@@ -1223,7 +1223,36 @@ polls (1 s; the stability read needs 6 equal reads, a 6 s window, was 3 reads 3 
   the 100-tick threshold, so about 160 ticks are needed; no saving, left as it was.
 - the first settle in HY's `buildTerrain` (chunk activation), t3a/voc natural caps are their own (60 s/30 s, not 90 s).
 
-@@MEASURED@@
+### Measured (speed audit B)
+
+`change --only <24 steps> --no-split --no-cache --no-turbo` (normal queue, load 100-160), three runs of drivers from: origin/main 596b89a8
+(`artifacts/gate-runs-spB/old`, 20 PASS / 4 FAIL), this branch at 41d0b22a (`new`, 22 / 2) and the branch with `GATE_SPRINT=0` on the 9
+sprinted steps (`new0`, 8 / 1). Compared by `ok`/`FAIL`/`rec` check names and statuses (split-proof's mask): **no check present on one side only
+and no status difference caused by a changed wait**; the exceptions are all main's own intermittents, present with the waits unchanged:
+- 6cf2-scenario-scatter, item 8 natural exactness: FAIL in old (2 unclassified) and in new0 (1 unclassified, real-time stand), ok in new (0).
+- 4d-all "group undo": FAIL in old (the known intermittent), ok in new and new0.
+- rs-survival-smoke item 14 (PARTIAL at 96.7%) and y2-ingame fail identically in old and new. Item 10 (rs02m2 "region reads REMOVING after the reopen:
+  REMOVED") failed once, in new only; item 10 uses none of the changed waits (a removal that finished before the read), so it is listed, not reverted.
+
+| step | old | new | new0 (`GATE_SPRINT=0`) |
+|---|---|---|---|
+| 6a-forest | 2.6 | 0.5 | 2.5 |
+| h-probe | 2.8 | 1.0 | 2.8 |
+| 6cf2-scenario-scatter | 11.6 | 6.3 | 11.0 |
+| 6cd-scenario-districts | 9.5 | 5.2 | 7.0 |
+| 4d-all (6855 ticks sprinted in 17.8 s) | 12.4 | 8.3 | 13.2 |
+| 5b-chains | 6.0 | 2.5 | |
+| 4e-orders-full | 10.2 | 6.0 | |
+| 4e-crash-full | 13.3 | 8.9 | |
+| 6a-crash | 9.1 | 6.1 | |
+| s3-plan | 7.8 | 4.4 | |
+| rp-crash / t3a-frozen / 0a-batches | 3.8 / 3.1 / 2.3 | 2.8 / 2.1 / 1.7 | |
+| rs-ingame, rs-survival-smoke, hy-ingame-smoke | 14.0, 20.7, 13.4 | 13.3, 19.1, 11.8 | 13.5, -, 15.5 |
+| the rest (6a-eflat, 6b-versionc, 6b-commands, voc-natural, y2, 0a-keys, hy-crash/cold) | | within a minute | |
+
+Minutes, one run each under heavy load, so small differences are noise. The natural stand sprinted 2400 ticks in 1.4 s. The quiet settles ended early
+only on flat or settled worlds (s3-plan 10 s flat, 81 s natural; rs item 14 82 s); t3a, voc-natural and 6b-commands ran to their caps, as expected.
+
 
 ## P3: the water and survival ledger lints (2026-10-21)
 
