@@ -242,25 +242,33 @@ public final class StyleBrowserScreen extends PickerScreen {
 		super.extractRenderState(g, mx, my, a);
 		StyleCatalog.Card c = selectedCard();
 		int[] d = detailGeometry();
+		int ew = Button.width(font, "Edit");
+		int dw = Button.width(font, "Duplicate");
+		// a narrow pane: Duplicate and Edit each on a row of its own (whole words, never "Duplic…")
+		boolean stack = dw + 4 + ew > d[1];
 		int rowTop = d[2] - Button.H - 4;
+		int top = stack ? rowTop - Button.H - 4 : rowTop;
 		g.nextStratum();
 		// Duplicate / Edit above "Use this style": a band of the pane's paper first, from a line boundary of the pane's detail lines
 		// (PickerScreen's layout: the big sheet, the name, the subtitle, then lines 10 px apart), so no line is cut in half under them
 		int[] gg = gridGeometry();
 		int paneH = height - 8 - gg[2];
 		int first = gg[2] + 6 + Math.min(60, paneH / 3) + 5 + 10 + 10 + 2;
-		int band = rowTop - 3;
+		int band = top - 3;
 		if (band > first) {
 			band = first + (band - first) / 10 * 10;
 		}
 		g.fill(d[0] - 6, band, d[0] - 6 + d[3] - 1, d[2] - 1, UiStyle.CREAM);
 		if (c != null) {
-			int ew = Button.width(font, "Edit");
-			int dw = Math.min(Button.width(font, "Duplicate"), d[1] - 4 - ew);
-			duplicate.draw(g, font, d[0], rowTop, dw, Button.H, mx, my);
 			edit.disabled(!c.canEdit()).tooltip(c.canEdit() ? null : c.bible().builtin() ? "Built-in: duplicate it to make your own"
 				: "Owned by a mod: duplicate it to make your own");
-			edit.draw(g, font, d[0] + dw + 4, rowTop, ew, Button.H, mx, my);
+			if (stack) {
+				duplicate.draw(g, font, d[0], top, d[1], Button.H, mx, my);
+				edit.draw(g, font, d[0], rowTop, d[1], Button.H, mx, my);
+			} else {
+				duplicate.draw(g, font, d[0], rowTop, dw, Button.H, mx, my);
+				edit.draw(g, font, d[0] + dw + 4, rowTop, ew, Button.H, mx, my);
+			}
 			if (!c.canEdit() && edit.contains(mx, my)) {
 				dev.larattalabs.labui.client.widget.Tooltip.render(g, font, edit.tooltip(), mx, my);
 			}
@@ -269,7 +277,7 @@ public final class StyleBrowserScreen extends PickerScreen {
 			edit.hide();
 		}
 		if (message != null) {
-			g.text(font, TextUtil.ellipsize(font, message, d[3] - 12), d[0], rowTop - 12, UiStyle.error(), false);
+			g.text(font, TextUtil.ellipsize(font, message, d[3] - 12), d[0], band - 11, UiStyle.error(), false);
 		}
 		drawMenu(g, mx, my);
 	}

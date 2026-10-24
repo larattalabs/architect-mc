@@ -143,6 +143,7 @@ final class StyleEditorScreen extends U3Screen {
 
 	@Override
 	protected void body(GuiGraphicsExtractor g, int x, int top, int w, int bottom, int mx, int my) {
+		devOnly.clear();
 		tickCheck();
 		int footerTop = bottom - Button.H - 8;
 		g.fill(x, footerTop - 3, x + w, footerTop - 2, UiStyle.rule());
@@ -208,13 +209,17 @@ final class StyleEditorScreen extends U3Screen {
 		for (String t : draft.tags()) {
 			Chip c = new Chip(t + " ×", () -> draft.removeTag(t)).selected(true);
 			int cwid = c.width(font);
-			if (tx + cwid > x + w - 70) {
+			if (tx > x + labelW && tx + cwid > x + w) {
 				tx = x + labelW;
 				y += Chip.H + 3;
 			}
 			c.draw(g, font, tx, y, mx, mY);
 			register("tag:remove:" + t, c, top, bottom);
 			tx += cwid + 4;
+		}
+		if (tx + 60 > x + w) {
+			tx = x + labelW;
+			y += Chip.H + 3;
 		}
 		if (visible(y, 18, top, bottom)) {
 			drawField(g, tagField, tx, y, Math.max(60, Math.min(110, x + w - tx)));
@@ -304,7 +309,8 @@ final class StyleEditorScreen extends U3Screen {
 	}
 
 	private void right(GuiGraphicsExtractor g, int x, int y, int w, int bottom, int mx, int my) {
-		int sh = Math.max(40, Math.min(96, w * 55 / 100));
+		// a short screen (GUI scale 4) keeps room for the check and the features under the sheet
+		int sh = Math.max(36, Math.min(Math.min(96, w * 55 / 100), (bottom - y) / 3));
 		Panels.inset(g, x, y, w, sh);
 		StylePaint.sheet(g, draft.roles(), x + 1, y + 1, w - 2, sh - 2);
 		y += sh + 4;
@@ -334,10 +340,17 @@ final class StyleEditorScreen extends U3Screen {
 			ink = UiStyle.error();
 		}
 		List<String> lines = TextUtil.wrapPlain(font, line, w - 8);
-		int bh = Math.min(4, lines.size()) * 10 + 6;
+		int maxLines = bottom - y < 160 ? 2 : 4;
+		if (lines.size() > maxLines) {
+			// the full errors stay in the tooltip-free state for the DevBridge; here the first lines, the last one cut
+			List<String> cut = new ArrayList<>(lines.subList(0, maxLines));
+			cut.set(maxLines - 1, TextUtil.ellipsize(font, cut.get(maxLines - 1) + " …", w - 8));
+			lines = cut;
+		}
+		int bh = lines.size() * 10 + 6;
 		Paint.box(g, x, y, w, bh, fill, UiStyle.withAlpha(ink, 120));
 		int ly = y + 4;
-		for (String l : lines.stream().limit(4).toList()) {
+		for (String l : lines) {
 			g.text(font, l, x + 4, ly, ink, false);
 			ly += 10;
 		}

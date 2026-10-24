@@ -269,13 +269,17 @@ steps.ingame = async () => {
     check(ids.has('place') && ids.has('edit') && ids.has('more') && !(st.controls ?? []).some((c) => c.id === 'delete' && (c.w ?? 0) > 0),
       '6: the detail shows Place, Edit and ⋯; Delete is not beside Place', [...ids].filter((i) => /^(place|edit|more|delete|variants|remix)$/.test(i)));
     await shot('library_detail', async () => { await call('dev.ui.open', { tab: 'library' }); await call('dev.library.select', { entry }); });
-    await ui('more');
-    await shot('library_menu', async () => { const x = await call('dev.ui.state'); if (!(x.controls ?? []).some((c) => c.id === 'delete' && c.w > 0)) await ui('more'); });
+    const openMenu = async () => { if (!(await call('dev.ui.state')).libraryMenu) await ui('more'); };
+    await openMenu();
+    await shot('library_menu', openMenu);
     await ui('delete');
-    await shot('library_delete_armed', async () => { await call('dev.ui.open', { tab: 'library' }); await call('dev.library.select', { entry }); await ui('more'); await ui('delete'); });
+    await shot('library_delete_armed', async () => { await openMenu(); if (!(await call('dev.ui.state')).deleteArmed) await ui('delete'); });
     st = await call('dev.ui.state');
-    const del = (st.controls ?? []).find((c) => c.id === 'delete');
-    check(fs.existsSync(path.join(LIB, entry)) && /Press again/.test(del?.label ?? '') || fs.existsSync(path.join(LIB, entry)), '6: the first Delete press only arms it (the design is still there)', del);
+    check(fs.existsSync(path.join(LIB, entry)) && st.deleteArmed === true && st.libraryMenu === true, '6: the first Delete press only arms it (the design is still there, the menu open)', { armed: st.deleteArmed, menu: st.libraryMenu });
+    await call('dev.screen', { open: null });
+    await call('dev.ui.open', { tab: 'library' });
+    st = await call('dev.ui.state');
+    check(st.deleteArmed === false || st.deleteArmed === undefined || !st.libraryMenu, '6: closing the screen cancels the armed Delete', { armed: st.deleteArmed });
     // Edit: the variant editor
     await call('dev.screen', { open: null }).catch(() => null);
     await call('dev.ui.open', { tab: 'library' });
@@ -310,7 +314,7 @@ steps.ingame = async () => {
     await ui('more');
     await ui('delete');
     const target = w.blueprintId ?? entry;
-    check(fs.existsSync(path.join(LIB, target)), '6: one press: still there');
+    check(fs.existsSync(path.join(LIB, target)) && (await call('dev.ui.state')).deleteArmed === true, '6: one press: armed, still there');
     await ui('delete');
     await until('the design deleted', async () => !fs.existsSync(path.join(LIB, target)), 30_000);
     check(!fs.existsSync(path.join(LIB, target)), `6: the second press deletes it (${target} moved to the trash)`);
@@ -338,6 +342,7 @@ steps.ingame = async () => {
   // ---- empty states have actions
   await call('dev.ui.open', { tab: 'library' });
   await call('dev.library.filter', { text: 'zzzz no such design' });
+  await sleep(400);
   let st = await call('dev.ui.state');
   check((st.controls ?? []).some((c) => c.id === 'library:empty_action'), '8: an empty Library search offers Clear filters');
   await shot('library_empty', async () => { await call('dev.ui.open', { tab: 'library' }); await call('dev.library.filter', { text: 'zzzz no such design' }); });

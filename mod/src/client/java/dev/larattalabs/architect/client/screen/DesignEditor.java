@@ -84,6 +84,8 @@ final class DesignEditor {
 	final TextFieldView saveNameView = new TextFieldView();
 	private boolean saving;
 	private @Nullable String saveMode;
+	/** The mix bar was just opened for its name: scroll it into view once. */
+	private boolean revealSave;
 	private final TextFieldView noteView = new TextFieldView();
 	private final TextFieldView styleTextView = new TextFieldView();
 	private final TextFieldView materialsView = new TextFieldView();
@@ -129,6 +131,21 @@ final class DesignEditor {
 
 	// ------------------------------------------------------------------ shared pieces
 
+	/** A Style's display name: an entry's Style may carry only its id ("medieval"): the installed one's name, else the id capitalised. */
+	static String nameOf(StyleForm.@Nullable Style b) {
+		if (b == null) {
+			return "";
+		}
+		if (b.id() != null && b.name().equals(b.id())) {
+			String n = SetFeature.bible(b.id()).map(Bible::name).orElse(null);
+			if (n != null) {
+				return n;
+			}
+			return b.id().isEmpty() ? b.id() : Character.toUpperCase(b.id().charAt(0)) + b.id().substring(1).replace('_', ' ');
+		}
+		return b.name();
+	}
+
 	/** "from Medieval", "follows Wood", "custom" for a role's provenance. */
 	static String provenanceLabel(@Nullable String prov, StyleForm.@Nullable Style base) {
 		if (prov == null) {
@@ -138,7 +155,7 @@ final class DesignEditor {
 			case StyleRoles.FOLLOWS_WOOD -> "follows Wood";
 			case StyleRoles.FOLLOWS_STONE -> "follows Stone";
 			case StyleRoles.HAND -> "custom";
-			default -> base == null || base.kind().equals(StyleForm.INPUTS) ? "from its palette" : "from " + base.name();
+			default -> base == null || base.kind().equals(StyleForm.INPUTS) ? "from its palette" : "from " + nameOf(base);
 		};
 	}
 
@@ -334,6 +351,13 @@ final class DesignEditor {
 
 	private int mixBar(GuiGraphicsExtractor g, String mode, StyleForm sf, StyleForm.Style base, int x, int y, int w, int mx, int my, Consumer<String> err) {
 		int h = Button.H + 6;
+		if (revealSave && mode.equals(saveMode)) {
+			revealSave = false;
+			int below = y + h + 4 - (view[1] + view[3]);
+			if (below > 0) {
+				s.scrollTo(s.scroll() + below);
+			}
+		}
 		Paint.box(g, x, y, w, h, UiStyle.withAlpha(UiStyle.CLAY, 30), UiStyle.withAlpha(UiStyle.CLAY_DARK, 90));
 		int by = y + 3;
 		if (mode.equals(saveMode)) {
@@ -344,7 +368,7 @@ final class DesignEditor {
 			int fx = x + 4 + font().width("Name") + 6;
 			g.text(font(), "Name", x + 4, by + 6, UiStyle.CLAY_DARK, false);
 			int fw = Math.max(60, x + w - 4 - sw - 4 - cnw - 6 - fx);
-			s.textField(g, Focus.SAVE_NAME, saveNameView, saveName, fx, by + 1, fw, new TextFieldView.Style(null, 0, base.name() + " mix", null, null, 0, 1));
+			s.textField(g, Focus.SAVE_NAME, saveNameView, saveName, fx, by + 1, fw, new TextFieldView.Style(null, 0, nameOf(base) + " mix", null, null, 0, 1));
 			Button save = new Button(saving ? "Saving…" : sv, this::confirmSave).primary(true);
 			save.disabled(saving || !SetFeature.has("bible.save")).tooltip(SetFeature.has("bible.save") ? null : "this design helper can't save Styles");
 			save.draw(g, font(), x + w - 4 - sw - 4 - cnw, by, sw, Button.H, mx, my(my));
@@ -360,13 +384,14 @@ final class DesignEditor {
 			String sv = "Save as style…";
 			int rw = Button.width(font(), rv);
 			int sw = Button.width(font(), sv);
-			g.text(font(), TextUtil.ellipsize(font(), "custom mix · based on " + base.name(), w - rw - sw - 20), x + 5, by + 6, UiStyle.CLAY_DARK, false);
+			g.text(font(), TextUtil.ellipsize(font(), "custom mix · based on " + nameOf(base), w - rw - sw - 20), x + 5, by + 6, UiStyle.CLAY_DARK, false);
 			Button revert = new Button(rv, sf::revert);
 			revert.draw(g, font(), x + w - 4 - sw - 4 - rw, by, rw, Button.H, mx, my(my));
 			s.control("style:revert", rv, revert, false);
 			Button save = new Button(sv, () -> {
 				saveMode = mode;
-				saveName.set(base.name() + " mix");
+				revealSave = true;
+				saveName.set(nameOf(base) + " mix");
 				saveName.selectAll();
 				s.setFocusPublic(Focus.SAVE_NAME);
 			});
@@ -407,7 +432,7 @@ final class DesignEditor {
 	void saveAs(String mode, @Nullable String name) {
 		saveMode = mode;
 		StyleForm sf = mode.equals("variant") && LibraryFeature.variantForm() != null ? LibraryFeature.variantForm().style() : DesignFeature.form().styleForm;
-		saveName.set(name != null ? name : sf.base() == null ? "" : sf.base().name() + " mix");
+		saveName.set(name != null ? name : sf.base() == null ? "" : nameOf(sf.base()) + " mix");
 		confirmSave();
 	}
 
@@ -536,7 +561,7 @@ final class DesignEditor {
 		// ---- Style
 		String styleSummary = f.ownWords() ? (f.styleText.value().isBlank() ? "your own words" : "“" + f.styleText.value() + "”")
 			: f.bible != null ? SetFeature.bible(f.bible).map(Bible::name).orElse(f.bible) + " (Claude-made: its own materials)" : f.styleForm.base() == null
-				? "none" : f.styleForm.base().name() + (f.noteSent().isEmpty() ? "" : " · “" + f.noteSent() + "”");
+				? "none" : nameOf(f.styleForm.base()) + (f.noteSent().isEmpty() ? "" : " · “" + f.noteSent() + "”");
 		y += header(g, style, "style", styleSummary, x, y, iw, mx, my);
 		String cur = f.bible != null ? f.bible : f.styleForm.base() == null ? null : f.styleForm.base().id();
 		if (style.open()) {
@@ -548,7 +573,7 @@ final class DesignEditor {
 				s.textField(g, Focus.STYLE, styleTextView, f.styleText, sx + LABEL_W, y, iw - 4 - LABEL_W, new TextFieldView.Style(null, 0,
 					"your own words instead of a Style, e.g. art deco seaside", null, f.styleText.length() + "/" + DesignSpec.MAX_STYLE, UiStyle.mutedText(), 1));
 			} else {
-				String with = cur == null ? "a Style" : f.bible != null ? SetFeature.bible(f.bible).map(Bible::name).orElse(cur) : f.styleForm.base().name();
+				String with = cur == null ? "a Style" : f.bible != null ? SetFeature.bible(f.bible).map(Bible::name).orElse(cur) : nameOf(f.styleForm.base());
 				s.textField(g, Focus.STYLE_NOTE, noteView, f.styleNote, sx + LABEL_W, y, iw - 4 - LABEL_W, new TextFieldView.Style(null, 0,
 					"optional words with " + with + ", e.g. mossy, lived-in", null, null, 0, 1));
 			}
@@ -571,7 +596,7 @@ final class DesignEditor {
 		s.devControl("design:bible", "the Style browser", true, false, () -> StyleBrowserScreen.open(cur, f::pickBible));
 		// ---- Materials
 		String matSummary = f.ownWords() ? "the designer picks them (your own words)" : f.bible != null ? "the Claude-made Style's own (set mode)"
-			: f.styleForm.base() == null ? "none" : f.styleForm.mix() ? "custom mix · based on " + f.styleForm.base().name() : "from " + f.styleForm.base()
+			: f.styleForm.base() == null ? "none" : f.styleForm.mix() ? "custom mix · based on " + nameOf(f.styleForm.base()) : "from " + f.styleForm.base()
 				.name();
 		y += header(g, materials, "materials", matSummary, x, y, iw, mx, my);
 		if (materials.open()) {
@@ -1026,7 +1051,7 @@ final class DesignEditor {
 		StyleForm sf = f.style();
 		StyleForm.Style base = sf.base();
 		String cur = base == null ? null : base.id();
-		y += header(g, vStyle, "variant_style", base == null ? "its own palette" : base.name() + (sf.mix() ? " (custom mix)" : ""), x, y, iw, mx, my);
+		y += header(g, vStyle, "variant_style", base == null ? "its own palette" : nameOf(base) + (sf.mix() ? " (custom mix)" : ""), x, y, iw, mx, my);
 		Consumer<Bible> use = b -> f.chooseStyle(StyleForm.Style.of(b));
 		if (vStyle.open()) {
 			label(g, "Style", x + 4, y + 2);
@@ -1044,8 +1069,7 @@ final class DesignEditor {
 		}
 		s.devControl("variant:browse", "browse", true, false, () -> StyleBrowserScreen.open(cur, use));
 		// Materials (live)
-		y += header(g, vMaterials, "variant_materials", base == null ? "its own" : sf.mix() ? "custom mix · based on " + base.name() : "from " + base
-			.name(), x, y, iw, mx, my);
+		y += header(g, vMaterials, "variant_materials", base == null ? "its own" : sf.mix() ? "custom mix · based on " + nameOf(base) : "from " + nameOf(base), x, y, iw, mx, my);
 		if (vMaterials.open()) {
 			if (base == null) {
 				y = muted(g, "This design has no Style: pick one to re-skin it.", x + 4, y + 2, iw - 4) + 2;

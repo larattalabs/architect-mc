@@ -747,6 +747,13 @@ public final class ArchitectScreen extends Screen {
 		overlay = t;
 	}
 
+	/** (U3) Drawn after the tab's body and footer (an overlay such as the ⋯ menu stays on top of them). */
+	private final List<java.util.function.Consumer<GuiGraphicsExtractor>> late = new ArrayList<>();
+
+	void late(java.util.function.Consumer<GuiGraphicsExtractor> c) {
+		late.add(c);
+	}
+
 	/** Takes this widget's mouse events this frame (compact pickers, lists, chip rows). */
 	void mouseTarget(MouseTarget t) {
 		mouseTargets.add(t);
@@ -1209,6 +1216,10 @@ public final class ArchitectScreen extends Screen {
 			case STATUS -> drawStatus(g, cx, top, cw, footerY, mouseX, mouseY);
 		}
 		clipRect = null;
+		for (var c : List.copyOf(late)) {
+			c.accept(g);
+		}
+		late.clear();
 		if (popup != null) {
 			drawPopup(g, mouseX, mouseY);
 		} else {
@@ -2490,6 +2501,9 @@ public final class ArchitectScreen extends Screen {
 		o.addProperty("libraryMessage", LibraryFeature.message());
 		o.addProperty("libraryDialog", LibraryTab.dialog.name().toLowerCase(Locale.ROOT));
 		o.addProperty("libraryEdit", library.edit.name().toLowerCase(Locale.ROOT));
+		// (U3) the ⋯ menu and its Delete's two presses
+		o.addProperty("libraryMenu", library.menuOpen);
+		o.addProperty("deleteArmed", library.deleteArmed());
 		o.addProperty("popup", popup == null ? null : popup.id);
 		o.addProperty("showPlaced", showPlaced);
 		o.addProperty("selectedEntry", selectedEntry);

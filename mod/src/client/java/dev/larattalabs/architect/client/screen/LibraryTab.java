@@ -376,7 +376,8 @@ final class LibraryTab {
 		drawGrid(g, gx, gy, gridW, gh, mx, my);
 		// detail
 		drawDetail(g, x + gridW + 12, top - 3, detailW, bottom - (top - 3), mx, my);
-		drawMenu(g, mx, my);
+		// the ⋯ menu over everything the tab draws after this (the footer included)
+		s.late(gg -> drawMenu(gg, mx, my));
 	}
 
 	/** "Ashfall" for {@code bible:<id>}, "Set: Ashfall hamlet" for {@code group:<id>}. */
