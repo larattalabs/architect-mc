@@ -133,8 +133,9 @@ export function helpers(main, env = process.env, src = SRC) {
 }
 
 /** The -javaagent option for a JVM whose coverage goes to `dir`, or null (with why) when execution coverage is unavailable. */
-export function agentOption(main, dir, { env = process.env, includes = 'dev.larattalabs.*' } = {}) {
-  const h = helpers(main, env);
+export function agentOption(main, dir, { env = process.env, includes = 'dev.larattalabs.*', src = SRC } = {}) {
+  // src: the checkout whose GateCovAgent.java is compiled (the runner passes its frozen source)
+  const h = helpers(main, env, src);
   if (!h.ok) return { option: null, why: h.why };
   if (/[\s;]/.test(dir) || /\s/.test(h.agentJar) || /[\s;]/.test(h.runtimeJar)) return { option: null, why: 'a path holds whitespace or ";" (JAVA_TOOL_OPTIONS splits on whitespace)' };
   return { option: `-javaagent:${h.agentJar}=dir=${dir};jar=${h.runtimeJar};pkg=${JACOCO.pkg};includes=${includes}`, why: null };
