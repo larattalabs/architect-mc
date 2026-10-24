@@ -36039,6 +36039,62 @@
     "tools/lib/sprint.mjs"
    ]
   },
+  "ui-gallery": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gateui2b.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
+    "tools/gateui2b.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "mod/src/test/resources/stub-sidecar/**"
+   ],
+   "dynamic": [],
+   "env": [
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATEUI2B_OUT",
+    "GATEUI2B_SHOTS",
+    "GATEUIG_BUDGET_MIN",
+    "GATEUIG_DEST",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gateui2b.mjs"
+   ]
+  },
   "ui2b-ingame": {
    "classes": [
     "jar",
@@ -36084,6 +36140,8 @@
     "GATE6B_SIDECAR_PORT",
     "GATEUI2B_OUT",
     "GATEUI2B_SHOTS",
+    "GATEUIG_BUDGET_MIN",
+    "GATEUIG_DEST",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"

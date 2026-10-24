@@ -283,6 +283,36 @@ It sends no notification of any kind; the coordinator reads the summary. It neve
 - its gate run takes a slot like any run and waits in the queue;
 - SIGTERM to the nightly stops only its own runner.
 
+### UI gallery (nightly only)
+
+After the full run, the nightly runs the named chain `ui-gallery` (one client step, `tools/gateui2b.mjs gallery`, built on the UI-2b
+driver's helpers). It is in no tier and no impact rule, so a change, slice or release never runs it. It costs $0: the sim sidecar,
+no Claude call, no API key. It is **non-blocking**: a capture failure, a client that will not start or a timeout
+(`nightly.uiGallery.timeoutMin`, 20) is reported in the nightly's `SUMMARY.md` ("UI gallery") and `summary.json` (`uiGallery`), and
+never changes the verdict. It uses its own run dir, out dir, lock and ports (`nightly.uiGallery` in `tools/gate-cache.json`:
+`../architect-mc-nightui-run`, sidecar 8898, DevBridge 8899), and is skipped past the yield cutoff.
+
+- **What it shoots**, each at GUI scale 2 and 4, as `<screen>__<state>__s<scale>.png`:
+  - the Library (grid, the Type / Tag / Collection / Sort pop-ups, starred, search, detail, the rename and tag editors, the variant
+    form with its palette pop-ups, Import, Placed); the Design tab (default, filled, custom size, large with options, other type,
+    profile and bible pop-ups, remix, the set dialog empty and filled); the Designs tab (before and after a sim design); the Status tab and
+    the helper strip;
+  - the placement HUD (checking, ready, key legend, force armed); the Placed toast; one paged chat list (pages 1 and 2); CrateScreen
+    (open, Confirm armed); the SiteHud modes (full, line, hidden);
+  - `kind: "world"`: the placement ghost in each colour category (normal, replaced, block entity in the way, refused), plot markers, the
+    region ghost and the survival crate with its SiteHud.
+- **Comparable night to night:** the pinned-seed flat base world, time 6000, clear weather, the same form contents, and cameras
+  placed as offsets from the ghost box. The run's Library can still differ (its entries come from the run dir): `index.json` records
+  the entry count and ids.
+- **Where:** `artifacts/nightly/<date>/ui/`, with `index.json`: `shots[]` (`kind` `ui` or `world`, `screen`, `state`, `scale`, `file`, `width`,
+  `height`), `failed[]` (what could not be captured and why), `skipped[]` (not started inside the 9 minute budget, `GATEUIG_BUDGET_MIN`),
+  the world, the head and the counts. Artifacts are never committed.
+- **Morning review (coordinator):** run the `design-critic` agent over `artifacts/nightly/<date>/ui/`, driven by `index.json`
+  (one screen per call, both scales, with the previous night's same file names for a before/after). It also reads `failed[]`: an
+  uncaptured screen is a finding when the screen exists on main. Look fixes are follow-ups ("Galleries only for slices whose point is the look").
+- **By hand:** `node tools/gate-run.mjs ui-gallery --run-dir <dir> --out <dir> --ports S:D` from a checkout that has the chain;
+  `GATEUIG_DEST=<dir>` also copies the shots and `index.json` there. Commit first (the runner tests a frozen snapshot).
+
 **An impact-map miss** is a step that the last release skipped as CACHED and that FAILs or TIMEOUTs in the nightly **at the same
 key**. Nothing in its set moved since the PASS that served the release, yet it fails, so the map lacks an input (or the step is flaky).
 A failing step whose key moved is listed as "explained", not as a miss. Each miss goes to `impact-map-misses.json`, with:
