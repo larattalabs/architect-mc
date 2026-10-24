@@ -1447,7 +1447,7 @@ in-game steps; turbo, 9 shards + 3 lanes, `--no-cache`, cold plan caches, the so
 | run | wall | load p50 / p90 / max | TIMEOUT | not passing |
 |---|---|---|---|---|
 | main dfb8897e (`artifacts/gate-runs-cpu/20261023-225537-slice`) | 32.2 min | 49 / 99 / 180 | 0 | coa-unit item 6, 4e-crash (no 4e-orders in the set) |
-| first budget, flat share 2 everywhere (`-235753-slice`) | 34.0 min | 63 / 99 / 126 | 0 | the same two, plus 6c-scenario-s2 and 6ct2-scenario-route: dev.world.open's 10 s in the 9-client start burst |
+| first budget, flat share 2 everywhere (`-235753-slice`) | 34.0 min | 63 / 95 / 126 | 0 | the same two, plus 6c-scenario-s2 and 6ct2-scenario-route: dev.world.open's 10 s in the 9-client start burst |
 
 - **With kit-reuse working, the load is the in-game shards.** The steady load and the start burst come from 9 game JVMs: the
   23:00 peak of 180 was 9 client starts (about 13 cores of game JVMs) beside unit-kit. No child-side cap at 9 shards gets the

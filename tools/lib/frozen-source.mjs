@@ -36,7 +36,9 @@ export function prepareFrozenSource({ src, main, dir, head, seed = ['.gradle-hom
     if (!from) continue;
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     log(`setup: cloning ${from} into the frozen source (APFS clone)`);
-    execFileSync('cp', ['-c', '-R', from, dst]);
+    // an APFS clone on macOS (cheap); a plain copy elsewhere (GNU cp's -c is not a clone)
+    if (process.platform === 'darwin') execFileSync('cp', ['-c', '-R', from, dst]);
+    else fs.cpSync(from, dst, { recursive: true });
     seeded.push(rel);
   }
   return { dir, created, seeded };
