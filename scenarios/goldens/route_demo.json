@@ -3,9 +3,9 @@
  "version": 0,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/route_demo/",
  "fromRun": "20261013-032659",
- "irSha": "084f22274c3672945e3b0f9088faa2da6c68614ad4a5d2290329d973cc389da3",
- "kitVersion": "0.23.0",
- "cells": 11837,
+ "irSha": "8495fb827ca7533a2a26a512164840b32e9864ea5afd95af5eac1ec35fa2f845",
+ "kitVersion": "0.42.0",
+ "cells": 11817,
  "tiles": {
   "ground|terrain|56,-14": "ad3ae975e5cecb148867ef74757bd2dffd10cc6b9a149698edd2e3e333c219b1",
   "ground|terrain|56,-15": "48091daeeec8a65c389dfac249d8ec0a5610c3d37f02f5f3cecbe0c83d5dfde2",
@@ -18,11 +18,11 @@
   "routes|path|57,-16": "6b6ca87d740657a3d96d63db39f575f54ad529513ba093164d12cc35ae1e1863",
   "routes|path|58,-15": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
   "routes|path|58,-16": "3c8acff695731d54bdbbad40a2d84b9eb7cb3ba2477a820f2f1db47585f66271",
-  "routes|terrain|56,-14": "15676dc99cdbed2a37d101fe135b4e49265e9f3f435822eb15b5268104af4343",
-  "routes|terrain|56,-15": "0b52580ec7d1b339671ab01a650463d932e778c19b95ffcfd5476105a8bf1142",
+  "routes|terrain|56,-14": "c81cb2c0443596b53f97d85595bd37757a0a9e1558d6f5610207737882eac458",
+  "routes|terrain|56,-15": "a942e8ce51f5a4a80bfb92132584faa91858c5bdd56146a809b6a92cb45cc976",
   "routes|terrain|56,-16": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
   "routes|terrain|57,-14": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
-  "routes|terrain|57,-15": "7710ad3937716e1b7764401b2458ffd04586baddac38bfb29de2d15f62048544",
-  "routes|terrain|57,-16": "97b6fd8c68d6f502a7f567935e69579208b3fa85021f32af60ae961a43243d09"
+  "routes|terrain|57,-15": "36220485dfaedadf5b455e834616aa1f8a6612cd198d66916f8cb29a7447b15e",
+  "routes|terrain|57,-16": "b244aabc9f57702018483abe17b64f5a8a07c23f67c9e34d4422c3d08b2e3803"
  }
 }
