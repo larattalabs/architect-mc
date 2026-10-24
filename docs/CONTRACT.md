@@ -25153,6 +25153,10 @@ The five known exceptions of S-THEME are themed or documented, and `THEME_KNOWN`
 | HY-c water-gate grate | Kept as `minecraft:iron_bars[waterlogged=true]`, a functional block: the state is shared by the fluid op, the survival bill and the mod, and a fence does not keep mobs out of a waterlogged reach. `minecraft:iron_bars` is in `UNTHEMED_OK` (`connectors/style.mjs`). |
 | VOC-c no-wood swaps | A door or trapdoor of the swap chain's base when that base has one (a copper role gives `copper_door`, `copper_trapdoor`), else iron's, the only other door. `minecraft:iron_door` and `minecraft:iron_trapdoor` are in `UNTHEMED_OK`. |
 
-Intended deviation: fixtures that carried the old blocks move (listed in the branch report). `kit/test/fixtures/lint/tunnel_hill` was
+Intended deviations (the moved fixtures; the drivers' byte-identity checks name the tunnel ones through `tools/lib/theme-rest-norm.mjs` `THEME_REST_MOVED`):
+- goldens re-cut (`scenarios/goldens/`): crossings_demo_flat (tunnel lamp cells), forms_demo (lamp posts: the light role's fixture; 13875 -> 13869 cells), route_demo (lamp spacing from the light role's level; 11837 -> 11817 cells). Their headers record kit 0.42.0 now.
+- plan fixtures with a tunnel (glowstone -> the lantern in a niche): rs/rs04_tunnel, tunnel/tn05_water_3, tunnel/tn13_via_lenient, tunnel/tn14_glass_params, valid/v37_tunnel, valid/v38_auto_crossings, valid/v38b_auto_tunnel, valid/v40_postern.
+- lint fixture `kit/test/fixtures/lint/tunnel_hill`.
+`kit/test/fixtures/lint/tunnel_hill` was
 patched in place (its palette's glowstone entry is the standing lantern, its bom 9 lanterns), not re-planned: re-planning needs
 the seed world (`T3B_WRITE_FIXTURE=1 node tools/gate6ct3b.mjs fixture`).
