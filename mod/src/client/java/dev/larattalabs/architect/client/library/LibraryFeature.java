@@ -652,7 +652,8 @@ public final class LibraryFeature {
 			f.type = b.type();
 		}
 		// the bible it was built with (phase 4b)
-		f.bible = c.bible();
+		// (U2, as the sidecar's setModePin) a materials-only entry's pin only names the Style its roles came from: not set mode
+		f.bible = r != null && r.has("palette") ? null : c.bible();
 		// (Style unification U2) a materials-only entry: its Style's roles inline; else the style chip or the words
 		var entryStyle = r != null && r.has("palette") && r.get("palette").isJsonObject() && r.getAsJsonObject("palette").has("bible")
 			? dev.larattalabs.architect.library.VariantForm.entryStyle(r.getAsJsonObject("palette"), palettes()) : null;

@@ -10,7 +10,9 @@
 //   3. Save as style…: a new hand-made Style (bible.save: origin hand, editable, basedOn medieval v1, the form's features suggested);
 //      the form then picks it (no longer a mix); its version folder is on disk;
 //   4. a variant re-skin: the Variants dialog of design 1 with the saved Style (unedited: the 4b re-skin, bible: id); the variant is built
-//      of its materials; a Wood edit in the dialog turns the request into the roles inline (the custom mix based on it).
+//      of its materials; a Wood edit in the dialog turns the request into the roles inline (the custom mix based on it);
+//   5. Remix… of the materials-only design picks its Style (palette, no bible: never set mode);
+//   6. Massing first with a Style: the massing request carries no palette, the detail pass (Approve) does, and is built of it.
 //
 //   node tools/gateu2.mjs ingame        (gate-chains.json step u2-ingame)
 //
@@ -135,6 +137,41 @@ steps.ingame = async () => {
     if (w.blueprintId) {
       const m = materials(entryJson(w.blueprintId));
       check(/birch_log/.test(m) && !/"minecraft:dark_oak_log"/.test(m), '4: the variant is built of the saved Style\'s materials (birch_log frame; no dark_oak_log)', entryJson(w.blueprintId).materials);
+    }
+  }
+
+  // ---- 5. a remix of the materials-only design: its Style picked, never set mode (its pin only names the Style)
+  if (d1.entryId) {
+    const rm = await call('dev.library.remix', { entry: d1.entryId });
+    data.remix = { request: rm.request, styleForm: rm.styleForm?.style };
+    check(rm.request?.palette?.bible?.id === 'medieval' && !rm.request?.bible && rm.request?.remix === d1.entryId,
+      '5: Remix… of the materials-only design: the medieval Style picked, its palette sent, no bible (not set mode)', { palette: rm.request?.palette?.bible?.id, bible: rm.request?.bible });
+    await call('dev.design.fill', { remix: null });
+  }
+
+  // ---- 6. massing first with a Style: the massing carries no palette, its detail pass (Approve) does
+  await call('dev.ui.open', { tab: 'design' });
+  await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'L', name: 'U2 Massed Cabin', massingFirst: true });
+  const sm = await call('dev.design.submit', {}, 30_000);
+  const mid = sm.sent?.designId;
+  check(!!mid && !sm.sent.error && sm.form?.massingFirst === true, `6: Design it with Massing first -> ${mid}`, sm.sent);
+  await call('dev.screen', { open: null });
+  const until = async (what, fn, ms = 300_000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = await fn(); if (v) return v; await sleep(1000); } throw new Error(`timed out: ${what}`); };
+  if (mid) {
+    const ms = await designDone(mid);
+    check(ms.status === 'DONE' && ms.request?.massing === true && !ms.request?.palette, '6: the massing job is done and its request has no palette (a massing has no materials)', { status: ms.status, palette: ms.request?.palette ?? null });
+    await until('the massing review', async () => (await call('dev.massing.state')).review);
+    const before = new Set((await call('dev.sidecar.state')).designs.map((d) => d.id));
+    const ka = await call('dev.massing.key', { key: 'enter' });
+    check(!!ka.consumed, '6: Enter approves the massing');
+    const det = await until('the detail design', async () => (await call('dev.sidecar.state')).designs.find((d) => !before.has(d.id)) ?? null);
+    const dd = await designDone(det.id);
+    data.massing = { massing: ms.request, detail: dd.request, status: dd.status };
+    check(dd.status === 'DONE' && !!dd.request?.fromMassing && dd.request?.palette?.bible?.id === 'medieval' && !dd.request?.bible,
+      '6: the detail pass carries the Style\'s palette (fromMassing + palette medieval) and is done', { status: dd.status, error: dd.error, fromMassing: dd.request?.fromMassing, palette: dd.request?.palette?.bible?.id });
+    if (dd.entryId) {
+      const j = entryJson(dd.entryId);
+      check(j.palette?.bible?.id === 'medieval' && /dark_oak_log/.test(materials(j)), '6: the detail entry records the palette and is built of it', { palette: j.palette?.bible?.id });
     }
   }
   return data;
