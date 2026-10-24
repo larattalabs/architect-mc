@@ -29,7 +29,10 @@ export const CONNECTOR_DEFAULTS = Object.freeze({
   bridge: { deck: ['path', 'floor'], rail: ['trim', 'rail'], pier: ['structure', 'foundation', 'wall'], arch: ['structure', 'foundation', 'wall'] },
   tunnel: { lining: ['foundation', 'structure'], portal: ['trim'], floor: ['path', 'floor'] },
   // (7a foundation) each 7a slice sets its own chains (empty until then: the slot resolves to null)
-  stair: { tread: [], rail: [] }, switchback: { retaining: [] }, ladder: { ladder: [], landing: [], rail: [], gate: [] },
+  // ((7a CL, N-CL-1) stairs in the path role's stairs (where it has them; else T2's structure), rails the rail role; switchback retaining
+  // in structure, then foundation (capped with the trim's slab); a ladder's rest landing the floor role's slab, its rails and gate the
+  // rail role's; the ladder block itself is vanilla's (no role))
+  stair: { tread: ['path'], rail: ['rail'] }, switchback: { retaining: ['structure', 'foundation'] }, ladder: { ladder: [], landing: ['floor'], rail: ['rail'], gate: ['rail'] },
   rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] },
   catwalk: { deck: ['floor', 'path'], bracket: ['frame'], rail: ['rail'] }, // ((7a CW, N-CW-1) a plank deck in floor then path, brackets in frame, fence rails)
   stairs_around: { tread: [], rail: [], deck: [] },

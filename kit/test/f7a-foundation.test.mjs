@@ -60,10 +60,11 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   for (const n of PROFILE_NAMES) {
     const p = PROFILES[n];
     assert.deepEqual(Object.keys(p).sort(), ['cost', 'ladderMax', 'ladders', 'stairs']);
-    assert.deepEqual({ ...COST, ...p.cost }, { ...COST }, n);
-    assert.equal(p.ladderMax, LADDER_MAX);
-    assert.equal(p.stairs, true);
-    assert.equal(p.ladders, true);
+    // ((7a CL) CL set the values (cl.test.mjs judges them): each cost a member of COST, the flags booleans)
+    for (const k of Object.keys(p.cost)) assert.ok(k in COST, `${n}.${k}`);
+    assert.ok(Number.isInteger(p.ladderMax) && p.ladderMax >= LADDER_MAX);
+    assert.equal(typeof p.stairs, 'boolean');
+    assert.equal(typeof p.ladders, 'boolean');
   }
   // a slope and a cliff (a player-only edge may ladder): the same route with each profile and without
   const W = 64, D = 48;
@@ -74,7 +75,8 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   assert.ok(out0.edges.every((e) => e.ok), JSON.stringify(out0.failed));
   assert.ok(out0.edges[0].segments.some((g) => g.kind === 'ladder') && out0.edges[1].segments.some((g) => g.kind === 'stair' || g.kind === 'landing'), 'the case climbs');
   const base = JSON.stringify(out0);
-  for (const n of PROFILE_NAMES) assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: n })) }).data), base, n);
+  // ((7a CL) without a profile the pass is T2's; an edge with CL's profiles is cl.test.mjs's)
+  assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: null })) }).data), base);
   assert.throws(() => routePass(s, [], { edges: [{ ...edges[0], profile: 'escalator' }] }), /profile must be one of stair, switchback, ladder/);
 });
 

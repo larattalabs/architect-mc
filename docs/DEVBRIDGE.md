@@ -365,6 +365,13 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   lab-ui's two-press Confirm: `dev.crate.press deconstruct` twice still deconstructs; an owned site still takes a third press);
   `dev.launcher.state` adds `summary` (the player's sentence; `detail` is unchanged) and `readyToasted`.
 
+- **2026-10-23 (7a slice CL):** new (`SliceClDev`, generated headless too) `dev.climb {flights: [{x, z, y0, y1}], face: [dx, dz]
+  (toward the wall), exit?: [x, y, z] (the top's walk cell, feet), maxTicks?: 400}`: the ladder physics probe. The player is placed at
+  each flight's foot facing the face and moved by `LivingEntity.travel` with the forward input, tick by tick (vanilla's `onClimbable`
+  rule against the ladder, with gravity), until its feet reach the flight's top or it stops rising for 40 ticks; then from the last top
+  forward into `exit` (a fence gate there opened for the step off and closed again). Returns `{flights: [{reached, top, ticks, maxY}],
+  exited, exitY, ok}`; the player is put back where it stood. A rest landing's side step is not simulated (each flight starts at its
+  own foot).
 - **2026-10-20 (slice RP, v0.40.1):** new (in `RegionDev`, generated headless too) `dev.region.realised {region, layer?: 0, tile?:
   "stage|set|tx,tz", cells?, verify?, world?: true}` (the realised record: per tile its status, codes, extras, sizes, shas and writers;
   `sites.json`; `composedSha` per key; `verify` against the journal and the world) and `dev.region.realised.audit {on?, dir?}` (each

@@ -1153,6 +1153,14 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   independent runs on 2026-10-24 (speed-audit-c's branch run and speed-audit-b's new run). Neither changed that code, and it had
   passed in about 18 earlier logs. If the nightly shows it again, treat it as a real race in the reopen-during-removal path, not
   a flake.
+- **A natural-site survey drifts in trees and water (CL, 2026-10-24).** Two surveys of the same G6B Seed Base in one run differed in
+  about 500 columns of trees and water, because chunk features aren't settled at survey time, and both differed from route_demo's
+  golden. Any gate that plans on a natural site should expect that drift: don't pin an answer on a tree or a water cell, and check
+  the step against more than one survey. CL's climbs pass trees at a cost (CL as built).
+- **T2's self-crossing retry can block its own goal (CL, 2026-10-24).** A route that crosses itself is searched again with the
+  crossing cells blocked and dilated; a crossing at the goal blocks the goal, so all 8 retries fail and the edge answers NO_ROUTE or
+  ROUTE_WATER. CL keeps the ends open for climb edges only (byte identity). Fixing it for every edge may route edges that fail today:
+  a small slice of its own, with the fixtures it moves named.
 
 ## UI track (Noah, 2026-10-24; audit notes in the coordinator's scratchpad, summarised here)
 Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family rail, swatches or preview sheets, detail pane), built to grow later (favourites, tags, compare); inline they are compact chip rows (current + recents + "more…"). UI-1 and Steward's UI-3 fixes start now, alongside 7a. Mock APPROVED by Noah 2026-10-24 (https://claude.ai/artifact/6ZC5ktBTis9Y6xDPoeHN4j): compact row max 4 chips, rail/grid/detail browser, preview in the detail pane (world-ghost preview later), form opens Basics + Palette, Features/Rules/Parameters closed with counts. Rebindable placement keys deferred.

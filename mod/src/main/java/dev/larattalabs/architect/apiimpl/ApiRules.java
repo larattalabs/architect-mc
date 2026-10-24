@@ -94,6 +94,7 @@ public final class ApiRules {
 					case "region.catwalks" -> "catwalks"; // 7a CW: plan/0's connector.catwalk (the face form; route row 10)
 					case "region.plan.besideReach" -> "besideReach"; // 6c D3: the join reaches into a standing town's claim (ends and side T junctions)
 					case "region.plan.dry" -> "besideCheck"; // 6c D3: Regions.checkBeside, a dry beside plan that keeps nothing
+					case "region.climbs" -> "climbConnectors"; // 7a CL: plan/0's connector.stair, connector.switchback and connector.ladder (since NEXT)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
