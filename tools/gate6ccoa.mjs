@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
@@ -130,7 +131,7 @@ steps.unit = async () => {
   out.java = await javaTests(['*PlanRetentionTest*', '*RegionWaitTagsTest*', '*RealiseKeyTest*', '*ApiRulesTest*'], 13);
   check(out.java.ok, `items 1, 2, 3, 8 (mod): RealiseKeyTest (the key rule: a stale retry under the same key, a standing region holds it, an undo frees it), PlanRetentionTest (the last-use sweep: a keyed plan touched at day 29 survives day 35, an untouched one goes; 7 days unkeyed, 30 keyed; a pinned artifact holds its plan; keyed pins end at the key's realise and 30 days after their last use; an old pins file), RegionWaitTagsTest (a tile's plan parts, the tags, the sentence), ApiRulesTest (the features): ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
   // item 3 (sidecar)
-  const s = spawnSync('npx', ['vitest', 'run', 'test/regions-discard.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
+  const s = sidecarReuse(root, ['test/regions-discard.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/regions-discard.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
   const st = `${s.stdout}${s.stderr}`;
   out.sidecar = (/Tests\s+[^\n]+/.exec(st) ?? ['?'])[0];
   check(s.status === 0 && /Tests\s+\d+ passed/.test(st), `item 3 (sidecar): region.plan.discard removes a plan's dir, answers existed false after, the feature is advertised: ${out.sidecar}`);

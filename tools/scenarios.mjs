@@ -418,7 +418,7 @@ async function runScenario(id) {
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
   if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc);
   let t0 = Date.now();
-  await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.seedBase(sc.world.seed));
+  await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.claimBase(sc.world.seed, sc.fixture.claim));
   await L.setRules(flat ? 'exact' : 'gallery');
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
   T('world', t0);

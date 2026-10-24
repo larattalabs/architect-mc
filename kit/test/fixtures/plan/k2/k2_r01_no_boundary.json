@@ -1,0 +1,25 @@
+{
+ "about": "(7a K2, \u00a79) a wall along a ridge on the asks claim (flat): no boundary, refused NO_FEATURE {why: boundary} (D2's NO_EDGE)",
+ "on": "asks",
+ "expect": {
+  "part": "w",
+  "code": "NO_FEATURE",
+  "why": "boundary"
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "w",
+    "kind": "wall",
+    "where": {
+     "along": {
+      "feature": {
+       "ridge": {}
+      }
+     }
+    }
+   }
+  ]
+ }
+}

@@ -243,7 +243,7 @@ public interface Regions {
 	 * Server thread. Since 1.39.0.
 	 */
 	default void pinArtifact(String artifactSha, String owner, String opKey) {
-		throw new UnsupportedOperationException("Regions.pinArtifact(sha, owner, opKey) needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.pinArtifact(sha, owner, opKey) needs Architect API 1.39.0");
 	}
 
 	/**
@@ -257,6 +257,6 @@ public interface Regions {
 	 * with a plan key). Since 1.39.0.
 	 */
 	default CompletableFuture<Boolean> discardPlan(String planId) {
-		throw new UnsupportedOperationException("Regions.discardPlan needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.discardPlan needs Architect API 1.39.0");
 	}
 }

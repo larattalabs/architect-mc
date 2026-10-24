@@ -25,6 +25,7 @@ import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
@@ -111,7 +112,7 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: format-1 goldens, S1's and S7's tile goldens, mega_bench and the 6b fixtures unchanged; the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/regions-passes.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+  const sc = sidecarReuse(root, ['test/regions-passes.test.ts', 'test/regions-real-kit-6b.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/regions-passes.test.ts', 'test/regions-real-kit-6b.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;
   out.sidecar = { code: sc.status, summary: st.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `§1-§3 (sidecar): declared passes pick the pass budget (120 s, 2 GB), region.planned carries the kit's passes, notes and siteplan.json the timings: ${out.sidecar.summary}`);

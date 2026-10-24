@@ -97,18 +97,18 @@ public interface Bibles {
 	 * the helper validates it with the kit (the test house included) and sets {@code origin: hand}. {@code bibleId} null: a new
 	 * Style ({@code bib_<slug of name>}, made unique). {@code owner} null = the player; an existing Style's owner must match.
 	 * Fails (the message says why) for a built-in id, an id a bible job holds, another owner's Style, or roles the kit refuses.
-	 * Completes with the saved version. Since NEXT.
+	 * Completes with the saved version. Since 1.41.0.
 	 */
 	default CompletableFuture<Bible> save(@Nullable String bibleId, com.google.gson.JsonObject style, @Nullable String owner) {
-		throw new UnsupportedOperationException("Bibles.save needs Architect API since NEXT");
+		throw new UnsupportedOperationException("Bibles.save needs Architect API since 1.41.0");
 	}
 
 	/**
 	 * (Style unification U1) The Styles a caller may design with, free and local (no helper call): the built-in ones, the player's
 	 * (no owner, or a player UUID) and, when {@code owner} is set, that owner's; archived ones left out. The latest version of each (installed ones
-	 * by id, then the built-in ones). Use {@link DesignRequest#withStyle} for a materials-only design with one. Any thread. Since NEXT.
+	 * by id, then the built-in ones). Use {@link DesignRequest#withStyle} for a materials-only design with one. Any thread. Since 1.41.0.
 	 */
 	default List<Bible> usable(@Nullable String owner) {
-		throw new UnsupportedOperationException("Bibles.usable needs Architect API since NEXT");
+		throw new UnsupportedOperationException("Bibles.usable needs Architect API since 1.41.0");
 	}
 }

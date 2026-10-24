@@ -8,10 +8,13 @@
 // edge, S-T2-2, nor at a coarse resolution); `ladderMax` replaces LADDER_MAX. No new flag semantics: "the connector really climbed"
 // is CL's post-check on the routed segments, not an A* constraint. A leaf module (no imports).
 
+// (7a CL, §2) the values: a stair climbs in flights rather than winding at the grade (flights cheap, a graded walk dear); a switchback
+// zigzags on hairpins rather than detouring round the slope (no flights, hairpins and their landings cheap); a ladder climbs a face to
+// 48 rather than walking round (the rest landings are the emitter's: lib/connectors/climbGeom.mjs)
 export const PROFILES = Object.freeze({
-  stair: Object.freeze({ stairs: true, ladders: true, ladderMax: 24, cost: Object.freeze({}) }),
-  switchback: Object.freeze({ stairs: true, ladders: true, ladderMax: 24, cost: Object.freeze({}) }),
-  ladder: Object.freeze({ stairs: true, ladders: true, ladderMax: 24, cost: Object.freeze({}) }),
+  stair: Object.freeze({ stairs: true, ladders: false, ladderMax: 24, cost: Object.freeze({ flight: 20, stair: 12, grade: 18 }) }),
+  switchback: Object.freeze({ stairs: false, ladders: false, ladderMax: 24, cost: Object.freeze({ hairpin: 16, landing: 1, grade: 6 }) }),
+  ladder: Object.freeze({ stairs: true, ladders: true, ladderMax: 48, cost: Object.freeze({ ladder: 30, ladderPer: 10 }) }),
 });
 
 /** The profile names an edge may carry. */

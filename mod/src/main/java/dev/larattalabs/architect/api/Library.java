@@ -27,7 +27,7 @@ public interface Library {
 	 * Makes a variant without Claude (the Library's Variants dialog): {@code variant.request} over the mod's sidecar link.
 	 * Completes on the server thread with the new entry once it is installed and loaded; fails when the helper is not
 	 * running, the source has no parametric source, or the build fails. {@code palette}: a preset name or
-	 * {@code {wood?, stone?, roof?, accent?}}, or (since NEXT, a helper with {@code "palette.roles"}; Style unification U1) a Style's
+	 * {@code {wood?, stone?, roof?, accent?}}, or (since 1.41.0, a helper with {@code "palette.roles"}; Style unification U1) a Style's
 	 * roles inline {@code {bible: {id, version, roles}}} ({@link DesignRequest#stylePalette}): a re-skin with those materials, e.g. a
 	 * Style's roles after a main-row edit; it replaces the entry's recorded palette. Without that feature the future fails rather than
 	 * building the default palette. Thread-safe.

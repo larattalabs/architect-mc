@@ -34,6 +34,14 @@ export const TURN_COOLDOWN = 3;
 /** The coarse grid's cell (in survey cells) and the fine search's corridor half-width (in cells). */
 export const COARSE = 4;
 export const CORRIDOR = 16;
+/**
+ * (7a CL) A climb edge's (a stair, switchback or ladder profile) tree cells within its ends' box grown by CORRIDOR are passable at
+ * this extra cost a cell, not obstacles: the search still goes round a tree when that is cheap, and the realise fells only the trees
+ * the chosen path and its clearance touch (6a's tree rule). A natural site's surveyed trees drift between surveys of one seed world
+ * (chunk features not settled), and a climb in woods has no other way up. Every other edge keeps trees as obstacles.
+ */
+export const CLIMB_TREE_COST = 30;
+const CLIMB_TREE_PROFILES = new Set(['stair', 'switchback', 'ladder']);
 /** The grade window (cells), a flight's longest run (the landing interval) and the tallest ladder. */
 export const WINDOW = 8;
 export const FLIGHT_MAX = 8;
@@ -254,7 +262,8 @@ function search(env, ctx) {
   const { W, D } = env;
   // (7a foundation) the edge's profile (moves/profiles.mjs): its costs merged over COST and its ladder limit; absent, COST itself
   const C = ctx.cost ?? COST, LMAX = ctx.ladderMax ?? LADDER_MAX;
-  const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity } = ctx;
+  const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity, treeC = null } = ctx;
+  const TC = C.tree ?? CLIMB_TREE_COST, treeN = (k) => (treeC && treeC[k] ? TC : 0);
   // (7a K1) the special moves this edge searches with, the flag bit (F = 2 when a row may set it) and whether the goal needs it
   const special = ctx.special ?? [], F = special.some((x) => x.m.flag) ? 2 : 1, needFlag = !!ctx.needFlag;
   const free0 = ctx.free ?? blockedW;
@@ -305,6 +314,7 @@ function search(env, ctx) {
     let d = dOf(yOf(q), k);
     if (d < 0 && built) d = Math.max(0, Math.min(ND - 1, yOf(q) - G[k] + maxCut));
     if (d < 0) return;
+    if (treeC) cost += treeN(k);
     const s = st(k, h, kk, d, f);
     if (closed[s]) return;
     const ng = gArr[s0] + cost;
@@ -397,7 +407,8 @@ function search(env, ctx) {
             // (hysteresis: a flight over preferred cells costs a third, as a walk does)
             let pref = 1;
             for (let t = 1; t <= n + 2 && pref; t++) { const pi = i + di * t, pj = j + dj * t; if (!prefer[pi + pj * W]) pref = 0; }
-            const fc = C.flight + C.stair * n + C.step * 2 + C.cutFill * (cf + cf2) * w;
+            let fc = C.flight + C.stair * n + C.step * 2 + C.cutFill * (cf + cf2) * w;
+            if (treeC) for (let t = 1; t <= n + 1; t++) fc += treeN(i + di * t + (j + dj * t) * W);
             relax(s, last, hf, 2, yn * FP, (pref ? Math.floor(fc / 3) : fc) + (hf !== h ? C.turn : 0), 1, n * 2 + (sg > 0 ? 1 : 0));
           }
         }
@@ -409,14 +420,14 @@ function search(env, ctx) {
       if (kk >= 1) {
         for (const side of [1, -1]) {
           const lo = side > 0 ? latLo : latLo - laneW, hi = side > 0 ? latHi + laneW : latHi;
-          let ok = true, cf = 0, cnt = 0;
+          let ok = true, cf = 0, cnt = 0, tl = 0;
           for (let t = 1; t <= Ld && ok; t++) {
             for (let v = lo; v <= hi; v++) {
               const ci = i + di * t + ri * v, cj = j + dj * t + rj * v;
               if (ci < 0 || cj < 0 || ci >= W || cj >= D) { ok = false; break; }
               const ck = ci + cj * W;
               if (!open1(ck) || dOf(y, ck) < 0) { ok = false; break; }
-              cf += Math.abs(y - G[ck]); cnt++;
+              cf += Math.abs(y - G[ck]); tl += treeN(ck); cnt++;
             }
           }
           if (!ok) continue;
@@ -424,7 +435,7 @@ function search(env, ctx) {
           if (ei < 0 || ej < 0 || ei >= W || ej >= D) continue;
           const ek = ei + ej * W;
           if (!inS(ek) || builtY[ek] !== NONE) continue;
-          relax(s, ek, (h + 4) & 7, 0, y * FP, C.hairpin + C.landing * cnt + C.step * (laneW + 2) + C.cutFill * cf, 2, side > 0 ? 1 : 0);
+          relax(s, ek, (h + 4) & 7, 0, y * FP, C.hairpin + C.landing * cnt + C.step * (laneW + 2) + C.cutFill * cf + tl, 2, side > 0 ? 1 : 0);
         }
       }
       // ladders (player-only edges): up a cliff face ahead, or down one; the walk meets the land at both feet
@@ -678,7 +689,19 @@ export function routePass(survey, volumes, intent) {
       const mk = water ? masks : baseMasks(env, it, { water: false, keepOut: !_unsafe.noKeepOut });
       const hardW = dilate(mk.hard, W, D, Rt), guardW = dilate(mk.guard, W, D, Rw), treeW = dilate(mk.tree, W, D, Rt), earlyW = dilate(earlier, W, D, Rt);
       const blockedW = new Uint8Array(n), blocked1 = dilate(mk.guard, W, D, R1);
-      for (let k = 0; k < n; k++) { blockedW[k] = hardW[k] | guardW[k] | treeW[k] | earlyW[k]; blocked1[k] |= mk.hard[k] | mk.tree[k] | earlier[k]; }
+      // ((7a CL) a climb edge's trees in its box: passable at CLIMB_TREE_COST, marked in treeC)
+      let tree1 = mk.tree, treeC = null;
+      if (CLIMB_TREE_PROFILES.has(e.profile)) {
+        const [ai, aj] = [ends[0].k % W, Math.floor(ends[0].k / W)], [bi, bj] = [ends[1].k % W, Math.floor(ends[1].k / W)];
+        const i0 = Math.max(0, Math.min(ai, bi) - CORRIDOR), i1 = Math.min(W - 1, Math.max(ai, bi) + CORRIDOR);
+        const j0 = Math.max(0, Math.min(aj, bj) - CORRIDOR), j1 = Math.min(D - 1, Math.max(aj, bj) + CORRIDOR);
+        tree1 = Uint8Array.from(mk.tree);
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const k = i + j * W;
+          if (treeW[k] || tree1[k]) { treeC ??= new Uint8Array(n); treeC[k] = 1; treeW[k] = 0; tree1[k] = 0; }
+        }
+      }
+      for (let k = 0; k < n; k++) { blockedW[k] = hardW[k] | guardW[k] | treeW[k] | earlyW[k]; blocked1[k] |= mk.hard[k] | tree1[k] | earlier[k]; }
       // ((6c D3) the edge's frame: outside it, and within the margin of its outer edge, is hard (under the footprint too))
       if (fr) { const fW = dilate(fr, W, D, Rt); for (let k = 0; k < n; k++) { blockedW[k] |= fW[k]; blocked1[k] |= fr[k]; } }
       // the approach to a lot: straight out of its front, through its apron and the margins
@@ -699,10 +722,10 @@ export function routePass(survey, volumes, intent) {
       }
       // (7a K1) the special moves' blocked cells (the walls, under the footprint and its half width) after the approaches, so no
       // walk ever writes one; `free` keeps the obstacles without them (a gate move's own cells, the coarse corridor)
-      if (!specialBlocks) return { blockedW, blocked1 };
+      if (!specialBlocks) return { blockedW, blocked1, ...(treeC ? { treeC } : {}) };
       const free = Uint8Array.from(blockedW), sbW = dilate(specialBlocks, W, D, Rt);
       for (let k = 0; k < n; k++) { blockedW[k] |= sbW[k]; blocked1[k] |= specialBlocks[k]; }
-      return { blockedW, blocked1, free };
+      return { blockedW, blocked1, free, ...(treeC ? { treeC } : {}) };
     };
     // the edge's own earlier route (6d replanning: `prefer` on the edge) costs a third too, for this edge only
     let preferE = preferM;
@@ -734,7 +757,8 @@ export function routePass(survey, volumes, intent) {
     // (7a foundation) the edge's profile: its costs over COST, its stairs and ladders ANDed with the pass's, its ladder limit
     const prof = e.profile === undefined || e.profile === null ? null : PROFILES[e.profile];
     if (e.profile !== undefined && e.profile !== null && !prof) throw new Error(`route ${e.id}: profile must be one of ${Object.keys(PROFILES).join(', ')}`);
-    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], ...(goalH >= 0 && (goalH & 1) === 0 ? { goalH, goalLead: lead } : {}), Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
+    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], ...(goalH >= 0 && (goalH & 1) === 0 ? { goalH, goalLead: lead } : {}), Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(isInt(e.hairpinLanding) && e.hairpinLanding >= 1 && e.hairpinLanding <= 16 ? e.hairpinLanding : hairpinLanding, w) + r - 1) / r), // ((7a CL) an edge's own landing depth: a switchback's `landing`)
+     
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse && (!prof || prof.stairs), ladders: ladders && (!prof || prof.ladders), nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(prof ? { cost: { ...COST, ...prof.cost }, ladderMax: prof.ladderMax } : {}),
       ...(sp.length ? { special: sp, needFlag } : {}) };
@@ -835,13 +859,16 @@ export function routePass(survey, volumes, intent) {
     const wetCorridor = sp.some((x) => x.m.crossesWater);
     for (let attempt = 0; attempt <= 8; attempt++) {
       const b = build(true);
-      if (attempt) { const sb = dilate(selfBlock, W, D, Rt); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
+      // ((7a CL) a climb edge's retry never blocks an end cell or a cell beside it: a crossing at the goal would block the goal itself,
+      // and no retry could then succeed (other edges keep T2's rule, byte for byte)
+      const keepEnds = (sb) => { if (CLIMB_TREE_PROFILES.has(e.profile)) for (const en of ends) { const i0 = en.k % W, j0 = Math.floor(en.k / W); for (let j = Math.max(0, j0 - 1); j <= Math.min(D - 1, j0 + 1); j++) for (let i = Math.max(0, i0 - 1); i <= Math.min(W - 1, i0 + 1); i++) sb[i + j * W] = 0; } return sb; };
+      if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
       let cmask = b.free ?? b.blockedW;
       if (wetCorridor) {
         const bw = build(false);
         cmask = bw.free ?? bw.blockedW;
-        if (attempt) { const sb = dilate(selfBlock, W, D, Rt); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
+        if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
       }
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
       for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {

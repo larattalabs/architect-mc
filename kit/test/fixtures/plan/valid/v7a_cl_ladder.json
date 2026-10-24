@@ -1,0 +1,75 @@
+{
+  "about": "(7a CL, \u00a710) the synthetic cliffs: a 30-high face climbed by a ladder with one rest landing (rest 24) and a 16-high one climbed in one flight, each with its top gate; player-only by kind",
+  "terrain": {
+    "W": 160,
+    "D": 120,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1080,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2059,
+        "y": 94
+      },
+      {
+        "x0": 1080,
+        "z0": 2060,
+        "x1": 1159,
+        "z1": 2119,
+        "y": 80
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1070,
+      65,
+      2030
+    ],
+    "b": [
+      1090,
+      95,
+      2030
+    ],
+    "c": [
+      1070,
+      65,
+      2090
+    ],
+    "d": [
+      1090,
+      81,
+      2090
+    ]
+  },
+  "covers": [
+    "connector.ladder"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "high_ladder",
+        "kind": "ladder",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      },
+      {
+        "id": "low_ladder",
+        "kind": "ladder",
+        "from": {
+          "anchor": "c"
+        },
+        "to": {
+          "anchor": "d"
+        }
+      }
+    ]
+  }
+}

@@ -434,7 +434,7 @@ export class Region {
       const k1 = {};
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       // ((7a foundation) and the 7a rows' opaque per-edge `t7` options and the edge's `profile` over the built-in moves)
-      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile']) if (e[key] !== undefined) k1[key] = e[key];
+      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
       // ((6c D3) a reach join: its own `frame` (rects), its `to` end's `lead`, `graded` (no 4e road: its columns are exactly its
       // footprint) and its own `part`; absent: as before)
       const d3 = {};
@@ -601,7 +601,8 @@ export class Region {
         if (ROW_SEGMENTS_7A.includes(g.kind)) return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
-          const onGround = g.kind === 'walk' && !it.base && !mats.guard && !e.d3.graded && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
+          // ((7a CL) never on a ladder edge: 4e re-grades its road to the realised ground, and at the face it ramps up against the cliff)
+          const onGround = g.kind === 'walk' && (e.k1?.profile ?? e.profile) !== 'ladder' && !it.base && !mats.guard && !e.d3.graded && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
           if (onGround) {
             const idx = polylineOf(cells);
             const id = `${rid}_${n}`;
@@ -617,7 +618,7 @@ export class Region {
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
           p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });
-          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard, railSkip: (x, z) => priorCols.has(`${x},${z}`) } : {}) });
+          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: e.k1?.stairMaterial ?? mats.stair, id: `${rid}_${n}`, ...(mats.guard ? { railing: mats.guard, railSkip: (x, z) => priorCols.has(`${x},${z}`) } : {}) });
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
           ladderSegs.push(n);
@@ -697,7 +698,8 @@ export class Region {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a gate in a wall is a node too
-    if (!['lot', 'plaza', 'junction', 'gate'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction or gate`);
+    // ((7a K2) a wall walk's access (a flight or a ladder up its inner face) too)
+    if (!['lot', 'plaza', 'junction', 'gate', 'access'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate or access`);
     this.graphIds.add(id);
     const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
     this.graph.nodes.push(n);
@@ -709,7 +711,8 @@ export class Region {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
-    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel or a 7a connector kind (${KINDS_7A.join(', ')})`);
+    // ((7a K2) and a wall walk's run between two accesses: wall_walk)
+    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', 'wall_walk', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel, wall_walk or a 7a connector kind (${KINDS_7A.join(', ')})`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     // ((6c D3, §3.5) a side junction's edge names the street road: `<regionId>:<roadId>` with `junction {kind: side, ...}`)
     const sideTo = external && junction?.kind === 'side' && /^[A-Za-z0-9_.-]{1,64}:[A-Za-z0-9_#.-]{1,64}$/.test(String(to));

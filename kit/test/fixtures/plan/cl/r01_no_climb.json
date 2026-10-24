@@ -1,0 +1,39 @@
+{
+  "about": "(7a CL, \u00a73) a stair between ends on one level of flat ground: refused NO_CLIMB {ascent 0, need 2}, a path wouldFit (re-checked alone: fits)",
+  "terrain": {
+    "W": 160,
+    "D": 96
+  },
+  "anchors": {
+    "a": [
+      1030,
+      65,
+      2048
+    ],
+    "b": [
+      1100,
+      65,
+      2048
+    ]
+  },
+  "expect": {
+    "part": "flat_stair",
+    "code": "NO_CLIMB",
+    "wouldFit": "path"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flat_stair",
+        "kind": "stair",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        }
+      }
+    ]
+  }
+}

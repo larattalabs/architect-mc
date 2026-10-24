@@ -35,7 +35,7 @@ def clientSidecar = rootProject.file("src/client/java/dev/larattalabs/architect/
 def genHooks = tasks.register("genHooks", Sync) {
 	into(generatedHooks)
 	from(clientDev) {
-		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "SliceWDev.java", "SliceF2Dev.java", "SliceBDev.java", "SliceP0Dev.java", "SlicePTDev.java", "SlicePT2Dev.java", "SliceT3Dev.java", "SliceHDev.java", "SliceVocDev.java", "SliceVocbDev.java", "SliceU1Dev.java", "SliceVoccDev.java", "SliceCuDev.java", "SliceRsDev.java", "SliceFlDev.java", "SliceCoaDev.java", "StockpileDev.java", "Fields.java"
+		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "SliceWDev.java", "SliceF2Dev.java", "SliceBDev.java", "SliceP0Dev.java", "SlicePTDev.java", "SlicePT2Dev.java", "SliceT3Dev.java", "SliceClDev.java", "SliceHDev.java", "SliceVocDev.java", "SliceVocbDev.java", "SliceU1Dev.java", "SliceVoccDev.java", "SliceCuDev.java", "SliceRsDev.java", "SliceFlDev.java", "SliceCoaDev.java", "StockpileDev.java", "Fields.java"
 		into("dev/larattalabs/architect/devserver/gen")
 		filter { String line ->
 			if (line.startsWith("package dev.larattalabs.architect.client.dev;")) {

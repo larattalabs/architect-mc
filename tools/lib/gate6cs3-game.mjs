@@ -79,7 +79,7 @@ export async function planTwin(ctx, variant) {
   const out = { variant };
   installBible(ctx);
   // ---- the world: a fresh copy of S3's site (settled), or the flat base with the hill raised and kept
-  await L.fresh(`G6B S3 Twin ${variant}`, variant === 'natural' ? await L.seedBase(sc.world.seed) : core.FLAT);
+  await L.fresh(`G6B S3 Twin ${variant}`, variant === 'natural' ? await L.claimBase(sc.world.seed, c) : core.FLAT);
   await L.setRules('exact');
   await L.cmd('/weather clear');
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);

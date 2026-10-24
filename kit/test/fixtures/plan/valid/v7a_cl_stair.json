@@ -1,0 +1,35 @@
+{
+  "about": "(7a CL, \u00a710) S3's pinned claim (route_demo's survey): a stair from the valley floor by the gate to the shoulder by the chapel, 2 wide, villagers (inferred: its ends are no lots); flights under the stair profile, railed beside drops, lit",
+  "on": "s3",
+  "anchors": {
+    "a": [
+      3638,
+      85,
+      -895
+    ],
+    "b": [
+      3674,
+      125,
+      -957
+    ]
+  },
+  "covers": [
+    "connector.stair"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "valley_stair",
+        "kind": "stair",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "width": 2
+      }
+    ]
+  }
+}

@@ -16,7 +16,8 @@
 // water under them is read from a frozen volume (the first plan asks it: incomplete VOLUME), recorded (meta.wet, kind wall) and
 // guarded; the answer's geometry gains `wet: [{from, to, depth}]` and `crossing {type: wall, over: water, depth}`.
 import { readParams } from './params.mjs';
-import { MARGIN, OB, lineCells, lineLeg, obstacleGrid, placeRing, ringCells } from './line.mjs';
+import { MARGIN, OB, alongLine, alongSide, lineCells, lineLeg, obstacleGrid, placeRing, ringCells } from './line.mjs';
+import { normalAt, traceBoundary } from '../region/boundary.mjs';
 import { doorOf, shapeOf } from './style.mjs';
 import { bomOf } from './bom.mjs';
 import { centreCells } from '../region/geom.mjs';
@@ -28,6 +29,7 @@ import { COND } from '../region/program.mjs';
 import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWallFallback } from '../fluids/wet.mjs';
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
+import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -164,16 +166,21 @@ function settingsOf(K, p) {
   const P = readParams('wall', p.part);
   const w = p.part;
   const g = w.gates;
-  const gatesMin = Number.isInteger(g) ? g : Number.isInteger(g?.min) ? g.min : P.read.gatesMin ?? WALL_DEFAULTS.gatesMin;
+  const gatesMin = Number.isInteger(g) ? g : Number.isInteger(g?.min) ? g.min : P.read.gatesMin ?? (w.where?.along ? 0 : WALL_DEFAULTS.gatesMin);
   const gatesMax = Number.isInteger(g?.max) ? g.max : g === 0 || P.read.gatesMin === 0 ? 0 : WALL_DEFAULTS.gatesMax;
-  const form = w.where?.around ? 'around' : w.where?.inside ? 'edge' : 'line';
-  const closedWritten = w.where?.around?.closed ?? P.read.closed;
-  const closed = form === 'line' ? false : closedWritten ?? true;
+  const form = w.where?.around ? 'around' : w.where?.inside ? 'edge' : w.where?.along ? 'along' : 'line';
+  // ((7a K2, §2) an along wall is never closed: closed is noted, not read; gates.min defaults to 0 (people walk round its ends))
+  const closedWritten = form === 'along' ? undefined : w.where?.around?.closed ?? P.read.closed;
+  const closed = form === 'line' || form === 'along' ? false : closedWritten ?? true;
+  if (form === 'along' && (P.read.closed !== undefined)) P.notes.push(`params.closed not read (an along wall is open)`);
   const namesGate = GATE_KEYS.some((k) => w.params?.[k] !== undefined && !(k === 'gates' && w.params[k] === 0));
   const sealed = gatesMax === 0 || (closedWritten === true && !gateParts(K, p.id).length && !namesGate);
+  // ((7a K2, §1) the walk: the member, else params.wall_walk; with no thickness given the wall is walk.width + 1 thick (the outer course
+  // the parapet))
+  const walk = walkOf(w, P.read);
   return {
-    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin),
-    height: w.height ?? P.read.height ?? WALL_DEFAULTS.height, thickness: w.thickness ?? WALL_DEFAULTS.thickness,
+    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin), walk,
+    height: w.height ?? P.read.height ?? WALL_DEFAULTS.height, thickness: w.thickness ?? (walk ? walk.width + 1 : WALL_DEFAULTS.thickness),
     crenels: w.crenels ?? WALL_DEFAULTS.crenels, corners: w.corners ?? WALL_DEFAULTS.corners, lamps: w.lamps ?? P.read.lamps ?? 'gates',
   };
 }
@@ -197,6 +204,7 @@ function lineOf(K, p, st, wet = null, bodies = true) {
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect), ...(reachBlocks ? { kind: 'region' } : {}) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
   }
+  if (st.form === 'along') return alongOf(K, p, st, bodies);
   if (st.form === 'edge') {
     const inside = w.where.inside;
     let R, what;
@@ -290,6 +298,38 @@ function lineOf(K, p, st, wet = null, bodies = true) {
   const lc = lineCells(line, t);
   if (joinedLots.length) notes.push(`joined lot${joinedLots.length > 1 ? 's' : ''} ${joinedLots.join(', ')}: the wall meets ${joinedLots.length > 1 ? 'their boxes' : 'its box'} (its closure provisional until the lot's entry binds)`);
   return { ...lc, crossings: crossings.map((c) => ({ positions: [c.from, c.to] })), devs, notes, joined: joinedLots, G };
+}
+
+/** (7a K2, §2) The default offset range of an along wall from its spine. */
+export const ALONG_DISTANCE = Object.freeze([2, 8]);
+
+/**
+ * (7a K2, §2) A wall.along's line: D2's boundary (traceBoundary: a water feature's shore, a biome edge, a ridge; near the anchor when
+ * given) as a spine, the side (alongSide), each run of 8 spine cells offset by its smallest clear distance (alongLine). No spine:
+ * refused NO_FEATURE {why: boundary} (D2's NO_EDGE). The inside of an along wall faces away from its spine: its thickness stands toward
+ * the boundary, so its inner course is the line (the coordinator's reading, 2026-10-23).
+ */
+function alongOf(K, p, st, bodies) {
+  const al = p.part.where.along, f = al.feature ?? {}, fk = Object.keys(f)[0];
+  const t = st.thickness, notes = [], devs = [];
+  const follow = fk === 'water' ? { shore: { minArea: f.water?.minArea ?? 64 } } : fk === 'biome_edge' ? { biome_edge: { between: f.biome_edge.between } } : fk === 'ridge' ? { ridge: { minRise: f.ridge?.minRise ?? 8 } } : null;
+  if (!follow) return { error: { code: 'NO_FEATURE', message: `an along wall follows a water body's shore, a biome edge or a ridge (not ${fk})`, evidence: { why: 'boundary', feature: f } } };
+  const anchorName = al.anchor ?? f[fk]?.to ?? null;
+  const near = anchorName ? K.env.anchors.get(anchorName) ?? null : null;
+  const tb = traceBoundary(K.env.cols, K.env.claim, follow, { biomes: K.ctx.biomes ?? null, near, minLength: 16 });
+  if (tb.none) return { error: { code: 'NO_FEATURE', message: `no boundary to wall along: ${tb.none.replace(/^NO_EDGE: /, '')}`, evidence: { why: 'boundary', feature: f, found: tb.none } } };
+  const spine = tb.spine, nrm = spine.map((_, i) => normalAt(spine, i));
+  const dist = Array.isArray(al.distance) ? [Math.min(...al.distance), Math.max(...al.distance)] : Number.isInteger(al.distance) ? [al.distance, al.distance] : [...ALONG_DISTANCE];
+  const G = gridOf(K, { bodies });
+  const waterAt = (x, z) => { const k = G.at(x, z); return k >= 0 && G.ob[k] === OB.WATER; };
+  const sd = alongSide(G, spine, nrm, { side: al.side ?? 'either', kind: tb.kind, anchor: near, dist, waterAt });
+  if (tb.kind === 'shore' && al.side && al.side !== 'either') notes.push(`side ${al.side} not read: a wall along a shore stands on the land`);
+  const L = alongLine(G, spine, nrm, { sign: sd.sign, dist, t });
+  const what = `${tb.kind === 'shore' ? 'the shore' : tb.kind === 'ridge' ? 'the ridge' : 'the biome edge'}`;
+  if (!L.ok) return { error: { code: L.code, message: L.short !== undefined ? `the wall along ${what} leaves the claim (${L.short} positions inside its margin)` : `no clear offset for the wall along ${what} at ${dist[0]}..${dist[1]} (or within ${L.tried[1] - dist[1]} past it) for spine cells ${L.spine?.map((q) => q.join(', ')).join(' to ')} (${Object.entries(L.blockers).map(([k, v]) => `${k.toLowerCase().replace(/_/g, ' ')} ${v}`).join(', ')})`, evidence: { why: 'offset', class: L.cls, run: L.run, distance: dist, blockers: L.blockers, ...(L.spine ? { spine: L.spine } : {}) } } };
+  if (L.move) { devs.push({ what: 'move', value: L.move }); notes.push(`a run of the wall stood ${L.move} outside its distance ${dist[0]}..${dist[1]} (the band was blocked)`); }
+  notes.push(`along ${what}: ${spine.length} spine cells (window ${L.window[0]}..${L.window[1]}), on its ${sd.sign > 0 ? 'left' : 'right'} side (${sd.why}), ${L.runs.length} runs at offsets ${[...new Set(L.runs.map((q) => q.offset))].sort((a, b) => a - b).join(', ')}; open, its ends in posts`);
+  return { ...L.lc, closed: false, crossings: L.crossings, devs, notes, G, along: { kind: tb.kind, side: sd.sign > 0 ? 'left' : 'right', spine, window: L.window, runs: L.runs.map(({ from, to, offset }) => ({ from, to, offset })), distance: dist } };
 }
 
 function appendLeg(line, crossings, leg) {
@@ -410,6 +450,16 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
+    // ((7a K2, §1) a walk needs thickness >= walk.width + 1 (the outer course is the parapet): a given thickness too thin is refused
+    // NO_ROOM {why: walk}, the thicker wall its wouldFit (re-checked alone)
+    if (st.walk && st.thickness < st.walk.width + 1) {
+      const need = st.walk.width + 1, frag = { ...p.part, thickness: need };
+      const L2 = lineOf(K, { ...p, part: frag }, { ...st, thickness: need });
+      K.ans(p, { class: 'refused', notes: [...st.P.notes], reasons: [{ code: 'NO_ROOM', message: `a ${st.walk.width}-wide walk needs a wall at least ${need} thick (its outer course the parapet); thickness ${st.thickness} is too thin`, evidence: { why: 'walk', thickness: st.thickness, need, width: st.walk.width } }], ...(L2.error ? {} : { wouldFit: [{ part: p.id, fragment: frag, notes: [`thickness ${need}: the walk on the inner ${st.walk.width} course${st.walk.width > 1 ? 's' : ''}, the parapet on the outer (re-checked alone: its line fits)`] }] }) });
+      continue;
+    }
+    if (st.walk && p.part.walk === undefined) st.P.notes.push('params.wall_walk read as walk: true');
+    if (st.walk && p.part.thickness === undefined && st.thickness !== WALL_DEFAULTS.thickness) st.P.notes.push(`thickness ${st.thickness}: walk.width + 1`);
     // ((6c KC) the broken variant `wallThroughBody` (ext architect_mc:unsafe): the old wall grid, the bodies' footprints left out; M25:clear
     // catches it)
     const blind = p.part.ext?.['architect_mc:unsafe']?.wallThroughBody === true;
@@ -417,7 +467,8 @@ export function planWalls(K) {
     const notes = [...st.P.notes];
     // ((6c H-b, §8.2) a ring that fails on water, or a line with no clear leg on a claim with water: once more over the wet grid)
     let wetW = null;
-    if (L.error && (L.error.code === 'WATER' || (st.form === 'line' && K.env.water?.bodies?.length))) {
+    // ((7a K2) never for an along wall: 0 of its cells in water, item 7; its WATER refusal stands)
+    if (L.error && st.form !== 'along' && (L.error.code === 'WATER' || (st.form === 'line' && K.env.water?.bodies?.length))) {
       const wf = wetWallFallback(K, p.part ? p : { part: p }, { code: 'WATER' });
       const L2 = wf ? lineOf(K, p, st, { waterDepth: wf.waterDepth, vols: wf.vols }) : null;
       if (L2 && !L2.error) { L = L2; wetW = wf; }
@@ -451,7 +502,7 @@ export function planWalls(K) {
     }
     notes.push(...L.notes);
     if (st.sealed) notes.push(st.gatesMax === 0 && (p.part.gates === 0 || st.P.read.gatesMin === 0) ? 'sealed: gates 0 (no gate; routes go round it or refuse)' : 'sealed: closed with no gate part (no gate; routes go round it or refuse)');
-    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G, ...(wetInfo ? { wet: wetInfo, wetPos: wetInfo.pos } : {}) };
+    const W = { id: p.id, p, st, form: st.form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: L.target ?? null, joined: L.joined ?? [], gates: [], devs: L.devs, notes, opened: 0, G: L.G, ...(L.along ? { along: L.along } : {}), ...(wetInfo ? { wet: wetInfo, wetPos: wetInfo.pos } : {}) };
     W.cellAt = new Map(W.cells.map((c) => [key(c.x, c.z), c]));
     // the networks' crossings: open gates (auto), at the network's own surface
     for (const c of L.crossings ?? []) {
@@ -476,6 +527,228 @@ export function planWalls(K) {
     K.ans(p, { class: 'fits', notes });
   }
   for (const g of K.k1Parts.filter((q) => q.kind === 'gate')) placeAtGate(K, g);
+  // ((7a K2) an along wall's gates.min gates, before routing (open gates the routes cross, on their landings: wallsBase))
+  for (const W of K.walls) if (W.form === 'along') alongMinGates(K, W, { early: true });
+}
+
+/** (7a K2) The longest flight a gate landing runs to meet the ground (beyond it: no landing, noted). */
+export const LANDING_FLIGHT = 40;
+/** (7a K2) How wide a landing's flight along the inner face is (cells out from the wall). */
+export const LANDING_WIDTH = 2;
+
+/**
+ * (7a K2, the coordinator's ruling (b), 2026-10-23) A gate landing on an along wall: on each side of the wall, over the gate's lanes, the
+ * 2 cells past the wall cut or filled to the gate's floor, then where the ground steps more than 1 a flight (rise 1 a cell, at most
+ * LANDING_FLIGHT) away from the wall until it meets the ground. Every cell must be clear on the wall's grid (a walk network's cell is
+ * one: the route levels it). Returns {ok: true, cells: [{x, z, y, kind: flat|stair, facing?}]} or {ok: false, why}.
+ */
+function landingOf(K, W, g) {
+  const t = W.st.thickness, S = K.env.S, cells = [];
+  const F = { '1,0': 'east', '-1,0': 'west', '0,1': 'south', '0,-1': 'north' };
+  const N = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] };
+  const wet = (x, z) => { const q = W.G.at(x, z); return q >= 0 && W.G.ob[q] === OB.WATER; };
+  const innerOf = (p) => W.cells.find((c) => c.pos === p && c.depth === 0);
+  let climb = false;
+  for (let p = g.a; p <= g.b; p++) {
+    const inner = innerOf(p), outer = W.cells.find((c) => c.pos === p && c.depth === t - 1) ?? inner;
+    if (!inner) return { ok: false, why: 'no inner course' };
+    const [dx, dz] = N[facingOut(W, inner)];
+    // inside: the gate's mouth, 2 cells at its floor; past it, a ground more than 1 off it takes the flight along the inner face (below)
+    for (let k = 1; k <= 2; k++) {
+      const x = inner.x - dx * k, z = inner.z - dz * k;
+      if (wet(x, z)) return { ok: false, why: 'water' };
+      cells.push({ x, z, y: g.y, kind: 'flat' });
+    }
+    if (Math.abs(S.groundAt(inner.x - dx * 3, inner.z - dz * 3) - g.y) > 1) climb = true;
+    // outside: 2 cells at the floor, then (where the ground is more than 1 off it) a flight straight out to the ground; a lane that meets
+    // the water at most 2 under the floor ends there (the gate opens onto the shore)
+    let L = g.y, k = 1, shore = false;
+    for (; k <= 2; k++) {
+      const x = outer.x + dx * k, z = outer.z + dz * k;
+      if (wet(x, z)) { if (L - S.groundAt(x, z) <= 2 && L >= S.groundAt(x, z)) { shore = true; break; } return { ok: false, why: `a drop of ${L - S.groundAt(x, z)} to the water` }; }
+      cells.push({ x, z, y: g.y, kind: 'flat', out: true, k });
+    }
+    let run = 0, rest = 0;
+    for (; !shore; k++) {
+      const x = outer.x + dx * k, z = outer.z + dz * k, G = S.groundAt(x, z);
+      if (wet(x, z)) { if (L - G <= 2 && L >= G) break; return { ok: false, why: `a drop of ${L - G} to the water` }; }
+      if (Math.abs(G - L) <= 1) break;
+      if (k > 2 + LANDING_FLIGHT) return { ok: false, why: `the ground steps ${Math.abs(S.groundAt(outer.x + dx * 3, outer.z + dz * 3) - g.y)} outside: a flight longer than ${LANDING_FLIGHT}` };
+      // (as T2's stair move climbs: flights of at most 8, then 2 flat cells, so a route over the landing (the pass's base) follows it)
+      if (run === 8) { cells.push({ x, z, y: L, kind: 'flat' }); if (++rest === 2) { run = 0; rest = 0; } continue; }
+      const up = G > L;
+      L += up ? 1 : -1;
+      run++;
+      cells.push({ x, z, y: L, kind: 'stair', facing: up ? F[`${dx},${dz}`] : F[`${-dx},${-dz}`] });
+    }
+  }
+  if (!cells.some((c) => c.out && c.k === 1)) return { ok: false, why: 'water at the gate' };
+  // inside, the flight along the inner face (the coordinator's ruling (i)): LANDING_WIDTH cells deep beside the wall, from the gate's
+  // side along the wall, rising (or falling) 1 a position in T2's pattern until the ground across its width is within 1; the shorter way
+  if (climb) {
+    let best = null;
+    // (along the wall's inner face, position by position, round its bends (a staircase shore's too), LANDING_WIDTH cells out)
+    // (a position's centre cell: the line's own, the inner course)
+    const posCell = (p) => (p >= 0 && p < W.positions.length ? W.positions[p] : null);
+    for (const dir of [1, -1]) {
+      const fl = [], seen = new Set(cells.map((c) => key(c.x, c.z)));
+      // the flight's centre line: each position's inner neighbour (its depth 2 at an inside corner), joined 4-connected round the bends
+      const centres = [];
+      const mouth = posCell(dir > 0 ? g.b : g.a);
+      let last = null;
+      { const nb0 = posCell((dir > 0 ? g.b : g.a) + 1) ?? posCell(dir > 0 ? g.b - 1 : g.a + 1); void nb0; }
+      for (let i = 0; i <= LANDING_FLIGHT && centres.length <= LANDING_FLIGHT; i++) {
+        const p = (dir > 0 ? g.b + 1 : g.a - 1) + dir * i;
+        const c = posCell(p);
+        if (!c || W.ends.includes(p) || W.gates.some((q) => q !== g && p >= q.a - 1 && p <= q.b + 1)) break;
+        const nb = posCell(p + 1), pb = posCell(p - 1);
+        const hx = nb ? nb.x - c.x : c.x - pb.x, hz = nb ? nb.z - c.z : c.z - pb.z;
+        const dx = -hz, dz = hx; // outward: right of travel
+        let q = [c.x - dx, c.z - dz];
+        if (W.cellAt.has(key(q[0], q[1]))) q = [c.x - 2 * dx, c.z - 2 * dz];
+        if (W.cellAt.has(key(q[0], q[1]))) continue;
+        last ??= [mouth.x - dx, mouth.z - dz];
+        // join from the last centre (x first, then z; else z first), never through the wall
+        const legs = [];
+        for (const xFirst of [true, false]) {
+          const out = [];
+          let [x, z] = last;
+          const step = (ax) => { if (ax === 'x') x += Math.sign(q[0] - x); else z += Math.sign(q[1] - z); out.push([x, z]); };
+          if (xFirst) { while (x !== q[0]) step('x'); while (z !== q[1]) step('z'); } else { while (z !== q[1]) step('z'); while (x !== q[0]) step('x'); }
+          if (out.every(([a, b]) => !W.cellAt.has(key(a, b)))) { legs.push(...out); break; }
+        }
+        if (!legs.length && (q[0] !== last[0] || q[1] !== last[1])) break;
+        // (a centre met again: the loop between cut out, so the line stays a 4-connected path)
+        for (const cc of legs) {
+          const at = centres.findIndex((e) => e[0] === cc[0] && e[1] === cc[1]);
+          if (at >= 0) centres.length = at + 1; else centres.push([...cc, dx, dz]);
+        }
+        last = q;
+      }
+      let L = g.y, run = 0, rest = 0, ok = false, prev = null;
+      for (let i = 0; i < centres.length; i++) {
+        const [cx, cz, dx, dz] = centres[i];
+        if (seen.has(key(cx, cz))) break;
+        const lane = [[cx, cz]].filter(([x, z]) => !W.cellAt.has(key(x, z)));
+        if (!lane.length) break;
+        if (lane.some(([x, z]) => wet(x, z))) break;
+        const G = Math.max(...lane.map(([x, z]) => S.groundAt(x, z)));
+        if (i > 0 && Math.abs(G - L) <= 1) { ok = true; break; }
+        const up = G > L;
+        let kind = 'stair';
+        if (run === 8) { kind = 'flat'; if (++rest === 2) { run = 0; rest = 0; } } else { L += up ? 1 : -1; run++; }
+        const from = prev ?? [cx + dx, cz + dz];
+        const sx = Math.sign(cx - from[0]), sz = Math.sign(cz - from[1]);
+        const facing = up ? F[`${sx},${sz}`] : F[`${-sx},${-sz}`];
+        for (const [x, z] of lane) { seen.add(key(x, z)); fl.push({ x, z, y: L, kind, ...(kind === 'stair' && facing ? { facing } : kind === 'stair' ? { facing: F[`${-dx},${-dz}`] } : {}), flight: true }); }
+        prev = centres[i];
+      }
+      if (ok && (!best || fl.length < best.length)) best = fl;
+    }
+    if (!best) return { ok: false, why: `the ground steps ${Math.abs(S.groundAt(innerOf(g.a).x, innerOf(g.a).z) - g.y)} inside and no flight along the wall's inner face meets it within ${LANDING_FLIGHT}` };
+    cells.push(...best);
+  }
+  for (const c of cells) {
+    const k = W.G.at(c.x, c.z);
+    if (k < 0) return { ok: false, why: 'the claim\'s margin' };
+    if (W.G.ob[k] && !W.G.walk[k]) return { ok: false, why: ['clear', 'the claim\'s margin', 'a protected area', 'water', 'keep-out', 'a lot, zone, form or another region', 'a plan body'][W.G.ob[k]] };
+    if (W.cellAt.has(key(c.x, c.z))) return { ok: false, why: 'the wall itself (a bend)' };
+  }
+  return { ok: true, cells };
+}
+
+/**
+ * (7a K2, §2) An along wall's gates.min, before routing: evenly along it (the n-th of `want` at (2n + 1) / (2 want) of its length), ties
+ * by position, with the linear distance (two ends, no wrap); within half the spacing of its target a level run wins, then the nearest
+ * run whose landing fits (landingOf), else the nearest; the network crossings' gates count. A gate with no landing is noted (never
+ * silent: a route the wall cuts answers UNREACHABLE {kind: wall}).
+ */
+function alongMinGates(K, W, { early = false } = {}) {
+  if (W.form !== 'along' || W.st.sealed || W.minDone) return;
+  // (before routing, only a wall some of whose gates need a landing: a level wall's gates.min waits for the routes' crossings, as K1a's)
+  if (early) {
+    const n0 = W.positions.length, h0 = Math.max(1, Math.floor(n0 / (2 * Math.max(1, W.st.gatesMin))));
+    let level = true;
+    for (let q = 0; q < W.st.gatesMin && level; q++) {
+      const target = Math.floor((n0 * (2 * q + 1)) / (2 * W.st.gatesMin));
+      let found = false;
+      for (let a = 1; a + WALL_DEFAULTS.gateWidth < n0 - 1 && !found; a++) { const b = a + WALL_DEFAULTS.gateWidth - 1; if (Math.abs(((a + b) >> 1) - target) <= h0 && runFree(W, a, b) && crossStep(K, W, a, b) <= 1) found = true; }
+      if (!found) level = false;
+    }
+    if (level) return;
+  }
+  W.minDone = true;
+  const want = W.st.gatesMin - W.gates.length;
+  const n = W.positions.length;
+  let added = 0;
+  const half = Math.max(1, Math.floor(n / (2 * Math.max(1, W.st.gatesMin))));
+  for (let q = 0; q < W.st.gatesMin && added < want; q++) {
+    const target = Math.floor((n * (2 * q + 1)) / (2 * W.st.gatesMin));
+    const cands = [];
+    for (let a = 1; a + WALL_DEFAULTS.gateWidth < n - 1; a++) {
+      const b = a + WALL_DEFAULTS.gateWidth - 1;
+      if (!runFree(W, a, b)) continue;
+      cands.push({ a, b, d: Math.abs(((a + b) >> 1) - target) });
+    }
+    if (!cands.length) break;
+    cands.sort((u, v) => u.d - v.d || u.a - v.a);
+    const mk = (c, y = null) => { const mid = W.positions[(c.a + c.b) >> 1]; return makeGate(W, { a: c.a, b: c.b, y: y ?? K.env.S.groundAt(mid.x, mid.z), h: WALL_DEFAULTS.gateHeight, auto: true, kind: 'min' }); };
+    // a run's landing: at the line's ground, else at the shore's (the land just outside the wall): the shorter that fits
+    const landAt = (c) => {
+      const g0 = mk(c);
+      const ys = new Set([g0.y]);
+      for (let p = c.a; p <= c.b; p++) {
+        const o = W.cells.find((q) => q.pos === p && q.depth === W.st.thickness - 1), i = W.cells.find((q) => q.pos === p && q.depth === 0);
+        if (!o || !i) continue;
+        const [dx, dz] = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] }[facingOut(W, i)];
+        for (let k = 1; k <= 2; k++) { const gq = W.G.at(o.x + dx * k, o.z + dz * k); if (gq >= 0 && !W.G.ob[gq]) ys.add(K.env.S.groundAt(o.x + dx * k, o.z + dz * k)); }
+      }
+      let best = null;
+      for (const y of [...ys].sort((u, v) => u - v)) { const g = mk(c, y); const l = landingOf(K, W, g); if (l.ok && (!best || l.cells.length < best.l.cells.length)) best = { y, l }; }
+      return best;
+    };
+    let pick = cands.find((c) => c.d <= half && crossStep(K, W, c.a, c.b) <= 1) ?? null, landing = null;
+    // (else the run within half the spacing whose landing is shortest: fewest flight steps, then nearest)
+    let pickY = null;
+    if (!pick) for (const c of cands) { if (c.d > half) break; const b = landAt(c); if (b && (!landing || b.l.cells.length < landing.cells.length)) { pick = c; landing = b.l; pickY = b.y; } }
+    // (none within half the spacing: the nearest anywhere whose landing fits, noted as moved from even)
+    let far = false;
+    if (!pick) for (const c of cands) { if (c.d <= half) continue; const b = landAt(c); if (b) { pick = c; landing = b.l; pickY = b.y; far = true; break; } }
+    pick ??= cands[0];
+    const g = mk(pick, pickY);
+    g.landing = landing ?? landingOf(K, W, g);
+    W.gates.push(g);
+    W.opened++;
+    added++;
+    const step = crossStep(K, W, pick.a, pick.b);
+    if (far) W.notes.push(`gate ${g.id}: ${pick.d} positions from its even place (none nearer has a level run or a landing)`);
+    if (step > 1 && g.landing.ok) W.notes.push(`gate ${g.id}: the ground steps ${step} across the wall there: a landing levels it (${g.landing.cells.filter((c) => c.kind === 'stair').length} flight step(s))`);
+    if (step > 1 && !g.landing.ok) W.notes.push(`gate ${g.id}: the ground steps ${step} across the wall there and no landing fits (${g.landing.why}): no walk through it`);
+  }
+  if (added < want) W.notes.push(`gates.min ${W.st.gatesMin}: room for ${W.gates.length}`);
+}
+
+/**
+ * (7a K2) The landings' ground for the route pass (its `base`: what each landing cell's ground becomes less the survey's), or null: the
+ * routes cross an along wall's gates.min gates at their floors.
+ */
+export function wallsBase(K) {
+  // (the landing's cells and the gate's own opening: its floor through the wall's depth)
+  const cs = (K.walls ?? []).flatMap((W) => W.gates.filter((g) => g.landing?.ok).flatMap((g) => [...g.landing.cells, ...g.cells.map(([x, z]) => ({ x, z, y: g.y }))]));
+  if (!cs.length) return null;
+  const minX = Math.min(...cs.map((c) => c.x)), minZ = Math.min(...cs.map((c) => c.z)), width = Math.max(...cs.map((c) => c.x)) - minX + 1, depth = Math.max(...cs.map((c) => c.z)) - minZ + 1;
+  const values = new Array(width * depth).fill(0);
+  for (const c of cs) values[(c.x - minX) + (c.z - minZ) * width] = c.y - K.env.S.groundAt(c.x, c.z);
+  return { minX, minZ, width, depth, values };
+}
+
+/** (7a K2) Two route-pass bases summed over their union (either may be null). */
+export function mergeBases(a, b) {
+  if (!a || !b) return a ?? b ?? null;
+  const minX = Math.min(a.minX, b.minX), minZ = Math.min(a.minZ, b.minZ), maxX = Math.max(a.minX + a.width, b.minX + b.width) - 1, maxZ = Math.max(a.minZ + a.depth, b.minZ + b.depth) - 1;
+  const width = maxX - minX + 1, depth = maxZ - minZ + 1, values = new Array(width * depth).fill(0);
+  for (const q of [a, b]) for (let j = 0; j < q.depth; j++) for (let i = 0; i < q.width; i++) values[(q.minX + i - minX) + (q.minZ + j - minZ) * width] += q.values[i + j * q.width];
+  return { minX, minZ, width, depth, values };
 }
 
 /** The wall a gate part belongs to: {W} or {error}. */
@@ -560,6 +833,46 @@ export function wallsEvidence(K, leg) {
   return walls.length ? { walls } : {};
 }
 
+/**
+ * (7a K2) A leg the route pass could not route (no route, or the search's budget spent) whose ends an open wall (wall.along: its ends
+ * clip at the claim margin) cuts apart: the claim's dry cells reach one end from the other without the walls' cells, and not with them.
+ * Its answer says so (refused UNREACHABLE, evidence {kind: wall, walls}) instead of a bare UNREACHABLE or BUDGET: K1a's gate move opens
+ * a gate only on a straight run held flat across the wall, which a stepped natural bank (a 45 degree staircase shore) never has. Null
+ * when no along wall is the cut.
+ */
+export function wallsCutAnswer(K, leg, why = null) {
+  const along = (K.walls ?? []).filter((W) => W.form === 'along');
+  if (!along.length) return null;
+  const G = along[0].G, n = G.W * G.D;
+  const a = G.at(leg.from.at[0], leg.from.at[2]), b = G.at(leg.to.at[0], leg.to.at[2]);
+  if (a < 0 || b < 0) return null;
+  const wallAt = new Int16Array(n).fill(-1);
+  along.forEach((W, wi) => { for (const c of W.cells) { const k = G.at(c.x, c.z); if (k >= 0) wallAt[k] = wi; } });
+  const reach = (blockWalls) => {
+    const seen = new Uint8Array(n), q = [a];
+    seen[a] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const k = q[i], x = k % G.W, z = (k - x) / G.W;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= G.W || nz >= G.D) continue;
+        const nk = nx + nz * G.W;
+        if (seen[nk] || (G.ob[nk] === OB.WATER || G.ob[nk] === OB.OUT_OF_CLAIM) || (blockWalls && wallAt[nk] >= 0)) continue;
+        seen[nk] = 1; q.push(nk);
+      }
+    }
+    return seen;
+  };
+  // the walls the straight line between the ends crosses (the ones a route had to pass through a gate or go round)
+  const hit = new Set();
+  { let x = leg.from.at[0], z = leg.from.at[2]; const x1 = leg.to.at[0], z1 = leg.to.at[2], dx = Math.abs(x1 - x), dz = Math.abs(z1 - z), sx = Math.sign(x1 - x), sz = Math.sign(z1 - z);
+    for (let ix = 0, iz = 0; ix < dx || iz < dz;) { if ((1 + 2 * ix) * dz <= (1 + 2 * iz) * dx) { x += sx; ix++; } else { z += sz; iz++; } const k = G.at(x, z); if (k >= 0 && wallAt[k] >= 0) hit.add(wallAt[k]); } }
+  if (!hit.size || !reach(false)[b]) return null;
+  const round = reach(true)[b];
+  const walls = [...hit].sort((p, q) => p - q).map((wi) => along[wi]).map((W) => ({ wall: W.id, form: 'along', gates: W.gates.length, open: W.gates.filter((g) => g.routed).length }));
+  return { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${leg.k + 1}: ${walls.length > 1 ? `the along walls ${walls.map((w) => w.wall).join(', ')} stand` : `along wall ${walls[0].wall} stands`} between its ends and no gate could open across it (a gate needs a straight run of the wall held flat across its depth; the ground here steps)${round ? ', and no route round its end was found' : ' (it cuts them apart)'}; give the wall a gate part at an endpoint where the ground is level, or move the route's end`, evidence: { leg: leg.k + 1, from: leg.from.at, to: leg.to.at, kind: 'wall', walls, round: round ? 'not found' : 'none', ...(why ? { search: why } : {}) } }] };
+}
+
 // ------------------------------------------------------------------ step 4: crossing gates, auto gates, gates.min
 
 export function finishGates(K) {
@@ -594,6 +907,8 @@ export function finishGates(K) {
   }
   // gates.min on a closed wall: first where a zone's street end faces the ring, then evenly along it (ties by position)
   for (const W of K.walls) {
+    // ((7a K2, §2) an along wall's gates.min: placed before routing (alongMinGates); nothing more here
+    if (W.form === 'along') { alongMinGates(K, W); continue; }
     if (!W.closed || W.st.sealed) continue;
     let want = W.st.gatesMin - W.gates.length;
     // ((6c HY-c) the standing water gates count against gates.max: gates.min adds no gate past it)
@@ -642,9 +957,25 @@ export function finishGates(K) {
     const deviations = [...j.deviations, ...W.joins.map(({ note, ...d }) => { void note; return d; })];
     const notes = mergeNotes([...W.notes, ...W.joins.map((d) => d.note)]);
     const klass = j.klass === 'refused' ? 'refused' : deviations.length ? 'adjusted' : 'fits';
-    W.answer = { class: klass, deviations, notes, ...(j.klass === 'refused' ? { reasons: [{ code: 'TOLERANCE', message: `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }] } : {}), ...(W.joined.length ? { provisional: true } : {}) };
+    W.answer = { class: klass, deviations, notes, ...(j.klass === 'refused' ? { reasons: [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }] } : {}), ...(W.joined.length ? { provisional: true } : {}) };
     K.ans(p, W.answer);
   }
+}
+
+/**
+ * (7a K2) How far the ground steps across a wall at positions a..b: the most, over the run, between the standable ground just inside its
+ * inner course and just outside its outer course (and along the opening's own cells).
+ */
+function crossStep(K, W, a, b) {
+  let worst = 0;
+  for (let i = a; i <= b; i++) {
+    const inner = W.cells.find((c) => c.pos === i && c.depth === 0), outer = W.cells.find((c) => c.pos === i && c.depth === W.st.thickness - 1) ?? inner;
+    if (!inner) return Infinity;
+    const [dx, dz] = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] }[facingOut(W, inner)];
+    const ys = [K.stand(inner.x - dx, inner.z - dz), ...W.cells.filter((c) => c.pos === i).map((c) => K.stand(c.x, c.z)), K.stand(outer.x + dx, outer.z + dz)];
+    worst = Math.max(worst, Math.max(...ys) - Math.min(...ys));
+  }
+  return worst;
 }
 
 /** At most 16 notes (partAnswer): the 16th says how many more there were. */
@@ -708,11 +1039,13 @@ export function emitWalls(K) {
       K.record.bom[W.id] = out.bom;
       for (const g of W.gates) if (g.part) K.record.bom[g.part] = out.gateBom.get(g.id) ?? {};
       K.answers.get(W.id).geometry = out.geometry;
+      // ((7a K2) the walk's notes (its dead ends, an access it had no room for))
+      if (out.notes?.length) K.answers.get(W.id).notes = mergeNotes([...(K.answers.get(W.id).notes ?? []), ...out.notes]);
       for (const g of W.gates) if (g.part && K.answers.get(g.part)) K.answers.get(g.part).geometry = { wall: W.id, at: g.at, width: g.width, height: g.h, door: g.door, frame: g.frame, cells: g.cells.length };
     } catch (e) {
       K.rollback(cp);
       metaWalls.length && (K.r.meta.walls = [...metaWalls]);
-      K.ans(W.p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `the wall's emission failed: ${e.message}`, evidence: { wall: W.id } }], notes: W.answer?.notes });
+      K.ans(W.p, { class: 'refused', reasons: [e.reason ?? { code: 'NO_ROOM', message: `the wall's emission failed: ${e.message}`, evidence: { wall: W.id } }], notes: W.answer?.notes });
       for (const g of W.gates) if (g.part && K.answers.has(g.part)) K.answers.set(g.part, { ...K.answers.get(g.part), class: 'blocked', blockedBy: [W.id], reasons: [{ code: 'DEPENDENCY', message: `depends on ${W.id}, which is not fits or adjusted`, evidence: { blockedBy: [W.id] } }] });
     }
   }
@@ -753,6 +1086,9 @@ function emitWall(K, W) {
     }
     if (!changed) break;
   }
+  // ((7a K2, §3) a walk: its surface ramps over the raised tops (within one half block a cell), the wall's top the walk's)
+  const WK = st.walk ? walkLevels(T, W.closed) : null;
+  if (WK) for (let i = 0; i < n; i++) T[i] = WK.top[i];
   // ---- the cells
   const ops = new Map(); // "x,y,z" -> state | null (air)
   const put = (x, y, z, s) => ops.set(`${x},${y},${z}`, s);
@@ -831,6 +1167,39 @@ function emitWall(K, W) {
     capCells.set(key(c.x, c.z), { y: top, merlon: !st.crenels || (c.depth === t - 1 && (c.pos & 1) === 0) });
   }
   for (const [x, y, z] of lowCols) put(x, y, z, frame);
+  // ((7a K2, the coordinator's ruling (b)) an along wall's gate landings: the 2 cells past the wall each side cut or filled to the gate's
+  // floor, then the flight to the ground; over a route's cells only the cut (the route levels its own floor). A route's own gate gets one
+  // too (its route made it flat: nothing to do but the head room); one that does not fit is noted
+  const landingStairs = shapeOf(foundation, 'stairs') ?? shapeOf(body, 'stairs') ?? 'minecraft:stone_brick_stairs';
+  if (W.form === 'along') for (const g of W.gates) {
+    g.landing ??= landingOf(K, W, g);
+    if (!g.landing.ok) continue;
+    for (const c of g.landing.cells) {
+      const G = S.groundAt(c.x, c.z);
+      const isWalk = walkSet.has(key(c.x, c.z));
+      for (let y = c.y + 1; y <= Math.max(G, c.y + 3); y++) put(c.x, y, c.z, null);
+      if (isWalk) continue;
+      for (let y = G + 1; y < c.y; y++) put(c.x, y, c.z, foundation);
+      put(c.x, c.y, c.z, c.kind === 'stair' ? `${landingStairs}[facing=${c.facing},half=bottom,shape=straight,waterlogged=false]#walk` : `${surface}#walk`);
+    }
+    // its open sides over a drop of more than 1: the side column filled to the landing and the rail role's fence on it (M8)
+    const own = new Set(g.landing.cells.map((c) => key(c.x, c.z)));
+    const railFence = shapeOf(roles.rail ?? 'minecraft:oak_fence', 'fence') ?? 'minecraft:oak_fence';
+    const sides = new Map();
+    for (const c of g.landing.cells) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = c.x + dx, z = c.z + dz, k = key(x, z);
+      if (own.has(k) || W.cellAt.has(k) || walkSet.has(k) || opening.has(k)) continue;
+      const gq = W.G.at(x, z);
+      if (gq < 0 || W.G.ob[gq]) continue;
+      if (c.y - S.groundAt(x, z) <= 1) continue;
+      if (!(sides.get(k)?.y >= c.y)) sides.set(k, { x, z, y: c.y });
+    }
+    for (const q of sides.values()) {
+      for (let y = S.groundAt(q.x, q.z) + 1; y <= q.y; y++) put(q.x, y, q.z, foundation);
+      put(q.x, q.y + 1, q.z, `${railFence}[east=false,north=false,south=false,waterlogged=false,west=false]`);
+      put(q.x, q.y + 2, q.z, null);
+    }
+  }
   // corner stubs: 3 above the wall
   for (const [x, z] of stubCells(W)) {
     const c = W.cellAt.get(key(x, z));
@@ -842,12 +1211,14 @@ function emitWall(K, W) {
   // and lamps along the top
   let topLamps = false;
   for (const [k, cc] of capCells) {
+    if (WK) break; // ((7a K2) a walk wall's top course is the walk's: wallWalk.mjs)
     if (cc.merlon && capWall) continue;
     const [x, z] = k.split(',').map(Number);
     put(x, cc.y, z, capSlab ? slabState(capSlab) : capWall ? wallState(capWall, {}) : cap);
     if (!capSlab && !capWall) topLamps = true;
   }
   for (const [k, cc] of capCells) {
+    if (WK) break;
     if (!(cc.merlon && capWall)) continue;
     const [x, z] = k.split(',').map(Number);
     const joins = (dx, dz) => { const o = capCells.get(key(x + dx, z + dz)); return !!o && o.y === cc.y && o.merlon; };
@@ -880,8 +1251,8 @@ function emitWall(K, W) {
       if (spot) for (const q of fixtureCells(fixture, spot).cells) lampCells.push(q);
     }
   }
-  // lamps along the top (lamps: every, or a cap with neither variant)
-  if (st.lamps === 'every' || topLamps) {
+  // lamps along the top (lamps: every, or a cap with neither variant; (7a K2) a walk has its own, on the parapet)
+  if (!WK && (st.lamps === 'every' || topLamps)) {
     const every = Math.max(4, Math.floor((12 * fixture.level) / 15));
     for (let i = 0; i < n; i += every) {
       const c = cellsOfPos[i].find((q) => q.depth === 0 && !opening.has(key(q.x, q.z)) && capCells.has(key(q.x, q.z)));
@@ -889,10 +1260,26 @@ function emitWall(K, W) {
       for (const q of fixtureCells(fixture, [c.x, capCells.get(key(c.x, c.z)).y + 1, c.z]).cells) lampCells.push(q);
     }
   }
+  // ---- ((7a K2, §3) the walk: the courses on the top, the parapet, the inner rail on its corbels, the accesses, the lamps)
+  let walkOut = null;
+  if (WK) {
+    const lampFoot = new Set(lampCells.map(([x, , z]) => key(x, z)));
+    // (the gate landings' columns: no access flight or rail over them)
+    const landing = new Map();
+    for (const g of W.gates) if (g.landing?.ok) for (const c of g.landing.cells) landing.set(key(c.x, c.z), Math.max(c.y, landing.get(key(c.x, c.z)) ?? -32768));
+    walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, landing, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
+    if (walkOut.refuse) throw Object.assign(new Error(walkOut.refuse.message), { reason: walkOut.refuse });
+    for (const q of walkOut.lamps) lampCells.push(q);
+  }
   // ---- the graph: a node per gate (kind gate, its wall the ref; §8's additive wire shape)
   for (const g of W.gates) {
     const c0 = W.cells.find((c) => c.pos === ((g.a + g.b) >> 1)) ?? W.cells[0];
     r.graphNode({ id: `gate:${g.id}`.slice(0, 64), kind: 'gate', ref: W.id, at: g.at, ports: [{ name: 'gate', at: g.at, facing: facingOut(W, c0), width: g.width }] });
+  }
+  // ((7a K2, §3) the walk's accesses (kind access) and its runs between them (type wall_walk, player only)
+  if (walkOut) {
+    for (const a of walkOut.nodes) r.graphNode({ id: a.id, kind: 'access', ref: W.id, at: a.at, ports: [{ name: 'walk', at: a.at, facing: 'up', width: st.walk.width }] });
+    for (const e of walkOut.edges) r.graphEdge({ id: e.id, from: `${e.from}.walk`, to: `${e.to}.walk`, type: 'wall_walk', width: st.walk.width, path: `w_${W.id}`.slice(0, 48), stage: K.stageOf('links'), movers: ['player'] });
   }
   // ---- the ops: one part per wall in the links stage, absolute y
   const part = r.part(`w_${W.id}`.slice(0, 48), { stage: K.stageOf('links') });
@@ -924,7 +1311,8 @@ function emitWall(K, W) {
   }
   const line = [];
   W.positions.forEach((q, i) => { if (i === 0 || i === n - 1 || q.axis === 3) line.push([q.x, q.z]); });
-  const gatesOut = W.gates.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, frame: g.frame, auto: g.auto, kind: g.kind, y: g.y, h: g.h, cells: g.cells, ...(g.conn ? { crossing: g.conn } : {}) }));
+  // ((7a K2) a gate's landing: its cells (x, y, z: the floor or stair block), its flight steps)
+  const gatesOut = W.gates.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, frame: g.frame, auto: g.auto, kind: g.kind, y: g.y, h: g.h, cells: g.cells, ...(g.conn ? { crossing: g.conn } : {}), ...(g.landing?.ok ? { landing: { steps: g.landing.cells.filter((c) => c.kind === 'stair').length, cells: g.landing.cells.map((c) => [c.x, c.y, c.z]) } } : {}) }));
   const meta = {
     id: W.id, part: W.id, form: W.form, closed: W.closed, sealed: st.sealed, height: st.height, thickness: t, crenels: st.crenels, line,
     inside: W.closed && W.I ? arr(W.I) : null, joined: W.joined, ends: W.ends,
@@ -936,6 +1324,14 @@ function emitWall(K, W) {
   if (wgOut.length) meta.waterGates = wgOut;
   const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
   const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  if (walkOut) { meta.walk = walkOut.meta; geometry.walk = walkOut.geometry; record.walk = { width: st.walk.width, runs: walkOut.edges.length, accesses: walkOut.meta.accesses.length }; }
+  // ((7a K2, §2, §7) an along wall: its spine (corners), the window used and each run's offset; meta and siteplan carry the spine)
+  if (W.along) {
+    const sp = W.along.spine, corners = sp.filter((q, i) => i === 0 || i === sp.length - 1 || (sp[i - 1][0] !== sp[i + 1][0] && sp[i - 1][1] !== sp[i + 1][1]));
+    geometry.along = { kind: W.along.kind, side: W.along.side, distance: W.along.distance, window: W.along.window, spine: corners.map((q) => [...q]), runs: W.along.runs };
+    meta.along = { kind: W.along.kind, side: W.along.side, distance: W.along.distance, spine: sp.slice(W.along.window[0], W.along.window[1] + 1).map((q) => [...q]) };
+    record.along = { kind: W.along.kind, side: W.along.side, window: W.along.window, runs: W.along.runs.length };
+  }
   // ((H-b) a harbour wall: its wet sections (runs of positions in natural water: from, to at the surface, the deepest water) and its
   // crossing of the water)
   if (W.wet) {
@@ -961,7 +1357,7 @@ function emitWall(K, W) {
     geometry.waterGates = wgOut.map(({ course, cells, lintel }) => ({ course, cells: cells.length, lintel }));
     if (!geometry.crossing) geometry.crossing = { type: 'wall', over: 'course', gate: 'water', course: wgOut[0].course };
   }
-  return { meta, record, geometry, bom: bomOf(states), gateBom };
+  return { meta, record, geometry, bom: bomOf(states), gateBom, notes: walkOut?.notes ?? [] };
 }
 
 /** The heading out of the wall at a cell (from its inner course to its outer). */
