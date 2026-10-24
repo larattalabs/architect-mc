@@ -435,14 +435,8 @@ steps.natural = async () => {
   // under the footing, untouched) is no wall in water (the verifier's finding, 2026-10-24)
   const pre = await decodeArwd(fs.readFileSync(out.before));
   const was = (x, y, z) => pre.palette[pre.cells[pre.at(x, y, z)]] ?? '';
-  let wet = 0;
-  const wetAt = [];
-  for (const [x, z, T] of w.cells) {
-    let foot = null;
-    for (let y = T - 40; y <= T + 3; y++) if (was(x, y, z) !== at(x, y, z)) { foot = y; break; }
-    if (foot === null) continue;
-    for (let y = foot; y <= T + 3; y++) if (/^minecraft:water/.test(at(x, y, z)) || /^minecraft:water/.test(was(x, y, z))) { wet++; if (wetAt.length < 8) wetAt.push([x, y, z]); break; }
-  }
+  const { wallInWater } = await import('./lib/gate7ak2-kit.mjs');
+  const { wet, sample: wetAt } = wallInWater(w.cells, was, at);
   check(wet === 0, `item 7: 0 wall cells in water (re-read: no water, before or after, over each wall column's written range, its lowest changed cell to its top; ${w.cells.length} columns)`, wetAt);
   // the free ends' posts: an end position stands 1 over its neighbour position
   const topOf = (pos) => Math.max(...w.cells.filter((c) => c[3] === pos).map((c) => { for (let y = c[2] + 4; y >= c[2] - 4; y--) if (!/^minecraft:(air|cave_air)$/.test(at(c[0], y, c[1]))) return y; return -Infinity; }));

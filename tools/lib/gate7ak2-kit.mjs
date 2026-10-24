@@ -6,3 +6,22 @@ import { F7A_MOVED } from './f7a-norm.mjs';
 export const K2_MOVED = Object.freeze({
   ...F7A_MOVED,
 });
+
+/**
+ * (7a K2 item 7) The wall columns standing in water: over each wall column's written range (its lowest cell the realise changed, up to
+ * its top + 3), water in the realised world, or water there before (a wall block standing where water was). Water under that range (a
+ * flooded cave beneath the footing, untouched) does not count. `cells`: the wall meta's [[x, z, T]]; `was`, `at`: (x, y, z) -> block
+ * state before and after. Returns {wet, sample: [[x, y, z]]}.
+ */
+export function wallInWater(cells, was, at) {
+  const water = (s) => /^minecraft:water/.test(s);
+  let wet = 0;
+  const sample = [];
+  for (const [x, z, T] of cells) {
+    let foot = null;
+    for (let y = T - 40; y <= T + 3; y++) if (was(x, y, z) !== at(x, y, z)) { foot = y; break; }
+    if (foot === null) continue;
+    for (let y = foot; y <= T + 3; y++) if (water(at(x, y, z)) || water(was(x, y, z))) { wet++; if (sample.length < 8) sample.push([x, y, z]); break; }
+  }
+  return { wet, sample };
+}
