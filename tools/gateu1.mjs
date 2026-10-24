@@ -70,7 +70,10 @@ steps.ingame = async () => {
     check(j.palette?.bible?.roles?.wall === 'minecraft:white_terracotta' && j.palette?.bible?.id === 'medieval', '2: the entry records the palette with the roles inline', j.palette);
     check(j.bible?.id === 'medieval' && j.bible?.version === 1, '2: the entry pins the Style the roles came from (medieval v1)', j.bible);
     check(!fs.existsSync(path.join(LIB, dd.entryId, 'bible')), '2: no bible/ folder: never bible set mode');
-    check(/white_terracotta/.test(materials(j)) && /dark_oak_log/.test(materials(j)), '2: built of the Style\'s materials (white_terracotta wall, dark_oak_log frame)', j.materials);
+    // (the sim copies a kit example, which reads the wood set, p.planks, for its walls: the roles it uses must be the Style's, not the
+    // example's own default palette (rustic: spruce and cobblestone))
+    const m = materials(j);
+    check(/dark_oak_log/.test(m) && /stone_bricks/.test(m) && /spruce_stairs/.test(m) && !/cobblestone/.test(m), '2: built of the Style\'s materials (dark_oak_log frame, stone_bricks foundation, spruce roof; no cobblestone)', j.materials);
   }
 
   // 3. a variant with the roles after a main-row edit
@@ -83,7 +86,7 @@ steps.ingame = async () => {
     if (v.entryId) {
       const j = entryJson(v.entryId);
       check(j.palette?.bible?.roles?.frame === 'minecraft:birch_log', '3: the variant records the edited roles as its palette', j.palette);
-      check(/birch_log/.test(materials(j)) && /white_terracotta/.test(materials(j)), '3: the variant is built of the edited roles (birch_log frame, white_terracotta wall)', j.materials);
+      check(/birch_log/.test(materials(j)) && /birch_planks/.test(materials(j)) && !/"minecraft:dark_oak_log"/.test(materials(j)), '3: the variant is built of the edited roles (birch_log frame, birch floor; the old dark_oak_log gone)', j.materials);
     }
   }
 
