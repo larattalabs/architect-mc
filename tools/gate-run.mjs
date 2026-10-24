@@ -87,7 +87,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
-import { kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
+import { buildFrozenClasses, kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
@@ -2058,6 +2058,8 @@ try {
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
   if (FROZEN) {
     DRV = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log }).dir;
+    // the snapshot's mod classes (a fresh worktree has none: gradle filters ran 0 tests, api-compat found no classes); a failure aborts the run here
+    summary.frozenBuildMs = buildFrozenClasses({ dir: DRV, log }).ms;
     summary.frozenSource = DRV;
     log(`frozen source: the drivers run from ${DRV} at ${head.slice(0, 9)}${summary.sourceDirty ? ` (${SRC} has uncommitted changes: NOT tested; commit them)` : ''}; a commit in ${SRC} during the run changes nothing here`);
   }

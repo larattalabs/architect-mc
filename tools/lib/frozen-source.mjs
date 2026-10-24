@@ -5,7 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const real = (p) => fs.realpathSync(p);
@@ -42,6 +42,37 @@ export function prepareFrozenSource({ src, main, dir, head, seed = ['.gradle-hom
     seeded.push(rel);
   }
   return { dir, created, seeded };
+}
+
+/**
+ * The frozen source carries BUILT mod classes. The snapshot is a fresh worktree: `mod/build` holds nothing, so a driver's own
+ * `./gradlew test --tests <filter>` ran 0 tests and tools/api-compat.mjs found no classes (2026-10-24, 12 of 18 steps). Compile
+ * them once, here, before any step starts: `classes testClasses :devserver:classes :apitest:classes` offline in the snapshot, with
+ * its own gradle home. Gradle's up-to-date checks key on the inputs, so the next run (another head, same dir) recompiles only what
+ * changed and never reuses a stale output. A failed build THROWS (the run aborts in setup, before any step). -> { ms, log }.
+ */
+export function buildFrozenClasses({ dir, tasks = ['classes', 'testClasses', ':devserver:classes', ':apitest:classes'], timeoutMin = 30, log = () => {}, env = process.env } = {}) {
+  const mod = path.join(dir, 'mod');
+  if (!fs.existsSync(path.join(mod, 'gradlew'))) throw new Error(`frozen source build: ${mod}/gradlew does not exist`);
+  const e = { ...env, JAVA_HOME: env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(dir, '.gradle-home') };
+  // nothing that changes what is compiled from outside the commit, as the build artifact's build (tools/lib/build-artifact.mjs)
+  for (const k of Object.keys(e)) if (/^(JAVA_TOOL_OPTIONS|NODE_OPTIONS|GATE_TRACE_|LAB_UI_DIR|ORG_GRADLE_PROJECT_)/.test(k) || /^(ANTHROPIC_|CLAUDE)/.test(k)) delete e[k];
+  log(`setup: building the frozen source's mod classes (./gradlew --offline ${tasks.join(' ')}) in ${mod}`);
+  const t0 = Date.now();
+  const r = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', ...tasks], { cwd: mod, env: e, encoding: 'utf8', timeout: timeoutMin * 60_000, maxBuffer: 64 << 20 });
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  const logFile = path.join(dir, 'frozen-build.log');
+  try {
+    fs.writeFileSync(logFile, out);
+  } catch {
+    // an unwritable log must not hide the build result
+  }
+  if (r.status !== 0) {
+    throw new Error(`the frozen source's mod build failed (${r.error?.message ?? `exit ${r.status ?? r.signal}`}); no step ran. Last output:\n${out.split('\n').slice(-25).join('\n')}`);
+  }
+  const ms = Date.now() - t0;
+  log(`setup: frozen source built in ${(ms / 1000).toFixed(0)}s`);
+  return { ms, log: logFile };
 }
 
 /**
