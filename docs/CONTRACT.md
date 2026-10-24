@@ -25081,3 +25081,62 @@ kit **0.42.0**, catalogue **14**.
   checked against the themed rule either.
 - `Regions.pinArtifact`'s and `Regions.discardPlan`'s default-method messages still say "needs Architect API NEXT" (unstamped
   since close-out A; runtime text, not javadoc, so release-version leaves it).
+
+## Style unification U2: StyleForm, the model behind both editor modes (as built)
+
+No API change, no new screens (U3 builds the UI on lab-ui 0.2.0). Mod-internal and kit only.
+
+**1. `StyleForm`** (`mod/.../library/StyleForm.java`, main source set, pure; JS twin `kit/lib/styles.mjs` `formNew` / `formApply` /
+`formView` / `formRequest` / `formSaveRequest`).
+- A Style as the form takes it: `{id, name, version, kind: preset | bible | inputs, roles, suggestedFeatures, tags}` (+ `editable`,
+  `modOwned` from `Bible.editable()` / `Bible.modOwned()` in Java). `Style.of(Bible)`, `Style.preset(Palettes, name)` (built-ins
+  without a helper: roles and the metadata from `palettes-fallback.json`, `Palettes.presetMeta`), `Style.inputs(Inputs)` (an entry's
+  plain palette inputs: no Style).
+- **Stored state, not read back:** picking a Style computes its roles, the four main rows (`mainOf`) and each role's provenance
+  (`provenanceOf`) once. A main-row edit re-derives only the roles whose STORED provenance follows that row, from the row's stored old
+  value (new core `editMainFrom(roles, field, value, old, following)` in kit and `StyleRoles`; `editMain` delegates to it with the
+  rows read back, so U1's parity cases are unchanged). A role set by hand is `hand` and never moves a row (U01's drift).
+- **Custom mix:** any role or row differing from the picked Style's. Revert (or picking the same Style again) restores the materials;
+  features untouched.
+- **NEW mode:** WHAT plus the Style. Picking a Style adds its `suggestedFeatures` (at most 6 in all), marked `style`; the player's
+  ticks are `hand`. A swap keeps the player's own picks, drops the untouched suggestions for the new Style's, and never adds back a
+  feature the player turned off. Construction and reset never add suggestions (the Design tab starts on rustic with `[porch]`, as
+  before).
+- **VARIANT mode:** WHAT and the features are fixed (refused); a Style swap re-skins the materials only.
+- **Output** (`request()`, the palette half): NEW `{palette: {bible: {id, version, roles}}}` (`withStyle` unedited, the mix based on
+  the Style edited); VARIANT `{}` while unchanged, else the smallest that builds it: an unedited preset's name, the four inputs
+  (roles equal to their plain fan-out), `bible: id` (an unedited installed Style: the 4b re-skin), else the roles inline based on the
+  Style. A preset with extras edited (desert's plaster) now goes inline, where U1 sent inputs and lost the extras.
+- **Save as style…** (`saveRequest(name)`): `{name, roles, tags (the Style's), suggestedFeatures (NEW: the form's features, at most 6),
+  basedOn {id, version}, origin: "hand"}` for `bible.save` with no `bibleId`: always a NEW hand-made Style (a duplicate), whatever the
+  base's ownership; the store sets `origin` itself.
+- **Parity:** `tools/gen-palettes.mjs --parity` records `formStyles` and `forms` (op sequences with the view after each op, refusals as
+  `{error: true}`) in `kit/test/fixtures/style-parity.json`; `StyleFormTest` replays them (24 sequences, 182 ops, 11 refusals; a refused op leaves
+  the state unchanged). `kit/test/styles.test.mjs` holds the fixture current.
+
+**2. Wiring (minimal UI change; U3 replaces the widgets).**
+- **Variants dialog:** `VariantForm`'s palette half is a VARIANT `StyleForm`; its public methods stay as delegates (`choosePreset`,
+  `chooseBible`, `setField`, `preset`, `inputs`, `bible`, `roles`), plus `chooseStyle(Style)`. An installed Style picked with unknown
+  roles keeps 4b's behaviour (a row edit drops it for plain inputs). An entry made materials-only opens on its Style. The footer's
+  summary reads an inline palette (U1 threw on it every frame).
+- **Design tab:** a style chip picks that built-in Style; the free text, when typed, means no Style (words only, no palette). The
+  Style bible list picks a built-in or hand-made Style materials only and keeps a Claude-made one as set mode (`bible`). With a Style
+  and no set-mode bible the request carries the palette (`palette.roles` helpers; an older one gets the Style's words only, and a
+  custom mix is refused in the form). A row of Wood / Stone / Roof / Accent dropdowns, and for a mix "based on X" with Revert and Save
+  as style… (named "<Style> mix"; U3 adds the name field). Features suggested by the Style are marked ✦.
+- **Massing first:** a massing has no materials, so the Design tab keeps the palette off the massing request and adds it to the detail
+  pass on Approve (MassingReview, as the critique).
+- **Remix** of a materials-only entry picks its Style (roles inline) and never sets `bible` from its pin (the pin only names the
+  Style, as the sidecar's `setModePin`), so it is not set mode.
+- `sidecar/src/claude/contract.ts` lists the 16 built-in Styles; a vitest holds the line equal to the kit's `PALETTE_PRESETS`.
+
+**3. Gate (DEV MODE):** units (kit `styles.test.mjs`, `StyleFormTest`, `VariantFormTest`, the sidecar's `variants.test.ts`), the
+instant lints, and `u2-ingame` (`tools/gateu2.mjs ingame`; client, sim, $0): the Design tab with medieval, free text, a custom mix,
+Save as style…, a variant re-skin with the saved Style, Remix… of the materials-only design, and Massing first with a Style (the
+palette on the detail pass only).
+
+**4. Left for U3 / U4.**
+- U3: the Style browser and editor, a name field for Save as style…, words alongside a picked Style, "More roles" (StyleForm's
+  `setRole`), the Variants dialog's per-role rows; Duplicate vs Edit from `Style.editable` / `modOwned`.
+- U4 (recorded, not fixed): the kit's example designs and the sim's copies of them build their walls from the wood set (`p.planks`),
+  not the `wall` role, so a wall-defined Style (medieval, japanese, modern) only partly re-skins them.

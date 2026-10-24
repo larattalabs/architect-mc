@@ -295,7 +295,8 @@ final class LibraryDev {
 							var known = bid == null ? null : dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> b.id().equals(bid))
 								.findFirst().orElse(null);
 							if (known != null) {
-								form.chooseBible(bid, known.version(), known.roles());
+								// (U2) the Style itself (its name, kind and version): a built-in one is a preset, an installed one a re-skin
+								form.chooseStyle(dev.larattalabs.architect.library.StyleForm.Style.of(known));
 							} else {
 								form.chooseBible(bid);
 							}

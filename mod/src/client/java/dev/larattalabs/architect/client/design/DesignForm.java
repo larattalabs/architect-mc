@@ -1,6 +1,10 @@
 package dev.larattalabs.architect.client.design;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import dev.larattalabs.architect.client.sidecar.Sidecar;
+import dev.larattalabs.architect.library.Palettes;
+import dev.larattalabs.architect.library.StyleForm;
 import com.google.gson.JsonObject;
 import dev.larattalabs.labui.client.text.TextModel;
 import dev.larattalabs.architect.design.CritiqueRules;
@@ -23,11 +27,14 @@ public final class DesignForm {
 	public static final String OTHER = "other";
 
 	public String type = "cabin";
-	/** The style: a chip id, or the free text when {@link #styleText} is not empty. */
-	public String styleChip = "rustic";
+	/**
+	 * (Style unification U2) The picked Style, its materials and the features (StyleForm, NEW mode): a style chip is a built-in Style;
+	 * the Style bible list adds the installed hand-made ones (a Claude-made one stays bible set mode: {@link #bible}). The free text
+	 * {@link #styleText}, when not empty, means no Style: the words go as the request's style and no palette is sent.
+	 */
+	public final StyleForm styleForm = new StyleForm(StyleForm.Mode.NEW, StyleForm.Style.preset(Palettes.FALLBACK, "rustic"), List.of("porch"));
 	public final TextModel styleText = new TextModel(DesignSpec.MAX_STYLE);
 	public final TextModel materials = new TextModel(DesignSpec.MAX_MATERIALS);
-	public final List<String> features = new ArrayList<>(List.of("porch"));
 	public String size = "M";
 	public int customX = 21;
 	public int customY = 14;
@@ -71,10 +78,72 @@ public final class DesignForm {
 		return massingFirst != null ? massingFirst : dev.larattalabs.architect.design.MassingRules.massingFirstByDefault(size);
 	}
 
-	/** The style sent: the free text when typed, else the chip. */
+	/** The style sent: the free text when typed, else the picked Style (a built-in's id, as the chips sent before U2; else its name). */
 	public String style() {
 		String t = styleText.value().strip();
-		return t.isEmpty() ? styleChip : t;
+		if (!t.isEmpty()) {
+			return t;
+		}
+		StyleForm.Style b = styleForm.base();
+		if (b == null) {
+			return "";
+		}
+		String w = StyleForm.PRESET.equals(b.kind()) && b.id() != null ? b.id() : b.name();
+		return w.length() > DesignSpec.MAX_STYLE ? w.substring(0, DesignSpec.MAX_STYLE) : w;
+	}
+
+	/** The style chip shown as picked: the built-in Style picked (no free text), or null. */
+	public @Nullable String styleChip() {
+		StyleForm.Style b = styleForm.base();
+		return styleText.value().isBlank() && b != null && StyleForm.PRESET.equals(b.kind()) ? b.id() : null;
+	}
+
+	/** A style chip: picks that built-in Style (its materials and suggested features) and clears the free text. */
+	public void pickChip(String id) {
+		StyleForm.Style s = StyleForm.Style.preset(Palettes.FALLBACK, id);
+		if (s == null) {
+			styleText.set(id);
+			return;
+		}
+		styleForm.pick(s);
+		styleText.clear();
+	}
+
+	/** A Style from the Style bible list: a Claude-made one is bible set mode ({@link #bible}); a built-in or hand-made one is picked. */
+	public void pickBible(dev.larattalabs.architect.api.@Nullable Bible b) {
+		if (b == null) {
+			bible = null;
+		} else if ("claude".equals(b.origin())) {
+			bible = b.id();
+		} else {
+			bible = null;
+			styleForm.pick(StyleForm.Style.of(b));
+			styleText.clear();
+		}
+	}
+
+	/** The features (the Style's suggestions and the player's picks). */
+	public List<String> features() {
+		return styleForm.features();
+	}
+
+	/**
+	 * (U2) The materials-only palette the request carries: the picked Style's roles inline ({@code withStyle}), or the custom mix based on
+	 * it. None with free text, with a set-mode bible (the bible's roles are the materials) or without a Style.
+	 */
+	public @Nullable JsonElement palette() {
+		if (!styleText.value().isBlank() || bible != null || styleForm.base() == null) {
+			return null;
+		}
+		return styleForm.request().get("palette");
+	}
+
+	/** Why the palette can't go to this helper (null: it can): a custom mix needs {@code palette.roles} (an unedited Style falls back to its name). */
+	public @Nullable String paletteRefusal() {
+		if (palette() == null || !Sidecar.connected() || SetFeature.has("palette.roles")) {
+			return null;
+		}
+		return styleForm.mix() ? "this design helper can't take a custom mix (no palette.roles): Revert, or update it" : null;
 	}
 
 	/** The size limit {x, y, z}: the preset for the type, the plot's, or the custom one. */
@@ -95,9 +164,7 @@ public final class DesignForm {
 	}
 
 	public void toggleFeature(String id) {
-		if (!features.remove(id)) {
-			features.add(id);
-		}
+		styleForm.toggleFeature(id);
 	}
 
 	/** The type sent: the chip, or the open type typed for {@link #OTHER}. */
@@ -113,20 +180,30 @@ public final class DesignForm {
 
 	public DesignSpec.Draft draft() {
 		int[] m = maxSize();
-		return new DesignSpec.Draft(typeSent(), style(), materials.value(), features, m[0], m[1], m[2], PLOT.equals(size) ? plot : null, remix,
+		return new DesignSpec.Draft(typeSent(), style(), materials.value(), features(), m[0], m[1], m[2], PLOT.equals(size) ? plot : null, remix,
 			name.value(), notes.value(), OTHER.equals(type) ? profile : List.of(), bible);
 	}
 
 	public Map<String, String> errors() {
 		Map<String, String> e = new LinkedHashMap<>(DesignSpec.validate(draft()));
+		String pr = paletteRefusal();
+		if (pr != null && !e.containsKey("style")) {
+			e.put("style", pr);
+		}
 		if (PLOT.equals(size) && plot == null) {
 			e.put("maxSize", "mark a plot first (Mark a plot…)");
 		}
 		return e;
 	}
 
+	/** The request as sent: the draft, plus the palette when the helper takes one ({@code palette.roles}). */
 	public JsonObject requestJson() {
-		return DesignSpec.requestJson(draft());
+		JsonObject r = DesignSpec.requestJson(draft());
+		JsonElement p = palette();
+		if (p != null && SetFeature.has("palette.roles")) {
+			r.add("palette", p.deepCopy());
+		}
+		return r;
 	}
 
 	/** For the DevBridge ({@code dev.design.state}). */
@@ -139,11 +216,14 @@ public final class DesignForm {
 		o.add("profile", pr);
 		o.addProperty("bible", bible);
 		o.addProperty("style", style());
-		o.addProperty("styleChip", styleChip);
+		o.addProperty("styleChip", styleChip());
+		o.add("styleForm", styleForm.view());
+		JsonElement pal = palette();
+		o.add("palette", pal == null ? com.google.gson.JsonNull.INSTANCE : pal);
 		o.addProperty("styleText", styleText.value());
 		o.addProperty("materials", materials.value());
 		JsonArray f = new JsonArray();
-		features.forEach(f::add);
+		features().forEach(f::add);
 		o.add("features", f);
 		o.addProperty("size", size);
 		int[] m = maxSize();

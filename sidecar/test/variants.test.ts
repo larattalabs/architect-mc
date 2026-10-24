@@ -2,6 +2,7 @@
 // fixture kit: naming, import path rules, the job pipeline, refusals, independence from the design queue, restart.
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { loadConfig } from '../src/config.js';
@@ -27,6 +28,16 @@ describe('the brief asks for parametric, palette-driven designs', () => {
     expect(b).toMatch(/--palette cherry/);
     expect(CONTRACT_EXCERPT).toMatch(/## Parametric designs/);
     expect(CONTRACT_EXCERPT).toMatch(/"values": \{ "width": 9/);
+  });
+
+  it('(Style unification U2) names every built-in Style the kit has', async () => {
+    const { CONTRACT_EXCERPT } = await import('../src/claude/contract.js');
+    const kit = await import(pathToFileURL(path.join(process.cwd(), '..', 'kit', 'lib', 'kit.mjs')).href);
+    const line = CONTRACT_EXCERPT.slice(CONTRACT_EXCERPT.indexOf('- Presets (`PALETTES`'), CONTRACT_EXCERPT.indexOf('## Building types'));
+    const names = Object.keys(kit.PALETTE_PRESETS as Record<string, unknown>);
+    expect(names.length).toBe(16);
+    for (const n of names) expect(line).toMatch(new RegExp(`\\b${n}\\b`));
+    expect(line).toMatch(new RegExp(`the ${names.length} built-in Styles`));
   });
 });
 

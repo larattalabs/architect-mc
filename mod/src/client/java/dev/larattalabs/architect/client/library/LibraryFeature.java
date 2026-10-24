@@ -652,11 +652,18 @@ public final class LibraryFeature {
 			f.type = b.type();
 		}
 		// the bible it was built with (phase 4b)
-		f.bible = c.bible();
-		if (r != null && r.has("style") && r.get("style").isJsonPrimitive()) {
+		// (U2, as the sidecar's setModePin) a materials-only entry's pin only names the Style its roles came from: not set mode
+		f.bible = r != null && r.has("palette") ? null : c.bible();
+		// (Style unification U2) a materials-only entry: its Style's roles inline; else the style chip or the words
+		var entryStyle = r != null && r.has("palette") && r.get("palette").isJsonObject() && r.getAsJsonObject("palette").has("bible")
+			? dev.larattalabs.architect.library.VariantForm.entryStyle(r.getAsJsonObject("palette"), palettes()) : null;
+		if (entryStyle != null) {
+			f.styleForm.pick(entryStyle);
+			f.styleText.clear();
+		} else if (r != null && r.has("style") && r.get("style").isJsonPrimitive()) {
 			String style = r.get("style").getAsString();
 			if (DesignSpec.find(DesignSpec.STYLES, style) != null) {
-				f.styleChip = style;
+				f.pickChip(style);
 			} else {
 				f.styleText.set(style);
 			}
@@ -664,14 +671,16 @@ public final class LibraryFeature {
 		if (r != null && r.has("materials") && r.get("materials").isJsonPrimitive()) {
 			f.materials.set(r.get("materials").getAsString());
 		}
-		f.features.clear();
+		List<String> feats = new ArrayList<>();
 		if (r != null && r.has("features") && r.get("features").isJsonArray()) {
 			for (JsonElement e : r.getAsJsonArray("features")) {
-				if (e.isJsonPrimitive() && f.features.size() < DesignSpec.MAX_FEATURES) {
-					f.features.add(e.getAsString());
+				if (e.isJsonPrimitive() && feats.size() < DesignSpec.MAX_FEATURES && DesignSpec.find(DesignSpec.FEATURES, e.getAsString()) != null
+					&& !feats.contains(e.getAsString())) {
+					feats.add(e.getAsString());
 				}
 			}
 		}
+		f.styleForm.setFeatures(feats);
 		int[] size = {b.sizeX(), b.sizeY(), b.sizeZ()};
 		if (r != null && r.has("maxSize") && r.get("maxSize").isJsonObject()) {
 			JsonObject m = r.getAsJsonObject("maxSize");

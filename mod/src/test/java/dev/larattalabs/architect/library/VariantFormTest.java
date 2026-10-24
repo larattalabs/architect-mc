@@ -164,4 +164,32 @@ class VariantFormTest {
 		assertNull(f.bible());
 		assertEquals("oak", f.requestJson().get("palette").getAsString());
 	}
+
+	/** (Style unification U2) the palette half is a StyleForm: a preset with extras edited goes inline; the footer reads every shape. */
+	@Test
+	void stylesAndTheSummary() {
+		VariantForm f = new VariantForm("gen_cabin", PARAMS, null, PALETTE, Palettes.FALLBACK);
+		f.choosePreset("desert");
+		assertEquals("desert palette", f.summary(id -> id));
+		f.setField("wood", "oak");
+		JsonObject b = f.requestJson().getAsJsonObject("palette").getAsJsonObject("bible");
+		assertEquals("desert", b.get("id").getAsString());
+		assertEquals("minecraft:smooth_sandstone", b.getAsJsonObject("roles").get("wall_alt").getAsString(), "desert's plaster kept (inputs would lose it)");
+		assertEquals("custom mix of Desert", f.summary(id -> id.equals("desert") ? "Desert" : id), "an inline palette no longer throws");
+		f.chooseBible("bib_ash");
+		assertEquals("re-skinned with Ash", f.summary(id -> "Ash"));
+		f.chooseBible(null);
+		assertEquals("rustic", f.preset(), "a bible toggled off: back to the entry's own Style");
+		assertFalse(f.changed());
+		// an entry made materials-only (its roles inline) opens on that Style, unchanged
+		JsonObject inline = json("{\"bible\": {\"id\": \"medieval\", \"version\": 1, \"roles\": " + new com.google.gson.Gson().toJson(Palettes.FALLBACK
+			.presetRoles("medieval")) + "}}");
+		VariantForm g = new VariantForm("gen_daub", PARAMS, null, inline, Palettes.FALLBACK);
+		assertEquals("medieval", g.preset());
+		assertFalse(g.changed());
+		g.setField("wood", "birch");
+		assertEquals("minecraft:birch_log", g.requestJson().getAsJsonObject("palette").getAsJsonObject("bible").getAsJsonObject("roles").get("frame")
+			.getAsString());
+		assertEquals("follows_wood", g.stateJson().getAsJsonObject("style").getAsJsonObject("provenance").get("frame").getAsString());
+	}
 }

@@ -1071,13 +1071,11 @@ public final class ArchitectScreen extends Screen {
 			y += 10;
 		}
 		y = label(g, "Style", errors, lx, y + 2, colW, "style");
-		boolean typed = !f.styleText.value().isBlank();
-		y = chips(g, "style:", DesignSpec.STYLES, typed ? null : f.styleChip, lx, y, colW, mx, my, id -> {
-			f.styleChip = id;
-			f.styleText.clear();
-		});
+		y = chips(g, "style:", DesignSpec.STYLES, f.styleChip(), lx, y, colW, mx, my, f::pickChip);
 		field(g, Focus.STYLE, styleView, f.styleText, lx, y - 2, colW);
 		y += TextFieldView.BASE_H + 2;
+		// (Style unification U2) the picked Style's four main rows (StyleForm): an edit makes a custom mix based on it
+		y = drawStyleRows(g, f, lx, y, colW, mx, my, errors);
 		y = label(g, "Materials", errors, lx, y, colW, "materials");
 		field(g, Focus.MATERIALS, materialsView, f.materials, lx, y, colW);
 		y += TextFieldView.BASE_H + 4;
@@ -1089,12 +1087,13 @@ public final class ArchitectScreen extends Screen {
 				fx = lx;
 				y += 14;
 			}
-			boolean on = f.features.contains(c.id());
-			boolean can = on || f.features.size() < DesignSpec.MAX_FEATURES;
+			boolean on = f.features().contains(c.id());
+			boolean can = on || f.features().size() < DesignSpec.MAX_FEATURES;
 			Hit h = new Hit("feature:" + c.id(), c.label(), fx, y, fw, 12, can, on, () -> f.toggleFeature(c.id()));
 			hits.add(h);
 			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, fx, y + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
-			g.text(font, c.label(), fx + 13, y + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
+			// (U2) a feature the picked Style suggested (the player hasn't touched it) is marked ✦
+			g.text(font, c.label() + (on && f.styleForm.fromStyle(c.id()) ? "✦" : ""), fx + 13, y + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
 			fx += fw;
 		}
 		// right: size, name, notes
@@ -1189,14 +1188,28 @@ public final class ArchitectScreen extends Screen {
 		int bdx = rx + font.width("Style bible") + 6;
 		int bdy = ry;
 		boolean bibles = dev.larattalabs.architect.client.design.SetFeature.has("bibles");
-		String bibleLabel = (f.bible == null ? "none" : dev.larattalabs.architect.client.design.SetFeature.bible(f.bible).map(b -> b.name()
-			+ (b.builtin() ? "" : " v" + b.version())).orElse(f.bible)) + " ▾";
+		// (U2) a Claude-made bible is set mode (f.bible); a hand-made Style picked here is materials only (the form's Style)
+		var picked = f.styleForm.base();
+		String bibleLabel = (f.bible != null ? dev.larattalabs.architect.client.design.SetFeature.bible(f.bible).map(b -> b.name()
+			+ (b.builtin() ? "" : " v" + b.version())).orElse(f.bible) : picked != null && dev.larattalabs.architect.library.StyleForm.BIBLE.equals(picked
+			.kind()) && f.styleText.value().isBlank() ? picked.name() + " v" + picked.version() + " (materials)" : "none") + " ▾";
 		if (bibles || f.bible != null) {
 			dropdown(g, "design:bible", bibleLabel, bdx, bdy, Math.min(160, rx + colW - bdx), mx, my, () -> {
 				List<Option> opts = new ArrayList<>();
 				opts.add(new Option("none", "None (no bible)", f.bible == null));
 				opts.addAll(SetDialog.bibleOptions(f.bible, false));
-				openPopup("design:bible", rx, bdy + CHIP_H + 1, colW, opts, v -> f.bible = "none".equals(v) ? null : v);
+				openPopup("design:bible", rx, bdy + CHIP_H + 1, colW, opts, v -> {
+					if ("none".equals(v)) {
+						f.bible = null;
+					} else {
+						var b = dev.larattalabs.architect.client.design.SetFeature.bible(v);
+						if (b.isPresent()) {
+							f.pickBible(b.get());
+						} else {
+							f.bible = v;
+						}
+					}
+				});
 			});
 		} else {
 			g.text(font, TextUtil.ellipsize(font, "none (the helper has no bibles)", rx + colW - bdx), bdx, ry + 3, muted, false);
@@ -1263,6 +1276,67 @@ public final class ArchitectScreen extends Screen {
 				UiBits.hints(g, font, x, footerY + 4, false, hints);
 			}
 		}
+	}
+
+	/**
+	 * (Style unification U2) The Design tab's main rows: Wood / Stone / Roof / Accent of the picked Style (StyleForm, NEW mode), each a
+	 * dropdown; an edited row is marked *. A custom mix shows "based on <Style>" with Revert and Save as style…. Hidden with free text
+	 * (no Style) or a set-mode bible (its roles are the materials). U3 replaces these widgets.
+	 */
+	private int drawStyleRows(GuiGraphicsExtractor g, DesignForm f, int x, int y, int colW, int mx, int my, Map<String, String> errors) {
+		var sf = f.styleForm;
+		var base = sf.base();
+		if (base == null || !f.styleText.value().isBlank() || f.bible != null || sf.main() == null) {
+			return y;
+		}
+		var pal = LibraryFeature.palettes();
+		var main = sf.main();
+		com.google.gson.JsonObject view = sf.view();
+		var mp = view.getAsJsonObject("mainProvenance");
+		int cw = (colW - 9) / 4;
+		int cx = x;
+		for (String field : dev.larattalabs.architect.library.StyleRoles.MAIN_FIELDS) {
+			String v = main.get(field);
+			boolean edited = "hand".equals(mp.get(field).getAsString());
+			String label = Character.toUpperCase(field.charAt(0)) + field.substring(1) + " " + (v == null ? "?" : v.replace('_', ' ')) + (edited ? "*" : "")
+				+ " ▾";
+			int dx = cx;
+			int dy = y;
+			dropdown(g, "style:" + field, TextUtil.ellipsize(font, label, cw - 4), dx, dy, cw, mx, my, () -> {
+				List<Option> opts = new ArrayList<>();
+				for (String o : pal.choices(field)) {
+					opts.add(new Option(o, o.replace('_', ' '), o.equals(v)));
+				}
+				openPopup("style:" + field, dx, dy + CHIP_H + 1, Math.max(200, colW), opts, val -> {
+					try {
+						sf.editMain(field, val);
+						f.sendError = null;
+					} catch (IllegalArgumentException | IllegalStateException e) {
+						f.sendError = e.getMessage();
+					}
+				});
+			});
+			cx += cw + 3;
+		}
+		y += CHIP_H + 3;
+		if (sf.mix()) {
+			String l = "custom mix · based on " + base.name();
+			int bx = x + colW;
+			String save = "Save as style…";
+			bx -= bw(save);
+			button(g, "style:save", save, bx, y, bw(save), false, dev.larattalabs.architect.client.design.SetFeature.has("bible.save"), mx, my, () ->
+				DesignFeature.saveStyle(null).whenComplete((b, err) -> {
+					if (err != null && minecraft != null) {
+						minecraft.execute(() -> f.sendError = "Not saved: " + (err.getCause() != null ? err.getCause().getMessage() : err.getMessage()));
+					}
+				}));
+			String rv = "Revert";
+			bx -= bw(rv) + 4;
+			button(g, "style:revert", rv, bx, y, bw(rv), false, true, mx, my, sf::revert);
+			g.text(font, TextUtil.ellipsize(font, l, Math.max(10, bx - x - 4)), x, y + 4, UiBits.muted(), false);
+			y += CHIP_H + 3;
+		}
+		return y + 1;
 	}
 
 	private int stepper(GuiGraphicsExtractor g, String id, String name, int value, int min, int max, int x, int y, int mx, int my,

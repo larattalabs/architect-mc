@@ -90,6 +90,36 @@ public record Palettes(Map<String, Inputs> presets, List<String> woods, List<Str
 
 	public static final List<String> FIELDS = List.of("wood", "stone", "roof", "accent");
 
+	/** (Style unification U2) A built-in Style's metadata (kit/lib/styles.mjs STYLE_META, as palettes.json carries it). */
+	public record Meta(List<String> tags, List<String> suggestedFeatures, String blurb) {
+		public Meta {
+			tags = List.copyOf(tags);
+			suggestedFeatures = List.copyOf(suggestedFeatures);
+		}
+	}
+
+	private static volatile @Nullable Map<String, Meta> meta;
+
+	/** A built-in Style's metadata from the checked-in palettes ({@code palettes-fallback.json}), or null. */
+	public static @Nullable Meta presetMeta(@Nullable String name) {
+		Map<String, Meta> m = meta;
+		if (m == null) {
+			Map<String, Meta> out = new LinkedHashMap<>();
+			JsonElement j = fallbackJson();
+			if (j != null && j.isJsonObject() && j.getAsJsonObject().has("presets") && j.getAsJsonObject().get("presets").isJsonObject()) {
+				for (var e : j.getAsJsonObject().getAsJsonObject("presets").entrySet()) {
+					if (e.getValue().isJsonObject()) {
+						JsonObject o = e.getValue().getAsJsonObject();
+						out.put(e.getKey(), new Meta(list(o, "tags"), list(o, "suggestedFeatures"), Objects.requireNonNullElse(first(o, "blurb"), "")));
+					}
+				}
+			}
+			m = java.util.Collections.unmodifiableMap(out);
+			meta = m;
+		}
+		return name == null ? null : m.get(name);
+	}
+
 	/** The fallback's JSON: the kit's palettes.json as generated when this mod was built ({@code palettes-fallback.json}). */
 	static @Nullable JsonElement fallbackJson() {
 		return StyleRoles.readResource("/assets/architect_mc/palettes-fallback.json");
