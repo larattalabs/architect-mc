@@ -1165,6 +1165,14 @@ Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family
 ## Queued (coordinator, 2026-10-24; Steward ask)
 - DevBridge `dev.key`: send a key release after the press, like a real tap, with an optional hold time. Steward's card Start now needs two presses and counts a held key once; a press with no release lapses after 3 s, so it works today but isn't exact. Small; batch it with the next tooling slice.
 
+## Style unification (Noah, 2026-10-24): replaces the form half of UI-2a
+Model in docs/STYLE-UNIFY.md. Mock approved: https://claude.ai/artifact/F5rfEVgeErTArWfQiL76F9. Noah's decisions (the recommendations):
+1. Built-in and hand-made Styles go to the generator **materials-only** (a new `DesignRequest.palette` with roles); `bible` set mode stays for Claude-made Styles and sets. U4's A/B confirms this.
+2. A custom mix on a new design is **sent inline**; nothing is saved until "Save as style…".
+3. The word-only style chips get authored materials and become built-in Styles: Medieval, Nordic, Japanese, Cozy and Fantasy. Modern stays text-only until a flat-roof role exists.
+4. The main rows stay **Wood / Stone / Roof / Accent**, each showing what it drives.
+Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/JS parity (M), U3 the unified editor + Style browser + Style editor on lab-ui 0.2.0 (L), U4 the materials-only vs bible A/B judged by design-critic (S). UI-2a's form and picker work is folded into U3.
+
 ## Queued from slice D3 (builder, 2026-10-23)
 
 - **0.42.x note (main's since C23, fixed on slice/D3):** a region removal refused by the owner rule, or stopped before it wrote
