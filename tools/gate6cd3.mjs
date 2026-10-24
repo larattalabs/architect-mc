@@ -719,8 +719,9 @@ steps.steward = async () => {
  * its two house lots carrying Steward's ext and left pads (a realise with no lot entries), its keys `<k>.dplan`/`<k>.drealise`, its claim
  * on the town's east side overlapping it by 7 columns, the player at the town's east edge (center + r - 4) near the join while it plans
  * and realises. Then:
- * - a remove with no requester (the RC's call): refused by the owner rule, nothing written, and the stop names why (the answer's
- *   blockers and the game log's "removal stopped" line);
+ * - a remove with no requester (the RC's call): refused by the owner rule before it starts, so everything is as it was (the region
+ *   still PLACED, every site's record and the journal's entries unchanged, nothing written), and the refusal is named (the answer's
+ *   blockers and the game log's line);
  * - the district removed first by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash unchanged;
  * - realised again, the town removed first, then the district: both REMOVED, E-flat 0 over both claims.
  */
@@ -759,15 +760,23 @@ async function stewardShapedRemovals() {
   const logF = path.join(process.env.ARCHITECT_GAME_DIR ?? L.GAME_DIR, 'logs', 'latest.log');
   const log0 = fs.existsSync(logF) ? fs.statSync(logF).size : 0;
   const h0 = await hash(all);
+  // (what a refusal must leave as it was: the journal's entries and their status, every site's record, the region's state)
+  const journalOf = async () => json(((await call('dev.journal.state', {}, 60_000)).entries ?? []).map((e) => [e.id, e.status]));
+  const sitesOf = async () => json(await call('dev.sites.state', {}, 60_000));
+  const j0 = await journalOf(), s0 = await sitesOf();
   const rm0 = await call('dev.region.remove', { region: d1.region }, 600_000).catch((e) => ({ error: String(e) }));
   await L.settle(2000);
   const v0 = await view(d1.region);
+  const j1 = await journalOf(), s1 = await sitesOf();
+  out.refusedLeaves = { state: v0?.state, journal: j0 === j1, sites: s0 === s1, entries: JSON.parse(j0).length };
+  check(v0?.state === 'PLACED' && j0 === j1 && s0 === s1 && JSON.parse(j0).length > 0,
+    `RC finding 1: the refused removal leaves everything as it was: the region still PLACED, every site's record and the journal's ${JSON.parse(j0).length} entries unchanged (${json(out.refusedLeaves)})`);
   const logTail = fs.existsSync(logF) ? fs.readFileSync(logF, 'utf8').slice(log0) : '';
-  const line = logTail.split('\n').find((l) => l.includes(`Region ${d1.region}: removal stopped`)) ?? null;
+  const line = logTail.split('\n').find((l) => l.includes(`Region ${d1.region}: removal refused`) || l.includes(`Region ${d1.region}: removal stopped`)) ?? null;
   out.noRequester = { removed: rm0.removed ?? null, blockers: rm0.blockers ?? rm0.error ?? null, state: v0?.state, log: line };
   check(rm0.removed === false && /owned by steward_mc:settlement\/d3rc/.test(json(rm0.blockers ?? [])) && (await hash(all)) === h0,
     `RC finding 1: a remove with no requester (the RC's call) is refused by the owner rule, nothing written; the answer names why (${json(rm0.blockers ?? rm0.error).slice(0, 200)})`);
-  check(!!line && /owned by steward_mc:settlement\/d3rc/.test(line), `RC finding 1: the game log's "removal stopped" line names the reason (${(line ?? 'no line').slice(0, 220)})`);
+  check(!!line && /removal refused, nothing changed/.test(line) && /owned by steward_mc:settlement\/d3rc/.test(line), `RC finding 1: the game log names the refusal and its reason, no PARTIAL (${(line ?? 'no line').slice(0, 220)})`);
   // the district removed first, by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash as before
   await kill();
   await undo(d1.region, SOWNER);

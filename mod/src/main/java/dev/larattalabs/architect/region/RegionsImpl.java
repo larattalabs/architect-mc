@@ -2702,7 +2702,26 @@ public final class RegionsImpl implements Regions {
 		}).thenCompose(f -> f);
 	}
 
+	/**
+	 * (6c D3, Steward's RC) The state a region had when its removal began: a removal that ends having written nothing (refused at once,
+	 * or stopped on a blocker before it starts) leaves the region as it was, not PARTIAL. Transient: a load reconciles a REMOVING region.
+	 */
+	private static final Map<String, RegionState> BEFORE_REMOVAL = new java.util.concurrent.ConcurrentHashMap<>();
+
 	private static CompletableFuture<RemoveResult> removeGroup(MinecraftServer s, Live l, RemoveOptions o) {
+		// (6c D3, Steward's RC) the owner rule first: a refused caller changes nothing (the region's state and its sites' stay as they
+		// were) and is answered with the rule's blocker. Before, the region went REMOVING and then ended PARTIAL with nothing removed
+		// (main since C23's refusal path)
+		SiteGroupRec grp = Sites.group(l.rec().groupId);
+		String refused = grp == null ? null : dev.larattalabs.architect.apiimpl.ApiRules.removeRefusal(l.rec().groupId, grp.owner(), o == null ? null : o.requester(),
+			o != null && o.force());
+		if (refused != null && !dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
+			Architect.LOGGER.info("Region {}: removal refused, nothing changed (state {}): {}", l.rec().id, l.rec().state, refused);
+			return CompletableFuture.completedFuture(new RemoveResult(false, List.of(refused), Map.of()));
+		}
+		if (l.rec().state != RegionState.REMOVING) {
+			BEFORE_REMOVAL.put(l.rec().id, l.rec().state);
+		}
 		l.rec().state = RegionState.REMOVING;
 		save(l);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
@@ -2719,7 +2738,7 @@ public final class RegionsImpl implements Regions {
 					String why = e != null ? "it failed: " + (e.getCause() != null ? e.getCause() : e) : String.join("; ", res.blockers());
 					Runnable end = () -> {
 						if (!dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
-							finishRemoval(l, false, 0L, why);
+							finishRemoval(l, false, 0L, why, true); // (answered at once: nothing was written)
 						}
 					};
 					if (s.isSameThread()) {
@@ -2750,13 +2769,24 @@ public final class RegionsImpl implements Regions {
 		for (Live l : List.copyOf(REGIONS.values())) {
 			if (l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId)) {
 				SiteGroupRec g = Sites.group(groupId);
-				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(), String.join("; ", res.blockers()));
+				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(), String.join("; ", res.blockers()),
+					!res.removed() && dev.larattalabs.architect.site.Groups.endedUntouched(groupId));
 			}
 		}
 	}
 
-	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why) {
+	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why, boolean untouched) {
 		if (REGIONS.get(l.rec().id) != l || l.rec().state != RegionState.REMOVING) {
+			return;
+		}
+		RegionState before = BEFORE_REMOVAL.remove(l.rec().id);
+		if (!removed && untouched && before != null) {
+			// (6c D3, Steward's RC) stopped before it wrote anything: the region stays as it was
+			l.rec().state = before;
+			save(l);
+			Architect.LOGGER.info("Region {}: removal stopped before it wrote anything; it stays {} ({}): {}", l.rec().id, before, l.rec().groupId,
+				why == null || why.isBlank() ? "no reason given" : why);
+			SiteEvents.REGION_STATE.invoker().onState(view(l));
 			return;
 		}
 		if (removed) {
@@ -2839,7 +2869,7 @@ public final class RegionsImpl implements Regions {
 			Architect.LOGGER.info("Region {} was REMOVING with no removal of group {} in progress: it ends {}", l.rec().id, l.rec().groupId,
 				removed ? "REMOVED (the group is removed)" : "PARTIAL");
 			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(),
-				"the world was loaded with the region REMOVING and no removal of its group in progress (remove it again)");
+				"the world was loaded with the region REMOVING and no removal of its group in progress (remove it again)", false);
 		}
 	}
 
