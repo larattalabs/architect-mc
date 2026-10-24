@@ -68,11 +68,11 @@ public final class SliceU1Dev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.style.design", 60_000, "{style, version?, name?, type?, size?: [x,y,z], owner?} - (U1) Designs.request of a "
+		DevBridge.register("dev.style.design", 60_000, "{style, version?, name?, buildingType? (not type: that is the message type), size?: [x,y,z], owner?} - (U1) Designs.request of a "
 			+ "materials-only design: DesignRequest.withStyle(Bibles.get(style)) -> {designId, palette (as sent)} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String id = f.nonBlank("style");
-				String type = req.has("type") ? req.get("type").getAsString() : "cabin";
+				String type = req.has("buildingType") ? req.get("buildingType").getAsString() : "cabin";
 				int[] sz = req.has("size") ? new int[] {req.getAsJsonArray("size").get(0).getAsInt(), req.getAsJsonArray("size").get(1).getAsInt(),
 					req.getAsJsonArray("size").get(2).getAsInt()} : new int[] {21, 16, 21};
 				String name = req.has("name") ? req.get("name").getAsString() : null;
@@ -140,7 +140,7 @@ public final class SliceU1Dev {
 					.thenApply(SliceU1Dev::style);
 				return fut.exceptionally(SliceU1Dev::refused);
 			});
-		DevBridge.register("dev.style.get", 10_000, "{id, version?} - (U1) Bibles.get -> the Style, or {missing}; with usable: true, Bibles.usable(null)"
+		DevBridge.register("dev.style.get", 10_000, "{style, version?} - (U1) Bibles.get -> the Style (style: its id; not id, that is the correlation id), or {missing}; with usable: true, Bibles.usable(null)"
 			+ " -> {usable: [ids]}", (req, mc) -> ServerTasks.callOnServer(s -> {
 				var bibles = ArchitectApi.get().bibles();
 				if (req.has("usable") && req.get("usable").getAsBoolean()) {
@@ -150,7 +150,7 @@ public final class SliceU1Dev {
 					o.add("usable", a);
 					return o;
 				}
-				String id = req.get("id").getAsString();
+				String id = Fields.of(req).nonBlank("style");
 				var b = req.has("version") ? bibles.get(id, req.get("version").getAsInt()) : bibles.get(id);
 				return b.map(SliceU1Dev::style).orElseGet(() -> {
 					JsonObject o = new JsonObject();

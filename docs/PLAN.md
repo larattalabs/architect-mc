@@ -1169,6 +1169,6 @@ Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family
 Model in docs/STYLE-UNIFY.md. Mock approved: https://claude.ai/artifact/F5rfEVgeErTArWfQiL76F9. Noah's decisions (the recommendations):
 1. Built-in and hand-made Styles go to the generator **materials-only** (a new `DesignRequest.palette` with roles); `bible` set mode stays for Claude-made Styles and sets. U4's A/B confirms this.
 2. A custom mix on a new design is **sent inline**; nothing is saved until "Save as style…".
-3. The word-only style chips get authored materials and become built-in Styles: Medieval, Nordic, Japanese, Cozy and Fantasy. Modern stays text-only until a flat-roof role exists.
+3. The word-only style chips get authored materials and become built-in Styles: all six, Medieval, Nordic, Japanese, Cozy, Fantasy and Modern (coordinator, 2026-10-24: flat roofs already exist as kit.mjs roofFlat, so Modern gets a stairs-capable roof role and a flat `roofLanguage` shape hint).
 4. The main rows stay **Wood / Stone / Roof / Accent**, each showing what it drives.
 Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/JS parity (M), U3 the unified editor + Style browser + Style editor on lab-ui 0.2.0 (L), U4 the materials-only vs bible A/B judged by design-critic (S). UI-2a's form and picker work is folded into U3.

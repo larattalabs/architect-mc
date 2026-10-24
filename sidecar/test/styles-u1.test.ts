@@ -166,6 +166,10 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
     const owned = hashTree(path.join(h.sc.config.biblesDir, st.id));
     expect(h.sc.bibleIndex.gc(-1)).not.toContain(`${st.id} v1`);
     expect(hashTree(path.join(h.sc.config.biblesDir, st.id))).toEqual(owned);
+    // a hand-made Style of the player's keeps every version too
+    const mine = hashTree(path.join(h.sc.config.biblesDir, 'bib_alpine_timber'));
+    expect(h.sc.bibleIndex.gc(-1)).toEqual([]);
+    expect(hashTree(path.join(h.sc.config.biblesDir, 'bib_alpine_timber'))).toEqual(mine);
     // the wire: bible.save through the message handler acks the saved version
     const acks: Outbound[] = [];
     await h.sc.handle(BibleSaveMsg.parse({ v: 1, type: 'bible.save', id: 'c1', bible: { name: 'Wire Style', roles: MEDIEVAL } }) as never, (m) => acks.push(m));

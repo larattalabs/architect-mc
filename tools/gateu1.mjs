@@ -54,11 +54,11 @@ steps.ingame = async () => {
   const u = await call('dev.style.get', { usable: true });
   data.usable = u.usable;
   for (const id of ['rustic', 'desert', 'medieval', 'nordic', 'japanese', 'cozy', 'fantasy', 'modern']) check(u.usable?.includes(id), `1: Bibles.usable lists the built-in Style ${id}`);
-  const med = await call('dev.style.get', { id: 'medieval' });
+  const med = await call('dev.style.get', { style: 'medieval' });
   check(med.builtin === true && med.origin === 'builtin' && med.editable === false && med.roles?.wall === 'minecraft:white_terracotta', '1: medieval is a built-in, Duplicate-only Style with its authored roles', med);
 
   // 2. a materials-only design with medieval
-  const d = await call('dev.style.design', { style: 'medieval', name: 'U1 Daub Cabin', type: 'cabin' }, 120_000);
+  const d = await call('dev.style.design', { style: 'medieval', name: 'U1 Daub Cabin', buildingType: 'cabin' }, 120_000);
   check(!!d.designId && !d.refused, '2: Designs.request with withStyle(medieval) accepted', d);
   const dd = d.designId ? await designDone(d.designId) : { status: 'NONE' };
   data.design = dd;
@@ -100,14 +100,14 @@ steps.ingame = async () => {
     data.save2 = s2;
     check(!s2.refused && s2.version === 2 && JSON.stringify(s2.versions) === '[1,2]', '4: a second save is v2', s2);
     check(JSON.stringify(tree(v1dir)) === JSON.stringify(before), '4: v1\'s folder is byte-unchanged by the second save');
-    const g1 = await call('dev.style.get', { id: s1.id, version: 1 });
-    const g2 = await call('dev.style.get', { id: s1.id });
+    const g1 = await call('dev.style.get', { style: s1.id, version: 1 });
+    const g2 = await call('dev.style.get', { style: s1.id });
     check(g1.roles?.light === 'minecraft:lantern' && g2.roles?.light === 'minecraft:soul_lantern' && g2.version === 2, '4: read back at v1 and at its head v2', { g1: g1.roles?.light, g2: g2.roles?.light });
     const u2 = await call('dev.style.get', { usable: true });
     check(u2.usable?.includes(s1.id), '4: the saved Style is usable');
     const bad = await call('dev.style.save', { bibleId: 'medieval', style: { name: 'Medieval', roles } });
     check(!!bad.refused && /built-in/.test(bad.refused), '4: saving over a built-in id is refused', bad);
-    const d2 = await call('dev.style.design', { style: s1.id, name: 'U1 Alpine Cabin', type: 'cabin' }, 120_000);
+    const d2 = await call('dev.style.design', { style: s1.id, name: 'U1 Alpine Cabin', buildingType: 'cabin' }, 120_000);
     const dd2 = d2.designId ? await designDone(d2.designId) : { status: 'NONE' };
     data.design2 = dd2;
     check(dd2.status === 'DONE' && dd2.request?.palette?.bible?.id === s1.id && dd2.request?.palette?.bible?.version === 2 && !dd2.request?.bible,

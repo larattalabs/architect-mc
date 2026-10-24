@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev`, `SliceT3Dev`, `SliceHDev`, `SliceVocDev`, `SliceVocbDev`, `SliceCuDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev`, `SliceT3Dev`, `SliceHDev`, `SliceVocDev`, `SliceVocbDev`, `SliceU1Dev`, `SliceCuDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -389,6 +389,13 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.fluid.state {region}` gains `ordered`, `order` (the write order), and per body `writtenAt` (game time; -1: forced with the stage)
   and `held` (never written: upstream of a body that failed). `dev.entity.damage` already records every damage type: `{type: "fall"}`
   reads fall damage (HY item 18 (b)).
+- **2026-10-24 (Style unification U1):** new (`SliceU1Dev`, generated headless too) `dev.style.design {style, version?, name?,
+  buildingType?, size?, owner?}` (Designs.request of `DesignRequest.withStyle(Bibles.get(style))`, materials only -> `{designId, palette}` or
+  `{refused}`), `dev.style.designState {designId}` (Designs.get -> `{designId, status, step, entryId?, error?, request}`),
+  `dev.style.variant {entryId, style, version?, edits: [[field, value]]}` (the Style's roles after `StyleRoles.editMain` edits, then
+  `Library.makeVariant` with them inline -> `{entryId, roles, provenance}`), `dev.style.save {bibleId?, owner?, style}` (Bibles.save
+  -> the saved Style) and `dev.style.get {style, version?} | {usable: true}` (Bibles.get / Bibles.usable). `dev.library.variants.set`
+  applies `bible` before the main rows, with the picked bible's roles, so a row edit edits them.
 - **2026-10-19 (6c slice VOC-b):** new (`SliceVocbDev`, generated headless too) `dev.vocab.bibleRequest {prompt, name?, owner?, scope?,
   seedPreset?, rarity?: {...}, opKey?}` (Bibles.request with `BibleRequest.Rarity`, the typed record built from the JSON -> `{jobId, bibleId,
   version, status, step, request, wire}` (`wire`: Wire4b's request JSON) or `{wire, refused, code?, detail?}`: a malformed budget is refused

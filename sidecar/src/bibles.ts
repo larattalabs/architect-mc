@@ -353,8 +353,10 @@ export class BibleIndex {
       const vs = this.versions(id);
       if (vs.length < 2) continue;
       const latest = vs[vs.length - 1]!;
-      // (Style unification U1, Steward's review) another mod's Style keeps every version: its pins live in that mod
-      if (this.installedInfo(id, latest)?.owner) continue;
+      // (Style unification U1, Steward's review) another mod's Style, and a hand-made one, keep every version: a pin may live
+      // outside Architect (a settlement's BibleRef), where this GC cannot see it
+      const head = this.installedInfo(id, latest);
+      if (head?.owner || head?.origin === 'hand') continue;
       const pinned = this.pins(id).versions;
       for (const v of vs) {
         if (v === latest || pinned.has(v)) continue;
