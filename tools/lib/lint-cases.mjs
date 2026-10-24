@@ -159,10 +159,10 @@ function structureCases() {
   out.push({ id: 'fx:tunnel_hill', covers: ['t3b-natural (the hill bore re-read: cover, shell, M3/M4:tunnel)'], run: async () => { const { loadFixture } = await kimp('lib/lint/vworld-fixtures.mjs'); const F = loadFixture('tunnel_hill'); const r = await structure({ ...F, name: 'tunnel_hill' }, { m5: null }); return { ok: [`${summary(r.rep)}; tunnels ${JSON.stringify(r.rep.metrics.tunnels ?? null).slice(0, 160)}`], fails: r.fails, recorded: r.recorded }; } });
   out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
-  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1]]) {
+  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['cw', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
   }
-  for (const w of ['bridge', 'rope', 'tunnel']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
+  for (const w of ['bridge', 'rope', 'tunnel', 'catwalk']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
   for (const h of HIST) out.push({ id: `hist:${h.id}`, covers: h.covers, run: h.run });
   return out;
 }
@@ -170,9 +170,9 @@ function structureCases() {
 const P0COVERS = {
   kc: ['kc-ingame #6', 'voc-ingame (wall through the fountain)'], k1a: ['k1a-natural #4', 'k1a-target #5'], refused: ['4d-all #16', 'v-ingame #7 (refusal half)', 'd2-ingame #12'],
   t3a: ['t3a-ingame #3', 't3a-natural #4', 't3a-frozen #4'], tunnel: ['t3b-ingame #4'], rope: ['k1b-ingame #4'], voc: ['voc-ingame #5', 'voc-ingame #10'],
-  vocc: ['vocc-ingame #3', 'vocc-ingame #8', 'vocc-ingame #9'], irr: ['irr-ingame #1'], h: ['h-ingame #23'], valid: ['Steward-shaped plans (risk 6)'],
+  vocc: ['vocc-ingame #3', 'vocc-ingame #8', 'vocc-ingame #9'], cw: ['cw-ingame #5 (M10:catwalk, M8, M6, M5, M3 on the plan; the broken variants caught)', 'cw-ingame #6 (KC: the catwalk past the falls, M25:clear 0)'], irr: ['irr-ingame #1'], h: ['h-ingame #23'], valid: ['Steward-shaped plans (risk 6)'],
 };
-const EVENCOVERS = { bridge: ['even-width bridges (c4f1c8f9)'], rope: ['even-width ropes (9ba60b79)'], tunnel: ['even-width tunnels (9ba60b79)'] };
+const EVENCOVERS = { bridge: ['even-width bridges (c4f1c8f9)'], rope: ['even-width ropes (9ba60b79)'], tunnel: ['even-width tunnels (9ba60b79)'], catwalk: ['7a CW: catwalk lanes on the walk footprint, both faces, both axes (cw-ingame #5)'] };
 
 // (the corpus gates the lint's own S- rules and error findings; the connector re-reads are gated on the scenario plans and the fuzz)
 const CONNECTOR_DIRS = new Set([]);
@@ -301,7 +301,7 @@ function transposed(f) {
   return { terrain, anchors };
 }
 async function evenFuzz(writer) {
-  const file = { bridge: ['t3a', 'w01_even_width.json'], rope: ['even', 'ew01_rope_even_width.json'], tunnel: ['even', 'ew02_tunnel_even_width.json'] }[writer];
+  const file = { bridge: ['t3a', 'w01_even_width.json'], rope: ['even', 'ew01_rope_even_width.json'], tunnel: ['even', 'ew02_tunnel_even_width.json'], catwalk: ['even', 'ew03_catwalk_even_width.json'] }[writer];
   const f = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', file[0], file[1]), 'utf8'));
   const S = await kimp('test/plan-p0-shared.mjs');
   const conn = f.plan.connectors.findIndex((q) => q.from?.anchor && q.to?.anchor);
@@ -319,7 +319,7 @@ async function evenFuzz(writer) {
     const fx = { ...f, terrain: h.terrain, anchors: h.anchors, plan, name: `${file[1]} w${width}`, volume: f.volume ?? {} };
     const p = await p0Of(fx, S);
     if (!p.c) { out.fails.push(`w${width}: no plan`); continue; }
-    const recs = [...(p.c.meta?.bridges ?? []), ...(p.c.meta?.ropes ?? []), ...(p.c.meta?.tunnels ?? [])];
+    const recs = [...(p.c.meta?.bridges ?? []), ...(p.c.meta?.ropes ?? []), ...(p.c.meta?.tunnels ?? []), ...(p.c.meta?.catwalks ?? [])];
     if (!recs.length) { out.recorded.push(`w${width} ${JSON.stringify(h.anchors[a])}: no ${writer} planned (${JSON.stringify((p.check?.parts ?? []).map((q) => [q.part, q.class, q.reasons?.[0]?.code ?? null]))})`); continue; }
     for (const q of recs) kinds.add(JSON.stringify(q.dir));
     runs++;

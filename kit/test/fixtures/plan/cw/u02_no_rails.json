@@ -1,0 +1,78 @@
+{
+  "about": "(7a CW, broken variant) v7a_cw_cliff with ext architect_mc:unsafe {noRails: true}: no rail on the open edge: M10:catwalk and M8 catch it; the plan check never refuses an unsafe part",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 84
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1059,
+        "z1": 2095,
+        "y": 72
+      },
+      {
+        "x0": 1076,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 72
+      }
+    ]
+  },
+  "anchors": {
+    "west_shelf": [
+      1048,
+      73,
+      2036
+    ],
+    "east_shelf": [
+      1087,
+      73,
+      2036
+    ]
+  },
+  "protected": [
+    {
+      "id": "foot_path",
+      "rect": [
+        1056,
+        2034,
+        1079,
+        2095
+      ]
+    }
+  ],
+  "expect": {
+    "rule": "M10:catwalk"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        },
+        "ext": {
+          "architect_mc:unsafe": {
+            "noRails": true
+          }
+        }
+      }
+    ]
+  }
+}

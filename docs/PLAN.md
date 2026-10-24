@@ -1146,3 +1146,10 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   say "load the town's chunks first" alongside the "not surveyed" counts.
 - **coa-unit item 6 goes stale on every slice now that COA is on main.** Its "before" table is computed on the merge base.
   Normalise it as F7A_ASK_PARTS does, or compare against the committed tables only.
+
+## Watch (coordinator, 2026-10-24)
+
+- **rs-survival item 10 rs02m2: "region reads REMOVING after the reopen", but it read REMOVED.** This failed once each in two
+  independent runs on 2026-10-24 (speed-audit-c's branch run and speed-audit-b's new run). Neither changed that code, and it had
+  passed in about 18 earlier logs. If the nightly shows it again, treat it as a real race in the reopen-during-removal path, not
+  a flake.

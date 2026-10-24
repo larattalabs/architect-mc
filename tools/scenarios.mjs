@@ -550,7 +550,8 @@ async function runScenario(id) {
   let shots = null;
   if (!flat) {
     t0 = Date.now();
-    await L.settle(120_000);
+    // (speed audit B) game time: sprinted on a headless host (GATE_SPRINT=0 / a client: the original 120 s real-time settle)
+    await L.gameWait(120_000, { real: L.settle, label: 'stand' });
     T('stand', t0);
     // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
     if (isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
