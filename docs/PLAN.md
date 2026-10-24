@@ -1172,3 +1172,6 @@ Model in docs/STYLE-UNIFY.md. Mock approved: https://claude.ai/artifact/F5rfEVge
 3. The word-only style chips get authored materials and become built-in Styles: Medieval, Nordic, Japanese, Cozy and Fantasy. Modern stays text-only until a flat-roof role exists.
 4. The main rows stay **Wood / Stone / Roof / Accent**, each showing what it drives.
 Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/JS parity (M), U3 the unified editor + Style browser + Style editor on lab-ui 0.2.0 (L), U4 the materials-only vs bible A/B judged by design-critic (S). UI-2a's form and picker work is folded into U3.
+
+## Queued (coordinator, 2026-10-24; found by Steward)
+- lab-ui composite build: when ../lab-ui is a clean checkout exactly at the consumer's lab_ui_version tag, settings.gradle includeBuild()s it, and the substitution exposes only lab-ui's main source set, not its split client set, so `dev.larattalabs.labui.client.*` doesn't resolve. The same rule exists in Architect, Steward and AgentCraft. Fix in lab-ui (publish the client classes in the composite's variant) or in the shared rule. Workaround: -Plab_ui.dir=none. Also resolve lab_ui 0.2.0 into main's .gradle-home online once when UI-2b merges, so offline builds don't depend on the checkout.
