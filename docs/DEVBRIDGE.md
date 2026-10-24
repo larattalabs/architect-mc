@@ -402,6 +402,14 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.fluid.state {region}` gains `ordered`, `order` (the write order), and per body `writtenAt` (game time; -1: forced with the stage)
   and `held` (never written: upstream of a body that failed). `dev.entity.damage` already records every damage type: `{type: "fall"}`
   reads fall damage (HY item 18 (b)).
+- **2026-10-24 (Style unification U2, client):** `dev.design.fill` takes `styleOps: [[pick, id] | [unpick] | [revert] | [main,
+  wood|stone|roof|accent, value] | [role, role, block] | [feature, id]]`, applied in order to the Design tab's `StyleForm`; `style` with a chip
+  id picks that built-in Style (its materials and suggested features), other text means no Style; `bible` picks a built-in or hand-made
+  Style (materials only) and keeps a Claude-made one as set mode. `dev.design.state`'s `form` gains `styleForm` (the StyleForm view:
+  style, mix, main, mainProvenance, roles, provenance, features, featureProvenance, request, save) and `palette`. New
+  `dev.design.saveStyle {name?}` (Save as style…: bible.save of the form's Style, which the form then picks -> `{saved, request}` + the
+  state, or `{refused}`). `dev.library.variants.set`'s `bible` picks the Style itself (a built-in one is a preset); the Variants
+  state gains `style` (the VARIANT-mode view).
 - **2026-10-24 (Style unification U1):** new (`SliceU1Dev`, generated headless too) `dev.style.design {style, version?, name?,
   buildingType?, size?, owner?}` (Designs.request of `DesignRequest.withStyle(Bibles.get(style))`, materials only -> `{designId, palette}` or
   `{refused}`), `dev.style.designState {designId}` (Designs.get -> `{designId, status, step, entryId?, error?, request}`),
