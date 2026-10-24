@@ -97,8 +97,13 @@ export async function unit(root, { check, log, OUT, nodeTest }) {
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).sort();
   out.asks = { before: before.text.split('\n')[0], after: after.text.split('\n')[0], moved };
   const cb = fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8'), ca = fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8');
-  check(f7n(before.text) === f7n(cb) && f7n(after.text) === f7n(ca), `item 6: the 59 asks' tables equal the committed ones (fixtures/plan/coa/asks-before.txt on the base kit, asks-after.txt here): ${out.asks.before.slice(2)} -> ${out.asks.after.slice(2)}`);
-  check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify([...ASKS_MOVED].sort()) && moved.every((k) => / blocked DEPENDENCY/.test(la.get(k))),
+  // ((7a foundation) a base past close-out A (main since v0.42.0): its table is the committed after; nothing moves, noted as FL's item 8)
+  const pastCoa = f7n(before.text) === f7n(ca);
+  if (pastCoa) {
+    check(f7n(after.text) === f7n(ca), `item 6: the base is past close-out A: the 59 asks' table on the base and here equal the committed asks-after.txt (${out.asks.after.slice(2)})`);
+    check(after.malformed === 0 && moved.length === 0, `item 6, §4: the base is past close-out A: 0 malformed, nothing moves (${moved.join(', ') || 'nothing moved'})`);
+  } else check(f7n(before.text) === f7n(cb) && f7n(after.text) === f7n(ca), `item 6: the 59 asks' tables equal the committed ones (fixtures/plan/coa/asks-before.txt on the base kit, asks-after.txt here): ${out.asks.before.slice(2)} -> ${out.asks.after.slice(2)}`);
+  if (!pastCoa) check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify([...ASKS_MOVED].sort()) && moved.every((k) => / blocked DEPENDENCY/.test(la.get(k))),
     `item 6, §4: 0 malformed; exactly the three routes on an unplaced lot move refused NO_ROOM -> blocked: ${moved.join(', ')}`, moved.map((k) => [lb.get(k), la.get(k)]));
   // item 10: byte identity but the named movers
   const u = await unchanged(root, { check, log, moved: MOVED });
