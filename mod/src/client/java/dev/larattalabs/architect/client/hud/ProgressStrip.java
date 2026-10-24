@@ -20,7 +20,17 @@ public final class ProgressStrip {
 
 	/** {@code frac} in [0, 1], or negative = unknown (the sweep). */
 	public static void draw(GuiGraphicsExtractor g, Font font, int x, int y, int w, String label, double frac, int text, int bar, int track) {
-		g.text(font, dev.larattalabs.labui.client.ui.TextUtil.ellipsize(font, label, w), x, y, text, false);
+		draw(g, font, x, y, w, label, null, frac, text, bar, track);
+	}
+
+	/** With {@code right} (e.g. the elapsed time) right-aligned on the label line, never cut off by a long label. */
+	public static void draw(GuiGraphicsExtractor g, Font font, int x, int y, int w, String label, @org.jspecify.annotations.Nullable String right,
+		double frac, int text, int bar, int track) {
+		int rw = right == null ? 0 : font.width(right) + 6;
+		g.text(font, dev.larattalabs.labui.client.ui.TextUtil.ellipsize(font, label, w - rw), x, y, text, false);
+		if (right != null) {
+			g.text(font, right, x + w - font.width(right), y, text, false);
+		}
 		int by = y + 10;
 		g.fill(x, by, x + w, by + 2, track);
 		if (frac >= 0) {

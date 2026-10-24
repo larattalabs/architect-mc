@@ -44,16 +44,17 @@ public final class HelperProgressHud implements HudElement {
 		}
 		Font font = mc.font;
 		Kit.Padding p = Kit.padding("tooltip");
-		int w = Math.min(240, g.guiWidth() / 2 - 8);
+		int w = Math.min(320, g.guiWidth() / 2 - 8);
 		int inner = w - p.left() - p.right();
 		String npm = pl != null ? previewNpm : installing ? Launcher.installLine() : null;
 		long since = pl != null ? previewSince : Launcher.installStartedAt();
-		String label = (pl != null ? pl : Launcher.summary()) + (since > 0 ? " " + ProgressStrip.elapsed(since) : "");
+		String label = pl != null ? pl : Launcher.summary();
+		String clock = since > 0 ? ProgressStrip.elapsed(since) : null;
 		int h = p.top() + p.bottom() + ProgressStrip.H + (npm != null ? 10 : 0);
 		int x = 4;
 		int y = 4;
 		Panels.sprite(g, Kit.TOOLTIP, x, y, w, h, 0xF0FFFFFF);
-		ProgressStrip.draw(g, font, x + p.left(), y + p.top(), inner, label, -1, HudInk.text(), HudInk.bar(), HudInk.track());
+		ProgressStrip.draw(g, font, x + p.left(), y + p.top(), inner, label, clock, -1, HudInk.text(), HudInk.bar(), HudInk.track());
 		if (npm != null) {
 			g.text(font, TextUtil.ellipsize(font, "npm: " + npm, inner), x + p.left(), y + p.top() + ProgressStrip.H + 1, HudInk.soft(), false);
 		}

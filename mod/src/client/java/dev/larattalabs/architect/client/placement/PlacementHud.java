@@ -57,50 +57,84 @@ final class PlacementHud implements HudElement {
 		boolean legend = BuildPlacement.legend();
 
 		List<Row> rows = new ArrayList<>();
+		// each row's priority on a short screen (HudFit): the title, chips and verdict stay; the rest drops lowest first
+		List<Integer> prio = new ArrayList<>();
+		java.util.function.BiConsumer<Row, Integer> add = (r, pr) -> {
+			rows.add(r);
+			prio.add(pr);
+		};
 		if (v != null) {
 			String mv = BuildPlacement.moving();
 			String title = mv != null ? "Moving " + mv + " (" + v.bp().name() + ")" : (BuildPlacement.preview() ? "Preview: " : "Placing ") + v.bp().name();
-			rows.add(Row.text(TextUtil.ellipsize(font, title, inner), HudInk.text()));
-			rows.add(Row.chips(chips(v)));
+			add.accept(Row.text(TextUtil.ellipsize(font, title, inner), HudInk.text()), dev.larattalabs.architect.placement.HudFit.KEEP);
+			add.accept(Row.chips(chips(v)), dev.larattalabs.architect.placement.HudFit.KEEP);
 			if (BuildPlacement.tooFar()) {
-				rows.add(Row.text(TextUtil.ellipsize(font, "▲ " + BuildPlacement.TOO_FAR, inner), HudInk.warn()));
+				add.accept(Row.text(TextUtil.ellipsize(font, "▲ " + BuildPlacement.TOO_FAR, inner), HudInk.warn()), 9);
 			}
-			verdict(rows, font, v, inner, legend);
-			rows.add(Row.segs(counts(v)));
+			List<Row> vr = new ArrayList<>();
+			verdict(vr, font, v, inner, legend);
+			for (int i = 0; i < vr.size(); i++) {
+				add.accept(vr.get(i), i == 0 ? dev.larattalabs.architect.placement.HudFit.KEEP : 6); // the headline stays, the detail may go
+			}
+			add.accept(Row.segs(counts(v)), 7);
 			if (v.approach().rows() > 0) {
 				dev.larattalabs.architect.placement.Approach.Plan ap = v.approach();
 				int[] feet = ap.feet();
 				int rise = feet[feet.length - 1] - feet[0];
-				rows.add(Row.segs(List.of(new Seg(GhostRenderer.PATH | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
+				add.accept(Row.segs(List.of(new Seg(GhostRenderer.PATH | 0xFF000000, "entrance path " + ap.rows() + " blocks" + (rise == 0 ? ", level"
 					: rise > 0 ? ", up " + rise : ", down " + -rise) + (ap.fillCount() == 0 ? "" : " · " + ap.fillCount() + " filled") + (ap.clearCount() == 0
-					? "" : " · " + ap.clearCount() + " cut"), HudInk.soft()))));
+					? "" : " · " + ap.clearCount() + " cut"), HudInk.soft()))), 3);
 			}
 			List<String> notes = v.notes();
 			int shownNotes = legend ? notes.size() : Math.min(2, notes.size());
 			for (int i = 0; i < shownNotes; i++) {
 				// the swatch is the ghost colour the note's cells are drawn in (water, hazards), beside the words
 				int ink = i < v.noteInk().size() ? v.noteInk().get(i) : 0;
-				rows.add(Row.segs(List.of(new Seg(ink == 0 ? 0 : ink | 0xFF000000, "Note: " + notes.get(i), HudInk.note()))));
+				add.accept(Row.segs(List.of(new Seg(ink == 0 ? 0 : ink | 0xFF000000, "Note: " + notes.get(i), HudInk.note()))), 4);
 			}
 			if (shownNotes < notes.size()) {
-				rows.add(Row.text("+" + (notes.size() - shownNotes) + " more notes (?)", HudInk.note()));
+				add.accept(Row.text("+" + (notes.size() - shownNotes) + " more notes (?)", HudInk.note()), 2);
 			}
 		}
 		if (fresh || v != null && v.forceArmed()) {
 			String s = status == null ? "" : status;
 			boolean err = BuildPlacement.statusError();
 			List<String> wrapped = TextUtil.wrapPlain(font, (err ? "✖ " : "") + s, inner);
-			for (String l : wrapped) {
-				rows.add(Row.text(l, err ? HudInk.error() : HudInk.text()));
+			if (v != null && err && !legend && wrapped.size() > 1) {
+				// while placing, a refusal's status repeats the grouped verdict and the chips: one line; "?" shows all of it
+				wrapped = List.of(TextUtil.ellipsize(font, (err ? "✖ " : "") + s, inner));
+			}
+			for (int i = 0; i < wrapped.size(); i++) {
+				// while placing, a refusal's status repeats the verdict: it goes first on a short screen (alone it stays)
+				add.accept(Row.text(wrapped.get(i), err ? HudInk.error() : HudInk.text()), v == null ? dev.larattalabs.architect.placement.HudFit.KEEP
+					: i == 0 ? 5 : 1);
 			}
 		}
 		String[][] keys = v == null || BuildPlacement.preview() ? new String[0][] : keyRows(v, legend, font, inner);
-		for (String[] k : keys) {
-			rows.add(Row.keys(k));
+		for (int i = 0; i < keys.length; i++) {
+			add.accept(Row.keys(keys[i]), i == keys.length - 1 ? 8 : 5); // the last key row holds "?" (hide) or "? keys"
 		}
+		// fit a short screen: never over the crosshair (the ghost is aimed with it); creative has no hearts above the hotbar
+		boolean bars = mc.gameMode != null && mc.gameMode.getPlayerMode().isSurvival();
+		int fixed = p.top() + p.bottom() - 1;
+		int[] hs = new int[rows.size()];
+		int[] ps = new int[rows.size()];
+		for (int i = 0; i < rows.size(); i++) {
+			hs[i] = rows.get(i).height();
+			ps[i] = prio.get(i);
+		}
+		boolean[] keep = dev.larattalabs.architect.placement.HudFit.keep(hs, ps, fixed, g.guiHeight() - (bars ? 50 : 26) - (g.guiHeight() / 2 + 8));
+		List<Row> fit = new ArrayList<>();
+		for (int i = 0; i < rows.size(); i++) {
+			if (keep[i]) {
+				fit.add(rows.get(i));
+			}
+		}
+		rows.clear();
+		rows.addAll(fit);
 		// size and place
 		int textW = 0;
-		int h = p.top() + p.bottom() - 1;
+		int h = fixed;
 		for (Row r : rows) {
 			textW = Math.max(textW, r.width(font));
 			h += r.height();
@@ -109,8 +143,6 @@ final class PlacementHud implements HudElement {
 		int x = (g.guiWidth() - w) / 2;
 		int y = g.guiHeight() - 64 - h;
 		if (y < g.guiHeight() / 2 + 8) {
-			// a short screen: never over the crosshair (the ghost is aimed with it); creative has no hearts above the hotbar
-			boolean bars = mc.gameMode != null && mc.gameMode.getPlayerMode().isSurvival();
 			y = Math.max(g.guiHeight() / 2 + 8, g.guiHeight() - (bars ? 50 : 26) - h);
 		}
 		lastRect = new int[] {x, y, w, h};
@@ -129,7 +161,7 @@ final class PlacementHud implements HudElement {
 	/** The state chips: rotation and lock always; force and place-on-top when armed. */
 	private static List<Chip> chips(BuildPlacement.View v) {
 		List<Chip> c = new ArrayList<>();
-		c.add(new Chip("↻ " + BlueprintTransform.rotationName(v.turns()).replace('_', ' ').toLowerCase(java.util.Locale.ROOT), HudInk.soft(), false));
+		c.add(new Chip("rotation " + BlueprintTransform.rotationName(v.turns()).replace('_', ' ').toLowerCase(java.util.Locale.ROOT), HudInk.soft(), false));
 		c.add(new Chip("entrance " + v.front(), HudInk.soft(), false));
 		c.add(v.locked() ? new Chip("■ locked", HudInk.text(), true) : new Chip("□ follows your look", HudInk.soft(), false));
 		if (v.forceArmed()) {

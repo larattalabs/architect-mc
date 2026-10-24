@@ -413,11 +413,17 @@ public final class CrateScreen extends Screen {
 		// footer: flash, buttons
 		int by = bottom - 20;
 		int bx = cx;
-		bx += button(g, "insert", "Insert from inventory", bx, by, 124, true, building, mouseX, mouseY, this::insertFromInventory) + 4;
+		// UI-2b: Deconstruct keeps the width of its armed label ("Press again to deconstruct (5)"), so arming never shifts the row;
+		// Insert gives way ("Insert" when "Insert from inventory" does not fit)
+		var dc = deconShown();
+		int dWant = dc.width(font);
+		int insW = Math.max(56, Math.min(124, cw - 50 - 60 - dWant - 12));
+		String ins = font.width("Insert from inventory") + 12 <= insW ? "Insert from inventory" : "Insert";
+		bx += button(g, "insert", ins, bx, by, insW, true, building, mouseX, mouseY, this::insertFromInventory) + 4;
 		bx += button(g, "pause", paused ? "Resume" : "Pause", bx, by, 60, false, building, mouseX, mouseY, this::togglePause) + 4;
 		{
-			var c = deconShown();
-			int dw = Math.max(60, Math.min(c.width(font), cx + cw - 54 - bx));
+			var c = dc;
+			int dw = Math.max(60, Math.min(dWant, cx + cw - 54 - bx));
 			c.draw(g, font, bx, by, dw, 20, mouseX, mouseY);
 			(c == decon ? deconOwned : decon).hide();
 			hits.add(new Hit("deconstruct", c.armed() ? c.armedLabel(deconArm.secondsLeft(net.minecraft.util.Util.getMillis())) : "Deconstruct", bx, by, dw,

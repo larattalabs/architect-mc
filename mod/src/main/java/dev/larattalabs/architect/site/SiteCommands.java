@@ -451,8 +451,9 @@ public final class SiteCommands {
 		}
 		for (Site b : sites) {
 			Sites.Report r = Sites.reports().get(b.id());
-			String text = String.format(Locale.ROOT, "site %s (%s) %s at %s", b.id(), b.blueprint(), b.rotation().replace('_', ' ').toLowerCase(Locale.ROOT),
-				b.box().minX() + " " + b.box().minY() + " " + b.box().minZ()) + (r == null ? "" : r.problem() ? " · check" : " · note");
+			String rot = b.rotation().replace('_', ' ').toLowerCase(Locale.ROOT);
+			String text = "site " + b.id() + " (" + b.blueprint() + ") at " + b.box().minX() + " " + b.box().minY() + " " + b.box().minZ()
+				+ ("none".equals(rot) ? "" : ", turned " + rot) + (r == null ? "" : r.problem() ? " · check" : " · note");
 			String hover = "Box " + Anchors.str(b.box()) + (r == null ? "" : "\n" + (r.problem() ? "Check: " : "Note: ") + r.message());
 			lines.add(Component.literal(text).withStyle(x -> {
 				var st = x.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal(hover)));
