@@ -589,6 +589,9 @@ export class Sidecar {
       // (Style unification U1) a hand-made Style: no Claude call
       case 'bible.save':
         return { ...this.bibleIndex.save({ id: msg.bibleId, owner: msg.owner, bible: msg.bible }) };
+      // (Style unification U3) the Style editor's test-house check: nothing saved
+      case 'bible.check':
+        return { ...this.bibleIndex.check({ bible: msg.bible, scope: msg.scope }) };
       // ---- 5b
       case 'entry.versions':
         return { entryId: msg.entryId, head: this.versions.head(msg.entryId), versions: this.versions.list(msg.entryId) };

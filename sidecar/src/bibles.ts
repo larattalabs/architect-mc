@@ -29,6 +29,9 @@ import { ClientError } from './sidecar.js';
 import { keptForKey } from './opkeys.js';
 import { truncate } from './util/text.js';
 
+/** Fields a bible.save / bible.check caller does not set: the store's and the job's own. */
+const SAVE_STORE_FIELDS = ['id', 'version', 'versions', 'builtin', 'preset', 'archived', 'cost', 'critique', 'createdAt', 'dir', 'sheetPath', 'prose', 'components', 'owner', 'origin', 'seedPreset', 'ext'];
+
 export const BIBLE_SNAPSHOT_LIMIT = 20;
 const BIBLE_KEEP = 100;
 export const MAX_BIBLE_ROUNDS = 3;
@@ -407,24 +410,13 @@ export class BibleIndex {
     }
     const version = (this.versions(id).pop() ?? 0) + 1;
     // fields a caller does not set: the store's and the job's own
-    for (const k of ['id', 'version', 'versions', 'builtin', 'preset', 'archived', 'cost', 'critique', 'createdAt', 'dir', 'sheetPath', 'prose', 'components', 'owner', 'origin', 'seedPreset', 'ext']) delete given[k];
+    for (const k of SAVE_STORE_FIELDS) delete given[k];
     const bible: Record<string, unknown> = { ...given, id, version, name, ...(req.owner ? { owner: req.owner } : {}), origin: 'hand', createdAt: this.sc.now() };
     const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-save-'));
     try {
-      const f = path.join(stage, 'in.json');
-      fs.writeFileSync(f, JSON.stringify(bible));
       const out = path.join(stage, 'bible.json');
-      const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
-      const scope = bible.scope === 'settlement' ? 'settlement' : 'building';
-      const r = spawnSync(process.execPath, [tool, 'validate', f, '--scope', scope, '--write', out], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
-      let v: { ok?: boolean; errors?: string[] } = {};
-      try {
-        v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
-      } catch {
-        /* below */
-      }
-      if (r.status !== 0 || !v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${(v.errors ?? [truncate(`${r.stdout}${r.stderr}`, 300)]).slice(0, 6).join('; ')}`);
-      fs.rmSync(f);
+      const v = this.validateStyle(bible, stage, out);
+      if (!v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${v.errors.slice(0, 6).join('; ')}`);
       // the reference components (the built-ins' too), so a saved Style also resolves for a group or a bible design
       const comps = this.referenceComponents();
       if (comps) fs.copyFileSync(comps, path.join(stage, 'components.mjs'));
@@ -437,6 +429,43 @@ export class BibleIndex {
     const info = this.installedInfo(id, version);
     if (!info) throw new ClientError(`bible ${id} v${version}: saved, but its bible.json is unreadable`);
     return { id, version, bible: info };
+  }
+
+  /**
+   * (Style unification U3) bible.check: the kit's validation of a Style as bible.save would run it (tools/bible.mjs validate: the
+   * roles build a palette and a small test house passes the checker), without saving anything. No Claude call, $0. The Style editor
+   * shows the result and refuses Save while there are errors; bible.save checks again.
+   */
+  check(req: { bible: Record<string, unknown>; scope?: 'building' | 'settlement' | undefined }): { ok: boolean; errors: string[]; warnings: string[] } {
+    const given = { ...req.bible };
+    for (const k of SAVE_STORE_FIELDS) delete given[k];
+    const name = typeof given.name === 'string' && given.name.trim() ? given.name.trim() : 'Unnamed';
+    const bible: Record<string, unknown> = { ...given, name, ...(req.scope ? { scope: req.scope } : {}) };
+    const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-check-'));
+    try {
+      return this.validateStyle(bible, stage, null);
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+  }
+
+  /** The kit's validate on `bible` (written to <stage>/in.json, removed after); `out`: where the normalised bible.json goes, or null. */
+  private validateStyle(bible: Record<string, unknown>, stage: string, out: string | null): { ok: boolean; errors: string[]; warnings: string[] } {
+    const f = path.join(stage, 'in.json');
+    fs.writeFileSync(f, JSON.stringify(bible));
+    const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
+    const scope = bible.scope === 'settlement' ? 'settlement' : 'building';
+    const r = spawnSync(process.execPath, [tool, 'validate', f, '--scope', scope, ...(out ? ['--write', out] : [])], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
+    let v: { ok?: boolean; errors?: string[]; warnings?: string[] } = {};
+    try {
+      v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
+    } catch {
+      /* below */
+    }
+    fs.rmSync(f, { force: true });
+    const ok = r.status === 0 && v.ok === true;
+    const errors = ok ? [] : v.errors?.length ? v.errors : [truncate(`${r.stdout}${r.stderr}`, 300) || 'the kit gave no verdict'];
+    return { ok, errors, warnings: Array.isArray(v.warnings) ? v.warnings.slice(0, 12) : [] };
   }
 
   /**
