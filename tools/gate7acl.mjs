@@ -99,7 +99,7 @@ steps.start = async () => {
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
-  await startClient(process.argv[3] ?? 'G7A CL Lobby', { backend: 'sim' });
+  await startClient(process.argv[3] ?? 'G6B CL Lobby', { backend: 'sim' });
   spendZero();
   return { head };
 };
@@ -368,16 +368,16 @@ async function stewardRound(tag, fx, { site = null, flat = true } = {}) {
 steps.ingame = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G7A CL Flat', FLAT);
+  await L.fresh('G6B CL Flat', FLAT);
   await L.setRules('exact');
   out.demo = await demoRun('flat', FLAT_CLAIM, { flat: true });
   await leaveWorld();
-  await L.fresh('G7A CL Steward Flat', FLAT);
+  await L.fresh('G6B CL Steward Flat', FLAT);
   await L.setRules('exact');
   out.steward = await stewardRound('v1-ladder', B.fixture(ctx, 'valid/v7a_cl_ladder.json'), { flat: true });
   await leaveWorld();
   // (every new kind through Regions.checkPlan then realiseApproved: the switchback's own round, on its slope)
-  await L.fresh('G7A CL Steward Switch', FLAT);
+  await L.fresh('G6B CL Steward Switch', FLAT);
   await L.setRules('exact');
   out.stewardSwitch = await stewardRound('v1-switch', B.fixture(ctx, 'valid/v7a_cl_switch.json'), { flat: true });
   await leaveWorld();
@@ -388,11 +388,11 @@ steps.ingame = async () => {
 steps.natural = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G7A CL S3', BASE);
+  await L.fresh('G6B CL S3', BASE);
   await L.setRules('default');
   out.demo = await demoRun('natural', S3_CLAIM, { flat: false });
   await leaveWorld();
-  await L.fresh('G7A CL Steward S3', BASE);
+  await L.fresh('G6B CL Steward S3', BASE);
   await L.setRules('default');
   out.steward = await stewardRound('v1-stair', B.fixture(ctx, 'valid/v7a_cl_stair.json'), { site: S3_CLAIM, flat: false });
   await leaveWorld();
@@ -458,7 +458,7 @@ steps.look = async () => {
   const out = { shots: [], bibles: {} };
   for (const bible of LOOK_BIBLES) {
     const tag = bible ?? 'default';
-    await L.fresh(`G7A CL Look ${tag}`, FLAT);
+    await L.fresh(`G6B CL Look ${tag}`, FLAT);
     await L.setRules('exact');
     await cmd('/time set 6000');
     await cmd('/weather clear');
