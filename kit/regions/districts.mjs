@@ -33,7 +33,9 @@ export function build(ctx, districts, { soul = true } = {}) {
   if (!Array.isArray(districts) || !districts.length) throw new Error('districts: params.spec.districts is empty');
   const r = region(ctx);
   r.stages(['ground', 'street', 'routes', 'lots', 'props']);
-  const out = r.pass('districts', { districts, loopiness: P.loopiness / 100, maxGrade: P.gradePct / 100, lamps: P.lamps, ...(P.routeLamp === 'soul' && soul ? { lampFixture: 'minecraft:soul_lantern' } : {}) });
+  // ((6c D3) `spec._unsafe`: the reach step's broken variants for the checker's tests: ignoreHeld, writeVerge, wideReach, noHold)
+  const unsafe = ctx.params.spec?._unsafe;
+  const out = r.pass('districts', { districts, loopiness: P.loopiness / 100, maxGrade: P.gradePct / 100, lamps: P.lamps, ...(P.routeLamp === 'soul' && soul ? { lampFixture: 'minecraft:soul_lantern' } : {}), ...(unsafe && typeof unsafe === 'object' ? { _unsafe: unsafe } : {}) });
   // cameras over the districts' bells
   const c = ctx.claim;
   const bells = Object.keys(out.data.rects).map((d) => r.anchors[`bell_${d}`.slice(0, 32)]).filter(Boolean);

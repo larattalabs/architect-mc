@@ -3,6 +3,8 @@
 // roads or paths), and the `beside` data a plan reads (ctx.beside). The mod's RegionsImpl applies the same rule in Java
 // (BesideCheck); this module is the reference the kit tests and the gate use.
 
+import { centreCells, crossOffsets } from './geom.mjs';
+
 /** The deepest overlap of the two claims (columns, along the narrower side of their intersection). */
 export const SEAM_MAX = 16;
 
@@ -80,4 +82,127 @@ export function besideData(id, standingClaim, ir, claim) {
   const lots = f.lots.filter((x) => meets(x.rect, near)).map((x) => x.rect);
   const keep = [...f.roads, ...f.paths, ...f.ways].filter((x) => meets(x.rect, near)).map((x) => x.rect);
   return { id, claim: [...standingClaim], lots, keep, graph: { nodes: ir.graph?.nodes ?? [], edges: ir.graph?.edges ?? [] } };
+}
+
+// ------------------------------------------------------------------ (6c D3) the standing data the reach step reads
+
+/** (6c D3) A block state's light level as the lamps write them (lantern 15, soul lantern 10, torch 14, soul torch 10, glowstone and the like 15), else 0. */
+export function lightLevelOf(state) {
+  const id = String(state ?? '').replace(/\[.*$/, '');
+  if (/soul_(lantern|torch|campfire)$/.test(id)) return 10;
+  if (/(^|:)(lantern|glowstone|sea_lantern|shroomlight|jack_o_lantern|beacon|ochre_froglight|verdant_froglight|pearlescent_froglight|campfire|redstone_lamp)$/.test(id)) return 15;
+  if (/(^|:)(torch|wall_torch|end_rod)$/.test(id)) return id.endsWith('end_rod') ? 14 : 14;
+  return 0;
+}
+
+/** (6c D3) A road id or graph edge path that names a street (§3.1): the `street_` stem after any prefix, or a following street (`st_<d>`). */
+export const isStreetId = (id) => typeof id === 'string' && (/(^|_)street_/.test(id) || /^(route_)?st_/.test(id));
+
+/** Row runs [x0, z, x1, z] of a set of "x,z" keys (z, then x), deterministic. */
+export function keyRuns(keys) {
+  const byZ = new Map();
+  for (const k of keys) { const i = k.indexOf(','); const x = Number(k.slice(0, i)), z = Number(k.slice(i + 1)); if (!byZ.has(z)) byZ.set(z, []); byZ.get(z).push(x); }
+  const out = [];
+  for (const z of [...byZ.keys()].sort((a, b) => a - b)) {
+    const xs = byZ.get(z).sort((a, b) => a - b);
+    let s = xs[0], e = xs[0];
+    for (let i = 1; i <= xs.length; i++) {
+      if (i < xs.length && xs[i] === e) continue;
+      if (i < xs.length && xs[i] === e + 1) { e = xs[i]; continue; }
+      out.push([s, z, e, z]);
+      if (i < xs.length) { s = xs[i]; e = xs[i]; }
+    }
+  }
+  return out;
+}
+
+/** The "x,z" keys of row runs [x0, z, x1, z] (rects too: every row of [x0, z0, x1, z1]). */
+export function runKeys(runs, into = new Set()) {
+  for (const q of runs ?? []) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) into.add(`${x},${z}`);
+  return into;
+}
+
+/**
+ * (6c D3, §2.4, the coordinator's deviation of 2026-10-23) `besideReach.standing`: what the reach step reads of a standing region beyond
+ * ctx.beside (which stays clipped to SEAM_MAX + 8 and byte-identical): its whole-claim footprint (standingFootprint's lots and keep
+ * rects, unclipped), its streets (road items whose ext carries `architect_mc:street` or whose id has the `street_` stem: id, width,
+ * points, flagged), its bodies' hard and watch columns (KC §2: cells, ice, shell, lining, grate, spill, decor; watch) as row runs, its
+ * lamp spots (the props' lamp parts' columns, the apron lamps, and every spot the 4e lanterns of its roads may take, both sides: N-D3-2
+ * and the verge contact), its props' columns (a T's verge contact is never one), and its own walls' columns (`walls`, only when it has a
+ * wall). The mod's BesideReach.standing is the same.
+ */
+export function besideStanding(id, standingClaim, ir) {
+  const f = standingFootprint(ir);
+  const streets = [];
+  for (const r of ir.roads ?? []) {
+    const flagged = !!r.ext?.['architect_mc:street'];
+    if (!flagged && !isStreetId(r.id)) continue;
+    streets.push({ id: r.id, width: r.width ?? 3, points: r.points.map((p) => [p[0], p[1], p[2]]), flagged });
+  }
+  // the bodies: every fluid op's hard sets and watch set, as columns
+  const hard = new Set(), watch = new Set();
+  // (a fluid op's sets are column runs [x, z, y0, y1]: fluids/body.mjs toRuns; a plan join is {body, cells})
+  const runCells = (runs, into) => { for (const q of runs ?? []) if (Array.isArray(q) && q.length === 4) into.add(`${q[0]},${q[1]}`); };
+  const list = [];
+  for (const p of ir.parts ?? []) for (const o of p.ops ?? []) {
+    if (o.op !== 'fluid') continue;
+    const bh = new Set(), bw = new Set();
+    for (const k of ['cells', 'ice', 'shell', 'lining', 'grate', 'spill', 'decor']) runCells(o[k], bh);
+    runCells((o.joins ?? []).filter((j) => Array.isArray(j)), bh);
+    runCells(o.watch, bw);
+    for (const k of bh) hard.add(k);
+    for (const k of bw) watch.add(k);
+    list.push({ id: o.id, hard: keyRuns(bh), watch: keyRuns(bw) });
+  }
+  // the lamps and props: a props part's columns (the lamp, the bench, the well), the apron lamps (props_apron), the 4e lanterns' spots
+  const lamps = new Set(), props = new Set();
+  const opCols = (op, into) => {
+    if (op.op === 'columns' && Array.isArray(op.cols)) for (let i = 0; i + 4 < op.cols.length; i += 5) into.add(`${op.cols[i]},${op.cols[i + 1]}`);
+    else if (op.bounds) for (let z = op.bounds.minZ; z <= op.bounds.maxZ; z++) for (let x = op.bounds.minX; x <= op.bounds.maxX; x++) into.add(`${x},${z}`);
+  };
+  // (the lights of its lamp parts: every light block they write, [x, y, z, level], for the join's lamps to count; the kit's light levels)
+  const lights = new Map();
+  for (const p of ir.parts ?? []) {
+    if (!/^props(_|$)/.test(p.id)) continue;
+    for (const op of p.ops ?? []) {
+      opCols(op, props);
+      if (!/lamp|apron/.test(p.id)) continue;
+      opCols(op, lamps);
+      if (op.op !== 'columns' || !Array.isArray(op.cols) || !Array.isArray(op.materials)) continue;
+      for (let i = 0; i + 4 < op.cols.length; i += 5) {
+        const lv = lightLevelOf(op.materials[op.cols[i + 4]]);
+        if (lv > 0) lights.set(`${op.cols[i]},${op.cols[i + 3]},${op.cols[i + 1]}`, [op.cols[i], op.cols[i + 3], op.cols[i + 1], lv]);
+      }
+    }
+  }
+  // ((the RC's finding 2) its own walls: the columns of its K1 wall parts (wall.mjs's `w_<id>` parts, gates included), for NO_JOIN [wall]
+  // as another owner's wall answers it)
+  const walls = new Set();
+  for (const p of ir.parts ?? []) if (/^w_/.test(p.id)) for (const op of p.ops ?? []) opCols(op, walls);
+  for (const r of ir.roads ?? []) {
+    if (!r.lanterns) continue;
+    // RoadPlan's lanterns (light.mjs roadLights, the model the light cover uses): the first `first` out, then every `every`, beside the
+    // walkway (|v| = half + 1), the right of travel first; both sides are listed (the world decides which one holds it)
+    const pts = r.points.map((q) => [q[0], q[2]]);
+    const { cells } = centreCells(pts);
+    const offs = crossOffsets(r.width ?? 3);
+    const hi = offs[offs.length - 1], lo = offs[0];
+    const every = r.lamp ? r.lamp.every : 12, first = r.lamp ? r.lamp.first : 6;
+    let since = every - first;
+    for (let i = 1; i < cells.length - 1; i++) {
+      since += 1;
+      if (since + 1e-9 < every) continue;
+      const c = cells[i], n = cells[i + 1];
+      const dx = Math.sign(n.x - c.x), dz = Math.sign(n.z - c.z);
+      for (const side of [hi + 1, lo - 1]) lamps.add(`${c.x - side * dz},${c.z + side * dx}`);
+      since = 0;
+    }
+  }
+  return {
+    id, claim: [...standingClaim],
+    footprint: { lots: f.lots.map((x) => [...x.rect]), keep: [...f.roads, ...f.paths, ...f.ways].map((x) => ({ kind: x.kind, id: x.id, rect: [...x.rect] })) },
+    streets, bodies: { hard: keyRuns(hard), watch: keyRuns(watch), list }, lamps: keyRuns(lamps), props: keyRuns(props),
+    lights: [...lights.values()].sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]),
+    ...(walls.size ? { walls: keyRuns(walls) } : {}), // (only a walled region carries it: an unwalled region's standing data is unchanged)
+  };
 }

@@ -25,7 +25,7 @@ import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.40.0';
+export const KIT_VERSION = '0.41.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -38,7 +38,7 @@ export const Y_MARGIN = 64;
  * (6c W) A region's parts, side blobs and tiles as the IR carries them (the ops' conditions and bounds, the tiles each stage and
  * set touches). planRegion assembles the IR from it; light.mjs builds a draft IR from it (draftIR) mid-program.
  */
-export function assembleParts(r, claim) {
+export function assembleParts(r, claim, reach = null) {
   const stages = r.stageList;
   // (6b) side blobs: name -> {sha, bytes, kind} in the IR; the bytes by sha beside it
   const sideBytes = new Map();
@@ -78,8 +78,12 @@ export function assembleParts(r, claim) {
     for (const op of p.ops) {
       const b = op.bounds;
       const x0 = Math.max(b.minX, irClaim.minX), x1 = Math.min(b.maxX, irClaim.maxX), z0 = Math.max(b.minZ, irClaim.minZ), z1 = Math.min(b.maxZ, irClaim.maxZ);
-      if (x0 > x1 || z0 > z1) continue;
-      for (let tx = tileOf(x0); tx <= tileOf(x1); tx++) for (let tz = tileOf(z0); tz <= tileOf(z1); tz++) tiles[p.stage][p.set].add(`${tx},${tz}`);
+      if (x0 <= x1 && z0 <= z1) for (let tx = tileOf(x0); tx <= tileOf(x1); tx++) for (let tz = tileOf(z0); tz <= tileOf(z1); tz++) tiles[p.stage][p.set].add(`${tx},${tz}`);
+      // ((6c D3) and the tiles of the reach columns the op's bounds meet)
+      if (reach) for (const q of reach.runs) {
+        if (q[2] < b.minX || q[0] > b.maxX || q[1] < b.minZ || q[1] > b.maxZ) continue;
+        for (let tx = tileOf(Math.max(q[0], b.minX)); tx <= tileOf(Math.min(q[2], b.maxX)); tx++) tiles[p.stage][p.set].add(`${tx},${tileOf(q[1])}`);
+      }
     }
   }
   const sortKeys = (set) => [...set].sort((a, b) => { const [ax, az] = a.split(',').map(Number), [bx, bz] = b.split(',').map(Number); return ax - bx || az - bz; });
@@ -94,7 +98,9 @@ export function assembleParts(r, claim) {
  */
 export function draftIR(r) {
   const claim = r.claim;
-  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim);
+  // ((6c D3) a reach plan's tiles also cover its reach columns outside the claim)
+  const reachM = r.meta.reach ?? null;
+  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim, reachM ? { runs: reachM.runs } : null);
   const ir = { format: 1, id: 'draft', claim: { ...claim }, roles: r.roles, stages: r.stageList, parts, lots: r.lots, roads: r.roads, paths: r.paths, anchors: r.anchors, rules: {}, tiles: tilesOut };
   if (blobs) ir.blobs = blobs;
   if (Object.keys(irBlobs).length) ir.blobs = irBlobs;
@@ -102,6 +108,8 @@ export function draftIR(r) {
   if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
   if (Object.keys(r.blockTags).length) ir.blockTags = r.blockTags;
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
+  // ((6c D3) its reach columns are claimed land for writing in the draft's virtual world too)
+  if (reachM) ir.reach = { runs: reachM.runs };
   return { ir, blobs: (sha) => sideBytes.get(sha) };
 }
 
@@ -363,6 +371,10 @@ export async function planRegion(o) {
   // (6c D1) a standing region the plan lays out beside (Regions.plan's `beside`): read through ctx.beside, recorded in the IR when read
   const beside = o.beside ? parseBeside(o.beside) : null;
   let besideRead = false;
+  // (6c D3) the reach inputs beside a standing region (the town claim's survey, the held columns, the standing data): read only by the
+  // reach step (a seam-step plan's IR is unchanged); recorded in the IR's `reach` when the reach step chose the join
+  const RM = o.besideReach ? await import('./reach.mjs') : null;
+  const besideReach = RM ? RM.parseReachInput(o.besideReach) : null;
   // (6c D2) the plan's biome grid (one biome per 4x4 columns: the game's storage, C28): read through ctx.biomes, recorded when read
   const biomes = o.biomes ? parseBiomes(o.biomes) : null;
   let biomesRead = false;
@@ -436,6 +448,8 @@ export async function planRegion(o) {
     // (6c D1) the standing region beside this claim (null without one; a program that reads it records it in the IR)
     Object.defineProperty(ctx, 'biomes', { enumerable: true, get: () => { if (!biomes) return null; biomesRead = true; return biomes; } });
     Object.defineProperty(ctx, 'beside', { enumerable: true, get: () => { if (!beside) return null; besideRead = true; return JSON.parse(JSON.stringify(beside)); } });
+    // (6c D3) not enumerable: a program's ctx copies stay as they were
+    Object.defineProperty(ctx, 'besideReach', { enumerable: false, get: () => besideReach });
     out = await mod.default(ctx);
     regionObj = out;
     ctx.__id = id; ctx.__params = params;
@@ -471,7 +485,9 @@ export async function planRegion(o) {
     const { applyPaletteExclude } = await import('../plan/palette.mjs');
     paletteSwaps = applyPaletteExclude(r, o.paletteExclude, r.meta.planCheck.partOf ?? {}, roles).swaps;
   }
-  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim);
+  // ((6c D3) a reach plan's tiles also cover its reach columns outside the claim)
+  const reachM = r.meta.reach ?? null;
+  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim, reachM ? { runs: reachM.runs } : null);
   // the IR's y range: the request's for now; tightened after the budget pass (below)
   const irClaim = { ...claim };
 
@@ -507,6 +523,13 @@ export async function planRegion(o) {
   // (6c D2) the biome grid the plan read (its sha), and an outpost's corridor (settlement land its road crosses: row runs per outpost)
   if (biomesRead) ir.biomes = { sha: sha256Hex(canonicalJson({ minX: biomes.minX, minZ: biomes.minZ, res: biomes.res, width: biomes.width, depth: biomes.depth, palette: biomes.palette, ids: [...biomes.ids] })) };
   if (r.meta.corridor) ir.corridor = r.meta.corridor;
+  // (6c D3, §2.3) the reach: the join's columns outside the claim and the contact columns it holds, with the shas of the reach inputs
+  if (reachM) {
+    const { encodeColumns } = await import('./pack.mjs');
+    const BR = RM.reachFor(besideReach, reachM.standing);
+    ir.reach = { standing: reachM.standing, runs: reachM.runs, rect: reachM.rect, cells: reachM.cells, hold: reachM.hold, contact: reachM.contact, ...(reachM.lamps ? { lamps: reachM.lamps } : {}),
+      heldSha: sha256Hex(canonicalJson(BR.held)), surveySha: sha256Hex(encodeColumns(BR.survey)), standingSha: sha256Hex(canonicalJson(BR.standing)) };
+  }
   // (6c RS) a survival plan (the world's mode): free marks and the target groups (a creative plan's IR is unchanged)
   if (o.survival) markSurvival(ir, r, ctx.__id);
   const kinds = walkKinds(ir);
@@ -518,6 +541,9 @@ export async function planRegion(o) {
 
   // ---- the exact budget: every tile of every change-set over the survey
   const tBudget = performance.now();
+  // ((6c D3) a reach plan's budget reads the reach frame's survey: the claim's columns are the plan survey's own)
+  const reachIn = reachM ? RM.reachFor(besideReach, reachM.standing) : null;
+  const evalSurvey = reachM ? RM.unionColumns(survey, reachIn.survey, [claim.minX, claim.minZ, claim.maxX, claim.maxZ], reachIn.standing.claim) : survey;
   let cells = 0, removed = 0, added = 0, evaluated = 0, cellLo = Infinity, cellHi = -Infinity;
   const perStage = {};
   const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey
@@ -527,7 +553,7 @@ export async function planRegion(o) {
     for (const set of ['terrain', 'path']) {
       for (const key of tilesOut[s][set]) {
         let w = windows.get(key);
-        if (!w) { w = windowFromSurvey(survey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
+        if (!w) { w = windowFromSurvey(evalSurvey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
         const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
         if (sv) for (const [g, x] of Object.entries(e.notes.survival ?? {})) {
@@ -661,5 +687,6 @@ export async function planRegion(o) {
       return again;
     }
   }
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
+  // ((6c D3) a reach plan's evaluation survey (the reach frame's): the plan check's artifact evaluates its tiles over it)
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}) };
 }

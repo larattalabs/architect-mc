@@ -267,6 +267,7 @@ function search(env, ctx) {
   // (7a K1) the special moves this edge searches with, the flag bit (F = 2 when a row may set it) and whether the goal needs it
   const special = ctx.special ?? [], F = special.some((x) => x.m.flag) ? 2 : 1, needFlag = !!ctx.needFlag;
   const free0 = ctx.free ?? blockedW;
+  const goalH = isInt(ctx.goalH) ? ctx.goalH : -1, goalLead = ctx.goalLead ?? 0;
   const ND = maxCut + maxFill + 1, SPC = 32 * ND * F;
   // the footprint square around a centre cell: an own move may lie beside an earlier edge's built cells only within a step of
   // their y (its writes skip them), and a stair flight never over them (its treads would stack)
@@ -338,7 +339,9 @@ function search(env, ctx) {
     expanded++;
     const k = cellOf(s), h = hOfS(s), kk = kOfS(s), q = qArr[s], y = yOf(q);
     curF = fOfS(s);
-    if (k === goal.k && y === goal.y && (!needFlag || curF === 1)) { found = s; break; }
+    // ((6c D3) an end's `lead: n` (n <= TURN_COOLDOWN): the goal is reached heading `goalH` after n straight walk cells, so the last n cells
+    // run straight into the end along its facing; absent: as before)
+    if (k === goal.k && y === goal.y && (!needFlag || curF === 1) && (goalH < 0 || (h === goalH && kk >= goalLead && mv[s] === 0))) { found = s; break; }
     const i = k % W, j = (k - i) / W;
     // walk: straight, or 45 degrees after the cooldown; the profile follows the land, or holds, rises or falls by Gq
     for (const dh of kk >= TURN_COOLDOWN ? [0, -1, 1] : [0]) {
@@ -612,6 +615,23 @@ export function routePass(survey, volumes, intent) {
     const i0 = k % W, j0 = Math.floor(k / W), R = Math.floor(((isInt(it.nearEnd) ? it.nearEnd : NEAR_END) + r - 1) / r);
     for (let j = Math.max(0, j0 - R); j <= Math.min(D - 1, j0 + R); j++) for (let i = Math.max(0, i0 - R); i <= Math.min(W - 1, i0 + R); i++) nearEnd[i + j * W] = 1;
   }
+  // ((6c D3) a frame's hard cells: outside its rects, and within the margin of its outer edge (cached per frame))
+  const frames = new Map();
+  const frameMask = (f) => {
+    if (!Array.isArray(f) || !f.length) return null;
+    const key = JSON.stringify(f);
+    if (frames.has(key)) return frames.get(key);
+    const out = new Uint8Array(n).fill(1);
+    for (const q of f) {
+      const i0 = Math.max(0, Math.floor((q[0] - c.minX) / r)), i1 = Math.min(W - 1, Math.floor((q[2] - c.minX) / r));
+      const j0 = Math.max(0, Math.floor((q[1] - c.minZ) / r)), j1 = Math.min(D - 1, Math.floor((q[3] - c.minZ) / r));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) out[i + j * W] = 0;
+    }
+    const m = Math.max(0, Math.floor(((it.margin ?? 2) + r - 1) / r));
+    const hard = dilate(out, W, D, m);
+    frames.set(key, hard);
+    return hard;
+  };
   const coarse = r > 1;
   // (6c S2) the quantum also keeps every WINDOW-cell window within the checker's whole-block limit floor(maxGrade * WINDOW): at a
   // grade whose window limit rounds down (0.2: 1.6 -> 1 block), 3/16 a cell rises 1.5 over a window, which rounds to 2. At 0.25
@@ -662,6 +682,9 @@ export function routePass(survey, volumes, intent) {
       edgeOut.note = "the plan's own water lies between the ends (a closed ring round one of them): every route crosses water";
       continue;
     }
+    // ((6c D3) `frame`: the edge's own frame (rects [x0, z0, x1, z1], their union), else the pass's; absent both: the survey's grid, as
+    // before)
+    const fr = frameMask(e.frame ?? it.frame ?? null);
     const build = (water) => {
       const mk = water ? masks : baseMasks(env, it, { water: false, keepOut: !_unsafe.noKeepOut });
       const hardW = dilate(mk.hard, W, D, Rt), guardW = dilate(mk.guard, W, D, Rw), treeW = dilate(mk.tree, W, D, Rt), earlyW = dilate(earlier, W, D, Rt);
@@ -679,6 +702,8 @@ export function routePass(survey, volumes, intent) {
         }
       }
       for (let k = 0; k < n; k++) { blockedW[k] = hardW[k] | guardW[k] | treeW[k] | earlyW[k]; blocked1[k] |= mk.hard[k] | tree1[k] | earlier[k]; }
+      // ((6c D3) the edge's frame: outside it, and within the margin of its outer edge, is hard (under the footprint too))
+      if (fr) { const fW = dilate(fr, W, D, Rt); for (let k = 0; k < n; k++) { blockedW[k] |= fW[k]; blocked1[k] |= fr[k]; } }
       // the approach to a lot: straight out of its front, through its apron and the margins
       for (const en of ends) {
         const fx = en.facing ? en.facing[0] : 0, fz = en.facing ? en.facing[1] : 0;
@@ -725,10 +750,15 @@ export function routePass(survey, volumes, intent) {
       for (const en of ends) seed[en.k] = 1;
       withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
     }
+    // ((6c D3) the `to` end's `lead`: the goal's arriving heading (against its facing, cardinal) and its straight cells)
+    const lead = isInt(e.to?.lead) && e.to.lead > 0 && Array.isArray(e.to.facing) ? Math.min(TURN_COOLDOWN, e.to.lead) : 0;
+    const sgn = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
+    const goalH = lead ? DIRS.findIndex((d) => d[0] === -sgn(e.to.facing[0]) && d[1] === -sgn(e.to.facing[1])) : -1;
     // (7a foundation) the edge's profile: its costs over COST, its stairs and ladders ANDed with the pass's, its ladder limit
     const prof = e.profile === undefined || e.profile === null ? null : PROFILES[e.profile];
     if (e.profile !== undefined && e.profile !== null && !prof) throw new Error(`route ${e.id}: profile must be one of ${Object.keys(PROFILES).join(', ')}`);
-    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(isInt(e.hairpinLanding) && e.hairpinLanding >= 1 && e.hairpinLanding <= 16 ? e.hairpinLanding : hairpinLanding, w) + r - 1) / r), // ((7a CL) an edge's own landing depth: a switchback's `landing`)
+    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], ...(goalH >= 0 && (goalH & 1) === 0 ? { goalH, goalLead: lead } : {}), Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(isInt(e.hairpinLanding) && e.hairpinLanding >= 1 && e.hairpinLanding <= 16 ? e.hairpinLanding : hairpinLanding, w) + r - 1) / r), // ((7a CL) an edge's own landing depth: a switchback's `landing`)
+     
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse && (!prof || prof.stairs), ladders: ladders && (!prof || prof.ladders), nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(prof ? { cost: { ...COST, ...prof.cost }, ladderMax: prof.ladderMax } : {}),
       ...(sp.length ? { special: sp, needFlag } : {}) };

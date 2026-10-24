@@ -322,12 +322,27 @@ public final class PlanChecks {
 		if (lotBlocks.size() > 0) {
 			extra.add("lotBlocks", lotBlocks);
 		}
+		// (6c D3, §8) the reach inputs of each standing region an endpoint.region names (at most 2 per check)
+		CompletableFuture<@Nullable Void> reachReady = CompletableFuture.completedFuture(null);
+		java.util.Set<String> named = new java.util.TreeSet<>();
+		endpointRegions(r.plan(), named);
+		int nr = 0;
+		for (String id : named) {
+			RegionsImpl.Live st = RegionsImpl.live(id);
+			if (st == null || nr >= 2 || !java.util.Objects.equals(st.rec().owner, r.owner()) || !st.rec().dimension.equals(dim) || RegionsImpl.besideBusy(st) != null) {
+				continue;
+			}
+			nr++;
+			int[] sc = st.rec().claim;
+			int[] stc = {sc[0], sc[2], sc[3], sc[5]};
+			reachReady = reachReady.thenCompose(v -> RegionsImpl.reachInputs(rp, st, stc, true));
+		}
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();
 		RegionsImpl.progress(s, null, "planning");
 		// (6c T3, Steward's S-T3-6) load: "generate" lets the survey and the tunnels' volume pass load (and generate) their chunks
 		LoadPolicy load = r.load() != null && r.load().loads() ? r.load() : null;
 		long t0 = System.nanoTime();
-		RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, load != null ? load : LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
+		reachReady.thenCompose(rv -> RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, load != null ? load : LoadPolicy.LOADED_ONLY)).thenCompose(cols -> {
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
 			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> RegionsImpl.planOnce(link, rp, blobId, surveySha, survey, null, false, extra)
@@ -354,6 +369,8 @@ public final class PlanChecks {
 				return pc;
 			});
 		})).thenCompose(f -> f).whenComplete((pc, e) -> {
+			RegionsImpl.REACH.remove(rp);
+			RegionsImpl.REACH_SURVEY.remove(rp);
 			if (e == null) {
 				out.complete(pc);
 				return;
@@ -783,6 +800,10 @@ public final class PlanChecks {
 				o.addProperty("owner", rec.owner);
 			}
 			o.add("rect", rect(c[0], c[2], c[3], c[5]));
+			// (6c D3, §9) another owner's district's reach: hard as its rect is
+			if (l.ir().json().get("reach") instanceof JsonObject reach && reach.get("runs") instanceof JsonArray runs) {
+				o.add("reach", runs.deepCopy());
+			}
 			regions.put(rec.id, o);
 		}
 		JsonArray a = new JsonArray(), g = new JsonArray();
@@ -792,6 +813,18 @@ public final class PlanChecks {
 		all.add("areas", a);
 		all.add("regions", g);
 		return new Protection(a, g, BatchKeys.sha256(BatchKeys.canonical(all)));
+	}
+
+	/** (6c D3) The region ids every {@code {region: id}} endpoint of a plan's connectors names. */
+	static void endpointRegions(@Nullable JsonElement e, java.util.Set<String> out) {
+		if (e instanceof JsonObject o) {
+			if (o.get("region") instanceof JsonElement v && v.isJsonPrimitive() && v.getAsJsonPrimitive().isString() && o.size() <= 2) {
+				out.add(v.getAsString());
+			}
+			o.entrySet().forEach(x -> endpointRegions(x.getValue(), out));
+		} else if (e instanceof JsonArray a) {
+			a.forEach(x -> endpointRegions(x, out));
+		}
 	}
 
 	/** (6c D1) The owner's standing regions within {@link BesideCheck#SEAM_MAX} of a claim, as {@code beside} data, by id. */
@@ -807,7 +840,12 @@ public final class PlanChecks {
 			if (c[0] > xz[2] + m || c[3] < xz[0] - m || c[2] > xz[3] + m || c[5] < xz[1] - m) {
 				continue;
 			}
-			out.put(rec.id, BesideCheck.besideData(rec.id, new int[] {c[0], c[2], c[3], c[5]}, l.ir().json(), xz));
+			JsonObject bd = BesideCheck.besideData(rec.id, new int[] {c[0], c[2], c[3], c[5]}, l.ir().json(), xz);
+			// (6c D3, §9) a district's reach (its join in a town's claim): hard to every later plan
+			if (l.ir().json().get("reach") instanceof JsonObject reach && reach.get("runs") instanceof JsonArray runs) {
+				bd.add("reach", runs.deepCopy());
+			}
+			out.put(rec.id, bd);
 		}
 		JsonArray a = new JsonArray();
 		out.values().forEach(a::add);
@@ -1296,6 +1334,14 @@ public final class PlanChecks {
 			String drift = terrainDiff(plan, now, body.getAsJsonObject("region").getAsJsonObject("tiles"), x0, z0, x1, z1);
 			if (drift != null) {
 				throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, "the land under the plan's tiles changed since the check: " + drift);
+			}
+			// (6c D3, §4.4) a reach plan's re-check (the town, the held set over the reach, the areas and other owners): every refusal is
+			// ARTIFACT_STALE here (the land under the plan changed), so Steward's stale retry re-checks
+			if (p.ir().json().get("reach") instanceof JsonObject reach) {
+				String[] rw = RegionsImpl.reachRecheck(p, reach);
+				if (rw != null) {
+					throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, "the land under the plan changed since the check (" + rw[0] + "): " + rw[1]);
+				}
 			}
 			return RegionsImpl.INSTANCE.realise(rr);
 		})).thenCompose(f -> f);

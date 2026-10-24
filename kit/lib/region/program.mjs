@@ -25,6 +25,7 @@ import { ruleError } from '../material.mjs';
 import { maskError } from '../mask.mjs';
 import { isPattern, mapPatternMats, patternError } from '../pattern.mjs';
 import { sha256Hex } from './pack.mjs';
+import { keyRuns } from './beside.mjs';
 import { voxelsSize } from './voxels.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
 import { iceSpike } from '../forms/iceSpike.mjs';
@@ -434,7 +435,15 @@ export class Region {
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       // ((7a foundation) and the 7a rows' opaque per-edge `t7` options and the edge's `profile` over the built-in moves)
       for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
-      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1 };
+      // ((6c D3) a reach join: its own `frame` (rects), its `to` end's `lead`, `graded` (no 4e road: its columns are exactly its
+      // footprint) and its own `part`; absent: as before)
+      const d3 = {};
+      if (Array.isArray(e.frame) && e.frame.length) d3.frame = e.frame.map((q) => [...q]);
+      if (isInt(e.lead) && e.lead > 0) d3.lead = e.lead;
+      if (e.graded === true) d3.graded = true;
+      if (typeof e.part === 'string') d3.part = e.part;
+      if (e.keepBehind === true) d3.keepBehind = true;
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1, d3 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
@@ -461,7 +470,7 @@ export class Region {
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];
     const t0 = performance.now();
     const routeIn = {
-      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...(e.stairs === false ? { stairs: false } : {}), ...e.k1 })),
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing, ...(e.d3.lead ? { lead: e.d3.lead } : {}) }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...(e.stairs === false ? { stairs: false } : {}), ...e.k1, ...(e.d3.frame ? { frame: e.d3.frame } : {}) })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
       // (6c P0) the plan check's node budget over all edges (absent: none)
@@ -474,14 +483,27 @@ export class Region {
       ...Object.fromEntries(INTENT_KEYS_7A.filter((k) => it[k]).map((k) => [k, it[k]])),
       // (6c H) the plan's own water (lib/fluids/moat.mjs passInput), only when the plan has a body
       ...(it.fluids ? { fluids: it.fluids } : {}),
+      // (6c D3) the pass's frame (the request claim, on a pass over the reach survey)
+      ...(Array.isArray(it.frame) && it.frame.length ? { frame: it.frame } : {}),
     };
-    const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], routeIn);
+    // ((6c D3) `survey`: the reach survey (the district's claim and the town's, one grid) for a pass with a reach join; absent: the plan's)
+    const sv = it.survey ?? this.survey;
+    const out = PASSES.route(sv.columns, this.ctx.volumes ?? [], routeIn);
+    // (the emission reads the same survey: every column of the claim is the plan survey's own there)
+    const saved = this.survey;
+    if (it.survey) this.survey = it.survey;
+    try { return this._routeEmit(it, edges, out, sv, t0, stage, keepOut); } finally { this.survey = saved; }
+  }
+
+  /** (6c D3) The route pass's emission (split from _route so a reach pass emits over its own survey). */
+  _routeEmit(it, edges, out, sv, t0, stage, keepOut) {
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
     // ---- emit
-    const p = this.part(it.part ?? 'routes', { stage, set: 'path' });
-    (this.meta.parts[p.id] ??= {}).kind = 'path';
-    const s = this.survey;
+    const p0 = this.part(it.part ?? 'routes', { stage, set: 'path' });
+    (this.meta.parts[p0.id] ??= {}).kind = 'path';
+    const s = sv;
+    let p = p0;
     const baseAt = (x, z) => {
       const b = it.base;
       if (!b) return 0;
@@ -510,7 +532,9 @@ export class Region {
     // its walk)
     const priorCols = new Set();
     if (mats.guard) for (const m of Object.values(this.meta.paths)) if (Array.isArray(m.cells) && m.cells.length && this.meta.parts[m.part]?.kind === 'path') for (const q of footprintOf(m.cells, m.width ?? 1)) priorCols.add(`${q[0]},${q[1]}`);
-    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`) || priorCols.has(`${x},${z}`);
+    // ((6c D3) `noRetain`: the caller's own columns no retaining column may take (a reach join's: outside its allowed reach))
+    const noRetain0 = typeof it.noRetain === 'function' ? it.noRetain : null;
+    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`) || priorCols.has(`${x},${z}`) || (noRetain0 ? noRetain0(x, z) : false);
     // ((6c S3) the guard's parapet columns, once each over every edge; never on another route's cells, a kept column, or a lot's
     // footprint, apron or (a slope pad's) batter, but beside a wall pad's apron: its ring is the parapet's ground)
     const guardCols = mats.guard ? new Set() : null;
@@ -536,11 +560,22 @@ export class Region {
       if (d.t7) rec.t7 = d.t7; // (7a) why a 7a row's edge found no route ({lift | catwalk | rock_stair: {code, evidence}}, as each row's fail sets it)
       metaEdges.push(rec);
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
+      // ((6c D3) an edge with its own part: its paths there)
+      p = p0;
+      if (e.d3.part) { p = this.part(e.d3.part, { stage, set: 'path' }); (this.meta.parts[p.id] ??= {}).kind = 'path'; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
       if (d.gates) rec.gates = d.gates; // (7a K1) the gates the edge crossed (only when the plan has walls)
       let n = 0;
       const ladderSegs = [];
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
+      // ((6c D3) an edge with a `lead` meets its junction square on: no column behind the junction cell (the street's end column, a verge)
+      // is its; absent: as before)
+      if (e.d3.lead && !e.d3.keepBehind && Array.isArray(e.b.facing)) {
+        const [gx, , gz] = e.b.at, [fx, fz] = e.b.facing;
+        const behind = (o) => (o.x - gx) * fx + (o.z - gz) * fz < 0;
+        ec.cols = ec.cols.filter((o) => !behind(o));
+        ec.bySeg = ec.bySeg.map((l) => l.filter((o) => !behind(o)));
+      }
       // (a column an earlier edge wrote stays that edge's: the search kept this edge within a step of it)
       const fpOf = (si) => ec.bySeg[si].filter((o) => !taken.has(`${o.x},${o.z}`)).map((o) => [o.x, o.z, o.y, o.edge]);
       d.segments.forEach((g, si) => {
@@ -567,7 +602,7 @@ export class Region {
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
           // ((7a CL) never on a ladder edge: 4e re-grades its road to the realised ground, and at the face it ramps up against the cliff)
-          const onGround = g.kind === 'walk' && (e.k1?.profile ?? e.profile) !== 'ladder' && !it.base && !mats.guard && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
+          const onGround = g.kind === 'walk' && (e.k1?.profile ?? e.profile) !== 'ladder' && !it.base && !mats.guard && !e.d3.graded && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
           if (onGround) {
             const idx = polylineOf(cells);
             const id = `${rid}_${n}`;
@@ -592,6 +627,8 @@ export class Region {
       // the ladders last (after the walk runs' cuts and fills at their feet)
       d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
       for (const o of ec.cols) if (!d.segments[o.seg].shared) taken.add(`${o.x},${o.z}`);
+      // ((6c D3) a framed edge records the columns it wrote: its reach)
+      if (e.d3.frame) rec.written = keyRuns([...written].filter(([, id]) => id === e.id).map(([k]) => k));
       // the graph: the ends' nodes (made when missing) and the edge with its movers and segments
       const port = (end) => {
         let g = this.graph.nodes.find((x) => x.id === end.name);
@@ -608,7 +645,7 @@ export class Region {
       if (b) throw new Error(`KEEP_OUT: route ${id} writes into the keep-out rect [${b.join(', ')}] (at ${x}, ${z})`);
     }
     const hairpins = metaEdges.reduce((a, x) => a + (x.landings?.length ?? 0), 0);
-    this.meta.route = { maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, part: p.id, stage, edges: metaEdges, hairpins, keepOut };
+    this.meta.route = { maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, part: p0.id, stage, edges: metaEdges, hairpins, keepOut };
     this.passRuns.push({ name: 'route', ms, heapMb });
     this.note(`pass route: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data.coarse ? ` (coarse: resolution ${out.data.resolution})` : ''}; ${out.data.routed}/${edges.length} edges routed, ${hairpins} hairpin(s)`);
     return { edges: res, data: { ...out.data, ms } };
@@ -669,13 +706,15 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing, junction }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
     if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel or a 7a connector kind (${KINDS_7A.join(', ')})`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
-    if (external && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
+    // ((6c D3, §3.5) a side junction's edge names the street road: `<regionId>:<roadId>` with `junction {kind: side, ...}`)
+    const sideTo = external && junction?.kind === 'side' && /^[A-Za-z0-9_.-]{1,64}:[A-Za-z0-9_#.-]{1,64}$/.test(String(to));
+    if (external && !sideTo && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
     for (const end of external ? [from] : [from, to]) {
       const [n, p] = String(end).split('.');
       const node = this.graph.nodes.find((x) => x.id === n);
@@ -688,6 +727,8 @@ export class Region {
     if (segments !== undefined) e.segments = segments.map((g) => ({ ...g }));
     if (external) e.external = true;
     if (crossing !== undefined) e.crossing = { ...crossing };
+    // ((6c D3) a reach join's junction: {kind: end|side, at, side?, u?})
+    if (junction !== undefined) e.junction = JSON.parse(JSON.stringify(junction));
     this.graph.edges.push(e);
     return e;
   }
