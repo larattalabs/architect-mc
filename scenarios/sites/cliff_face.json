@@ -1,6 +1,6 @@
 {
   "id": "cliff_face",
-  "purpose": "slice CW's natural cliff (docs/CONTRACT.md \"Phase 7a slice CW\" §8): a straight run along a face of rock at least 24 long and 8 high with no water within 8, the run catwalks_demo's natural variant takes (its pickFace's first: the face bar first); pinned by tools/gate7acw.mjs pin (find-site's spiral and summary, then each candidate's survey through pickFace)",
+  "purpose": "slice CW's natural cliff (docs/CONTRACT.md \"Phase 7a slice CW\" \u00a78): a straight run along a face of rock at least 24 long and 8 high with no water within 8, the run catwalks_demo's natural variant takes (its pickFace's first: the face bar first); pinned by tools/gate7acw.mjs pin (find-site's spiral and summary, then each candidate's survey through pickFace)",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -30,31 +30,32 @@
   },
   "fixture": {
     "claim": [
-      224,
-      608,
-      351,
-      735
+      -992,
+      -2528,
+      -865,
+      -2401
     ],
     "biome": "wooded_badlands",
     "run": {
       "a": [
-        260,
-        113,
-        623
+        -943,
+        126,
+        -2489
       ],
       "dir": [
-        1,
-        0
+        0,
+        1
       ],
       "side": "left",
-      "n": 8,
-      "gap": 8,
+      "n": 10,
+      "gap": 10,
       "face": {
-        "length": 74,
-        "height": 9
+        "length": 48,
+        "height": 8
       }
     },
-    "surveySha": "1297c9d7867a1a8d44ec6ba12760a46356ea79f09c7aef932bbcd8f29a768896",
-    "pinned": "2026-10-23"
+    "surveySha": "16616a4bf969a601af2c8f17ae52c9a30e107aece49900a09d08da14d2ce2d71",
+    "pinned": "2026-10-23",
+    "from": "the pin run artifacts/gate-runs/20261023-232758-7acw-pin's survey of the claim (pin--992_-2528.arsv), read by this checkout's pickFace and catwalks_demo natural (1 catwalk planned, no water within 8 of the run); also on the bar: eroded_badlands [-2848,544] (91 x 8) and badlands [1280,-512] (73 x 9), the wooded one chosen for its non-gravity top"
   }
 }

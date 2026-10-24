@@ -41,12 +41,18 @@ export function pickFace(S, claim, { width = 2, min = 8, max = 24, padMax = 8, m
           const [lx, lz] = at(n + 1, L.inner);
           if (!inside(...at(n + PAD, L.inner)) || !inside(...at(1 - PAD, L.outer))) continue;
           // the pads: each end's landing lanes at most padMax under y, none over it, no water; the walks out from them PAD cells along
-          // the run within the route's cut and fill (4) of y, dry (the route's land ramps to an end's y within 8 of it, so the nodes stand
+          // the run within the route's cut (4) over y and padMax under it, dry (a cell past the fill is padded) (the route's land ramps to an end's y within 8 of it, so the nodes stand
           // PAD - 1 out: the run's first cell is then no walk at grade)
-          const ends = [0, n + 1].flatMap((i) => L.lanes.map((v) => { const [px, pz] = at(i, v); return { x: px, z: pz, g: S.groundAt(px, pz), w: S.waterAt(px, pz) }; }));
+          const cell = (i, v) => { const [px, pz] = at(i, v); return { x: px, z: pz, g: S.groundAt(px, pz), w: S.waterAt(px, pz) }; };
+          const ends = [0, n + 1].flatMap((i) => L.lanes.map((v) => cell(i, v)));
           if (ends.some((e) => e.w || e.g > y || y - e.g > padMax)) continue;
+          // (the walk cells out to the nodes: a cell more than the route's fill (4) under y is raised on the pad too; none over y + 4)
           let walk = true;
-          for (let t = 1; t < PAD && walk; t++) for (const i of [-t, n + 1 + t]) for (const v of L.lanes) { const [px, pz] = at(i, v); if (S.waterAt(px, pz) || Math.abs(S.groundAt(px, pz) - y) > 4) walk = false; }
+          for (let t = 1; t < PAD && walk; t++) for (const i of [-t, n + 1 + t]) for (const v of L.lanes) {
+            const e = cell(i, v);
+            if (e.w || e.g > y + 4 || y - e.g > padMax) walk = false;
+            else if (e.g < y - 4) ends.push(e);
+          }
           if (!walk) continue;
           // route row 10 tries a run only where the cell ahead (the run's first cell on the centre line) is no walk at grade
           if (S.groundAt(...at(1, 0)) >= y - 4) continue;
