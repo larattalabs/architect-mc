@@ -11,6 +11,7 @@ import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) 
 import { syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { KINDS_7A } from '../../kit/lib/connectors/kinds7a.mjs'; // (7a) the slices' own kinds (a leaf module)
+import { testConcurrencyArgs } from './cpu-budget.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -25,7 +26,7 @@ export const PHASE3_CREATIVE_ONLY = Object.freeze(['architect_mc:construction_cr
 export const CREATIVE_ONLY_ADDED = Object.freeze([]);
 
 function nodeTest(root, files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
