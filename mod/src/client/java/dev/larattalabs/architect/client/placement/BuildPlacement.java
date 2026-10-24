@@ -90,7 +90,7 @@ public final class BuildPlacement {
 	record View(Blueprint bp, GhostModel model, int ox, int oy, int oz, int turns, String front, int[] obstructed, int obstructedCount,
 		int[] blocked, int blockedCount, List<String> refusals, boolean playerInside, boolean locked, boolean pending, boolean forceArmed,
 		int[] water, int waterCount, int[] lava, int lavaCount, int[] fill, int fillCount, int[] clear, int clearCount, List<String> notes,
-		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site) {
+		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site, List<Integer> noteInk) {
 		Anchors.Bounds box() {
 			return new Anchors.Bounds(ox, oy, oz, ox + model.sizeX - 1, oy + model.sizeY - 1, oz + model.sizeZ - 1);
 		}
@@ -98,7 +98,7 @@ public final class BuildPlacement {
 		View with(boolean locked, boolean pending, boolean forceArmed) {
 			return new View(bp, model, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, refusals, playerInside, locked,
 				pending, forceArmed, water, waterCount, lava, lavaCount, fill, fillCount, clear, clearCount, notes, snapMinY, approach, path, snapBox, hazards,
-				site);
+				site, noteInk);
 		}
 	}
 
@@ -869,34 +869,41 @@ public final class BuildPlacement {
 		List<String> occupied = Occupancy.refusals(found);
 		refusals.addAll(occupied);
 		boolean inside = found.stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
+		// UI-2b: each note with the ghost colour it is drawn in (the HUD's swatch beside it), not a colour word in its text
 		List<String> notes = new ArrayList<>();
+		List<Integer> noteInk = new ArrayList<>();
 		String gone = Occupancy.removalNote(found);
 		if (gone != null) {
 			notes.add("placing " + gone);
+			noteInk.add(0);
 		}
 		String water = TerrainFit.waterWarning(plan);
 		if (water != null) {
-			notes.add(water + " (blue)");
+			notes.add(water);
+			noteInk.add(GhostRenderer.WATER);
 		}
 		String wet = Approach.waterWarning(approach);
 		if (wet != null) {
-			notes.add(wet + " (blue)");
+			notes.add(wet);
+			noteInk.add(GhostRenderer.WATER);
 		}
 		String shortOf = Approach.shortWarning(approach);
 		if (shortOf != null) {
 			notes.add(shortOf);
+			noteInk.add(0);
 		}
 		// site warnings (never a refusal): what the ground in front of the door and under the path is like
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(b, turns, box, approach, world);
 		for (String w : site.warnings()) {
-			notes.add(w + " (magenta)");
+			notes.add(w);
+			noteInk.add(GhostRenderer.HAZARD);
 		}
 		String front = BlueprintTransform.rotateDirection(b.front(), turns);
 		return new View(b, m, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, List.copyOf(refusals), inside, locked,
 			pending, forceArmed, shellOf(concat(plan.water(), approach.water())), plan.waterCount() + approach.waterCount(),
 			shellOf(concat(plan.lava(), approach.lava())), plan.lavaCount() + approach.lavaCount(), shellOf(concat(plan.fill(), approach.fill())),
 			plan.fillCount(), shellOf(concat(plan.clear(), approach.clear())), plan.clearCount(), List.copyOf(notes), snapBox.minY(), approach,
-			shellOf(approach.path()), snapBox, shellOf(site.cells()), site);
+			shellOf(approach.path()), snapBox, shellOf(site.cells()), site, List.copyOf(noteInk));
 	}
 
 	private static int[] concat(int[] a, int[] b) {

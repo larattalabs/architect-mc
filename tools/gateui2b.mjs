@@ -32,7 +32,9 @@ L.refuseKeys();
 const SHOTS = path.join(OUT, 'shots');
 const EXTRA_SHOTS = process.env.GATEUI2B_SHOTS ? path.resolve(process.env.GATEUI2B_SHOTS) : null;
 const FLAT = 'G6B Flat Base';
-const ORIGIN = [4, -60, 12]; // the ghost's rotated box minimum (flat world; the ground row snaps with ground: true)
+const ORIGIN = [4, 64, 12]; // the ghost's rotated box minimum (the flat base's ground row snaps with ground: true)
+/** The ghost's box from dev.build.state ("x,y,z .. x,y,z"). */
+const boxOf = (st) => { const [a, b] = String(st.box).split(' .. ').map((t) => t.split(',').map(Number)); return { min: a, max: b }; };
 
 const steps = {};
 const ensure = async () => { if (!state.dev) await connect(); };
@@ -97,17 +99,27 @@ steps.ingame = async () => {
   await L.fresh('G6B UI2b', FLAT);
   await L.setRules('exact');
   await cmd('/time set 6000');
-  await L.tp(8.5, -57, 0.5, 0, 25);
+  await L.tp(9.5, 72, 0.5, 0, 25);
   await cmd('/gamemode creative');
   await call('dev.ui2b.siteHud', { mode: 'full' });
 
   // ---------------------------------------------------------------- item 1: the paged chat lists
+  // more lines than a page: 6 sites in a row (the run's library holds only the bundled designs) besides the designs
+  const row = [];
+  for (let i = 0; i < 6; i++) {
+    await call('dev.build.start', { blueprint: 'cabin', origin: [40 + i * 16, 64, 40], ground: true, turns: 0 });
+    await waitVerdict();
+    const r = await call('dev.build.confirm', {}, 60_000);
+    if (r.placed) row.push(r.siteId);
+  }
+  check(row.length === 6, `6 sites placed for the list (${row.join(' ')})`);
   const list1 = await chat('/architect list');
   const nDesigns = Number(/^(\d+) designs? in the library/.exec(list1.messages[0]?.text ?? '')?.[1] ?? -1);
   const footer = list1.messages.at(-1);
-  check(list1.success && nDesigns > 8 && list1.messages.length === 10 && /page 1\/\d+/.test(footer.text)
+  const nSites = Number(/, (\d+) sites? in this world/.exec(list1.messages[0]?.text ?? '')?.[1] ?? -1);
+  check(list1.success && nDesigns + nSites > 8 && list1.messages.length === 10 && /page 1\/\d+/.test(footer.text)
     && footer.links.some((l) => l.text === '[next ›]' && l.click === 'run_command' && l.value === '/architect list 2'),
-    `/architect list: the count line, 8 lines and the footer with [next ›] -> /architect list 2 (${nDesigns} designs; ${list1.messages.length} lines; "${footer?.text}")`, texts(list1));
+    `/architect list: the count line, 8 lines and the footer with [next ›] -> /architect list 2 (${nDesigns} designs, ${nSites} sites; ${list1.messages.length} lines; "${footer?.text}")`, texts(list1));
   const list2 = await chat('/architect list 2');
   check(list2.success && links(list2).some((l) => l.text === '[‹ prev]' && l.value === '/architect list 1'), `/architect list 2: [‹ prev] -> /architect list 1 ("${list2.messages.at(-1)?.text}")`, texts(list2));
   const listF = await chat('/architect list cabin');
@@ -123,7 +135,7 @@ steps.ingame = async () => {
   const bad = await chat('/architect place cabn');
   const badText = bad.messages[0]?.text ?? '';
   const mean = /Did you mean (.*)\?/.exec(badText)?.[1]?.split(', ') ?? [];
-  check(!bad.success && /^Unknown design 'cabn'\./.test(badText) && mean.includes('cabin') && mean.length <= 5 && !/known:/.test(badText)
+  check(bad.result === 0 && /^Unknown design 'cabn'\./.test(badText) && mean.includes('cabin') && mean.length <= 5 && !/known:/.test(badText)
     && /See \/architect list/.test(badText) && links(bad).some((l) => l.value === '/architect place cabin'),
     `unknown design: did-you-mean ${mean.length} (${mean.join(', ')}), each a click, see /architect list ("${badText}")`, bad.messages);
   for (const c of ['/architect batches', '/architect groups', '/architect stockpile list', '/architect build list', '/architect build list 1 x']) {
@@ -153,7 +165,8 @@ steps.ingame = async () => {
   out.shots.push(...await atScales('hud_legend'));
   await call('dev.build.legend', { on: false });
   // a chest in the box: the server refuses over a block entity, Shift+Enter arms force
-  const chest = [ORIGIN[0] + 2, -60, ORIGIN[2] + 2];
+  const bx = boxOf(st);
+  const chest = [bx.min[0] + 3, bx.min[1] + 2, bx.min[2] + 3];
   await call('dev.build.cancel');
   await cmd(`/setblock ${chest.join(' ')} minecraft:chest`);
   await call('dev.build.start', { blueprint: 'cabin', origin: ORIGIN, ground: true, turns: 0 });
@@ -214,6 +227,8 @@ steps.ingame = async () => {
   const hist = await chat('/architect list site');
   out.listSites = texts(hist);
 
+  for (const id of row) await chat(`/architect remove ${id}`);
+
   // ---------------------------------------------------------------- item 6: the construction HUD; item 5: the crate's Confirm
   await call('dev.survival.set', { on: true });
   await call('dev.build.start', { blueprint: 'cabin', origin: ORIGIN, ground: true, turns: 0 });
@@ -222,7 +237,10 @@ steps.ingame = async () => {
   const siteB = cs.siteId;
   check(cs.placed === true && /^Construction site/.test(cs.message) && (await buildState()).lastChat?.links?.some((l) => l.value === `/architect remove ${siteB}`),
     `a construction site's line also carries [Undo] ("${cs.message}")`);
-  await sleep(1500);
+  // the placement HUD's last status line stays 8 s; the construction HUD keeps to one line while it shows
+  for (let i = 0; i < 40 && (await buildState()).hudRect; i++) await sleep(300);
+  const whilePlacing = await call('dev.ghosts.state');
+  out.siteHudWhilePlacingStatus = whilePlacing.siteHudMode;
   for (const mode of ['full', 'line', 'hidden']) {
     await call('dev.ui2b.siteHud', { mode });
     await sleep(300);

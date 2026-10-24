@@ -78,7 +78,9 @@ final class PlacementHud implements HudElement {
 			List<String> notes = v.notes();
 			int shownNotes = legend ? notes.size() : Math.min(2, notes.size());
 			for (int i = 0; i < shownNotes; i++) {
-				rows.add(Row.text(TextUtil.ellipsize(font, "Note: " + notes.get(i), inner), HudInk.note()));
+				// the swatch is the ghost colour the note's cells are drawn in (water, hazards), beside the words
+				int ink = i < v.noteInk().size() ? v.noteInk().get(i) : 0;
+				rows.add(Row.segs(List.of(new Seg(ink == 0 ? 0 : ink | 0xFF000000, "Note: " + notes.get(i), HudInk.note()))));
 			}
 			if (shownNotes < notes.size()) {
 				rows.add(Row.text("+" + (notes.size() - shownNotes) + " more notes (?)", HudInk.note()));
