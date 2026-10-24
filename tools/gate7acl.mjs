@@ -358,8 +358,20 @@ async function stewardRound(tag, fx, { site = null, flat = true } = {}) {
   await L.settle(10_000);
   const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapF }, 4 * 3_600_000);
   out.exact = { removed: rm.removed, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).slice(0, 20) };
+  fs.writeFileSync(path.join(OUT, `${tag}-exact.json`), `${JSON.stringify({ ...out.exact, list: diff.list ?? [] }, null, 1)}\n`);
   if (flat) check(rm.removed && diff.mismatches === 0, `item 4 (${tag}): Regions.remove E-flat ${diff.mismatches}`);
-  else check(rm.removed && (diff.classes?.none ?? diff.mismatches) === 0, `item 4 (${tag}): Regions.remove E-normal classified: ${diff.mismatches} (${json(diff.classes ?? {})})`);
+  else {
+    // a natural site's water and leaves keep settling over the whole claim (PLAN "A natural-site survey drifts"): the unclassified
+    // mismatches within 8 of the plan's own cells are judged; the rest of the claim's are recorded as the site's drift
+    const meta = fs.existsSync(path.join(planDir, 'meta.json')) ? JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8')) : {};
+    const near = new Set();
+    for (const e of meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) for (let dx = -8; dx <= 8; dx++) for (let dz = -8; dz <= 8; dz++) near.add(`${x + dx},${z + dz}`);
+    const none = (diff.list ?? []).filter((m) => m.class === 'none');
+    const inside = none.filter((m) => { const [x, , z] = String(m.pos).split(',').map(Number); return near.has(`${x},${z}`); });
+    const listed = (diff.list ?? []).length >= diff.mismatches;
+    out.exact.near = { none: inside.length, drift: none.length - inside.length, listed };
+    check(rm.removed && listed && near.size > 0 && inside.length === 0, `item 4 (${tag}): Regions.remove E-normal classified: ${diff.mismatches} (${json(diff.classes ?? {})}); unclassified within 8 of the plan's cells ${inside.length}${inside.length ? ` (${json(inside.slice(0, 5))})` : ''}, elsewhere on the claim ${none.length - inside.length} (the site's drift, recorded)`);
+  }
   return out;
 }
 
@@ -472,6 +484,7 @@ steps.look = async () => {
     const st = await L.waitRegion(region, 3_600_000);
     out.bibles[tag] = { planId: p.planId, state: st.view.state };
     const edges = Object.fromEntries((meta.route?.edges ?? []).filter((e) => e.ok).map((e) => [e.id, e]));
+    check(st.view.state === 'PLACED' && ['stair', 'switch', 'ladder'].every((id) => edges[id]), `look (${tag}): climbs_demo flat realised with its stair, switchback and ladder (${st.view.state}; ${Object.keys(edges).join(', ')}; recorded, not judged: Noah's call, N-CL-1)`);
     for (const [id, e] of Object.entries(edges)) {
       const mid = e.path[e.path.length >> 1], top = e.path.at(-1);
       out.shots.push(await shot(`${tag}_${id}_side`, [mid[0] + 18.5, mid[1] + 6, mid[2] + 10.5], [mid[0] + 0.5, mid[1], mid[2] + 0.5]));
@@ -485,6 +498,7 @@ steps.look = async () => {
     await call('dev.release', {}).catch(() => null);
     await leaveWorld();
   }
+  check(out.shots.length >= 3 * LOOK_BIBLES.length && out.shots.every((x) => fs.existsSync(x.file)), `look: ${out.shots.length} shots in ${path.join(OUT, 'look')} (the gallery's)`);
   spendZero();
   return out;
 };
