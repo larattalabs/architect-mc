@@ -127,7 +127,9 @@ public final class ScreenFeature {
 			});
 		});
 		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type; a non-preset one is an open type), openType?, profile?: [rules], "
-			+ "bible?: id|none, style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
+			+ "bible?: id|none (U2: a Claude-made Style is set mode, a built-in or hand-made one is picked), style? (chip id = a built-in Style, or any text = none), "
+			+ "styleOps?: [[pick, id] | [unpick] | [revert] | [main, wood|stone|roof|accent, value] | [role, role, block] | [feature, id]] (U2, in order), materials?, "
+			+ "features?: [..] | \"a,b\", size?: "
 			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?, massingFirst?: bool|null (4c; null = the default for the size), critique?: bool, "
 			+ "maxRevisions?: 1|2 (5a)} - set the Design tab's fields", (req, mc) -> {
 				Fields f = Fields.of(req);
@@ -152,6 +154,41 @@ public final class ScreenFeature {
 					o.add("sent", s);
 					return o;
 				}));
+			});
+		DevBridge.register("dev.design.saveStyle", 30_000, "{name?} - (Style unification U2) Save as style…: the Design tab's Style as it is (a custom mix "
+			+ "or a copy) saved as a new hand-made Style (bible.save, free); the form then picks it -> {saved: {styleId, version, origin, editable, basedOn, "
+			+ "suggestedFeatures, tags, roles}, request (the bible.save Style as sent)} + the state, or {refused}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String name = f.optStr("name", null);
+				return DevBridge.onClient(mc, () -> {
+					JsonObject sent = DesignFeature.form().styleForm.saveRequest(name);
+					return DesignFeature.saveStyle(name).handle((b, err) -> DevBridge.onClient(mc, () -> {
+						JsonObject o = designState(mc);
+						o.add("request", sent);
+						if (err != null) {
+							Throwable c = err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err;
+							o.addProperty("refused", String.valueOf(c.getMessage()));
+						} else {
+							JsonObject sb = new JsonObject();
+							sb.addProperty("styleId", b.id());
+							sb.addProperty("version", b.version());
+							sb.addProperty("origin", b.origin());
+							sb.addProperty("editable", b.editable());
+							b.basedOn().ifPresent(p -> sb.addProperty("basedOn", p.id() + " v" + p.version()));
+							JsonArray sf = new JsonArray();
+							b.suggestedFeatures().forEach(sf::add);
+							sb.add("suggestedFeatures", sf);
+							JsonArray tg = new JsonArray();
+							b.tags().forEach(tg::add);
+							sb.add("tags", tg);
+							JsonObject r = new JsonObject();
+							b.roles().forEach(r::addProperty);
+							sb.add("roles", r);
+							o.add("saved", sb);
+						}
+						return o;
+					})).thenCompose(x -> x);
+				}).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.design.state", 10_000, "{} - the Design form (fields, errors, the request as it would be sent), the sidecar's designs, "
 			+ "plots", (req, mc) -> DevBridge.onClient(mc, () -> designState(mc)));
@@ -244,8 +281,7 @@ public final class ScreenFeature {
 		if (f.has("style")) {
 			String s = f.str("style");
 			if (dev.larattalabs.architect.design.DesignSpec.find(dev.larattalabs.architect.design.DesignSpec.STYLES, s) != null) {
-				form.styleChip = s;
-				form.styleText.clear();
+				form.pickChip(s);
 			} else {
 				form.styleText.set(s);
 			}
@@ -254,17 +290,50 @@ public final class ScreenFeature {
 			form.materials.set(f.str("materials"));
 		}
 		if (f.has("features")) {
-			form.features.clear();
+			java.util.List<String> feats = new java.util.ArrayList<>();
 			JsonElement el = f.json().get("features");
 			if (el.isJsonArray()) {
 				for (JsonElement e : el.getAsJsonArray()) {
-					form.features.add(e.getAsString());
+					feats.add(e.getAsString());
 				}
 			} else {
 				for (String s : el.getAsString().split(",")) {
 					if (!s.isBlank()) {
-						form.features.add(s.strip());
+						feats.add(s.strip());
 					}
+				}
+			}
+			try {
+				form.styleForm.setFeatures(feats);
+			} catch (IllegalArgumentException | IllegalStateException e) {
+				throw new DevBridge.DevException("features: " + e.getMessage());
+			}
+		}
+		// (Style unification U2) Style operations on the Design tab's StyleForm, in order (kit formApply's ops)
+		if (f.has("styleOps")) {
+			for (JsonElement oe : f.json().getAsJsonArray("styleOps")) {
+				JsonArray op = oe.getAsJsonArray();
+				String k = op.get(0).getAsString();
+				try {
+					switch (k) {
+						case "pick" -> {
+							String id = op.get(1).getAsString();
+							var installed = dev.larattalabs.architect.client.design.SetFeature.bible(id);
+							if (installed.isPresent() && !installed.get().builtin()) {
+								form.pickBible(installed.get());
+							} else {
+								form.pickChip(id);
+							}
+						}
+						case "unpick" -> form.styleForm.unpick();
+						case "revert" -> form.styleForm.revert();
+						case "main" -> form.styleForm.editMain(op.get(1).getAsString(), op.get(2).getAsString());
+						case "role" -> form.styleForm.setRole(op.get(1).getAsString(), op.get(2).getAsString());
+						case "feature" -> form.styleForm.toggleFeature(op.get(1).getAsString());
+						default -> throw new IllegalArgumentException("unknown style op " + k + " (pick, unpick, revert, main, role, feature)");
+					}
+				} catch (IllegalArgumentException | IllegalStateException e) {
+					throw new DevBridge.DevException("styleOps " + op + ": " + e.getMessage());
 				}
 			}
 		}
@@ -303,7 +372,14 @@ public final class ScreenFeature {
 			}
 		}
 		if (f.has("bible")) {
-			form.bible = f.isExplicitNull("bible") || "none".equals(f.str("bible")) ? null : f.str("bible");
+			// (U2) a Claude-made Style is set mode; a built-in or hand-made one is picked (materials only); an unknown id stays set mode
+			String bid = f.isExplicitNull("bible") || "none".equals(f.str("bible")) ? null : f.str("bible");
+			var known = bid == null ? java.util.Optional.<dev.larattalabs.architect.api.Bible>empty() : dev.larattalabs.architect.client.design.SetFeature.bible(bid);
+			if (known.isPresent()) {
+				form.pickBible(known.get());
+			} else {
+				form.bible = bid;
+			}
 		}
 		if (f.has("massingFirst")) {
 			// (4c) true / false, or null = the default for the size (on for L and plot)

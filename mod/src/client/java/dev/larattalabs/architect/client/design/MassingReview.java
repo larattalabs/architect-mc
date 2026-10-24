@@ -153,11 +153,22 @@ public final class MassingReview {
 
 	/** (5a) As above, with the critique its detail pass gets on Approve (null: none). */
 	public static void expect(String designId, DesignSpec.@Nullable Plot plot, @Nullable JsonObject critique) {
+		expect(designId, plot, critique, null);
+	}
+
+	/** (Style unification U2) As above, with the Style's palette its detail pass gets on Approve (null: none; a massing has no materials). */
+	public static void expect(String designId, DesignSpec.@Nullable Plot plot, @Nullable JsonObject critique, com.google.gson.@Nullable JsonElement palette) {
 		PENDING.put(designId, Optional.ofNullable(plot));
 		if (critique != null) {
 			CRITIQUE_BY_DESIGN.put(designId, critique);
 		}
+		if (palette != null) {
+			PALETTE_BY_DESIGN.put(designId, palette);
+		}
 	}
+
+	private static final Map<String, com.google.gson.JsonElement> PALETTE_BY_DESIGN = new java.util.HashMap<>();
+	private static final Map<String, com.google.gson.JsonElement> PALETTE_BY_MASSING = new java.util.HashMap<>();
 
 	/** (5a) The critique the Design tab asked for, by the massing job's design id and then by massing id (this session). */
 	private static final Map<String, JsonObject> CRITIQUE_BY_DESIGN = new java.util.HashMap<>();
@@ -177,6 +188,10 @@ public final class MassingReview {
 		JsonObject critique = CRITIQUE_BY_DESIGN.remove(m.designId());
 		if (critique != null) {
 			CRITIQUE_BY_MASSING.put(m.id(), critique);
+		}
+		com.google.gson.JsonElement palette = PALETTE_BY_DESIGN.remove(m.designId());
+		if (palette != null) {
+			PALETTE_BY_MASSING.put(m.id(), palette);
 		}
 		plot.ifPresent(p -> PLOT_BY_MASSING.put(m.id(), p));
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
@@ -290,6 +305,11 @@ public final class MassingReview {
 		JsonObject critique = CRITIQUE_BY_MASSING.get(r.massing().id());
 		if (critique != null && SetFeature.has("critique")) {
 			req.add("critique", critique.deepCopy());
+		}
+		// (Style unification U2) the Style picked on the Design tab: its materials go with the detail pass
+		com.google.gson.JsonElement palette = PALETTE_BY_MASSING.get(r.massing().id());
+		if (palette != null && SetFeature.has("palette.roles") && !req.has("bible")) {
+			req.add("palette", palette.deepCopy());
 		}
 		sending = true;
 		return Sidecar.designRequest(req).handle((ack, err) -> {

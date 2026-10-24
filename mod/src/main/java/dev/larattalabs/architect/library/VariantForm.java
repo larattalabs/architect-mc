@@ -152,26 +152,25 @@ public final class VariantForm {
 	private final Palettes palettes;
 	private final List<Param> params;
 	private final List<String> skipped = new ArrayList<>();
-	private final Palettes.Inputs originalPalette;
 	private final @Nullable String originalPreset;
 	private final Map<String, JsonPrimitive> original = new LinkedHashMap<>();
 	private final Map<String, JsonPrimitive> values = new LinkedHashMap<>();
-	private @Nullable String preset;
-	private Palettes.Inputs inputs;
 	private String name = "";
-	/** A re-skin (phase 4b): the style bible to build with instead of a palette, or null. */
-	private @Nullable String bible;
-	/** (Style unification U1) the picked bible's version and roles, when the picker knew them; null: only its id. */
-	private int bibleVersion = 1;
-	private @Nullable Map<String, String> bibleRoles;
-	/** (U1) its roles after main-row edits (setField), or null while unedited */
-	private @Nullable Map<String, String> editedRoles;
+	/**
+	 * (Style unification U2) The palette half: a {@link StyleForm} in VARIANT mode. WHAT is fixed (the design's code); a Style swap
+	 * re-skins the materials only; the main rows and the roles' provenance are stored there.
+	 */
+	private final StyleForm style;
+	/** The entry's own Style (a bible chip toggled off goes back to it). */
+	private final StyleForm.@Nullable Style entryStyle;
+	/** The rows before an installed Style with no known roles was picked (a main-row edit then falls back to plain inputs, as in 4b). */
+	private Palettes.Inputs inputsBeforeBible = Palettes.Inputs.NONE;
 
 	/**
 	 * @param from the library id
 	 * @param params the entry's {@code params} (or null)
 	 * @param values the entry's {@code values} (or null: the defaults)
-	 * @param palette the entry's {@code palette} (or null)
+	 * @param palette the entry's {@code palette} (or null): a preset name and/or inputs, or a Style's roles {@code {bible: {id, version, roles}}}
 	 */
 	public VariantForm(String from, @Nullable JsonObject params, @Nullable JsonObject values, @Nullable JsonObject palette, Palettes palettes) {
 		this.from = from;
@@ -182,16 +181,46 @@ public final class VariantForm {
 			original.put(p.name(), v);
 			this.values.put(p.name(), v);
 		}
-		String named = palette == null ? null : Palettes.first(palette, "preset", "name");
+		this.entryStyle = entryStyle(palette, palettes);
+		this.style = new StyleForm(StyleForm.Mode.VARIANT, entryStyle, List.of(), StyleRoles.fallback(), palettes);
+		this.originalPreset = preset();
+	}
+
+	/** The Style an entry's palette names: a preset, its inputs, or its roles inline; null for none. */
+	public static StyleForm.@Nullable Style entryStyle(@Nullable JsonObject palette, Palettes palettes) {
+		if (palette == null) {
+			return null;
+		}
+		if (palette.has("bible") && palette.get("bible").isJsonObject()) {
+			JsonObject b = palette.getAsJsonObject("bible");
+			Map<String, String> r = new LinkedHashMap<>();
+			if (b.has("roles") && b.get("roles").isJsonObject()) {
+				b.getAsJsonObject("roles").entrySet().forEach(e -> {
+					if (e.getValue().isJsonPrimitive()) {
+						r.put(e.getKey(), e.getValue().getAsString());
+					}
+				});
+			}
+			String id = Palettes.first(b, "id");
+			int v = b.has("version") && b.get("version").isJsonPrimitive() ? b.get("version").getAsInt() : 1;
+			StyleForm.Style preset = id == null ? null : StyleForm.Style.preset(palettes, id);
+			if (preset != null && preset.roles().equals(new StyleForm.Style(id, id, v, StyleForm.BIBLE, null, r, List.of(), List.of(), false, false).roles())) {
+				return preset;
+			}
+			return new StyleForm.Style(id == null ? "custom" : id, id == null ? "custom" : id, v, StyleForm.BIBLE, null, r, List.of(), List.of(), false, false);
+		}
+		String named = Palettes.first(palette, "preset", "name");
 		Palettes.Inputs in = Palettes.Inputs.of(palette);
 		Palettes.Inputs presetIn = palettes.preset(named);
 		if (presetIn != null) {
 			in = in.orElse(presetIn);
 		}
-		this.originalPalette = in;
-		this.originalPreset = presetIn != null && presetIn.equals(in) ? named : palettes.presetMatching(in);
-		this.inputs = in;
-		this.preset = originalPreset;
+		String match = presetIn != null && presetIn.equals(in) ? named : palettes.presetMatching(in);
+		StyleForm.Style p = match == null ? null : StyleForm.Style.preset(palettes, match);
+		if (p != null) {
+			return p;
+		}
+		return in.equals(Palettes.Inputs.NONE) ? null : StyleForm.Style.inputs(in, StyleRoles.fallback());
 	}
 
 	public String from() {
@@ -202,6 +231,11 @@ public final class VariantForm {
 		return palettes;
 	}
 
+	/** (U2) The palette half's model. */
+	public StyleForm style() {
+		return style;
+	}
+
 	public List<Param> params() {
 		return params;
 	}
@@ -210,12 +244,27 @@ public final class VariantForm {
 		return List.copyOf(skipped);
 	}
 
+	/** The preset the materials are exactly (an unedited built-in Style, or plain inputs equal to a preset's), or null. */
 	public @Nullable String preset() {
-		return preset;
+		StyleForm.Style b = style.base();
+		if (b == null) {
+			return null;
+		}
+		if (b.kind().equals(StyleForm.PRESET) && !style.mix()) {
+			return b.id();
+		}
+		if ((b.kind().equals(StyleForm.PRESET) || b.kind().equals(StyleForm.INPUTS)) && style.roles().equals(style.table().fanOut(style.mainInputs()))) {
+			String m = palettes.presetMatching(style.mainInputs());
+			Map<String, String> pr = m == null ? null : palettes.presetRoles(m);
+			return pr == null || style.roles().equals(new StyleForm.Style(m, m, 1, StyleForm.BIBLE, null, pr, List.of(), List.of(), false, false).roles())
+				? m : null;
+		}
+		return null;
 	}
 
+	/** The four main rows as the form stores them ({@link Palettes.Inputs#NONE} without a Style). */
 	public Palettes.Inputs inputs() {
-		return inputs;
+		return style.mainInputs();
 	}
 
 	public String name() {
@@ -226,68 +275,77 @@ public final class VariantForm {
 		name = n == null ? "" : n.strip();
 	}
 
-	/** The style bible picked (a re-skin), or null. */
+	/** The installed Style picked (a re-skin), or null. */
 	public @Nullable String bible() {
-		return bible;
+		StyleForm.Style b = style.base();
+		return b != null && b.kind().equals(StyleForm.BIBLE) && b != entryStyle ? b.id() : null;
 	}
 
-	/** Picks a style bible (phase 4b re-skin): the variant builds with its roles instead of a palette; null = none. */
+	/** (U2) Picks a Style (re-skin: materials only); null = back to the entry's own. */
+	public void chooseStyle(StyleForm.@Nullable Style s) {
+		if (s == null) {
+			if (entryStyle != null) {
+				style.pick(entryStyle);
+			} else {
+				style.unpick();
+			}
+			return;
+		}
+		if (s.roles().isEmpty()) {
+			inputsBeforeBible = style.mainInputs();
+		}
+		style.pick(s);
+	}
+
+	/** Picks an installed style bible by id only (its roles unknown here: unedited, the 4b re-skin {@code bible: id}); null = none. */
 	public void chooseBible(@Nullable String id) {
-		bible = id == null || id.isBlank() ? null : id;
-		bibleRoles = null;
-		editedRoles = null;
+		chooseStyle(id == null || id.isBlank() ? null : new StyleForm.Style(id, id, 1, StyleForm.BIBLE, null, Map.of(), List.of(), List.of(), false, false));
 	}
 
 	/**
 	 * (Style unification U1) Picks a style bible with its version and roles: a later main-row edit ({@link #setField}) edits these roles
-	 * (StyleRoles editMain) and the variant is sent with them inline ({@code palette: {bible: {id, version, roles}}}) instead of dropping
-	 * the bible. Null id = none.
+	 * and the variant is sent with them inline ({@code palette: {bible: {id, version, roles}}}). Null id = none.
 	 */
 	public void chooseBible(@Nullable String id, int version, @Nullable Map<String, String> roles) {
-		chooseBible(id);
-		if (bible != null && roles != null && !roles.isEmpty()) {
-			bibleVersion = Math.max(1, version);
-			bibleRoles = Map.copyOf(new LinkedHashMap<>(roles));
+		if (id == null || id.isBlank() || roles == null || roles.isEmpty()) {
+			chooseBible(id);
+			return;
 		}
+		chooseStyle(new StyleForm.Style(id, id, Math.max(1, version), StyleForm.BIBLE, null, roles, List.of(), List.of(), false, false));
 	}
 
-	/** (U1) The roles the variant builds with when a bible is picked: its own, or as edited; null without a bible's roles. */
+	/** The roles the variant builds with (null without a Style, or an installed one whose roles are unknown here). */
 	public @Nullable Map<String, String> roles() {
-		return editedRoles != null ? editedRoles : bibleRoles == null ? null : new LinkedHashMap<>(bibleRoles);
+		return style.base() == null || style.roles().isEmpty() ? null : new LinkedHashMap<>(style.roles());
 	}
 
-	/** Picks a preset chip: the inputs become the preset's (another Style: a picked bible is replaced by the preset). */
+	/** Picks a preset chip: another Style (it replaces a picked bible). */
 	public void choosePreset(String p) {
 		Palettes.Inputs in = palettes.preset(p);
 		if (in == null) {
 			throw new IllegalArgumentException("no palette preset '" + p + "' (" + String.join(", ", palettes.presets().keySet()) + ")");
 		}
-		preset = p;
-		inputs = in;
-		bible = null;
+		StyleForm.Style s = StyleForm.Style.preset(palettes, p);
+		style.pick(s != null ? s : StyleForm.Style.inputs(in, style.table()));
 	}
 
-	/** An advanced dropdown: one field changes; the preset name stays only while the inputs still equal it. */
+	/** A main row (Wood / Stone / Roof / Accent): the roles that still follow it are re-derived (StyleForm). */
 	public void setField(String field, @Nullable String value) {
 		if (!Palettes.FIELDS.contains(field)) {
 			throw new IllegalArgumentException("palette field must be wood, stone, roof or accent: " + field);
 		}
-		// (U1) a picked bible with known roles keeps them: the main row re-derives the roles that still follow it (StyleRoles)
-		if (bible != null && bibleRoles != null) {
-			Map<String, String> base = editedRoles != null ? editedRoles : new LinkedHashMap<>(bibleRoles);
-			String v = Palettes.shortName(value);
-			if (v == null) {
-				throw new IllegalArgumentException("a Style's " + field + " needs a value");
-			}
-			editedRoles = StyleRoles.fallback().editMain(base, field, v);
+		String v = Palettes.shortName(value);
+		if (v == null) {
+			throw new IllegalArgumentException("a palette " + field + " needs a value");
+		}
+		StyleForm.Style b = style.base();
+		if (b == null || b.roles().isEmpty()) {
+			// no Style, or an installed one whose roles are unknown here: plain inputs from the rows shown (4b: the bible is dropped)
+			Palettes.Inputs in = (b == null ? Palettes.Inputs.NONE : inputsBeforeBible).with(field, v);
+			style.pick(StyleForm.Style.inputs(in, style.table()));
 			return;
 		}
-		inputs = inputs.with(field, Palettes.shortName(value));
-		bible = null;
-		Palettes.Inputs p = palettes.preset(preset);
-		if (p == null || !p.equals(inputs)) {
-			preset = palettes.presetMatching(inputs);
-		}
+		style.editMain(field, v);
 	}
 
 	public JsonPrimitive value(String param) {
@@ -326,7 +384,7 @@ public final class VariantForm {
 	}
 
 	public boolean paletteChanged() {
-		return !inputs.equals(originalPalette);
+		return style.changed();
 	}
 
 	/** The parameters that differ from the entry's values. */
@@ -342,30 +400,18 @@ public final class VariantForm {
 
 	/** Whether "Make variant" has something to make. */
 	public boolean changed() {
-		return bible != null || paletteChanged() || !changedValues().isEmpty();
+		return paletteChanged() || !changedValues().isEmpty();
 	}
 
 	/**
-	 * {@code {from, palette?, values?, name?}}: {@code palette} is the preset name when the inputs are exactly a preset's,
-	 * else an object of the four inputs, and absent when unchanged; {@code values} holds only the changed parameters. With a
-	 * bible picked: {@code bible} instead of {@code palette} (a re-skin).
+	 * {@code {from, palette? | bible?, values?, name?}}: the palette half is {@link StyleForm#request()} (absent when unchanged; a preset
+	 * name, the four inputs, {@code bible: id} for an unedited installed Style, or a Style's roles inline); {@code values} holds only the
+	 * changed parameters.
 	 */
 	public JsonObject requestJson() {
 		JsonObject o = new JsonObject();
 		o.addProperty("from", from);
-		if (bible != null && editedRoles != null && !editedRoles.equals(bibleRoles)) {
-			// (U1) the Style's roles after a main-row edit, inline (a helper with palette.roles; LibraryFeature checks)
-			o.add("palette", dev.larattalabs.architect.api.DesignRequest.stylePalette(bible, bibleVersion, editedRoles));
-		} else if (bible != null) {
-			o.addProperty("bible", bible);
-		} else if (paletteChanged()) {
-			Palettes.Inputs p = palettes.preset(preset);
-			if (preset != null && p != null && p.equals(inputs)) {
-				o.addProperty("palette", preset);
-			} else {
-				o.add("palette", inputs.toJson());
-			}
-		}
+		style.request().entrySet().forEach(e -> o.add(e.getKey(), e.getValue()));
 		Map<String, JsonPrimitive> ch = changedValues();
 		if (!ch.isEmpty()) {
 			JsonObject v = new JsonObject();
@@ -378,23 +424,53 @@ public final class VariantForm {
 		return o;
 	}
 
+	/**
+	 * "Will make: …" (the Variants dialog's footer): a re-skin with a Style, a preset or inputs palette, a custom mix of a Style (its roles
+	 * inline: before U2 the dialog read every palette value as a string and threw on that object), then the changed values.
+	 * @param styleName a Style id -> its name (the installed ones the client knows)
+	 */
+	public String summary(java.util.function.Function<String, String> styleName) {
+		JsonObject r = requestJson();
+		List<String> bits = new ArrayList<>();
+		if (r.has("bible")) {
+			bits.add("re-skinned with " + styleName.apply(r.get("bible").getAsString()));
+		}
+		if (r.has("palette")) {
+			JsonElement p = r.get("palette");
+			if (p.isJsonPrimitive()) {
+				bits.add(p.getAsString() + " palette");
+			} else if (p.getAsJsonObject().has("bible")) {
+				bits.add("custom mix of " + styleName.apply(p.getAsJsonObject().getAsJsonObject("bible").get("id").getAsString()));
+			} else {
+				bits.add("palette " + String.join("/", p.getAsJsonObject().entrySet().stream().filter(e -> e.getValue().isJsonPrimitive()).map(e -> e
+					.getValue().getAsString()).toList()));
+			}
+		}
+		if (r.has("values")) {
+			r.getAsJsonObject("values").entrySet().forEach(e -> bits.add(e.getKey() + " " + (e.getValue().isJsonPrimitive() && e.getValue()
+				.getAsJsonPrimitive().isBoolean() ? e.getValue().getAsBoolean() ? "on" : "off" : e.getValue().getAsString())));
+		}
+		return String.join(", ", bits);
+	}
+
 	/** DevBridge view. */
 	public JsonObject stateJson() {
 		JsonObject o = new JsonObject();
 		o.addProperty("from", from);
-		o.addProperty("preset", preset);
-		o.addProperty("bible", bible);
+		o.addProperty("preset", preset());
+		o.addProperty("bible", bible());
+		o.add("style", style.view());
 		Map<String, String> rs = roles();
 		if (rs != null) {
 			JsonObject r = new JsonObject();
 			rs.forEach(r::addProperty);
 			o.add("roles", r);
 			JsonObject pv = new JsonObject();
-			StyleRoles.fallback().provenance(rs, bibleRoles).forEach(pv::addProperty);
+			style.provenance().forEach(pv::addProperty);
 			o.add("provenance", pv);
 		}
 		o.addProperty("originalPreset", originalPreset);
-		o.add("inputs", inputs.toJson());
+		o.add("inputs", inputs().toJson());
 		JsonArray ps = new JsonArray();
 		for (Param p : params) {
 			JsonObject j = new JsonObject();

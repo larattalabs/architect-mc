@@ -1014,8 +1014,8 @@ final class LibraryTab {
 					bx = lx;
 					ly += ArchitectScreen.CHIP_H + 3;
 				}
-				bx += s.chip(g, "bible:" + b.id(), label, bx, ly, b.id().equals(f.bible()), true, mx, my, () -> f.chooseBible(b.id().equals(f.bible())
-					? null : b.id(), b.version(), b.roles())) + 3;
+				bx += s.chip(g, "bible:" + b.id(), label, bx, ly, b.id().equals(f.bible()), true, mx, my, () -> f.chooseStyle(b.id().equals(f.bible())
+					? null : dev.larattalabs.architect.library.StyleForm.Style.of(b))) + 3;
 			}
 			ly += ArchitectScreen.CHIP_H + 6;
 		}
@@ -1151,22 +1151,7 @@ final class LibraryTab {
 	}
 
 	static String summary(VariantForm f) {
-		JsonObject r = f.requestJson();
-		List<String> bits = new ArrayList<>();
-		if (r.has("bible")) {
-			String id = r.get("bible").getAsString();
-			bits.add("re-skinned with " + dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name)
-				.orElse(id));
-		}
-		if (r.has("palette")) {
-			bits.add(r.get("palette").isJsonPrimitive() ? r.get("palette").getAsString() + " palette" : "palette " + String.join("/",
-				r.getAsJsonObject("palette").entrySet().stream().map(e -> e.getValue().getAsString()).toList()));
-		}
-		if (r.has("values")) {
-			r.getAsJsonObject("values").entrySet().forEach(e -> bits.add(e.getKey() + " " + (e.getValue().isJsonPrimitive() && e.getValue()
-				.getAsJsonPrimitive().isBoolean() ? e.getValue().getAsBoolean() ? "on" : "off" : e.getValue().getAsString())));
-		}
-		return String.join(", ", bits);
+		return f.summary(id -> dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name).orElse(id));
 	}
 
 	// ------------------------------------------------------------------ Import dialog

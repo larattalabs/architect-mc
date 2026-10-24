@@ -1,5 +1,6 @@
 package dev.larattalabs.architect.client.design;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.hud.Keys;
@@ -82,6 +83,31 @@ public final class DesignFeature {
 	public record Sent(@Nullable String designId, @Nullable String error) {
 	}
 
+	/**
+	 * (Style unification U2) "Save as style…": the form's Style as it is now (a custom mix, or a copy) saved as a new hand-made Style
+	 * ({@code bible.save}: free, no Claude call); the form then picks it. Name null = "<Style> mix" / "<Style> copy". Completes with the
+	 * saved Style, or fails with why (no Style, a helper without bible.save, the kit refusing the roles).
+	 */
+	public static CompletableFuture<dev.larattalabs.architect.api.Bible> saveStyle(@Nullable String name) {
+		DesignForm f = form;
+		JsonObject style = f.styleForm.saveRequest(name == null || name.isBlank() ? null : name.strip());
+		if (style == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("pick a Style first"));
+		}
+		if (!SetFeature.has("bible.save")) {
+			return CompletableFuture.failedFuture(new IllegalStateException("this design helper can't save Styles (no bible.save): update it"));
+		}
+		return dev.larattalabs.architect.apiimpl.ApiImpl.biblesImpl().save(null, style, null).thenApply(b -> {
+			net.minecraft.client.Minecraft.getInstance().execute(() -> {
+				f.styleForm.pick(dev.larattalabs.architect.library.StyleForm.Style.of(b));
+				f.bible = null;
+				f.styleText.clear();
+				f.sendError = null;
+			});
+			return b;
+		});
+	}
+
 	/** Validates the form and sends {@code design.request}; completes on the client thread. */
 	public static CompletableFuture<Sent> submit() {
 		DesignForm f = form;
@@ -101,6 +127,8 @@ public final class DesignFeature {
 		JsonObject request = f.requestJson();
 		// (4c) "Massing first": a massing job; its massing opens the review (MassingReview) when it is installed
 		boolean massing = f.massingFirst() && SetFeature.has("massing");
+		// (Style unification U2) a massing has no materials: the Style's palette goes with its detail pass (MassingReview approve)
+		JsonElement palette = massing ? request.remove("palette") : null;
 		if (massing) {
 			request.addProperty("massing", true);
 		}
@@ -129,7 +157,7 @@ public final class DesignFeature {
 			lastSent = id;
 			RUNNING.add(id);
 			if (massing) {
-				MassingReview.expect(id, plot, critique);
+				MassingReview.expect(id, plot, critique, palette);
 			} else if (plot != null) {
 				PLOT_BY_DESIGN.put(id, plot);
 			}
