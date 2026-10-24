@@ -104,3 +104,23 @@ export function doorOf(frameBlock) {
   const w = woodOf(frameBlock);
   return (w && variant(`minecraft:${w}_planks`, 'door')) || 'minecraft:oak_door';
 }
+
+/** (7a CL theme, Noah 2026-10-24) Functional blocks a connector may write that no role themes: ladders, air, fluids, chains, cauldrons, beds. */
+export const UNTHEMED_OK = Object.freeze(new Set(['minecraft:air', 'minecraft:cave_air', 'minecraft:ladder', 'minecraft:water', 'minecraft:lava', 'minecraft:chain', 'minecraft:iron_chain', 'minecraft:scaffolding', 'minecraft:vine', 'minecraft:water_cauldron', 'minecraft:cauldron']));
+const SHAPES = Object.freeze(['slab', 'stairs', 'wall', 'fence', 'fence_gate', 'door', 'trapdoor', 'pressure_plate', 'button']);
+/**
+ * The role a block traces to (Noah: "everything should be themed"): the role whose block, or one of whose shape variants (slab,
+ * stairs, wall, fence, fence gate, door, ...), the block is; the light role's W fixture counts as the light role. null when no role
+ * gives it (and it is not in UNTHEMED_OK: then 'functional').
+ */
+export function traceRole(block, roles, { lightFixture = null } = {}) {
+  const name = String(block).replace(/\[.*$/, '');
+  if (UNTHEMED_OK.has(name) || /_bed$/.test(name)) return 'functional'; // (a bed: a villager's workstation of sleep, any colour)
+  for (const [r, b] of Object.entries(roles ?? {})) {
+    const base = String(b).replace(/\[.*$/, '');
+    if (base === name) return r;
+    for (const sh of SHAPES) { const v = shapeOf(base, sh); if (v && v.replace(/\[.*$/, '') === name) return `${r}.${sh}`; }
+  }
+  if (lightFixture && String(lightFixture).replace(/\[.*$/, '') === name) return 'light';
+  return null;
+}

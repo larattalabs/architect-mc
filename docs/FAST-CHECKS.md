@@ -432,6 +432,7 @@ but `child`.
 - **S-FELL:** felling stops at protected areas, builds and the claim (over a frozen volume's logs).
 - **S-DOOR:** a build record's claim box holds both halves of its doors and beds, and a lifted build's door is an entrance.
 - **S-FARM:** a zone asking a farm pond with a farm lot, its villager use given or implied, gets one or says why.
+- **S-THEME** (Noah, 2026-10-24: "everything should be themed / fit"): every block written outside the lots traces to one of the plan's roles (the role's block or its slab, stairs, wall, fence, fence gate, door, ... variant: `connectors/style.mjs` `traceRole`), the light role's W fixture, or the shared functional allowlist (`UNTHEMED_OK`: ladders, air, fluids, chains, cauldrons, beds). Natural material (vworld's natural flag, plus moss carpet and mangrove roots) is the land's look and not judged. `lib/lint/theme.mjs` `THEME_KNOWN` lists the known exceptions, recorded as `T-THEME-KNOWN` and not gated, each with a PLAN item.
 - **The refusal set:** each corpus fixture expecting a refused code answers it: OVERLAP, PROTECTED, NO_ROOM, WATER, OUT_OF_CLAIM,
   MOVER, UNREACHABLE and the rest. NO_EDGE is checked by `d2:crest`. PALETTE is the mod's own code and stays in game; the kit's
   palette rule is checked by `p0:vocc`.

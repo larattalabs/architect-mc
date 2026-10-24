@@ -15,8 +15,7 @@
 // leaves or air: ANCHOR, naming the cells. Integer math only (the plan-path lint).
 import { classAt as volumeClassAt, VOXEL_CLASSES } from '../region/volume.mjs';
 import { footprintOf, edgeColumns } from '../region/passes/route.mjs';
-import { shapeOf, woodOf } from './style.mjs';
-import { variant } from '../kit.mjs';
+import { shapeOf } from './style.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 import { BLOCKS, isCube } from '../blocks.mjs';
@@ -87,11 +86,10 @@ export function ladderPlan(lc, rest, side) {
 /** A role's block in a shape (wall, fence, slab, stairs, fence_gate), with a fallback chain. */
 const shaped = (block, ...shapes) => { for (const s of shapes) { const v = s === 'self' ? block : shapeOf(block, s); if (v) return v; } return null; };
 
-/** The fence gate of a rail block (its wood family's, else oak's), facing `f`, closed. */
-function gateOf(railBlock, f) {
-  const w = woodOf(railBlock);
-  const g = (w && variant(`minecraft:${w}_planks`, 'fence_gate')) || 'minecraft:oak_fence_gate';
-  return `${g.replace(/\[.*$/, '')}[facing=${f},in_wall=false,open=false,powered=false]`;
+/** The top gate facing `f`, closed: `gate` (climbRoles': the first role with a fence gate), else the rail block itself. */
+function gateOf(gate, railBlock, f) {
+  if (!gate) return railBlock;
+  return `${gate.replace(/\[.*$/, '')}[facing=${f},in_wall=false,open=false,powered=false]`;
 }
 
 /**
@@ -145,13 +143,13 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
     }
   }
   // ---- slab edges on a switchback's turns: a curb along each hairpin landing's open sides, on level ground beside it
-  if (o.kind === 'switchback' && o.roles.halfStep && o.curbs !== false) {
+  if (o.kind === 'switchback' && o.roles.curb && o.curbs !== false) {
     const seen = new Set();
     for (const l of e.landings ?? []) for (const [x, z] of l.cells) for (const [dx, dz] of DIR4) {
       const ox = x + dx, oz = z + dz, k = `${ox},${oz}`;
       if (own.has(k) || used.has(k) || seen.has(k) || taken(ox, oz) || land.groundAt(ox, oz) !== l.y) continue;
       seen.add(k);
-      put(ox, l.y + 1, oz, o.roles.halfStep, 'curb');
+      put(ox, l.y + 1, oz, o.roles.curb, 'curb');
     }
   }
   // ---- switchback retaining: T2's columns (the land beside over 2 higher), in the role, capped with the trim's slab
@@ -220,7 +218,7 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
     if (o.top !== 'open') {
       gate = [tx, ty, tz];
       // (`unsafe.noGate`: the broken variant, the gate recorded but not written; M10:climb catches it)
-      if (!o.unsafe?.noGate) put(tx, ty, tz, gateOf(o.roles.railBlock ?? 'minecraft:oak_fence', CARD[`${fx},${fz}`]), 'gate');
+      if (!o.unsafe?.noGate) put(tx, ty, tz, gateOf(o.roles.gate, o.roles.rail, CARD[`${fx},${fz}`]), 'gate');
       meta.gates++;
       const [rx, rz] = [-fz, fx];
       for (const s of [1, -1]) for (let t = 1; t <= CLIMB.topRail; t++) {
@@ -391,23 +389,33 @@ const levelOf = (s) => (/lantern|torch|glowstone|sea_lantern|shroomlight|froglig
 export function climbRoles(r) {
   const c = r.ctx?.connectors ?? {};
   const role = (slot, chain) => { for (const x of [slot, ...chain]) if (x && r.roles?.[x]) return r.roles[x]; return null; };
-  const railBlock = role(c.stair?.rail, ['rail']) ?? 'minecraft:oak_fence';
+  // (Noah, 2026-10-24: "everything should be themed / fit") every fitting from the bible's roles, through the role's shape variant;
+  // a role without that variant falls back to the nearest role that has one, never a fixed block
+  const firstShaped = (names, shape) => { for (const n of names) { const b = n && r.roles?.[n]; const v = b ? shapeOf(String(b).replace(/\[.*$/, ''), shape) : null; if (v) return v; } return null; };
+  const railBlock = role(c.stair?.rail, ['rail', 'frame']);
   const rail = shaped(railBlock, 'wall', 'fence', 'self');
-  const support = role(null, ['foundation', 'structure']) ?? 'minecraft:cobblestone';
-  // the half-step slab: the path role's slab, else the stair tread's or the structure's, else cobblestone's
-  const slabOf = (b) => { const v = b ? shaped(b, 'slab') : null; return v ? `${v.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null; };
-  const halfStep = slabOf(role(null, ['path'])) ?? slabOf(role(c.stair?.tread, ['structure'])) ?? slabOf(support) ?? 'minecraft:cobblestone_slab[type=bottom,waterlogged=false]';
+  const support = role(null, ['foundation', 'structure']);
+  const bottom = (v) => (v ? `${v.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null);
+  // the treads' role: the stair slot's (where it has stairs, as the leg's stairMaterial), else T2's structure
+  const treadRole = c.stair?.tread && firstShaped([c.stair.tread], 'stairs') ? c.stair.tread : 'structure';
+  // a walk's half-step: the path role's slab, else the treads' role's (so it matches the flight), else the nearest role with a slab
+  const halfStep = bottom(firstShaped(['path', treadRole, 'floor', 'trim', 'foundation', 'structure'], 'slab'));
+  // a turn's curb: the trim role's slab, else the foundation's, else the nearest
+  const curb = bottom(firstShaped(['trim', 'foundation', 'structure', 'path', 'floor'], 'slab'));
   const retain = role(c.switchback?.retaining, ['structure', 'foundation']);
   const trim = role(null, ['trim']);
   const cap = trim ? shaped(trim, 'slab') : null;
-  const floor = role(c.ladder?.landing, ['floor']) ?? 'minecraft:oak_planks';
+  const floor = role(c.ladder?.landing, ['floor', 'wall', 'structure']);
   const landing = shaped(floor, 'slab', 'self');
   const ladderRail = role(c.ladder?.rail, ['rail']) ?? railBlock;
   // W's fixture for the light role, stood on a post (a hanging lantern stands; a sea lantern or glowstone is a bollard block)
   const fx = fixtureFor(r.roles?.light, railBlock);
   const light = fx.kind === 'hanging_lantern' ? fx.light.replace('hanging=true', 'hanging=false') : fx.light;
-  return { halfStep, rail, railBlock: role(c.ladder?.gate, ['rail']) ?? railBlock, support, retain, cap: cap ? `${cap.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null,
-    landingBase: isCube({ name: String(floor).replace(/\[.*$/, '') }) ? String(floor).replace(/\[.*$/, '') : 'minecraft:oak_planks',
+  const cubeOf = (names) => { for (const n of names) { const b = n && r.roles?.[n]; if (b && isCube({ name: String(b).replace(/\[.*$/, '') })) return String(b).replace(/\[.*$/, ''); } return null; };
+  // the top gate: the ladder's gate slot, then the rail, frame, floor and wall roles: the first with a fence gate (a wood's)
+  const gate = firstShaped([c.ladder?.gate, 'rail', 'frame', 'floor', 'wall'], 'fence_gate');
+  return { halfStep, curb, gate, rail, railBlock: role(c.ladder?.gate, ['rail', 'frame']) ?? railBlock, support, retain, cap: cap ? `${cap.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null,
+    landingBase: cubeOf([c.ladder?.landing, 'floor', 'wall', 'structure', 'foundation']),
     landing: landing && /_slab/.test(landing) ? `${landing.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : landing, bracket: shaped(ladderRail, 'fence', 'self'),
     light, post: shaped(railBlock, 'fence', 'self') };
 }
