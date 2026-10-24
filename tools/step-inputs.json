@@ -33620,6 +33620,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -33750,6 +33751,7 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate7acl.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ]
@@ -33945,6 +33947,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -34092,6 +34095,7 @@
     "tools/gate6b.mjs",
     "tools/gate7acl.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs",
@@ -34290,6 +34294,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -34437,6 +34442,7 @@
     "tools/gate6b.mjs",
     "tools/gate7acl.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs",
@@ -34631,6 +34637,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -34771,6 +34778,7 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate7acl.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ]
@@ -34966,6 +34974,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -35113,6 +35122,7 @@
     "tools/gate6b.mjs",
     "tools/gate7acl.mjs",
     "tools/lib/basestamp.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs",
