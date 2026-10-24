@@ -283,7 +283,9 @@ final class LibraryTab {
 		int gridW = w - detailW - 12;
 		int gx = x;
 		// search, right of the Designs/Placed chips
-		int sw = Math.max(80, gx + gridW - chipsRight - 6);
+		// (U3) at a narrow width (GUI scale 4) the search keeps to the room the chips leave, and the filters get short labels
+		boolean narrow = gridW < 330;
+		int sw = Math.max(56, gx + gridW - chipsRight - 6);
 		int sx = gx + gridW - sw;
 		s.textField(g, Focus.SEARCH, searchView, search, sx, top - 3, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
 		// filters row
@@ -291,7 +293,7 @@ final class LibraryTab {
 		LibraryQuery q = LibraryFeature.query();
 		List<LibraryCard> all = LibraryFeature.cards();
 		int cx = gx;
-		String typeLabel = "Type: " + (q.type() == null ? "all" : q.type()) + " ▾";
+		String typeLabel = narrow ? (q.type() == null ? "Type" : q.type()) + " ▾" : "Type: " + (q.type() == null ? "all" : q.type()) + " ▾";
 		cx += s.chip(g, "filter:type", typeLabel, cx, fy, q.type() != null, true, mx, my, () -> {
 			List<ArchitectScreen.Option> opts = new ArrayList<>();
 			opts.add(new ArchitectScreen.Option("all", "All types", q.type() == null));
@@ -304,7 +306,7 @@ final class LibraryTab {
 			});
 		}) + 3;
 		List<String> userTags = LibraryQuery.userTags(all);
-		String tagLabel = "Tag: " + (q.tag() == null ? "all" : q.tag()) + " ▾";
+		String tagLabel = narrow ? (q.tag() == null ? "Tag" : "#" + q.tag()) + " ▾" : "Tag: " + (q.tag() == null ? "all" : q.tag()) + " ▾";
 		int tagX = cx;
 		cx += s.chip(g, "filter:tag", tagLabel, cx, fy, q.tag() != null, !userTags.isEmpty() || q.tag() != null, mx, my, () -> {
 			List<ArchitectScreen.Option> opts = new ArrayList<>();
@@ -317,13 +319,13 @@ final class LibraryTab {
 				s.resetScroll();
 			});
 		}) + 3;
-		cx += s.chip(g, "filter:favorites", "★ Starred", cx, fy, q.favoritesOnly(), true, mx, my, () -> {
+		cx += s.chip(g, "filter:favorites", narrow ? "★" : "★ Starred", cx, fy, q.favoritesOnly(), true, mx, my, () -> {
 			LibraryFeature.setQuery(LibraryFeature.query().withFavoritesOnly(!LibraryFeature.query().favoritesOnly()));
 			s.resetScroll();
 		}) + 3;
 		// collections (phase 4b, R10): the entries of one bible or one design set
 		List<LibraryQuery.CollectionInfo> cols = LibraryQuery.collections(all);
-		String colLabel = TextUtil.ellipsize(font, q.collection() == null ? "Collection ▾" : collectionName(q.collection()) + " ▾", 78);
+		String colLabel = TextUtil.ellipsize(font, q.collection() == null ? narrow ? "Coll. ▾" : "Collection ▾" : collectionName(q.collection()) + " ▾", narrow ? 56 : 78);
 		int colX = cx;
 		cx += s.chip(g, "filter:collection", colLabel, cx, fy, q.collection() != null, !cols.isEmpty() || q.collection() != null, mx, my, () -> {
 			List<ArchitectScreen.Option> opts = new ArrayList<>();
@@ -350,7 +352,7 @@ final class LibraryTab {
 			}
 		} else {
 			// no room for three chips (a collection is picked): one that opens the sort choices
-			String sl = "↕ " + q.sort().label() + " ▾";
+			String sl = narrow ? "↕ ▾" : "↕ " + q.sort().label() + " ▾";
 			int sw0 = font.width(sl) + 12;
 			int sortX = Math.max(cx + 2, gx + gridW - sw0);
 			s.chip(g, "sort", sl, sortX, fy, false, true, mx, my, () -> {

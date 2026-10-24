@@ -351,7 +351,8 @@ final class DesignEditor {
 
 	private int mixBar(GuiGraphicsExtractor g, String mode, StyleForm sf, StyleForm.Style base, int x, int y, int w, int mx, int my, Consumer<String> err) {
 		int h = Button.H + 6;
-		if (revealSave && mode.equals(saveMode)) {
+		// while its name field is open, the bar stays in view (a GUI-scale change re-lays the body out)
+		if (mode.equals(saveMode)) {
 			revealSave = false;
 			int below = y + h + 4 - (view[1] + view[3]);
 			if (below > 0) {
