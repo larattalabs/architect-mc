@@ -17,8 +17,14 @@ import org.jspecify.annotations.Nullable;
  * {@code {"presets": {"rustic": {"wood","stone","roof","accent"}, ...}, "woods": [...], "stones": [...], "roofs": [...]}}:
  * the sidecar's {@code snapshot.palettes} when it sends one, else the {@code palettes.json} generated from the kit at build
  * time, else {@link #FALLBACK}. Pure.
+ *
+ * <p>(Style unification U0) {@code roles}: each preset's roles as the kit gives them ({@code presets.<name>.roles}; a preset
+ * with extras, such as desert's plaster, is only right as roles), empty for JSON without them. {@link #FALLBACK} is the kit's
+ * own output, checked in as {@code assets/architect_mc/palettes-fallback.json} (tools/gen-palettes.mjs; kit/test/styles.test.mjs
+ * holds it current), so a jar built without node lists every preset.
  */
-public record Palettes(Map<String, Inputs> presets, List<String> woods, List<String> stones, List<String> roofs, String origin) {
+public record Palettes(Map<String, Inputs> presets, List<String> woods, List<String> stones, List<String> roofs, String origin,
+	Map<String, Map<String, String>> roles) {
 	/** A palette's inputs (short names without {@code minecraft:}); any may be null (the kit derives it). */
 	public record Inputs(@Nullable String wood, @Nullable String stone, @Nullable String roof, @Nullable String accent) {
 		public static final Inputs NONE = new Inputs(null, null, null, null);
@@ -84,27 +90,34 @@ public record Palettes(Map<String, Inputs> presets, List<String> woods, List<Str
 
 	public static final List<String> FIELDS = List.of("wood", "stone", "roof", "accent");
 
-	/** The kit's phase 1 presets and lists, for a jar built without node (the build normally generates palettes.json). */
-	public static final Palettes FALLBACK = new Palettes(fallbackPresets(),
-		List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "bamboo", "crimson", "warped"),
-		List.of("cobblestone", "mossy_cobblestone", "stone_bricks", "mossy_stone_bricks", "deepslate_bricks", "deepslate_tiles", "cobbled_deepslate",
-			"bricks", "sandstone", "smooth_sandstone", "polished_andesite", "blackstone", "polished_blackstone_bricks", "nether_bricks", "mud_bricks"),
-		List.of("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "crimson", "warped", "deepslate_tiles", "bricks",
-			"stone_bricks", "cobblestone", "smooth_sandstone", "nether_bricks", "mud_bricks", "blackstone"),
-		"built-in");
+	/** The fallback's JSON: the kit's palettes.json as generated when this mod was built ({@code palettes-fallback.json}). */
+	static @Nullable JsonElement fallbackJson() {
+		return StyleRoles.readResource("/assets/architect_mc/palettes-fallback.json");
+	}
 
-	private static Map<String, Inputs> fallbackPresets() {
-		Map<String, Inputs> m = new LinkedHashMap<>();
-		m.put("rustic", new Inputs("spruce", "cobblestone", "dark_oak", "dark_oak"));
-		m.put("oak", new Inputs("oak", "stone_bricks", "spruce", "spruce"));
-		m.put("birch", new Inputs("birch", "polished_andesite", "dark_oak", "dark_oak"));
-		m.put("dark", new Inputs("dark_oak", "deepslate_bricks", "deepslate_tiles", "spruce"));
-		m.put("desert", new Inputs("jungle", "sandstone", "smooth_sandstone", "jungle"));
-		m.put("brick", new Inputs("oak", "bricks", "deepslate_tiles", "dark_oak"));
-		return m;
+	/**
+	 * The kit's presets and lists for a jar built without node, and when a sidecar's snapshot lacks a list: the checked-in
+	 * {@code palettes-fallback.json} (every preset the kit has, with roles). Only if that resource is missing: rustic alone.
+	 */
+	public static final Palettes FALLBACK = loadFallback();
+
+	private static Palettes loadFallback() {
+		JsonElement j = fallbackJson();
+		Palettes p = j == null ? null : parseWith(j, "built-in", null);
+		if (p != null) {
+			return p;
+		}
+		return new Palettes(Map.of("rustic", new Inputs("spruce", "cobblestone", "dark_oak", "dark_oak")), List.of("oak", "spruce", "birch",
+			"dark_oak"), List.of("cobblestone", "stone_bricks"), List.of("oak", "spruce", "dark_oak", "deepslate_tiles"), "built-in (no fallback file)");
+	}
+
+	/** The shape before U0 (no roles). */
+	public Palettes(Map<String, Inputs> presets, List<String> woods, List<String> stones, List<String> roofs, String origin) {
+		this(presets, woods, stones, roofs, origin, Map.of());
 	}
 
 	public Palettes {
+		roles = roles == null ? Map.of() : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(roles));
 		presets = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(presets));
 		woods = List.copyOf(woods);
 		stones = List.copyOf(stones);
@@ -117,16 +130,31 @@ public record Palettes(Map<String, Inputs> presets, List<String> woods, List<Str
 	 * there is nothing usable.
 	 */
 	public static @Nullable Palettes parse(@Nullable JsonElement json, String origin) {
+		return parseWith(json, origin, FALLBACK);
+	}
+
+	private static @Nullable Palettes parseWith(@Nullable JsonElement json, String origin, @Nullable Palettes base) {
 		if (json == null || !json.isJsonObject()) {
 			return null;
 		}
 		JsonObject o = json.getAsJsonObject();
 		Map<String, Inputs> presets = new LinkedHashMap<>();
+		Map<String, Map<String, String>> roles = new LinkedHashMap<>();
 		JsonElement p = o.has("presets") ? o.get("presets") : o.get("palettes");
 		if (p != null && p.isJsonObject()) {
 			for (var e : p.getAsJsonObject().entrySet()) {
 				if (e.getValue().isJsonObject()) {
 					presets.put(e.getKey(), inputsOf(e.getValue().getAsJsonObject()));
+					JsonElement r = e.getValue().getAsJsonObject().get("roles");
+					if (r != null && r.isJsonObject()) {
+						Map<String, String> m = new LinkedHashMap<>();
+						r.getAsJsonObject().entrySet().forEach(x -> {
+							if (x.getValue().isJsonPrimitive()) {
+								m.put(x.getKey(), x.getValue().getAsString());
+							}
+						});
+						roles.put(e.getKey(), java.util.Collections.unmodifiableMap(m));
+					}
 				}
 			}
 		} else if (p != null && p.isJsonArray()) {
@@ -142,16 +170,29 @@ public record Palettes(Map<String, Inputs> presets, List<String> woods, List<Str
 		List<String> woods = list(o, "woods");
 		List<String> stones = list(o, "stones");
 		List<String> roofs = list(o, "roofs");
-		LinkedHashSet<String> w = new LinkedHashSet<>(woods.isEmpty() ? FALLBACK.woods : woods);
-		LinkedHashSet<String> s = new LinkedHashSet<>(stones.isEmpty() ? FALLBACK.stones : stones);
-		LinkedHashSet<String> r = new LinkedHashSet<>(roofs.isEmpty() ? FALLBACK.roofs : roofs);
+		LinkedHashSet<String> w = new LinkedHashSet<>(woods.isEmpty() && base != null ? base.woods : woods);
+		LinkedHashSet<String> s = new LinkedHashSet<>(stones.isEmpty() && base != null ? base.stones : stones);
+		LinkedHashSet<String> r = new LinkedHashSet<>(roofs.isEmpty() && base != null ? base.roofs : roofs);
 		for (Inputs in : presets.values()) {
 			addIf(w, in.wood());
 			addIf(w, in.accent());
 			addIf(s, in.stone());
 			addIf(r, in.roof());
 		}
-		return new Palettes(presets, new ArrayList<>(w), new ArrayList<>(s), new ArrayList<>(r), origin);
+		// a sidecar's snapshot.palettes sends no roles: the fallback's, for the presets it has
+		if (base != null) {
+			for (String n : presets.keySet()) {
+				if (!roles.containsKey(n) && base.roles.containsKey(n) && presets.get(n).equals(base.presets.get(n))) {
+					roles.put(n, base.roles.get(n));
+				}
+			}
+		}
+		return new Palettes(presets, new ArrayList<>(w), new ArrayList<>(s), new ArrayList<>(r), origin, roles);
+	}
+
+	/** A preset's roles (kit {@code PALETTES[name].roles}), or null when this JSON had none for it. */
+	public @Nullable Map<String, String> presetRoles(@Nullable String name) {
+		return name == null ? null : roles.get(name);
 	}
 
 	private static Inputs inputsOf(JsonObject o) {

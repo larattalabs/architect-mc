@@ -521,9 +521,15 @@ public final class LibraryFeature {
 			variantError = "The design helper is not running (Status tab)";
 			return CompletableFuture.failedFuture(new IllegalStateException(variantError));
 		}
+		JsonObject payload = f.requestJson();
+		// (Style unification U1) roles inline need palette.roles: an older helper would strip them and build the default palette
+		if (payload.has("palette") && payload.get("palette").isJsonObject() && payload.getAsJsonObject("palette").has("bible")
+			&& !Sidecar.state().features().contains("palette.roles")) {
+			variantError = "This helper is too old for an edited Style (it lacks palette.roles): update it, or pick a preset";
+			return CompletableFuture.failedFuture(new IllegalStateException(variantError));
+		}
 		variantSending = true;
 		variantError = null;
-		JsonObject payload = f.requestJson();
 		return Sidecar.variantRequest(payload).handle((ack, err) -> {
 			variantSending = false;
 			String jobId = err == null && ack.ok() ? jobId(ack) : null;

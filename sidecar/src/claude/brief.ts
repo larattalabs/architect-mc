@@ -305,6 +305,21 @@ export function reservedLines(r: DesignRequest['reserved']): string[] {
   ];
 }
 
+/**
+ * (Style unification U1) The brief's materials line for a request's `palette` (materials only, never bible set mode): the default
+ * palette is exactly it, and the sidecar builds and checks the design with it.
+ */
+export function paletteLines(spec: NonNullable<DesignRequest['palette']>): string[] {
+  if (typeof spec === 'string') return [`- materials: the palette preset \`${spec}\`, picked by the player. Make it the design's default palette (\`palette({ preset: '${spec}' })\`); the sidecar builds and checks the design with it.`];
+  if ('bible' in spec) {
+    const roles = Object.entries(spec.bible.roles).map(([k, v]) => `\`${k}\` ${v.replace(/^minecraft:/, '')}`).join(', ');
+    return [
+      `- materials: the player picked these materials (the Style \`${spec.bible.id}\`; materials only, the shapes and details are yours). Roles: ${roles}. Make the design's default palette exactly \`palette(${JSON.stringify(spec)})\` (\`import { palette } from '../lib/kit.mjs'\`), read every material from it (\`p.wall\`, \`p.plaster\` = wall_alt, \`p.stoneTrim\` = trim, \`p.roofStairs\`, \`p.frame\`, \`p.floor\`, \`p.accentPlanks\`, \`p.light\`, \`p.pane\`, \`p.foundation\`, \`p.path\`, the wood and stone sets), and build with \`--palette '${JSON.stringify(spec)}'\`: the sidecar builds and checks it with these roles.`,
+    ];
+  }
+  return [`- materials: the player picked the palette \`${JSON.stringify(spec)}\`. Make it the design's default palette (\`palette(${JSON.stringify(spec)})\`); the sidecar builds and checks the design with it.`];
+}
+
 /** BRIEF.md for a request: what the design agent reads first. */
 export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions): string {
   if (req.massing) return massingBrief(req, bp, opts);
@@ -326,7 +341,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     `- type: \`${req.type}\` (set \`type: '${req.type}'\` on the Blueprint). ${typeGuide(req.type)}`,
     `- checker profile for ${req.type}: ${profileLine(req.type, req.profile)}.`,
     `- style: "${req.style}". Interpret it with vanilla blocks; let it shape the materials, the roof form, the windows and the details.`,
-    req.materials ? `- materials: "${req.materials}". Make the design's default palette match them (a preset, or \`palette({ wood, stone, roof, accent })\` with the closest vanilla names).` : '- materials: your choice, fitting the type and the style: pick the default palette (a preset or `palette({ wood, stone, roof, accent })`).',
+    ...(req.palette !== undefined ? paletteLines(req.palette) : [req.materials ? `- materials: "${req.materials}". Make the design's default palette match them (a preset, or \`palette({ wood, stone, roof, accent })\` with the closest vanilla names).` : '- materials: your choice, fitting the type and the style: pick the default palette (a preset or `palette({ wood, stone, roof, accent })`).']),
     `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'}`,
     `- maximum size (the whole template, including roof overhangs, porch, chimney and garden): x <= ${m.x}, y <= ${m.y}, z <= ${m.z}. Use the space well, but never exceed it.`,
     plot,

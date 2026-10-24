@@ -11,6 +11,7 @@
 // a pool ticket) and re-enters its lane at the front for the revision turn, ahead of items not yet started.
 // Files: <scratch>/rounds/<n>/ (the .nbt, the sidecar JSON, the source, previews/, check.json) for every round that
 // passed the check; <scratch>/critique/<n>/ (the critic's renders, slices.txt, summary.json, verdict.json).
+import { setModePin } from './styles.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -666,9 +667,9 @@ export class Critiques {
     const base: DesignRequest = parsed.success
       ? { ...parsed.data }
       : ({ type: typeof bp.type === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(bp.type) ? bp.type : 'custom', style: 'as built', features: [], maxSize: { x: clamp(size.x, 7, 96), y: clamp(size.y, 6, 64), z: clamp(size.z, 7, 96) }, ...(typeof bp.name === 'string' ? { name: bp.name.slice(0, 40) } : {}) } as DesignRequest);
-    const pin = bp.bible && typeof bp.bible === 'object' ? (bp.bible as { id?: string; version?: number }) : undefined;
     const { group: _g, itemKey: _k, wave: _w, role: _r, redirect: _re, massing: _m, fromMassing: _f, massingVersion: _mv, ...clean } = base;
-    const req: DesignRequest = { ...clean, ...(pin?.id ? { bible: pin.id, bibleVersion: pin.version ?? 1 } : {}), critique: { ...(spec ?? {}), mode: 'report' } };
+    // (U1) a materials-only entry is critiqued without a bible (its pin only names the Style its roles came from)
+    const req: DesignRequest = { ...clean, ...setModePin(bp), critique: { ...(spec ?? {}), mode: 'report' } };
     const d = sc.designs.create(req);
     sc.designs.update(d.id, { critiqueOf: entryId, status: 'critiquing', step: 'critic: preparing the renders' });
     sc.log.info(`design ${d.id}: report critique of ${entryId}`);

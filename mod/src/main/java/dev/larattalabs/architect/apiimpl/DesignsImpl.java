@@ -210,8 +210,37 @@ final class DesignsImpl implements Designs {
 			if (r.reserved() != null) {
 				o.add("reserved", r.reserved().wire());
 			}
+			// (Style unification U1) materials only (only when set; refusalPalette first holds a helper without palette.roles)
+			if (r.palette() != null) {
+				o.add("palette", r.palette().deepCopy());
+			}
 		}
 		return o;
+	}
+
+	/**
+	 * (Style unification U1) Why a palette can't be sent (null: it can, or there is none): a helper without {@code palette.roles}
+	 * strips an unknown {@code palette} and would design with its own materials, silently; a palette and a bible exclude each other;
+	 * a massing has no materials. Pure.
+	 */
+	static @Nullable String refusalPalette(DesignRequest r, int protocol, java.util.Set<String> features) {
+		if (r.palette() == null) {
+			return null;
+		}
+		if (protocol < 2 || !features.contains("palette.roles")) {
+			return "a design with a Style's materials (palette) needs a helper with palette.roles (Style unification U1); this one does not have it";
+		}
+		if (r.bible() != null) {
+			return "a request takes a palette (materials only) or a bible (set mode), not both";
+		}
+		if (r.massing()) {
+			return "a massing has no materials: send the palette with its detail pass";
+		}
+		JsonElement p = r.palette();
+		if (!(p.isJsonObject() || p.isJsonPrimitive() && p.getAsJsonPrimitive().isString())) {
+			return "palette must be a preset name, palette inputs or {bible: {id, version, roles}}";
+		}
+		return null;
 	}
 
 	/** Why the helper can't take this request (null: it can): a group set, an open type or a bible without 4b. */
@@ -227,6 +256,7 @@ final class DesignsImpl implements Designs {
 		}
 		String why = refusal4c(r, b.protocol(), b.sidecarFeatures());
 		why = why != null ? why : refusalReserved(r, b.protocol(), b.sidecarFeatures());
+		why = why != null ? why : refusalPalette(r, b.protocol(), b.sidecarFeatures());
 		return why != null ? why : refusal5a(r.critique(), b.protocol(), b.sidecarFeatures());
 	}
 
@@ -720,6 +750,7 @@ final class DesignsImpl implements Designs {
 				case "opKeys", "estimate.kinds", "group.breakdown" -> "6c slice 0a";
 				case "copies", "smallEffort", "versionOf" -> "6c slice 0b";
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
+				case "palette.roles", "bible.save" -> "Style unification U1";
 				default -> "4b";
 			};
 			return what + " need a helper with phase " + phase + " (" + feature + "); this one does not have it";

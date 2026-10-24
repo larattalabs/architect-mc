@@ -107,6 +107,11 @@ export function variant(block, kind) {
 export const WOODS = ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak', 'mangrove', 'cherry', 'pale_oak', 'poplar', 'bamboo', 'crimson', 'warped'];
 const DARK_WOODS = new Set(['spruce', 'dark_oak', 'mangrove', 'crimson', 'warped']);
 
+/** The wood set of a WOODS name (planks, log, strippedLog, bark, stairs, slab, fence, door...): Style unification's fan-out reads it. */
+export function woodSetOf(w) {
+  return woodSet(w);
+}
+
 function woodSet(w) {
   if (!has(`${w}_planks`)) throw new Error(`palette: unknown wood '${w}' (one of ${WOODS.join(', ')})`);
   const pick = (...names) => { for (const n of names) if (n && has(n)) return qualify(n); return null; };
@@ -418,7 +423,23 @@ export const PALETTE_PRESETS = Object.freeze({
   mangrove: { wood: 'mangrove', stone: 'mud_bricks', roof: 'mangrove', accent: 'spruce', plaster: 'packed_mud' },
   crimson: { wood: 'crimson', stone: 'polished_blackstone_bricks', roof: 'nether_bricks', accent: 'crimson', plaster: 'polished_blackstone' },
   fortress: { wood: 'spruce', stone: 'stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak', stoneTrim: 'polished_andesite' },
+  // (Style unification U0, docs/STYLE-UNIFY.md) the word-only style chips as authored built-in Styles (AUTHORED_STYLES)
+  medieval: { wood: 'dark_oak', stone: 'stone_bricks', roof: 'spruce', accent: 'spruce', wall: 'white_terracotta' },
+  nordic: { wood: 'spruce', stone: 'cobbled_deepslate', roof: 'spruce', accent: 'dark_oak', plaster: 'stripped_spruce_wood', path: 'coarse_dirt' },
+  japanese: { wood: 'birch', stone: 'mossy_stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak', wall: 'white_wool', plaster: 'birch_planks' },
+  cozy: { wood: 'oak', stone: 'mossy_cobblestone', roof: 'dark_oak', accent: 'spruce', plaster: 'white_terracotta' },
+  fantasy: { wood: 'warped', stone: 'purpur_block', roof: 'crimson', accent: 'crimson', light: 'shroomlight' },
+  modern: {
+    wood: 'birch', stone: 'smooth_quartz', roof: 'polished_deepslate', accent: 'dark_oak', wall: 'white_concrete', plaster: 'light_gray_concrete',
+    frame: 'stripped_birch_log', light: 'sea_lantern', path: 'smooth_stone',
+  },
 });
+
+/**
+ * The presets added by Style unification U0 (the word-only style chips, authored): the golden fixtures recorded before them
+ * (test/fixtures/preset-builds.json, vocab/palettes-v0370.json) hold the other ten byte-unchanged and these as the only extras.
+ */
+export const AUTHORED_STYLES = Object.freeze(['medieval', 'nordic', 'japanese', 'cozy', 'fantasy', 'modern']);
 
 /** The presets as palettes (any can be tweaked: `PALETTES.rustic.with({ stone: 'mossy_cobblestone' })`). */
 export const PALETTES = Object.freeze(Object.fromEntries(Object.keys(PALETTE_PRESETS).map((n) => [n, palette({ preset: n })])));

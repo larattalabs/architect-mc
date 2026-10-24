@@ -13,7 +13,7 @@ import { BLOCKS } from '../lib/blocks.mjs';
 import * as V from '../lib/vocab.mjs';
 import { CREATIVE_ONLY, COSTS } from '../lib/vocab/survival.mjs';
 import { RARITY_DEFAULTS, validateRarity } from '../lib/vocab/rarity.mjs';
-import { PALETTES, paletteFromBible, STONE_FAMILIES, WOODS, woodFamilyOf } from '../lib/kit.mjs';
+import { AUTHORED_STYLES, PALETTES, paletteFromBible, STONE_FAMILIES, WOODS, woodFamilyOf } from '../lib/kit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(KIT, '..');
@@ -106,7 +106,11 @@ test('item 3: every built-in palette and every built-in and scenario bible\'s pa
       got[`${bdir}/${f}`] = sha(v);
     }
   }
-  assert.deepEqual(got, want);
+  // (Style unification U0) the fixture stays as recorded: every palette in it is byte-identical; the only new ones are the
+  // authored built-in Styles (kit.mjs AUTHORED_STYLES)
+  const kept = Object.fromEntries(Object.keys(want).map((k) => [k, got[k]]));
+  assert.deepEqual(kept, want);
+  assert.deepEqual(Object.keys(got).filter((k) => !(k in want)).sort(), AUTHORED_STYLES.map((n) => `preset:${n}`).sort());
 });
 
 test('item 4: one source: check.mjs and bom.mjs hold no literal list; creativeOnly = the 35 of phase 3, no 26.3 additions; COSTS = survival_items costs', () => {

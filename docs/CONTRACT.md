@@ -185,6 +185,8 @@ DesignRequest = {
 Design = { id: "d<n>", request, status, step, blueprintId?, size?, previews?, error?, createdAt, updatedAt }
 ```
 
+> **Style unification U1:** `DesignRequest.palette?` (protocol 2, helper feature `palette.roles`): a preset, inputs or a Style's roles inline `{bible: {id, version, roles}}`, materials only, never bible set mode; it excludes `bible`. See "Style unification U0+U1 contract" (end of this file).
+
 `DesignStatus` is the same as AgentCraft. The sidecar knows the library path from its launch flags; the
 mod does not send `outDir`.
 
@@ -316,6 +318,8 @@ How a variant job works:
   The entry gets `variantOf`, keeps the original's `request`, and gets `displayName` = `"<name> (<palette>, floors 2)"`.
 - One job at a time; seconds, not minutes.
 - A source that throws or fails the check marks the variant `failed`, with the checker's error lines.
+
+> **Style unification U1:** `palette` may also be a Style's roles inline `{bible: {id, version, roles}}` (feature `palette.roles`); it replaces the entry's recorded palette. `PaletteSpec` is strict: an unknown key is refused, never stripped. See "Style unification U0+U1 contract" (end of this file).
 
 ## Mod: library screen
 
@@ -925,6 +929,8 @@ A bible is an artifact, separate from library entries: `<gameDir>/architect/bibl
 - **Revise:** `bible.revise {id, notes}` creates version+1. Entries pin the bible version they were built with, and re-skinning
   to a newer version is a variant.
 
+> **Style unification U1:** a bible is a Style. Optional fields `tags`, `suggestedFeatures`, `blurb`, `basedOn`, `origin`; the built-in Styles are now 16 (the six word-only chips authored); `bible.save` makes a hand-made Style with no Claude call; every save adds a version and a pinned version is never rewritten or removed. See "Style unification U0+U1 contract" (end of this file).
+
 ## Component library and named parts (R3)
 
 - **Components:** `components.mjs` exports functions `(bp, at, opts)` that place a small part using the bible's roles:
@@ -1026,6 +1032,8 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
     - `ext` and `itemKey` survive a sidecar restart mid-group;
     - the estimate is within ±50% of the measured cost for the gate group, and the tolerance gets tightened as data accrues;
     - a soft-budget pause, extend and resume (sim backend).
+
+> **Style unification U1:** items 5-7 still hold. `Bible` gains the Style fields and `editable()`; `Bibles.save` and `Bibles.usable` are added; an owned Style (owner set) is Duplicate-only in Architect's UI and saved only by its owner. See "Style unification U0+U1 contract" (end of this file).
 
 ### Steward ask (2026-10-05): read the world's survival toggle (API 1.2.0, with the 4b Java side)
 
@@ -24787,3 +24795,207 @@ devserver) are archived in `artifacts/release-0430/v0430/` with a SOURCE.txt, fo
 
 - Everything listed under v0.42.0's, and D3's queued items (PLAN "Queued from slice D3").
 - If another slice reaches main before D3, this branch is stale: re-merge and re-run `release-version.mjs --check`.
+
+# Style unification U0+U1 contract: one Style, materials only, bible.save - DRAFT for Steward review
+
+Model: docs/STYLE-UNIFY.md. Noah's decisions: docs/PLAN.md "Style unification". Slice `slice/U01` (U0 kit + U1 wire). API: additive,
+a minor bump (the coordinator sets it at merge; the code says `NEXT`). Steward's review conditions (a)-(d) are folded in (§6, §7).
+
+## 1. Styles (U0, the kit)
+
+- **A Style is a bible** plus five optional fields (§4). The built-in Styles are the palette presets (`kit/lib/kit.mjs`
+  `PALETTE_PRESETS`): the ten of before, plus the six word-only style chips, authored (`AUTHORED_STYLES`). Every chip in
+  `DesignSpec.STYLES` now has a built-in Style of its id (rustic and desert were presets already).
+
+  | Style | wall | wall_alt | frame | floor | trim | foundation | roof | accent | light | path |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | medieval | white_terracotta | calcite | dark_oak_log | dark_oak_planks | smooth_stone | stone_bricks | spruce_planks | spruce_planks | lantern | dirt_path |
+  | nordic | spruce_planks | stripped_spruce_wood | spruce_log | spruce_planks | deepslate_bricks | cobbled_deepslate | spruce_planks | dark_oak_planks | lantern | coarse_dirt |
+  | japanese | white_wool | birch_planks | birch_log | birch_planks | stone_bricks | mossy_stone_bricks | deepslate_tiles | dark_oak_planks | lantern | dirt_path |
+  | cozy | oak_planks | white_terracotta | oak_log | oak_planks | cobblestone | mossy_cobblestone | dark_oak_planks | spruce_planks | lantern | dirt_path |
+  | fantasy | warped_planks | calcite | warped_stem | warped_planks | purpur_pillar | purpur_block | crimson_planks | crimson_planks | shroomlight | dirt_path |
+  | modern | white_concrete | light_gray_concrete | stripped_birch_log | birch_planks | quartz_block | smooth_quartz | polished_deepslate | dark_oak_planks | sea_lantern | smooth_stone |
+
+  Glass is `glass_pane` throughout. Each passes `validateBible` with the test house and no role-fitness warning; wall differs from
+  wall_alt; every roof has stairs and a slab; `palette({bible: n})` equals `palette({preset: n})` field by field. Modern's roof role
+  is stairs-capable (polished_deepslate); its flat look is a shape hint (`roofLanguage` "flat roofs: a deck with a parapet (kit.mjs
+  roofFlat)", `roofPitch: 0`, `overhang: 0`), not a role.
+- **Metadata** (`kit/lib/styles.mjs` `STYLE_META`, one row per preset): `tags`, `suggestedFeatures` (`DesignSpec.FEATURES` ids, at
+  most 6; a kit test reads DesignSpec.java), `blurb`, and for the six authored ones shape hints (proportions over the defaults,
+  `roofLanguage`). `builtinBible(n)` (and so the sidecar's built-in index) carries them plus `origin: "builtin"`. The ten older
+  presets keep the default proportions.
+- **Golden:** `kit/test/fixtures/preset-builds.json` and `kit/test/fixtures/vocab/palettes-v0370.json` are unchanged. Their tests
+  now hold every recorded key byte-equal and allow exactly the six authored Styles as new keys.
+- **The four main rows** (Wood / Stone / Roof / Accent, decision 4). Wood fills wall, frame and floor; Stone fills foundation and
+  trim; Roof and Accent fill one role each; wall_alt, light, glass and path are fixed (`FAN_OUT`, `FIXED_ROLES`).
+  - `mainOf(roles)` reads the rows back from the roles, exactly as `palette({bible})` derives them: the wood of the first wooden role
+    (wood, frame, accent, floor, wall, wall_alt, roof), the stone of the first stone-like role with stairs and slab, the roof, the
+    accent's wood. It's lossy: a role set by hand to another wood can move the Wood row.
+  - `editMain(roles, field, value)` re-derives only the roles that still follow the row: a Wood role whose block is of the current
+    wood's family moves to the same part of the new wood (planks stay planks, a stripped log stays one); a Stone role of the current
+    stone's family moves to the new stone (foundation) or its trim. Every other role (the Style's own, or one set by hand) stays.
+    Roof sets the roof role (a wood's planks for a wood); Accent the accent's planks. It returns a new roles object; an invalid
+    value throws.
+  - `provenanceOf(roles, base?)` tags each role `follows_wood`, `follows_stone`, `style` (equal to the base Style's, or no base
+    given) or `hand`. These drive the editor's "follows Wood" / "from X" / "custom" markers (U3).
+- **One table for JS and Java.** `styleTable()` is the fan-out as data (each wood's parts, block -> wood family, block -> stone
+  family, every block with stairs and slab and its trim, stairs/slab/wall -> full block). `tools/gen-palettes.mjs` writes it into
+  `palettes.json` (`styles`) beside each preset's `roles`, `tags`, `suggestedFeatures` and `blurb`. The same output is checked in as
+  `mod/src/main/resources/assets/architect_mc/palettes-fallback.json`, which is now `Palettes.FALLBACK`. The stale six-preset
+  literal is gone, so a jar built without node lists every preset. `library/StyleRoles.java` reads the table and has
+  `mainOf`, `editMain`, `provenance` and `fanOut`. Parity: `tools/gen-palettes.mjs --parity` records the cases
+  (`kit/test/fixtures/style-parity.json`: every built-in Style, a Claude-made bible and a hand mix, each row edited to several
+  values, the refusals) and `StyleRolesTest` replays them. `kit/test/styles.test.mjs` fails when either checked-in file is stale.
+
+## 2. Materials only: `DesignRequest.palette` (U1)
+
+- **Wire** (protocol 2, helper feature **`palette.roles`**): `design.request.request.palette?` is a preset name, palette inputs
+  `{preset?, wood?, stone?, roof?, accent?}`, or a Style's roles inline `{bible: {id, version, roles}}` (`id`/`version`: the Style
+  the roles came from, which for a custom mix is the Style it is based on; `roles`: what is built, at most 64, `[a-z][a-z0-9_]{0,31}`
+  -> a block id). It excludes `bible` (both: refused) and `massing` (a massing has no materials; send the palette with its detail
+  pass). A group's items never carry one: the group's bible is the materials.
+- **What the sidecar does.**
+  - It checks the palette with its kit at the request (`kit/tools/bible.mjs palette`: it builds a palette, and inline roles also
+    pass the bible checks, the test house included). One the kit can't build is refused at once, before any job exists.
+  - It checks and installs the design built with that palette (`build.mjs --palette`), whatever the design's own default is. The
+    brief tells the designer the player picked these materials and to make the default palette exactly that.
+  - **Never bible set mode:** no `bible/` files, no shared components, no "follow it over your own taste", no `--restraint`.
+  - The entry records the palette as its `palette`. With roles inline, the kit also records `{id, version}` as the entry's `bible`
+    (that version's pin, §6); the blocks come from the roles alone.
+  - The text `style` stays required, and `materials` text, if sent, is ignored in favour of the palette.
+  - Designed again (polish, versionOf, a report critique), a materials-only entry keeps its palette and gets no bible: its pin only
+    names the Style the roles came from (`setModePin`). An entry made in set mode (a `bible` request, a group) keeps its pin as
+    before.
+- **`PaletteSpec` is strict** (`design.request`, `variant.request`): an unknown key is refused. Before U1 the inputs object
+  wasn't strict, so `{bible: …}` parsed as `{}` and the default palette was built, silently. The bible branch is tried first. A
+  stored variant record still reads leniently.
+- **Java** (Since NEXT):
+  - `DesignRequest.palette()` (a `JsonElement`, null = none) is a new last component;
+  - `withPalette(JsonElement)`, `withStyle(Bible)` (materials only, from the Style's id, version and roles) and the static
+    `stylePalette(id, version, roles)`;
+  - `Limits.PALETTE_PRESET_MAX` (32), `PALETTE_BLOCK_MAX` (64) and `PALETTE_ROLES_MAX` (64), checked by FieldLimits before
+    sending.
+  - The mod sends `palette` only to a helper whose features list `palette.roles`. Otherwise the future fails: an older helper would
+    drop the field and design with its own materials. Callers can check `ArchitectApi.features().contains("palette.roles")`.
+- **Binary compatibility (Steward's review, condition c).**
+  - Every earlier canonical constructor of `DesignRequest` stays, as a secondary one delegating with the new fields null: 1.1.0's
+    14 arguments (Steward's `gateway/LotBrief.java:46`, `service/ChangeRequests.java:154`), 1.2.0, 1.3.0, 1.6.0, 1.11.0 and 1.37.0's
+    24. `Bible` keeps 1.2.0's 12 arguments and 1.6.0's 16. `ApiStyleU1Test` finds each by reflection.
+  - **Rule from now on:** a change to an API record that Steward constructs (`DesignRequest`, `Bible`, `BibleRequest`,
+    `GroupRequest`, ...) keeps every earlier canonical constructor and adds its own.
+
+## 3. Variants with a Style's roles
+
+- `variant.request.palette` (and `Library.makeVariant`'s `palette`) may be `{bible: {id, version, roles}}` (feature
+  `palette.roles`). It replaces the entry's recorded palette outright; the kit takes no other inputs with it. The new entry's id
+  is `<from>_<style id>` and its name `<name> (<style>)`. The mod fails the future against a helper without the feature.
+- The Variants dialog (`VariantForm`): a bible picked from the list carries its version and roles, and a Wood / Stone / Roof /
+  Accent edit then edits those roles (`StyleRoles.editMain`). The variant goes out with them inline, where before U1 the edit
+  silently dropped the bible (VariantForm.java:242, 251). Unedited, it's the re-skin it was (`bible: id`). A preset chip is another
+  Style: it replaces the bible. UI otherwise unchanged; U3 rebuilds it.
+
+## 4. Bible fields (additive, optional)
+
+| field | type | meaning |
+|---|---|---|
+| `tags` | string[] (<= 12, each 1-40) | a Style's tags |
+| `suggestedFeatures` | `DesignSpec.FEATURES` ids (<= 6, no duplicates) | the features a new design with this Style starts with |
+| `blurb` | string (<= 200) | one line for the Style browser |
+| `basedOn` | `{id, version}` | the Style it started from (a duplicate, a hand edit of a built-in) |
+| `origin` | `builtin` \| `claude` \| `hand` | a built-in Style, a bible job, or `bible.save` |
+
+- Validated by `validateBible` (`kit/lib/bible.mjs` `styleFieldsErrors`); `BibleInfo` carries them.
+- Bible jobs now write `origin: "claude"`. An installed bible from before U1 reads as `claude` with no tags; nothing is
+  rewritten.
+- Java `Bible` gains `tags()`, `suggestedFeatures()`, `blurb()`, `basedOn()` and `origin()`, plus `editable()` (not built in, and
+  the owner the player's: absent or a player UUID) and `modOwned()`.
+
+## 5. `bible.save`: a hand-made Style, no Claude call (feature `bible.save`)
+
+- **Request:** `bible.save {bibleId?, owner?, bible}` -> ack `{id, version, bible: BibleInfo}`. `bibleId` is used because `id` is
+  the envelope's correlation id.
+  - `bible`: `name`, `roles` and any of `scope, tags, suggestedFeatures, blurb, basedOn, proportions, roofLanguage, silhouette,
+    motifs, lighting, avoid, tiers, patterns, format, restraint, connectors, fluids, rarity`.
+  - Fields the store owns (`id, version, builtin, archived, cost, critique, createdAt, components, owner, origin, ...`) are
+    ignored; `origin` is set to `hand`.
+  - It is validated by the kit (`tools/bible.mjs validate`, the test house included), with the same limits as a bible job's.
+- **Where:** a new version `<gameDir>/architect/bibles/<id>/versions/<v>/` (v = the latest + 1; 1 for a new id), created
+  exclusively. It holds `bible.json` and the kit's reference `components.mjs`, so the Style still resolves for a group or a bible
+  design; it has no `bible.md` and no `sheet.png`, since the UI draws the preview from the roles.
+- **Ids:** `bibleId` absent makes a new Style, `bib_<slug of name>` (`_2`, `_3`, ... when taken).
+- **Refused:** a built-in id (duplicate it: no `bibleId`, `basedOn {id, version: 1}`); an id an unfinished bible job holds;
+  another owner's Style (§6); roles or fields the kit refuses.
+- **Java:** `Bibles.save(bibleId, JsonObject style, owner)` -> `CompletableFuture<Bible>`; the future fails when the helper lacks
+  `bible.save`. Since NEXT.
+
+## 6. Ownership and version permanence (Steward's review, conditions a and b)
+
+- **A version that anything pins is never rewritten or removed**, by a save, a duplicate or a clean-up. Saves only add versions:
+  - the version folder is created exclusively (`install`: a non-recursive `mkdir`, files copied with `COPYFILE_EXCL`); only the
+    `<id>/` top-level "latest" copy is refreshed;
+  - a unit test hashes every existing version folder before and after each save and each refusal (`sidecar/test/styles-u1.test.ts`).
+- **Clean-up:**
+  - `bible.delete` still refuses while any entry, group, design or massing pins a version, and for another owner's bible.
+  - The version GC (5a) no longer touches a mod-owned Style or a hand-made one at all, because their pins may live outside Architect
+    (a settlement's `BibleRef`).
+  - A Claude-made Style of the player's keeps 5a's rule: a version that is not the latest, pinned by nothing Architect knows, and
+    older than 30 days goes.
+  - A materials-only entry pins the Style its roles came from (its `bible`), so that version is kept too.
+- **Owner** (Steward's RC). An owner that is absent or a player UUID (8-4-4-4-12 hex) makes the Style the player's: editable in
+  Architect's UI, saved by the player (no owner, or that same UUID; a save keeps the stored owner), and under 5a's GC rule above.
+  - The Design tab's "Draft bible" sends no owner, so a player's own Claude-made bible is the player's.
+  - **Any other owner** is a mod's (`Bible.modOwned()`, sidecar `isModOwned`). It is Duplicate-only in Architect's UI, saved
+    only by that exact owner through `bible.save`, and the GC never removes any of its versions.
+  - Steward's form is **`steward_mc:settlement/<settlementId>`** (steward-mc `SettlementRunner.java:1523`). Existing worlds'
+    bibles already carry it, and nothing is rewritten.
+  - It is set through **`BibleRequest.owner`**, the third component of `new BibleRequest(prompt, name, owner, ...)`, sent as
+    `bible.request.request.owner`. The job copies it into `bible.json` `owner`, and `Bible.owner()` reads it back.
+  - Tests cover no owner, a UUID, `steward_mc:settlement/abc` and another mod's string: `ApiStyleU1Test.ownership` and
+    `sidecar/test/styles-u1.test.ts` (the save rule, and a GC run over four Claude-made bibles).
+
+## 7. What Steward can use for free (condition d)
+
+- `Bibles.get(id)`: a Style's head version, read locally with no helper call. `Bibles.get(id, version)`: one version.
+  `Bibles.list(owner)`: as before.
+- `Bibles.usable(owner)` (new, Since NEXT): the Styles a caller may design with, read locally: the built-in ones, the player's (no
+  owner, or a player UUID) and,
+  given an owner, that owner's; archived ones left out.
+- `DesignRequest.withStyle(bible)`: a materials-only design with any of them, no bible job. With these, "use an existing Style"
+  needs no new API. Steward's district flow can pin the chosen Style through the design entry it gets back.
+- Feature names, in `ArchitectApi.features()` as the helper sends them: `palette.roles` and `bible.save`.
+
+## 8. API version
+
+Additive only: `DesignRequest.palette` and its methods, the `Bible` fields and `editable()`, `Bibles.save` and `Bibles.usable`
+(defaults that throw on an older API), the three `Limits` constants, and the `Library.makeVariant` roles shape. A minor bump at
+merge (`Since NEXT` in the javadoc). `tools/api-compat.mjs`: the 0.42.0 and 0.41.0 apitest jars and the 0.42.0 mod jar's
+surface still resolve.
+
+## 9. Gate (DEV MODE)
+
+- **Units:**
+  - kit `node --test` (styles, bible, vocab, the whole suite);
+  - the sidecar's vitest (`styles-u1.test.ts`, plus limits, jobs and bundle for the feature list);
+  - `./gradlew build --offline` (`StyleRolesTest`, `ApiStyleU1Test`, `VariantFormTest`);
+  - the instant lints, `step-inputs check`, and api-compat.
+- **In game** (`u1-ingame`, `tools/gateu1.mjs ingame`; headless, the sim sidecar, $0):
+  1. `Bibles.usable` lists the built-ins.
+  2. A materials-only design with medieval: palette inline, no bible files, built of white_terracotta and dark_oak_log, pinned
+     medieval v1.
+  3. A variant after a Wood -> birch edit made in Java: frame birch_log, wall white_terracotta, provenance follows_wood / style.
+  4. `bible.save` v1 then v2: v1's folder byte-unchanged, both read back, the Style usable, a built-in id refused, and a design with
+     the saved head v2.
+
+## 10. Left for U2/U3
+
+- U2 `StyleForm` replaces VariantForm's palette half and the Design tab's style row. `StyleRoles` and `Palettes.presetRoles` are its
+  model, and the parity fixture is its test.
+- U3 is the browser and the editor. Favourites and recents live in the client's `style-meta.json`. A Style is Duplicate-only when
+  `!Bible.editable()`.
+- The Design tab still sends free-text `style` with no palette; U2/U3 send `withStyle` / an inline mix.
+- **A Style re-skins what a design reads.** The kit examples (and the sim's copies of them) take their walls from the wood set
+  (`p.planks`), not `p.wall`. A Style whose identity is a non-wood wall (medieval's white_terracotta, japanese's white_wool,
+  modern's white_concrete) changes their frame, floor, roof, trim and foundation, but not their walls. A design Claude makes with
+  the brief's materials line reads the roles. U3's previews and U4's A/B should expect this.
+- `sidecar/src/claude/contract.ts` (the design agent's contract excerpt) still lists the ten older presets. That is prompt text, so
+  it is left for a deliberate follow-up.

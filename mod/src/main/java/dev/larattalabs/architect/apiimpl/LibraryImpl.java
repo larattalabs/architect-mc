@@ -86,6 +86,11 @@ final class LibraryImpl implements Library {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
 		}
 		boolean hasPalette = palette != null && !palette.isJsonNull();
+		// (Style unification U1) roles inline: a helper without palette.roles strips the bible and builds the default palette, silently
+		if (hasPalette && palette.isJsonObject() && palette.getAsJsonObject().has("bible") && !b.sidecarFeatures().contains("palette.roles")) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(
+				"a variant with a Style's roles needs a helper with palette.roles (Style unification U1); this one does not have it")));
+		}
 		if (bible != null) {
 			String why = hasPalette ? "a variant takes a palette or a bible, not both" : DesignsImpl.unavailable4b(b, "reskin", "re-skins with a bible");
 			if (why != null) {
