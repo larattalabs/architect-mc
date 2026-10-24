@@ -12,7 +12,8 @@ import { checkRegion, walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { routePass, COST } from '../lib/region/passes/route.mjs';
 import { PROFILES } from '../lib/region/passes/moves/profiles.mjs';
-import { ladderPlan, CLIMB } from '../lib/connectors/climbGeom.mjs';
+import { ladderPlan, CLIMB, joins, splitState } from '../lib/connectors/climbGeom.mjs';
+import { BLOCKS, isCube } from '../lib/blocks.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
 import { encodeArvx, decodeArvx, VC } from '../lib/region/volume.mjs';
@@ -296,4 +297,51 @@ test('the coordinator\'s ruling (2026-10-23): a switchback\'s detour is judged a
   const w = part(await run(read('cl', /^a02_/)[0]), 'slope_switch');
   assert.equal(w.class, 'adjusted');
   assert.deepEqual(w.deviations.map((d) => [d.what, d.exceeds]), [['detour', true]]);
+});
+
+/**
+ * (Noah's look, 2026-10-24) Over a plan's virtual world, every fence, wall or pane its climb parts wrote: its sides agree with its
+ * neighbours (kit.mjs finalize's rule), and it stands on something (a cube, slab, stairs, fence or wall below) or hangs from the wall
+ * or deck (a cube or slab over it, or a side joined to a cube). Returns the bad cells.
+ */
+function connectableFaults(ir, vw) {
+  const parts = new Set((ir.parts ?? []).map((q, i) => (/^links/.test(q.id) ? i : -1)).filter((i) => i >= 0));
+  const st = (x, y, z) => { const s = vw.pal.states[vw.get(x, y, z)]; return s && !/^minecraft:(cave_|void_)?air$/.test(splitState(s).name) ? splitState(s) : null; };
+  const bad = { sides: [], floating: [], n: 0 };
+  vw.eachWritten((x, y, z, idx, f, part) => {
+    if (!parts.has(part)) return;
+    const s = splitState(vw.pal.states[idx]), fam = BLOCKS[s.name]?.family;
+    if (fam !== 'fence' && fam !== 'wall' && fam !== 'pane') return;
+    bad.n++;
+    const D = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
+    let joinedCube = false;
+    for (const [d, [dx, dz]] of Object.entries(D)) {
+      const n = st(x + dx, y, z + dz), want = joins(fam, n, d), got = fam === 'wall' ? s.props[d] !== 'none' : s.props[d] === 'true';
+      if (want !== got) bad.sides.push([x, y, z, d, s.name, n?.name ?? 'air']);
+      if (want && n && isCube(n)) joinedCube = true;
+    }
+    const below = st(x, y - 1, z), above = st(x, y + 1, z);
+    const holds = (b) => b && (isCube(b) || ['slab', 'stairs', 'fence', 'wall'].includes(BLOCKS[b.name]?.family));
+    const hangs = above && (isCube(above) || BLOCKS[above.name]?.family === 'slab');
+    if (!holds(below) && !hangs && !joinedCube) bad.floating.push([x, y, z, s.name]);
+  });
+  return bad;
+}
+
+test('Noah\'s look: every climb fence joins its neighbours and stands on something (or hangs from the wall or deck)', async () => {
+  const s = flatSurvey({ W: 240, D: 176 });
+  const p = await planRegion({ programFile: path.join(ROOT, 'kit', 'regions', 'climbs_demo.mjs'), survey: s.bytes, claim: s.claim, seed: '1', params: { variant: 'flat' } });
+  const n = goldenSurvey('s3');
+  const q = await planRegion({ programFile: path.join(ROOT, 'kit', 'regions', 'climbs_demo.mjs'), survey: n.bytes, claim: n.claim, seed: '1', params: { variant: 'natural' } });
+  const runs = [['flat', p, s], ['natural', q, n]];
+  for (const f of read('valid', /^v7a_cl_/)) { const r = await run(f); runs.push([f.name, { ir: r.res.ir, blobs: r.res.blobs }, r.survey]); }
+  let total = 0;
+  for (const [name, plan, sv] of runs) {
+    const { vw } = buildVirtual({ ir: plan.ir, survey: sv.bytes, blobs: (sha) => plan.blobs?.get?.(sha) ?? null });
+    const b = connectableFaults(plan.ir, vw);
+    total += b.n;
+    assert.deepEqual(b.sides, [], `${name}: sides that disagree with their neighbours`);
+    assert.deepEqual(b.floating, [], `${name}: posts on nothing`);
+  }
+  assert.ok(total > 40, `fences checked: ${total}`);
 });

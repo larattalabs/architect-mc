@@ -19,6 +19,7 @@ import { shapeOf, woodOf } from './style.mjs';
 import { variant } from '../kit.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
+import { BLOCKS, isCube } from '../blocks.mjs';
 
 export const CLIMB = Object.freeze({ minAscent: 2, railDrop: 3, rest: 24, restMin: 8, restMax: 24, ladderMax: 48, topRail: 2, lampLight: 15 });
 
@@ -130,6 +131,29 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
       }
     }
   }
+  // ---- half-steps (Noah's look, 2026-10-24): a bottom slab on a walk or landing column whose next cell along the path stands 1
+  // higher (a stair's foot, a switchback's rise, a landing's edge), so the climb reads in half blocks; the route cleared 3 over it
+  if (o.halfSteps !== false && o.roles.halfStep && (o.kind === 'stair' || o.kind === 'switchback')) {
+    const col = new Map();
+    e.segments.forEach((g) => { if (g.shared) return; for (const q of footprintOf(e.path.slice(g.from, g.to + 1), e.width)) { const k = `${q[0]},${q[1]}`; if (!col.has(k)) col.set(k, { x: q[0], z: q[1], y: q[2], idx: g.from + q[4], kind: g.kind }); } });
+    for (const c of col.values()) {
+      if (c.kind !== 'walk' && c.kind !== 'landing' && c.kind !== 'gate') continue;
+      const up = DIR4.some(([dx, dz]) => { const n = col.get(`${c.x + dx},${c.z + dz}`); return n && Math.abs(n.idx - c.idx) <= 1 && n.y === c.y + 1; });
+      if (!up || used.has(`${c.x},${c.z}`)) continue;
+      put(c.x, c.y + 1, c.z, o.roles.halfStep, 'half');
+      meta.halfSteps = (meta.halfSteps ?? 0) + 1;
+    }
+  }
+  // ---- slab edges on a switchback's turns: a curb along each hairpin landing's open sides, on level ground beside it
+  if (o.kind === 'switchback' && o.roles.halfStep && o.curbs !== false) {
+    const seen = new Set();
+    for (const l of e.landings ?? []) for (const [x, z] of l.cells) for (const [dx, dz] of DIR4) {
+      const ox = x + dx, oz = z + dz, k = `${ox},${oz}`;
+      if (own.has(k) || used.has(k) || seen.has(k) || taken(ox, oz) || land.groundAt(ox, oz) !== l.y) continue;
+      seen.add(k);
+      put(ox, l.y + 1, oz, o.roles.halfStep, 'curb');
+    }
+  }
   // ---- switchback retaining: T2's columns (the land beside over 2 higher), in the role, capped with the trim's slab
   if (o.kind === 'switchback' && o.retaining !== 'none') {
     const seen = new Set();
@@ -155,7 +179,7 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
       const p = ladderPlan(lc, rest, side);
       const faceBad = p.faces.filter(([x, y, z]) => !land.sturdy(x, y, z));
       // a landing's deck stands in the open, its brackets against the face (a sturdy face cell behind each)
-      const deckBad = p.landings.some((l) => l.deck.some(([x, z]) => (!(x === lc.x && z === lc.z) && (own.has(`${x},${z}`) || taken(x, z))) || land.groundAt(x, z) >= l.y - 1)); // (A, the ladder's own column, may hold a deck)
+      const deckBad = p.landings.some((l) => l.rails.some(([x, z]) => land.groundAt(x, z) >= l.y - 1) || l.deck.some(([x, z]) => (!(x === lc.x && z === lc.z) && (own.has(`${x},${z}`) || taken(x, z))) || land.groundAt(x, z) >= l.y - 1)); // (A, the ladder's own column, may hold a deck)
       const brBad = p.landings.flatMap((l) => l.faces.filter(([x, y, z]) => !land.sturdy(x, y, z) || !land.sturdy(x, y - 1, z)));
       // the first flight in B: the climber side-steps from A's foot to B's, level
       const topBad = p.startB && (land.groundAt(p.B[0], p.B[1]) !== lc.y0 - 1 || own.has(`${p.B[0]},${p.B[1]}`) || taken(p.B[0], p.B[1]));
@@ -184,7 +208,8 @@ export function climbCells(e, o, land, { taken = () => false } = {}) {
     for (const l of plan.landings) {
       for (const [x, z] of l.deck) put(x, l.y - 1, z, o.roles.landing, 'deck');
       for (const [x, y, z] of l.brackets) put(x, y - 1, z, o.roles.bracket, 'bracket');
-      for (const [x, z] of l.rails) { put(x, l.y - 1, z, o.roles.rail, 'rail'); put(x, l.y, z, o.roles.rail, 'rail'); }
+      // (the rail line stands on a full block beside the deck: no post floats; Noah's look, 2026-10-24)
+      for (const [x, z] of l.rails) { put(x, l.y - 1, z, o.roles.landingBase, 'deck'); put(x, l.y, z, o.roles.rail, 'rail'); }
       // the landing's lamp: a lantern on its far rail post
       if (o.lamps !== false && o.roles.light) { const [x, z] = l.rails[2]; put(x, l.y + 1, z, o.roles.light, 'lamp'); meta.lamps++; }
     }
@@ -271,7 +296,7 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
     const taken0 = takenBut(e.id);
     const o = { rails: 'drops', retaining: 'plain', rest: CLIMB.rest, top: 'gate', lamps: true, ...(opts?.[e.id] ?? {}), roles };
     const { cells, meta } = climbCells(e, o, land, { taken: taken0 });
-    const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken: taken0, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support').map((c) => `${c[0]},${c[2]}`)), rails: new Map(cells.filter((c) => c[4] === 'rail' && c.length === 5).map((c) => [`${c[0]},${c[2]}`, c[1]])) });
+    const lamps = o.lamps === false ? [] : climbLamps(e, land, { every: Math.max(4, Math.floor((12 * levelOf(roles.light)) / 15)), light: roles.light, post: roles.post, support: roles.support, taken: taken0, skip: new Set(cells.filter((c) => c[4] === 'rail' || c[4] === 'support' || c[4] === 'curb').map((c) => `${c[0]},${c[2]}`)), rails: new Map(cells.filter((c) => c[4] === 'rail' && c.length === 5).map((c) => [`${c[0]},${c[2]}`, c[1]])) });
     // ((6c KC, §5) a fluid body's cells are its own: a rail, support, lamp or cap never lands in its hard or watch sets (skipped); the
     // treads, as streets, are the route's: KC's rule there)
     const inBody = (c) => { if (!kept) return null; for (let y = c[1]; y <= (c.length > 5 ? c[5] : c[1]); y++) { const k = kept(c[0], y, c[2]); if (k) return { ...k, at: [c[0], y, c[2]] }; } return null; };
@@ -285,7 +310,7 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
       err.evidence = { kind: 'body', body: k.body, part: k.part, set: k.set, at: k.at, what: c[4] };
       throw err;
     }
-    const all = [...cells, ...lamps].filter((c) => !(['rail', 'support', 'lamp', 'post', 'cap', 'retain'].includes(c[4]) && inBody(c)));
+    const all = joinClimb([...cells, ...lamps].filter((c) => !(['rail', 'support', 'lamp', 'post', 'cap', 'retain'].includes(c[4]) && inBody(c))), land, fps.get(e.id));
     meta.lamps += lamps.filter((c) => c[4] === 'lamp').length;
     if (all.length) {
       const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage, set: 'path' });
@@ -308,6 +333,58 @@ export function emitClimbs(r, edges, { opts, stage, part = 'links_climbs', land,
   return res;
 }
 
+/** A state string's name and props. */
+export function splitState(s) {
+  const m = /^([^[]+)(?:\[(.*)\])?$/.exec(String(s));
+  const props = {};
+  if (m?.[2]) for (const kv of m[2].split(',')) { const [k, v] = kv.split('='); props[k] = v; }
+  return { name: m ? m[1] : String(s), props };
+}
+const stateOf = (name, props) => { const ks = Object.keys(props).sort(); return ks.length ? `${name}[${ks.map((k) => `${k}=${props[k]}`).join(',')}]` : name; };
+const JOIN_DIRS = Object.freeze({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] });
+/** The kit's connects rule (kit.mjs finalize): does a `fam` block join neighbour state `n` (or null) on side `dir`? */
+export function joins(fam, n, dir) {
+  if (!n) return false;
+  const nf = BLOCKS[n.name]?.family;
+  if (fam === 'pane') return nf === 'pane' || nf === 'wall' || isCube(n);
+  if (fam === 'fence') return nf === 'fence' || (nf === 'fence_gate' && ['north', 'south'].includes(n.props.facing) === ['east', 'west'].includes(dir)) || isCube(n);
+  if (fam === 'wall') return nf === 'wall' || nf === 'pane' || nf === 'fence_gate' || isCube(n);
+  return false;
+}
+/** A connectable state's sides set from its neighbours (`at(x, y, z)` -> {name, props} or null), as kit.mjs finalize does. */
+export function joinedState(s, x, y, z, at) {
+  const st = splitState(s), fam = BLOCKS[st.name]?.family;
+  if (fam !== 'fence' && fam !== 'wall' && fam !== 'pane') return s;
+  const props = { ...st.props };
+  const conn = {};
+  for (const [d, [dx, dz]] of Object.entries(JOIN_DIRS)) conn[d] = joins(fam, at(x + dx, y, z + dz), d);
+  if (fam === 'wall') {
+    for (const d of Object.keys(JOIN_DIRS)) props[d] = conn[d] ? 'low' : 'none';
+    const straight = (conn.north && conn.south && !conn.east && !conn.west) || (conn.east && conn.west && !conn.north && !conn.south);
+    props.up = String(!straight || !!at(x, y + 1, z));
+    props.waterlogged ??= 'false';
+  } else { for (const d of Object.keys(JOIN_DIRS)) props[d] = String(conn[d]); props.waterlogged ??= 'false'; }
+  return stateOf(st.name, props);
+}
+/**
+ * (7a CL, Noah's look 2026-10-24) The climb's fences, walls and panes joined to their neighbours: its own cells (the last write per
+ * cell), else the climb's walk (its footprint's surface: the tread, a partial block, never joined; under it the fill, a cube; over it
+ * air), else the land (rock and soil are cubes). Cells keep their order; a column cell (retaining) is left as it is.
+ */
+export function joinClimb(cells, land, walk = new Map()) {
+  const own = new Map();
+  for (const c of cells) { const y1 = c.length > 5 ? c[5] : c[1]; for (let y = c[1]; y <= y1; y++) own.set(`${c[0]},${y},${c[2]}`, c[3]); }
+  const CUBE = { name: 'minecraft:stone', props: {} };
+  const at = (x, y, z) => {
+    const k = `${x},${y},${z}`;
+    if (own.has(k)) { const s = own.get(k); return s === null ? null : splitState(s); }
+    const w = walk.get(`${x},${z}`);
+    if (w !== undefined) return y < w ? CUBE : null;
+    return land.sturdy(x, y, z) ? CUBE : null;
+  };
+  return cells.map((c) => (c.length > 5 || c[3] === null ? c : [c[0], c[1], c[2], joinedState(c[3], c[0], c[1], c[2], at), ...c.slice(4)]));
+}
+
 const levelOf = (s) => (/lantern|torch|glowstone|sea_lantern|shroomlight|froglight|lamp/.test(String(s)) ? 15 : 15);
 
 /** The fittings' blocks from the plan's roles (the bible's connectors member resolved: ctx.connectors), with each one's fallback. */
@@ -317,6 +394,9 @@ export function climbRoles(r) {
   const railBlock = role(c.stair?.rail, ['rail']) ?? 'minecraft:oak_fence';
   const rail = shaped(railBlock, 'wall', 'fence', 'self');
   const support = role(null, ['foundation', 'structure']) ?? 'minecraft:cobblestone';
+  // the half-step slab: the path role's slab, else the stair tread's or the structure's, else cobblestone's
+  const slabOf = (b) => { const v = b ? shaped(b, 'slab') : null; return v ? `${v.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null; };
+  const halfStep = slabOf(role(null, ['path'])) ?? slabOf(role(c.stair?.tread, ['structure'])) ?? slabOf(support) ?? 'minecraft:cobblestone_slab[type=bottom,waterlogged=false]';
   const retain = role(c.switchback?.retaining, ['structure', 'foundation']);
   const trim = role(null, ['trim']);
   const cap = trim ? shaped(trim, 'slab') : null;
@@ -326,7 +406,8 @@ export function climbRoles(r) {
   // W's fixture for the light role, stood on a post (a hanging lantern stands; a sea lantern or glowstone is a bollard block)
   const fx = fixtureFor(r.roles?.light, railBlock);
   const light = fx.kind === 'hanging_lantern' ? fx.light.replace('hanging=true', 'hanging=false') : fx.light;
-  return { rail, railBlock: role(c.ladder?.gate, ['rail']) ?? railBlock, support, retain, cap: cap ? `${cap.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null,
+  return { halfStep, rail, railBlock: role(c.ladder?.gate, ['rail']) ?? railBlock, support, retain, cap: cap ? `${cap.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null,
+    landingBase: isCube({ name: String(floor).replace(/\[.*$/, '') }) ? String(floor).replace(/\[.*$/, '') : 'minecraft:oak_planks',
     landing: landing && /_slab/.test(landing) ? `${landing.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : landing, bracket: shaped(ladderRail, 'fence', 'self'),
     light, post: shaped(railBlock, 'fence', 'self') };
 }

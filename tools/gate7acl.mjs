@@ -497,10 +497,19 @@ steps.look = async () => {
         if (d?.top) out.shots.push(await shot(`${tag}_ladder_top`, [d.top[0] - 4.5, d.top[1] + 4, d.top[2] + 4.5], [d.top[0] + 0.5, d.top[1], d.top[2] + 0.5]));
       } else out.shots.push(await shot(`${tag}_${id}_down`, [top[0] + 0.5, top[1] + 3.6, top[2] + 0.5], [mid[0] + 0.5, mid[1] + 1, mid[2] + 0.5]));
     }
+    // (Noah's look, 2026-10-24) close-ups: the ladder's rest landing, a switchback turn, a stair's foot
+    const rec = (k) => (meta.climbs ?? []).find((c) => c.kind === k);
+    const lnd = rec('ladder')?.detail?.[0]?.rest?.[0];
+    if (lnd) out.shots.push(await shot(`${tag}_close_landing`, [lnd.deck[1][0] - 3.5, lnd.y + 1.5, lnd.deck[1][1] + 3.5], [lnd.deck[0][0] + 0.5, lnd.y - 0.5, lnd.deck[0][1] + 0.5]));
+    const turn = rec('switchback')?.route?.landings?.[0];
+    if (turn) { const [x, z] = turn.cells[0]; out.shots.push(await shot(`${tag}_close_turn`, [x + 5.5, turn.y + 5, z + 5.5], [x + 0.5, turn.y, z + 0.5])); }
+    const sr = rec('stair')?.route;
+    const fg = sr?.segments?.find((g) => g.kind === 'stair');
+    if (fg) { const f0 = sr.path[Math.max(0, fg.from - 1)], f1 = sr.path[Math.min(sr.path.length - 1, fg.from + 3)]; out.shots.push(await shot(`${tag}_close_stair_foot`, [f0[0] + 4.5, f0[1] + 2.6, f0[2] + 4.5], [f1[0] + 0.5, f1[1] + 0.5, f1[2] + 0.5])); }
     await call('dev.release', {}).catch(() => null);
     await leaveWorld();
   }
-  check(out.shots.length >= 3 * LOOK_BIBLES.length && out.shots.every((x) => fs.existsSync(x.file)), `look: ${out.shots.length} shots in ${path.join(OUT, 'look')} (the gallery's)`);
+  check(out.shots.length >= 6 * LOOK_BIBLES.length && out.shots.every((x) => fs.existsSync(x.file)), `look: ${out.shots.length} shots in ${path.join(OUT, 'look')} (the gallery's)`);
   spendZero();
   return out;
 };
