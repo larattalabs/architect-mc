@@ -60,10 +60,11 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   for (const n of PROFILE_NAMES) {
     const p = PROFILES[n];
     assert.deepEqual(Object.keys(p).sort(), ['cost', 'ladderMax', 'ladders', 'stairs']);
-    assert.deepEqual({ ...COST, ...p.cost }, { ...COST }, n);
-    assert.equal(p.ladderMax, LADDER_MAX);
-    assert.equal(p.stairs, true);
-    assert.equal(p.ladders, true);
+    // ((7a CL) CL set the values (cl.test.mjs judges them): each cost a member of COST, the flags booleans)
+    for (const k of Object.keys(p.cost)) assert.ok(k in COST, `${n}.${k}`);
+    assert.ok(Number.isInteger(p.ladderMax) && p.ladderMax >= LADDER_MAX);
+    assert.equal(typeof p.stairs, 'boolean');
+    assert.equal(typeof p.ladders, 'boolean');
   }
   // a slope and a cliff (a player-only edge may ladder): the same route with each profile and without
   const W = 64, D = 48;
@@ -74,7 +75,8 @@ test('§3.1: the profiles are frozen by name and shape, each equal to the pass\'
   assert.ok(out0.edges.every((e) => e.ok), JSON.stringify(out0.failed));
   assert.ok(out0.edges[0].segments.some((g) => g.kind === 'ladder') && out0.edges[1].segments.some((g) => g.kind === 'stair' || g.kind === 'landing'), 'the case climbs');
   const base = JSON.stringify(out0);
-  for (const n of PROFILE_NAMES) assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: n })) }).data), base, n);
+  // ((7a CL) without a profile the pass is T2's; an edge with CL's profiles is cl.test.mjs's)
+  assert.equal(JSON.stringify(routePass(s, [], { edges: edges.map((e) => ({ ...e, profile: null })) }).data), base);
   assert.throws(() => routePass(s, [], { edges: [{ ...edges[0], profile: 'escalator' }] }), /profile must be one of stair, switchback, ladder/);
 });
 
@@ -109,7 +111,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const d = diffCatalogues(pre, golden, { pending: [{ part: 'rail_1', block: 'connector.rail' }, { part: 'x', block: 'connector.span_bridge' }] });
   // ((7a slices) each 7a slice flips its own kinds reserved -> supported (CW: connector.catwalk): those flips are the slices' and are
   // left out here, so this item keeps checking exactly the foundation's three entries whichever slices have merged)
-  const flipped = new Set(K7.KINDS_7A.map((k) => `connector.${k}`).filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
+  // ((7a K2) and K2's wall.along)
+  const flipped = new Set([...K7.KINDS_7A.map((k) => `connector.${k}`), 'wall.along'].filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
@@ -122,7 +125,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
   assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
-  for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, `${e.id}: ${e.sinceApi}`);
+  // (released in v0.43.0 at API 1.40.0, catalogue-v0430.json: a later release's golden.api moves on, the stamp stays)
+  for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.40.0', `${e.id}: ${e.sinceApi}`);
   // every reserved 7a kind still has its extension fixture; span_bridge left e15
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)));
   assert.ok(!ext.has('connector.span_bridge'));

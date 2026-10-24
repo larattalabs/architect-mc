@@ -13,7 +13,7 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { UNCHANGED_EXCEPTIONS as VOCC_EXCEPTIONS } from './gate6cvoc-c.mjs';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs';
 import { inSlice } from './gate-part.mjs'; // (6c FL) the street ext normalised, FL's named movers
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
@@ -32,6 +32,17 @@ export function baseTree(root) {
 
 export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
   // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+  const sk = baseDir ? null : identicalToBase(root);
+  if (sk) {
+    const all = fixtures(root).filter(([name]) => !(only && !only.test(name)));
+    const added = all.filter(([, fx]) => /"irrigate":/.test(JSON.stringify(fx.plan))).map(([name]) => name);
+    const n = all.length - added.length;
+    const planned = fixtures(root).filter(([name, fx], k) => !(only && !only.test(name)) && !/"irrigate":/.test(JSON.stringify(fx.plan)) && inSlice(k, slice)).length;
+    check(true, skippedLine(sk));
+    if (!only) check(n >= 230, `${n} committed fixtures without irrigate present (every dir, the 59 asks included)`);
+    return { base: sk.base, head: sk.head, fixtures: {}, added, n, same: n, differ: [], skipped: true, ...(slice ? { slice: { slices: slice, planned, elsewhere: n - planned } } : {}) };
+  }
   const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);

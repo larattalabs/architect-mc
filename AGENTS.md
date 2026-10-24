@@ -52,7 +52,8 @@ gate anything:
 ## Build and test
 
 - **Java:** `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home`. In a new worktree, first run
-  `cp -c -R ~/Developer/LarattaLabs/architect-mc/.gradle-home .` (an APFS clone, cheap). Then
+  `cp -c -R ~/Developer/LarattaLabs/architect-mc/.gradle-home . && rm -f .gradle-home/daemon/*/registry.bin*` (an APFS clone, cheap;
+  the copied daemon registry would otherwise point Gradle at the original's live daemons). Then
   `cd mod && ./gradlew build --offline`.
 - **lab-ui** (`dev.larattalabs:lab_ui`, the shared UI library, jar-in-jar): `LAB_UI_DIR`/`-Plab_ui.dir` forces a
   checkout (warns UNRELEASED; never publish that build); else `../lab-ui` only when clean and exactly at tag
@@ -88,4 +89,11 @@ gate anything:
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. PR descriptions carry no "Generated
   with Claude Code" footer.
 - No `rm -rf` outside build/temp dirs, no `git reset --hard`, no force-push.
+- **Never `./gradlew --stop`**, and never point GRADLE_USER_HOME at another repo's or checkout's home: it kills other sessions'
+  running clients. A new clone or worktree gets its own `cp -c -R` copy with `daemon/*/registry.bin*` deleted before any Gradle command (a
+  copied registry still lists the original's live daemons, so `--stop` or a daemon connect reaches them); stop only the daemons
+  you started, by PID.
+- **Everything generated is themed (Noah, 2026-10-24).** Every block a generator, connector or region writes comes from the
+  style's roles (or their slab/stairs/wall/fence shape variants), with a fallback to the nearest role, never a hard-coded oak
+  or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. lint-look checks it.
 - Don't tune prompts against the eval briefs. A failed quality gate is reported as "not shown", with the data.

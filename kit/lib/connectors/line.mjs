@@ -341,3 +341,196 @@ export function lineCells(line, t) {
   });
   return { positions: positions.map(({ x, z, axis }) => ({ x, z, axis })), cells: [...seen.values()], ends: [0, line.length - 1], closed: false };
 }
+
+// ------------------------------------------------------------------ (7a K2) along a boundary (wall.along)
+
+/** (K2, §2) Spine cells per run: each run of 8 takes its own offset, as a ring's side does. */
+export const ALONG_RUN = 8;
+/** (K2) How far past `distance` a run may step (soft: a `move` deviation, judged by the part's tolerance). */
+export const ALONG_REACH = 16;
+/** (K2) The offset line is smoothed over +-SMOOTH spine cells (a boundary's wiggles leave no straight run for a gate). */
+const SMOOTH = 4;
+
+/** The cell a spine point offsets to at distance d on side `sign` (normalAt's Chebyshev normal, rounded). */
+const offsetCell = (spine, i, d, sign, nrm) => { const [nx, nz] = nrm[i]; return [Math.round(spine[i][0] + nx * d * sign), Math.round(spine[i][1] + nz * d * sign)]; };
+
+/**
+ * The side of a spine a wall stands on: 1 (left of the spine's travel, its first cell to its last) or -1. `side`: left, right,
+ * toward_anchor, away_from_anchor (with `anchor` [x, z]) or either: the side with more clear cells in the band of `dist` (ties left);
+ * a shore's side is always the land. `nrm`: the spine's normals.
+ */
+export function alongSide(G, spine, nrm, { side = 'either', kind, anchor = null, dist: [lo, hi], waterAt }) {
+  if (kind === 'shore') {
+    let votes = 0;
+    spine.forEach((p, i) => { votes += waterAt(...offsetCell(spine, i, 2, 1, nrm)) ? -1 : 1; });
+    return { sign: votes >= 0 ? 1 : -1, why: 'land' };
+  }
+  if (side === 'left') return { sign: 1, why: 'left' };
+  if (side === 'right') return { sign: -1, why: 'right' };
+  if ((side === 'toward_anchor' || side === 'away_from_anchor') && anchor) {
+    let bi = 0, bd = Infinity;
+    spine.forEach((p, i) => { const d = Math.max(Math.abs(p[0] - anchor[0]), Math.abs(p[1] - anchor[1])); if (d < bd) { bd = d; bi = i; } });
+    const [nx, nz] = nrm[bi], dot = nx * (anchor[0] - spine[bi][0]) + nz * (anchor[1] - spine[bi][1]);
+    const toward = dot >= 0 ? 1 : -1;
+    return { sign: side === 'toward_anchor' ? toward : -toward, why: side };
+  }
+  const clear = (sign) => { let n = 0; for (let i = 0; i < spine.length; i++) for (let d = lo; d <= hi; d++) { const [x, z] = offsetCell(spine, i, d, sign, nrm); const k = G.at(x, z); if (k >= 0 && !G.ob[k]) n++; } return n; };
+  const l = clear(1), r = clear(-1);
+  return { sign: r > l ? -1 : 1, why: 'either', clear: { left: l, right: r } };
+}
+
+/** A 4-connected join from cell a to b (x first, else z first when x first's corner is blocked): the cells after a, b included. */
+function joinCells(G, a, b) {
+  const legs = (xFirst) => {
+    const out = [];
+    let [x, z] = a;
+    const sx = Math.sign(b[0] - x), sz = Math.sign(b[1] - z);
+    if (xFirst) { while (x !== b[0]) { x += sx; out.push([x, z]); } while (z !== b[1]) { z += sz; out.push([x, z]); } } else { while (z !== b[1]) { z += sz; out.push([x, z]); } while (x !== b[0]) { x += sx; out.push([x, z]); } }
+    return out;
+  };
+  const okAll = (cs) => cs.every(([x, z]) => { const k = G.at(x, z); return k >= 0 && !G.ob[k]; });
+  const xf = legs(true);
+  if (a[0] === b[0] || a[1] === b[1] || okAll(xf)) return xf;
+  const zf = legs(false);
+  return okAll(zf) ? zf : xf;
+}
+
+/**
+ * (K2, §2) The line of a wall along a spine: each run of ALONG_RUN spine cells offset by the smallest clear distance in `dist`
+ * (Chebyshev, D2's measure) to `sign`'s side, joined at the run ends by L legs, the 4-connected supercover of the whole (a loop the
+ * offset folds into on an inner bend cut out), the wall `t` thick toward the spine (lineCells: to the right of travel). A run whose
+ * every offset in `dist` is blocked steps outside it (at most ALONG_REACH, never into the spine: a `move`). The line's ends clip at the
+ * claim margin. Network walk cells are crossings when every course of a straight run with a jamb each side is one (an open gate);
+ * any other walk cell under the wall blocks its run. Returns `{ok: true, line: [[x, z, h]], lc (lineCells), runs: [{from, to, offset}],
+ * window: [i0, i1], move, crossings: [{positions: [a, b]}]}` or `{ok: false, code, run, blockers, tried}`.
+ */
+export function alongLine(G, spine, nrm, { sign, dist: [lo, hi], t, reach = ALONG_REACH, maxRounds = 64 }) {
+  const nRuns = Math.ceil(spine.length / ALONG_RUN);
+  const minD = Math.max(1, t - 1);
+  // each run's offset order: in range ascending, then outside it by how far (above first at a tie)
+  const order = [];
+  for (let d = Math.max(lo, minD); d <= hi; d++) order.push(d);
+  for (let m = 1; m <= reach; m++) { if (hi + m <= 64) order.push(hi + m); if (lo - m >= minD) order.push(lo - m); }
+  const idx = new Array(nRuns).fill(0);
+  const seen = Array.from({ length: nRuns }, () => []);
+  const clsOf = (k) => (k < 0 ? OB.OUT_OF_CLAIM : G.ob[k]);
+  // a cell's Chebyshev distance to the spine (its cells within +-24 of index i)
+  const spineDist = (c, i) => { let m = Infinity; for (let q = Math.max(0, i - 28); q <= Math.min(spine.length - 1, i + 28); q++) m = Math.min(m, Math.max(Math.abs(spine[q][0] - c[0]), Math.abs(spine[q][1] - c[1]))); return m; };
+  // a run's own pre-check: every course of every offset cell clear (walk cells allowed: crossings, judged on the built line)
+  const runBlockers = (r, d) => {
+    const b = new Set();
+    for (let i = r * ALONG_RUN; i < Math.min(spine.length, (r + 1) * ALONG_RUN); i++) for (let k = 0; k < t; k++) { const [x, z] = offsetCell(spine, i, d - k, sign, nrm); const c = clsOf(G.at(x, z)); if (c) b.add(c); }
+    return b;
+  };
+  const advance = (r, also = null) => {
+    for (;;) {
+      if (idx[r] >= order.length) return false;
+      const b = runBlockers(r, order[idx[r]]);
+      if (also && idx[r] === also.at) for (const c of also.cls) b.add(c);
+      // (an end run out of the claim is clipped, not refused)
+      const endRun = r === 0 || r === nRuns - 1;
+      if (!b.size || (endRun && [...b].every((c) => c === OB.OUT_OF_CLAIM))) return true;
+      seen[r].push(b);
+      idx[r]++;
+      also = null;
+    }
+  };
+  const refuse = (r) => {
+    const every = [1, 2, 3, 4, 5, 6].filter((k) => seen[r].length && seen[r].every((s) => s.has(k)));
+    const any = [...new Set(seen[r].flatMap((s) => [...s]))].sort((a, b) => a - b);
+    const cls = every[0] ?? any[0] ?? OB.OVERLAP;
+    const counts = {};
+    for (const s of seen[r]) for (const c of s) counts[OB_NAME[c]] = (counts[OB_NAME[c]] ?? 0) + 1;
+    return { ok: false, code: OB_CODE[cls], cls: OB_NAME[cls], run: r, spine: [spine[r * ALONG_RUN], spine[Math.min(spine.length, (r + 1) * ALONG_RUN) - 1]], blockers: counts, tried: [order[0], order[order.length - 1]] };
+  };
+  for (let r = 0; r < nRuns; r++) if (!advance(r)) return refuse(r);
+  for (let round = 0; round < maxRounds; round++) {
+    // the offset points, joined
+    const pts = [], runOf = [];
+    // each spine cell's offset point, smoothed over +-SMOOTH spine cells of the same offset (a boundary's 1-cell wiggles would leave the
+    // line no straight run for a gate), kept only where the smoothed cell stays within the run's distance of the spine (else the raw one)
+    const dAt = (i) => order[idx[Math.floor(i / ALONG_RUN)]];
+    const pointAt = (i) => {
+      const d = dAt(i);
+      let sx = 0, sz = 0, n = 0;
+      for (let q = Math.max(0, i - SMOOTH); q <= Math.min(spine.length - 1, i + SMOOTH); q++) {
+        if (dAt(q) !== d) continue;
+        const [nx, nz] = nrm[q];
+        sx += spine[q][0] + nx * d * sign; sz += spine[q][1] + nz * d * sign; n++;
+      }
+      const c = [Math.round(sx / n), Math.round(sz / n)];
+      const cd = spineDist(c, i);
+      return cd === d || (cd >= Math.min(d, lo) && cd <= Math.max(d, hi) && cd >= minD) ? c : offsetCell(spine, i, d, sign, nrm);
+    };
+    for (let r = 0; r < nRuns; r++) {
+      for (let i = r * ALONG_RUN; i < Math.min(spine.length, (r + 1) * ALONG_RUN); i++) {
+        const c = pointAt(i);
+        if (pts.length) {
+          const p = pts[pts.length - 1];
+          if (p[0] === c[0] && p[1] === c[1]) continue;
+          for (const q of joinCells(G, p, c)) { pts.push(q); runOf.push(r); }
+        } else { pts.push(c); runOf.push(r); }
+      }
+    }
+    // loops cut out (a cell met again: the cells between it and its return dropped)
+    const at = new Map();
+    const cells = [], cr = [];
+    for (let i = 0; i < pts.length; i++) {
+      const k = `${pts[i][0]},${pts[i][1]}`;
+      if (at.has(k)) { const j = at.get(k); for (let q = j + 1; q < cells.length; q++) at.delete(`${cells[q][0]},${cells[q][1]}`); cells.length = j + 1; cr.length = j + 1; continue; }
+      at.set(k, cells.length); cells.push(pts[i]); cr.push(runOf[i]);
+    }
+    // the wall thick toward the spine: lineCells puts it to the right of travel, so a wall on the right of the spine runs backwards
+    if (sign < 0) { cells.reverse(); cr.reverse(); }
+    const hOf = (a, b) => (b[0] > a[0] ? 0 : b[1] > a[1] ? 1 : b[0] < a[0] ? 2 : 3);
+    let line = cells.map((c, i) => [c[0], c[1], i + 1 < cells.length ? hOf(c, cells[i + 1]) : hOf(cells[i - 1], c)]);
+    let runs = cr;
+    // the ends clipped at the claim margin (a position with any course out of the claim)
+    const posOut = (lc) => { const o = new Set(); for (const c of lc.cells) if (clsOf(G.at(c.x, c.z)) === OB.OUT_OF_CLAIM) o.add(c.pos); return o; };
+    let lc = lineCells(line, t);
+    const out = posOut(lc);
+    if (out.size) {
+      let a = 0, b = line.length - 1;
+      while (a <= b && out.has(a)) a++;
+      while (b >= a && out.has(b)) b--;
+      if (a > 0 || b < line.length - 1) {
+        line = line.slice(a, b + 1); runs = runs.slice(a, b + 1);
+        if (line.length) line[line.length - 1] = [line[line.length - 1][0], line[line.length - 1][1], line.length > 1 ? line[line.length - 2][2] : line[0][2]];
+        lc = lineCells(line, t);
+      }
+    }
+    if (line.length < 8) return { ok: false, code: 'OUT_OF_CLAIM', cls: 'OUT_OF_CLAIM', run: 0, spine: [spine[0], spine[spine.length - 1]], blockers: { OUT_OF_CLAIM: 1 }, tried: [order[0], order[order.length - 1]], short: line.length };
+    // every course clear; a walk cell only in a clean crossing (every course of a straight run, a clear jamb each side)
+    const bad = new Map(); // run -> Set(class)
+    const mark = (pos, c) => { const r = runs[pos]; if (!bad.has(r)) bad.set(r, new Set()); bad.get(r).add(c); };
+    const byPos = Array.from({ length: line.length }, () => []);
+    for (const c of lc.cells) byPos[c.pos].push(c);
+    const walkPos = byPos.map((cs) => cs.filter((c) => { const k = G.at(c.x, c.z); return k >= 0 && G.walk[k]; }).length);
+    for (const c of lc.cells) { const cl = clsOf(G.at(c.x, c.z)); if (cl) mark(c.pos, cl); }
+    const crossings = [];
+    for (let i = 0; i < line.length; i++) {
+      if (!walkPos[i]) continue;
+      let j = i; while (j + 1 < line.length && walkPos[j + 1]) j++;
+      const full = byPos.slice(i, j + 1).every((cs, q) => walkPos[i + q] === cs.length && cs.length === t);
+      const ax = lc.positions[i].axis;
+      const straight = ax !== 3 && i > 0 && j < line.length - 1 && lc.positions.slice(i - 1, j + 2).every((p) => p.axis === ax) && !walkPos[i - 1] && !walkPos[j + 1];
+      if (full && straight) crossings.push({ positions: [i, j] });
+      else for (let q = i; q <= j; q++) mark(q, OB.OVERLAP);
+      i = j;
+    }
+    if (!bad.size) {
+      const used = [...new Set(runs)];
+      const runsOut = [];
+      for (let i = 0; i < runs.length; i++) { const last = runsOut[runsOut.length - 1]; if (last && last.run === runs[i]) last.to = i; else runsOut.push({ run: runs[i], from: i, to: i, offset: order[idx[runs[i]]] }); }
+      const move = Math.max(0, ...runsOut.map((q) => (q.offset > hi ? q.offset - hi : q.offset < lo ? lo - q.offset : 0)));
+      return { ok: true, line, lc, runs: runsOut, window: [Math.min(...used) * ALONG_RUN, Math.min(spine.length, (Math.max(...used) + 1) * ALONG_RUN) - 1], move, crossings };
+    }
+    // bump each blocked run past its offset (the classes found there remembered for the refusal)
+    for (const [r, cls] of [...bad].sort((a, b) => a[0] - b[0])) {
+      if (cls.size) seen[r].push(new Set(cls));
+      idx[r]++;
+      if (!advance(r)) return refuse(r);
+    }
+  }
+  return { ok: false, code: 'NO_ROOM', cls: 'OVERLAP', run: -1, blockers: {}, tried: [order[0], order[order.length - 1]], rounds: maxRounds };
+}

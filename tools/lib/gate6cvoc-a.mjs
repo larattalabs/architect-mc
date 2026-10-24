@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './sidecar-reuse.mjs';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
@@ -79,7 +80,9 @@ export const LATER_EXCEPTIONS = Object.freeze({ fixtures: ['extension/e05_reserv
     // ((7a foundation) its three catalogue changes)
     'connector.rail', 'connector.branch_walk', 'connector.span_bridge',
     // ((7a slices) each 7a slice flips its own kinds reserved -> supported: expected, as f7a-foundation.test reads them)
-    ...KINDS_7A.map((k) => `connector.${k}`)] });
+    ...KINDS_7A.map((k) => `connector.${k}`),
+    // ((7a K2) wall.along supported)
+    'wall.along'] });
 
 export async function unchanged(root) {
   const { dir: mainDir, base } = baseTree(root);
@@ -208,7 +211,7 @@ const unit = [
       const out = {};
       out.java = await javaTests(root, ['*ApiVocTest*', '*SurvivalItemsTest*', '*ApiHTest*'], 4);
       check(out.java.ok, `S-VOC-5 (Java): BibleRequest.Rarity (the typed record, the 1.10.0 constructor kept, every copy carries it), the feature vocabulary, SurvivalItems reading the generated file: ${out.java.tests} tests, ${out.java.failures} failures`);
-      const sc = spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+      const sc = sidecarReuse(root, ['test/system-refs.test.ts', 'test/jobs.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
       out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|passed|failed/.test(l)).slice(-3) };
       check(sc.status === 0, `S-VOC-6 (sidecar): the systemRef vocab/1 and vocab/1#compact from the kit's generated document; the feature vocab: ${out.sidecar.tail.join(' ')}`, out.sidecar);
       const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', '--gate6cvoc'], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });

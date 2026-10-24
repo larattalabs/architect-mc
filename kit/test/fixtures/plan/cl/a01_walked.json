@@ -1,0 +1,66 @@
+{
+  "about": "(7a CL, \u00a73, S-CL-1) a stair whose ends rise 3 over 100 cells: the stair profile walks it within the grade: adjusted, deviation {what: climb, value: 3, kind: walk, rise: 3} (the coordinator's shape), its note; the three unread params named (S-K1-3)",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "bands": [
+      {
+        "x0": 1060,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 65
+      },
+      {
+        "x0": 1080,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 66
+      },
+      {
+        "x0": 1100,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 67
+      }
+    ]
+  },
+  "anchors": {
+    "a": [
+      1030,
+      65,
+      2048
+    ],
+    "b": [
+      1130,
+      68,
+      2048
+    ]
+  },
+  "expect": {
+    "part": "walked",
+    "class": "adjusted"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "walked",
+        "kind": "stair",
+        "from": {
+          "anchor": "a"
+        },
+        "to": {
+          "anchor": "b"
+        },
+        "params": {
+          "material": "oak",
+          "handrail": true,
+          "steps": "wide"
+        }
+      }
+    ]
+  }
+}

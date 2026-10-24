@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
@@ -132,7 +133,7 @@ steps.unit = async () => {
   check(d.code === 0 && /^reserved -> supported: connector\.auto, connector\.gate, connector\.rope_bridge, connector\.wall$/m.test(d.out) && /^added: layout\.elevated \(reserved\), wall\.along \(reserved\), wall\.around \(supported\), wall\.edge \(supported\), wall\.line \(supported\)$/m.test(d.out)
     && /^notes changed: locator\.around: /m.test(d.out) && /recheck \(pending parts now supported\): wall \{connector\.wall\}/.test(d.out) && /^other state changes: none$/m.test(d.out),
   'item 8: tools/plan-catalogue-diff.mjs C37 (v0.33.0, after D2) -> K1 lists exactly the four flips, the five added ids and locator.around\'s note, and flags the pending connector.wall part');
-  const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts test/jobs.test.ts');
+  const s = sidecarReuse(root, ['test/plan-check.test.ts', 'test/jobs.test.ts']) ?? sh('cd sidecar && npx vitest run test/plan-check.test.ts test/jobs.test.ts');
   out.sidecar = s.out.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ');
   check(s.code === 0, `the sidecar's plan check (ajv 2020-12 over the fixtures, K1's included) and features (region.walls, region.rope appended): ${out.sidecar}`);
   srcGradle(root, () => sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`));

@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -24,6 +24,14 @@ export function baseTree(root) {
 }
 
 export async function unchanged(root, { check = null, log = console.log, only = null, moved = {} } = {}) {
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+  const sk = identicalToBase(root);
+  if (sk) {
+    const n = fixtures(root).filter(([name]) => !only || only.test(name)).length;
+    if (check) check(true, skippedLine(sk));
+    log(skippedLine(sk));
+    return { base: sk.base, head: sk.head, fixtures: {}, n, same: n, differ: [], skipped: true };
+  }
   const { dir: baseDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(baseDir)];

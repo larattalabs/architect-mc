@@ -11,6 +11,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
@@ -273,8 +274,50 @@ async function fit(bp, lot, side, extra = '') {
 
 const item = (l, extra = {}) => ({ key: l.key, bp: l.bp, at: l.at, rot: l.rot, mode: 'INSTANT', force: l.force, ...extra });
 
+/** (speed audit D, B7) The prepared G4D Base: a world this driver's base() made once (the chunks of the village, the far lots, the rules) with
+ * its context beside the level.dat, put back by the runner from the snapshot store (tools/gate-chains.json `restore`). */
+const BASE_MARK = 'gate4d-base.json';
+const BASE_PREP = 'G4D Base v2'; // the store's prepared copy (a new name: the shared 'G4D Base' is never replaced)
+const mcVersion = () => { try { return /^minecraft_version=(.+)$/m.exec(fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8'))[1].trim(); } catch { return 'unknown'; } };
+const sha256File = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+
+async function basePrepared(mark) {
+  const m = JSON.parse(fs.readFileSync(mark, 'utf8'));
+  if (m.minecraft !== mcVersion() || m.recipe !== 1) { log(`  prepared G4D Base is stale (made for Minecraft ${m.minecraft} recipe ${m.recipe}): generating it as before`); return baseFresh(); }
+  // the restored copy becomes the gate's G4D Base (the game is out of both)
+  fs.rmSync(path.join(SAVES, BASE), { recursive: true, force: true });
+  execFileSync('cp', ['-c', '-R', path.join(SAVES, BASE_PREP), path.join(SAVES, BASE)]);
+  fs.rmSync(path.join(SAVES, BASE, 'session.lock'), { force: true });
+  const levelSha = sha256File(path.join(SAVES, BASE, 'level.dat'));
+  await openWorld(BASE);
+  const rules = await setRules();
+  ctx.center = m.center;
+  ctx.far = m.far;
+  ctx.rules = rules;
+  await tpCenter();
+  const lots = [];
+  for (const l0 of m.lots) {
+    const f = await fit(l0.bp, l0.lot, 'north');
+    const reasons = (f.refusals ?? []).map((r) => r.reason);
+    lots.push({ ...l0, at: f.at, rot: f.rot, box: f.box, predicted: f.predictedRestoreBox ?? null, refusals: f.refusals });
+    check(reasons.every((r) => r === 'BLOCK_ENTITIES'), `base: lot L${l0.i} (${l0.bp}) fits and checks (${reasons.join(',') || 'ok'})`, f);
+  }
+  check(lots.every((l, i) => JSON.stringify(l.at) === JSON.stringify(m.lots[i].at) && l.rot === m.lots[i].rot), `base: the prepared world's 12 lots fit where they did when it was made (level.dat sha256 ${levelSha.slice(0, 16)})`, { levelSha });
+  ctx.lots = lots;
+  saveCtx();
+  await cmd('/save-all flush');
+  await leaveWorld();
+  return { rules, center: m.center, lots, far: m.far, prepared: { levelSha } };
+}
+
 async function base() {
   await leaveWorld();
+  const mark = path.join(SAVES, BASE_PREP, BASE_MARK);
+  if (fs.existsSync(mark) && process.env.GATE4D_FRESH_BASE !== '1') return basePrepared(mark);
+  return baseFresh();
+}
+
+async function baseFresh() {
   fs.rmSync(path.join(SAVES, BASE), { recursive: true, force: true });
   await openWorld(BASE, { mode: 'creative', preset: 'normal', cheats: true });
   const rules = await setRules();
@@ -323,6 +366,8 @@ async function base() {
   saveCtx();
   await cmd('/save-all flush');
   await leaveWorld();
+  // the context beside the level.dat: copied into the snapshot store, the next run restores this world instead of generating it
+  fs.writeFileSync(path.join(SAVES, BASE, BASE_MARK), `${JSON.stringify({ minecraft: mcVersion(), recipe: 1, center, lots, far, rules, madeAt: new Date().toISOString() }, null, 1)}\n`);
   return { rules, center, lots, far };
 }
 

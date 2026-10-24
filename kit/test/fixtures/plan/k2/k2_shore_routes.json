@@ -1,0 +1,79 @@
+{
+ "about": "(7a K2, the coordinator's ruling 2026-10-23) S3's shore wall with gates.min 2 and two inland-to-quay paths: no gate can open across the stepped bank, so each path answers refused UNREACHABLE {kind: wall} naming the wall (never a bare BUDGET or a silent loss); the wall fits",
+ "on": "s3",
+ "anchors": {
+  "quay_w": [
+   3642,
+   -874
+  ],
+  "up_w": [
+   3640,
+   -888
+  ],
+  "quay_e": [
+   3676,
+   -878
+  ],
+  "up_e": [
+   3668,
+   -892
+  ]
+ },
+ "expect": {
+  "all": [
+   {
+    "part": "stair_w",
+    "code": "UNREACHABLE",
+    "kind": "wall"
+   },
+   {
+    "part": "stair_e",
+    "code": "UNREACHABLE",
+    "kind": "wall"
+   }
+  ]
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "river_wall",
+    "kind": "wall",
+    "where": {
+     "along": {
+      "feature": {
+       "water": {}
+      },
+      "distance": [
+       3,
+       6
+      ]
+     }
+    },
+    "gates": {
+     "min": 2
+    }
+   },
+   {
+    "id": "stair_w",
+    "kind": "path",
+    "from": {
+     "anchor": "up_w"
+    },
+    "to": {
+     "anchor": "quay_w"
+    }
+   },
+   {
+    "id": "stair_e",
+    "kind": "path",
+    "from": {
+     "anchor": "up_e"
+    },
+    "to": {
+     "anchor": "quay_e"
+    }
+   }
+  ]
+ }
+}

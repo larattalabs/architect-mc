@@ -68,6 +68,18 @@ steps.base = async () => {
   return { worlds: [BASE, FLAT], seed: SEED };
 };
 
+/** (speed audit D, B4) The prepared claim worlds of this host (tools/lib/run6b.mjs claimBase): maintenance, `claims`. */
+steps.claims = async () => {
+  await ensure();
+  const out = {};
+  for (const id of ['s3_monastery', 's2_ice_spikes']) {
+    const sc = readScenario(id);
+    out[id] = await L6.makeClaimWorld(sc.world.seed, sc.fixture.claim, sc.fixture.yRange);
+    check(!!out[id].levelDatSha256, `claims: "${out[id].name}" for ${id}'s claim [${sc.fixture.claim}] made (level.dat sha256 ${out[id].levelDatSha256})`);
+  }
+  return out;
+};
+
 /** find-site for the scenarios and gate sites: `findsite <id>|all`. */
 steps.findsite = async () => {
   await ensure();

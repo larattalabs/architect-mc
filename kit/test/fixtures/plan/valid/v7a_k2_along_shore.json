@@ -1,0 +1,31 @@
+{
+ "about": "(7a K2, \u00a79; the coordinator's ruling 2026-10-23) a wall along S3's pinned river (wall.along {water}, distance [3, 6]) with gates.min 2, evenly placed (a level run within half the spacing preferred: none on this stepped bank). Routes across it are kept to kit/test/fixtures/plan/k2/k2_shore_routes.json: K1a's gate move needs a straight run held flat across the wall, which this 45-degree staircase shore never has (the K2 finding)",
+ "on": "s3",
+ "covers": [
+  "connector.wall",
+  "wall.along"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "connectors": [
+   {
+    "id": "river_wall",
+    "kind": "wall",
+    "where": {
+     "along": {
+      "feature": {
+       "water": {}
+      },
+      "distance": [
+       3,
+       6
+      ]
+     }
+    },
+    "gates": {
+     "min": 2
+    }
+   }
+  ]
+ }
+}

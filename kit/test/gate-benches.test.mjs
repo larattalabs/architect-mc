@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, releaseBenches, sensitiveHits } from '../../tools/lib/bench-select.mjs';
+import { applyNightlyFulls, benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, nightlyFulls, releaseBenches, sensitiveHits } from '../../tools/lib/bench-select.mjs';
 import { fullTwins, judgedBenches, supersededList } from '../../tools/lib/step-cache.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -152,4 +152,32 @@ test('the nightly records: the newest nightly result of each bench, finished or 
   assert.equal(r.has('6a-heap'), false, 'a pending step has no result');
   assert.equal(decideBench(BC, { ...megaA, latest: r.get('6a-megaA'), valid: null, changed: [] }).run, true);
   fs.rmSync(root, { recursive: true });
+});
+
+test('the nightly-only full twins (Noah, 2026-10-23): a release lists their smoke twins, the nightly adds the full ids', () => {
+  const ids = nightlyFulls(CONF);
+  const pairs = { '5b-chains-full': '5b-chains', 'hy-ingame': 'hy-ingame-smoke', 'h-ingame': 'h-ingame-smoke', 'w-ingame': 'w-ingame-smoke', 'rs-survival': 'rs-survival-smoke', 'h-probe': 'h-probe-smoke', 'hy-crash': 'hy-crash-smoke', 'd2-ingame': 'd2-ingame-smoke', 'hy-cold': 'hy-cold-smoke', 'kc-ingame': 'kc-ingame-smoke' };
+  const twins = fullTwins(CHAINS);
+  const always = new Set(CHAINS.tiers.release.always);
+  for (const [full, small] of Object.entries(pairs)) {
+    assert.ok(ids.includes(full), `${full} is a nightly-only id`);
+    assert.ok(CHAINS.steps[full] && CHAINS.steps[small], `${full} / ${small} are steps`);
+    assert.ok(supersededList(CHAINS.steps[small]).includes(full), `${small} is supersededBy ${full}`);
+    assert.ok(twins.has(full));
+    assert.ok(always.has(small) && !always.has(full), `the release lists ${small}, not ${full}`);
+  }
+  // the 4e extras (dropped from releases, 47a9f68e) and the water probe (it reads the full steps' evidence) run in the nightly too
+  for (const id of ['4e-orders-full', '4e-crash-full', 'p3-probe-water']) assert.ok(ids.includes(id), id);
+  assert.ok(!always.has('p3-probe-water') && always.has('p3-probe-ledger'));
+  // the left-alone steps stay out
+  for (const id of ['irr-ingame', 'c29-ingame', 'voc-survival', 'x-resume', 'x-resume-full', '6a-eflat', '6a-eflat-full', '6a-staged', '6a-staged-full', 'c30-ingame', 'c30-ingame-full']) assert.ok(!ids.includes(id), id);
+  for (const id of ids) assert.ok(CHAINS.steps[id], id);
+  // the rule: a release drops them wherever they came from; the nightly adds them
+  const want = new Set([...always, 'hy-ingame', '4e-orders-full']);
+  const rel = applyNightlyFulls(want, ids, { nightly: false });
+  assert.deepEqual(rel.dropped.sort(), ['4e-orders-full', 'hy-ingame']);
+  for (const id of ids) assert.ok(!want.has(id), id);
+  const night = applyNightlyFulls(want, ids, { nightly: true });
+  assert.equal(night.added.length, ids.length);
+  for (const id of ids) assert.ok(want.has(id), id);
 });

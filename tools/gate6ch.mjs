@@ -154,6 +154,7 @@ steps.unit = async () => {
     ch.on('close', (code) => { clearTimeout(timer); fs.closeSync(acFd); resolve({ status: code, text: fs.readFileSync(acLog, 'utf8') }); });
   });
   out.unchanged = await (await import('./lib/gate6ch-core.mjs')).unchanged(root);
+  if (out.unchanged.identical) check(true, `item 11: ${out.unchanged.identical}`);
   check(out.unchanged.ok, `item 11: ${out.unchanged.same} of ${out.unchanged.n} committed valid/, K1 and T3 fixtures without an H part answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'} (wet fits); ${out.unchanged.skipped} skipped (H fixtures, and refused/k1a_r01's two-plan harness)`, out.unchanged.differ);
   out.core = kitOnce(['kit/test/h-core.test.mjs', 'kit/test/h-foundation.test.mjs']);
   check(out.core.code === 0 && out.core.fail === 0 && out.core.pass >= 10, `items 1, 11, 12, 14(b), 15 (kit, H-core): the fluid model (shell, runs, the lint FLUID_STATE), M25 on h_core_demo and each broken variant caught with its cells, vanilla's steady state, catalogue 7 and its diff from catalogue-t3.json, R21-R23, the codes, ARVX version 3, determinism: ${out.core.pass} pass, ${out.core.fail} fail`, out.core.failing);
