@@ -151,7 +151,7 @@ steps.ingame = async () => {
   out.checking = early.hud;
   out.shots.push(await shot('hud_checking_s4'));
   const st = await waitVerdict();
-  check(st.ready === true && st.hud.some((r) => /^\[↻ .*\] \[entrance .*\] \[■ locked\]/.test(r)) && st.hud.some((r) => /^✔ Ready/.test(r))
+  check(st.ready === true && st.hud.some((r) => /^\[rotation .*\] \[entrance .*\] \[■ locked\]/.test(r)) && st.hud.some((r) => /^✔ Ready/.test(r))
     && st.hud.some((r) => /^keys: \? keys/.test(r)) && !st.hud.some((r) => /\((orange|red|grey|pale|tan|amber)\)/.test(r)),
     `HUD ready: the state chips, "✔ Ready", the one "? keys" hint, no colour words (${JSON.stringify(st.hud)})`, st.hud);
   check(early.hud.some((r) => /^~ Checking the site with the server/.test(r)) || early.serverVerdict != null,
