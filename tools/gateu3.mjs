@@ -352,7 +352,7 @@ async function run(name) {
   let data, error;
   log(`== u3 ${name}`);
   try {
-    if (!state.dev) await connect();
+    if (!state.dev && name !== 'start' && name !== 'stop') await connect();
     data = await steps[name]();
   } catch (e) {
     log(String(e?.stack ?? e));

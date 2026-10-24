@@ -404,6 +404,8 @@ steps.gallery = async () => {
   await sec('ui', 'library', 'detail', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); });
   await sec('ui', 'library', 'detail_rename', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.ui.click', { control: 'rename' }); });
   await sec('ui', 'library', 'detail_tags', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.ui.click', { control: 'tags' }); });
+  await sec('ui', 'library', 'detail_menu', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.ui.click', { control: 'more' }); });
+  await sec('ui', 'library', 'empty_search', async () => { await openTab('library'); await call('dev.library.filter', { text: 'zzzz no such design' }); });
   await sec('ui', 'library', 'variants_form', async () => { await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.library.variants.open', { entry: pick }); });
   for (const f of ['wood', 'stone', 'roof', 'accent']) {
     await sec('ui', 'library', `variants_palette_${f}`, async () => {
@@ -430,7 +432,38 @@ steps.gallery = async () => {
   await sec('ui', 'design', 'size_large_options', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, size: 'L' }); });
   await sec('ui', 'design', 'type_other', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); });
   await sec('ui', 'design', 'profile_popup', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); await call('dev.ui.click', { control: 'design:profile' }); });
-  await sec('ui', 'design', 'bible_popup', async () => { await openTab('design'); await call('dev.design.fill', FORM); await call('dev.ui.click', { control: 'design:bible' }); });
+  // (U3) the unified editor's folds and states, the Style browser, the Style editor, the material / role pickers
+  const U3FOLDS = {
+    'architect_mc.editor.what': true, 'architect_mc.editor.style': true, 'architect_mc.editor.materials': true, 'architect_mc.editor.more_roles': false,
+    'architect_mc.editor.features': false, 'architect_mc.editor.rules': false, 'architect_mc.editor.parameters': false,
+    'architect_mc.variant.what': false, 'architect_mc.variant.style': true, 'architect_mc.variant.materials': true, 'architect_mc.variant.more_roles': false,
+    'architect_mc.variant.features': false, 'architect_mc.variant.rules': false, 'architect_mc.variant.parameters': true,
+    'architect_mc.style_editor.roles': false, 'architect_mc.style_editor.settlement': false, 'architect_mc.style_editor.slots': false,
+  };
+  const folds = (o) => call('dev.u3.sections', { set: { ...U3FOLDS, ...o } }).catch(() => null);
+  await folds({});
+  const designWith = async (extra = {}) => { await openTab('design'); await call('dev.design.fill', { ...FORM, ...extra }); };
+  await sec('ui', 'design', 'sections_open', async () => { await folds({ 'architect_mc.editor.what': false, 'architect_mc.editor.features': true, 'architect_mc.editor.rules': true, 'architect_mc.editor.parameters': true }); await designWith(); });
+  await folds({});
+  await sec('ui', 'design', 'style_note', async () => { await designWith({ style: 'medieval', styleNote: 'mossy, lived-in' }); });
+  await sec('ui', 'design', 'own_words', async () => { await designWith({ style: 'a hobbit hole under a hill' }); });
+  await sec('ui', 'design', 'custom_mix', async () => { await designWith({ style: 'medieval', styleOps: [['main', 'wood', 'birch']] }); });
+  await sec('ui', 'design', 'more_roles', async () => { await folds({ 'architect_mc.editor.what': false, 'architect_mc.editor.more_roles': true }); await designWith({ style: 'medieval', styleOps: [['main', 'wood', 'birch'], ['role', 'light', 'soul_lantern']] }); });
+  await folds({});
+  await sec('ui', 'design', 'save_as_style', async () => { await designWith({ style: 'medieval', styleOps: [['main', 'wood', 'birch']] }); await tryc('style:save'); });
+  await sec('ui', 'design', 'type_popup', async () => { await designWith(); await tryc('design:type'); });
+  await sec('ui', 'picker', 'wood', async () => { await designWith({ style: 'medieval' }); await call('dev.ui.click', { control: 'palette:wood' }); });
+  await sec('ui', 'picker', 'roof', async () => { await designWith({ style: 'medieval' }); await call('dev.ui.click', { control: 'palette:roof' }); });
+  await sec('ui', 'picker', 'role', async () => { await folds({ 'architect_mc.editor.more_roles': true }); await designWith({ style: 'medieval' }); await call('dev.ui.click', { control: 'role:light' }); await call('dev.u3.picker', { query: 'lantern' }); });
+  await folds({});
+  const browser = async (o = {}) => { await designWith({ style: 'medieval' }); await call('dev.ui.click', { control: 'style:browse' }); if (Object.keys(o).length) await call('dev.u3.browser', o); };
+  await sec('ui', 'style_browser', 'grid', async () => browser());
+  await sec('ui', 'style_browser', 'detail_builtin', async () => browser({ select: 'nordic' }));
+  await sec('ui', 'style_browser', 'new_menu', async () => browser({ menu: 'new' }));
+  await sec('ui', 'style_browser', 'tags_menu', async () => browser({ menu: 'tags' }));
+  await sec('ui', 'style_browser', 'describe', async () => { await browser({ menu: 'new' }); await call('dev.u3.browser', { item: 'describe' }); await call('dev.u3.describe.fill', { name: 'Harbour stone', prompt: 'weathered harbour stone, teal shutters' }); });
+  await sec('ui', 'style_editor', 'duplicate', async () => { await browser({ select: 'medieval' }); await call('dev.u3.click', { control: 'duplicate' }); await sleep(1500); });
+  await sec('ui', 'style_editor', 'check_fail', async () => { await browser({ select: 'medieval' }); await call('dev.u3.click', { control: 'duplicate' }); await call('dev.u3.editor.fill', { roles: { light: 'minecraft:oak_planks' } }); await sleep(2500); });
   await sec('ui', 'design', 'remix', async () => { await openTab('library'); await call('dev.library.remix', { entry: pick }); });
   await sec('ui', 'design', 'set_dialog', async () => { await openTab('design'); await call('dev.set.open'); });
   await sec('ui', 'design', 'set_dialog_filled', async () => {
