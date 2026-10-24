@@ -521,7 +521,8 @@ steps.gallery = async () => {
     await place([40 + i * 16, 64, 40]).catch(() => null);
   }
   await call('dev.build.cancel').catch(() => null);
-  const listChat = async (page) => { await call('dev.command', { cmd: `/architect list${page > 1 ? ` ${page}` : ''}` }, 60_000); await call('dev.screen', { open: 'chat' }); await sleep(500); };
+  // a clicked link runs the command as a player: its output lands in the real chat (dev.command's does not)
+  const listChat = async (page) => { await call('dev.ui2b.click', { value: `/architect list${page > 1 ? ` ${page}` : ''}` }); await call('dev.screen', { open: 'chat' }); await sleep(500); };
   await sec('ui', 'chat', 'list_page1', () => listChat(1), { closeScreen: false });
   await sec('ui', 'chat', 'list_page2', () => listChat(2), { closeScreen: false });
   await call('dev.screen', { open: null });
