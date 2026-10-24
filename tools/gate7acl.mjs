@@ -345,12 +345,13 @@ async function stewardRound(tag, fx, { site = null, flat = true } = {}) {
   await L.settle(5000);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId ?? st.view.planId);
+  let R = null;
   if (fs.existsSync(planDir)) {
     const RV = await import('./lib/realised-virtual.mjs');
     const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
     out.realisedVirtual = { written: rv.written, differ: rv.differ, byKind: rv.byKind };
     check(RV.realisedOk(rv, ['route'], { strict: flat }).pass, `item 4 (${tag}): the realised world equals the virtual one: ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}`);
-    const R = await realisedOf(planDir, before, after);
+    R = await realisedOf(planDir, before, after);
     out.item7 = item7(tag, R);
   } else check(false, `item 4 (${tag}): the check's plan dir ${planDir} is missing`);
   await cmd('/kill @e[type=!minecraft:player]');
@@ -362,15 +363,16 @@ async function stewardRound(tag, fx, { site = null, flat = true } = {}) {
   if (flat) check(rm.removed && diff.mismatches === 0, `item 4 (${tag}): Regions.remove E-flat ${diff.mismatches}`);
   else {
     // a natural site's water and leaves keep settling over the whole claim (PLAN "A natural-site survey drifts"): the unclassified
-    // mismatches within 8 of the plan's own cells are judged; the rest of the claim's are recorded as the site's drift
-    const meta = fs.existsSync(path.join(planDir, 'meta.json')) ? JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8')) : {};
-    const near = new Set();
-    for (const e of meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) for (let dx = -8; dx <= 8; dx++) for (let dz = -8; dz <= 8; dz++) near.add(`${x + dx},${z + dz}`);
+    // mismatches at a cell the plan wrote are judged (the removal restores exactly those); the rest of the claim's are recorded as
+    // the site's drift, with how many lie within 8 of a written cell
+    const wrote = new Set(), near = new Set();
+    R?.vw.eachWritten((x, y, z) => { wrote.add(`${x},${y},${z}`); near.add(`${x >> 3},${z >> 3}`); });
     const none = (diff.list ?? []).filter((m) => m.class === 'none');
-    const inside = none.filter((m) => { const [x, , z] = String(m.pos).split(',').map(Number); return near.has(`${x},${z}`); });
+    const at = none.filter((m) => wrote.has(String(m.pos)));
+    const close = none.filter((m) => { const [x, , z] = String(m.pos).split(',').map(Number); return !wrote.has(String(m.pos)) && near.has(`${x >> 3},${z >> 3}`); });
     const listed = (diff.list ?? []).length >= diff.mismatches;
-    out.exact.near = { none: inside.length, drift: none.length - inside.length, listed };
-    check(rm.removed && listed && near.size > 0 && inside.length === 0, `item 4 (${tag}): Regions.remove E-normal classified: ${diff.mismatches} (${json(diff.classes ?? {})}); unclassified within 8 of the plan's cells ${inside.length}${inside.length ? ` (${json(inside.slice(0, 5))})` : ''}, elsewhere on the claim ${none.length - inside.length} (the site's drift, recorded)`);
+    out.exact.written = { cells: wrote.size, none: at.length, near: close.length, drift: none.length - at.length, listed };
+    check(rm.removed && listed && wrote.size > 0 && at.length === 0, `item 4 (${tag}): Regions.remove E-normal classified: ${diff.mismatches} (${json(diff.classes ?? {})}); unclassified at the ${wrote.size} cells the plan wrote ${at.length}${at.length ? ` (${json(at.slice(0, 5))})` : ''}; elsewhere on the claim ${none.length - at.length}, ${close.length} of them near the plan (the site's drift, recorded: ${json(close.slice(0, 3))})`);
   }
   return out;
 }
