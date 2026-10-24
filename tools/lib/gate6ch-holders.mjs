@@ -68,23 +68,35 @@ async function removeRegion(ctx, region) {
 }
 
 /**
- * A world with h_core_demo realised (exact rules), its pre-region snapshot, and the stair site layered over a pond source cell; the
- * precondition checked: the stair site's cell on top of the region's (another group, a higher layer).
+ * A world with h_core_demo realised (exact rules), its pre-region snapshot, and the stair site layered over a pond source cell. No check
+ * is made here (`settledCheck` and `preCheck` make them, so rmcrash can build once and check every copy of the world).
  */
-async function setUp(ctx, world, tag) {
-  const { L, check, json } = ctx;
+async function build(ctx, world, tag) {
+  const { json } = ctx;
   await freshFlat(ctx, world, 'exact');
   const d = await planDemo(ctx, {});
   const pond = d.bodies.find((b) => b.id === 'pond');
   const box = demoBox(d.bodies);
   const file = await snap(ctx, box, `h-holders-${tag}`);
   const r = await realiseWait(ctx, d.p.planId);
-  const settled = r.view.state === 'PLACED' && (r.fluids ?? []).every((x) => x.state === 'settled');
-  check(settled, `${tag}: h_core_demo PLACED, every body settled (${r.view.state}; ${json((r.fluids ?? []).map((x) => [x.body, x.state]))})`);
   const cell = stairCell(pond);
   if (!cell) throw new Error('the pond has no interior top source cell');
-  const under = await L.call('dev.journal.at', { x: cell[0], y: cell[1], z: cell[2] }, 10_000);
   const placed = await later(ctx, `cells ${json({ kind: 'apitest:stair', cells: [[cell[0], cell[1], cell[2], STAIR]], overlap: 'LAYER', naturalOnly: false, owner: OWNER, tag: `stair${tag}` })}`, `cells:stair${tag}`);
+  return { d, pond, box, file, region: r.region, r, cell, placed, stairSite: placed.siteId };
+}
+
+/** The region PLACED with every body settled (what `build` made). */
+function settledCheck(ctx, tag, s) {
+  const { r } = s;
+  const settled = r.view.state === 'PLACED' && (r.fluids ?? []).every((x) => x.state === 'settled');
+  ctx.check(settled, `${tag}: h_core_demo PLACED, every body settled (${r.view.state}; ${ctx.json((r.fluids ?? []).map((x) => [x.body, x.state]))})`);
+}
+
+/** The precondition, read in the world as it is now: the stair site's cell on top of the region's (another group, a higher layer). */
+async function preCheck(ctx, tag, s) {
+  const { L, check, json } = ctx;
+  const { r, placed, cell } = s;
+  const under = await L.call('dev.journal.at', { x: cell[0], y: cell[1], z: cell[2] }, 10_000);
   const stack = (await L.call('dev.journal.at', { x: cell[0], y: cell[1], z: cell[2] }, 10_000)).stack ?? [];
   const top = stack.at(-1);
   const regionCell = stack.slice(0, -1).find((e) => e.group === r.view.groupId || (e.group && e.group !== top?.group));
@@ -92,7 +104,13 @@ async function setUp(ctx, world, tag) {
   const pre = !!placed.placed && top?.site === placed.siteId && !!regionCell && regionCell.group !== top.group && regionCell.layer < top.layer
     && /^minecraft:oak_stairs\[/.test(stateNow ?? '') && /waterlogged=true/.test(stateNow ?? '');
   check(pre, `${tag}: precondition: the stair site ${placed.siteId} (layered) holds pond source cell ${json(cell)} over the region's own cell (stack ${json(stack.map((e) => [e.site, e.group, e.layer]))}; the world ${stateNow})`, { under: under.stack, stack, placed });
-  return { d, pond, box, file, region: r.region, cell, stairSite: placed.siteId, stack };
+  return { ...s, stack };
+}
+
+async function setUp(ctx, world, tag) {
+  const s = await build(ctx, world, tag);
+  settledCheck(ctx, tag, s);
+  return preCheck(ctx, tag, s);
 }
 
 /**
@@ -139,15 +157,35 @@ export async function holders(ctx) {
   return out;
 }
 
-/** The holder case through the removal's crash windows (finding 2 with the drain's holders). */
+/**
+ * The holder case through the removal's crash windows (finding 2 with the drain's holders). The world is built once (h_core_demo
+ * realised, the stair layered, saved) and each kill point runs in its own copy of it (speed set C: it was built four times to the same
+ * state); each copy's own precondition (`preCheck`, in the copy as opened: the stair's stack, its waterlogged block, the region PLACED)
+ * is what guards that the copy equals the state that was built.
+ */
 export async function rmcrash(ctx) {
   const out = {};
-  for (const point of ['FL3+save', 'K6+save', 'R2q+save', 'K7+save']) {
+  const POINTS = ['FL3+save', 'K6+save', 'R2q+save', 'K7+save'];
+  const BASE = 'G6B H Hold Base';
+  let base = null;
+  let baseError = null;
+  try {
+    base = await build(ctx, BASE, 'base');
+    await ctx.L.cmd('/save-all flush');
+    await ctx.L.leaveWorld();
+  } catch (e) { baseError = e; }
+  for (const point of POINTS) {
     const tag = point.replace('+save', '');
     const world = `G6B H Hold ${tag}`;
     ctx.log(`-- ${point}`);
     try {
-      const s = await setUp(ctx, world, tag);
+      if (baseError) throw baseError;
+      await ctx.L.fresh(world, BASE);
+      await ctx.L.tp((CLAIM[0] + CLAIM[2]) / 2, 120, (CLAIM[1] + CLAIM[3]) / 2);
+      settledCheck(ctx, tag, base);
+      const placedNow = (await ctx.L.call('dev.region.state', { region: base.region }, 60_000)).view?.state;
+      if (placedNow !== 'PLACED') throw new Error(`the copy ${world}: the region reads ${placedNow}, not PLACED`);
+      const s = await preCheck(ctx, tag, base);
       await crashAt(ctx, world, point, async () => { await ctx.L.call('dev.region.remove', { region: s.region, requester: OWNER, covered: 'keep' }, 600_000); });
       await sleep(5000);
       const rm = await removeRegion(ctx, s.region);

@@ -1503,10 +1503,12 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 |---|---|---|---|---|
 | irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
 | h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
-| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 4 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds in two sections (item9a, item9b: every other fixture), each its own part (smoke: with core, and with the villagers part) (set C) | 31/31, 24/24: equal (before set C, 3 / 2 parts) |
 | 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
-| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| rs-survival | 23.2 | 4 (set C) | rs02 + rs02r; rs03; village + item 10; L-V7 + item 14 (sections are builds, not items: "Speed set C") | 11/11: equal (before set C, items 5; 9; 8 and 10) |
+| rsb-crash | 10.4 | 2 (set C) | rs04crash; rs03stop | "Speed set C" |
+| 0a-tiles | 7.1 | 3 (set C) | the unhooked run; SLOW_TILES=4; SLOW_TILES=2 | "Speed set C" |
 | 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
 | irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | **whole again** (2026-10-23) | was: the byte-identity fixture loop in 3 round-robin slices. With the shared plans each whole step is 0.2-7.5 min ("Shared plans"), so the split is dropped; the drivers keep their sections (`GATE_PART_SECTIONS` still works by hand) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
@@ -1553,6 +1555,36 @@ their steps are not split.
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
 for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
 16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
+
+## Speed set C (2026-10-23): fixtures built once, serial loops split
+
+Noah approved the audit's set C on 2026-10-23 (`artifacts/audit-findings-2026-10-23.md`, `findings6.md`, `findings8.md`): the same
+work was being done several times in a run, and a few steps ran independent sections serially. Each change keeps its assertions; the
+three lines that go are listed, with where each is kept.
+
+**Work done once per run: `tools/lib/run-shared.mjs`.** The runner gives every step `GATE_RUN_SHARED`, a directory under the run's own
+dir (all shards, new for each run: nothing is reused across runs or heads). `sharedOnce(ns, key, build)` memoises in the process
+and, with the directory, across the run: the first caller takes `<key>.lock` (mkdir), builds, publishes `<key>.json` by rename; the
+others wait for it. A builder that throws drops its lock and publishes nothing (a waiter then builds for itself); a lock of a dead
+pid is taken over; a waiter builds for itself after 50 minutes. `kit/test/gate-run-shared.test.mjs` covers it.
+
+| change | what | assertions |
+|---|---|---|
+| RS INSTANT twin (`tools/lib/gate6crs-game.mjs` `twin`) | built once per fixture, lot entries, survival-toggle state and head: in the process and, through `GATE_RUN_SHARED`, in the run. rs02_walled's twin was built by items 5, 8, 9, 11 and 18 (5 times), rs03_water's by items 5 and 9. The snapshot is then a file of the shared dir; `twinDiff` writes its `.diff.json` into the caller's dir | none changed; a caller still diffs its world against the snapshot |
+| rs-survival builds | item 5's rs02 was item 8's rs02c without its conservation sum, item 5's rs03 was item 9's rs03r before its keep hook (the smoke tier already built each once, as rs02c and rs03r). Each is built once with the sum on (`Conservation.insert` and the default feed send the same `dev.crate.insert {exact: true}`). Sections are now the builds: `rs02` (items 3, 5, 8), `rs03` (3, 5, 9), `village`, `rs02r` (9), `item10`, `lv7`, `item14` | the lines `item 5 (rs02): ...`, `item 3 (rs02, ...`, `item 5 (rs03): ...` and `item 3 (rs03, ...` are the surviving `(rs02c)` and `(rs03r)` lines (the same check over the same build, the tag aside). One thing is not the same: rs03's E-flat after the removal is read after rs03r's keep hook (a player's block, a weathered copper cell), as item 9 already does and as the smoke tier did |
+| rs-ingame `latent` | `latent` (creative rs01, survival toggle switched on, checked and realised) and item 4's twin were two builds of one site. The twin takes `toggleOn` for rs01: built once with the toggle on, `latent` reads its answers, item 4 diffs against it. (The toggle is per world, `architect-world.json`, and the creative base has it off, so the twin was not already the latent world: item 4's reference is now the toggle-on one.) The region's removal at the end of `latent` is gone (no check followed it) | none dropped |
+| rsb-crash | `rs04crash` and `rs03stop` are two parts | none |
+| hy-ingame item 9 | 11 fixtures in one section: `item9a` (v50 v52 v54 v56 v57b steward), `item9b` (v51 v53 v55 v57 v59); smoke: v50 v54 v56 / v51 v55 | none |
+| 0a-tiles | `unhooked`, `slow4`, `slow2` are three parts. The two slow runs are judged against the unhooked run's sha: it is run once per gate run, by whichever part asks first (`sharedOnce`), the others wait for it | none |
+| h-rmcrash (`tools/lib/gate6ch-holders.mjs`) | `setUp` (fresh world, h_core_demo planned and realised, the stair site layered) ran for each of 4 kill points to the same state. It runs once; each point is a copy of the saved world, opened, with its own settled and precondition checks (the stair's stack in the copy, its waterlogged block, the region PLACED) | none; `h-holders` runs `setUp` once, nothing to share |
+| 6b-versions | each of versiona's two runs and versionb's two plans planned and prepared the same rift_city claim: versiona prepares it once in a copy of the flat base that both runs copy; versionb plans and prepares it once for both doctored plans. (A prepare is per world: versiona and versionb are two processes in two worlds, nothing is shared between them) | none |
+| sch-placement, sch-refusals | one step `sch-placement` (placement, then refusals) in one sim client | the refusals' lines are in `sch-placement` |
+| w-ingame pathbibles | S7 flat with the coarse-dirt bible (g6cv_village) is `6cv-scenario-s7`'s flat run: when that run of the same gate run has finished at this head (`scenarios.mjs` lists a finished run in `GATE_RUN_SHARED/scenario-runs/`), pathbibles reads it; else it runs it as before | none |
+| w-ingame variants | the gravity broken variant was run alone and named here; `w-unit` runs `village-safety.test.mjs` whole (item 1/3/4, which holds `gravity broken variant`) | the line `variant: a gravel verge over a 2-deep gap with the rule off` is gone from w-ingame; w-unit's `items 1, 3, 4 (kit)` line holds the test |
+
+**Not done, and why.** 6cf2-scenario-scatter's harvest: the whole step is 10 s per part (`harvest` 2 s for the 72 stamps twice, in the
+slice run of 2026-10-22); its second stamping pass is the "same bytes" determinism check, so a copy would remove the assertion for
+nothing saved.
 
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
