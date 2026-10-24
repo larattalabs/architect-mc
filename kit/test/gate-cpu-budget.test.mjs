@@ -1,4 +1,4 @@
-// The gate runner's CPU budget (tools/lib/cpu-budget.mjs, docs/GATES.md "CPU budget"): the share arithmetic, the environment a
+// The gate runner's CPU budget (tools/lib/cpu-budget.mjs, docs/GATES.md "Frozen source and the CPU budget"): the share arithmetic, the environment a
 // step's children get, that `--test-concurrency` really bounds node --test, that the chain shells and every driver pass it, and
 // that the drivers' kit-suite reuse still hits (the flag never goes into kitReuse's file list).
 import { test } from 'node:test';
@@ -25,10 +25,12 @@ test('the share: the cores over the workers, at least minShare, at most cores - 
   assert.equal(machineCores({}), os.availableParallelism());
 });
 
-test('the environment: every consumer gets the step\'s share; a by-hand value wins', () => {
+test('the environment: every consumer gets the step\'s share (the plan pool at least 4); a by-hand value wins', () => {
   const e = budgetEnv({ cores: 18, share: 2 });
-  assert.deepEqual(e, { GATE_CPU_CORES: '18', GATE_CPU_SHARE: '2', GATE_PLAN_WORKERS: '2', GATE_TEST_CONCURRENCY: '2', VITEST_MAX_WORKERS: '2', GRADLE_OPTS: '-Dorg.gradle.workers.max=2' });
-  assert.equal(budgetEnv({ cores: 18, share: 2 }, { shares: 4 }).GATE_TEST_CONCURRENCY, '8'); // unit-kit's cpuShares
+  assert.deepEqual(e, { GATE_CPU_CORES: '18', GATE_CPU_SHARE: '2', GATE_PLAN_WORKERS: '4', GATE_TEST_CONCURRENCY: '2', VITEST_MAX_WORKERS: '2', GRADLE_OPTS: '-Dorg.gradle.workers.max=2' });
+  assert.equal(budgetEnv({ cores: 18, share: 2 }, { shares: 6 }).GATE_TEST_CONCURRENCY, '12'); // unit-kit's cpuShares
+  assert.equal(budgetEnv({ cores: 18, share: 6 }).GATE_PLAN_WORKERS, '6'); // the plan pool: the share, at least corpus-plan's floor 4
+  assert.equal(budgetEnv({ cores: 3, share: 2 }).GATE_PLAN_WORKERS, '2');
   assert.equal(budgetEnv({ cores: 18, share: 6 }, { shares: 4 }).GATE_TEST_CONCURRENCY, '17'); // at most cores - 1
   const kept = budgetEnv({ cores: 18, share: 2 }, { env: { GATE_PLAN_WORKERS: '6', GRADLE_OPTS: '-Xmx1g' } });
   assert.equal(kept.GATE_PLAN_WORKERS, '6');
@@ -68,7 +70,7 @@ test('the chain shells that run node --test pass the share, and only when the ru
   for (const [id, s] of Object.entries(cfg.steps)) {
     for (const m of (s.shell ?? '').matchAll(/node --test\b(.{0,80})/g)) assert.match(m[1], /^ \$\{GATE_TEST_CONCURRENCY:\+--test-concurrency=\$GATE_TEST_CONCURRENCY\}/, `${id}: ${m[0]}`);
   }
-  assert.equal(cfg.steps['unit-kit'].cpuShares, 4);
+  assert.equal(cfg.steps['unit-kit'].cpuShares, 6);
   const { GATE_TEST_CONCURRENCY, ...base } = process.env; // (unit-kit itself runs with the runner's share set)
   const echo = (env) => spawnSync('sh', ['-c', 'echo node --test ${GATE_TEST_CONCURRENCY:+--test-concurrency=$GATE_TEST_CONCURRENCY} a.test.mjs'], { encoding: 'utf8', env: { ...base, ...env } }).stdout.trim();
   assert.equal(echo({}), 'node --test a.test.mjs');

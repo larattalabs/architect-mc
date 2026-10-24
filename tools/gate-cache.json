@@ -21,6 +21,7 @@
    "tools/gate-run.mjs",
    "tools/lib/build-artifact.mjs",
    "tools/lib/cpu-budget.mjs",
+   "tools/lib/frozen-source.mjs",
    "tools/lib/gate-history.mjs",
    "tools/lib/gate-part.mjs",
    "tools/lib/hosts.mjs",
