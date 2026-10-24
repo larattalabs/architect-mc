@@ -88,6 +88,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
+import { SIDECAR_TREE_PATHS } from './lib/sidecar-reuse.mjs';
 import { buildFrozenClasses, kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
@@ -2078,7 +2079,7 @@ try {
     const m = manifestOf(CACHE);
     log(`build artifact ${m.hash ?? '?'}: ${m.ok ? `${Object.keys(m.classes ?? {}).length} classes` : `NOT available (${m.error}): coverage-mode steps record source keys`}`);
   }
-  const sidecarTreeNow = () => ['sidecar', 'kit', 'scenarios'].map((d) => git(SRC, 'rev-parse', `HEAD:${d}`).slice(0, 12)).join('.');
+  const sidecarTreeNow = () => SIDECAR_TREE_PATHS.map((d) => git(SRC, 'rev-parse', `HEAD:${d}`).slice(0, 12)).join('.');
   if (stepIds.includes('unit-sidecar')) {
     runShared.sidecarJunit = path.join(OUT, 'sidecar-suite.junit.xml');
     runShared.sidecarTree = sidecarTreeNow();

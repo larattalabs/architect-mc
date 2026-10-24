@@ -41,11 +41,14 @@ function report(file) {
   return files;
 }
 
+/** What unit-sidecar's results depend on: the sidecar, the kit, the scenarios, and the two files its tests read from outside them. */
+export const SIDECAR_TREE_PATHS = ['sidecar', 'kit', 'scenarios', 'mod/src/main/java/dev/larattalabs/architect/api/Limits.java', 'tools/eval.mjs'];
+
 /** The sidecar tree the run's unit-sidecar tests: HEAD's sidecar/, kit/ and scenarios/, or 'dirty'. */
 export function sidecarTree(root) {
   const git = (...a) => spawnSync('git', ['-C', root, ...a], { encoding: 'utf8' });
-  const t = ['sidecar', 'kit', 'scenarios'].map((d) => git('rev-parse', `HEAD:${d}`));
-  const s = git('status', '--porcelain', '--', 'sidecar', 'kit', 'scenarios');
+  const t = SIDECAR_TREE_PATHS.map((d) => git('rev-parse', `HEAD:${d}`));
+  const s = git('status', '--porcelain', '--', ...SIDECAR_TREE_PATHS);
   if (t.some((x) => x.status !== 0) || s.status !== 0) return null;
   return s.stdout.trim() ? 'dirty' : t.map((x) => x.stdout.trim().slice(0, 12)).join('.');
 }
