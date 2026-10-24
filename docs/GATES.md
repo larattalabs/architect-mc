@@ -1001,7 +1001,8 @@ the same assertions; only idle time and pure duplication went. The before/after 
   0 of the 12 baseline slices.
 - **The natural scenario settles** stay at 90 s in effect (above): never quiet within the cap.
 - **gate6a's in-assertion sleeps** (staged's 90 s "still waits without maxWait", the sidecar-kill pauses) are the assertions'
-  own time windows.
+  own time windows. (Speed audit B, below, made 6a-crash's RG5 pause after the sidecar kill a poll for SIDECAR_UNAVAILABLE, at most the
+  20 s; staged's 90 s and the other pauses stay.)
 
 ### Duplicates (`supersededBy`)
 
@@ -1204,6 +1205,84 @@ A sprint of 2,400 ticks took 0.4-4.5 s at default rules (a villager stand the mo
 not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-212922-slice`) these waits are about 57 of its 339
 in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
 wall falls by less until those shrink.
+
+## Speed audit B: in-game waits (2026-10-23)
+
+Noah approved the in-game-wait items of the 2026-10-23 audit (`artifacts/audit-findings-2026-10-23.md`, G1-G8). Branch
+`chore/speed-audit-b`. Every check keeps its assertions; only idle time went. The rule of "Sprinted game-time waits" holds: a wait
+sprints only if it counts ticks, and nothing here sprints a timeout, a presence limit, a bench or a wall-clock rule.
+
+**Sprinted (headless hosts only; `GATE_SPRINT=0` or a client: the original wait)**
+- `tools/scenarios.mjs` natural stand: `L.gameWait(120_000, {real: L.settle, label: 'stand'})`. Only 6cd-scenario-districts and
+  6cf2-scenario-scatter run it headless; the client scenarios keep the real wait.
+- 6a-forest's 2-minute stand at random_tick_speed 3 (`gate6a.mjs`).
+- h-probe's lava loop: the 24 samples 5 s apart are 24 `gameWait(5000)` (`lib/gate6ch-core.mjs`).
+- rs item 7's 10 s starve (`gate6crs.mjs`; the audit named it "rs-crash ~576": it is item 7, rs-ingame; rs-crash's item 11 is unchanged).
+  WaitCalc's 100-tick threshold counts builder ticks of game time (`survival/WaitCalc.java`; no wall clock in `survival/` or
+  `site/Builder.java`), so this is a tick wait, not the wall-clock builder rule of the list above.
+- HY's terrain settle and post-removal settle (`lib/gate6chy-b.mjs`), only when the driver sets `ctx.sprintWaits` (gate6chy.mjs).
+  The settle straight after the forceload and `waitChunks` stays real (chunk activation). KC, FL, IRR, F3 and RS call the same helpers
+  and keep their fixed settles.
+- 4d-all(-full)'s survival build: `/tick sprint` in 100-tick chunks with SITE_BUILT checked between them, the 25-minute wall cap
+  kept (`gate4d.mjs`). The builder's `nanoTime` deadlines are per-tick CPU budgets, not graces; the hopper chain is vanilla ticks.
+
+**Settles that became "until quiet"** (`settleQuiet`, at most the wait they replace; natural and fluid sites usually run to the cap
+as in "Waits that became wait until done", so the saving there is nil and the point is parity): rs item 14 and s3-plan (90 s),
+t3a-frozen's natural settle (60 s), voc-natural (30 s), 6b-commands (90 s). The goldens and surveys these steps read are cut from
+the settled world; a quiet end means no scheduled tick is left, so the world is the one the cap would have given.
+- 5b-chains `hash()`: tick-quiet (1 s floor, 3 s cap) instead of 3 s, and the apply's pre-hash is the last record's hash. 5b's client
+  host is kept; other 5b steps keep the fixed 3 s.
+- 4e-orders and 4e-crash: the hash settle, the removal settle, the open sleeps and the crash restart's settle are quiet polls
+  (the restart's waits at least 3 s and for the journal to stop changing) with the same caps; connect polls are 500 ms. Other 4e steps
+  (throughput, migration, ...) keep their fixed waits.
+
+**Polls instead of fixed sleeps:** rp-crash's verify loop (500 ms, the 30 s cap); 6a-crash's 20 s after the sidecar kill (poll for
+SIDECAR_UNAVAILABLE and for cellsWritten to rest 3 s, so buffered tiles finish as in the old pause; the link's reconnect backoff is capped at 5 s, so the resume bar of RG5 can come at most about 2 s sooner than
+after a full 20 s outage); 0a-keys and 0a-batches' `killClient` (exit poll of the helper's pid, at most the 8 s); rs-survival's lv7
+polls (1 s; the stability read needs 6 equal reads, a 6 s window, was 3 reads 3 s apart); 6b-versionc (v0.11.0's sidecar build cached under
+`artifacts/sidecar-dist-cache/` by tag commit and node version; the three 5 s settles are quiet polls, which wait the full 5 s on
+0.11.0's client because it has no `dev.ticks.pending`; the 30 s window is untouched). 6a-eflat skips the heap-GC baseline
+(`heapBaseline: false`), which only the other mega runs record.
+
+**Kept in real time, with the reason**
+- f3-ingame (`gate6cf3.mjs` 300/303, `lib/gate6cf3-game.mjs` 172-174) and fl-natural's control (`lib/gate6cfl-game.mjs`): the
+  controls that mirror another run's span and the settle after a site copy, listed above.
+- pt2-ingame's settles (and PT's): `Builds` detects with wall-clock `debounceMs` (5 s), `demoteGapMs` and `graceMs`
+  (`System.currentTimeMillis`), and the 6 s settle is that debounce plus a second.
+- y2-ingame's 8 s after the reload: a re-emitted start edge shows only EVENT_TICKS (20) after D's first builder tick, which follows
+  the 100-tick threshold, so about 160 ticks are needed; no saving, left as it was.
+- the first settle in HY's `buildTerrain` (chunk activation), t3a/voc natural caps are their own (60 s/30 s, not 90 s).
+
+### Measured (speed audit B)
+
+`change --only <24 steps> --no-split --no-cache --no-turbo` (normal queue, load 100-160), three runs of drivers from: origin/main 596b89a8
+(`artifacts/gate-runs-spB/old`, 20 PASS / 4 FAIL), this branch at 41d0b22a (`new`, 22 / 2) and the branch with `GATE_SPRINT=0` on the 9
+sprinted steps (`new0`, 8 / 1). Compared by `ok`/`FAIL`/`rec` check names and statuses (split-proof's mask): **no check present on one side only
+and no status difference caused by a changed wait**; the exceptions are all main's own intermittents, present with the waits unchanged:
+- 6cf2-scenario-scatter, item 8 natural exactness: FAIL in old (2 unclassified) and in new0 (1 unclassified, real-time stand), ok in new (0).
+- 4d-all "group undo": FAIL in old (the known intermittent), ok in new and new0.
+- rs-survival-smoke item 14 (PARTIAL at 96.7%) and y2-ingame fail identically in old and new. Item 10 (rs02m2 "region reads REMOVING after the reopen:
+  REMOVED") failed once, in new only; item 10 uses none of the changed waits (a removal that finished before the read), so it is listed, not reverted.
+
+| step | old | new | new0 (`GATE_SPRINT=0`) |
+|---|---|---|---|
+| 6a-forest | 2.6 | 0.5 | 2.5 |
+| h-probe | 2.8 | 1.0 | 2.8 |
+| 6cf2-scenario-scatter | 11.6 | 6.3 | 11.0 |
+| 6cd-scenario-districts | 9.5 | 5.2 | 7.0 |
+| 4d-all (6855 ticks sprinted in 17.8 s) | 12.4 | 8.3 | 13.2 |
+| 5b-chains | 6.0 | 2.5 | |
+| 4e-orders-full | 10.2 | 6.0 | |
+| 4e-crash-full | 13.3 | 8.9 | |
+| 6a-crash | 9.1 | 6.1 | |
+| s3-plan | 7.8 | 4.4 | |
+| rp-crash / t3a-frozen / 0a-batches | 3.8 / 3.1 / 2.3 | 2.8 / 2.1 / 1.7 | |
+| rs-ingame, rs-survival-smoke, hy-ingame-smoke | 14.0, 20.7, 13.4 | 13.3, 19.1, 11.8 | 13.5, -, 15.5 |
+| the rest (6a-eflat, 6b-versionc, 6b-commands, voc-natural, y2, 0a-keys, hy-crash/cold) | | within a minute | |
+
+Minutes, one run each under heavy load, so small differences are noise. The natural stand sprinted 2400 ticks in 1.4 s. The quiet settles ended early
+only on flat or settled worlds (s3-plan 10 s flat, 81 s natural; rs item 14 82 s); t3a, voc-natural and 6b-commands ran to their caps, as expected.
+
 
 ## P3: the water and survival ledger lints (2026-10-21)
 

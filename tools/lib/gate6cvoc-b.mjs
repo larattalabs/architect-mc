@@ -431,7 +431,8 @@ const natural = [{
     await L.fresh('G6B VOCb S3', await L.seedBase(S3_SEED));
     await L.setRules('exact');
     await L.tp((claim[0] + claim[2]) >> 1, S3.fixture.yRange[1], (claim[1] + claim[3]) >> 1);
-    await L.settle(30_000);
+    // (speed audit B) until quiet (no scheduled block or fluid tick, claim + 48 ticking), at most the 30 s it always waited, as scenarios.mjs
+    await L.settleQuiet([claim[0] - 48, claim[1] - 48, claim[2] + 48, claim[3] + 48], { capMs: 30_000 });
     const anchors = { stone: [S3.params.hallX + 4, 100, S3.params.hallZ + 4] };
     const c = await checkIn(ctx, 'v50n', { plan: fx.plan, claim, anchors, bible: 'g6cvoc_modern' });
     out.check = { overall: c.check?.overall, parts: (c.check?.parts ?? []).map((a) => `${a.part}:${a.class}`) };

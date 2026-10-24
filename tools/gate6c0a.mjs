@@ -387,6 +387,8 @@ async function stopClient() {
 }
 /** A crash: SIGKILL to this run's client JVM (by its PID). */
 async function killClient() {
+  // (speed audit B) the helper's pid, read while the client still answers: the exit poll below watches it
+  const helperPid = (await dev?.call('dev.launcher.state', {}, { timeoutMs: 10_000 }).catch(() => null))?.pid ?? null;
   const pids = clientPids();
   for (const pid of pids) {
     log(`SIGKILL my client pid ${pid}`);
@@ -399,8 +401,11 @@ async function killClient() {
     // closed
   }
   dev = null;
-  // the helper outlives a killed game (its parent-pid watch stops it within ~5 s)
-  await sleep(8000);
+  // the helper outlives a killed game (its parent-pid watch stops it within ~5 s): polled for its exit, at most the 8 s it always waited
+  if (helperPid) {
+    const alive = () => { try { process.kill(helperPid, 0); return true; } catch { return false; } };
+    for (let t1 = Date.now(); alive() && Date.now() - t1 < 8000; ) await sleep(250);
+  } else await sleep(8000);
 }
 async function restart(world, env = clientEnv) {
   await stopClient();
