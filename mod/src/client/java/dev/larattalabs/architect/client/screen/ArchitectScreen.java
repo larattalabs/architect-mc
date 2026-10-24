@@ -94,7 +94,9 @@ public final class ArchitectScreen extends Screen {
 	enum Focus {
 		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT,
 		/** (4c) the Designs tab's redirect notes for a set's item. */
-		REDIRECT;
+		REDIRECT,
+		/** (U3) words alongside the picked Style; the "Save as style…" name. */
+		STYLE_NOTE, SAVE_NAME;
 
 		/** A field of the set dialog's item rows (focused with an index). */
 		boolean perItem() {
@@ -110,12 +112,75 @@ public final class ArchitectScreen extends Screen {
 	record Option(String id, String label, boolean on) {
 	}
 
-	/** An open popup: options laid out as chips in a box under its anchor; drawn last, clicked first. */
-	private record Popup(String id, int x, int y, int w, List<Option> options, java.util.function.Consumer<String> pick) {
+	/**
+	 * An open popup (U3: one searchable list, lab-ui {@link dev.larattalabs.labui.client.widget.ScrollList}, for the Type, Tag, Collection,
+	 * profile, sort and re-skin choices): a filter line (focused: typing searches), a capped scrolling list, picked by a click or Enter;
+	 * drawn last, clicked first, Esc closes it. Each option is also a zero-size control {@code option:<popup>:<option>} for the DevBridge.
+	 */
+	private final class Popup {
+		final String id;
+		final int ax;
+		final int ay;
+		final int w;
+		final List<Option> options;
+		final java.util.function.Consumer<String> pick;
+		final dev.larattalabs.labui.client.widget.ScrollList<Option> list;
+		boolean clicking;
+		int x;
+		int y;
+		int h;
+
+		Popup(String id, int ax, int ay, int w, List<Option> options, java.util.function.Consumer<String> pick) {
+			this.id = id;
+			this.ax = ax;
+			this.ay = ay;
+			this.w = w;
+			this.options = options;
+			this.pick = pick;
+			list = new dev.larattalabs.labui.client.widget.ScrollList<Option>(dev.larattalabs.labui.client.widget.ScrollList.ROW_H, (g, f, o, rx, ry, rw,
+				rh, sel, hov) -> {
+				int tx = rx + 5;
+				if (o.on()) {
+					g.text(f, "✓", tx, ry + (rh - 8) / 2, UiStyle.CLAY_DARK, false);
+				}
+				g.text(f, TextUtil.ellipsize(f, o.label(), rw - 20), tx + 10, ry + (rh - 8) / 2, UiBits.ink(), false);
+			});
+			if (options.size() > 5) {
+				list.filter(Option::label, "Search " + options.size() + "…");
+			}
+			list.empty("Nothing matches");
+			list.items(options);
+			list.focused(true);
+			list.onActivate(this::choose);
+			list.onSelect(o -> {
+				if (clicking) {
+					choose(o);
+				}
+			});
+			for (Option o : options) {
+				if (o.on()) {
+					list.select(o);
+					break;
+				}
+			}
+		}
+
+		void choose(Option o) {
+			closePopup();
+			pick.accept(o.id());
+		}
+
+		boolean contains(double mx, double my) {
+			return mx >= x && mx < x + w && my >= y && my < y + h;
+		}
 	}
 
 	/** A text field drawn this frame (for click-to-focus). */
-	private record FieldRect(Focus focus, int index, TextFieldView view, TextModel model, int x, int y, int w, TextFieldView.Style style) {
+	private record FieldRect(Focus focus, int index, TextFieldView view, TextModel model, int x, int y, int w, TextFieldView.Style style,
+		int @Nullable [] clip) {
+		boolean clipped(double mx, double my) {
+			return clip != null && (mx < clip[0] || mx >= clip[0] + clip[2] || my < clip[1] || my >= clip[1] + clip[3]);
+		}
 	}
 
 	record Hit(String id, String label, int x, int y, int w, int h, boolean enabled, boolean on, Runnable action) {
@@ -180,6 +245,36 @@ public final class ArchitectScreen extends Screen {
 	private final List<Hit> overlayHits = new ArrayList<>();
 	private final List<FieldRect> fieldRects = new ArrayList<>();
 	private @Nullable Popup popup;
+	/** (U3) The lab-ui Confirms drawn this frame: every click goes to them first (a click elsewhere disarms them). */
+	private final List<dev.larattalabs.labui.client.widget.Confirm> confirms = new ArrayList<>();
+	/** (U3) Widgets drawn this frame that take their own mouse events (compact pickers, lists, chip rows). */
+	private final List<MouseTarget> mouseTargets = new ArrayList<>();
+	/** (U3) The viewport of the scrolling body: a control drawn outside it can't be clicked (it is scissored away). */
+	private int @Nullable [] clipRect;
+	/** (U3) The current list's scrollbar (x, y, w, h) and a drag on its thumb (the grab offset, or -1). */
+	private int[] barRect = new int[4];
+	private int barGrab = -1;
+	/** (U3) The screen's tooltip (lab-ui: one per screen, drawn last). */
+	final dev.larattalabs.labui.client.widget.Tooltip tooltip = new dev.larattalabs.labui.client.widget.Tooltip();
+	/** (U3) The unified design editor (NEW on this tab, VARIANT in the Library's Variants dialog). */
+	final DesignEditor editor = new DesignEditor(this);
+
+	/** A widget with its own mouse handling (lab-ui CompactPicker, ScrollList, ChipRow). */
+	interface MouseTarget {
+		boolean click(double mx, double my, int button);
+
+		default boolean drag(double mx, double my, int button) {
+			return false;
+		}
+
+		default boolean release(double mx, double my, int button) {
+			return false;
+		}
+
+		default boolean wheel(double mx, double my, double dy) {
+			return false;
+		}
+	}
 	private final LibraryTab library = new LibraryTab(this);
 	private final TextFieldView styleView = new TextFieldView();
 	private final TextFieldView materialsView = new TextFieldView();
@@ -270,6 +365,8 @@ public final class ArchitectScreen extends Screen {
 		DesignForm f = DesignFeature.form();
 		return switch (focus) {
 			case STYLE -> f.styleText;
+			case STYLE_NOTE -> f.styleNote;
+			case SAVE_NAME -> editor.saveName;
 			case MATERIALS -> f.materials;
 			case NAME -> f.name;
 			case NOTES -> f.notes;
@@ -290,9 +387,17 @@ public final class ArchitectScreen extends Screen {
 	@Override
 	public boolean keyPressed(KeyEvent e) {
 		int k = e.key();
+		Popup pp = popup;
+		if (pp != null && !e.isEscape() && pp.list.keyPressed(e)) {
+			return true;
+		}
 		if (e.isEscape()) {
 			if (popup != null) {
 				closePopup();
+			} else if (disarmConfirms()) {
+				// an armed Confirm takes the Esc first
+			} else if (editor.escape()) {
+				// the editor's inline name field (Save as style…)
 			} else if (focus == Focus.RENAME || focus == Focus.TAGS) {
 				library.cancelEdit();
 			} else if (focus != Focus.NONE) {
@@ -323,14 +428,15 @@ public final class ArchitectScreen extends Screen {
 			return true;
 		}
 		if (k == InputConstants.KEY_TAB && tab == Tab.DESIGN) {
-			Focus[] order = DesignForm.OTHER.equals(DesignFeature.form().type) ? new Focus[] {Focus.OTYPE, Focus.STYLE, Focus.MATERIALS, Focus.NAME,
-				Focus.NOTES} : new Focus[] {Focus.STYLE, Focus.MATERIALS, Focus.NAME, Focus.NOTES};
+			Focus words = DesignFeature.form().ownWords() ? Focus.STYLE : Focus.STYLE_NOTE;
+			Focus[] order = DesignForm.OTHER.equals(DesignFeature.form().type) ? new Focus[] {Focus.OTYPE, Focus.NAME, Focus.NOTES, words, Focus.MATERIALS}
+				: new Focus[] {Focus.NAME, Focus.NOTES, words, Focus.MATERIALS};
 			int i = java.util.Arrays.asList(order).indexOf(focus);
 			setFocus(order[Math.floorMod(i + (e.hasShiftDown() ? -1 : 1), order.length)]);
 			return true;
 		}
 		if (TextKeys.isEnter(e)) {
-			if (library.enter(focus)) {
+			if (editor.enter(focus) || library.enter(focus)) {
 				return true;
 			}
 			if (focus == Focus.REDIRECT) {
@@ -415,6 +521,10 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean charTyped(CharacterEvent e) {
+		Popup pp = popup;
+		if (pp != null) {
+			return pp.list.charTyped(e) || true;
+		}
 		if (focus == Focus.KEY) {
 			if (e.codepoint() > 32 && e.codepoint() < 127 && key.length() < 400) {
 				key.append(e.codepointAsString());
@@ -433,6 +543,16 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+		Popup pp = popup;
+		if (pp != null) {
+			pp.list.mouseScrolled(x, y, scrollY);
+			return true;
+		}
+		for (MouseTarget t : List.copyOf(mouseTargets)) {
+			if (t.wheel(x, y, scrollY)) {
+				return true;
+			}
+		}
 		if (tab == Tab.DESIGNS && x >= groupArea[0] && x < groupArea[0] + groupArea[2] && y >= groupArea[1] && y < groupArea[1] + groupArea[3]) {
 			groupScroll = Math.max(0, groupScroll + (scrollY > 0 ? -1 : 1));
 			return true;
@@ -446,17 +566,42 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
-		if (popup != null) {
-			for (Hit h : List.copyOf(overlayHits)) {
-				if (h.contains(e.x(), e.y())) {
-					if (h.enabled()) {
-						h.action().run();
-					}
-					return true;
+		Popup pp = popup;
+		if (pp != null) {
+			if (pp.contains(e.x(), e.y())) {
+				pp.clicking = true;
+				try {
+					pp.list.mouseClicked(e.x(), e.y(), e.button());
+				} finally {
+					pp.clicking = false;
 				}
+				return true;
 			}
 			closePopup(); // a click outside closes it
 			return true;
+		}
+		// (U3) lab-ui Confirms first: a click on one presses it, a click anywhere else disarms it
+		for (dev.larattalabs.labui.client.widget.Confirm c : List.copyOf(confirms)) {
+			if (c.mouseClicked(e.x(), e.y(), e.button())) {
+				return true;
+			}
+		}
+		// (U3) the list's scrollbar: drag the thumb, or page towards the click
+		if (listNeeded > listAvailable && barRect[3] > 0 && e.x() >= barRect[0] && e.x() < barRect[0] + barRect[2] + 2 && e.y() >= barRect[1]
+			&& e.y() < barRect[1] + barRect[3]) {
+			dev.larattalabs.labui.ui.ScrollMath.Thumb t = dev.larattalabs.labui.ui.ScrollMath.thumb(barRect[3], listNeeded, listAvailable, listScroll);
+			if (t.contains(barRect[1], (int) e.y())) {
+				barGrab = (int) e.y() - barRect[1] - t.y();
+			} else {
+				listScroll = dev.larattalabs.labui.ui.ScrollMath.pageTowards(barRect[3], listNeeded, listAvailable, listScroll, (int) e.y() - barRect[1]);
+			}
+			return true;
+		}
+		for (MouseTarget t : List.copyOf(mouseTargets)) {
+			if (t.click(e.x(), e.y(), e.button())) {
+				setFocus(Focus.NONE);
+				return true;
+			}
 		}
 		// UI-2b: confirms first: a click anywhere but the armed Remove disarms it (lab-ui ConfirmArm)
 		String clicked = null;
@@ -477,6 +622,9 @@ public final class ArchitectScreen extends Screen {
 			}
 		}
 		for (FieldRect r : List.copyOf(fieldRects)) {
+			if (r.clipped(e.x(), e.y())) {
+				continue;
+			}
 			int at = r.view().hit(font, r.model(), r.x(), r.y(), r.w(), r.style(), e.x(), e.y());
 			if (at >= 0) {
 				if (focus != r.focus() && (focus == Focus.RENAME || focus == Focus.TAGS)) {
@@ -492,6 +640,110 @@ public final class ArchitectScreen extends Screen {
 		}
 		setFocus(Focus.NONE);
 		return super.mouseClicked(e, doubleClick);
+	}
+
+	@Override
+	public boolean mouseDragged(MouseButtonEvent e, double dx, double dy) {
+		Popup pp = popup;
+		if (pp != null && pp.list.mouseDragged(e.x(), e.y(), e.button())) {
+			return true;
+		}
+		if (barGrab >= 0) {
+			listScroll = dev.larattalabs.labui.ui.ScrollMath.offsetForThumbTop(barRect[3], listNeeded, listAvailable, (int) e.y() - barRect[1] - barGrab);
+			return true;
+		}
+		for (MouseTarget t : List.copyOf(mouseTargets)) {
+			if (t.drag(e.x(), e.y(), e.button())) {
+				return true;
+			}
+		}
+		return super.mouseDragged(e, dx, dy);
+	}
+
+	@Override
+	public boolean mouseReleased(MouseButtonEvent e) {
+		Popup pp = popup;
+		if (pp != null && pp.list.mouseReleased(e.x(), e.y(), e.button())) {
+			return true;
+		}
+		if (barGrab >= 0) {
+			barGrab = -1;
+			return true;
+		}
+		for (MouseTarget t : List.copyOf(mouseTargets)) {
+			if (t.release(e.x(), e.y(), e.button())) {
+				return true;
+			}
+		}
+		return super.mouseReleased(e);
+	}
+
+	/** Disarms an armed Confirm (Esc); true when one was armed. */
+	private boolean disarmConfirms() {
+		boolean any = false;
+		for (dev.larattalabs.labui.client.widget.Confirm c : confirms) {
+			any |= c.escape();
+		}
+		return any;
+	}
+
+	// ------------------------------------------------------------------ (U3) lab-ui controls in the hit list
+
+	/**
+	 * Registers a lab-ui control drawn this frame as control {@code id} (dev.ui.state / dev.ui.click see it; a mouse click on it
+	 * presses it through the hit list). Clipped to the scrolling body when one is set: scrolled out of view, it is still a control for
+	 * the DevBridge (zero size) but no click lands on it.
+	 */
+	void control(String id, String label, dev.larattalabs.labui.client.widget.Control c, boolean on) {
+		if (!c.shown()) {
+			return;
+		}
+		int x = c.x();
+		int y = c.y();
+		int w = c.width();
+		int h = c.height();
+		int[] r = clipRect;
+		if (r != null) {
+			int x0 = Math.max(x, r[0]);
+			int y0 = Math.max(y, r[1]);
+			int x1 = Math.min(x + w, r[0] + r[2]);
+			int y1 = Math.min(y + h, r[1] + r[3]);
+			x = x0;
+			y = y0;
+			w = Math.max(0, x1 - x0);
+			h = Math.max(0, y1 - y0);
+		}
+		if (c instanceof dev.larattalabs.labui.client.widget.Confirm cf) {
+			confirms.add(cf);
+		}
+		hits.add(new Hit(id, label, x, y, w, h, !c.isDisabled(), on, c::press));
+		tooltip.offer(c, (int) mouseX(), (int) mouseY());
+	}
+
+	/** A control for the DevBridge only (zero size: no mouse click lands on it), e.g. a compact picker's choice. */
+	void devControl(String id, String label, boolean enabled, boolean on, Runnable action) {
+		hits.add(new Hit(id, label, 0, 0, 0, 0, enabled, on, action));
+	}
+
+	/** Takes this widget's mouse events this frame (compact pickers, lists, chip rows). */
+	void mouseTarget(MouseTarget t) {
+		mouseTargets.add(t);
+	}
+
+	/** Controls drawn after this are clipped to {@code r} (x, y, w, h); null = none. */
+	void clipControls(int @Nullable [] r) {
+		clipRect = r;
+	}
+
+	private double lastMx;
+	private double lastMy;
+
+	double mouseX() {
+		return lastMx;
+	}
+
+	double mouseY() {
+		return lastMy;
 	}
 
 	/** Runs the control with id {@code id} as a click would (DevBridge {@code dev.ui.click}). Returns false when there is none. */
@@ -595,9 +847,12 @@ public final class ArchitectScreen extends Screen {
 		r[0] = x;
 		r[1] = y;
 		r[2] = w;
-		fieldRects.add(new FieldRect(f, index, view, m, x, y, w, st));
+		fieldRects.add(new FieldRect(f, index, view, m, x, y, w, st, clipRect));
 		boolean on = focus == f && (index < 0 || focusIndex == index);
-		hits.add(new Hit("field:" + f.name().toLowerCase(Locale.ROOT) + (index >= 0 ? ":" + index : ""), "text field", x, y, w, TextFieldView.BASE_H,
+		int[] cr = clipRect;
+		int hy = cr == null ? y : Math.max(y, cr[1]);
+		int hh = cr == null ? TextFieldView.BASE_H : Math.max(0, Math.min(y + TextFieldView.BASE_H, cr[1] + cr[3]) - hy);
+		hits.add(new Hit("field:" + f.name().toLowerCase(Locale.ROOT) + (index >= 0 ? ":" + index : ""), "text field", x, hy, w, hh,
 			true, on, () -> {
 				setFocus(f, index);
 				m.moveTo(m.length(), false);
@@ -652,42 +907,31 @@ public final class ArchitectScreen extends Screen {
 		if (p == null) {
 			return;
 		}
-		int pad = 4;
-		int w = Math.min(p.w(), width - 8);
-		// lay the chips out first to know the height
-		int cx = 0;
-		int cy = 0;
-		List<int[]> at = new ArrayList<>();
-		for (Option o : p.options()) {
-			int cw = font.width(o.label()) + 12;
-			if (cx > 0 && cx + cw > w - 2 * pad) {
-				cx = 0;
-				cy += CHIP_H + 3;
-			}
-			at.add(new int[] {cx, cy, cw});
-			cx += cw + 3;
+		int pad = 3;
+		int w = Math.min(Math.max(p.w, 120), width - 8);
+		int rows = Math.max(1, Math.min(p.options.size(), 8));
+		int lh = p.list.heightFor(rows);
+		// at most what fits under or over the anchor
+		int below = height - 4 - p.ay;
+		int above = p.ay - CHIP_H - 6;
+		int room = Math.max(below, above) - 2 * pad;
+		while (lh > room && rows > 2) {
+			rows--;
+			lh = p.list.heightFor(rows);
 		}
-		int h = cy + CHIP_H + 2 * pad;
-		int x = Math.max(4, Math.min(p.x(), width - w - 4));
-		int y = p.y() + h > height - 4 ? Math.max(4, p.y() - h - CHIP_H - 2) : p.y();
+		int h = lh + 2 * pad;
+		int x = Math.max(4, Math.min(p.ax, width - w - 4));
+		int y = p.ay + h > height - 4 ? Math.max(4, p.ay - h - CHIP_H - 2) : p.ay;
+		p.x = x;
+		p.y = y;
+		p.h = h;
 		g.nextStratum();
 		Panels.framed(g, x - 2, y - 2, w + 4, h + 4);
 		g.fill(x, y, x + w, y + h, UiStyle.CREAM);
-		for (int i = 0; i < p.options().size(); i++) {
-			Option o = p.options().get(i);
-			int[] a = at.get(i);
-			int ox = x + pad + a[0];
-			int oy = y + pad + a[1];
-			Hit hit = new Hit("option:" + p.id() + ":" + o.id(), o.label(), ox, oy, a[2], CHIP_H, true, o.on(), () -> {
-				closePopup();
-				p.pick().accept(o.id());
-			});
-			overlayHits.add(hit);
-			Panels.sprite(g, o.on() ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, ox, oy, a[2], CHIP_H);
-			if (!o.on() && hit.contains(mx, my)) {
-				g.fill(ox + 1, oy + 1, ox + a[2] - 1, oy + CHIP_H - 1, 0x14000000);
-			}
-			g.text(font, o.label(), ox + 6, oy + 3, o.on() || hit.contains(mx, my) ? UiBits.ink() : UiBits.muted(), false);
+		p.list.draw(g, font, x + pad, y + pad, w - 2 * pad, lh, mx, my);
+		// every option as a control for the DevBridge (dev.ui.click option:<popup>:<id>), whether it is scrolled into view or not
+		for (Option o : p.options) {
+			overlayHits.add(new Hit("option:" + p.id + ":" + o.id(), o.label(), x, y, 0, 0, true, o.on(), () -> p.choose(o)));
 		}
 	}
 
@@ -698,9 +942,18 @@ public final class ArchitectScreen extends Screen {
 
 	// ------------------------------------------------------------------ actions
 
+	/** (U3) Generate (the editor's footer). */
+	void submitDesign() {
+		submit();
+	}
+
 	private void submit() {
 		setFocus(Focus.NONE);
 		DesignFeature.submit().thenAccept(sent -> {
+			if (sent.designId() != null) {
+				// (U3) a sent design's draft is done with
+				dev.larattalabs.architect.client.design.Drafts.dropDesign();
+			}
 			if (sent.designId() != null && minecraft != null && minecraft.gui.screen() == this) {
 				selectedDesign = sent.designId();
 				setTab(Tab.DESIGNS);
@@ -864,6 +1117,12 @@ public final class ArchitectScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		hits.clear();
 		fieldRects.clear();
+		confirms.clear();
+		mouseTargets.clear();
+		clipRect = null;
+		barRect = new int[4];
+		lastMx = mouseX;
+		lastMy = mouseY;
 		int pw = Math.min(MAX_W, width - 16);
 		int ph = Math.min(MAX_H, height - 16);
 		int px = (width - pw) / 2;
@@ -922,8 +1181,12 @@ public final class ArchitectScreen extends Screen {
 			case DESIGNS -> drawDesigns(g, cx, top, cw, footerY, mouseX, mouseY);
 			case STATUS -> drawStatus(g, cx, top, cw, footerY, mouseX, mouseY);
 		}
+		clipRect = null;
 		if (popup != null) {
 			drawPopup(g, mouseX, mouseY);
+		} else {
+			g.nextStratum();
+			tooltip.draw(g, font, mouseX, mouseY);
 		}
 	}
 
@@ -1016,7 +1279,7 @@ public final class ArchitectScreen extends Screen {
 		r[0] = x;
 		r[1] = y;
 		r[2] = w;
-		fieldRects.add(new FieldRect(f, -1, view, m, x, y, w, styleFor(f)));
+		fieldRects.add(new FieldRect(f, -1, view, m, x, y, w, styleFor(f), clipRect));
 		view.draw(g, font, m, x, y, w, focus == f, styleFor(f));
 	}
 
@@ -1034,319 +1297,8 @@ public final class ArchitectScreen extends Screen {
 			set.draw(g, x, top, w, footerY, mx, my);
 			return;
 		}
-		DesignForm f = DesignFeature.form();
-		Map<String, String> errors = f.errors();
-		int colW = (w - 14) / 2;
-		int lx = x;
-		int rx = x + colW + 14;
-		int muted = UiBits.muted();
-		int y = top;
-		// left: type, style, materials, features
-		y = label(g, "Building type", errors, lx, y, colW, "type");
-		boolean openTypes = dev.larattalabs.architect.client.design.SetFeature.has("open.types");
-		y = chips(g, "type:", openTypes || DesignForm.OTHER.equals(f.type) ? TYPE_CHIPS : DesignSpec.TYPES, f.type, lx, y, colW, mx, my, id -> {
-			f.type = id;
-			if (DesignForm.OTHER.equals(id)) {
-				setFocus(Focus.OTYPE);
-			}
-		});
-		DesignSpec.Choice tc = DesignSpec.find(DesignSpec.TYPES, f.type);
-		if (DesignForm.OTHER.equals(f.type)) {
-			// an open type: its name, and the checker rules it wants
-			int tw = Math.min(150, colW / 2);
-			field(g, Focus.OTYPE, openTypeView, f.openType, lx, y - 3, tw);
-			String pl = "Profile: " + (f.profile.isEmpty() ? "default" : String.join(", ", f.profile)) + " ▾";
-			int px = lx + tw + 4;
-			int py = y;
-			dropdown(g, "design:profile", pl, px, py - 1, colW - tw - 4, mx, my, () -> {
-				List<Option> opts = new ArrayList<>();
-				for (DesignSpec.Choice c : DesignSpec.PROFILE_RULES) {
-					opts.add(new Option(c.id(), c.label(), f.profile.contains(c.id())));
-				}
-				openPopup("design:profile", px, py + CHIP_H, Math.max(240, colW - tw - 4), opts, f::toggleProfile);
-			});
-			y += TextFieldView.BASE_H - 1;
-		} else if (tc != null) {
-			g.text(font, TextUtil.ellipsize(font, tc.label() + ": " + tc.description(), colW), lx, y - 2, muted, false);
-			y += 10;
-		}
-		y = label(g, "Style", errors, lx, y + 2, colW, "style");
-		y = chips(g, "style:", DesignSpec.STYLES, f.styleChip(), lx, y, colW, mx, my, f::pickChip);
-		field(g, Focus.STYLE, styleView, f.styleText, lx, y - 2, colW);
-		y += TextFieldView.BASE_H + 2;
-		// (Style unification U2) the picked Style's four main rows (StyleForm): an edit makes a custom mix based on it
-		y = drawStyleRows(g, f, lx, y, colW, mx, my, errors);
-		y = label(g, "Materials", errors, lx, y, colW, "materials");
-		field(g, Focus.MATERIALS, materialsView, f.materials, lx, y, colW);
-		y += TextFieldView.BASE_H + 4;
-		y = label(g, "Features (up to " + DesignSpec.MAX_FEATURES + ")", errors, lx, y, colW, "features");
-		int fx = lx;
-		for (DesignSpec.Choice c : DesignSpec.FEATURES) {
-			int fw = 12 + font.width(c.label()) + 10;
-			if (fx > lx && fx + fw > lx + colW) {
-				fx = lx;
-				y += 14;
-			}
-			boolean on = f.features().contains(c.id());
-			boolean can = on || f.features().size() < DesignSpec.MAX_FEATURES;
-			Hit h = new Hit("feature:" + c.id(), c.label(), fx, y, fw, 12, can, on, () -> f.toggleFeature(c.id()));
-			hits.add(h);
-			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, fx, y + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
-			// (U2) a feature the picked Style suggested (the player hasn't touched it) is marked ✦
-			g.text(font, c.label() + (on && f.styleForm.fromStyle(c.id()) ? "✦" : ""), fx + 13, y + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
-			fx += fw;
-		}
-		// right: size, name, notes
-		int ry = top;
-		ry = label(g, "Size", errors, rx, ry, colW, "maxSize");
-		int cx = rx;
-		for (String s : List.of("S", "M", "L")) {
-			cx += chip(g, "size:" + s, s, cx, ry, s.equals(f.size), true, mx, my, () -> f.size = s) + 3;
-		}
-		cx += chip(g, "size:custom", "Custom", cx, ry, DesignForm.CUSTOM.equals(f.size), true, mx, my, () -> {
-			int[] m = f.maxSize();
-			f.customX = m[0];
-			f.customY = m[1];
-			f.customZ = m[2];
-			f.size = DesignForm.CUSTOM;
-		}) + 3;
-		if (f.plot != null) {
-			cx += chip(g, "size:plot", "Plot", cx, ry, DesignForm.PLOT.equals(f.size), true, mx, my, () -> f.size = DesignForm.PLOT) + 3;
-		}
-		chip(g, "mark_plot", f.plot != null ? "Re-mark…" : "Mark a plot…", cx + 2, ry, false, minecraft != null && minecraft.player != null, mx, my, () -> {
-			setFocus(Focus.NONE);
-			DesignFeature.startPlot();
-		});
-		ry += CHIP_H + 4;
-		if (DesignForm.CUSTOM.equals(f.size)) {
-			int sx = rx;
-			sx = stepper(g, "w", "W", f.customX, DesignSpec.MIN_XZ, DesignSpec.MAX_XZ, sx, ry, mx, my, v -> f.customX = v);
-			sx = stepper(g, "h", "H", f.customY, DesignSpec.MIN_Y, DesignSpec.MAX_Y, sx + 6, ry, mx, my, v -> f.customY = v);
-			stepper(g, "d", "D", f.customZ, DesignSpec.MIN_XZ, DesignSpec.MAX_XZ, sx + 6, ry, mx, my, v -> f.customZ = v);
-			ry += CHIP_H + 4;
-		}
-		int[] m = f.maxSize();
-		g.text(font, TextUtil.ellipsize(font, "at most " + m[0] + " wide × " + m[1] + " high × " + m[2] + " deep", colW), rx, ry, UiBits.ink(), false);
-		ry += 10;
-		DesignSpec.Plot p = f.plot;
-		if (p != null && DesignForm.PLOT.equals(f.size)) {
-			g.text(font, TextUtil.ellipsize(font, "plot " + p.dx() + " × " + p.dz() + " at " + p.minX() + ", " + p.y() + ", " + p.minZ() + " · entrance "
-				+ p.front(), colW), rx, ry, muted, false);
-			ry += 10;
-		}
-		ry += 2;
-		// (4c) Massing first: a cheap shape to approve before the detail (on by default for L and plot sizes)
-		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
-			boolean can = f.remix == null;
-			boolean on = f.massingFirst();
-			String ml = "Massing first";
-			Hit h = new Hit("design:massing_first", ml, rx, ry, 12 + font.width(ml) + 4, 12, can, on, () -> f.massingFirst = !f.massingFirst());
-			hits.add(h);
-			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
-			g.text(font, ml, rx + 13, ry + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
-			String why = !can ? "not for a remix" : on ? f.massingFirst == null ? "a cheap shape to approve (default for " + (DesignForm.PLOT.equals(f.size)
-				? "a plot)" : "size L)") : "a cheap shape to approve first" : "the detail at once";
-			int wx = rx + 13 + font.width(ml) + 8;
-			g.text(font, TextUtil.ellipsize(font, why, Math.max(10, rx + colW - wx)), wx, ry + 2, muted, false);
-			ry += 16;
-		}
-		// (5a) Critique and revise: a critic scores the renders, Claude revises until it ships (default off), 1 or 2 revisions
-		if (dev.larattalabs.architect.client.design.SetFeature.has("critique")) {
-			boolean on = f.critique;
-			String cl = "Critique and revise (experimental)";
-			Hit h = new Hit("design:critique", cl, rx, ry, 12 + font.width(cl) + 4, 12, true, on, () -> f.critique = !f.critique);
-			hits.add(h);
-			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10);
-			g.text(font, cl, rx + 13, ry + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
-			int qx = rx + 13 + font.width(cl) + 8;
-			g.text(font, "Revisions", qx, ry + 2, on ? UiStyle.CLAY_DARK : muted, false);
-			qx += font.width("Revisions") + 4;
-			for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
-				qx += chip(g, "design:revisions:" + n, Integer.toString(n), qx, ry - 1, on && f.maxRevisions == n, on, mx, my, () -> f.maxRevisions = n) + 3;
-			}
-			ry += 15;
-		}
-		// (5a) the estimate, with and without critique
-		if (dev.larattalabs.architect.client.design.SetFeature.has("estimates")) {
-			DesignFeature.tickEstimate();
-			String est = f.estimateError != null ? "estimate: " + f.estimateError : f.estimate != null ? dev.larattalabs.architect.design.CritiqueRules
-				.estimateLine(f.estimate) : errors.isEmpty() ? "estimating…" : "estimate: fix the marked fields";
-			int ec = f.estimateError != null ? UiBits.errorText() : UiStyle.color("palette.ui.teal_text", 0xFF1E7472);
-			int cut = est.indexOf(" · with critique");
-			if (font.width(est) > colW && cut > 0) {
-				// two lines: the design, then with critique
-				g.text(font, TextUtil.ellipsize(font, est.substring(0, cut), colW), rx, ry + 1, ec, false);
-				ry += 10;
-				g.text(font, TextUtil.ellipsize(font, est.substring(cut + 3), colW), rx, ry + 1, ec, false);
-			} else {
-				g.text(font, TextUtil.ellipsize(font, est, colW), rx, ry + 1, ec, false);
-			}
-			ry += 12;
-		}
-		// the style bible (phase 4b): none = today's behaviour
-		g.text(font, "Style bible", rx, ry + 3, UiStyle.CLAY_DARK, false);
-		int bdx = rx + font.width("Style bible") + 6;
-		int bdy = ry;
-		boolean bibles = dev.larattalabs.architect.client.design.SetFeature.has("bibles");
-		// (U2) a Claude-made bible is set mode (f.bible); a hand-made Style picked here is materials only (the form's Style)
-		var picked = f.styleForm.base();
-		String bibleLabel = (f.bible != null ? dev.larattalabs.architect.client.design.SetFeature.bible(f.bible).map(b -> b.name()
-			+ (b.builtin() ? "" : " v" + b.version())).orElse(f.bible) : picked != null && dev.larattalabs.architect.library.StyleForm.BIBLE.equals(picked
-			.kind()) && f.styleText.value().isBlank() ? picked.name() + " v" + picked.version() + " (materials)" : "none") + " ▾";
-		if (bibles || f.bible != null) {
-			dropdown(g, "design:bible", bibleLabel, bdx, bdy, Math.min(160, rx + colW - bdx), mx, my, () -> {
-				List<Option> opts = new ArrayList<>();
-				opts.add(new Option("none", "None (no bible)", f.bible == null));
-				opts.addAll(SetDialog.bibleOptions(f.bible, false));
-				openPopup("design:bible", rx, bdy + CHIP_H + 1, colW, opts, v -> {
-					if ("none".equals(v)) {
-						f.bible = null;
-					} else {
-						var b = dev.larattalabs.architect.client.design.SetFeature.bible(v);
-						if (b.isPresent()) {
-							f.pickBible(b.get());
-						} else {
-							f.bible = v;
-						}
-					}
-				});
-			});
-		} else {
-			g.text(font, TextUtil.ellipsize(font, "none (the helper has no bibles)", rx + colW - bdx), bdx, ry + 3, muted, false);
-		}
-		ry += CHIP_H + 4;
-		ry = label(g, "Name", errors, rx, ry, colW, "name");
-		field(g, Focus.NAME, nameView, f.name, rx, ry, colW);
-		ry += TextFieldView.BASE_H + 4;
-		ry = label(g, "Notes", errors, rx, ry, colW, "notes");
-		int room = footerY - 18 - ry;
-		notesLines = Math.max(2, Math.min(8, (room - TextFieldView.BASE_H) / TextFieldView.LINE + 1));
-		field(g, Focus.NOTES, notesView, f.notes, rx, ry, colW);
-		// status + footer
-		String status;
-		boolean err;
-		if (DesignFeature.sending()) {
-			status = "Sending…";
-			err = false;
-		} else if (f.sendError != null) {
-			status = f.sendError;
-			err = true;
-		} else if (!errors.isEmpty()) {
-			status = errors.size() == 1 ? "1 field needs a fix (in red)" : errors.size() + " fields need a fix (in red)";
-			err = true;
-		} else if (!Sidecar.connected()) {
-			status = "The design helper is not running yet (Status tab).";
-			err = true;
-		} else if (f.remix != null) {
-			status = "Remix: Claude edits " + LibraryFeature.nameOf(f.remix) + "; the notes say what to change.";
-			err = false;
-		} else if (f.massingFirst() && dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
-			status = "Ready: a massing first (cents, a minute or two); approve its shape, then Claude adds the detail" + (f.critiqueSpec() != null
-				? " and revises it after a critique." : ".");
-			err = false;
-		} else if (f.critiqueSpec() != null) {
-			status = "Ready: Claude designs it, a critic scores the renders and Claude revises (up to " + f.maxRevisions + "); the Designs tab shows the rounds.";
-			err = false;
-		} else {
-			status = "Ready: Claude designs it in the background; the Designs tab shows progress.";
-			err = false;
-		}
-		statusLine(g, status, err, x, footerY - 13, w);
-		int bx = x + w;
-		String go = "Design it";
-		bx -= bw(go);
-		button(g, "submit", go, bx, footerY, bw(go), true, !DesignFeature.sending() && errors.isEmpty(), mx, my, this::submit);
-		String reset = "Clear";
-		bx -= bw(reset) + 6;
-		button(g, "reset", reset, bx, footerY, bw(reset), false, true, mx, my, DesignFeature::resetForm);
-		String setL = "Design a set…";
-		bx -= bw(setL) + 6;
-		button(g, "design_set", setL, bx, footerY, bw(setL), false, dev.larattalabs.architect.client.design.SetFeature.has("design.groups"), mx, my,
-			this::openSet);
-		if (f.remix != null) {
-			String rl = "Remix of " + LibraryFeature.nameOf(f.remix) + "  ×";
-			int rw = Math.min(font.width(rl) + 12, bx - x - 8);
-			Hit h = new Hit("remix:clear", "Not a remix", x, footerY + 3, rw, CHIP_H, true, true, () -> f.remix = null);
-			hits.add(h);
-			Panels.sprite(g, Kit.TAB_ACTIVE, x, footerY + 3, rw, CHIP_H);
-			g.text(font, TextUtil.ellipsize(font, rl, rw - 12), x + 6, footerY + 6, h.contains(mx, my) ? UiBits.errorText() : UiBits.ink(), false);
-		} else {
-			String[] hints = {"Tab", "next field", "Ctrl+Enter", "design it", "Esc", "close"};
-			if (UiBits.hintsWidth(font, hints) <= bx - x - 6) {
-				UiBits.hints(g, font, x, footerY + 4, false, hints);
-			}
-		}
-	}
-
-	/**
-	 * (Style unification U2) The Design tab's main rows: Wood / Stone / Roof / Accent of the picked Style (StyleForm, NEW mode), each a
-	 * dropdown; an edited row is marked *. A custom mix shows "based on <Style>" with Revert and Save as style…. Hidden with free text
-	 * (no Style) or a set-mode bible (its roles are the materials). U3 replaces these widgets.
-	 */
-	private int drawStyleRows(GuiGraphicsExtractor g, DesignForm f, int x, int y, int colW, int mx, int my, Map<String, String> errors) {
-		var sf = f.styleForm;
-		var base = sf.base();
-		if (base == null || !f.styleText.value().isBlank() || f.bible != null || sf.main() == null) {
-			return y;
-		}
-		var pal = LibraryFeature.palettes();
-		var main = sf.main();
-		com.google.gson.JsonObject view = sf.view();
-		var mp = view.getAsJsonObject("mainProvenance");
-		int cw = (colW - 9) / 4;
-		int cx = x;
-		for (String field : dev.larattalabs.architect.library.StyleRoles.MAIN_FIELDS) {
-			String v = main.get(field);
-			boolean edited = "hand".equals(mp.get(field).getAsString());
-			String label = Character.toUpperCase(field.charAt(0)) + field.substring(1) + " " + (v == null ? "?" : v.replace('_', ' ')) + (edited ? "*" : "")
-				+ " ▾";
-			int dx = cx;
-			int dy = y;
-			dropdown(g, "style:" + field, TextUtil.ellipsize(font, label, cw - 4), dx, dy, cw, mx, my, () -> {
-				List<Option> opts = new ArrayList<>();
-				for (String o : pal.choices(field)) {
-					opts.add(new Option(o, o.replace('_', ' '), o.equals(v)));
-				}
-				openPopup("style:" + field, dx, dy + CHIP_H + 1, Math.max(200, colW), opts, val -> {
-					try {
-						sf.editMain(field, val);
-						f.sendError = null;
-					} catch (IllegalArgumentException | IllegalStateException e) {
-						f.sendError = e.getMessage();
-					}
-				});
-			});
-			cx += cw + 3;
-		}
-		y += CHIP_H + 3;
-		if (sf.mix()) {
-			String l = "custom mix · based on " + base.name();
-			int bx = x + colW;
-			String save = "Save as style…";
-			bx -= bw(save);
-			button(g, "style:save", save, bx, y, bw(save), false, dev.larattalabs.architect.client.design.SetFeature.has("bible.save"), mx, my, () ->
-				DesignFeature.saveStyle(null).whenComplete((b, err) -> {
-					if (err != null && minecraft != null) {
-						minecraft.execute(() -> f.sendError = "Not saved: " + (err.getCause() != null ? err.getCause().getMessage() : err.getMessage()));
-					}
-				}));
-			String rv = "Revert";
-			bx -= bw(rv) + 4;
-			button(g, "style:revert", rv, bx, y, bw(rv), false, true, mx, my, sf::revert);
-			g.text(font, TextUtil.ellipsize(font, l, Math.max(10, bx - x - 4)), x, y + 4, UiBits.muted(), false);
-			y += CHIP_H + 3;
-		}
-		return y + 1;
-	}
-
-	private int stepper(GuiGraphicsExtractor g, String id, String name, int value, int min, int max, int x, int y, int mx, int my,
-		java.util.function.IntConsumer set) {
-		x += chip(g, "custom:" + id + "-", "−", x, y, false, value > min, mx, my, () -> set.accept(Math.max(min, value - 1))) + 2;
-		String v = name + " " + value;
-		g.text(font, v, x, y + 3, UiBits.ink(), false);
-		x += font.width(v) + 2;
-		x += chip(g, "custom:" + id + "+", "+", x, y, false, value < max, mx, my, () -> set.accept(Math.min(max, value + 1)));
-		return x;
+		// (Style unification U3) the unified design editor, NEW mode (it replaces the form and U2's drawStyleRows)
+		editor.drawNew(g, x, top, w, footerY, mx, my);
 	}
 
 	// ------------------------------------------------------------------ Library tab
@@ -1668,11 +1620,16 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private void scrollbar(GuiGraphicsExtractor g, int x, int y, int h) {
-		if (listNeeded > h) {
-			TextUtil.Scroll sc = new TextUtil.Scroll().update(listNeeded, h);
-			sc.scrollBy(-1_000_000);
-			sc.scrollBy(listScroll);
-			Panels.scrollbar(g, x, y, h, sc, false);
+		if (listNeeded > listAvailable && h > 8) {
+			// (U3) lab-ui's thumb: draggable, a click on the track pages towards it
+			barRect = new int[] {x, y, 6, h};
+			Panels.sprite(g, Kit.SCROLL_TRACK, x, y, 6, h);
+			dev.larattalabs.labui.ui.ScrollMath.Thumb t = dev.larattalabs.labui.ui.ScrollMath.thumb(h, listNeeded, listAvailable, listScroll);
+			boolean hot = barGrab >= 0 || lastMx >= x && lastMx < x + 6 && t.contains(y, (int) lastMy);
+			Panels.sprite(g, hot ? Kit.SCROLL_THUMB_HOVER : Kit.SCROLL_THUMB, x, y + t.y(), 6, t.h());
+			if (t.h() >= 10) {
+				Panels.sprite(g, Kit.SCROLL_GRIP, x + 2, y + t.y() + t.h() / 2 - 1, 2, 3);
+			}
 		}
 	}
 
@@ -2496,7 +2453,7 @@ public final class ArchitectScreen extends Screen {
 		o.addProperty("libraryMessage", LibraryFeature.message());
 		o.addProperty("libraryDialog", LibraryTab.dialog.name().toLowerCase(Locale.ROOT));
 		o.addProperty("libraryEdit", library.edit.name().toLowerCase(Locale.ROOT));
-		o.addProperty("popup", popup == null ? null : popup.id());
+		o.addProperty("popup", popup == null ? null : popup.id);
 		o.addProperty("showPlaced", showPlaced);
 		o.addProperty("selectedEntry", selectedEntry);
 		o.addProperty("selectedSite", selectedSite);
