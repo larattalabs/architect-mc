@@ -306,6 +306,8 @@ const GAL_DIR = path.join(OUT, 'ui');
 const GAL = { shots: [], failed: [], skipped: [], notes: [] };
 let galT0 = 0;
 const galBudgetMs = Number(process.env.GATEUIG_BUDGET_MIN ?? 9) * 60_000;
+// GATEUIG_ONLY=screen/state,...: capture just those states (plus what they depend on), for re-shooting a few
+const ONLY = process.env.GATEUIG_ONLY ? new Set(process.env.GATEUIG_ONLY.split(',').map((x) => x.trim())) : null;
 const galOver = () => Date.now() - galT0 > galBudgetMs;
 const tryc = (control) => call('dev.ui.click', { control }).then(() => true, () => false);
 const errMsg = (e) => String(e?.message ?? e).replace(/\s+/g, ' ').slice(0, 300);
@@ -322,6 +324,7 @@ async function galCap(kind, screen, state, scale) {
  * out on a scale change and drops its popups, so screens set up per scale). */
 async function sec(kind, screen, state, setup, { scales = [2, 4], once = false, closeScreen = true } = {}) {
   let first = true;
+  if (ONLY && !ONLY.has(`${screen}/${state}`)) return;
   for (const s of scales) {
     if (galOver()) { GAL.skipped.push({ kind, screen, state, scale: s, why: 'time budget' }); continue; }
     try {
@@ -360,6 +363,12 @@ steps.gallery = async () => {
     await call('dev.camera', { x: CAM[0] + dx, y: CAM[1] + dy, z: CAM[2] + dz, lookAt: { x: CAM[0] + ax, y: CAM[1] + ay, z: CAM[2] + az }, mode: 'spectator', closePause: true }, 30_000);
     await call('dev.hud', { hidden: false });
     await sleep(1200);
+  };
+  // the flat base is dirt (to y 63) under one grass layer at y 64 (the ORIGIN row): put a box of it back after blocks were set or sites removed
+  const flatten = async (x0, z0, x1, z1) => {
+    await cmd(`/fill ${x0} ${ORIGIN[1] + 1} ${z0} ${x1} ${ORIGIN[1] + 8} ${z1} minecraft:air`);
+    await cmd(`/fill ${x0} ${ORIGIN[1]} ${z0} ${x1} ${ORIGIN[1]} ${z1} minecraft:grass_block`);
+    await cmd(`/fill ${x0} ${ORIGIN[1] - 3} ${z0} ${x1} ${ORIGIN[1] - 1} ${z1} minecraft:dirt`);
   };
   await L.fresh('G6B UIG', FLAT);
   await L.setRules('exact');
@@ -434,7 +443,7 @@ steps.gallery = async () => {
   // ================================================================ Designs tab (a sim design: $0)
   await sec('ui', 'designs', 'before', async () => openTab('designs'));
   let madeEntry = null;
-  try {
+  if (!ONLY) try {
     await openTab('design');
     await call('dev.design.fill', FORM);
     const sent = await call('dev.design.submit', {}, 30_000);
@@ -476,14 +485,17 @@ steps.gallery = async () => {
   await call('dev.build.legend', { on: false }).catch(() => null);
   // replaced: the ghost over blocks that will be replaced (a stone slab laid in its box)
   await sec('world', 'ghost', 'replaced', async () => {
+    // real blocks inside the footprint, above the ground row (the cabin's walls and interior replace them): the HUD must read "N blocks replaced"
     await start(); await waitVerdict();
     const b = boxOf(await buildState());
-    await cmd(`/fill ${b.min[0] + 1} ${b.min[1]} ${b.min[2] + 1} ${b.min[0] + 9} ${b.min[1] + 1} ${b.min[2] + 7} minecraft:stone`);
-    await start(); await cam(6, 16, 34); await waitVerdict();
+    await cmd(`/fill ${b.min[0] + 2} ${b.min[1] + 1} ${b.min[2] + 2} ${b.max[0] - 2} ${b.min[1] + 4} ${b.max[2] - 2} minecraft:stone`);
+    await start(); await cam(6, 16, 34); const st = await waitVerdict(); await sleep(500);
+    const hud = (await buildState()).hud ?? st?.hud ?? [];
+    if (!hud.some((r) => /\d+ blocks? replaced/.test(r))) throw new Error(`replaced not reached: HUD ${JSON.stringify(hud)}`);
+    GAL.notes.push(`ghost/replaced HUD: ${hud.filter((r) => /replaced/.test(r)).join(' | ')}`);
   }, { once: true, closeScreen: false });
   await call('dev.build.cancel').catch(() => null);
-  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] + 3} ${ORIGIN[2] + 14} minecraft:air`);
-  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] - 1} ${ORIGIN[2] + 14} minecraft:grass_block`).catch(() => null);
+  await flatten(ORIGIN[0] - 4, ORIGIN[2] - 4, ORIGIN[0] + 18, ORIGIN[2] + 16);
   // a block entity in the way (a chest): the refusal and the force chip
   await sec('world', 'ghost', 'block_entity', async () => {
     await start(); await waitVerdict(); await chestAt(true);
@@ -513,10 +525,18 @@ steps.gallery = async () => {
   await sec('ui', 'toast', 'placed', async (s) => { await place([ORIGIN[0], 64, ORIGIN[2]], s); await call('dev.screen', { open: null }); }, { closeScreen: false });
   await call('dev.ui2b.toasts').then((t) => { GAL.toasts = t; }, () => null);
   // place on top: the same design over the site just placed (refused for the overlap; Place on top armed)
-  await sec('world', 'ghost', 'place_on_top', async () => { await start(); await waitVerdict(); await sleep(400); await cam(6, 16, 34); }, { once: true, closeScreen: false });
+  await sec('world', 'ghost', 'place_on_top', async () => {
+    await start(); await waitVerdict();
+    // the first Enter over the placed site is refused for the overlap and arms Place on top (the chip)
+    await call('dev.build.confirm', {}, 60_000).catch(() => null);
+    await sleep(400);
+    const st = await buildState();
+    if (!(st.layerArmed === true && (st.hud ?? []).some((r) => /place on top/.test(r)))) throw new Error(`place-on-top not armed: ${JSON.stringify(st.hud)}`);
+    await cam(6, 16, 34);
+  }, { once: true, closeScreen: false });
   await call('dev.build.cancel').catch(() => null);
   // the first site is needed above; a row of 6 more makes the list longer than one page
-  for (let i = 1; i < 7 && !galOver(); i++) {
+  for (let i = 1; i < 7 && !ONLY && !galOver(); i++) {
     await call('dev.build.cancel').catch(() => null);
     await place([40 + i * 16, 64, 40]).catch(() => null);
   }
@@ -536,21 +556,37 @@ steps.gallery = async () => {
   // ================================================================ plot markers and the region ghost (world)
   await call('dev.screen', { open: null });
   await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
-  const plotCam = async () => { await call('dev.camera', { x: 22, y: 78, z: 52, lookAt: { x: 29, y: 63, z: 17 }, mode: 'spectator', closePause: true }, 30_000); await call('dev.hud', { hidden: false }); await sleep(1200); };
-  await sec('world', 'plot', 'first_corner', async () => {
+  // the removed sites leave their dug footprints (a trench that reads like the plot marker): level and re-grass the ground first
+  for (const r of [[-6, -6, 24, 26], [30, 30, 110, 70]]) await flatten(...r);
+  // the plot box: corners A and B on the surface (y 63), height 16; the camera is centred on the box, south of it (its front), high enough to take both corners
+  const PA = [20, 64, 10]; const PB = [38, 64, 24]; const PH = 16;
+  const plotCam = async () => {
+    const cx = (PA[0] + PB[0]) / 2 + 0.5; const cz = (PA[2] + PB[2]) / 2 + 0.5;
+    await call('dev.camera', { x: cx, y: 80, z: PB[2] + 24, lookAt: { x: cx, y: PA[1] + 4, z: cz }, mode: 'spectator', closePause: true }, 30_000);
+    await call('dev.hud', { hidden: false }); await sleep(1500);
+  };
+  // first corner confirmed, the second pinned as the hover: the translucent rectangle with its size and height limit, as the mod draws it while marking
+  await sec('world', 'plot', 'marking', async () => {
     await openTab('design'); await call('dev.design.fill', FORM);
-    await call('dev.plot.start', {});
-    await call('dev.plot.corner', { x: 20, y: 63, z: 10 });
+    await call('dev.plot.start', { height: PH });
+    await call('dev.plot.corner', { x: PA[0], y: PA[1], z: PA[2], confirm: true });
+    await call('dev.plot.corner', { x: PB[0], y: PB[1], z: PB[2], front: 'south', confirm: false }); // confirm defaults to true: false pins the hover only
     await plotCam();
+    const ps = await call('dev.plot.state').catch(() => ({}));
+    GAL.notes.push(`plot/marking state: ${JSON.stringify(ps).slice(0, 200)}`);
   }, { once: true, closeScreen: false });
+  // the second corner confirmed: the Design tab gets the size; the plot as it stays in the world
   await sec('world', 'plot', 'marked', async () => {
-    await call('dev.plot.corner', { x: 38, y: 63, z: 24, front: 'south', confirm: true });
+    await call('dev.plot.corner', { x: PB[0], y: PB[1], z: PB[2], front: 'south', confirm: true });
     await call('dev.screen', { open: null });
     await plotCam();
+    const ps = await call('dev.plot.state').catch(() => ({}));
+    GAL.notes.push(`plot/marked state: ${JSON.stringify(ps).slice(0, 200)}`);
   }, { once: true, closeScreen: false });
+  await sec('ui', 'plot', 'marked_form', async () => { await openTab('design'); }, { closeScreen: true });
   await call('dev.plot.cancel', {}).catch(() => null);
   await call('dev.design.fill', { reset: true }).catch(() => null);
-  try {
+  if (!ONLY) try {
     const claim = [-60, -60, 59, 59];
     const p = await L.plan('crater_works', claim, { surveyLoad: 'bounded:256' });
     await call('dev.region.ghost', { planId: p.planId }, 120_000);
@@ -563,7 +599,7 @@ steps.gallery = async () => {
 
   // ================================================================ the survival crate in the world, SiteHud, CrateScreen
   let siteB = null;
-  try {
+  if (!ONLY) try {
     await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
     await call('dev.survival.set', { on: true });
     await call('dev.build.start', { blueprint: 'cabin', origin: ORIGIN, ground: true, turns: 0 });
