@@ -25141,3 +25141,18 @@ palette on the detail pass only).
   `setRole`), the Variants dialog's per-role rows; Duplicate vs Edit from `Style.editable` / `modOwned`.
 - U4 (recorded, not fixed): the kit's example designs and the sim's copies of them build their walls from the wood set (`p.planks`),
   not the `wall` role, so a wall-defined Style (medieval, japanese, modern) only partly re-skins them.
+
+## Theme rest (`fix/theme-rest`, Noah 2026-10-24: "everything should be themed / fit"; as built)
+
+The five known exceptions of S-THEME are themed or documented, and `THEME_KNOWN` (`kit/lib/lint/theme.mjs`) is empty.
+| Exception | Became |
+|---|---|
+| T3 tunnel flush light (`connectors/tunnelGeom.mjs` `tunnelLights`) | The light role's own full block when it is a bollard fixture; else the same lantern the tunnel hangs, standing in a niche in the wall (no glowstone). Level and lamp spacing unchanged (both lanterns). |
+| route_demo's lamps | `lampFixture(r)`: the light and rail roles, like every other village lamp. Lamp spacing follows the light role's level (the soul lantern's 10 is gone). |
+| forms_demo's lamp posts | `lampFixture(r)` cells through `fixtureCells` (any kind: post, light, a gibbet's arm); the parameter label is "Lamp posts". |
+| HY-c water-gate grate | Kept as `minecraft:iron_bars[waterlogged=true]`, a functional block: the state is shared by the fluid op, the survival bill and the mod, and a fence does not keep mobs out of a waterlogged reach. `minecraft:iron_bars` is in `UNTHEMED_OK` (`connectors/style.mjs`). |
+| VOC-c no-wood swaps | A door or trapdoor of the swap chain's base when that base has one (a copper role gives `copper_door`, `copper_trapdoor`), else iron's, the only other door. `minecraft:iron_door` and `minecraft:iron_trapdoor` are in `UNTHEMED_OK`. |
+
+Intended deviation: fixtures that carried the old blocks move (listed in the branch report). `kit/test/fixtures/lint/tunnel_hill` was
+patched in place (its palette's glowstone entry is the standing lantern, its bom 9 lanterns), not re-planned: re-planning needs
+the seed world (`T3B_WRITE_FIXTURE=1 node tools/gate6ct3b.mjs fixture`).
