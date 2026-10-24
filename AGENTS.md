@@ -95,5 +95,5 @@ gate anything:
   you started, by PID.
 - **Everything generated is themed (Noah, 2026-10-24).** Every block a generator, connector or region writes comes from the
   style's roles (or their slab/stairs/wall/fence shape variants), with a fallback to the nearest role, never a hard-coded oak
-  or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. lint-look checks it.
+  or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. The structure lint (S-THEME, step lint-structure) checks it.
 - Don't tune prompts against the eval briefs. A failed quality gate is reported as "not shown", with the data.
