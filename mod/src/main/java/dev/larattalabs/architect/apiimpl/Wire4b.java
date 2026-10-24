@@ -163,7 +163,18 @@ public final class Wire4b {
 			Optional.ofNullable(sheet == null || sheet.isBlank() ? null : Path.of(sheet)), comps.isEmpty() ? REQUIRED_COMPONENTS : comps,
 			Optional.ofNullable(str(o, "owner")), obj(o, "ext").deepCopy(), (int) num(o, "format"), restraint, o.has("archived") && o.get("archived")
 				.isJsonPrimitive() && o.get("archived").getAsBoolean(), o.has("critique") && o.get("critique").isJsonObject() ? Optional.of(o
-				.getAsJsonObject("critique").deepCopy()) : Optional.empty());
+				.getAsJsonObject("critique").deepCopy()) : Optional.empty(), strings(o, "tags"), strings(o, "suggestedFeatures"),
+			Optional.ofNullable(str(o, "blurb")), basedOn(o), str(o, "origin"));
+	}
+
+	/** (Style unification U1) {@code basedOn: {id, version}}, or empty. */
+	static Optional<dev.larattalabs.architect.api.BiblePin> basedOn(JsonObject o) {
+		JsonElement b = o.get("basedOn");
+		if (b == null || !b.isJsonObject() || !b.getAsJsonObject().has("id")) {
+			return Optional.empty();
+		}
+		JsonObject j = b.getAsJsonObject();
+		return Optional.of(new dev.larattalabs.architect.api.BiblePin(j.get("id").getAsString(), j.has("version") ? j.get("version").getAsInt() : 1));
 	}
 
 	/** {@code BibleJob} (bible.upsert, snapshot.bibles). */
@@ -283,9 +294,10 @@ public final class Wire4b {
 			if (ic != null) {
 				r.add("critique", Wire5a.spec(ic));
 			}
-			// the group sets these
+			// the group sets these (and its bible's roles are the materials: a palette never rides along)
 			r.remove("bible");
 			r.remove("bibleVersion");
+			r.remove("palette");
 			r.remove("group");
 			// the group's massingFirst decides the massing pass, and its context goes to every item
 			r.remove("massing");

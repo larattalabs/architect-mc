@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { SIBLING_MOVED, STORM_MOVED, normSiblingIr } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 import { DERIVE } from './corpus-derive.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
@@ -35,9 +35,13 @@ export function baseTree(root) {
 
 export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
   // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
-  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the base side (its plans and the comparison) is skipped;
+  // the head's own M18/M19 still run
+  const sk = baseDir ? null : identicalToBase(root);
+  const { dir: mainDir, base } = sk ? { dir: root, base: sk.base } : baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
+  const { hNew, hOld } = sk ? { hNew: await CP.helpers(root, { derive: [...CP.HEAD_DERIVE], headRoot: root }), hOld: null } : await CP.corpusHelpers(root, mainDir);
+  if (sk) check(true, skippedLine(sk));
   // (M18/M19: corpus-derive.mjs f3M18M19, computed where the plan ran; without the store (GATE_PLAN_CACHE=0), here, as before)
   const m1819 = async (r, s) => r.derived?.f3M18M19 ?? DERIVE.f3M18M19(r, { survey: s.bytes }, { headRoot: root });
   // ((batch v0.41.0) kitVersion and FL's street ext normalised; a fixture a sibling slice moves by name is that slice's to judge)
@@ -45,7 +49,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(norm(r)), first: r.first && r.first !== r ? sha256(norm(r.first)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, m18: {}, m19: {} };
   const all = fixtures(root);
-  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice)).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice)).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(!sk && fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
   let i = -1;
   let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
   for (const [name, fx] of all) {
@@ -56,7 +60,8 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     const existsOld = fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a, b, err = null, headRun = null;
     try { headRun = await planFixture(hNew, root, fx); a = sig(headRun.r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
-    if (existsOld) {
+    if (sk) b = a; // (the same kit and scenarios: the base's signature is the head's)
+    if (existsOld && !sk) {
       try { const { r } = await planFixture(hOld, mainDir, fx); b = sig(r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     }
     // M18 and M19 on this head's IR (recorded; predicted 0, any finding named)

@@ -15,7 +15,7 @@ import net.minecraft.world.phys.Vec3;
  * {@code onClimbable} rule against the ladder, with gravity), until its feet reach the flight's top or it stops rising for 40 ticks.
  * The flights are climbed in order (each from its own foot: a rest landing's side step is not simulated); at the top a fence gate in
  * the exit cell is opened for the step off (as the climber opens it) and closed again. The player is put back where it stood.
- * Since NEXT.
+ * Since 1.41.0.
  */
 public final class SliceClDev {
 	private SliceClDev() {

@@ -13,6 +13,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /** Param controls from a {@code params} schema, palettes, and the variant.request payload. */
@@ -140,5 +141,27 @@ class VariantFormTest {
 		assertNotNull(list);
 		assertEquals("oak", list.preset("oak").wood());
 		assertNull(Palettes.parse(json("{}"), "test"));
+	}
+
+	/** (Style unification U1) a picked bible with its roles: a main-row edit keeps the bible and sends its roles inline. */
+	@Test
+	void aMainRowEditKeepsThePickedStyle() {
+		VariantForm f = new VariantForm("gen_cabin", PARAMS, null, PALETTE, Palettes.FALLBACK);
+		Map<String, String> med = Palettes.FALLBACK.presetRoles("medieval");
+		f.chooseBible("medieval", 1, med);
+		assertEquals("medieval", f.requestJson().get("bible").getAsString(), "unedited: a re-skin with the bible");
+		f.setField("wood", "birch");
+		assertEquals("medieval", f.bible(), "the bible is kept");
+		com.google.gson.JsonObject r = f.requestJson();
+		assertFalse(r.has("bible"));
+		com.google.gson.JsonObject b = r.getAsJsonObject("palette").getAsJsonObject("bible");
+		assertEquals("medieval", b.get("id").getAsString());
+		assertEquals("minecraft:birch_log", b.getAsJsonObject("roles").get("frame").getAsString());
+		assertEquals("minecraft:white_terracotta", b.getAsJsonObject("roles").get("wall").getAsString(), "set by the Style: stays");
+		assertEquals("follows_wood", f.stateJson().getAsJsonObject("provenance").get("frame").getAsString());
+		// a preset is another Style: it replaces the bible
+		f.choosePreset("oak");
+		assertNull(f.bible());
+		assertEquals("oak", f.requestJson().get("palette").getAsString());
 	}
 }

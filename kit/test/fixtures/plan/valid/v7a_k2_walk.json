@@ -1,0 +1,97 @@
+{
+  "about": "(7a K2, \u00a79) v30's walled village with a walk (walk: true) and corners: tower: the walk round the ring, through a 1-wide 2-high passage in each corner stub, a flight up the inner face each side of both gates (or a ladder where a flight has no room), the parapet continuous, the rail on its corbels, lamps on the parapet",
+  "on": "s7",
+  "covers": [
+    "connector.wall",
+    "connector.gate",
+    "wall.around"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "k2_walk",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6,
+        "walk": true,
+        "corners": "tower"
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "west_gate",
+        "kind": "gate",
+        "at": {
+          "anchor": "claim_w"
+        },
+        "door": "door"
+      },
+      {
+        "id": "west_path",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town"
+        }
+      }
+    ]
+  }
+}

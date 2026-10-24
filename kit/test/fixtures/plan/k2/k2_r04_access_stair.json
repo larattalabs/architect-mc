@@ -1,0 +1,98 @@
+{
+ "about": "(7a K2, \u00a73, \u00a79) v30's wall rung tight round its zone (ring [2, 2]) with walk {access: stair}: no flight's band (its cells plus 1) clears the zone, refused NO_ROOM {why: access}",
+ "on": "s7",
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "k1_v30",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       2,
+       2
+      ]
+     }
+    },
+    "height": 6,
+    "walk": {
+     "access": "stair"
+    }
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "town"
+    }
+   },
+   {
+    "id": "west_gate",
+    "kind": "gate",
+    "at": {
+     "anchor": "claim_w"
+    },
+    "door": "door"
+   },
+   {
+    "id": "west_path",
+    "kind": "path",
+    "from": {
+     "anchor": "claim_w"
+    },
+    "to": {
+     "part": "town"
+    }
+   }
+  ]
+ },
+ "expect": {
+  "part": "town_wall",
+  "code": "NO_ROOM",
+  "why": "access"
+ }
+}

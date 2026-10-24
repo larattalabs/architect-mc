@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -278,6 +278,31 @@ export const LineageEntry = z.object({
   criticHash: z.string().optional(),
 });
 
+const BlockName = z.string().min(1).max(64).regex(/^[a-z0-9_:]+$/);
+
+/** (Style unification U1) a role name (kit ROLE_NAME) and a Style's roles as sent inline: at most 64. */
+export const ROLE_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+export const Roles = z
+  .record(z.string().regex(ROLE_NAME, 'role names are [a-z][a-z0-9_]{0,31}'), BlockName)
+  .refine((r) => Object.keys(r).length <= 64, 'at most 64 roles');
+/**
+ * (Style unification U1, feature `palette.roles`) a Style's materials inline: `{ bible: { id, version, roles } }`, the shape a
+ * bible build records (kit palette({ bible })). `id`/`version` name the Style the roles came from (a built-in, a saved Style, or
+ * the one a custom mix is based on); the roles are what is built. It never turns on bible set mode.
+ */
+export const BiblePalette = z.object({ bible: z.object({ id: BibleId, version: z.number().int().min(1), roles: Roles }).strict() }).strict();
+export type BiblePalette = z.infer<typeof BiblePalette>;
+const PaletteInputs = z.object({ preset: z.string().min(1).max(32).regex(/^[a-z0-9_]+$/).optional(), wood: BlockName.optional(), stone: BlockName.optional(), roof: BlockName.optional(), accent: BlockName.optional() });
+/**
+ * A preset name (kit PALETTE_PRESETS), palette inputs, or (U1, `palette.roles`) a Style's roles inline; anything else the kit
+ * refuses with a reason. Strict: an unknown key is refused (before U1 a `bible` key was stripped and the default palette built).
+ * The bible branch is first (a union takes the first branch that parses).
+ */
+export const PaletteSpec = z.union([z.string().min(1).max(32).regex(/^[a-z0-9_]+$/), BiblePalette, PaletteInputs.strict()]);
+export type PaletteSpec = z.infer<typeof PaletteSpec>;
+/** A palette as a stored variant record holds it (lenient: records written before U1 parse as they were). */
+export const StoredPaletteSpec = z.union([z.string().min(1).max(32).regex(/^[a-z0-9_]+$/), BiblePalette, PaletteInputs]);
+
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
   profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
@@ -308,10 +333,13 @@ export const DesignRequest = DesignRequestBase.extend({
     })
     .optional()
     .describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it as blobs'),
+  palette: PaletteSpec.optional().describe('(Style unification U1, feature palette.roles) materials only: the design builds with this palette (a preset, inputs, or a Style\'s roles inline `{ bible: { id, version, roles } }`) and its default palette is it. Never bible set mode: no components, no restraint. Excludes `bible`'),
   reserved: Reserved.optional().describe("(6c IRR, S-IRR-2) the lot's cells the design must leave as given (an irrigated farm's water and its edges): the brief names them, the checker refuses a design writing one (kit build.mjs --reserved)"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
+  if (r.palette !== undefined && r.bible !== undefined) ctx.addIssue({ code: 'custom', path: ['palette'], message: 'a request takes a palette (materials only) or a bible (set mode), not both' });
+  if (r.palette !== undefined && r.massing) ctx.addIssue({ code: 'custom', path: ['palette'], message: 'a massing has no materials: send the palette with its detail pass' });
 });
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
@@ -357,14 +385,6 @@ export const VariantStatus = z
   .describe('queued -> building (copy the source, build + check with a pristine kit, render, install) -> done | failed. done and failed are final.');
 export type VariantStatus = z.infer<typeof VariantStatus>;
 
-const BlockName = z.string().min(1).max(64).regex(/^[a-z0-9_:]+$/);
-
-/** A preset name (kit PALETTE_PRESETS) or palette inputs; anything else the kit refuses with a reason. */
-export const PaletteSpec = z.union([
-  z.string().min(1).max(32).regex(/^[a-z0-9_]+$/),
-  z.object({ preset: z.string().min(1).max(32).regex(/^[a-z0-9_]+$/).optional(), wood: BlockName.optional(), stone: BlockName.optional(), roof: BlockName.optional(), accent: BlockName.optional() }),
-]);
-export type PaletteSpec = z.infer<typeof PaletteSpec>;
 
 /** Param values ({ floors: 2, porch: false, roof: 'hip' }); the kit checks them against the design's params. */
 export const ParamValues = z
@@ -387,7 +407,7 @@ export const Variant = z.object({
   schem: ImportSchem.optional().describe('(6c SCH) import-schem: what the mod read from the schematic'),
   status: VariantStatus,
   step: z.string().describe('one line of progress'),
-  palette: PaletteSpec.optional().describe('(addition) variant: the palette asked for'),
+  palette: StoredPaletteSpec.optional().describe('(addition) variant: the palette asked for'),
   values: ParamValues.optional().describe('(addition) variant: the param values asked for'),
   name: z.string().optional().describe("(addition) the name asked for; when done, the new entry's display name (variant) or name (import)"),
   blueprintId: z.string().optional().describe('done: the new library id'),
@@ -663,6 +683,12 @@ export const BibleInfo = z.object({
   archived: z.boolean().optional().describe('(5a) hidden from the pickers (bible.archive); its entries are unaffected'),
   critique: z.record(z.string(), z.unknown()).optional().describe('(5a) the sheet critique (overall, scores, issues), when the bible job had one'),
   rarity: z.record(z.string(), z.unknown()).optional().describe("(6c VOC) the bible's rarity budget as stored (format 2), when it carries one"),
+  // (Style unification U1) the optional Style fields, as stored
+  tags: z.array(z.string()).optional().describe('(U1) a Style\'s tags'),
+  suggestedFeatures: z.array(z.string()).optional().describe('(U1) the features a new design with this Style starts with (DesignSpec.FEATURES ids, at most 6)'),
+  blurb: z.string().optional().describe('(U1) one line for the Style browser'),
+  basedOn: BiblePin.optional().describe('(U1) the Style it started from (a duplicate, or a hand edit of a built-in)'),
+  origin: z.enum(['builtin', 'claude', 'hand']).optional().describe('(U1) who made it: a built-in Style, a bible job (claude), or bible.save (hand)'),
 });
 export type BibleInfo = z.infer<typeof BibleInfo>;
 
@@ -1117,6 +1143,20 @@ export const GroupApproveMsg = z.object({
 export const DesignCritiqueMsg = z.object({ ...envelope('design.critique'), entryId: z.string().regex(LIBRARY_ID).max(64), spec: CritiqueSpec.optional().describe('mode must be report (the default); the model, effort, views and extraCriteria apply') });
 export const BibleDeleteMsg = z.object({ ...envelope('bible.delete'), id: BibleId, owner: Owner.optional().describe("required for another owner's bible") });
 export const BibleArchiveMsg = z.object({ ...envelope('bible.archive'), id: BibleId, archived: z.boolean() });
+/**
+ * (Style unification U1, feature `bible.save`) A hand-made Style: no Claude call, $0. Writes a new version
+ * <bibles>/<id>/versions/<v>/ (v = the latest + 1, or 1 for a new id); an existing version is never touched. `bible` is the
+ * Style (name, roles, scope?, tags?, suggestedFeatures?, blurb?, basedOn?, proportions?, roofLanguage?, silhouette?, motifs?,
+ * lighting?, avoid?, tiers?, patterns?, format?, restraint?, connectors?, fluids?, rarity?), validated by the kit
+ * (tools/bible.mjs validate: the test house included). `bibleId` absent: a new Style (bib_<slug of name>, made unique). Refused:
+ * a built-in id, an id an unfinished bible job reserved, another owner's Style. Acks { id, version, bible: BibleInfo }.
+ */
+export const BibleSaveMsg = z.object({
+  ...envelope('bible.save'),
+  bibleId: BibleId.optional().describe('the Style to save a new version of; absent = a new Style (not `id`: that is the envelope\'s correlation id)'),
+  owner: Owner.optional().describe("who saves it (by convention <modid>:<thing>); absent = the player. An existing Style's owner must match"),
+  bible: z.record(z.string(), z.unknown()).refine((b) => JSON.stringify(b).length <= 64 * 1024, 'bible is larger than 64 KB'),
+});
 // 5b
 const EntryId = z.string().regex(LIBRARY_ID).max(64);
 export const EntryVersionsMsg = z.object({ ...envelope('entry.versions'), entryId: EntryId });
@@ -1290,6 +1330,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   DesignCritiqueMsg,
   BibleDeleteMsg,
   BibleArchiveMsg,
+  BibleSaveMsg,
   EntryVersionsMsg,
   EntryDeltaMsg,
   EntryRevertMsg,

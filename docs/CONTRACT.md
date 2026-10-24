@@ -185,6 +185,8 @@ DesignRequest = {
 Design = { id: "d<n>", request, status, step, blueprintId?, size?, previews?, error?, createdAt, updatedAt }
 ```
 
+> **Style unification U1:** `DesignRequest.palette?` (protocol 2, helper feature `palette.roles`): a preset, inputs or a Style's roles inline `{bible: {id, version, roles}}`, materials only, never bible set mode; it excludes `bible`. See "Style unification U0+U1 contract" (end of this file).
+
 `DesignStatus` is the same as AgentCraft. The sidecar knows the library path from its launch flags; the
 mod does not send `outDir`.
 
@@ -316,6 +318,8 @@ How a variant job works:
   The entry gets `variantOf`, keeps the original's `request`, and gets `displayName` = `"<name> (<palette>, floors 2)"`.
 - One job at a time; seconds, not minutes.
 - A source that throws or fails the check marks the variant `failed`, with the checker's error lines.
+
+> **Style unification U1:** `palette` may also be a Style's roles inline `{bible: {id, version, roles}}` (feature `palette.roles`); it replaces the entry's recorded palette. `PaletteSpec` is strict: an unknown key is refused, never stripped. See "Style unification U0+U1 contract" (end of this file).
 
 ## Mod: library screen
 
@@ -925,6 +929,8 @@ A bible is an artifact, separate from library entries: `<gameDir>/architect/bibl
 - **Revise:** `bible.revise {id, notes}` creates version+1. Entries pin the bible version they were built with, and re-skinning
   to a newer version is a variant.
 
+> **Style unification U1:** a bible is a Style. Optional fields `tags`, `suggestedFeatures`, `blurb`, `basedOn`, `origin`; the built-in Styles are now 16 (the six word-only chips authored); `bible.save` makes a hand-made Style with no Claude call; every save adds a version and a pinned version is never rewritten or removed. See "Style unification U0+U1 contract" (end of this file).
+
 ## Component library and named parts (R3)
 
 - **Components:** `components.mjs` exports functions `(bp, at, opts)` that place a small part using the bible's roles:
@@ -1026,6 +1032,8 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
     - `ext` and `itemKey` survive a sidecar restart mid-group;
     - the estimate is within ±50% of the measured cost for the gate group, and the tolerance gets tightened as data accrues;
     - a soft-budget pause, extend and resume (sim backend).
+
+> **Style unification U1:** items 5-7 still hold. `Bible` gains the Style fields and `editable()`; `Bibles.save` and `Bibles.usable` are added; an owned Style (owner set) is Duplicate-only in Architect's UI and saved only by its owner. See "Style unification U0+U1 contract" (end of this file).
 
 ### Steward ask (2026-10-05): read the world's survival toggle (API 1.2.0, with the 4b Java side)
 
@@ -20562,6 +20570,19 @@ functions of `wall.mjs` and merge cleanly.
 - **N-K2-1. How walks look.** Proposed: a 1-wide walk on a thickness-2 wall, a continuous wall-block parapet with merlons above,
   a fence rail on the inside, lanterns on the parapet, stairs up the inside face at each gate. Default as proposed.
 
+### Phase 7a slice K2 as built (walls along a boundary and wall walks; branch `slice/K2`, versions NEXT; recorded 2026-10-23)
+
+| Area | As built |
+|---|---|
+| `wall.along` (`kit/lib/connectors/line.mjs` `alongSide`, `alongLine`; `wall.mjs` `alongOf`) | D2's `traceBoundary` (water as a shore of `minArea`, a biome edge with the plan's biome grid, a ridge; `near` the anchor or the feature's `to`), its normals (`normalAt`), the side (`alongSide`: a shore's land; left, right, toward or away from an anchor; `either`: the side with more clear band cells, ties left), then per run of 8 spine cells the smallest clear offset in `distance` (default [2, 8]); a run with none steps outside it (above first, at most 16, never nearer the spine than thickness - 1: a `move` deviation, `tolerance.move`). The offset points are smoothed over +-4 spine cells of one offset (kept only where the cell stays within the run's distance of the spine), joined 4-connected (x first, else z first where clear), loops cut out; the wall stands toward the spine (`lineCells` to the right of travel: the line reversed on the right side), so its inside faces away from the spine (the coordinator's reading). Every course is checked on the final line: a blocked one bumps its run; walk-network cells are crossings only on a straight run with a jamb each side (an open gate), else a blocker. Ends out of the claim are clipped (posts at the free ends, K1a's); under 8 positions is `OUT_OF_CLAIM`. Refusals: `NO_FEATURE {why: boundary}` (D2's NO_EDGE), the class every offset met (`NO_ROOM` for lots and zones, `PROTECTED`, `WATER`, `OUT_OF_CLAIM`, `OVERLAP {kind: body}` through KC's `bodyBlame`). The geometry carries `along {kind, side, distance, window, spine (corners), runs [{from, to, offset}]}`; meta `along.spine` (the window); siteplan `walls[].spine`. |
+| Gates on an along wall | Open, `closed` noted not read; `gates.min` defaults to 0; auto gates where routes cross (the gate move, K1a's, unchanged); `gates.min` evenly (the n-th at (2n + 1) / (2 want) of the length, linear distance), a level run within half the spacing preferred. Where no level run exists (a stepped bank) the gates are placed **before routing** on a **gate landing** (the coordinator's ruling (b)/(i)): the gate's floor (the line's ground or the shore's, whichever landing is shorter) 2 cells each side; outside lanes end at the water's edge (at most 2 above it) or run straight out to the ground; inside, a 1-wide flight follows the wall's inner face round its bends (a 4-connected line, loops cut) rising 1 a cell in T2's pattern (8, then 2 flat) until the ground is within 1 (at most 40); open sides over a drop of more than 1 are filled and fenced; every cell is the wall's own part (undo with the wall). The landings feed the route pass's `base` (`wallsBase`, merged with rope.base in compile.mjs). A gate whose landing doesn't fit, or that sits far from its even place, is noted per gate. A leg an along wall cuts (the straight line between its ends crosses it, the dry claim joins them without the wall) answers `refused UNREACHABLE {kind: wall, walls, round, search}` (`wallsCutAnswer`; never a bare BUDGET). |
+| Walks (`kit/lib/connectors/wallWalk.mjs`, called by `emitWall`) | `walk: true \| {width 1..2, access stair\|ladder\|auto, every 16..128, lamps every\|none}`; `params.wall_walk: true` read as `walk: true` (noted). Thickness defaults to width + 1; a given thickness under it is `refused NO_ROOM {why: walk}` with the thicker wall as `wouldFit` (its line re-checked). The surface: S2 = max over j of (2 T[j] + 2 - d(i, j)) (half blocks, ring distance on a closed wall), a full block of the walk role at even S2, a bottom slab over a full block at odd: neighbouring cells within one half block, over the gates' raised lintels too. The courses under the outer one are the walk; the outer course carries a continuous wall-block parapet at the feet (the first of `connectors.wall.parapet`, then trim, structure, foundation, wall with a wall variant; none: two full blocks) and K1a's merlons above it every other position with crenels. Inner rail: one cell inward at the feet on a corbel at walk level (the coordinator's reading), where the inside ground is more than 3 below; open over an access where its steps need 3 clear. Accesses: a flight each side of every gate (from 2 past the jamb, up to 8 further along), 1 wide along the inner face, rising 1 a position to the walk, filled under, railed on its open side from its second step, its band (cells plus 1) clear of obstacles, networks, lamps and props; else a ladder (auto); `access: stair` with no room is `refused NO_ROOM {why: access}` (at emission); `every` adds one along a longer run; a wall with no gate gets one (by its zone's street end, else its middle). Corner towers: a 1-wide, 2-high passage through each stub at walk level. Lamps: the bible's light on the parapet's top in a crenel gap at least every floor(12 * level / 15) positions (the coordinator's reading), and one on each flight's rail. Dead ends: a rail across the walk at an open wall's free ends (noted). Graph: nodes `kind: access` (ref the wall) and edges `type: wall_walk` between neighbouring accesses (`movers: ['player']`). Siteplan `walls[].walk {width, runs, accesses}`. Broken variants (`ext architect_mc:unsafe`): `noRail`, `parapetGap: n`, `noLamps`. |
+| Checker (`checkWalls.mjs` `walkRules`) and the structure lint | `M2:walk` (the kit player from the accesses' feet round the whole walk, up each access from its own foot, down to every foot), `M8:walk` (every edge of the walk's level area, which grows over any cell the player steps onto beside it, a 1.5 barrier or a drop of at most 3; an access's column is no ledge), `M6:walk` (2 clear), `M5:walk` (dark walk cells and flight steps); M8:wall ignores an access's and a corbel's columns as ground beside the wall. `kit/lib/lint/structure.mjs` gates the four, and M3 in a connector corpus; `tools/lib/lint-cases.mjs` adds `k2:walk` (the walk fixtures, the along walls, castle_city, the three broken variants each caught on its rule) and the corpus dir `k2`. |
+| Plan/0, catalogue, API | `wall.along` reserved -> supported (schemaVersion 1, sinceApi NEXT, its note); `connector.wall.walk`; R15's and wallWhere's wording; bible `connectors.wall {walk, parapet}` defaults (trim; parapet trim then the body's chain). Features `wallAlong`, `wallWalks` (sidecar `region.walls.along`, `region.walls.walk`; two `case` lines in `ApiRules.java` and ApiK1Test: the coordinator's reading of "No Java" as no new API surface). Graph node kind `access` and edge type `wall_walk` (program.mjs, siteplan-1; Steward never reads node kinds: confirmed). The compact plan/0: 93,627 characters (bound 96,000). |
+| Deviations (each the coordinator's, 2026-10-23) | The inner rail on corbels; along walls never take H's harbour fallback (0 cells in water); the along wall's inside faces away from its spine; features need ApiRules; S3's shore fixture takes `gates.min: 2` (routes can't open gates on its stepped bank), the route-crossing bar on the flat biome edge; the gate landings (ruling (b), then (i)); routes joining landings queued (fallback (ii), PLAN "Routes joining gate landings", probe: 11 of 25 route without the wall, 0 with it and its landings: 24 UNREACHABLE {kind: wall}, 1 BUDGET either way); lamps on the parapet top; no M17 swap (PLAN: a shared lamp helper); item 6 "shown" is the bot taken cell by cell along the walk (no bot-walk API); item 7 judged on the runs' offsets with a cell within one of the range on a staircase shore. K1a's `k1a/unread_keys.json` swaps `wall_walk` for `wall_height` (S-K1-3's three keys kept). |
+| Look (N-K2-1) | **Approved by Noah, 2026-10-23** ("walls are looking good"), on gallery v1: https://claude.ai/artifact/BXkwixYbrNA9Zxo8nMiDnw (the walk in the village, infernal and coastal bibles: on the walk, an access landing, the rail on its corbels, a tower passage, a gate, the ring; S3's shore wall). v2 adds the night shots and a shore gate on its landing (k2/k2_look_bank) for completeness. Noah's ask for fancier piston and redstone gates is queued as its own slice after K3; K2's gates stay as built. |
+| Gate (DEV MODE, Noah 2026-10-24: K2's own steps and the lints on its committed head) | `artifacts/gate-runs-K2/20261024-061930-slice` at d3522225 (after merging origin/main with UI-2b): **PASS 6/6** (k2-unit 355 ok; S3's removal E-normal 101, 0 unclassified, the undo's own 0). Before it: ccae670a (v0.43.0 merged) in `20261024-055221-slice` (E-normal 87, melt:lit 1), 25b5f064 in `20261024-051614-slice` and 556f8bdb in `20261024-024031-slice`, both PASS 6/6. Between them, `20261024-040017-slice` at ab9b9928 failed k2-unit item 2 (the foundation's movers no longer move: K2_MOVED now names only castle_city) and k2-natural item 9 once (one snow layer, kept by its condition under K1a's gate lamp at light 14, melted before the removal: now `melt:kept`, only where the realised re-read still held the snow; PLAN's M17 item). k2-unit (353 ok: items 1, 3, 8, 11, 12; item 2 byte identity, only the named movers moved: castle_city by its walk, the foundation's mining_town and e15; item 3 only castle_city among the asks; the compact plan/0 under 96,000; the lints k2:walk with its broken variants and p0:k2; the sidecar's features), k2-ingame (24 ok: v7a_k2_walk READY, 3 checks one artifact, tile shas the artifact's, realised = virtual over 5127 cells, closure 0 leaks and 14/14 across for both movers, no route cell under the wall, the walk judged by the kit player 176/176 cells and 6/6 accesses up and down, M8:walk 0, M5 0, M3 0, head room; vanilla villagers 6/6 both ways through the gates only; the bot along the walk; **E-flat 0**, 5141 cells restored), k2-natural (16 ok: v7a_k2_along_shore on S3's live claim, realised vs virtual within 0.01%, every line cell within distance (the runs' offsets), **0 wall cells in water** over each column's written range, both free ends' posts, **E-normal 107, 0 unclassified, the undo's own 0**), k2-survival (7 ok: k2/k2_rs_walk in survival READY, the walk paid with its wall, PLACED and built, BOM exact per part, equal to its INSTANT twin, E-flat 0, the refund once), lint-structure, lint-look. The look step (k2-look) passed in `20261023-175925-slice` at 9a81564a (gallery v1, approved). Earlier: the full slice tier `20261023-175925-slice` (its other failures the foundation's tables, since fixed there, or load). **gate-verifier**: item 9 re-run `artifacts/gate-runs-K2-verify/20261024-005144-slice` (E-flat 0; E-normal 0 unclassified); its one finding (item 7's water scan too deep: a flooded cave under the footing) fixed as `gate7ak2-kit.mjs wallInWater` and verified in a delta on its dumps (17 -> 0; a wall cell in water and a footing reaching water each caught; untouched water under the footing not counted). No undo or journal exposure found. $0.00. |
+
 ## Phase 7a slice CW: catwalks along a face (FROZEN 2026-10-20, Steward reviewed: every default accepted)
 
 `connector.catwalk` reserved -> supported, in its **face form**: a deck shelf on brackets along a cliff or a steep bank, railed on
@@ -24774,3 +24795,289 @@ devserver) are archived in `artifacts/release-0430/v0430/` with a SOURCE.txt, fo
 
 - Everything listed under v0.42.0's, and D3's queued items (PLAN "Queued from slice D3").
 - If another slice reaches main before D3, this branch is stale: re-merge and re-run `release-version.mjs --check`.
+
+# Style unification U0+U1 contract: one Style, materials only, bible.save - DRAFT for Steward review
+
+Model: docs/STYLE-UNIFY.md. Noah's decisions: docs/PLAN.md "Style unification". Slice `slice/U01` (U0 kit + U1 wire). API: additive,
+a minor bump (the coordinator sets it at merge; the code says `NEXT`). Steward's review conditions (a)-(d) are folded in (§6, §7).
+
+## 1. Styles (U0, the kit)
+
+- **A Style is a bible** plus five optional fields (§4). The built-in Styles are the palette presets (`kit/lib/kit.mjs`
+  `PALETTE_PRESETS`): the ten of before, plus the six word-only style chips, authored (`AUTHORED_STYLES`). Every chip in
+  `DesignSpec.STYLES` now has a built-in Style of its id (rustic and desert were presets already).
+
+  | Style | wall | wall_alt | frame | floor | trim | foundation | roof | accent | light | path |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | medieval | white_terracotta | calcite | dark_oak_log | dark_oak_planks | smooth_stone | stone_bricks | spruce_planks | spruce_planks | lantern | dirt_path |
+  | nordic | spruce_planks | stripped_spruce_wood | spruce_log | spruce_planks | deepslate_bricks | cobbled_deepslate | spruce_planks | dark_oak_planks | lantern | coarse_dirt |
+  | japanese | white_wool | birch_planks | birch_log | birch_planks | stone_bricks | mossy_stone_bricks | deepslate_tiles | dark_oak_planks | lantern | dirt_path |
+  | cozy | oak_planks | white_terracotta | oak_log | oak_planks | cobblestone | mossy_cobblestone | dark_oak_planks | spruce_planks | lantern | dirt_path |
+  | fantasy | warped_planks | calcite | warped_stem | warped_planks | purpur_pillar | purpur_block | crimson_planks | crimson_planks | shroomlight | dirt_path |
+  | modern | white_concrete | light_gray_concrete | stripped_birch_log | birch_planks | quartz_block | smooth_quartz | polished_deepslate | dark_oak_planks | sea_lantern | smooth_stone |
+
+  Glass is `glass_pane` throughout. Each passes `validateBible` with the test house and no role-fitness warning; wall differs from
+  wall_alt; every roof has stairs and a slab; `palette({bible: n})` equals `palette({preset: n})` field by field. Modern's roof role
+  is stairs-capable (polished_deepslate); its flat look is a shape hint (`roofLanguage` "flat roofs: a deck with a parapet (kit.mjs
+  roofFlat)", `roofPitch: 0`, `overhang: 0`), not a role.
+- **Metadata** (`kit/lib/styles.mjs` `STYLE_META`, one row per preset): `tags`, `suggestedFeatures` (`DesignSpec.FEATURES` ids, at
+  most 6; a kit test reads DesignSpec.java), `blurb`, and for the six authored ones shape hints (proportions over the defaults,
+  `roofLanguage`). `builtinBible(n)` (and so the sidecar's built-in index) carries them plus `origin: "builtin"`. The ten older
+  presets keep the default proportions.
+- **Golden:** `kit/test/fixtures/preset-builds.json` and `kit/test/fixtures/vocab/palettes-v0370.json` are unchanged. Their tests
+  now hold every recorded key byte-equal and allow exactly the six authored Styles as new keys.
+- **The four main rows** (Wood / Stone / Roof / Accent, decision 4). Wood fills wall, frame and floor; Stone fills foundation and
+  trim; Roof and Accent fill one role each; wall_alt, light, glass and path are fixed (`FAN_OUT`, `FIXED_ROLES`).
+  - `mainOf(roles)` reads the rows back from the roles, exactly as `palette({bible})` derives them: the wood of the first wooden role
+    (wood, frame, accent, floor, wall, wall_alt, roof), the stone of the first stone-like role with stairs and slab, the roof, the
+    accent's wood. It's lossy: a role set by hand to another wood can move the Wood row.
+  - `editMain(roles, field, value)` re-derives only the roles that still follow the row: a Wood role whose block is of the current
+    wood's family moves to the same part of the new wood (planks stay planks, a stripped log stays one); a Stone role of the current
+    stone's family moves to the new stone (foundation) or its trim. Every other role (the Style's own, or one set by hand) stays.
+    Roof sets the roof role (a wood's planks for a wood); Accent the accent's planks. It returns a new roles object; an invalid
+    value throws.
+  - `provenanceOf(roles, base?)` tags each role `follows_wood`, `follows_stone`, `style` (equal to the base Style's, or no base
+    given) or `hand`. These drive the editor's "follows Wood" / "from X" / "custom" markers (U3).
+- **One table for JS and Java.** `styleTable()` is the fan-out as data (each wood's parts, block -> wood family, block -> stone
+  family, every block with stairs and slab and its trim, stairs/slab/wall -> full block). `tools/gen-palettes.mjs` writes it into
+  `palettes.json` (`styles`) beside each preset's `roles`, `tags`, `suggestedFeatures` and `blurb`. The same output is checked in as
+  `mod/src/main/resources/assets/architect_mc/palettes-fallback.json`, which is now `Palettes.FALLBACK`. The stale six-preset
+  literal is gone, so a jar built without node lists every preset. `library/StyleRoles.java` reads the table and has
+  `mainOf`, `editMain`, `provenance` and `fanOut`. Parity: `tools/gen-palettes.mjs --parity` records the cases
+  (`kit/test/fixtures/style-parity.json`: every built-in Style, a Claude-made bible and a hand mix, each row edited to several
+  values, the refusals) and `StyleRolesTest` replays them. `kit/test/styles.test.mjs` fails when either checked-in file is stale.
+
+## 2. Materials only: `DesignRequest.palette` (U1)
+
+- **Wire** (protocol 2, helper feature **`palette.roles`**): `design.request.request.palette?` is a preset name, palette inputs
+  `{preset?, wood?, stone?, roof?, accent?}`, or a Style's roles inline `{bible: {id, version, roles}}` (`id`/`version`: the Style
+  the roles came from, which for a custom mix is the Style it is based on; `roles`: what is built, at most 64, `[a-z][a-z0-9_]{0,31}`
+  -> a block id). It excludes `bible` (both: refused) and `massing` (a massing has no materials; send the palette with its detail
+  pass). A group's items never carry one: the group's bible is the materials.
+- **What the sidecar does.**
+  - It checks the palette with its kit at the request (`kit/tools/bible.mjs palette`: it builds a palette, and inline roles also
+    pass the bible checks, the test house included). One the kit can't build is refused at once, before any job exists.
+  - It checks and installs the design built with that palette (`build.mjs --palette`), whatever the design's own default is. The
+    brief tells the designer the player picked these materials and to make the default palette exactly that.
+  - **Never bible set mode:** no `bible/` files, no shared components, no "follow it over your own taste", no `--restraint`.
+  - The entry records the palette as its `palette`. With roles inline, the kit also records `{id, version}` as the entry's `bible`
+    (that version's pin, §6); the blocks come from the roles alone.
+  - The text `style` stays required, and `materials` text, if sent, is ignored in favour of the palette.
+  - Designed again (polish, versionOf, a report critique), a materials-only entry keeps its palette and gets no bible: its pin only
+    names the Style the roles came from (`setModePin`). An entry made in set mode (a `bible` request, a group) keeps its pin as
+    before.
+- **`PaletteSpec` is strict** (`design.request`, `variant.request`): an unknown key is refused. Before U1 the inputs object
+  wasn't strict, so `{bible: …}` parsed as `{}` and the default palette was built, silently. The bible branch is tried first. A
+  stored variant record still reads leniently.
+- **Java** (Since NEXT):
+  - `DesignRequest.palette()` (a `JsonElement`, null = none) is a new last component;
+  - `withPalette(JsonElement)`, `withStyle(Bible)` (materials only, from the Style's id, version and roles) and the static
+    `stylePalette(id, version, roles)`;
+  - `Limits.PALETTE_PRESET_MAX` (32), `PALETTE_BLOCK_MAX` (64) and `PALETTE_ROLES_MAX` (64), checked by FieldLimits before
+    sending.
+  - The mod sends `palette` only to a helper whose features list `palette.roles`. Otherwise the future fails: an older helper would
+    drop the field and design with its own materials. Callers can check `ArchitectApi.features().contains("palette.roles")`.
+- **Binary compatibility (Steward's review, condition c).**
+  - Every earlier canonical constructor of `DesignRequest` stays, as a secondary one delegating with the new fields null: 1.1.0's
+    14 arguments (Steward's `gateway/LotBrief.java:46`, `service/ChangeRequests.java:154`), 1.2.0, 1.3.0, 1.6.0, 1.11.0 and 1.37.0's
+    24. `Bible` keeps 1.2.0's 12 arguments and 1.6.0's 16. `ApiStyleU1Test` finds each by reflection.
+  - **Rule from now on:** a change to an API record that Steward constructs (`DesignRequest`, `Bible`, `BibleRequest`,
+    `GroupRequest`, ...) keeps every earlier canonical constructor and adds its own.
+
+## 3. Variants with a Style's roles
+
+- `variant.request.palette` (and `Library.makeVariant`'s `palette`) may be `{bible: {id, version, roles}}` (feature
+  `palette.roles`). It replaces the entry's recorded palette outright; the kit takes no other inputs with it. The new entry's id
+  is `<from>_<style id>` and its name `<name> (<style>)`. The mod fails the future against a helper without the feature.
+- The Variants dialog (`VariantForm`): a bible picked from the list carries its version and roles, and a Wood / Stone / Roof /
+  Accent edit then edits those roles (`StyleRoles.editMain`). The variant goes out with them inline, where before U1 the edit
+  silently dropped the bible (VariantForm.java:242, 251). Unedited, it's the re-skin it was (`bible: id`). A preset chip is another
+  Style: it replaces the bible. UI otherwise unchanged; U3 rebuilds it.
+
+## 4. Bible fields (additive, optional)
+
+| field | type | meaning |
+|---|---|---|
+| `tags` | string[] (<= 12, each 1-40) | a Style's tags |
+| `suggestedFeatures` | `DesignSpec.FEATURES` ids (<= 6, no duplicates) | the features a new design with this Style starts with |
+| `blurb` | string (<= 200) | one line for the Style browser |
+| `basedOn` | `{id, version}` | the Style it started from (a duplicate, a hand edit of a built-in) |
+| `origin` | `builtin` \| `claude` \| `hand` | a built-in Style, a bible job, or `bible.save` |
+
+- Validated by `validateBible` (`kit/lib/bible.mjs` `styleFieldsErrors`); `BibleInfo` carries them.
+- Bible jobs now write `origin: "claude"`. An installed bible from before U1 reads as `claude` with no tags; nothing is
+  rewritten.
+- Java `Bible` gains `tags()`, `suggestedFeatures()`, `blurb()`, `basedOn()` and `origin()`, plus `editable()` (not built in, and
+  the owner the player's: absent or a player UUID) and `modOwned()`.
+
+## 5. `bible.save`: a hand-made Style, no Claude call (feature `bible.save`)
+
+- **Request:** `bible.save {bibleId?, owner?, bible}` -> ack `{id, version, bible: BibleInfo}`. `bibleId` is used because `id` is
+  the envelope's correlation id.
+  - `bible`: `name`, `roles` and any of `scope, tags, suggestedFeatures, blurb, basedOn, proportions, roofLanguage, silhouette,
+    motifs, lighting, avoid, tiers, patterns, format, restraint, connectors, fluids, rarity`.
+  - Fields the store owns (`id, version, builtin, archived, cost, critique, createdAt, components, owner, origin, ...`) are
+    ignored; `origin` is set to `hand`.
+  - It is validated by the kit (`tools/bible.mjs validate`, the test house included), with the same limits as a bible job's.
+- **Where:** a new version `<gameDir>/architect/bibles/<id>/versions/<v>/` (v = the latest + 1; 1 for a new id), created
+  exclusively. It holds `bible.json` and the kit's reference `components.mjs`, so the Style still resolves for a group or a bible
+  design; it has no `bible.md` and no `sheet.png`, since the UI draws the preview from the roles.
+- **Ids:** `bibleId` absent makes a new Style, `bib_<slug of name>` (`_2`, `_3`, ... when taken).
+- **Refused:** a built-in id (duplicate it: no `bibleId`, `basedOn {id, version: 1}`); an id an unfinished bible job holds;
+  another owner's Style (§6); roles or fields the kit refuses.
+- **Java:** `Bibles.save(bibleId, JsonObject style, owner)` -> `CompletableFuture<Bible>`; the future fails when the helper lacks
+  `bible.save`. Since NEXT.
+
+## 6. Ownership and version permanence (Steward's review, conditions a and b)
+
+- **A version that anything pins is never rewritten or removed**, by a save, a duplicate or a clean-up. Saves only add versions:
+  - the version folder is created exclusively (`install`: a non-recursive `mkdir`, files copied with `COPYFILE_EXCL`); only the
+    `<id>/` top-level "latest" copy is refreshed;
+  - a unit test hashes every existing version folder before and after each save and each refusal (`sidecar/test/styles-u1.test.ts`).
+- **Clean-up:**
+  - `bible.delete` still refuses while any entry, group, design or massing pins a version, and for another owner's bible.
+  - The version GC (5a) no longer touches a mod-owned Style or a hand-made one at all, because their pins may live outside Architect
+    (a settlement's `BibleRef`).
+  - A Claude-made Style of the player's keeps 5a's rule: a version that is not the latest, pinned by nothing Architect knows, and
+    older than 30 days goes.
+  - A materials-only entry pins the Style its roles came from (its `bible`), so that version is kept too.
+- **Owner** (Steward's RC). An owner that is absent or a player UUID (8-4-4-4-12 hex) makes the Style the player's: editable in
+  Architect's UI, saved by the player (no owner, or that same UUID; a save keeps the stored owner), and under 5a's GC rule above.
+  - The Design tab's "Draft bible" sends no owner, so a player's own Claude-made bible is the player's.
+  - **Any other owner** is a mod's (`Bible.modOwned()`, sidecar `isModOwned`). It is Duplicate-only in Architect's UI, saved
+    only by that exact owner through `bible.save`, and the GC never removes any of its versions.
+  - Steward's form is **`steward_mc:settlement/<settlementId>`** (steward-mc `SettlementRunner.java:1523`). Existing worlds'
+    bibles already carry it, and nothing is rewritten.
+  - It is set through **`BibleRequest.owner`**, the third component of `new BibleRequest(prompt, name, owner, ...)`, sent as
+    `bible.request.request.owner`. The job copies it into `bible.json` `owner`, and `Bible.owner()` reads it back.
+  - Tests cover no owner, a UUID, `steward_mc:settlement/abc` and another mod's string: `ApiStyleU1Test.ownership` and
+    `sidecar/test/styles-u1.test.ts` (the save rule, and a GC run over four Claude-made bibles).
+
+## 7. What Steward can use for free (condition d)
+
+- `Bibles.get(id)`: a Style's head version, read locally with no helper call. `Bibles.get(id, version)`: one version.
+  `Bibles.list(owner)`: as before.
+- `Bibles.usable(owner)` (new, Since NEXT): the Styles a caller may design with, read locally: the built-in ones, the player's (no
+  owner, or a player UUID) and,
+  given an owner, that owner's; archived ones left out.
+- `DesignRequest.withStyle(bible)`: a materials-only design with any of them, no bible job. With these, "use an existing Style"
+  needs no new API. Steward's district flow can pin the chosen Style through the design entry it gets back.
+- Feature names, in `ArchitectApi.features()` as the helper sends them: `palette.roles` and `bible.save`.
+
+## 8. API version
+
+Additive only: `DesignRequest.palette` and its methods, the `Bible` fields and `editable()`, `Bibles.save` and `Bibles.usable`
+(defaults that throw on an older API), the three `Limits` constants, and the `Library.makeVariant` roles shape. A minor bump at
+merge (`Since NEXT` in the javadoc). `tools/api-compat.mjs`: the 0.42.0 and 0.41.0 apitest jars and the 0.42.0 mod jar's
+surface still resolve.
+
+## 9. Gate (DEV MODE)
+
+- **Units:**
+  - kit `node --test` (styles, bible, vocab, the whole suite);
+  - the sidecar's vitest (`styles-u1.test.ts`, plus limits, jobs and bundle for the feature list);
+  - `./gradlew build --offline` (`StyleRolesTest`, `ApiStyleU1Test`, `VariantFormTest`);
+  - the instant lints, `step-inputs check`, and api-compat.
+- **In game** (`u1-ingame`, `tools/gateu1.mjs ingame`; headless, the sim sidecar, $0):
+  1. `Bibles.usable` lists the built-ins.
+  2. A materials-only design with medieval: palette inline, no bible files, built of white_terracotta and dark_oak_log, pinned
+     medieval v1.
+  3. A variant after a Wood -> birch edit made in Java: frame birch_log, wall white_terracotta, provenance follows_wood / style.
+  4. `bible.save` v1 then v2: v1's folder byte-unchanged, both read back, the Style usable, a built-in id refused, and a design with
+     the saved head v2.
+
+## 10. Left for U2/U3
+
+- U2 `StyleForm` replaces VariantForm's palette half and the Design tab's style row. `StyleRoles` and `Palettes.presetRoles` are its
+  model, and the parity fixture is its test.
+- U3 is the browser and the editor. Favourites and recents live in the client's `style-meta.json`. A Style is Duplicate-only when
+  `!Bible.editable()`.
+- The Design tab still sends free-text `style` with no palette; U2/U3 send `withStyle` / an inline mix.
+- **A Style re-skins what a design reads.** The kit examples (and the sim's copies of them) take their walls from the wood set
+  (`p.planks`), not `p.wall`. A Style whose identity is a non-wood wall (medieval's white_terracotta, japanese's white_wool,
+  modern's white_concrete) changes their frame, floor, roof, trim and foundation, but not their walls. A design Claude makes with
+  the brief's materials line reads the roles. U3's previews and U4's A/B should expect this.
+- `sidecar/src/claude/contract.ts` (the design agent's contract excerpt) still lists the ten older presets. That is prompt text, so
+  it is left for a deliberate follow-up.
+
+## Release v0.44.0 as integrated (7a CL, 7a K2, Style unification U0+U1, gate tooling; branch `release/0.44.0`, 2026-10-24, DEV MODE)
+
+Branch `release/0.44.0` over origin/main c0c0a0cb: slice/CL (36badab7, merged before this cut), then slice/K2 (085ba8f2),
+slice/U01 (b49c449f), chore/ui-gallery-2 (b6154208) and chore/speed-audit-d (39aca192), in that order. Not merged, tagged or
+published: the coordinator does that. DEV MODE: a cheap tag, no release-tier run. **Versions:** API **1.41.0**, mod **0.44.0**,
+kit **0.42.0**, catalogue **14**.
+
+### What it does for a player
+
+- **Climbs** (CL): stairs, switchbacks and ladders up slopes and cliffs, with rails beside the drops, rest landings on long
+  ladders and a gate at the top. Villagers take stairs and switchbacks; ladders are for players.
+- **Walls along a boundary** (K2): a wall can follow a shore, a biome edge or a ridge, with evenly spaced gates (on a landing
+  where the bank is stepped). **Wall walks**: a railed, lit walk along the top of a wall, reached by stairs or ladders.
+- **Styles** (U0+U1): sixteen built-in Styles (six new: medieval, nordic, japanese, cozy, fantasy, modern) with tags and a
+  blurb; a design can take just a Style's materials; hand-made Styles can be saved with no Claude call.
+
+### What it does for Steward
+
+- Features `climbConnectors` (sidecar `region.climbs`), `wallAlong` and `wallWalks` (`region.walls.along`,
+  `region.walls.walk`), and the helper features `palette.roles` and `bible.save`.
+- Java, since 1.41.0 (additive): `DesignRequest.palette` with `withPalette`/`withStyle`, the `Bible` Style fields and
+  `editable()`, `Bibles.save` and `Bibles.usable`, three `Limits` constants, and `Library.makeVariant`'s roles shape. Steward's
+  RC passed on U01 (b49c449f); CL and K2 add features only.
+- plan/0: `connector.stair`, `connector.switchback`, `connector.ladder` and `wall.along` reserved -> supported; the wall's `walk`
+  member. Catalogue 14.
+- Kit output changed, so a region planned on kit 0.41.0 goes `PLAN_STALE` and Steward re-checks it.
+
+### Merge resolutions
+
+- K2 into CL: the protocol FEATURES list and its two test pins, ApiRules' feature names, the structure lint's GATED and
+  connector-corpus lists and the lint corpus dirs, all unions in merge order (catwalks, D3's two, CL's climbs, K2's walls.along
+  and walls.walk). gate7a-kit.mjs keeps main's `mergedIf` and CL's `landed` (K2 changed nothing there). e15's body merged
+  cleanly off both slices' flips; no tool writes e15, so it was checked against the merged x-catalogue's reserved set (every
+  reserved id but the compiler-only tunnel.under and channel.aqueduct in e15 or e16) and by plan-p0. cl.test's catalogue diff
+  leaves K2's wall ids to k2.test; k2.test reads wall.along's sinceApi as NEXT or the stamped api.
+- U01: FEATURES again (then palette.roles, bible.save), devserver genHooks (SliceClDev and SliceU1Dev), PLAN.md (both sections).
+- ui-gallery-2: clean. speed-audit-d: step-inputs.json (generated) rebuilt; every traced entry from both sides kept.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.41.0 --mod 0.44.0 --kit 0.42.0 --catalogue 14`, one run:
+- API minor (1.40.0 -> 1.41.0) for U1's methods and the five features (CONTRACT "Java API": a minor adds methods); kit
+  0.41.0 -> 0.42.0 for the kit output changes.
+- **Catalogue 14**: CL and K2 changed entries and left the number at 13. Catalogue 13 (v0.43.0's golden) archived as
+  `fixtures/plan/catalogue-v0430.json`.
+- 29 placeholders stamped (four sinceApi in plan.json and the golden each, the features javadoc, U1's Bible, Bibles,
+  DesignRequest, Library and Limits members, ApiRules, SliceClDev). By hand: `Bible.editable`'s line-wrapped "Since NEXT"
+  (the tool reads one line), and ApiK1Test's and ApiCLTest's javadoc.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo,
+  links_demo_flat, s3.
+- `--check` (strict, release context): consistent. `catalogue-since-check`: every sinceApi at or below 1.41.0.
+
+### Suites
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline` at 552aa44e: 903 tests, 0 failed, 1 skipped (LedgerLintTest 14/14 and RegionFluidsLintTest 2/2, p3-lint, among them); lab-ui 0.2.0 from `../lab-ui` at its tag |
+| kit | `node --test kit/test/*.test.mjs` at 552aa44e: 890/892. The two: f7a-foundation item 2 (the foundation's entries, stamped 1.40.0 in v0.43.0, read as NEXT or the golden's api) and sidecar-reuse (its temp repo lacked the two paths speed-audit-d added to the tree key; failing on speed-audit-d's head too). Both fixed in 400339d1; those files and the catalogue tests re-run 56/56 |
+| sidecar | `npm run check`: 768/768, plus the bundle |
+| lints | lint-structure 64 cases, 0 failing; lint-look 13, 0 failing; water-lint 126/126. fix/cl-theme (the themed-blocks check) is not in this release, so neither CL's nor K2's blocks were checked against the themed rule |
+| api-compat | the 0.43.0, 0.42.0 and 0.41.0 apitest jars and the 0.43.0 mod jar's 1.40.0 surface: clean |
+| step-inputs | `check`: 252 steps, every closure inside its recorded set |
+
+### In game (DEV MODE: the steps whose resolutions touched behaviour)
+
+`gate-run change --only ... --turbo --no-split --no-cache`, ports 8896-8901, run dir `../architect-mc-rel0440-run`:
+- `20261024-073241-change` at 552aa44e: **u1-ingame 29/0, cl-ingame 40/0, k2-ingame 24/0** PASS (the resolutions touched
+  ApiRules' feature names, the FEATURES snapshot and genHooks). cl-unit and k2-unit failed on f7a-foundation item 2 (fixed in
+  400339d1).
+- `20261024-074218-change` at 400339d1: **cl-unit 353/0 PASS**. **k2-unit 350/5**: every FAIL is integration staleness, not a
+  defect. Its byte identity (item 2) and Steward's recorded plans (item 3) compare against origin/main, which lacks CL, so CL's
+  three named movers (asks/hidden_village, asks/old_new_town, asks/sky_monastery, exactly CL's own item 2 exceptions) differ
+  besides K2's castle_city. The nightly on main after the merge is the clean check.
+
+### Known issues carried forward
+
+- Everything listed under v0.43.0's, and CL's and K2's queued items (PLAN).
+- fix/cl-theme (lint-look's themed-blocks check and CL's theme fixes) is not in this release; K2's walls and walk have not been
+  checked against the themed rule either.
+- `Regions.pinArtifact`'s and `Regions.discardPlan`'s default-method messages still say "needs Architect API NEXT" (unstamped
+  since close-out A; runtime text, not javadoc, so release-version leaves it).

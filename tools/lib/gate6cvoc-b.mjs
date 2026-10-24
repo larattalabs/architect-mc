@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { sidecarReuse } from './sidecar-reuse.mjs';
 import { pathToFileURL } from 'node:url';
 import * as P3 from './p3-tier.mjs';
 
@@ -136,7 +137,7 @@ const unit = [
     name: 'item 7 (sidecar, Java): BibleRequest.rarity, FIELD_LIMIT, the stub bible copying it, the wire',
     async run({ root, check }) {
       const out = {};
-      const sc = spawnSync('npx', ['vitest', 'run', 'test/vocb.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+      const sc = sidecarReuse(root, ['test/vocb.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/vocb.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
       out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|passed|failed|×/.test(l)).slice(-4) };
       check(sc.status === 0, `item 7 (sidecar): a malformed BibleRequest.rarity refused FIELD_LIMIT (detail rarity, naming the path) before any job, bible.estimate too; the stub bible job copies it byte for byte into the made bible, a revise keeps it; metrics.rarity/drift kept out of the agent's files unless opted in; the feature bible.rarity: ${out.sidecar.tail.join(' ')}`, out.sidecar);
       out.java = await javaTests(root, ['*WireVocbTest*', '*ApiVocTest*', '*Wire4bTest*'], 6);

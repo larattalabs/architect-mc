@@ -18,6 +18,7 @@
 // State: DesignWork.polish (persisted), so a polish resumes after a restart (a step's interrupted turn runs again, a
 // critic call waits for its job or runs again). It runs in the design pool like a design (designer.run delegates here
 // through a PolishBackend: the Claude designer's turn runner, or the sim's scripted edits).
+import { setModePin } from './styles.js';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -276,8 +277,8 @@ export class Polishes {
       ? { ...parsed.data }
       : ({ type: typeof json.type === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(json.type) ? json.type : 'custom', style: 'as built', features: [], maxSize: { x: clamp(size.x, 7, 96), y: clamp(size.y, 6, 64), z: clamp(size.z, 7, 96) }, ...(typeof json.name === 'string' ? { name: json.name.slice(0, 40) } : {}) } as DesignRequest);
     const { group: _g, itemKey: _k, wave: _w, role: _r, redirect: _re, massing: _m, fromMassing: _f, massingVersion: _mv, critique: _c, budgetUsd: _b, ...clean } = base;
-    const pin = json.bible && typeof json.bible === 'object' ? (json.bible as { id?: string; version?: number }) : undefined;
-    return { ...clean, model, ...(pin?.id ? { bible: pin.id, bibleVersion: pin.version ?? 1 } : {}) };
+    // (U1) a materials-only entry keeps its palette (in clean) and gets no bible: never set mode
+    return { ...clean, model, ...setModePin(json) };
   }
 
   /** design.polish: refused at once (bundled, no_source, massing, a polish already running), else queued. */

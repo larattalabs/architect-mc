@@ -142,7 +142,13 @@ export class BibleIndex {
   }
 
   private builtinInfo(b: BuiltinRecord): BibleInfo {
-    return { id: b.id, name: b.name, version: b.version ?? 1, versions: [b.version ?? 1], builtin: true, scope: b.scope === 'settlement' ? 'settlement' : 'building', roles: { ...b.roles }, components: b.components?.length ? [...b.components] : [...REQUIRED_COMPONENTS] };
+    return {
+      id: b.id, name: b.name, version: b.version ?? 1, versions: [b.version ?? 1], builtin: true, scope: b.scope === 'settlement' ? 'settlement' : 'building', roles: { ...b.roles },
+      components: b.components?.length ? [...b.components] : [...REQUIRED_COMPONENTS],
+      // (Style unification U1) the built-in Style's metadata (kit/lib/styles.mjs STYLE_META), from a kit that has it
+      ...styleFields(b as unknown as Record<string, unknown>),
+      origin: 'builtin',
+    };
   }
 
   /** The versions installed for an id, ascending. */
@@ -205,6 +211,9 @@ export class BibleIndex {
       ...(j.critique && typeof j.critique === 'object' ? { critique: j.critique } : {}),
       // (6c VOC) the rarity budget as stored
       ...(j.rarity && typeof j.rarity === 'object' && !Array.isArray(j.rarity) ? { rarity: j.rarity as Record<string, unknown> } : {}),
+      // (Style unification U1) the optional Style fields; a bible from before U1 was a bible job's (origin claude)
+      ...styleFields(j),
+      origin: j.origin === 'hand' || j.origin === 'claude' ? j.origin : 'claude',
     };
     const r = BibleInfoSchema.safeParse(info);
     return r.success ? r.data : undefined;
@@ -344,6 +353,10 @@ export class BibleIndex {
       const vs = this.versions(id);
       if (vs.length < 2) continue;
       const latest = vs[vs.length - 1]!;
+      // (Style unification U1, Steward's review) another mod's Style, and a hand-made one, keep every version: a pin may live
+      // outside Architect (a settlement's BibleRef), where this GC cannot see it
+      const head = this.installedInfo(id, latest);
+      if (isModOwned(head?.owner) || head?.origin === 'hand') continue;
       const pinned = this.pins(id).versions;
       for (const v of vs) {
         if (v === latest || pinned.has(v)) continue;
@@ -361,6 +374,69 @@ export class BibleIndex {
   /** Copy a bible's files into <scratch>/bible/ (bible.json, bible.md, components.mjs), replacing what is there. */
   copyInto(files: BibleFiles, scratch: string): void {
     copyBible(files, scratch);
+  }
+
+  /**
+   * (Style unification U1) bible.save: a hand-made Style, no Claude call. Every save is a new version
+   * <bibles>/<id>/versions/<v>/ created exclusively (install()): an existing version folder is never written, renamed or removed.
+   * Refused: a built-in id (duplicate it: no id, basedOn), an id an unfinished bible job holds, another owner's Style (owner
+   * absent = the player), roles or fields the kit's validateBible refuses (the test house included).
+   */
+  save(req0: { id?: string | undefined; owner?: string | undefined; bible: Record<string, unknown> }): { id: string; version: number; bible: BibleInfo } {
+    let req = req0;
+    const given = { ...req.bible };
+    const name = typeof given.name === 'string' ? given.name.trim() : '';
+    if (!name) throw new ClientError('bible.save: the Style needs a name');
+    let id = req.id;
+    if (id !== undefined) {
+      if (this.isBuiltin(id) && !this.versions(id).length) throw new ClientError(`${id} is a built-in Style: it cannot be changed; save a copy (no id, basedOn {id: "${id}", version: 1})`);
+      if (this.sc.bibles.active().some((j) => j.bibleId === id)) throw new ClientError(`bible ${id} is being made or revised by a bible job: save after it ends`);
+      const vs = this.versions(id);
+      if (vs.length) {
+        const cur = this.installedInfo(id, vs[vs.length - 1]!);
+        // (U1, Steward's RC) a mod's Style (any owner that is not a player UUID) is saved only by that owner; the player's (no owner,
+        // or a player UUID) by the player (no owner) or that same UUID, and keeps its owner
+        const ok = isModOwned(cur?.owner) ? req.owner === cur?.owner : !isModOwned(req.owner) && (req.owner === undefined || cur?.owner === undefined || req.owner === cur.owner);
+        if (!ok) throw new ClientError(`bible ${id} belongs to ${cur?.owner ?? 'the player'}: only its owner can save a new version (duplicate it instead)`);
+        if (req.owner === undefined && cur?.owner) req = { ...req, owner: cur.owner };
+      } else if (this.taken(id)) throw new ClientError(`bible id ${id} is taken`);
+    } else {
+      const base = `bib_${slugify(name, 40) || 'style'}`;
+      id = base;
+      for (let n = 2; this.taken(id); n++) id = `${base}_${n}`;
+    }
+    const version = (this.versions(id).pop() ?? 0) + 1;
+    // fields a caller does not set: the store's and the job's own
+    for (const k of ['id', 'version', 'versions', 'builtin', 'preset', 'archived', 'cost', 'critique', 'createdAt', 'dir', 'sheetPath', 'prose', 'components', 'owner', 'origin', 'seedPreset', 'ext']) delete given[k];
+    const bible: Record<string, unknown> = { ...given, id, version, name, ...(req.owner ? { owner: req.owner } : {}), origin: 'hand', createdAt: this.sc.now() };
+    const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-save-'));
+    try {
+      const f = path.join(stage, 'in.json');
+      fs.writeFileSync(f, JSON.stringify(bible));
+      const out = path.join(stage, 'bible.json');
+      const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
+      const scope = bible.scope === 'settlement' ? 'settlement' : 'building';
+      const r = spawnSync(process.execPath, [tool, 'validate', f, '--scope', scope, '--write', out], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
+      let v: { ok?: boolean; errors?: string[] } = {};
+      try {
+        v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
+      } catch {
+        /* below */
+      }
+      if (r.status !== 0 || !v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${(v.errors ?? [truncate(`${r.stdout}${r.stderr}`, 300)]).slice(0, 6).join('; ')}`);
+      fs.rmSync(f);
+      // the reference components (the built-ins' too), so a saved Style also resolves for a group or a bible design
+      const comps = this.referenceComponents();
+      if (comps) fs.copyFileSync(comps, path.join(stage, 'components.mjs'));
+      this.install(id, version, stage);
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+    this.sc.log.info(`bible ${id} v${version} saved by hand${req.owner ? ` (owner ${req.owner})` : ''}`);
+    this.sc.bibleIndexChanged();
+    const info = this.installedInfo(id, version);
+    if (!info) throw new ClientError(`bible ${id} v${version}: saved, but its bible.json is unreadable`);
+    return { id, version, bible: info };
   }
 
   /**
@@ -748,6 +824,8 @@ export class Bibles {
           ...(j.request.seedPreset ? { seedPreset: j.request.seedPreset } : {}),
           // (6c VOC, S-VOC-1, N-VOC-1) the request's rarity budget, copied by code (the prompt never sees it; the sim's bible job too)
           ...(j.request.rarity ? { rarity: structuredClone(j.request.rarity) } : {}),
+          // (Style unification U1) who made it
+          origin: 'claude',
           createdAt: this.sc.now(),
         };
         w.prose = r.prose;
@@ -898,4 +976,28 @@ export class SimBibleBackend implements BibleBackend {
     }
     if (usd > 0) this.sc.bibles.setCost(p.job.id, { ...p.work.cost, usd: Math.round((p.work.cost.usd + usd) * 1e6) / 1e6, turns: p.work.cost.turns + 1 });
   }
+}
+
+/** (Style unification U1) The optional Style fields of a bible.json or a built-in record, as BibleInfo carries them. */
+export function styleFields(j: Record<string, unknown>): Pick<BibleInfo, 'tags' | 'suggestedFeatures' | 'blurb' | 'basedOn'> {
+  const strs = (v: unknown) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? [...(v as string[])] : undefined);
+  const tags = strs(j.tags);
+  const suggestedFeatures = strs(j.suggestedFeatures);
+  const b = j.basedOn as { id?: unknown; version?: unknown } | undefined;
+  return {
+    ...(tags ? { tags } : {}),
+    ...(suggestedFeatures ? { suggestedFeatures } : {}),
+    ...(typeof j.blurb === 'string' ? { blurb: j.blurb } : {}),
+    ...(b && typeof b.id === 'string' && Number.isInteger(b.version) ? { basedOn: { id: b.id, version: b.version as number } } : {}),
+  };
+}
+
+/** A player's UUID (the canonical 8-4-4-4-12 hex form). */
+export const PLAYER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * (U1, Steward's RC) Whether a Style's owner is a mod: any owner that is set and is not a player UUID ("steward_mc:settlement/<id>",
+ * "<modid>:<thing>"). No owner, or a player UUID, is the player's: editable, saved by the player, under the 5a GC.
+ */
+export function isModOwned(owner: string | undefined | null): boolean {
+  return typeof owner === 'string' && owner.length > 0 && !PLAYER_UUID.test(owner);
 }

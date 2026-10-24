@@ -490,7 +490,7 @@ steps.ingame = async () => {
 
 steps.natural = async () => {
   await ensure();
-  await L.fresh('G6B T3a Cross River', BASE);
+  await L.fresh('G6B T3a Cross River', await L.claimBase(SEED, S3_CLAIM));
   await L.setRules('default');
   const out = await crossRun('river', S3_CLAIM, { kind: 'river', golden: null });
   await leaveWorld();

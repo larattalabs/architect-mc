@@ -28,11 +28,58 @@ import java.util.Optional;
  * @param archived (since 1.6.0) hidden from the pickers ({@link Bibles#archive}); its entries and re-skins are unaffected
  * @param critique (since 1.6.0) the sheet critique ({@code bible.json critique}: overall, scores, issues), when the bible job had
  *     one ({@link BibleRequest#sheetCritique})
+ * @param tags (since 1.41.0, Style unification U1) a Style's tags (empty: none, e.g. a bible from before U1)
+ * @param suggestedFeatures (since 1.41.0) the features a new design with this Style starts with ({@code DesignSpec.FEATURES} ids, at
+ *     most 6)
+ * @param blurb (since 1.41.0) one line for the Style browser, or empty
+ * @param basedOn (since 1.41.0) the Style it started from (a duplicate, or a hand edit of a built-in), or empty
+ * @param origin (since 1.41.0) who made it: {@code builtin}, {@code claude} (a bible job; also every installed bible from before U1) or
+ *     {@code hand} ({@link Bibles#save})
+ *
+ * <p>Ownership (U1): {@code owner} empty, or a player UUID, is the player's: editable in Architect's UI. Any other owner (a mod's,
+ * e.g. Steward's {@code steward_mc:settlement/<id>}) is Duplicate-only there, and only that owner saves new versions of it. Every save adds a version;
+ * a version that anything pins is never rewritten or removed.
  */
 public record Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
 	Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
-	boolean archived, Optional<JsonObject> critique) {
+	boolean archived, Optional<JsonObject> critique, List<String> tags, List<String> suggestedFeatures, Optional<String> blurb,
+	Optional<BiblePin> basedOn, String origin) {
+	/** The 1.6.0 constructor (no Style fields: origin builtin for a built-in one, else claude). Kept for binary compatibility. */
+	public Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
+		Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
+		boolean archived, Optional<JsonObject> critique) {
+		this(id, name, version, versions, builtin, scope, roles, prose, sheetPath, components, owner, ext, format, restraint, archived, critique, List.of(),
+			List.of(), Optional.empty(), Optional.empty(), builtin ? "builtin" : "claude");
+	}
+
+	/**
+	 * Whether Architect's UI may edit it rather than only duplicate it: not built in, and the player's ({@link #modOwned} false). Since
+	 * 1.41.0.
+	 */
+	public boolean editable() {
+		return !builtin && !modOwned();
+	}
+
+	/**
+	 * Whether a mod owns it: an owner that is set and is not a player UUID (e.g. Steward's {@code steward_mc:settlement/<id>}). No owner,
+	 * or a player UUID, is the player's. A mod-owned Style is Duplicate-only in Architect's UI, saved only by that owner, and its versions
+	 * are never garbage-collected. Since 1.41.0.
+	 */
+	public boolean modOwned() {
+		return isModOwner(owner.orElse(null));
+	}
+
+	/** The ownership rule of {@link #modOwned} for an owner string (null = none). Since 1.41.0. */
+	public static boolean isModOwner(@org.jspecify.annotations.Nullable String owner) {
+		return owner != null && !owner.isEmpty() && !owner.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+	}
+
 	public Bible {
+		tags = tags == null ? List.of() : List.copyOf(tags);
+		suggestedFeatures = suggestedFeatures == null ? List.of() : List.copyOf(suggestedFeatures);
+		blurb = blurb == null ? Optional.empty() : blurb;
+		basedOn = basedOn == null ? Optional.empty() : basedOn;
+		origin = origin == null || origin.isBlank() ? (builtin ? "builtin" : "claude") : origin;
 		versions = List.copyOf(versions);
 		roles = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(roles));
 		components = List.copyOf(components);
