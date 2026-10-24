@@ -417,7 +417,8 @@
    ".gradle-home",
    "sidecar/node_modules"
   ],
-  "yieldAfter": "05:30"
+  "yieldAfter": "05:30",
+  "uiGallery": {"$comment": "The nightly-only UI gallery (docs/GATES.md \"UI gallery\"): chain ui-gallery after the full run, own run dir/out/lock, dedicated ports (sidecar:DevBridge), killed after timeoutMin; reported in summary.uiGallery, never blocking.", "enabled": true, "runDir": "../architect-mc-nightui-run", "out": "artifacts/gate-runs-nightly-ui", "ports": "8898:8899", "timeoutMin": 20}
  },
  "coverage": {
   "$comment": "Coverage-based inputs (tools/lib/step-coverage.mjs, docs/GATES.md \"Coverage-based inputs\"): an in-game step (a class in replaces) records what its run touched (its JVMs' loaded classes, its and its client's node files) and caches against that set plus `always` (and the closures of alwaysRoots) instead of the whole-tree classes. A compile-time constant changed in Java invalidates every coverage PASS.",

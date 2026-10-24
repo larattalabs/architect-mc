@@ -14,6 +14,7 @@
 //   - one nightly at a time: artifacts/nightly/nightly.lock (pid); a live holder -> exit 0 at once ("already active");
 //   - any gate run active or queued (a live slot holder or queue ticket in the slot dir): the night is skipped, exit 0 at once
 //     (nightly.idleWaitMin > 0 waits that long for an idle machine first, without taking a queue ticket);
+//   - after the run, the UI gallery (nightly-only, non-blocking: docs/GATES.md "UI gallery") shoots the screens into <date>/ui/;
 //   - otherwise the gate run (turbo: the machine idle at night, it holds every slot until it ends) runs in its own run dirs;
 //   - the main checkout is only fetched (git fetch), never checked out or pulled; the nightly worktree (gate-cache.json
 //     nightly.worktree) is moved only when clean, else the night is skipped.
@@ -364,6 +365,55 @@ const lines = mm.misses.map((m) => `| ${date} | ${m.step} | ${m.nightlyStatus} a
 fs.writeFileSync(path.join(DAY, 'misses-log.md'), lines.length ? `${lines.join('\n')}\n` : '');
 writeDay();
 
+// ------------------------------------------------------------------ the UI gallery (docs/GATES.md "UI gallery")
+// NIGHTLY ONLY and non-blocking: after the full run, the named chain `ui-gallery` (one client step, sim sidecar, $0, no Claude) shoots
+// every Architect screen / HUD state / in-world piece at GUI scale 2 and 4 into artifacts/nightly/<date>/ui/ with index.json. Own run
+// dir, out dir, lock and ports (gate-cache.json nightly.uiGallery). Whatever happens (the chain missing on this head, a client that
+// won't start, a timeout, capture failures) is only reported in summary.uiGallery and SUMMARY.md; it never touches verdict, counts or
+// notPassing. Skipped past the yield cutoff, and when the chain is not on this head yet.
+const UIG = { enabled: true, runDir: '../architect-mc-nightui-run', out: 'artifacts/gate-runs-nightly-ui', ports: '8898:8899', timeoutMin: 20, ...(conf.uiGallery ?? {}), ...(wtConf.uiGallery ?? {}) };
+async function uiGallery() {
+  const res = { state: 'skipped', shots: 0, failed: 0, skipped: 0, wallMin: 0, dir: path.join(DAY, 'ui'), error: null };
+  const chains = readJson(path.join(WT, 'tools', 'gate-chains.json'));
+  if (!UIG.enabled) res.error = 'disabled (nightly.uiGallery.enabled)';
+  else if (!chains?.chains?.['ui-gallery']) res.error = 'no ui-gallery chain on this head';
+  else if (pastCutoff()) res.error = `past the ${yh}:${String(ym || 0).padStart(2, '0')} cutoff`;
+  if (res.error) return res;
+  const t1 = Date.now();
+  fs.rmSync(res.dir, { recursive: true, force: true });
+  const uiOut = path.resolve(MAIN, UIG.out);
+  const args = ['tools/gate-run.mjs', 'ui-gallery', '--no-turbo', '--run-dir', path.resolve(MAIN, UIG.runDir), '--out', uiOut, '--ports', UIG.ports, '--lock', path.join(uiOut, 'gate-run.lock')];
+  log(`nightly: ui gallery: node ${args.join(' ')} (cwd ${WT}; at most ${UIG.timeoutMin} min)`);
+  const fd = fs.openSync(path.join(DAY, 'ui-gallery.out'), 'a');
+  const child = spawn(process.execPath, args, { cwd: WT, env: { ...env, GATEUIG_DEST: res.dir }, stdio: ['ignore', fd, fd] });
+  current = child;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try { child.kill('SIGTERM'); } catch { /* gone */ }
+    setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* gone */ } }, 90_000).unref();
+  }, UIG.timeoutMin * 60_000);
+  const code = await new Promise((r) => child.on('exit', (c) => r(c ?? 1)));
+  clearTimeout(timer);
+  fs.closeSync(fd);
+  current = null;
+  res.wallMin = Math.round((Date.now() - t1) / 600) / 100;
+  const idx = readJson(path.join(res.dir, 'index.json'));
+  if (idx) Object.assign(res, { shots: idx.counts?.shots ?? idx.shots?.length ?? 0, failed: idx.counts?.failed ?? 0, skipped: idx.counts?.skipped ?? 0, failures: (idx.failed ?? []).slice(0, 40).map((f) => `${f.screen}/${f.state}${f.scale ? ` s${f.scale}` : ''}: ${f.error}`) });
+  res.state = timedOut ? 'timeout' : idx ? (res.failed ? 'partial' : 'ok') : 'failed';
+  if (timedOut) res.error = `killed after ${UIG.timeoutMin} min`;
+  else if (!idx) res.error = `no index.json (the runner exited ${code}; see ui-gallery.out)`;
+  return res;
+}
+if (!flag('--plan')) {
+  try {
+    summary.uiGallery = await uiGallery();
+  } catch (e) {
+    summary.uiGallery = { state: 'failed', shots: 0, error: e.message };
+  }
+  log(`nightly: ui gallery ${summary.uiGallery.state}: ${summary.uiGallery.shots} shot(s), ${summary.uiGallery.failed ?? 0} failed${summary.uiGallery.error ? `, ${summary.uiGallery.error}` : ''}`);
+}
+
 const md = [
   `# Nightly ${date}: ${summary.verdict ?? summary.state}`,
   '',
@@ -376,6 +426,9 @@ const md = [
   ...mm.misses.map((m) => `- **${m.step}** ${m.nightlyStatus} at the key it was CACHED under: \`${(m.failLines[0] ?? '').replace(/`/g, "'").slice(0, 160)}\` (log \`${m.nightlyLog}\`). Paste \`misses-log.md\` into docs/GATES.md's misses log.`),
   ...(mm.explained.length ? ['', `Not misses (their inputs changed since the cached PASS): ${mm.explained.map((m) => `${m.step} ${m.nightlyStatus}`).join(', ')}.`] : []),
   ...(summary.inputsMisses.length ? ['', `Inputs-map misses in this run (a PASS not cached: its trace left its set; \`node tools/step-inputs.mjs merge ${run}\`): ${summary.inputsMisses.map((m) => m.step).join(', ')}.`] : []),
+  '',
+  `**UI gallery** (non-blocking, $0): ${summary.uiGallery ? `${summary.uiGallery.state}; ${summary.uiGallery.shots} shot(s) at GUI scale 2 and 4, ${summary.uiGallery.failed ?? 0} capture(s) failed, ${summary.uiGallery.skipped ?? 0} skipped, ${summary.uiGallery.wallMin} min${summary.uiGallery.error ? `; ${summary.uiGallery.error}` : ''}; \`${path.join(DAY, 'ui')}/index.json\`` : 'not run'}.`,
+  ...(summary.uiGallery?.failures?.length ? summary.uiGallery.failures.map((f) => `  - not captured: ${f}`) : []),
   '',
   '## Not passing',
   '',
