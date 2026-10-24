@@ -19,7 +19,6 @@ import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
-import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { F7A_MOVED } from './lib/f7a-norm.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
