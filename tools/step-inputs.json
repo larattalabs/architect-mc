@@ -137,6 +137,7 @@
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
+    "kit/test/sidecar-reuse.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
     "kit/test/t3-foundation.test.mjs",
@@ -447,6 +448,7 @@
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
+    "kit/test/sidecar-reuse.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
     "kit/test/t3-foundation.test.mjs",
@@ -514,6 +516,7 @@
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
@@ -548,6 +551,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/step-cache.mjs",
@@ -737,7 +741,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HOME",
@@ -758,6 +766,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -1031,6 +1040,7 @@
     "kit/test/scatter-f2.test.mjs",
     "kit/test/scenario-goldens.test.mjs",
     "kit/test/schem.test.mjs",
+    "kit/test/sidecar-reuse.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
     "kit/test/t3-foundation.test.mjs",
@@ -1055,6 +1065,7 @@
     "kit/vocab/tiers.json",
     "tools/catalogue-since-check.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/bench-select.mjs",
     "tools/lib/build-artifact.mjs",
@@ -1068,6 +1079,7 @@
     "tools/lib/megab.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/shard-auto.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/step-cache.mjs",
     "tools/lib/step-coverage.mjs",
@@ -1437,6 +1449,53 @@
     "tools/gate6c0a.mjs"
    ],
    "verified": "20261023-114540-release 0a-flow"
+  },
+  "0a-session": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6c0a.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
+    "tools/gate6c0a.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6c0a-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "mod/src/test/resources/stub-sidecar/**"
+   ],
+   "dynamic": [],
+   "env": [
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_PORT",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6C0A_OUT",
+    "GATE6C0A_PIN_ENTRY",
+    "GATE6C0A_RUN",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gate6c0a.mjs"
+   ]
   },
   "0a-budget": {
    "classes": [
@@ -1996,6 +2055,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gate6cmp.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -2081,6 +2141,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
@@ -2092,6 +2154,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -2293,6 +2356,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cmp.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -2387,6 +2451,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GATE_UNIT_MOD_RUN",
@@ -2398,6 +2464,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -2456,6 +2523,7 @@
     "tools/lib/SchemGzip.java",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "globs": [
@@ -2472,6 +2540,8 @@
     "GATE6CSCH_RUN",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "JAVA_HOME"
    ],
    "flags": {
@@ -2491,6 +2561,7 @@
     "tools/gate6csch.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -2530,6 +2601,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -2554,6 +2626,8 @@
     "GATE6CSCH_RUN",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -2574,6 +2648,7 @@
     "tools/gate6csch.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release sch-roundtrip"
@@ -2606,6 +2681,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -2630,6 +2706,8 @@
     "GATE6CSCH_RUN",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -2650,6 +2728,7 @@
     "tools/gate6csch.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release sch-refusals"
@@ -2682,6 +2761,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -2706,6 +2786,8 @@
     "GATE6CSCH_RUN",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -2726,6 +2808,7 @@
     "tools/gate6csch.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release sch-placement"
@@ -2758,6 +2841,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-headless-server.mjs"
@@ -2782,6 +2866,8 @@
     "GATE6CSCH_RUN",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -2802,6 +2888,7 @@
     "tools/gate6csch.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release sch-ingame"
@@ -2985,6 +3072,7 @@
     "scenarios/s7_flat_village.json",
     "tools/gate6a-stubs.mjs",
     "tools/gate6cv.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -3007,6 +3095,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -3067,13 +3156,18 @@
     "GATE6CV_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -3081,7 +3175,8 @@
    "eager": [
     "tools/gate6cv.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs"
    ],
    "data": [
     "deno.json",
@@ -3275,6 +3370,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cv.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -3298,6 +3394,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -3369,7 +3466,11 @@
     "GATE6CV_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -3379,6 +3480,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -3393,6 +3495,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release v-ingame"
@@ -3568,6 +3671,7 @@
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "scenarios/s7_flat_village.json",
     "tools/gate6cw.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -3590,6 +3694,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -3653,7 +3758,11 @@
     "GATE6CW_REPIN",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "SCENARIOS_ART",
     "UPDATE_EXPECTED",
@@ -3661,6 +3770,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -3668,7 +3778,8 @@
    "eager": [
     "tools/gate6cw.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs"
    ],
    "data": [
     "deno.json",
@@ -3856,6 +3967,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cw.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -3879,6 +3991,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -3953,7 +4066,11 @@
     "GATE6CW_REPIN",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -3964,6 +4081,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -3978,6 +4096,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs"
    ],
    "data": [
@@ -4165,6 +4284,7 @@
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "tools/api-compat.mjs",
     "tools/gate6cf1.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -4250,6 +4370,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "JAVA_HOME",
@@ -4258,6 +4380,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -4429,6 +4552,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -4511,6 +4635,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -4520,6 +4646,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -4920,6 +5047,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cx.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -5024,6 +5152,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -5033,6 +5163,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -5707,6 +5838,7 @@
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "tools/api-compat.mjs",
     "tools/gate6ct1.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -5729,6 +5861,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -5801,7 +5934,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
@@ -5811,6 +5948,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -5820,6 +5958,7 @@
     "tools/gate6ct1.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -6004,6 +6143,7 @@
     "scenarios/relief_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6cb.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -6089,6 +6229,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -6098,6 +6240,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -6300,6 +6443,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -6397,6 +6541,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -6407,6 +6553,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -6833,6 +6980,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cpt.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -6928,6 +7076,8 @@
     "GATE6CPT_STEPS",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -6937,6 +7087,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -7132,6 +7283,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cpt.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -7227,6 +7379,8 @@
     "GATE6CPT_STEPS",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -7236,6 +7390,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -7320,6 +7475,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/pt2/Pt2Old027ReadTest.java",
@@ -7363,6 +7519,8 @@
     "GATE6CPT2_STEPS",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -7394,6 +7552,7 @@
    "eager": [
     "tools/gate6cpt2.mjs",
     "tools/lib/cpu-budget.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -7569,6 +7728,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cpt2.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -7591,6 +7751,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -7669,7 +7830,11 @@
     "GATE6CPT2_STEPS",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -7679,6 +7844,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -7714,6 +7880,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -7883,6 +8050,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cpt2.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -7905,6 +8073,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -7983,7 +8152,11 @@
     "GATE6CPT2_STEPS",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -7993,6 +8166,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -8028,6 +8202,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -8211,6 +8386,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -8308,6 +8484,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -8318,6 +8496,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -8526,6 +8705,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cb.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -8623,6 +8803,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -8633,6 +8815,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -8843,6 +9026,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct1.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -8866,6 +9050,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -8949,7 +9134,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -8961,6 +9150,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -8975,6 +9165,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -9138,6 +9329,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -9220,6 +9412,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -9229,6 +9423,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -9436,6 +9631,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gate6cf2.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -9528,6 +9724,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "JAVA_HOME",
@@ -9540,6 +9738,7 @@
      "tools/gate6cf2.mjs"
     ],
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -9749,6 +9948,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cf2.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -9850,6 +10050,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -9863,6 +10065,7 @@
      "tools/gate6cf2.mjs"
     ],
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -10079,6 +10282,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cf2.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -10180,6 +10384,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -10190,6 +10396,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ],
@@ -10401,6 +10608,7 @@
     "scenarios/route_demo.json",
     "tools/api-compat.mjs",
     "tools/gate6ct2.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -10423,6 +10631,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -10495,7 +10704,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
@@ -10505,6 +10718,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -10514,6 +10728,7 @@
     "tools/gate6ct2.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -10544,6 +10759,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh"
@@ -10565,6 +10781,8 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME"
    ],
@@ -10572,6 +10790,7 @@
    "eager": [
     "tools/gate6cp0.mjs",
     "tools/lib/cpu-budget.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -10801,6 +11020,7 @@
     "tools/gate6b.mjs",
     "tools/gate6c37.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -10886,6 +11106,8 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC37_OUT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -10895,6 +11117,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11209,6 +11432,7 @@
     "tools/gate6b.mjs",
     "tools/gate6c38.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -11294,6 +11518,8 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATEC38_OUT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -11303,6 +11529,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -11489,6 +11716,7 @@
     "tools/lib/plan-cache.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -11538,10 +11766,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -11570,7 +11801,8 @@
    "gradleUse": "tests",
    "eager": [
     "tools/gate6ccoa.mjs",
-    "tools/lib/cpu-budget.mjs"
+    "tools/lib/cpu-budget.mjs",
+    "tools/lib/sidecar-reuse.mjs"
    ],
    "data": [
     "deno.json",
@@ -11780,6 +12012,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -11863,10 +12096,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HEADLESS_SIDECAR",
@@ -11903,6 +12139,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release coa-ingame"
@@ -12181,6 +12418,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -12504,6 +12742,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -12827,6 +13066,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -13150,6 +13390,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -13472,6 +13713,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -13795,6 +14037,7 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -14057,6 +14300,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -14305,6 +14549,7 @@
     "GATE6B_SIDECAR_PORT",
     "GATE6CRSB_OUT",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -14501,6 +14746,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cp0.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -14523,6 +14769,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -14590,7 +14837,11 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -14599,6 +14850,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -14612,6 +14864,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -14779,6 +15032,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cp0.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -14801,6 +15055,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -14868,7 +15123,11 @@
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
     "GATE6CP0_OUT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -14877,6 +15136,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -14890,10 +15150,543 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release p0-natural"
+  },
+  "claims-prepare": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6b.mjs"
+   ],
+   "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
+    "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "tools/find-site.mjs",
+    "tools/gate6a-stubs.mjs",
+    "tools/gate6b.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "FINDSITE_PART",
+    "FINDSITE_RESULT",
+    "FINDSITE_SEED",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
+    "GATE_P3",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME",
+    "REFIND",
+    "SCENARIOS_ART"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
+  },
+  "claims-prepare-srv": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gate6b.mjs"
+   ],
+   "closure": [
+    "kit/build.mjs",
+    "kit/check.mjs",
+    "kit/lib/bible.mjs",
+    "kit/lib/blocks.mjs",
+    "kit/lib/check.mjs",
+    "kit/lib/colors.mjs",
+    "kit/lib/components.mjs",
+    "kit/lib/connectors/bom.mjs",
+    "kit/lib/connectors/bridge.mjs",
+    "kit/lib/connectors/bridgeGeom.mjs",
+    "kit/lib/connectors/line.mjs",
+    "kit/lib/connectors/params.mjs",
+    "kit/lib/connectors/rope.mjs",
+    "kit/lib/connectors/ropeGeom.mjs",
+    "kit/lib/connectors/style.mjs",
+    "kit/lib/connectors/t3kinds.mjs",
+    "kit/lib/connectors/templateLand.mjs",
+    "kit/lib/connectors/tunnel.mjs",
+    "kit/lib/connectors/tunnelGeom.mjs",
+    "kit/lib/connectors/wall.mjs",
+    "kit/lib/fluids/biomes.mjs",
+    "kit/lib/fluids/body.mjs",
+    "kit/lib/fluids/course.mjs",
+    "kit/lib/fluids/ditch.mjs",
+    "kit/lib/fluids/fountain.mjs",
+    "kit/lib/fluids/gate.mjs",
+    "kit/lib/fluids/handcourse.mjs",
+    "kit/lib/fluids/handgate.mjs",
+    "kit/lib/fluids/hooks.mjs",
+    "kit/lib/fluids/irrfield.mjs",
+    "kit/lib/fluids/irrigate.mjs",
+    "kit/lib/fluids/keep.mjs",
+    "kit/lib/fluids/kinds.mjs",
+    "kit/lib/fluids/moat.mjs",
+    "kit/lib/fluids/place.mjs",
+    "kit/lib/fluids/pond.mjs",
+    "kit/lib/fluids/profile.mjs",
+    "kit/lib/fluids/quay.mjs",
+    "kit/lib/fluids/race.mjs",
+    "kit/lib/fluids/sim.mjs",
+    "kit/lib/fluids/waterfall.mjs",
+    "kit/lib/fluids/wet.mjs",
+    "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/cave.mjs",
+    "kit/lib/forms/coral.mjs",
+    "kit/lib/forms/floatingIsland.mjs",
+    "kit/lib/forms/giantMushroom.mjs",
+    "kit/lib/forms/giantTree.mjs",
+    "kit/lib/forms/hooks.mjs",
+    "kit/lib/forms/iceSpike.mjs",
+    "kit/lib/forms/place.mjs",
+    "kit/lib/forms/rockSpire.mjs",
+    "kit/lib/forms/rules.mjs",
+    "kit/lib/forms/states.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/mask.mjs",
+    "kit/lib/massing.mjs",
+    "kit/lib/material.mjs",
+    "kit/lib/mirror.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/noise.mjs",
+    "kit/lib/params.mjs",
+    "kit/lib/pattern.mjs",
+    "kit/lib/plan/catalogue.mjs",
+    "kit/lib/plan/compile.mjs",
+    "kit/lib/plan/finish.mjs",
+    "kit/lib/plan/free.mjs",
+    "kit/lib/plan/palette.mjs",
+    "kit/lib/plan/schema.mjs",
+    "kit/lib/png.mjs",
+    "kit/lib/realise.mjs",
+    "kit/lib/region/boundary.mjs",
+    "kit/lib/region/builds.mjs",
+    "kit/lib/region/check.mjs",
+    "kit/lib/region/checkBridges.mjs",
+    "kit/lib/region/checkFluids.mjs",
+    "kit/lib/region/checkForms.mjs",
+    "kit/lib/region/checkRopes.mjs",
+    "kit/lib/region/checkTunnels.mjs",
+    "kit/lib/region/checkVocab.mjs",
+    "kit/lib/region/checkWalls.mjs",
+    "kit/lib/region/districtsEmit.mjs",
+    "kit/lib/region/fixtures.mjs",
+    "kit/lib/region/followEmit.mjs",
+    "kit/lib/region/frontage.mjs",
+    "kit/lib/region/geom.mjs",
+    "kit/lib/region/layouts/grid.mjs",
+    "kit/lib/region/layouts/organic.mjs",
+    "kit/lib/region/layouts/outline.mjs",
+    "kit/lib/region/layouts/ring.mjs",
+    "kit/lib/region/layouts/spiral.mjs",
+    "kit/lib/region/light.mjs",
+    "kit/lib/region/pack.mjs",
+    "kit/lib/region/passes/districts.mjs",
+    "kit/lib/region/passes/hydrology.mjs",
+    "kit/lib/region/passes/index.mjs",
+    "kit/lib/region/passes/moves/bridge.mjs",
+    "kit/lib/region/passes/moves/gate.mjs",
+    "kit/lib/region/passes/moves/rope.mjs",
+    "kit/lib/region/passes/moves/tunnel.mjs",
+    "kit/lib/region/passes/relief.mjs",
+    "kit/lib/region/passes/route.mjs",
+    "kit/lib/region/plan.mjs",
+    "kit/lib/region/program.mjs",
+    "kit/lib/region/props.mjs",
+    "kit/lib/region/scatter.mjs",
+    "kit/lib/region/stamps.mjs",
+    "kit/lib/region/survey.mjs",
+    "kit/lib/region/survival.mjs",
+    "kit/lib/region/survivalData.mjs",
+    "kit/lib/region/terraces.mjs",
+    "kit/lib/region/village.mjs",
+    "kit/lib/region/volume.mjs",
+    "kit/lib/region/voxels.mjs",
+    "kit/lib/region/vworld.mjs",
+    "kit/lib/render.mjs",
+    "kit/lib/reserved.mjs",
+    "kit/lib/sdf.mjs",
+    "kit/lib/specschema.mjs",
+    "kit/lib/vocab.mjs",
+    "kit/lib/vocab/budget.mjs",
+    "kit/lib/vocab/groups.mjs",
+    "kit/lib/vocab/rarity.mjs",
+    "kit/lib/vocab/survival.mjs",
+    "kit/lib/write.mjs",
+    "kit/regions/crater_works.mjs",
+    "kit/regions/floating_islands.mjs",
+    "kit/regions/hy_core_demo.mjs",
+    "kit/regions/plan_v0.mjs",
+    "kit/regions/rift_city.mjs",
+    "kit/regions/s3_hill.mjs",
+    "kit/schemas/mask.json",
+    "kit/schemas/pattern.json",
+    "kit/schemas/plan.json",
+    "kit/test/fixtures/vocab/voc-designs.mjs",
+    "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/h-helpers.mjs",
+    "kit/test/plan-helpers.mjs",
+    "kit/vocab/hazards.json",
+    "kit/vocab/roles.json",
+    "kit/vocab/tiers.json",
+    "mod/gradle.properties",
+    "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
+    "tools/find-site.mjs",
+    "tools/gate6a-stubs.mjs",
+    "tools/gate6b.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/fl-norm.mjs",
+    "tools/lib/gallery6b.html",
+    "tools/lib/gallery6b.mjs",
+    "tools/lib/gate6chy-core.mjs",
+    "tools/lib/p3-tier.mjs",
+    "tools/lib/plan-cache.mjs",
+    "tools/lib/realised-virtual.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/scenario-districts.mjs",
+    "tools/lib/scenario-eval-worker.mjs",
+    "tools/lib/scenario-forms.mjs",
+    "tools/lib/scenario-metrics.mjs",
+    "tools/lib/scenario-relief.mjs",
+    "tools/lib/scenario-route.mjs",
+    "tools/lib/scenario-s2.mjs",
+    "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-scatter.mjs",
+    "tools/lib/scenario-village.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs",
+    "tools/scenarios.mjs"
+   ],
+   "globs": [
+    "kit/bibles/**",
+    "kit/designs/**",
+    "kit/examples/cabin/**",
+    "kit/test/fixtures/plan/**",
+    "mod/src/test/resources/stub-sidecar/**",
+    "scenarios/bibles/**"
+   ],
+   "dynamic": [
+    {
+     "from": "kit/lib/components.mjs",
+     "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/plan.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/program.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/synth.mjs'))"
+    },
+    {
+     "from": "tools/lib/gallery6b.mjs",
+     "expr": "K('region/preview.mjs'))"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+    },
+    {
+     "from": "kit/build.mjs",
+     "expr": "pathToFileURL(file).href)"
+    }
+   ],
+   "env": [
+    "ARCHITECT_BIG_REGIONS",
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "FINDSITE_PART",
+    "FINDSITE_RESULT",
+    "FINDSITE_SEED",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
+    "GATE_P3",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME",
+    "REFIND",
+    "SCENARIOS_ART"
+   ],
+   "flags": {
+    "originMain": [
+     "tools/lib/base-tree.mjs",
+     "tools/lib/gate6chy-core.mjs",
+     "tools/lib/plan-cache.mjs"
+    ]
+   },
+   "gradleUse": "compile",
+   "eager": [
+    "tools/find-site.mjs",
+    "tools/gate6b.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/sprint.mjs"
+   ]
   },
   "t2-ingame": {
    "classes": [
@@ -15079,6 +15872,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct2.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -15102,6 +15896,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -15185,7 +15980,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -15197,6 +15996,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -15211,6 +16011,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -15419,6 +16220,7 @@
     "tools/api-compat.mjs",
     "tools/catalogue-since-check.mjs",
     "tools/gate6ct3a.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -15513,6 +16315,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "JAVA_HOME",
@@ -15525,6 +16329,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -15746,6 +16551,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -15852,6 +16658,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -15866,6 +16674,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -16094,6 +16903,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -16200,6 +17010,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -16214,6 +17026,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -16442,6 +17255,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -16548,6 +17362,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -16562,6 +17378,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -16786,6 +17603,7 @@
     "tools/catalogue-since-check.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -16889,6 +17707,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -16902,6 +17722,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -17124,6 +17945,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -17230,6 +18052,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -17244,6 +18068,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ct3a.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
@@ -17452,6 +18277,7 @@
     "scenarios/goldens/relief_demo/survey.bin",
     "scenarios/sites/rift_site.json",
     "tools/gate7ak1b.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -17540,6 +18366,8 @@
     "GATE7AK1B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "K1B_WRITE_GOLDEN",
@@ -17550,6 +18378,7 @@
    "flags": {
     "originMain": [
      "tools/gate7ak1b.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -17755,6 +18584,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -17855,6 +18685,8 @@
     "GATE7AK1B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -17868,6 +18700,7 @@
    "flags": {
     "originMain": [
      "tools/gate7ak1b.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -18080,6 +18913,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -18180,6 +19014,8 @@
     "GATE7AK1B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -18193,6 +19029,7 @@
    "flags": {
     "originMain": [
      "tools/gate7ak1b.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -18409,6 +19246,7 @@
     "scenarios/sites/tunnel_hill.json",
     "tools/find-site.mjs",
     "tools/gate6ct3b.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -18498,6 +19336,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "SCENARIOS_ART",
@@ -18507,6 +19347,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -18725,6 +19566,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -18824,6 +19666,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -18836,6 +19680,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -19060,6 +19905,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -19159,6 +20005,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -19171,6 +20019,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -19395,6 +20244,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -19494,6 +20344,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -19506,6 +20358,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -19729,6 +20582,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -19828,6 +20682,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -19840,6 +20696,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -20068,6 +20925,7 @@
     "tools/catalogue-since-check.mjs",
     "tools/gate6ch.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -20174,6 +21032,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "JAVA_HOME",
@@ -20185,6 +21045,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -20418,6 +21279,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -20536,6 +21398,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -20549,6 +21413,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -20788,6 +21653,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -20906,6 +21772,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -20919,6 +21787,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -21158,6 +22027,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -21276,6 +22146,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -21289,6 +22161,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -21528,6 +22401,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -21646,6 +22520,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -21659,6 +22535,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -21897,6 +22774,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -22015,6 +22893,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -22028,6 +22908,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -22266,6 +23147,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -22384,6 +23266,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -22397,6 +23281,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -22643,6 +23528,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -22717,10 +23603,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
@@ -22987,6 +23876,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -23072,10 +23962,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -23339,6 +24232,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -23424,10 +24318,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -23691,6 +24588,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -23776,10 +24674,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -24043,6 +24944,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -24128,10 +25030,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -24395,6 +25300,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -24480,10 +25386,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -24741,6 +25650,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -24815,10 +25725,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA",
     "JAVA_HOME",
@@ -25085,6 +25998,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -25170,10 +26084,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -25437,6 +26354,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -25522,10 +26440,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -25787,6 +26708,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ccu.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -25878,6 +26800,8 @@
     "GATE6CCU_OUT",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -25888,6 +26812,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -26075,6 +27000,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ccu.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -26166,6 +27092,8 @@
     "GATE6CCU_OUT",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -26176,6 +27104,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -26514,6 +27443,7 @@
     "tools/gate6b.mjs",
     "tools/gate6crp.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -26607,6 +27537,8 @@
     "GATE6CRP_OUT",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -26617,6 +27549,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -26803,6 +27736,7 @@
     "tools/gate6b.mjs",
     "tools/gate6crp.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -26896,6 +27830,8 @@
     "GATE6CRP_OUT",
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -26906,6 +27842,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -27202,6 +28139,7 @@
     "scenarios/s3_monastery.json",
     "tools/gate6cha.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -27289,12 +28227,15 @@
     "GATE6CH_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "SCENARIOS_ART"
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -27485,6 +28426,7 @@
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -27584,6 +28526,8 @@
     "GATE6CH_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -27593,6 +28537,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -27790,6 +28735,7 @@
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -27889,6 +28835,8 @@
     "GATE6CH_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -27898,6 +28846,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -28095,6 +29044,7 @@
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -28194,6 +29144,8 @@
     "GATE6CH_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -28203,6 +29155,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -28400,6 +29353,7 @@
     "tools/gate6cha.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -28499,6 +29453,8 @@
     "GATE6CH_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -28508,6 +29464,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -28827,6 +29784,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -29077,6 +30035,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -29195,6 +30154,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -29208,6 +30169,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -29463,6 +30425,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -29552,10 +30515,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -29816,6 +30782,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -29934,6 +30901,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -29947,6 +30916,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -30295,6 +31265,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -30662,6 +31633,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -31029,6 +32001,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -31395,6 +32368,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -31716,6 +32690,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -32037,6 +33012,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -32369,6 +33345,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -32715,6 +33692,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -33069,6 +34047,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -33406,6 +34385,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -33752,6 +34732,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -34016,6 +34997,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -34094,10 +35076,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -34366,6 +35351,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -34455,10 +35441,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -34735,6 +35724,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -34824,10 +35814,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -35104,6 +36097,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -35193,10 +36187,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -35448,6 +36445,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -35521,10 +36519,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -35778,6 +36779,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -35862,10 +36864,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -36115,6 +37120,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -36199,10 +37205,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -36452,6 +37461,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -36536,10 +37546,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -37325,6 +38338,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -37443,6 +38457,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -37456,6 +38472,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -37694,6 +38711,7 @@
     "tools/gate6ch.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/asks-first.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -37812,6 +38830,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -37825,6 +38845,7 @@
     "releaseContext": true,
     "originMain": [
      "tools/gate6ch.mjs",
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6ch-a.mjs",
      "tools/lib/gate6ch-core.mjs",
      "tools/lib/gate6chy-core.mjs",
@@ -38172,6 +39193,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -38539,6 +39561,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -38905,6 +39928,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -39178,6 +40202,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -39267,10 +40292,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -39610,6 +40638,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -39873,6 +40902,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -39958,10 +40988,13 @@
     "GATE_JAVAP_CACHE",
     "GATE_JAVAP_CACHE_DIR",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -40481,6 +41514,7 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
@@ -40709,6 +41743,7 @@
     "scenarios/s2_ice_spikes.json",
     "tools/api-compat.mjs",
     "tools/gate6cs2.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -40731,6 +41766,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -40799,7 +41835,11 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME",
     "SCENARIOS_ART",
@@ -40808,6 +41848,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -40817,6 +41858,7 @@
     "tools/gate6cs2.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -41054,6 +42096,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -41142,10 +42185,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -41178,7 +42224,8 @@
    "eager": [
     "tools/gate6cs3.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/gate-part.mjs"
+    "tools/lib/gate-part.mjs",
+    "tools/lib/sidecar-reuse.mjs"
    ],
    "data": [
     "deno.json",
@@ -41421,6 +42468,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -41520,10 +42568,13 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
@@ -41564,6 +42615,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release s3-plan"
@@ -41726,6 +42778,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -41808,6 +42861,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -41817,6 +42872,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -41993,6 +43049,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -42075,6 +43132,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -42084,6 +43143,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -42257,6 +43317,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -42339,6 +43400,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -42348,6 +43411,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -42525,6 +43589,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -42607,6 +43672,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -42616,6 +43683,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -42848,6 +43916,7 @@
     "scenarios/sites/desert_jungle_site.json",
     "tools/api-compat.mjs",
     "tools/gate6cd.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -42872,6 +43941,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -42949,8 +44019,12 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME",
     "P2_CALIBRATION_LATEST",
@@ -42962,6 +44036,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -42971,6 +44046,7 @@
     "tools/gate6cd.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -43200,6 +44276,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cd.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -43225,6 +44302,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -43313,8 +44391,12 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -43328,6 +44410,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -43342,6 +44425,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -43505,6 +44589,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -43587,6 +44672,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -43596,6 +44683,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -43821,6 +44909,7 @@
     "scenarios/route_demo.json",
     "scenarios/s7_flat_village.json",
     "tools/gate7ak1.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -43844,6 +44933,7 @@
     "tools/lib/scenario-s3.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6b-client.sh",
@@ -43914,7 +45004,11 @@
     "GATE7AK1_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "JAVA_HOME",
     "PATH",
@@ -43925,6 +45019,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -43934,6 +45029,7 @@
     "tools/gate7ak1.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -44159,6 +45255,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -44183,6 +45280,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -44264,7 +45362,11 @@
     "GATE7AK1_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -44277,6 +45379,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -44291,6 +45394,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -44507,6 +45611,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -44531,6 +45636,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -44612,7 +45718,11 @@
     "GATE7AK1_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -44625,6 +45735,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -44639,6 +45750,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -44855,6 +45967,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -44879,6 +45992,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -44960,7 +46074,11 @@
     "GATE7AK1_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -44973,6 +46091,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -44987,6 +46106,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -45203,6 +46323,7 @@
     "tools/gate6b.mjs",
     "tools/gate7ak1.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -45227,6 +46348,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -45308,7 +46430,11 @@
     "GATE7AK1_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -45321,6 +46447,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -45335,6 +46462,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -45558,6 +46686,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cd.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -45583,6 +46712,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -45671,8 +46801,12 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -45686,6 +46820,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -45700,6 +46835,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ],
@@ -45862,6 +46998,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -45944,6 +47081,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -45953,6 +47092,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -46140,6 +47280,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cx.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -46244,6 +47385,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -46253,6 +47396,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -46453,6 +47597,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cx.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -46557,6 +47702,8 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -46566,6 +47713,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -46771,6 +47919,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cw.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -46794,6 +47943,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -46868,7 +48018,11 @@
     "GATE6CW_REPIN",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -46879,6 +48033,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -46893,6 +48048,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
    ],
@@ -46956,6 +48112,7 @@
     "tools/gate6c0b.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/run-gate6c0a-client.sh"
    ],
@@ -46988,13 +48145,16 @@
     "ARCHITECT_PORT",
     "COPIES_REPORT",
     "GATE6C0B_OUT",
-    "GATE6C0B_RUN"
+    "GATE6C0B_RUN",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE"
    ],
    "gradleUse": "compile",
    "eager": [
     "tools/gate6c0b.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -47063,6 +48223,7 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6c0a-client.sh",
@@ -47104,6 +48265,8 @@
     "COPIES_REPORT",
     "GATE6C0B_OUT",
     "GATE6C0B_RUN",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
    ],
@@ -47112,6 +48275,7 @@
     "tools/gate6c0b.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/src-gradle.mjs"
    ],
    "data": [
@@ -47212,6 +48376,7 @@
     "kit/lib/blocks.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
     "tools/gate4d.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
@@ -47235,6 +48400,7 @@
     "ARCHITECT_SIMULATION_DISTANCE",
     "ARCHITECT_XMX",
     "C30_N",
+    "GATE4D_FRESH_BASE",
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
@@ -47260,6 +48426,7 @@
     "kit/lib/blocks.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
     "tools/gate4d.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
@@ -47283,6 +48450,7 @@
     "ARCHITECT_SIMULATION_DISTANCE",
     "ARCHITECT_XMX",
     "C30_N",
+    "GATE4D_FRESH_BASE",
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
@@ -47309,6 +48477,7 @@
     "kit/lib/blocks.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
     "tools/gate4d.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
@@ -47332,6 +48501,7 @@
     "ARCHITECT_SIMULATION_DISTANCE",
     "ARCHITECT_XMX",
     "C30_N",
+    "GATE4D_FRESH_BASE",
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
@@ -47357,6 +48527,7 @@
     "kit/lib/blocks.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/nbt.mjs",
+    "mod/gradle.properties",
     "tools/gate4d.mjs",
     "tools/gen-palettes.mjs",
     "tools/lib/devclient.mjs",
@@ -47380,6 +48551,7 @@
     "ARCHITECT_SIMULATION_DISTANCE",
     "ARCHITECT_XMX",
     "C30_N",
+    "GATE4D_FRESH_BASE",
     "GATE4D_OUT",
     "GRADLE_USER_HOME",
     "JAVA_HOME"
@@ -48929,6 +50101,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -49011,6 +50184,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -49020,6 +50195,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -49192,6 +50368,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -49274,6 +50451,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -49283,6 +50462,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -49455,6 +50635,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -49537,6 +50718,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -49546,6 +50729,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -49718,6 +50902,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -49800,6 +50985,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -49809,6 +50996,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -49980,6 +51168,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -50062,6 +51251,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -50071,6 +51262,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -50242,6 +51434,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -50324,6 +51517,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -50333,6 +51528,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -50505,6 +51701,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -50587,6 +51784,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -50596,6 +51795,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -50768,6 +51968,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -50850,6 +52051,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -50859,6 +52062,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -51035,6 +52239,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -51117,6 +52322,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -51126,6 +52333,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -51303,6 +52511,7 @@
     "tools/gate6a-stubs.mjs",
     "tools/gate6b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/fl-norm.mjs",
@@ -51385,6 +52594,8 @@
     "GATE6B_OUT",
     "GATE6B_RUN",
     "GATE6B_SIDECAR_PORT",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -51394,6 +52605,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -51872,6 +53084,7 @@
     "tools/gate6b.mjs",
     "tools/gate6ct3b.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -51971,6 +53184,8 @@
     "GATE6CT3B_OUT",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P3",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
@@ -51983,6 +53198,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -52694,6 +53910,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -52808,11 +54025,14 @@
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
     "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
     "GATE_PLAN_CACHE",
     "GATE_PLAN_CACHE_DIR",
     "GATE_PLAN_WORKERS",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA",
@@ -53045,6 +54265,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cw.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
@@ -53069,6 +54290,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -53143,8 +54365,12 @@
     "GATE6CW_REPIN",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -53156,6 +54382,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -53171,6 +54398,7 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs"
    ]
   },
@@ -53392,6 +54620,7 @@
     "tools/gate6b.mjs",
     "tools/gate6cd.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/base-tree.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/d2-replay.mjs",
@@ -53417,6 +54646,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs",
     "tools/lib/wsserver.mjs",
@@ -53505,8 +54735,12 @@
     "GATE_JAVAP_CACHE_DIR",
     "GATE_KIT_RESULTS",
     "GATE_KIT_TREE",
+    "GATE_MERGE_BASE",
+    "GATE_NO_UNCHANGED_SKIP",
     "GATE_P2_SMOKE",
     "GATE_P3",
+    "GATE_SIDECAR_RESULTS",
+    "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
@@ -53520,6 +54754,7 @@
    ],
    "flags": {
     "originMain": [
+     "tools/lib/base-tree.mjs",
      "tools/lib/gate6chy-core.mjs",
      "tools/lib/plan-cache.mjs"
     ]
@@ -53534,6 +54769,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sidecar-reuse.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/src-gradle.mjs"
    ]
