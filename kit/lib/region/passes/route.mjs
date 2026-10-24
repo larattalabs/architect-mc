@@ -859,13 +859,16 @@ export function routePass(survey, volumes, intent) {
     const wetCorridor = sp.some((x) => x.m.crossesWater);
     for (let attempt = 0; attempt <= 8; attempt++) {
       const b = build(true);
-      if (attempt) { const sb = dilate(selfBlock, W, D, Rt); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
+      // ((7a CL) a climb edge's retry never blocks an end cell or a cell beside it: a crossing at the goal would block the goal itself,
+      // and no retry could then succeed (other edges keep T2's rule, byte for byte)
+      const keepEnds = (sb) => { if (CLIMB_TREE_PROFILES.has(e.profile)) for (const en of ends) { const i0 = en.k % W, j0 = Math.floor(en.k / W); for (let j = Math.max(0, j0 - 1); j <= Math.min(D - 1, j0 + 1); j++) for (let i = Math.max(0, i0 - 1); i <= Math.min(W - 1, i0 + 1); i++) sb[i + j * W] = 0; } return sb; };
+      if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
       let cmask = b.free ?? b.blockedW;
       if (wetCorridor) {
         const bw = build(false);
         cmask = bw.free ?? bw.blockedW;
-        if (attempt) { const sb = dilate(selfBlock, W, D, Rt); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
+        if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
       }
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
       for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
