@@ -66,6 +66,14 @@ export const CL_MOVED = Object.freeze({
   'asks/hidden_village.json': 'CL: cave_ladders answers blocked DEPENDENCY, its tower_1 unplaced in the zone (was unsupported until 7a)',
 });
 
+/** (fix/cl-theme, Noah 2026-10-24) the climb fixtures whose fittings the theme rule re-roles: half-steps of the treads' family, trim curbs. */
+export const THEME_MOVED = Object.freeze({
+  'cl/a01_walked.json': "fix/cl-theme: the half-steps take the treads' family (structure's slab)",
+  'cl/a02_switch_wanders.json': "fix/cl-theme: the half-steps take the treads' family, the turn curbs the trim's slab",
+  'valid/v7a_cl_stair.json': "fix/cl-theme: the half-steps take the treads' family (structure's slab)",
+  'valid/v7a_cl_switch.json': "fix/cl-theme: the half-steps take the treads' family, the turn curbs the trim's slab",
+});
+
 const B = await import('./lib/gate6chy-b.mjs');
 const CORE = await import('./lib/gate6chy-core.mjs');
 const ctx = { L, OUT, KIT, imp, json, root, check, log, core: CORE, B };
@@ -134,7 +142,9 @@ steps.unit = async () => {
   check(g.status === 0, 'item 15 (Java): ApiCLTest (the feature climbConnectors from the sidecar\'s region.climbs; protocol 1 none)', out.java.tail);
   // item 2: byte identity against the merge base, the named exceptions aside
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'CL', except: CL_MOVED, landed: F7A_MOVED });
+  // (CL is on main since v0.44.0: its own movers are landed, identical either way; fix/cl-theme's movers are named until it lands)
+  const onMain = fs.existsSync(path.join(K.baseTree(root, 'CL').dir, 'kit', 'lib', 'connectors', 'climbGeom.mjs'));
+  const u = await K.unchanged(root, { check, log, base: 'CL', except: onMain ? THEME_MOVED : CL_MOVED, landed: onMain ? { ...F7A_MOVED, ...CL_MOVED } : F7A_MOVED, mergedIf: 'kit/lib/lint/theme.mjs' });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
   fs.writeFileSync(path.join(OUT, 'cl-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   // item 3: the 59 asks, re-made here and on the merge base, against the committed tables
@@ -146,8 +156,9 @@ steps.unit = async () => {
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).filter((k) => !/mining_town\/rail_1/.test(k));
   out.asks = { moved, malformed: after.malformed, committedAfter: fs.readFileSync(path.join(F, 'asks-gap-after.txt'), 'utf8') === after.text };
-  check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify(['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair']) && out.asks.committedAfter,
-    `item 3: the 59 asks on the merge base and on this head: 0 malformed; exactly the three climbs move (${moved.join(', ')}; the foundation's rail_1 aside); the after table equals fixtures/plan/cl/asks-gap-after.txt: ${out.asks.committedAfter}`);
+  const climbs = ['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair'];
+  check(after.malformed === 0 && (JSON.stringify(moved) === JSON.stringify(climbs) || (onMain && moved.length === 0)) && out.asks.committedAfter,
+    `item 3: the 59 asks on the merge base and on this head: 0 malformed; ${onMain ? 'CL on the base: nothing moves' : 'exactly the three climbs move'} (${moved.join(', ') || 'none'}; the foundation's rail_1 aside); the after table equals fixtures/plan/cl/asks-gap-after.txt: ${out.asks.committedAfter}`);
   // item 15: api-compat ($0)
   const flag = process.env.GATE7ACL_APICOMPAT ?? '--gate7acl';
   const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', flag], { cwd: root, encoding: 'utf8', timeout: 900_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
