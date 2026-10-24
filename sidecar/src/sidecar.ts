@@ -891,15 +891,34 @@ export class Sidecar {
     return caps.length ? Math.min(...caps) : undefined;
   }
 
-  /** The bible a design builds with (resolved), if any. */
+  /**
+   * The bible a design builds with (resolved), if any. (U5) A Style without parts hands out no components; an entry designed again
+   * (versionOf, polish, a report critique) whose source was made in set mode before U5 (a built-in or hand-made Style then got the kit's
+   * reference library, which its source imports) keeps the library the entry was built with: its own bible/components.mjs. That file is
+   * the entry's, not another Style's attached to a Style, and the design stays out of set mode (no restraint, the hybrid brief).
+   */
   private designBible(d: Design) {
     if (!d.request.bible) return undefined;
     try {
-      return this.bibleIndex.resolve({ id: d.request.bible, version: d.request.bibleVersion ?? 1 });
+      const r = this.bibleIndex.resolve({ id: d.request.bible, version: d.request.bibleVersion ?? 1 });
+      const own = r.files.components ? undefined : this.entryComponents(d);
+      return own ? { ...r, files: { ...r.files, components: own } } : r;
     } catch (e) {
       this.log.warn(`design ${d.id}: its bible ${d.request.bible} v${d.request.bibleVersion} is gone (${(e as Error).message})`);
       return undefined;
     }
+  }
+
+  /** (U5) The bible/components.mjs of the entry a design re-designs (versionOf, polish, a report critique), if it has one. */
+  private entryComponents(d: Design): string | undefined {
+    const id = d.request.versionOf?.entryId ?? d.polish?.entryId ?? d.critiqueOf;
+    if (!id || !/^[a-z0-9_]+$/.test(id)) return undefined;
+    const v = d.polish?.fromVersion ?? d.request.versionOf?.baseVersion ?? this.versions.head(id);
+    for (const dir of [this.versions.versionDir(id, v), this.versions.dir(id)]) {
+      const f = dir ? path.join(dir, 'bible', 'components.mjs') : '';
+      if (f && fs.existsSync(f)) return f;
+    }
+    return undefined;
   }
 
   /** prepareScratch's extras: the bible's files and up to 4 iso renders of finished earlier-wave siblings. */

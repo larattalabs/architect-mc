@@ -157,6 +157,34 @@ describe('U5a: the sidecar (sim)', () => {
     expect(h.sc.bibleIndex.get('rustic')!.parts).toHaveLength(5);
   });
 
+  it('an entry made in set mode before U5 with a Style that has no parts still builds when designed again (its own library)', async () => {
+    h = await harness();
+    // a set-mode tavern (rustic's library in its bible/), then made to look like a pre-U5 one: pinned to cherry (no parts now), its
+    // source importing the library it was built with
+    const d = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', name: 'Old Set Inn', bible: 'rustic', maxSize: { x: 64, y: 64, z: 64 } }))).id);
+    const e = d.blueprintId!;
+    const dir = path.join(h.sc.config.libraryDir, e);
+    expect(fs.existsSync(path.join(dir, 'bible', 'components.mjs'))).toBe(true);
+    const jf = path.join(dir, `${e}.blueprint.json`);
+    const j = JSON.parse(fs.readFileSync(jf, 'utf8')) as Record<string, unknown>;
+    fs.writeFileSync(jf, JSON.stringify({ ...j, bible: { id: 'cherry', version: 1 }, request: { ...(j.request as object), bible: 'cherry', bibleVersion: 1 } }));
+    const src = path.join(dir, `${e}.mjs`);
+    fs.writeFileSync(src, `import * as C from '../../bible/components.mjs';\nif (typeof C.window !== 'function') throw new Error('no library');\n${fs.readFileSync(src, 'utf8')}`);
+    const v = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', notes: 'add a lean-to', maxSize: { x: 64, y: 64, z: 64 }, versionOf: { entryId: e } })));
+    expect(v.request.bible).toBe('cherry');
+    const vd = await done(h, v.id);
+    expect(h.sc.setMode(vd)).toBe(false);
+    const b = brief(h.sc, vd.id);
+    for (const re of SET_MODE_TEXT) expect(b).not.toMatch(re);
+    expect(fs.existsSync(path.join(h.sc.config.dataDir, 'designs', vd.id, 'bible', 'components.mjs'))).toBe(true);
+    // the new version keeps the library its source imports
+    expect(fs.existsSync(path.join(dir, 'bible', 'components.mjs'))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(jf, 'utf8')).version).toBe(2);
+    // a fresh design with cherry gets no library
+    const f = await done(h, h.sc.requestDesign(DesignRequest.parse(request({ name: 'Fresh Cherry', bible: 'cherry' }))).id);
+    expect(fs.existsSync(path.join(h.sc.config.dataDir, 'designs', f.id, 'bible', 'components.mjs'))).toBe(false);
+  });
+
   it('a hand-made Style has no parts and no copied library; a hand edit of a Style with parts keeps them', async () => {
     h = await harness();
     const med = h.sc.bibleIndex.get('medieval')!;
