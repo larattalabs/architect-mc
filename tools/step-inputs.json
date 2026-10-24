@@ -33322,6 +33322,7 @@
     "tools/lib/corpus-derive.mjs",
     "tools/lib/corpus-plan-worker.mjs",
     "tools/lib/corpus-plan.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
@@ -33428,6 +33429,7 @@
    },
    "eager": [
     "tools/gate7af.mjs",
+    "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/kit-reuse.mjs"
    ]
