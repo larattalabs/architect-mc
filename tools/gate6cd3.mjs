@@ -763,7 +763,8 @@ async function stewardShapedRemovals() {
   const h0 = await hash(all);
   // (what a refusal must leave as it was: the journal's entries and their status, every site's record, the region's state)
   const journalOf = async () => json(((await call('dev.journal.state', {}, 60_000)).entries ?? []).map((e) => [e.id, e.status]));
-  const sitesOf = async () => json(await call('dev.sites.state', {}, 60_000));
+  // (every record as stored: a pending infra record's `pendingSince` is the time of the call, so it is left out)
+  const sitesOf = async () => { const st = await call('dev.sites.state', {}, 60_000); return JSON.stringify({ sites: st.sites, infra: (st.infra ?? []).map(({ pendingSince, ...q }) => { void pendingSince; return q; }), pending: st.pending }); };
   const j0 = await journalOf(), s0 = await sitesOf();
   const rm0 = await call('dev.region.remove', { region: d1.region }, 600_000).catch((e) => ({ error: String(e) }));
   await L.settle(2000);
@@ -775,7 +776,7 @@ async function stewardShapedRemovals() {
   const logTail = fs.existsSync(logF) ? fs.readFileSync(logF, 'utf8').slice(log0) : '';
   const line = logTail.split('\n').find((l) => l.includes(`Region ${d1.region}: removal refused`) || l.includes(`Region ${d1.region}: removal stopped`)) ?? null;
   out.noRequester = { removed: rm0.removed ?? null, blockers: rm0.blockers ?? rm0.error ?? null, state: v0?.state, log: line };
-  check(rm0.removed === false && /owned by steward_mc:settlement\/d3rc/.test(json(rm0.blockers ?? [])) && (await hash(all)) === h0,
+  check(rm0.removed === false && /owned by steward_mc:settlement\/d3rc/.test(JSON.stringify(rm0.blockers ?? [])) && (await hash(all)) === h0,
     `RC finding 1: a remove with no requester (the RC's call) is refused by the owner rule, nothing written; the answer names why (${json(rm0.blockers ?? rm0.error).slice(0, 200)})`);
   check(!!line && /removal refused, nothing changed/.test(line) && /owned by steward_mc:settlement\/d3rc/.test(line), `RC finding 1: the game log names the refusal and its reason, no PARTIAL (${(line ?? 'no line').slice(0, 220)})`);
   // the district removed first, by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash as before
