@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILTIN_BIBLES, builtinBible, styleFieldsErrors, validateBible } from '../lib/bible.mjs';
 import { AUTHORED_STYLES, PALETTES, PALETTE_PRESETS, WOODS, palette, variant } from '../lib/kit.mjs';
-import { FEATURE_IDS, MAX_SUGGESTED_FEATURES, STYLE_META, editMain, fanOut, mainOf, provenanceOf, styleTable } from '../lib/styles.mjs';
+import { FEATURE_IDS, MAX_SUGGESTED_FEATURES, STYLE_META, editMain, editMainFrom, fanOut, formApply, formNew, formSaveRequest, formStyle, formView, mainOf, presetStyle, provenanceOf, styleTable } from '../lib/styles.mjs';
 import { fitsRole } from '../lib/vocab.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -153,4 +153,89 @@ test('the mod\'s fallback palettes and the parity cases are what tools/gen-palet
   assert.deepEqual(Object.keys(j.presets), Object.keys(PALETTE_PRESETS));
   assert.deepEqual(j.presets.desert.roles, { ...PALETTES.desert.roles });
   assert.deepEqual(j.styles, styleTable());
+});
+
+// ------------------------------------------------------------------ the Style form (Style unification U2)
+
+const apply = (st, ...ops) => ops.reduce((s, op) => formApply(s, op), st);
+
+test('U2 form: picking a Style fills the materials and its suggested features, marked from the Style', () => {
+  const st = apply(formNew({ mode: 'new', features: ['porch'] }), ['pick', presetStyle('medieval')]);
+  const v = formView(st);
+  assert.equal(v.style.id, 'medieval');
+  assert.deepEqual(v.roles, { ...PALETTES.medieval.roles });
+  assert.deepEqual(v.main, { wood: 'dark_oak', stone: 'stone_bricks', roof: 'spruce', accent: 'spruce' });
+  assert.deepEqual(v.features, ['porch', 'chimney', 'balcony']);
+  assert.deepEqual(v.featureProvenance, { porch: 'hand', chimney: 'style', balcony: 'style' });
+  assert.equal(v.provenance.frame, 'follows_wood');
+  assert.equal(v.provenance.wall, 'style');
+  assert.equal(v.mix, false);
+  // unedited: withStyle (the roles inline, the Style's id and version)
+  assert.deepEqual(v.request, { palette: { bible: { id: 'medieval', version: 1, roles: { ...PALETTES.medieval.roles } } } });
+});
+
+test('U2 form: an edit makes a custom mix based on the Style; revert undoes it; the main rows are stored, not read back', () => {
+  let st = apply(formNew({ mode: 'new' }), ['pick', presetStyle('medieval')], ['main', 'wood', 'birch']);
+  let v = formView(st);
+  assert.equal(v.mix, true);
+  assert.equal(v.roles.frame, 'minecraft:birch_log');
+  assert.equal(v.roles.wall, 'minecraft:white_terracotta', 'the Style set the wall: it stays');
+  assert.equal(v.mainProvenance.wood, 'hand');
+  assert.equal(v.request.palette.bible.id, 'medieval', 'a custom mix names the Style it is based on');
+  assert.equal(formView(apply(st, ['revert'])).mix, false);
+  // the U01 drift: a hand-set frame of another wood does not move the Wood row, and a later Wood edit leaves it alone
+  st = apply(formNew({ mode: 'new' }), ['pick', presetStyle('oak')], ['role', 'frame', 'birch_log']);
+  assert.equal(mainOf(st.roles).wood, 'birch', 'read back from the roles, the Wood row would drift');
+  v = formView(st);
+  assert.equal(v.main.wood, 'oak');
+  assert.equal(v.provenance.frame, 'hand');
+  v = formView(apply(st, ['main', 'wood', 'spruce']));
+  assert.equal(v.roles.frame, 'minecraft:birch_log');
+  assert.equal(v.roles.wall, 'minecraft:spruce_planks');
+  assert.equal(v.main.wood, 'spruce');
+  // editMain is editMainFrom with the rows read back: the U1 cases are unchanged
+  assert.deepEqual(editMain(PALETTES.medieval.roles, 'wood', 'birch'), editMainFrom(PALETTES.medieval.roles, 'wood', 'birch', 'dark_oak', ['frame', 'floor']));
+});
+
+test('U2 form: swapping Styles keeps the player\'s picks, replaces untouched suggestions, never re-adds one turned off', () => {
+  let st = apply(formNew({ mode: 'new', features: ['porch'] }), ['pick', presetStyle('rustic')]);
+  assert.deepEqual(st.features, ['porch', 'chimney']);
+  st = apply(st, ['feature', 'chimney'], ['feature', 'garden'], ['pick', presetStyle('medieval')]);
+  assert.deepEqual(st.features, ['porch', 'garden', 'balcony'], 'chimney was turned off: medieval does not add it back');
+  st = apply(st, ['pick', presetStyle('japanese')]);
+  assert.deepEqual(st.features, ['porch', 'garden', 'courtyard'], 'balcony (untouched) went; garden is the player\'s, not marked from japanese');
+  assert.deepEqual(formView(st).featureProvenance, { porch: 'hand', garden: 'hand', courtyard: 'style' });
+  // at most 6; picking the same Style again reverts the materials only
+  st = apply(formNew({ mode: 'new', features: ['porch', 'garden', 'skylights', 'basement', 'courtyard'] }), ['pick', presetStyle('modern')]);
+  assert.equal(st.features.length, 6);
+  assert.throws(() => formApply(st, ['feature', 'chimney']), /at most 6/);
+  const same = apply(st, ['main', 'wood', 'oak'], ['pick', presetStyle('modern')]);
+  assert.deepEqual(same.features, st.features);
+  assert.equal(formView(same).mix, false);
+});
+
+test('U2 form: variant mode: WHAT is fixed, a Style swap re-skins materials only, the smallest request', () => {
+  const v0 = formNew({ mode: 'variant', style: presetStyle('rustic') });
+  assert.deepEqual(formView(v0).request, {});
+  assert.throws(() => formApply(v0, ['feature', 'porch']), /fixed/);
+  assert.deepEqual(formView(apply(v0, ['pick', presetStyle('birch')])).request, { palette: 'birch' });
+  assert.deepEqual(formView(apply(v0, ['main', 'wood', 'cherry'])).request, { palette: { wood: 'cherry', stone: 'cobblestone', roof: 'dark_oak', accent: 'dark_oak' } });
+  // a preset with extras edited: the roles inline (inputs would lose desert's plaster)
+  const d = formView(apply(v0, ['pick', presetStyle('desert')], ['main', 'wood', 'oak']));
+  assert.equal(d.request.palette.bible.id, 'desert');
+  assert.equal(d.request.palette.bible.roles.wall_alt, 'minecraft:smooth_sandstone');
+  // an installed Style: unedited the 4b re-skin (bible: id), edited inline
+  const ash = formStyle({ id: 'bib_ash', name: 'Ash', version: 2, kind: 'bible', roles: PALETTES.crimson.roles });
+  assert.deepEqual(formView(apply(v0, ['pick', ash])).request, { bible: 'bib_ash' });
+  assert.equal(formView(apply(v0, ['pick', ash], ['main', 'roof', 'oak'])).request.palette.bible.version, 2);
+});
+
+test('U2 form: Save as style is a bible.save request: roles, tags, suggestedFeatures, basedOn, origin hand', () => {
+  const st = apply(formNew({ mode: 'new', features: ['garden'] }), ['pick', presetStyle('medieval')], ['main', 'wood', 'birch']);
+  const s = formSaveRequest(st, 'Birch daub');
+  assert.deepEqual(s, { name: 'Birch daub', roles: { ...st.roles }, tags: [...STYLE_META.medieval.tags], suggestedFeatures: ['garden', 'chimney', 'balcony'], basedOn: { id: 'medieval', version: 1 }, origin: 'hand' });
+  assert.equal(formSaveRequest(st).name, 'Medieval mix');
+  const vb = validateBible({ id: 'bib_birch_daub', ...s });
+  assert.ok(vb.ok, vb.errors.join('; '));
+  assert.equal(formSaveRequest(formNew({ mode: 'new' })), null);
 });

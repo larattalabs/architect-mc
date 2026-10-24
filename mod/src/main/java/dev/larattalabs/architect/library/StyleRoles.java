@@ -223,12 +223,40 @@ public final class StyleRoles {
 		if (!MAIN_FIELDS.contains(field)) {
 			throw new IllegalArgumentException("editMain: field must be one of " + String.join(", ", MAIN_FIELDS) + " (got " + field + ")");
 		}
+		Map<String, String> q = new LinkedHashMap<>();
+		roles.forEach((k, v) -> q.put(k, qualify(v)));
+		Palettes.Inputs main = mainOf(q);
+		List<String> following = new ArrayList<>();
+		if (field.equals("wood")) {
+			for (String role : fanOut.getOrDefault("wood", List.of())) {
+				if (q.get(role) != null && main.wood().equals(woodFamilyOf(q.get(role)))) {
+					following.add(role);
+				}
+			}
+		} else if (field.equals("stone")) {
+			for (String role : fanOut.getOrDefault("stone", List.of())) {
+				if (q.get(role) != null && sameStone(q.get(role), main.stone())) {
+					following.add(role);
+				}
+			}
+		}
+		return editMainFrom(roles, field, value, main.get(field), following);
+	}
+
+	/**
+	 * (Style unification U2) The core of {@link #editMain} with the row's old value and the roles that follow it given (kit
+	 * {@code editMainFrom}), not read back from the roles: {@link StyleForm} stores both, so a role set by hand never moves a main row.
+	 */
+	public Map<String, String> editMainFrom(Map<String, String> roles, String field, String value, @Nullable String old,
+		java.util.Collection<String> following) {
+		if (!MAIN_FIELDS.contains(field)) {
+			throw new IllegalArgumentException("editMain: field must be one of " + String.join(", ", MAIN_FIELDS) + " (got " + field + ")");
+		}
 		if (value == null || !VALUE.matcher(value).matches()) {
 			throw new IllegalArgumentException("editMain: " + field + " must be a wood or block name");
 		}
 		Map<String, String> out = new LinkedHashMap<>();
 		roles.forEach((k, v) -> out.put(k, qualify(v)));
-		Palettes.Inputs main = mainOf(out);
 		String v = shortOf(value);
 		switch (field) {
 			case "wood", "accent" -> {
@@ -239,11 +267,11 @@ public final class StyleRoles {
 					out.put("accent", woods.get(v).get("planks"));
 					return out;
 				}
-				Map<String, String> from = woods.get(main.wood());
+				Map<String, String> from = old == null ? Map.of() : woods.getOrDefault(shortOf(old), Map.of());
 				Map<String, String> to = woods.get(v);
 				for (String role : fanOut.getOrDefault("wood", List.of())) {
 					String b = out.get(role);
-					if (b == null || from == null || !main.wood().equals(woodFamilyOf(b))) {
+					if (b == null || !following.contains(role)) {
 						continue;
 					}
 					String part = partOfRole.get(role);
@@ -263,8 +291,7 @@ public final class StyleRoles {
 					throw new IllegalArgumentException("editMain: stone '" + value + "' is not a full vanilla block with stairs and slab variants");
 				}
 				for (String role : fanOut.getOrDefault("stone", List.of())) {
-					String b = out.get(role);
-					if (b == null || !sameStone(b, main.stone())) {
+					if (out.get(role) == null || !following.contains(role)) {
 						continue;
 					}
 					out.put(role, role.equals("foundation") ? s : trimOf(s));
