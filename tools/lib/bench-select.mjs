@@ -186,3 +186,26 @@ export function latestNightlyRecords(root, ids) {
 export function newestOf(records, ids) {
   return ids.map((x) => records.get(x)).filter(Boolean).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))[0] ?? null;
 }
+
+// ------------------------------------------------------------------ the full twins that only the nightly runs (Noah, 2026-10-23)
+
+/** tools/gate-cache.json release.nightly.ids: the full ids the releases replace by their smoke or slice twins and only the nightly runs. */
+export function nightlyFulls(conf) {
+  return [...(conf?.release?.nightly?.ids ?? [])];
+}
+
+/**
+ * Applies the rule to a release's candidate set `want` (a Set, edited in place): a release drops every nightly-only full id (a smoke or
+ * slice twin stands for it: it is in the release's own lists, supersededBy that full id); the nightly adds them (a step a full id
+ * supersedes then drops, as at any run that holds both). -> { dropped, added }: what changed, for the plan.
+ */
+export function applyNightlyFulls(want, ids, { nightly, valid = () => true }) {
+  const dropped = [], added = [];
+  for (const s of ids) {
+    if (!valid(s)) continue;
+    if (nightly) {
+      if (!want.has(s)) { want.add(s); added.push(s); }
+    } else if (want.delete(s)) dropped.push(s);
+  }
+  return { dropped, added };
+}

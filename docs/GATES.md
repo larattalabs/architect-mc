@@ -1352,6 +1352,83 @@ not minutes. In the turbo slice (`artifacts/gate-runs-turbo-slice/20261022-21292
 in-game step-minutes; the slice's wall was bound by the unit lanes (fl-unit/p1 20.6, s3-unit/p1 19.7, f3-unit/p1 16.6 min), so its
 wall falls by less until those shrink.
 
+## Speed audit D: the cull and combine items (2026-10-23, branch chore/speed-audit-d)
+
+Noah approved implementing the gate audit's set D. Each item keeps its assertions unless stated; the proofs are in the branch's report.
+
+### Byte-identity loops skipped on an identical kit and scenarios tree (K1)
+
+`tools/lib/base-tree.mjs` `identicalToBase(root, { ref })`: when `git rev-parse <base>:kit` and `<base>:scenarios` equal HEAD's and nothing under
+`kit/` or `scenarios/` is uncommitted, the "every committed plan fixture is byte-identical to the merge base" loop can only agree, so the
+driver skips it and prints one check line, `unchanged: base == head (kit <sha>, scenarios <sha>), skipped`. The base is the run's
+`GATE_MERGE_BASE` (outside a gate run the kit drivers skip nothing); gate6ch-core and gate6chy-core compare with `origin/main` after their fetch, so
+they use that (and skip in any run). Under the skip, kc's and f3's per-fixture lines still read "byte-identical" (a head result compared with itself); only the `unchanged: base == head` line says why. A differing tree, a dirty tree or an unreadable ref never skips. `GATE_NO_UNCHANGED_SKIP=1` turns it off. Drivers: rs, coa,
+fl, f3, kc, irr, s3 (kit), voc-c item 4, hy-core item 12, h-core item 11. kc and f3 keep their head-only work in the same loop (the M25
+census on every fixture, M18/M19) and skip only the base side (the base's census is the head's). The fixture-count assertions
+(`n >= 230` and the like) still run.
+
+### 0a: retired steps and one client session (K5, B6)
+
+`0a-stub`, `0a-budget`, `0a-cancel` and `0a-pins` leave the tiers and the impact rules (their rows are ALREADY-OFFLINE in docs/FAST-CHECKS.md);
+their steps and `node tools/gate6c0a.mjs <name>` still run by name. Their in-game residues are rows of `0a-flow`: the packed jar carries the
+helper bundle and the helper runs the sim with no SDK (0a-stub row 1), "cancel gives BIBLE_DONE once" (0a-cancel), and "a helper restart
+runs the GC" (a pinned v1 survives a forced-age GC, unpinned it is collected: 0a-pins). `0a-session` runs 0a-flow, then 0a-fit, then
+0a-stopped in ONE client session (each item in its own world copy: flow its fresh world, fit a copy of the flow's saved world, stopped a copy
+of the prepared flat base); it replaces the three in the impact rule. 0a-batches and 0a-keys SIGKILL the client and 0a-tiles starts three, so
+they stay apart; 0b-ingame uses another driver and world and was left out.
+
+### Sidecar suite once per run (B3)
+
+`unit-sidecar` writes a JUnit report ($GATE_SIDECAR_RESULTS, one suite per test file); `tools/lib/sidecar-reuse.mjs` serves the drivers' own
+`vitest run <files>` calls from it (gate6c0b, ccoa, cd, cp0, cpt2, cs2, cs3, csch, ct1, ct2, cv, cw, 7ak1, voc-a/b/c) when the sidecar/, kit/ and
+scenarios/ trees are clean and the ones unit-sidecar ran (known gap: `mod/.../api/Limits.java` and `tools/eval.mjs`, which a couple of sidecar tests read, are not in the key; it matters only if the source and run worktrees differ there), and every file passed with no skipped test. Otherwise it logs `sidecar: not reused
+(<reason>); running <files>` and the driver runs the files as before. The unit steps wait for unit-sidecar; a cached unit-sidecar hands its
+report on; a coverage-cached driver step serves only when unit-sidecar is in the run (as kit-reuse). gate6cfl keeps its own runs (its
+`--silent=false` size-print lines are the evidence).
+
+### G4D Base restored (B7)
+
+`4d-all`, `4d-all-full`, `c30-ingame` and `c30-ingame-full` carry `restore: ["G4D Base"]`. The runner may now restore the client's own world (put
+back before the client opens it, or while it is on the title screen). `gate4d.mjs base` finds `gate4d-base.json` (the lots, the far lots, the
+centre) beside the restored level.dat and, instead of generating the world, re-opens it, sets the rules and re-fits the 12 lots (the same
+`base: lot L<i> ... fits` lines, plus one line with the level.dat sha256); a world without the marker is generated and marked as before.
+`restore` names `G4D Base v2` (a new store name: the shared `G4D Base` is never replaced while other runs use it); `base` copies it over `G4D Base` before opening. To publish: run the step once on this branch (it generates and marks `G4D Base`), then `cp -c -R` the run's `G4D Base` into the snapshot store as `G4D Base v2`.
+The runner records each restored world's level.dat sha256 in `<evidence>/restored-worlds.json` and the step log.
+
+### Prepared claim worlds (B4)
+
+`G6B S3 Claim v1` ([3604,-1036,3795,-845]) and `G6B S2 Claim v1` ([2508,1588,2699,1779]), plus `G6B S3 Claim Srv v1` / `G6B S2 Claim Srv v1` for the headless server host (a base made by the
+other host generates different terrain: tools/lib/basestamp.mjs), are copies of `G6B Seed Base` (seed 2026100906) with the claim's chunks
+generated and saved, a `gate-claim.json` beside the level.dat. `tools/lib/run6b.mjs` `claimBase(seed, claim)` returns the prepared world
+when it exists and was made by the current base recipe (else the plain base, with a log line), and logs its level.dat sha256 (also
+`claim-world-<name>.json` in the step's evidence). Used by p0-natural, t3a-natural, s3-plan, b-ingame natural, rs-survival item 14 and
+scenarios.mjs (s3, relief, route, districts on S3's claim; forms, s2, scatter on S2's); those steps carry `restore` for both hosts' worlds.
+Making them: `gate-run change --only claims-prepare` (client host) and `--only claims-prepare-srv` (server host), then `cp -c -R` the two
+worlds from the run's saves into the snapshot store. Not in any tier.
+
+## Smoke at releases; the full twins run in the nightly (Noah, 2026-10-23)
+
+Noah approved (combine audit T1 and T3): **a release runs the smoke or slice twin of these full ids, not the full id**:
+
+| the release runs | in place of |
+|---|---|
+| `5b-chains` | `5b-chains-full` |
+| `h-ingame-smoke`, `hy-ingame-smoke`, `w-ingame-smoke`, `rs-survival-smoke`, `h-probe-smoke`, `hy-crash-smoke`, `d2-ingame-smoke`, `hy-cold-smoke`, `kc-ingame-smoke` | `h-ingame`, `hy-ingame`, `w-ingame`, `rs-survival`, `h-probe`, `hy-crash`, `d2-ingame`, `hy-cold`, `kc-ingame` |
+
+Left as they were (their smoke saves almost nothing): `irr-ingame`, `c29-ingame`, `voc-survival`, `x-resume`, `6a-eflat`, `6a-staged`, `c30`.
+
+**The nightly** (`release --full --nightly`) runs every full id: the ten above, `4e-orders-full` and `4e-crash-full` (main dropped them
+from releases in 47a9f68e), and `p3-probe-water`. They are `tools/gate-cache.json` `release.nightly.ids`: a release removes each of them
+from its candidates wherever they came from (the always list, an impact rule, `--full`), the nightly adds them; the smoke twin then drops
+by `supersededBy` as at any run holding both. The groups the P3 lints took over, which the smoke drivers leave out, are therefore proved
+by the full steps once a night, not at each release; the judgement stays with the verifier and the nightly summary.
+
+`p3-probe-water` reads the full h-ingame, hy-ingame and h-probe evidence of its own run, so it goes to the nightly with them (no probe
+works from the smoke evidence: the full runs are what it calibrates against). `p3-probe-ledger` (y-ingame, cu-survival) stays in the release.
+The rule is unchanged: a probe mismatch (now in the nightly) sends the P3 rows back in game (`node tools/p3-mode.mjs ingame`).
+
+`gate-run release --plan` (not `--full`) lists the smoke ids and no full id; `release --full --nightly --plan` lists every full id. Tests:
+`kit/test/gate-benches.test.mjs` ("the nightly-only full twins").
 ## Speed audit B: in-game waits (2026-10-23)
 
 Noah approved the in-game-wait items of the 2026-10-23 audit (`artifacts/audit-findings-2026-10-23.md`, G1-G8). Branch
@@ -1444,8 +1521,8 @@ the row-by-row cutover are in docs/FAST-CHECKS.md ("4. Water lint" and "5. Survi
 | `p3-lint` | gradle `LedgerLintTest` + `RegionFluidsLintTest`: the survival ledger lint and the water lint's Java half (the real `RegionFluids.breachTake` and `drain`) | slice always; change through "P3 water lint" and "P3 survival ledger lint"; release |
 | `p3-lint-long` | the ledger fuzz over 20000 fresh seeds | release |
 | `<step>-smoke` (h-ingame, h-probe, hy-ingame, hy-crash, hy-cold, irr-ingame, kc-ingame, voc-survival, y-ingame, c29-ingame, rs-survival (6c close-out B)) | the full step with `GATE_P3=smoke` (y and c29: without the subcommands the lint took): the SMOKE remainder | slice and change, through the impact rules (they name the `-smoke` ids) |
-| the full ids | everything, as before | release (`tiers.release.always`), named chains, by hand |
-| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | release |
+| the full ids | everything, as before | the nightly (`release.nightly`, 2026-10-23: a release runs the smoke twins), named chains, by hand |
+| `p3-probe-water` | `tools/p3-probe.mjs water` (waits for the full h-ingame, hy-ingame, h-probe of the same run): h_core_demo's census per body (0 diff), its settles within the bounds, every body's breach in its recorded reach; hy_core_demo's census; the riffle table; the fire-reach posts within M20's FIRE_REACH | the nightly, with the full steps it reads (2026-10-23) |
 | `p3-probe-ledger` | `tools/p3-probe.mjs ledger` (waits for the full y-ingame and cu-survival): the store run's ledger at each event against the model's; weathering charged nothing; the measured refund == the Java model's refund of the same standing blocks (`LedgerProbeTest`) | release |
 
 `supersededBy`: a `-smoke` id is dropped when its full id is in the same run. The smoke drivers log every group they leave out as
@@ -1460,7 +1537,9 @@ A lint is trusted only while its calibration probe passes on the current Minecra
 2. Fix the lint or its model (the failing probe line names the body, the cell or the item), until the probe passes on a release run.
 3. `node tools/p3-mode.mjs smoke`, and commit it.
 
-The probe's own FAIL line says so. Only the impact rules' lists change; the release tier always runs the full ids.
+The probe's own FAIL line says so. Only the impact rules' lists change. Since 2026-10-23 `p3-probe-water` runs in the nightly (with the full
+h-ingame, hy-ingame and h-probe it reads) and a release runs the smoke twins; the coordinator reads the probe's result from the nightly
+summary, and the rule above is unchanged (`p3-probe-ledger` still runs at release).
 
 ### Mutation evidence
 

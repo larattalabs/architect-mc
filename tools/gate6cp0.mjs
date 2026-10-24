@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
@@ -97,7 +98,7 @@ steps.unit = async () => {
   out.catalogueDiff = d.out;
   check(d.code === 0 && /reserved -> supported: endpoint\.region, program\.districts\n/.test(d.out) && /recheck \(pending parts now supported\): craftsmen_district \{program\.districts\}/.test(d.out) && /^added: none$/m.test(d.out),
     'item 9: tools/plan-catalogue-diff.mjs lists exactly endpoint.region and program.districts reserved -> supported, and flags the pending part');
-  const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts');
+  const s = sidecarReuse(root, ['test/plan-check.test.ts']) ?? sh('cd sidecar && npx vitest run test/plan-check.test.ts');
   fs.writeFileSync(path.join(OUT, 'unit-sidecar.log'), s.out);
   check(s.code === 0 && /Tests\s+\d+ passed/.test(s.out), `item 1 (ajv 2020-12) and the sidecar half: ${(/Tests\s+[^\n]+/.exec(s.out) ?? ['?'])[0]}`);
   srcGradle(root, () => sh(`cd mod && GRADLE_USER_HOME=${path.join(root, '.gradle-home')} ./gradlew compileJava compileClientJava --offline -q`));
@@ -365,9 +366,9 @@ const S3_PLAN = { schemaVersion: 'plan/0', planId: 'gate_p0_s3', zones: [{ id: '
 steps.natural = async () => {
   await ensure();
   const out = {};
-  await L.fresh('G6B P0 S3', await L.seedBase(SEED));
-  await L.setRules('default');
   const claim = [...S3.fixture.claim];
+  await L.fresh('G6B P0 S3', await L.claimBase(SEED, claim));
+  await L.setRules('default');
   const [cx, cz] = centre(claim);
   await tp(cx, S3.fixture.yRange[1], cz);
   await L.settle(60_000);

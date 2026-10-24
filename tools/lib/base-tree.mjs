@@ -66,3 +66,25 @@ export function syncBaseTree(root, dir, { fetchOptional = false } = {}) {
     return { dir, base };
   });
 }
+
+/**
+ * (speed audit D, K1) -> null, or { base, head, kit, scenarios } when the base's kit/ and scenarios/ trees are byte-identical to HEAD's
+ * (equal tree shas, and no uncommitted change under them): a "byte-identical to the merge base" loop over the same kit and scenarios
+ * can only agree, so the caller skips it and prints one check line instead. Only under a gate run (the run's GATE_MERGE_BASE, or the
+ * `ref` the caller really compares with); otherwise null. If the trees differ at all, or anything can't be read, null: never skip.
+ */
+export function identicalToBase(root, { ref = process.env.GATE_MERGE_BASE?.trim() || null } = {}) {
+  if (!ref || process.env.GATE_NO_UNCHANGED_SKIP === '1') return null;
+  try {
+    const git = (...a) => execFileSync('git', ['-C', root, ...a], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (git('status', '--porcelain', '--', 'kit', 'scenarios') !== '') return null;
+    const [bk, hk, bs, hs] = [git('rev-parse', `${ref}:kit`), git('rev-parse', 'HEAD:kit'), git('rev-parse', `${ref}:scenarios`), git('rev-parse', 'HEAD:scenarios')];
+    if (!bk || !bs || bk !== hk || bs !== hs) return null;
+    return { base: git('rev-parse', ref), head: git('rev-parse', 'HEAD'), kit: hk, scenarios: hs };
+  } catch {
+    return null;
+  }
+}
+
+/** The check line for a skipped loop. */
+export const skippedLine = (s, label = 'unchanged') => `${label}: base == head (kit ${s.kit.slice(0, 10)}, scenarios ${s.scenarios.slice(0, 10)}), skipped`;

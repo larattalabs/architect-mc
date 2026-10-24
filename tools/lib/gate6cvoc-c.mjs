@@ -9,10 +9,11 @@ import fs from 'node:fs';
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { sidecarReuse } from './sidecar-reuse.mjs';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { testConcurrencyArgs } from './cpu-budget.mjs';
 
@@ -171,6 +172,17 @@ const unit = [
   {
     name: 'item 4: byte identity: every committed plan fixture without a palette rule answers and plans as on the base (the named exceptions only)',
     async run({ root, check, OUT }) {
+      // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+      const sk = identicalToBase(root);
+      if (sk) {
+        const fxBase = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+        let n = 0;
+        for (const d of fs.readdirSync(fxBase).filter((x) => fs.statSync(path.join(fxBase, x)).isDirectory())) for (const f of fs.readdirSync(path.join(fxBase, d)).filter((x) => x.endsWith('.json'))) { const fx = JSON.parse(fs.readFileSync(path.join(fxBase, d, f), 'utf8')); if (fx.plan ?? fx.answer?.plan) n++; }
+        check(true, `item 4: ${skippedLine(sk)}`);
+        check(n >= 150, `item 4: ${n} committed plan fixtures present (every dir, the asks too)`);
+        fs.writeFileSync(path.join(OUT, 'vocc-unchanged.json'), `${JSON.stringify({ skipped: true, ...sk, n }, null, 1)}\n`);
+        return { same: n, n, excepted: [], differ: [], skipped: true };
+      }
       const { dir, base } = baseTree(root);
       const out = await unchanged(root, dir);
       fs.writeFileSync(path.join(OUT, 'vocc-unchanged.json'), `${JSON.stringify(out, null, 1)}\n`);
@@ -182,7 +194,7 @@ const unit = [
     name: 'items 7, 9 (sidecar, Java, API): vocab/1 in both forms and the append-only ref list, lotBlocks on the wire; PaletteRulesTest, the HY version pins; api-compat --gate6cvocc',
     async run({ root, check }) {
       const out = {};
-      const sc = spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts', 'test/vocc.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+      const sc = sidecarReuse(root, ['test/system-refs.test.ts', 'test/jobs.test.ts', 'test/vocc.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/system-refs.test.ts', 'test/jobs.test.ts', 'test/vocc.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
       out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|passed|failed|×/.test(l)).slice(-4) };
       check(sc.status === 0, `items 7 (sidecar): the systemRef list append-only, vocab/1's groups and compact.palette in both forms, the feature plan.rules, a check's lotBlocks to the plan CLI's --lot-blocks: ${out.sidecar.tail.join(' ')}`, out.sidecar);
       out.java = await javaTests(root, ['*PaletteRulesTest*', '*RegionFluidsHYTest*', '*ApiVocTest*', '*ApiHTest*'], 10);

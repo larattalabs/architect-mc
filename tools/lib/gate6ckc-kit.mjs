@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, COA_MOVED_FIXTURES } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { inSlice } from './gate-part.mjs';
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 import { DERIVE } from './corpus-derive.mjs';
 
@@ -63,9 +63,13 @@ export function baseTree(root) {
 
 export async function unchanged(root, { check, log = console.log, only = null, slice = null, baseDir = null } = {}) {
   // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
-  const { dir: mainDir, base } = baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the base side (its plans, its census, the comparison) is
+  // skipped; the head's own census checks still run (the base's watch/hard census is the head's, the same kit)
+  const sk = baseDir ? null : identicalToBase(root);
+  const { dir: mainDir, base } = sk ? { dir: root, base: sk.base } : baseDir ? { dir: baseDir, base: 'given' } : baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
+  const { hNew, hOld } = sk ? { hNew: await CP.helpers(root, { derive: [...CP.HEAD_DERIVE], headRoot: root }), hOld: null } : await CP.corpusHelpers(root, mainDir);
+  if (sk) check(true, skippedLine(sk));
   // (the census: corpus-derive.mjs kcCensus, computed where the plan ran; without the store (GATE_PLAN_CACHE=0), here, as before)
   const censusOf = async (r, s) => r.derived?.kcCensus ?? DERIVE.kcCensus(r, { survey: s.bytes }, { headRoot: root });
   const norm = (r) => normIrJson(r.res?.irJson);
@@ -73,7 +77,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {}, watch: [], hard: [] };
   const all = fixtures(root);
   const mine = all.filter(([name], k) => !(only && !only.test(name)) && inSlice(k, slice));
-  await CP.prewarm(root, CP.fixtureJobs(root, mine.flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
+  await CP.prewarm(root, CP.fixtureJobs(root, mine.flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(!sk && fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[mainDir, mainDir, fx, 'base', name]] : [])])), { log });
   let i = -1;
   let elsewhere = 0; // (a split unit step) fixtures another part plans: counted, not planned here
   for (const [name, fx] of all) {
@@ -85,7 +89,8 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     let a, b, err = null, census = null;
     let headRun = null;
     try { headRun = await planFixture(hNew, root, fx); a = sig(headRun.r); } catch (e) { err = `head: ${String(e.message).slice(0, 160)}`; }
-    if (existsOld) {
+    if (sk) b = a; // (the same kit and scenarios: the base's signature is the head's)
+    if (existsOld && !sk) {
       try {
         const { r, s } = await planFixture(hOld, mainDir, fx);
         b = sig(r);
@@ -106,6 +111,11 @@ export async function unchanged(root, { check, log = console.log, only = null, s
       if (cz.threw) throw new Error(cz.threw);
       if (cz.census) {
         const sc = cz.census;
+        if (sk) { // (the base's census is this head's: the same kit)
+          census = sc;
+          if (sc.counts.watch) out.watch.push({ fixture: name, cells: sc.counts.watch, writers: [...new Set(sc.findings.filter((q) => q.set === 'watch').map((q) => `${q.writerPart ?? q.writer} in ${q.body}`))] });
+          if (sc.counts.hard) out.hard.push({ fixture: name, cells: sc.counts.hard, writers: [...new Set(sc.findings.filter((q) => q.set !== 'watch').map((q) => `${q.writerPart ?? q.writer} in ${q.body}.${q.set}`))] });
+        }
         const broken = /^kc\/u\d/.test(name) || /^irr\/u01_/.test(name) || /^f3\/u0[14]_/.test(name) || /^fl\/u03_/.test(name); // ((6c IRR) irrigation's M25:clear variant, u01, too; (6c F3) treeInPond u01 and coralOtherPart u04; (6c FL) zoneIgnoresBody, u03)
         (out.headCensus ??= {})[name] = sc.counts;
         if (broken) check(sc.counts.hard + sc.counts.watch > 0, `${name} (a broken variant): M25:clear catches it on this head (${JSON.stringify(sc.counts)})`);

@@ -16,7 +16,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { SIBLING_MOVED, normSiblingIr, siblingAsks } from './batch-0410.mjs';
-import { syncBaseTree } from './base-tree.mjs';
+import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -54,6 +54,14 @@ const norm = (s) => s.replace(/"kitVersion":"[0-9.]+"/g, '"kitVersion":"*"');
 const sig = (r) => ({ answers: sha256(norm(JSON.stringify(r.check.parts))), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res.irJson)) : null });
 
 export async function unchanged(root, { check, log = console.log, only = null } = {}) {
+  // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
+  const sk = identicalToBase(root);
+  if (sk) {
+    const n = fixtures(root).filter(([name]) => !only || only.test(name)).length;
+    check(true, `item 2: ${skippedLine(sk)}`);
+    if (!only) check(n >= 230, `item 2: ${n} committed fixtures present (every dir, the 59 asks included)`);
+    return { base: sk.base, head: sk.head, fixtures: {}, n, same: n, differ: [], skipped: true };
+  }
   const { dir: mainDir, base } = baseTree(root);
   const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
   const [hNew, hOld] = [await H(root), await H(mainDir)];
