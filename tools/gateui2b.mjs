@@ -381,7 +381,13 @@ steps.gallery = async () => {
   // ================================================================ Library
   await sec('ui', 'library', 'grid', async () => openTab('library'));
   await sec('ui', 'library', 'filter_type', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:type' }); });
-  await sec('ui', 'library', 'filter_tag', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:tag' }); });
+  {
+    // the Tag pop-up is enabled only when the library has user tags; without any, say so instead of failing
+    await openTab('library');
+    const ui = await call('dev.ui.state').catch(() => ({ controls: [] }));
+    if (ui.controls?.some((c) => c.id === 'filter:tag' && c.enabled !== false && c.state !== 'disabled')) await sec('ui', 'library', 'filter_tag', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:tag' }); });
+    else GAL.skipped.push({ kind: 'ui', screen: 'library', state: 'filter_tag', scale: null, why: 'no user tags in this library: the Tag pop-up is disabled' });
+  }
   await sec('ui', 'library', 'filter_collection', async () => { await openTab('library'); await call('dev.ui.click', { control: 'filter:collection' }); });
   await sec('ui', 'library', 'sort', async () => { await openTab('library'); if (!(await tryc('sort'))) GAL.notes.push('library/sort: sort chips are not folded at this scale; the chips are in the grid shot'); });
   await sec('ui', 'library', 'starred_empty', async () => { await openTab('library'); await call('dev.library.filter', { favorites: true }); });
@@ -414,7 +420,7 @@ steps.gallery = async () => {
   await sec('ui', 'design', 'size_custom', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, size: 'custom', custom: [11, 7, 9] }); });
   await sec('ui', 'design', 'size_large_options', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, size: 'L' }); });
   await sec('ui', 'design', 'type_other', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); });
-  await sec('ui', 'design', 'profile_popup', async () => { await openTab('design'); await call('dev.design.fill', FORM); await call('dev.ui.click', { control: 'design:profile' }); });
+  await sec('ui', 'design', 'profile_popup', async () => { await openTab('design'); await call('dev.design.fill', { ...FORM, openType: 'windmill' }); await tryc('type:other'); await call('dev.ui.click', { control: 'design:profile' }); });
   await sec('ui', 'design', 'bible_popup', async () => { await openTab('design'); await call('dev.design.fill', FORM); await call('dev.ui.click', { control: 'design:bible' }); });
   await sec('ui', 'design', 'remix', async () => { await openTab('library'); await call('dev.library.remix', { entry: pick }); });
   await sec('ui', 'design', 'set_dialog', async () => { await openTab('design'); await call('dev.set.open'); });
@@ -470,11 +476,14 @@ steps.gallery = async () => {
   await call('dev.build.legend', { on: false }).catch(() => null);
   // replaced: the ghost over blocks that will be replaced (a stone slab laid in its box)
   await sec('world', 'ghost', 'replaced', async () => {
-    await call('dev.build.cancel').catch(() => null);
-    await cmd(`/fill ${ORIGIN[0] + 1} ${ORIGIN[1]} ${ORIGIN[2] + 1} ${ORIGIN[0] + 9} ${ORIGIN[1] + 1} ${ORIGIN[2] + 7} minecraft:stone`);
+    await start(); await waitVerdict();
+    const b = boxOf(await buildState());
+    await cmd(`/fill ${b.min[0] + 1} ${b.min[1]} ${b.min[2] + 1} ${b.min[0] + 9} ${b.min[1] + 1} ${b.min[2] + 7} minecraft:stone`);
     await start(); await cam(6, 16, 34); await waitVerdict();
   }, { once: true, closeScreen: false });
-  await cmd(`/fill ${ORIGIN[0] + 1} ${ORIGIN[1]} ${ORIGIN[2] + 1} ${ORIGIN[0] + 9} ${ORIGIN[1] + 1} ${ORIGIN[2] + 7} minecraft:air`);
+  await call('dev.build.cancel').catch(() => null);
+  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] + 3} ${ORIGIN[2] + 14} minecraft:air`);
+  await cmd(`/fill ${ORIGIN[0] - 2} ${ORIGIN[1] - 1} ${ORIGIN[2] - 2} ${ORIGIN[0] + 16} ${ORIGIN[1] - 1} ${ORIGIN[2] + 14} minecraft:grass_block`).catch(() => null);
   // a block entity in the way (a chest): the refusal and the force chip
   await sec('world', 'ghost', 'block_entity', async () => {
     await start(); await waitVerdict(); await chestAt(true);
@@ -503,13 +512,16 @@ steps.gallery = async () => {
   };
   await sec('ui', 'toast', 'placed', async (s) => { await place([ORIGIN[0], 64, ORIGIN[2]], s); await call('dev.screen', { open: null }); }, { closeScreen: false });
   await call('dev.ui2b.toasts').then((t) => { GAL.toasts = t; }, () => null);
+  // place on top: the same design over the site just placed (refused for the overlap; Place on top armed)
+  await sec('world', 'ghost', 'place_on_top', async () => { await start(); await waitVerdict(); await sleep(400); await cam(6, 16, 34); }, { once: true, closeScreen: false });
+  await call('dev.build.cancel').catch(() => null);
   // the first site is needed above; a row of 6 more makes the list longer than one page
   for (let i = 1; i < 7 && !galOver(); i++) {
     await call('dev.build.cancel').catch(() => null);
     await place([40 + i * 16, 64, 40]).catch(() => null);
   }
   await call('dev.build.cancel').catch(() => null);
-  const listChat = async (page) => { await chat(`/architect list${page > 1 ? ` ${page}` : ''}`); await call('dev.screen', { open: 'chat' }); await sleep(500); };
+  const listChat = async (page) => { await call('dev.command', { cmd: `/architect list${page > 1 ? ` ${page}` : ''}` }, 60_000); await call('dev.screen', { open: 'chat' }); await sleep(500); };
   await sec('ui', 'chat', 'list_page1', () => listChat(1), { closeScreen: false });
   await sec('ui', 'chat', 'list_page2', () => listChat(2), { closeScreen: false });
   await call('dev.screen', { open: null });
@@ -523,21 +535,22 @@ steps.gallery = async () => {
   // ================================================================ plot markers and the region ghost (world)
   await call('dev.screen', { open: null });
   await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
+  const plotCam = async () => { await call('dev.camera', { x: 22, y: 78, z: 52, lookAt: { x: 29, y: 63, z: 17 }, mode: 'spectator', closePause: true }, 30_000); await call('dev.hud', { hidden: false }); await sleep(1200); };
   await sec('world', 'plot', 'first_corner', async () => {
     await openTab('design'); await call('dev.design.fill', FORM);
     await call('dev.plot.start', {});
     await call('dev.plot.corner', { x: 20, y: 63, z: 10 });
-    await cam(8, 20, 40, 20, 63, 10);
+    await plotCam();
   }, { once: true, closeScreen: false });
   await sec('world', 'plot', 'marked', async () => {
     await call('dev.plot.corner', { x: 38, y: 63, z: 24, front: 'south', confirm: true });
     await call('dev.screen', { open: null });
-    await cam(8, 20, 40, 20, 63, 10);
+    await plotCam();
   }, { once: true, closeScreen: false });
   await call('dev.plot.cancel', {}).catch(() => null);
   await call('dev.design.fill', { reset: true }).catch(() => null);
   try {
-    const claim = [-60, -60, -21, -21];
+    const claim = [-60, -60, 59, 59];
     const p = await L.plan('crater_works', claim, { surveyLoad: 'bounded:256' });
     await call('dev.region.ghost', { planId: p.planId }, 120_000);
     await sleep(6000);
