@@ -96,7 +96,9 @@ public final class ArchitectScreen extends Screen {
 		/** (4c) the Designs tab's redirect notes for a set's item. */
 		REDIRECT,
 		/** (U3) words alongside the picked Style; the "Save as style…" name. */
-		STYLE_NOTE, SAVE_NAME;
+		STYLE_NOTE, SAVE_NAME,
+		/** (U3) the Import dialog's search. */
+		IMPORT_FILTER;
 
 		/** A field of the set dialog's item rows (focused with an index). */
 		boolean perItem() {
@@ -370,7 +372,7 @@ public final class ArchitectScreen extends Screen {
 			case MATERIALS -> f.materials;
 			case NAME -> f.name;
 			case NOTES -> f.notes;
-			case SEARCH, RENAME, TAGS, VNAME -> library.model(focus);
+			case SEARCH, RENAME, TAGS, VNAME, IMPORT_FILTER -> library.model(focus);
 			case OTYPE -> f.openType;
 			case SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT -> set.model(focus, focusIndex);
 			case REDIRECT -> redirectNotes;
@@ -379,7 +381,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private boolean libraryField() {
-		return focus == Focus.SEARCH || focus == Focus.RENAME || focus == Focus.TAGS || focus == Focus.VNAME;
+		return focus == Focus.SEARCH || focus == Focus.RENAME || focus == Focus.TAGS || focus == Focus.VNAME || focus == Focus.IMPORT_FILTER;
 	}
 
 	// ------------------------------------------------------------------ input
@@ -586,6 +588,10 @@ public final class ArchitectScreen extends Screen {
 				return true;
 			}
 		}
+		MouseTarget ov = overlay;
+		if (ov != null && ov.click(e.x(), e.y(), e.button())) {
+			return true;
+		}
 		// (U3) the list's scrollbar: drag the thumb, or page towards the click
 		if (listNeeded > listAvailable && barRect[3] > 0 && e.x() >= barRect[0] && e.x() < barRect[0] + barRect[2] + 2 && e.y() >= barRect[1]
 			&& e.y() < barRect[1] + barRect[3]) {
@@ -720,9 +726,25 @@ public final class ArchitectScreen extends Screen {
 		tooltip.offer(c, (int) mouseX(), (int) mouseY());
 	}
 
+	/** (U3) A lab-ui EmptyState with its action, as control {@code id}. */
+	void emptyState(GuiGraphicsExtractor g, String id, String line, String action, Runnable run, int x, int y, int w, int h, int mx, int my) {
+		dev.larattalabs.labui.client.widget.EmptyState es = new dev.larattalabs.labui.client.widget.EmptyState(line).action(action, run);
+		es.draw(g, font, x, y, w, h, mx, my);
+		if (es.actionButton() != null) {
+			control(id, action, es.actionButton(), false);
+		}
+	}
+
 	/** A control for the DevBridge only (zero size: no mouse click lands on it), e.g. a compact picker's choice. */
 	void devControl(String id, String label, boolean enabled, boolean on, Runnable action) {
 		hits.add(new Hit(id, label, 0, 0, 0, 0, enabled, on, action));
+	}
+
+	/** (U3) An overlay drawn this frame (the Library's ⋯ menu): it takes every click first, after the Confirms. */
+	private @Nullable MouseTarget overlay;
+
+	void overlay(MouseTarget t) {
+		overlay = t;
 	}
 
 	/** Takes this widget's mouse events this frame (compact pickers, lists, chip rows). */
@@ -1119,6 +1141,7 @@ public final class ArchitectScreen extends Screen {
 		fieldRects.clear();
 		confirms.clear();
 		mouseTargets.clear();
+		overlay = null;
 		clipRect = null;
 		barRect = new int[4];
 		lastMx = mouseX;
@@ -1379,7 +1402,11 @@ public final class ArchitectScreen extends Screen {
 		}
 		g.disableScissor();
 		if (sites.isEmpty()) {
-			g.text(font, "Nothing placed in this world yet.", x + 6, ly + 6, UiBits.muted(), false);
+			// (U3) no dead ends
+			emptyState(g, "empty:placed", "Nothing placed in this world yet: pick a design and Place it.", "Show the designs", () -> {
+				showPlaced = false;
+				listScroll = 0;
+			}, x, ly, listW, lh, mx, my);
 		}
 		scrollbar(g, x + listW + 2, ly, lh);
 		Site s = selectedSite == null ? null : Sites.get(selectedSite);
@@ -1816,7 +1843,13 @@ public final class ArchitectScreen extends Screen {
 		}
 		g.disableScissor();
 		if (jobs.isEmpty()) {
-			g.text(font, Sidecar.connected() ? "No designs yet." : "The design helper is not connected.", x + 6, top + 6, UiBits.muted(), false);
+			// (U3) no dead ends
+			if (Sidecar.connected()) {
+				emptyState(g, "empty:designs", "Nothing is being designed: describe a building and Claude designs it.", "Design one", () -> setTab(Tab.DESIGN),
+					x, top, listW, lh, mx, my);
+			} else {
+				emptyState(g, "empty:designs", "The design helper is not connected.", "Status tab", () -> setTab(Tab.STATUS), x, top, listW, lh, mx, my);
+			}
 		}
 		scrollbar(g, x + listW + 2, top, lh);
 		if (sel == null) {

@@ -54,7 +54,8 @@ final class LibraryTab {
 	}
 
 	static final int CARD_MIN_W = 84;
-	static final int CARD_H = 86;
+	/** (U3) a shorter card: more rows of designs in the same grid. */
+	static final int CARD_H = 70;
 	static final int GAP = 5;
 	static final List<String> VIEW_KINDS = List.of("iso", "top", "front", "cutaway");
 	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ROOT).withZone(ZoneId.systemDefault());
@@ -75,6 +76,9 @@ final class LibraryTab {
 	final TextModel rename = new TextModel(LibraryMeta.MAX_NAME);
 	final TextModel tags = new TextModel(200);
 	final TextModel variantName = new TextModel(40);
+	/** (U3) The Import dialog's search. */
+	final TextModel importFilter = new TextModel(60);
+	final TextFieldView importFilterView = new TextFieldView();
 	final TextFieldView searchView = new TextFieldView();
 	final TextFieldView renameView = new TextFieldView();
 	final TextFieldView tagsView = new TextFieldView();
@@ -102,6 +106,7 @@ final class LibraryTab {
 			case RENAME -> rename;
 			case TAGS -> tags;
 			case VNAME -> variantName;
+			case IMPORT_FILTER -> importFilter;
 			default -> null;
 		};
 	}
@@ -127,6 +132,9 @@ final class LibraryTab {
 
 	/** Esc in a library field or dialog: cancels an edit, else closes a dialog. Returns whether it was handled. */
 	boolean escape() {
+		if (closeMenu()) {
+			return true;
+		}
 		if (edit != Edit.NONE) {
 			cancelEdit();
 			return true;
@@ -358,10 +366,17 @@ final class LibraryTab {
 		if (q.collection() != null) {
 			gy = drawCollectionHeader(g, q.collection(), gx, gy, gridW, mx, my) + 3;
 		}
-		int gh = footerY - 16 - gy;
+		// (U3) the jobs strip: what is being made, and a massing to approve, by mouse
+		int stripH = JobStrip.height();
+		int bottom = footerY - 16 - (stripH > 0 ? stripH + 3 : 0);
+		if (stripH > 0) {
+			JobStrip.draw(s, g, x, bottom + 3, w, mx, my);
+		}
+		int gh = bottom - gy;
 		drawGrid(g, gx, gy, gridW, gh, mx, my);
 		// detail
-		drawDetail(g, x + gridW + 12, top - 3, detailW, footerY - 16 - (top - 3), mx, my);
+		drawDetail(g, x + gridW + 12, top - 3, detailW, bottom - (top - 3), mx, my);
+		drawMenu(g, mx, my);
 	}
 
 	/** "Ashfall" for {@code bible:<id>}, "Set: Ashfall hamlet" for {@code group:<id>}. */
@@ -474,8 +489,19 @@ final class LibraryTab {
 		g.disableScissor();
 		s.scrollbarAt(g, x + w - 7, y + 1, h - 2);
 		if (cards.isEmpty()) {
-			String msg = LibraryFeature.cards().isEmpty() ? "No designs yet: the Design tab makes one." : "Nothing matches the filters.";
-			g.text(font, TextUtil.ellipsize(font, msg, w - 12), x + 6, y + 6, UiBits.muted(), false);
+			// (U3) no dead ends: every empty state has an action
+			boolean none = LibraryFeature.cards().isEmpty();
+			dev.larattalabs.labui.client.widget.EmptyState es = new dev.larattalabs.labui.client.widget.EmptyState(none
+				? "No designs yet: describe one and Claude designs it, or import a structure." : "Nothing matches the search and filters.");
+			es.action(none ? "Design one" : "Clear filters", none ? () -> s.setTab(ArchitectScreen.Tab.DESIGN) : () -> {
+				search.clear();
+				LibraryFeature.setQuery(new LibraryQuery(null, null, false, "", LibraryFeature.query().sort(), null));
+				s.resetScroll();
+			});
+			es.draw(g, font, x, y, w, h, mx, my);
+			if (es.actionButton() != null) {
+				s.control("library:empty_action", es.actionButton().label(), es.actionButton(), false);
+			}
 		}
 	}
 
@@ -553,44 +579,43 @@ final class LibraryTab {
 			cancelEdit();
 		}
 		Blueprint b = Blueprints.get(c.id());
-		// actions first (they decide how much room the text and preview get)
-		List<Btn> row1 = new ArrayList<>();
+		// (U3) actions: Place (primary), Edit, and ⋯ (everything else; Delete there, behind a Confirm). The rest are menu items.
 		boolean inWorld = s.inWorld();
 		boolean survival = dev.larattalabs.architect.survival.SurvivalWorld.on();
-		row1.add(new Btn("place", survival ? "Place construction site" : "Place", true, inWorld, () -> place(c.id())));
+		List<Btn> items = new ArrayList<>();
 		if (DesignFeature.plotForBlueprint(c.id()) != null) {
-			row1.add(new Btn("place_plot", "On the plot", false, inWorld, () -> placeOnPlot(c.id())));
+			items.add(new Btn("place_plot", "Place on the plot", false, inWorld, () -> placeOnPlot(c.id())));
 		}
-		row1.add(new Btn("variants", "Variants…", false, c.canVariant(), () -> openVariants(c.id())));
-		row1.add(new Btn("remix", "Remix…", false, true, () -> s.remix(c.id())));
+		items.add(new Btn("variants", "Variants… (re-skin, parameters)", false, c.canVariant(), () -> openVariants(c.id())));
+		items.add(new Btn("remix", "Remix… (Claude)", false, true, () -> s.remix(c.id())));
 		// (5a) a report critique of the entry: one critic call (about $0.1), the verdict lands in its critique.json
 		if (dev.larattalabs.architect.client.design.SetFeature.has("critique.report")) {
 			String why = dev.larattalabs.architect.design.CritiqueRules.reportRefusal(c.bundled(), false, true, Sidecar.connected());
-			row1.add(new Btn("critique", DesignFeature.REPORT_PENDING.contains(c.id()) ? "Critiquing…" : dev.larattalabs.architect.design.CritiqueRules.reportLabel(
+			items.add(new Btn("critique", DesignFeature.REPORT_PENDING.contains(c.id()) ? "Critiquing…" : dev.larattalabs.architect.design.CritiqueRules.reportLabel(
 				reportEstimate(c)), false, why == null && !DesignFeature.REPORT_PENDING.contains(c.id()), () -> requestReport(c)));
 		}
-		List<Btn> row2 = new ArrayList<>();
-		row2.add(new Btn("rename", "Rename", false, true, () -> startEdit(Edit.RENAME, c)));
-		row2.add(new Btn("tags", "Tags", false, true, () -> startEdit(Edit.TAGS, c)));
-		row2.add(new Btn("favorite", c.favorite() ? "★ Starred" : "☆ Star", false, true, () -> LibraryFeature.setFavorite(c.id(), !c.favorite())));
-		row2.add(new Btn("export", "Export .nbt", false, inWorld, () -> LibraryFeature.export(c.id())));
+		items.add(new Btn("rename", "Rename", false, true, () -> startEdit(Edit.RENAME, c)));
+		items.add(new Btn("tags", "Tags", false, true, () -> startEdit(Edit.TAGS, c)));
+		items.add(new Btn("favorite", c.favorite() ? "★ Unstar" : "☆ Star", false, true, () -> LibraryFeature.setFavorite(c.id(), !c.favorite())));
+		items.add(new Btn("export", "Export .nbt", false, inWorld, () -> LibraryFeature.export(c.id())));
 		// (6c SCH) a Sponge schematic (version 3) for WorldEdit and other tools
-		row2.add(new Btn("export_schem", "Export .schem", false, inWorld, () -> LibraryFeature.exportSchem(c.id())));
-		row2.add(new Btn("delete", deleteArmed(c.id()) ? "Sure?" : "Delete", false, !c.bundled(), () -> delete(c)));
+		items.add(new Btn("export_schem", "Export .schem", false, inWorld, () -> LibraryFeature.exportSchem(c.id())));
 		// phase 5b: versions (Compare…, Revert entry to the previous one, Polish…)
 		Blueprints.Entry ve = Blueprints.entry(c.id());
 		int headV = ve == null ? 1 : Blueprints.headVersion(ve);
 		if (headV > 1) {
-			row2.add(new Btn("compare", "Compare…", false, inWorld, () -> compare(c.id(), headV - 1, headV)));
-			row2.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1)));
+			items.add(new Btn("compare", "Compare v" + (headV - 1) + " and v" + headV + "…", false, inWorld, () -> compare(c.id(), headV - 1, headV)));
+			items.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1)));
 		}
 		// (5b) polish failed its gate (G4), so per the contract it stays behind a dev flag: -Darchitect.dev.polish=true
 		if (dev.larattalabs.architect.client.design.SetFeature.has("design.polish") && Boolean.getBoolean("architect.dev.polish")) {
-			row2.add(new Btn("polish", POLISHING.contains(c.id()) ? "Polishing…" : "Polish…", false, !c.bundled() && c.canVariant() && !POLISHING.contains(c
+			items.add(new Btn("polish", POLISHING.contains(c.id()) ? "Polishing…" : "Polish…", false, !c.bundled() && c.canVariant() && !POLISHING.contains(c
 				.id()), () -> polish(c.id())));
 		}
-		List<List<Btn>> rows = flow(List.of(row1, row2), w);
-		int buttonsTop = y + h - rows.size() * 22 + 2;
+		menuItems = items;
+		menuFor = c;
+		int buttonsTop = y + h - 20;
+
 		// text block height
 		// the expanded BOM takes the room of the description and the materials line
 		boolean bomOpen = survival && showBom;
@@ -709,17 +734,127 @@ final class LibraryTab {
 				s.chip(g, "bom", showBom ? "Preview" : "BOM ▸", x + w - cw, ty - 3, showBom, true, mx, my, () -> showBom = !showBom);
 			}
 		}
-		// buttons
-		int by = buttonsTop;
-		for (List<Btn> row : rows) {
-			int bx = x;
-			for (Btn bt : row) {
-				int bwid = bw(bt.label());
-				s.button(g, bt.id(), bt.label(), bx, by, bwid, bt.primary(), bt.enabled(), mx, my, bt.action());
-				bx += bwid + 3;
+		// buttons: Place, Edit, ⋯
+		String placeL = survival ? "Place construction site" : "Place";
+		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 14));
+		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, mx, my, () -> place(c.id()));
+		int ex = x + pw + 4;
+		// Edit: the design's variants editor (its Style, materials and parameters), else a remix (an import has no source)
+		boolean variants = c.canVariant();
+		s.button(g, "edit", "Edit", ex, buttonsTop, bw("Edit"), false, true, mx, my, () -> {
+			if (variants) {
+				openVariants(c.id());
+			} else {
+				s.remix(c.id());
 			}
-			by += 22;
+		});
+		ex += bw("Edit") + 4;
+		s.button(g, "more", "⋯", ex, buttonsTop, bw("⋯") + 6, false, true, mx, my, () -> menuOpen = !menuOpen);
+		menuAnchor = new int[] {ex, buttonsTop};
+		// every menu item stays a control for the DevBridge when the menu is closed (dev.ui.click rename, tags, variants, …)
+		if (!menuOpen) {
+			for (Btn it : items) {
+				s.devControl(it.id(), it.label(), it.enabled(), false, it.action());
+			}
+			s.devControl("delete", "Delete…", !c.bundled(), false, () -> {
+				menuOpen = true;
+				deleteConfirm().press();
+			});
 		}
+	}
+
+	// ------------------------------------------------------------------ (U3) the ⋯ menu, with Delete behind a lab-ui Confirm
+
+	private List<Btn> menuItems = List.of();
+	private @Nullable LibraryCard menuFor;
+	boolean menuOpen;
+	private int[] menuAnchor = new int[2];
+	private int[] menuRect = new int[4];
+	private final dev.larattalabs.labui.ui.ConfirmArm deleteArm = new dev.larattalabs.labui.ui.ConfirmArm();
+	private final java.util.Map<String, dev.larattalabs.labui.client.widget.Confirm> confirms = new java.util.HashMap<>();
+
+	/** The selected design's Delete (two presses: the first arms it with a countdown, the second moves it to the trash). */
+	dev.larattalabs.labui.client.widget.Confirm deleteConfirm() {
+		LibraryCard c = menuFor;
+		String id = c == null ? "" : c.id();
+		return confirms.computeIfAbsent(id, k -> new dev.larattalabs.labui.client.widget.Confirm(deleteArm, "delete:" + k, "Delete…", "delete", () -> {
+			menuOpen = false;
+			LibraryFeature.delete(k);
+		}));
+	}
+
+	/** Whether the selected design's Delete is armed (pressed once). */
+	boolean deleteArmed() {
+		return menuFor != null && deleteConfirm().armed();
+	}
+
+	private void drawMenu(GuiGraphicsExtractor g, int mx, int my) {
+		LibraryCard c = menuFor;
+		LibraryCard sel = LibraryFeature.selected();
+		if (!menuOpen || c == null || sel == null || !c.id().equals(sel.id())) {
+			menuOpen = false;
+			return;
+		}
+		Font font = font();
+		int w = 0;
+		for (Btn b : menuItems) {
+			w = Math.max(w, bw(b.label()));
+		}
+		dev.larattalabs.labui.client.widget.Confirm del = deleteConfirm();
+		w = Math.max(w, del.width(font)) + 8;
+		int rowH = dev.larattalabs.labui.client.widget.Button.H + 2;
+		int h = (menuItems.size() + 1) * rowH + 13;
+		int x = Math.max(4, Math.min(menuAnchor[0] + 20 - w, s.width - w - 4));
+		int y = menuAnchor[1] - h - 2;
+		if (y < 4) {
+			y = Math.max(4, Math.min(s.height - h - 4, menuAnchor[1] + 22));
+		}
+		menuRect = new int[] {x, y, w, h};
+		g.nextStratum();
+		Panels.framed(g, x - 2, y - 2, w + 4, h + 4);
+		g.fill(x, y, x + w, y + h, UiStyle.CREAM);
+		int yy = y + 4;
+		List<dev.larattalabs.labui.client.widget.Control> drawn = new ArrayList<>();
+		for (Btn b : menuItems) {
+			dev.larattalabs.labui.client.widget.Button bt = new dev.larattalabs.labui.client.widget.Button(b.label(), () -> {
+				menuOpen = false;
+				b.action().run();
+			});
+			bt.disabled(!b.enabled());
+			bt.draw(g, font, x + 4, yy, w - 8, dev.larattalabs.labui.client.widget.Button.H, mx, my);
+			s.control(b.id(), b.label(), bt, false);
+			drawn.add(bt);
+			yy += rowH;
+		}
+		g.fill(x + 4, yy + 2, x + w - 4, yy + 3, UiStyle.rule());
+		yy += 7;
+		del.disabled(c.bundled()).tooltip(c.bundled() ? "a bundled design can't be deleted" : "moves it to architect/library-trash");
+		del.draw(g, font, x + 4, yy, w - 8, dev.larattalabs.labui.client.widget.Button.H, mx, my);
+		s.control("delete", "Delete…", del, false);
+		int[] r = menuRect;
+		// clicks go to the menu first; a click outside closes it
+		s.overlay((px, py, b) -> {
+			if (px >= r[0] && px < r[0] + r[2] && py >= r[1] && py < r[1] + r[3]) {
+				for (dev.larattalabs.labui.client.widget.Control ct : drawn) {
+					if (ct.mouseClicked(px, py, b)) {
+						return true;
+					}
+				}
+				return true;
+			}
+			menuOpen = false;
+			deleteArm.cancel();
+			return true;
+		});
+	}
+
+	boolean closeMenu() {
+		if (menuOpen) {
+			menuOpen = false;
+			deleteArm.cancel();
+			return true;
+		}
+		return false;
 	}
 
 	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
@@ -987,7 +1122,19 @@ final class LibraryTab {
 			y += 10;
 		}
 		y += 3;
-		List<Exchange.Candidate> list = LibraryFeature.importList();
+		// (U3) a search over the files (name and path)
+		List<Exchange.Candidate> all = LibraryFeature.importList();
+		String q = importFilter.value().strip().toLowerCase(Locale.ROOT);
+		List<Exchange.Candidate> list = q.isEmpty() ? all : all.stream().filter(c -> c.label().toLowerCase(Locale.ROOT).contains(q) || c.path().toString()
+			.toLowerCase(Locale.ROOT).contains(q)).toList();
+		if (!all.isEmpty()) {
+			s.textField(g, Focus.IMPORT_FILTER, importFilterView, importFilter, x, y, w, new TextFieldView.Style(dev.larattalabs.labui.client.widget.ScrollList
+				.SEARCH_GLYPH, UiBits.muted(), "Search " + all.size() + " files…", null, q.isEmpty() ? null : list.size() + "/" + all.size(), UiBits.muted(), 1));
+			y += TextFieldView.BASE_H + 3;
+		}
+		if (importSel >= 0 && importSel < all.size() && !list.contains(all.get(importSel))) {
+			importSel = list.isEmpty() ? -1 : all.indexOf(list.get(0));
+		}
 		int lh = footerY - 16 - y;
 		int rowH = 22;
 		Panels.inset(g, x, y, w, lh);
@@ -998,9 +1145,9 @@ final class LibraryTab {
 		for (int i = 0; i < list.size(); i++) {
 			Exchange.Candidate c = list.get(i);
 			if (ry + rowH > y && ry < y + lh) {
-				int index = i;
-				boolean sel = i == importSel;
-				Hit h = new Hit("import:" + i, c.label(), x + 2, Math.max(ry, y), w - 10, Math.min(rowH - 2, y + lh - ry), true, sel, () -> importSel = index);
+				int index = all.indexOf(c);
+				boolean sel = index == importSel;
+				Hit h = new Hit("import:" + index, c.label(), x + 2, Math.max(ry, y), w - 10, Math.min(rowH - 2, y + lh - ry), true, sel, () -> importSel = index);
 				s.addHit(h);
 				if (sel) {
 					g.fill(x + 2, ry, x + w - 8, ry + rowH - 2, 0x30D97757);
@@ -1018,7 +1165,10 @@ final class LibraryTab {
 		}
 		g.disableScissor();
 		s.scrollbarAt(g, x + w - 7, y + 1, lh - 2);
-		if (list.isEmpty()) {
+		if (list.isEmpty() && !all.isEmpty()) {
+			g.text(font, TextUtil.ellipsize(font, "Nothing matches “" + importFilter.value().strip() + "”: Esc clears the search.", w - 12), x + 6, y + 6,
+				UiBits.muted(), false);
+		} else if (list.isEmpty()) {
 			for (String line : TextUtil.wrapPlain(font, "No .nbt or .schem files yet. Put structure files or Sponge schematics in " + Exchange.importsDir(Blueprints.gameDataDir())
 				+ ", or save one with a structure block in this world, then Refresh.", w - 12)) {
 				g.text(font, line, x + 6, y + 6, UiBits.muted(), false);
@@ -1028,12 +1178,12 @@ final class LibraryTab {
 		// footer
 		String status = LibraryFeature.importSending() ? "Sending…" : LibraryFeature.importError() != null ? LibraryFeature.importError()
 			: !Sidecar.connected() ? "The design helper is not running (Status tab)." : list.isEmpty() ? null
-				: importSel >= 0 && importSel < list.size() ? "Will import " + list.get(importSel).label() + " as a custom entry" : "Pick a file";
+				: importSel >= 0 && importSel < all.size() ? "Will import " + all.get(importSel).label() + " as a custom entry" : "Pick a file";
 		s.statusLineAt(g, status, LibraryFeature.importError() != null || !Sidecar.connected(), x, footerY - 13, w);
 		int bx = x + w;
 		String go = "Import";
 		bx -= s.bw(go);
-		s.button(g, "import:go", go, bx, footerY, s.bw(go), true, importSel >= 0 && importSel < list.size() && Sidecar.connected()
+		s.button(g, "import:go", go, bx, footerY, s.bw(go), true, importSel >= 0 && importSel < all.size() && Sidecar.connected()
 			&& !LibraryFeature.importSending(), mx, my, () -> importPick(importSel));
 		String cancel = "Cancel";
 		bx -= s.bw(cancel) + 6;
