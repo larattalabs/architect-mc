@@ -566,7 +566,8 @@ export class Region {
         if (ROW_SEGMENTS_7A.includes(g.kind)) return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
-          const onGround = g.kind === 'walk' && !it.base && !mats.guard && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
+          // ((7a CL) never on a ladder edge: 4e re-grades its road to the realised ground, and at the face it ramps up against the cliff)
+          const onGround = g.kind === 'walk' && (e.k1?.profile ?? e.profile) !== 'ladder' && !it.base && !mats.guard && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
           if (onGround) {
             const idx = polylineOf(cells);
             const id = `${rid}_${n}`;

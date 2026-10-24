@@ -59,13 +59,11 @@ const OWNER = 'test:cl';
 const FLAT_CLAIM = [7400, 7000, 7639, 7175];
 /** S3's pinned claim (route_demo's, the golden's survey), on the seed world. */
 const S3_CLAIM = [3604, -1036, 3795, -845];
-/** The fixtures that move by name (item 2): the foundation's (F7A_MOVED), and the recorded plans whose climbs CL answers (§9). */
+/** The fixtures that move by name (item 2): the recorded plans whose climbs CL answers (§9). */
 export const CL_MOVED = Object.freeze({
-  ...F7A_MOVED,
   'asks/old_new_town.json': 'CL: quarter_stair answers refused NO_CLIMB (was unsupported until 7a)',
   'asks/sky_monastery.json': 'CL: long_stair answers refused NO_CLIMB (was unsupported until 7a)',
   'asks/hidden_village.json': 'CL: cave_ladders answers blocked DEPENDENCY, its tower_1 unplaced in the zone (was unsupported until 7a)',
-  'extension/e15_every_reserved_a.json': 'the foundation (rail until CR, branch_walk until 7b) and CL (c_ladder, c_stair, c_switchback left the fixture)',
 });
 
 const B = await import('./lib/gate6chy-b.mjs');
@@ -136,7 +134,7 @@ steps.unit = async () => {
   check(g.status === 0, 'item 15 (Java): ApiCLTest (the feature climbConnectors from the sidecar\'s region.climbs; protocol 1 none)', out.java.tail);
   // item 2: byte identity against the merge base, the named exceptions aside
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'CL', except: CL_MOVED });
+  const u = await K.unchanged(root, { check, log, base: 'CL', except: CL_MOVED, landed: F7A_MOVED });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
   fs.writeFileSync(path.join(OUT, 'cl-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   // item 3: the 59 asks, re-made here and on the merge base, against the committed tables
