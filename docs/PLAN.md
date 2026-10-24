@@ -1265,3 +1265,6 @@ version a mod has pinned, and `bible.delete` refuses it, as it does for an entry
 - **In the accessibility pack:** a second cue besides colour in the world: ghost categories by outline style or marker icons, and a glyph beside the nameplate status dot and the map colours.
 - **In the Jobs & spend panel design:** one shared state for "needs you" and spend, read by the panel, Steward's board and the nameplate alike.
 - **After U3:** "Preview on ghost" in the Style browser: show the current design as a ghost in the world, wearing the hovered Style.
+
+## U3 look approved (Noah, 2026-10-24)
+The unified Design editor, the Style browser and editor, and the Library screens (gallery https://claude.ai/artifact/SchCjqK9aDRvcnnhTZbezi) are approved as built. Next in the Style unification: U4, the materials-only vs bible A/B (paid; needs Noah's spend approval).
