@@ -83,6 +83,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
@@ -93,7 +94,7 @@ import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
 import { autoConfig, chooseShards, describeChoice, freePairs, probeMachine } from './lib/shard-auto.mjs';
 import { autoFullWhy, cacheContext, coverageMode, entryByKey, entryStillValid, fullTwins, judgedBenches, keyFor, lastNightly, lookup, lookupCoverage, manifestOf, record as recordPass, supersededList } from './lib/step-cache.mjs';
-import { benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, releaseBenches } from './lib/bench-select.mjs';
+import { applyNightlyFulls, benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, nightlyFulls, releaseBenches } from './lib/bench-select.mjs';
 import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/step-coverage.mjs';
 import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
@@ -169,6 +170,7 @@ if (!cfg.chains[chainName] && !TIERS.includes(chainName)) die(`unknown chain ${c
       if (!cfg.steps[s]) bad.push(`tiers: unknown step ${s}`);
     }
   }
+  for (const s of nightlyFulls(CACHE_CONF)) if (!cfg.steps[s]) bad.push(`gate-cache.json release.nightly: unknown step ${s}`);
   bad.push(...validateSplits(cfg.steps));
   if (bad.length) die(`config: ${bad.join('; ')}`);
 }
@@ -400,6 +402,14 @@ function select() {
     // their timing judged, a release reuses the latest nightly's PASS unless what they measure changed (the bench rule)
     for (const s of BENCH.judged) {
       if (want.delete(s)) delete why[s];
+    }
+    // the full twins only the nightly runs (Noah, 2026-10-23; tools/gate-cache.json release.nightly): a release runs their smoke or
+    // slice twins (in the tier's lists), the nightly (--nightly) runs the full ids
+    {
+      const nf = applyNightlyFulls(want, nightlyFulls(CACHE_CONF), { nightly: NIGHTLY || info.full.on }); // (a --full release, also the auto one for a Minecraft, build-dependency or engine change, keeps them: the calibration moments)
+      for (const s of nf.dropped) delete why[s];
+      for (const s of nf.added) addW(s, 'the nightly: the full twin only the nightly runs (release.nightly)');
+      info.nightlyFulls = { mode: NIGHTLY ? 'nightly' : info.full.on ? 'full release' : 'release', dropped: nf.dropped, added: nf.added };
     }
     if (info.full.on) {
       let variant = null;
@@ -643,6 +653,10 @@ if (tierInfo.cache.lookup) {
         if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/kit-reuse.mjs') && !want.has('unit-kit')) {
           l = { hit: null, why: 'its kit tests are delegated to unit-kit (kit-reuse), which is not in this run' };
         }
+        // sidecar-reuse (tools/lib/sidecar-reuse.mjs): the same for its sidecar test files and unit-sidecar
+        if (l.hit && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes('tools/lib/sidecar-reuse.mjs') && !want.has('unit-sidecar')) {
+          l = { hit: null, why: 'its sidecar tests are delegated to unit-sidecar (sidecar-reuse), which is not in this run' };
+        }
       }
     }
     if (!l.hit) {
@@ -666,7 +680,7 @@ if (tierInfo.cache.lookup) {
       const s = cfg.steps[id];
       const deps = [];
       if (s.after && want.has(s.after)) deps.push([s.after, `needed by ${id}: it runs after it, in its context`]);
-      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
+      for (const w of s.waitFor ?? []) if (w !== 'unit-kit' && w !== 'unit-sidecar' && want.has(w)) deps.push([w, `needed by ${id}: it reads ${w}'s evidence of this run`]);
       if ((INPUT_MAP.steps[parentOf(id)]?.env ?? []).includes('GATE_UNIT_MOD_RUN') && want.has('unit-mod')) deps.push(['unit-mod', `needed by ${id}: it reads the classes unit-mod builds in this run`]);
       for (const [d, r] of deps) {
         if (run.has(d)) continue;
@@ -900,6 +914,9 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
   // checks take it when exact. Only when unit-kit is in this run.
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
+  // the sidecar suite once per run (tools/lib/sidecar-reuse.mjs, speed audit D B3): unit-sidecar writes its JUnit report here; the drivers'
+  // sidecar test files take pass/fail from it when exact. Only when unit-sidecar is in this run.
+  if (runShared.sidecarJunit) Object.assign(env, { GATE_SIDECAR_RESULTS: runShared.sidecarJunit, GATE_SIDECAR_TREE: runShared.sidecarTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
   // the merge base the drivers' "unchanged against origin/main" items compare with, fixed once per run (tools/lib/base-tree.mjs)
@@ -927,7 +944,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
-const runShared = { kitJunit: null, kitTree: null, unitModRun: null, mergeBase: null };
+const runShared = { kitJunit: null, kitTree: null, sidecarJunit: null, sidecarTree: null, unitModRun: null, mergeBase: null };
 const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC: DRV, MAIN, OUT: sh.ev })[n] ?? '');
 const resolveCwd = (c, sh) => (!c ? DRV : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(DRV, c.slice(4)) : path.resolve(DRV, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -1536,7 +1553,9 @@ async function ensureClient(sh, step, beforeStart = async () => {}) {
  * client's own world is never replaced under it; with a client up, the restore happens on the title screen. */
 async function restoreWorlds(sh, step) {
   const own = cfg.clients[step.client]?.world;
-  const worlds = (step.restore ?? []).filter((w) => w !== own);
+  // (speed audit D, B7) the client's own world may be restored too: with no client up it is put back before the client opens it; with a
+  // client up the client is on the title screen (left above) and reopens it below
+  const worlds = step.restore ?? [];
   if (!worlds.length) return;
   const saves = path.join(sh.GAME_DIR, 'saves');
   const up = clientProcs(sh).length > 0;
@@ -1548,6 +1567,7 @@ async function restoreWorlds(sh, step) {
   try {
     const t = Date.now();
     const done = [];
+    const shas = {};
     for (const w of worlds) {
       const src = path.join(SNAP, w);
       const dst = path.join(saves, w);
@@ -1560,8 +1580,21 @@ async function restoreWorlds(sh, step) {
       execFileSync('cp', ['-c', '-R', src, dst]);
       fs.rmSync(path.join(dst, 'session.lock'), { force: true });
       done.push(w);
+      // (speed audit D, B4/B7) the restored world's level.dat sha256 is step evidence: <evidence>/restored-worlds.json and the log line
+      shas[w] = createHash('sha256').update(fs.readFileSync(path.join(dst, 'level.dat'))).digest('hex');
     }
-    if (done.length) log(`  restored ${done.map((w) => `"${w}"`).join(', ')} from snapshots in ${((Date.now() - t) / 1000).toFixed(1)} s`, sh);
+    if (done.length) {
+      log(`  restored ${done.map((w) => `"${w}" (level.dat sha256 ${shas[w].slice(0, 16)})`).join(', ')} from snapshots in ${((Date.now() - t) / 1000).toFixed(1)} s`, sh);
+      try {
+        const ef = path.join(sh.ev, 'restored-worlds.json');
+        const prev = fs.existsSync(ef) ? JSON.parse(fs.readFileSync(ef, 'utf8')) : {};
+        prev[step.id] = { ...(prev[step.id] ?? {}), ...Object.fromEntries(done.map((w) => [w, { levelDatSha256: shas[w], snapshot: path.join(SNAP, w) }])) };
+        fs.mkdirSync(sh.ev, { recursive: true });
+        fs.writeFileSync(ef, `${JSON.stringify(prev, null, 1)}\n`);
+      } catch (e) {
+        log(`  (restored-worlds.json not written: ${e.message})`, sh);
+      }
+    }
   } finally {
     if (dev) {
       await dev.call('dev.world.open', { name: cfg.clients[sh.current]?.world ?? own }, { timeoutMs: 60_000 });
@@ -2045,6 +2078,19 @@ try {
     const m = manifestOf(CACHE);
     log(`build artifact ${m.hash ?? '?'}: ${m.ok ? `${Object.keys(m.classes ?? {}).length} classes` : `NOT available (${m.error}): coverage-mode steps record source keys`}`);
   }
+  // the paths are joined so step-inputs doesn't read them as files this runner loads (they are git keys only; same list as
+  // tools/lib/sidecar-reuse.mjs SIDECAR_TREE_PATHS)
+  const sidecarTreeNow = () => ['sidecar', 'kit', 'scenarios', ['mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Limits.java'].join('/'), ['tools', 'eval.mjs'].join('/')].map((d) => git(SRC, 'rev-parse', `HEAD:${d}`).slice(0, 12)).join('.');
+  if (stepIds.includes('unit-sidecar')) {
+    runShared.sidecarJunit = path.join(OUT, 'sidecar-suite.junit.xml');
+    runShared.sidecarTree = sidecarTreeNow();
+  } else if (cachedHits.get('unit-sidecar')?.junit && cachedHits.get('unit-sidecar').kitTree === sidecarTreeNow() && fs.existsSync(cachedHits.get('unit-sidecar').junit)) {
+    // unit-sidecar is CACHED: its recorded JUnit report (the same trees) serves the drivers' sidecar test files (sidecar-reuse.mjs)
+    runShared.sidecarJunit = path.join(OUT, 'sidecar-suite.junit.xml');
+    fs.copyFileSync(cachedHits.get('unit-sidecar').junit, runShared.sidecarJunit);
+    runShared.sidecarTree = cachedHits.get('unit-sidecar').kitTree;
+    log(`unit-sidecar CACHED: its JUnit report (trees ${runShared.sidecarTree}) serves this run's sidecar-suite readers`);
+  }
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     runShared.kitTree = git(SRC, 'rev-parse', `${head}:kit`);
@@ -2192,7 +2238,8 @@ async function worker(sh) {
         const r = recordPass(CACHE, step.id, rec, { key: k.key, why: k.why, parts: k.parts, run: OUT, ev: sh.ev, traceDir: path.join(OUT, 'traces', step.id), traced: TRACE,
           coverage: stepCoverage.get(step.id) ?? null,
           timingPolicy: recordsTiming(step) ? 'recorded' : 'judged', judgedBench: JUDGED_BENCHES.has(parentOf(step.id)), nightly: NIGHTLY, contended: !!rec.contended, tier: chainName,
-          ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}) });
+          ...(step.id === 'unit-kit' && runShared.kitJunit ? { junit: runShared.kitJunit, kitTree: runShared.kitTree } : {}),
+          ...(step.id === 'unit-sidecar' && runShared.sidecarJunit ? { junit: runShared.sidecarJunit, kitTree: runShared.sidecarTree } : {}) });
         rec.cache = { key: r.key ?? k.key, recorded: r.stored, why: r.why };
         if (r.outside && !r.stored) {
           rec.cache.outside = r.outside.slice(0, 40);

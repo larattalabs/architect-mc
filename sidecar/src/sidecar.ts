@@ -77,6 +77,7 @@ export { ClientError, RefusedError } from './errors.js';
 import { ClientError, RefusedError } from './errors.js';
 import { checkSystemRefs } from './jobs/systemrefs.js';
 import { checkRarity } from './rarity.js';
+import { checkPaletteSpec } from './styles.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
@@ -585,6 +586,9 @@ export class Sidecar {
         return { ...this.bibleIndex.delete(msg.id, msg.owner) };
       case 'bible.archive':
         return { ...this.bibleIndex.archive(msg.id, msg.archived) };
+      // (Style unification U1) a hand-made Style: no Claude call
+      case 'bible.save':
+        return { ...this.bibleIndex.save({ id: msg.bibleId, owner: msg.owner, bible: msg.bible }) };
       // ---- 5b
       case 'entry.versions':
         return { entryId: msg.entryId, head: this.versions.head(msg.entryId), versions: this.versions.list(msg.entryId) };
@@ -756,8 +760,10 @@ export class Sidecar {
       const m = this.massings.get(req.fromMassing, req.massingVersion);
       if (!m) throw new ClientError(req.massingVersion ? `no massing "${req.fromMassing}" v${req.massingVersion}` : `no massing "${req.fromMassing}"`);
       if (m.group) throw new ClientError(`massing ${m.id} belongs to group ${m.group}: approve it with group.approve`);
-      req = { ...req, massingVersion: m.version, ...(!req.bible && m.bible ? { bible: m.bible.id, bibleVersion: m.bible.version } : {}) };
+      req = { ...req, massingVersion: m.version, ...(!req.bible && !req.palette && m.bible ? { bible: m.bible.id, bibleVersion: m.bible.version } : {}) };
     }
+    // (Style unification U1) materials only: a palette the kit cannot build is refused now, not after a design round
+    if (req.palette !== undefined) checkPaletteSpec(this.config.kitDir, req.palette);
     if (req.bible) {
       const pin = this.bibleIndex.resolve(req.bibleVersion ? { id: req.bible, version: req.bibleVersion } : req.bible).pin;
       req = { ...req, bible: pin.id, bibleVersion: pin.version };
@@ -960,7 +966,10 @@ export class Sidecar {
     const restraint = d.request.bible && !d.request.massing && this.kitHas('--restraint') ? ['--restraint', path.join('bible', 'bible.json')] : [];
     // (6c IRR, S-IRR-2) the lot's reserved cells: the checker refuses a design writing one (a kit without the flag: refused at the request)
     const reserved = d.request.reserved && !d.request.massing && this.kitHas('--reserved') ? ['--reserved', JSON.stringify(d.request.reserved)] : [];
-    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved] };
+    // (Style unification U1) materials only: the design is checked and installed built with the palette asked for, whatever its
+    // own default (the entry records it as its palette); never bible set mode (no --restraint, no bible files)
+    const pal = d.request.palette !== undefined && !d.request.massing && !extra.includes('--palette') ? ['--palette', typeof d.request.palette === 'string' ? d.request.palette : JSON.stringify(d.request.palette)] : [];
+    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
   }
 
   private kitFlags: string | undefined;

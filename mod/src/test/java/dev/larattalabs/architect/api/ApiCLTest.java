@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Since NEXT (docs/CONTRACT.md "Phase 7a slice CL" §8): no new records, methods or IR kinds; the feature climbConnectors (sidecar
+ * Since 1.41.0 (docs/CONTRACT.md "Phase 7a slice CL" §8): no new records, methods or IR kinds; the feature climbConnectors (sidecar
  * region.climbs: plan/0's connector.stair, connector.switchback and connector.ladder).
  */
 class ApiCLTest {

@@ -11,7 +11,7 @@ import { loadDesign } from '../build.mjs';
 import { BUILTIN_BIBLES, builtinBible, builtinComponentsFile, validateBible } from '../lib/bible.mjs';
 import { checkBlueprint } from '../lib/check.mjs';
 import { buildFrame, checkComponents, loadComponents, REQUIRED_COMPONENTS } from '../lib/components.mjs';
-import { Blueprint, CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, palette, resolvePalette } from '../lib/kit.mjs';
+import { AUTHORED_STYLES, Blueprint, CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, palette, resolvePalette } from '../lib/kit.mjs';
 import { decodePng } from '../lib/png.mjs';
 import { presetBuilds, FIXTURE } from '../tools/preset-builds.mjs';
 
@@ -39,8 +39,11 @@ const ASHFALL = {
 test('the presets still build byte-identically (template and sidecar, every example, every corner)', async () => {
   const want = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
   const got = await presetBuilds();
-  const diff = Object.keys({ ...want, ...got }).filter((k) => JSON.stringify(want[k]) !== JSON.stringify(got[k]));
+  const diff = Object.keys(want).filter((k) => JSON.stringify(want[k]) !== JSON.stringify(got[k]));
   assert.deepEqual(diff, [], `${diff.length} builds differ from before style bibles`);
+  // (Style unification U0) the fixture stays as recorded; the only builds it lacks are the authored built-in Styles'
+  const extra = [...new Set(Object.keys(got).filter((k) => !(k in want)).map((k) => k.split('|')[1]))].sort();
+  assert.deepEqual(extra, [...AUTHORED_STYLES].sort());
 });
 
 test('every preset is a built-in bible: the same palette fields and the same templates', async () => {
@@ -53,7 +56,9 @@ test('every preset is a built-in bible: the same palette fields and the same tem
   }
   const want = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
   const got = await presetBuilds({ palette: (preset) => ({ bible: preset }) });
-  const diff = Object.keys(want).filter((k) => want[k].nbt !== got[k].nbt);
+  // (U0) the authored Styles are not in the fixture: their bible builds equal their preset builds
+  const plain = await presetBuilds();
+  const diff = Object.keys(got).filter((k) => (want[k] ?? plain[k]).nbt !== got[k].nbt);
   assert.deepEqual(diff, [], 'templates built under a built-in bible differ from the preset');
 });
 

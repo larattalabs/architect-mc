@@ -7,8 +7,9 @@
 //
 // The rule (Noah, 2026-10-21): a lint is trusted only while its calibration probe passes. When `p3-probe-water` or `p3-probe-ledger`
 // fails (release tier, or after a Minecraft update), run `node tools/p3-mode.mjs ingame`, commit, and keep it until the lint or its
-// model is fixed and the probe passes again; then `smoke`. Only the impact rules' change/slice lists change; the release tier always runs
-// the full ids, and named chains are untouched. Text edit, line by line: the file's layout stays as it is.
+// model is fixed and the probe passes again; then `smoke`. Only the impact rules' change/slice lists change; the release tier runs the smoke twins (Noah, 2026-10-23: the
+// full ids and p3-probe-water run in the nightly, tools/gate-cache.json release.nightly; the probe's FAIL is read from the nightly), and
+// named chains are untouched. Text edit, line by line: the file's layout stays as it is.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

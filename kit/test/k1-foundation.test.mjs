@@ -16,10 +16,11 @@ import { resolveRoles } from '../lib/region/plan.mjs';
 test('lenient params: read where they map, every other key listed, lot-naming keys are joins', () => {
   const castle = { kind: 'wall', where: { around: { feature: { part: 'castle' }, closed: true } }, params: { height: 8, wall_walk: true, gate_lot: 'gatehouse_1', corner_lots: ['tower_1', 'tower_2'] } };
   const a = readParams('wall', castle);
-  assert.deepEqual(a.read, { height: 8 });
-  assert.deepEqual(a.unread, ['corner_lots', 'gate_lot', 'wall_walk']);
+  // ((7a K2, §1) wall_walk: true is read as walk: true)
+  assert.deepEqual(a.read, { height: 8, walk: true });
+  assert.deepEqual(a.unread, ['corner_lots', 'gate_lot']);
   assert.deepEqual(a.joins, [{ key: 'corner_lots', lot: 'tower_1' }, { key: 'corner_lots', lot: 'tower_2' }, { key: 'gate_lot', lot: 'gatehouse_1' }]);
-  assert.deepEqual(a.notes, ['params.corner_lots not read', 'params.gate_lot not read', 'params.wall_walk not read']);
+  assert.deepEqual(a.notes, ['params.corner_lots not read', 'params.gate_lot not read']);
   // a first-class member wins over params; torches -> lamps every; gates as a number -> gates.min
   const b = readParams('wall', { kind: 'wall', height: 5, lamps: 'none', params: { height: 9, torches: true, gates: 4, material: 'stone' } });
   assert.deepEqual(b.read, { gatesMin: 4 });
@@ -34,7 +35,8 @@ test('lenient params: read where they map, every other key listed, lot-naming ke
 test('connector roles: the bible names roles, else the contract defaults (§6, N-K1-1, N-K1-2)', () => {
   const roles = resolveRoles({});
   const d = connectorRoles(roles, null);
-  assert.deepEqual({ wall: d.wall, gate: d.gate, rope_bridge: d.rope_bridge }, { wall: { body: 'structure', cap: 'trim', frame: 'trim', walk: null, parapet: null }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
+  // ((7a K2, N-K2-1) the walk and parapet default to trim, the cap's chain)
+  assert.deepEqual({ wall: d.wall, gate: d.gate, rope_bridge: d.rope_bridge }, { wall: { body: 'structure', cap: 'trim', frame: 'trim', walk: 'trim', parapet: 'trim' }, gate: { frame: 'trim', door: null }, rope_bridge: { deck: 'floor', rail: 'rail', post: 'frame', rope: null } });
   const g = connectorRoles(roles, { wall: { body: 'wall_alt' }, rope_bridge: { rope: 'none' } });
   assert.equal(g.wall.body, 'wall_alt');
   assert.equal(g.rope_bridge.rope, 'none');
@@ -67,7 +69,7 @@ test('the route pass\'s special-move table: the frozen interface, gate then rope
   for (const m of SPECIAL_MOVES) assert.equal(m.init(env, { edges: [] }), null, m.name);
 });
 
-test('the validator: R15 path forms, R16 references, wall.along reserved, a gate\'s one wall implicit', () => {
+test('the validator: R15 path forms, R16 references, wall.along supported (K2), a gate\'s one wall implicit', () => {
   const zone = { id: 'town', program: { lots: [{ id: 'h1', type: 'house', size: [9, 9] }] } };
   const v = (connectors) => validatePlan({ schemaVersion: 'plan/0', zones: [zone], connectors });
   const p = (r, id) => r.parts.find((x) => x.id === id);
@@ -80,9 +82,9 @@ test('the validator: R15 path forms, R16 references, wall.along reserved, a gate
   const none = v([{ id: 'w', kind: 'wall' }]);
   assert.equal(p(none, 'w').verdict, 'malformed');
   const along = v([{ id: 'w', kind: 'wall', where: { along: { feature: { water: {} } } } }]);
-  assert.equal(p(along, 'w').verdict, 'unsupported');
-  assert.equal(p(along, 'w').block, 'wall.along');
-  assert.equal(p(along, 'w').reason.until, 'K2');
+  // ((7a K2) wall.along flipped to supported: the part compiles, its block wall.along's own form id)
+  assert.equal(p(along, 'w').verdict, 'compile');
+  assert.equal(wallForm({ where: { along: { feature: { water: {} } } } }), 'along');
   const g = v([{ id: 'w', kind: 'wall', where: { around: { feature: { part: 'town' } } } }, { id: 'r', kind: 'road', from: { anchor: 'claim_e' }, to: { part: 'town' } }, { id: 'g', kind: 'gate', crossing: 'r' }]);
   assert.deepEqual(p(g, 'g').deps, ['r', 'w'], 'a gate depends on its crossing and (implicitly) the plan\'s one wall');
   const bad = v([{ id: 'w', kind: 'wall', where: { around: { feature: { part: 'town' } } } }, { id: 'g', kind: 'gate', wall: 'town', crossing: 'w' }]);

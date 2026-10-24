@@ -3,8 +3,8 @@
  "variant": "flat",
  "version": 0,
  "note": "tile shas of grove_demo planned by the kit over its flat claim, 1 worker = 4 workers shuffled; inputs in goldens/grove_demo_flat/",
- "irSha": "39c6530d6a91437922a1374e6084726eba61c5dbae060f33c4aa95a10385e051",
- "kitVersion": "0.41.0",
+ "irSha": "b795ed72468f1949127a9d0eec56922ad16eedbb6d88f2066be4457f8aeaffb9",
+ "kitVersion": "0.42.0",
  "cells": 20220,
  "tiles": {
   "forms|terrain|53,-22": "37fb1a3533cf1727762996b15fce8a21542dacdb1267273fa09f9d4f96da79ce",

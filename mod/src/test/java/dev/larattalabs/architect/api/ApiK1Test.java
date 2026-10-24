@@ -19,5 +19,8 @@ class ApiK1Test {
 		assertFalse(ApiRules.features(2, List.of("region.boundary")).contains("wallConnectors"), "a D2 helper has no walls");
 		assertFalse(ApiRules.features(2, List.of("region.walls")).contains("autoConnector"), "walls alone bring no auto connector");
 		assertFalse(ApiRules.features(1, List.of("region.walls", "region.rope")).contains("wallConnectors"), "protocol 1 has no helper features");
+		// (7a K2, since 1.41.0) wallAlong and wallWalks
+		assertTrue(ApiRules.features(2, List.of("region.walls", "region.walls.along", "region.walls.walk")).containsAll(List.of("wallConnectors", "wallAlong", "wallWalks")));
+		assertFalse(ApiRules.features(2, List.of("region.walls")).contains("wallWalks"), "a K1 helper has no walks");
 	}
 }

@@ -1147,6 +1147,36 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
 - **coa-unit item 6 goes stale on every slice now that COA is on main.** Its "before" table is computed on the merge base.
   Normalise it as F7A_ASK_PARTS does, or compare against the committed tables only.
 
+## Queued from slice K2 (builder, 2026-10-23)
+
+- **Routes joining gate landings** (the K2 finding; the coordinator's rulings (b) and (i), 2026-10-23, then the fallback (ii)).
+  - **The limit.** Auto gates where routes cross can't open on stepped natural banks (45° staircase shores): K1a's gate move needs a
+    straight run perpendicular to the route held flat across the wall at the route's y, and S3's river bank drops 7-10 blocks across
+    the wall's 4 cells wherever the line runs straight (it is mostly runs of 1-3 cells). K1a's gate move is unchanged.
+  - **What K2 ships.** An along wall's gates.min gates are placed before routing when the bank is stepped (a level wall's wait for the
+    routes, as K1a's), each on a gate landing: the gate's floor 2 cells each side, outside lanes ending at the water's edge (at most 2
+    above it), inside a 1-wide flight along the wall's inner face (round its bends) up to the bank, open sides over a drop of more than 1
+    filled and fenced; the cells are the wall's own part (undo journaled). On S3 (`v7a_k2_along_shore`, gates.min 2) both gates have
+    landings (flights of 4 and 16 steps, within 8 of the wall) and the kit's player and villager pass each both ways. A gate whose
+    landing doesn't fit is noted per gate; a route the wall cuts answers `refused UNREACHABLE {kind: wall, walls, round}`.
+  - **Probe** (25 spine points, every 8th spine cell, a path from a point 12 inland along the normal to the shore cell): without the
+    wall 11 of 25 route (adjusted), 11 run out of budget, 3 refuse on the bank itself. With the wall and its landings, 0 route: 24
+    answer UNREACHABLE {kind: wall} (the 11 among them), 1 (spine cell 0) BUDGET either way. (Same before the landings.)
+  - **Why routes don't join.** The landings go to the route pass as its `base` (the ground they make, merged with rope.base), but (1) an
+    endpoint inside a landing keeps its survey y, so the edge starts off the base's ground; (2) T2's gate move wants the route at the
+    gate's floor on the cell before the wall, and the floor is the shore's level (62-64) under a bank of 75-90: a route reaches it only
+    down the landing's flight, which follows the wall's face round staircase bends, not T2's straight flights of 2..8 then 2 flat cells.
+    Probe pair 144 routed directly: without the wall 45 cells; with the wall and the base, the 2M-node budget spent.
+  - **Likely fix:** T2 learns the landing as a fixed segment (a "gate approach" special move from the flight's top cell through the gate
+    to the outside cell, cost by length), and endpoints read the base's ground. Or a terraced gate landing a route can join along its
+    length (cut and fill a bench along the wall at the flight's levels).
+- **A shared lamp helper with M17 (soul lanterns near snow and ice)** (the coordinator, 2026-10-23): K1a's gate lamps and K2's walk lamps
+  place the bible's light with no M17 swap (a light over 11 within reach of snow layers or ice melts them). Lift a helper (scatter.mjs
+  already clears its reach) and use it in both.
+- **K1a bug: dark gate-walk cells under a level-10 light** (found by K2's look variants, not fixed in K2): v30 in g7ak1_infernal (soul
+  lantern, light 10) on S7's flat claim: M5 5 dark spawnable cells on the east gate's walk (1559-1560, 66, -3077..-3075), with or
+  without a walk. K1a's one lamp a side doesn't cover a 3-wide gate's depth at light 10.
+
 ## Watch (coordinator, 2026-10-24)
 
 - **rs-survival item 10 rs02m2: "region reads REMOVING after the reopen", but it read REMOVED.** This failed once each in two
@@ -1194,7 +1224,7 @@ Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family
 Model in docs/STYLE-UNIFY.md. Mock approved: https://claude.ai/artifact/F5rfEVgeErTArWfQiL76F9. Noah's decisions (the recommendations):
 1. Built-in and hand-made Styles go to the generator **materials-only** (a new `DesignRequest.palette` with roles); `bible` set mode stays for Claude-made Styles and sets. U4's A/B confirms this.
 2. A custom mix on a new design is **sent inline**; nothing is saved until "Save as style…".
-3. The word-only style chips get authored materials and become built-in Styles: Medieval, Nordic, Japanese, Cozy and Fantasy. Modern stays text-only until a flat-roof role exists.
+3. The word-only style chips get authored materials and become built-in Styles: all six, Medieval, Nordic, Japanese, Cozy, Fantasy and Modern (coordinator, 2026-10-24: flat roofs already exist as kit.mjs roofFlat, so Modern gets a stairs-capable roof role and a flat `roofLanguage` shape hint).
 4. The main rows stay **Wood / Stone / Roof / Accent**, each showing what it drives.
 Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/JS parity (M), U3 the unified editor + Style browser + Style editor on lab-ui 0.2.0 (L), U4 the materials-only vs bible A/B judged by design-critic (S). UI-2a's form and picker work is folded into U3.
 
@@ -1215,6 +1245,11 @@ Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/J
   that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
   making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
 - **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.
+
+### Queued with "use an existing Style" (Steward's U1 RC, 2026-10-24; not U1)
+When Steward's settlements design with an existing Style, a settlement pins a player's Style version outside Architect. That
+feature ships with a keyed `Bibles.pin(id, version, owner, key)` / `unpin(...)` (like `pinArtifact`). The version GC skips any
+version a mod has pinned, and `bible.delete` refuses it, as it does for an entry's pin.
 
 ## UI/UX roadmap additions (Noah, 2026-10-24)
 - **Now:** U3 also covers the Library screen, the rest of the old UI-2a: a grid with more rows; detail as Place / Edit / ⋯ with Delete behind Confirm; searchable Type, Tag, Collection and Import pop-ups; job progress visible from the Library; massing approval by mouse too; and no dead ends. The Library and the editor are designed together.

@@ -573,6 +573,24 @@ census reads that stay at the slice tier: h-ingame #2 (h_core_demo's four bodies
 (hy_core_demo's reaches) and item 9's five writer kinds, irr-ingame's v62 live and s01 placed checks, kc-ingame's v61. Each compares
 the realised world's fluid cells with the plan's prediction cell by cell.
 
+## Smoke at releases (Noah, 2026-10-23)
+
+The P3 smoke remainders no longer wait for a full run at each release: a release runs `5b-chains`, `h-ingame-smoke`, `hy-ingame-smoke`,
+`w-ingame-smoke`, `rs-survival-smoke`, `h-probe-smoke`, `hy-crash-smoke`, `d2-ingame-smoke`, `hy-cold-smoke` and `kc-ingame-smoke`; the
+full ids (and `4e-orders-full`, `4e-crash-full`, `p3-probe-water`) run in the nightly (`tools/gate-cache.json` `release.nightly`). So
+the groups the water and ledger lints took over (the `P3 smoke: ... left to ...` lines) are proved in game once a night, with the water
+probe beside them; the probe rule is unchanged. `irr-ingame`, `c29-ingame`, `voc-survival`, `x-resume`, `6a-eflat`, `6a-staged` and
+`c30` stay full at release. Details: docs/GATES.md "Smoke at releases".
+
+## 0a: the retired steps (speed audit D, 2026-10-23)
+
+`0a-stub`, `0a-budget`, `0a-cancel` and `0a-pins` are retired from the tiers and the impact rules: every row of 0a-budget is ALREADY-OFFLINE (sidecar
+limits/groups/simcosts tests), 0a-stub's rows 2-4 and 0a-pins' rows 2-3 are ALREADY-OFFLINE (bundle.e2e, slice0a, versions tests) and 0a-cancel's
+second row is. Their residues became rows of `0a-flow`: the packed jar carries the helper bundle and the helper runs the sim with no SDK (0a-stub row 1,
+the only KEEP-INGAME row there), `cancelJob` gives CANCELLED and BIBLE_DONE once (0a-cancel row 2, with the "already cancelled" row, one call), and
+a helper restart runs the library GC (0a-pins: pinned v1 survives, unpinned it goes). `0a-flow`, `0a-fit` and `0a-stopped` run as `0a-session`,
+one client session. The independent review (2026-10-23) found two more residues to keep, now in 0a-flow: the log-label rows of 0a-stub (`sim costs: sim: true`, the group's final cost `sim: true`) and 0a-pins' two-owner rows (pinOwners, VERSION_GONE, one owner unpinned, idempotent unpin) - no offline test asserts them. NOT covered anywhere now: 0a-budget row 3 (no re-sent GROUP_AWAITING_APPROVAL or PAUSED_BUDGET event to the mod while extend and resume are in flight, seq strictly increasing); the offline groups.test.ts covers the pause, extend and resume in the sidecar only, and slice0a C7 the plain-flow seq rule. Run `node tools/gate6c0a.mjs budget` by hand when the mod's group event path changes. The drivers still run by name (`node tools/gate6c0a.mjs stub|budget|cancel|pins`).
+
 ## What stays in game at the slice tier (after P3)
 
 About 162 in-game step-minutes per slice (55% of today). It is dominated by:

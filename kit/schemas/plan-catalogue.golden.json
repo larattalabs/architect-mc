@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 13,
- "api": "1.40.0",
- "kitVersion": "0.41.0",
+ "catalogueVersion": 14,
+ "api": "1.41.0",
+ "kitVersion": "0.42.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -290,7 +290,7 @@
   },
   {
    "id": "connector.ladder",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.41.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -310,7 +310,7 @@
   },
   {
    "id": "connector.stair",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.41.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -381,7 +381,7 @@
   },
   {
    "id": "connector.switchback",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.41.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -449,11 +449,10 @@
   },
   {
    "id": "wall.along",
-   "sinceApi": "1.32.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "K2",
-   "note": "D2's boundary spine plus an offset (where.along on a wall): the same member, no format change."
+   "sinceApi": "1.41.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "D2's boundary spine (a water body's shore, a biome edge or a ridge) plus an offset in distance (default [2, 8]), per run of 8 spine cells; open (its free ends end in posts), no gate by default (gates.min places them evenly)."
   },
   {
    "id": "wall.water_gate",

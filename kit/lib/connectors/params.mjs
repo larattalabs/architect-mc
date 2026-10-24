@@ -10,7 +10,7 @@ export const JOIN_KEYS = Object.freeze(['towers', 'corner_lots', 'joins', 'ancho
 const isInt = Number.isInteger;
 
 /**
- * Read a part's params. Returns `{read: {height?, closed?, gatesMin?, lamps?}, unread: [key], joins: [{key, lot}], notes: [string]}`.
+ * Read a part's params. Returns `{read: {height?, closed?, gatesMin?, lamps?, walk?}, unread: [key], joins: [{key, lot}], notes: [string]}`.
  * `kind`: wall, gate, rope_bridge or auto. A key is read only when the part has no first-class member for it.
  */
 export function readParams(kind, part) {
@@ -25,6 +25,8 @@ export function readParams(kind, part) {
       else if (key === 'closed' && typeof v === 'boolean' && part.where?.around?.closed === undefined) { read.closed = v; ok = true; }
       else if (key === 'gates' && isInt(v) && part.gates === undefined && v >= 0 && v <= 16) { read.gatesMin = v; ok = true; }
       else if (key === 'torches' && v === true && part.lamps === undefined) { read.lamps = 'every'; ok = true; }
+      // ((7a K2, §1) wall_walk: true is read as walk: true when the part has no walk member)
+      else if (key === 'wall_walk' && v === true && part.walk === undefined) { read.walk = true; ok = true; }
     }
     if (!ok) {
       unread.push(key);

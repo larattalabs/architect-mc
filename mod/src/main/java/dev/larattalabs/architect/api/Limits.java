@@ -86,6 +86,11 @@ public final class Limits {
 	public static final int EXTRA_CRITERION_MAX = 200;
 	/** (since 1.37.0, 6c IRR) The most reserved cells a {@link DesignRequest#reserved} carries. */
 	public static final int RESERVED_CELLS_MAX = 65536;
+	/** (since 1.41.0, Style unification U1) {@link DesignRequest#palette}: a preset name at most 32; an input or a role's block at most 64. */
+	public static final int PALETTE_PRESET_MAX = 32;
+	public static final int PALETTE_BLOCK_MAX = 64;
+	/** (since 1.41.0) The most roles a palette carries inline ({@code {bible: {id, version, roles}}}). */
+	public static final int PALETTE_ROLES_MAX = 64;
 
 	// ---- BibleRequest
 	/** {@code prompt}, trimmed: 1-2000. */

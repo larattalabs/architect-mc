@@ -236,6 +236,8 @@ export function normalizeKitImports(source: string): string {
 export function mergePalette(recorded: unknown, asked: PaletteSpec | undefined): PaletteSpec | Record<string, unknown> | undefined {
   if (asked === undefined) return isPaletteInputs(recorded) ? recorded : isBiblePalette(recorded) ? recorded : undefined;
   if (typeof asked === 'string') return asked;
+  // (U1, palette.roles) a Style's roles asked inline replace whatever was recorded (the kit takes no other inputs with them)
+  if (isBiblePalette(asked)) return asked;
   return { ...(isPaletteInputs(recorded) ? recorded : {}), ...asked };
 }
 
@@ -254,6 +256,7 @@ function isPaletteInputs(p: unknown): p is Exclude<PaletteSpec, string> {
 export function paletteLabel(p: PaletteSpec | undefined): string {
   if (p === undefined) return '';
   if (typeof p === 'string') return p.replace(/_/g, ' ');
+  if (isBiblePalette(p)) return p.bible.id.replace(/^bib_/, '').replace(/_/g, ' ');
   return [p.wood, p.stone, p.roof, p.accent].filter(Boolean).map((s) => s!.replace(/^minecraft:/, '').replace(/_/g, ' ')).join(', ') || (p.preset ?? '').replace(/_/g, ' ');
 }
 
@@ -262,7 +265,7 @@ export function paletteLabel(p: PaletteSpec | undefined): string {
  * <from>_v3, ...; never one with a folder in the library or in `taken`.
  */
 export function variantId(libraryDir: string, from: string, palette: PaletteSpec | undefined, taken: ReadonlySet<string> = new Set(), bible?: string): string {
-  const sfx = bible ? slugify(bible.replace(/^bib_/, ''), 20) : typeof palette === 'string' ? slugify(palette, 20) : palette ? slugify((palette.wood ?? palette.stone ?? palette.roof ?? palette.accent ?? palette.preset ?? '').replace(/^minecraft:/, ''), 20) : '';
+  const sfx = bible ? slugify(bible.replace(/^bib_/, ''), 20) : typeof palette === 'string' ? slugify(palette, 20) : palette && isBiblePalette(palette) ? slugify(palette.bible.id.replace(/^bib_/, ''), 20) : palette ? slugify((palette.wood ?? palette.stone ?? palette.roof ?? palette.accent ?? palette.preset ?? '').replace(/^minecraft:/, ''), 20) : '';
   const stem = from.slice(0, 40);
   if (sfx) return freeLibraryId(libraryDir, `${stem}_${sfx}`, taken);
   for (let n = 2; ; n++) {

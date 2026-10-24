@@ -25,6 +25,8 @@ import { checkBlueprint } from './check.mjs';
 // (6c VOC-b) the `rarity` member (format 2) and role fitness, reported as `warnings` (never errors: stored bibles stay valid)
 import { validateRarity } from './vocab/rarity.mjs';
 import { fitsRole } from './vocab.mjs';
+// (Style unification U0/U1) the optional Style fields and the built-in Styles' metadata
+import { FEATURE_IDS, MAX_SUGGESTED_FEATURES, ORIGINS, styleMeta } from './styles.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Built-in bibles that ship a reference component library (kit/bibles/<name>/components.mjs). */
@@ -46,9 +48,14 @@ export function builtinComponentsFile(name) {
   return fs.existsSync(f) ? f : null;
 }
 
-/** A built-in bible: a palette preset as roles, version 1, no prose. */
+/**
+ * A built-in bible: a palette preset as roles, version 1, no prose. (Style unification U0) plus the Style fields of
+ * lib/styles.mjs STYLE_META: `tags`, `suggestedFeatures`, `blurb`, `origin: 'builtin'`, and its shape hints (proportions over
+ * the defaults, `roofLanguage`) when it has any.
+ */
 export function builtinBible(name) {
   if (!PALETTE_PRESETS[name]) throw new Error(`no built-in bible '${name}' (one of ${BUILTIN_BIBLES.join(', ')})`);
+  const meta = styleMeta(name);
   return {
     id: name,
     name: TITLE(name),
@@ -57,9 +64,30 @@ export function builtinBible(name) {
     preset: name,
     scope: 'building',
     roles: rolesOfPalette(PALETTES[name]),
-    proportions: { ...DEFAULT_PROPORTIONS },
+    proportions: { ...DEFAULT_PROPORTIONS, ...(meta?.hints?.proportions ?? {}) },
+    ...(meta?.hints?.roofLanguage ? { roofLanguage: meta.hints.roofLanguage } : {}),
     components: builtinComponentsFile(name) ? [...REQUIRED_COMPONENTS] : [],
+    ...(meta ? { tags: [...meta.tags], suggestedFeatures: [...meta.suggestedFeatures], blurb: meta.blurb } : {}),
+    origin: 'builtin',
   };
+}
+
+/** (Style unification U1) The optional Style fields of a bible: their errors (an empty list when absent or sound). */
+export function styleFieldsErrors(b) {
+  const errors = [];
+  if (b.tags !== undefined && !(Array.isArray(b.tags) && b.tags.length <= 12 && b.tags.every((t) => typeof t === 'string' && t.trim().length >= 1 && t.length <= 40))) errors.push('tags must be a list of at most 12 short strings (1-40 characters)');
+  if (b.suggestedFeatures !== undefined) {
+    if (!(Array.isArray(b.suggestedFeatures) && b.suggestedFeatures.length <= MAX_SUGGESTED_FEATURES && b.suggestedFeatures.every((f) => typeof f === 'string'))) errors.push(`suggestedFeatures must be a list of at most ${MAX_SUGGESTED_FEATURES} feature ids`);
+    else {
+      const unknown = b.suggestedFeatures.filter((f) => !FEATURE_IDS.includes(f));
+      if (unknown.length) errors.push(`suggestedFeatures: ${unknown.join(', ')} ${unknown.length > 1 ? 'are not feature ids' : 'is not a feature id'} (one of ${FEATURE_IDS.join(', ')})`);
+      if (new Set(b.suggestedFeatures).size !== b.suggestedFeatures.length) errors.push('suggestedFeatures: duplicate feature');
+    }
+  }
+  if (b.blurb !== undefined && !(typeof b.blurb === 'string' && b.blurb.length <= 200)) errors.push('blurb must be a string of at most 200 characters');
+  if (b.basedOn !== undefined && !(b.basedOn && typeof b.basedOn === 'object' && !Array.isArray(b.basedOn) && typeof b.basedOn.id === 'string' && BIBLE_ID.test(b.basedOn.id) && Number.isInteger(b.basedOn.version) && b.basedOn.version >= 1 && Object.keys(b.basedOn).every((k) => k === 'id' || k === 'version'))) errors.push('basedOn must be { id, version } (the Style it started from)');
+  if (b.origin !== undefined && !ORIGINS.includes(b.origin)) errors.push(`origin must be one of ${ORIGINS.join(', ')}`);
+  return errors;
 }
 
 /** `--bible <arg>`: a bible.json path, or a built-in bible name. Returns the bible object (throws with the reason). */
@@ -233,6 +261,8 @@ export function validateBible(j, opts = {}) {
     if (!f2) err('rarity needs format: 2');
     else for (const e of validateRarity(b.rarity).errors) err(e);
   }
+  // (Style unification U1) tags, suggestedFeatures, blurb, basedOn, origin: optional, typed
+  for (const e of styleFieldsErrors(b)) err(e);
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');
   b.components = [...new Set([...REQUIRED_COMPONENTS, ...(Array.isArray(b.components) ? b.components.filter((c) => typeof c === 'string') : [])])];
   if (f2 && b.components.length > REQUIRED_COMPONENTS.length + FORMAT2_MAX_EXTRA_COMPONENTS) err(`components: format 2 allows the ${REQUIRED_COMPONENTS.length} required components plus at most ${FORMAT2_MAX_EXTRA_COMPONENTS} (got ${b.components.length - REQUIRED_COMPONENTS.length} more: ${b.components.filter((c) => !REQUIRED_COMPONENTS.includes(c)).join(', ')})`);

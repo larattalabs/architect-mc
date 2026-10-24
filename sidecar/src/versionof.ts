@@ -8,6 +8,7 @@
 //     that fails it is a repair round, before install. Growth is allowed up to the request's maxSize
 //   - install: head + 1, by 'design', parent = the base, the designId, the change request as the summary. If the head moved
 //     meanwhile the design fails `base_moved` (its cost is kept)
+import { setModePin } from './styles.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -37,8 +38,10 @@ export function prepareVersionOf(sc: VersionOfHost, req: DesignRequest): DesignR
   const head = sc.versions.head(v.entryId);
   const type = typeof json.type === 'string' ? json.type : req.type;
   // the head's bible (a group item's entry): the new version builds with the same roles
-  const bible = json.bible && typeof json.bible === 'object' ? (json.bible as { id?: string; version?: number }) : undefined;
-  return { ...req, type: type as DesignRequest['type'], ...(!req.bible && bible?.id ? { bible: bible.id, bibleVersion: bible.version ?? 1 } : {}), versionOf: { ...v, baseVersion: head } };
+  // (U1) not for a materials-only head: its palette (the roles inline) comes with the request instead, never set mode
+  const pin = setModePin(json);
+  const palette = !req.bible && req.palette === undefined && !('bible' in pin) && (json.request as { palette?: unknown } | undefined)?.palette !== undefined ? { palette: (json.request as { palette: DesignRequest['palette'] }).palette } : {};
+  return { ...req, type: type as DesignRequest['type'], ...(!req.bible && req.palette === undefined && 'bible' in pin ? pin : {}), ...palette, versionOf: { ...v, baseVersion: head } };
 }
 
 /** The scratch context: context/base/ (the head's files) and the site's files. Returns the brief's lines. */

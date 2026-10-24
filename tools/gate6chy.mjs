@@ -142,6 +142,7 @@ steps.unit = async () => {
     ch.on('close', (code) => { clearTimeout(timer); fs.closeSync(acFd); resolve({ status: code, text: fs.readFileSync(acLog, 'utf8') }); });
   });
   out.unchanged = await CORE.unchanged(root);
+  if (out.unchanged.identical) check(true, `item 12: ${out.unchanged.identical}`);
   check(out.unchanged.ok, `item 12: ${out.unchanged.same} of ${out.unchanged.n} committed plan fixtures without an HY part (every dir, H's and the asks included) answer as on origin/main ${out.unchanged.mainHead.slice(0, 10)} and plan the same IR but its kitVersion; the named exceptions that differ: ${out.unchanged.excepted.join(', ') || 'none'}; ${out.unchanged.skipped} skipped (course parts, or new since main)`, out.unchanged.differ);
   out.core = kitOnce(['kit/test/hy-core.test.mjs']);
   check(out.core.code === 0 && out.core.fail === 0 && out.core.pass >= 8, `items 2, 12, 13 (kit, HY-core): catalogue 8 and its diff from catalogue-h.json, R24, the course members of the fluid op (requires courses), the overflow hook and the emit order, M25 on hy_core_demo clean and each broken variant caught (order, shell, leak, keep, lint), siteplan courses, determinism: ${out.core.pass} pass, ${out.core.fail} fail`, out.core.failing);

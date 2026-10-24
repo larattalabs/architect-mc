@@ -165,6 +165,37 @@ public final class BiblesImpl implements Bibles {
 		});
 	}
 
+	/** (Style unification U1) {@code bible.save}: a new version of a hand-made Style. */
+	@Override
+	public CompletableFuture<Bible> save(@Nullable String bibleId, JsonObject style, @Nullable String owner) {
+		if (style == null || !style.has("roles") || !style.get("roles").isJsonObject()) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("a Style needs roles")));
+		}
+		JsonObject m = DesignsImpl.msg("bible.save");
+		if (bibleId != null) {
+			m.addProperty("bibleId", bibleId);
+		}
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		m.add("bible", style.deepCopy());
+		return DesignsImpl.ask("bible.save", "hand-made Styles", m).thenApply(res -> {
+			invalidate();
+			if (!res.has("bible") || !res.get("bible").isJsonObject()) {
+				throw new IllegalStateException("the helper sent no saved Style");
+			}
+			Bible b = Wire4b.bibleInfo(res.getAsJsonObject("bible"));
+			Architect.LOGGER.info("API: Style {} v{} saved", b.id(), b.version());
+			return b;
+		});
+	}
+
+	@Override
+	public List<Bible> usable(@Nullable String owner) {
+		return all().stream().filter(b -> !b.archived()).filter(b -> b.builtin() || !b.modOwned() || (owner != null && owner.equals(b.owner().get())))
+			.toList();
+	}
+
 	/** The job named in an ack ({@code {jobId, bibleId, version}}): as the helper reported it, else a queued placeholder. */
 	private BibleJob acked(JsonObject res) {
 		String jobId = res.has("jobId") ? res.get("jobId").getAsString() : null;
