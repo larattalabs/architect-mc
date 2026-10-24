@@ -1,10 +1,11 @@
 // (7a K2) What slice K2 moves for its byte-identity check (tools/gate7ak2.mjs unit, docs/CONTRACT.md "Phase 7a slice K2" §6, §8), by name,
-// over the 7a foundation's own (F7A_MOVED: the merge base is main, before the foundation). Every other committed plan fixture plans
+// (castle_city only: the 7a foundation is on main now, so its own movers, F7A_MOVED, plan as on the merge base). Every other committed plan fixture plans
 // byte for byte as on the merge base: a wall without where.along and without walk (or params.wall_walk) emits as K1a.
 import { F7A_MOVED } from './f7a-norm.mjs';
 
+// (the foundation is on main now (merged with CW): its own movers plan as on the merge base, so K2 names only its own)
 export const K2_MOVED = Object.freeze({
-  ...F7A_MOVED,
+  'asks/castle_city.json': F7A_MOVED['asks/castle_city.json'],
 });
 
 /**
