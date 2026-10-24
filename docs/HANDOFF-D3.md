@@ -63,7 +63,8 @@ On disk (sidecar plan dir): `reach-survey.bin`, `held.json`, `standing.json`, an
 - [x] Gate-verifier PASS at 41c19d00.
 - [x] Steward RC on 28720a05: finding 1 (a refused removal left the region PARTIAL: main's since C23) and finding 2 (own wall ->
       [wall]) fixed; d3-steward with the RC row 23/0 at 0d8eac82.
-- [ ] The verifier's strict re-run of the removal row, then Steward's re-run on the head.
+- [x] The verifier's strict re-run of the removal row: PASS (gate-runs-d3-verify/20261024-025722-change).
+- [ ] Steward's re-run on the head.
 
 ## Notes from the first in-game round
 

@@ -24648,3 +24648,4 @@ after a prepare can wait `NOT_GENERATED` on its edge tiles.
 | RC finding 1 (removal) | d3-steward, run `20261024-023059-change` at 0d8eac82 (DEV MODE) | PASS, 23 ok / 0 FAIL, the RC row included |
 | removal regression | run `20261024-020754-slice` at e0bbb44f | x-resume (C23) 35/0, d3-ingame (items 7, 8, 10) 26/0, d3-unit 7/0. x-ingame 52/1: its api-compat found every reference missing because the frozen-source worktree had no compiled classes (main's new runner, not D3's) |
 | RC finding 2 (own wall) | kit `districts-d3.test.mjs` (the choice test), Java `DistrictLandTest` | pass; Java 7/7 |
+| verifier (strict: removal) | gate-verifier, run `gate-runs-d3-verify/20261024-025722-change` at 77f4c3d3 (0d8eac82's code) | PASS: d3-steward 23/0 with the RC row; offline kit D3 14/0, DistrictLandTest 7/7, PlanRetentionTest 8/8, ApiRulesTest 12/12; review of the removal fix found no defect |
