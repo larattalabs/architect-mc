@@ -18,6 +18,7 @@ import { footprintOf, edgeColumns } from '../region/passes/route.mjs';
 import { shapeOf, woodOf } from './style.mjs';
 import { variant } from '../kit.mjs';
 import { bomOf } from './bom.mjs';
+import { fixtureFor } from '../region/fixtures.mjs';
 
 export const CLIMB = Object.freeze({ minAscent: 2, railDrop: 3, rest: 24, restMin: 8, restMax: 24, ladderMax: 48, topRail: 2, lampLight: 15 });
 
@@ -322,10 +323,12 @@ export function climbRoles(r) {
   const floor = role(c.ladder?.landing, ['floor']) ?? 'minecraft:oak_planks';
   const landing = shaped(floor, 'slab', 'self');
   const ladderRail = role(c.ladder?.rail, ['rail']) ?? railBlock;
-  const light = r.roles?.light ?? 'minecraft:lantern[hanging=false,waterlogged=false]';
+  // W's fixture for the light role, stood on a post (a hanging lantern stands; a sea lantern or glowstone is a bollard block)
+  const fx = fixtureFor(r.roles?.light, railBlock);
+  const light = fx.kind === 'hanging_lantern' ? fx.light.replace('hanging=true', 'hanging=false') : fx.light;
   return { rail, railBlock: role(c.ladder?.gate, ['rail']) ?? railBlock, support, retain, cap: cap ? `${cap.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : null,
     landing: landing && /_slab/.test(landing) ? `${landing.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]` : landing, bracket: shaped(ladderRail, 'fence', 'self'),
-    light: /lantern/.test(light) && !/hanging/.test(light) ? `${light.replace(/\[.*$/, '')}[hanging=false,waterlogged=false]` : light, post: shaped(railBlock, 'fence', 'self') };
+    light, post: shaped(railBlock, 'fence', 'self') };
 }
 
 void isInt;
