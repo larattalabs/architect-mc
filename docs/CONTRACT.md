@@ -25140,3 +25140,53 @@ palette on the detail pass only).
   `setRole`), the Variants dialog's per-role rows; Duplicate vs Edit from `Style.editable` / `modOwned`.
 - U4 (recorded, not fixed): the kit's example designs and the sim's copies of them build their walls from the wood set (`p.planks`),
   not the `wall` role, so a wall-defined Style (medieval, japanese, modern) only partly re-skins them.
+
+## Style unification U3: the unified editor, the Style browser and editor, the Library screen (as built)
+
+Branch `slice/U3` (off U2, main v0.44.0 merged in). Client UI on lab-ui 0.2.0 plus one free, read-only sidecar op. No API change (no
+Steward RC in DEV MODE). Look reference: the approved picker and unify mocks.
+
+**1. Wire.** `bible.check {bible, scope?}` (feature `bible.check`, appended last to `FEATURES`): the kit's validation of a Style as
+`bible.save` runs it (`tools/bible.mjs validate`: the roles build a palette, a small test house passes the checker), nothing saved, $0.
+Acks `{ok, errors[], warnings[]}`. `bible.save` shares the same code path (`validateStyle`); its refusals are unchanged.
+
+**2. Words alongside a Style.** The request shape is unchanged: `style` stays the Style (its id for a built-in, else its name: what the
+entry's provenance shows, at most 40 characters), `palette` its roles; the words go first in `notes` on their own line,
+`"Style: <words>"`, then a blank line and the notes (`design/StyleNote`; at most 120 characters of words). Free text alone (no Style:
+"Own words", or words typed in the style field) is still the style with no palette and no note (U2). A remix reads the line back.
+
+**3. The design editor** (`DesignEditor`): NEW on the Design tab, VARIANT in the Library's Variants dialog, both bound to
+`StyleForm.view()`. Sections What / Style / Materials / Features / Rules / Parameters (lab-ui `CollapsibleSection`, folds kept in
+`config/lab_ui/pickers.json`; What, Style and Materials open by default); the body scrolls (wheel, a draggable bar), the footer is pinned
+(Generate or Make variant, Save draft). Materials: Wood / Stone / Roof / Accent as lab-ui `CompactPicker`s (the current choice, two of
+its family, "more… N": a full-screen `PickerScreen` of swatches by family, the detail pane showing the Style with that choice), each
+marked "from <Style>" or "custom" and saying what it drives; "More roles" folded (each role's block, "follows Wood" / "from X" /
+"custom", a role picker over every block the swatch table knows); a custom mix shows Revert and Save as style… (a name field, default
+"<Style> mix"). Features marked ✦ when suggested by the Style. VARIANT locks What, Features and Rules (a lock bar with Remix…).
+The Type, Tag, Collection, profile, sort and re-skin choices are one searchable lab-ui `ScrollList` pop-up; the Import list has a search.
+
+**4. The Style browser** (`StyleBrowserScreen`, lab-ui `PickerScreen` in CARDS mode): cards are preview sheets drawn from each Style's
+roles (`library/StyleSheet`: every part one of its roles, the nearest role when it lacks one; the sky is the UI's) with tags (+N); the
+rail is Yours / Built-in / Made by Claude / Settlements (`library/StyleCatalog`), favourites are lab-ui's ★ Favourites chip (PickerStore,
+id `architect_mc.styles`, not STYLE-UNIFY's `style-meta.json`). A single click selects a card; Use this style (double click, Enter)
+picks it. Duplicate always; Edit only for `Bible.editable()`. "+ New style ▾" (lab-ui's Compare chip): copy the selected Style, start from
+a built-in, or describe it (Claude drafts a bible job; the helper's `bible.estimate` cost line first). "Tags ▾" filters by tag.
+
+**5. The Style editor** (`StyleEditorScreen`, model `library/StyleDraft`): Edit saves a new version of the player's own Style
+(`bible.save {bibleId}`, "Save v<N+1>"); Duplicate / a start from a built-in saves a new hand-made Style based on it ("Save style").
+Name, tags, the four main rows (what each drives), More roles, a settlement Style's roles, and the water / wall / pattern / tier slots
+(read-only; roles are never removed, so a slot never loses its role). Right: a live preview sheet, the test-house check (`bible.check`,
+debounced; Save refused while it fails, and when the helper lacks it Save itself checks), suggested features (at most 6), shape hints
+(read-only; they and the slots ride along unchanged from the stored `bible.json`).
+
+**6. The Library**: shorter cards (more rows), Place (primary) / Edit / ⋯ in the detail; Edit opens the VARIANT editor (an import, which
+has no source: Remix…); everything else is in ⋯, Delete last, a lab-ui `Confirm` (the first press arms it, "Press again to delete (N)").
+A jobs strip shows the newest running job (and how many more) and, when a massing is on review, Approve / Redirect… / Put aside by mouse.
+Every empty state (no designs, no match, nothing placed, no jobs, helper down) carries an action.
+
+**7. Save draft** (`client/design/Drafts`): the editor as it is, kept in `<gameDir>/architect/drafts/` (`design.json`, one
+`variant-<entry>.json` per design); nothing restores itself: the editor offers Restore / Discard; a sent design drops its draft.
+
+**8. Theming.** Swatches and sheets are the Style's own blocks: the `colors` table that tools/gen-palettes.mjs adds to
+`palettes-fallback.json` (the side face's average from the game's textures, kit/lib/colors.mjs, for every block the Style table, the
+presets and the common role candidates name), else the block's map colour.
