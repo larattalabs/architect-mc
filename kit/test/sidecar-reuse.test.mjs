@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { sidecarReuse, sidecarTree } from '../../tools/lib/sidecar-reuse.mjs';
+import { sidecarReuse, sidecarTree, SIDECAR_TREE_PATHS } from '../../tools/lib/sidecar-reuse.mjs';
 import { identicalToBase, skippedLine } from '../../tools/lib/base-tree.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
@@ -16,6 +16,8 @@ function repo() {
   git(dir, 'config', 'user.email', 't@t');
   git(dir, 'config', 'user.name', 't');
   for (const d of ['sidecar', 'kit', 'scenarios']) { fs.mkdirSync(path.join(dir, d)); fs.writeFileSync(path.join(dir, d, 'a.txt'), d); }
+  // (the tree key also names api/Limits.java and tools/eval.mjs, read by the sidecar tests from outside the three dirs)
+  for (const f of SIDECAR_TREE_PATHS.slice(3)) { fs.mkdirSync(path.join(dir, path.dirname(f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), f); }
   git(dir, 'add', '-A');
   git(dir, 'commit', '-qm', 'one');
   return dir;
@@ -34,7 +36,7 @@ test('sidecarReuse: exact report -> vitest\'s two summary lines and the JSON of 
   const root = repo();
   const rf = path.join(root, 'r.xml');
   const tree = sidecarTree(root);
-  assert.match(tree, /^[0-9a-f]{12}\.[0-9a-f]{12}\.[0-9a-f]{12}$/);
+  assert.match(tree, /^[0-9a-f]{12}(\.[0-9a-f]{12}){4}$/);
   fs.writeFileSync(rf, xml([{ name: 'test/a.test.ts', cases: ['s &gt; one', 's &gt; two'] }, { name: 'test/b.test.ts', cases: ['x'] }, { name: 'test/bad.test.ts', cases: ['y'], failures: 1 }, { name: 'test/skip.test.ts', cases: ['y'], skipped: 1 }]));
   const j = path.join(root, 'out.json');
   withEnv({ GATE_SIDECAR_RESULTS: rf, GATE_SIDECAR_TREE: tree }, (lines) => {
