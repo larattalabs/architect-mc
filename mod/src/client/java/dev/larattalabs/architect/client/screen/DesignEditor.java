@@ -635,13 +635,16 @@ final class DesignEditor {
 		boolean other = DesignForm.OTHER.equals(f.type);
 		String ruleSummary = other ? f.profile.size() + " rule" + (f.profile.size() == 1 ? "" : "s") + " (your type)" : "set by the type ("
 			+ (tc == null ? f.type : tc.label()) + ")";
+		int rulesY = y;
 		y += header(g, rules, "rules", ruleSummary, x, y, iw, mx, my);
 		Runnable profile = () -> {
 			List<Option> opts = new ArrayList<>();
 			for (DesignSpec.Choice c : DesignSpec.PROFILE_RULES) {
 				opts.add(new Option(c.id(), c.label(), f.profile.contains(c.id())));
 			}
-			s.openPopup("design:profile", x + 4 + LABEL_W, (int) s.mouseY() + 6, Math.max(220, iw / 2), opts, f::toggleProfile);
+			// under the Rules header (in view), else under the body's top
+			int ay = rulesY >= view[1] && rulesY < view[1] + view[3] - 20 ? rulesY + 18 : view[1] + 4;
+			s.openPopup("design:profile", x + 4 + LABEL_W, ay, Math.max(220, iw / 2), opts, f::toggleProfile);
 		};
 		if (rules.open()) {
 			int sx = x + 4;
@@ -722,7 +725,7 @@ final class DesignEditor {
 		chip(g, "design:type", more, cx, y, mx, my);
 		y += ROW;
 		if (DesignForm.OTHER.equals(f.type)) {
-			label(g, "Your type", x, y);
+			label(g, "Called", x, y);
 			s.textField(g, Focus.OTYPE, openTypeView, f.openType, x + LABEL_W, y, w - LABEL_W, new TextFieldView.Style(null, 0,
 				"your type, e.g. hellish_lair (the Rules section picks its checks)", null, null, 0, 1));
 			y += TextFieldView.BASE_H + 2;
