@@ -21,7 +21,6 @@ final class PlotHud implements HudElement {
 	static volatile int @org.jspecify.annotations.Nullable [] lastRect;
 
 	private static final long STATUS_MS = 6000;
-	private static final int ORANGE = 0xFFF0A060;
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
@@ -41,8 +40,8 @@ final class PlotHud implements HudElement {
 		int maxW = Math.min(420, g.guiWidth() - 16);
 		Kit.Padding p = Kit.padding("tooltip");
 		int inner = maxW - p.left() - p.right();
-		int cream = UiStyle.CREAM;
-		int soft = UiBits.activityOnInk();
+		int cream = dev.larattalabs.architect.client.hud.HudInk.text();
+		int soft = dev.larattalabs.architect.client.hud.HudInk.soft();
 		List<String[]> lines = new ArrayList<>(); // text, color
 		String[] hints;
 		if (v != null) {
@@ -57,13 +56,13 @@ final class PlotHud implements HudElement {
 					+ plot.front(), Integer.toString(cream)});
 				int[] m = plot.maxSize();
 				String limit = "design limit " + m[0] + " × " + m[1] + " × " + m[2] + " (wide × high × deep)";
-				lines.add(new String[] {limit, Integer.toString(UiStyle.SAGE)});
+				lines.add(new String[] {limit, Integer.toString(dev.larattalabs.architect.client.hud.HudInk.ok())});
 				if (plot.tooSmall()) {
 					lines.add(new String[] {"Smaller than " + DesignSpec.MIN_XZ + " a side: the limit is raised to " + DesignSpec.MIN_XZ,
-						Integer.toString(ORANGE)});
+						Integer.toString(dev.larattalabs.architect.client.hud.HudInk.warn())});
 				} else if (plot.tooLarge()) {
 					lines.add(new String[] {"Larger than " + DesignSpec.MAX_XZ + " a side: the limit is capped at " + DesignSpec.MAX_XZ,
-						Integer.toString(ORANGE)});
+						Integer.toString(dev.larattalabs.architect.client.hud.HudInk.warn())});
 				}
 				hints = new String[] {"Enter", "done", "PgUp/Dn", "height", "Backspace", "first corner", "Esc", "back"};
 			}

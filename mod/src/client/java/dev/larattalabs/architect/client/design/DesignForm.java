@@ -2,7 +2,7 @@ package dev.larattalabs.architect.client.design;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import dev.larattalabs.architect.client.text.TextModel;
+import dev.larattalabs.labui.client.text.TextModel;
 import dev.larattalabs.architect.design.CritiqueRules;
 import dev.larattalabs.architect.design.DesignSpec;
 import java.util.ArrayList;

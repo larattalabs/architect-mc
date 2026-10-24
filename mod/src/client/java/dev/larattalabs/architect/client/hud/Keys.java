@@ -7,11 +7,13 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
 
 /**
- * Architect's key mapping (Options > Controls > Key Binds > Architect, rebindable like any vanilla key): the Architect
- * screen ({@code B}). Registered once.
+ * Architect's key mappings (Options > Controls > Key Binds > Architect, rebindable like any vanilla key): the Architect
+ * screen ({@code B}) and the construction HUD's full / one line / hidden ({@code J}, UI-2b). Registered once.
  */
 public final class Keys {
 	public static KeyMapping screen;
+	/** UI-2b: the construction HUD full / one line / hidden ({@code J}). */
+	public static KeyMapping siteHud;
 	private static boolean registered;
 
 	private Keys() {
@@ -30,6 +32,8 @@ public final class Keys {
 		}
 		screen = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.screen", InputConstants.Type.KEYBOARD, InputConstants.KEY_B, cat,
 			1));
+		siteHud = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.site_hud", InputConstants.Type.KEYBOARD, InputConstants.KEY_J, cat,
+			2));
 	}
 
 	/**
