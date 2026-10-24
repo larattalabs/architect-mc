@@ -363,7 +363,10 @@ steps.ingame = async () => {
 // ------------------------------------------------------------------ items 4, 7, 9 on S3's pinned claim (natural)
 
 /** D2's narrowed world classes over a removal's diff (K1a's worldClasses, tools/gate7ak1.mjs): mutates diff.classes; {by, world, undoOwn, cap}. */
-function worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, restored) {
+// keptSnow (S3 natural): (x, y, z) -> true where a snow layer stood before and still stood in the realised world (a written cell the
+// realise kept by its condition: no journal entry, so the undo leaves what the world made of it). Such a cell melted later by a written
+// light over 11 within reach (K1a's gate lamps on a snowy bank, PLAN's M17 item) is `melt:kept`, not the undo's own.
+function worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, restored, keptSnow = null) {
   const cols = decodeColumns(F.survey);
   const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
   const wcol = new Map();
@@ -391,9 +394,11 @@ function worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, restored) {
   for (const m of diff.list ?? []) {
     if (m.class !== 'none') continue;
     const [x, y, z] = m.pos.split(',').map(Number);
-    if (isWritten(x, y, z)) continue;
+    const snowMelt = /^minecraft:snow\[/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && lit(x, y, z);
+    if (isWritten(x, y, z) && !(snowMelt && keptSnow?.(x, y, z))) continue;
     let cls = null, where = null;
-    if (/^minecraft:snow\[/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && lit(x, y, z)) { cls = 'melt'; where = 'lit'; }
+    if (isWritten(x, y, z)) { cls = 'melt'; where = 'kept'; }
+    else if (/^minecraft:snow\[/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && lit(x, y, z)) { cls = 'melt'; where = 'lit'; }
     else {
       cls = fluidRe.test(m.now) || fluidRe.test(m.was) ? 'flow' : /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay' : idOf(m.was) === idOf(m.now) ? 'live' : null;
       if (!cls) continue;
@@ -453,7 +458,7 @@ steps.natural = async () => {
   const { decodeColumns } = await imp('lib/region/pack.mjs');
   const F = planFiles(planDir(out.checkId));
   const { vw } = buildVirtual({ ir: F.ir, survey: F.survey, blobs: F.blobs });
-  const wc = worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, rm.restored);
+  const wc = worldClasses(diff, F, vw, F_WRITTEN, decodeColumns, rm.restored, (x, y, z) => /^minecraft:snow\[/.test(was(x, y, z)) && at(x, y, z) === was(x, y, z));
   out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, worldBy: wc.by, undoOwn: wc.undoOwn, cap: wc.cap, list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40) };
   check(rm.removed && (diff.classes.none ?? 0) === 0, `item 9 (S3 natural): Regions.remove: E-normal ${diff.mismatches} mismatches, 0 unclassified (${json(diff.classes)}; by place ${json(wc.by)}; the undo's own ${wc.undoOwn})`, out.exact.list);
   delete out.R.meta; delete out.R.after;
