@@ -566,7 +566,7 @@ final class StyleEditorScreen extends U3Screen {
 		JsonObject o = new JsonObject();
 		o.addProperty("screen", "style_editor");
 		o.addProperty("mode", draft.mode().name().toLowerCase(java.util.Locale.ROOT));
-		o.addProperty("id", draft.id());
+		o.addProperty("styleId", draft.id());
 		o.addProperty("saveLabel", draft.saveLabel());
 		o.addProperty("name", draft.name());
 		JsonArray tags = new JsonArray();

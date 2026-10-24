@@ -442,6 +442,8 @@ steps.gallery = async () => {
   };
   const folds = (o) => call('dev.u3.sections', { set: { ...U3FOLDS, ...o } }).catch(() => null);
   await folds({});
+  // shots don't depend on where the cursor rests (U3's screens draw it away)
+  await call('dev.u3.park', { on: true }).catch(() => null);
   const designWith = async (extra = {}) => { await openTab('design'); await call('dev.design.fill', { ...FORM, ...extra }); };
   await sec('ui', 'design', 'sections_open', async () => { await folds({ 'architect_mc.editor.what': false, 'architect_mc.editor.features': true, 'architect_mc.editor.rules': true, 'architect_mc.editor.parameters': true }); await designWith(); });
   await folds({});

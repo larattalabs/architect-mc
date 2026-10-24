@@ -127,6 +127,10 @@ abstract class U3Screen extends Screen {
 
 	@Override
 	public final void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float a) {
+		if (U3Dev.park) {
+			mx = -1000;
+			my = -1000;
+		}
 		super.extractRenderState(g, mx, my, a);
 		controls.clear();
 		targets.clear();

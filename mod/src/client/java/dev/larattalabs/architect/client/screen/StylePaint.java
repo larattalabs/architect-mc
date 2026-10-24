@@ -141,8 +141,16 @@ public final class StylePaint {
 			default -> "accent woods";
 		};
 		StyleRoles table = StyleRoles.fallback();
+		// the compact row's other chips: the Style's own value for this row (when the row is edited), then the current value's family
+		List<String> rec = new ArrayList<>();
+		String fam = current == null ? null : Swatches.family(field, current);
+		for (String v : pal.choices(field)) {
+			if (rec.size() < 2 && !v.equals(current) && fam != null && fam.equals(Swatches.family(field, v))) {
+				rec.add(v);
+			}
+		}
 		return PickerSpec.of("architect_mc.material." + field, "Choose " + (field.equals("roof") ? "roof material" : field.equals("accent")
-			? "accent wood" : field), entries).current(current).groupOrder(groups).noun(noun).compactChoices(3).detailPreview(roles == null ? null
+			? "accent wood" : field), entries).current(current).recommended(rec).groupOrder(groups).noun(noun).compactChoices(3).detailPreview(roles == null ? null
 				: (g, font, e, x, y, w, h) -> {
 					Map<String, String> r;
 					try {
@@ -162,12 +170,19 @@ public final class StylePaint {
 		if (current != null && !blocks.contains(current)) {
 			blocks.add(0, current);
 		}
+		// the current block's family first (a light's lights, a glass's glass)
+		if (current != null) {
+			groups.add(Swatches.blockFamily(current));
+		}
 		for (String b : blocks) {
 			String fam = Swatches.blockFamily(b);
 			if (!groups.contains(fam)) {
 				groups.add(fam);
 			}
-			entries.add(PickerEntry.of(b, Swatches.label(b)).group(fam).swatch(rgb(b)).subtitle(b).build());
+			// lights and glass read better as their item than as a colour
+			var ic = fam.equals("Lights") || fam.equals("Glass") ? icon(b) : null;
+			PickerEntry.Builder e = PickerEntry.of(b, Swatches.label(b)).group(fam).subtitle(b);
+			entries.add((ic != null ? e.icon(ic) : e.swatch(rgb(b))).build());
 		}
 		return PickerSpec.of("architect_mc.role", "Choose the " + role.replace('_', ' ') + " block", entries).current(current).groupOrder(groups)
 			.noun("blocks").onPick(e -> pick.accept(e.id()));

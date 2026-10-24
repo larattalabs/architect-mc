@@ -504,8 +504,12 @@ final class DesignEditor {
 	void drawNew(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
 		DesignForm f = DesignFeature.form();
 		Map<String, String> errors = f.errors();
-		titleRow(g, f.remix != null ? "Remix of " + LibraryFeature.nameOf(f.remix) : "New design", false, x, top - 2, w, mx, my);
-		int by = top + Chip.H + 2;
+		// the title row (and the New | Variant switch) only when there is a remix or an open Variants dialog to switch to
+		boolean titled = f.remix != null || LibraryFeature.variantForm() != null;
+		if (titled) {
+			titleRow(g, f.remix != null ? "Remix of " + LibraryFeature.nameOf(f.remix) : "New design", false, x, top - 2, w, mx, my);
+		}
+		int by = titled ? top + Chip.H + 2 : top - 2;
 		int bh = footerY - 16 - by;
 		int y0 = begin(g, x, by, w, bh);
 		int iw = w - 10;

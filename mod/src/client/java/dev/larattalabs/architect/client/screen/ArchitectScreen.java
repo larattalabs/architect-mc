@@ -1137,6 +1137,10 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
+		if (U3Dev.park) {
+			mouseX = -1000;
+			mouseY = -1000;
+		}
 		hits.clear();
 		fieldRects.clear();
 		confirms.clear();

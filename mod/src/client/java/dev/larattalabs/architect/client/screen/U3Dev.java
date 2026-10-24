@@ -70,7 +70,17 @@ public final class U3Dev {
 		return b -> DesignFeature.form().pickBible(b);
 	}
 
+	/** Shots: the screens draw as if the mouse were away (no hover, no tooltip), so a shot doesn't depend on where the cursor rests. */
+	static volatile boolean park;
+
 	public static void init() {
+		DevBridge.register("dev.u3.park", 10_000, "{on: bool} - (U3) the Architect and Style screens draw as if the mouse were away (no hover, no "
+			+ "tooltips) for reproducible shots -> {park}", (req, mc) -> DevBridge.onClient(mc, () -> {
+				park = Fields.of(req).bool("on");
+				JsonObject o = new JsonObject();
+				o.addProperty("park", park);
+				return o;
+			}));
 		DevBridge.register("dev.u3.state", 10_000, "{} - (U3) the open screen: the Style browser / Style editor / Describe a style / a picker / the "
 			+ "Architect screen's editor folds", (req, mc) -> DevBridge.onClient(mc, () -> state(mc)));
 		DevBridge.register("dev.u3.sections", 10_000, "{set: {<key>: bool}} - (U3) fold or open the editor's sections (keys architect_mc.editor.* and "

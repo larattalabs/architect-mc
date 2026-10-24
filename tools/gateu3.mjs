@@ -115,6 +115,7 @@ steps.ingame = async () => {
   await cmd('/gamemode creative').catch(() => null);
   await cmd('/time set 6000').catch(() => null);
   await folds(FOLDS);
+  await call('dev.u3.park', { on: true });
   const tag = Date.now().toString(36).slice(-4);
 
   // ---- 1. the editor, NEW
@@ -359,7 +360,10 @@ async function run(name) {
     error = String(e?.stack ?? e);
     check(false, `${name}: ${String(e?.message ?? e).slice(0, 300)}`);
   }
-  if (name === 'ingame') await call('dev.gui.scale', { scale: 2 }).catch(() => null);
+  if (name === 'ingame') {
+    await call('dev.gui.scale', { scale: 2 }).catch(() => null);
+    await call('dev.u3.park', { on: false }).catch(() => null);
+  }
   L.write?.(`u3-${name}.json`, { step: `u3-${name}`, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
 }
 
