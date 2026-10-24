@@ -357,7 +357,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - **2026-10-24 (slice UI-2b):** new (`SliceUi2bDev`, client only) `dev.ui2b.command {cmd, asPlayer?: true}` (a command's chat output as
   components with their click actions: `{messages: [{text, parts, links}], success, result}`; `dev.command` is unchanged and returns
   plain strings), `dev.gui.scale {scale}`, `dev.ui2b.siteHud {mode?: full|line|hidden}`, `dev.ui2b.toasts {}` (lab-ui `Toasts.json`),
-  `dev.ui2b.helperPreview {label?, npm?}` (draws the helper's progress strip for a shot; null label: the real state). New
+  `dev.ui2b.helperPreview {label?, npm?}` (draws the helper's progress strip for a shot; null label: the real state),
+  `dev.ui2b.click {value, action?: run|suggest}` (a chat link clicked through vanilla's own click handler from the chat screen ->
+  the screen open after it: a confirm screen would show here). New
   `dev.build.legend {on?}`. `dev.build.state` adds `hud`, `hudRect`, `legend`, `layerArmed`, `forceArmedNow`, `lastChat`;
   `dev.ghosts.state` adds `siteHudMode` and each ghost's `hudShort`; `dev.crate.state` adds `confirmSecondsLeft` (Deconstruct is
   lab-ui's two-press Confirm: `dev.crate.press deconstruct` twice still deconstructs; an owned site still takes a third press);

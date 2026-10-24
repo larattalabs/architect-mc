@@ -79,6 +79,27 @@ public final class SliceUi2bDev {
 					});
 				});
 			});
+		DevBridge.register("dev.ui2b.click", 15_000, "{value, action?: run|suggest} - (UI-2b) a chat link clicked: the ClickEvent goes through "
+			+ "vanilla's own handler (Screen.defaultHandleGameClickEvent: a RunCommand through sendUnattendedCommand, which may ask to confirm) "
+			+ "from the chat screen -> {screen: the screen open after it, ms}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String value = f.nonBlank("value");
+				String action = f.optStr("action", "run");
+				return DevBridge.onClient(mc, () -> {
+					net.minecraft.client.gui.screens.ChatScreen chat = new net.minecraft.client.gui.screens.ChatScreen("", false);
+					mc.gui.setScreen(chat);
+					net.minecraft.network.chat.ClickEvent e = "suggest".equals(action) ? new net.minecraft.network.chat.ClickEvent.SuggestCommand(value)
+						: new net.minecraft.network.chat.ClickEvent.RunCommand(value);
+					ClickProbe.click(e, mc, chat);
+					return true;
+				}).thenCompose(v -> FrameScheduler.afterFrames(10)).thenCompose(v -> DevBridge.onClient(mc, () -> {
+					JsonObject o = new JsonObject();
+					var sc = mc.gui.screen();
+					o.addProperty("screen", sc == null ? null : sc.getClass().getName());
+					o.addProperty("title", sc == null ? null : sc.getTitle().getString());
+					return o;
+				}));
+			});
 		DevBridge.register("dev.gui.scale", 10_000, "{scale: 0 (auto) - 6} - (UI-2b) set the GUI scale as Options > Video Settings does -> {guiScale, "
 			+ "guiWidth, guiHeight}", (req, mc) -> {
 				int scale = Fields.of(req).optInt("scale", 0, 0, 6);
@@ -127,5 +148,16 @@ public final class SliceUi2bDev {
 					return o;
 				});
 			});
+	}
+
+	/** Reaches the protected static chat click handler, as a click on a chat line does. */
+	private static final class ClickProbe extends net.minecraft.client.gui.screens.Screen {
+		private ClickProbe() {
+			super(Component.empty());
+		}
+
+		static void click(net.minecraft.network.chat.ClickEvent e, net.minecraft.client.Minecraft mc, net.minecraft.client.gui.screens.Screen from) {
+			defaultHandleGameClickEvent(e, mc, from);
+		}
 	}
 }

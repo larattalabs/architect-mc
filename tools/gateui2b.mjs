@@ -125,6 +125,11 @@ steps.ingame = async () => {
   const listF = await chat('/architect list cabin');
   check(listF.success && listF.messages.slice(1).every((m) => /cabin/i.test(m.text) || /page|Nothing/.test(m.text)) && listF.messages.length >= 2,
     `/architect list cabin filters (${listF.messages.length - 1} lines)`, texts(listF));
+  // a pager link clicked as a player clicks it (vanilla's chat click handler: no confirm screen for an unrestricted command)
+  const nextLink = footer.links.find((l) => l.text === '[next ›]');
+  const pageClick = await call('dev.ui2b.click', { value: nextLink?.value ?? '/architect list 2' });
+  check(!/Confirm/i.test(String(pageClick.screen)), `clicking [next ›] runs ${nextLink?.value} with no confirm screen (screen after: ${pageClick.screen})`, pageClick);
+  await call('dev.screen', { open: null });
   const designLink = links(list1).find((l) => l.click === 'suggest_command' && /^\/architect place /.test(l.value));
   check(!!designLink, `a design line is a click that puts its place command in the chat box (${designLink?.value})`);
   const rel = await chat('/architect reload');
@@ -213,17 +218,19 @@ steps.ingame = async () => {
   out.shots.push(...await atScales('hud_ontop_legend'));
   await call('dev.build.legend', { on: false });
   await call('dev.build.cancel');
-  // [Open in Library] then [Undo], run as the links run them
-  const opened = await chat(lib?.value ?? `/architect library ${siteA}`);
+  // [Open in Library] then [Undo], clicked as a player clicks them (vanilla's chat click handler from the chat screen)
+  const opened = await call('dev.ui2b.click', { value: lib?.value ?? `/architect library ${siteA}` });
   await sleep(800);
   const ui = await call('dev.ui.state').catch((e) => ({ error: String(e) }));
-  check(opened.success && ui.tab === 'library' && ui.showPlaced === true && ui.selectedSite === siteA,
-    `[Open in Library] opens Library > Placed with ${siteA} selected (tab ${ui.tab}, showPlaced ${ui.showPlaced}, selected ${ui.selectedSite})`, ui.error);
+  check(!/Confirm/i.test(String(opened.screen)) && ui.tab === 'library' && ui.showPlaced === true && ui.selectedSite === siteA,
+    `clicking [Open in Library] opens Library > Placed with ${siteA} selected (tab ${ui.tab}, showPlaced ${ui.showPlaced}, selected ${ui.selectedSite}; screen ${opened.screen})`, ui.error);
   out.shots.push(...await atScales('library_placed', null, [2]));
   await call('dev.screen', { open: null });
-  const undone = await chat(undo?.value ?? `/architect remove ${siteA}`);
+  const undone = await call('dev.ui2b.click', { value: undo?.value ?? `/architect remove ${siteA}` });
+  await sleep(1500);
+  await call('dev.screen', { open: null });
   const sites = await call('dev.sites.state');
-  check(undone.success && !sites.sites.some((s) => s.id === siteA), `[Undo] removes ${siteA} (${texts(undone).join(' ')})`, texts(undone));
+  check(!/Confirm/i.test(String(undone.screen)) && !sites.sites.some((s) => s.id === siteA), `clicking [Undo] removes ${siteA} (screen after: ${undone.screen})`, undone);
   const hist = await chat('/architect list site');
   out.listSites = texts(hist);
 
