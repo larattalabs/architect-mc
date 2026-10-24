@@ -22,6 +22,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { srcGradle } from './lib/src-gradle.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -86,7 +87,7 @@ async function unit() {
   // the kit: the mirror oracle, smalls under every built-in bible, variation for every example x bible
   const varDir = path.join(OUT, 'variation');
   fs.mkdirSync(varDir, { recursive: true });
-  const kit = run('node', ['--test', 'kit/test/mirror.test.mjs', 'kit/test/smalls.test.mjs', 'kit/test/copies.test.mjs'], root, { COPIES_REPORT: path.join(varDir, '%s.txt') });
+  const kit = run('node', ['--test', ...testConcurrencyArgs(), 'kit/test/mirror.test.mjs', 'kit/test/smalls.test.mjs', 'kit/test/copies.test.mjs'], root, { COPIES_REPORT: path.join(varDir, '%s.txt') });
   const kc = tapCases(kit.out);
   fs.writeFileSync(path.join(OUT, 'unit-kit.log'), kit.out);
   // the sidecar suites
