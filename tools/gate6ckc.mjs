@@ -27,6 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { flAsksFilter } from './lib/fl-norm.mjs'; // (6c FL) FL's five free asks left to FL's own item 8
 import * as P3 from './lib/p3-tier.mjs';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,7 +91,7 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline
 
 function nodeTest(files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

@@ -590,6 +590,15 @@ async function runScenario(id) {
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
   fs.writeFileSync(path.join(out, 'evidence.sha'), `${ev.sha}\n`);
+  // (speed set C) a finished run is listed in the gate run's shared dir, so a step of the same run that needs the same run (w-ingame's
+  // pathbibles: S7 flat in its own bible) can take it instead of making it again
+  if (process.env.GATE_RUN_SHARED) {
+    try {
+      const d = path.join(process.env.GATE_RUN_SHARED, 'scenario-runs');
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, `${sc.id}.${flat ? 'flat' : 'natural'}.${sc.bible ?? 'default'}.json`), JSON.stringify({ out, runId, head: run.versions.head, evidence: ev.sha }));
+    } catch { /* an index entry is only a convenience */ }
+  }
   L.log(`== scenario ${sc.id} run ${runId}: evidence ${ev.sha.slice(0, 12)}; ${metrics.rows.filter((r) => r.gated && !r.pass).map((r) => r.id).join(', ') || 'every run bar passes'}`);
   return { out, runId, evidence: ev.sha, metrics };
 }

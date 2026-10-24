@@ -37,7 +37,7 @@ const sortObj = (o) => Object.fromEntries(Object.entries(o ?? {}).sort(([a], [b]
 const canon = (o) => JSON.stringify(o, (_k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? sortObj(v) : v));
 
 function nodeTest(root, files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
@@ -191,6 +191,7 @@ async function anchorsOf(ctx, claim) {
 // (fix/voc-natural) item 9's `farfluid` class lives in tools/scenarios.mjs since 6c S3 (S3's natural run classes by it too); the rule is
 // unchanged and this module re-exports it for item 9 and kit/test/voc-farfluid.test.mjs.
 import { farFluidOf } from '../scenarios.mjs';
+import { testConcurrencyArgs } from './cpu-budget.mjs';
 export { farFluidOf };
 
 /** Regions.checkPlan in game (the two-plan flow, chunks generated). */

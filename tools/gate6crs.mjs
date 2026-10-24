@@ -26,6 +26,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart } from './lib/gate-part.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-RS-run');
@@ -97,7 +98,7 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline: items 1, 2, 17
 
 function nodeTest(files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
@@ -159,16 +160,14 @@ steps.unit = async () => {
 steps.latent = async () => {
   await ensure();
   const fx = G.fixture(ctx, 'rs01_land');
-  const s = await G.site(ctx, 'latent', fx, { creative: true });
-  await L.call('dev.survival.set', { on: true });
-  const sv = await L.call('dev.survival.state', {});
-  const ck = await G.check(ctx, 'latent', s);
-  const region = await G.realise(ctx, ck.check.artifactSha);
-  const st = await L.waitRegion(region, 1_800_000);
-  const r = await G.regionState(ctx, region);
-  const out = { toggle: sv, survivalCheck: ck.check?.survival ?? false, state: st.view.state, items: st.items, failed: r.failed ?? {} };
-  check(sv.survival === true && !ck.check?.survival && st.view.state === 'PLACED' && Object.keys(r.failed ?? {}).length === 0, `§0's latent bug: in a creative-game-type world with the survival toggle on (mode creative by the world), rs01 checked in creative and realised: ${st.view.state}, ${Object.keys(r.failed ?? {}).length} item(s) failed (on the base e755d663 every item failed NOT_ALLOWED "survival was switched on after this was queued": artifacts/gate6c-rs/latent-base.json); its items now queue survivalAtQueue from the toggle`, out);
-  await G.remove(ctx, region);
+  // (speed set C) the creative rs01 site with the toggle switched on, checked, realised and waited for PLACED is item 4's twin (item 4 asks
+  // for it the same way), built once for both: this reads its answers
+  const T = await G.twin(ctx, 'rs01', fx, {}, { toggleOn: true });
+  const sv = T.toggle;
+  const ck = T.check;
+  const st = { view: T.view, items: T.items };
+  const out = { toggle: sv, survivalCheck: ck.check?.survival ?? false, state: st.view.state, items: st.items, failed: T.failed ?? {} };
+  check(sv.survival === true && !ck.check?.survival && st.view.state === 'PLACED' && Object.keys(T.failed ?? {}).length === 0, `§0's latent bug: in a creative-game-type world with the survival toggle on (mode creative by the world), rs01 checked in creative and realised: ${st.view.state}, ${Object.keys(T.failed ?? {}).length} item(s) failed (on the base e755d663 every item failed NOT_ALLOWED "survival was switched on after this was queued": artifacts/gate6c-rs/latent-base.json); its items now queue survivalAtQueue from the toggle`, out);
   return out;
 };
 
@@ -177,7 +176,7 @@ steps.latent = async () => {
 steps.item4 = async () => {
   await ensure();
   const fx = G.fixture(ctx, 'rs01_land');
-  const T = await G.twin(ctx, 'rs01', fx);
+  const T = await G.twin(ctx, 'rs01', fx, {}, { toggleOn: true }); // (the latent step's twin: see steps.latent)
   const s = await G.site(ctx, 'rs01', fx);
   const box = G.boxOf(s.W);
   const pre = await G.snap(ctx, box, 'rs-rs01-pre');
@@ -298,15 +297,20 @@ async function buildOne(tag, name, { crates = 4, cons = null, remove = true, kee
   return out;
 }
 
-steps.item5 = async () => {
+// (speed set C, rs-survival) item 5's three fixtures, item 8's rs02c and item 9's rs03r were built over again: item 5's rs02 is item 8's rs02c
+// without its conservation sum, and item 5's rs03 is item 9's rs03r before its keep hook (the smoke tier already built them once, as
+// rs02c and rs03r). Each fixture is now built once, with the conservation sum on, and the rows of every item that built it read the one
+// build. The group's sections are the builds: rs02 (items 5, 3 and 8: rs02c), rs03 (items 5, 3 and 9: rs03r), village (item 5), rs02r
+// (item 9), item10, lv7, item14. Dropped lines: "item 5 (rs02): ...", "item 3 (rs02, ...", "item 5 (rs03): ..." and "item 3 (rs03, ..."
+// are the surviving "(rs02c)" and "(rs03r)" lines (the same checks over the same build, the tag aside).
+const onlyTag = (...tags) => !process.env.RS_ONLY || tags.some((t) => process.env.RS_ONLY.split(',').includes(t));
+
+steps.village = async () => {
   await ensure();
   const out = {};
   // (rs04, the tunnel, is RS-b's row: RS_ONLY=rs04 runs it)
-  for (const [tag, name] of [['rs02', 'rs02_walled'], ['rs03', 'rs03_water'], ['village', 'survival_village'], ...(process.env.RS_ONLY?.includes('rs04') ? [['rs04', 'rs04_tunnel']] : [])]) {
-    if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue; // (development: one fixture)
-    // (smoke: rs02's build and its item 3/5 rows are item 8's rs02c, rs03's are item 9's rs03r, each the same buildOne)
-    if (tag === 'rs02' && smokeSkip('item 5 (rs02): the build, the bills, the twin, E-flat', "item 8's rs02c (the same buildOne)")) continue;
-    if (tag === 'rs03' && smokeSkip('item 5 (rs03): the build, the bodies, the bills, the twin, E-flat', "item 9's rs03r (the same buildOne)")) continue;
+  for (const [tag, name] of [['village', 'survival_village'], ...(process.env.RS_ONLY?.includes('rs04') ? [['rs04', 'rs04_tunnel']] : [])]) {
+    if (!onlyTag(tag)) continue; // (development: one fixture)
     try { out[tag] = await buildOne(tag, name, { remove: !process.env.RS_KEEP }); } catch (e) { check(false, `item 5 (${tag}): ${String(e.message).slice(0, 300)}`); out[tag] = { error: String(e.stack ?? e) }; }
   }
   return out;
@@ -648,8 +652,9 @@ steps.item7 = async () => {
 
 // ------------------------------------------------------------------ items 8, 9: conservation, removal
 
-steps.item8 = async () => {
+steps.rs02 = async () => {
   await ensure();
+  if (!onlyTag('rs02', 'rs02c')) return {};
   const o = await buildOne('rs02c', 'rs02_walled', { cons: true });
   const pts = o.conservation ?? [];
   const bad = pts.filter((p) => !G.exact(p));
@@ -657,59 +662,73 @@ steps.item8 = async () => {
   return { points: pts };
 };
 
-steps.item9 = async () => {
+/** Item 9 on one fixture: its build with the keep hook (one copper cell weathered, one paid cell replaced by a player's block), the removal's refund, once per key. */
+async function item9One(tag, name) {
+  let pre = null;
+  const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs, C, box }) => {
+    // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
+    const sites = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
+    let copper = null;
+    for (const s of sites.filter((x) => (x.blueprint ?? x.blueprintId ?? x.bp) === 'rs_hut')) {
+      const c = await L.call('dev.site.cells', { site: s.id }, 60_000).catch(() => ({}));
+      const hit = Object.entries(c).find(([k, v]) => /^-?\d+,-?\d+,-?\d+$/.test(k) && String(v).includes('copper_block'));
+      if (hit) { copper = hit[0].split(',').map(Number); break; }
+    }
+    if (copper) {
+      await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
+      C.cleared['minecraft:copper_block'] = (C.cleared['minecraft:copper_block'] ?? 0) + 1; // (the driver's weathering: a copper block became
+      C.injected['minecraft:weathered_copper'] = (C.injected['minecraft:weathered_copper'] ?? 0) + 1; // a weathered one)
+    }
+    const cells = await L.call('dev.rs.cells', { region }, 300_000);
+    const t = (cells.targets ?? []).find((x) => (x.cells ?? []).some((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)));
+    const pc = t.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)).slice(0, 3);
+    const was = (await L.call('dev.journal.at', { x: pc[0], y: pc[1], z: pc[2] }, 30_000)).stack?.slice(-1)[0]?.after ?? '';
+    const paidItem = String(was).replace(/\{.*$/, '');
+    await cmd(`/setblock ${pc.join(' ')} minecraft:oak_planks`);
+    // (the driver's own edit: the paid block gone, a player's oak planks there)
+    C.cleared[paidItem] = (C.cleared[paidItem] ?? 0) + 1;
+    C.injected['minecraft:oak_planks'] = (C.injected['minecraft:oak_planks'] ?? 0) + 1;
+    await sleep(2000);
+    const a = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [box[0], box[1], box[2]], max: [box[3], box[4], box[5]] }, 120_000);
+    const p0 = await G.pileState(ctx);
+    pre = { copper, player: pc, paidItem, paid: a.paidStanding, fluid: a.fluidStanding ?? {}, entities: a.entities, keys: p0.creditedKeys, stock: p0.stock, box };
+  } });
+  const p1 = await G.pileState(ctx);
+  const refund = o.removed?.refund ?? {};
+  const want = pre.paid; // (the audit counts a weathered copper cell as the block standing)
+  const a1 = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [pre.box[0], pre.box[1], pre.box[2]], max: [pre.box[3], pre.box[4], pre.box[5]] }, 120_000);
+  const drops = await L.call('dev.items.near', { pos: pre.player, radius: 6 }, 30_000); // (pushed out of the restored block)
+  // credited to the stock, or dropped at the crates past the capacity; the player's block dropped at its cell is no refund
+  const got = G.minus(G.plus(G.minus(p1.stock, pre.stock), G.minus(a1.entities, pre.entities)), { 'minecraft:oak_planks': (drops.items ?? {})['minecraft:oak_planks'] ?? 0 });
+  const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);
+  const p2 = await G.pileState(ctx);
+  const res = { pre, refund, credited: got, want, drops, keys: [pre.keys, p1.creditedKeys, p2.creditedKeys], eflat: o.eflat, conservation: o.conservation };
+  check(G.same(got, want) && G.same(refund, G.minus(want, pre.fluid)), `item 9 (${tag}): the refund (credited, or dropped at the crates past the capacity) equals the paid cells standing (Regions.remove's refund the targets' and lots', the bodies' scoop and grates on their own key), as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
+  check(((drops.items ?? drops.stacks ?? {})['minecraft:oak_planks'] ?? 0) >= 1 || JSON.stringify(drops).includes('oak_planks'), `item 9 (${tag}): the player's block at ${pre.player.join(',')} drops at its cell (${json(drops).slice(0, 200)})`);
+  check(o.eflat?.mismatches === 0, `item 9 (${tag}): free cells restored, E-flat ${o.eflat?.mismatches}`);
+  check(p2.creditedKeys === p1.creditedKeys && G.same(p2.stock, p1.stock) && again.removed !== false, `item 9 (${tag}): one credit per key: ${pre.keys} -> ${p1.creditedKeys} keys at the removal, ${p2.creditedKeys} after a second remove (nothing credited again)`);
+  check((o.conservation ?? []).every(G.exact), `item 9 (${tag}): the conservation sum exact through it (${(o.conservation ?? []).length} points)`);
+  return res;
+}
+
+steps.rs02r = async () => {
   await ensure();
   const out = {};
-  for (const [tag, name] of [['rs02r', 'rs02_walled'], ['rs03r', 'rs03_water']]) {
-    if (process.env.RS_ONLY && !process.env.RS_ONLY.split(',').includes(tag)) continue;
-    if (tag === 'rs02r' && smokeSkip('item 9 (rs02r): the refund, the player\'s block, once per key, conservation on rs02', 'rs03r (every row of it, the bodies\' scoop besides) and item 8 (rs02\'s conservation)')) continue;
-    let pre = null;
-    const o = await buildOne(tag, name, { cons: true, keep: async ({ region, rs, C, box }) => {
-      // one copper cell weathered (a lot's, rs_hut's back wall), one paid target cell replaced by a player's block
-      const sites = (await L.call('dev.sites.state', {}, 60_000)).sites ?? [];
-      let copper = null;
-      for (const s of sites.filter((x) => (x.blueprint ?? x.blueprintId ?? x.bp) === 'rs_hut')) {
-        const c = await L.call('dev.site.cells', { site: s.id }, 60_000).catch(() => ({}));
-        const hit = Object.entries(c).find(([k, v]) => /^-?\d+,-?\d+,-?\d+$/.test(k) && String(v).includes('copper_block'));
-        if (hit) { copper = hit[0].split(',').map(Number); break; }
-      }
-      if (copper) {
-        await cmd(`/setblock ${copper.join(' ')} minecraft:weathered_copper`);
-        C.cleared['minecraft:copper_block'] = (C.cleared['minecraft:copper_block'] ?? 0) + 1; // (the driver's weathering: a copper block became
-        C.injected['minecraft:weathered_copper'] = (C.injected['minecraft:weathered_copper'] ?? 0) + 1; // a weathered one)
-      }
-      const cells = await L.call('dev.rs.cells', { region }, 300_000);
-      const t = (cells.targets ?? []).find((x) => (x.cells ?? []).some((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)));
-      const pc = t.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)).slice(0, 3);
-      const was = (await L.call('dev.journal.at', { x: pc[0], y: pc[1], z: pc[2] }, 30_000)).stack?.slice(-1)[0]?.after ?? '';
-      const paidItem = String(was).replace(/\{.*$/, '');
-      await cmd(`/setblock ${pc.join(' ')} minecraft:oak_planks`);
-      // (the driver's own edit: the paid block gone, a player's oak planks there)
-      C.cleared[paidItem] = (C.cleared[paidItem] ?? 0) + 1;
-      C.injected['minecraft:oak_planks'] = (C.injected['minecraft:oak_planks'] ?? 0) + 1;
-      await sleep(2000);
-      const a = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [box[0], box[1], box[2]], max: [box[3], box[4], box[5]] }, 120_000);
-      const p0 = await G.pileState(ctx);
-      pre = { copper, player: pc, paidItem, paid: a.paidStanding, fluid: a.fluidStanding ?? {}, entities: a.entities, keys: p0.creditedKeys, stock: p0.stock, box };
-    } });
-    const p1 = await G.pileState(ctx);
-    const refund = o.removed?.refund ?? {};
-    const want = pre.paid; // (the audit counts a weathered copper cell as the block standing)
-    const a1 = await L.call('dev.stockpile.audit', { owner: G.OWNER, min: [pre.box[0], pre.box[1], pre.box[2]], max: [pre.box[3], pre.box[4], pre.box[5]] }, 120_000);
-    const drops = await L.call('dev.items.near', { pos: pre.player, radius: 6 }, 30_000); // (pushed out of the restored block)
-    // credited to the stock, or dropped at the crates past the capacity; the player's block dropped at its cell is no refund
-    const got = G.minus(G.plus(G.minus(p1.stock, pre.stock), G.minus(a1.entities, pre.entities)), { 'minecraft:oak_planks': (drops.items ?? {})['minecraft:oak_planks'] ?? 0 });
-    const again = await L.call('dev.region.remove', { region: o.region, requester: G.OWNER }, 600_000);
-    const p2 = await G.pileState(ctx);
-    out[tag] = { pre, refund, credited: got, want, drops, keys: [pre.keys, p1.creditedKeys, p2.creditedKeys], eflat: o.eflat, conservation: o.conservation };
-    check(G.same(got, want) && G.same(refund, G.minus(want, pre.fluid)), `item 9 (${tag}): the refund (credited, or dropped at the crates past the capacity) equals the paid cells standing (Regions.remove's refund the targets' and lots', the bodies' scoop and grates on their own key), as standing blocks (the weathered copper cell ${json(pre.copper)} credited as weathered_copper): ${G.same(got, want) ? 'equal' : `differs ${json(G.minus(got, want))}`}`, { got, want });
-    check(((drops.items ?? drops.stacks ?? {})['minecraft:oak_planks'] ?? 0) >= 1 || JSON.stringify(drops).includes('oak_planks'), `item 9 (${tag}): the player's block at ${pre.player.join(',')} drops at its cell (${json(drops).slice(0, 200)})`);
-    check(o.eflat?.mismatches === 0, `item 9 (${tag}): free cells restored, E-flat ${o.eflat?.mismatches}`);
-    check(p2.creditedKeys === p1.creditedKeys && G.same(p2.stock, p1.stock) && again.removed !== false, `item 9 (${tag}): one credit per key: ${pre.keys} -> ${p1.creditedKeys} keys at the removal, ${p2.creditedKeys} after a second remove (nothing credited again)`);
-    check((o.conservation ?? []).every(G.exact), `item 9 (${tag}): the conservation sum exact through it (${(o.conservation ?? []).length} points)`);
-  }
+  if (smokeSkip('item 9 (rs02r): the refund, the player\'s block, once per key, conservation on rs02', 'rs03r (every row of it, the bodies\' scoop besides) and item 8 (rs02\'s conservation)')) return out;
+  if (onlyTag('rs02r')) out.rs02r = await item9One('rs02r', 'rs02_walled');
   return out;
 };
+steps.rs03 = async () => {
+  await ensure();
+  const out = {};
+  if (onlyTag('rs03r', 'rs03')) out.rs03r = await item9One('rs03r', 'rs03_water');
+  return out;
+};
+
+// (by hand, the old item names: item5 = the three fixtures item 5 built, item8 = rs02, item9 = rs02r and rs03)
+steps.item5 = async () => ({ rs02: await steps.rs02(), rs03: await steps.rs03(), village: await steps.village() });
+steps.item8 = steps.rs02;
+steps.item9 = async () => ({ rs02r: await steps.rs02r(), rs03: await steps.rs03() });
 
 // ------------------------------------------------------------------ item 10: mid-build removal
 
@@ -1303,7 +1322,7 @@ steps.checkonly = async () => {
 // ------------------------------------------------------------------ dispatch
 
 steps.report = async () => {
-  const files = fs.readdirSync(OUT).filter((f) => /^(unit|latent|item\d+b?|ingame|survival|crash|toggle)\.json$/.test(f)).sort();
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|latent|item\d+b?|rs02|rs03|rs02r|village|ingame|survival|crash|toggle)\.json$/.test(f)).sort();
   const lines = ['# Slice RS gate report', '', `${new Date().toISOString()} · head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
   let fail = 0;
   for (const f of files) {
@@ -1323,7 +1342,7 @@ steps.report = async () => {
 
 const groups = {
   ingame: ['latent', 'item4', 'item6', 'item6b', 'item7', 'item12', 'item13', 'item15'],
-  survival: ['item5', 'item8', 'item9', 'item10', 'lv7', 'item14'],
+  survival: ['rs02', 'rs03', 'village', 'rs02r', 'item10', 'lv7', 'item14'], // (speed set C: the builds; was item5, item8, item9, item10, lv7, item14)
   crash: ['item11'],
   toggle: ['item18'], // (fix/survival-off-storm) the toggle switched off mid-build
 };

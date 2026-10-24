@@ -568,11 +568,15 @@ steps.nudges = async () => {
 steps.versiona = async () => {
   await ensure();
   const claim = [-128, -100, 127, 99];
+  // (speed set C) the claim planned and prepared once, in a prepared copy of the flat base (made here, every run), which both runs copy:
+  // each run plans and prepares the same rift_city claim in the same flat world, so the second one was a repeat of the first's work
+  const PREP = 'G6B V10a Prepared';
+  await fresh(PREP, FLAT);
+  await tp(0.5, 120, 0.5);
+  await prepare((await plan('rift_city', claim, { surveyLoad: 'bounded:256' })).planId);
   const runOnce = async (world, drop) => {
-    await fresh(world, FLAT);
+    await fresh(world, PREP);
     await tp(0.5, 120, 0.5);
-    const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
-    await prepare(p.planId);
     const p2 = await plan('rift_city', claim, { surveyLoad: 'generated:64' });
     const ir = readPlanJson(p2.planId, 'ir.json');
     const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
@@ -602,13 +606,14 @@ steps.versionb = async () => {
   const claim = [-128, -100, 127, 99];
   const out = {};
   const stale = (x) => /PLAN_STALE/.test(typeof x === 'string' ? x : JSON.stringify(x ?? ''));
+  // (speed set C) the claim planned and prepared once for both doctored plans (the first one's regions are removed before the second)
+  const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
+  await prepare(p.planId);
+  const ir = readPlanJson(p.planId, 'ir.json');
+  const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  const lots = Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9']));
   for (const [label, override] of [['format 3', { format: 3 }], ['kitVersion 0.99.0', { kitVersion: '0.99.0' }]]) {
     const r = {};
-    const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
-    await prepare(p.planId);
-    const ir = readPlanJson(p.planId, 'ir.json');
-    const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
-    const lots = Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9']));
     const h0 = await call('dev.region.hash', { box }, 3_600_000);
     // accept: the next plan's IR is doctored; the plan must refuse
     r.acceptDoctor = await call('dev.region.planStale', { at: 'accept', ...override });

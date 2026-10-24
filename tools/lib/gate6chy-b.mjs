@@ -583,23 +583,24 @@ export const items = {
         return out;
       },
     },
-    {
-      key: 'item9',
-      name: 'item 9: every new kind through Regions.checkPlan and realiseApproved',
+    // (speed set C) item 9's 11 fixtures ran serially in one section: two sections, the fixtures interleaved (a: 1st, 3rd ...; b: 2nd, 4th ...)
+    ...['a', 'b'].map((half, h) => ({
+      key: `item9${half}`,
+      name: `item 9${half}: every new kind through Regions.checkPlan and realiseApproved (${half === 'a' ? 'odd' : 'even'} fixtures of the list)`,
       async run(ctx) {
         const out = {};
         const only = (process.env.HYB_ONLY ?? '').split(',').filter(Boolean);
         // (P3 smoke: one per course writer kind: stream, canal, race, ditch, fountain-fed; all of them at release; every kind's census,
         // containment and breach sweep are the water lint's, offline)
-        if (P3.smoke) P3.skipped(ctx.log, `item 9: ${ITEM9.map(([t]) => t).filter((t) => !SMOKE9.includes(t)).join(', ')}`, 'the water lint (W1-W3 over every kind)');
-        for (const [tag, rel] of ITEM9) {
+        if (h === 0 && P3.smoke) P3.skipped(ctx.log, `item 9: ${ITEM9.map(([t]) => t).filter((t) => !SMOKE9.includes(t)).join(', ')}`, 'the water lint (W1-W3 over every kind)');
+        for (const [tag, rel] of ITEM9.filter((_, i) => i % 2 === h)) {
           if (only.length && !only.includes(tag)) continue;
           if (P3.smoke && !SMOKE9.includes(tag)) continue;
           try { out[tag] = await realiseFixture(ctx, tag, fixture(ctx, rel)); } catch (e) { ctx.check(false, `item 9 (${tag}): ${String(e.message ?? e).slice(0, 300)}`); try { await ctx.L.leaveWorld(); } catch { /* left */ } }
         }
         return out;
       },
-    },
+    })),
   ],
 };
 

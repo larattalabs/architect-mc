@@ -24,6 +24,36 @@ node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gat
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
+## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
+
+These override the tier, verifier and RC rules below for as long as dev mode is on.
+
+**A slice merges when these pass:**
+- unit tests;
+- the instant lints (lint-structure, lint-look, water-lint, p3-lint);
+- the slice's OWN in-game steps.
+No regression suite, impact steps or before/after comparison runs per slice. Use `gate-run change --only <the slice's own steps>`.
+
+**The gate-verifier is review only.** It reads the diff and the evidence. It re-runs checks only when the slice touches undo,
+the journal, removal, crash recovery or survival accounting. Those stay strict, because they lose a player's work.
+
+**Steward RC only when the API Steward calls changes.** Otherwise Steward picks up the next tag.
+
+**Galleries only for slices whose point is the look.** Noah glances; the merge doesn't wait. Look fixes are follow-ups.
+
+**Releases are cheap tags,** cut whenever Steward needs something or every day or two. No release-tier run before a tag.
+
+**The full set runs nightly** (tools/nightly.mjs). Whatever it finds is fixed forward the next morning.
+
+**No new test-tooling projects** unless something is actually broken.
+
+**Keep the machine for product:**
+- at most 3-4 agents running gates at once;
+- no duplicate before/after runs: compare against recorded history instead;
+- commit before running (the runner tests a frozen snapshot).
+
+**To return to release mode:** Noah says so. Then the full tiers, verifier re-runs and Steward RCs come back.
+
 ## Policy update (Noah, 2026-10-12): cut what has only cost time
 
 Evidence from 0a-X: every timing-bar failure on a slice was machine load (0a's three benches, 0b's 4d-all, 0c's three,
@@ -1473,7 +1503,74 @@ coordinator's agents' editors (load 4.5, 7, 4.8 and 9 at the starts; about 1-3 c
   3 shards), both on lanes, because their byte-identity loops plan every committed fixture on both trees, CPU-bound. Hence the
   unit splits below.
 - **Decision:** `shards.turbo.max` 9 and `shards.turbo.offlineLanes` 3 (12 workers): the knee by wall, and the largest count with
-  no new failure.
+  no new failure. **Changed to 6 on 2026-10-24** ("Frozen source and the CPU budget"): about 7.6% more wall for half the load, and no client-start
+  burst that overruns dev.world.open.
+
+### Frozen source and the CPU budget (2026-10-24)
+
+**What failed.** K2's and CW's turbo slices (`artifacts/gate-runs-K2/20261023-175925-slice`, `artifacts/gate-runs/
+20261023-193332-slice`: 9 shards + 3 lanes) TIMED OUT the same eight unit steps, none related to the slices: t1, t2, coa, t3a,
+h, hy, d and k1a-unit. 6c-scenario-s3 and 6cd-scenario-districts refused plans after 120 s. CW took 86 min, with load p50 83,
+p90 117 and max 147 on 18 cores.
+
+**Why.** Both agents committed kit changes in their source checkouts during their own runs. K2 went from 9a81564a to 6fcbba52, CW
+from 1ba6e423 to dd40a975. The drivers ran from that working tree, so kit-reuse refused for every driver ("Kit suite once per
+run": the tree is not the one unit-kit ran; CW logged no "kit: reused" line). Each unit driver then re-ran the 824-test kit
+suite with node --test's default concurrency, cores - 1 = 17 files at once.
+- That put 45-65 node --test children on the machine at once (a throwaway per-process CPU sampler, 15 s: ps CPU-time deltas,
+  with iostat for the whole machine). Load went to 100-150 with the CPU at 18/18.
+- The readers' history timeouts are 2 x a p90 recorded on the reuse path, so they don't cover a re-run of the kit suite.
+
+**Frozen source** (`tools/lib/frozen-source.mjs`). The runner now creates, or reuses, a detached worktree of the source at the
+run's HEAD, `<run dir>-src`. It APFS-clones `.gradle-home` and `sidecar/node_modules` into it from the source checkout, else from
+the main checkout (`frozenSourceSeed`).
+- Every step whose cwd is not `run:` runs there: the drivers and the offline lanes' unit steps. Its `${SRC}` and the step
+  trace's roots point there too.
+- kit-reuse compares the frozen source's kit tree with unit-kit's, which is the same HEAD for the whole run. A commit in the
+  source checkout mid-run changes nothing the run reads, and the step cache keeps recording; its HEAD-moved and dirty checks
+  read the frozen source.
+- A frozen source with modified tracked files is refused, as a run dir is. A dirty `kit/` there still makes kit-reuse refuse.
+- `--no-frozen-source`: the drivers run from this checkout, as before.
+
+**The slow-path guard.** A kit-suite reader (`waitFor` unit-kit) that will re-run the kit suite itself gets its configured
+timeout, not the history's. That happens when unit-kit did not PASS, or when the frozen source's `kit/` is dirty. The runner
+logs which (`kitReaderSlowPath`).
+
+**The CPU budget** (`tools/lib/cpu-budget.mjs`, `cpu` in `gate-chains.json`). The machine's cores (`GATE_CPU_CORES`; 18 here)
+are split over the run's workers: a turbo run's shards and lanes, a shared run's shards but at least `--slots`. Each worker gets
+`floor(cores / workers)`, at least `minShare` 2. A step's children get its share (its `cpuShares`, default 1; unit-kit 6)
+through the environment, on steps only: client starts and setup builds keep their defaults.
+- `GATE_TEST_CONCURRENCY` sets `--test-concurrency` on every `node --test` the gates run. That covers the drivers'
+  `testConcurrencyArgs()` (outside kitReuse's file list, which would refuse any flag) and the unit-kit and water-lint shells.
+- `VITEST_MAX_WORKERS` caps the sidecar's vitest.
+- `GRADLE_OPTS -Dorg.gradle.workers.max` caps gradle ("Using N worker leases" at --info, with `--no-daemon` too).
+- `GATE_PLAN_WORKERS` gets the share but at least 4, corpus-plan's own floor.
+- A value the runner was started with wins. Outside the runner every tool keeps its default.
+- `kit/test/gate-cpu-budget.test.mjs` checks the arithmetic and that `--test-concurrency=1` really serialises node --test. It
+  checks that every driver and chain shell passes the share, and that kit-reuse still hits. `gate-frozen-source.test.mjs`
+  checks the frozen source.
+
+**Measured** (the same 37 steps: unit-kit, the seven units and two scenarios above, five more unit steps, lint-structure and 15
+in-game steps; turbo, 9 shards + 3 lanes, `--no-cache`, cold plan caches, the source frozen by hand, so kit-reuse hit in both):
+
+| run | wall | load p50 / p90 / max | TIMEOUT | not passing |
+|---|---|---|---|---|
+| main dfb8897e (`artifacts/gate-runs-cpu/20261023-225537-slice`) | 32.2 min | 49 / 99 / 180 | 0 | coa-unit item 6, 4e-crash (no 4e-orders in the set) |
+| first budget, flat share 2 everywhere (`-235753-slice`) | 34.0 min | 63 / 95 / 126 | 0 | the same two, plus 6c-scenario-s2 and 6ct2-scenario-route: dev.world.open's 10 s in the 9-client start burst |
+
+- **With kit-reuse working, the load is the in-game shards.** The steady load and the start burst come from 9 game JVMs: the
+  23:00 peak of 180 was 9 client starts (about 13 cores of game JVMs) beside unit-kit. No child-side cap at 9 shards gets the
+  load near 18.
+- **A flat share of 2 cost wall time on the critical path.** unit-kit went from 796 to 1148 s, and hy-unit, which waits for
+  it, started 6 min later. lint-structure went from 57 to 183 s, and voc-unit's parts from 1.4 to 1.8x, on a nearly idle
+  machine.
+- The drivers' plan pools averaged about 2 cores in every sampled run (threads inside long-lived processes, which ps sees
+  fully), and gradle about 0.5. Neither is a load source.
+- Hence the shape above: node --test capped, the plan pool's floor kept at 4, lint jobs left alone, unit-kit at 6 shares, the
+  budget on steps only.
+- **Hence `shards.turbo.max` 6 and staggered client starts** (`shards.clientStaggerSec`, 8 s apart in a sharded run). The knee
+  measured 6 shards at 33.7 min against 31.3 at 9, with load p50 29 against 52 and max 58 against 91. The next real slice
+  is the field proof against the 58-minute turbo baseline below.
 
 ### What is split
 
@@ -1485,10 +1582,12 @@ release; `node tools/split-proof.mjs --whole <A> --parts <B>`):
 |---|---|---|---|---|
 | irr-ingame / irr-ingame-smoke | 29.4 / 26.7 | 3 | worlds: v62 live; v62 exact + the breach fix + 5 (a); the lamp path, s01 with its control, v63, d01, irrUnmasked, the pad, the probe | 34/34, 29/29: equal, full masked lines too |
 | h-ingame / h-ingame-smoke | 15.5 / 12.3 | 3 / 2 | H-core; H-a flat; H-a exact, farm, H-b flat | 19/19, 16/16: equal |
-| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 3 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds | 31/31, 24/24: equal |
+| hy-ingame / hy-ingame-smoke | 21.7 / 14.7 | 4 / 2 | HY-core; the riffle table, villagers, HY-c's water gate and v58; item 9's kinds in two sections (item9a, item9b: every other fixture), each its own part (smoke: with core, and with the villagers part) (set C) | 31/31, 24/24: equal (before set C, 3 / 2 parts) |
 | 4d-all / 4d-all-full | 13.1 / 15.3 | 2 | base, then survival; base, then the other nine sub-steps (stages and gap0 with waiting) | 23/23: same checks |
 | 5b-chains-full | 31.4 | 3 | the 21 scripts (fixed + 20 seeds), each from its own world; E1 over each part's states | 3 names / 13 lines: equal |
-| rs-survival | 23.2 | 3 | items 5; 9; 8 and 10 | 11/11: equal |
+| rs-survival | 23.2 | 4 (set C) | rs02 + rs02r; rs03; village + item 10; L-V7 + item 14 (sections are builds, not items: "Speed set C") | 11/11: equal (before set C, items 5; 9; 8 and 10) |
+| rsb-crash | 10.4 | 2 (set C) | rs04crash; rs03stop | "Speed set C" |
+| 0a-tiles | 7.1 | 3 (set C) | the unhooked run; SLOW_TILES=4; SLOW_TILES=2 | "Speed set C" |
 | 6cf2-scenario-scatter | 12.2 | 2 | harvest, then scatter_demo flat and natural; harvest, then scatter_cave (a shell split) | see below |
 | irr-unit, kc-unit, f3-unit, fl-unit, s3-unit | 14-36 under turbo | **whole again** (2026-10-23) | was: the byte-identity fixture loop in 3 round-robin slices. With the shared plans each whole step is 0.2-7.5 min ("Shared plans"), so the split is dropped; the drivers keep their sections (`GATE_PART_SECTIONS` still works by hand) | proof below (the turbo slice against the whole runs) |
 | voc-unit | 27-34 under turbo | 3 | item 5 (byte identity); item 13 and the census; the rest | proof below |
@@ -1535,6 +1634,36 @@ their steps are not split.
 restores took 10.0 of 414 step-minutes and the steps' own `gate6b.mjs base` 6.5: 4% together, under the 10% that would pay
 for a warm-server-per-shard reset and its proof. Under turbo the starts grow (28.7 of 447 step-minutes at 12 shards, 6%;
 16.5 of 339 at 9, 5%), still under 10%; a reset proven clean (world hash, entities, journal) is not worth its risk at that.
+
+## Speed set C (2026-10-23): fixtures built once, serial loops split
+
+Noah approved the audit's set C on 2026-10-23 (`artifacts/audit-findings-2026-10-23.md`, `findings6.md`, `findings8.md`): the same
+work was being done several times in a run, and a few steps ran independent sections serially. Each change keeps its assertions; the
+three lines that go are listed, with where each is kept.
+
+**Work done once per run: `tools/lib/run-shared.mjs`.** The runner gives every step `GATE_RUN_SHARED`, a directory under the run's own
+dir (all shards, new for each run: nothing is reused across runs or heads). `sharedOnce(ns, key, build)` memoises in the process
+and, with the directory, across the run: the first caller takes `<key>.lock` (mkdir), builds, publishes `<key>.json` by rename; the
+others wait for it. A builder that throws drops its lock and publishes nothing (a waiter then builds for itself); a lock of a dead
+pid is taken over; a waiter builds for itself after 50 minutes. `kit/test/gate-run-shared.test.mjs` covers it.
+
+| change | what | assertions |
+|---|---|---|
+| RS INSTANT twin (`tools/lib/gate6crs-game.mjs` `twin`) | built once per fixture, lot entries, survival-toggle state and head: in the process and, through `GATE_RUN_SHARED`, in the run. rs02_walled's twin was built by items 5, 8, 9, 11 and 18 (5 times), rs03_water's by items 5 and 9. The snapshot is then a file of the shared dir; `twinDiff` writes its `.diff.json` into the caller's dir | none changed; a caller still diffs its world against the snapshot |
+| rs-survival builds | item 5's rs02 was item 8's rs02c without its conservation sum, item 5's rs03 was item 9's rs03r before its keep hook (the smoke tier already built each once, as rs02c and rs03r). Each is built once with the sum on (`Conservation.insert` and the default feed send the same `dev.crate.insert {exact: true}`). Sections are now the builds: `rs02` (items 3, 5, 8), `rs03` (3, 5, 9), `village`, `rs02r` (9), `item10`, `lv7`, `item14` | the lines `item 5 (rs02): ...`, `item 3 (rs02, ...`, `item 5 (rs03): ...` and `item 3 (rs03, ...` are the surviving `(rs02c)` and `(rs03r)` lines (the same check over the same build, the tag aside). One thing is not the same: rs03's E-flat after the removal is read after rs03r's keep hook (a player's block, a weathered copper cell), as item 9 already does and as the smoke tier did |
+| rs-ingame `latent` | `latent` (creative rs01, survival toggle switched on, checked and realised) and item 4's twin were two builds of one site. The twin takes `toggleOn` for rs01: built once with the toggle on, `latent` reads its answers, item 4 diffs against it. (The toggle is per world, `architect-world.json`, and the creative base has it off, so the twin was not already the latent world: item 4's reference is now the toggle-on one.) The region's removal at the end of `latent` is gone (no check followed it) | none dropped |
+| rsb-crash | `rs04crash` and `rs03stop` are two parts | none |
+| hy-ingame item 9 | 11 fixtures in one section: `item9a` (v50 v52 v54 v56 v57b steward), `item9b` (v51 v53 v55 v57 v59); smoke: v50 v54 v56 / v51 v55 | none |
+| 0a-tiles | `unhooked`, `slow4`, `slow2` are three parts. The two slow runs are judged against the unhooked run's sha: it is run once per gate run, by whichever part asks first (`sharedOnce`), the others wait for it | none |
+| h-rmcrash (`tools/lib/gate6ch-holders.mjs`) | `setUp` (fresh world, h_core_demo planned and realised, the stair site layered) ran for each of 4 kill points to the same state. It runs once; each point is a copy of the saved world, opened, with its own settled and precondition checks (the stair's stack in the copy, its waterlogged block, the region PLACED) | none; `h-holders` runs `setUp` once, nothing to share |
+| 6b-versions | each of versiona's two runs and versionb's two plans planned and prepared the same rift_city claim: versiona prepares it once in a copy of the flat base that both runs copy; versionb plans and prepares it once for both doctored plans. (A prepare is per world: versiona and versionb are two processes in two worlds, nothing is shared between them) | none |
+| sch-placement, sch-refusals | one step `sch-placement` (placement, then refusals) in one sim client | the refusals' lines are in `sch-placement` |
+| w-ingame pathbibles | S7 flat with the coarse-dirt bible (g6cv_village) is `6cv-scenario-s7`'s flat run: when that run of the same gate run has finished at this head (`scenarios.mjs` lists a finished run in `GATE_RUN_SHARED/scenario-runs/`), pathbibles reads it; else it runs it as before | none |
+| w-ingame variants | the gravity broken variant was run alone and named here; `w-unit` runs `village-safety.test.mjs` whole (item 1/3/4, which holds `gravity broken variant`) | the line `variant: a gravel verge over a 2-deep gap with the rule off` is gone from w-ingame; w-unit's `items 1, 3, 4 (kit)` line holds the test |
+
+**Not done, and why.** 6cf2-scenario-scatter's harvest: the whole step is 10 s per part (`harvest` 2 s for the 72 stamps twice, in the
+slice run of 2026-10-22); its second stamping pass is the "same bytes" determinism check, so a copy would remove the assertion for
+nothing saved.
 
 ## Fast checks P1 (2026-10-21): the undo assertions move to the undo model
 
@@ -2036,8 +2165,10 @@ The runner never calls Claude. The independent gate-verifier is launched by the 
    this checkout's HEAD for every run. On a worktree's first run, `.gradle-home`, `sidecar/node_modules` and `mod/run` (the gate
    worlds, the prepared mega worlds and the library) are APFS-cloned from the seed (`../architect-mc-6a-run`). The seed is
    read-only; nothing is written back to it. The sidecar is then built.
-   **The clients run the committed HEAD. The drivers (`tools/*.mjs`) run from this checkout's working tree.** `--plan` warns
-   when the tree is dirty, so commit before a run.
+   **The clients run the committed HEAD, and so do the drivers (`tools/*.mjs`):** they run from the frozen source, a detached
+   worktree `<run dir>-src` at the run's HEAD ("Frozen source and the CPU budget"), not from this checkout. Uncommitted changes are not tested
+   (`--plan` and the runner say so), so commit before a run. `--no-frozen-source` runs the drivers from this checkout's
+   working tree, as before 2026-10-24.
 5. **Steps.** Each step names its client: one of `cfg.clients`, `none` (unit tests) or `self` (the step starts its own clients, as
    apijars does). Each step runs in its own process group, with its effective timeout: from the step history (max(2 x p90,
    10 min), at most the configured `timeoutMin`, with at least 5 samples) or the configured one (see "Gate speed").
@@ -2060,8 +2191,9 @@ Several agents and runners share this machine, so everything is configurable. A 
 |---|---|---|
 | `--turbo`, `--no-turbo` | | turbo for a tier run of at least 20 steps (`shards.turbo.minSteps`): the whole machine ("Turbo") |
 | `--lanes N` | | turbo: `shards.turbo.offlineLanes` (3) offline lanes for the client-less steps |
+| `--no-frozen-source` | | the drivers run from the frozen source `<run dir>-src` at HEAD ("Frozen source and the CPU budget"); this flag: from this checkout's working tree |
 | `--split`, `--no-split` | | split steps run as parts in turbo runs; `--split` outside turbo too |
-| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (9), N at most 9; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
+| `--shards N\|auto` | | turbo: auto up to `shards.turbo.max` (6; 9 before 2026-10-24, "Frozen source and the CPU budget"), N at most 6; shared: auto for `slice`/`release` over 20 steps (`shards.auto.minSteps`), else 1; N at most `shards.max` (6) |
 | `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | auto: free pairs of `shards.auto.portRange` (8980-8999); else shard 1: 8890:8891; shards 2..: **none, name them** |
 | | `GATE_AUTO_PROBE` (JSON: `load1`, `load5`, `freeGB`, `cores`) | the machine now; overrides fields of auto's probe (marked INJECTED) |
 | `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
@@ -2072,7 +2204,9 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
-| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v1` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; under the runner the step's CPU share, at least 4 ("Frozen source and the CPU budget"), else the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v1` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_CPU_CORES` | the machine's cores (`hw.ncpu`, 18 here): the run's CPU budget ("Frozen source and the CPU budget") |
+| | `GATE_TEST_CONCURRENCY`, `VITEST_MAX_WORKERS`, `GRADLE_OPTS` (`-Dorg.gradle.workers.max`), `GATE_CPU_SHARE` (recorded) | set by the runner for each step to its CPU share; a value the runner was started with is kept; outside the runner: each tool's own default |
 | | `GATE_JAVAP_CACHE`, `GATE_JAVAP_CACHE_DIR` | on; `<main checkout>/artifacts/javap-cache` (api-compat's javap answers, "Shared plans") |
 | | `GATE_SPRINT` | on: the drivers' game-time waits sprint on headless hosts ("Sprinted game-time waits"); `0`: every one waits in real time, as before |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
@@ -2153,3 +2287,10 @@ passes `--judge-timing`. mega-lite's bars judge here as before.
 5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
 6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and
    read your own bench numbers with their recorded load. On a shared, busy box use `--quiet-wait`.
+
+### Release drops the 4e -full undo extras (Noah, 2026-10-23)
+
+Releases run the slice subsets `4e-orders` and `4e-crash` (crash rotation), not `4e-orders-full` and `4e-crash-full`. The extra orders
+and kill points (the 22 orders and K1, K2, K4, K5, K6, K8) are covered by the undo model (`UmtGateMovesTest.orders4e_*`,
+`crash4e_*`). About 12 minutes saved per release. The -full twins stay defined and run only in the named `regress` and `engine`
+chains. The nightly doesn't run them either.

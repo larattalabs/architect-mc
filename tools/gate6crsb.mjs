@@ -30,6 +30,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gatePart } from './lib/gate-part.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-RSb-run');
@@ -148,7 +150,7 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline
 
 function nodeTest(files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
@@ -538,7 +540,9 @@ if (!name || (!steps[name] && !groups[name])) {
   console.error(`usage: node tools/gate6crsb.mjs ${[...Object.keys(steps), ...Object.keys(groups)].join('|')}`);
   process.exit(2);
 }
-for (const s of groups[name] ?? [name]) {
+// a split group step (docs/GATES.md "Turbo"): each part runs its items (tools/lib/gate-part.mjs); rsb-crash's two rows are its two parts
+const P = groups[name] ? gatePart(groups[name], { log }) : null;
+for (const s of groups[name] ? P.sections : [name]) {
   if (!steps[s]) { check(false, `step ${s} is not built`); continue; }
   await run(s);
 }

@@ -85,7 +85,9 @@ import path from 'node:path';
 import net from 'node:net';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { budgetEnv, cpuShare, machineCores } from './lib/cpu-budget.mjs';
 import { DevClient } from './lib/devclient.mjs';
+import { kitReaderSlowPath, prepareFrozenSource } from './lib/frozen-source.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact, versionOnlyFiles } from './gate-impact.mjs';
 import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 import { currentHistory, definitionNow, definitionsAt, effectiveTimeout, estimateMin, loadHistory } from './lib/gate-history.mjs';
@@ -508,6 +510,13 @@ const load1 = () => Math.round(os.loadavg()[0] * 100) / 100;
 const NOTIFY_MODE = flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry' ? 'dry' : flag('--notify') || process.env.GATE_NOTIFY === 'send' ? 'send' : 'off';
 const NOTIFY_SCRIPT = process.env.GATE_NOTIFY_SCRIPT ?? path.join(os.homedir(), 'Developer', '_infra', 'discord-notify.sh');
 const RUN1 = path.resolve(opt('--run-dir') ?? process.env.GATE_RUN_DIR ?? path.resolve(SRC, cfg.runDir));
+// The frozen source (docs/GATES.md "Frozen source and the CPU budget"): the drivers (tools/*.mjs, the cwd of every step without a run: cwd) run from a
+// detached worktree of this checkout at the run's HEAD, <run dir>-src, not from this checkout's working tree. A commit made here
+// during the run (K2's and CW's slices, 2026-10-23: the kit changed, every driver's kit-suite reuse refused, eight unit steps timed
+// out) no longer changes what the run tests. --no-frozen-source: the drivers run from this checkout, as before.
+const FROZEN = !flag('--no-frozen-source');
+const DRV_DIR = `${RUN1}-src`;
+let DRV = SRC;
 const RUN_DIRS = (opt('--run-dirs') ?? process.env.GATE_RUN_DIRS ?? '').split(',').map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d));
 const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
 const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
@@ -841,8 +850,20 @@ const portFree = (port) => new Promise((resolve) => {
   srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
 });
 
-/** The children's environment: no ANTHROPIC_* / CLAUDE* at all, the shard's paths and ports, its evidence dirs. */
-function childEnv(sh, extra = {}) {
+/**
+ * The run's CPU budget (tools/lib/cpu-budget.mjs, docs/GATES.md "Frozen source and the CPU budget"): the machine's cores split evenly over the run's
+ * workers. A turbo run owns the machine: its shards and lanes. A shared run shares it with up to --slots other runs: at least
+ * that many workers. Null until the shards are built (the auto decision builds them under the slot mutex).
+ */
+function runCpu() {
+  return shards.length ? cpuShare({ cores: machineCores(), workers: TURBO ? shards.length : Math.max(shards.length, SLOTS), conf: cfg.cpu ?? {} }) : null;
+}
+
+/**
+ * The children's environment: no ANTHROPIC_* / CLAUDE* at all, the shard's paths and ports, its evidence dirs; for a step, its CPU
+ * share (`cpuShares` shares: the step's chain entry, default 1).
+ */
+function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (/^(ANTHROPIC_|CLAUDE)/.test(k) || k === 'ARCHITECT_DEV_TOKEN' || k === 'AWS_BEARER_TOKEN_BEDROCK') continue;
@@ -860,9 +881,15 @@ function childEnv(sh, extra = {}) {
     ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots'),
     JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
     GATE_RUNNER: '1',
+    // (speed set C) a dir every shard and part of this run shares, new for each run: work several steps need is done once (tools/lib/run-shared.mjs)
+    GATE_RUN_SHARED: RUN_SHARED_DIR,
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
+  // the CPU share, for a step only (cpuShares set): node --test's concurrency, corpus-plan's pool, gradle's and vitest's workers.
+  // Client starts and setup builds keep their defaults.
+  const cpu = cpuShares != null ? runCpu() : null;
+  if (cpu) Object.assign(env, budgetEnv(cpu, { shares: cpuShares, env: process.env }));
   // the kit suite once per run (tools/lib/kit-reuse.mjs): unit-kit writes its JUnit report here; the drivers' kit-suite and goldens
   // checks take it when exact. Only when unit-kit is in this run.
   if (runShared.kitJunit) Object.assign(env, { GATE_KIT_RESULTS: runShared.kitJunit, GATE_KIT_TREE: runShared.kitTree });
@@ -876,17 +903,17 @@ function childEnv(sh, extra = {}) {
     const cov = path.join(sh.ev, 'coverage');
     fs.mkdirSync(path.join(cov, 'node'), { recursive: true });
     env.JAVA_TOOL_OPTIONS = [env.JAVA_TOOL_OPTIONS, javaLogOption(cov)].filter(Boolean).join(' ');
-    env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
+    env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(DRV, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
     env.GATE_TRACE_DIR = path.join(cov, 'node');
-    env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
+    env.GATE_TRACE_ROOTS = JSON.stringify([...new Set([SRC, DRV])].map((r) => [r, '']).concat([[sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]));
   }
   for (const [k, v] of Object.entries(extra)) env[k] = expand(String(v), sh);
   return env;
 }
 /** Run-level facts the steps' environment carries (filled in when the run starts and as steps end). */
 const runShared = { kitJunit: null, kitTree: null, unitModRun: null, mergeBase: null };
-const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC, MAIN, OUT: sh.ev })[n] ?? '');
-const resolveCwd = (c, sh) => (!c ? SRC : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(SRC, c.slice(4)) : path.resolve(SRC, c));
+const expand = (s, sh) => s.replace(/\$\{(\w+)\}/g, (_, n) => ({ RUN: sh.RUN, SRC: DRV, MAIN, OUT: sh.ev })[n] ?? '');
+const resolveCwd = (c, sh) => (!c ? DRV : c.startsWith('run:') ? path.join(sh.RUN, c.slice(4)) : c.startsWith('src:') ? path.join(DRV, c.slice(4)) : path.resolve(DRV, c));
 const getPath = (obj, p) => p.split('.').filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
 
 // ------------------------------------------------------------------ the schedule (shared by --plan's estimate and the run)
@@ -1150,7 +1177,9 @@ function printPlan() {
   const head = git(SRC, 'rev-parse', '--short', 'HEAD');
   printSelection();
   console.log(`${tierInfo.kind === 'tier' ? 'tier' : 'chain'} ${chainName}: ${steps.length} steps, worst case ${fmtDur(totalTimeout * 60)} of step timeouts (+ client starts, ${cfg.clientStartMin} min cap each)`);
-  console.log(`source ${SRC} @ ${head}${git(SRC, 'status', '--porcelain', '--untracked-files=no') ? ' (DIRTY: the drivers run from the working tree, the clients from HEAD)' : ''}`);
+  const dirtyNow = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
+  console.log(`source ${SRC} @ ${head}${FROZEN ? `; the drivers run from the frozen source ${DRV_DIR} at HEAD (--no-frozen-source: from this checkout)${dirtyNow ? '; DIRTY: the uncommitted changes are NOT tested, commit them' : ''}`
+    : dirtyNow ? ' (DIRTY: the drivers run from the working tree, the clients from HEAD)' : ''}`);
   for (const sh of shards) {
     const missing = (cfg.seed ?? []).filter((s) => !fs.existsSync(path.join(sh.RUN, s)));
     console.log(`${sh.kind === 'offline' ? `offline lane ${sh.name}` : `shard ${sh.k}`}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
@@ -1189,6 +1218,7 @@ function printPlan() {
     + `${shards.length > 1 ? `per shard busy ${sched.perShard.map((p) => `${p.name} ${fmtDur(p.busyMin * 60)}`).join(', ')}; ` : ''}`
     + `schedule: longest first from ${HIST.runs} past runs (${HISTORY_FILE}); benches ${ISOLATE_BENCH ? 'isolated (timing judged)' : 'not isolated (timing recorded)'}; `
     + `timeouts ${HIST_TIMEOUTS ? `from history on ${steps.filter((s) => s.effTimeoutMin < s.timeoutMin).length}/${steps.length} steps` : 'configured'} (--verbose: per step)`);
+  if (runCpu()) console.log(`cpu budget: ${runCpu().cores} cores over ${runCpu().workers} workers: share ${runCpu().share} each (node --test concurrency, gradle and vitest workers; plan workers at least 4)${steps.some((s) => Number(s.cpuShares) > 1) ? `; ${steps.filter((s) => Number(s.cpuShares) > 1).map((s) => `${s.id} x${s.cpuShares}`).join(', ')}` : ''}`);
 }
 
 if (!steps.length) {
@@ -1260,6 +1290,7 @@ const releaseLock = () => {
 
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
 const OUT = path.join(RUNS_ROOT, `${stamp}-${chainName}`);
+const RUN_SHARED_DIR = path.join(OUT, 'shared');
 for (const sh of shards) {
   sh.ev = shards.length > 1 ? path.join(OUT, sh.name) : OUT;
   sh.clientLog = path.join(OUT, shards.length > 1 ? `client-${sh.name}.log` : 'client.log');
@@ -1281,7 +1312,7 @@ const summary = {
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes, benches: tierInfo.benches ?? null } : null,
   nightly: NIGHTLY,
-  counts: {}, setup: null, slot: slotNote, shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, cpu: runCpu(), shardsAuto: autoChoice ? (({ text, ...a }) => a)(autoChoice) : null, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.some((x) => parentOf(x) === id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   cache: tierInfo.cache ?? null, cached: tierInfo.cached ?? [], inputsMisses: [],
   schedule: { order: 'longest first', historyRuns: HIST.runs, historyFile: HISTORY_FILE, benches: ISOLATE_BENCH ? 'isolated' : 'not isolated (timing recorded)', historyTimeouts: HIST_TIMEOUTS },
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, effectiveTimeoutMin: s.effTimeoutMin, timeoutSource: s.timeoutSource, estimateMin: Math.round(est(s) * 10) / 10, timingPolicy: recordsTiming(s) ? 'recorded' : 'judged', ...(s.parentId ? { parent: s.parentId } : {}), ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
@@ -1399,7 +1430,16 @@ async function leaveWorld(dev) {
   throw new Error('still in the world');
 }
 
+// client starts a few seconds apart (shards.clientStaggerSec, 8): every shard's first client started at once (9 JVMs' JIT, GC and
+// world generation, load 120-180) and two hidden clients' world creation overran dev.world.open's 10 s (2026-10-23)
+let nextClientAt = 0;
 async function startClient(sh, key) {
+  if (shards.length > 1) {
+    const gap = Number(cfg.shards?.clientStaggerSec ?? 8) * 1000;
+    const at = Math.max(Date.now(), nextClientAt);
+    nextClientAt = at + gap;
+    if (at > Date.now()) await sleep(at - Date.now());
+  }
   const c = cfg.clients[key];
   const world = c.world;
   log(`  starting client ${key}: ${c.script} in "${world}"`, sh);
@@ -1543,15 +1583,24 @@ function junitCounts(dir) {
 function runProcess(sh, step, logFile) {
   return new Promise((resolve) => {
     const fd = fs.openSync(logFile, 'a');
-    const env = childEnv(sh, step.env ?? {});
+    const slow = step.effTimeoutMin < step.timeoutMin
+      ? kitReaderSlowPath({ step, hasReport: !!runShared.kitJunit, unitKit: summary.steps.find((x) => x.id === 'unit-kit')?.status ?? null, drvDir: DRV }) : null;
+    if (slow) {
+      log(`  ${step.id}: ${slow}: its configured timeout ${step.timeoutMin} min, not the history's ${step.effTimeoutMin}`, sh);
+      step.effTimeoutMin = step.timeoutMin;
+      step.timeoutSource = `configured (${slow})`;
+      const r = summary.steps.find((x) => x.id === step.id);
+      if (r) Object.assign(r, { effectiveTimeoutMin: step.effTimeoutMin, timeoutSource: step.timeoutSource });
+    }
+    const env = childEnv(sh, step.env ?? {}, { cpuShares: step.cpuShares ?? 1 });
     if (TRACE) {
       // the input trace (tools/lib/step-trace.mjs): every node process of the step records the source files it touches
-      if (!COVERAGE) env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(SRC, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
+      if (!COVERAGE) env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${pathToFileURL(path.join(DRV, 'tools', 'lib', 'step-trace.mjs')).href}`].filter(Boolean).join(' ');
       env.GATE_TRACE_DIR = path.join(OUT, 'traces', step.id);
       // a step keyed by its test filters runs its gradle tests in a JVM every time (mod/build.gradle gateRerunTests): a test run
       // served from gradle's cache would log no class. Only those steps: unit-mod and the rest keep gradle's up-to-date checks
       if (COVERAGE && INPUT_MAP?.steps?.[parentOf(step.id)]?.testFiltersComplete) env.ORG_GRADLE_PROJECT_gateRerunTests = '1';
-      env.GATE_TRACE_ROOTS = JSON.stringify([[SRC, ''], [sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]);
+      env.GATE_TRACE_ROOTS = JSON.stringify([...new Set([SRC, DRV])].map((r) => [r, '']).concat([[sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]));
     }
     const cwd = resolveCwd(step.cwd, sh);
     const [cmd, args] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];
@@ -1932,6 +1981,13 @@ try {
     for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (${sh.name}; set --ports / GATE_PORTS)`);
   }
   log(`gate-run ${chainName}: ${steps.length} steps (${steps.map((s) => s.id).join(' ')}); ${shards.map((s) => `shard ${s.k} ${s.RUN} ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join('; ')}; notify ${NOTIFY_MODE}`);
+  if (runCpu()) {
+    const c = runCpu();
+    summary.cpu = c;
+    const big = steps.filter((s) => Number(s.cpuShares) > 1).map((s) => `${s.id} x${s.cpuShares}`);
+    log(`cpu budget: ${c.cores} cores over ${c.workers} workers (${TURBO ? 'the turbo run\'s shards and lanes' : `this run's shards, at least --slots ${SLOTS}`}): `
+      + `share ${c.share} each (node --test concurrency, gradle and vitest workers; plan workers at least 4)${big.length ? `; ${big.join(', ')}` : ''}`);
+  }
   if (tierInfo.kind === 'tier') {
     log(`tier ${tierInfo.tier}${tierInfo.range ? ` over ${tierInfo.range}` : ''}: engine ${tierInfo.engine}, placement ${tierInfo.placement}${tierInfo.impact?.unmapped.length ? `, ${tierInfo.impact.unmapped.length} unmapped files` : ''}`);
     for (const r of tierInfo.rotation ?? []) if (r.skipped.length) log(`rotation ${r.name}: ran ${r.ran.join(' ') || '-'}, SKIPPED ${r.skipped.join(' ')} (${r.reason})`);
@@ -1970,8 +2026,8 @@ try {
   }
   if (stepIds.includes('unit-kit')) {
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
-    runShared.kitTree = git(SRC, 'rev-parse', 'HEAD:kit');
-  } else if (cachedHits.get('unit-kit')?.junit && cachedHits.get('unit-kit').kitTree === git(SRC, 'rev-parse', 'HEAD:kit') && fs.existsSync(cachedHits.get('unit-kit').junit)) {
+    runShared.kitTree = git(SRC, 'rev-parse', `${head}:kit`);
+  } else if (cachedHits.get('unit-kit')?.junit && cachedHits.get('unit-kit').kitTree === git(SRC, 'rev-parse', `${head}:kit`) && fs.existsSync(cachedHits.get('unit-kit').junit)) {
     // unit-kit is CACHED: its recorded JUnit report (the same kit tree) serves the drivers' kit-suite checks (kit-reuse.mjs)
     runShared.kitJunit = path.join(OUT, 'kit-suite.junit.xml');
     fs.copyFileSync(cachedHits.get('unit-kit').junit, runShared.kitJunit);
@@ -1979,6 +2035,11 @@ try {
     log(`unit-kit CACHED: its JUnit report (kit tree ${runShared.kitTree.slice(0, 9)}) serves this run's kit-suite readers`);
   }
   summary.sourceDirty = !!git(SRC, 'status', '--porcelain', '--untracked-files=no');
+  if (FROZEN) {
+    DRV = prepareFrozenSource({ src: SRC, main: MAIN, dir: DRV_DIR, head, seed: cfg.frozenSourceSeed, log }).dir;
+    summary.frozenSource = DRV;
+    log(`frozen source: the drivers run from ${DRV} at ${head.slice(0, 9)}${summary.sourceDirty ? ` (${SRC} has uncommitted changes: NOT tested; commit them)` : ''}; a commit in ${SRC} during the run changes nothing here`);
+  }
   summary.setup = [];
   for (const sh of shards) summary.setup.push(await setupShard(sh, head));
   const builds = await Promise.allSettled(summary.setup.map((r) => r.build));
@@ -2093,13 +2154,13 @@ async function worker(sh) {
       try {
         // the drivers ran from the working tree: one that turned dirty during the run records nothing from here on
         // and one whose HEAD moved (a commit or checkout mid-run: the tree is clean again, but later steps ran other code)
-        const headNow = git(SRC, 'rev-parse', 'HEAD');
+        const headNow = git(DRV, 'rev-parse', 'HEAD');
         if (!CACHE.dirty.length && headNow !== CACHE.head) {
           CACHE.dirty = [`(the source HEAD moved to ${headNow.slice(0, 9)} during the run)`];
           keys.clear();
           log(`the source HEAD moved to ${headNow.slice(0, 9)} during the run: no further PASS is recorded in the step cache`);
         }
-        if (!CACHE.dirty.length && git(SRC, 'status', '--porcelain', '--untracked-files=all')) {
+        if (!CACHE.dirty.length && git(DRV, 'status', '--porcelain', '--untracked-files=all')) {
           CACHE.dirty = ['(the source tree turned dirty during the run)'];
           keys.clear();
           log('the source tree turned dirty during the run: no further PASS is recorded in the step cache');
