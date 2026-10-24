@@ -9,7 +9,7 @@ import dev.larattalabs.architect.apiimpl.Wire4b;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarLink;
 import dev.larattalabs.architect.client.sidecar.SidecarState;
-import dev.larattalabs.architect.client.text.TextModel;
+import dev.larattalabs.labui.client.text.TextModel;
 import dev.larattalabs.architect.design.DesignSpec;
 import dev.larattalabs.architect.design.SetSpec;
 import java.util.ArrayList;

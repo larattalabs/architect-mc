@@ -8,7 +8,7 @@ import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.ClientEnv;
 import dev.larattalabs.architect.client.hud.Keys;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.client.sidecar.LinkStatus;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarState;

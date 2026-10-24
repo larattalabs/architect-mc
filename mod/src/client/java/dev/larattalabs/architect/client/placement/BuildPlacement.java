@@ -14,7 +14,7 @@ import dev.larattalabs.architect.placement.Occupancy;
 import dev.larattalabs.architect.placement.Approach;
 import dev.larattalabs.architect.placement.SiteWarnings;
 import dev.larattalabs.architect.placement.TerrainFit;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.placement.Anchors;
 import java.util.ArrayList;
 import java.util.List;

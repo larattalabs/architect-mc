@@ -3,7 +3,7 @@ package dev.larattalabs.architect.client;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.design.DesignFeature;
 import dev.larattalabs.architect.client.dev.DevBridge;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.client.launcher.Launcher;
 import dev.larattalabs.architect.client.placement.PlacementFeature;
 import dev.larattalabs.architect.client.screen.ScreenFeature;
@@ -53,7 +53,8 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.StockpileDev.init(); // phase 6c slice Y1 hooks (dev.stockpile.*)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
-		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.toasts", new Toasts()));
+		Toasts.install(); // lab-ui's one shared toast stack (never also register new Toasts(): it would draw every toast twice)
+		Toasts.avoid(dev.larattalabs.architect.client.placement.BuildPlacement::hudRect); // the stack ends above the placement HUD
 		ClientLifecycleEvents.CLIENT_STARTED.register(ArchitectClient::onStarted);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DevBridge.stopBridge());
 		Architect.LOGGER.info("Architect client init (devPort={}, mute={}, takeFocus={}, autoWorld={})", ClientEnv.DEV_PORT, ClientEnv.MUTE,
