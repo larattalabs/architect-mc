@@ -3,7 +3,7 @@ package dev.larattalabs.architect.client.design;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.hud.Keys;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.client.placement.PlacementFeature;
 import dev.larattalabs.architect.client.placement.PlotMarker;
 import dev.larattalabs.architect.client.sidecar.Sidecar;

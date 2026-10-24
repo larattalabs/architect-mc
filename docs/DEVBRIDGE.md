@@ -91,6 +91,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.command` | {cmd, asPlayer?: false} - run a command as the player with full permissions (asPlayer: with the player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result} |
 | `dev.help` | {} -> {commands, screens} |
 | `dev.hud` | {hidden: bool} - hide/show the HUD (like F1) |
+| `dev.gui.scale` | {scale: 0 (auto) - 6} - set the GUI scale as Options > Video Settings does -> {guiScale, guiWidth, guiHeight} (UI-2b) |
 | `dev.key` | {key:'escape'\|'key.keyboard.f3', modifiers?} or {mapping:'key.chat'} - press a key (to the open screen, else key mappings) |
 | `dev.ping` | {} -> {pong, frame, msSinceLastFrame, stalled, quitting}. Answered on the socket thread, so it works while the game loads or hangs; stalled:true means the render thread has not finished a frame for 5 s |
 | `dev.quit` | {forceAfterMs?:15000} - save and quit. If the render thread is hung and never runs the stop, the world is saved on the server thread and the JVM is halted (exit code 3) after forceAfterMs |
@@ -112,11 +113,12 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 |---|---|
 | `dev.build.cancel` | {} - leave placement mode (Esc) |
 | `dev.build.confirm` | {force?: bool} - place it (Enter; force = Shift+Enter, only after a block-entity refusal); replies when the server answered: {placed, siteId, message} + state |
+| `dev.build.legend` | {on?: bool (default: toggle)} - the placement HUD's key legend and refusal detail (the ? or H key) (UI-2b) |
 | `dev.build.lock` | {on?: bool (default: toggle)} - lock the ghost where it is / follow the look again |
 | `dev.build.nudge` | {forward?, right?, up?} - move the ghost (blocks, relative to where the player faces) |
 | `dev.build.rotate` | {turns?: 1} - rotate the ghost by quarter turns (clockwise; negative = back) |
 | `dev.build.start` | {blueprint, origin?: [x,y,z] (rotated box minimum; locks the ghost there), ground?: false (origin's y replaced by the footprint's median surface), turns?: 0-3 \| rotation name, move?: siteId} - enter placement mode |
-| `dev.build.state` | {} - placement mode: blueprint, origin, rotation, box, conflicts {obstructed, blockEntities, refusals, wouldPlace, approach, site}, serverVerdict, ready, render stats, last result |
+| `dev.build.state` | {} - placement mode: blueprint, origin, rotation, box, conflicts {obstructed, blockEntities, refusals, wouldPlace, approach, site}, serverVerdict, ready, render stats, last result; since UI-2b also `hud` (the rows drawn last frame as plain text: chips in [..], swatch segments with ■, a progress strip as "~ label", keys as "keys: ..."), `hudRect`, `legend`, `layerArmed`, `forceArmedNow` and `lastChat` (the last "Placed" chat line: {text, parts, links: [{text, click, value}]}) |
 
 ### Sites
 
@@ -351,6 +353,17 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-24 (slice UI-2b):** new (`SliceUi2bDev`, client only) `dev.ui2b.command {cmd, asPlayer?: true}` (a command's chat output as
+  components with their click actions: `{messages: [{text, parts, links}], success, result}`; `dev.command` is unchanged and returns
+  plain strings), `dev.gui.scale {scale}`, `dev.ui2b.siteHud {mode?: full|line|hidden}`, `dev.ui2b.toasts {}` (lab-ui `Toasts.json`),
+  `dev.ui2b.helperPreview {label?, npm?}` (draws the helper's progress strip for a shot; null label: the real state),
+  `dev.ui2b.click {value, action?: run|suggest}` (a chat link clicked through vanilla's own click handler from the chat screen ->
+  the screen open after it: a confirm screen would show here). New
+  `dev.build.legend {on?}`. `dev.build.state` adds `hud`, `hudRect`, `legend`, `layerArmed`, `forceArmedNow`, `lastChat`;
+  `dev.ghosts.state` adds `siteHudMode` and each ghost's `hudShort`; `dev.crate.state` adds `confirmSecondsLeft` (Deconstruct is
+  lab-ui's two-press Confirm: `dev.crate.press deconstruct` twice still deconstructs; an owned site still takes a third press);
+  `dev.launcher.state` adds `summary` (the player's sentence; `detail` is unchanged) and `readyToasted`.
 
 - **2026-10-23 (7a slice CL):** new (`SliceClDev`, generated headless too) `dev.climb {flights: [{x, z, y0, y1}], face: [dx, dz]
   (toward the wall), exit?: [x, y, z] (the top's walk cell, feet), maxTicks?: 400}`: the ladder physics probe. The player is placed at

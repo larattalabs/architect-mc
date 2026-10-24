@@ -14,7 +14,7 @@ import dev.larattalabs.architect.placement.Occupancy;
 import dev.larattalabs.architect.placement.Approach;
 import dev.larattalabs.architect.placement.SiteWarnings;
 import dev.larattalabs.architect.placement.TerrainFit;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.placement.Anchors;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,7 +90,7 @@ public final class BuildPlacement {
 	record View(Blueprint bp, GhostModel model, int ox, int oy, int oz, int turns, String front, int[] obstructed, int obstructedCount,
 		int[] blocked, int blockedCount, List<String> refusals, boolean playerInside, boolean locked, boolean pending, boolean forceArmed,
 		int[] water, int waterCount, int[] lava, int lavaCount, int[] fill, int fillCount, int[] clear, int clearCount, List<String> notes,
-		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site) {
+		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site, List<Integer> noteInk) {
 		Anchors.Bounds box() {
 			return new Anchors.Bounds(ox, oy, oz, ox + model.sizeX - 1, oy + model.sizeY - 1, oz + model.sizeZ - 1);
 		}
@@ -98,7 +98,7 @@ public final class BuildPlacement {
 		View with(boolean locked, boolean pending, boolean forceArmed) {
 			return new View(bp, model, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, refusals, playerInside, locked,
 				pending, forceArmed, water, waterCount, lava, lavaCount, fill, fillCount, clear, clearCount, notes, snapMinY, approach, path, snapBox, hazards,
-				site);
+				site, noteInk);
 		}
 	}
 
@@ -154,8 +154,26 @@ public final class BuildPlacement {
 	/** The key of the verdict request in flight, or null: at most one at a time, a reply for an old key is dropped. */
 	private static @Nullable String verdictAsked;
 	private static long ticks;
+	/** UI-2b: the HUD's key legend and the refusals' detail, toggled by "?" (or H); kept across placements this session. */
+	private static boolean legend;
+	/** UI-2b: the last "Placed" chat line (with its [Undo] / [Open in Library] links), for the DevBridge. */
+	private static net.minecraft.network.chat.@Nullable Component lastChat;
 
 	private BuildPlacement() {
+	}
+
+	/** Whether the HUD shows the full key legend and the refusals' detail. */
+	public static boolean legend() {
+		return legend;
+	}
+
+	public static void setLegend(boolean on) {
+		legend = on;
+	}
+
+	/** Phase 4e "Place on top" is armed: the next Enter places on top of the site it overlaps. */
+	static boolean layerArmed() {
+		return active && layerArmed;
 	}
 
 	// ------------------------------------------------------------------ lifecycle
@@ -194,7 +212,7 @@ public final class BuildPlacement {
 		Blueprint b = Blueprints.get(blueprintId);
 		GhostModel.Cells c = TemplateCells.of(blueprintId);
 		if (b == null || c == null) {
-			throw new IllegalArgumentException("Unknown design '" + blueprintId + "' (known: " + Blueprints.ids() + ")");
+			throw new IllegalArgumentException(dev.larattalabs.architect.site.DidYouMean.message(blueprintId, Blueprints.ids()));
 		}
 		cancelQuietly();
 		PlotMarker.cancelQuietly();
@@ -426,7 +444,7 @@ public final class BuildPlacement {
 						? new Result(true, placed.id(), "Construction site " + placed.id() + " (" + b.name() + ") placed: feed its crate (right-click it, "
 							+ "or hoppers); it builds as the items arrive")
 						: new Result(true, placed.id(), "Placed " + placed.id() + " (" + b.name() + ")" + (note == null ? "" : " (" + note + ")")
-						+ ". Undo: Library > Placed > Remove, or /architect remove " + placed.id());
+						+ ". Undo: the [Undo] link in chat, or Library > Placed > Remove");
 				}
 			} catch (Sites.SiteException e) {
 				r = new Result(false, null, e.getMessage());
@@ -454,9 +472,18 @@ public final class BuildPlacement {
 		inFlight = null;
 		lastResult = r;
 		if (r.placed()) {
+			boolean moved = moving != null;
+			boolean construction = r.message().startsWith("Construction site");
 			cancelQuietly();
 			setStatus(r.message(), false);
-			Toasts.push(Toasts.Level.INFO, "Placed", r.message());
+			// UI-2b: a short toast (the old one cut off the undo hint), the whole line with its links in chat
+			Toasts.push(Toasts.Level.INFO, moved ? "Moved" : construction ? "Construction site placed" : "Placed", refused.bp().name() + " (" + r.buildingId()
+				+ ")" + (moved ? "" : ". Undo: [Undo] in chat"));
+			lastChat = placedChat(r, moved, construction);
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.gui != null && mc.gui.hud != null) {
+				mc.gui.hud.getChat().addClientSystemMessage(lastChat);
+			}
 			return;
 		}
 		// refused: stay in placement mode; over block entities, a second confirm with Shift may force it
@@ -487,6 +514,36 @@ public final class BuildPlacement {
 			: " - Shift+Enter places anyway (they come back on remove)" : "") + (layerArmed ? " - Enter again places on top of it (Place on top)" : "");
 		setStatus(msg, true);
 		Toasts.push(Toasts.Level.WARN, "Not placed", msg);
+	}
+
+	/**
+	 * The "Placed" chat line (UI-2b): the message, then [Undo] (runs {@code /architect remove <site>}: the terrain comes back; a
+	 * construction site is taken down and its blocks refunded) and [Open in Library] ({@code /architect library <site>}). A move
+	 * has no [Undo] (moving it back is another move).
+	 */
+	static net.minecraft.network.chat.Component placedChat(Result r, boolean moved, boolean construction) {
+		String id = r.buildingId();
+		net.minecraft.network.chat.MutableComponent m = net.minecraft.network.chat.Component.literal(r.message().replace(
+			". Undo: the [Undo] link in chat, or Library > Placed > Remove", "") + " ");
+		if (!moved && id != null) {
+			m.append(link("[Undo]", "/architect remove " + id, construction ? "Take the construction site down (its blocks come back to you)"
+				: "Remove it: the ground comes back as it was")).append(" ");
+		}
+		if (id != null) {
+			m.append(link("[Open in Library]", "/architect library " + id, "Show it in Library > Placed here"));
+		}
+		return m;
+	}
+
+	private static net.minecraft.network.chat.Component link(String text, String command, String hover) {
+		return net.minecraft.network.chat.Component.literal(text).withStyle(st -> st.withColor(net.minecraft.ChatFormatting.AQUA).withUnderlined(true)
+			.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(command))
+			.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(net.minecraft.network.chat.Component.literal(hover + "\n" + command))));
+	}
+
+	/** The last "Placed" chat line, or null. */
+	static net.minecraft.network.chat.@Nullable Component lastChat() {
+		return lastChat;
 	}
 
 	// ------------------------------------------------------------------ per tick
@@ -812,34 +869,41 @@ public final class BuildPlacement {
 		List<String> occupied = Occupancy.refusals(found);
 		refusals.addAll(occupied);
 		boolean inside = found.stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
+		// UI-2b: each note with the ghost colour it is drawn in (the HUD's swatch beside it), not a colour word in its text
 		List<String> notes = new ArrayList<>();
+		List<Integer> noteInk = new ArrayList<>();
 		String gone = Occupancy.removalNote(found);
 		if (gone != null) {
 			notes.add("placing " + gone);
+			noteInk.add(0);
 		}
 		String water = TerrainFit.waterWarning(plan);
 		if (water != null) {
-			notes.add(water + " (blue)");
+			notes.add(water);
+			noteInk.add(GhostRenderer.WATER);
 		}
 		String wet = Approach.waterWarning(approach);
 		if (wet != null) {
-			notes.add(wet + " (blue)");
+			notes.add(wet);
+			noteInk.add(GhostRenderer.WATER);
 		}
 		String shortOf = Approach.shortWarning(approach);
 		if (shortOf != null) {
 			notes.add(shortOf);
+			noteInk.add(0);
 		}
 		// site warnings (never a refusal): what the ground in front of the door and under the path is like
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(b, turns, box, approach, world);
 		for (String w : site.warnings()) {
-			notes.add(w + " (magenta)");
+			notes.add(w);
+			noteInk.add(GhostRenderer.HAZARD);
 		}
 		String front = BlueprintTransform.rotateDirection(b.front(), turns);
 		return new View(b, m, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, List.copyOf(refusals), inside, locked,
 			pending, forceArmed, shellOf(concat(plan.water(), approach.water())), plan.waterCount() + approach.waterCount(),
 			shellOf(concat(plan.lava(), approach.lava())), plan.lavaCount() + approach.lavaCount(), shellOf(concat(plan.fill(), approach.fill())),
 			plan.fillCount(), shellOf(concat(plan.clear(), approach.clear())), plan.clearCount(), List.copyOf(notes), snapBox.minY(), approach,
-			shellOf(approach.path()), snapBox, shellOf(site.cells()), site);
+			shellOf(approach.path()), snapBox, shellOf(site.cells()), site, List.copyOf(noteInk));
 	}
 
 	private static int[] concat(int[] a, int[] b) {
@@ -936,6 +1000,22 @@ public final class BuildPlacement {
 		o.addProperty("active", active);
 		o.addProperty("status", status);
 		o.addProperty("statusError", statusError);
+		// UI-2b: the HUD as drawn last frame (rows as plain text, chips in [..]), the legend, the armed choices, the Placed chat line
+		o.addProperty("legend", legend);
+		o.addProperty("layerArmed", layerArmed);
+		o.addProperty("forceArmedNow", forceArmed);
+		com.google.gson.JsonArray hud = new com.google.gson.JsonArray();
+		PlacementHud.lastRows.forEach(hud::add);
+		o.add("hud", hud);
+		int[] rect = PlacementHud.lastRect;
+		if (rect != null) {
+			com.google.gson.JsonArray r = new com.google.gson.JsonArray();
+			for (int i : rect) {
+				r.add(i);
+			}
+			o.add("hudRect", r);
+		}
+		o.add("lastChat", dev.larattalabs.architect.client.dev.ChatJson.of(lastChat));
 		if (lastResult != null) {
 			JsonObject r = new JsonObject();
 			r.addProperty("placed", lastResult.placed());

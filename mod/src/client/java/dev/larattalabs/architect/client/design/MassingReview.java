@@ -13,7 +13,7 @@ import dev.larattalabs.architect.api.PreviewStyle;
 import dev.larattalabs.architect.apiimpl.Wire4b;
 import dev.larattalabs.architect.apiimpl.Wire4c;
 import dev.larattalabs.architect.client.hud.Keys;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.architect.client.placement.BuildPlacement;
 import dev.larattalabs.architect.client.placement.CompositePreview;

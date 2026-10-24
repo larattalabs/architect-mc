@@ -13,9 +13,9 @@ import dev.larattalabs.architect.client.placement.BlueprintPreview;
 import dev.larattalabs.architect.client.placement.PlacementFeature;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarState;
-import dev.larattalabs.architect.client.text.TextFieldView;
-import dev.larattalabs.architect.client.text.TextKeys;
-import dev.larattalabs.architect.client.text.TextModel;
+import dev.larattalabs.labui.client.text.TextFieldView;
+import dev.larattalabs.labui.client.text.TextKeys;
+import dev.larattalabs.labui.client.text.TextModel;
 import dev.larattalabs.labui.client.ui.Kit;
 import dev.larattalabs.labui.client.ui.Panels;
 import dev.larattalabs.labui.client.ui.TextUtil;
@@ -125,6 +125,46 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private static Tab lastTab = Tab.DESIGN;
+	/**
+	 * The second confirmation before removing a site another mod owns (docs/CONTRACT.md phase 4a, R5; lab-ui {@link
+	 * dev.larattalabs.labui.ui.ConfirmArm} since UI-2b, replacing OwnedConfirm): the first press explains whose it is and arms
+	 * "Press again to remove (N)"; a second press on the same site within the window removes it. The player's own sites remove on
+	 * one press, as before.
+	 */
+	private static final dev.larattalabs.labui.ui.ConfirmArm OWNED_REMOVE = new dev.larattalabs.labui.ui.ConfirmArm();
+	private static final String OWNED_KEY = "owned:";
+
+	/** "owned by steward_mc" (the mod id part of the owner), or null for the player's own site. */
+	static @Nullable String ownedLabel(Site s) {
+		if (s.owner() == null) {
+			return null;
+		}
+		int colon = s.owner().indexOf(':');
+		return "owned by " + (colon > 0 ? s.owner().substring(0, colon) : s.owner());
+	}
+
+	/** True when the removal may go ahead: the player's own site, or the second press on an owned one (else it arms and says so). */
+	private static boolean ownedRemoveOk(Site s) {
+		if (s.owner() == null) {
+			return true;
+		}
+		if (OWNED_REMOVE.press(OWNED_KEY + s.id(), net.minecraft.util.Util.getMillis()) == dev.larattalabs.labui.ui.ConfirmArm.Result.CONFIRMED) {
+			return true;
+		}
+		LibraryFeature.say(s.id() + " is " + ownedLabel(s) + " (" + s.owner() + "); removing it may break that mod's plans. Press Remove again to "
+			+ "remove it", true);
+		return false;
+	}
+
+	/** Opens the Library on this world's placed sites with {@code site} selected (the "Placed" chat line's [Open in Library]). */
+	public static ArchitectScreen openPlaced(@Nullable String site) {
+		showPlaced = true;
+		if (site != null) {
+			selectedSite = site;
+		}
+		return open(Tab.LIBRARY);
+	}
+
 	private static boolean showPlaced;
 	private static @Nullable String selectedDesign;
 	private static @Nullable String selectedEntry;
@@ -418,6 +458,15 @@ public final class ArchitectScreen extends Screen {
 			closePopup(); // a click outside closes it
 			return true;
 		}
+		// UI-2b: confirms first: a click anywhere but the armed Remove disarms it (lab-ui ConfirmArm)
+		String clicked = null;
+		for (Hit h : List.copyOf(hits)) {
+			if (h.contains(e.x(), e.y())) {
+				clicked = h.id();
+				break;
+			}
+		}
+		OWNED_REMOVE.clickedElsewhere("remove".equals(clicked) && selectedSite != null ? OWNED_KEY + selectedSite : null);
 		for (Hit h : List.copyOf(hits)) {
 			if (h.contains(e.x(), e.y())) {
 				if (h.enabled()) {
@@ -1295,7 +1344,7 @@ public final class ArchitectScreen extends Screen {
 				}
 				Blueprint b = Blueprints.get(s.blueprint());
 				g.text(font, TextUtil.ellipsize(font, s.id() + "  " + (b == null ? s.blueprint() : b.name()), listW - 14), x + 6, ry + 2, UiBits.ink(), false);
-				String owned = dev.larattalabs.architect.client.ui.OwnedConfirm.label(s);
+				String owned = ownedLabel(s);
 				g.text(font, TextUtil.ellipsize(font, s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + " · " + s.rotation().replace('_', ' ')
 					+ (owned == null ? "" : " · " + owned) + (s.group() == null ? "" : " · group " + s.group()) + (s.placing() ? " · placing" : ""), listW - 14),
 					x + 6, ry + 12, UiBits.muted(), false);
@@ -1318,7 +1367,7 @@ public final class ArchitectScreen extends Screen {
 			s.dimension() + " · " + s.rotation(),
 			s.movedFrom() == null ? "never moved" : "moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z()));
 		if (s.owner() != null) {
-			lines.add(0, dev.larattalabs.architect.client.ui.OwnedConfirm.label(s) + " (" + s.owner() + ")");
+			lines.add(0, ownedLabel(s) + " (" + s.owner() + ")");
 		}
 		if (s.member() != null) {
 			// phase 4d: the site group (one undo for the set), the batch and item that placed it
@@ -1340,16 +1389,18 @@ public final class ArchitectScreen extends Screen {
 		int by = footerY - 16 - 20;
 		int bx = dx;
 		boolean force = s.id().equals(armedRemove);
-		boolean ownedArmed = dev.larattalabs.architect.client.ui.OwnedConfirm.armed(s);
-		String rm = ownedArmed ? "Remove owned site" : force ? "Remove anyway" : "Remove";
+		long nowMs = net.minecraft.util.Util.getMillis();
+		boolean ownedArmed = s.owner() != null && OWNED_REMOVE.armed(OWNED_KEY + s.id(), nowMs);
+		String rm = ownedArmed ? "Press again to remove (" + OWNED_REMOVE.secondsLeft(nowMs) + ")" : force ? "Remove anyway" : "Remove";
 		boolean coveredAsk = s.id().equals(coveredArmed);
-		button(g, "remove", rm, bx, by, bw(rm), true, true, mx, my, () -> {
+		int rmW = s.owner() != null ? Math.max(bw(rm), bw("Press again to remove (9)")) : bw(rm); // arming never shifts the row
+		button(g, "remove", rm, bx, by, rmW, true, true, mx, my, () -> {
 			// a site another mod owns asks twice (R5)
-			if (dev.larattalabs.architect.client.ui.OwnedConfirm.ask(s, LibraryFeature::say)) {
+			if (ownedRemoveOk(s)) {
 				removeSite(s, force, coveredAsk ? Sites.Covered.KEEP : null);
 			}
 		});
-		bx += bw(rm) + 4;
+		bx += rmW + 4;
 		if (coveredAsk) {
 			// phase 4e: the site is covered: Remove keeps the covered cells (hand-down), Remove both takes the covering sites first
 			String both = "Remove both";
@@ -2170,13 +2221,6 @@ public final class ArchitectScreen extends Screen {
 		// left: the helper
 		g.text(font, "Design helper", lx, y, UiStyle.CLAY_DARK, false);
 		y += 12;
-		if (Launcher.devBuildWithoutBundle()) {
-			for (String line : TextUtil.wrapPlain(font, Launcher.NO_BUNDLE, colW).stream().limit(3).toList()) {
-				g.text(font, line, lx, y, UiBits.errorText(), false);
-				y += 10;
-			}
-			y += 2;
-		}
 		LauncherPlan.State st = Launcher.state();
 		String fam = switch (st) {
 			case RUNNING -> "done";
@@ -2187,13 +2231,25 @@ public final class ArchitectScreen extends Screen {
 		Panels.dot(g, fam, lx, y + 1, false);
 		g.text(font, st.wire(), lx + 10, y, UiBits.ink(), false);
 		y += 11;
-		for (String line : TextUtil.wrapPlain(font, Launcher.detail(), colW).stream().limit(4).toList()) {
-			g.text(font, line, lx, y, st == LauncherPlan.State.RUNNING ? UiBits.muted() : st == LauncherPlan.State.NODE_MISSING
-				|| st == LauncherPlan.State.CRASHED ? UiBits.errorText() : UiBits.muted(), false);
+		// UI-2b: the plain sentence first; the technical detail (exit codes, ports, env vars) as small print under it
+		String plain = Launcher.summary().isEmpty() ? Launcher.detail() : Launcher.summary();
+		for (String line : TextUtil.wrapPlain(font, plain, colW).stream().limit(3).toList()) {
+			g.text(font, line, lx, y, st == LauncherPlan.State.NODE_MISSING || st == LauncherPlan.State.CRASHED ? UiStyle.error() : UiBits.ink(), false);
+			y += 10;
+		}
+		if (st == LauncherPlan.State.INSTALLING && Launcher.installStartedAt() > 0) {
+			dev.larattalabs.architect.client.hud.ProgressStrip.draw(g, font, lx, y, colW, "Installing · " + dev.larattalabs.architect.client.hud
+				.ProgressStrip.elapsed(Launcher.installStartedAt()), -1, UiBits.muted(), UiStyle.status("working"), UiStyle.rule());
+			y += 13;
+		}
+		String small = (Launcher.summary().isEmpty() ? "" : "Details: " + Launcher.detail()) + (Launcher.devBuildWithoutBundle()
+			&& !Launcher.detail().equals(Launcher.NO_BUNDLE) ? (Launcher.summary().isEmpty() ? "" : " · ") + Launcher.NO_BUNDLE : "");
+		for (String line : TextUtil.wrapPlain(font, small, colW).stream().limit(3).toList()) {
+			g.text(font, line, lx, y, UiStyle.mutedText(), false);
 			y += 10;
 		}
 		if (Launcher.installLine() != null) {
-			g.text(font, TextUtil.ellipsize(font, "npm: " + Launcher.installLine(), colW), lx, y, UiBits.muted(), false);
+			g.text(font, TextUtil.ellipsize(font, "npm: " + Launcher.installLine(), colW), lx, y, UiStyle.mutedText(), false);
 			y += 10;
 		}
 		y += 2;
@@ -2315,6 +2371,18 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;
 		}
+		// UI-2b: the construction HUD's size (the J key cycles it too)
+		ry += 4;
+		var hudMode = dev.larattalabs.architect.client.design.UiPrefs.siteHud();
+		String hl = "Construction HUD: " + switch (hudMode) {
+			case FULL -> "full";
+			case LINE -> "one line";
+			case HIDDEN -> "hidden";
+		} + " (click or " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.siteHud) + " to change)";
+		hits.add(new Hit("site_hud", hl, rx, ry, Math.min(colW, font.width(hl)), 12, true, hudMode != dev.larattalabs.architect.client.design.UiPrefs.SiteHud
+			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
+		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
+		ry += 12;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);

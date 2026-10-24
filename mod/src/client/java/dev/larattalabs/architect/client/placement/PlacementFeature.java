@@ -134,6 +134,15 @@ public final class PlacementFeature {
 					BuildPlacement.cancel();
 				}
 			}
+			// UI-2b: "?" (Shift+/ on a US layout; plain / still opens chat) or H shows / hides the key legend and the refusals' detail
+			case InputConstants.KEY_SLASH, InputConstants.KEY_H -> {
+				if (e.key() == InputConstants.KEY_SLASH && !e.hasShiftDown()) {
+					return false;
+				}
+				if (!repeat) {
+					BuildPlacement.setLegend(!BuildPlacement.legend());
+				}
+			}
 			default -> {
 				return false;
 			}
@@ -273,6 +282,14 @@ public final class PlacementFeature {
 					o.addProperty("message", r.message());
 					return o;
 				}));
+			});
+		DevBridge.register("dev.build.legend", 10_000, "{on?: bool (default: toggle)} - the placement HUD's key legend and refusal detail "
+			+ "(the ? or H key) (UI-2b)", (req, mc) -> {
+				Boolean on = Fields.of(req).optBool("on");
+				return DevBridge.onClient(mc, () -> {
+					BuildPlacement.setLegend(on == null ? !BuildPlacement.legend() : on);
+					return BuildPlacement.state();
+				});
 			});
 		DevBridge.register("dev.build.cancel", 10_000, "{} - leave placement mode (Esc)", (req, mc) -> DevBridge.onClient(mc, () -> {
 			BuildPlacement.cancel();
