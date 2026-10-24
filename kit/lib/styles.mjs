@@ -19,6 +19,8 @@ export const MAIN_FIELDS = Object.freeze(['wood', 'stone', 'roof', 'accent']);
 export const FAN_OUT = Object.freeze({ wood: ['wall', 'frame', 'floor'], stone: ['foundation', 'trim'], roof: ['roof'], accent: ['accent'] });
 /** The roles no main row drives, at the value palette() gives them. */
 export const FIXED_ROLES = Object.freeze({ wall_alt: 'minecraft:calcite', light: 'minecraft:lantern', glass: 'minecraft:glass_pane', path: 'minecraft:dirt_path' });
+/** The woods palette() roofs with another wood by default (kit.mjs DARK_WOODS): fanOut's default roof. */
+export const DARK_WOODS = Object.freeze(['spruce', 'dark_oak', 'mangrove', 'crimson', 'warped']);
 /** The wood part a wood-driven role takes when it has none of its own (palette(): wall and floor planks, frame the log). */
 export const WOOD_PART_OF_ROLE = Object.freeze({ wall: 'planks', frame: 'log', floor: 'planks', accent: 'planks' });
 /** The wood parts a role block may be, in the order editMain matches them. */
@@ -216,7 +218,7 @@ export function fanOut(inputs) {
   const { wood = 'oak', stone = 'cobblestone', roof, accent } = inputs ?? {};
   const w = woodParts(wood);
   const s = qualify(stone);
-  const roofName = roof ?? (['spruce', 'dark_oak', 'mangrove', 'crimson', 'warped'].includes(wood) ? (wood === 'dark_oak' ? 'spruce' : 'dark_oak') : 'dark_oak');
+  const roofName = roof ?? (DARK_WOODS.includes(wood) ? (wood === 'dark_oak' ? 'spruce' : 'dark_oak') : 'dark_oak');
   const roofBlock = WOODS.includes(short(roofName)) ? qualify(`${short(roofName)}_planks`) : qualify(roofName);
   const acc = accent ?? (WOODS.includes(short(roofName)) ? short(roofName) : wood);
   return {
@@ -257,6 +259,7 @@ export function styleTable() {
     coreRoles: [...CORE_ROLES],
     fanOut: structuredClone(FAN_OUT),
     fixed: { ...FIXED_ROLES },
+    darkWoods: [...DARK_WOODS],
     woodPartOfRole: { ...WOOD_PART_OF_ROLE },
     woodParts: [...WOOD_PARTS],
     woods: Object.fromEntries(WOODS.map((w) => [w, woodParts(w)])),

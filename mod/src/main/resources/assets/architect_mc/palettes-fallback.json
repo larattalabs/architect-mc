@@ -597,6 +597,13 @@
       "glass": "minecraft:glass_pane",
       "path": "minecraft:dirt_path"
     },
+    "darkWoods": [
+      "spruce",
+      "dark_oak",
+      "mangrove",
+      "crimson",
+      "warped"
+    ],
     "woodPartOfRole": {
       "wall": "planks",
       "frame": "log",
