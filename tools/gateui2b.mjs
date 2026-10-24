@@ -676,6 +676,7 @@ steps.gallery = async () => {
     log(`copied ${fs.readdirSync(GAL_DIR).length} files to ${dest}`);
   }
   // non-blocking: failures are in index.json; only "nothing captured" fails the step
+  await call('dev.u3.park', { on: false }).catch(() => null);
   check(GAL.shots.length > 0, `UI gallery: ${GAL.shots.length} shots, ${GAL.failed.length} failed, ${GAL.skipped.length} skipped, ${index.seconds} s`, index.counts);
   spendZero();
   return index.counts;
