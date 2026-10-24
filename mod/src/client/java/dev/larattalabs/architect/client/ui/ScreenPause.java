@@ -1,7 +1,7 @@
 package dev.larattalabs.architect.client.ui;
 
 import dev.larattalabs.architect.client.ClientEnv;
-import dev.larattalabs.architect.ui.UiRules;
+import dev.larattalabs.labui.ui.UiRules;
 import org.jspecify.annotations.Nullable;
 
 /**

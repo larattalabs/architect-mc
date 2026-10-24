@@ -186,12 +186,14 @@ public final class SiteGhosts {
 			j.addProperty("green", g.nextDelivered().size());
 			if (g.status != null) {
 				j.addProperty("hud", SiteHud.line(g));
+				j.addProperty("hudShort", SiteHud.shortLine(g)); // UI-2b: the one-line form
 				j.addProperty("paused", g.status.paused());
 				j.addProperty("blocked", g.status.blocked());
 			}
 			arr.add(j);
 		}
 		o.add("ghosts", arr);
+		o.addProperty("siteHudMode", SiteHud.mode().id()); // UI-2b: full | line | hidden, as drawn now
 		return o;
 	}
 

@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.dev.DevBridge;
 import dev.larattalabs.architect.client.dev.Fields;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.labui.client.ui.GuardedHud;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.site.Builder;

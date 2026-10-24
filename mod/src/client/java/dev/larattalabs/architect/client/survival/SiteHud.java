@@ -11,12 +11,18 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import dev.larattalabs.architect.client.design.UiPrefs;
+import dev.larattalabs.architect.client.hud.HudInk;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The construction HUD line (docs/CONTRACT.md phase 3 "UI"): while a site the player placed is building and they are within
  * 64 blocks, a small ink strip at the top centre: "Log Cabin 62% · needs 40 spruce planks" (or "paused", "crate missing",
  * "3 cells blocked").
+ *
+ * <p>UI-2b: the player sizes it ({@link UiPrefs#siteHud}, the J key or the Status tab): full (the line and its progress bar),
+ * one line ("Log Cabin 62%", no bar), or hidden. While the placement HUD is up it shows one line at most, so the two and the
+ * toasts don't stack. Colours are {@link HudInk}'s.
  */
 final class SiteHud implements HudElement {
 	static final int RANGE = 64;
@@ -66,14 +72,38 @@ final class SiteHud implements HudElement {
 		return best;
 	}
 
+	/** The one-line form: the name and the percent, and "crate missing" / "paused" when so. */
+	static @Nullable String shortLine(SiteGhosts.Ghost g) {
+		SiteNet.SiteStatus s = g.status;
+		if (s == null) {
+			return null;
+		}
+		int pct = s.total() == 0 ? 100 : s.built() * 100 / s.total();
+		return s.name() + " " + pct + "%" + (s.crateMissing() ? " · crate missing" : s.paused() ? " · paused" : "");
+	}
+
+	/** The mode drawn now: the player's, at most one line while placing. */
+	static UiPrefs.SiteHud mode() {
+		UiPrefs.SiteHud m = UiPrefs.siteHud();
+		if (m == UiPrefs.SiteHud.FULL && (dev.larattalabs.architect.client.placement.BuildPlacement.active()
+			|| dev.larattalabs.architect.client.placement.BuildPlacement.hudRect() != null)) {
+			return UiPrefs.SiteHud.LINE;
+		}
+		return m;
+	}
+
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.gui.screen() != null) {
 			return;
 		}
+		UiPrefs.SiteHud mode = mode();
+		if (mode == UiPrefs.SiteHud.HIDDEN) {
+			return;
+		}
 		SiteGhosts.Ghost ghost = shown(mc);
-		String line = ghost == null ? null : line(ghost);
+		String line = ghost == null ? null : mode == UiPrefs.SiteHud.LINE ? shortLine(ghost) : line(ghost);
 		if (line == null) {
 			return;
 		}
@@ -82,16 +112,20 @@ final class SiteHud implements HudElement {
 		int maxW = Math.min(360, g.guiWidth() - 16);
 		String text = TextUtil.ellipsize(font, line, maxW - p.left() - p.right() - 4);
 		int w = font.width(text) + p.left() + p.right() + 4;
-		int h = font.lineHeight + p.top() + p.bottom() + 8;
+		boolean full = mode == UiPrefs.SiteHud.FULL;
+		int h = font.lineHeight + p.top() + p.bottom() + (full ? 8 : 2);
 		int x = (g.guiWidth() - w) / 2;
 		int y = 4;
 		Panels.sprite(g, Kit.TOOLTIP, x, y, w, h);
 		SiteNet.SiteStatus s = ghost.status;
 		double frac = s.total() == 0 ? 1 : (double) s.built() / s.total();
-		Panels.text(g, font, text, x + p.left() + 2, y + p.top(), s.crateMissing() ? 0xFFF07060 : UiStyle.CREAM);
+		Panels.text(g, font, text, x + p.left() + 2, y + p.top(), s.crateMissing() ? HudInk.error() : HudInk.text());
+		if (!full) {
+			return;
+		}
 		int bw = w - p.left() - p.right() - 4;
 		int by = y + p.top() + font.lineHeight + 2;
-		g.fill(x + p.left() + 2, by, x + p.left() + 2 + bw, by + 2, UiStyle.withAlpha(UiBits.activityOnInk(), 0x60));
-		g.fill(x + p.left() + 2, by, x + p.left() + 2 + (int) Math.round(bw * frac), by + 2, s.paused() ? UiStyle.BRASS : UiStyle.SAGE);
+		g.fill(x + p.left() + 2, by, x + p.left() + 2 + bw, by + 2, HudInk.track());
+		g.fill(x + p.left() + 2, by, x + p.left() + 2 + (int) Math.round(bw * frac), by + 2, s.paused() ? HudInk.armed() : HudInk.ok());
 	}
 }

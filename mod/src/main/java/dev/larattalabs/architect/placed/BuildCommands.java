@@ -22,7 +22,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * <pre>
  * /architect build claim &lt;x0 y0 z0&gt; &lt;x1 y1 z1&gt;   marks the box's cells as yours, one CLAIMED build (pre-tracking builds)
  * /architect build release &lt;id&gt;                  a placer or an op: the build becomes RELEASED (incidental)
- * /architect build list                           the builds of this dimension
+ * /architect build list [page] [filter]          the builds of this dimension, paged
  * /architect build at &lt;x y z&gt;                     who placed a cell, and its build
  * /architect build rule [&lt;name&gt; [&lt;value&gt;]]       the world rules (op): playerTracking, promote, demote, ... (N-PT-3)
  * </pre>
@@ -36,7 +36,8 @@ public final class BuildCommands {
 			.then(Commands.literal("claim").then(Commands.argument("from", BlockPosArgument.blockPos()).then(Commands.argument("to", BlockPosArgument.blockPos())
 				.executes(BuildCommands::claim))))
 			.then(Commands.literal("release").then(Commands.argument("id", StringArgumentType.word()).executes(BuildCommands::release)))
-			.then(Commands.literal("list").executes(BuildCommands::list))
+			.then(Commands.literal("list").executes(BuildCommands::list).then(Commands.argument(dev.larattalabs.architect.site.ChatLists.ARG,
+				StringArgumentType.greedyString()).executes(BuildCommands::list)))
 			.then(Commands.literal("at").then(Commands.argument("pos", BlockPosArgument.blockPos()).executes(BuildCommands::at)))
 			.then(Commands.literal("rule").requires(BuildCommands::op).executes(c -> rule(c, null, null))
 				.then(Commands.argument("name", StringArgumentType.word()).executes(c -> rule(c, StringArgumentType.getString(c, "name"), null))
@@ -83,10 +84,15 @@ public final class BuildCommands {
 	private static int list(CommandContext<CommandSourceStack> c) {
 		CommandSourceStack src = c.getSource();
 		var all = BuildViews.builds(src.getLevel().dimension(), null);
-		src.sendSuccess(() -> Component.literal(all.size() + " build(s)"), false);
+		src.sendSuccess(() -> Component.literal(all.size() + " tracked build" + (all.size() == 1 ? "" : "s") + " in this dimension" + (all.isEmpty() ? "" : ":")),
+			false);
+		java.util.List<Component> lines = new java.util.ArrayList<>();
 		for (Build b : all) {
-			src.sendSuccess(() -> Component.literal(b.id() + " " + b.state() + " " + b.kind().name().toLowerCase(Locale.ROOT) + " " + b.cells() + " cells at "
-				+ b.bounds().minX() + " " + b.bounds().minY() + " " + b.bounds().minZ() + " r" + b.revision()), false);
+			lines.add(Component.literal(b.id() + " " + b.state().toString().toLowerCase(Locale.ROOT) + " " + b.kind().name().toLowerCase(Locale.ROOT) + " "
+				+ b.cells() + " cells at " + b.bounds().minX() + " " + b.bounds().minY() + " " + b.bounds().minZ() + " r" + b.revision()));
+		}
+		if (!lines.isEmpty()) {
+			dev.larattalabs.architect.site.ChatLists.send(src, lines, dev.larattalabs.architect.site.ChatLists.args(c), "/architect build list");
 		}
 		return all.size();
 	}

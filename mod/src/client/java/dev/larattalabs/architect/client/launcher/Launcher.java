@@ -8,10 +8,11 @@ import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.ClientEnv;
 import dev.larattalabs.architect.client.hud.Keys;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.client.sidecar.LinkStatus;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarState;
+import dev.larattalabs.architect.launcher.LaunchNotices;
 import dev.larattalabs.architect.launcher.LauncherPlan;
 import dev.larattalabs.architect.launcher.LauncherPlan.Reuse;
 import dev.larattalabs.architect.launcher.LauncherPlan.SourceKind;
@@ -65,6 +66,11 @@ public final class Launcher {
 
 	private static volatile State state = State.IDLE;
 	private static volatile String detail = "";
+	/** The plain sentence for the player (UI-2b): the toasts and the Status tab's headline; {@link #detail} is the technical one. */
+	private static volatile String summary = "";
+	/** When the npm install started (the progress strip's elapsed time), or 0. */
+	private static volatile long installStartedAt;
+	private static final dev.larattalabs.architect.launcher.LaunchNotices NOTICES = new dev.larattalabs.architect.launcher.LaunchNotices();
 	private static volatile @Nullable String installLine;
 	private static volatile List<String> logTail = List.of();
 	private static volatile LauncherPlan.@Nullable Source source;
@@ -84,6 +90,9 @@ public final class Launcher {
 
 	public static void init() {
 		config = LauncherConfig.load();
+		// UI-2b: the install / first start as one progress strip
+		net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(Architect.id("hud/helper_progress"),
+			dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.helper_progress", new HelperProgressHud()));
 		Sidecar.init();
 		Sidecar.state().addListener(new SidecarState.Listener() {
 			@Override
@@ -95,7 +104,8 @@ public final class Launcher {
 			if (config.autoStart()) {
 				start();
 			} else {
-				set(State.DISABLED, "autoStart is off in config/architect_mc.json (the Status tab can start the helper)");
+				set(State.DISABLED, "The design helper starts by hand in this game: press Start helper in the Status tab.",
+					"autoStart is off in config/architect_mc.json (the Status tab can start the helper)");
 			}
 		});
 		ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> stopOnExit());
@@ -107,8 +117,24 @@ public final class Launcher {
 		return state;
 	}
 
+	/** The technical detail (exception text, ports, env vars, exit codes): the Status tab's small print, the log, the API. */
 	public static String detail() {
 		return detail;
+	}
+
+	/** Whether "Architect is ready" was toasted this session (the helper ran once). */
+	public static boolean readyToasted() {
+		return NOTICES.readyShown();
+	}
+
+	/** The plain sentence for the player (UI-2b). */
+	public static String summary() {
+		return summary;
+	}
+
+	/** When the npm install started, or 0 (not installing). */
+	public static long installStartedAt() {
+		return state == State.INSTALLING ? installStartedAt : 0;
 	}
 
 	public static @Nullable String installLine() {
@@ -159,7 +185,8 @@ public final class Launcher {
 				launch(gen);
 			} catch (Throwable t) {
 				Architect.LOGGER.error("Launcher failed", t);
-				set(State.CRASHED, "launcher error: " + t.getMessage());
+				set(State.CRASHED, "The design helper could not start because of an unexpected error. Restart it from the Status tab.",
+					"launcher error: " + t);
 			}
 		});
 	}
@@ -204,13 +231,15 @@ public final class Launcher {
 			Architect.LOGGER.warn("Launcher: {}", NO_BUNDLE);
 		}
 		if (src.kind() == SourceKind.NONE) {
-			set(State.DISABLED, devBuildWithoutBundle() ? NO_BUNDLE : "this build has no sidecar bundled (dev: set ARCHITECT_SIDECAR_DIR to a sidecar/ checkout)");
+			set(State.DISABLED, "This build has no design helper, so designing is off. Placing works as usual.", devBuildWithoutBundle() ? NO_BUNDLE
+				: "this build has no sidecar bundled (dev: set ARCHITECT_SIDECAR_DIR to a sidecar/ checkout)");
 			return;
 		}
 		// node
 		Path found = findNode();
 		if (found == null) {
-			set(State.NODE_MISSING, "Node.js " + LauncherPlan.MIN_NODE + " or newer was not found. Install it from " + LauncherPlan.NODE_INSTALL_URL
+			set(State.NODE_MISSING, "Designing needs Node.js " + LauncherPlan.MIN_NODE + " or newer. Install it from nodejs.org, then press Restart "
+				+ "helper in the Status tab.", "Node.js " + LauncherPlan.MIN_NODE + " or newer was not found. Install it from " + LauncherPlan.NODE_INSTALL_URL
 				+ ", or set nodePath in config/architect_mc.json");
 			return;
 		}
@@ -226,7 +255,7 @@ public final class Launcher {
 			}
 		}
 		if (!Files.isRegularFile(dir.resolve("dist").resolve("main.mjs"))) {
-			set(State.DISABLED, "no dist/main.mjs in " + dir + (src.kind() == SourceKind.DEV ? " (run npm run build in sidecar/)" : ""));
+			set(State.DISABLED, "The design helper's files are incomplete, so designing is off.", "no dist/main.mjs in " + dir + (src.kind() == SourceKind.DEV ? " (run npm run build in sidecar/)" : ""));
 			return;
 		}
 		expectedVersion = packageVersion(dir);
@@ -257,17 +286,18 @@ public final class Launcher {
 			case REUSE -> {
 				reused = true;
 				sidecarPid = recordedPid;
-				set(State.STARTING, "reusing the helper already running on port " + Sidecar.port());
+				set(State.STARTING, "Connecting to the design helper…", "reusing the helper already running on port " + Sidecar.port());
 				Sidecar.link().start();
 				return;
 			}
 			case PORT_TAKEN -> {
-				set(State.DISABLED, "port " + Sidecar.port() + " is used by another helper (version " + (answered.isEmpty() ? "?" : answered)
+				set(State.DISABLED, "Another copy of the design helper (from another game or version) is in the way, so designing is off. Close "
+					+ "the other game, then press Restart helper.", "port " + Sidecar.port() + " is used by another helper (version " + (answered.isEmpty() ? "?" : answered)
 					+ ", ours " + expectedVersion + ") that this game did not start; stop it or set ARCHITECT_PORT");
 				return;
 			}
 			case STOP_THEN_START -> {
-				set(State.STARTING, "stopping the old helper (pid " + recordedPid + ")");
+				set(State.STARTING, "Replacing an old design helper…", "stopping the old helper (pid " + recordedPid + ")");
 				ProcessHandle.of(recordedPid).ifPresent(h -> kill(h, 3000));
 			}
 			case START -> {
@@ -291,7 +321,7 @@ public final class Launcher {
 		pb.environment().clear();
 		pb.environment().putAll(LauncherPlan.environment(System.getenv(), nodePath, isWindows()));
 		long spawnedAt = System.currentTimeMillis();
-		set(State.STARTING, "starting the helper");
+		set(State.STARTING, "Starting the design helper…", "starting the helper");
 		Process p = pb.start();
 		process = p;
 		reused = false;
@@ -330,22 +360,23 @@ public final class Launcher {
 		process = null;
 		Sidecar.link().pause();
 		if (stopping) {
-			set(State.DISABLED, "the helper was stopped");
+			set(State.DISABLED, "The design helper is stopped.", "the helper was stopped");
 			return;
 		}
 		logTail = readTail(20);
-		set(State.CRASHED, "the helper exited (code " + code + "); last lines of " + logFile().getFileName());
+		set(State.CRASHED, "The design helper stopped unexpectedly. Restart it from the Status tab.", "the helper exited (code " + code
+			+ "); last lines of " + logFile().getFileName());
 	}
 
 	private static void onLinkChange(LinkStatus link) {
 		if (link.synced()) {
 			if (state != State.RUNNING) {
-				set(State.RUNNING, (reused ? "reused the helper" : "helper running") + " on port " + Sidecar.port());
+				set(State.RUNNING, "The design helper is running.", (reused ? "reused the helper" : "helper running") + " on port " + Sidecar.port());
 			}
 		} else if (state == State.RUNNING && link.phase() == LinkStatus.Phase.WAITING_RETRY) {
 			Process p = process;
 			if (reused || p == null || p.isAlive()) {
-				set(State.STARTING, "reconnecting: " + (link.lastError() == null ? "" : link.lastError()));
+				set(State.STARTING, "Reconnecting to the design helper…", "reconnecting: " + (link.lastError() == null ? "" : link.lastError()));
 			}
 		}
 	}
@@ -460,7 +491,8 @@ public final class Launcher {
 		String extracted = readString(target.resolve(".extracted"));
 		if (!fingerprint.equals(extracted)) {
 			bundleUpdated = extracted != null;
-			set(State.INSTALLING, extracted == null ? "unpacking the helper" : "updating the helper");
+			set(State.INSTALLING, extracted == null ? "Unpacking the design helper…" : "Updating the design helper…", extracted == null
+				? "unpacking the helper" : "updating the helper");
 			Architect.LOGGER.info("Launcher: extracting the helper bundle {} (was {})", fingerprint, extracted);
 			Path tmp = target.resolveSibling(target.getFileName() + ".tmp-" + System.currentTimeMillis());
 			try (Stream<Path> walk = Files.walk(root)) {
@@ -502,7 +534,8 @@ public final class Launcher {
 		}
 		Path npm = LauncherPlan.npmFor(nodePath, isWindows());
 		List<String> cmd = LauncherPlan.installCommand(npm, Files.exists(target.resolve("package-lock.json")));
-		set(State.INSTALLING, "installing the Claude Agent SDK (about 200 MB, first run only)");
+		installStartedAt = System.currentTimeMillis();
+		set(State.INSTALLING, "Installing the design helper (about 200 MB, first run only)…", "installing the Claude Agent SDK (npm " + cmd.get(1) + ")");
 		ProcessBuilder pb = new ProcessBuilder(cmd).directory(target.toFile()).redirectErrorStream(true);
 		pb.environment().putAll(LauncherPlan.environment(System.getenv(), nodePath, isWindows()));
 		Process p = pb.start();
@@ -521,7 +554,8 @@ public final class Launcher {
 		Files.write(Sidecar.dataDir().resolve("npm-install.log"), lines, StandardCharsets.UTF_8);
 		if (code != 0) {
 			logTail = LauncherPlan.tail(lines, 20);
-			set(State.CRASHED, "npm " + cmd.get(1) + " failed (code " + code + ")");
+			set(State.CRASHED, "Installing the design helper failed. Check the internet connection, then press Restart helper in the Status tab.",
+				"npm " + cmd.get(1) + " failed (code " + code + "); see npm-install.log");
 			return false;
 		}
 		installLine = null;
@@ -654,28 +688,42 @@ public final class Launcher {
 		return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows");
 	}
 
-	private static void set(State s, String why) {
+	private static void set(State s, String plain, String why) {
 		State before = state;
 		state = s;
 		detail = why;
+		summary = plain;
 		if (s == State.CRASHED && logTail.isEmpty()) {
 			logTail = readTail(20);
 		}
 		if (s != State.CRASHED) {
 			logTail = s == State.RUNNING ? List.of() : logTail;
 		}
-		Architect.LOGGER.info("Launcher: {} ({})", s.wire(), why);
 		if (before == s) {
+			Architect.LOGGER.info("Launcher: {} ({})", s.wire(), why);
+			return;
+		}
+		// UI-2b: "ready" toasts once a session; a reconnect blip back to RUNNING is not news; a repeated failure toasts once a minute
+		LaunchNotices.Notice notice;
+		synchronized (NOTICES) {
+			notice = NOTICES.on(before, s, System.currentTimeMillis());
+			if (NOTICES.quiet()) {
+				Architect.LOGGER.debug("Launcher: {} ({}; a reconnect blip)", s.wire(), why);
+			} else {
+				Architect.LOGGER.info("Launcher: {} ({})", s.wire(), why);
+			}
+		}
+		if (notice == LaunchNotices.Notice.NONE) {
 			return;
 		}
 		Minecraft mc = Minecraft.getInstance();
 		mc.execute(() -> {
 			String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
-			switch (s) {
-				case RUNNING -> Toasts.push(Toasts.Level.INFO, "Architect is ready", "The design helper is running.");
+			switch (notice) {
+				case READY -> Toasts.push(Toasts.Level.INFO, "Architect is ready", "You can design buildings now.");
 				case NODE_MISSING -> Toasts.push(Toasts.Level.NEED, "Architect needs Node.js", "Install Node.js " + LauncherPlan.MIN_NODE
 					+ "+ to design buildings; placing works without it.", key, "status");
-				case CRASHED -> Toasts.push(Toasts.Level.WARN, "The design helper stopped", why, key, "status");
+				case CRASHED -> Toasts.push(Toasts.Level.WARN, "The design helper stopped", plain, key, "status");
 				default -> {
 				}
 			}
@@ -687,6 +735,8 @@ public final class Launcher {
 		JsonObject o = new JsonObject();
 		o.addProperty("state", state.wire());
 		o.addProperty("detail", detail);
+		o.addProperty("summary", summary);
+		o.addProperty("readyToasted", NOTICES.readyShown());
 		o.addProperty("installLine", installLine);
 		LauncherPlan.Source s = source;
 		o.addProperty("source", s == null ? null : s.kind().name().toLowerCase(java.util.Locale.ROOT));

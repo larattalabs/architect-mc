@@ -27,8 +27,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The construction crate's screen (docs/CONTRACT.md phase 3 "The crate"): the bill of materials with needed / delivered /
- * placed per item (and what is still missing), progress, "Insert from inventory", Pause / Resume and Deconstruct (pressed
- * twice). Notes: waterlogged cells built dry, cells blocked for 200 ticks ("blocked at x,y,z"), credit, a missing crate.
+ * placed per item (and what is still missing), progress, "Insert from inventory", Pause / Resume and Deconstruct (lab-ui's
+ * two-press Confirm since UI-2b). Notes: waterlogged cells built dry, cells blocked for 200 ticks ("blocked at x,y,z"), credit, a missing crate.
  * Reads the site's state on the integrated server twice a second (singleplayer, as the rest of the mod).
  */
 public final class CrateScreen extends Screen {
@@ -42,7 +42,16 @@ public final class CrateScreen extends Screen {
 	@Nullable String flash;
 	boolean flashBad;
 	long flashAt;
-	boolean confirmDeconstruct;
+	/**
+	 * UI-2b: Deconstruct is lab-ui's two-press {@link dev.larattalabs.labui.client.widget.Confirm} ("Press again to deconstruct
+	 * (4)", Esc or a click elsewhere cancels, a 5 s window). A site another mod owns asks once more (R5): the second Confirm,
+	 * armed by the first's confirm, on the same {@link dev.larattalabs.labui.ui.ConfirmArm}.
+	 */
+	final dev.larattalabs.labui.ui.ConfirmArm deconArm = new dev.larattalabs.labui.ui.ConfirmArm();
+	final dev.larattalabs.labui.client.widget.Confirm decon = new dev.larattalabs.labui.client.widget.Confirm(deconArm, "deconstruct", "Deconstruct",
+		"deconstruct", this::deconstructConfirmed);
+	final dev.larattalabs.labui.client.widget.Confirm deconOwned = new dev.larattalabs.labui.client.widget.Confirm(deconArm, "deconstruct_owned",
+		"Deconstruct", "take down their site", this::doDeconstruct);
 	int scroll;
 	int ticks;
 	private final List<Hit> hits = new ArrayList<>();
@@ -159,18 +168,37 @@ public final class CrateScreen extends Screen {
 		});
 	}
 
+	/** Whether a Deconstruct press is armed (the next press goes on). */
+	boolean confirmDeconstruct() {
+		return deconArm.armedKey(net.minecraft.util.Util.getMillis()) != null;
+	}
+
+	/** The Deconstruct confirm drawn now: the owned site's second ask while it is armed, else the first. */
+	private dev.larattalabs.labui.client.widget.Confirm deconShown() {
+		return deconOwned.armed() ? deconOwned : decon;
+	}
+
+	/** A Deconstruct press (the button, Enter on it, DevBridge {@code dev.crate.press}). */
 	public void deconstruct() {
-		Site owned = Sites.get(siteId);
-		if (owned != null && owned.owner() != null && confirmDeconstruct
-			&& !dev.larattalabs.architect.client.ui.OwnedConfirm.ask(owned, this::flash)) {
-			return; // a site another mod owns asks once more (R5)
+		boolean wasArmed = confirmDeconstruct();
+		deconShown().press();
+		if (!wasArmed && confirmDeconstruct()) {
+			flash("The ground comes back; placed blocks are refunded here", false);
 		}
-		if (!confirmDeconstruct) {
-			confirmDeconstruct = true;
-			flash("Press Deconstruct again: the terrain comes back, placed blocks are refunded here", false);
+	}
+
+	private void deconstructConfirmed() {
+		Site owned = Sites.get(siteId);
+		if (owned != null && owned.owner() != null) {
+			// a site another mod owns asks once more (R5)
+			deconArm.press("deconstruct_owned", net.minecraft.util.Util.getMillis());
+			flash(siteId + " belongs to " + owned.owner() + "; taking it down may break that mod's plans. Press again to take it down", true);
 			return;
 		}
-		confirmDeconstruct = false;
+		doDeconstruct();
+	}
+
+	private void doDeconstruct() {
 		ServerTasks.callAsPlayer((level, player) -> {
 			try {
 				Site s = Sites.get(siteId);
@@ -194,12 +222,17 @@ public final class CrateScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		// confirms first: a click on one presses it, a click anywhere else disarms it (lab-ui Confirm)
+		boolean wasArmed = confirmDeconstruct();
+		if (decon.mouseClicked(e.x(), e.y(), e.button()) | deconOwned.mouseClicked(e.x(), e.y(), e.button())) {
+			if (!wasArmed && confirmDeconstruct()) {
+				flash("The ground comes back; placed blocks are refunded here", false);
+			}
+			return true;
+		}
 		for (Hit h : List.copyOf(hits)) {
 			if (h.contains(e.x(), e.y())) {
-				if (h.enabled()) {
-					if (!h.id().equals("deconstruct")) {
-						confirmDeconstruct = false;
-					}
+				if (h.enabled() && !h.id().equals("deconstruct")) { // Deconstruct's clicks are the Confirm's (left button only)
 					h.action().run();
 				}
 				return true;
@@ -217,6 +250,10 @@ public final class CrateScreen extends Screen {
 	@Override
 	public boolean keyPressed(KeyEvent e) {
 		if (e.isEscape()) {
+			if (decon.escape() || deconOwned.escape()) {
+				flash("Not deconstructed", false);
+				return true;
+			}
 			onClose();
 			return true;
 		}
@@ -228,7 +265,8 @@ public final class CrateScreen extends Screen {
 		JsonObject o = new JsonObject();
 		o.addProperty("site", siteId);
 		o.addProperty("flash", flash);
-		o.addProperty("confirmDeconstruct", confirmDeconstruct);
+		o.addProperty("confirmDeconstruct", confirmDeconstruct());
+		o.addProperty("confirmSecondsLeft", deconArm.secondsLeft(net.minecraft.util.Util.getMillis()));
 		JsonArray c = new JsonArray();
 		for (Hit h : hits) {
 			JsonObject j = new JsonObject();
@@ -248,7 +286,7 @@ public final class CrateScreen extends Screen {
 		for (Hit h : List.copyOf(hits)) {
 			if (h.id().equals(id) && h.enabled()) {
 				if (!id.equals("deconstruct")) {
-					confirmDeconstruct = false;
+					deconArm.cancel();
 				}
 				h.action().run();
 				return true;
@@ -375,10 +413,23 @@ public final class CrateScreen extends Screen {
 		// footer: flash, buttons
 		int by = bottom - 20;
 		int bx = cx;
-		bx += button(g, "insert", "Insert from inventory", bx, by, 124, true, building, mouseX, mouseY, this::insertFromInventory) + 4;
+		// UI-2b: Deconstruct keeps the width of its armed label ("Press again to deconstruct (5)"), so arming never shifts the row;
+		// Insert gives way ("Insert" when "Insert from inventory" does not fit)
+		var dc = deconShown();
+		int dWant = dc.width(font);
+		int insW = Math.max(56, Math.min(124, cw - 50 - 60 - dWant - 12));
+		String ins = font.width("Insert from inventory") + 12 <= insW ? "Insert from inventory" : "Insert";
+		bx += button(g, "insert", ins, bx, by, insW, true, building, mouseX, mouseY, this::insertFromInventory) + 4;
 		bx += button(g, "pause", paused ? "Resume" : "Pause", bx, by, 60, false, building, mouseX, mouseY, this::togglePause) + 4;
-		bx += button(g, "deconstruct", confirmDeconstruct ? "Really deconstruct" : "Deconstruct", bx, by, confirmDeconstruct ? 104 : 80, false, true,
-			mouseX, mouseY, this::deconstruct) + 4;
+		{
+			var c = dc;
+			int dw = Math.max(60, Math.min(dWant, cx + cw - 54 - bx));
+			c.draw(g, font, bx, by, dw, 20, mouseX, mouseY);
+			(c == decon ? deconOwned : decon).hide();
+			hits.add(new Hit("deconstruct", c.armed() ? c.armedLabel(deconArm.secondsLeft(net.minecraft.util.Util.getMillis())) : "Deconstruct", bx, by, dw,
+				20, true, this::deconstruct)); // the DevBridge's dev.crate.press and json (clicks reach the Confirm first)
+			bx += dw + 4;
+		}
 		button(g, "close", "Close", cx + cw - 50, by, 50, false, true, mouseX, mouseY, this::onClose);
 		if (flash != null && System.currentTimeMillis() - flashAt < 6000) {
 			Panels.text(g, font, TextUtil.ellipsize(font, flash, cw - 110), cx, listBottom + 3, flashBad ? UiBits.errorText() : UiBits.okText());
