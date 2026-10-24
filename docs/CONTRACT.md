@@ -24751,6 +24751,10 @@ release-tier run. **Versions:** API **1.40.0**, mod **0.43.0**, kit **0.41.0**, 
 | api-compat | against this build's classes: the 0.42.0, 0.41.0, 0.40.1 and 0.40.0 apitest jars and the 0.42.0 jar's 1.39.0 surface, 5/5 clean |
 | in game | D3's, CW's and the foundation's own steps on slice/D3 (D3 as built, "Brought up to main"); no release-tier run (DEV MODE) |
 
+`apijars` now runs the latest three releases: 0.42.0 (`artifacts/release-0430/v0420`: the D3 builder's tag build with the tag's
+`tools/`), 0.41.0 and 0.40.1. Not run in game for this cut (DEV MODE); the nightly runs it. The 0.43.0 jars (mod, sources, apitest,
+devserver) are archived in `artifacts/release-0430/v0430/` with a SOURCE.txt, for Steward and the next slice's api-compat.
+
 ### Known issues carried forward
 
 - Everything listed under v0.42.0's, and D3's queued items (PLAN "Queued from slice D3").
