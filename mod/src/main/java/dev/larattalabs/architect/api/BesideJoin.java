@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * region it meets, the junction's kind ({@code "end"}: a street end, continuing its line; {@code "side"}: a T at a street's side), the
  * search step that found it ({@code "seam"}: D1's, inside the claim's seam; {@code "reach"}: into the town's claim), the street road
  * it meets, the street end's node (an end only), the junction cell (the join's end, its feet), the join's facing there (away from the
- * street), its written columns and how many of them lie in the town's claim. Since NEXT.
+ * street), its written columns and how many of them lie in the town's claim. Since 1.40.0.
  */
 public record BesideJoin(String region, String kind, String step, String road, @Nullable String node, BlockPos at, Direction facing, int cells,
 	int insideCells) {

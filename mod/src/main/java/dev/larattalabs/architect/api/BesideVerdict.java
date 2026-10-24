@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
  * land ({@code architect_mc:land}'s record for the plan, D-S3); or not, with the {@link Reason} the plan would have been refused with
  * (null for a plan the helper failed), its message, and {@code code}, the kit's named word with its bracketed kind ({@code NO_JOIN
  * [route]}, {@code NO_ROOM}, {@code NO_EDGE}, {@code PROTECTED}, {@code OVERLAP}). {@code ms}: the run's time (recorded, not judged).
- * A placeholder district's join and land are the placeholder's: the real first building plans again and may land elsewhere. Since NEXT.
+ * A placeholder district's join and land are the placeholder's: the real first building plans again and may land elsewhere. Since 1.40.0.
  */
 public record BesideVerdict(boolean fits, @Nullable Reason reason, @Nullable String code, String message, @Nullable BesideJoin join,
 	com.google.gson.@Nullable JsonObject land, long ms) {

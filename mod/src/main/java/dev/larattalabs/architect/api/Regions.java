@@ -128,10 +128,10 @@ public interface Regions {
 	 * no plan id, plan record or file, no opKey entry (an opKey in the request is ignored and noted), no blob, no world write, ticket or
 	 * prepare. Completes with a {@link BesideVerdict}: fits with the join and the land, or the reason, message and the kit's code the plan
 	 * would have failed with. The same request planned now gives the same answer (a snapshot). Without {@code beside} it refuses
-	 * {@link Reason#NOT_ALLOWED}. Costs $0; it shares the plan queue. Since NEXT, feature {@code "besideCheck"}.
+	 * {@link Reason#NOT_ALLOWED}. Costs $0; it shares the plan queue. Since 1.40.0, feature {@code "besideCheck"}.
 	 */
 	default CompletableFuture<BesideVerdict> checkBeside(RegionPlanRequest r) {
-		throw new UnsupportedOperationException("Regions.checkBeside needs the Architect API since NEXT");
+		throw new UnsupportedOperationException("Regions.checkBeside needs the Architect API since 1.40.0");
 	}
 
 	// ------------------------------------------------------------------ (6c P0) plan check v0
