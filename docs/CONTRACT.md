@@ -24835,6 +24835,9 @@ a minor bump (the coordinator sets it at merge; the code says `NEXT`). Steward's
   - The entry records the palette as its `palette`. With roles inline, the kit also records `{id, version}` as the entry's `bible`
     (that version's pin, §6); the blocks come from the roles alone.
   - The text `style` stays required, and `materials` text, if sent, is ignored in favour of the palette.
+  - Designed again (polish, versionOf, a report critique), a materials-only entry keeps its palette and gets no bible: its pin only
+    names the Style the roles came from (`setModePin`). An entry made in set mode (a `bible` request, a group) keeps its pin as
+    before.
 - **`PaletteSpec` is strict** (`design.request`, `variant.request`): an unknown key is refused. Before U1 the inputs object
   wasn't strict, so `{bible: …}` parsed as `{}` and the default palette was built, silently. The bible branch is tried first. A
   stored variant record still reads leniently.
@@ -24955,3 +24958,9 @@ surface still resolve.
 - U3 is the browser and the editor. Favourites and recents live in the client's `style-meta.json`. A Style is Duplicate-only when
   `!Bible.editable()`.
 - The Design tab still sends free-text `style` with no palette; U2/U3 send `withStyle` / an inline mix.
+- **A Style re-skins what a design reads.** The kit examples (and the sim's copies of them) take their walls from the wood set
+  (`p.planks`), not `p.wall`. A Style whose identity is a non-wood wall (medieval's white_terracotta, japanese's white_wool,
+  modern's white_concrete) changes their frame, floor, roof, trim and foundation, but not their walls. A design Claude makes with
+  the brief's materials line reads the roles. U3's previews and U4's A/B should expect this.
+- `sidecar/src/claude/contract.ts` (the design agent's contract excerpt) still lists the ten older presets. That is prompt text, so
+  it is left for a deliberate follow-up.

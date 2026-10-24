@@ -23,3 +23,15 @@ export function checkPaletteSpec(kitDir: string, spec: PaletteSpec): void {
   if (r.status === 0 && v.ok) return;
   throw new ClientError(`palette: ${(v.errors ?? [truncate(`${r.stdout}${r.stderr}`, 300)]).slice(0, 4).join('; ')}`);
 }
+
+/**
+ * (U1) The bible an installed entry is designed again with (polish, versionOf, a report critique): its `bible` pin, in set mode,
+ * unless the entry was made materials only (its request carries a `palette`). Then the pin only names the Style its roles came
+ * from: the request keeps its palette (the roles inline) and no bible turns set mode on.
+ */
+export function setModePin(json: Record<string, unknown>): { bible: string; bibleVersion: number } | Record<string, never> {
+  const req = json.request && typeof json.request === 'object' ? (json.request as { palette?: unknown }) : undefined;
+  if (req?.palette !== undefined) return {};
+  const pin = json.bible && typeof json.bible === 'object' ? (json.bible as { id?: string; version?: number }) : undefined;
+  return pin?.id ? { bible: pin.id, bibleVersion: pin.version ?? 1 } : {};
+}

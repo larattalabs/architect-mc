@@ -176,3 +176,13 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
     expect(acks[0]).toMatchObject({ type: 'ack', ok: true, result: { id: 'bib_wire_style', version: 1 } });
   });
 });
+
+describe('a materials-only entry stays out of set mode when designed again (pure)', () => {
+  it('setModePin: the pin turns set mode on only for an entry made without a palette', async () => {
+    const { setModePin } = await import('../src/styles.js');
+    const pin = { id: 'medieval', version: 1 };
+    expect(setModePin({ bible: pin, request: { type: 'cabin', palette: { bible: { ...pin, roles: MEDIEVAL } } } })).toEqual({});
+    expect(setModePin({ bible: { id: 'bib_x', version: 2 }, request: { type: 'cabin', bible: 'bib_x' } })).toEqual({ bible: 'bib_x', bibleVersion: 2 });
+    expect(setModePin({ request: { type: 'cabin' } })).toEqual({});
+  });
+});

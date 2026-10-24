@@ -9,7 +9,8 @@ lists what Steward is asked to accept. API: additive only, a minor bump at merge
    roles inline `{bible: {id, version, roles}}` (`DesignRequest.withStyle(Bible)` builds it). It is never bible set mode: no shared
    components, no restraint. It excludes `bible`. The mod sends it only to a helper whose features list `palette.roles`, and fails
    the future otherwise (an older helper would drop it silently). The entry records the palette, and with roles inline it pins
-   `{id, version}` as its `bible`.
+   `{id, version}` as its `bible`. Designed again (polish, versionOf, a report critique), such an entry keeps its palette and never
+   turns into set mode.
 2. **Binary compatibility (your condition c).** Every earlier canonical constructor of `DesignRequest` stays: your 14-argument
    1.1.0 one (LotBrief.java:46, ChangeRequests.java:154), and those of 1.2.0, 1.3.0, 1.6.0, 1.11.0 and 1.37.0. `Bible` keeps its
    1.2.0 (12) and 1.6.0 (16) constructors. `ApiStyleU1Test` checks each by reflection, and api-compat passes against the 0.42.0 and
@@ -55,12 +56,10 @@ lists what Steward is asked to accept. API: additive only, a minor bump at merge
 
 ## Evidence (DEV MODE)
 
-- **Units:**
-  - kit: the whole suite (851 tests). The one failure was my own mid-run edit to a kit file, which tripped
-    `delta-fixtures` determinism; it passes alone.
-  - `styles.test.mjs`, `bible.test.mjs` and `vocab.test.mjs`: pass.
-  - sidecar vitest: all pass, after updating the feature lists and Limits.
-  - Java: `StyleRolesTest` (JS/Java parity cases), `ApiStyleU1Test`, `VariantFormTest`, the Wire tests and `FieldLimitsTest`.
+- **Units (on the tree merged with main e00af4ab):** kit, the whole suite 865/865 (delta-fixtures included); sidecar `tsc` and
+  vitest, all pass (`styles-u1.test.ts`: the materials-only design, variants with roles, `bible.save`, version permanence, GC,
+  `setModePin`); Java `./gradlew build --offline`, 901 tests and 0 failures (`StyleRolesTest` for JS/Java parity,
+  `ApiStyleU1Test`, `VariantFormTest`, the Wire tests, `FieldLimitsTest`); `release-version.mjs --check --lenient` consistent.
 - **Lints:** structure (59 cases), look (13) and water (123), all 0 FAIL.
 - **Other checks:** `step-inputs check` and api-compat (0.42.0, 0.41.0 and the 0.42.0 surface).
 - **In game:** `u1-ingame` (`tools/gateu1.mjs ingame`, headless, sim, $0): **PASS**, 29/29 checks, on the tree merged with main

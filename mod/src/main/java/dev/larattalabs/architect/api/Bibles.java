@@ -100,7 +100,7 @@ public interface Bibles {
 	 * Completes with the saved version. Since NEXT.
 	 */
 	default CompletableFuture<Bible> save(@Nullable String bibleId, com.google.gson.JsonObject style, @Nullable String owner) {
-		throw new UnsupportedOperationException("Bibles.save needs Architect API NEXT");
+		throw new UnsupportedOperationException("Bibles.save needs Architect API since NEXT");
 	}
 
 	/**
@@ -109,6 +109,6 @@ public interface Bibles {
 	 * by id, then the built-in ones). Use {@link DesignRequest#withStyle} for a materials-only design with one. Any thread. Since NEXT.
 	 */
 	default List<Bible> usable(@Nullable String owner) {
-		throw new UnsupportedOperationException("Bibles.usable needs Architect API NEXT");
+		throw new UnsupportedOperationException("Bibles.usable needs Architect API since NEXT");
 	}
 }
