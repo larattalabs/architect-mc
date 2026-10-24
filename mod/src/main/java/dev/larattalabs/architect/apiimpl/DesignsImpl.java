@@ -752,6 +752,7 @@ final class DesignsImpl implements Designs {
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				case "palette.roles", "bible.save" -> "Style unification U1";
 				case "bible.check" -> "Style unification U3";
+				case "bible.parts" -> "Style unification U5";
 				default -> "4b";
 			};
 			return what + " need a helper with phase " + phase + " (" + feature + "); this one does not have it";

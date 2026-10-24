@@ -43,6 +43,7 @@ class StyleFormTest {
 			case "role" -> f.setRole(op.get(1).getAsString(), op.get(2).getAsString());
 			case "feature" -> f.toggleFeature(op.get(1).getAsString());
 			case "features" -> f.setFeatures(strings(op.get(1).getAsJsonArray()));
+			case "parts" -> f.useParts(op.get(1).getAsBoolean());
 			default -> throw new AssertionError("unknown op " + kind);
 		}
 	}
@@ -103,7 +104,7 @@ class StyleFormTest {
 		f.pick(StyleForm.Style.preset(Palettes.FALLBACK, "medieval"));
 		JsonObject p = f.request().getAsJsonObject("palette").getAsJsonObject("bible");
 		assertEquals("medieval", p.get("id").getAsString());
-		assertEquals("minecraft:white_terracotta", p.getAsJsonObject("roles").get("wall").getAsString());
+		assertEquals("minecraft:white_concrete", p.getAsJsonObject("roles").get("wall").getAsString());
 		assertEquals(List.of("porch", "chimney", "balcony"), f.features());
 		assertTrue(f.fromStyle("chimney") && !f.fromStyle("porch"));
 		f.editMain("wood", "birch");

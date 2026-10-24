@@ -124,8 +124,9 @@ public final class Drafts {
 		StyleForm.Style s = kind.equals(StyleForm.INPUTS) && o.has("inputs") ? StyleForm.Style.inputs(Palettes.Inputs.of(o.getAsJsonObject("inputs")),
 			StyleRoles.fallback()) : new StyleForm.Style(o.has("id") ? o.get("id").getAsString() : null, o.get("name").getAsString(), o.get("version")
 				.getAsInt(), kind, null, baseRoles, java.util.List.of(), java.util.List.of(), false, false);
-		var installed = s.id() != null && kind.equals(StyleForm.BIBLE) ? SetFeature.bible(s.id()).filter(b -> b.version() == s.version()) : java.util.Optional
-			.<dev.larattalabs.architect.api.Bible>empty();
+		// (U5) the helper's record when it has that version (it knows the Style's own parts), for a built-in too
+		var installed = s.id() != null && !kind.equals(StyleForm.INPUTS) ? SetFeature.bible(s.id()).filter(b -> b.version() == s.version()) : java.util
+			.Optional.<dev.larattalabs.architect.api.Bible>empty();
 		pick.accept(installed.map(StyleForm.Style::of).orElse(s));
 		JsonObject main = o.getAsJsonObject("main");
 		for (String field : StyleRoles.MAIN_FIELDS) {
@@ -157,9 +158,8 @@ public final class Drafts {
 		f.profile.forEach(pr::add);
 		o.add("profile", pr);
 		o.add("style", styleOf(f.styleForm));
-		if (f.bible != null) {
-			o.addProperty("bible", f.bible);
-		}
+		// (U5b) "Use this style's parts" as chosen
+		o.addProperty("useParts", f.styleForm.usePartsChosen());
 		o.addProperty("styleText", f.styleText.value());
 		o.addProperty("ownWords", f.ownWordsMode);
 		o.addProperty("styleNote", f.styleNote.value());
@@ -200,7 +200,13 @@ public final class Drafts {
 		} else {
 			f.styleForm.unpick();
 		}
-		f.bible = o.has("bible") ? o.get("bible").getAsString() : null;
+		// (U5b) the parts toggle; a draft from before U5 named a Claude-made Style as its set-mode bible: pick it, its parts on
+		if (o.has("bible") && !o.get("bible").isJsonNull()) {
+			SetFeature.bible(o.get("bible").getAsString()).ifPresent(b -> f.styleForm.pick(StyleForm.Style.of(b)));
+			f.setUseParts(true);
+		} else if (o.has("useParts")) {
+			f.setUseParts(o.get("useParts").getAsBoolean());
+		}
 		f.styleText.set(str(o, "styleText", ""));
 		f.ownWordsMode = o.has("ownWords") && o.get("ownWords").getAsBoolean();
 		f.styleNote.set(str(o, "styleNote", ""));

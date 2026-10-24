@@ -33,6 +33,11 @@ public final class StyleCatalog {
 		public boolean canEdit() {
 			return bible.editable();
 		}
+
+		/** (U5b) "Add parts…": the player's own Style or a built-in (its parts go on a copy); never a mod's. */
+		public boolean canAddParts() {
+			return !bible.modOwned();
+		}
 	}
 
 	private StyleCatalog() {
@@ -61,6 +66,17 @@ public final class StyleCatalog {
 			return "Built-in (duplicate to change it)";
 		}
 		return "claude".equals(b.origin()) ? "Made by Claude · yours" : "Yours · made by hand";
+	}
+
+	/**
+	 * (U5b) Whether a Style has its own parts: "Parts: 7" or "No parts · Add parts… (+ New style)" (a built-in's go on your copy; a
+	 * mod's: only its owner adds them).
+	 */
+	public static String partsLine(Bible b) {
+		if (b.hasParts()) {
+			return "Parts: " + b.parts().size();
+		}
+		return b.modOwned() ? "No parts (only its owner adds them)" : "No parts · Add parts… (+ New style)" + (b.builtin() ? ": on your copy" : "");
 	}
 
 	/**
@@ -121,6 +137,7 @@ public final class StyleCatalog {
 			int used = usage.getOrDefault(b.id(), 0);
 			List<String> d = new ArrayList<>();
 			d.add(originLine(b) + (b.builtin() ? "" : " · v" + b.version()));
+			d.add(partsLine(b));
 			b.basedOn().ifPresent(p -> {
 				String n = nameOf.apply(p.id());
 				d.add("Based on " + (n == null ? p.id() : n) + " v" + p.version());

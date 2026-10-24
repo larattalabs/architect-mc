@@ -60,6 +60,9 @@ final class StyleEditorScreen extends U3Screen {
 	private final Button save;
 	private final Button cancel = new Button("Cancel", this::back);
 	private final String basedOn;
+	/** (U5b) the Style it was opened on (its parts: an edit keeps them, a copy starts without) */
+	private final Bible source;
+	private final Button addParts = new Button("Add parts…", this::addParts);
 	private int scroll;
 	private int contentH;
 	private int[] view = new int[4];
@@ -75,10 +78,11 @@ final class StyleEditorScreen extends U3Screen {
 	private boolean saving;
 	private @Nullable Bible saved;
 
-	private StyleEditorScreen(StyleDraft draft, String basedOn, @Nullable Screen parent) {
+	private StyleEditorScreen(StyleDraft draft, String basedOn, Bible source, @Nullable Screen parent) {
 		super(draft.mode() == StyleDraft.Mode.EDIT ? "Edit style" : "New style", parent);
 		this.draft = draft;
 		this.basedOn = basedOn;
+		this.source = source;
 		name.set(draft.name());
 		nameField = field("name", name, "a name", 1);
 		tagField = field("tag", tagInput, "+ tag", 1);
@@ -93,7 +97,23 @@ final class StyleEditorScreen extends U3Screen {
 			.fallback(), LibraryFeature.palettes());
 		String based = edit ? b.basedOn().map(p -> "Based on " + SetFeature.bible(p.id()).map(Bible::name).orElse(p.id()) + " v" + p.version())
 			.orElse(b.builtin() ? "Built-in" : "Made from scratch") : "Based on " + b.name() + (b.builtin() ? "" : " v" + b.version());
-		return new StyleEditorScreen(d, based, parent);
+		return new StyleEditorScreen(d, based, b, parent);
+	}
+
+	/** (U5b) "Parts: 7 · kept when you save" / "No parts · Add parts…" (an edit), "No parts: a copy starts without" (a copy). */
+	String partsLine() {
+		boolean edit = draft.mode() == StyleDraft.Mode.EDIT;
+		if (edit && source.hasParts()) {
+			return "Parts: " + source.parts().size() + " · kept when you save (they read the roles)";
+		}
+		return edit ? "No parts · Add parts… (Claude drafts them)" : "No parts: a copy starts without them (Add parts… once it is saved)";
+	}
+
+	/** (U5b) "Add parts…" for the Style being edited (its latest version; unsaved edits are not part of it). */
+	void addParts() {
+		if (draft.mode() == StyleDraft.Mode.EDIT && !source.modOwned()) {
+			minecraft.gui.setScreen(new AddPartsScreen(source, this));
+		}
 	}
 
 	/** Its {@code bible.json} as stored (the shape hints and slots ride along), from the helper's index {@code dir}; null for a built-in. */
@@ -384,6 +404,21 @@ final class StyleEditorScreen extends U3Screen {
 			fx += cwid + 3;
 		}
 		y += Chip.H + 6;
+		// (U5b) the Style's own parts
+		if (y + 10 < bottom) {
+			g.text(font, "Parts", x, y, UiStyle.CLAY_DARK, false);
+			y += 11;
+			g.text(font, TextUtil.ellipsize(font, partsLine(), w), x, y, source.hasParts() && draft.mode() == StyleDraft.Mode.EDIT ? UiBits.ink() : UiStyle
+				.mutedText(), false);
+			y += 11;
+			if (draft.mode() == StyleDraft.Mode.EDIT && y + Button.H < bottom) {
+				addParts.label(source.hasParts() ? "Redraft parts…" : "Add parts…");
+				int bw = addParts.width(font);
+				addParts.draw(g, font, x, y, bw, Button.H, mx, my);
+				control("parts", addParts);
+				y += Button.H + 6;
+			}
+		}
 		// shape hints (read-only: they ride along unchanged)
 		List<String> hints = draft.shapeHints();
 		if (y + 10 < bottom) {
@@ -605,6 +640,8 @@ final class StyleEditorScreen extends U3Screen {
 		JsonArray hints = new JsonArray();
 		draft.shapeHints().forEach(hints::add);
 		o.add("shapeHints", hints);
+		o.addProperty("parts", source.parts().size());
+		o.addProperty("partsLine", partsLine());
 		o.addProperty("slots", draft.slots().size());
 		o.add("controls", controlsJson());
 		JsonArray dev = new JsonArray();
