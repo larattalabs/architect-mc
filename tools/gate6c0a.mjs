@@ -479,7 +479,7 @@ async function flowItem() {
       }
     }
     const sc = await call('dev.sidecar.state');
-    check(sc.status?.backend === 'sim' && sc.status?.auth === 'ok' && sc.status?.sdk === 'missing', `the helper runs the sim with no Agent SDK installed (backend ${sc.status?.backend}, auth ${sc.status?.auth}, sdk ${sc.status?.sdk})`);
+    check(/^sim /.test(sc.status?.authSource ?? '') && sc.status?.auth === 'ok' && sc.status?.sdk === 'missing', `the helper runs the sim with no Agent SDK installed (auth ${sc.status?.auth} via ${sc.status?.authSource}, sdk ${sc.status?.sdk})`);
     check(/sim costs: sim: true/.test(scLog()), 'the log labels the notional costs sim: true at start');
   }
   const v = await api('api110');
