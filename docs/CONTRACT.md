@@ -24677,3 +24677,30 @@ after a prepare can wait `NOT_GENERATED` on its edge tiles.
 | removal regression | run `20261024-020754-slice` at e0bbb44f | x-resume (C23) 35/0, d3-ingame (items 7, 8, 10) 26/0, d3-unit 7/0. x-ingame 52/1: its api-compat found every reference missing because the frozen-source worktree had no compiled classes (main's new runner, not D3's) |
 | RC finding 2 (own wall) | kit `districts-d3.test.mjs` (the choice test), Java `DistrictLandTest` | pass; Java 7/7 |
 | verifier (strict: removal) | gate-verifier, run `gate-runs-d3-verify/20261024-025722-change` at 77f4c3d3 (0d8eac82's code) | PASS: d3-steward 23/0 with the RC row; offline kit D3 14/0, DistrictLandTest 7/7, PlanRetentionTest 8/8, ApiRulesTest 12/12; review of the removal fix found no defect |
+
+### Brought up to main (2026-10-24, DEV MODE)
+
+`origin/main` 42956aa5 (the 7a foundation, CW, the frozen-source build, the CPU budget) merged into slice/D3 at d1019551. Steward's RC
+passed on 0cb5f7a7, so no new RC; the conflicts were resolved keeping both sides:
+
+| file | resolution |
+|---|---|
+| `sidecar/src/protocol.ts` FEATURES, `sidecar/test/jobs.test.ts`, `sidecar/test/bundle.e2e.test.ts` | the union, in merge order: main's `region.catwalks`, then D3's `region.plan.besideReach` and `region.plan.dry` |
+| `ApiRules.java` | both mappings: `region.catwalks` -> `catwalks`, then `besideReach` and `besideCheck` |
+| `kit/lib/region/program.mjs` | an edge carries main's `t7` and `profile` in `k1` and D3's `d3` (frame, lead, graded, part, keepBehind). The only semantic merge: main's emission hunks (`rec.t7`, the 7a row segments' early return) auto-merged into D3's split-out `_routeEmit`; every name they use is module-level or local there (cw-unit and 7af-unit exercise it) |
+| `kit/lib/region/passes/route.mjs` | `sctx` has D3's `goalH`/`goalLead` and main's profile (stairs and ladders ANDed, `cost`, `ladderMax`) |
+| `kit/lib/plan/compile.mjs` | main's 7a pass inputs (`...t7`) before D3's reach inputs (`RL`), so the reach's `hard` still overrides last; t7's keys (`rockStair`, `lift`, `catwalk`) collide with none of RL's |
+| `docs/PLAN.md` | main's Watch, UI track and queued sections, then D3's queued section |
+
+Then `tools/step-inputs.json` rebuilt (236 steps; 38633af6). One gate fix (7d4e4c0e): `tools/lib/gate7a-kit.mjs` `unchanged()`
+takes `mergedIf`, so an excepted fixture identical on a base that already holds the 7a foundation passes (as KC's `onBase`);
+without it 7af-unit and cw-unit item 1 fail on any branch off main (the two F7A_MOVED fixtures read UNCHANGED).
+
+| suite / step | result |
+|---|---|
+| kit | 857/857 (`--test-concurrency=4`) |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| mod | `./gradlew build --offline`: 883 tests, 0 failed (LedgerLintTest and RegionFluidsLintTest included: p3-lint) |
+| lints | lint-structure 59/0, lint-look 13/0, water-lint 123/0 |
+| D3's, CW's and the 7a foundation's own steps | run `gate-runs-d3up/20261024-045544-change` at 38633af6 (turbo, 3 shards + 3 lanes): d3-unit 7/0, d3-ingame 26/0, d3-side 9/0, d3-steward 23/0, d3-walled 7/0, d3-natural 4/0, d3-survival 5/0, cw-ingame 28/0, cw-survival 5/0, cw-natural 13/0; cw-unit 349/2 and 7af-unit 347/2, only the two stale exceptions above |
+| the re-run after the gate fix | run `gate-runs-d3up/20261024-052832-change` at 7d4e4c0e: 7af-unit 349/0, cw-unit 351/0 (the two exceptions read "identical: the base already has it") |
