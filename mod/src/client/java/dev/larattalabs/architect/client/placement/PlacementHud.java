@@ -107,7 +107,7 @@ final class PlacementHud implements HudElement {
 			for (int i = 0; i < wrapped.size(); i++) {
 				// while placing, a refusal's status repeats the verdict: it goes first on a short screen (alone it stays)
 				add.accept(Row.text(wrapped.get(i), err ? HudInk.error() : HudInk.text()), v == null ? dev.larattalabs.architect.placement.HudFit.KEEP
-					: i == 0 ? 5 : 1);
+					: i == 0 ? 4 : 1);
 			}
 		}
 		String[][] keys = v == null || BuildPlacement.preview() ? new String[0][] : keyRows(v, legend, font, inner);
