@@ -30,6 +30,7 @@ import { kitReuse } from './lib/kit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-B-run');
@@ -75,7 +76,7 @@ function spendZero() {
 // ------------------------------------------------------------------ offline
 
 function nodeTest(files) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), notes: t.split('\n').filter((l) => l.startsWith('# ')) };

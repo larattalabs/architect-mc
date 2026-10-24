@@ -25,6 +25,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { gatePart } from './lib/gate-part.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-HY-run');
@@ -104,7 +105,7 @@ steps.base = async () => {
 /** (gate waits, 2026-10-20) The kit suite once per gate run (tools/lib/kit-reuse.mjs): pass/fail-only kit files take this run's unit-kit results when exact. */
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 function nodeTest(files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

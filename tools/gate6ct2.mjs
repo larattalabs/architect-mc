@@ -33,6 +33,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-T2-run');
@@ -108,7 +109,7 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline: unit, synth, variants, plan time, hysteresis, api-compat
 
 function nodeTest(files) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };

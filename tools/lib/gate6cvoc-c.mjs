@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
+import { testConcurrencyArgs } from './cpu-budget.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const j = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
@@ -29,7 +30,7 @@ export const UNCHANGED_EXCEPTIONS = Object.freeze(['asks/desert_jungle_wall.json
   'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n))]);
 
 function nodeTest(root, files, timeout = 3_600_000) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

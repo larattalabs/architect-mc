@@ -8,6 +8,14 @@ undoably. It has three parts:
 
 Steward (`../steward-mc`) is the main consumer of the API.
 
+
+**DEV MODE is on (Noah, 2026-10-24).** Gates are lighter until Noah says otherwise. Read docs/GATES.md "DEV MODE" before you
+gate anything:
+- a slice merges on its unit tests, the instant lints and its own in-game steps;
+- the verifier only reviews, except for undo, the journal, crash recovery and survival accounting;
+- a Steward RC only for API changes;
+- the full set runs nightly.
+
 ## Where things are decided
 
 - `docs/PLAN.md`: status per phase, decisions, queued asks, process. Read its latest sections first.

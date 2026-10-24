@@ -20,6 +20,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { testConcurrencyArgs } from './cpu-budget.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k2 = (x, z) => `${x},${z}`;
@@ -304,7 +305,7 @@ async function gateLook(ctx) {
 async function gateUnit(ctx) {
   const { root, check } = ctx;
   const run = (files) => {
-    const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
+    const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
     const t = `${r.stdout}${r.stderr}`;
     const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
     return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

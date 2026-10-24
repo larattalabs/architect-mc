@@ -1136,3 +1136,13 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   - A Steward offer ("add a portcullis to the main gate").
 - **Gate:** in game, open and close cycles, an exact undo with pistons extended and retracted, villager paths with the gate open,
   and the survival BOM.
+
+## Queued from slice D3 (coordinator, 2026-10-23)
+
+- **Prepare covers claim + 2 chunks, but an edge tile off the 64 grid needs a third.** A region realised in never-generated land
+  can then wait NOT_GENERATED after a prepare. This is a bug on main; see D3's as-built. Fix: prepare to the tiles' real chunk
+  bounds.
+- **A clearer NO_JOIN answer next to an unloaded town.** The beside check reads loaded chunks only (D3 §4), so the answer should
+  say "load the town's chunks first" alongside the "not surveyed" counts.
+- **coa-unit item 6 goes stale on every slice now that COA is on main.** Its "before" table is computed on the merge base.
+  Normalise it as F7A_ASK_PARTS does, or compare against the committed tables only.
