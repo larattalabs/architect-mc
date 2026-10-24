@@ -1917,6 +1917,17 @@ public final class RegionFluids {
 	 * drained (sources and ice back to their before states, the watched cells holding new fluid restored), saved, then one settle bound
 	 * (the longest body's) with no fluid tick scheduled in any watch set. True for a group with no region bodies, and once done.
 	 */
+	/** (6c D3, Steward's RC) Whether a region group's removal began draining its fluid bodies (it wrote the world). Server thread. */
+	public static boolean drainStarted(String group) {
+		for (RegionsImpl.Live x : RegionsImpl.all()) {
+			if (group.equals(x.rec().groupId)) {
+				Regional st = of(x);
+				return st != null && st.removal != null;
+			}
+		}
+		return false;
+	}
+
 	public static boolean removalGate(MinecraftServer s, String group) {
 		RegionsImpl.Live l = null;
 		for (RegionsImpl.Live x : RegionsImpl.all()) {

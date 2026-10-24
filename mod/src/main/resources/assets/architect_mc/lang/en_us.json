@@ -1,5 +1,6 @@
 {
 	"key.category.architect_mc.architect": "Architect",
 	"key.architect_mc.screen": "Open Architect",
+	"key.architect_mc.site_hud": "Construction HUD: full / one line / hidden",
 	"block.architect_mc.construction_crate": "Construction Crate"
 }

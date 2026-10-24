@@ -18,7 +18,9 @@ import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
-import { footprintOf } from './passes/route.mjs';
+import { edgeColumns, footprintOf } from './passes/route.mjs';
+import { LEAD, chooseReach } from './reach.mjs';
+import { keyRuns } from './beside.mjs';
 import { CHAIN_WIDTH, chainTerraces, emitTerraces, junctionOf, layoutTerraces, parseTerraces, ringOf, terraceEnds } from './terraces.mjs';
 import { BANDS, DISTRICTS_MAX, DISTRICT_GAP, DISTRICT_INF, EXACT_MAX, LOT_UNPLACED, PREFER_TAGS, UNPLACED, assignDistricts, bandOf, candidateCost, districtCandidates, levelBands, rectsMeet, spanningEdges } from './passes/districts.mjs';
 
@@ -432,9 +434,12 @@ export function emitDistricts(r, intent = {}) {
   if (!ds.some((x) => isPlaced(x.id))) throw new Error(`NO_ROOM: no district could be placed (${unplaced.map((u) => `${u.id}: ${u.reason}`).join(', ')})`);
   // ---- the join to a standing region: the cheapest dry route from a district end to a standing street end in the seam
   let join = null;
+  // ((6c D3) the reach step's state when it chose the join: the frame's survey, the candidate, the hard columns)
+  let reachJ = null;
   if (beside) {
     const ports = besidePorts(beside).filter((q) => q.end[0] >= claim.minX && q.end[0] <= claim.maxX && q.end[1] >= claim.minZ && q.end[1] <= claim.maxZ);
-    if (!ports.length) throw new Error(`NO_JOIN: no street end of region ${beside.id} lies inside this claim (its seam with the standing claim must hold one, at most 16 columns)`);
+    // (6c D3, §2.1) the seam step first, as D1; the reach step only when it has no port or no dry route, and only with the reach inputs
+    // (an older mod sends none: D1's two refusals read as before)
     let best = null;
     for (const d of ds.filter((x) => isPlaced(x.id))) for (const e of ends.get(d.id)) for (const q of ports) {
       const a = endNode(d, e);
@@ -443,7 +448,14 @@ export function emitDistricts(r, intent = {}) {
       if (dry.cost >= DISTRICT_INF) continue;
       if (!best || dry.cost < best.dry.cost) best = { a, b, q, dry };
     }
-    if (!best) throw new Error(`NO_JOIN: no route from a district to region ${beside.id}'s street ends (${ports.map((q) => q.node).join(', ')}) within the grade and the obstacles`);
+    if (!best && !ctx.besideReach) {
+      if (!ports.length) throw new Error(`NO_JOIN: no street end of region ${beside.id} lies inside this claim (its seam with the standing claim must hold one, at most 16 columns)`);
+      throw new Error(`NO_JOIN: no route from a district to region ${beside.id}'s street ends (${ports.map((q) => q.node).join(', ')}) within the grade and the obstacles`);
+    }
+    if (!best) {
+      reachJ = reachStep({ r, ctx, claim, beside, ds: ds.filter((x) => isPlaced(x.id)), ends, endNode, base, keepOut, rko, maxGrade, seamPorts: ports.length, unsafe: it._unsafe ?? {} });
+      best = reachJ.join;
+    }
     join = best;
   } else if (it.joinTo) {
     // (6c D2) a join to a point of this region (a plan's outpost to its town zone's street end): routed, no external edge
@@ -509,10 +521,16 @@ export function emitDistricts(r, intent = {}) {
     t.edges.forEach((e, k) => edges.push({ id: `${d.id}_t${k + 1}`.slice(0, 48), from: jn.get(e.a), to: jn.get(e.b), width: CHAIN_WIDTH, ...(d.terraces.stairs ? {} : { stairs: false }) }));
   }
   for (const p of chosen) { addNode(p.na); addNode(p.nb); edges.push({ id: `d_${p.a}__${p.b}`.slice(0, 48), from: p.na.name, to: p.nb.name, width: DISTRICT_ROUTE_WIDTH }); }
-  if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
+  // ((6c D3) a reach join: framed by both claims, its lead into the junction, graded (its columns exactly its footprint) and its own part
+  // `route_join`; the pass runs over the frame's survey, every other edge framed by the claim)
+  // (`_unsafe.wideReach`: the join in the routes part, a non-join writer outside the claim; `_unsafe.writeVerge`: its footprint behind the
+  // junction kept, a T graded into the verge: broken variants M28:beside must catch)
+  const U0 = it._unsafe ?? {};
+  if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, ...(reachJ ? { frame: reachJ.frame, lead: LEAD, graded: true, ...(U0.wideReach ? {} : { part: 'route_join' }), ...(U0.writeVerge ? { keepBehind: true } : {}) } : {}) }); }
   let routed = null;
   const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => (Lof(d).terraced ? layouts[d.id].ring : streetRects(Lof(d))));
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: [...(it.keepOut ?? []), ...(rko ?? [])], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear), ...[...terr.values()].flatMap((t) => t.L.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR]))], roadSurface: 'path', lamp: roadLamp(lampFixture(r)), ...(terr.size ? { guard: true } : {}) });
+  const reachIn = reachJ ? { survey: reachJ.api, frame: [reachJ.claimR], noRetain: reachJ.noRetain } : {};
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing, ...(reachJ ? reachJ.hard : [])], keepOut: [...(it.keepOut ?? []), ...(rko ?? [])], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear), ...[...terr.values()].flatMap((t) => t.L.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR]))], roadSurface: 'path', lamp: roadLamp(lampFixture(r)), ...(terr.size ? { guard: true } : {}), ...reachIn });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // a following street that does not route refuses the plan, named
   for (const d of placedNow) if (follows.has(d.id) && !byId.get(`st_${d.id}`)?.ok) throw new Error(`NO_EDGE: the street of district ${d.id} along the ${follows.get(d.id).pf.kind.replace('_', ' ')} did not route (${byId.get(`st_${d.id}`)?.failed ?? 'not routed'})`);
@@ -541,11 +559,16 @@ export function emitDistricts(r, intent = {}) {
     linkEnd(join.a);
     // the external edge (7a turns it into a typed link, S-D-2): this region's join node to the standing region's port
     const jn = r.graph.nodes.find((x) => x.id === join.b.name);
-    r.graphEdge({ id: 'join_external', from: `${jn.id}.${jn.ports[0].name}`, to: `${beside.id}:${join.q.node}.${join.q.port}`, type: 'road', width: DISTRICT_ROUTE_WIDTH, path: 'route_join', stage: stages.routes, external: true });
+    // ((6c D3, §3.5) a reach join's edge names its junction: a street end as D1 plus `junction {kind: end, at}`, a side `<town>:<roadId>`
+    // with `junction {kind: side, at, side, u}`)
+    const to = join.q.node ? `${beside.id}:${join.q.node}.${join.q.port}` : `${beside.id}:${join.q.road}`;
+    r.graphEdge({ id: 'join_external', from: `${jn.id}.${jn.ports[0].name}`, to, type: 'road', width: DISTRICT_ROUTE_WIDTH, path: 'route_join', stage: stages.routes, external: true, ...(reachJ ? { junction: reachJ.cand.junction } : {}) });
   }
   const failed = (routed?.edges ?? []).filter((e) => !e.ok);
   if (join && byId.get('join')?.ok && !beside) linkEnd(join.a);
-  if (join && !byId.get('join')?.ok) throw new Error(`NO_JOIN: the join to ${beside ? `region ${beside.id}` : it.joinTo.name} did not route (${byId.get('join')?.failed ?? 'not routed'})`);
+  if (join && !byId.get('join')?.ok) throw new Error(`NO_JOIN: ${reachJ ? '[route] ' : ''}the join to ${beside ? `region ${beside.id}` : it.joinTo.name} did not route (${byId.get('join')?.failed ?? 'not routed'})`);
+  // ---- (6c D3, §2.3) the reach: the join's written columns outside this claim, and the contact columns it holds
+  if (reachJ) r.meta.reach = reachRecord(r, reachJ, beside, U0);
   // ---- (6c D2) an outpost's corridor: the routes that reach it (its join, its spanning-tree edges), each footprint grown by 2: the
   // settlement land its road crosses, undone with it (one region)
   const corridor = {};
@@ -568,10 +591,18 @@ export function emitDistricts(r, intent = {}) {
   let lamps = null;
   if (it.lamps !== false) {
     const extra = [], extraCap = {};
-    if (it.routeLamps !== false && r.meta.route) for (const e of r.meta.route.edges) { const l = lampSpots(e); extra.push(...l.spots); if (l.spots.length) extraCap[`route:${e.id}`] = l.cap; }
+    // ((6c D3, N-D3-2) a reach join's lamps: inside this claim only, and none within LAMP_GAP of a town lamp)
+    // ((6c D3, the coordinator's ruling B) a reach join is lit inside the town's claim too: its lamps may stand on reach columns (unheld,
+    // off the town's footprint and bodies, never a contact column), none within LAMP_GAP of a town lamp (N-D3-2), and the cover holds
+    // over its walk cells in the town on their own, the town's own lights counted)
+    const RL = reachJ ? reachLamps(reachJ, claim, r) : null;
+    const lampOk = RL ? (e, q) => e.id !== 'join' || ((q.x >= claim.minX && q.x <= claim.maxX && q.z >= claim.minZ && q.z <= claim.maxZ) || RL.lampOk(q.x, q.z)) && !reachJ.nearTownLamp(q.x, q.z) : null;
+    if (it.routeLamps !== false && r.meta.route) for (const e of r.meta.route.edges) { const l = lampSpots(e); const sp = lampOk ? l.spots.filter((q) => lampOk(e, q)) : l.spots; extra.push(...sp); if (sp.length) extraCap[`route:${e.id}`] = RL && e.id === 'join' ? l.cap + RL.extraCap : l.cap; }
     const fixture = it.lampFixture ? fixtureFor(it.lampFixture, r.material('rail', 'lamp post')) : lampFixture(r);
-    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap });
-    lamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length };
+    if (RL) r._reachSurvey = reachJ.U;
+    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap, ...(RL ? { reach: { lampOk: RL.lampOk, targets: RL.targets, lights: RL.lights, area: (x, z) => x >= reachJ.town[0] && x <= reachJ.town[2] && z >= reachJ.town[1] && z <= reachJ.town[3] } } : {}) });
+    if (RL) { delete r._reachSurvey; reachAddLamps(r, claim, cover.lamps); }
+    lamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length, ...(cover.reach ? { reach: cover.reach } : {}) };
   }
   // ---- the record
   const rectArr = (q) => [q.minX, q.minZ, q.maxX, q.maxZ];
@@ -587,9 +618,9 @@ export function emitDistricts(r, intent = {}) {
     unplaced,
     pairs: pairs.map((p) => ({ a: p.a, b: p.b, cost: p.cost < DISTRICT_INF ? p.cost : null, failed: p.dry.failed ?? null })),
     edges: [...chosen.map((p) => { const id = `d_${p.a}__${p.b}`.slice(0, 48); const e = byId.get(id); return { id, a: p.a, b: p.b, kind: p.kind, dryCost: p.cost, ok: !!e?.ok, failed: e?.failed ?? null }; }),
-      ...(join ? [{ id: 'join', a: join.a.d.id, b: beside ? `${beside.id}:${join.q.node}` : join.b.name, kind: 'join', dryCost: join.dry.cost, ok: !!byId.get('join')?.ok, failed: byId.get('join')?.failed ?? null }] : [])],
+      ...(join ? [{ id: 'join', a: join.a.d.id, b: beside ? `${beside.id}:${join.q.node ?? join.q.road}` : join.b.name, kind: 'join', dryCost: join.dry.cost, ok: !!byId.get('join')?.ok, failed: byId.get('join')?.failed ?? null }] : [])],
     treeCost: span.treeCost, loopCost: span.loopCost, failedEdges: failed.map((e) => e.id),
-    join: join ? (beside ? { region: beside.id, node: join.q.node, port: join.q.port, at: join.b.at, from: join.a.name, district: join.a.d.id } : { to: join.b.name, at: join.b.at, from: join.a.name, district: join.a.d.id }) : null,
+    join: join ? (beside ? { region: beside.id, node: join.q.node, port: join.q.port, at: join.b.at, from: join.a.name, district: join.a.d.id, ...(reachJ ? { road: join.q.road, step: 'reach', junction: reachJ.cand.junction, tried: reachJ.tried, candidates: reachJ.count } : {}) } : { to: join.b.name, at: join.b.at, from: join.a.name, district: join.a.d.id }) : null,
     bells: Object.fromEntries(placedNow.map((d) => [d.id, bellOf(d)])),
     ...(follows.size ? { follow: Object.fromEntries([...follows.entries()].filter(([id]) => placedNow.some((d) => d.id === id)).map(([id, f]) => [id, {
       kind: f.pf.kind, side: f.pf.side, rect: rectArr(f.pf.rect), mask: maskRuns(f.pf.mask), maskCells: f.pf.mask.size, boundary: f.pf.window, line: f.pf.line,
@@ -608,6 +639,82 @@ export function emitDistricts(r, intent = {}) {
   if (Object.keys(corridor).length) r.meta.corridor = Object.fromEntries(Object.entries(corridor).map(([k, v]) => [k, v.runs]));
   r.note(`pass districts: ${placedNow.length}/${ds.length} placed (${data.method}${exact ? '' : ', not exact'}${follows.size ? `; ${follows.size} following a boundary` : ''}), ${chosen.length} edge(s) (${span.tree.length} tree, ${span.loops.length} loop), loop cost ${span.loopCost} of tree ${span.treeCost}${join ? `, joined to ${beside ? `${beside.id} at ${join.q.node}` : join.b.name}` : ''}${unplaced.length ? `; unplaced: ${unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}` : ''}`);
   return { data, layouts, ends: Object.fromEntries(placedNow.map((d) => [d.id, ends.get(d.id)])), reserved, laneCells };
+}
+
+/**
+ * (6c D3, §2) The reach step: the join's candidates over the town's claim (its street ends and sides), the cheapest dry route (T2 cost)
+ * from a district end to one, over the reach frame (this claim and the town's, one grid). Pairs are tried in order of their 10-a-cell
+ * lower bound and skipped once the bound can't win; at most REACH_DRY_MAX dry routes, each at most REACH_EXPANDED expansions. Throws
+ * `NO_JOIN: [kind] ...` (apart, street, wall, route, budget). Returns the join (as the seam step's: {a, b, q, dry}) and the state the
+ * route pass, the lamps and the reach record read.
+ */
+function reachStep({ r, ctx, claim, beside, ds, ends, endNode, base, keepOut, rko, maxGrade, seamPorts, unsafe }) {
+  const districtEnds = ds.flatMap((d) => ends.get(d.id).map((e) => { const n = endNode(d, e); return { x: e.x, z: e.z, at: n.at, facing: n.facing, node: n }; }));
+  const J = chooseReach({ planCols: r.survey.columns, R: ctx.besideReach, beside, claim: [claim.minX, claim.minZ, claim.maxX, claim.maxZ], yRange: [claim.minY, claim.maxY], districtEnds, baseHard: base.hard, clearTrees: base.clearTrees, keepOut: rko ? [...keepOut, ...rko] : keepOut, maxGrade, volumes: ctx.volumes ?? [], seamPorts, unsafe, route: PASSES.route });
+  const name = `join_${beside.id}`.replace(/[^a-z0-9_]/g, '_');
+  const a = J.best.end.node;
+  const b = { name, at: [...J.cand.at], facing: [...J.cand.facing] };
+  return { ...J, join: { a, b, q: { node: J.cand.node ?? null, port: J.cand.port ?? null, road: J.cand.road }, dry: J.best.dry } };
+}
+
+/**
+ * (6c D3, §2.3) The IR's `reach` (the plan adds its input shas): the join's written columns outside this claim and the contact columns it
+ * holds (row runs), their rect and count. Every reach column is checked against the reach rules (§5.3's M28:beside, at plan time):
+ * inside the town's claim, never the footprint, a body or a held column outside the contact columns.
+ */
+function reachRecord(r, J, beside, unsafe = {}) {
+  const broken = !!(unsafe.ignoreHeld || unsafe.writeVerge || unsafe.wideReach || unsafe.noHold);
+  const rec = r.meta.route.edges.find((e) => e.id === 'join');
+  const out = new Set();
+  const inClaim = (x, z) => x >= J.claimR[0] && x <= J.claimR[2] && z >= J.claimR[1] && z <= J.claimR[3];
+  for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!inClaim(x, q[1])) out.add(`${x},${q[1]}`);
+  const contact = new Set(J.cand.contact);
+  for (const k of out) {
+    const [x, z] = k.split(',').map(Number);
+    if (broken) continue;
+    if (!(x >= J.town[0] && x <= J.town[2] && z >= J.town[1] && z <= J.town[3])) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}) outside both claims`);
+    if (J.hardKeys.has(k) && !contact.has(k)) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}), a column region ${beside.id} or another site holds`);
+  }
+  const hold = unsafe.noHold ? [] : J.cand.hold.filter((k) => contact.has(k));
+  for (const k of hold) out.add(k);
+  const runs = keyRuns(out);
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const q of runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+  return { standing: beside.id, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRuns(hold), junction: J.cand.junction, contact: keyRuns(J.cand.contact) };
+}
+
+/**
+ * (6c D3, ruling B) A reach join's lamps: `lampOk` (a lamp column outside this claim: in the town's claim, unheld, off the footprint and
+ * bodies, never a contact column or one the join writes), `targets` (the join's walk cells outside this claim: feet over its surface),
+ * `lights` (the town's own light blocks, [x, y, z, level]) and `extraCap` (more lamps for the in-town stretch: one per 10 cells of it).
+ */
+function reachLamps(J, claim, r) {
+  const inClaim = (x, z) => x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ;
+  const reachCols = new Set();
+  for (const q of r.meta.reach?.runs ?? []) for (let x = q[0]; x <= q[2]; x++) reachCols.add(`${x},${q[1]}`);
+  const contact = new Set(J.cand.contact);
+  const lampOk = (x, z) => !inClaim(x, z) && x >= J.town[0] && x <= J.town[2] && z >= J.town[1] && z <= J.town[3] && !J.hardKeys.has(`${x},${z}`) && !contact.has(`${x},${z}`) && !reachCols.has(`${x},${z}`);
+  const rec = r.meta.route.edges.find((e) => e.id === 'join');
+  const targets = [];
+  if (rec?.ok) for (const o of edgeColumns({ path: rec.path, segments: rec.segments, landings: rec.landings ?? [], width: rec.width ?? DISTRICT_ROUTE_WIDTH }).cols) if (!inClaim(o.x, o.z) && reachCols.has(`${o.x},${o.z}`)) targets.push([o.x, o.y + 1, o.z]);
+  return { lampOk, targets, lights: J.lights ?? [], extraCap: Math.max(1, Math.floor((targets.length / 3 + 9) / 10)) };
+}
+
+/** (6c D3, ruling B) The join's lamps that stand outside this claim join the reach (their columns; `lamps` names them for M28). */
+function reachAddLamps(r, claim, lamps) {
+  const out = new Set();
+  for (const l of lamps) for (const [x, , z] of l.cells) if (!(x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ)) out.add(`${x},${z}`);
+  if (!out.size) return;
+  const m = r.meta.reach;
+  const all = new Set();
+  for (const q of m.runs) for (let x = q[0]; x <= q[2]; x++) all.add(`${x},${q[1]}`);
+  for (const k of out) all.add(k);
+  m.runs = keyRuns(all);
+  m.lamps = keyRuns(out);
+  m.cells = all.size;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const q of m.runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
+  m.rect = [x0, z0, x1, z1];
 }
 
 export { LOT_UNPLACED, UNPLACED };

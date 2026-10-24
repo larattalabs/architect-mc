@@ -1161,6 +1161,7 @@ Decisions: pickers are FULL-SCREEN browsers where it makes sense (search, family
 - UI-2b (Architect): paged chat lists (list, reload, build list, stockpile list, batches, groups, history, unknown-design error), clickable Undo on "Placed", placement HUD state chips + "?" legend + visible force-armed + icons instead of colour words, one progress strip, quieter launcher (debounce ready, plain errors), one colour palette.
 - UI-3 (Steward, its own slice): dead toasts, inbox lines/terminal rows, Describe-again keeps words, Enter-to-start confirm, capped part offers with plain copy, allowance chips; card compaction, buildings filter/grouping, board ordering on 0.2.0.
 - Later: rebindable placement keys (Esc opens pause when not placing); a terms glossary (design/blueprint/site/build/crate/stockpile).
+- UI-2b terms (the wording pass on the strings it touched; UI-2a and UI-3 follow them): **design** = a building in the Library (never "blueprint" in player text; `Blueprint` stays the code name); **site** = a design placed in this world, and **construction site** = a site still building in survival; **build** = only a tracked player build (`/architect build`, the API's `Build`), never a placed design; **crate** = a construction site's supply crate, **stockpile** = the shared store of crates. The sidecar is the **design helper** in player text. Not renamed: API Reason text, `dev.*` hook names, existing messages outside UI-2b's scope.
 
 ## Queued (coordinator, 2026-10-24; Steward ask)
 - DevBridge `dev.key`: send a key release after the press, like a real tap, with an optional hold time. Steward's card Start now needs two presses and counts a held key once; a press with no release lapses after 3 s, so it works today but isn't exact. Small; batch it with the next tooling slice.
@@ -1172,3 +1173,21 @@ Model in docs/STYLE-UNIFY.md. Mock approved: https://claude.ai/artifact/F5rfEVge
 3. The word-only style chips get authored materials and become built-in Styles: all six, Medieval, Nordic, Japanese, Cozy, Fantasy and Modern (coordinator, 2026-10-24: flat roofs already exist as kit.mjs roofFlat, so Modern gets a stairs-capable roof role and a flat `roofLanguage` shape hint).
 4. The main rows stay **Wood / Stone / Roof / Accent**, each showing what it drives.
 Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/JS parity (M), U3 the unified editor + Style browser + Style editor on lab-ui 0.2.0 (L), U4 the materials-only vs bible A/B judged by design-critic (S). UI-2a's form and picker work is folded into U3.
+
+## Queued (coordinator, 2026-10-24; found by Steward)
+- lab-ui composite build: when ../lab-ui is a clean checkout exactly at the consumer's lab_ui_version tag, settings.gradle includeBuild()s it, and the substitution exposes only lab-ui's main source set, not its split client set, so `dev.larattalabs.labui.client.*` doesn't resolve. The same rule exists in Architect, Steward and AgentCraft. Fix in lab-ui (publish the client classes in the composite's variant) or in the shared rule. Workaround: -Plab_ui.dir=none. Also resolve lab_ui 0.2.0 into main's .gradle-home online once when UI-2b merges, so offline builds don't depend on the checkout.
+
+## Queued from slice D3 (builder, 2026-10-23)
+
+- **0.42.x note (main's since C23, fixed on slice/D3):** a region removal refused by the owner rule, or stopped before it wrote
+  anything, ended the region PARTIAL with nothing removed. D3 now leaves it as it was and logs the reason (CONTRACT D3 as built,
+  "Steward's RC").
+- **gate6cx's api-compat under the frozen-source runner** finds every reference missing (no compiled classes in `<run dir>-src`);
+  gate6cd3's apicompat compiles first (srcGradle). Worth the same in gate6cx.
+- **`Prepare.chunksOf(claim)` misses a third chunk** for an edge tile's window off the 64-grid: a region realised in never-generated
+  land after a prepare can wait NOT_GENERATED on its edge tiles (CONTRACT D3 as built).
+
+- **Reach as a list (coordinator's ruling, D3).** plan/0's `endpoint.region` allows one standing region's reach per check; a second
+  that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
+  making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
+- **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.

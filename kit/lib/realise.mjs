@@ -57,12 +57,37 @@ export const OPS_RESERVED = [];
 /** (6b) The members a format-2 IR may have (anything else throws). */
 // ((6c H-a) `biomes`: the biome grid's sha a plan records when it reads ctx.biomes (D2), now also in format 2: a body's ice cap reads it)
 export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
-  'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'survival', 'tiles', 'utility', 'volumes'];
+  'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'survival', 'tiles', 'utility', 'volumes',
+  // ((6c D3) a districts plan's `beside`, `corridor` (D1, D2) and `reach` (D3): known members the evaluator reads only for `reach`)
+  'beside', 'corridor', 'reach'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.40.0';
+export const EVAL_KIT_VERSION = '0.41.0';
+
+/**
+ * (6c D3) An IR's `reach` columns (row runs [x0, z, x1, z]) as a lookup: z -> sorted [x0, x1, ...] pairs; null without a reach.
+ */
+export function compileReach(reach) {
+  if (!reach || !Array.isArray(reach.runs) || !reach.runs.length) return null;
+  const rows = new Map();
+  for (const q of reach.runs) {
+    if (!Array.isArray(q) || q.length !== 4 || !q.every(Number.isInteger) || q[1] !== q[3] || q[0] > q[2]) throw new Error('IR: reach.runs must be row runs [x0, z, x1, z]');
+    let l = rows.get(q[1]);
+    if (!l) { l = []; rows.set(q[1], l); }
+    l.push(q[0], q[2]);
+  }
+  return rows;
+}
+
+/** (6c D3) Whether (x, z) is a reach column. */
+export function reachHas(rows, x, z) {
+  const l = rows.get(z);
+  if (!l) return false;
+  for (let i = 0; i < l.length; i += 2) if (x >= l[i] && x <= l[i + 1]) return true;
+  return false;
+}
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -415,7 +440,7 @@ export function compileIR(ir, opts = {}) {
   }
   if (ops.length >= OP_SLOTS) throw new Error('IR: too many ops');
   track = null;
-  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats) : null };
+  c = { claim, ops, mats, parts, matBytes: mats.map(stateBytes), isAir: mats.map((s) => s === AIR), format: ir.format, survival: SV ? compileSurvival(SV, ir.parts ?? [], parts, ops, mats, opMats) : null, reach: compileReach(ir.reach) };
   compiled.set(ir, c);
   return c;
 }
@@ -705,7 +730,8 @@ export function evalTile(ir, key, heights, opts = {}) {
             const idx = ci + cj * cols.width;
             if (cols.flags[idx] & FLAG_MISSING) { missing++; continue; }
             col.g = cols.ground[idx]; col.h = cols.height[idx]; col.f = cols.floor[idx]; MC.g = col.g;
-            const inClaimXZ = wx >= claim.minX && wx <= claim.maxX && wz >= claim.minZ && wz <= claim.maxZ;
+            // ((6c D3) a reach plan's reach columns are claimed land for writing: the join's cells outside the claim)
+            const inClaimXZ = (wx >= claim.minX && wx <= claim.maxX && wz >= claim.minZ && wz <= claim.maxZ) || (C.reach !== null && reachHas(C.reach, wx, wz));
             const cell = lz * 16 + lx;
             for (let k = first; k < sel.length; k++) {
               const o = sel[k];

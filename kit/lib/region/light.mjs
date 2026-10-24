@@ -30,7 +30,7 @@ export const COVER_SHARE = 0.005;
 export const LAMPS_PER_LOT = 4;
 
 /** Block light from sources [[x, y, z, level]...] over vw (opaque cells and lot boxes stop it): Map "x,y,z" -> level. */
-function lightFrom(vw, sources, opaque) {
+function lightFrom(vw, sources, opaque, inArea = null) {
   const P = vw.pal;
   const L = new Map();
   const buckets = Array.from({ length: 16 }, () => []);
@@ -43,7 +43,8 @@ function lightFrom(vw, sources, opaque) {
       if (L.get(`${x},${y},${z}`) !== lv) continue;
       for (const [dx, dy, dz] of DIRS6) {
         const nx = x + dx, ny = y + dy, nz = z + dz;
-        if (!vw.inClaim(nx, nz) || opaque(nx, ny, nz)) continue;
+        // ((6c D3) `inArea`: a reach plan's light also spreads over the town's claim)
+        if (!(inArea ? inArea(nx, nz) : vw.inClaim(nx, nz)) || opaque(nx, ny, nz)) continue;
         const v = lv - P.cost[vw.get(nx, ny, nz)];
         const k = `${nx},${ny},${nz}`;
         if (v > (L.get(k) ?? 0)) { L.set(k, v); if (v >= 2) buckets[v].push([nx, ny, nz]); }
@@ -105,7 +106,7 @@ function roadLights(vw, ir, fixtureOf) {
  * `reserved`: "x,z" columns no lamp may take (the bell area, golem space, the props' own); `laneCells`: the lanes' cells
  * (door paths). Returns `{lamps: [{lot, at, cells}], perLot, before, after, targets, capped}`.
  */
-export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null, _format1 = false, lampGap = 0 } = {}) {
+export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null, _format1 = false, lampGap = 0, reach = null } = {}) {
   const { ir, blobs } = draftIR(r);
   // (6c S2) a draft with side blobs (a relief pass's fields, a frozen volume, a baked form) is a format-2 IR (the kinds it walks, the
   // plan's seed and keep-out, as scatterPlan's draft), and its virtual world reads the volumes the plan used (the kept natural cells are there, not air); a draft without side blobs
@@ -122,7 +123,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
     volumes = (r.ctx.volumes ?? []).filter((v) => Object.values(r.volumesUsed).some((u) => u.sha === v.sha)).map((v) => v.decoded).filter(Boolean);
   }
   const meta = { lots: r.meta.lots, parts: r.meta.parts };
-  const surveyCols = r.ctx.survey.columns;
+  // ((6c D3) a reach plan's virtual world stands over the reach frame's survey: its join's cells in the town's claim are there)
+  const surveyCols = r._reachSurvey ?? r.ctx.survey.columns;
   const vw = buildVirtual({ ir, survey: surveyCols, blobs, volumes }).vw;
   const P = vw.pal;
   const start = ir.anchors?.entrance;
@@ -137,12 +139,22 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
     const x = ra[i], y = ra[i + 1], z = ra[i + 2];
     if ((vw.flags(x, y - 1, z) & F_WRITTEN) && P.spawn[vw.get(x, y - 1, z)]) targets.push([x, y, z]);
   }
+  // ((6c D3) `reach`: a reach join's walk cells in a standing town's claim (outside the walk graph's claim) are targets too, and the
+  // cover must hold over them on their own (the M5 bar over the whole join); `reach.lights`: the town's own lights near them)
+  const reachT = new Set();
+  if (reach) for (const [x, y, z] of reach.targets ?? []) {
+    if (!((vw.flags(x, y - 1, z) & F_WRITTEN) && P.spawn[vw.get(x, y - 1, z)]) || targets.some((t) => t[0] === x && t[1] === y && t[2] === z)) continue;
+    reachT.add(targets.length);
+    targets.push([x, y, z]);
+  }
   const tIndex = new Map(targets.map((t, i) => [`${t[0]},${t[1]},${t[2]}`, i]));
   // ---- the base light: written emitters plus the modelled street lanterns
   const sources = [];
   vw.eachWritten((x, y, z, idx) => { const e = P.emit[idx]; if (e > 0) sources.push([x, y, z, e]); });
   sources.push(...roadLights(vw, ir, (lamp) => (lamp ? { level: fixture.level } : DEFAULT_FIXTURE)));
-  const base = lightFrom(vw, sources, opaque);
+  if (reach) sources.push(...(reach.lights ?? []));
+  const inArea = reach ? (x, z) => vw.inClaim(x, z) || reach.area(x, z) : null;
+  const base = lightFrom(vw, sources, opaque, inArea);
   const lights0 = lampGap > 0 ? sources.filter((q) => q[3] >= 10).map((q) => [q[0], q[1], q[2]]) : [];
   const dark = new Set();
   targets.forEach((t, i) => { if (!((base.get(`${t[0]},${t[1]},${t[2]}`) ?? 0) > 0)) dark.add(i); });
@@ -158,7 +170,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   const keep = Array.isArray(r._keep) ? r._keep.filter((q) => q.kind === 'body') : [];
   let keptSkipped = 0;
   const spillCols = new Set((r._fluidBodies ?? []).filter((b) => b.kind === 'course' || b.kind === 'ditch').flatMap((b) => b.spill.map((c) => `${c[0]},${c[2]}`)));
-  const colOk = (x, z) => vw.inClaim(x, z) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`) && !spillCols.has(`${x},${z}`);
+  const colOk = (x, z) => (vw.inClaim(x, z) || (reach ? reach.lampOk(x, z) : false)) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`) && !spillCols.has(`${x},${z}`);
   const standY = (x, z, h) => {
     const [lo, hi] = vw.colRange(x, z);
     // the column's top floor: supported (solid, not a fluid), not a walk cell, with air for the fixture above it
@@ -217,7 +229,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   }
   // ---- each candidate's reach over the targets (its own light, the fixture's level)
   for (const c of cands) {
-    const L = lightFrom(vw, [[...c.lightAt, fixture.level]], opaque);
+    const L = lightFrom(vw, [[...c.lightAt, fixture.level]], opaque, inArea);
     c.reach = [];
     for (const [k, v] of L) if (v > 0) { const i = tIndex.get(k); if (i !== undefined) c.reach.push(i); }
   }
@@ -226,7 +238,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   const perLot = Object.fromEntries(ir.lots.map((l) => [l.id, 0]));
   for (const c of extra) perLot[c.lot] ??= 0;
   const capOf = (k) => extraCap[k] ?? maxPerLot;
-  const goal = () => targets.length === 0 || dark.size / targets.length < share;
+  const reachDark = () => { let n = 0; for (const i of reachT) if (dark.has(i)) n++; return n; };
+  const goal = () => (targets.length === 0 || dark.size / targets.length < share) && (!reachT.size || reachDark() / reachT.size < share);
   const taken = new Set();
   while (!goal()) {
     let best = null, gain = 0;
@@ -258,7 +271,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
         for (const c of chosen) { const d = Math.abs(c.x - n.at[0]) + Math.abs(c.z - n.at[2]); if (d < nd) { nd = d; near = c; } }
         if (near) drop.add(`${near.x},${near.z}`);
       }
-      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, extra, extraCap, part, _drop: drop, _format1 });
+      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, extra, extraCap, part, _drop: drop, _format1, ...(reach ? { reach } : {}) });
     }
   }
   const after = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
@@ -286,5 +299,5 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   }
   const counts = Object.fromEntries(Object.entries(perLot).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   r.note(`apron lamps (${fixture.kind}, light ${fixture.level}): ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ')}; dark ${(100 * before.share).toFixed(1)}% -> ${(100 * after.share).toFixed(2)}% of ${targets.length} walk cells at plan time${capped ? ` (capped at ${maxPerLot} per lot: not covered)` : ''}`);
-  return { lamps, perLot: counts, before, after, targets: targets.length, capped, fixture: { kind: fixture.kind, level: fixture.level }, ...(keptSkipped ? { keptSkipped } : {}) };
+  return { lamps, perLot: counts, before, after, targets: targets.length, capped, fixture: { kind: fixture.kind, level: fixture.level }, ...(keptSkipped ? { keptSkipped } : {}), ...(reach ? { reach: { targets: reachT.size, dark: reachDark() } } : {}) };
 }

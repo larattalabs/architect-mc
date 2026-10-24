@@ -141,6 +141,19 @@ class PlanRetentionTest {
 		assertEquals(List.of("k"), PlanRetention.sweepAt(null, w));
 	}
 
+	/** (6c D3) A reach plan's two reach files: never read as a plan id by the sweep, and gone with the plan. */
+	@Test
+	void aReachPlansFilesGoWithItAndAreNoPlanOfTheirOwn() throws IOException {
+		plan("r", null);
+		Path p = plans();
+		RegionStore.writeJson(p.resolve("r.reach.json"), new JsonObject());
+		Files.write(p.resolve("r.reach-survey.bin"), new byte[] {1});
+		PlanRetention.clockOffset(8 * DAY);
+		assertEquals(List.of("r"), PlanRetention.sweepAt(null, w));
+		assertFalse(Files.exists(p.resolve("r.reach.json")));
+		assertFalse(Files.exists(p.resolve("r.reach-survey.bin")));
+	}
+
 	@Test
 	void aPinnedArtifactHoldsItsPlanAndAnUnpinnedOneGoesWithIt() throws IOException {
 		plan("held", null);

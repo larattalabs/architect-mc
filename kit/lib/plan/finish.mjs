@@ -84,7 +84,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     return { check: { ...base, overall: 'MALFORMED', malformed: pc.malformed, parts: [], cost: null, catalogue, preview: null, artifactSha: null, notes }, artifact: null, artifactSha: null, classMap: null, cacheOut: {} };
   }
   // ---- cost: cells per IR part, then per plan part
-  const ev = evalAll(ir, survey, (sha) => (blobs ? blobs(sha) : null));
+  // ((6c D3) a reach plan's tiles over the reach frame's survey: its reach columns lie in a standing town's claim)
+  const ev = evalAll(ir, res.evalSurvey ?? survey, (sha) => (blobs ? blobs(sha) : null));
   const byPlan = new Map();
   const add = (pid, c) => { if (!pid) return; const o = byPlan.get(pid) ?? { removed: 0, placed: 0 }; o.removed += c.removed; o.placed += c.placed; byPlan.set(pid, o); };
   for (const [irPart, c] of Object.entries(ev.parts)) {

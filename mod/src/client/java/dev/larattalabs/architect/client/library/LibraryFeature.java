@@ -8,7 +8,7 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.design.DesignFeature;
 import dev.larattalabs.architect.client.design.DesignForm;
 import dev.larattalabs.architect.client.hud.Keys;
-import dev.larattalabs.architect.client.hud.Toasts;
+import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarLink;
 import dev.larattalabs.architect.client.sidecar.SidecarState;
