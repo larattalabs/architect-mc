@@ -28,11 +28,41 @@ import java.util.Optional;
  * @param archived (since 1.6.0) hidden from the pickers ({@link Bibles#archive}); its entries and re-skins are unaffected
  * @param critique (since 1.6.0) the sheet critique ({@code bible.json critique}: overall, scores, issues), when the bible job had
  *     one ({@link BibleRequest#sheetCritique})
+ * @param tags (since NEXT, Style unification U1) a Style's tags (empty: none, e.g. a bible from before U1)
+ * @param suggestedFeatures (since NEXT) the features a new design with this Style starts with ({@code DesignSpec.FEATURES} ids, at
+ *     most 6)
+ * @param blurb (since NEXT) one line for the Style browser, or empty
+ * @param basedOn (since NEXT) the Style it started from (a duplicate, or a hand edit of a built-in), or empty
+ * @param origin (since NEXT) who made it: {@code builtin}, {@code claude} (a bible job; also every installed bible from before U1) or
+ *     {@code hand} ({@link Bibles#save})
+ *
+ * <p>Ownership (U1): {@code owner} empty is the player's: editable in Architect's UI. Any other owner (a mod's, e.g.
+ * {@code steward_mc:<settlementId>}) is Duplicate-only there, and only that owner saves new versions of it. Every save adds a version;
+ * a version that anything pins is never rewritten or removed.
  */
 public record Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
 	Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
-	boolean archived, Optional<JsonObject> critique) {
+	boolean archived, Optional<JsonObject> critique, List<String> tags, List<String> suggestedFeatures, Optional<String> blurb,
+	Optional<BiblePin> basedOn, String origin) {
+	/** The 1.6.0 constructor (no Style fields: origin builtin for a built-in one, else claude). Kept for binary compatibility. */
+	public Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
+		Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
+		boolean archived, Optional<JsonObject> critique) {
+		this(id, name, version, versions, builtin, scope, roles, prose, sheetPath, components, owner, ext, format, restraint, archived, critique, List.of(),
+			List.of(), Optional.empty(), Optional.empty(), builtin ? "builtin" : "claude");
+	}
+
+	/** Whether Architect's UI may edit it (owner empty: the player's) rather than only duplicate it. Built-in ones never. Since NEXT. */
+	public boolean editable() {
+		return !builtin && owner.isEmpty();
+	}
+
 	public Bible {
+		tags = tags == null ? List.of() : List.copyOf(tags);
+		suggestedFeatures = suggestedFeatures == null ? List.of() : List.copyOf(suggestedFeatures);
+		blurb = blurb == null ? Optional.empty() : blurb;
+		basedOn = basedOn == null ? Optional.empty() : basedOn;
+		origin = origin == null || origin.isBlank() ? (builtin ? "builtin" : "claude") : origin;
 		versions = List.copyOf(versions);
 		roles = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(roles));
 		components = List.copyOf(components);

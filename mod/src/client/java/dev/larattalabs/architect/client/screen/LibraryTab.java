@@ -1015,7 +1015,7 @@ final class LibraryTab {
 					ly += ArchitectScreen.CHIP_H + 3;
 				}
 				bx += s.chip(g, "bible:" + b.id(), label, bx, ly, b.id().equals(f.bible()), true, mx, my, () -> f.chooseBible(b.id().equals(f.bible())
-					? null : b.id())) + 3;
+					? null : b.id(), b.version(), b.roles())) + 3;
 			}
 			ly += ArchitectScreen.CHIP_H + 6;
 		}

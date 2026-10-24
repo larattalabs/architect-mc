@@ -87,4 +87,28 @@ public interface Bibles {
 	default CompletableFuture<Optional<BibleJob>> jobByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Bibles.jobByKey needs Architect API 1.10.0");
 	}
+
+	/**
+	 * (Style unification U1) Saves a hand-made Style ({@code bible.save}, a helper with {@code "bible.save"}): no Claude call, $0.
+	 * Every save is a new version {@code <gameDir>/architect/bibles/<id>/versions/<v>/}; an existing version is never rewritten or
+	 * removed. {@code style} is the Style's JSON: {@code name}, {@code roles} (the 11 core roles; built from a Style with
+	 * {@code StyleRoles}' fan-out or by hand) and optionally {@code scope, tags, suggestedFeatures, blurb, basedOn {id, version},
+	 * proportions, roofLanguage, silhouette, motifs, lighting, avoid, tiers, patterns, format, restraint, connectors, fluids, rarity};
+	 * the helper validates it with the kit (the test house included) and sets {@code origin: hand}. {@code bibleId} null: a new
+	 * Style ({@code bib_<slug of name>}, made unique). {@code owner} null = the player; an existing Style's owner must match.
+	 * Fails (the message says why) for a built-in id, an id a bible job holds, another owner's Style, or roles the kit refuses.
+	 * Completes with the saved version. Since NEXT.
+	 */
+	default CompletableFuture<Bible> save(@Nullable String bibleId, com.google.gson.JsonObject style, @Nullable String owner) {
+		throw new UnsupportedOperationException("Bibles.save needs Architect API NEXT");
+	}
+
+	/**
+	 * (Style unification U1) The Styles a caller may design with, free and local (no helper call): the built-in ones, the player's
+	 * (owner empty) and, when {@code owner} is set, that owner's; archived ones left out. The latest version of each (installed ones
+	 * by id, then the built-in ones). Use {@link DesignRequest#withStyle} for a materials-only design with one. Any thread. Since NEXT.
+	 */
+	default List<Bible> usable(@Nullable String owner) {
+		throw new UnsupportedOperationException("Bibles.usable needs Architect API NEXT");
+	}
 }

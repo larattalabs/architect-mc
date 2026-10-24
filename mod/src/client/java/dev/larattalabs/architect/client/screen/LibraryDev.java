@@ -289,13 +289,21 @@ final class LibraryDev {
 						if (f.has("preset")) {
 							form.choosePreset(f.str("preset"));
 						}
+						// (Style unification U1) the bible first, with its roles when the picker lists it: a main-row edit then edits them
+						if (f.has("bible")) {
+							String bid = f.isExplicitNull("bible") ? null : f.str("bible");
+							var known = bid == null ? null : dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> b.id().equals(bid))
+								.findFirst().orElse(null);
+							if (known != null) {
+								form.chooseBible(bid, known.version(), known.roles());
+							} else {
+								form.chooseBible(bid);
+							}
+						}
 						for (String field : dev.larattalabs.architect.library.Palettes.FIELDS) {
 							if (f.has(field)) {
 								form.setField(field, f.str(field));
 							}
-						}
-						if (f.has("bible")) {
-							form.chooseBible(f.isExplicitNull("bible") ? null : f.str("bible"));
 						}
 						if (f.has("values")) {
 							for (var e : f.json().getAsJsonObject("values").entrySet()) {

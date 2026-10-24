@@ -161,6 +161,11 @@ public final class VariantForm {
 	private String name = "";
 	/** A re-skin (phase 4b): the style bible to build with instead of a palette, or null. */
 	private @Nullable String bible;
+	/** (Style unification U1) the picked bible's version and roles, when the picker knew them; null: only its id. */
+	private int bibleVersion = 1;
+	private @Nullable Map<String, String> bibleRoles;
+	/** (U1) its roles after main-row edits (setField), or null while unedited */
+	private @Nullable Map<String, String> editedRoles;
 
 	/**
 	 * @param from the library id
@@ -229,9 +234,29 @@ public final class VariantForm {
 	/** Picks a style bible (phase 4b re-skin): the variant builds with its roles instead of a palette; null = none. */
 	public void chooseBible(@Nullable String id) {
 		bible = id == null || id.isBlank() ? null : id;
+		bibleRoles = null;
+		editedRoles = null;
 	}
 
-	/** Picks a preset chip: the inputs become the preset's (and a picked bible is dropped). */
+	/**
+	 * (Style unification U1) Picks a style bible with its version and roles: a later main-row edit ({@link #setField}) edits these roles
+	 * (StyleRoles editMain) and the variant is sent with them inline ({@code palette: {bible: {id, version, roles}}}) instead of dropping
+	 * the bible. Null id = none.
+	 */
+	public void chooseBible(@Nullable String id, int version, @Nullable Map<String, String> roles) {
+		chooseBible(id);
+		if (bible != null && roles != null && !roles.isEmpty()) {
+			bibleVersion = Math.max(1, version);
+			bibleRoles = Map.copyOf(new LinkedHashMap<>(roles));
+		}
+	}
+
+	/** (U1) The roles the variant builds with when a bible is picked: its own, or as edited; null without a bible's roles. */
+	public @Nullable Map<String, String> roles() {
+		return editedRoles != null ? editedRoles : bibleRoles == null ? null : new LinkedHashMap<>(bibleRoles);
+	}
+
+	/** Picks a preset chip: the inputs become the preset's (another Style: a picked bible is replaced by the preset). */
 	public void choosePreset(String p) {
 		Palettes.Inputs in = palettes.preset(p);
 		if (in == null) {
@@ -246,6 +271,16 @@ public final class VariantForm {
 	public void setField(String field, @Nullable String value) {
 		if (!Palettes.FIELDS.contains(field)) {
 			throw new IllegalArgumentException("palette field must be wood, stone, roof or accent: " + field);
+		}
+		// (U1) a picked bible with known roles keeps them: the main row re-derives the roles that still follow it (StyleRoles)
+		if (bible != null && bibleRoles != null) {
+			Map<String, String> base = editedRoles != null ? editedRoles : new LinkedHashMap<>(bibleRoles);
+			String v = Palettes.shortName(value);
+			if (v == null) {
+				throw new IllegalArgumentException("a Style's " + field + " needs a value");
+			}
+			editedRoles = StyleRoles.fallback().editMain(base, field, v);
+			return;
 		}
 		inputs = inputs.with(field, Palettes.shortName(value));
 		bible = null;
@@ -318,7 +353,10 @@ public final class VariantForm {
 	public JsonObject requestJson() {
 		JsonObject o = new JsonObject();
 		o.addProperty("from", from);
-		if (bible != null) {
+		if (bible != null && editedRoles != null && !editedRoles.equals(bibleRoles)) {
+			// (U1) the Style's roles after a main-row edit, inline (a helper with palette.roles; LibraryFeature checks)
+			o.add("palette", dev.larattalabs.architect.api.DesignRequest.stylePalette(bible, bibleVersion, editedRoles));
+		} else if (bible != null) {
 			o.addProperty("bible", bible);
 		} else if (paletteChanged()) {
 			Palettes.Inputs p = palettes.preset(preset);
@@ -346,6 +384,15 @@ public final class VariantForm {
 		o.addProperty("from", from);
 		o.addProperty("preset", preset);
 		o.addProperty("bible", bible);
+		Map<String, String> rs = roles();
+		if (rs != null) {
+			JsonObject r = new JsonObject();
+			rs.forEach(r::addProperty);
+			o.add("roles", r);
+			JsonObject pv = new JsonObject();
+			StyleRoles.fallback().provenance(rs, bibleRoles).forEach(pv::addProperty);
+			o.add("provenance", pv);
+		}
 		o.addProperty("originalPreset", originalPreset);
 		o.add("inputs", inputs.toJson());
 		JsonArray ps = new JsonArray();
