@@ -48,6 +48,10 @@ public final class SliceU1Dev {
 		com.google.gson.JsonArray t = new com.google.gson.JsonArray();
 		b.tags().forEach(t::add);
 		o.add("tags", t);
+		// (U5) its own parts
+		com.google.gson.JsonArray pa = new com.google.gson.JsonArray();
+		b.parts().forEach(pa::add);
+		o.add("parts", pa);
 		b.basedOn().ifPresent(p -> {
 			JsonObject bo = new JsonObject();
 			bo.addProperty("id", p.id());
@@ -140,6 +144,31 @@ public final class SliceU1Dev {
 				CompletableFuture<JsonObject> fut = ServerTasks.callOnServer(s -> ArchitectApi.get().bibles().save(bid, st, owner)).thenCompose(x -> x)
 					.thenApply(SliceU1Dev::style);
 				return fut.exceptionally(SliceU1Dev::refused);
+			});
+		DevBridge.register("dev.style.parts", 60_000, "{style, version?, owner?} - (U5b) Bibles.addParts -> {jobId, bibleId, version} or {refused}; with "
+			+ "estimate: true, Bibles.estimateParts -> {usdLow, usdHigh, basis}", (req, mc) -> {
+				var bibles = ArchitectApi.get().bibles();
+				if (req.has("estimate") && req.get("estimate").getAsBoolean()) {
+					return ServerTasks.callOnServer(s -> bibles.estimateParts()).thenCompose(x -> x).thenApply(e -> {
+						JsonObject o = new JsonObject();
+						o.addProperty("usdLow", e.usdLow());
+						o.addProperty("usdHigh", e.usdHigh());
+						o.addProperty("minutesLow", e.minutesLow());
+						o.addProperty("minutesHigh", e.minutesHigh());
+						o.addProperty("basis", e.basis());
+						return o;
+					}).exceptionally(SliceU1Dev::refused);
+				}
+				String id = Fields.of(req).nonBlank("style");
+				Integer v = req.has("version") && !req.get("version").isJsonNull() ? req.get("version").getAsInt() : null;
+				String owner = req.has("owner") && !req.get("owner").isJsonNull() ? req.get("owner").getAsString() : null;
+				return ServerTasks.callOnServer(s -> bibles.addParts(id, v, owner)).thenCompose(x -> x).thenApply(j -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("jobId", j.id());
+					o.addProperty("bibleId", j.bibleId());
+					o.addProperty("version", j.version());
+					return o;
+				}).exceptionally(SliceU1Dev::refused);
 			});
 		DevBridge.register("dev.style.get", 10_000, "{style, version?} - (U1) Bibles.get -> the Style (style: its id; not id, that is the correlation id), or {missing}; with usable: true, Bibles.usable(null)"
 			+ " -> {usable: [ids]}", (req, mc) -> ServerTasks.callOnServer(s -> {

@@ -55,7 +55,7 @@ steps.ingame = async () => {
   check(f.styleForm?.style?.id === 'medieval' && f.styleForm.style.kind === 'preset' && f.styleChip === 'medieval', '1: the chip medieval picks the built-in Style', f.styleForm?.style);
   check(JSON.stringify(f.features) === '["porch","chimney","balcony"]' && f.styleForm.featureProvenance.chimney === 'style' && f.styleForm.featureProvenance.porch === 'hand',
     '1: its suggested features join the player\'s porch, marked as the Style\'s', { features: f.features, provenance: f.styleForm.featureProvenance });
-  check(f.request?.palette?.bible?.id === 'medieval' && f.request.palette.bible.roles?.wall === 'minecraft:white_terracotta' && !f.request.bible && f.request.style === 'medieval',
+  check(f.request?.palette?.bible?.id === 'medieval' && f.request.palette.bible.roles?.wall === 'minecraft:white_concrete' && !f.request.bible && f.request.style === 'medieval',
     '1: the request carries withStyle(medieval): the roles inline, no bible', f.request?.palette);
   st = await call('dev.design.fill', { style: 'a hobbit hole under a hill' });
   check(!st.form.request?.palette && st.form.request?.style === 'a hobbit hole under a hill' && st.form.styleChip == null, '1: free text means no Style: the words go, no palette', st.form.request);
@@ -82,7 +82,7 @@ steps.ingame = async () => {
   data.mix = f.styleForm;
   const r = f.request?.palette?.bible?.roles ?? {};
   check(f.styleForm?.mix === true && f.request?.palette?.bible?.id === 'medieval', '2: a custom mix based on medieval', { mix: f.styleForm?.mix, id: f.request?.palette?.bible?.id });
-  check(r.frame === 'minecraft:birch_log' && r.floor === 'minecraft:birch_planks' && r.wall === 'minecraft:white_terracotta' && r.light === 'minecraft:soul_lantern',
+  check(r.frame === 'minecraft:birch_log' && r.floor === 'minecraft:birch_planks' && r.wall === 'minecraft:white_concrete' && r.light === 'minecraft:soul_lantern',
     '2: the frame and floor follow the wood, the Style\'s wall stays, the light is the player\'s', r);
   const pv = f.styleForm?.provenance ?? {};
   check(pv.frame === 'follows_wood' && pv.wall === 'style' && pv.light === 'hand' && f.styleForm.main?.wood === 'birch' && f.styleForm.mainProvenance?.wood === 'hand',
@@ -126,7 +126,7 @@ steps.ingame = async () => {
       '4: the saved Style picked in the Variants dialog: a re-skin (bible: id), materials only', v?.request);
     vs = await call('dev.library.variants.set', { wood: 'spruce' });
     const vr = vs.variants?.request;
-    check(vr?.palette?.bible?.id === saved.styleId && vr.palette.bible.roles?.frame === 'minecraft:spruce_log' && vr.palette.bible.roles?.wall === 'minecraft:white_terracotta',
+    check(vr?.palette?.bible?.id === saved.styleId && vr.palette.bible.roles?.frame === 'minecraft:spruce_log' && vr.palette.bible.roles?.wall === 'minecraft:white_concrete',
       '4: a Wood edit in the dialog: the roles inline, based on the saved Style (frame spruce, wall kept)', vr?.palette);
     vs = await call('dev.library.variants.set', { bible: saved.styleId });
     check(vs.variants?.request?.bible === saved.styleId, '4: picking the Style again reverts the edit (the re-skin again)', vs.variants?.request);
