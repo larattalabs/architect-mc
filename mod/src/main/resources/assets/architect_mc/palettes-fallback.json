@@ -1,0 +1,1743 @@
+{
+  "presets": {
+    "rustic": {
+      "wood": "spruce",
+      "stone": "cobblestone",
+      "roof": "dark_oak",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:spruce_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:mossy_cobblestone",
+        "roof": "minecraft:dark_oak_planks",
+        "floor": "minecraft:spruce_planks",
+        "frame": "minecraft:spruce_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:cobblestone",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "rustic",
+        "timber",
+        "countryside"
+      ],
+      "suggestedFeatures": [
+        "chimney",
+        "porch"
+      ],
+      "blurb": "Spruce timber on cobblestone under a dark oak roof."
+    },
+    "oak": {
+      "wood": "oak",
+      "stone": "stone_bricks",
+      "roof": "spruce",
+      "accent": "spruce",
+      "roles": {
+        "wall": "minecraft:oak_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:smooth_stone",
+        "roof": "minecraft:spruce_planks",
+        "floor": "minecraft:oak_planks",
+        "frame": "minecraft:oak_log",
+        "accent": "minecraft:spruce_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:stone_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "temperate",
+        "plain",
+        "village"
+      ],
+      "suggestedFeatures": [
+        "porch",
+        "garden"
+      ],
+      "blurb": "Oak walls on stone bricks under a spruce roof."
+    },
+    "birch": {
+      "wood": "birch",
+      "stone": "polished_andesite",
+      "roof": "dark_oak",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:birch_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:andesite",
+        "roof": "minecraft:dark_oak_planks",
+        "floor": "minecraft:birch_planks",
+        "frame": "minecraft:birch_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:polished_andesite",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "light",
+        "calm"
+      ],
+      "suggestedFeatures": [
+        "big_windows",
+        "garden"
+      ],
+      "blurb": "Pale birch on polished andesite under a dark oak roof."
+    },
+    "dark": {
+      "wood": "dark_oak",
+      "stone": "deepslate_bricks",
+      "roof": "deepslate_tiles",
+      "accent": "spruce",
+      "roles": {
+        "wall": "minecraft:dark_oak_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:polished_deepslate",
+        "roof": "minecraft:deepslate_tiles",
+        "floor": "minecraft:dark_oak_planks",
+        "frame": "minecraft:dark_oak_log",
+        "accent": "minecraft:spruce_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:deepslate_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "dark",
+        "grand"
+      ],
+      "suggestedFeatures": [
+        "chimney",
+        "basement"
+      ],
+      "blurb": "Dark oak on deepslate bricks under deepslate tiles."
+    },
+    "desert": {
+      "wood": "jungle",
+      "stone": "sandstone",
+      "roof": "smooth_sandstone",
+      "accent": "jungle",
+      "roles": {
+        "wall": "minecraft:jungle_planks",
+        "wall_alt": "minecraft:smooth_sandstone",
+        "trim": "minecraft:cut_sandstone",
+        "roof": "minecraft:smooth_sandstone",
+        "floor": "minecraft:jungle_planks",
+        "frame": "minecraft:jungle_log",
+        "accent": "minecraft:jungle_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:sandstone",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "warm",
+        "sand",
+        "arid"
+      ],
+      "suggestedFeatures": [
+        "courtyard"
+      ],
+      "blurb": "Sandstone and jungle wood with smooth sandstone plaster."
+    },
+    "brick": {
+      "wood": "oak",
+      "stone": "bricks",
+      "roof": "deepslate_tiles",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:oak_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:polished_deepslate",
+        "roof": "minecraft:deepslate_tiles",
+        "floor": "minecraft:oak_planks",
+        "frame": "minecraft:oak_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "town",
+        "brick"
+      ],
+      "suggestedFeatures": [
+        "chimney"
+      ],
+      "blurb": "Brick and oak with deepslate trim and a tiled roof."
+    },
+    "cherry": {
+      "wood": "cherry",
+      "stone": "polished_tuff",
+      "roof": "dark_oak",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:cherry_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:tuff_bricks",
+        "roof": "minecraft:dark_oak_planks",
+        "floor": "minecraft:cherry_planks",
+        "frame": "minecraft:cherry_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:polished_tuff",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "calm",
+        "blossom"
+      ],
+      "suggestedFeatures": [
+        "garden",
+        "balcony"
+      ],
+      "blurb": "Cherry wood on polished tuff under a dark oak roof."
+    },
+    "mangrove": {
+      "wood": "mangrove",
+      "stone": "mud_bricks",
+      "roof": "mangrove",
+      "accent": "spruce",
+      "roles": {
+        "wall": "minecraft:mangrove_planks",
+        "wall_alt": "minecraft:packed_mud",
+        "trim": "minecraft:packed_mud",
+        "roof": "minecraft:mangrove_planks",
+        "floor": "minecraft:mangrove_planks",
+        "frame": "minecraft:mangrove_log",
+        "accent": "minecraft:spruce_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:mud_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "swamp",
+        "mud"
+      ],
+      "suggestedFeatures": [
+        "porch"
+      ],
+      "blurb": "Mangrove and mud bricks with packed mud plaster."
+    },
+    "crimson": {
+      "wood": "crimson",
+      "stone": "polished_blackstone_bricks",
+      "roof": "nether_bricks",
+      "accent": "crimson",
+      "roles": {
+        "wall": "minecraft:crimson_planks",
+        "wall_alt": "minecraft:polished_blackstone",
+        "trim": "minecraft:polished_blackstone",
+        "roof": "minecraft:nether_bricks",
+        "floor": "minecraft:crimson_planks",
+        "frame": "minecraft:crimson_stem",
+        "accent": "minecraft:crimson_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:polished_blackstone_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "nether",
+        "infernal"
+      ],
+      "suggestedFeatures": [
+        "basement"
+      ],
+      "blurb": "Crimson stems on blackstone under a nether brick roof."
+    },
+    "fortress": {
+      "wood": "spruce",
+      "stone": "stone_bricks",
+      "roof": "deepslate_tiles",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:spruce_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:polished_andesite",
+        "roof": "minecraft:deepslate_tiles",
+        "floor": "minecraft:spruce_planks",
+        "frame": "minecraft:spruce_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:stone_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "grand",
+        "stone",
+        "defensive"
+      ],
+      "suggestedFeatures": [
+        "basement"
+      ],
+      "blurb": "Stone bricks and spruce under deepslate tiles."
+    },
+    "medieval": {
+      "wood": "dark_oak",
+      "stone": "stone_bricks",
+      "roof": "spruce",
+      "accent": "spruce",
+      "roles": {
+        "wall": "minecraft:white_terracotta",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:smooth_stone",
+        "roof": "minecraft:spruce_planks",
+        "floor": "minecraft:dark_oak_planks",
+        "frame": "minecraft:dark_oak_log",
+        "accent": "minecraft:spruce_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:stone_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "medieval",
+        "timber frame",
+        "plaster",
+        "village"
+      ],
+      "suggestedFeatures": [
+        "chimney",
+        "balcony"
+      ],
+      "blurb": "Dark oak timber framing with pale daub walls and steep spruce roofs."
+    },
+    "nordic": {
+      "wood": "spruce",
+      "stone": "cobbled_deepslate",
+      "roof": "spruce",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:spruce_planks",
+        "wall_alt": "minecraft:stripped_spruce_wood",
+        "trim": "minecraft:deepslate_bricks",
+        "roof": "minecraft:spruce_planks",
+        "floor": "minecraft:spruce_planks",
+        "frame": "minecraft:spruce_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:cobbled_deepslate",
+        "path": "minecraft:coarse_dirt"
+      },
+      "tags": [
+        "nordic",
+        "cold",
+        "dark wood",
+        "steep roof"
+      ],
+      "suggestedFeatures": [
+        "chimney",
+        "porch"
+      ],
+      "blurb": "Spruce halls on cobbled deepslate under steep spruce roofs."
+    },
+    "japanese": {
+      "wood": "birch",
+      "stone": "mossy_stone_bricks",
+      "roof": "deepslate_tiles",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:white_wool",
+        "wall_alt": "minecraft:birch_planks",
+        "trim": "minecraft:stone_bricks",
+        "roof": "minecraft:deepslate_tiles",
+        "floor": "minecraft:birch_planks",
+        "frame": "minecraft:birch_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:mossy_stone_bricks",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "japanese",
+        "light wood",
+        "paper walls",
+        "wide eaves"
+      ],
+      "suggestedFeatures": [
+        "garden",
+        "courtyard"
+      ],
+      "blurb": "Birch framing with paper-white walls and deepslate tile roofs on mossy stone."
+    },
+    "cozy": {
+      "wood": "oak",
+      "stone": "mossy_cobblestone",
+      "roof": "dark_oak",
+      "accent": "spruce",
+      "roles": {
+        "wall": "minecraft:oak_planks",
+        "wall_alt": "minecraft:white_terracotta",
+        "trim": "minecraft:cobblestone",
+        "roof": "minecraft:dark_oak_planks",
+        "floor": "minecraft:oak_planks",
+        "frame": "minecraft:oak_log",
+        "accent": "minecraft:spruce_planks",
+        "light": "minecraft:lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:mossy_cobblestone",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "cozy",
+        "small",
+        "warm",
+        "cottage"
+      ],
+      "suggestedFeatures": [
+        "chimney",
+        "garden"
+      ],
+      "blurb": "An oak cottage on mossy cobblestone, small windows and warm light."
+    },
+    "fantasy": {
+      "wood": "warped",
+      "stone": "purpur_block",
+      "roof": "crimson",
+      "accent": "crimson",
+      "roles": {
+        "wall": "minecraft:warped_planks",
+        "wall_alt": "minecraft:calcite",
+        "trim": "minecraft:purpur_pillar",
+        "roof": "minecraft:crimson_planks",
+        "floor": "minecraft:warped_planks",
+        "frame": "minecraft:warped_stem",
+        "accent": "minecraft:crimson_planks",
+        "light": "minecraft:shroomlight",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:purpur_block",
+        "path": "minecraft:dirt_path"
+      },
+      "tags": [
+        "fantasy",
+        "colourful",
+        "whimsical"
+      ],
+      "suggestedFeatures": [
+        "balcony",
+        "garden"
+      ],
+      "blurb": "Warped wood and purpur under crimson roofs, lit by shroomlights."
+    },
+    "modern": {
+      "wood": "birch",
+      "stone": "smooth_quartz",
+      "roof": "polished_deepslate",
+      "accent": "dark_oak",
+      "roles": {
+        "wall": "minecraft:white_concrete",
+        "wall_alt": "minecraft:light_gray_concrete",
+        "trim": "minecraft:quartz_block",
+        "roof": "minecraft:polished_deepslate",
+        "floor": "minecraft:birch_planks",
+        "frame": "minecraft:stripped_birch_log",
+        "accent": "minecraft:dark_oak_planks",
+        "light": "minecraft:sea_lantern",
+        "glass": "minecraft:glass_pane",
+        "foundation": "minecraft:smooth_quartz",
+        "path": "minecraft:smooth_stone"
+      },
+      "tags": [
+        "modern",
+        "glass",
+        "flat roof",
+        "concrete"
+      ],
+      "suggestedFeatures": [
+        "big_windows",
+        "skylights",
+        "balcony"
+      ],
+      "blurb": "White concrete and smooth quartz, glass-heavy, under flat roofs."
+    }
+  },
+  "woods": [
+    "oak",
+    "spruce",
+    "birch",
+    "jungle",
+    "acacia",
+    "dark_oak",
+    "mangrove",
+    "cherry",
+    "pale_oak",
+    "poplar",
+    "bamboo",
+    "crimson",
+    "warped"
+  ],
+  "stones": [
+    "cobblestone",
+    "mossy_cobblestone",
+    "stone",
+    "stone_bricks",
+    "mossy_stone_bricks",
+    "andesite",
+    "polished_andesite",
+    "diorite",
+    "polished_diorite",
+    "granite",
+    "polished_granite",
+    "cobbled_deepslate",
+    "polished_deepslate",
+    "deepslate_bricks",
+    "deepslate_tiles",
+    "tuff",
+    "polished_tuff",
+    "tuff_bricks",
+    "bricks",
+    "mud_bricks",
+    "sandstone",
+    "smooth_sandstone",
+    "red_sandstone",
+    "smooth_red_sandstone",
+    "blackstone",
+    "polished_blackstone",
+    "polished_blackstone_bricks",
+    "nether_bricks",
+    "red_nether_bricks",
+    "end_stone_bricks",
+    "prismarine",
+    "prismarine_bricks",
+    "quartz_block",
+    "purpur_block",
+    "resin_bricks",
+    "smooth_quartz"
+  ],
+  "roofs": [
+    "oak",
+    "spruce",
+    "birch",
+    "jungle",
+    "acacia",
+    "dark_oak",
+    "mangrove",
+    "cherry",
+    "pale_oak",
+    "poplar",
+    "bamboo",
+    "crimson",
+    "warped",
+    "deepslate_tiles",
+    "deepslate_bricks",
+    "cobbled_deepslate",
+    "bricks",
+    "mud_bricks",
+    "stone_bricks",
+    "mossy_stone_bricks",
+    "cobblestone",
+    "mossy_cobblestone",
+    "smooth_sandstone",
+    "red_sandstone",
+    "blackstone",
+    "polished_blackstone_bricks",
+    "nether_bricks",
+    "red_nether_bricks",
+    "prismarine_bricks",
+    "dark_prismarine",
+    "end_stone_bricks",
+    "quartz_block",
+    "purpur_block",
+    "cut_copper",
+    "tuff_bricks",
+    "resin_bricks",
+    "polished_deepslate"
+  ],
+  "styles": {
+    "format": 1,
+    "note": "generated by kit/lib/styles.mjs styleTable() (tools/gen-palettes.mjs): the Style fan-out for mod/.../library/StyleRoles.java",
+    "mainFields": [
+      "wood",
+      "stone",
+      "roof",
+      "accent"
+    ],
+    "coreRoles": [
+      "wall",
+      "wall_alt",
+      "trim",
+      "roof",
+      "floor",
+      "frame",
+      "accent",
+      "light",
+      "glass",
+      "foundation",
+      "path"
+    ],
+    "fanOut": {
+      "wood": [
+        "wall",
+        "frame",
+        "floor"
+      ],
+      "stone": [
+        "foundation",
+        "trim"
+      ],
+      "roof": [
+        "roof"
+      ],
+      "accent": [
+        "accent"
+      ]
+    },
+    "fixed": {
+      "wall_alt": "minecraft:calcite",
+      "light": "minecraft:lantern",
+      "glass": "minecraft:glass_pane",
+      "path": "minecraft:dirt_path"
+    },
+    "woodPartOfRole": {
+      "wall": "planks",
+      "frame": "log",
+      "floor": "planks",
+      "accent": "planks"
+    },
+    "woodParts": [
+      "planks",
+      "log",
+      "strippedLog",
+      "bark",
+      "strippedBark"
+    ],
+    "woods": {
+      "oak": {
+        "planks": "minecraft:oak_planks",
+        "log": "minecraft:oak_log",
+        "strippedLog": "minecraft:stripped_oak_log",
+        "bark": "minecraft:oak_wood",
+        "strippedBark": "minecraft:stripped_oak_wood"
+      },
+      "spruce": {
+        "planks": "minecraft:spruce_planks",
+        "log": "minecraft:spruce_log",
+        "strippedLog": "minecraft:stripped_spruce_log",
+        "bark": "minecraft:spruce_wood",
+        "strippedBark": "minecraft:stripped_spruce_wood"
+      },
+      "birch": {
+        "planks": "minecraft:birch_planks",
+        "log": "minecraft:birch_log",
+        "strippedLog": "minecraft:stripped_birch_log",
+        "bark": "minecraft:birch_wood",
+        "strippedBark": "minecraft:stripped_birch_wood"
+      },
+      "jungle": {
+        "planks": "minecraft:jungle_planks",
+        "log": "minecraft:jungle_log",
+        "strippedLog": "minecraft:stripped_jungle_log",
+        "bark": "minecraft:jungle_wood",
+        "strippedBark": "minecraft:stripped_jungle_wood"
+      },
+      "acacia": {
+        "planks": "minecraft:acacia_planks",
+        "log": "minecraft:acacia_log",
+        "strippedLog": "minecraft:stripped_acacia_log",
+        "bark": "minecraft:acacia_wood",
+        "strippedBark": "minecraft:stripped_acacia_wood"
+      },
+      "dark_oak": {
+        "planks": "minecraft:dark_oak_planks",
+        "log": "minecraft:dark_oak_log",
+        "strippedLog": "minecraft:stripped_dark_oak_log",
+        "bark": "minecraft:dark_oak_wood",
+        "strippedBark": "minecraft:stripped_dark_oak_wood"
+      },
+      "mangrove": {
+        "planks": "minecraft:mangrove_planks",
+        "log": "minecraft:mangrove_log",
+        "strippedLog": "minecraft:stripped_mangrove_log",
+        "bark": "minecraft:mangrove_wood",
+        "strippedBark": "minecraft:stripped_mangrove_wood"
+      },
+      "cherry": {
+        "planks": "minecraft:cherry_planks",
+        "log": "minecraft:cherry_log",
+        "strippedLog": "minecraft:stripped_cherry_log",
+        "bark": "minecraft:cherry_wood",
+        "strippedBark": "minecraft:stripped_cherry_wood"
+      },
+      "pale_oak": {
+        "planks": "minecraft:pale_oak_planks",
+        "log": "minecraft:pale_oak_log",
+        "strippedLog": "minecraft:stripped_pale_oak_log",
+        "bark": "minecraft:pale_oak_wood",
+        "strippedBark": "minecraft:stripped_pale_oak_wood"
+      },
+      "poplar": {
+        "planks": "minecraft:poplar_planks",
+        "log": "minecraft:poplar_log",
+        "strippedLog": "minecraft:stripped_poplar_log",
+        "bark": "minecraft:poplar_wood",
+        "strippedBark": "minecraft:stripped_poplar_wood"
+      },
+      "bamboo": {
+        "planks": "minecraft:bamboo_planks",
+        "log": "minecraft:bamboo_block",
+        "strippedLog": "minecraft:stripped_bamboo_block",
+        "bark": "minecraft:bamboo_block",
+        "strippedBark": "minecraft:stripped_bamboo_block"
+      },
+      "crimson": {
+        "planks": "minecraft:crimson_planks",
+        "log": "minecraft:crimson_stem",
+        "strippedLog": "minecraft:stripped_crimson_stem",
+        "bark": "minecraft:crimson_hyphae",
+        "strippedBark": "minecraft:stripped_crimson_hyphae"
+      },
+      "warped": {
+        "planks": "minecraft:warped_planks",
+        "log": "minecraft:warped_stem",
+        "strippedLog": "minecraft:stripped_warped_stem",
+        "bark": "minecraft:warped_hyphae",
+        "strippedBark": "minecraft:stripped_warped_hyphae"
+      }
+    },
+    "woodOf": {
+      "minecraft:acacia_button": "acacia",
+      "minecraft:acacia_door": "acacia",
+      "minecraft:acacia_fence": "acacia",
+      "minecraft:acacia_fence_gate": "acacia",
+      "minecraft:acacia_hanging_sign": "acacia",
+      "minecraft:acacia_log": "acacia",
+      "minecraft:acacia_planks": "acacia",
+      "minecraft:acacia_pressure_plate": "acacia",
+      "minecraft:acacia_shelf": "acacia",
+      "minecraft:acacia_sign": "acacia",
+      "minecraft:acacia_slab": "acacia",
+      "minecraft:acacia_stairs": "acacia",
+      "minecraft:acacia_trapdoor": "acacia",
+      "minecraft:acacia_wall_hanging_sign": "acacia",
+      "minecraft:acacia_wall_sign": "acacia",
+      "minecraft:acacia_wood": "acacia",
+      "minecraft:bamboo_block": "bamboo",
+      "minecraft:bamboo_button": "bamboo",
+      "minecraft:bamboo_door": "bamboo",
+      "minecraft:bamboo_fence": "bamboo",
+      "minecraft:bamboo_fence_gate": "bamboo",
+      "minecraft:bamboo_hanging_sign": "bamboo",
+      "minecraft:bamboo_mosaic": "bamboo",
+      "minecraft:bamboo_mosaic_slab": "bamboo",
+      "minecraft:bamboo_mosaic_stairs": "bamboo",
+      "minecraft:bamboo_planks": "bamboo",
+      "minecraft:bamboo_pressure_plate": "bamboo",
+      "minecraft:bamboo_shelf": "bamboo",
+      "minecraft:bamboo_sign": "bamboo",
+      "minecraft:bamboo_slab": "bamboo",
+      "minecraft:bamboo_stairs": "bamboo",
+      "minecraft:bamboo_trapdoor": "bamboo",
+      "minecraft:bamboo_wall_hanging_sign": "bamboo",
+      "minecraft:bamboo_wall_sign": "bamboo",
+      "minecraft:birch_button": "birch",
+      "minecraft:birch_door": "birch",
+      "minecraft:birch_fence": "birch",
+      "minecraft:birch_fence_gate": "birch",
+      "minecraft:birch_hanging_sign": "birch",
+      "minecraft:birch_log": "birch",
+      "minecraft:birch_planks": "birch",
+      "minecraft:birch_pressure_plate": "birch",
+      "minecraft:birch_shelf": "birch",
+      "minecraft:birch_sign": "birch",
+      "minecraft:birch_slab": "birch",
+      "minecraft:birch_stairs": "birch",
+      "minecraft:birch_trapdoor": "birch",
+      "minecraft:birch_wall_hanging_sign": "birch",
+      "minecraft:birch_wall_sign": "birch",
+      "minecraft:birch_wood": "birch",
+      "minecraft:cherry_button": "cherry",
+      "minecraft:cherry_door": "cherry",
+      "minecraft:cherry_fence": "cherry",
+      "minecraft:cherry_fence_gate": "cherry",
+      "minecraft:cherry_hanging_sign": "cherry",
+      "minecraft:cherry_log": "cherry",
+      "minecraft:cherry_planks": "cherry",
+      "minecraft:cherry_pressure_plate": "cherry",
+      "minecraft:cherry_shelf": "cherry",
+      "minecraft:cherry_sign": "cherry",
+      "minecraft:cherry_slab": "cherry",
+      "minecraft:cherry_stairs": "cherry",
+      "minecraft:cherry_trapdoor": "cherry",
+      "minecraft:cherry_wall_hanging_sign": "cherry",
+      "minecraft:cherry_wall_sign": "cherry",
+      "minecraft:cherry_wood": "cherry",
+      "minecraft:crimson_button": "crimson",
+      "minecraft:crimson_door": "crimson",
+      "minecraft:crimson_fence": "crimson",
+      "minecraft:crimson_fence_gate": "crimson",
+      "minecraft:crimson_hanging_sign": "crimson",
+      "minecraft:crimson_hyphae": "crimson",
+      "minecraft:crimson_planks": "crimson",
+      "minecraft:crimson_pressure_plate": "crimson",
+      "minecraft:crimson_shelf": "crimson",
+      "minecraft:crimson_sign": "crimson",
+      "minecraft:crimson_slab": "crimson",
+      "minecraft:crimson_stairs": "crimson",
+      "minecraft:crimson_stem": "crimson",
+      "minecraft:crimson_trapdoor": "crimson",
+      "minecraft:crimson_wall_hanging_sign": "crimson",
+      "minecraft:crimson_wall_sign": "crimson",
+      "minecraft:dark_oak_button": "dark_oak",
+      "minecraft:dark_oak_door": "dark_oak",
+      "minecraft:dark_oak_fence": "dark_oak",
+      "minecraft:dark_oak_fence_gate": "dark_oak",
+      "minecraft:dark_oak_hanging_sign": "dark_oak",
+      "minecraft:dark_oak_log": "dark_oak",
+      "minecraft:dark_oak_planks": "dark_oak",
+      "minecraft:dark_oak_pressure_plate": "dark_oak",
+      "minecraft:dark_oak_shelf": "dark_oak",
+      "minecraft:dark_oak_sign": "dark_oak",
+      "minecraft:dark_oak_slab": "dark_oak",
+      "minecraft:dark_oak_stairs": "dark_oak",
+      "minecraft:dark_oak_trapdoor": "dark_oak",
+      "minecraft:dark_oak_wall_hanging_sign": "dark_oak",
+      "minecraft:dark_oak_wall_sign": "dark_oak",
+      "minecraft:dark_oak_wood": "dark_oak",
+      "minecraft:jungle_button": "jungle",
+      "minecraft:jungle_door": "jungle",
+      "minecraft:jungle_fence": "jungle",
+      "minecraft:jungle_fence_gate": "jungle",
+      "minecraft:jungle_hanging_sign": "jungle",
+      "minecraft:jungle_log": "jungle",
+      "minecraft:jungle_planks": "jungle",
+      "minecraft:jungle_pressure_plate": "jungle",
+      "minecraft:jungle_shelf": "jungle",
+      "minecraft:jungle_sign": "jungle",
+      "minecraft:jungle_slab": "jungle",
+      "minecraft:jungle_stairs": "jungle",
+      "minecraft:jungle_trapdoor": "jungle",
+      "minecraft:jungle_wall_hanging_sign": "jungle",
+      "minecraft:jungle_wall_sign": "jungle",
+      "minecraft:jungle_wood": "jungle",
+      "minecraft:mangrove_button": "mangrove",
+      "minecraft:mangrove_door": "mangrove",
+      "minecraft:mangrove_fence": "mangrove",
+      "minecraft:mangrove_fence_gate": "mangrove",
+      "minecraft:mangrove_hanging_sign": "mangrove",
+      "minecraft:mangrove_log": "mangrove",
+      "minecraft:mangrove_planks": "mangrove",
+      "minecraft:mangrove_pressure_plate": "mangrove",
+      "minecraft:mangrove_shelf": "mangrove",
+      "minecraft:mangrove_sign": "mangrove",
+      "minecraft:mangrove_slab": "mangrove",
+      "minecraft:mangrove_stairs": "mangrove",
+      "minecraft:mangrove_trapdoor": "mangrove",
+      "minecraft:mangrove_wall_hanging_sign": "mangrove",
+      "minecraft:mangrove_wall_sign": "mangrove",
+      "minecraft:mangrove_wood": "mangrove",
+      "minecraft:oak_button": "oak",
+      "minecraft:oak_door": "oak",
+      "minecraft:oak_fence": "oak",
+      "minecraft:oak_fence_gate": "oak",
+      "minecraft:oak_hanging_sign": "oak",
+      "minecraft:oak_log": "oak",
+      "minecraft:oak_planks": "oak",
+      "minecraft:oak_pressure_plate": "oak",
+      "minecraft:oak_shelf": "oak",
+      "minecraft:oak_sign": "oak",
+      "minecraft:oak_slab": "oak",
+      "minecraft:oak_stairs": "oak",
+      "minecraft:oak_trapdoor": "oak",
+      "minecraft:oak_wall_hanging_sign": "oak",
+      "minecraft:oak_wall_sign": "oak",
+      "minecraft:oak_wood": "oak",
+      "minecraft:pale_oak_button": "pale_oak",
+      "minecraft:pale_oak_door": "pale_oak",
+      "minecraft:pale_oak_fence": "pale_oak",
+      "minecraft:pale_oak_fence_gate": "pale_oak",
+      "minecraft:pale_oak_hanging_sign": "pale_oak",
+      "minecraft:pale_oak_log": "pale_oak",
+      "minecraft:pale_oak_planks": "pale_oak",
+      "minecraft:pale_oak_pressure_plate": "pale_oak",
+      "minecraft:pale_oak_shelf": "pale_oak",
+      "minecraft:pale_oak_sign": "pale_oak",
+      "minecraft:pale_oak_slab": "pale_oak",
+      "minecraft:pale_oak_stairs": "pale_oak",
+      "minecraft:pale_oak_trapdoor": "pale_oak",
+      "minecraft:pale_oak_wall_hanging_sign": "pale_oak",
+      "minecraft:pale_oak_wall_sign": "pale_oak",
+      "minecraft:pale_oak_wood": "pale_oak",
+      "minecraft:poplar_button": "poplar",
+      "minecraft:poplar_door": "poplar",
+      "minecraft:poplar_fence": "poplar",
+      "minecraft:poplar_fence_gate": "poplar",
+      "minecraft:poplar_hanging_sign": "poplar",
+      "minecraft:poplar_log": "poplar",
+      "minecraft:poplar_planks": "poplar",
+      "minecraft:poplar_pressure_plate": "poplar",
+      "minecraft:poplar_shelf": "poplar",
+      "minecraft:poplar_sign": "poplar",
+      "minecraft:poplar_slab": "poplar",
+      "minecraft:poplar_stairs": "poplar",
+      "minecraft:poplar_trapdoor": "poplar",
+      "minecraft:poplar_wall_hanging_sign": "poplar",
+      "minecraft:poplar_wall_sign": "poplar",
+      "minecraft:poplar_wood": "poplar",
+      "minecraft:spruce_button": "spruce",
+      "minecraft:spruce_door": "spruce",
+      "minecraft:spruce_fence": "spruce",
+      "minecraft:spruce_fence_gate": "spruce",
+      "minecraft:spruce_hanging_sign": "spruce",
+      "minecraft:spruce_log": "spruce",
+      "minecraft:spruce_planks": "spruce",
+      "minecraft:spruce_pressure_plate": "spruce",
+      "minecraft:spruce_shelf": "spruce",
+      "minecraft:spruce_sign": "spruce",
+      "minecraft:spruce_slab": "spruce",
+      "minecraft:spruce_stairs": "spruce",
+      "minecraft:spruce_trapdoor": "spruce",
+      "minecraft:spruce_wall_hanging_sign": "spruce",
+      "minecraft:spruce_wall_sign": "spruce",
+      "minecraft:spruce_wood": "spruce",
+      "minecraft:stripped_acacia_log": "acacia",
+      "minecraft:stripped_acacia_wood": "acacia",
+      "minecraft:stripped_bamboo_block": "bamboo",
+      "minecraft:stripped_birch_log": "birch",
+      "minecraft:stripped_birch_wood": "birch",
+      "minecraft:stripped_cherry_log": "cherry",
+      "minecraft:stripped_cherry_wood": "cherry",
+      "minecraft:stripped_crimson_hyphae": "crimson",
+      "minecraft:stripped_crimson_stem": "crimson",
+      "minecraft:stripped_dark_oak_log": "dark_oak",
+      "minecraft:stripped_dark_oak_wood": "dark_oak",
+      "minecraft:stripped_jungle_log": "jungle",
+      "minecraft:stripped_jungle_wood": "jungle",
+      "minecraft:stripped_mangrove_log": "mangrove",
+      "minecraft:stripped_mangrove_wood": "mangrove",
+      "minecraft:stripped_oak_log": "oak",
+      "minecraft:stripped_oak_wood": "oak",
+      "minecraft:stripped_pale_oak_log": "pale_oak",
+      "minecraft:stripped_pale_oak_wood": "pale_oak",
+      "minecraft:stripped_poplar_log": "poplar",
+      "minecraft:stripped_poplar_wood": "poplar",
+      "minecraft:stripped_spruce_log": "spruce",
+      "minecraft:stripped_spruce_wood": "spruce",
+      "minecraft:stripped_warped_hyphae": "warped",
+      "minecraft:stripped_warped_stem": "warped",
+      "minecraft:warped_button": "warped",
+      "minecraft:warped_door": "warped",
+      "minecraft:warped_fence": "warped",
+      "minecraft:warped_fence_gate": "warped",
+      "minecraft:warped_hanging_sign": "warped",
+      "minecraft:warped_hyphae": "warped",
+      "minecraft:warped_planks": "warped",
+      "minecraft:warped_pressure_plate": "warped",
+      "minecraft:warped_shelf": "warped",
+      "minecraft:warped_sign": "warped",
+      "minecraft:warped_slab": "warped",
+      "minecraft:warped_stairs": "warped",
+      "minecraft:warped_stem": "warped",
+      "minecraft:warped_trapdoor": "warped",
+      "minecraft:warped_wall_hanging_sign": "warped",
+      "minecraft:warped_wall_sign": "warped"
+    },
+    "stoneOf": {
+      "minecraft:andesite": "andesite",
+      "minecraft:andesite_slab": "andesite",
+      "minecraft:andesite_stairs": "andesite",
+      "minecraft:andesite_wall": "andesite",
+      "minecraft:basalt": "basalt",
+      "minecraft:blackstone": "blackstone",
+      "minecraft:blackstone_slab": "blackstone",
+      "minecraft:blackstone_stairs": "blackstone",
+      "minecraft:blackstone_wall": "blackstone",
+      "minecraft:brick_slab": "bricks",
+      "minecraft:brick_stairs": "bricks",
+      "minecraft:brick_wall": "bricks",
+      "minecraft:bricks": "bricks",
+      "minecraft:chiseled_deepslate": "deepslate",
+      "minecraft:chiseled_nether_bricks": "nether_bricks",
+      "minecraft:chiseled_polished_blackstone": "blackstone",
+      "minecraft:chiseled_quartz_block": "quartz",
+      "minecraft:chiseled_red_sandstone": "red_sandstone",
+      "minecraft:chiseled_resin_bricks": "resin",
+      "minecraft:chiseled_sandstone": "sandstone",
+      "minecraft:chiseled_stone_bricks": "stone",
+      "minecraft:chiseled_tuff": "tuff",
+      "minecraft:chiseled_tuff_bricks": "tuff",
+      "minecraft:cobbled_deepslate": "deepslate",
+      "minecraft:cobbled_deepslate_slab": "deepslate",
+      "minecraft:cobbled_deepslate_stairs": "deepslate",
+      "minecraft:cobbled_deepslate_wall": "deepslate",
+      "minecraft:cobblestone": "cobblestone",
+      "minecraft:cobblestone_slab": "cobblestone",
+      "minecraft:cobblestone_stairs": "cobblestone",
+      "minecraft:cobblestone_wall": "cobblestone",
+      "minecraft:cracked_deepslate_bricks": "deepslate",
+      "minecraft:cracked_deepslate_tiles": "deepslate",
+      "minecraft:cracked_nether_bricks": "nether_bricks",
+      "minecraft:cracked_polished_blackstone_bricks": "blackstone",
+      "minecraft:cracked_stone_bricks": "stone",
+      "minecraft:cut_red_sandstone": "red_sandstone",
+      "minecraft:cut_red_sandstone_slab": "red_sandstone",
+      "minecraft:cut_sandstone": "sandstone",
+      "minecraft:cut_sandstone_slab": "sandstone",
+      "minecraft:dark_prismarine": "prismarine",
+      "minecraft:dark_prismarine_slab": "prismarine",
+      "minecraft:dark_prismarine_stairs": "prismarine",
+      "minecraft:deepslate": "deepslate",
+      "minecraft:deepslate_brick_slab": "deepslate",
+      "minecraft:deepslate_brick_stairs": "deepslate",
+      "minecraft:deepslate_brick_wall": "deepslate",
+      "minecraft:deepslate_bricks": "deepslate",
+      "minecraft:deepslate_tile_slab": "deepslate",
+      "minecraft:deepslate_tile_stairs": "deepslate",
+      "minecraft:deepslate_tile_wall": "deepslate",
+      "minecraft:deepslate_tiles": "deepslate",
+      "minecraft:diorite": "diorite",
+      "minecraft:diorite_slab": "diorite",
+      "minecraft:diorite_stairs": "diorite",
+      "minecraft:diorite_wall": "diorite",
+      "minecraft:end_stone": "end_stone",
+      "minecraft:end_stone_brick_slab": "end_stone",
+      "minecraft:end_stone_brick_stairs": "end_stone",
+      "minecraft:end_stone_brick_wall": "end_stone",
+      "minecraft:end_stone_bricks": "end_stone",
+      "minecraft:gilded_blackstone": "blackstone",
+      "minecraft:granite": "granite",
+      "minecraft:granite_slab": "granite",
+      "minecraft:granite_stairs": "granite",
+      "minecraft:granite_wall": "granite",
+      "minecraft:mossy_cobblestone": "cobblestone",
+      "minecraft:mossy_cobblestone_slab": "cobblestone",
+      "minecraft:mossy_cobblestone_stairs": "cobblestone",
+      "minecraft:mossy_cobblestone_wall": "cobblestone",
+      "minecraft:mossy_stone_brick_slab": "stone",
+      "minecraft:mossy_stone_brick_stairs": "stone",
+      "minecraft:mossy_stone_brick_wall": "stone",
+      "minecraft:mossy_stone_bricks": "stone",
+      "minecraft:mud_brick_slab": "mud",
+      "minecraft:mud_brick_stairs": "mud",
+      "minecraft:mud_brick_wall": "mud",
+      "minecraft:mud_bricks": "mud",
+      "minecraft:nether_brick_fence": "nether_bricks",
+      "minecraft:nether_brick_slab": "nether_bricks",
+      "minecraft:nether_brick_stairs": "nether_bricks",
+      "minecraft:nether_brick_wall": "nether_bricks",
+      "minecraft:nether_bricks": "nether_bricks",
+      "minecraft:packed_mud": "mud",
+      "minecraft:polished_andesite": "andesite",
+      "minecraft:polished_andesite_slab": "andesite",
+      "minecraft:polished_andesite_stairs": "andesite",
+      "minecraft:polished_basalt": "basalt",
+      "minecraft:polished_blackstone": "blackstone",
+      "minecraft:polished_blackstone_brick_slab": "blackstone",
+      "minecraft:polished_blackstone_brick_stairs": "blackstone",
+      "minecraft:polished_blackstone_brick_wall": "blackstone",
+      "minecraft:polished_blackstone_bricks": "blackstone",
+      "minecraft:polished_blackstone_slab": "blackstone",
+      "minecraft:polished_blackstone_stairs": "blackstone",
+      "minecraft:polished_blackstone_wall": "blackstone",
+      "minecraft:polished_deepslate": "deepslate",
+      "minecraft:polished_deepslate_slab": "deepslate",
+      "minecraft:polished_deepslate_stairs": "deepslate",
+      "minecraft:polished_deepslate_wall": "deepslate",
+      "minecraft:polished_diorite": "diorite",
+      "minecraft:polished_diorite_slab": "diorite",
+      "minecraft:polished_diorite_stairs": "diorite",
+      "minecraft:polished_granite": "granite",
+      "minecraft:polished_granite_slab": "granite",
+      "minecraft:polished_granite_stairs": "granite",
+      "minecraft:polished_tuff": "tuff",
+      "minecraft:polished_tuff_slab": "tuff",
+      "minecraft:polished_tuff_stairs": "tuff",
+      "minecraft:polished_tuff_wall": "tuff",
+      "minecraft:prismarine": "prismarine",
+      "minecraft:prismarine_brick_slab": "prismarine",
+      "minecraft:prismarine_brick_stairs": "prismarine",
+      "minecraft:prismarine_bricks": "prismarine",
+      "minecraft:prismarine_slab": "prismarine",
+      "minecraft:prismarine_stairs": "prismarine",
+      "minecraft:prismarine_wall": "prismarine",
+      "minecraft:purpur_block": "purpur",
+      "minecraft:purpur_pillar": "purpur",
+      "minecraft:purpur_slab": "purpur",
+      "minecraft:purpur_stairs": "purpur",
+      "minecraft:quartz_block": "quartz",
+      "minecraft:quartz_bricks": "quartz",
+      "minecraft:quartz_pillar": "quartz",
+      "minecraft:quartz_slab": "quartz",
+      "minecraft:quartz_stairs": "quartz",
+      "minecraft:red_nether_brick_slab": "nether_bricks",
+      "minecraft:red_nether_brick_stairs": "nether_bricks",
+      "minecraft:red_nether_brick_wall": "nether_bricks",
+      "minecraft:red_nether_bricks": "nether_bricks",
+      "minecraft:red_sandstone": "red_sandstone",
+      "minecraft:red_sandstone_slab": "red_sandstone",
+      "minecraft:red_sandstone_stairs": "red_sandstone",
+      "minecraft:red_sandstone_wall": "red_sandstone",
+      "minecraft:resin_brick_slab": "resin",
+      "minecraft:resin_brick_stairs": "resin",
+      "minecraft:resin_brick_wall": "resin",
+      "minecraft:resin_bricks": "resin",
+      "minecraft:sandstone": "sandstone",
+      "minecraft:sandstone_slab": "sandstone",
+      "minecraft:sandstone_stairs": "sandstone",
+      "minecraft:sandstone_wall": "sandstone",
+      "minecraft:smooth_basalt": "basalt",
+      "minecraft:smooth_quartz": "quartz",
+      "minecraft:smooth_quartz_slab": "quartz",
+      "minecraft:smooth_quartz_stairs": "quartz",
+      "minecraft:smooth_red_sandstone": "red_sandstone",
+      "minecraft:smooth_red_sandstone_slab": "red_sandstone",
+      "minecraft:smooth_red_sandstone_stairs": "red_sandstone",
+      "minecraft:smooth_sandstone": "sandstone",
+      "minecraft:smooth_sandstone_slab": "sandstone",
+      "minecraft:smooth_sandstone_stairs": "sandstone",
+      "minecraft:smooth_stone": "stone",
+      "minecraft:smooth_stone_slab": "stone",
+      "minecraft:stone": "stone",
+      "minecraft:stone_brick_slab": "stone",
+      "minecraft:stone_brick_stairs": "stone",
+      "minecraft:stone_brick_wall": "stone",
+      "minecraft:stone_bricks": "stone",
+      "minecraft:stone_slab": "stone",
+      "minecraft:stone_stairs": "stone",
+      "minecraft:tuff": "tuff",
+      "minecraft:tuff_brick_slab": "tuff",
+      "minecraft:tuff_brick_stairs": "tuff",
+      "minecraft:tuff_brick_wall": "tuff",
+      "minecraft:tuff_bricks": "tuff",
+      "minecraft:tuff_slab": "tuff",
+      "minecraft:tuff_stairs": "tuff",
+      "minecraft:tuff_wall": "tuff"
+    },
+    "stairsSlab": {
+      "minecraft:acacia_planks": {
+        "cube": true,
+        "trim": "minecraft:acacia_planks"
+      },
+      "minecraft:andesite": {
+        "cube": true,
+        "trim": "minecraft:polished_andesite"
+      },
+      "minecraft:bamboo": {
+        "cube": false
+      },
+      "minecraft:bamboo_block": {
+        "cube": true,
+        "trim": "minecraft:bamboo_block"
+      },
+      "minecraft:bamboo_mosaic": {
+        "cube": true,
+        "trim": "minecraft:bamboo_mosaic"
+      },
+      "minecraft:bamboo_planks": {
+        "cube": true,
+        "trim": "minecraft:bamboo_planks"
+      },
+      "minecraft:birch_planks": {
+        "cube": true,
+        "trim": "minecraft:birch_planks"
+      },
+      "minecraft:black_concrete": {
+        "cube": true,
+        "trim": "minecraft:black_concrete"
+      },
+      "minecraft:black_wool": {
+        "cube": true,
+        "trim": "minecraft:black_wool"
+      },
+      "minecraft:blackstone": {
+        "cube": true,
+        "trim": "minecraft:polished_blackstone_bricks"
+      },
+      "minecraft:blue_concrete": {
+        "cube": true,
+        "trim": "minecraft:blue_concrete"
+      },
+      "minecraft:blue_wool": {
+        "cube": true,
+        "trim": "minecraft:blue_wool"
+      },
+      "minecraft:bricks": {
+        "cube": true,
+        "trim": "minecraft:bricks"
+      },
+      "minecraft:brown_concrete": {
+        "cube": true,
+        "trim": "minecraft:brown_concrete"
+      },
+      "minecraft:brown_wool": {
+        "cube": true,
+        "trim": "minecraft:brown_wool"
+      },
+      "minecraft:cherry_planks": {
+        "cube": true,
+        "trim": "minecraft:cherry_planks"
+      },
+      "minecraft:cinnabar": {
+        "cube": true,
+        "trim": "minecraft:cinnabar"
+      },
+      "minecraft:cinnabar_bricks": {
+        "cube": true,
+        "trim": "minecraft:cinnabar_bricks"
+      },
+      "minecraft:cobbled_deepslate": {
+        "cube": true,
+        "trim": "minecraft:deepslate_bricks"
+      },
+      "minecraft:cobblestone": {
+        "cube": true,
+        "trim": "minecraft:mossy_cobblestone"
+      },
+      "minecraft:crimson_planks": {
+        "cube": true,
+        "trim": "minecraft:crimson_planks"
+      },
+      "minecraft:cut_copper": {
+        "cube": true,
+        "trim": "minecraft:cut_copper"
+      },
+      "minecraft:cyan_concrete": {
+        "cube": true,
+        "trim": "minecraft:cyan_concrete"
+      },
+      "minecraft:cyan_wool": {
+        "cube": true,
+        "trim": "minecraft:cyan_wool"
+      },
+      "minecraft:dark_oak_planks": {
+        "cube": true,
+        "trim": "minecraft:dark_oak_planks"
+      },
+      "minecraft:dark_prismarine": {
+        "cube": true,
+        "trim": "minecraft:prismarine"
+      },
+      "minecraft:deepslate_bricks": {
+        "cube": true,
+        "trim": "minecraft:polished_deepslate"
+      },
+      "minecraft:deepslate_tiles": {
+        "cube": true,
+        "trim": "minecraft:deepslate_bricks"
+      },
+      "minecraft:diorite": {
+        "cube": true,
+        "trim": "minecraft:polished_diorite"
+      },
+      "minecraft:end_stone_bricks": {
+        "cube": true,
+        "trim": "minecraft:end_stone"
+      },
+      "minecraft:exposed_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:exposed_cut_copper"
+      },
+      "minecraft:granite": {
+        "cube": true,
+        "trim": "minecraft:polished_granite"
+      },
+      "minecraft:gray_concrete": {
+        "cube": true,
+        "trim": "minecraft:gray_concrete"
+      },
+      "minecraft:gray_wool": {
+        "cube": true,
+        "trim": "minecraft:gray_wool"
+      },
+      "minecraft:green_concrete": {
+        "cube": true,
+        "trim": "minecraft:green_concrete"
+      },
+      "minecraft:green_wool": {
+        "cube": true,
+        "trim": "minecraft:green_wool"
+      },
+      "minecraft:jungle_planks": {
+        "cube": true,
+        "trim": "minecraft:jungle_planks"
+      },
+      "minecraft:light_blue_concrete": {
+        "cube": true,
+        "trim": "minecraft:light_blue_concrete"
+      },
+      "minecraft:light_blue_wool": {
+        "cube": true,
+        "trim": "minecraft:light_blue_wool"
+      },
+      "minecraft:light_gray_concrete": {
+        "cube": true,
+        "trim": "minecraft:light_gray_concrete"
+      },
+      "minecraft:light_gray_wool": {
+        "cube": true,
+        "trim": "minecraft:light_gray_wool"
+      },
+      "minecraft:lime_concrete": {
+        "cube": true,
+        "trim": "minecraft:lime_concrete"
+      },
+      "minecraft:lime_wool": {
+        "cube": true,
+        "trim": "minecraft:lime_wool"
+      },
+      "minecraft:magenta_concrete": {
+        "cube": true,
+        "trim": "minecraft:magenta_concrete"
+      },
+      "minecraft:magenta_wool": {
+        "cube": true,
+        "trim": "minecraft:magenta_wool"
+      },
+      "minecraft:mangrove_planks": {
+        "cube": true,
+        "trim": "minecraft:mangrove_planks"
+      },
+      "minecraft:mossy_cobblestone": {
+        "cube": true,
+        "trim": "minecraft:cobblestone"
+      },
+      "minecraft:mossy_stone_bricks": {
+        "cube": true,
+        "trim": "minecraft:stone_bricks"
+      },
+      "minecraft:mud_bricks": {
+        "cube": true,
+        "trim": "minecraft:packed_mud"
+      },
+      "minecraft:nether_bricks": {
+        "cube": true,
+        "trim": "minecraft:red_nether_bricks"
+      },
+      "minecraft:oak_planks": {
+        "cube": true,
+        "trim": "minecraft:oak_planks"
+      },
+      "minecraft:orange_concrete": {
+        "cube": true,
+        "trim": "minecraft:orange_concrete"
+      },
+      "minecraft:orange_wool": {
+        "cube": true,
+        "trim": "minecraft:orange_wool"
+      },
+      "minecraft:oxidized_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:oxidized_cut_copper"
+      },
+      "minecraft:pale_oak_planks": {
+        "cube": true,
+        "trim": "minecraft:pale_oak_planks"
+      },
+      "minecraft:pink_concrete": {
+        "cube": true,
+        "trim": "minecraft:pink_concrete"
+      },
+      "minecraft:pink_wool": {
+        "cube": true,
+        "trim": "minecraft:pink_wool"
+      },
+      "minecraft:polished_andesite": {
+        "cube": true,
+        "trim": "minecraft:andesite"
+      },
+      "minecraft:polished_blackstone": {
+        "cube": true,
+        "trim": "minecraft:polished_blackstone_bricks"
+      },
+      "minecraft:polished_blackstone_bricks": {
+        "cube": true,
+        "trim": "minecraft:polished_blackstone"
+      },
+      "minecraft:polished_cinnabar": {
+        "cube": true,
+        "trim": "minecraft:polished_cinnabar"
+      },
+      "minecraft:polished_deepslate": {
+        "cube": true,
+        "trim": "minecraft:deepslate_bricks"
+      },
+      "minecraft:polished_diorite": {
+        "cube": true,
+        "trim": "minecraft:diorite"
+      },
+      "minecraft:polished_granite": {
+        "cube": true,
+        "trim": "minecraft:granite"
+      },
+      "minecraft:polished_sulfur": {
+        "cube": true,
+        "trim": "minecraft:polished_sulfur"
+      },
+      "minecraft:polished_tuff": {
+        "cube": true,
+        "trim": "minecraft:tuff_bricks"
+      },
+      "minecraft:poplar_planks": {
+        "cube": true,
+        "trim": "minecraft:poplar_planks"
+      },
+      "minecraft:prismarine": {
+        "cube": true,
+        "trim": "minecraft:prismarine_bricks"
+      },
+      "minecraft:prismarine_bricks": {
+        "cube": true,
+        "trim": "minecraft:prismarine"
+      },
+      "minecraft:purple_concrete": {
+        "cube": true,
+        "trim": "minecraft:purple_concrete"
+      },
+      "minecraft:purple_wool": {
+        "cube": true,
+        "trim": "minecraft:purple_wool"
+      },
+      "minecraft:purpur_block": {
+        "cube": true,
+        "trim": "minecraft:purpur_pillar"
+      },
+      "minecraft:quartz_block": {
+        "cube": true,
+        "trim": "minecraft:smooth_quartz"
+      },
+      "minecraft:red_concrete": {
+        "cube": true,
+        "trim": "minecraft:red_concrete"
+      },
+      "minecraft:red_nether_bricks": {
+        "cube": true,
+        "trim": "minecraft:nether_bricks"
+      },
+      "minecraft:red_sandstone": {
+        "cube": true,
+        "trim": "minecraft:cut_red_sandstone"
+      },
+      "minecraft:red_wool": {
+        "cube": true,
+        "trim": "minecraft:red_wool"
+      },
+      "minecraft:resin_bricks": {
+        "cube": true,
+        "trim": "minecraft:chiseled_resin_bricks"
+      },
+      "minecraft:sandstone": {
+        "cube": true,
+        "trim": "minecraft:cut_sandstone"
+      },
+      "minecraft:smooth_quartz": {
+        "cube": true,
+        "trim": "minecraft:quartz_block"
+      },
+      "minecraft:smooth_red_sandstone": {
+        "cube": true,
+        "trim": "minecraft:red_sandstone"
+      },
+      "minecraft:smooth_sandstone": {
+        "cube": true,
+        "trim": "minecraft:sandstone"
+      },
+      "minecraft:spruce_planks": {
+        "cube": true,
+        "trim": "minecraft:spruce_planks"
+      },
+      "minecraft:stone": {
+        "cube": true,
+        "trim": "minecraft:stone_bricks"
+      },
+      "minecraft:stone_bricks": {
+        "cube": true,
+        "trim": "minecraft:smooth_stone"
+      },
+      "minecraft:sulfur": {
+        "cube": true,
+        "trim": "minecraft:sulfur"
+      },
+      "minecraft:sulfur_bricks": {
+        "cube": true,
+        "trim": "minecraft:sulfur_bricks"
+      },
+      "minecraft:tuff": {
+        "cube": true,
+        "trim": "minecraft:tuff_bricks"
+      },
+      "minecraft:tuff_bricks": {
+        "cube": true,
+        "trim": "minecraft:polished_tuff"
+      },
+      "minecraft:warped_planks": {
+        "cube": true,
+        "trim": "minecraft:warped_planks"
+      },
+      "minecraft:waxed_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:waxed_cut_copper"
+      },
+      "minecraft:waxed_exposed_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:waxed_exposed_cut_copper"
+      },
+      "minecraft:waxed_oxidized_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:waxed_oxidized_cut_copper"
+      },
+      "minecraft:waxed_weathered_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:waxed_weathered_cut_copper"
+      },
+      "minecraft:weathered_cut_copper": {
+        "cube": true,
+        "trim": "minecraft:weathered_cut_copper"
+      },
+      "minecraft:white_concrete": {
+        "cube": true,
+        "trim": "minecraft:white_concrete"
+      },
+      "minecraft:white_wool": {
+        "cube": true,
+        "trim": "minecraft:white_wool"
+      },
+      "minecraft:yellow_concrete": {
+        "cube": true,
+        "trim": "minecraft:yellow_concrete"
+      },
+      "minecraft:yellow_wool": {
+        "cube": true,
+        "trim": "minecraft:yellow_wool"
+      }
+    },
+    "fullOf": {
+      "minecraft:acacia_slab": "minecraft:acacia_planks",
+      "minecraft:acacia_stairs": "minecraft:acacia_planks",
+      "minecraft:andesite_slab": "minecraft:andesite",
+      "minecraft:andesite_stairs": "minecraft:andesite",
+      "minecraft:andesite_wall": "minecraft:andesite",
+      "minecraft:bamboo_mosaic_slab": "minecraft:bamboo_mosaic",
+      "minecraft:bamboo_mosaic_stairs": "minecraft:bamboo_mosaic",
+      "minecraft:bamboo_slab": "minecraft:bamboo_planks",
+      "minecraft:bamboo_stairs": "minecraft:bamboo_planks",
+      "minecraft:birch_slab": "minecraft:birch_planks",
+      "minecraft:birch_stairs": "minecraft:birch_planks",
+      "minecraft:black_concrete_slab": "minecraft:black_concrete",
+      "minecraft:black_concrete_stairs": "minecraft:black_concrete",
+      "minecraft:black_wool_slab": "minecraft:black_wool",
+      "minecraft:black_wool_stairs": "minecraft:black_wool",
+      "minecraft:blackstone_slab": "minecraft:blackstone",
+      "minecraft:blackstone_stairs": "minecraft:blackstone",
+      "minecraft:blackstone_wall": "minecraft:blackstone",
+      "minecraft:blue_concrete_slab": "minecraft:blue_concrete",
+      "minecraft:blue_concrete_stairs": "minecraft:blue_concrete",
+      "minecraft:blue_wool_slab": "minecraft:blue_wool",
+      "minecraft:blue_wool_stairs": "minecraft:blue_wool",
+      "minecraft:brick_slab": "minecraft:bricks",
+      "minecraft:brick_stairs": "minecraft:bricks",
+      "minecraft:brick_wall": "minecraft:bricks",
+      "minecraft:brown_concrete_slab": "minecraft:brown_concrete",
+      "minecraft:brown_concrete_stairs": "minecraft:brown_concrete",
+      "minecraft:brown_wool_slab": "minecraft:brown_wool",
+      "minecraft:brown_wool_stairs": "minecraft:brown_wool",
+      "minecraft:cherry_slab": "minecraft:cherry_planks",
+      "minecraft:cherry_stairs": "minecraft:cherry_planks",
+      "minecraft:cinnabar_brick_slab": "minecraft:cinnabar_bricks",
+      "minecraft:cinnabar_brick_stairs": "minecraft:cinnabar_bricks",
+      "minecraft:cinnabar_brick_wall": "minecraft:cinnabar_bricks",
+      "minecraft:cinnabar_slab": "minecraft:cinnabar",
+      "minecraft:cinnabar_stairs": "minecraft:cinnabar",
+      "minecraft:cinnabar_wall": "minecraft:cinnabar",
+      "minecraft:cobbled_deepslate_slab": "minecraft:cobbled_deepslate",
+      "minecraft:cobbled_deepslate_stairs": "minecraft:cobbled_deepslate",
+      "minecraft:cobbled_deepslate_wall": "minecraft:cobbled_deepslate",
+      "minecraft:cobblestone_slab": "minecraft:cobblestone",
+      "minecraft:cobblestone_stairs": "minecraft:cobblestone",
+      "minecraft:cobblestone_wall": "minecraft:cobblestone",
+      "minecraft:crimson_slab": "minecraft:crimson_planks",
+      "minecraft:crimson_stairs": "minecraft:crimson_planks",
+      "minecraft:cut_copper_slab": "minecraft:cut_copper",
+      "minecraft:cut_copper_stairs": "minecraft:cut_copper",
+      "minecraft:cut_red_sandstone_slab": "minecraft:cut_red_sandstone",
+      "minecraft:cut_sandstone_slab": "minecraft:cut_sandstone",
+      "minecraft:cyan_concrete_slab": "minecraft:cyan_concrete",
+      "minecraft:cyan_concrete_stairs": "minecraft:cyan_concrete",
+      "minecraft:cyan_wool_slab": "minecraft:cyan_wool",
+      "minecraft:cyan_wool_stairs": "minecraft:cyan_wool",
+      "minecraft:dark_oak_slab": "minecraft:dark_oak_planks",
+      "minecraft:dark_oak_stairs": "minecraft:dark_oak_planks",
+      "minecraft:dark_prismarine_slab": "minecraft:dark_prismarine",
+      "minecraft:dark_prismarine_stairs": "minecraft:dark_prismarine",
+      "minecraft:deepslate_brick_slab": "minecraft:deepslate_bricks",
+      "minecraft:deepslate_brick_stairs": "minecraft:deepslate_bricks",
+      "minecraft:deepslate_brick_wall": "minecraft:deepslate_bricks",
+      "minecraft:deepslate_tile_slab": "minecraft:deepslate_tiles",
+      "minecraft:deepslate_tile_stairs": "minecraft:deepslate_tiles",
+      "minecraft:deepslate_tile_wall": "minecraft:deepslate_tiles",
+      "minecraft:diorite_slab": "minecraft:diorite",
+      "minecraft:diorite_stairs": "minecraft:diorite",
+      "minecraft:diorite_wall": "minecraft:diorite",
+      "minecraft:end_stone_brick_slab": "minecraft:end_stone_bricks",
+      "minecraft:end_stone_brick_stairs": "minecraft:end_stone_bricks",
+      "minecraft:end_stone_brick_wall": "minecraft:end_stone_bricks",
+      "minecraft:exposed_cut_copper_slab": "minecraft:exposed_cut_copper",
+      "minecraft:exposed_cut_copper_stairs": "minecraft:exposed_cut_copper",
+      "minecraft:granite_slab": "minecraft:granite",
+      "minecraft:granite_stairs": "minecraft:granite",
+      "minecraft:granite_wall": "minecraft:granite",
+      "minecraft:gray_concrete_slab": "minecraft:gray_concrete",
+      "minecraft:gray_concrete_stairs": "minecraft:gray_concrete",
+      "minecraft:gray_wool_slab": "minecraft:gray_wool",
+      "minecraft:gray_wool_stairs": "minecraft:gray_wool",
+      "minecraft:green_concrete_slab": "minecraft:green_concrete",
+      "minecraft:green_concrete_stairs": "minecraft:green_concrete",
+      "minecraft:green_wool_slab": "minecraft:green_wool",
+      "minecraft:green_wool_stairs": "minecraft:green_wool",
+      "minecraft:jungle_slab": "minecraft:jungle_planks",
+      "minecraft:jungle_stairs": "minecraft:jungle_planks",
+      "minecraft:light_blue_concrete_slab": "minecraft:light_blue_concrete",
+      "minecraft:light_blue_concrete_stairs": "minecraft:light_blue_concrete",
+      "minecraft:light_blue_wool_slab": "minecraft:light_blue_wool",
+      "minecraft:light_blue_wool_stairs": "minecraft:light_blue_wool",
+      "minecraft:light_gray_concrete_slab": "minecraft:light_gray_concrete",
+      "minecraft:light_gray_concrete_stairs": "minecraft:light_gray_concrete",
+      "minecraft:light_gray_wool_slab": "minecraft:light_gray_wool",
+      "minecraft:light_gray_wool_stairs": "minecraft:light_gray_wool",
+      "minecraft:lime_concrete_slab": "minecraft:lime_concrete",
+      "minecraft:lime_concrete_stairs": "minecraft:lime_concrete",
+      "minecraft:lime_wool_slab": "minecraft:lime_wool",
+      "minecraft:lime_wool_stairs": "minecraft:lime_wool",
+      "minecraft:magenta_concrete_slab": "minecraft:magenta_concrete",
+      "minecraft:magenta_concrete_stairs": "minecraft:magenta_concrete",
+      "minecraft:magenta_wool_slab": "minecraft:magenta_wool",
+      "minecraft:magenta_wool_stairs": "minecraft:magenta_wool",
+      "minecraft:mangrove_slab": "minecraft:mangrove_planks",
+      "minecraft:mangrove_stairs": "minecraft:mangrove_planks",
+      "minecraft:mossy_cobblestone_slab": "minecraft:mossy_cobblestone",
+      "minecraft:mossy_cobblestone_stairs": "minecraft:mossy_cobblestone",
+      "minecraft:mossy_cobblestone_wall": "minecraft:mossy_cobblestone",
+      "minecraft:mossy_stone_brick_slab": "minecraft:mossy_stone_bricks",
+      "minecraft:mossy_stone_brick_stairs": "minecraft:mossy_stone_bricks",
+      "minecraft:mossy_stone_brick_wall": "minecraft:mossy_stone_bricks",
+      "minecraft:mud_brick_slab": "minecraft:mud_bricks",
+      "minecraft:mud_brick_stairs": "minecraft:mud_bricks",
+      "minecraft:mud_brick_wall": "minecraft:mud_bricks",
+      "minecraft:nether_brick_slab": "minecraft:nether_bricks",
+      "minecraft:nether_brick_stairs": "minecraft:nether_bricks",
+      "minecraft:nether_brick_wall": "minecraft:nether_bricks",
+      "minecraft:oak_slab": "minecraft:oak_planks",
+      "minecraft:oak_stairs": "minecraft:oak_planks",
+      "minecraft:orange_concrete_slab": "minecraft:orange_concrete",
+      "minecraft:orange_concrete_stairs": "minecraft:orange_concrete",
+      "minecraft:orange_wool_slab": "minecraft:orange_wool",
+      "minecraft:orange_wool_stairs": "minecraft:orange_wool",
+      "minecraft:oxidized_cut_copper_slab": "minecraft:oxidized_cut_copper",
+      "minecraft:oxidized_cut_copper_stairs": "minecraft:oxidized_cut_copper",
+      "minecraft:pale_oak_slab": "minecraft:pale_oak_planks",
+      "minecraft:pale_oak_stairs": "minecraft:pale_oak_planks",
+      "minecraft:pink_concrete_slab": "minecraft:pink_concrete",
+      "minecraft:pink_concrete_stairs": "minecraft:pink_concrete",
+      "minecraft:pink_wool_slab": "minecraft:pink_wool",
+      "minecraft:pink_wool_stairs": "minecraft:pink_wool",
+      "minecraft:polished_andesite_slab": "minecraft:polished_andesite",
+      "minecraft:polished_andesite_stairs": "minecraft:polished_andesite",
+      "minecraft:polished_blackstone_brick_slab": "minecraft:polished_blackstone_bricks",
+      "minecraft:polished_blackstone_brick_stairs": "minecraft:polished_blackstone_bricks",
+      "minecraft:polished_blackstone_brick_wall": "minecraft:polished_blackstone_bricks",
+      "minecraft:polished_blackstone_slab": "minecraft:polished_blackstone",
+      "minecraft:polished_blackstone_stairs": "minecraft:polished_blackstone",
+      "minecraft:polished_blackstone_wall": "minecraft:polished_blackstone",
+      "minecraft:polished_cinnabar_slab": "minecraft:polished_cinnabar",
+      "minecraft:polished_cinnabar_stairs": "minecraft:polished_cinnabar",
+      "minecraft:polished_cinnabar_wall": "minecraft:polished_cinnabar",
+      "minecraft:polished_deepslate_slab": "minecraft:polished_deepslate",
+      "minecraft:polished_deepslate_stairs": "minecraft:polished_deepslate",
+      "minecraft:polished_deepslate_wall": "minecraft:polished_deepslate",
+      "minecraft:polished_diorite_slab": "minecraft:polished_diorite",
+      "minecraft:polished_diorite_stairs": "minecraft:polished_diorite",
+      "minecraft:polished_granite_slab": "minecraft:polished_granite",
+      "minecraft:polished_granite_stairs": "minecraft:polished_granite",
+      "minecraft:polished_sulfur_slab": "minecraft:polished_sulfur",
+      "minecraft:polished_sulfur_stairs": "minecraft:polished_sulfur",
+      "minecraft:polished_sulfur_wall": "minecraft:polished_sulfur",
+      "minecraft:polished_tuff_slab": "minecraft:polished_tuff",
+      "minecraft:polished_tuff_stairs": "minecraft:polished_tuff",
+      "minecraft:polished_tuff_wall": "minecraft:polished_tuff",
+      "minecraft:poplar_slab": "minecraft:poplar_planks",
+      "minecraft:poplar_stairs": "minecraft:poplar_planks",
+      "minecraft:prismarine_brick_slab": "minecraft:prismarine_bricks",
+      "minecraft:prismarine_brick_stairs": "minecraft:prismarine_bricks",
+      "minecraft:prismarine_slab": "minecraft:prismarine",
+      "minecraft:prismarine_stairs": "minecraft:prismarine",
+      "minecraft:prismarine_wall": "minecraft:prismarine",
+      "minecraft:purple_concrete_slab": "minecraft:purple_concrete",
+      "minecraft:purple_concrete_stairs": "minecraft:purple_concrete",
+      "minecraft:purple_wool_slab": "minecraft:purple_wool",
+      "minecraft:purple_wool_stairs": "minecraft:purple_wool",
+      "minecraft:purpur_slab": "minecraft:purpur_block",
+      "minecraft:purpur_stairs": "minecraft:purpur_block",
+      "minecraft:quartz_slab": "minecraft:quartz_block",
+      "minecraft:quartz_stairs": "minecraft:quartz_block",
+      "minecraft:red_concrete_slab": "minecraft:red_concrete",
+      "minecraft:red_concrete_stairs": "minecraft:red_concrete",
+      "minecraft:red_nether_brick_slab": "minecraft:red_nether_bricks",
+      "minecraft:red_nether_brick_stairs": "minecraft:red_nether_bricks",
+      "minecraft:red_nether_brick_wall": "minecraft:red_nether_bricks",
+      "minecraft:red_sandstone_slab": "minecraft:red_sandstone",
+      "minecraft:red_sandstone_stairs": "minecraft:red_sandstone",
+      "minecraft:red_sandstone_wall": "minecraft:red_sandstone",
+      "minecraft:red_wool_slab": "minecraft:red_wool",
+      "minecraft:red_wool_stairs": "minecraft:red_wool",
+      "minecraft:resin_brick_slab": "minecraft:resin_bricks",
+      "minecraft:resin_brick_stairs": "minecraft:resin_bricks",
+      "minecraft:resin_brick_wall": "minecraft:resin_bricks",
+      "minecraft:sandstone_slab": "minecraft:sandstone",
+      "minecraft:sandstone_stairs": "minecraft:sandstone",
+      "minecraft:sandstone_wall": "minecraft:sandstone",
+      "minecraft:smooth_quartz_slab": "minecraft:smooth_quartz",
+      "minecraft:smooth_quartz_stairs": "minecraft:smooth_quartz",
+      "minecraft:smooth_red_sandstone_slab": "minecraft:smooth_red_sandstone",
+      "minecraft:smooth_red_sandstone_stairs": "minecraft:smooth_red_sandstone",
+      "minecraft:smooth_sandstone_slab": "minecraft:smooth_sandstone",
+      "minecraft:smooth_sandstone_stairs": "minecraft:smooth_sandstone",
+      "minecraft:smooth_stone_slab": "minecraft:smooth_stone",
+      "minecraft:spruce_slab": "minecraft:spruce_planks",
+      "minecraft:spruce_stairs": "minecraft:spruce_planks",
+      "minecraft:stone_brick_slab": "minecraft:stone_bricks",
+      "minecraft:stone_brick_stairs": "minecraft:stone_bricks",
+      "minecraft:stone_brick_wall": "minecraft:stone_bricks",
+      "minecraft:stone_slab": "minecraft:stone",
+      "minecraft:stone_stairs": "minecraft:stone",
+      "minecraft:sulfur_brick_slab": "minecraft:sulfur_bricks",
+      "minecraft:sulfur_brick_stairs": "minecraft:sulfur_bricks",
+      "minecraft:sulfur_brick_wall": "minecraft:sulfur_bricks",
+      "minecraft:sulfur_slab": "minecraft:sulfur",
+      "minecraft:sulfur_stairs": "minecraft:sulfur",
+      "minecraft:sulfur_wall": "minecraft:sulfur",
+      "minecraft:tuff_brick_slab": "minecraft:tuff_bricks",
+      "minecraft:tuff_brick_stairs": "minecraft:tuff_bricks",
+      "minecraft:tuff_brick_wall": "minecraft:tuff_bricks",
+      "minecraft:tuff_slab": "minecraft:tuff",
+      "minecraft:tuff_stairs": "minecraft:tuff",
+      "minecraft:tuff_wall": "minecraft:tuff",
+      "minecraft:warped_slab": "minecraft:warped_planks",
+      "minecraft:warped_stairs": "minecraft:warped_planks",
+      "minecraft:waxed_cut_copper_slab": "minecraft:waxed_cut_copper",
+      "minecraft:waxed_cut_copper_stairs": "minecraft:waxed_cut_copper",
+      "minecraft:waxed_exposed_cut_copper_slab": "minecraft:waxed_exposed_cut_copper",
+      "minecraft:waxed_exposed_cut_copper_stairs": "minecraft:waxed_exposed_cut_copper",
+      "minecraft:waxed_oxidized_cut_copper_slab": "minecraft:waxed_oxidized_cut_copper",
+      "minecraft:waxed_oxidized_cut_copper_stairs": "minecraft:waxed_oxidized_cut_copper",
+      "minecraft:waxed_weathered_cut_copper_slab": "minecraft:waxed_weathered_cut_copper",
+      "minecraft:waxed_weathered_cut_copper_stairs": "minecraft:waxed_weathered_cut_copper",
+      "minecraft:weathered_cut_copper_slab": "minecraft:weathered_cut_copper",
+      "minecraft:weathered_cut_copper_stairs": "minecraft:weathered_cut_copper",
+      "minecraft:white_concrete_slab": "minecraft:white_concrete",
+      "minecraft:white_concrete_stairs": "minecraft:white_concrete",
+      "minecraft:white_wool_slab": "minecraft:white_wool",
+      "minecraft:white_wool_stairs": "minecraft:white_wool",
+      "minecraft:yellow_concrete_slab": "minecraft:yellow_concrete",
+      "minecraft:yellow_concrete_stairs": "minecraft:yellow_concrete",
+      "minecraft:yellow_wool_slab": "minecraft:yellow_wool",
+      "minecraft:yellow_wool_stairs": "minecraft:yellow_wool"
+    }
+  }
+}
