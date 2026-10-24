@@ -415,7 +415,8 @@ steps.crash = async () => {
     const st = await L.waitRegion(rid, 3_600_000);
     // (settle: a record reads pending until its item is marked placed)
     let rv = await realised(rid, { verify: true });
-    for (let k = 0; k < 6 && Object.keys(rv.verify.status).some((x) => x !== 'committed'); k++) { await sleep(5000); rv = await realised(rid, { verify: true }); }
+    // (speed audit B) polled every 500 ms, at most the 30 s the six 5 s sleeps made
+    for (let t1 = Date.now(); Date.now() - t1 < 30_000 && Object.keys(rv.verify.status).some((x) => x !== 'committed'); ) { await sleep(500); rv = await realised(rid, { verify: true }); }
     const v = rv.verify;
     out[tag] = { region: rid, atHalt, state: st.view.state, status: v.status, unrecorded: v.unrecorded, placingLeftover: v.placingLeftover, notHeld: v.notHeld, cellsChecked: v.cellsChecked, problems: v.problems.slice(0, 8), tiles: rv.tiles.map((t) => [t.stage, t.set, t.key, t.site, t.status]) };
     const allCommitted = Object.keys(v.status).every((s) => s === 'committed');

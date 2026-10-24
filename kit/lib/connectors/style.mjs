@@ -32,7 +32,8 @@ export const CONNECTOR_DEFAULTS = Object.freeze({
   tunnel: { lining: ['foundation', 'structure'], portal: ['trim'], floor: ['path', 'floor'] },
   // (7a foundation) each 7a slice sets its own chains (empty until then: the slot resolves to null)
   stair: { tread: [], rail: [] }, switchback: { retaining: [] }, ladder: { ladder: [], landing: [], rail: [], gate: [] },
-  rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] }, catwalk: { deck: [], bracket: [], rail: [] },
+  rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] },
+  catwalk: { deck: ['floor', 'path'], bracket: ['frame'], rail: ['rail'] }, // ((7a CW, N-CW-1) a plank deck in floor then path, brackets in frame, fence rails)
   stairs_around: { tread: [], rail: [], deck: [] },
 });
 

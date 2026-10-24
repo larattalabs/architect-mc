@@ -35,6 +35,7 @@
 //     report                         REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7a-k2/<step>.json in the main checkout (GATE7AK2_OUT overrides), all.log, REPORT.md, spend.json.
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -109,7 +110,7 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline
 
 function nodeTest(files) {
-  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout: 3_600_000 });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };

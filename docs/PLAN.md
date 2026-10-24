@@ -1176,3 +1176,10 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
 - **K1a bug: dark gate-walk cells under a level-10 light** (found by K2's look variants, not fixed in K2): v30 in g7ak1_infernal (soul
   lantern, light 10) on S7's flat claim: M5 5 dark spawnable cells on the east gate's walk (1559-1560, 66, -3077..-3075), with or
   without a walk. K1a's one lamp a side doesn't cover a 3-wide gate's depth at light 10.
+
+## Watch (coordinator, 2026-10-24)
+
+- **rs-survival item 10 rs02m2: "region reads REMOVING after the reopen", but it read REMOVED.** This failed once each in two
+  independent runs on 2026-10-24 (speed-audit-c's branch run and speed-audit-b's new run). Neither changed that code, and it had
+  passed in about 18 earlier logs. If the nightly shows it again, treat it as a real race in the reopen-during-removal path, not
+  a flake.

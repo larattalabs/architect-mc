@@ -1,0 +1,99 @@
+{
+  "about": "(7a CW) v7a_cw_cliff with the face beside the bay of sand (a frozen volume's LOOSE cells from the foot to 4 over the shelves): the face is not site-solid: ANCHOR {why: face}",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 84
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1059,
+        "z1": 2095,
+        "y": 72
+      },
+      {
+        "x0": 1076,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 72
+      }
+    ]
+  },
+  "volume": {
+    "given": [
+      [
+        1052,
+        60,
+        2024,
+        1083,
+        90,
+        2040
+      ]
+    ],
+    "edits": [
+      {
+        "box": [
+          1052,
+          60,
+          2024,
+          1083,
+          76,
+          2029
+        ],
+        "class": "LOOSE"
+      }
+    ]
+  },
+  "anchors": {
+    "west_shelf": [
+      1048,
+      73,
+      2036
+    ],
+    "east_shelf": [
+      1087,
+      73,
+      2036
+    ]
+  },
+  "protected": [
+    {
+      "id": "foot_path",
+      "rect": [
+        1056,
+        2034,
+        1079,
+        2095
+      ]
+    }
+  ],
+  "expect": {
+    "part": "cliff_walk",
+    "code": "ANCHOR"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        }
+      }
+    ]
+  }
+}

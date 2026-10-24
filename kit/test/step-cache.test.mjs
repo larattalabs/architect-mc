@@ -395,3 +395,69 @@ test('coverage: drivers count by their eager imports; a lazy import() only when 
   git(root, 'commit', '-qam', 'the driver now always executes the lazy import');
   assert.equal(lookupCoverage(ctx(), 'g').hit, null, 'the driver itself changed: re-run (and re-traced)');
 });
+
+test('coverage, execution mode (JaCoCo): a loaded class never entered counts by its skeleton; an entered one whole; load-mode PASSes still validate', () => {
+  const root = covRepo();
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
+  const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
+  const J = 'dev.larattalabs.architect';
+  const JN = `${J}.journal.Journal`;
+  const RF = `${J}.region.RegionFluids`;
+  let manifest = { ok: true, hash: 'b1', classes: { [JN]: 'aa', [RF]: 'bb' }, skel: { [JN]: 's-aa', [RF]: 's-bb' } };
+  const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg, manifest });
+  const covDir = path.join(main, 'cov');
+  write(covDir, 'jvm-1.log', `[0.1s] ${JN} source: x\n[0.1s] ${RF} source: x\n`);
+  // the JVM's dump answered this step's token: it entered Journal, only loaded RegionFluids
+  write(covDir, 'jvm-1.entered', `# token t1\n# at 1\ne ${JN.replaceAll('.', '/')}\n`);
+  const { readDump } = { readDump: (d, pid) => ({ token: 't1', entered: new Set([JN]), uninstrumented: new Set(), pid, d }) };
+  const cov = collect(covDir, { t: 0, alive: new Set() }, { exec: { token: 't1' }, readDump });
+  assert.deepEqual(cov.entered, [JN]);
+  const tdir = path.join(main, 'trace-g');
+  write(tdir, '1.txt', 'm\ttools/gate-g.mjs\n');
+  const r = record(ctx(), 'g', pass({ id: 'g' }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: cov, timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(r.stored, true, r.why);
+  const e = JSON.parse(fs.readFileSync(r.file, 'utf8'));
+  assert.deepEqual(e.coverageEntered, [JN]);
+  assert.match(e.coverageGranularity, /^entered-class\//);
+  // a load-mode PASS of the same step (no entered list), recorded before: it still validates on its own terms
+  const legacy = record(ctx(), 'g', pass({ id: 'g', startedAt: new Date(Date.now() - 5000).toISOString() }), { key: 'x', run: main, ev: main, traceDir: tdir, traced: true, coverage: { ...cov, entered: null }, timingPolicy: 'judged', judgedBench: false, tier: 'release' });
+  assert.equal(legacy.stored, true, legacy.why);
+  assert.notEqual(legacy.key, r.key, 'the granularity is in the key');
+  assert.ok(entryStillValid(ctx(), 'g', JSON.parse(fs.readFileSync(legacy.file, 'utf8'))).ok);
+  // RegionFluids' body moves, its skeleton doesn't: the execution PASS holds, the load-mode one doesn't
+  manifest = { ...manifest, hash: 'b2', classes: { ...manifest.classes, [RF]: 'cc' } };
+  assert.ok(entryStillValid(ctx(), 'g', e).ok, 'a body of a class it never entered');
+  assert.equal(entryStillValid(ctx(), 'g', JSON.parse(fs.readFileSync(legacy.file, 'utf8'))).ok, false);
+  // its skeleton moves (a constant, a member, <clinit>): miss
+  manifest = { ...manifest, hash: 'b3', skel: { ...manifest.skel, [RF]: 's-cc' } };
+  assert.equal(entryStillValid(ctx(), 'g', e).ok, false);
+  // the entered class moves anywhere: miss; a manifest without skeletons counts every class whole: miss
+  manifest = { ...manifest, hash: 'b4', skel: { ...manifest.skel, [RF]: 's-bb' }, classes: { ...manifest.classes, [RF]: 'bb', [JN]: 'zz' } };
+  assert.equal(entryStillValid(ctx(), 'g', e).ok, false);
+  manifest = { ok: true, hash: 'b5', classes: { [JN]: 'aa', [RF]: 'bb' } };
+  assert.equal(entryStillValid(ctx(), 'g', e).ok, false, 'no skeletons: the never-entered class counts whole, so the key moves');
+});
+
+test('coverage: a hidden lambda class counts as its host (keyed by the host\'s bytecode, never its source)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-hidden-'));
+  write(dir, 'jvm-1.log', '[0.1s] dev.larattalabs.a.Roads source: x\n[0.2s] dev.larattalabs.a.Roads$$Lambda/0x000003e0025628a8 source: dev.larattalabs.a.Roads\n[0.3s] dev.larattalabs.b.Only$$Lambda/0x01 source: x\n');
+  const c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump: () => ({ token: 't', entered: new Set(), uninstrumented: new Set() }) });
+  assert.deepEqual(c.classes, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only']);
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only'], 'a spun lambda means its host ran the invokedynamic: entered');
+});
+
+test('coverage: a dump older than its JVM\'s agent start (a reused pid) is stale: that JVM counts every loaded class as entered', async () => {
+  const { readDump } = await import('../../tools/lib/jacoco.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-pid-'));
+  write(dir, 'jvm-7.log', '[0.1s] dev.larattalabs.a.A source: x\n[0.1s] dev.larattalabs.a.B source: x\n[0.1s] dev.larattalabs.a.mixin.Helper source: x\n');
+  write(dir, 'jvm-7.entered', '# token exit\n# at 1000\ne dev/larattalabs/a/A\n');
+  write(dir, 'jvm-7.agent', 'pid 7\nstarted 2000\n');
+  let c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump });
+  assert.match(c.jvms[0].exec, /stale/);
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.A', 'dev.larattalabs.a.B', 'dev.larattalabs.a.mixin.Helper']);
+  // the same dump written after the agent started is this JVM's: A entered; B loaded only; a mixin-package class always entered
+  write(dir, 'jvm-7.agent', 'pid 7\nstarted 500\n');
+  c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump });
+  assert.deepEqual(c.entered, ['dev.larattalabs.a.A', 'dev.larattalabs.a.mixin.Helper']);
+});

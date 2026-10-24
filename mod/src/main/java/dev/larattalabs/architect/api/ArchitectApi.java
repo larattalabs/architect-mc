@@ -144,6 +144,10 @@ public interface ArchitectApi {
 	 * {@code sketch.outline} are compiled (lots stay axis-aligned rects with a cardinal front, their streets ordinary roads); every
 	 * street road a plan region writes carries the road ext {@code architect_mc:street: {zone, district?}} (S-FL-5), on its
 	 * batch item.
+	 * Since NEXT (7a CW), a CW helper ({@code region.catwalks}) adds {@code "catwalks"}: plan/0's {@code connector.catwalk} (the face
+	 * form: a level deck on brackets along a cliff, railed on its open side) is compiled (route row 10), the graph edge typed
+	 * {@code catwalk} with its crossing {@code {type, length, brackets}}, the siteplan's {@code catwalks[]}. No new record, method or
+	 * reason.
 	 * Since NEXT (7a K2), a K2 helper adds {@code "wallAlong"} ({@code region.walls.along}: plan/0's {@code wall.along}, a wall along a
 	 * shore, a biome edge or a ridge, open, its gates where routes cross and {@code gates.min} evenly) and {@code "wallWalks"}
 	 * ({@code region.walls.walk}: a wall's {@code walk} member, a railed and lit walk on its top with stairs or ladders up from the

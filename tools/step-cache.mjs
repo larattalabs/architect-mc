@@ -25,6 +25,7 @@ import { applyHosts } from './lib/hosts.mjs';
 import { parentOf } from './lib/step-split.mjs';
 import { cacheContext, judgedBenches, keyFor, record } from './lib/step-cache.mjs';
 import { loadConf, loadMap, treeAt } from './lib/step-inputs.mjs';
+import { setMatcher } from './lib/step-coverage.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -87,6 +88,55 @@ async function anyModeMatcher(id, tree, commit = 'HEAD') {
   return { cov: true, m: (p) => keep(p) || safetyCache(p) };
 }
 let safetyCache = null;
+
+/**
+ * The newest coverage PASS of a step in the live cache (or GATE_STEP_CACHE_DIR): with `entered`, the newest that carries
+ * execution coverage (JaCoCo's entered classes). -> the entry or null.
+ */
+function newestCoverage(id, { entered = false } = {}) {
+  const dir = path.join(path.resolve(process.env.GATE_STEP_CACHE_DIR ?? path.join(MAIN, 'artifacts', 'step-cache')), id.replace(/[^\w.@-]/g, '_'));
+  let es = [];
+  try {
+    es = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      } catch {
+        return null;
+      }
+    });
+  } catch {
+    return null;
+  }
+  es = es.filter((e) => e?.mode === 'coverage' && Array.isArray(e.coverageSet) && (!entered || Array.isArray(e.coverageEntered)));
+  return es.sort((a, b) => (String(a.at) < String(b.at) ? 1 : -1))[0] ?? null;
+}
+
+/**
+ * Whether a recorded coverage PASS would run for a change: its set holds a changed path, or one of its loaded classes changed
+ * between two build manifests. `mode` 'load': every loaded class counts whole (the class-load key); 'exec': an entered class
+ * whole, a loaded-only one by its skeleton (and <clinit>), as bytecodeDigest keys it. Without manifests (a build that failed),
+ * a changed Java source counts for the loaded classes it declares (conservative). -> { run, why }.
+ */
+function coverageVerdict(e, delta, ma, mb, mode) {
+  const sHit = delta.filter((p) => setMatcher(e.coverageSet)(p));
+  if (sHit.length) return { run: true, why: `set: ${sHit.slice(0, 2).join(', ')}` };
+  const loaded = e.coverageClasses ?? [];
+  if (!loaded.length) return { run: false, why: 'no Java class recorded and no set entry changed' };
+  const ent = mode === 'exec' && Array.isArray(e.coverageEntered) ? new Set(e.coverageEntered) : null;
+  if (ma?.ok && mb?.ok) {
+    const dig = (m, c) => {
+      const sk = ent && !ent.has(c) ? m.skel?.[c] : undefined;
+      return sk ? `s:${sk}` : m.classes?.[c] ?? '-';
+    };
+    // a manifest without skeletons can't compare a loaded-only class: whole for both sides
+    const both = !ent || (ma.skel && mb.skel);
+    const hit = loaded.filter((c) => (both ? dig(ma, c) !== dig(mb, c) : (ma.classes?.[c] ?? '-') !== (mb.classes?.[c] ?? '-')));
+    return hit.length ? { run: true, why: `bytecode: ${hit.slice(0, 3).join(', ')}${hit.length > 3 ? ` and ${hit.length - 3} more` : ''}` } : { run: false, why: 'none of its classes changed (as keyed)' };
+  }
+  const tops = new Set(loaded.map((c) => c.split('$')[0]));
+  const jHit = delta.filter((p) => p.endsWith('.java') && (conf.coverage?.javaRoots ?? []).some((r) => p.startsWith(`${r}/`) && tops.has(p.slice(r.length + 1, -5).replaceAll('/', '.'))));
+  return jHit.length ? { run: true, why: `source (no build): ${jHit.slice(0, 2).join(', ')}` } : { run: false, why: 'no loaded class\'s source changed (no build to compare)' };
+}
 
 if (cmd === 'import') {
   const cfg = resolved();
@@ -184,11 +234,13 @@ if (cmd === 'import') {
     cb.rawCfg = rawCfg;
     ch.rawCfg = rawCfg;
     const row = { commit: c, subject: git('log', '-1', '--format=%s', head).slice(0, 80), changed: delta.length, steps: 0, mapRuns: 0, staticRuns: 0, classesOnly: 0, coverageRuns: 0, coverageSkips: 0, pending: 0, classesOnlyIds: [] };
+    let ma = null;
+    let mb = null;
     if (argv.includes('--bytecode')) {
       // the classes whose bytecode the commit changed: both builds' manifests (tools/lib/build-artifact.mjs, compiled offline)
       const { ensureBuild } = await import('./lib/build-artifact.mjs');
-      const ma = ensureBuild({ src: SRC, main: MAIN, commit: base, conf, java: cb.toolchain.java, log: (m) => console.log(`  ${m}`) });
-      const mb = ensureBuild({ src: SRC, main: MAIN, commit: head, conf, java: ch.toolchain.java, log: (m) => console.log(`  ${m}`) });
+      ma = ensureBuild({ src: SRC, main: MAIN, commit: base, conf, java: cb.toolchain.java, log: (m) => console.log(`  ${m}`) });
+      mb = ensureBuild({ src: SRC, main: MAIN, commit: head, conf, java: ch.toolchain.java, log: (m) => console.log(`  ${m}`) });
       if (ma.ok && mb.ok) {
         const names = new Set([...Object.keys(ma.classes), ...Object.keys(mb.classes)]);
         row.classesChanged = [...names].filter((n) => ma.classes[n] !== mb.classes[n]).sort();
@@ -210,6 +262,32 @@ if (cmd === 'import') {
       }
       row.classesOnly++;
       row.classesOnlyIds.push(id);
+      // --exact: each classes-only step's newest recorded coverage decides, read as the class-load key and as the execution key
+      if (argv.includes('--exact')) {
+        const e = newestCoverage(id, { entered: true }) ?? newestCoverage(id);
+        if (!e) {
+          (row.pendingIds ??= []).push(id);
+          continue;
+        }
+        const lv = coverageVerdict(e, delta, ma, mb, 'load');
+        const xv = Array.isArray(e.coverageEntered) ? coverageVerdict(e, delta, ma, mb, 'exec') : null;
+        (row.exact ??= []).push({ id, load: lv, exec: xv, head: String(e.head).slice(0, 9), at: e.at });
+      }
+    }
+    if (row.exact || row.pendingIds) {
+      const ex = row.exact ?? [];
+      const withExec = ex.filter((x) => x.exec);
+      row.exactSummary = {
+        pending: row.pendingIds?.length ?? 0,
+        // every step that runs: the static ones, the pending ones (no coverage recorded) and the classes-only ones whose coverage moved
+        loadRuns: row.staticRuns + (row.pendingIds?.length ?? 0) + ex.filter((x) => x.load.run).length,
+        execRuns: row.staticRuns + (row.pendingIds?.length ?? 0) + ex.filter((x) => (x.exec ?? x.load).run).length,
+        execEntries: withExec.length,
+        loadOnlyEntries: ex.length - withExec.length,
+        // restricted to the steps that carry execution coverage: how many each reading runs
+        onExecEntries: { load: withExec.filter((x) => x.load.run).length, exec: withExec.filter((x) => x.exec.run).length },
+      };
+      console.log(`  exact (newest recorded coverage): class-load key runs ${row.exactSummary.loadRuns}, execution key runs ${row.exactSummary.execRuns} of ${row.steps}; pending ${row.exactSummary.pending}; ${withExec.length} classes-only steps carry execution coverage (load ${row.exactSummary.onExecEntries.load} / exec ${row.exactSummary.onExecEntries.exec} of them run)`);
     }
     out.push(row);
     if (row.classesChanged) console.log(`  bytecode: ${Array.isArray(row.classesChanged) ? `${row.classesChanged.length} class file(s) changed${row.classesChanged.length ? ` (${row.classesChanged.slice(0, 6).join(', ')}${row.classesChanged.length > 6 ? ', ...' : ''})` : ''}` : row.classesChanged}`);
@@ -257,14 +335,9 @@ if (cmd === 'import') {
     }
   };
   const covDir = path.join(MAIN, 'artifacts', 'step-cache');
-  const covOf = (id) => {
-    try {
-      const es = fs.readdirSync(path.join(covDir, id.replace(/[^\w.@-]/g, '_'))).map((f) => JSON.parse(fs.readFileSync(path.join(covDir, id.replace(/[^\w.@-]/g, '_'), f), 'utf8'))).filter((e) => e.mode === 'coverage');
-      return es.sort((a, b) => (a.at < b.at ? 1 : -1))[0] ?? null;
-    } catch {
-      return null;
-    }
-  };
+  // the newest coverage PASS, preferring one with execution coverage (JaCoCo)
+  const covOf = (id) => newestCoverage(id, { entered: true }) ?? newestCoverage(id);
+  void covDir;
   const out = { static: [], classes: [], none: [], flake: [], noBase: 0, fails: 0 };
   const conf2 = conf;
   for (let i = 0; i < rows.length; i++) {
@@ -305,13 +378,33 @@ if (cmd === 'import') {
     }
     const cov = covOf(f.id);
     let verdict = 'pending (no coverage recorded for this step yet)';
-    if (cov) verdict = delta.some((p) => setMatcher(cov.coverageSet)(p)) ? 'runs (its coverage holds a changed file)' : 'SKIPPED (coverage misses the cause: a hole to close)';
-    out.classes.push({ ...rec, why: cHit.slice(0, 4), java: cHit.filter((p) => p.endsWith('.java')).length, kit: cHit.filter((p) => p.startsWith('kit/')).length, coverage: verdict });
+    let execVerdict = null;
+    if (cov) {
+      // --bytecode: compare the recorded classes between builds of the PASS's head and the FAIL's (else by source, conservative)
+      let ma = null;
+      let mb = null;
+      if (argv.includes('--bytecode') && (cov.coverageClasses ?? []).length) {
+        const { ensureBuild } = await import('./lib/build-artifact.mjs');
+        const { javaVersion } = await import('./lib/step-cache.mjs');
+        ma = ensureBuild({ src: SRC, main: MAIN, commit: base.head, conf, java: javaVersion(), log: (m) => console.log(`  ${m}`) });
+        mb = ensureBuild({ src: SRC, main: MAIN, commit: f.head, conf, java: javaVersion(), log: (m) => console.log(`  ${m}`) });
+      }
+      const lv = coverageVerdict(cov, delta, ma, mb, 'load');
+      verdict = lv.run ? `runs (${lv.why})` : `SKIPPED (coverage misses the cause: a hole to close; ${lv.why})`;
+      if (Array.isArray(cov.coverageEntered)) {
+        const xv = coverageVerdict(cov, delta, ma, mb, 'exec');
+        execVerdict = xv.run ? `runs (${xv.why})` : `SKIPPED (${xv.why})`;
+      }
+    }
+    out.classes.push({ ...rec, why: cHit.slice(0, 4), java: cHit.filter((p) => p.endsWith('.java')).length, kit: cHit.filter((p) => p.startsWith('kit/')).length, coverage: verdict, exec: execVerdict, covHead: cov ? String(cov.head).slice(0, 9) : null });
   }
   console.log(`fail-audit: ${out.fails} FAIL/TIMEOUT records; ${out.noBase} with no earlier PASS on an ancestor; ${out.flake.length} on the same commit as an earlier PASS (no code change: a flake, load or the environment); ${out.static.length} caused by a change in the step's own drivers, data or definition (run in every mode); ${out.classes.length} only through the whole-tree classes (coverage decides); ${out.none.length} with no change in the step's set (holes)`);
   const byCov = {};
-  for (const x of out.classes) byCov[x.coverage] = (byCov[x.coverage] ?? 0) + 1;
-  console.log(`  classes-only, by coverage verdict: ${JSON.stringify(byCov)}; of them java ${out.classes.filter((x) => x.java).length}, kit ${out.classes.filter((x) => x.kit).length}`);
+  for (const x of out.classes) byCov[x.coverage.replace(/ \(.*$/, '')] = (byCov[x.coverage.replace(/ \(.*$/, '')] ?? 0) + 1;
+  const byExec = {};
+  for (const x of out.classes) if (x.exec) byExec[x.exec.replace(/ \(.*$/, '')] = (byExec[x.exec.replace(/ \(.*$/, '')] ?? 0) + 1;
+  console.log(`  classes-only, by coverage verdict (class-load key): ${JSON.stringify(byCov)}; execution key (steps with JaCoCo coverage): ${JSON.stringify(byExec)}; of them java ${out.classes.filter((x) => x.java).length}, kit ${out.classes.filter((x) => x.kit).length}`);
+  for (const x of out.classes) if (/SKIPPED/.test(x.coverage) || /SKIPPED/.test(x.exec ?? '')) console.log(`  SKIPPED ${x.id} ${x.status} @ ${x.head} (PASS @ ${x.base}; coverage @ ${x.covHead}): load ${x.coverage}; exec ${x.exec ?? '-'}`);
   for (const x of out.none) console.log(`  HOLE ${x.id} ${x.status} @ ${x.head} (PASS @ ${x.base}): ${x.delta.join(', ')}`);
   if (opt('--json')) fs.writeFileSync(opt('--json'), JSON.stringify(out, null, 1));
 } else if (cmd === 'replay') {

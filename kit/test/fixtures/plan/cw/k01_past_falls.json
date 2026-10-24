@@ -1,0 +1,81 @@
+{
+  "about": "(7a CW, KC row, item 6) v7a_cw_cliff without the protected foot path: a waterfall pours off the west shelf's side into a pond basin on the bay floor, south of the catwalk's run; the catwalk passes the basin, kept clear (no cell on the body's hard set, M25:clear 0)",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 84
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1059,
+        "z1": 2095,
+        "y": 72
+      },
+      {
+        "x0": 1076,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 72
+      }
+    ]
+  },
+  "volume": {},
+  "anchors": {
+    "west_shelf": [
+      1048,
+      73,
+      2036
+    ],
+    "east_shelf": [
+      1087,
+      73,
+      2036
+    ],
+    "falls_at": [
+      1059,
+      73,
+      2048
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "falls",
+        "kind": "waterfall",
+        "drop": 8,
+        "width": 3,
+        "lip": "existing",
+        "basin": "pond",
+        "where": {
+          "near": {
+            "anchor": "falls_at",
+            "within": 6
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        }
+      }
+    ]
+  }
+}

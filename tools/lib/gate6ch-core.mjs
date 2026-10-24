@@ -597,7 +597,8 @@ export async function probe(ctx) {
     let prev = { fire: [], gone: new Set() };
     const direct = [], spread = [];
     for (let i = 0; i < 24; i++) {
-      await sleep(5000);
+      // (speed audit B) 5 s of game time: 100 ticks sprinted on a headless host (GATE_SPRINT=0 / a client: the original sleep(5000))
+      await L.gameWait(5000, { real: sleep, label: i === 0 ? 'h-probe lava sample (x24)' : `h-probe lava sample ${i}` });
       const cur = await sample(i);
       for (const p of posts) {
         const k = k3([p.x, p.y, p.z]);

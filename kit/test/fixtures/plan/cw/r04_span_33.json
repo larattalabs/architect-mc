@@ -1,0 +1,74 @@
+{
+  "about": "(7a CW) the bay 33 wide: the only run along the face is 33 deck cells (over 32): SPAN",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 84
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1059,
+        "z1": 2095,
+        "y": 72
+      },
+      {
+        "x0": 1093,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 72
+      }
+    ]
+  },
+  "anchors": {
+    "west_shelf": [
+      1048,
+      73,
+      2036
+    ],
+    "east_shelf": [
+      1104,
+      73,
+      2036
+    ]
+  },
+  "protected": [
+    {
+      "id": "foot_path",
+      "rect": [
+        1056,
+        2034,
+        1096,
+        2095
+      ]
+    }
+  ],
+  "expect": {
+    "part": "cliff_walk",
+    "code": "SPAN"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        }
+      }
+    ]
+  }
+}

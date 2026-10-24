@@ -2,9 +2,12 @@
  "$comment": "The step result cache and the affected-only release (docs/GATES.md \"Affected-only releases\"). Hand-written policy; tools/step-inputs.json is the derived input map (tools/step-inputs.mjs). Read by the runner only (no gate driver reads this file, so editing it never changes a step's inputs).",
  "runnerFiles": [
   "tools/gate-run.mjs",
+  "tools/lib/GateCovAgent.java",
+  "tools/lib/GateCovTool.java",
   "tools/lib/bench-select.mjs",
   "tools/lib/build-artifact.mjs",
   "tools/lib/gate-history.mjs",
+  "tools/lib/jacoco.mjs",
   "tools/lib/shard-auto.mjs",
   "tools/lib/step-cache.mjs",
   "tools/lib/step-coverage.mjs",
@@ -19,12 +22,15 @@
   "$comment": "The runner code that changes how every step runs or what its cache entry claims (its environment, timeouts, kills, hosts, splits, the tracer, the coverage collector and the key itself): its blobs are in every key, so a change to any of them re-runs everything. The fail audit found 8 past FAILs only a runner change explains.",
   "files": [
    "tools/gate-run.mjs",
+   "tools/lib/GateCovAgent.java",
+   "tools/lib/GateCovTool.java",
    "tools/lib/build-artifact.mjs",
    "tools/lib/cpu-budget.mjs",
    "tools/lib/frozen-source.mjs",
    "tools/lib/gate-history.mjs",
    "tools/lib/gate-part.mjs",
    "tools/lib/hosts.mjs",
+   "tools/lib/jacoco.mjs",
    "tools/lib/shard-auto.mjs",
    "tools/lib/step-cache.mjs",
    "tools/lib/step-coverage.mjs",
@@ -209,7 +215,7 @@
    "ARCHITECT_APITEST",
    "ARCHITECT_HEADLESS"
   ],
-  "plumbing": "^(PATH|HOME|USER|TMPDIR|JAVA_HOME|GRADLE_USER_HOME|GRADLE_OPTS|VITEST_MAX_WORKERS|GATE_RUNNER|GATE_CPU_CORES|GATE_CPU_SHARE|GATE_TEST_CONCURRENCY|GATE_KIT_RESULTS|GATE_KIT_TREE|GATE_UNIT_MOD_RUN|GATE_TRACE_DIR|GATE_TRACE_ROOT|GATE_TRACE_ROOTS|GATE_HISTORY_FILE|GATE_SLOTS|GATE_SLOTS_DIR|GATE_SLOT_POLL_MS|GATE_PORTS|GATE_SHARD_PORTS|GATE_RUN_DIR|GATE_RUN_DIRS|GATE_RUNS_OUT|GATE_LOCK|GATE_SEED_DIR|GATE_SNAPSHOT_DIR|GATE_NOTIFY|GATE_NOTIFY_SCRIPT|GATE_AUTO_PROBE|GATE_STEP_CACHE_DIR|GATE_NIGHTLY_DIR|GATE_PART|GATE_PART_ALL|SCENARIOS_ART|ARCHITECT_DEV_TOKEN|ARCHITECT_SHOTS_DIR|ARCHITECT_ARTIFACTS|ARCHITECT_EVAL_PORT|ARCHITECT_GAME_DIR|ARCHITECT_PORT|ARCHITECT_DEV_PORT|ARCHITECT_GATE_SIDECAR_PORT|ARCHITECT_GATE_DEV_PORT|ARCHITECT_GATE_OLD_SIDECAR_PORT|ARCHITECT_GATE_OLD_DEV_PORT|APITEST_GAME_DIR|APITEST_OUT|P3_RUN|LINT_OUT|GATE4E_RUN|GATE5B_RUN|GATE6A_RUN|GATE6B_RUN|GATE6B_DEV_PORT|GATE6B_SIDECAR_PORT|.*_OUT)$",
+  "plumbing": "^(PATH|HOME|USER|TMPDIR|JAVA_HOME|GRADLE_USER_HOME|GRADLE_OPTS|VITEST_MAX_WORKERS|GATE_RUNNER|GATE_RUN_SHARED|GATE_CPU_CORES|GATE_CPU_SHARE|GATE_TEST_CONCURRENCY|GATE_KIT_RESULTS|GATE_KIT_TREE|GATE_UNIT_MOD_RUN|GATE_TRACE_DIR|GATE_TRACE_ROOT|GATE_TRACE_ROOTS|GATE_HISTORY_FILE|GATE_SLOTS|GATE_SLOTS_DIR|GATE_SLOT_POLL_MS|GATE_PORTS|GATE_SHARD_PORTS|GATE_RUN_DIR|GATE_RUN_DIRS|GATE_RUNS_OUT|GATE_LOCK|GATE_SEED_DIR|GATE_SNAPSHOT_DIR|GATE_NOTIFY|GATE_NOTIFY_SCRIPT|GATE_AUTO_PROBE|GATE_STEP_CACHE_DIR|GATE_NIGHTLY_DIR|GATE_PART|GATE_PART_ALL|SCENARIOS_ART|ARCHITECT_DEV_TOKEN|ARCHITECT_SHOTS_DIR|ARCHITECT_ARTIFACTS|ARCHITECT_EVAL_PORT|ARCHITECT_GAME_DIR|ARCHITECT_PORT|ARCHITECT_DEV_PORT|ARCHITECT_GATE_SIDECAR_PORT|ARCHITECT_GATE_DEV_PORT|ARCHITECT_GATE_OLD_SIDECAR_PORT|ARCHITECT_GATE_OLD_DEV_PORT|APITEST_GAME_DIR|APITEST_OUT|P3_RUN|LINT_OUT|GATE4E_RUN|GATE5B_RUN|GATE6A_RUN|GATE6B_RUN|GATE6B_DEV_PORT|GATE6B_SIDECAR_PORT|.*_OUT)$",
   "prefixes": "^(ARCHITECT_|GATE_|G5B_|RS_|IRR_|HYB_|UPDATE_|LINT_|UMT|LEDGER|CALIBRATION_|P2_|P3_|APITEST_|T3[AB]_|K1B_|F3_|C3[078]_|GATE6)"
  },
  "release": {
@@ -515,7 +521,13 @@
   },
   "lazyAlways": [
    "tools/gate6a-stubs.mjs"
-  ]
+  ],
+  "jacoco": {
+   "$comment": "Execution coverage (docs/GATES.md \"Execution coverage (JaCoCo)\"): every JVM a step starts also runs the pinned JaCoCo agent through tools/lib/GateCovAgent.java (tools/lib/jacoco.mjs pins the version and sha256). A step's key then holds the whole class-file digest of the classes its JVMs ENTERED (a method or static initializer started) and only the skeleton (declarations, constants, hierarchy, annotations, <clinit>) of the classes they loaded but never entered. Off with --no-jacoco or enabled false, and whenever the jars are missing or don't verify. dumpTimeoutSec: how long a step's end waits for each live JVM's dump (one that doesn't answer counts every class it loaded as entered).",
+   "enabled": true,
+   "includes": "dev.larattalabs.*",
+   "dumpTimeoutSec": 20
+  }
  },
  "build": {
   "$comment": "The run-level build artifact (tools/lib/build-artifact.mjs): the classes of mod (main, client, test), devserver and apitest, compiled once per hash of these inputs in the worktree below, offline, with a manifest of every class file's digest in artifacts/build-cache/<hash>.json. A coverage-mode key holds the bytecode digests of the classes its run loaded; a failed or missing build means no coverage lookup.",
