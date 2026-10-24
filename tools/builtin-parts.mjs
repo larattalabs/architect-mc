@@ -22,7 +22,7 @@
 // <out> is ../architect-mc/artifacts/gate-runs-parts (PARTS_OUT overrides; the sim backend writes to <out>/sim).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -249,9 +249,6 @@ export async function reviewLibrary(file, style, outDir) {
   const { palette } = await kit('kit.mjs');
   const C = await kit('components.mjs');
   const { checkBlueprint } = await kit('check.mjs');
-  const { plain } = await kit('nbt.mjs');
-  const { buildScene, renderFront } = await kit('render.mjs');
-  const { encodePng } = await kit('png.mjs');
   const b = builtinBible(style);
   const p = palette({ bible: { id: b.id, version: b.version ?? 1, roles: b.roles } });
   const r = await C.checkComponents(path.resolve(file), p);
@@ -283,9 +280,8 @@ export async function reviewLibrary(file, style, outDir) {
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, 'sheet.png'), C.renderSheet([C.buildSwatch(p), ...r.frames.map((f) => f.bp)]));
     if (houseBp) {
-      fs.writeFileSync(path.join(outDir, 'house.png'), C.renderSheet([houseBp], { columns: 1, tileWidth: 640 }));
-      const front = renderFront(buildScene(plain(houseBp.toStructure()), { front: houseBp.front }), { width: 520, bg: [236, 232, 224] });
-      fs.writeFileSync(path.join(outDir, 'house-front.png'), encodePng(front.width, front.height, front.data));
+      // the house from the front (south) and from the back (north): every facing's parts show
+      fs.writeFileSync(path.join(outDir, 'house.png'), C.renderSheet([houseBp, { toStructure: () => houseBp.toStructure(), front: 'north' }], { columns: 2, tileWidth: 560 }));
     }
     fs.writeFileSync(path.join(outDir, 'check.json'), `${JSON.stringify(out, null, 2)}\n`);
   }
@@ -355,7 +351,8 @@ async function promote() {
 
 // ---- main -------------------------------------------------------------------------------------------
 
-const cmd = args[0];
+const direct = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+const cmd = direct ? args[0] : undefined;
 if (cmd === 'plan') {
   console.log(JSON.stringify({ capUsd: PART1_CAP, jobCapUsd: JOB_CAP, marginUsd: MARGIN, spent: readSpend().part1.totalUsd, styles: STYLES.map((s) => ({ style: s, hasKitParts: !!builtinComponentsFile(s) })) }, null, 2));
 } else if (cmd === 'jobs') await jobs();
@@ -365,5 +362,3 @@ else if (cmd) {
   console.error('usage: node tools/builtin-parts.mjs plan|jobs|check|promote [--backend sim] [--port N] [--only a,b] [--kit] [--all] [--from dir]');
   process.exitCode = 2;
 }
-// (imported by tools/partsab.mjs for the shared spend file and the sidecar helpers)
-export { spawnSync };
