@@ -171,7 +171,8 @@ export function reachClasses(reach) {
   runKeys(st.bodies?.watch ?? [], body);
   const held = runKeys(reach.held.runs), town = runKeys(reach.held.town), terrain = runKeys(reach.held.terrain);
   const others = new Set([...held].filter((k) => !town.has(k)));
-  return { lot, keep, body, held, town, terrain, others, lamps: runKeys(st.lamps ?? []), props: runKeys(st.props ?? []) };
+  // ((the RC's finding 2) the town's own walls' columns: a wall as another owner's held columns are, for NO_JOIN [wall])
+  return { lot, keep, body, held, town, terrain, others, walls: runKeys(st.walls ?? []), lamps: runKeys(st.lamps ?? []), props: runKeys(st.props ?? []) };
 }
 
 /**
@@ -286,11 +287,12 @@ export function hardRects(keys, cand) {
  * flood over the frame from the district ends that never crosses such a column reaches none of them.
  */
 export function wallEncloses(K, frame, starts, candidates) {
-  if (!candidates.length || !K.others.size) return false;
+  const walls = K.walls ?? new Set();
+  if (!candidates.length || (!K.others.size && !walls.size)) return false;
   const bb = [Math.min(...frame.map((q) => q[0])), Math.min(...frame.map((q) => q[1])), Math.max(...frame.map((q) => q[2])), Math.max(...frame.map((q) => q[3]))];
   const W = bb[2] - bb[0] + 1, D = bb[3] - bb[1] + 1;
   const seen = new Uint8Array(W * D);
-  const ok = (x, z) => frame.some((q) => inRect(q, x, z)) && !K.others.has(`${x},${z}`);
+  const ok = (x, z) => frame.some((q) => inRect(q, x, z)) && !K.others.has(`${x},${z}`) && !walls.has(`${x},${z}`);
   const q = [];
   for (const [x, z] of starts) if (ok(x, z)) { const k = (x - bb[0]) + (z - bb[1]) * W; if (!seen[k]) { seen[k] = 1; q.push(k); } }
   for (let h = 0; h < q.length; h++) {
@@ -332,7 +334,7 @@ export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], d
   const K = reachClasses(R);
   const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds, unsafe });
   if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
-  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) throw new Error(`NO_JOIN: [wall] every street end and side of region ${beside.id} is enclosed by another owner's held columns (a wall round the town: joining through its gate is 7a's) (${why})`);
+  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) throw new Error(`NO_JOIN: [wall] every street end and side of region ${beside.id} is enclosed by ${K.walls?.size ? "a wall (its own, or another owner's held columns)" : "another owner's held columns"} (a wall round the town: joining through its gate is 7a's) (${why})`);
   const hardKeys = reachHardKeys(K, claimR, town, { unsafe });
   // a pair whose junction no 4-connected walk from its district end reaches (over the frame, around the hard columns and rects, every
   // candidate's contact columns open) can't route: skipped before any dry route (a superset of what the route pass reaches)

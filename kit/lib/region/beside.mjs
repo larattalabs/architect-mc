@@ -128,7 +128,8 @@ export function runKeys(runs, into = new Set()) {
  * rects, unclipped), its streets (road items whose ext carries `architect_mc:street` or whose id has the `street_` stem: id, width,
  * points, flagged), its bodies' hard and watch columns (KC §2: cells, ice, shell, lining, grate, spill, decor; watch) as row runs, its
  * lamp spots (the props' lamp parts' columns, the apron lamps, and every spot the 4e lanterns of its roads may take, both sides: N-D3-2
- * and the verge contact), and its props' columns (a T's verge contact is never one). The mod's BesideCheck.standing is the same.
+ * and the verge contact), its props' columns (a T's verge contact is never one), and its own walls' columns (`walls`, only when it has a
+ * wall). The mod's BesideReach.standing is the same.
  */
 export function besideStanding(id, standingClaim, ir) {
   const f = standingFootprint(ir);
@@ -174,6 +175,10 @@ export function besideStanding(id, standingClaim, ir) {
       }
     }
   }
+  // ((the RC's finding 2) its own walls: the columns of its K1 wall parts (wall.mjs's `w_<id>` parts, gates included), for NO_JOIN [wall]
+  // as another owner's wall answers it)
+  const walls = new Set();
+  for (const p of ir.parts ?? []) if (/^w_/.test(p.id)) for (const op of p.ops ?? []) opCols(op, walls);
   for (const r of ir.roads ?? []) {
     if (!r.lanterns) continue;
     // RoadPlan's lanterns (light.mjs roadLights, the model the light cover uses): the first `first` out, then every `every`, beside the
@@ -198,5 +203,6 @@ export function besideStanding(id, standingClaim, ir) {
     footprint: { lots: f.lots.map((x) => [...x.rect]), keep: [...f.roads, ...f.paths, ...f.ways].map((x) => ({ kind: x.kind, id: x.id, rect: [...x.rect] })) },
     streets, bodies: { hard: keyRuns(hard), watch: keyRuns(watch), list }, lamps: keyRuns(lamps), props: keyRuns(props),
     lights: [...lights.values()].sort((a, b) => a[0] - b[0] || a[2] - b[2] || a[1] - b[1]),
+    ...(walls.size ? { walls: keyRuns(walls) } : {}), // (only a walled region carries it: an unwalled region's standing data is unchanged)
   };
 }

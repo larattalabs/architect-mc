@@ -2715,9 +2715,11 @@ public final class RegionsImpl implements Regions {
 			// removed group ended the region through the hook). Its own refusal ends the region PARTIAL, as before.
 			f.whenComplete((res, e) -> {
 				if (e != null || !res.removed()) {
+					// (the D3 RC's finding 1) the refusal's reason goes with the region's end: never a PARTIAL without one
+					String why = e != null ? "it failed: " + (e.getCause() != null ? e.getCause() : e) : String.join("; ", res.blockers());
 					Runnable end = () -> {
 						if (!dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
-							finishRemoval(l, false, 0L);
+							finishRemoval(l, false, 0L, why);
 						}
 					};
 					if (s.isSameThread()) {
@@ -2748,12 +2750,12 @@ public final class RegionsImpl implements Regions {
 		for (Live l : List.copyOf(REGIONS.values())) {
 			if (l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId)) {
 				SiteGroupRec g = Sites.group(groupId);
-				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis());
+				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(), String.join("; ", res.blockers()));
 			}
 		}
 	}
 
-	private static void finishRemoval(Live l, boolean removed, long at) {
+	private static void finishRemoval(Live l, boolean removed, long at, @Nullable String why) {
 		if (REGIONS.get(l.rec().id) != l || l.rec().state != RegionState.REMOVING) {
 			return;
 		}
@@ -2775,7 +2777,12 @@ public final class RegionsImpl implements Regions {
 			l.rec().state = RegionState.PARTIAL;
 			save(l);
 		}
-		Architect.LOGGER.info("Region {}: removal {} ({})", l.rec().id, removed ? "done: REMOVED" : "stopped: PARTIAL", l.rec().groupId);
+		if (removed) {
+			Architect.LOGGER.info("Region {}: removal done: REMOVED ({})", l.rec().id, l.rec().groupId);
+		} else {
+			// (the D3 RC's finding 1) a stopped removal always names why (the caller's RemoveResult.blockers carries the same)
+			Architect.LOGGER.info("Region {}: removal stopped: PARTIAL ({}): {}", l.rec().id, l.rec().groupId, why == null || why.isBlank() ? "no reason given" : why);
+		}
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 		if (removed) {
 			PlanChecks.regionRemoved(l.rec(), false); // (C36) its artifact, if nothing else holds it
@@ -2831,7 +2838,8 @@ public final class RegionsImpl implements Regions {
 			boolean removed = end == RegionState.REMOVED;
 			Architect.LOGGER.info("Region {} was REMOVING with no removal of group {} in progress: it ends {}", l.rec().id, l.rec().groupId,
 				removed ? "REMOVED (the group is removed)" : "PARTIAL");
-			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis());
+			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis(),
+				"the world was loaded with the region REMOVING and no removal of its group in progress (remove it again)");
 		}
 	}
 

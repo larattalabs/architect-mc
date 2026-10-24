@@ -40,6 +40,16 @@ class DistrictLandTest {
 		assertEquals(t.getAsJsonObject("standing"), got);
 	}
 
+	/** (the RC's finding 2) A region's own wall: its `w_<id>` parts' columns as {@code walls} (as the kit's besideStanding), only when it has one. */
+	@Test
+	void standingCarriesItsOwnWalls() {
+		JsonObject ir = JsonParser.parseString("{\"roads\": [], \"lots\": [], \"paths\": [], \"graph\": {\"nodes\": [], \"edges\": []}, \"parts\": [{\"id\": \"w_town_wall\", "
+			+ "\"ops\": [{\"op\": \"columns\", \"cols\": [4, 4, 64, 66, 0, 5, 4, 64, 66, 0, 6, 4, 64, 66, 0]}]}]}").getAsJsonObject();
+		assertEquals(JsonParser.parseString("[[4, 4, 6, 4]]"), BesideReach.standing("rg9", new int[] {0, 0, 95, 95}, ir).get("walls"));
+		ir.add("parts", new JsonArray());
+		assertNull(BesideReach.standing("rg9", new int[] {0, 0, 95, 95}, ir).get("walls"));
+	}
+
 	@Test
 	void landEqualsTheKits() throws Exception {
 		JsonArray ds = fixture().getAsJsonArray("districts");

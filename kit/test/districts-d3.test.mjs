@@ -164,6 +164,17 @@ test('item 1 (§2.2): the choice: cheapest by T2 cost, the lead (3 straight cell
   // wall: another owner's held ring round the town's streets
   const ring = synthTown({ held: [[4, 4, 91, 4], [4, 91, 91, 91], [4, 4, 4, 91], [91, 4, 91, 91]] });
   assert.throws(() => chooseReach({ planCols, R: ring.R, beside: ring.beside, claim: [96, 0, 155, 95], districtEnds: [end(110, 48)], route: routePass }), /NO_JOIN: \[wall\]/);
+  // (the RC's finding 2) wall: the town's OWN wall (one region: a town zone and its wall.around), its ring held by the town itself.
+  // Without the standing data's walls it reads as unroutable ([route]); with them, [wall] as another owner's
+  const RING = [[4, 4, 91, 4], [4, 91, 91, 91], [4, 4, 4, 91], [91, 4, 91, 91]];
+  const own = synthTown({ terrain: RING });
+  assert.throws(() => chooseReach({ planCols, R: own.R, beside: own.beside, claim: [96, 0, 155, 95], districtEnds: [end(110, 48)], route: routePass }), /NO_JOIN: \[route\]/);
+  const ownW = { ...own.R, standing: { ...own.R.standing, walls: RING } };
+  assert.throws(() => chooseReach({ planCols, R: ownW, beside: own.beside, claim: [96, 0, 155, 95], districtEnds: [end(110, 48)], route: routePass }), /NO_JOIN: \[wall\] .*a wall \(its own/);
+  // besideStanding reads a region's own walls from its K1 wall parts (`w_<id>`, the columns its ops write), and only when it has one
+  const irW = { roads: [], lots: [], paths: [], graph: { nodes: [], edges: [] }, parts: [{ id: 'w_town_wall', ops: [{ op: 'columns', cols: [4, 4, 64, 66, 0, 5, 4, 64, 66, 0, 6, 4, 64, 66, 0] }] }] };
+  assert.deepEqual(besideStanding('rg9', [0, 0, 95, 95], irW).walls, [[4, 4, 6, 4]]);
+  assert.equal(besideStanding('rg9', [0, 0, 95, 95], { ...irW, parts: [] }).walls, undefined);
 });
 
 test('item 1: 300 seeded synthetic towns: every chosen join\'s reach cells unheld (but its terrain-held contact columns), outside the footprint and bodies; deterministic', () => {

@@ -205,6 +205,7 @@ public final class BesideReach {
 		Cols hard = new Cols(), watch = new Cols();
 		JsonArray list = new JsonArray();
 		Cols lamps = new Cols(), props = new Cols();
+		Cols walls = new Cols(); // (the RC's finding 2) its own K1 wall parts' columns (`w_<id>`), for NO_JOIN [wall]
 		Map<String, int[]> lights = new java.util.LinkedHashMap<>();
 		if (ir.get("parts") instanceof JsonArray parts) {
 			for (JsonElement pe : parts) {
@@ -239,6 +240,9 @@ public final class BesideReach {
 						b.add("hard", bh.runs());
 						b.add("watch", bw.runs());
 						list.add(b);
+					}
+					if (pid != null && pid.startsWith("w_")) {
+						opCols(op, walls);
 					}
 					if (isProps) {
 						opCols(op, props);
@@ -306,6 +310,9 @@ public final class BesideReach {
 		JsonArray la = new JsonArray();
 		ls.forEach(q -> la.add(arr(q)));
 		o.add("lights", la);
+		if (!walls.isEmpty()) {
+			o.add("walls", walls.runs()); // (only a walled region carries it, as the kit's)
+		}
 		return o;
 	}
 

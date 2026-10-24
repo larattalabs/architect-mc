@@ -19,7 +19,9 @@
 //                                       verdict equals the plan's; nothing kept by the dry check
 //     steward                           item 6: checkBeside with a placeholder lot, Regions.plan under an opKey, Regions.realise under an
 //                                       opKey, realiseByKey after a restart, the land; a partial town (one lot failed) taken as a beside town;
-//                                       plan/0's endpoint.region reach through checkPlan then realiseApproved, a stale retry across a restart
+//                                       plan/0's endpoint.region reach through checkPlan then realiseApproved, a stale retry across a restart;
+//                                       Steward's RC shape (finding 1: its owner, lot ext, pads, the player at the town's edge): a remove with
+//                                       no requester refused and named, then removal district-first and town-first to REMOVED, E-flat 0
 //     along                             item 5: a shore district and an outpost (gap 40), each joined through the town's claim
 //     kc                                item 13: a second district beside the same town keeps off the first's join
 //     report                            REPORT.md over the step JSONs
@@ -159,8 +161,8 @@ const planFiles = (planId) => {
   const d = path.join(L.SIDECAR_DATA, 'regions', 'plans', planId);
   return { ir: JSON.parse(fs.readFileSync(path.join(d, 'ir.json'), 'utf8')), meta: JSON.parse(fs.readFileSync(path.join(d, 'meta.json'), 'utf8')), report: fs.existsSync(path.join(d, 'report.json')) ? JSON.parse(fs.readFileSync(path.join(d, 'report.json'), 'utf8')) : null };
 };
-async function undo(region) {
-  const r = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
+async function undo(region, requester = OWNER) {
+  const r = await call('dev.region.remove', { region, requester }, 3_600_000);
   for (let i = 0; i < 2400; i++) {
     const st = await call('dev.region.state', { region }, 60_000).catch(() => null);
     const s = st?.view?.state;
@@ -222,7 +224,7 @@ async function generateFor(A, params) {
   await L.prepare(g.planId);
 }
 
-async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial = false } = {}) {
+async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial = false, owner = OWNER } = {}) {
   const A = [X, Z, X + TOWN_SIZE - 1, Z + TOWN_SIZE - 1];
   const params = { lots: TOWN_LOTS, apronLamps: false };
   await generateFor(A, params);
@@ -238,7 +240,7 @@ async function d3Town(X, Z, { addition = true, cabin = true, dip = true, partial
   }
   const all = [A[0] - 120, -64, A[1] - 120, A[2] + 120, 160, A[3] + 120];
   const world0 = await dump(all, `world0-${X}`);
-  const pa = await planReq({ program: 'flat_village', params, claim: A, check: false });
+  const pa = await planReq({ program: 'flat_village', params, claim: A, check: false, owner });
   if (pa.refused) throw new Error(`d3_town's plan: ${pa.refused}`);
   const ir = planFiles(pa.planId).ir;
   const net = await streetsOf('t', A, ir);
@@ -706,10 +708,91 @@ steps.steward = async () => {
     out.stale.refused = st.refused ?? null;
     check(/ARTIFACT_STALE/.test(json(st.refused ?? '')) && !!reach, `item 6: a stale retry under a second key across a restart: ARTIFACT_STALE (${json(st.refused).slice(0, 200)})`);
   } else check(false, `item 6: the second check made no artifact (${ck2.check?.overall})`);
+  out.rc = await stewardShapedRemovals();
   await leaveWorld();
   spendZero();
   return out;
 };
+
+/**
+ * (Steward's D3 RC, finding 1) A district in the RC's shape: Steward's owner (`steward_mc:settlement/<id>`) on the town and the district,
+ * its two house lots carrying Steward's ext and left pads (a realise with no lot entries), its keys `<k>.dplan`/`<k>.drealise`, its claim
+ * on the town's east side overlapping it by 7 columns, the player at the town's east edge (center + r - 4) near the join while it plans
+ * and realises. Then:
+ * - a remove with no requester (the RC's call): refused by the owner rule, nothing written, and the stop names why (the answer's
+ *   blockers and the game log's "removal stopped" line);
+ * - the district removed first by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash unchanged;
+ * - realised again, the town removed first, then the district: both REMOVED, E-flat 0 over both claims.
+ */
+async function stewardShapedRemovals() {
+  const out = {};
+  const SOWNER = 'steward_mc:settlement/d3rc', key = 'steward.e2e.d3rc';
+  const X = 40000, Z = 20000, cx = X + 80, cz = Z + 80, r = 80;
+  await tp(cx + r - 4, 120, cz);
+  await kill();
+  const x0 = cx + r - 7, C = [x0, cz - 48, x0 + 96, cz + 48];
+  await generateFor(C, { lots: TOWN_LOTS, apronLamps: false }); // (before the town: its world0 dump reads generated land there)
+  const T = await d3Town(X, Z, { dip: false, cabin: false, addition: false, owner: SOWNER });
+  const A = T.A;
+  const spec = { districts: [{ id: 'quay', size: [48, 48], lots: [1, 2].map((k) => ({ id: `quay_${k}`, type: 'house', role: 'house', size: [9, 9], landmark: false,
+    ext: { 'steward_mc:settlement': 'd3rc', 'steward_mc:lot': `quay_${k}`, 'steward_mc:role': 'house' } })) }] };
+  const all = [A[0] - 8, -64, A[1] - 8, C[2] + 8, 160, A[3] + 8];
+  const townBox = [A[0], -64, A[1], A[2], 160, A[3]];
+  const planOne = async (k) => {
+    await tp(cx + r - 4, T.g + 1, cz); // (the RC's player: at the town's east edge, near the join)
+    await L.settle(2000);
+    const p = await planReq({ program: 'districts', params: { spec }, claim: C, owner: SOWNER, beside: T.region, opKey: `${k}.dplan`, check: false });
+    if (p.refused) throw new Error(`the RC-shaped district's plan refused: ${p.refused}`);
+    const rr = await call('dev.region.realise', { planId: p.planId, opKey: `${k}.drealise` }, 300_000); // (no lot entries: its lots stay pads)
+    if (rr.refused) throw new Error(`the RC-shaped district's realise refused: ${json(rr.refused)}`);
+    const st = await L.waitRegion(rr.region, 3_600_000);
+    return { planId: p.planId, region: rr.region, state: st.view.state, step: planFiles(p.planId).meta.districts?.join?.step };
+  };
+  const before = await dump(all, 'rc-before-district');
+  const townHash0 = await hash(townBox);
+  const d1 = await planOne(key);
+  out.d1 = d1;
+  check(d1.state === 'PLACED' && d1.step === 'reach', `RC finding 1: a district in Steward's shape (owner ${SOWNER}, Steward's lot ext, pads only, the player at the town's east edge) PLACED beside ${T.region} (${json(d1)})`);
+  const reachRuns = planFiles(d1.planId).ir.reach?.runs ?? [];
+  // the RC's call: no requester. The owner rule refuses it before anything is written, and the stop names why
+  await tp(cx, T.g + 1, cz - r - 40); // (off the town and the district: a player in a box holds a removal up)
+  const logF = path.join(process.env.ARCHITECT_GAME_DIR ?? L.GAME_DIR, 'logs', 'latest.log');
+  const log0 = fs.existsSync(logF) ? fs.statSync(logF).size : 0;
+  const h0 = await hash(all);
+  const rm0 = await call('dev.region.remove', { region: d1.region }, 600_000).catch((e) => ({ error: String(e) }));
+  await L.settle(2000);
+  const v0 = await view(d1.region);
+  const logTail = fs.existsSync(logF) ? fs.readFileSync(logF, 'utf8').slice(log0) : '';
+  const line = logTail.split('\n').find((l) => l.includes(`Region ${d1.region}: removal stopped`)) ?? null;
+  out.noRequester = { removed: rm0.removed ?? null, blockers: rm0.blockers ?? rm0.error ?? null, state: v0?.state, log: line };
+  check(rm0.removed === false && /owned by steward_mc:settlement\/d3rc/.test(json(rm0.blockers ?? [])) && (await hash(all)) === h0,
+    `RC finding 1: a remove with no requester (the RC's call) is refused by the owner rule, nothing written; the answer names why (${json(rm0.blockers ?? rm0.error).slice(0, 200)})`);
+  check(!!line && /owned by steward_mc:settlement\/d3rc/.test(line), `RC finding 1: the game log's "removal stopped" line names the reason (${(line ?? 'no line').slice(0, 220)})`);
+  // the district removed first, by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash as before
+  await kill();
+  await undo(d1.region, SOWNER);
+  await L.settle(3000);
+  const after1 = await dump(all, 'rc-after-district');
+  const v1 = await view(d1.region).catch(() => null);
+  out.districtFirst = { state: v1?.state ?? 'REMOVED', town: diffCols(before, after1, [A]), district: diffCols(before, after1, [[C[0] - 8, C[1] - 8, C[2] + 8, C[3] + 8], ...rectsOfRuns(reachRuns)]), townHash: (await hash(townBox)) === townHash0 };
+  check(out.districtFirst.district.cells === 0 && out.districtFirst.town.cells === 0 && out.districtFirst.townHash,
+    `RC finding 1: the district removed first by its owner: REMOVED, E-flat 0 over its claim and reach, the town's hash unchanged (${out.districtFirst.district.cells}, ${out.districtFirst.town.cells}; ${json(out.districtFirst.district.sample)})`);
+  // realised again; the town removed first, then the district: both REMOVED, E-flat 0 over both claims (the world before the town)
+  const d2 = await planOne(`${key}.2`);
+  out.d2 = d2;
+  await tp(cx, T.g + 1, cz + r + 40);
+  await kill();
+  await undo(T.region, SOWNER);
+  const vd = await view(d2.region);
+  const dangling = vd?.ext?.['architect_mc:beside']?.dangling === true;
+  await undo(d2.region, SOWNER);
+  await L.settle(3000);
+  const after2 = await dump(all, 'rc-after-both');
+  const both = diffCols(T.world0, after2, [A, [C[0] - 8, C[1] - 8, C[2] + 8, C[3] + 8]]);
+  out.townFirst = { dangling, cells: both.cells, sample: both.sample };
+  check(d2.state === 'PLACED' && dangling && both.cells === 0, `RC finding 1: realised again, the town removed first (the district's join dangling), then the district: both REMOVED, E-flat 0 over both claims (${both.cells}; ${json(both.sample)})`);
+  return out;
+}
 
 // ------------------------------------------------------------------ item 5: along and outpost
 
