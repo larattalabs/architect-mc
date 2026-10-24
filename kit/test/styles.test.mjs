@@ -97,7 +97,7 @@ test('mainOf reads the four rows back from roles: every preset without extras ro
 test('editMain re-derives only the roles that still follow; a Style-set role stays', () => {
   const med = PALETTES.medieval.roles;
   const w = editMain(med, 'wood', 'birch');
-  assert.equal(w.wall, 'minecraft:white_terracotta', 'medieval wall is set by the Style');
+  assert.equal(w.wall, 'minecraft:white_concrete', 'medieval wall is set by the Style');
   assert.equal(w.frame, 'minecraft:birch_log');
   assert.equal(w.floor, 'minecraft:birch_planks');
   assert.equal(w.accent, med.accent);
@@ -179,7 +179,7 @@ test('U2 form: an edit makes a custom mix based on the Style; revert undoes it; 
   let v = formView(st);
   assert.equal(v.mix, true);
   assert.equal(v.roles.frame, 'minecraft:birch_log');
-  assert.equal(v.roles.wall, 'minecraft:white_terracotta', 'the Style set the wall: it stays');
+  assert.equal(v.roles.wall, 'minecraft:white_concrete', 'the Style set the wall: it stays');
   assert.equal(v.mainProvenance.wood, 'hand');
   assert.equal(v.request.palette.bible.id, 'medieval', 'a custom mix names the Style it is based on');
   assert.equal(formView(apply(st, ['revert'])).mix, false);
