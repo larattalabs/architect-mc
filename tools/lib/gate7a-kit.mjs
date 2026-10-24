@@ -22,8 +22,11 @@ export function baseTree(root, name) {
   return syncBaseTree(root, path.resolve(root, '..', `architect-mc-${name}-main`));
 }
 
-export async function unchanged(root, { check, log = console.log, base: baseName, except = {}, only = null, slice = null } = {}) {
+export async function unchanged(root, { check, log = console.log, base: baseName, except = {}, only = null, slice = null, mergedIf = null } = {}) {
   const { dir: mainDir, base } = baseTree(root, baseName);
+  // (`mergedIf`: a repo path the excepted change brings; once the base has it (the change merged to main), an excepted fixture
+  // identical on both is the exception already on the base, as KC's onBase reads it)
+  const exMerged = !!mergedIf && fs.existsSync(path.join(mainDir, mergedIf));
   const { hNew, hOld } = await CP.corpusHelpers(root, mainDir);
   const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normIrJson(r.res?.irJson)), first: r.first && r.first !== r ? sha256(normIrJson(r.first.res?.irJson)) : null });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
@@ -44,7 +47,7 @@ export async function unchanged(root, { check, log = console.log, base: baseName
     const ex = except[name] ?? null;
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
-    if (ex) { check(!same, `${name}: excepted by name (${ex}): ${same ? 'UNCHANGED (the exception did not move)' : 'differs, as named'}`); continue; }
+    if (ex) { check(!same || exMerged, `${name}: excepted by name (${ex}): ${same ? (exMerged ? `identical: the base already has it (${mergedIf} on the base; the exception merged)` : 'UNCHANGED (the exception did not move)') : 'differs, as named'}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }
   const rows = Object.entries(out.fixtures).filter(([, r]) => r.existsOld);
