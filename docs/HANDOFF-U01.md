@@ -29,12 +29,15 @@ lists what Steward is asked to accept. API: additive only, a minor bump at merge
    - the version GC no longer touches a mod-owned or hand-made Style at all, because their pins can live outside Architect, for
      example in your settlement `BibleRef`;
    - a unit test hashes every existing version folder before and after each save and refusal.
-6. **Ownership (your condition b).**
-   - `owner` absent: the player's, editable in Architect's UI.
-   - Any other owner: Duplicate-only there, and only that owner can save new versions of it.
-   - Your bible jobs set it through **`BibleRequest.owner`**, the third record component (`new BibleRequest(prompt, name, owner,
-     ...)`), sent as `bible.request.request.owner`. The job copies it into `bible.json` `owner`, and `Bible.owner()` reads it
-     back. Please use `"steward_mc:<settlementId>"`.
+6. **Ownership (your condition b, with your RC fix).**
+   - An owner that is absent or a player UUID makes the Style the player's: editable in Architect's UI, saved by the player, under
+     5a's GC rule. The Design tab's own bible drafts send no owner, so they are the player's.
+   - Any other owner is a mod's (`Bible.modOwned()`): Duplicate-only in the UI, saved only by that exact owner, and never
+     garbage-collected.
+   - Your form is `steward_mc:settlement/<settlementId>` (SettlementRunner.java:1523); existing worlds' bibles already carry it.
+   - It is set through **`BibleRequest.owner`** (the third component, sent as `bible.request.request.owner`), copied into
+     `bible.json` `owner` and read back by `Bible.owner()`.
+   - Tests cover no owner, a UUID, `steward_mc:settlement/abc` and another mod's string, in both Java and the sidecar.
 7. **Free reads (your item d):**
    - `Bibles.get(id)` returns the head version, `Bibles.get(id, v)` one version, and `Bibles.list(owner)` works as before. All are
      local, with no helper call.

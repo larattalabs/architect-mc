@@ -192,7 +192,7 @@ public final class BiblesImpl implements Bibles {
 
 	@Override
 	public List<Bible> usable(@Nullable String owner) {
-		return all().stream().filter(b -> !b.archived()).filter(b -> b.builtin() || b.owner().isEmpty() || (owner != null && owner.equals(b.owner().get())))
+		return all().stream().filter(b -> !b.archived()).filter(b -> b.builtin() || !b.modOwned() || (owner != null && owner.equals(b.owner().get())))
 			.toList();
 	}
 

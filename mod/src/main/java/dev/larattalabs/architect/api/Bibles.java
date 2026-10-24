@@ -105,7 +105,7 @@ public interface Bibles {
 
 	/**
 	 * (Style unification U1) The Styles a caller may design with, free and local (no helper call): the built-in ones, the player's
-	 * (owner empty) and, when {@code owner} is set, that owner's; archived ones left out. The latest version of each (installed ones
+	 * (no owner, or a player UUID) and, when {@code owner} is set, that owner's; archived ones left out. The latest version of each (installed ones
 	 * by id, then the built-in ones). Use {@link DesignRequest#withStyle} for a materials-only design with one. Any thread. Since NEXT.
 	 */
 	default List<Bible> usable(@Nullable String owner) {

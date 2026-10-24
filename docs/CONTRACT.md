@@ -24880,7 +24880,7 @@ a minor bump (the coordinator sets it at merge; the code says `NEXT`). Steward's
 - Bible jobs now write `origin: "claude"`. An installed bible from before U1 reads as `claude` with no tags; nothing is
   rewritten.
 - Java `Bible` gains `tags()`, `suggestedFeatures()`, `blurb()`, `basedOn()` and `origin()`, plus `editable()` (not built in, and
-  the owner empty).
+  the owner the player's: absent or a player UUID) and `modOwned()`.
 
 ## 5. `bible.save`: a hand-made Style, no Claude call (feature `bible.save`)
 
@@ -24913,17 +24913,24 @@ a minor bump (the coordinator sets it at merge; the code says `NEXT`). Steward's
   - A Claude-made Style of the player's keeps 5a's rule: a version that is not the latest, pinned by nothing Architect knows, and
     older than 30 days goes.
   - A materials-only entry pins the Style its roles came from (its `bible`), so that version is kept too.
-- **Owner.** `owner` empty (absent) is the player's: editable in Architect's UI. Any other owner (`<modid>:<thing>`) is
-  Duplicate-only there, and only that owner saves new versions of it through `bible.save` (`owner` must match). Steward's bible
-  jobs set it through **`BibleRequest.owner`**: the third component of `new BibleRequest(prompt, name, owner, ...)`, sent as
-  `bible.request.request.owner`. The job copies it into `bible.json` `owner`, and `Bible.owner()` reads it back. Steward
-  should set `"steward_mc:<settlementId>"`.
+- **Owner** (Steward's RC). An owner that is absent or a player UUID (8-4-4-4-12 hex) makes the Style the player's: editable in
+  Architect's UI, saved by the player (no owner, or that same UUID; a save keeps the stored owner), and under 5a's GC rule above.
+  - The Design tab's "Draft bible" sends no owner, so a player's own Claude-made bible is the player's.
+  - **Any other owner** is a mod's (`Bible.modOwned()`, sidecar `isModOwned`). It is Duplicate-only in Architect's UI, saved
+    only by that exact owner through `bible.save`, and the GC never removes any of its versions.
+  - Steward's form is **`steward_mc:settlement/<settlementId>`** (steward-mc `SettlementRunner.java:1523`). Existing worlds'
+    bibles already carry it, and nothing is rewritten.
+  - It is set through **`BibleRequest.owner`**, the third component of `new BibleRequest(prompt, name, owner, ...)`, sent as
+    `bible.request.request.owner`. The job copies it into `bible.json` `owner`, and `Bible.owner()` reads it back.
+  - Tests cover no owner, a UUID, `steward_mc:settlement/abc` and another mod's string: `ApiStyleU1Test.ownership` and
+    `sidecar/test/styles-u1.test.ts` (the save rule, and a GC run over four Claude-made bibles).
 
 ## 7. What Steward can use for free (condition d)
 
 - `Bibles.get(id)`: a Style's head version, read locally with no helper call. `Bibles.get(id, version)`: one version.
   `Bibles.list(owner)`: as before.
-- `Bibles.usable(owner)` (new, Since NEXT): the Styles a caller may design with, read locally: the built-in ones, the player's and,
+- `Bibles.usable(owner)` (new, Since NEXT): the Styles a caller may design with, read locally: the built-in ones, the player's (no
+  owner, or a player UUID) and,
   given an owner, that owner's; archived ones left out.
 - `DesignRequest.withStyle(bible)`: a materials-only design with any of them, no bible job. With these, "use an existing Style"
   needs no new API. Steward's district flow can pin the chosen Style through the design entry it gets back.

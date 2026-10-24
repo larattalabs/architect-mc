@@ -151,24 +151,45 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
     // refusals: built-in, another owner's, bad roles (the test house), no name
     const before = hashTree(h.sc.config.biblesDir);
     expect(() => h!.sc.bibleIndex.save({ id: 'medieval', bible: { name: 'M', roles: MEDIEVAL } })).toThrow(/built-in Style/);
-    expect(() => h!.sc.bibleIndex.save({ id: 'bib_alpine_timber', owner: 'steward_mc:s1', bible: { name: 'A', roles: MEDIEVAL } })).toThrow(/belongs to the player/);
+    expect(() => h!.sc.bibleIndex.save({ id: 'bib_alpine_timber', owner: 'steward_mc:settlement/abc', bible: { name: 'A', roles: MEDIEVAL } })).toThrow(/belongs to the player/);
     expect(() => h!.sc.bibleIndex.save({ bible: { name: 'Dark', roles: { ...MEDIEVAL, light: 'minecraft:stone' } } })).toThrow(/kit refused/);
     expect(() => h!.sc.bibleIndex.save({ bible: { roles: MEDIEVAL } })).toThrow(/needs a name/);
     expect(() => h!.sc.bibleIndex.save({ bible: { name: 'Feat', roles: MEDIEVAL, suggestedFeatures: ['moat'] } })).toThrow(/moat/);
     expect(hashTree(h.sc.config.biblesDir)).toEqual(before);
     // a mod's Style: only that owner saves, and the version GC keeps every version of it
-    const st = h.sc.bibleIndex.save({ owner: 'steward_mc:s1', bible: { name: 'Frostholm', roles: MEDIEVAL } });
-    expect(() => h!.sc.bibleIndex.save({ id: st.id, bible: { name: 'Frostholm', roles: MEDIEVAL } })).toThrow(/belongs to steward_mc:s1/);
-    h.sc.bibleIndex.save({ id: st.id, owner: 'steward_mc:s1', bible: { name: 'Frostholm', roles: MEDIEVAL } });
+    const st = h.sc.bibleIndex.save({ owner: 'steward_mc:settlement/abc', bible: { name: 'Frostholm', roles: MEDIEVAL } });
+    expect(() => h!.sc.bibleIndex.save({ id: st.id, bible: { name: 'Frostholm', roles: MEDIEVAL } })).toThrow(/belongs to steward_mc:settlement\/abc/);
+    h.sc.bibleIndex.save({ id: st.id, owner: 'steward_mc:settlement/abc', bible: { name: 'Frostholm', roles: MEDIEVAL } });
     const old = path.join(h.sc.config.biblesDir, st.id, 'versions', '1', 'bible.json');
     const b1 = JSON.parse(fs.readFileSync(old, 'utf8')) as Record<string, unknown>;
-    expect(b1.owner).toBe('steward_mc:s1');
+    expect(b1.owner).toBe('steward_mc:settlement/abc');
     const owned = hashTree(path.join(h.sc.config.biblesDir, st.id));
     expect(h.sc.bibleIndex.gc(-1)).not.toContain(`${st.id} v1`);
     expect(hashTree(path.join(h.sc.config.biblesDir, st.id))).toEqual(owned);
+    // a player UUID owns like the player: that UUID (or no owner) saves, a mod can't; the owner is kept
+    const uuid = '45ec2bed-0a65-3047-9f6e-8e67d21b1b92';
+    const pu = h.sc.bibleIndex.save({ owner: uuid, bible: { name: 'Uuid Style', roles: MEDIEVAL } });
+    expect(h.sc.bibleIndex.save({ id: pu.id, bible: { name: 'Uuid Style', roles: MEDIEVAL } }).bible.owner).toBe(uuid);
+    expect(h.sc.bibleIndex.save({ id: pu.id, owner: uuid, bible: { name: 'Uuid Style', roles: MEDIEVAL } }).version).toBe(3);
+    expect(() => h!.sc.bibleIndex.save({ id: pu.id, owner: 'othermod:thing', bible: { name: 'Uuid Style', roles: MEDIEVAL } })).toThrow(/belongs to/);
+    expect(() => h!.sc.bibleIndex.save({ id: st.id, owner: uuid, bible: { name: 'Frostholm', roles: MEDIEVAL } })).toThrow(/belongs to steward_mc:settlement\/abc/);
     // a hand-made Style of the player's keeps every version too
     const mine = hashTree(path.join(h.sc.config.biblesDir, 'bib_alpine_timber'));
     expect(h.sc.bibleIndex.gc(-1)).toEqual([]);
+    // Claude-made bibles (origin claude, two versions each): a mod's keeps every version; the player's (no owner, or a UUID) keeps
+    // 5a's rule (an old unpinned version goes)
+    const fake = (id: string, owner?: string) => {
+      for (const v of [1, 2]) {
+        const dir = path.join(h!.sc.config.biblesDir, id, 'versions', String(v));
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ id, version: v, name: id, roles: MEDIEVAL, origin: 'claude', createdAt: 0, ...(owner ? { owner } : {}) }));
+      }
+    };
+    fake('bib_c_steward', 'steward_mc:settlement/abc');
+    fake('bib_c_other', 'othermod:thing');
+    fake('bib_c_null');
+    fake('bib_c_uuid', uuid);
+    expect(h.sc.bibleIndex.gc(-1).sort()).toEqual(['bib_c_null v1', 'bib_c_uuid v1']);
     expect(hashTree(path.join(h.sc.config.biblesDir, 'bib_alpine_timber'))).toEqual(mine);
     // the wire: bible.save through the message handler acks the saved version
     const acks: Outbound[] = [];
@@ -184,5 +205,17 @@ describe('a materials-only entry stays out of set mode when designed again (pure
     expect(setModePin({ bible: pin, request: { type: 'cabin', palette: { bible: { ...pin, roles: MEDIEVAL } } } })).toEqual({});
     expect(setModePin({ bible: { id: 'bib_x', version: 2 }, request: { type: 'cabin', bible: 'bib_x' } })).toEqual({ bible: 'bib_x', bibleVersion: 2 });
     expect(setModePin({ request: { type: 'cabin' } })).toEqual({});
+  });
+});
+
+describe('ownership (pure; Steward\'s RC)', () => {
+  it('no owner or a player UUID is the player\'s; any other owner is a mod\'s', async () => {
+    const { isModOwned } = await import('../src/bibles.js');
+    expect(isModOwned(undefined)).toBe(false);
+    expect(isModOwned(null)).toBe(false);
+    expect(isModOwned('45ec2bed-0a65-3047-9f6e-8e67d21b1b92')).toBe(false);
+    expect(isModOwned('steward_mc:settlement/abc')).toBe(true);
+    expect(isModOwned('othermod:thing')).toBe(true);
+    expect(isModOwned('not-a-uuid')).toBe(true);
   });
 });

@@ -36,8 +36,8 @@ import java.util.Optional;
  * @param origin (since NEXT) who made it: {@code builtin}, {@code claude} (a bible job; also every installed bible from before U1) or
  *     {@code hand} ({@link Bibles#save})
  *
- * <p>Ownership (U1): {@code owner} empty is the player's: editable in Architect's UI. Any other owner (a mod's, e.g.
- * {@code steward_mc:<settlementId>}) is Duplicate-only there, and only that owner saves new versions of it. Every save adds a version;
+ * <p>Ownership (U1): {@code owner} empty, or a player UUID, is the player's: editable in Architect's UI. Any other owner (a mod's,
+ * e.g. Steward's {@code steward_mc:settlement/<id>}) is Duplicate-only there, and only that owner saves new versions of it. Every save adds a version;
  * a version that anything pins is never rewritten or removed.
  */
 public record Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
@@ -52,9 +52,26 @@ public record Bible(String id, String name, int version, List<Integer> versions,
 			List.of(), Optional.empty(), Optional.empty(), builtin ? "builtin" : "claude");
 	}
 
-	/** Whether Architect's UI may edit it (owner empty: the player's) rather than only duplicate it. Built-in ones never. Since NEXT. */
+	/**
+	 * Whether Architect's UI may edit it rather than only duplicate it: not built in, and the player's ({@link #modOwned} false). Since
+	 * NEXT.
+	 */
 	public boolean editable() {
-		return !builtin && owner.isEmpty();
+		return !builtin && !modOwned();
+	}
+
+	/**
+	 * Whether a mod owns it: an owner that is set and is not a player UUID (e.g. Steward's {@code steward_mc:settlement/<id>}). No owner,
+	 * or a player UUID, is the player's. A mod-owned Style is Duplicate-only in Architect's UI, saved only by that owner, and its versions
+	 * are never garbage-collected. Since NEXT.
+	 */
+	public boolean modOwned() {
+		return isModOwner(owner.orElse(null));
+	}
+
+	/** The ownership rule of {@link #modOwned} for an owner string (null = none). Since NEXT. */
+	public static boolean isModOwner(@org.jspecify.annotations.Nullable String owner) {
+		return owner != null && !owner.isEmpty() && !owner.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 	}
 
 	public Bible {

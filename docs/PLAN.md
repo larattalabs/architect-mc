@@ -1191,3 +1191,8 @@ Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/J
   that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
   making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
 - **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.
+
+### Queued with "use an existing Style" (Steward's U1 RC, 2026-10-24; not U1)
+When Steward's settlements design with an existing Style, a settlement pins a player's Style version outside Architect. That
+feature ships with a keyed `Bibles.pin(id, version, owner, key)` / `unpin(...)` (like `pinArtifact`). The version GC skips any
+version a mod has pinned, and `bible.delete` refuses it, as it does for an entry's pin.

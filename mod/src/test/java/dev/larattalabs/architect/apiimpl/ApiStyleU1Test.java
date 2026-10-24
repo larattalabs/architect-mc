@@ -148,4 +148,20 @@ class ApiStyleU1Test {
 		o.addProperty("builtin", true);
 		assertEquals("builtin", Wire4b.bibleInfo(o).origin());
 	}
+
+	/** Steward's RC: no owner or a player UUID is the player's (editable); any other owner is a mod's (Duplicate-only). */
+	@Test
+	void ownership() {
+		assertFalse(Bible.isModOwner(null));
+		assertFalse(Bible.isModOwner("45ec2bed-0a65-3047-9f6e-8e67d21b1b92"));
+		assertTrue(Bible.isModOwner("steward_mc:settlement/abc"));
+		assertTrue(Bible.isModOwner("othermod:thing"));
+		for (String o : new String[] {null, "45ec2bed-0a65-3047-9f6e-8e67d21b1b92", "steward_mc:settlement/abc", "othermod:thing"}) {
+			Bible b = new Bible("bib_x", "X", 1, List.of(1), false, "building", ROLES, Optional.empty(), Optional.empty(), List.of(), Optional.ofNullable(o),
+				new JsonObject());
+			boolean player = o == null || o.contains("-") && !o.contains(":");
+			assertEquals(player, b.editable(), String.valueOf(o));
+			assertEquals(!player, b.modOwned(), String.valueOf(o));
+		}
+	}
 }
