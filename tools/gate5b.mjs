@@ -213,8 +213,29 @@ async function waitBatch(id, timeoutMs = 600_000) {
   return waitEvent((e) => e.event === 'BATCH_DONE' && e.batch === id, timeoutMs, `BATCH_DONE ${id}`);
 }
 const settle = (ms = 3000) => call('dev.wait', { ms }, 20_000);
+/**
+ * (speed audit B) The 3 s settle before a hash, ended early once the world is tick-quiet: the box's chunks ticking and no chunk the server
+ * ticks holding a scheduled block or fluid tick (dev.ticks.pending) for 1 s in a row; at most the 3 s it always waited. A client without the
+ * hook (or a call that fails) waits the full 3 s.
+ */
+async function settleTickQuiet(box, capMs = 3000, quietMs = 1000) {
+  const t0 = Date.now();
+  let quietSince = null;
+  while (Date.now() - t0 < capMs) {
+    const p = await call('dev.ticks.pending', { box: [box[0], box[2], box[3], box[5]] }, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    if (p.error) { await settle(Math.max(0, capMs - (Date.now() - t0))); return; }
+    const at = Date.now() - t0;
+    const quiet = p.block === 0 && p.fluid === 0 && p.boxTicking === p.boxChunks;
+    if (!quiet) quietSince = null;
+    else if (quietSince === null) quietSince = at;
+    if (quietSince !== null && at - quietSince >= quietMs) return;
+    await sleep(250);
+  }
+}
+const QUIET = process.argv[2] === 'chains'; // (speed audit B) only 5b-chains polls for quiet; the other steps keep the fixed 3 s
 async function hash(box, exclude = [], cells = false) {
-  await settle();
+  if (QUIET) await settleTickQuiet(box);
+  else await settle();
   return call('dev.region.hash', { box, exclude, cells }, 300_000);
 }
 const grow = (b, n) => [b[0] - n, b[1] - n, b[2] - n, b[3] + n, b[4] + n, b[5] + n];
@@ -597,7 +618,8 @@ steps.chains = async () => {
       const h = await history(site);
       states.push({ script: sc.name, what, version: h.version, origin: h.versioning.history.at(-1).origin, sha: hh.sha256 });
     };
-    await record('placed', await hash(BOX));
+    let last = await hash(BOX); // the hash of the world as the last record() saw it (null: hash again)
+    await record('placed', last);
     for (let i = 0; i < ops.length; i++) {
       const h = await history(site);
       let op = ops[i];
@@ -612,15 +634,18 @@ steps.chains = async () => {
       }
       const v = Number(op.slice(1));
       if (op[0] === 'a') {
-        const pre = await hash(BOX);
+        // (speed audit B) the world before this apply is what the last record() hashed: reused, not hashed again
+        const pre = last ?? await hash(BOX);
         const a = await deltaApply(site, v);
-        if (!check(a.applied, `chains ${sc.name}: apply v${h.version}->v${v} (${a.written} cells)`, a.applied ? undefined : a)) continue;
+        if (!check(a.applied, `chains ${sc.name}: apply v${h.version}->v${v} (${a.written} cells)`, a.applied ? undefined : a)) { last = null; continue; }
         stack.push({ version: h.version, sha: pre.sha256 });
-        await record(op, await hash(BOX));
+        last = await hash(BOX);
+        await record(op, last);
       } else {
         const a = await revert(site, v);
-        if (!check(a.applied, `chains ${sc.name}: revert to v${v}`, a.applied ? undefined : a)) continue;
+        if (!check(a.applied, `chains ${sc.name}: revert to v${v}`, a.applied ? undefined : a)) { last = null; continue; }
         const now = await hash(BOX);
+        last = now;
         // E2: a revert of the top delta (one step back) gives the world before that apply back
         const top = stack.at(-1);
         if (top && top.version === v) {

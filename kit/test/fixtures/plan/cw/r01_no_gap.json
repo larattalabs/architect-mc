@@ -1,0 +1,42 @@
+{
+  "about": "(7a CW) a catwalk over flat ground: no drop under any run along a face: NO_GAP, with a `path` wouldFit that fits alone",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": []
+  },
+  "anchors": {
+    "west_shelf": [
+      1048,
+      65,
+      2036
+    ],
+    "east_shelf": [
+      1087,
+      65,
+      2036
+    ]
+  },
+  "expect": {
+    "part": "cliff_walk",
+    "code": "NO_GAP",
+    "wouldFit": "path"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        }
+      }
+    ]
+  }
+}

@@ -96,9 +96,10 @@ test('§4: a free layout\'s unplaced lot (port), a districts zone\'s unplaced lo
 const withRule = (plan, fragment, drop = []) => ({ ...plan, rules: plan.rules.map((x) => { const y = { ...x, ...fragment }; for (const k of drop) delete y[k]; return y; }) });
 
 test('§5: the catalogue is 12 (NEXT); its diff from catalogue 11 (catalogue-b0410.json) is exactly rule.palette\'s bump', () => {
-  const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-  assert.deepEqual(planCatalogue(), golden);
-  assert.equal(golden.api, PLAN_API);
+  assert.deepEqual(planCatalogue(), JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8')));
+  // ((7a foundation) catalogue 12 as v0.42.0 shipped it is archived as catalogue-pre7a.json; 7a's changes are its own tests')
+  const golden = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
+  assert.equal(golden.catalogueVersion, 12);
   const prev = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-b0410.json'), 'utf8'));
   assert.equal(prev.catalogueVersion, 11);
   assert.ok(golden.catalogueVersion > prev.catalogueVersion, `catalogue ${golden.catalogueVersion}`);
@@ -111,7 +112,7 @@ test('§5: the catalogue is 12 (NEXT); its diff from catalogue 11 (catalogue-b04
   const rest = (c) => c.entries.filter((e) => e.id !== 'rule.palette');
   assert.deepEqual(rest(golden), rest(prev));
   const e = golden.entries.find((x) => x.id === 'rule.palette');
-  assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === PLAN_API, e.sinceApi);
+  assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === PLAN_API || e.sinceApi === golden.api, e.sinceApi);
   // vocab/1's compact.palette names over and the two exemptions
   const doc = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'vocab-1.json'), 'utf8'));
   assert.match(doc.compact.palette, /; over: lots measures the buildings only; exempt ways\/forms leaves the streets and forms out$/);

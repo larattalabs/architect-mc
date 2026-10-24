@@ -1,0 +1,26 @@
+{
+  "about": "(7a CW) a synthetic 20-high cliff (its top at 84, the foot at 64) with two shelves 8 above the foot either side of a 16-wide bay; the bay floor (the path along the cliff's foot) is a protected area but for the 4 columns against the face, so a villager catwalk 2 wide runs along the face at the shelves' level, 8 over the foot",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      { "x0": 1000, "z0": 2000, "x1": 1159, "z1": 2029, "y": 84 },
+      { "x0": 1000, "z0": 2030, "x1": 1059, "z1": 2095, "y": 72 },
+      { "x0": 1076, "z0": 2030, "x1": 1159, "z1": 2095, "y": 72 }
+    ]
+  },
+  "anchors": {
+    "west_shelf": [1048, 73, 2036],
+    "east_shelf": [1087, 73, 2036]
+  },
+  "protected": [{ "id": "foot_path", "rect": [1056, 2034, 1079, 2095] }],
+  "covers": ["connector.catwalk"],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      { "id": "cliff_walk", "kind": "catwalk", "from": { "anchor": "west_shelf" }, "to": { "anchor": "east_shelf" } }
+    ]
+  }
+}

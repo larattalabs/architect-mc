@@ -454,7 +454,8 @@ steps.commands = async () => {
   for (let i = 0; i < 1800; i++) { const s = await call('dev.region.prepare.state', { planId }).catch(() => null); if (s && /DONE|READY|COMPLETE/i.test(JSON.stringify(s.view ?? s))) break; await sleep(2000); }
   const ir = readPlanJson(planId, 'ir.json');
   const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
-  await settle(90_000); // the prepared chunks tick first (fluids and first block ticks settle), as the scenario runs
+  // the prepared chunks tick first (fluids and first block ticks settle), as the scenario runs; (speed audit B) until quiet, at most the 90 s it always waited
+  await L6.settleQuiet([claim[0] - 48, claim[1] - 48, claim[2] + 48, claim[3] + 48], { capMs: 90_000 });
   await call('dev.region.hash', { box, mode: 'snap', file: path.join(OUT, 'G6B_Commands.snap.gz') }, 4 * 3_600_000);
   await say('realise', '/architect region realise fill');
   let region = null;
@@ -579,11 +580,15 @@ steps.nudges = async () => {
 steps.versiona = async () => {
   await ensure();
   const claim = [-128, -100, 127, 99];
+  // (speed set C) the claim planned and prepared once, in a prepared copy of the flat base (made here, every run), which both runs copy:
+  // each run plans and prepares the same rift_city claim in the same flat world, so the second one was a repeat of the first's work
+  const PREP = 'G6B V10a Prepared';
+  await fresh(PREP, FLAT);
+  await tp(0.5, 120, 0.5);
+  await prepare((await plan('rift_city', claim, { surveyLoad: 'bounded:256' })).planId);
   const runOnce = async (world, drop) => {
-    await fresh(world, FLAT);
+    await fresh(world, PREP);
     await tp(0.5, 120, 0.5);
-    const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
-    await prepare(p.planId);
     const p2 = await plan('rift_city', claim, { surveyLoad: 'generated:64' });
     const ir = readPlanJson(p2.planId, 'ir.json');
     const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
@@ -613,13 +618,14 @@ steps.versionb = async () => {
   const claim = [-128, -100, 127, 99];
   const out = {};
   const stale = (x) => /PLAN_STALE/.test(typeof x === 'string' ? x : JSON.stringify(x ?? ''));
+  // (speed set C) the claim planned and prepared once for both doctored plans (the first one's regions are removed before the second)
+  const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
+  await prepare(p.planId);
+  const ir = readPlanJson(p.planId, 'ir.json');
+  const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  const lots = Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9']));
   for (const [label, override] of [['format 3', { format: 3 }], ['kitVersion 0.99.0', { kitVersion: '0.99.0' }]]) {
     const r = {};
-    const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
-    await prepare(p.planId);
-    const ir = readPlanJson(p.planId, 'ir.json');
-    const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
-    const lots = Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9']));
     const h0 = await call('dev.region.hash', { box }, 3_600_000);
     // accept: the next plan's IR is doctored; the plan must refuse
     r.acceptDoctor = await call('dev.region.planStale', { at: 'accept', ...override });
@@ -683,19 +689,39 @@ steps.versionc = async () => {
   const launcher = path.join(RUN, 'tools', 'run-gate6b-client.sh');
   const placed = !fs.existsSync(launcher);
   if (placed) fs.copyFileSync(path.join(root, 'tools', 'run-gate6b-client.sh'), launcher);
+  // (speed audit B) a settle ended once the claim's chunks tick and no scheduled tick is left for 1 s, at most the 5 s it always waited
+  // (a client without dev.ticks.pending, as 0.11.0's, waits the full 5 s)
+  const bxy = [claim[0] - 8, claim[1] - 8, claim[2] + 8, claim[3] + 8];
+  const settle5 = () => L6.settleQuiet(bxy, { capMs: 5000, quietMs: 1000, minMs: 1000 });
   try {
-    execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+    // (speed audit B) v0.11.0's sidecar build is cached by the tag's commit and node's version (the tag never changes)
+    const tagSha = execFileSync('git', ['-C', RUN, 'rev-parse', 'v0.11.0^{commit}']).toString().trim();
+    const cacheDir = path.join(MAIN, 'artifacts', 'sidecar-dist-cache', `v0.11.0-${tagSha.slice(0, 12)}-${process.version}`);
+    const distDir = path.join(RUN, 'sidecar', 'dist');
+    if (fs.existsSync(path.join(cacheDir, 'main.mjs')) && fs.existsSync(path.join(cacheDir, 'region-worker.mjs'))) {
+      fs.rmSync(distDir, { recursive: true, force: true });
+      fs.cpSync(cacheDir, distDir, { recursive: true });
+      log(`  v0.11.0 sidecar build: cache hit (${path.basename(cacheDir)})`);
+    } else {
+      execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+      const tmp = `${cacheDir}.tmp${process.pid}`;
+      fs.mkdirSync(path.dirname(cacheDir), { recursive: true });
+      fs.rmSync(tmp, { recursive: true, force: true });
+      fs.cpSync(distDir, tmp, { recursive: true });
+      try { fs.renameSync(tmp, cacheDir); } catch { fs.rmSync(tmp, { recursive: true, force: true }); }
+      log(`  v0.11.0 sidecar build: built and cached (${path.basename(cacheDir)})`);
+    }
     copyWorld(W, `${W} Old`);
     await startClient(`${W} Old`, { backend: 'sim' });
     await tp(0.5, 120, 0.5);
-    await settle(5000);
+    await settle5();
     const a = await call('dev.region.hash', { box }, 3_600_000);
     const list = await call('dev.region.list', {}).catch((e) => ({ error: String(e) }));
     const st11 = await call('dev.region.state', { region }).catch((e) => ({ error: String(e) }));
     await settle(30_000);
     const b = await call('dev.region.hash', { box }, 3_600_000);
     const rm = await call('dev.region.remove', { region }, 600_000).catch((e) => ({ error: String(e) }));
-    await settle(5000);
+    await settle5();
     const c = await call('dev.region.hash', { box }, 3_600_000);
     if (rm.removed) {
       const d11 = await call('dev.region.hash', { box, mode: 'diff', file: snap }, 3_600_000);
@@ -717,7 +743,7 @@ steps.versionc = async () => {
   // back on 0.12.0: the region's record survived the downgrade; remove is exact on what 0.12.0 wrote
   await startClient(`${W} Old`, { backend: 'sim' });
   await tp(0.5, 120, 0.5);
-  await settle(5000);
+  await settle5();
   const back = await call('dev.region.state', { region }).catch((e) => ({ error: String(e) }));
   await cmd('/kill @e[type=!minecraft:player]');
   const rm2 = await call('dev.region.remove', { region, force: true }, 3_600_000).catch((e) => ({ error: String(e) }));

@@ -15,11 +15,13 @@ import { inSlice } from './gate-part.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
 import { DERIVE } from './corpus-derive.mjs';
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 /** §8's named exceptions: fixture -> why it moves. */
 export const EXCEPT = Object.freeze({
+  ...F7A_MOVED, // ((7a foundation) its catalogue changes' named movers)
   'extension/e16_every_reserved_b.json': 'F3: form.giant_tree supported (f_giant_tree, a giant oak near the stone, now fits; it left the reserved list)',
   // (fix/survival-off-storm) their trees had a log held only from above or by leaves: now a leaf or gone; the answers unchanged
   ...Object.fromEntries(STORM_MOVED.map((f) => [f, 'fix/survival-off-storm: giantTree leaves no unsupported log (the answers unchanged, the tree cells move)'])),

@@ -86,7 +86,8 @@ export async function planTwin(ctx, variant) {
   await L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
   if (variant === 'flat') out.hill = await S3.raiseHill(L, c, sc);
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
-  await L.settle(90_000);
+  // (speed audit B) until quiet (no scheduled block or fluid tick, claim + 48 ticking), at most the 90 s it always waited, as scenarios.mjs
+  await L.settleQuiet([c[0] - 48, c[1] - 48, c[2] + 48, c[3] + 48], { capMs: 90_000 });
   // ---- the plan from the settled world's own survey (the anchors Steward would compute from what it sees)
   const sv = path.join(OUT, `${tag}-survey.bin`);
   await L.call('dev.region.survey', { claim: c, surveyLoad: 'bounded:256', file: sv }, 900_000);

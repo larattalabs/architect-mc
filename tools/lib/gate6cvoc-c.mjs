@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, flAsksFilter } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { testConcurrencyArgs } from './cpu-budget.mjs';
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
@@ -27,7 +28,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 const t0 = new Set(['extension/e16_every_reserved_b.json']); // ((6c FL) FL's movers appended, none listed twice)
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['asks/desert_jungle_wall.json', 'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json',
-  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n))]);
+  'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json', 'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => !t0.has(n)),
+  ...Object.keys(F7A_MOVED).filter((n) => !FL_MOVED.includes(n))]); // ((7a foundation) its named movers)
 
 function nodeTest(root, files, timeout = 3_600_000) {
   const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });

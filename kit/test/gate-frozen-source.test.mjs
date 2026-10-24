@@ -73,3 +73,29 @@ test('the kit-suite readers\' slow path: unit-kit not passing, no report, not a 
   assert.equal(kitReaderSlowPath({ step: reader, hasReport: false, unitKit: null, drvDir: null }), null); // the runner's own rule
   assert.equal(kitReaderSlowPath({ step: { waitFor: [] }, hasReport: true, unitKit: 'FAIL', drvDir: null }), null);
 });
+
+test('the frozen source is built before any step: classes appear in the snapshot, a failed build throws', async () => {
+  const { buildFrozenClasses } = await import('../../tools/lib/frozen-source.mjs');
+  const { root, src, head } = repo();
+  try {
+    // a stand-in gradlew: writes the class dirs the real tasks produce, fails when FAIL_BUILD marks the snapshot
+    fs.mkdirSync(path.join(src, 'mod'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'mod', 'gradlew'), '#!/bin/sh\nif [ -f ../FAIL_BUILD ]; then echo "compile error: boom" >&2; exit 1; fi\nmkdir -p build/classes/java/main ../devserver/build/classes/java/main ../apitest/build/classes/java/main\necho "$@ $GRADLE_USER_HOME" > build/args.txt\ntouch build/classes/java/main/A.class\n');
+    fs.chmodSync(path.join(src, 'mod', 'gradlew'), 0o755);
+    git(src, 'add', '-A');
+    git(src, 'commit', '-q', '-m', 'mod');
+    const dir = path.join(root, 'run-src');
+    prepareFrozenSource({ src, main: null, dir, head: git(src, 'rev-parse', 'HEAD'), seed: [] });
+    assert.ok(!fs.existsSync(path.join(dir, 'mod', 'build'))); // the bug: a fresh snapshot has no classes
+    buildFrozenClasses({ dir });
+    assert.ok(fs.existsSync(path.join(dir, 'mod', 'build', 'classes', 'java', 'main', 'A.class')));
+    assert.ok(fs.existsSync(path.join(dir, 'devserver', 'build', 'classes', 'java', 'main')));
+    const args = fs.readFileSync(path.join(dir, 'mod', 'build', 'args.txt'), 'utf8');
+    assert.match(args, /--offline .*classes testClasses :devserver:classes :apitest:classes/);
+    assert.ok(args.includes(path.join(dir, '.gradle-home'))); // the snapshot's own gradle home
+    fs.writeFileSync(path.join(root, 'run-src', 'FAIL_BUILD'), '');
+    assert.throws(() => buildFrozenClasses({ dir }), /mod build failed.*boom/s);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -550,7 +550,8 @@ async function runScenario(id) {
   let shots = null;
   if (!flat) {
     t0 = Date.now();
-    await L.settle(120_000);
+    // (speed audit B) game time: sprinted on a headless host (GATE_SPRINT=0 / a client: the original 120 s real-time settle)
+    await L.gameWait(120_000, { real: L.settle, label: 'stand' });
     T('stand', t0);
     // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
     if (isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
@@ -589,6 +590,15 @@ async function runScenario(id) {
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
   fs.writeFileSync(path.join(out, 'evidence.sha'), `${ev.sha}\n`);
+  // (speed set C) a finished run is listed in the gate run's shared dir, so a step of the same run that needs the same run (w-ingame's
+  // pathbibles: S7 flat in its own bible) can take it instead of making it again
+  if (process.env.GATE_RUN_SHARED) {
+    try {
+      const d = path.join(process.env.GATE_RUN_SHARED, 'scenario-runs');
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, `${sc.id}.${flat ? 'flat' : 'natural'}.${sc.bible ?? 'default'}.json`), JSON.stringify({ out, runId, head: run.versions.head, evidence: ev.sha }));
+    } catch { /* an index entry is only a convenience */ }
+  }
   L.log(`== scenario ${sc.id} run ${runId}: evidence ${ev.sha.slice(0, 12)}; ${metrics.rows.filter((r) => r.gated && !r.pass).map((r) => r.id).join(', ') || 'every run bar passes'}`);
   return { out, runId, evidence: ev.sha, metrics };
 }

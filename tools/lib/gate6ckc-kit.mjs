@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson, COA_MOVED_FIXTURES } from './fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
+import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { inSlice } from './gate-part.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
@@ -22,6 +23,8 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 export const EXCEPT = Object.freeze({
   // ((6c FL) the fixtures FL moves by name (its own item 4 judges them)
   ...Object.fromEntries(FL_MOVED.map((n) => [n, 'FL: a free layout or outline shipped (layout.ring, .grid, .organic, sketch.outline; the e15 list)'])),
+  // ((7a foundation) the catalogue's three changes: rail until CR, branch_walk until 7b, span_bridge an alias)
+  ...F7A_MOVED,
   'valid/v51_voc_forge.json': 'forge_wall (connector.wall) wrote 5 water, 5 rim and 24 watch cells of w_fount (form.fountain): now refused OVERLAP {kind: body}, wouldFit ring [4, 17]',
   // ((the CU/IRR/VOC-c batch) VOC-c's named exceptions: rule.palette supported; its own item 4 judges them. e05 is not one here: VOC-c
   // rewrote the fixture itself, so the base and this head plan the same file alike)

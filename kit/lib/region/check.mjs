@@ -14,6 +14,8 @@ import { ropeRules } from './checkRopes.mjs';
 // (6c T3) bridges (M10:bridge, T3a) and tunnels (M3:tunnel, M4:tunnel, T3b)
 import { bridgeRules } from './checkBridges.mjs';
 import { tunnelRules } from './checkTunnels.mjs';
+// (7a CW) catwalks (M10:catwalk)
+import { catwalkRules } from './checkCatwalks.mjs';
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
 import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
@@ -467,6 +469,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // (6c T3) bridges (checkBridges.mjs, T3a) and tunnels (checkTunnels.mjs, T3b), each only when the plan meta records some
   if (Array.isArray(meta?.bridges) && meta.bridges.length) time('M10', () => bridgeRules({ ir, vw, bridges: meta.bridges, meta, want, findings, metrics, partStage, finding }));
   if (Array.isArray(meta?.tunnels) && meta.tunnels.length) time('M3', () => tunnelRules({ ir, vw, tunnels: meta.tunnels, meta, want, findings, metrics, partStage, finding }));
+  // (7a CW) catwalks (M10:catwalk: checkCatwalks.mjs), only when the plan meta records some
+  if (Array.isArray(meta?.catwalks) && meta.catwalks.length) time('M10', () => catwalkRules({ ir, vw, catwalks: meta.catwalks, meta, want, findings, metrics, partStage, finding }));
   // (6c H) fluid bodies (the IR's fluid ops) and wet writes (meta.wet): only when the plan has either
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));
@@ -561,16 +565,17 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       metrics.M5rope = { darkSpawnable: rd, deckCells: ra, sample: rs };
     }
     // (6c T3) the same over every bridge's deck cells and every tunnel's floor cells (`cells`: the deck or floor blocks; feet one over)
-    for (const [key, list, name] of [['M5bridge', meta?.bridges, 'deckCells'], ['M5tunnel', meta?.tunnels, 'floorCells']]) {
+    // ((7a CW) and every catwalk's deck cells: its record's `deckCells` (its `cells` is siteplan/1's count))
+    for (const [key, list, name] of [['M5bridge', meta?.bridges, 'deckCells'], ['M5tunnel', meta?.tunnels, 'floorCells'], ['M5catwalk', meta?.catwalks, 'deckCells']]) {
       if (!Array.isArray(list) || !list.length) continue;
       let rd = 0, ra = 0;
       const rs = [];
-      for (const q of list) for (const [x, y, z] of q.cells ?? []) {
+      for (const q of list) for (const [x, y, z] of (key === 'M5catwalk' ? q.deckCells : q.cells) ?? []) {
         ra++;
         if (P.spawn[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)] && !(light.at(x, y + 1, z) > 0)) { rd++; if (rs.length < 20) rs.push([x, y + 1, z]); }
       }
       metrics[key] = { darkSpawnable: rd, [name]: ra, sample: rs };
-      if (rd && want.has('M5')) findings.push(finding('M5', null, null, rd, rs, `${rd} of ${ra} ${key === 'M5bridge' ? 'bridge deck' : 'tunnel floor'} cell(s) are dark (block light 0) and spawnable`));
+      if (rd && want.has('M5')) findings.push(finding('M5', null, null, rd, rs, `${rd} of ${ra} ${key === 'M5bridge' ? 'bridge deck' : key === 'M5catwalk' ? 'catwalk deck' : 'tunnel floor'} cell(s) are dark (block light 0) and spawnable`));
     }
     if (dark) findings.push(finding('M5', null, null, dark, sample, `${dark} of ${area} walk cell(s) are dark (block light 0) and spawnable (${(100 * dark / Math.max(1, area)).toFixed(1)}%)`));
     // caverns: no dark spawnable floor cell inside

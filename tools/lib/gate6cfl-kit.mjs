@@ -20,6 +20,7 @@ import { SIBLING_FILES } from './batch-0410.mjs';
 import { inSlice } from './gate-part.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the run's shared store, prewarmed on every core
+import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -34,6 +35,8 @@ export const EXCEPT = Object.freeze({
   'extension/e14_sketch_outline.json': 'sketch.outline supported: the outline answers fits (the fixture moved by name)',
   'extension/e15_every_reserved_a.json': 'the six FL ids supported: z2-z5, z7 and z11 answer (they left the reserved list)',
   'extension/e16_every_reserved_b.json': 'named by §8 (its reserved list); judged as any other: it may stay byte-identical',
+  // ((7a foundation) the catalogue's three changes move these by name (e15 is FL's too: it differs either way))
+  'asks/mining_town.json': F7A_MOVED['asks/mining_town.json'],
 });
 
 /** The base worktree at the merge base with origin/main (made or moved there). */
@@ -155,7 +158,8 @@ export async function asks(root, { check, write = true }) {
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-before.md'), before.text);
     fs.writeFileSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'fl', 'asks-after.md'), after.text);
   }
-  const moved = after.rows.filter((r) => !before.rows.includes(r));
+  // ((7a foundation) its ask movers' `until` normalised on both sides: tools/lib/f7a-norm.mjs)
+  const moved = after.rows.map(f7aAskLine).filter((r) => !before.rows.map(f7aAskLine).includes(r));
   const five = ['around_my_tree/grove', 'nomad_camp/camp', 'ring_city/ring_town', 'grid_city/grid_city', 'organic_hamlet/hamlet'];
   // ((6c close-out A) a base past FL (main since v0.41.0): the free zones already answer there, so nothing moves; noted)
   const pastFL = !before.gaps['layout.ring'] && !before.gaps['layout.grid'] && !before.gaps['layout.organic'];

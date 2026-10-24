@@ -143,6 +143,12 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   // (6c T3) the plan's bridges (span: deck cells; piers: each pier's centre column [x, z]; landings: the near and far landing cells) and
   // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
   if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));
+  // (7a foundation, §5) the 7a connectors' rows, from the plan meta each slice's emission records (absent: none)
+  if (Array.isArray(meta?.climbs) && meta.climbs.length) out.climbs = meta.climbs.map((c) => ({ id: c.id, part: c.part, kind: c.kind, flights: c.flights ?? 0, hairpins: c.hairpins ?? 0, ladders: (c.ladders ?? []).map((l) => ({ at: [...l.at], rungs: l.rungs, landings: l.landings ?? 0 })) }));
+  if (Array.isArray(meta?.rockStairs) && meta.rockStairs.length) out.rockStairs = meta.rockStairs.map((c) => ({ id: c.id, part: c.part, steps: c.steps, landings: c.landings ?? 0, carved: c.carved ?? 0, lined: c.lined ?? 0 }));
+  if (Array.isArray(meta?.lifts) && meta.lifts.length) out.lifts = meta.lifts.map((c) => ({ id: c.id, part: c.part, foot: [...c.foot], top: [...c.top], rise: c.rise, down: !!c.down }));
+  if (Array.isArray(meta?.catwalks) && meta.catwalks.length) out.catwalks = meta.catwalks.map((c) => ({ id: c.id, part: c.part, cells: c.cells, brackets: c.brackets ?? 0 }));
+  if (Array.isArray(meta?.spirals) && meta.spirals.length) out.spirals = meta.spirals.map((c) => ({ id: c.id, part: c.part, host: c.host, rise: c.rise, turns: c.turns, top: [...c.top] }));
   if (Array.isArray(meta?.tunnels) && meta.tunnels.length) out.tunnels = meta.tunnels.map((t) => ({ id: t.id, part: t.part, portals: (t.portals ?? []).map((q) => [...q]), length: t.length, carved: t.carved ?? 0 }));
   // (6c H) the plan's fluid bodies (r.fluidBody's records: counts of sources, declared spill and ice) and quays (H-b's records), from
   // the plan meta (§12)

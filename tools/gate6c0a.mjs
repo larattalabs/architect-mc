@@ -20,6 +20,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gatePart } from './lib/gate-part.mjs';
+import { sharedOnce } from './lib/run-shared.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.join(path.dirname(root), 'architect-mc');
@@ -385,6 +387,8 @@ async function stopClient() {
 }
 /** A crash: SIGKILL to this run's client JVM (by its PID). */
 async function killClient() {
+  // (speed audit B) the helper's pid, read while the client still answers: the exit poll below watches it
+  const helperPid = (await dev?.call('dev.launcher.state', {}, { timeoutMs: 10_000 }).catch(() => null))?.pid ?? null;
   const pids = clientPids();
   for (const pid of pids) {
     log(`SIGKILL my client pid ${pid}`);
@@ -397,8 +401,11 @@ async function killClient() {
     // closed
   }
   dev = null;
-  // the helper outlives a killed game (its parent-pid watch stops it within ~5 s)
-  await sleep(8000);
+  // the helper outlives a killed game (its parent-pid watch stops it within ~5 s): polled for its exit, at most the 8 s it always waited
+  if (helperPid) {
+    const alive = () => { try { process.kill(helperPid, 0); return true; } catch { return false; } };
+    for (let t1 = Date.now(); alive() && Date.now() - t1 < 8000; ) await sleep(250);
+  } else await sleep(8000);
 }
 async function restart(world, env = clientEnv) {
   await stopClient();
@@ -913,6 +920,10 @@ steps.session = async () => {
 
 /** Item 11 in game: a small region with SLOW_TILES=4 ends PLACED with the unhooked run's sha, shows TILE_SLOW, RETRY works; =2 passes inside the retries. */
 steps.tiles = async () => {
+  // (speed set C) three client boots in a row: the unhooked run, SLOW_TILES=4 and =2, each its own section (a split step's part). The two slow
+  // runs are judged against the unhooked run's sha, which a part that did not run it takes from the one that did (tools/lib/run-shared.mjs):
+  // the unhooked run happens once per gate run, in whichever part asks first, and the others wait for it.
+  const P = gatePart(['unhooked', 'slow4', 'slow2'], { log: console.log });
   const out = {};
   const runOnce = async (n) => {
     const W = `G6C0A Tiles ${n}`;
@@ -945,13 +956,22 @@ steps.tiles = async () => {
     await stopClient();
     return { state: st.view.state, sha: h.sha256, sawSlow, nudged };
   };
-  out.unhooked = await runOnce(0);
-  out.slow4 = await runOnce(4);
-  out.slow2 = await runOnce(2);
-  check(out.unhooked.state === 'PLACED', `the unhooked run: ${out.unhooked.state} (sha ${out.unhooked.sha?.slice(0, 12)})`);
-  check(out.slow4.state === 'PLACED' && out.slow4.sha === out.unhooked.sha, `SLOW_TILES=4: ${out.slow4.state} with the unhooked run's sha (${out.slow4.sha?.slice(0, 12)})`);
-  check(out.slow4.sawSlow && out.slow4.nudged?.done === true, `SLOW_TILES=4: TILE_SLOW shown with RETRY, and RETRY works (${JSON.stringify(out.slow4.nudged)})`);
-  check(out.slow2.state === 'PLACED' && out.slow2.sha === out.unhooked.sha && !out.slow2.sawSlow, `SLOW_TILES=2: passes inside the helper's retries (${out.slow2.state}, no TILE_SLOW)`);
+  const unhooked = async () => { const { shared, ...u } = await sharedOnce('0a-tiles', 'unhooked', () => runOnce(0), { log: console.log }); return u; };
+  if (P.want('unhooked')) {
+    out.unhooked = await unhooked();
+    check(out.unhooked.state === 'PLACED', `the unhooked run: ${out.unhooked.state} (sha ${out.unhooked.sha?.slice(0, 12)})`);
+  }
+  if (P.want('slow4')) {
+    out.slow4 = await runOnce(4);
+    out.unhooked ??= await unhooked();
+    check(out.slow4.state === 'PLACED' && out.slow4.sha === out.unhooked.sha, `SLOW_TILES=4: ${out.slow4.state} with the unhooked run's sha (${out.slow4.sha?.slice(0, 12)})`);
+    check(out.slow4.sawSlow && out.slow4.nudged?.done === true, `SLOW_TILES=4: TILE_SLOW shown with RETRY, and RETRY works (${JSON.stringify(out.slow4.nudged)})`);
+  }
+  if (P.want('slow2')) {
+    out.slow2 = await runOnce(2);
+    out.unhooked ??= await unhooked();
+    check(out.slow2.state === 'PLACED' && out.slow2.sha === out.unhooked.sha && !out.slow2.sawSlow, `SLOW_TILES=2: passes inside the helper's retries (${out.slow2.state}, no TILE_SLOW)`);
+  }
   return out;
 };
 

@@ -99,14 +99,14 @@ test('item 2: the seven classes, with their reasons, deviations, blockedBy and u
     const r2 = await asks(p2, { protected: GROVE });
     assert.equal(part(r2, 'town').class, 'fits', `wouldFit ${JSON.stringify(w.fragment)}: ${JSON.stringify(part(r2, 'town'))}`);
   }
-  // unsupported (required): REQUIRED_BLOCKED and no artifact ((7a K1) on connector.catwalk, which stays reserved, since
-  // connector.wall ships)
+  // unsupported (required): REQUIRED_BLOCKED and no artifact ((7a K1) on connector.catwalk, since connector.wall ships; (7a foundation)
+  // on connector.tube, the longest-lived reservation (until UW), since CW flips connector.catwalk)
   const req = NEAR_CENTRE();
-  req.connectors.push({ id: 'walk', kind: 'catwalk', required: true, from: { part: 'town' }, to: { anchor: 'claim_n' } });
+  req.connectors.push({ id: 'walk', kind: 'tube', required: true, from: { part: 'town' }, to: { anchor: 'claim_n' } });
   const rb = await asks(req);
   assert.equal(part(rb, 'walk').class, 'unsupported');
-  assert.equal(part(rb, 'walk').block, 'connector.catwalk');
-  assert.equal(part(rb, 'walk').reasons[0].until, '7a');
+  assert.equal(part(rb, 'walk').block, 'connector.tube');
+  assert.equal(part(rb, 'walk').reasons[0].until, 'UW');
   assert.equal(rb.check.overall, 'REQUIRED_BLOCKED');
   assert.equal(rb.artifactSha, null);
   // malformed (a part): its path; the rest still answers

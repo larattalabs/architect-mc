@@ -368,7 +368,9 @@ async function crossRun(tag, claim, { kind, golden }) {
   vP.eachWritten((x, y) => { if (y < y0) y0 = y; if (y > y1) y1 = y; });
   const box = [claim[0] - 8, Math.max(-64, y0 - 8), claim[1] - 8, claim[2] + 8, Math.min(319, y1 + 8), claim[3] + 8];
   await tp((claim[0] + claim[2]) / 2, Math.min(319, y1 + 20), (claim[1] + claim[3]) / 2);
-  await L.settle(flat ? 5000 : 60_000);
+  // (speed audit B) until quiet (no scheduled block or fluid tick, claim + 48 ticking), at most the 60 s it always waited, as scenarios.mjs
+  if (flat) await L.settle(5000);
+  else await L.settleQuiet([claim[0] - 48, claim[1] - 48, claim[2] + 48, claim[3] + 48], { capMs: 60_000 });
   const before = path.join(OUT, `${tag}-before.arwd.gz`), after = path.join(OUT, `${tag}-after.arwd.gz`), snapF = path.join(OUT, `${tag}-snap.gz`);
   await call('dev.region.dump', { box, file: before, light: true }, 1_800_000);
   const snap = await call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
