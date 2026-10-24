@@ -28,6 +28,7 @@ function blobText(src, id) {
   return blobs.get(id);
 }
 import { bytecodeDigest, ensureBuild } from './build-artifact.mjs';
+import { JACOCO } from './jacoco.mjs';
 
 /** The build artifact's manifest at the context's head (tools/lib/build-artifact.mjs); built on first use when ctx.allowBuild. */
 export function manifestOf(ctx) {
@@ -140,7 +141,7 @@ function snapshotsOf(ctx, entry) {
 /**
  * Step `id`'s key -> { key, parts } or { key: null, why } when it can't be cached (uncacheable, no map entry, a dirty tree).
  */
-export function keyFor(ctx, id, { set = null, classes = null } = {}) {
+export function keyFor(ctx, id, { set = null, classes = null, entered = null } = {}) {
   const { cfg, conf, map } = ctx;
   // a split step's part (<id>/p<k>, turbo): its own entry (its section env) and key, its parent's input set
   const entry = cfg.steps[id] ?? entryOf(cfg, id);
@@ -153,12 +154,13 @@ export function keyFor(ctx, id, { set = null, classes = null } = {}) {
   if (ctx.dirty.length) return { key: null, why: `the source tree is dirty (${ctx.dirty.length} path(s), e.g. ${ctx.dirty[0]}): a dirty tree is never cached` };
   // coverage mode (step-coverage.mjs): the hash runs over the set a recorded run touched instead of the map's set
   const inputs = set ? setHash(set, ctx.src, ctx.head) : inputsHash(map, conf, mid, ctx.src, ctx.head);
-  // bytecode mode: the loaded classes' class-file digests from the run-level build artifact; no artifact (or a failed build), no key
+  // bytecode mode: the loaded classes' class-file digests from the run-level build artifact; no artifact (or a failed build), no key.
+  // Execution coverage (`entered`, JaCoCo): a loaded class the run never entered counts by its skeleton and static initializer
   let bytecode = null;
   if (classes) {
     const m = manifestOf(ctx);
     if (!m?.ok) return { key: null, why: `the build artifact at ${ctx.head.slice(0, 9)}: ${m?.error ?? 'missing'}` };
-    bytecode = bytecodeDigest(classes, m);
+    bytecode = bytecodeDigest(classes, m, entered);
   }
   const def = ctx.defAt ? ctx.defAt(ctx.head, id) : definitionNow(ctx.src, ctx.rawCfg ?? cfg, id);
   const names = new Set([...(me.env ?? []), ...(conf.modeEnv?.always ?? [])]);
@@ -283,7 +285,7 @@ export function entryStillValid(ctx, id, e) {
     // sees an inlined constant in the class that uses it
     const cc = e.coverageClasses ? new Set() : constantChanges(ctx.src, e.head, ctx.head, ctx.conf.coverage?.javaRoots ?? []);
     if (cc === null || cc.size) return { ok: false, why: cc === null ? `its head ${String(e.head).slice(0, 9)} is unknown here` : `a compile-time constant changed since its PASS (${[...cc].slice(0, 3).join(', ')})` };
-    const k = keyFor(ctx, id, { set: e.coverageSet, classes: e.coverageClasses ?? null });
+    const k = keyFor(ctx, id, { set: e.coverageSet, classes: e.coverageClasses ?? null, entered: e.coverageEntered ?? null });
     if (!k.key) return { ok: false, why: k.why };
     if (k.key !== e.key) return { ok: false, why: `a file its coverage holds changed since ${String(e.head).slice(0, 9)} (or its definition, toolchain, runner or a mode)` };
   } else {
@@ -347,7 +349,9 @@ export function record(ctx, id, rec, opts) {
     const m = manifestOf(ctx);
     cov = coverageSet({ entry: ctx.map.steps[mapId(ctx.map, id)], trace: tr, cov: opts.coverage, conf: ctx.conf, tree: treeAt(ctx.src, ctx.head), src: ctx.src, manifest: m?.ok ? m : null });
     cov.loaded = m?.ok ? [...new Set([...(opts.coverage.classes ?? []), ...(cov.classReads ?? [])])].sort() : null;
-    const k = keyFor(ctx, id, { set: cov.set, classes: cov.loaded });
+    // execution coverage (JaCoCo): the classes its JVMs entered; a class file a node process read (api-compat) counts as entered
+    cov.entered = m?.ok && Array.isArray(opts.coverage.entered) ? [...new Set([...opts.coverage.entered, ...(cov.classReads ?? [])])].sort() : null;
+    const k = keyFor(ctx, id, { set: cov.set, classes: cov.loaded, entered: cov.entered });
     if (!k.key) return { stored: false, why: k.why };
     opts = { ...opts, key: k.key, parts: k.parts };
   } else if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
@@ -360,6 +364,7 @@ export function record(ctx, id, rec, opts) {
     external: Object.fromEntries(chk.external.map((r) => [r, externalFingerprint(ctx.main, r)])),
     ...(opts.untracedImport ? { untraced: opts.untracedImport } : {}),
     ...(cov?.loaded ? { coverageClasses: cov.loaded, build: manifestOf(ctx).hash } : {}),
+    ...(cov?.entered ? { coverageEntered: cov.entered, coverageGranularity: JACOCO.granularity, coverageJvms: (opts.coverage.jvms ?? []).slice(0, 40) } : {}),
     ...(cov ? { mode: 'coverage', coverageSet: cov.set, coverage: { classes: cov.classes, unmappedClasses: cov.unmappedClasses.slice(0, 50), mapOutside: chk.outside.length } } : {}),
   };
   const f = entryFile(ctx, id, opts.key);
@@ -379,7 +384,7 @@ export function record(ctx, id, rec, opts) {
   const tmp = `${f}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(e, null, 1));
   fs.renameSync(tmp, f);
-  return { stored: true, why: cov ? `recorded (coverage: ${cov.set.length} set entries, ${cov.classes} classes)` : 'recorded', file: f, key: opts.key, ...(chk.outside.length ? { outside: chk.outside } : {}) };
+  return { stored: true, why: cov ? `recorded (coverage: ${cov.set.length} set entries, ${cov.classes} classes${cov.entered ? `, ${cov.entered.length} entered` : ''})` : 'recorded', file: f, key: opts.key, ...(chk.outside.length ? { outside: chk.outside } : {}) };
 }
 
 /** The last full nightly that ran to the end: <root>/latest.json (root: artifacts/nightly) -> { startedAt, head, run } or null. */

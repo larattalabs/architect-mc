@@ -2,8 +2,8 @@
 // sidecar's kit, the scenarios) made every mod/src/main or kit/lib change re-run every in-game step. In coverage mode a step's
 // cached PASS is keyed by what that run actually touched:
 //   - Java: every class a JVM of the step's shard loaded while the step ran, cumulative over a reused client (JAVA_TOOL_OPTIONS
-//     -Xlog:class+load into <run>/coverage/<shard>/jvm-<pid>.log), mapped to its source file. Loaded is a superset of executed
-//     (JaCoCo's class level), with no agent to install;
+//     -Xlog:class+load into <run>/coverage/<shard>/jvm-<pid>.log), keyed by its bytecode. With execution coverage (JaCoCo,
+//     tools/lib/jacoco.mjs) a loaded class the step's JVMs never ENTERED counts only by its skeleton and static initializer;
 //   - Node: every file the step's own processes and the runner-started client's processes (the sidecar, its workers, the node
 //     children that keep the environment) loaded, read, listed or statted (tools/lib/step-trace.mjs);
 //   - the safety set, always in (tools/gate-cache.json coverage.always / alwaysRoots): build files and resources, mixins (applied
@@ -56,11 +56,19 @@ export function snapshotStart(dir) {
   return { t: Date.now(), alive: new Set(coverageFiles(dir).filter((f) => alive(f.pid)).map((f) => f.file)) };
 }
 
-/** At its end: the classes and node paths of the files alive at its start or begun since. */
-export function collect(dir, snap, { prefix = 'dev.larattalabs.' } = {}) {
+/**
+ * At its end: the classes and node paths of the files alive at its start or begun since. With execution coverage (`exec`: the
+ * dump token the runner just requested, tools/lib/jacoco.mjs requestDumps), also the classes those JVMs ENTERED: a JVM's entered
+ * set counts when its last dump answers this step's token, or is its exit dump; a JVM with a class-load log and no such dump (no
+ * agent, an agent error, killed before it could answer, no answer in time) counts every class it loaded as entered, as does a
+ * class JaCoCo did not instrument. -> { classes, node, entered: [...] | null, jvms: [{ pid, exec }] }.
+ */
+export function collect(dir, snap, { prefix = 'dev.larattalabs.', exec = null, readDump = null } = {}) {
   const classes = new Set();
+  const entered = exec ? new Set() : null;
+  const jvms = [];
   const node = new Map();
-  for (const { file } of coverageFiles(dir)) {
+  for (const { file, pid } of coverageFiles(dir)) {
     let st;
     try {
       st = fs.statSync(file);
@@ -71,7 +79,32 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.' } = {}) {
     if (!snap.alive.has(file) && st.mtimeMs < snap.t) continue;
     const text = fs.readFileSync(file, 'utf8');
     if (file.endsWith('.log')) {
-      for (const m of text.matchAll(/^\[[^\]]*\]\s+(\S+)\s+source:/gm)) if (m[1].startsWith(prefix)) classes.add(m[1]);
+      const mine = [];
+      const hidden = new Set();
+      // a hidden class the JVM spun for a lambda (Host$$Lambda/0x...) is its host's code: the lambda body is a method of the host
+      // and the host's bytecode keys it (the host ran the invokedynamic, so it is loaded and entered). Its name, unique per run
+      // and in no manifest, would otherwise send the host's SOURCE into the set
+      for (const m of text.matchAll(/^\[[^\]]*\]\s+(\S+)\s+source:/gm)) if (m[1].startsWith(prefix)) {
+        const h = hostOf(m[1]);
+        if (h !== m[1]) hidden.add(h);
+        mine.push(h);
+      }
+      for (const c of mine) classes.add(c);
+      if (entered) {
+        const d = readDump ? readDump(dir, pid) : null;
+        const ok = d && (d.token === exec.token || d.token === 'exit');
+        jvms.push({ pid, exec: ok ? (d.token === 'exit' ? 'exit dump' : 'dump') : d ? `stale dump (${d.token})` : 'no dump: its loaded classes count as entered' });
+        if (!ok) for (const c of mine) entered.add(c);
+        else {
+          for (const c of hidden) entered.add(c);
+          // a project class in a mixin package that loaded as a class (an accessor, a helper) is never instrumented: entered
+          for (const c of mine) if (c.includes('.mixin.')) entered.add(c);
+          const loadedHere = new Set(mine);
+          for (const c of d.entered) if (c.startsWith(prefix)) entered.add(c);
+          // a class JaCoCo left uninstrumented: its execution is invisible, so it counts as entered
+          for (const c of d.uninstrumented) if (loadedHere.has(c) || c.startsWith(prefix)) entered.add(c);
+        }
+      }
     } else {
       for (const line of text.split('\n')) {
         if (!line || line.startsWith('#')) continue;
@@ -82,8 +115,13 @@ export function collect(dir, snap, { prefix = 'dev.larattalabs.' } = {}) {
       }
     }
   }
-  return { classes: [...classes].sort(), node };
+  // entered is a subset of loaded; a class entered but absent from the logs (a log rotated away, never expected) is loaded too
+  if (entered) for (const c of entered) classes.add(c);
+  return { classes: [...classes].sort(), node, entered: entered ? [...entered].sort() : null, jvms };
 }
+
+/** A hidden class's host (`a.B$$Lambda/0x0001` and `a.B$$Lambda$12/0x...` -> `a.B`); any other name as it is. */
+export const hostOf = (name) => (name.includes('/') || name.includes('$$Lambda') ? name.replace(/\$\$Lambda.*$/, '').replace(/\/.*$/, '') : name);
 
 /** FQN of a top-level class -> its source file, over the tracked tree's Java roots. */
 export function javaIndex(tree, roots) {

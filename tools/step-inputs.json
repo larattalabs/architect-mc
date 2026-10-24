@@ -140,6 +140,7 @@
     "kit/test/schem.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
+    "kit/test/step-jacoco.test.mjs",
     "kit/test/t3-foundation.test.mjs",
     "kit/test/terraces-s3.test.mjs",
     "kit/test/tunnel-t3b.test.mjs",
@@ -451,6 +452,7 @@
     "kit/test/schem.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
+    "kit/test/step-jacoco.test.mjs",
     "kit/test/t3-foundation.test.mjs",
     "kit/test/terraces-s3.test.mjs",
     "kit/test/tunnel-t3b.test.mjs",
@@ -515,6 +517,8 @@
     "tools/gate6cb.mjs",
     "tools/gate6ct3a.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/GateCovAgent.java",
+    "tools/lib/GateCovTool.java",
     "tools/lib/asks-first.mjs",
     "tools/lib/basestamp.mjs",
     "tools/lib/bench-select.mjs",
@@ -532,6 +536,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6cirr-game.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/jacoco.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/p3-tier.mjs",
@@ -635,18 +640,6 @@
      "expr": "pathToFileURL(file).href)"
     },
     {
-     "from": "kit/test/step-cache.test.mjs",
-     "expr": "path.join(KIT, name))"
-    },
-    {
-     "from": "kit/test/step-cache.test.mjs",
-     "expr": ") only when a run executed it"
-    },
-    {
-     "from": "kit/tools/region.mjs",
-     "expr": "pathToFileURL(path.join(dir, f)).href)"
-    },
-    {
      "from": "tools/lib/step-coverage.mjs",
      "expr": ") counts when its run executed it (the"
     },
@@ -657,6 +650,18 @@
     {
      "from": "tools/lib/step-inputs.mjs",
      "expr": ") counts only when a run executed"
+    },
+    {
+     "from": "kit/test/step-cache.test.mjs",
+     "expr": "path.join(KIT, name))"
+    },
+    {
+     "from": "kit/test/step-cache.test.mjs",
+     "expr": ") only when a run executed it"
+    },
+    {
+     "from": "kit/tools/region.mjs",
+     "expr": "pathToFileURL(path.join(dir, f)).href)"
     },
     {
      "from": "kit/test/release-version.test.mjs",
@@ -1057,6 +1062,7 @@
     "kit/test/schem.test.mjs",
     "kit/test/smalls.test.mjs",
     "kit/test/step-cache.test.mjs",
+    "kit/test/step-jacoco.test.mjs",
     "kit/test/t3-foundation.test.mjs",
     "kit/test/terraces-s3.test.mjs",
     "kit/test/tunnel-t3b.test.mjs",
@@ -1088,6 +1094,7 @@
     "tools/lib/gate-part.mjs",
     "tools/lib/gate6cirr-game.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/jacoco.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/megab.mjs",
     "tools/lib/p3-tier.mjs",
