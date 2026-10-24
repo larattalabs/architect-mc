@@ -57,4 +57,25 @@ Branch `slice/U5`, off `origin/main` (72e8939f, U3 merged; U4's `chore/u4-ab` is
 
 ## Evidence (DEV MODE)
 
-(filled in below after the run)
+All $0 (sim). Ports 8900/8901, run dir `../architect-mc-U5-run` (frozen source `-src`), lock and runs in the main checkout's
+`artifacts/gate-runs-U5/`.
+- **Run 1, `20261024-185112-change`** at 84475b7c (the code; only docs and the blurb label came after): `gate-run change --only
+  unit-mod,unit-kit,unit-sidecar,lint-structure,lint-look,water-lint,p3-lint,u1-ingame,u2-ingame,u3-ingame,u5-ingame`. **PASS 11/11**
+  in 14m45s.
+  - **u5-ingame 31/31.**
+  - u1-ingame 29/29 and u2-ingame 33/33, both with medieval's new wall.
+  - u3-ingame 39/39: the editor rework holds.
+  - unit-mod 923 tests, 0 failures. unit-kit 898/898. unit-sidecar 783.
+  - lint-structure 177, lint-look 14, water-lint 126, p3-lint 16.
+- **Run 2, `20261024-190638-change`** at 4acb427c (the brief's blurb line renamed "in short:"): `--only unit-sidecar,u5-ingame`. **PASS
+  2/2** (783; 31/31).
+- **Shots** (`gate6b/shots/` of each run): editor_hybrid, browser_no_parts, browser_menu_parts, add_parts (the estimate "about
+  $1.16-1.55, 5-8 min (at most)"), browser_parts ("Parts: 5"), style_editor_no_parts, editor_parts_off, editor_parts_on (the chip, the
+  note and the provenance line).
+- **api-compat** (by hand, the merged main and client classes at 8fbae53a): the 0.44.0 mod jar's api surface (2600 members) and the
+  0.44.0 apitest jar (932 references) resolve. **step-inputs check**: 255 steps OK.
+- The gate's hybrid brief lines (u5-ingame.json `hybridBrief`): "## The Style's look: Medieval (guidance)", "- in short: Dark oak timber
+  framing with pale daub walls and steep spruce roofs.", "- roofs: lean toward steep gables, jettied upper floors.", "- proportions:
+  lean toward a roof pitch of about 1.5 (1 is 45 degrees; steeper than the default)."
+- The test frame in the copy's roles: dark_oak_planks, **white_concrete**, spruce_stairs, spruce_planks, dark_oak_log, dark_oak_door,
+  lantern. No white_terracotta.
