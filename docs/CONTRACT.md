@@ -24704,3 +24704,54 @@ without it 7af-unit and cw-unit item 1 fail on any branch off main (the two F7A_
 | lints | lint-structure 59/0, lint-look 13/0, water-lint 123/0 |
 | D3's, CW's and the 7a foundation's own steps | run `gate-runs-d3up/20261024-045544-change` at 38633af6 (turbo, 3 shards + 3 lanes): d3-unit 7/0, d3-ingame 26/0, d3-side 9/0, d3-steward 23/0, d3-walled 7/0, d3-natural 4/0, d3-survival 5/0, cw-ingame 28/0, cw-survival 5/0, cw-natural 13/0; cw-unit 349/2 and 7af-unit 347/2, only the two stale exceptions above |
 | the re-run after the gate fix | run `gate-runs-d3up/20261024-052832-change` at 7d4e4c0e: 7af-unit 349/0, cw-unit 351/0 (the two exceptions read "identical: the base already has it") |
+
+## Release v0.43.0 as integrated (6c D3, the 7a foundation, 7a CW; branch `release/0.43.0`, 2026-10-24, DEV MODE)
+
+Branch `release/0.43.0` over slice/D3 cd197da8, which holds main 49ccb988 (v0.42.0 plus the 7a foundation, CW and the gate tooling):
+the tree main will be once D3 merges. Not merged, tagged or published: the coordinator does that. DEV MODE: a cheap tag, no
+release-tier run. **Versions:** API **1.40.0**, mod **0.43.0**, kit **0.41.0**, catalogue **13**.
+
+### What it does for a player
+
+- **A new district can join a town that already stands** (D3). Its street reaches into the town and meets one of the town's streets
+  at an end or as a T on a straight side, square on, without touching the town's buildings, lamps, verges or water. Towns that are
+  only partly built count; only a town still being placed or removed refuses.
+- **Catwalks along a cliff** (CW): a plank deck with brackets and rails along a rock face, where a path can't go at grade.
+- **A region removal that is refused, or stops before it removes anything, leaves the region as it was** instead of PARTIAL (D3's
+  fix of a 0.42.0 bug, found in Steward's RC).
+
+### What it does for Steward
+
+- `Regions.checkBeside` (a dry beside plan that keeps nothing), `BesideVerdict`, `BesideJoin`: since 1.40.0. Features
+  `besideReach` and `besideCheck` (sidecar `region.plan.besideReach`, `region.plan.dry`) and `catwalks` (`region.catwalks`).
+- plan/0: the 7a connector defs (stair, switchback, ladder, rock_stair, lift, catwalk, stairs_around; reserved but catwalk),
+  `connector.span_bridge` supported as an alias of bridge, `NO_CLIMB`, R25-R27; `connector.catwalk` supported. Catalogue 13.
+- Kit output changed, so a region planned on kit 0.40.0 goes `PLAN_STALE` and Steward re-checks it.
+- Steward's RC passed on D3 (0cb5f7a7); no new RC.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.40.0 --mod 0.43.0 --kit 0.41.0 --catalogue 13`, one run (8d81d14a):
+- API minor (1.39.0 -> 1.40.0) for D3's method and records and the three features (CONTRACT "Java API": a minor adds methods);
+  kit 0.40.0 -> 0.41.0 for the kit output changes.
+- **Catalogue 13**: the foundation and CW changed entries and left the number to the merge (catalogue 12 archived as
+  `fixtures/plan/catalogue-pre7a.json`). The 6d RV2 text's "catalogue 13" for `revision.grow` becomes the next free number then.
+- 13 placeholders stamped (four sinceApi in plan.json and the golden each, `catwalks` in ArchitectApi.features, BesideJoin,
+  BesideVerdict, the two Regions javadocs), plus ApiCWTest's javadoc by hand.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo, links_demo_flat, s3.
+- `--check` (strict, release context): consistent, no placeholder left. `catalogue-since-check`: every sinceApi at or below 1.40.0.
+
+### Suites (release/0.43.0 at 8d81d14a; the later merge adds only the gate7a-kit fix and docs)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 883 tests, 0 failed, 1 skipped; `mod/build/libs/architect_mc-0.43.0.jar` |
+| kit | 857/857 (release context: NEXT refused) |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| api-compat | against this build's classes: the 0.42.0, 0.41.0, 0.40.1 and 0.40.0 apitest jars and the 0.42.0 jar's 1.39.0 surface, 5/5 clean |
+| in game | D3's, CW's and the foundation's own steps on slice/D3 (D3 as built, "Brought up to main"); no release-tier run (DEV MODE) |
+
+### Known issues carried forward
+
+- Everything listed under v0.42.0's, and D3's queued items (PLAN "Queued from slice D3").
+- If another slice reaches main before D3, this branch is stale: re-merge and re-run `release-version.mjs --check`.
