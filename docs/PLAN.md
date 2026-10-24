@@ -1274,3 +1274,16 @@ U4 (materials-only vs bible, $10.67): bible mode scored a bit higher on fit, but
 1. **U5a (now):** the default for built-in and hand-made Styles is materials-only PLUS the Style's description, roof language and proportions as guidance in the brief. No shared components, no "follow it over your taste". A Style never borrows another Style's (rustic's) components.
 2. **U5b (now):** support for adding parts (components) to any Style. A "Add parts…" action drafts a component set for an existing Style (a Claude bible job seeded from the Style, as a new version), plus a per-design "use this style's parts" option, available only when the Style has its own parts (set mode). Medieval's main wall moves off white terracotta (renders salmon) to a whiter block.
 3. **Then:** author parts for the 15 built-ins without them (paid, about $20-40; confirm the cap with Noah first), then one A/B: hints vs parts-bible.
+
+### U5 (slice/U5, built 2026-10-24; ready for review)
+U5a and U5b as in CONTRACT "Style unification U5 (as built)". Decisions for Noah and the coordinator:
+- A built-in's parts go on a hand-made copy (`bib_<name>_parts`), not a built-in version. The 15 then get authored parts by
+  promoting copies' `components.mjs` into `kit/bibles/<id>/` (as rustic's).
+- "Add parts" costs at most $1.16-1.55 per Style (the bible-job seed; no drafting pass), so at most about $17-23 for the 15.
+- No Steward RC (additive; Steward's Claude bibles keep set mode).
+
+Queued from U5:
+- (a) the Style's hints on a massing request (Massing first gets them only at the detail pass);
+- (b) cozy's plaster is white_terracotta (the same salmon);
+- (c) parts jobs get their own estimate kind once measured;
+- (d) a promotion tool for authored built-in parts.
