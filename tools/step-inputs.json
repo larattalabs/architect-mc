@@ -25533,6 +25533,59 @@
    ],
    "verified": "20261023-114540-release voc-ingame"
   },
+  "u2-ingame": {
+   "classes": [
+    "jar",
+    "sidecar",
+    "world"
+   ],
+   "roots": [
+    "tools/gateu2.mjs"
+   ],
+   "closure": [
+    "kit/lib/blocks.mjs",
+    "kit/lib/kit.mjs",
+    "kit/lib/nbt.mjs",
+    "kit/lib/styles.mjs",
+    "mod/gradle.properties",
+    "tools/gateu2.mjs",
+    "tools/gen-palettes.mjs",
+    "tools/lib/basestamp.mjs",
+    "tools/lib/devclient.mjs",
+    "tools/lib/run6b.mjs",
+    "tools/lib/server-host.mjs",
+    "tools/lib/sprint.mjs",
+    "tools/lib/wsserver.mjs",
+    "tools/run-gate6b-client.sh",
+    "tools/run-headless-server.mjs"
+   ],
+   "globs": [
+    "kit/examples/cabin/**",
+    "mod/src/test/resources/stub-sidecar/**"
+   ],
+   "dynamic": [],
+   "env": [
+    "ARCHITECT_BOT_VIEW_DISTANCE",
+    "ARCHITECT_DEV_PORT",
+    "ARCHITECT_DEV_TOKEN",
+    "ARCHITECT_GAME_DIR",
+    "ARCHITECT_SERVER_EULA",
+    "ARCHITECT_SIMULATION_DISTANCE",
+    "ARCHITECT_XMX",
+    "GATE6B_CLIENT_SCRIPT",
+    "GATE6B_DEV_PORT",
+    "GATE6B_OUT",
+    "GATE6B_RUN",
+    "GATE6B_SIDECAR_PORT",
+    "GATE_SPRINT",
+    "GRADLE_USER_HOME",
+    "JAVA_HOME"
+   ],
+   "gradleUse": "compile",
+   "eager": [
+    "tools/gateu2.mjs"
+   ]
+  },
   "u1-ingame": {
    "classes": [
     "jar",
@@ -36127,6 +36180,7 @@
     "kit/lib/blocks.mjs",
     "kit/lib/kit.mjs",
     "kit/lib/nbt.mjs",
+    "kit/lib/styles.mjs",
     "mod/gradle.properties",
     "tools/gateui2b.mjs",
     "tools/gen-palettes.mjs",
@@ -51052,6 +51106,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -51395,6 +51450,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -51762,6 +51818,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -52129,6 +52186,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -52496,6 +52554,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -52863,6 +52922,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
@@ -53230,6 +53290,7 @@
     "kit/lib/reserved.mjs",
     "kit/lib/sdf.mjs",
     "kit/lib/specschema.mjs",
+    "kit/lib/styles.mjs",
     "kit/lib/vocab.mjs",
     "kit/lib/vocab/budget.mjs",
     "kit/lib/vocab/groups.mjs",
