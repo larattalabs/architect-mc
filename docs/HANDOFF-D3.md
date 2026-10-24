@@ -58,11 +58,12 @@ On disk (sidecar plan dir): `reach-survey.bin`, `held.json`, `standing.json`, an
       b2b92d3d), d3-steward (20261023-173524-6cd3 at 5e0860a9), d3-unit (20261023-173830-6cd3). Evidence rows in the as-built.
 - [x] Merged origin/main (v0.42.0) at 89b29157; head 41c19d00 pushed. step-inputs rebuilt (230 steps). Kit 819/0, gradle build
       green, lints green, sidecar regions tests green.
-- [~] Slice tier `20261023-212002-slice`: every D3 step PASS; 11 load TIMEOUTs and 5 FAILs, none on D3's paths (see the as-built
-      evidence). Their rerun is queued (`--only` the 16 steps, out `artifacts/gate-runs-d3/<ts>-slice`, lock
-      `../architect-mc-D3-gate.lock`).
-- [x] Gate-verifier PASS at 41c19d00 (items 7, 8, 10, 12 and 15 rerun).
-- [ ] Steward RC (S-D3-7) on the branch head.
+- [x] Slice tier `20261023-212002-slice`: every D3 step PASS; the unrelated load timeouts and failures were dropped by the
+      coordinator (DEV MODE, 2026-10-24).
+- [x] Gate-verifier PASS at 41c19d00.
+- [x] Steward RC on 28720a05: finding 1 (a refused removal left the region PARTIAL: main's since C23) and finding 2 (own wall ->
+      [wall]) fixed; d3-steward with the RC row 23/0 at 0d8eac82.
+- [ ] The verifier's strict re-run of the removal row, then Steward's re-run on the head.
 
 ## Notes from the first in-game round
 

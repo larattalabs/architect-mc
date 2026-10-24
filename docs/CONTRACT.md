@@ -24618,3 +24618,33 @@ The first in-game round found one kit bug and four driver bugs, all fixed:
 Observation for main (not D3's): `Prepare.chunksOf(claim)` covers the claim plus 2 chunks. A tile at a claim edge off the 64-grid
 needs a third chunk for its window (tile 437 spans x 27968..28031 and needs chunk 1747), so a region realised in never-generated land
 after a prepare can wait `NOT_GENERATED` on its edge tiles.
+
+### Steward's RC (2026-10-24): two findings, fixed
+
+1. **A refused removal left the region PARTIAL** (blocker). Steward's e2e removed its district with `dev.region.remove` and no
+   requester. The owner rule refused it (`g39 is owned by steward_mc:settlement/set_31, not the player; pass force`), but the region
+   went REMOVING and then ended PARTIAL, with nothing removed and no reason in its log line. This was **main's behaviour since C23**
+   (f3f63c84), not D3's. It needs a 0.42.x note. The fix:
+   - `RegionsImpl.removeGroup` checks the owner rule before the region goes REMOVING. Unless a removal is already running for
+     another caller (C23's case (e), unchanged), a refusal is answered with its blocker. The region's state, its sites' records
+     and the journal stay exactly as they were, and the log says "removal refused, nothing changed".
+   - A removal that ends not removed, having written nothing, puts the region back in the state it had (it was PARTIAL before).
+     "Written nothing" (`Groups.endedUntouched`) means: its undo never planned or committed, no member's restore begun, nothing
+     restored or handed down, and no fluid drained (`RegionFluids.drainStarted`). This covers a player in a box past the wait, the
+     owner's things in a box, covered cells refused, and an unreadable journal.
+   - Every stop logs its reason (`finishRemoval` takes it on each path).
+   - d3-steward gains a row in the RC's shape (Steward's owner and lot ext, pads only, the player at the town's east edge):
+     - the no-requester remove is refused and named, the region is still PLACED, every site's record and the journal's entries are
+       unchanged, and the world hash is unchanged;
+     - then the owner removes the district first: REMOVED, E-flat 0 over its claim and reach, the town's hash unchanged;
+     - then, realised again, the town first and then the district: both REMOVED, E-flat 0 over both claims.
+2. **A town inside its own wall answered NO_JOIN [route]** (minor). `besideStanding` and `BesideReach.standing` now carry the town's own
+   K1 wall columns (`walls`: the `w_<id>` parts' columns), only when it has a wall, so an unwalled town's standing data and shas are
+   unchanged. `wallEncloses` treats those columns as another owner's wall, so the answer is `NO_JOIN [wall]`. There's a kit unit test
+   (without the walls the answer is [route], with them [wall]) and a Java one (`DistrictLandTest.standingCarriesItsOwnWalls`).
+
+| item | where | result |
+|---|---|---|
+| RC finding 1 (removal) | d3-steward, run `20261024-023059-change` at 0d8eac82 (DEV MODE) | PASS, 23 ok / 0 FAIL, the RC row included |
+| removal regression | run `20261024-020754-slice` at e0bbb44f | x-resume (C23) 35/0, d3-ingame (items 7, 8, 10) 26/0, d3-unit 7/0. x-ingame 52/1: its api-compat found every reference missing because the frozen-source worktree had no compiled classes (main's new runner, not D3's) |
+| RC finding 2 (own wall) | kit `districts-d3.test.mjs` (the choice test), Java `DistrictLandTest` | pass; Java 7/7 |

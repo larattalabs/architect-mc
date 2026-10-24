@@ -1149,6 +1149,14 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
 
 ## Queued from slice D3 (builder, 2026-10-23)
 
+- **0.42.x note (main's since C23, fixed on slice/D3):** a region removal refused by the owner rule, or stopped before it wrote
+  anything, ended the region PARTIAL with nothing removed. D3 now leaves it as it was and logs the reason (CONTRACT D3 as built,
+  "Steward's RC").
+- **gate6cx's api-compat under the frozen-source runner** finds every reference missing (no compiled classes in `<run dir>-src`);
+  gate6cd3's apicompat compiles first (srcGradle). Worth the same in gate6cx.
+- **`Prepare.chunksOf(claim)` misses a third chunk** for an edge tile's window off the 64-grid: a region realised in never-generated
+  land after a prepare can wait NOT_GENERATED on its edge tiles (CONTRACT D3 as built).
+
 - **Reach as a list (coordinator's ruling, D3).** plan/0's `endpoint.region` allows one standing region's reach per check; a second
   that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
   making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
