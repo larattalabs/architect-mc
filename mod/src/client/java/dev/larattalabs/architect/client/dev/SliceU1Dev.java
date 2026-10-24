@@ -32,7 +32,8 @@ public final class SliceU1Dev {
 
 	static JsonObject style(Bible b) {
 		JsonObject o = new JsonObject();
-		o.addProperty("id", b.id());
+		// styleId, not id: a reply's id is the correlation id
+		o.addProperty("styleId", b.id());
 		o.addProperty("version", b.version());
 		o.addProperty("origin", b.origin());
 		o.addProperty("builtin", b.builtin());
@@ -131,7 +132,7 @@ public final class SliceU1Dev {
 					});
 				}).thenCompose(x -> x).exceptionally(SliceU1Dev::refused);
 			});
-		DevBridge.register("dev.style.save", 60_000, "{bibleId?, owner?, style: {name, roles, ...}} - (U1) Bibles.save -> the saved Style {id, version, "
+		DevBridge.register("dev.style.save", 60_000, "{bibleId?, owner?, style: {name, roles, ...}} - (U1) Bibles.save -> the saved Style {styleId, version, "
 			+ "versions, origin, roles, ...} or {refused}", (req, mc) -> {
 				String bid = req.has("bibleId") && !req.get("bibleId").isJsonNull() ? req.get("bibleId").getAsString() : null;
 				String owner = req.has("owner") && !req.get("owner").isJsonNull() ? req.get("owner").getAsString() : null;

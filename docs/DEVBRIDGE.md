@@ -394,7 +394,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `{refused}`), `dev.style.designState {designId}` (Designs.get -> `{designId, status, step, entryId?, error?, request}`),
   `dev.style.variant {entryId, style, version?, edits: [[field, value]]}` (the Style's roles after `StyleRoles.editMain` edits, then
   `Library.makeVariant` with them inline -> `{entryId, roles, provenance}`), `dev.style.save {bibleId?, owner?, style}` (Bibles.save
-  -> the saved Style) and `dev.style.get {style, version?} | {usable: true}` (Bibles.get / Bibles.usable). `dev.library.variants.set`
+  -> the saved Style `{styleId, version, versions, origin, editable, owner?, roles, tags, basedOn?}`) and `dev.style.get {style, version?} | {usable: true}` (Bibles.get / Bibles.usable). `dev.library.variants.set`
   applies `bible` before the main rows, with the picked bible's roles, so a row edit edits them.
 - **2026-10-19 (6c slice VOC-b):** new (`SliceVocbDev`, generated headless too) `dev.vocab.bibleRequest {prompt, name?, owner?, scope?,
   seedPreset?, rarity?: {...}, opKey?}` (Bibles.request with `BibleRequest.Rarity`, the typed record built from the JSON -> `{jobId, bibleId,
