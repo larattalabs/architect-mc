@@ -297,6 +297,19 @@ public final class Groups {
 	 */
 	public static volatile java.util.function.@Nullable BiConsumer<String, Removed> GROUP_ENDED;
 
+	/**
+	 * (6c D3, Steward's RC) The groups whose last whole-group removal ended not removed and having written nothing: its undo never
+	 * planned or committed, no member's restore begun, no fluid drained (a stop on a blocker before it starts: a player in a box past
+	 * the wait, the owner's things in a box, covered cells refused, the journal unreadable). Read by the region's end (its state stays as
+	 * it was) through {@link #endedUntouched}; set in {@link #end} before {@link #GROUP_ENDED} is called.
+	 */
+	private static final Set<String> UNTOUCHED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** Whether the group's last whole-group removal ended having written nothing (see {@link #UNTOUCHED}). Server thread. */
+	public static boolean endedUntouched(String groupId) {
+		return UNTOUCHED.contains(groupId);
+	}
+
 	private static void groupEnded(String group, Removed result) {
 		var h = GROUP_ENDED;
 		if (h != null) {
@@ -1115,6 +1128,15 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		if (r.stage == null) {
+			boolean untouched = !result.removed() && r.undo == null && r.planned == null && r.current == null && r.undoSites.isEmpty() && r.restoredCells == 0
+				&& result.restored() == 0 && result.handedDown().isEmpty() && !dev.larattalabs.architect.region.RegionFluids.drainStarted(r.group);
+			if (untouched) {
+				UNTOUCHED.add(r.group);
+			} else {
+				UNTOUCHED.remove(r.group);
+			}
+		}
 		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
 		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {
 			STALLED.add(r); // (6c X, C22) restorations are still pending: the retry resumes them

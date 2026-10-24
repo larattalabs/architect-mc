@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Since NEXT (7a CW; docs/CONTRACT.md "Phase 7a slice CW" §7): no new records, methods, reasons or IR kinds; the feature catwalks
+ * Since 1.40.0 (7a CW; docs/CONTRACT.md "Phase 7a slice CW" §7): no new records, methods, reasons or IR kinds; the feature catwalks
  * (sidecar region.catwalks).
  */
 class ApiCWTest {

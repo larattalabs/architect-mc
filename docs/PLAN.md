@@ -1175,3 +1175,18 @@ Slices: U0 kit (S), U1 wire + Steward review (M), U2 StyleForm model with Java/J
 
 ## Queued (coordinator, 2026-10-24; found by Steward)
 - lab-ui composite build: when ../lab-ui is a clean checkout exactly at the consumer's lab_ui_version tag, settings.gradle includeBuild()s it, and the substitution exposes only lab-ui's main source set, not its split client set, so `dev.larattalabs.labui.client.*` doesn't resolve. The same rule exists in Architect, Steward and AgentCraft. Fix in lab-ui (publish the client classes in the composite's variant) or in the shared rule. Workaround: -Plab_ui.dir=none. Also resolve lab_ui 0.2.0 into main's .gradle-home online once when UI-2b merges, so offline builds don't depend on the checkout.
+
+## Queued from slice D3 (builder, 2026-10-23)
+
+- **0.42.x note (main's since C23, fixed on slice/D3):** a region removal refused by the owner rule, or stopped before it wrote
+  anything, ended the region PARTIAL with nothing removed. D3 now leaves it as it was and logs the reason (CONTRACT D3 as built,
+  "Steward's RC").
+- **gate6cx's api-compat under the frozen-source runner** finds every reference missing (no compiled classes in `<run dir>-src`);
+  gate6cd3's apicompat compiles first (srcGradle). Worth the same in gate6cx.
+- **`Prepare.chunksOf(claim)` misses a third chunk** for an edge tile's window off the 64-grid: a region realised in never-generated
+  land after a prepare can wait NOT_GENERATED on its edge tiles (CONTRACT D3 as built).
+
+- **Reach as a list (coordinator's ruling, D3).** plan/0's `endpoint.region` allows one standing region's reach per check; a second
+  that needs the reach answers `NO_FEATURE {why: reach, kind: second}` (CONTRACT D3 §8 allows 2). The IR's `reach` is one member;
+  making it a list touches the evaluator (`compileReach`), M28:beside, the land, the mod's re-check, TileCheck, Drift and Prepare.
+- **A T on a diagonal or turning street** (D3's deferred list): side junctions only on axis-aligned runs of 9+ cells today.

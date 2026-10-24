@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.39.0";
+	String VERSION = "1.40.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -144,7 +144,7 @@ public interface ArchitectApi {
 	 * {@code sketch.outline} are compiled (lots stay axis-aligned rects with a cardinal front, their streets ordinary roads); every
 	 * street road a plan region writes carries the road ext {@code architect_mc:street: {zone, district?}} (S-FL-5), on its
 	 * batch item.
-	 * Since NEXT (7a CW), a CW helper ({@code region.catwalks}) adds {@code "catwalks"}: plan/0's {@code connector.catwalk} (the face
+	 * Since 1.40.0 (7a CW), a CW helper ({@code region.catwalks}) adds {@code "catwalks"}: plan/0's {@code connector.catwalk} (the face
 	 * form: a level deck on brackets along a cliff, railed on its open side) is compiled (route row 10), the graph edge typed
 	 * {@code catwalk} with its crossing {@code {type, length, brackets}}, the siteplan's {@code catwalks[]}. No new record, method or
 	 * reason.

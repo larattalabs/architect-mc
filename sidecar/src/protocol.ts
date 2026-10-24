@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1125,6 +1125,17 @@ export const EntryRevertMsg = z.object({ ...envelope('entry.revert'), entryId: E
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
+// (6c D3) one standing region's reach inputs: its claim's survey blob, the held columns (row runs by owner) and its standing data
+const Runs = z.array(z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()])).max(1 << 20);
+const ReachInputs = z
+  .object({
+    surveyBlobId: BlobId.describe("the town claim's survey (ARSV, resolution 1, loaded chunks only)"),
+    surveySha: Sha256Hex.optional(),
+    held: z.object({ runs: Runs, town: Runs, terrain: Runs }).describe('the held columns over the town claim: every one, the town\'s alone, its terrain\'s alone'),
+    standing: z.object({ id: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/), claim: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]) }).passthrough(),
+  })
+  .passthrough();
+
 // 6a regions (client -> sidecar)
 export const RegionPlanMsg = z.object({
   ...envelope('region.plan'),
@@ -1157,6 +1168,11 @@ export const RegionPlanMsg = z.object({
     })
     .optional()
     .describe("(6c D1) the standing region the plan is laid out beside (Regions.plan's beside): its id, claim, lot boxes, footprint near this claim and graph; a program reads it as ctx.beside"),
+  besideReach: z
+    .union([ReachInputs, z.record(z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/), ReachInputs).refine((o) => Object.keys(o).length <= 2, 'at most 2 standing regions')])
+    .optional()
+    .describe("(6c D3) the reach inputs beside a standing region (a districts plan's beside; a plan check's endpoint.region regions, by id): the town claim's survey (a blob), the held columns and the standing data; the kit's --beside-reach (ctx.besideReach)"),
+  dry: z.boolean().optional().describe("(6c D3) a dry plan (Regions.checkBeside): run in a temporary directory deleted at the end, nothing kept, no blob published, the IR inline"),
   biomes: z
     .object({
       minX: z.number().int(), minZ: z.number().int(), res: z.literal(4), width: z.number().int().min(1).max(1024), depth: z.number().int().min(1).max(1024),

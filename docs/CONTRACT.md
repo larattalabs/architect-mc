@@ -24523,3 +24523,239 @@ catalogue **12**.
 - umt-long's new findings F9, DPT, F10 and PTS are tagged, in the undo-B queue.
 - gate6crs item 4's consumed check reads the wrong field; the kit's virtual world writes over lava; the asks-8703dbd fixtures still to
   retire; lamp spacing on V and D streets (all in PLAN).
+
+## Phase 6c slice D3 as built (branch `slice/D3`, 2026-10-23)
+
+Built against the frozen D3 section above, with Steward's review and the coordinator's rulings. Versions are placeholders (`NEXT`):
+`Regions.checkBeside`, `BesideVerdict` and `BesideJoin` are stamped `Since NEXT`. The kit's `KIT_VERSION` moves at the release
+(`release-version.mjs`); the seam-step goldens are unchanged under the kitVersion-only rule (§10).
+
+### What was built
+
+- **Kit, the reach step** (`kit/lib/region/reach.mjs`). It runs only where D1's seam step finds no port or no dry route, and only
+  with the reach inputs (an older mod or sidecar sends none, so D1's two refusals read as before).
+  - The street network (§3.1): ends are terminal junctions whose one edge is a street (the `architect_mc:street` flag or the
+    `street_` / `st_` stem); sides are straight runs of 9 or more cells, with each run's junctions.
+  - Candidates (§3.2, §3.3): ends (the past-end cell and 3 lead cells, 3 wide) and sides (a 5-cell landing strip, a 3-deep lead and
+    a 3-cell verge contact). Side points are thinned to every 4 cells plus each district end's projection. Sides are kept at least 3
+    from run ends and junctions, the verge carries no lamp, prop, lane or other site, and the height difference is at most 1. The
+    junction's feet sit at the street's own surface in the reach survey.
+  - The choice (§2.2): `chooseReach` takes the cheapest dry route (T2 cost) in lower-bound order, with the prune, at most 48 routes
+    of 2M expansions each, and ties by end before side, then road and (x, z). Before any route, a 4-connected flood over centre
+    cells (hard columns grown by 1, approaches and leads open) skips pairs no walk can reach. It is a superset of what the route pass
+    reaches.
+  - Refusals (§2.5): `NO_JOIN: [apart|street|wall|route|budget] ...`. `wall` means a flood from the district ends never reaches a
+    candidate past another owner's held columns.
+  - The route pass gains a per-edge and pass-level `frame` (rects; outside them, and within the margin of their outer edge, is hard)
+    and a `to.lead` (the goal is reached heading against the end's facing after n straight walk cells). Absent, the pass is today's.
+  - The join is routed graded (no 4e road), in its own part `route_join`. Its footprint behind the junction cell is never its own:
+    no write lands on the street's end column or a verge.
+- **IR (reach-step plans only)**: `reach {standing, runs, rect, cells, hold, contact, lamps?, heldSha, surveySha, standingSha}`,
+  `meta.districts.join.step/.junction/.road`, and `join_external.junction`. A side T's external edge is `<town>:<roadId>`.
+  - `evalTile` writes reach columns (`compileReach`).
+  - `assembleParts` adds the tiles of reach columns.
+  - The budget pass and the plan check's artifact (`finish.mjs`) evaluate over the reach frame's survey.
+  - `MEMBERS_FORMAT2` knows `beside`, `corridor` and `reach`.
+- **Checker**: `M28:beside` (`kit/lib/region/checkBeside.mjs`) and `M25:clear` over the town's bodies, named `<town>:<id>`.
+  - M1 lets `route_join`'s paths leave the claim.
+  - M2's route metric walks the join into its reach: the virtual world carries the reach columns as a walk area
+    (`VWorld.setReach`/`inWalk`), read only by the route metric's graphs (`walkGraph(..., {reach: true})`, also its grade). Every
+    other rule keeps to the claim. Without `reach` the walk graph is main's code path (same cache key, same area), and VWorld's
+    reach columns exist only for an IR with `reach`, so a seam-step plan's report is unchanged by construction. The unit test fails
+    without the fix (`player: false` on the join).
+  - M5 over the join's walk cells in the town (`metrics.M28.M5reach`).
+  - The four broken variants (`spec._unsafe`): `ignoreHeld`, `writeVerge`, `wideReach` and `noHold`, each caught in the unit tests.
+- **The land** (`kit/lib/region/land.mjs` and `region/DistrictLand.java`): equal on the parity fixture
+  (`kit/test/fixtures/d3/parity.json`: a reach end, a side T, a seam join and an outpost, with and without the town and with
+  `standingRemoved`).
+- **plan/0** (§8, §9): `endpoint.region` reaches through `chooseReach` from the leg's other end, its leg in `route_join`. The
+  answer's leg carries `junction` and its notes say `reach: true`. Standing and other-owner regions' `reach` runs are hard to later
+  plans, and C38's ring blocked by a district's reach answers `NO_ROOM {kind: region}`.
+- **Mod**:
+  - At plan: the reach inputs, as follows.
+    - `BesideReach.standing` (= `besideStanding`).
+    - `BesideReach.held` from the journal: all, the town's alone, and its terrain's alone. Terrain means its terrain tiles of
+      stages with no `props*` part.
+    - The town claim's survey (resolution 1, loaded only) as a blob.
+    - These are kept as `<planId>.reach.json` and `.reach-survey.bin`.
+  - At realise, once before any write (§4.4): the re-check. A town in flight answers OVERLAP_BUSY; a gone town answers OTHER,
+    "re-plan". A changed held set over the reach answers OVERLAP, naming the site and column. A C17 area answers PROTECTED; another
+    owner's region answers OVERLAP_OWNED. Through `realiseApproved`, every one of these answers ARTIFACT_STALE.
+  - Prepare and the estimate add the reach's chunks. Drift samples the reach columns against the reach survey. TileCheck writes
+    reach columns (it clipped everything outside the claim).
+  - The hold: one LAYER cell-site item (`architect:hold`, CELL, before = after) of every town-held cell in the hold columns, first in
+    the district's batch.
+  - `architect_mc:land` is set on every districts region at realise; `standingRemoved` is set by the town's removal.
+  - `Regions.checkBeside` is the dry plan (`DRY`): `plan0raw` without `finishPlan`, and the sidecar's `dry`.
+  - Features: `besideReach`, `besideCheck` and `districtLand`.
+  - DevBridge: `dev.region.checkBeside` and `dev.journal.columns`.
+- **Sidecar**:
+  - `region.plan` gains `besideReach` (one, or by region for a check, at most 2), written as `reach-survey[-id].bin`,
+    `held[-id].json`, `standing[-id].json` and `beside-reach.json`, with `--beside-reach` passed to the plan and the check.
+  - `dry`: its own `regions/dry/<id>` directory, removed when the run ends, with no blob published, no IR cache and no previews.
+- **Plan fixtures**: `valid/v7x_d3_endpoint_reach` (an end) and `valid/v7x_d3_district_side` (a side T), each in Steward's plan v1
+  shape with its reach inputs. The broken variants are the districts program's `_unsafe` cases in `districts-d3.test.mjs`. No
+  plan/0 fixture can carry them.
+
+### Deviations (each with the coordinator's ruling, 2026-10-23)
+
+1. **`besideReach.standing`** (§2.4/§10). The standing data the reach step needs (whole-claim footprint, streets, bodies, lamps,
+   props, lights) travels as `besideReach.standing`, and `reach.standingSha` covers it. Approved.
+2. **The reach join is lit** (ruling B). Its route lamps may stand on reach columns: unheld, off the footprint and bodies, never a
+   contact column, and none within 6 of a town lamp (N-D3-2).
+   - lightCover, given `reach`, spreads light over the town's claim, counts the town's lamp parts' own lights
+     (`standing.lights`), and holds the cover over the join's in-town walk cells on their own.
+   - The lamps' columns join `reach.runs` as `reach.lamps`. M28 accepts their writer (the lamps' `props*` part).
+3. **One reach region per plan/0 check** (§8 allows 2). A second answers `NO_FEATURE {why: reach, kind: second}`. Queued in PLAN
+   ("reach as a list").
+4. **The hold op is `reach.hold` plus one LAYER hold item**, not a tile-writer op (§12). The journal effect is the same.
+5. **Steward's in-flight rule applies at `Regions.plan` for every beside plan**, D1's seam plans included. REMOVING now answers
+   OVERLAP_BUSY where it answered OTHER.
+6. **N-D3-2 applies to reach plans only**, so seam-step plans stay byte-identical.
+7. **Item 2's held check on the pinned seam joins counts the 4e road's width.** Its verge row holds a lantern only at its spacing, so
+   it is listed apart: D1's fixture and D2's outpost share 0 written columns with the town's held set. The one verge-row column
+   (11, 55) is the farm lot's apron and a possible lantern spot of the join road. It is listed as §4.3's finding, not changed.
+
+### Evidence
+
+| item | where | result |
+|---|---|---|
+| 1, 2, 17 (kit) | `kit/test/districts-d3.test.mjs`, `districts-d3-parity.test.mjs` | 13 + 1 pass; 300 synthetic towns: 300 joined (143 at a side), 648 terrain-held contact cells; the pinned seam joins share 0 columns |
+| 1 (Java) | `DistrictLandTest` | 5/5: standing and land equal the kit's on every parity case |
+| 2 | the whole kit suite at e75a0e18 | 806/806 pass |
+| lints | at e75a0e18: lint-structure 57/0, lint-look 13/0, water-lint 118/0; p3-lint pass | |
+| 1, 2, 17, 18 (step `d3-unit`) | run `20261023-173830-6cd3` at 5e0860a9 | PASS, 7 ok / 0 FAIL (the kit's D3, D1/D2, P0 and goldens; Java parity; the sidecar; api-compat against the 0.41.0, 0.40.1 and 0.40.0 jars) |
+| 3, 7, 8, 9, 10, 14 (step `d3-ingame`) | run `20261023-173030-6cd3` at b2b92d3d | PASS, 26 ok / 0 FAIL |
+| 4, 5, 13 (step `d3-side`: side, along, kc) | the same run | PASS, 9 ok / 0 FAIL |
+| 11, 13 (step `d3-walled`: walled, pond) | the same run | PASS, 7 ok / 0 FAIL |
+| 15 (step `d3-natural`) | the same run | PASS, 4 ok / 0 FAIL |
+| 16 (step `d3-survival`) | the same run | PASS, 5 ok / 0 FAIL |
+| 6, 11, 12 and Steward's partial town (step `d3-steward`: refusals, steward) | run `20261023-173524-6cd3` at 5e0860a9 | PASS, 17 ok / 0 FAIL |
+
+| slice tier | run `20261023-212002-slice` at 41c19d00 (after the v0.42.0 merge; load 60-100 from other sessions) | 105 PASS, 11 TIMEOUT, 5 FAIL. Every D3 step PASS (d3-unit 7/0, d3-ingame 26/0, d3-side 9/0, d3-steward 17/0, d3-walled 7/0, d3-natural 4/0 with a shore district, d3-survival 5/0), plus d-ingame, 6cd-scenario-districts, d2-ingame-smoke, p0-*, k1a-*, kc-*, unit-mod 881/0. The timeouts are SIGTERMs under load, each with 0 FAIL logged before the kill. The FAILs: unit-sidecar (versions.test.ts hook timeouts), t3b-unit (the recorded perf test), 6b-scenario-s1 (`dev.world.open` timed out), 6c-scenario-s3 (the 120 s plan cap), coa-unit item 6 (the head's asks table equals the committed asks-after.txt byte for byte; only the merge-base "before" table moved, because main now contains COA, so the check is stale) and 6cf2-scenario-scatter/p2 (7 jungle-leaf `distance` changes, not D3's code path). The rerun of these 16 steps is queued |
+| verifier | gate-verifier at 41c19d00: run `gate-runs-d3-verify/20261023-225133-6cd3` | PASS: d3-ingame 26/0 (items 7, 8, 10, 9, 14), d3-steward 17/0 (item 12, item 11, item 6, the partial town), d3-natural 4/0 (item 15). Kit D3/D1/D2/P0/golden suites green at head; diff reviewed, no defects |
+
+The first in-game round found one kit bug and four driver bugs, all fixed:
+- M2 on the join: the kit's walk graph stopped at the district's claim (fixed as above).
+- The driver read refusals through its space-stripping `json()`.
+- Item 11's protected area sat on the reach's rect corner rather than a reach column.
+- The towns 400 blocks off the spawn waited `NOT_GENERATED` (see the observation below), and their beside plans read unloaded chunks as
+  missing (§4: the town's survey reads loaded chunks only). The driver now prepares a plan over the claim grown by 16, and
+  force-loads those towns' claims while it plans beside them.
+
+Observation for main (not D3's): `Prepare.chunksOf(claim)` covers the claim plus 2 chunks. A tile at a claim edge off the 64-grid
+needs a third chunk for its window (tile 437 spans x 27968..28031 and needs chunk 1747), so a region realised in never-generated land
+after a prepare can wait `NOT_GENERATED` on its edge tiles.
+
+### Steward's RC (2026-10-24): two findings, fixed
+
+1. **A refused removal left the region PARTIAL** (blocker). Steward's e2e removed its district with `dev.region.remove` and no
+   requester. The owner rule refused it (`g39 is owned by steward_mc:settlement/set_31, not the player; pass force`), but the region
+   went REMOVING and then ended PARTIAL, with nothing removed and no reason in its log line. This was **main's behaviour since C23**
+   (f3f63c84), not D3's. It needs a 0.42.x note. The fix:
+   - `RegionsImpl.removeGroup` checks the owner rule before the region goes REMOVING. Unless a removal is already running for
+     another caller (C23's case (e), unchanged), a refusal is answered with its blocker. The region's state, its sites' records
+     and the journal stay exactly as they were, and the log says "removal refused, nothing changed".
+   - A removal that ends not removed, having written nothing, puts the region back in the state it had (it was PARTIAL before).
+     "Written nothing" (`Groups.endedUntouched`) means: its undo never planned or committed, no member's restore begun, nothing
+     restored or handed down, and no fluid drained (`RegionFluids.drainStarted`). This covers a player in a box past the wait, the
+     owner's things in a box, covered cells refused, and an unreadable journal.
+   - Every stop logs its reason (`finishRemoval` takes it on each path).
+   - d3-steward gains a row in the RC's shape (Steward's owner and lot ext, pads only, the player at the town's east edge):
+     - the no-requester remove is refused and named, the region is still PLACED, every site's record and the journal's entries are
+       unchanged, and the world hash is unchanged;
+     - then the owner removes the district first: REMOVED, E-flat 0 over its claim and reach, the town's hash unchanged;
+     - then, realised again, the town first and then the district: both REMOVED, E-flat 0 over both claims.
+2. **A town inside its own wall answered NO_JOIN [route]** (minor). `besideStanding` and `BesideReach.standing` now carry the town's own
+   K1 wall columns (`walls`: the `w_<id>` parts' columns), only when it has a wall, so an unwalled town's standing data and shas are
+   unchanged. `wallEncloses` treats those columns as another owner's wall, so the answer is `NO_JOIN [wall]`. There's a kit unit test
+   (without the walls the answer is [route], with them [wall]) and a Java one (`DistrictLandTest.standingCarriesItsOwnWalls`).
+
+| item | where | result |
+|---|---|---|
+| RC finding 1 (removal) | d3-steward, run `20261024-023059-change` at 0d8eac82 (DEV MODE) | PASS, 23 ok / 0 FAIL, the RC row included |
+| removal regression | run `20261024-020754-slice` at e0bbb44f | x-resume (C23) 35/0, d3-ingame (items 7, 8, 10) 26/0, d3-unit 7/0. x-ingame 52/1: its api-compat found every reference missing because the frozen-source worktree had no compiled classes (main's new runner, not D3's) |
+| RC finding 2 (own wall) | kit `districts-d3.test.mjs` (the choice test), Java `DistrictLandTest` | pass; Java 7/7 |
+| verifier (strict: removal) | gate-verifier, run `gate-runs-d3-verify/20261024-025722-change` at 77f4c3d3 (0d8eac82's code) | PASS: d3-steward 23/0 with the RC row; offline kit D3 14/0, DistrictLandTest 7/7, PlanRetentionTest 8/8, ApiRulesTest 12/12; review of the removal fix found no defect |
+
+### Brought up to main (2026-10-24, DEV MODE)
+
+`origin/main` 42956aa5 (the 7a foundation, CW, the frozen-source build, the CPU budget) merged into slice/D3 at d1019551. Steward's RC
+passed on 0cb5f7a7, so no new RC; the conflicts were resolved keeping both sides:
+
+| file | resolution |
+|---|---|
+| `sidecar/src/protocol.ts` FEATURES, `sidecar/test/jobs.test.ts`, `sidecar/test/bundle.e2e.test.ts` | the union, in merge order: main's `region.catwalks`, then D3's `region.plan.besideReach` and `region.plan.dry` |
+| `ApiRules.java` | both mappings: `region.catwalks` -> `catwalks`, then `besideReach` and `besideCheck` |
+| `kit/lib/region/program.mjs` | an edge carries main's `t7` and `profile` in `k1` and D3's `d3` (frame, lead, graded, part, keepBehind). The only semantic merge: main's emission hunks (`rec.t7`, the 7a row segments' early return) auto-merged into D3's split-out `_routeEmit`; every name they use is module-level or local there (cw-unit and 7af-unit exercise it) |
+| `kit/lib/region/passes/route.mjs` | `sctx` has D3's `goalH`/`goalLead` and main's profile (stairs and ladders ANDed, `cost`, `ladderMax`) |
+| `kit/lib/plan/compile.mjs` | main's 7a pass inputs (`...t7`) before D3's reach inputs (`RL`), so the reach's `hard` still overrides last; t7's keys (`rockStair`, `lift`, `catwalk`) collide with none of RL's |
+| `docs/PLAN.md` | main's Watch, UI track and queued sections, then D3's queued section |
+
+Then `tools/step-inputs.json` rebuilt (236 steps; 38633af6). One gate fix (7d4e4c0e): `tools/lib/gate7a-kit.mjs` `unchanged()`
+takes `mergedIf`, so an excepted fixture identical on a base that already holds the 7a foundation passes (as KC's `onBase`);
+without it 7af-unit and cw-unit item 1 fail on any branch off main (the two F7A_MOVED fixtures read UNCHANGED).
+
+| suite / step | result |
+|---|---|
+| kit | 857/857 (`--test-concurrency=4`) |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| mod | `./gradlew build --offline`: 883 tests, 0 failed (LedgerLintTest and RegionFluidsLintTest included: p3-lint) |
+| lints | lint-structure 59/0, lint-look 13/0, water-lint 123/0 |
+| D3's, CW's and the 7a foundation's own steps | run `gate-runs-d3up/20261024-045544-change` at 38633af6 (turbo, 3 shards + 3 lanes): d3-unit 7/0, d3-ingame 26/0, d3-side 9/0, d3-steward 23/0, d3-walled 7/0, d3-natural 4/0, d3-survival 5/0, cw-ingame 28/0, cw-survival 5/0, cw-natural 13/0; cw-unit 349/2 and 7af-unit 347/2, only the two stale exceptions above |
+| the re-run after the gate fix | run `gate-runs-d3up/20261024-052832-change` at 7d4e4c0e: 7af-unit 349/0, cw-unit 351/0 (the two exceptions read "identical: the base already has it") |
+
+## Release v0.43.0 as integrated (6c D3, the 7a foundation, 7a CW; branch `release/0.43.0`, 2026-10-24, DEV MODE)
+
+Branch `release/0.43.0` over slice/D3 cd197da8, which holds main 49ccb988 (v0.42.0 plus the 7a foundation, CW and the gate tooling):
+the tree main will be once D3 merges. Not merged, tagged or published: the coordinator does that. DEV MODE: a cheap tag, no
+release-tier run. **Versions:** API **1.40.0**, mod **0.43.0**, kit **0.41.0**, catalogue **13**.
+
+### What it does for a player
+
+- **A new district can join a town that already stands** (D3). Its street reaches into the town and meets one of the town's streets
+  at an end or as a T on a straight side, square on, without touching the town's buildings, lamps, verges or water. Towns that are
+  only partly built count; only a town still being placed or removed refuses.
+- **Catwalks along a cliff** (CW): a plank deck with brackets and rails along a rock face, where a path can't go at grade.
+- **A region removal that is refused, or stops before it removes anything, leaves the region as it was** instead of PARTIAL (D3's
+  fix of a 0.42.0 bug, found in Steward's RC).
+
+### What it does for Steward
+
+- `Regions.checkBeside` (a dry beside plan that keeps nothing), `BesideVerdict`, `BesideJoin`: since 1.40.0. Features
+  `besideReach` and `besideCheck` (sidecar `region.plan.besideReach`, `region.plan.dry`) and `catwalks` (`region.catwalks`).
+- plan/0: the 7a connector defs (stair, switchback, ladder, rock_stair, lift, catwalk, stairs_around; reserved but catwalk),
+  `connector.span_bridge` supported as an alias of bridge, `NO_CLIMB`, R25-R27; `connector.catwalk` supported. Catalogue 13.
+- Kit output changed, so a region planned on kit 0.40.0 goes `PLAN_STALE` and Steward re-checks it.
+- Steward's RC passed on D3 (0cb5f7a7); no new RC.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.40.0 --mod 0.43.0 --kit 0.41.0 --catalogue 13`, one run (8d81d14a):
+- API minor (1.39.0 -> 1.40.0) for D3's method and records and the three features (CONTRACT "Java API": a minor adds methods);
+  kit 0.40.0 -> 0.41.0 for the kit output changes.
+- **Catalogue 13**: the foundation and CW changed entries and left the number to the merge (catalogue 12 archived as
+  `fixtures/plan/catalogue-pre7a.json`). The 6d RV2 text's "catalogue 13" for `revision.grow` becomes the next free number then.
+- 13 placeholders stamped (four sinceApi in plan.json and the golden each, `catwalks` in ArchitectApi.features, BesideJoin,
+  BesideVerdict, the two Regions javadocs), plus ApiCWTest's javadoc by hand.
+- 6 goldens re-cut, tiles, cells and blobs identical: crossings_demo_flat, grove_demo, grove_demo_flat, links_demo, links_demo_flat, s3.
+- `--check` (strict, release context): consistent, no placeholder left. `catalogue-since-check`: every sinceApi at or below 1.40.0.
+
+### Suites (release/0.43.0 at 8d81d14a; the later merge adds only the gate7a-kit fix and docs)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline`: 883 tests, 0 failed, 1 skipped; `mod/build/libs/architect_mc-0.43.0.jar` |
+| kit | 857/857 (release context: NEXT refused) |
+| sidecar | `npm run check`: 761/761, plus the bundle |
+| api-compat | against this build's classes: the 0.42.0, 0.41.0, 0.40.1 and 0.40.0 apitest jars and the 0.42.0 jar's 1.39.0 surface, 5/5 clean |
+| in game | D3's, CW's and the foundation's own steps on slice/D3 (D3 as built, "Brought up to main"); no release-tier run (DEV MODE) |
+
+`apijars` now runs the latest three releases: 0.42.0 (`artifacts/release-0430/v0420`: the D3 builder's tag build with the tag's
+`tools/`), 0.41.0 and 0.40.1. Not run in game for this cut (DEV MODE); the nightly runs it. The 0.43.0 jars (mod, sources, apitest,
+devserver) are archived in `artifacts/release-0430/v0430/` with a SOURCE.txt, for Steward and the next slice's api-compat.
+
+### Known issues carried forward
+
+- Everything listed under v0.42.0's, and D3's queued items (PLAN "Queued from slice D3").
+- If another slice reaches main before D3, this branch is stale: re-merge and re-run `release-version.mjs --check`.

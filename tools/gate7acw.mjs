@@ -136,7 +136,7 @@ steps.unit = async () => {
 steps.unchanged = async () => {
   const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'CW', except: F7A_MOVED });
+  const u = await K.unchanged(root, { check, log, base: 'CW', except: F7A_MOVED, mergedIf: 'kit/lib/connectors/kinds7a.mjs' });
   fs.writeFileSync(path.join(OUT, 'cw-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   return { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
 };

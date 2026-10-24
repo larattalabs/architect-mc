@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 12,
- "api": "1.39.0",
- "kitVersion": "0.40.0",
+ "catalogueVersion": 13,
+ "api": "1.40.0",
+ "kitVersion": "0.41.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -304,7 +304,7 @@
   },
   {
    "id": "connector.rail",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.40.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "CR",
@@ -330,7 +330,7 @@
   },
   {
    "id": "connector.catwalk",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.40.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -372,7 +372,7 @@
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.40.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "7b",
@@ -380,7 +380,7 @@
   },
   {
    "id": "connector.span_bridge",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.40.0",
    "schemaVersion": 1,
    "state": "supported",
    "aliasOf": "connector.bridge",

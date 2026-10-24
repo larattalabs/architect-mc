@@ -205,7 +205,8 @@ public final class PlanRetention {
 				RegionsImpl.dropPlanKey(scope);
 			}
 			RegionStore.writeJson(p.resolve(planId + ".discarded.json"), tomb);
-			for (String suffix : List.of(".json", ".survey.bin", ".key.json", ".used.json")) {
+			// ((6c D3) a reach plan's reach inputs, RegionsImpl.saveReach's two files)
+			for (String suffix : List.of(".json", ".survey.bin", ".key.json", ".used.json", ".reach.json", ".reach-survey.bin")) {
 				Files.deleteIfExists(p.resolve(planId + suffix));
 			}
 			Files.deleteIfExists(RegionStore.prepare(w, planId));
@@ -318,7 +319,7 @@ public final class PlanRetention {
 		List<String> ids;
 		try (var st = Files.list(p)) {
 			ids = st.map(x -> x.getFileName().toString()).filter(n -> n.endsWith(".json") && !n.endsWith(".key.json") && !n.endsWith(".used.json")
-				&& !n.endsWith(".discarded.json") && !n.equals("discard-pending.json")).map(n -> n.substring(0, n.length() - 5)).sorted().toList();
+				&& !n.endsWith(".discarded.json") && !n.endsWith(".reach.json") && !n.equals("discard-pending.json")).map(n -> n.substring(0, n.length() - 5)).sorted().toList();
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region plans: sweep skipped: {}", e.toString());
 			return out;

@@ -113,6 +113,15 @@ export class VWorld {
     this.written = 0;
   }
   inClaim(x, z) { return x >= this.claim.minX && x <= this.claim.maxX && z >= this.claim.minZ && z <= this.claim.maxZ; }
+  /**
+   * (6c D3) A reach plan's walk area: the claim plus the reach columns (`setReach`), where the join's route runs. Only the route
+   * metric's walk graph reads it (`walkGraph(..., {reach: true})`); every other rule keeps to the claim.
+   */
+  setReach(runs) {
+    this.reachCols = new Map();
+    for (const q of runs ?? []) for (let x = q[0]; x <= q[2]; x++) if (!this.inClaim(x, q[1])) this.reachCols.set(`${x},${q[1]}`, [32767, -32768]);
+  }
+  inWalk(x, z) { return this.inClaim(x, z) || (this.reachCols?.has(`${x},${z}`) ?? false); }
   colIndex(x, z) { return (x - this.claim.minX) + (z - this.claim.minZ) * this.W; }
   sec(x, y, z, make) {
     const k = skey(x >> 4, y >> 4, z >> 4);
@@ -142,6 +151,9 @@ export class VWorld {
       const c = this.colIndex(x, z);
       if (y < this.wLo[c]) this.wLo[c] = y;
       if (y > this.wHi[c]) this.wHi[c] = y;
+    } else if (this.reachCols) {
+      const r = this.reachCols.get(`${x},${z}`);
+      if (r) { if (y < r[0]) r[0] = y; if (y > r[1]) r[1] = y; }
     }
   }
   /** Activate a lot's box (an obstacle: its interior is the declared box, A5B §3). */
@@ -171,7 +183,10 @@ export class VWorld {
   /** The y range a column's cells may change in (written cells, or its pre-region top). */
   colRange(x, z) {
     const t = this.colTop(x, z);
-    if (!this.inClaim(x, z)) return [t, t];
+    if (!this.inClaim(x, z)) {
+      const r = this.reachCols?.get(`${x},${z}`);
+      return r && r[0] <= r[1] ? [Math.min(r[0], t), Math.max(r[1], t)] : [t, t];
+    }
     const c = this.colIndex(x, z);
     return this.wLo[c] <= this.wHi[c] ? [Math.min(this.wLo[c], t), Math.max(this.wHi[c], t)] : [t, t];
   }
@@ -240,6 +255,7 @@ export function buildVirtual({ ir, survey, blobs, volumes = [], onStage, filled 
   const sb = surveyBase(filled ?? survey, pal, volumes);
   const vw = new VWorld({ claim: ir.claim, palette: pal, base: sb.base, colTop: sb.colTop });
   vw.survey = sb.columns;
+  if (ir.reach) vw.setReach(ir.reach.runs); // (6c D3)
   const C = compileIR(ir, { blobs });
   const partIdx = new Map(ir.parts.map((p, i) => [p.id, i]));
   const opPart = C.ops.map((o) => o.part);

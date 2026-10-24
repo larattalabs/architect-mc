@@ -76,6 +76,21 @@ public final class JournalDev {
 					}
 				})).thenCompose(r -> r);
 			});
+		DevBridge.register("dev.journal.columns", 120_000, "{runs: [[x0, z, x1, z]...], dimension?} - 6c D3: every active journal cell in those columns, its "
+			+ "stack bottom first (group, site, entry, layer, policy) -> {cells: [{x, y, z, stack}]}", (req, mc) -> {
+				JsonArray runs = req.getAsJsonArray("runs");
+				String dim = req.has("dimension") ? req.get("dimension").getAsString() : null;
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+					try {
+						JsonObject o = new JsonObject();
+						o.add("cells", dev.larattalabs.architect.region.BesideReach.stacks(dim != null ? dim : Sites.dimensionId(level), dev.larattalabs.architect.region.BesideReach
+							.colsOf(runs)));
+						return o;
+					} catch (java.io.IOException e) {
+						throw new DevBridge.DevException(e.getMessage());
+					}
+				})).thenCompose(r -> r);
+			});
 		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | RG1..RG6 (phase 6a regions) | FL1..FL6 (6c H fluids, HY: FL4 between two reaches written, FL5 a removal between the head and the tail; IRR: FL6 a lot removal's sources drained, its site not restored yet) | (RP) RP1 a tile's realised record written, its PLACING commit not; RP2 a tile with nothing to write: its record written, its item not placed | R2q (fix/drain-holders: a group removal's R2 commit durable and the queue file not saved after it, the crash window between the two) | GW (a group removal: a member written, the next one's job saved) | R1q (a single removal job's R2 commit submitted, its group saved first) | +save on any but GW: chunks saved first | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
