@@ -21,6 +21,8 @@ to 0.2.0. Release this with UI-3, or after it.
     remove (N)", and a click anywhere else disarms it. Your own sites still remove with one press.
   - CrateScreen's Deconstruct is lab-ui `Confirm`. Clicks reach the Confirm first. Esc disarms it. An owned site asks a
     second time on the same arm, as before.
+  - The crate footer keeps the Confirm at the width of its armed label, so arming never shifts the row. The Insert button
+    shortens to "Insert" when "Insert from inventory" doesn't fit.
   - `dev.crate.press deconstruct` twice still deconstructs, which gate3 relies on.
 
 **1. Paged chat lists** (`site/ChatLists`, lab-ui `ChatPager`, 8 a page, `[‹ prev]` / `[next ›]` / `[filter…]`)
@@ -103,7 +105,8 @@ to 0.2.0. Release this with UI-3, or after it.
 
 ## Evidence
 
-- **mod unit tests:** `./gradlew build --offline` gives 885 tests, 0 failures, 1 skipped, at d32a8182. The slice's new tests:
+- **mod unit tests:** `./gradlew build --offline` gives 885 tests, 0 failures, 1 skipped, at d32a8182. Since then only the
+  dev hook, the driver and docs have changed. The slice's new tests:
   - DidYouMeanTest 6
   - ChatListsTest 3
   - VerdictSummaryTest 4
@@ -117,10 +120,11 @@ to 0.2.0. Release this with UI-3, or after it.
   - p3-lint (LedgerLintTest 14, RegionFluidsLintTest 2), 0 failures
 - **`node tools/step-inputs.mjs check`:** 230 steps OK. A new step, `ui2b-ingame` (chain `ui2b`), has an impact rule and a
   step-inputs entry.
-- **In game:** `tools/gateui2b.mjs ingame` passes 30/30 at d32a8182. It uses its own client, run worktree
+- **In game:** `tools/gateui2b.mjs ingame` passes 31/31 at 8a31d7df. It uses its own client, run worktree
   `../architect-mc-UI2b-run`, ports 8896/8897 and the sim sidecar, at $0. The checks cover:
   - every changed command's components and links;
-  - the Placed links run;
+  - `[next ›]`, `[Open in Library]` and `[Undo]` clicked through vanilla's own chat click handler (`dev.ui2b.click`, from the
+    chat screen): each ran with no confirm screen, the Library opened on Placed with the site selected, and Undo removed it;
   - the HUD states;
   - the SiteHud modes;
   - the crate Confirm, including Esc;
@@ -129,7 +133,8 @@ to 0.2.0. Release this with UI-3, or after it.
   There are 24 PNGs: hud_ready, hud_checking, hud_legend, hud_force, hud_ontop_legend, placed_toast_chat, placed_chat_open,
   library_placed, sitehud_full / line / hidden, crate_confirm, helper_strip, status_tab.
 - **Run outside gate-run:** the driver ran directly, not through `gate-run change --only ui2b-ingame`, to stay off the slot
-  queue (D3's turbo run was holding it). The runner can run it as is.
+  queue (D3's turbo run was holding it). `gate-run slice --since origin/main --plan` lists
+  `ui2b-ingame` (client 6b, host client) as defined.
 
 ## For the verifier
 
@@ -147,7 +152,13 @@ did change, for review:
   - the Placed tab's Remove button (label and width);
   - the Status tab's helper block (summary, strip, small print) and its Construction HUD link.
 
-  Nothing in the design form, pickers, LibraryTab or VariantForm.
+  The lab-ui import swap also touched these files, imports only: LibraryTab, DesignForm, SetDialog, RedirectScreen,
+  SetFeature, MassingReview, DesignFeature, LibraryFeature, SurvivalFeature and Launcher. Beyond that, nothing in the
+  design form, pickers, LibraryTab or VariantForm changed.
+- **Where lab-ui 0.2.0 came from.** It resolved through the sibling `../lab-ui` checkout (clean, at tag `v0.2.0`), not the
+  Gradle cache. Main's `.gradle-home` holds only 0.1.0. Offline builds in other worktrees and the frozen snapshots work only
+  while `../lab-ui` stays clean at that tag. Resolve the package online once into main's `.gradle-home`
+  (`GITHUB_TOKEN=$(gh auth token)`, with `../lab-ui` moved off the tag or `LAB_UI_DIR` unset).
 - **lab-ui 0.2.0's `semantic.*` tokens are for text on paper** and are about 2:1 on the ink HUD panels. `HudInk` maps the
   HUDs onto `monitor_dark.*` / `status.*` / `ink_ui.*` instead. Semantic on-ink tokens would be a good lab-ui 0.3
   follow-up; then HudInk becomes a thin alias.
