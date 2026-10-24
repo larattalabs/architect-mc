@@ -18,7 +18,18 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  * ({@code npm ci} prints no percentage when it is not writing to a terminal, so the progress is the elapsed time, the moving
  * bar and npm's own last line). Only until the helper first runs in this session: a later reconnect stays quiet.
  */
-final class HelperProgressHud implements HudElement {
+public final class HelperProgressHud implements HudElement {
+	private static volatile @org.jspecify.annotations.Nullable String previewLabel;
+	private static volatile @org.jspecify.annotations.Nullable String previewNpm;
+	private static volatile long previewSince;
+
+	/** DevBridge {@code dev.ui2b.helperPreview}: draw the strip with this label (null = the real state only). */
+	public static void preview(@org.jspecify.annotations.Nullable String label, @org.jspecify.annotations.Nullable String npm) {
+		previewLabel = label;
+		previewNpm = npm;
+		previewSince = System.currentTimeMillis();
+	}
+
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
 		Minecraft mc = Minecraft.getInstance();
@@ -27,16 +38,17 @@ final class HelperProgressHud implements HudElement {
 		}
 		State st = Launcher.state();
 		boolean installing = st == State.INSTALLING;
-		if (!installing && !(st == State.STARTING && !Launcher.readyToasted())) {
+		String pl = previewLabel;
+		if (pl == null && !installing && !(st == State.STARTING && !Launcher.readyToasted())) {
 			return;
 		}
 		Font font = mc.font;
 		Kit.Padding p = Kit.padding("tooltip");
 		int w = Math.min(240, g.guiWidth() / 2 - 8);
 		int inner = w - p.left() - p.right();
-		String npm = installing ? Launcher.installLine() : null;
-		long since = Launcher.installStartedAt();
-		String label = Launcher.summary() + (since > 0 ? " " + ProgressStrip.elapsed(since) : "");
+		String npm = pl != null ? previewNpm : installing ? Launcher.installLine() : null;
+		long since = pl != null ? previewSince : Launcher.installStartedAt();
+		String label = (pl != null ? pl : Launcher.summary()) + (since > 0 ? " " + ProgressStrip.elapsed(since) : "");
 		int h = p.top() + p.bottom() + ProgressStrip.H + (npm != null ? 10 : 0);
 		int x = 4;
 		int y = 4;
