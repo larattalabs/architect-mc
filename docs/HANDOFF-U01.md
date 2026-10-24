@@ -63,4 +63,7 @@ lists what Steward is asked to accept. API: additive only, a minor bump at merge
   - Java: `StyleRolesTest` (JS/Java parity cases), `ApiStyleU1Test`, `VariantFormTest`, the Wire tests and `FieldLimitsTest`.
 - **Lints:** structure (59 cases), look (13) and water (123), all 0 FAIL.
 - **Other checks:** `step-inputs check` and api-compat (0.42.0, 0.41.0 and the 0.42.0 surface).
-- **In game:** `u1-ingame` (`tools/gateu1.mjs ingame`, headless, sim, $0). See the run under `artifacts/gate-runs-U01/`.
+- **In game:** `u1-ingame` (`tools/gateu1.mjs ingame`, headless, sim, $0): **PASS**, 29/29 checks, on the tree merged with main
+  e00af4ab (v0.43.0). Evidence: `artifacts/gate-runs-U01/20261024-054804-change/` (`gate6b/u1-ingame.json`).
+- **After the merge with main:** `./gradlew build --offline` (901 tests, 0 failures); sidecar `tsc` and vitest (766/766, with the
+  bundle built); api-compat against the 0.43.0 apitest jar and the 0.43.0 surface.
