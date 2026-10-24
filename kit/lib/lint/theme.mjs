@@ -11,16 +11,9 @@ const nameOf = (s) => String(s).replace(/\[.*$/, '');
 const NATURAL_DECOR = new Set(['minecraft:moss_carpet', 'minecraft:mangrove_roots', 'minecraft:muddy_mangrove_roots']);
 
 /**
- * Known exceptions (recorded, not gated; each has its PLAN item "Queued from the theme rule"): the writer, the block, why.
+ * Known exceptions (recorded, not gated): the writer, the block, why. Empty since "Theme rest" (docs/CONTRACT.md); the functional ones live in style.mjs UNTHEMED_OK.
  */
-export const THEME_KNOWN = Object.freeze([
-  { part: /^links_(t\d+|tunnels)$/, block: 'minecraft:glowstone', why: "T3's tunnel lamp: a light role that can't sit flush in the lining (a lantern) falls back to glowstone (tunnelGeom.mjs flush light)" },
-  { part: /^route_lamps$/, block: 'minecraft:soul_lantern', why: "route_demo's own lamp: fixtureFor('minecraft:soul_lantern') hard-coded (route_demo.mjs)" },
-  { part: /^lamps$/, block: 'minecraft:soul_lantern', why: "forms_demo's own lamp posts: spruce fence and soul lantern hard-coded (forms_demo.mjs)" },
-  { part: /^brook_r\d+$/, block: 'minecraft:iron_bars', why: "HY-c's water gate: a waterlogged iron-bars grate where a brook passes a wall (fluids/gate.mjs GRATE_STATE)" },
-  { part: /^props_planter$/, block: 'minecraft:iron_trapdoor', why: "VOC-c's no-wood palette rule swaps a planter's wooden trapdoor for iron (plan/palette.mjs)" },
-  { part: /^w_.*wall$/, block: 'minecraft:iron_door', why: "VOC-c's no-wood palette rule swaps a gate's wooden door for iron (plan/palette.mjs)" },
-]);
+export const THEME_KNOWN = Object.freeze([]);
 export const knownTheme = (o) => THEME_KNOWN.find((k) => k.part.test(o.part) && k.block === o.block) ?? null;
 
 /**

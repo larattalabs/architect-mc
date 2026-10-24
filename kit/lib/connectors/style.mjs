@@ -106,7 +106,11 @@ export function doorOf(frameBlock) {
 }
 
 /** (7a CL theme, Noah 2026-10-24) Functional blocks a connector may write that no role themes: ladders, air, fluids, chains, cauldrons, beds. */
-export const UNTHEMED_OK = Object.freeze(new Set(['minecraft:air', 'minecraft:cave_air', 'minecraft:ladder', 'minecraft:water', 'minecraft:lava', 'minecraft:chain', 'minecraft:iron_chain', 'minecraft:scaffolding', 'minecraft:vine', 'minecraft:water_cauldron', 'minecraft:cauldron']));
+export const UNTHEMED_OK = Object.freeze(new Set(['minecraft:air', 'minecraft:cave_air', 'minecraft:ladder', 'minecraft:water', 'minecraft:lava', 'minecraft:chain', 'minecraft:iron_chain', 'minecraft:scaffolding', 'minecraft:vine', 'minecraft:water_cauldron', 'minecraft:cauldron',
+  // (theme rest, Noah 2026-10-24) iron, where nothing else does the job: bars hold HY-c's water gate (still water passes, mobs don't:
+  // a fence would not, and the grate state is shared with the mod's fluid op); iron's door and trapdoor are the only doors VOC-c's
+  // no-wood rule can swap a wooden one for when the plan's roles have none of their own (a copper role gives copper_door first)
+  'minecraft:iron_bars', 'minecraft:iron_door', 'minecraft:iron_trapdoor']));
 const SHAPES = Object.freeze(['slab', 'stairs', 'wall', 'fence', 'fence_gate', 'door', 'trapdoor', 'pressure_plate', 'button']);
 /**
  * The role a block traces to (Noah: "everything should be themed"): the role whose block, or one of whose shape variants (slab,
