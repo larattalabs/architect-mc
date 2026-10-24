@@ -25157,6 +25157,5 @@ Intended deviations (the moved fixtures; the drivers' byte-identity checks name 
 - goldens re-cut (`scenarios/goldens/`): crossings_demo_flat (tunnel lamp cells), forms_demo (lamp posts: the light role's fixture; 13875 -> 13869 cells), route_demo (lamp spacing from the light role's level; 11837 -> 11817 cells). Their headers record kit 0.42.0 now.
 - plan fixtures with a tunnel (glowstone -> the lantern in a niche): rs/rs04_tunnel, tunnel/tn05_water_3, tunnel/tn13_via_lenient, tunnel/tn14_glass_params, valid/v37_tunnel, valid/v38_auto_crossings, valid/v38b_auto_tunnel, valid/v40_postern.
 - lint fixture `kit/test/fixtures/lint/tunnel_hill`.
-`kit/test/fixtures/lint/tunnel_hill` was
-patched in place (its palette's glowstone entry is the standing lantern, its bom 9 lanterns), not re-planned: re-planning needs
-the seed world (`T3B_WRITE_FIXTURE=1 node tools/gate6ct3b.mjs fixture`).
+`kit/test/fixtures/lint/tunnel_hill` was re-planned by the planner (step `t3b-fixture`, a headless checkPlan on a fresh copy of the seed world; same survey and frozen volume).
+Baseline: vocc-unit item 3 and hy-unit item 11 failed on origin/main 395fd5c8 too (CL's three asks, quarter_stair, long_stair, cave_ladders, against tables committed before CL); `tools/lib/fl-norm.mjs` `clAskLine` and the stair/ladder tally rows now compare them by part and kind.

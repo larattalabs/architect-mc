@@ -48,6 +48,7 @@ export function flAsksFilter(text) {
   for (const l of String(text).split('\n')) {
     if (/^# 59 asks/.test(l)) continue;
     if (/^\s+(layout\.(ring|grid|organic|spiral)|locator\.around|sketch\.outline)\s+\d+$/.test(l)) continue;
+    if (/^\s+connector\.(stair|ladder)\s+\d+$/.test(l)) continue; // (7a CL) the gap table's tally rows its three movers change
     const head = /^([a-z0-9_]+)(\/| )/.exec(l);
     if (head && !l.startsWith(' ')) inBlock = asks.includes(head[1]) && head[2] === ' ';
     if (head && asks.includes(head[1])) continue;
