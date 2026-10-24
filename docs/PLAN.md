@@ -1268,3 +1268,9 @@ version a mod has pinned, and `bible.delete` refuses it, as it does for an entry
 
 ## U3 look approved (Noah, 2026-10-24)
 The unified Design editor, the Style browser and editor, and the Library screens (gallery https://claude.ai/artifact/SchCjqK9aDRvcnnhTZbezi) are approved as built. Next in the Style unification: U4, the materials-only vs bible A/B (paid; needs Noah's spend approval).
+
+## After U4 (Noah, 2026-10-24)
+U4 (materials-only vs bible, $10.67): bible mode scored a bit higher on fit, but every built-in borrowed rustic's components, so variety dropped. The fit gain likely comes from the Style's shape hints. Noah's decisions:
+1. **U5a (now):** the default for built-in and hand-made Styles is materials-only PLUS the Style's description, roof language and proportions as guidance in the brief. No shared components, no "follow it over your taste". A Style never borrows another Style's (rustic's) components.
+2. **U5b (now):** support for adding parts (components) to any Style. A "Add parts…" action drafts a component set for an existing Style (a Claude bible job seeded from the Style, as a new version), plus a per-design "use this style's parts" option, available only when the Style has its own parts (set mode). Medieval's main wall moves off white terracotta (renders salmon) to a whiter block.
+3. **Then:** author parts for the 15 built-ins without them (paid, about $20-40; confirm the cap with Noah first), then one A/B: hints vs parts-bible.
