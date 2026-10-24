@@ -660,6 +660,7 @@ public final class LibraryFeature {
 		if (entryStyle != null) {
 			f.styleForm.pick(entryStyle);
 			f.styleText.clear();
+			f.ownWordsMode = false;
 		} else if (r != null && r.has("style") && r.get("style").isJsonPrimitive()) {
 			String style = r.get("style").getAsString();
 			if (DesignSpec.find(DesignSpec.STYLES, style) != null) {
@@ -693,6 +694,9 @@ public final class LibraryFeature {
 		String name = r != null && r.has("name") && r.get("name").isJsonPrimitive() ? r.get("name").getAsString() : c.name();
 		f.name.set(name.length() > DesignSpec.MAX_NAME ? name.substring(0, DesignSpec.MAX_NAME) : name);
 		f.notes.clear();
+		// (U3) the words that went with its Style (the notes' first line "Style: …")
+		f.styleNote.set(r != null && r.has("notes") && r.get("notes").isJsonPrimitive() ? dev.larattalabs.architect.design.StyleNote.split(r.get("notes")
+			.getAsString()).note() : "");
 		f.remix = id;
 		f.sendError = null;
 	}

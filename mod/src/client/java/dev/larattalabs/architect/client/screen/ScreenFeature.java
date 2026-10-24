@@ -286,6 +286,18 @@ public final class ScreenFeature {
 				form.styleText.set(s);
 			}
 		}
+		// (U3) words alongside the picked Style; "Own words" (the words are the style, no Style)
+		if (f.has("styleNote")) {
+			form.styleNote.set(f.str("styleNote"));
+		}
+		if (f.has("ownWords")) {
+			if (f.bool("ownWords")) {
+				form.useOwnWords();
+			} else {
+				form.ownWordsMode = false;
+				form.styleText.clear();
+			}
+		}
 		if (f.has("materials")) {
 			form.materials.set(f.str("materials"));
 		}

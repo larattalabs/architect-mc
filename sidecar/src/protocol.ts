@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1157,6 +1157,16 @@ export const BibleSaveMsg = z.object({
   owner: Owner.optional().describe("who saves it (by convention <modid>:<thing>); absent = the player. An existing Style's owner must match"),
   bible: z.record(z.string(), z.unknown()).refine((b) => JSON.stringify(b).length <= 64 * 1024, 'bible is larger than 64 KB'),
 });
+/**
+ * (Style unification U3, feature `bible.check`) The test-house check of a Style without saving it: the kit's validation as bible.save
+ * runs it (tools/bible.mjs validate: the roles build a palette, a small test house passes the checker). No Claude call, $0. Acks
+ * { ok, errors: [...], warnings: [...] }.
+ */
+export const BibleCheckMsg = z.object({
+  ...envelope('bible.check'),
+  bible: z.record(z.string(), z.unknown()).refine((b) => JSON.stringify(b).length <= 64 * 1024, 'bible is larger than 64 KB'),
+  scope: z.enum(['building', 'settlement']).optional(),
+});
 // 5b
 const EntryId = z.string().regex(LIBRARY_ID).max(64);
 export const EntryVersionsMsg = z.object({ ...envelope('entry.versions'), entryId: EntryId });
@@ -1331,6 +1341,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BibleDeleteMsg,
   BibleArchiveMsg,
   BibleSaveMsg,
+  BibleCheckMsg,
   EntryVersionsMsg,
   EntryDeltaMsg,
   EntryRevertMsg,

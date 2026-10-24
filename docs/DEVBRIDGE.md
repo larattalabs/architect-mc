@@ -196,6 +196,33 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.ui.open` | {tab?: design\|library\|designs\|status} - open the Architect screen |
 | `dev.ui.state` | {} - the open Architect screen: tab, focus, controls [{id, label, state, x, y}] (GUI px) |
 
+### The Style screens (Style unification U3)
+
+The editor's controls are on `dev.ui.click` (ids below); a control in a closed section or a closed ⋯ menu stays clickable there (zero
+size). The editor: `submit` (Generate), `design:save_draft`, `design:restore_draft`, `design:discard_draft`, `section:<what|style|materials|
+features|rules|parameters|design_more_roles>`, `type:<id>`, `design:type` (the searchable list), `style:<id>`, `style:own_words`,
+`style:browse`, `palette:<field>` (the row's full-screen picker), `material:<field>=<value>`, `role:<role>`, `style:revert`, `style:save`
+(the name field), `style:save_confirm`, `feature:<id>`, `design:profile`, `design:massing_first`, `design:critique`. VARIANT (the Variants
+dialog): `variant:style:<id>`, `variant:browse`, `variant:remix`, `variant:make`, `variant:save_draft`, `variant:cancel`, `param:*`, and the
+old `preset:<name>` / `bible:<id>`. The Library: `place`, `edit`, `more` (⋯), its items (`variants`, `remix`, `rename`, `tags`, `favorite`,
+`export`, `export_schem`, `compare`, `revert_entry`, `critique`, `place_plot`), `delete` (a lab-ui Confirm: the first press arms it),
+`jobs:approve`, `jobs:redirect`, `jobs:aside`, `jobs:open`, `library:empty_action`.
+
+| hook | arguments, result |
+|---|---|
+| `dev.u3.state` | {} - the open screen: the Style browser (cards, selected, detail lines, canEdit, menu), the Style editor (draft view, check, errors, saveLabel, request, controls), Describe a style, a picker (its id, debug state), or the Architect screen's editor folds |
+| `dev.u3.sections` | {set: {<key>: bool}} - fold or open the editor's sections (`architect_mc.editor.*`, `architect_mc.variant.*`, `architect_mc.style_editor.*`) |
+| `dev.u3.browser.open` | {for?: design\|variant, current?} - the Style browser; using a Style picks it for the Design tab's form or the open Variants dialog |
+| `dev.u3.browser` | {select?, query?, rail?, menu?: new\|builtin\|tags\|null, item?: copy\|builtin\|describe, builtin?: id, favourite?, use?} - drive the open Style browser |
+| `dev.u3.click` | {control} - the browser's use / duplicate / edit; the Style editor's save, cancel, back, feature:<id>, tag:remove:<t>, role:<role>, material:<field>=<v>, palette:<field>, section:*; Describe a style's draft / cancel |
+| `dev.u3.editor.fill` | {name?, addTags?, removeTag?, main?: {field: value}, roles?: {role: block}, features?: [toggle]} - edit the open Style editor |
+| `dev.u3.describe.fill` | {name?, prompt?} - type into Describe a style |
+| `dev.u3.picker` | {query?, pick?, back?} - the open material or role picker |
+| `dev.u3.back` | {} - Esc on the open Style screen or picker |
+| `dev.u3.saveAs` | {mode: design\|variant, name?} - Save as style… of an editor's custom mix |
+
+`dev.design.fill` also takes `styleNote` (words alongside the Style) and `ownWords` (true: the words are the style, no Style).
+
 ### Library
 
 | hook | arguments, result |
@@ -353,6 +380,12 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-24 (Style unification U3):** new (`U3Dev`, client only) `dev.u3.state`, `dev.u3.sections`, `dev.u3.browser.open`,
+  `dev.u3.browser`, `dev.u3.click`, `dev.u3.editor.fill`, `dev.u3.describe.fill`, `dev.u3.picker`, `dev.u3.back`, `dev.u3.saveAs`;
+  `dev.design.fill {styleNote, ownWords}`. Changed: the Architect screen's pop-ups are searchable lists (`option:<popup>:<id>` are now
+  zero-size controls); `design:bible` opens the Style browser; `palette:<field>` opens a full-screen picker (Design tab and Variants
+  dialog alike); the Library's `delete` is a two-press Confirm in the ⋯ menu; `submit` reads "Generate".
 
 - **2026-10-24 (slice UI-2b):** new (`SliceUi2bDev`, client only) `dev.ui2b.command {cmd, asPlayer?: true}` (a command's chat output as
   components with their click actions: `{messages: [{text, parts, links}], success, result}`; `dev.command` is unchanged and returns
