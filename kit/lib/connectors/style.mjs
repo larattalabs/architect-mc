@@ -33,7 +33,8 @@ export const CONNECTOR_DEFAULTS = Object.freeze({
   // in structure, then foundation (capped with the trim's slab); a ladder's rest landing the floor role's slab, its rails and gate the
   // rail role's; the ladder block itself is vanilla's (no role))
   stair: { tread: ['path'], rail: ['rail'] }, switchback: { retaining: ['structure', 'foundation'] }, ladder: { ladder: [], landing: ['floor'], rail: ['rail'], gate: ['rail'] },
-  rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] }, catwalk: { deck: [], bracket: [], rail: [] },
+  rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] },
+  catwalk: { deck: ['floor', 'path'], bracket: ['frame'], rail: ['rail'] }, // ((7a CW, N-CW-1) a plank deck in floor then path, brackets in frame, fence rails)
   stairs_around: { tread: [], rail: [], deck: [] },
 });
 

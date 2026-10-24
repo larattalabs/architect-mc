@@ -44,7 +44,7 @@ const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
 const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 
 /** The context every item gets (the core's and the halves'): the run helpers, the kit importer, the output dir, HY-core's helpers. */
-const ctx = { L, OUT, KIT, imp, json, root, check, log, core: CORE };
+const ctx = { L, OUT, KIT, imp, json, root, check, log, core: CORE, sprintWaits: true }; // (speed audit B) sprintWaits: gate6chy-b's game-time settles sprint on a headless host
 
 const steps = {};
 async function run(name) {

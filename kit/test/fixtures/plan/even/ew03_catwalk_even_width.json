@@ -1,0 +1,69 @@
+{
+  "about": "(7a CW, the even-width fuzz) v7a_cw_cliff's catwalk, player-only (widths 1 and 2): the lint's even:catwalk runs it both ways (the face on the left, then on the right) on both axes (the terrain transposed for z); each run's deck lanes must stand on its walk's footprint at both ends (S-LAND), the checker's connector rules clean",
+  "terrain": {
+    "W": 160,
+    "D": 96,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 84
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1059,
+        "z1": 2095,
+        "y": 72
+      },
+      {
+        "x0": 1076,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2095,
+        "y": 72
+      }
+    ]
+  },
+  "anchors": {
+    "west_shelf": [
+      1048,
+      73,
+      2036
+    ],
+    "east_shelf": [
+      1087,
+      73,
+      2036
+    ]
+  },
+  "expect": {
+    "widths": [
+      1,
+      2
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_walk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "west_shelf"
+        },
+        "to": {
+          "anchor": "east_shelf"
+        },
+        "movers": [
+          "player"
+        ],
+        "width": 2
+      }
+    ]
+  }
+}

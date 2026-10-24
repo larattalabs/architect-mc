@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { gatePart } from './lib/gate-part.mjs';
+import { advanceTicks, isHeadless, sprintOn } from './lib/sprint.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -729,11 +730,21 @@ async function survival() {
   // feed and build
   const end = Date.now() + 25 * 60_000;
   let built = [];
+  // (speed audit B) the build is paced by game ticks (the builder's per-tick budget, the hoppers; no wall-clock grace on this path): on a
+  // headless host it is sprinted in 100-tick chunks with SITE_BUILT checked between them (GATE_SPRINT=0 / a client: the 3 s real-time poll)
+  let sprint = sprintOn() && await isHeadless(call);
+  let sprinted = 0;
+  const sw0 = Date.now();
   while (Date.now() < end) {
     built = (await since()).filter((e) => e.event === 'SITE_BUILT').map((e) => e.id);
     if (sites.every((s) => built.includes(s))) break;
-    await sleep(3000);
+    if (sprint) {
+      const r = await advanceTicks({ cmd }, 100);
+      sprinted += Math.max(0, r.ticks);
+      if (!r.ok) { log(`  (sprint) survival build: SPRINT INCOMPLETE (${r.why}) after ${sprinted} ticks: real time from here`); sprint = false; }
+    } else await sleep(3000);
   }
+  log(`  (sprint) survival build: ${sprinted} ticks sprinted, ${((Date.now() - sw0) / 1000).toFixed(1)} s${sprintOn() ? '' : ' (GATE_SPRINT=0)'}`);
   const stats = await call('dev.placement.stats', {});
   check(sites.every((s) => built.includes(s)), 'shared crate: the 3 construction sites finished from one hopper chain', { built });
   bar(ownOk(ownTick(stats)), `survival: ${tickText(ownTick(stats))}`, ownTick(stats));

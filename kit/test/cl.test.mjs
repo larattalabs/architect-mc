@@ -202,7 +202,8 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   assert.deepEqual(planCatalogue(), golden);
   const pre = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7a.json'), 'utf8'));
   const d = diffCatalogues(pre, golden);
-  const F = ['connector.span_bridge', 'connector.rail', 'connector.branch_walk']; // (the foundation's: f7a-foundation.test.mjs)
+  // (the foundation's entries are f7a-foundation.test.mjs's, the other 7a slices' flips (CW's catwalk, ...) theirs)
+  const F = ['connector.span_bridge', 'connector.rail', 'connector.branch_walk', ...['rock_stair', 'lift', 'catwalk', 'stairs_around'].map((k) => `connector.${k}`)];
   const cl = (xs) => xs.filter((x) => !F.includes(x.id ?? x));
   assert.deepEqual(cl(d.reservedToSupported), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual(cl(d.schemaVersionBumps).map((x) => x.id).sort(), ['connector.ladder', 'connector.stair', 'connector.switchback']);

@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';

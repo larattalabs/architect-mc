@@ -353,10 +353,24 @@
   },
   {
    "id": "connector.catwalk",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "length": [
+     3,
+     32
+    ],
+    "width": [
+     1,
+     2
+    ],
+    "villagerMinWidth": 2,
+    "approach": 32,
+    "bracketEvery": 4,
+    "outerEdge": 2
+   },
+   "note": "CW: the face form: a level deck shelf on brackets along a cliff or a steep bank, railed on its open side, where a walk would cut deep or go a long way round; never over water (WATER). Decks between buildings at height wait for 7b."
   },
   {
    "id": "connector.rock_stair",
