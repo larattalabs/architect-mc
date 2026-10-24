@@ -140,22 +140,28 @@ final class TileCheck {
 
 	/** (C31) With the region's owner: felling and held leaves stop at its protected areas. */
 	TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window) {
-		this(tile, regionGroup, owner, dim, claim, window, false, java.util.Set.of(), false);
+		this(tile, regionGroup, owner, dim, claim, window, false, java.util.Set.of(), false, null);
+	}
+
+	/** (6c D3) A reach plan's tile: its reach columns (the join's cells in a standing town's claim) are claimed land for writing. */
+	TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window,
+		dev.larattalabs.architect.region.BesideReach.@Nullable Cols reach) {
+		this(tile, regionGroup, owner, dim, claim, window, false, java.util.Set.of(), false, reach);
 	}
 
 	/** (6c B) A brush stroke's tile ({@code RegionRec.brush}): its destruction rule and the owner's other strokes. */
 	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks, java.util.Set<String> layerGroups) {
-		this(tile, regionGroup, null, dim, claim, window, playerBlocks, layerGroups, true);
+		this(tile, regionGroup, null, dim, claim, window, playerBlocks, layerGroups, true, null);
 	}
 
 	/** (C31) A brush stroke's tile with its owner (the stroke owner's protected areas bound felling and held leaves). */
 	TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
 		java.util.Set<String> layerGroups) {
-		this(tile, regionGroup, owner, dim, claim, window, playerBlocks, layerGroups, true);
+		this(tile, regionGroup, owner, dim, claim, window, playerBlocks, layerGroups, true, null);
 	}
 
 	private TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
-		java.util.Set<String> layerGroups, boolean stroke) {
+		java.util.Set<String> layerGroups, boolean stroke, dev.larattalabs.architect.region.BesideReach.@Nullable Cols reach) {
 		this.areas = List.copyOf(Protected.of(dim, owner));
 		this.stroke = stroke;
 		this.playerBlocks = playerBlocks;
@@ -166,7 +172,7 @@ final class TileCheck {
 		this.window = window;
 		this.checked = tile;
 		this.causeOf.defaultReturnValue(-1);
-		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim));
+		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim, reach));
 	}
 
 	/** (RP) Records the tile's realised draft over {@code t}, the tile as evaluated ({@code tile} is it after the fluids gate). */
@@ -201,7 +207,7 @@ final class TileCheck {
 		return this;
 	}
 
-	private static Prep prepare(Packed.Tile t, int[] claim) {
+	private static Prep prepare(Packed.Tile t, int[] claim, dev.larattalabs.architect.region.BesideReach.@Nullable Cols reach) {
 		int n = t.size();
 		int[] idx = new int[n];
 		int k = 0;
@@ -212,7 +218,9 @@ final class TileCheck {
 			int x = BlockPos.getX(p);
 			int y = BlockPos.getY(p);
 			int z = BlockPos.getZ(p);
-			if (x < claim[0] || y < claim[1] || z < claim[2] || x > claim[3] || y > claim[4] || z > claim[5]) {
+			// ((6c D3) a reach column outside the claim's x/z is claimed land for writing: its y range is the claim's)
+			boolean inXZ = x >= claim[0] && z >= claim[2] && x <= claim[3] && z <= claim[5] || reach != null && reach.has(x, z);
+			if (!inXZ || y < claim[1] || y > claim[4]) {
 				clipped++; // REGION_LIMIT: the mod never trusts the evaluator for the claim
 				fcode[i] = dev.larattalabs.architect.region.Realised.CLIP;
 				continue;

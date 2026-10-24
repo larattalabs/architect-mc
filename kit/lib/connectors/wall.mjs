@@ -113,7 +113,8 @@ function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = 
   const forms = r.forms.flatMap((f) => (f.columns ? Array.from({ length: f.columns.length / 3 }, (_, i) => ({ minX: f.columns[3 * i + 1], minZ: f.columns[3 * i], maxX: f.columns[3 * i + 2], maxZ: f.columns[3 * i] })) : f.bounds ? [f.bounds] : []));
   const protectedR = [...env.protectedAreas.map((a) => a.rect), ...env.keepOut];
   const st = walkStanding ? env.standing.find((a) => a.id === walkStanding) : null;
-  const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep])) : env.standingHard;
+  // ((6c D3, §9, S-D3-6) another standing region's reach (a district's join in the town's claim) is an obstacle too: the ring keeps off it)
+  const standingHard = st ? env.standing.flatMap((a) => (a === st ? a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]) : [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep, ...(Array.isArray(a.reach) ? a.reach : [])])) : env.standingHard;
   const overlap = [...zoneRects, ...lots, ...forms, ...env.regions.map((a) => grow(a.rect, 1)), ...env.buildRects.map((a) => grow(a.rect, 1)), ...standingHard.map(rect)];
   const walkCells = [...K.walk];
   if (st) for (const q of st.keep) for (let z = q[1]; z <= q[3]; z++) for (let x = q[0]; x <= q[2]; x++) walkCells.push([x, z, env.S.groundAt(x, z)]);
@@ -198,7 +199,9 @@ function lineOf(K, p, st, wet = null, bodies = true) {
     for (let d = r0; d <= r1; d++) order.push(d);
     const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet, bodies });
     const pl = placeRing(G, tg.rect, order, t);
-    if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect) } } };
+    // ((6c D3, S-D3-6) a ring round a standing region that another standing region's reach (a district's join) blocks: {kind: region})
+    const reachBlocks = tg.standing && K.env.standing.some((a) => a !== tg.standing && Array.isArray(a.reach) && a.reach.length);
+    if (!pl.ok) return { error: { code: pl.code, message: `no clear ring round ${tg.what} at offsets ${r0}..${r1} on its ${pl.side} side (${blockerText(pl.blockers)})`, evidence: { side: pl.side, ring: [r0, r1], blockers: pl.blockers, target: arr(tg.rect), ...(reachBlocks ? { kind: 'region' } : {}) } } };
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: tg, G };
   }
   if (st.form === 'along') return alongOf(K, p, st, bodies);

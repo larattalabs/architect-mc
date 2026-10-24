@@ -49,7 +49,34 @@ final class Drift {
 				cols.add(new int[] {x, z, plan.height[k], inLot(p.ir(), x, z) ? 1 : 0});
 			}
 		}
+		// (6c D3, §2.3) a reach plan: every reach column against the reach survey it was planned on, with the same bars
+		if (p.ir().json().get("reach") instanceof com.google.gson.JsonObject reach) {
+			Columns rs = reachSurvey(level, p.planId());
+			if (rs != null) {
+				BesideReach.colsOf(reach.getAsJsonArray("runs")).forEach((x, z) -> {
+					int i = x - rs.minX, j = z - rs.minZ;
+					if (i < 0 || j < 0 || i >= rs.width || j >= rs.depth) {
+						return;
+					}
+					int k = rs.index(i, j);
+					if (!rs.missing(k)) {
+						cols.add(new int[] {x, z, rs.height[k], 0});
+					}
+				});
+			}
+		}
 		return compare(level, cols, "");
+	}
+
+	/** (6c D3) A reach plan's town-claim survey as kept with the plan, or null. */
+	static @org.jspecify.annotations.Nullable Columns reachSurvey(ServerLevel level, String planId) {
+		try {
+			Path f = RegionStore.plan(level.getServer().getWorldPath(LevelResource.ROOT), planId).resolveSibling(planId + ".reach-survey.bin");
+			byte[] a = RegionStore.read(f);
+			return a == null ? null : Columns.decode(a);
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
 	}
 
 	/** The plan's survey as kept with the plan, or null. */

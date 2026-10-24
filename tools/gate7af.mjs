@@ -57,7 +57,7 @@ steps.unit = async () => {
   check(out.tests.code === 0 && out.tests.fail === 0 && out.tests.pass >= 20, `items 2-4 (kit): the kinds leaf, the hook table (inert stubs), rows 9-11 off, the profiles equal to COST (an edge with each routes as without), the defs, NO_CLIMB, climb, R25-R27; the catalogue golden and its diff against catalogue-pre7a.json exactly §4's three entries; P0 on connector.tube; the span_bridge alias answering as v35's bridge with the note; K1's and T3's foundation tests: ${out.tests.pass} pass, ${out.tests.fail} fail`, out.tests.failing);
   // item 1: inert
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: '7a-foundation', landed: F7A_MOVED });
+  const u = await K.unchanged(root, { check, log, base: '7a-foundation', except: F7A_MOVED, mergedIf: 'kit/lib/connectors/kinds7a.mjs' });
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved, excepted: F7A_MOVED };
   fs.writeFileSync(path.join(OUT, '7af-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   // item 5: the compact plan/0, here and on the merge base

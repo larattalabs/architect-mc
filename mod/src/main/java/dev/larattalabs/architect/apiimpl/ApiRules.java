@@ -27,7 +27,9 @@ public final class ApiRules {
 		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile",
 		"schematics", "targetPause", "removalLeavesFeed", "builds", "adopt", "planCatalogueView", "weatheringOurs",
 		// 6c close-out A: keyed artifact pins, the world-start plan sweep, region item waits with their region and parts
-		"keyedPins", "planSweep", "regionWaitParts");
+		"keyedPins", "planSweep", "regionWaitParts",
+		// (6c D3, D-S3) every districts region's land in its ext (architect_mc:land)
+		"districtLand");
 
 	private ApiRules() {
 	}
@@ -90,6 +92,8 @@ public final class ApiRules {
 					case "region.planDiscard" -> "planDiscard"; // 6c close-out A: the helper removes a discarded plan's dir (Regions.discardPlan)
 					case "plan.layouts" -> "freeLayouts"; // 6c FL: plan/0's layout.ring, .spiral, .grid, .organic, locator.around and sketch.outline
 					case "region.catwalks" -> "catwalks"; // 7a CW: plan/0's connector.catwalk (the face form; route row 10)
+					case "region.plan.besideReach" -> "besideReach"; // 6c D3: the join reaches into a standing town's claim (ends and side T junctions)
+					case "region.plan.dry" -> "besideCheck"; // 6c D3: Regions.checkBeside, a dry beside plan that keeps nothing
 					case "region.walls.along" -> "wallAlong"; // 7a K2: plan/0's wall.along (a wall along a shore, biome edge or ridge)
 					case "region.walls.walk" -> "wallWalks"; // 7a K2: a wall's walk member (a railed, lit walk on the top, player only)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
