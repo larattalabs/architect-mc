@@ -14,7 +14,7 @@
 // kept honest by the realised == virtual SMOKE row (tools/lib/realised-virtual.mjs: a post where the model has none differs).
 import { hasTag, info } from '../blocks.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from '../region/geom.mjs';
-import { F_WRITTEN } from '../region/vworld.mjs';
+import { F_WRITTEN, naturalBlock } from '../region/vworld.mjs';
 
 export const K = Object.freeze({ AIR: 0, PLANT: 1, STACK: 2, LEAVES: 3, LOG: 4, WATER: 5, LAVA: 6, DIRT: 7, SAND: 8, STONE: 9, MUD: 10, PATH: 11, BUILT: 12, BUILT_OPEN: 13, BLOCK_ENTITY: 14 });
 const LANTERN_SPACING = 12, LANTERN_FIRST = 6;
@@ -22,7 +22,11 @@ const FENCE = 'minecraft:oak_fence[east=false,north=false,south=false,waterlogge
 const LANTERN = 'minecraft:lantern[hanging=false,waterlogged=false]';
 
 const kindCache = new Map();
-/** RoadTerrain.kind over a block state string (the kit's tags for vanilla's; frozen-water ice counts as ice here, not water). */
+/**
+ * RoadTerrain.kind over a block state string (the kit's tags for vanilla's). Any other natural block (the virtual world's natural rule,
+ * the mod's TerrainFit.natural) is STONE ground, or PLANT with no collision, as RoadTerrain falls back to it (rs-survival item 14: land
+ * ice). Ice over water is WATER in the mod (RoadTerrain.frozenBelow), which needs the cells under it: kindAt in layRoadLanterns.
+ */
 export function roadKind(state) {
   let k = kindCache.get(state);
   if (k !== undefined) return k;
@@ -46,9 +50,25 @@ export function roadKind(state) {
   else if (hasTag(name, 'minecraft:dirt') || hasTag(name, 'minecraft:substrate_overworld') || hasTag(name, 'minecraft:grass_blocks') || hasTag(name, 'minecraft:moss_blocks')) k = K.DIRT;
   else if (hasTag(name, 'minecraft:sand') || name === 'minecraft:gravel') k = K.SAND;
   else if (hasTag(name, 'minecraft:base_stone_overworld') || hasTag(name, 'minecraft:base_stone_nether') || hasTag(name, 'minecraft:badlands_terracotta') || /^minecraft:(sandstone|red_sandstone|clay|snow_block|terracotta)$/.test(name)) k = K.STONE;
+  else if (naturalBlock(name)) k = bi && bi.collision === 'none' ? K.PLANT : K.STONE;
   else if (bi && bi.collision === 'none' && (bi.v === 'PLANT' || bi.family === 'plant')) k = K.PLANT;
   else k = bi && bi.collision === 'none' ? K.BUILT_OPEN : K.BUILT;
   kindCache.set(state, k);
+  return k;
+}
+const ICE_TOP = /^minecraft:(ice|packed_ice|blue_ice|frosted_ice)$/;
+const FROZEN_DEPTH = 3; // mod Columns.FROZEN_DEPTH
+const WATERY = (state) => /^minecraft:(water|bubble_column)\b/.test(state) || /waterlogged=true/.test(state);
+/** RoadTerrain.kind at a cell: roadKind, with ice over water (water within FROZEN_DEPTH under it, only ice or water between) as WATER. */
+export function roadKindAt(stateAt, x, y, z) {
+  const s = stateAt(x, y, z);
+  const k = roadKind(s);
+  if (!ICE_TOP.test(s.replace(/\[.*$/, ''))) return k;
+  for (let dy = 1; dy <= FROZEN_DEPTH; dy++) {
+    const b = stateAt(x, y - dy, z);
+    if (WATERY(b)) return K.WATER;
+    if (!ICE_TOP.test(b.replace(/\[.*$/, ''))) return k;
+  }
   return k;
 }
 const ground = (k) => k === K.DIRT || k === K.SAND || k === K.STONE || k === K.MUD || k === K.PATH;
@@ -65,6 +85,7 @@ export function layRoadLanterns(vw, ir, { protect = () => false, preFix = null }
   const out = { posts: [], skipped: 0, lights: [] };
   const st = (x, y, z) => P.states[vw.get(x, y, z)];
   const own = (x, y, z) => (vw.flags(x, y, z) & F_WRITTEN) !== 0;
+  const kindAt = (x, y, z) => roadKindAt(st, x, y, z);
   for (const r of ir.roads ?? []) {
     if (!r.lanterns) continue;
     const pi = partIdx.get(r.part) ?? -1;
@@ -94,13 +115,13 @@ export function layRoadLanterns(vw, ir, { protect = () => false, preFix = null }
         if (walk.has(`${qx},${qz}`) || !vw.inClaim(qx, qz)) continue;
         for (const dy of [0, 1, -1]) {
           const y = t + 1 + dy; // the post's cell (the feet row over the surface row t)
-          const bs = st(qx, y - 1, qz), below = roadKind(bs);
+          const bs = st(qx, y - 1, qz), below = kindAt(qx, y - 1, qz);
           const foot = preFix === 'lamp-path'
             ? ground(below) || (below === K.BUILT && own(qx, y - 1, qz))
             : (ground(below) && below !== K.PATH) || ((below === K.BUILT || below === K.PATH) && own(qx, y - 1, qz));
           if (!foot) continue;
           if (!lamp) {
-            const f = roadKind(st(qx, y, qz)), l = roadKind(st(qx, y + 1, qz));
+            const f = kindAt(qx, y, qz), l = kindAt(qx, y + 1, qz);
             if (!open(f) || !open(l) || f === K.STACK || l === K.STACK || protect(qx, qz)) continue;
             vw.set(qx, y, qz, P.of(FENCE), 0, pi);
             vw.set(qx, y + 1, qz, P.of(LANTERN), 0, pi);
@@ -113,8 +134,8 @@ export function layRoadLanterns(vw, ir, { protect = () => false, preFix = null }
           const cs = [];
           for (const [along, ddy, state] of lamp.cells) {
             const cx = qx + along * dx, cz = qz + along * dz, cy = y + ddy;
-            const kd = roadKind(st(cx, cy, cz));
-            const under = roadKind(st(cx, cy - 1, cz));
+            const kd = kindAt(cx, cy, cz);
+            const under = kindAt(cx, cy - 1, cz);
             ok = open(kd) && kd !== K.STACK && (along === 0 || !walk.has(`${cx},${cz}`)) && !protect(cx, cz)
               && (preFix === 'lamp-path' || under !== K.PATH || own(cx, cy - 1, cz));
             if (!ok) break;

@@ -26,6 +26,8 @@ const NATURAL_CLASSES = new Set(['AIR', 'ROCK', 'SOIL', 'LOOSE', 'ICE', 'SNOW', 
 // cell to write over (the mod's CellCond refuses them); a coral wall fan (no voxel class of its own) is the reef's, as the mod counts it
 const NOT_NATURAL = new Set(['minecraft:bedrock', 'minecraft:tripwire']);
 const naturalState = (name, vc) => (NATURAL_CLASSES.has(vc) && !NOT_NATURAL.has(name)) || /_coral_wall_fan$/.test(name);
+/** The virtual world's natural rule for a block id (the mod's TerrainFit.natural, kept equal by kit/test/natural-drift.test.mjs). */
+export const naturalBlock = (name) => naturalState(name, voxelClassOf(name));
 const GRAVITY = /(^minecraft:(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|anvil|chipped_anvil|damaged_anvil|pointed_dripstone|scaffolding)$)|_concrete_powder$/;
 
 /** A palette of block states with the per-state facts the rules need. */

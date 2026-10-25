@@ -24402,6 +24402,8 @@ no version set (the coordinator's at merge).
   - Its street_e stops on untouched `minecraft:packed_ice`: `RoadTerrain` classes natural ground blocks that `TerrainFit.natural`
     knows as BUILT. The region ends PARTIAL (96.7%). Removal still gives E-normal 0 unclassified.
   - Queued in PLAN as its own slice; evidence `artifacts/gate-runs-coB/20261023-080517-slice`.
+  - **Fixed (fix/nightly-infra, 2026-10-25):** `RoadTerrain.kind` counts every solid block of the mod's natural rule
+    (`TerrainFit.natural`, `CellCond.alsoNatural`) as STONE ground; see PLAN "Queued from 6c close-out B".
 - **The final slice at 34aab6bc** (`gate-runs/20261023-093624-slice`, turbo): 87 PASS, 4 FAIL, 1 TIMEOUT.
   - rs-survival-smoke/p4: item 14, recorded (§11). Its L-V7 rows pass.
   - 6c-scenario-s3: rims 3 open on this run's live survey. Main's kit plans the same IR from it (PLAN).
