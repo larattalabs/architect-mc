@@ -5,7 +5,7 @@ Run: `artifacts/gate-runs-nightly/20261025-080033-release` (release --full --nig
 Re-runs on branch fix/nightly-1025, off origin/main 98d0f3f3, out dir `artifacts/gate-runs-n1025/` (local evidence only):
 - **A** `20261025-230130-change`: 30 offline steps, 3 shards, at 98d0f3f3. Done in 17m51s: 26 PASS, 4 FAIL. The 4 FAILs are the (b)
   fixes below.
-- **B** `20261025-231926-change`: 24 in-game and crash steps, 3 shards. Still running when this was written.
+- **B** `20261025-231926-change`: 24 in-game and crash steps, 3 shards: 22 PASS, 2 FAIL (rs-survival/p4, the known (a); 4e-crash-full without its orders step). 0a-keys and d2-ingame passed, so they stay (c).
 - **D** (`../architect-mc-n1025-runD`): the four fixed (b) steps at the branch head.
 - **C** (`../architect-mc-n1025-runC`): the 11 timing steps, 1 shard, `--judge-timing --quiet-wait`.
 - **E** (`../architect-mc-n1025-runE`): 4e-orders-full then 4e-crash-full. B ran crash without orders, so it failed on its own
@@ -66,16 +66,16 @@ Classes: **(a)** real product bug; **(b)** stale test expectation; **(c)** flake
 | umt-long | c | history timeout 17 min under load (2) | re-run | A PASS 4m25s |
 | unit-kit | c | 20-min timeout, load 33 (2) | re-run | A PASS 8m05s |
 | unit-sidecar | c | 15-min timeout (2) | re-run | A PASS 2m15s |
-| sim-massing | c | "world leave cleared every composite (keys now: 3)": a race under load; passed 4 times on 10-23 | re-run | B pending |
-| apijars | c | timeout 15/30, bars missed under load | re-run | B pending |
-| 0a-keys | c (pending) | the group op sent before the kill was not adopted; the driver sleeps a fixed 3 s before SIGKILL (gate6c0a.mjs:735). Crash recovery stays strict: (c) only if B passes | re-run | B pending |
+| sim-massing | c | "world leave cleared every composite (keys now: 3)": a race under load; passed 4 times on 10-23 | re-run | B PASS |
+| apijars | c | timeout 15/30, bars missed under load | re-run | B PASS |
+| 0a-keys | c (pending) | the group op sent before the kill was not adopted; the driver sleeps a fixed 3 s before SIGKILL (gate6c0a.mjs:735). Crash recovery stays strict: (c) only if B passes | re-run | B PASS |
 | mp-ingame | c | bar: own tick 63.5 > 50 ms | judged re-run | C pending |
 | sch-unit | d | ANSI (3) after the reuse fallback (2) | NO_COLOR fix | A PASS |
 | v-unit | c | 30-min timeout (2) | re-run | A PASS 28s |
 | w-unit | c | 45-min timeout; item 12 "44 pass, 1 fail" read the goldens' kit-suite fallback under load (2) | re-run | A PASS 16s |
 | w-ingame | d | world.open cascade (1) | re-run | B PASS |
 | x-unit | c | timeout (2) | re-run | A PASS |
-| y2-ingame | d | its own `openWorld` (gate6cy2.mjs:93) timed out on dev.world.open: same 10-s budget (1); no rebuild line | re-run | B pending |
+| y2-ingame | d | its own `openWorld` (gate6cy2.mjs:93) timed out on dev.world.open: same 10-s budget (1); no rebuild line | re-run | B PASS |
 | t1-unit | c | timeout (2) | re-run | A PASS |
 | b-ingame | c | bar: strokes p50 3.8 s > 2 s | judged re-run | C pending |
 | pt-ingame | c | bar: classifier 7.89 ms > 1 ms | judged re-run | C pending |
@@ -88,30 +88,30 @@ Classes: **(a)** real product bug; **(b)** stale test expectation; **(c)** flake
 | rs-unit | b | asks tables: CL x3, rail_1 `until CR` (foundation), castle_city walk (K2) | re-cut df9373d4 | A FAIL (old tables), D pending |
 | rs-survival/p4 | a | item 14 PARTIAL 96.7% (6) | write-up | B FAIL (same) |
 | t3a-unit | c | timeout (2) | re-run | A PASS |
-| t3a-look | d | world.open cascade (1) | re-run | B pending |
+| t3a-look | d | world.open cascade (1) | re-run | B PASS |
 | k1b-unit | c | timeout (2) | re-run | A PASS |
 | t3b-unit | c | timeout (2) | re-run | A PASS |
-| t3b-look | d | cascade (1) | re-run | B pending |
+| t3b-look | d | cascade (1) | re-run | B PASS |
 | h-unit | c | timeout (2) | re-run | A PASS |
-| u3-ingame | c | dev.style.designState timed out under load (load 36) | re-run | B pending |
+| u3-ingame | c | dev.style.designState timed out under load (load 36) | re-run | B PASS |
 | vocc-unit | b | CL movers; fixed on main (af947a2a) | none | A PASS |
-| 6cvoc-look | d | cascade (1) | re-run | B pending |
+| 6cvoc-look | d | cascade (1) | re-run | B PASS |
 | hy-unit | b/c | CL movers (fixed on main) plus timeout | none | A PASS |
 | hy-ingame/p3 | c | checkPlan BUDGET: "took longer than 88.1 s" (the maxMs sandbox cap) under load | re-run | B PASS |
 | kc-unit | b | CL movers; fixed on main (af947a2a) | none | A PASS |
-| cl-look | d | cascade (1) | re-run | B pending |
+| cl-look | d | cascade (1) | re-run | B PASS |
 | f3-unit | b | §9: CL's three moved against the pre-CL F3-main kit | fix d8c73dec | A FAIL (old driver), D pending |
 | fl-look | d | cascade (1) | re-run | B PASS |
 | water-lint | c | history timeout 11 min (2) | re-run | A PASS 32s |
 | s2-unit | c | timeout (2) | re-run | A PASS |
 | s3-unit | c | the kit suite missing (2) | re-run | A PASS |
-| s3-plan | c | checkPlan BUDGET: "took longer than 31/46.7 s" under load | re-run | B pending |
+| s3-plan | c | checkPlan BUDGET: "took longer than 31/46.7 s" under load | re-run | B PASS |
 | d-unit | c | timeout (2) | re-run | A PASS |
 | k1a-unit | c | timeout (2) | re-run | A PASS |
-| k1a-look | d | cascade (1) | re-run | B pending |
+| k1a-look | d | cascade (1) | re-run | B PASS |
 | k2-unit | b | after the K2 merge (23235708), base = head: "castle_city UNCHANGED", "moved []" | fix 6d85c744 | A FAIL (old driver), D pending |
-| k2-look | d | cascade (1) | re-run | B pending |
-| d2-ingame | c (pending) | quay undo: 82 "none" cells, water flowing into air at 3651,110,-994. Undo is strict: (c) only if B passes; otherwise check whether that claim's water was unsettled | re-run | B pending |
+| k2-look | d | cascade (1) | re-run | B PASS |
+| d2-ingame | c (pending) | quay undo: 82 "none" cells, water flowing into air at 3651,110,-994. Undo is strict: (c) only if B passes; otherwise check whether that claim's water was unsettled | re-run | B PASS |
 | d3-unit | c | the kit suite missing (2) and timeout | re-run | A PASS |
 | 6cv-scenario-s7 | c/d | bar: own tick 91 ms; scorecard "golden differs" after the base rebuild on the other host (1) | judged re-run | C pending |
 | 4e-megalite | c | bars at load 3-6 (contended earlier) | judged re-run | C pending |
@@ -120,12 +120,12 @@ Classes: **(a)** real product bug; **(b)** stale test expectation; **(c)** flake
 | 5b-village | c | bar 29.8 > 25 ms | judged re-run | C pending |
 | 6a-megaA | c | bar: own tick max 70 ms; E-normal ok | judged re-run | C pending |
 | 6a-crash | c | history timeout 34/40 | re-run | B PASS |
-| 6a-eflat-full | c | timeout 30 min; rows ok | re-run | B pending |
+| 6a-eflat-full | c | timeout 30 min; rows ok | re-run | B PASS |
 | 6b-smoke | c | checktime 120.7 > 120 s | judged re-run | C pending |
-| 6b-ghost | d | cascade (1) | re-run | B pending |
-| 6b-commands | c | the plan never landed ("No plan") after the base rebuilds; hung to the timeout | re-run | B pending |
-| 6b-nudges | c | the devserver restarted the sidecar (STOP_THEN_START: the health check answered empty under load); plan refused SIDECAR_UNAVAILABLE in the gap | re-run | B pending |
-| 6b-versionc | d | cascade (1) | re-run | B pending |
+| 6b-ghost | d | cascade (1) | re-run | B PASS |
+| 6b-commands | c | the plan never landed ("No plan") after the base rebuilds; hung to the timeout | re-run | B PASS |
+| 6b-nudges | c | the devserver restarted the sidecar (STOP_THEN_START: the health check answered empty under load); plan refused SIDECAR_UNAVAILABLE in the gap | re-run | B PASS |
+| 6b-versionc | d | cascade (1) | re-run | B PASS |
 | 6b-scenario-s1 | c/d | bar: own tick 87 ms; scorecard golden differs after the host-flip rebuild (1) | judged re-run | C pending |
 | lint-structure | c | history timeout 16 min (2) | re-run | A PASS 25s |
 
