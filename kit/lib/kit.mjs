@@ -424,7 +424,7 @@ export const PALETTE_PRESETS = Object.freeze({
   crimson: { wood: 'crimson', stone: 'polished_blackstone_bricks', roof: 'nether_bricks', accent: 'crimson', plaster: 'polished_blackstone' },
   fortress: { wood: 'spruce', stone: 'stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak', stoneTrim: 'polished_andesite' },
   // (Style unification U0, docs/STYLE-UNIFY.md) the word-only style chips as authored built-in Styles (AUTHORED_STYLES)
-  medieval: { wood: 'dark_oak', stone: 'stone_bricks', roof: 'spruce', accent: 'spruce', wall: 'white_terracotta' },
+  medieval: { wood: 'dark_oak', stone: 'stone_bricks', roof: 'spruce', accent: 'spruce', wall: 'white_concrete' },
   nordic: { wood: 'spruce', stone: 'cobbled_deepslate', roof: 'spruce', accent: 'dark_oak', plaster: 'stripped_spruce_wood', path: 'coarse_dirt' },
   japanese: { wood: 'birch', stone: 'mossy_stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak', wall: 'white_wool', plaster: 'birch_planks' },
   cozy: { wood: 'oak', stone: 'mossy_cobblestone', roof: 'dark_oak', accent: 'spruce', plaster: 'white_terracotta' },

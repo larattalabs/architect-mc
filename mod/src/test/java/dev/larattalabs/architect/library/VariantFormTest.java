@@ -157,7 +157,7 @@ class VariantFormTest {
 		com.google.gson.JsonObject b = r.getAsJsonObject("palette").getAsJsonObject("bible");
 		assertEquals("medieval", b.get("id").getAsString());
 		assertEquals("minecraft:birch_log", b.getAsJsonObject("roles").get("frame").getAsString());
-		assertEquals("minecraft:white_terracotta", b.getAsJsonObject("roles").get("wall").getAsString(), "set by the Style: stays");
+		assertEquals("minecraft:white_concrete", b.getAsJsonObject("roles").get("wall").getAsString(), "set by the Style: stays");
 		assertEquals("follows_wood", f.stateJson().getAsJsonObject("provenance").get("frame").getAsString());
 		// a preset is another Style: it replaces the bible
 		f.choosePreset("oak");

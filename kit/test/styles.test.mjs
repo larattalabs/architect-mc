@@ -97,7 +97,7 @@ test('mainOf reads the four rows back from roles: every preset without extras ro
 test('editMain re-derives only the roles that still follow; a Style-set role stays', () => {
   const med = PALETTES.medieval.roles;
   const w = editMain(med, 'wood', 'birch');
-  assert.equal(w.wall, 'minecraft:white_terracotta', 'medieval wall is set by the Style');
+  assert.equal(w.wall, 'minecraft:white_concrete', 'medieval wall is set by the Style');
   assert.equal(w.frame, 'minecraft:birch_log');
   assert.equal(w.floor, 'minecraft:birch_planks');
   assert.equal(w.accent, med.accent);
@@ -170,8 +170,10 @@ test('U2 form: picking a Style fills the materials and its suggested features, m
   assert.equal(v.provenance.frame, 'follows_wood');
   assert.equal(v.provenance.wall, 'style');
   assert.equal(v.mix, false);
-  // unedited: withStyle (the roles inline, the Style's id and version)
-  assert.deepEqual(v.request, { palette: { bible: { id: 'medieval', version: 1, roles: { ...PALETTES.medieval.roles } } } });
+  // unedited, a built-in's parts on by default (2026-10-24): set mode with its own parts
+  assert.deepEqual(v.request, { bible: 'medieval', bibleVersion: 1 });
+  // parts off: withStyle (the roles inline, the Style's id and version)
+  assert.deepEqual(formView(apply(st, ['parts', false])).request, { palette: { bible: { id: 'medieval', version: 1, roles: { ...PALETTES.medieval.roles } } } });
 });
 
 test('U2 form: an edit makes a custom mix based on the Style; revert undoes it; the main rows are stored, not read back', () => {
@@ -179,7 +181,7 @@ test('U2 form: an edit makes a custom mix based on the Style; revert undoes it; 
   let v = formView(st);
   assert.equal(v.mix, true);
   assert.equal(v.roles.frame, 'minecraft:birch_log');
-  assert.equal(v.roles.wall, 'minecraft:white_terracotta', 'the Style set the wall: it stays');
+  assert.equal(v.roles.wall, 'minecraft:white_concrete', 'the Style set the wall: it stays');
   assert.equal(v.mainProvenance.wood, 'hand');
   assert.equal(v.request.palette.bible.id, 'medieval', 'a custom mix names the Style it is based on');
   assert.equal(formView(apply(st, ['revert'])).mix, false);
@@ -238,4 +240,15 @@ test('U2 form: Save as style is a bible.save request: roles, tags, suggestedFeat
   const vb = validateBible({ id: 'bib_birch_daub', ...s });
   assert.ok(vb.ok, vb.errors.join('; '));
   assert.equal(formSaveRequest(formNew({ mode: 'new' })), null);
+});
+
+test('every built-in Style ships its own parts, and the form starts "Use this style\'s parts" on for it (BUILTIN_PARTS matches the libraries)', () => {
+  for (const n of BUILTIN_BIBLES) {
+    const s = presetStyle(n);
+    assert.equal(s.parts, builtinBible(n).components.length, `${n}: parts`);
+    assert.equal(s.partsDefault, true, `${n}: partsDefault`);
+    const v = formView(apply(formNew({ mode: 'new' }), ['pick', s]));
+    assert.equal(v.request.bible, n, `${n}: set mode with its own parts`);
+    assert.equal(v.request.palette, undefined, `${n}: no palette`);
+  }
 });

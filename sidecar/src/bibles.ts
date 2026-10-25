@@ -29,6 +29,26 @@ import { ClientError } from './sidecar.js';
 import { keptForKey } from './opkeys.js';
 import { truncate } from './util/text.js';
 
+/** Fields a bible.save / bible.check caller does not set: the store's and the job's own. */
+const SAVE_STORE_FIELDS = ['id', 'version', 'versions', 'builtin', 'preset', 'archived', 'cost', 'critique', 'createdAt', 'dir', 'sheetPath', 'prose', 'components', 'parts', 'partsOf', 'componentsFile', 'owner', 'origin', 'seedPreset', 'ext'];
+
+/**
+ * (Style unification U5) A Style's OWN parts (the components set mode uses), from its bible.json or built-in record:
+ * - `parts` as stored (written by every bible job since U5, by an "Add parts" job, and carried forward by a hand save);
+ * - else a built-in's: the components of the library the kit ships for it (only rustic's, kit/bibles/rustic), none otherwise;
+ * - else a bible job's from before U5 (origin claude, or no origin): its components (it drafted them);
+ * - else (a hand-made Style, `bible.save`): none. Its version folder may hold a copy of the kit's reference library (saves before
+ *   U5 copied it in), which is not its own.
+ */
+export function partsOf(j: Record<string, unknown>, builtin = false): string[] {
+  const strs = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === 'string') : undefined);
+  const stored = strs(j.parts);
+  if (stored) return [...stored];
+  if (builtin) return j.componentsFile ? strs(j.components) ?? [] : [];
+  if (j.origin === 'hand' || j.origin === 'builtin') return [];
+  return strs(j.components) ?? [...REQUIRED_COMPONENTS];
+}
+
 export const BIBLE_SNAPSHOT_LIMIT = 20;
 const BIBLE_KEEP = 100;
 export const MAX_BIBLE_ROUNDS = 3;
@@ -86,6 +106,7 @@ interface BuiltinRecord {
   roles: Record<string, string>;
   components?: string[];
   componentsFile?: string | null;
+  [k: string]: unknown;
 }
 
 const readJson = (f: string): Record<string, unknown> | undefined => {
@@ -124,12 +145,21 @@ export class BibleIndex {
     return list;
   }
 
-  /** The reference components of the kit (a built-in bible without its own uses them: they read the roles). */
+  /**
+   * The starting template of a bible job's components pass: the seed's own library when it ships one, else the kit's reference
+   * library (rustic's). Only a job's starting point (the agent rewrites it); never a Style's parts (U5: no fallback there).
+   */
   referenceComponents(name?: string): string | undefined {
     const b = name ? this.loadBuiltins().find((x) => x.id === name) : undefined;
     if (b?.componentsFile && fs.existsSync(b.componentsFile)) return b.componentsFile;
     const ref = path.join(this.sc.config.kitDir, 'bibles', 'rustic', 'components.mjs');
     return fs.existsSync(ref) ? ref : undefined;
+  }
+
+  /** The built-in record of an id (a palette preset), or undefined. */
+  builtin(id: string): Record<string, unknown> | undefined {
+    const b = this.loadBuiltins().find((x) => x.id === id);
+    return b ? { ...b } : undefined;
   }
 
   private builtinFiles(b: BuiltinRecord): BibleFiles {
@@ -138,13 +168,18 @@ export class BibleIndex {
     const json = path.join(dir, 'bible.json');
     const { componentsFile: _c, ...rest } = b;
     fs.writeFileSync(json, `${JSON.stringify(rest, null, 2)}\n`);
-    return { json, components: this.referenceComponents(b.id) ?? '' };
+    // (U5) only the library the kit ships for this built-in (rustic's); never another Style's
+    return { json, components: b.componentsFile && fs.existsSync(b.componentsFile) ? b.componentsFile : '' };
   }
 
   private builtinInfo(b: BuiltinRecord): BibleInfo {
     return {
       id: b.id, name: b.name, version: b.version ?? 1, versions: [b.version ?? 1], builtin: true, scope: b.scope === 'settlement' ? 'settlement' : 'building', roles: { ...b.roles },
-      components: b.components?.length ? [...b.components] : [...REQUIRED_COMPONENTS],
+      // (U5) what the kit ships: the components of its own library (rustic's), none for the others
+      components: partsOf(b, true),
+      parts: partsOf(b, true),
+      ...(typeof b.roofLanguage === 'string' ? { roofLanguage: b.roofLanguage } : {}),
+      ...numbersOf(b.proportions),
       // (Style unification U1) the built-in Style's metadata (kit/lib/styles.mjs STYLE_META), from a kit that has it
       ...styleFields(b as unknown as Record<string, unknown>),
       origin: 'builtin',
@@ -201,6 +236,12 @@ export class BibleIndex {
       ...(fs.existsSync(path.join(dir, 'sheet.png')) ? { sheetPath: path.join(dir, 'sheet.png') } : {}),
       dir,
       components: Array.isArray(j.components) ? (j.components as string[]) : [...REQUIRED_COMPONENTS],
+      // (U5) its own parts (none for a hand-made Style unless parts were added to it)
+      parts: partsOf(j),
+      ...(typeof j.roofLanguage === 'string' ? { roofLanguage: j.roofLanguage } : {}),
+      ...(typeof j.silhouette === 'string' ? { silhouette: j.silhouette } : {}),
+      ...numbersOf(j.proportions),
+      ...(Array.isArray(j.motifs) ? { motifs: (j.motifs as unknown[]).map((m) => (typeof m === 'string' ? m : typeof (m as { name?: unknown })?.name === 'string' ? (m as { name: string }).name : '')).filter((m) => m) } : {}),
       ...(typeof j.owner === 'string' ? { owner: j.owner } : {}),
       ...(j.ext && typeof j.ext === 'object' ? { ext: j.ext } : {}),
       ...(typeof j.createdAt === 'number' ? { createdAt: j.createdAt } : {}),
@@ -258,7 +299,8 @@ export class BibleIndex {
       const dir = this.versionDir(id, v);
       const info = this.installedInfo(id, v);
       if (!info) throw new ClientError(`bible ${id} v${v}: its bible.json is unreadable`);
-      return { pin: { id, version: v }, files: { json: path.join(dir, 'bible.json'), md: path.join(dir, 'bible.md'), components: path.join(dir, 'components.mjs'), sheet: path.join(dir, 'sheet.png') }, info };
+      // (U5) the components only when they are the Style's own (a hand save before U5 holds a copy of the kit's reference library)
+      return { pin: { id, version: v }, files: { json: path.join(dir, 'bible.json'), md: path.join(dir, 'bible.md'), components: info.parts?.length ? path.join(dir, 'components.mjs') : '', sheet: path.join(dir, 'sheet.png') }, info };
     }
     const b = this.loadBuiltins().find((x) => x.id === id);
     if (b) {
@@ -384,6 +426,7 @@ export class BibleIndex {
    */
   save(req0: { id?: string | undefined; owner?: string | undefined; bible: Record<string, unknown> }): { id: string; version: number; bible: BibleInfo } {
     let req = req0;
+    let carry: { dir: string; parts: string[]; components: string[] } | undefined;
     const given = { ...req.bible };
     const name = typeof given.name === 'string' ? given.name.trim() : '';
     if (!name) throw new ClientError('bible.save: the Style needs a name');
@@ -399,6 +442,8 @@ export class BibleIndex {
         const ok = isModOwned(cur?.owner) ? req.owner === cur?.owner : !isModOwned(req.owner) && (req.owner === undefined || cur?.owner === undefined || req.owner === cur.owner);
         if (!ok) throw new ClientError(`bible ${id} belongs to ${cur?.owner ?? 'the player'}: only its owner can save a new version (duplicate it instead)`);
         if (req.owner === undefined && cur?.owner) req = { ...req, owner: cur.owner };
+        // (U5) a hand edit of a Style with parts keeps them (they read the roles): the head's components.mjs and its list
+        if (cur?.parts?.length && cur.dir && fs.existsSync(path.join(cur.dir, 'components.mjs'))) carry = { dir: cur.dir, parts: [...cur.parts], components: [...cur.components] };
       } else if (this.taken(id)) throw new ClientError(`bible id ${id} is taken`);
     } else {
       const base = `bib_${slugify(name, 40) || 'style'}`;
@@ -407,27 +452,20 @@ export class BibleIndex {
     }
     const version = (this.versions(id).pop() ?? 0) + 1;
     // fields a caller does not set: the store's and the job's own
-    for (const k of ['id', 'version', 'versions', 'builtin', 'preset', 'archived', 'cost', 'critique', 'createdAt', 'dir', 'sheetPath', 'prose', 'components', 'owner', 'origin', 'seedPreset', 'ext']) delete given[k];
-    const bible: Record<string, unknown> = { ...given, id, version, name, ...(req.owner ? { owner: req.owner } : {}), origin: 'hand', createdAt: this.sc.now() };
+    for (const k of SAVE_STORE_FIELDS) delete given[k];
+    const bible: Record<string, unknown> = { ...given, id, version, name, ...(req.owner ? { owner: req.owner } : {}), origin: 'hand', ...(carry ? { components: carry.components, parts: carry.parts } : {}), createdAt: this.sc.now() };
     const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-save-'));
     try {
-      const f = path.join(stage, 'in.json');
-      fs.writeFileSync(f, JSON.stringify(bible));
       const out = path.join(stage, 'bible.json');
-      const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
-      const scope = bible.scope === 'settlement' ? 'settlement' : 'building';
-      const r = spawnSync(process.execPath, [tool, 'validate', f, '--scope', scope, '--write', out], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
-      let v: { ok?: boolean; errors?: string[] } = {};
-      try {
-        v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
-      } catch {
-        /* below */
+      const v = this.validateStyle(bible, stage, out);
+      if (!v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${v.errors.slice(0, 6).join('; ')}`);
+      // (U5) no other Style's components: a hand-made Style has parts only when they were added to it (and a hand edit keeps them)
+      if (carry) {
+        fs.copyFileSync(path.join(carry.dir, 'components.mjs'), path.join(stage, 'components.mjs'));
+        // the kit's normalised bible.json lists components; parts as carried
+        const j = readJson(out) ?? {};
+        fs.writeFileSync(out, `${JSON.stringify({ ...j, components: carry.components, parts: carry.parts }, null, 2)}\n`);
       }
-      if (r.status !== 0 || !v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${(v.errors ?? [truncate(`${r.stdout}${r.stderr}`, 300)]).slice(0, 6).join('; ')}`);
-      fs.rmSync(f);
-      // the reference components (the built-ins' too), so a saved Style also resolves for a group or a bible design
-      const comps = this.referenceComponents();
-      if (comps) fs.copyFileSync(comps, path.join(stage, 'components.mjs'));
       this.install(id, version, stage);
     } finally {
       fs.rmSync(stage, { recursive: true, force: true });
@@ -437,6 +475,43 @@ export class BibleIndex {
     const info = this.installedInfo(id, version);
     if (!info) throw new ClientError(`bible ${id} v${version}: saved, but its bible.json is unreadable`);
     return { id, version, bible: info };
+  }
+
+  /**
+   * (Style unification U3) bible.check: the kit's validation of a Style as bible.save would run it (tools/bible.mjs validate: the
+   * roles build a palette and a small test house passes the checker), without saving anything. No Claude call, $0. The Style editor
+   * shows the result and refuses Save while there are errors; bible.save checks again.
+   */
+  check(req: { bible: Record<string, unknown>; scope?: 'building' | 'settlement' | undefined }): { ok: boolean; errors: string[]; warnings: string[] } {
+    const given = { ...req.bible };
+    for (const k of SAVE_STORE_FIELDS) delete given[k];
+    const name = typeof given.name === 'string' && given.name.trim() ? given.name.trim() : 'Unnamed';
+    const bible: Record<string, unknown> = { ...given, name, ...(req.scope ? { scope: req.scope } : {}) };
+    const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-check-'));
+    try {
+      return this.validateStyle(bible, stage, null);
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+  }
+
+  /** The kit's validate on `bible` (written to <stage>/in.json, removed after); `out`: where the normalised bible.json goes, or null. */
+  private validateStyle(bible: Record<string, unknown>, stage: string, out: string | null): { ok: boolean; errors: string[]; warnings: string[] } {
+    const f = path.join(stage, 'in.json');
+    fs.writeFileSync(f, JSON.stringify(bible));
+    const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
+    const scope = bible.scope === 'settlement' ? 'settlement' : 'building';
+    const r = spawnSync(process.execPath, [tool, 'validate', f, '--scope', scope, ...(out ? ['--write', out] : [])], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
+    let v: { ok?: boolean; errors?: string[]; warnings?: string[] } = {};
+    try {
+      v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
+    } catch {
+      /* below */
+    }
+    fs.rmSync(f, { force: true });
+    const ok = r.status === 0 && v.ok === true;
+    const errors = ok ? [] : v.errors?.length ? v.errors : [truncate(`${r.stdout}${r.stderr}`, 300) || 'the kit gave no verdict'];
+    return { ok, errors, warnings: Array.isArray(v.warnings) ? v.warnings.slice(0, 12) : [] };
   }
 
   /**
@@ -619,6 +694,97 @@ export class Bibles {
     return j;
   }
 
+  /**
+   * (Style unification U5b) bible.parts, "Add parts…": a job that drafts a component set for an existing Style, seeded from its
+   * latest version (roles, hints, tags, owner kept; no drafting pass). It writes the next version of the same Style; a built-in
+   * Style is the kit's, so its parts go on a new hand-made copy based on it (a new id, version 1). The ownership rule is
+   * bible.save's: the player's Style by the player (no owner, or its UUID), a mod's only by that owner.
+   */
+  parts(req: { bibleId: string; version?: number | undefined; owner?: string | undefined; model?: string | undefined; budgetUsd?: number | undefined; opKey?: string | undefined }): { job: BibleJob; from: BiblePin; copy: boolean } {
+    this.sc.ensureClaudeAvailable();
+    const idx = this.sc.bibleIndex;
+    const src = idx.get(req.bibleId);
+    if (!src) throw new ClientError(`no Style "${req.bibleId}"`);
+    if (req.version !== undefined && req.version !== src.version) throw new ClientError(`${req.bibleId} v${req.version} is no longer the latest (v${src.version}): add parts to the latest version`);
+    if (this.active().some((j) => j.bibleId === req.bibleId)) throw new ClientError(`bible ${req.bibleId} is being made or revised already`);
+    const from = { id: src.id, version: src.version };
+    const base = { prompt: truncate(src.prompt ?? src.blurb ?? src.name, 2000), ...(req.model ? { model: req.model } : {}), ...(req.budgetUsd !== undefined ? { budgetUsd: req.budgetUsd } : {}), ...(req.opKey ? { opKey: req.opKey } : {}), ...(src.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(src.rarity ? { rarity: structuredClone(src.rarity) } : {}), partsOf: from };
+    if (src.builtin) {
+      const name = truncate(`${src.name} (parts)`, 40);
+      const stem = `bib_${slugify(`${src.name} parts`, 28) || 'parts'}`;
+      let id = stem;
+      for (let n = 2; idx.taken(id); n++) id = `${stem}_${n}`;
+      const j = this.create('request', id, 1, { ...base, name, ...(req.owner ? { owner: req.owner } : {}) });
+      this.sc.log.info(`bible job ${j.id}: parts for the built-in ${src.id}, as its copy ${id}`);
+      return { job: j, from, copy: true };
+    }
+    // bible.save's ownership rule
+    const ok = isModOwned(src.owner) ? req.owner === src.owner : !isModOwned(req.owner) && (req.owner === undefined || src.owner === undefined || req.owner === src.owner);
+    if (!ok) throw new ClientError(`bible ${src.id} belongs to ${src.owner ?? 'the player'}: only its owner can add parts (duplicate it instead)`);
+    const j = this.create('revise', src.id, src.version + 1, { ...base, name: src.name, ...(src.owner ? { owner: src.owner } : {}), notes: 'Add parts: draft the component set for this Style as it is.' });
+    this.sc.log.info(`bible job ${j.id}: parts for ${src.id} -> v${j.version}`);
+    return { job: j, from, copy: false };
+  }
+
+  /**
+   * (U5b) An "Add parts" job's bible: the source Style's bible.json as it is (the store's fields dropped), the job's id, version,
+   * name and owner, validated by the kit like a draft. A built-in's copy is hand-made and based on it; a version of the same Style
+   * keeps its origin and basedOn.
+   */
+  private async seedFromStyle(j: BibleJob, w: BibleWork, scratch: string, scope: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const pin = j.request.partsOf!;
+    let src: Resolved;
+    try {
+      src = this.sc.bibleIndex.resolve(pin);
+    } catch (e) {
+      return { ok: false, error: `the Style to add parts to is gone: ${(e as Error).message}` };
+    }
+    const json = readJson(src.files.json) ?? {};
+    const kept: Record<string, unknown> = { ...json };
+    for (const k of SAVE_STORE_FIELDS) delete kept[k];
+    for (const k of ['prompt', 'scope', 'name', 'format', 'restraint']) delete kept[k];
+    const copy = src.info.builtin;
+    const draft: Record<string, unknown> = {
+      ...kept,
+      // format 2 like every new version; the source's restraint when it had one (a format-1 or hand-made Style: the defaults)
+      ...(json.format === 2 && json.restraint ? { restraint: json.restraint } : {}),
+      components: src.info.parts?.length ? [...src.info.parts] : [...REQUIRED_COMPONENTS],
+    };
+    const v = await this.validate(scratch, { ...draft, format: 2, id: j.bibleId, version: j.version, name: j.request.name ?? src.info.name }, scope);
+    if (!v.ok) return { ok: false, error: `the Style does not validate as a bible: ${truncate(v.errors.join('; '), 1000)}` };
+    const restraint = restraintOf({ ...v.bible, format: 2, ...(draft.restraint ? { restraint: draft.restraint } : {}) });
+    const motifs = Array.isArray(v.bible.motifs) ? (v.bible.motifs as unknown[]) : [];
+    w.bible = {
+      ...v.bible,
+      format: 2,
+      motifs,
+      restraint: { ...restraint, heroMotifs: heroesOf(restraint.heroMotifs, motifs) },
+      id: j.bibleId,
+      version: j.version,
+      name: j.request.name ?? src.info.name,
+      prompt: j.request.prompt,
+      scope,
+      ...(j.request.owner ? { owner: j.request.owner } : {}),
+      ...(j.request.ext ? { ext: j.request.ext } : {}),
+      ...(copy ? { basedOn: { id: pin.id, version: pin.version } } : {}),
+      partsOf: { ...pin },
+      origin: copy ? 'hand' : src.info.origin ?? 'claude',
+      createdAt: this.sc.now(),
+    };
+    let prose = '';
+    try {
+      prose = src.files.md && fs.existsSync(src.files.md) ? fs.readFileSync(src.files.md, 'utf8') : '';
+    } catch {
+      prose = '';
+    }
+    w.prose = prose.trim()
+      ? prose
+      : [`# ${String(w.bible.name)}`, '', src.info.blurb ?? `The Style ${src.info.name}.`, '', ...(src.info.roofLanguage ? [`Roofs: ${src.info.roofLanguage}.`] : []), ...(src.info.silhouette ? [`Silhouette: ${src.info.silhouette}.`] : [])].join('\n');
+    this.writeBible(scratch, w);
+    this.sc.store.markDirty();
+    return { ok: true };
+  }
+
   cancel(jobId: string): BibleJob {
     const j = this.get(jobId);
     if (!j) throw new ClientError(`no bible job "${jobId}"`);
@@ -677,6 +843,17 @@ export class Bibles {
     const bdir = path.join(scratch, 'bible');
     fs.mkdirSync(bdir, { recursive: true });
     const comp = path.join(bdir, 'components.mjs');
+    if (!fs.existsSync(comp) && j.request.partsOf) {
+      // (U5b) the Style's own parts when it has them (a redraft), else the kit's reference library as the template
+      let own = '';
+      try {
+        own = this.sc.bibleIndex.resolve(j.request.partsOf).files.components;
+      } catch {
+        own = '';
+      }
+      const start = own && fs.existsSync(own) ? own : this.sc.bibleIndex.referenceComponents();
+      if (start) fs.copyFileSync(start, comp);
+    }
     if (!fs.existsSync(comp)) {
       if (j.kind === 'revise') {
         const prev = this.sc.bibleIndex.resolve({ id: j.bibleId, version: j.version - 1 });
@@ -780,7 +957,16 @@ export class Bibles {
     w.startedAt ??= this.sc.now();
     const scratch = this.prepare(j);
     const scope = j.request.scope ?? 'building';
-    // ---- 1. the structured bible
+    // ---- 1. the structured bible ((U5b) an "Add parts" job: the Style's own, no drafting pass)
+    if (!w.bible && j.request.partsOf) {
+      if (this.stopped(id)) return 'finished';
+      this.update(id, { status: 'drafting', step: `taking the Style ${j.request.partsOf.id} v${j.request.partsOf.version} as it is` });
+      const s = await this.seedFromStyle(j, w, scratch, scope);
+      if (!s.ok) {
+        this.fail(id, s.error);
+        return 'finished';
+      }
+    }
     if (!w.bible) {
       let retryErrors: string[] | undefined;
       for (;;) {
@@ -861,7 +1047,8 @@ export class Bibles {
         // (5a) format 2: the drafted list (the 5 required plus at most 3) is the library; extra exports are not listed
         const drafted = (w.bible!.components as string[] | undefined) ?? [];
         const comps = w.bible!.format === 2 && drafted.length ? [...new Set(drafted)] : [...new Set([...drafted, ...c.components])];
-        w.bible = { ...w.bible!, components: comps, cost: w.cost };
+        // (U5) the job drafted them: they are the Style's own parts
+        w.bible = { ...w.bible!, components: comps, parts: comps, cost: w.cost };
         const stage = path.join(scratch, 'install');
         fs.rmSync(stage, { recursive: true, force: true });
         fs.mkdirSync(stage, { recursive: true });
@@ -881,7 +1068,7 @@ export class Bibles {
         }
         this.sc.bibleIndex.install(j.bibleId, j.version, stage);
         const info = this.sc.bibleIndex.get(j.bibleId, j.version);
-        if (this.sc.designerName() === 'claude' && w.startedAt) this.sc.estimates.record('bible', j.request.model ?? this.sc.config.bibleModel, w.cost.usd, this.sc.now() - w.startedAt);
+        if (this.sc.designerName() === 'claude' && w.startedAt && !j.request.partsOf) this.sc.estimates.record('bible', j.request.model ?? this.sc.config.bibleModel, w.cost.usd, this.sc.now() - w.startedAt);
         this.update(id, { status: 'done', step: `done: ${j.bibleId} v${j.version} (${comps.length} components${c.warnings.length ? `, ${c.warnings.length} warning(s)` : ''})`, ...(info ? { bible: info } : {}) });
         this.sc.log.info(`bible ${j.bibleId} v${j.version} is ready in ${info?.dir ?? this.sc.config.biblesDir} ($${w.cost.usd.toFixed(4)}${this.sc.config.simCosts && this.sc.designerName() === 'sim' ? ', sim: true, notional' : ''})`);
         this.sc.bibleIndexChanged();
@@ -990,6 +1177,13 @@ export function styleFields(j: Record<string, unknown>): Pick<BibleInfo, 'tags' 
     ...(typeof j.blurb === 'string' ? { blurb: j.blurb } : {}),
     ...(b && typeof b.id === 'string' && Number.isInteger(b.version) ? { basedOn: { id: b.id, version: b.version as number } } : {}),
   };
+}
+
+/** (U5) `{proportions}` with only the numeric members of a stored proportions object (none: {}). */
+function numbersOf(p: unknown): { proportions?: Record<string, number> } {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
+  const o = Object.fromEntries(Object.entries(p as Record<string, unknown>).filter((e): e is [string, number] => typeof e[1] === 'number' && Number.isFinite(e[1])));
+  return Object.keys(o).length ? { proportions: o } : {};
 }
 
 /** A player's UUID (the canonical 8-4-4-4-12 hex form). */

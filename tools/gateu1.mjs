@@ -55,7 +55,7 @@ steps.ingame = async () => {
   data.usable = u.usable;
   for (const id of ['rustic', 'desert', 'medieval', 'nordic', 'japanese', 'cozy', 'fantasy', 'modern']) check(u.usable?.includes(id), `1: Bibles.usable lists the built-in Style ${id}`);
   const med = await call('dev.style.get', { style: 'medieval' });
-  check(med.builtin === true && med.origin === 'builtin' && med.editable === false && med.roles?.wall === 'minecraft:white_terracotta', '1: medieval is a built-in, Duplicate-only Style with its authored roles', med);
+  check(med.builtin === true && med.origin === 'builtin' && med.editable === false && med.roles?.wall === 'minecraft:white_concrete', '1: medieval is a built-in, Duplicate-only Style with its authored roles', med);
 
   // 2. a materials-only design with medieval
   const d = await call('dev.style.design', { style: 'medieval', name: 'U1 Daub Cabin', buildingType: 'cabin' }, 120_000);
@@ -67,7 +67,7 @@ steps.ingame = async () => {
   if (dd.entryId) {
     const j = entryJson(dd.entryId);
     data.entry = { palette: j.palette, bible: j.bible, materials: j.materials };
-    check(j.palette?.bible?.roles?.wall === 'minecraft:white_terracotta' && j.palette?.bible?.id === 'medieval', '2: the entry records the palette with the roles inline', j.palette);
+    check(j.palette?.bible?.roles?.wall === 'minecraft:white_concrete' && j.palette?.bible?.id === 'medieval', '2: the entry records the palette with the roles inline', j.palette);
     check(j.bible?.id === 'medieval' && j.bible?.version === 1, '2: the entry pins the Style the roles came from (medieval v1)', j.bible);
     check(!fs.existsSync(path.join(LIB, dd.entryId, 'bible')), '2: no bible/ folder: never bible set mode');
     // (the sim copies a kit example, which reads the wood set, p.planks, for its walls: the roles it uses must be the Style's, not the
@@ -81,7 +81,7 @@ steps.ingame = async () => {
     const v = await call('dev.style.variant', { entryId: dd.entryId, style: 'medieval', edits: [['wood', 'birch']] }, 200_000);
     data.variant = v;
     check(!!v.entryId && !v.refused, '3: Library.makeVariant with the edited roles inline accepted and installed', v);
-    check(v.roles?.frame === 'minecraft:birch_log' && v.roles?.wall === 'minecraft:white_terracotta', '3: editMain: the frame follows the wood, the Style\'s wall stays', v.roles);
+    check(v.roles?.frame === 'minecraft:birch_log' && v.roles?.wall === 'minecraft:white_concrete', '3: editMain: the frame follows the wood, the Style\'s wall stays', v.roles);
     check(v.provenance?.frame === 'follows_wood' && v.provenance?.wall === 'style', '3: provenance: frame follows wood, wall from the Style', v.provenance);
     if (v.entryId) {
       const j = entryJson(v.entryId);

@@ -164,7 +164,24 @@ public final class Wire4b {
 			Optional.ofNullable(str(o, "owner")), obj(o, "ext").deepCopy(), (int) num(o, "format"), restraint, o.has("archived") && o.get("archived")
 				.isJsonPrimitive() && o.get("archived").getAsBoolean(), o.has("critique") && o.get("critique").isJsonObject() ? Optional.of(o
 				.getAsJsonObject("critique").deepCopy()) : Optional.empty(), strings(o, "tags"), strings(o, "suggestedFeatures"),
-			Optional.ofNullable(str(o, "blurb")), basedOn(o), str(o, "origin"));
+			Optional.ofNullable(str(o, "blurb")), basedOn(o), str(o, "origin"), partsOf(o, comps));
+	}
+
+	/**
+	 * (Style unification U5) A Style's own parts: {@code parts} as the helper (or bible.json, since U5) has them; else a bible job's
+	 * from before U5 (origin claude, or none, not built in): its components; else none (a built-in from an older helper, a hand-made
+	 * Style). The sidecar's {@code partsOf} is the same rule.
+	 */
+	static List<String> partsOf(JsonObject o, List<String> comps) {
+		if (o.has("parts") && o.get("parts").isJsonArray()) {
+			return strings(o, "parts");
+		}
+		boolean builtin = o.has("builtin") && o.get("builtin").isJsonPrimitive() && o.get("builtin").getAsBoolean();
+		String origin = str(o, "origin");
+		if (builtin || "hand".equals(origin) || "builtin".equals(origin)) {
+			return List.of();
+		}
+		return comps.isEmpty() ? REQUIRED_COMPONENTS : comps;
 	}
 
 	/** (Style unification U1) {@code basedOn: {id, version}}, or empty. */

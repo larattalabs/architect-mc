@@ -312,6 +312,10 @@ export function builtinStyles() {
 //   variant mode, only when the Style or roles changed: a preset's name (unedited preset), the four inputs (roles equal to their plain
 //   fan-out), `bible: id` (an unedited installed Style: the 4b re-skin), else the roles inline based on the Style.
 // - Save as style: a bible.save request {name, roles, tags, suggestedFeatures, basedOn, origin: 'hand'}.
+// - (U5b) Parts: a Style with its own parts (`parts`: how many; `partsDefault`: on when picked, as a built-in or Claude-made Style is) offers
+//   "Use this style's parts" in new mode (['parts', on]). On, and the materials still the Style's, the request is set mode
+//   `{bible: id, bibleVersion: version}` instead of the palette; a custom mix sends the palette (the parts read the Style's own
+//   roles). Picking another Style resets it to that Style's default; the hybrid (off) is the default for every other Style.
 
 export const FORM_MODES = Object.freeze(['new', 'variant']);
 const ROLE_ID = /^[a-z][a-z0-9_]{0,31}$/;
@@ -330,15 +334,26 @@ export function formStyle(s) {
     id: kind === 'inputs' ? null : s.id, name: s.name ?? s.id ?? 'custom', version: s.version ?? 1, kind,
     ...(kind === 'inputs' ? { inputs: { ...(s.inputs ?? {}) } } : {}),
     roles, suggestedFeatures: [...(s.suggestedFeatures ?? [])].slice(0, MAX_SUGGESTED_FEATURES), tags: [...(s.tags ?? [])],
+    // (U5b) its own parts, and whether "Use this style's parts" starts on
+    parts: kind !== 'inputs' && Number.isInteger(s.parts) && s.parts > 0 ? s.parts : 0,
+    partsDefault: kind !== 'inputs' && Number.isInteger(s.parts) && s.parts > 0 && s.partsDefault === true,
   };
 }
+
+/**
+ * How many parts every built-in ships (kit/bibles/<id>/components.mjs; bible.test.mjs checks it against builtinBible). Held here
+ * rather than read from bible.mjs so styles.mjs, which many drivers import, does not widen their step inputs to kit/bibles/**.
+ */
+export const BUILTIN_PARTS = 5;
 
 /** A built-in Style (a palette preset) with its metadata. */
 export function presetStyle(name) {
   const p = PALETTES[name];
   if (!p) throw new Error(`no built-in Style '${name}'`);
   const m = STYLE_META[name] ?? { tags: [], suggestedFeatures: [] };
-  return formStyle({ id: name, name: name.charAt(0).toUpperCase() + name.slice(1), version: 1, kind: 'preset', roles: p.roles, suggestedFeatures: m.suggestedFeatures, tags: m.tags });
+  return formStyle({ id: name, name: name.charAt(0).toUpperCase() + name.slice(1), version: 1, kind: 'preset', roles: p.roles, suggestedFeatures: m.suggestedFeatures, tags: m.tags,
+    // every built-in ships its own parts, and "Use this style's parts" starts on for it (Noah, 2026-10-24)
+    parts: BUILTIN_PARTS, partsDefault: true });
 }
 
 function materials(st, s) {
@@ -350,10 +365,11 @@ function materials(st, s) {
 /** A new form: `mode` new or variant, `style` (formStyle) or null, `features` the new mode's starting features (the player's). */
 export function formNew({ mode = 'new', style = null, features = [] } = {}) {
   if (!FORM_MODES.includes(mode)) throw new Error(`form mode must be new or variant (got ${mode})`);
-  const st = { mode, base: null, roles: {}, main: null, prov: {}, features: [], from: [], mine: [], off: [], original: null };
+  const st = { mode, base: null, roles: {}, main: null, prov: {}, features: [], from: [], mine: [], off: [], original: null, useParts: false };
   if (style) {
     st.base = formStyle(style);
     materials(st, st.base);
+    st.useParts = mode === 'new' && st.base.partsDefault;
   }
   if (mode === 'new') {
     st.features = [...new Set(features)].slice(0, MAX_SUGGESTED_FEATURES);
@@ -378,6 +394,7 @@ export function formApply(state, op) {
       const same = styleKey(s) === styleKey(st.base);
       st.base = s;
       materials(st, s);
+      st.useParts = st.mode === 'new' && s.parts > 0 && (same ? st.useParts : s.partsDefault);
       if (st.mode === 'new' && !same) {
         const next = st.features.filter((f) => st.mine.includes(f));
         const from = [];
@@ -393,6 +410,7 @@ export function formApply(state, op) {
       return st;
     }
     case 'unpick':
+      st.useParts = false;
       st.base = null;
       st.roles = {};
       st.main = null;
@@ -451,6 +469,13 @@ export function formApply(state, op) {
       st.from = [];
       return st;
     }
+    case 'parts': {
+      if (st.mode !== 'new') throw new Error('a variant\'s parts are in its code');
+      if (!st.base) throw new Error('pick a Style first');
+      if (!(st.base.parts > 0)) throw new Error('this Style has no parts of its own (Add parts… first)');
+      st.useParts = a === true;
+      return st;
+    }
     default:
       throw new Error(`unknown form op '${kind}'`);
   }
@@ -461,12 +486,21 @@ export function formMix(st) {
   return !!st.base && (!sameMap(st.roles, st.base.roles) || !sameMap(st.main, mainOf(st.base.roles)));
 }
 
-/** The palette half of the request (see above): new mode `{palette}` or `{}`; variant mode `{palette}`, `{bible}` or `{}` (unchanged). */
+/** (U5b) Whether the request runs the Style's parts (set mode): new mode, a Style with parts, the toggle on, its own materials. */
+export function formPartsOn(st) {
+  return st.mode === 'new' && !!st.base && st.base.parts > 0 && st.useParts === true && !formMix(st);
+}
+
+/**
+ * The materials half of the request (see above): new mode `{palette}`, `{bible, bibleVersion}` (the Style's parts) or `{}`;
+ * variant mode `{palette}`, `{bible}` or `{}` (unchanged).
+ */
 export function formRequest(st) {
   const b = st.base;
   if (!b) return {};
   const inline = () => ({ palette: { bible: { id: b.id, version: b.version, roles: { ...st.roles } } } });
   const inputs = () => ({ palette: Object.fromEntries(MAIN_FIELDS.map((f) => [f, st.main[f]])) });
+  if (st.mode === 'new' && formPartsOn(st)) return { bible: b.id, bibleVersion: b.version };
   if (st.mode === 'new') return b.id ? inline() : inputs();
   if (styleKey(b) === st.original.key && sameMap(st.roles, st.original.roles)) return {};
   if (b.kind === 'preset' && PALETTES[b.id] && sameMap(st.roles, qroles(PALETTES[b.id].roles))) return { palette: b.id };
@@ -504,6 +538,9 @@ export function formView(st) {
     features: [...st.features],
     featureProvenance: Object.fromEntries(st.features.map((f) => [f, st.from.includes(f) ? 'style' : 'hand'])),
     changed: st.mode === 'variant' ? Object.keys(formRequest(st)).length > 0 : null,
+    parts: b ? b.parts : 0,
+    useParts: st.useParts === true,
+    partsOn: formPartsOn(st),
     request: formRequest(st),
     save: formSaveRequest(st),
   };

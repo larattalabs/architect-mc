@@ -127,7 +127,7 @@ public final class ScreenFeature {
 			});
 		});
 		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type; a non-preset one is an open type), openType?, profile?: [rules], "
-			+ "bible?: id|none (U2: a Claude-made Style is set mode, a built-in or hand-made one is picked), style? (chip id = a built-in Style, or any text = none), "
+			+ "bible?: id|none (U5: any Style is picked; a Claude-made one starts with its parts on), parts?: bool (U5b: use the Style's parts), style? (chip id = a built-in Style, or any text = none), "
 			+ "styleOps?: [[pick, id] | [unpick] | [revert] | [main, wood|stone|roof|accent, value] | [role, role, block] | [feature, id]] (U2, in order), materials?, "
 			+ "features?: [..] | \"a,b\", size?: "
 			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?, massingFirst?: bool|null (4c; null = the default for the size), critique?: bool, "
@@ -286,6 +286,18 @@ public final class ScreenFeature {
 				form.styleText.set(s);
 			}
 		}
+		// (U3) words alongside the picked Style; "Own words" (the words are the style, no Style)
+		if (f.has("styleNote")) {
+			form.styleNote.set(f.str("styleNote"));
+		}
+		if (f.has("ownWords")) {
+			if (f.bool("ownWords")) {
+				form.useOwnWords();
+			} else {
+				form.ownWordsMode = false;
+				form.styleText.clear();
+			}
+		}
 		if (f.has("materials")) {
 			form.materials.set(f.str("materials"));
 		}
@@ -372,14 +384,21 @@ public final class ScreenFeature {
 			}
 		}
 		if (f.has("bible")) {
-			// (U2) a Claude-made Style is set mode; a built-in or hand-made one is picked (materials only); an unknown id stays set mode
+			// (U5) any Style is picked (its parts on by default for a built-in and a Claude-made one, off for a hand-made one); an unknown id is refused
 			String bid = f.isExplicitNull("bible") || "none".equals(f.str("bible")) ? null : f.str("bible");
 			var known = bid == null ? java.util.Optional.<dev.larattalabs.architect.api.Bible>empty() : dev.larattalabs.architect.client.design.SetFeature.bible(bid);
 			if (known.isPresent()) {
 				form.pickBible(known.get());
-			} else {
-				form.bible = bid;
+			} else if (bid != null) {
+				throw new IllegalArgumentException("no Style " + bid + " in the helper's index");
 			}
+		}
+		if (f.has("parts")) {
+			// (U5b) "Use this style's parts" (only for a Style with its own parts)
+			if (!form.styleForm.partsOffered()) {
+				throw new IllegalArgumentException("parts: the picked Style has no parts of its own");
+			}
+			form.setUseParts(f.bool("parts"));
 		}
 		if (f.has("massingFirst")) {
 			// (4c) true / false, or null = the default for the size (on for L and plot)

@@ -185,14 +185,15 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     const g = h.sc.groups.create(
       GroupRequest.parse({
         name: 'Hamlet',
-        bible: 'cherry',
+        // (U5) a built-in with its own parts (rustic's, in the kit): set mode; one without them runs the hybrid (styles-u5.test.ts)
+        bible: 'rustic',
         owner: 'steward_mc:s1',
         ext: { 'steward_mc:settlement': 'S1' },
         items: [item('hall', { type: 'tavern', anchor: true, role: 'landmark', ext: { 'steward_mc:lot': 'L1' } }), item('house_a', { ext: { 'steward_mc:lot': 'L2' } }), item('house_b', { type: 'tower' })],
       }),
     );
     expect(g.items.map((i) => [i.itemKey, i.wave, i.role, i.model])).toEqual([['hall', 0, 'landmark', 'claude-opus-5-5'], ['house_a', 1, 'ordinary', 'claude-sonnet-5-5'], ['house_b', 1, 'ordinary', 'claude-sonnet-5-5']]);
-    expect(g.bible).toEqual({ id: 'cherry', version: 1 });
+    expect(g.bible).toEqual({ id: 'rustic', version: 1 });
     // wave 1 waits for the anchor
     const hall = g.items[0]!.designId;
     const [a, b] = [g.items[1]!.designId, g.items[2]!.designId];
@@ -216,14 +217,14 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     const hallEntry = final.items[0]!.entryId!;
     expect(fs.readdirSync(path.join(scratch(a), 'neighbours'))).toEqual([`${hallEntry}.png`]);
     const brief = fs.readFileSync(path.join(scratch(a), 'BRIEF.md'), 'utf8');
-    expect(brief).toContain('## The style bible: Cherry (`cherry` v1)');
+    expect(brief).toContain('## The style bible: Rustic (`rustic` v1)');
     expect(brief).toContain(`neighbours/${hallEntry}.png`);
     expect(brief).toContain("bp.part('<name>'");
     expect(brief).toContain('../../bible/components.mjs');
     // entries: bible pin, group, item ext, their bible files; the build used the bible's roles
     const e = readEntry(h, final.items[1]!.entryId!);
-    expect(e).toMatchObject({ bible: { id: 'cherry', version: 1 }, group: g.id, groupItem: 'house_a', ext: { 'steward_mc:lot': 'L2' } });
-    expect((e.palette as { bible: { id: string } }).bible.id).toBe('cherry');
+    expect(e).toMatchObject({ bible: { id: 'rustic', version: 1 }, group: g.id, groupItem: 'house_a', ext: { 'steward_mc:lot': 'L2' } });
+    expect((e.palette as { bible: { id: string } }).bible.id).toBe('rustic');
     expect(fs.readdirSync(path.join(h.sc.config.libraryDir, final.items[1]!.entryId!, 'bible')).sort()).toEqual(['bible.json', 'components.mjs']);
     expect(lastGroup(h, g.id).status).toBe('done');
   }, 90_000);

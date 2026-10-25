@@ -91,7 +91,7 @@ class StyleRolesTest {
 		StyleRoles s = StyleRoles.fallback();
 		Map<String, String> med = Palettes.FALLBACK.presetRoles("medieval");
 		Map<String, String> w = s.editMain(med, "wood", "birch");
-		assertEquals("minecraft:white_terracotta", w.get("wall"));
+		assertEquals("minecraft:white_concrete", w.get("wall"));
 		assertEquals("minecraft:birch_log", w.get("frame"));
 		assertEquals("follows_wood", s.provenance(w, med).get("frame"));
 		assertEquals("style", s.provenance(w, med).get("wall"));

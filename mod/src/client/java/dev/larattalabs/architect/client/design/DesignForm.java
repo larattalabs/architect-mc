@@ -29,11 +29,19 @@ public final class DesignForm {
 	public String type = "cabin";
 	/**
 	 * (Style unification U2) The picked Style, its materials and the features (StyleForm, NEW mode): a style chip is a built-in Style;
-	 * the Style bible list adds the installed hand-made ones (a Claude-made one stays bible set mode: {@link #bible}). The free text
-	 * {@link #styleText}, when not empty, means no Style: the words go as the request's style and no palette is sent.
+	 * the Style browser adds the installed ones. (U5) Every Style is picked here; "Use this style's parts" ({@link #setUseParts}, a Style
+	 * with its own parts) turns bible set mode on ({@link #bible()}). The free text {@link #styleText}, when not empty, means no Style:
+	 * the words go as the request's style and no palette is sent.
 	 */
 	public final StyleForm styleForm = new StyleForm(StyleForm.Mode.NEW, StyleForm.Style.preset(Palettes.FALLBACK, "rustic"), List.of("porch"));
 	public final TextModel styleText = new TextModel(DesignSpec.MAX_STYLE);
+	/**
+	 * (U3) Words alongside the picked Style ("mossy, lived-in" with Medieval): sent first in the notes ({@link
+	 * dev.larattalabs.architect.design.StyleNote}); the request's style stays the Style. Ignored with your own words.
+	 */
+	public final TextModel styleNote = new TextModel(dev.larattalabs.architect.design.StyleNote.MAX);
+	/** (U3) "Own words" chosen with nothing typed yet: the words field is the style itself (no Style, no palette). */
+	public boolean ownWordsMode;
 	public final TextModel materials = new TextModel(DesignSpec.MAX_MATERIALS);
 	public String size = "M";
 	public int customX = 21;
@@ -47,8 +55,27 @@ public final class DesignForm {
 	public final TextModel openType = new TextModel(40);
 	/** (4b) An open type's checker rules ({@link DesignSpec#PROFILE_RULES}); empty = the default (door, lit, no_floating). */
 	public final List<String> profile = new ArrayList<>(DesignSpec.DEFAULT_PROFILE);
-	/** (4b) The style bible to design with, or null (today's behaviour). */
-	public @Nullable String bible;
+	/**
+	 * (4b) The style bible to design with (set mode), or null. (U5) Derived: the picked Style's id when its parts are used
+	 * ({@link StyleForm#partsOn}), else null (materials only, the hybrid default).
+	 */
+	public @Nullable String bible() {
+		StyleForm.Style b = styleForm.base();
+		return !ownWords() && b != null && styleForm.partsOn() ? b.id() : null;
+	}
+
+	/** (U5) The set-mode bible's version (the picked Style's), or null. */
+	public @Nullable Integer bibleVersion() {
+		StyleForm.Style b = styleForm.base();
+		return bible() != null && b != null ? b.version() : null;
+	}
+
+	/** (U5b) "Use this style's parts" (a Style with its own parts; ignored otherwise). */
+	public void setUseParts(boolean on) {
+		if (styleForm.partsOffered()) {
+			styleForm.useParts(on);
+		}
+	}
 	/** Shown under the form after a refused or failed send; cleared by any edit. */
 	public @Nullable String sendError;
 	/** (4c) "Massing first": null = the default for the size (on for L and plot, {@link dev.larattalabs.architect.design.MassingRules}). */
@@ -78,10 +105,29 @@ public final class DesignForm {
 		return massingFirst != null ? massingFirst : dev.larattalabs.architect.design.MassingRules.massingFirstByDefault(size);
 	}
 
+	/** (U3) Your own words instead of a Style: words typed in the style field, or "Own words" picked (U2: free text = no Style). */
+	public boolean ownWords() {
+		return ownWordsMode || !styleText.value().isBlank();
+	}
+
+	/** (U3) Own words: the words field becomes the style (the Style's untouched suggestions stay until a Style is picked again). */
+	public void useOwnWords() {
+		ownWordsMode = true;
+		if (styleText.value().isBlank() && !styleNote.value().isBlank()) {
+			styleText.set(styleNote.value().length() > DesignSpec.MAX_STYLE ? styleNote.value().substring(0, DesignSpec.MAX_STYLE) : styleNote.value());
+			styleNote.clear();
+		}
+	}
+
+	/** (U3) The style note as sent: only with a Style picked (not your own words, not a set-mode bible's own text). */
+	public String noteSent() {
+		return ownWords() || styleForm.base() == null ? "" : styleNote.value().strip();
+	}
+
 	/** The style sent: the free text when typed, else the picked Style (a built-in's id, as the chips sent before U2; else its name). */
 	public String style() {
 		String t = styleText.value().strip();
-		if (!t.isEmpty()) {
+		if (!t.isEmpty() || ownWordsMode) {
 			return t;
 		}
 		StyleForm.Style b = styleForm.base();
@@ -95,31 +141,33 @@ public final class DesignForm {
 	/** The style chip shown as picked: the built-in Style picked (no free text), or null. */
 	public @Nullable String styleChip() {
 		StyleForm.Style b = styleForm.base();
-		return styleText.value().isBlank() && b != null && StyleForm.PRESET.equals(b.kind()) ? b.id() : null;
+		return !ownWords() && b != null && StyleForm.PRESET.equals(b.kind()) ? b.id() : null;
 	}
 
 	/** A style chip: picks that built-in Style (its materials and suggested features) and clears the free text. */
 	public void pickChip(String id) {
-		StyleForm.Style s = StyleForm.Style.preset(Palettes.FALLBACK, id);
+		// (U5) the helper's record when it lists one (it knows the built-in's own parts: rustic's), else the kit's fallback
+		StyleForm.Style s = SetFeature.bible(id).filter(dev.larattalabs.architect.api.Bible::builtin).map(StyleForm.Style::of).orElse(StyleForm.Style
+			.preset(Palettes.FALLBACK, id));
 		if (s == null) {
 			styleText.set(id);
 			return;
 		}
 		styleForm.pick(s);
 		styleText.clear();
+		ownWordsMode = false;
 	}
 
-	/** A Style from the Style bible list: a Claude-made one is bible set mode ({@link #bible}); a built-in or hand-made one is picked. */
+	/**
+	 * A Style from the Style browser: picked, whoever made it (U5). A Style with its own parts offers "Use this style's parts": on at
+	 * once for a Claude-made one (set mode, as before), off for any other (the hybrid: materials plus its look as guidance).
+	 */
 	public void pickBible(dev.larattalabs.architect.api.@Nullable Bible b) {
-		if (b == null) {
-			bible = null;
-		} else if ("claude".equals(b.origin())) {
-			bible = b.id();
-		} else {
-			bible = null;
+		if (b != null) {
 			styleForm.pick(StyleForm.Style.of(b));
 			styleText.clear();
 		}
+		ownWordsMode = false;
 	}
 
 	/** The features (the Style's suggestions and the player's picks). */
@@ -132,7 +180,7 @@ public final class DesignForm {
 	 * it. None with free text, with a set-mode bible (the bible's roles are the materials) or without a Style.
 	 */
 	public @Nullable JsonElement palette() {
-		if (!styleText.value().isBlank() || bible != null || styleForm.base() == null) {
+		if (ownWords() || bible() != null || styleForm.base() == null) {
 			return null;
 		}
 		return styleForm.request().get("palette");
@@ -180,8 +228,9 @@ public final class DesignForm {
 
 	public DesignSpec.Draft draft() {
 		int[] m = maxSize();
+		// (U3) words alongside the Style go first in the notes
 		return new DesignSpec.Draft(typeSent(), style(), materials.value(), features(), m[0], m[1], m[2], PLOT.equals(size) ? plot : null, remix,
-			name.value(), notes.value(), OTHER.equals(type) ? profile : List.of(), bible);
+			name.value(), dev.larattalabs.architect.design.StyleNote.compose(noteSent(), notes.value()), OTHER.equals(type) ? profile : List.of(), bible());
 	}
 
 	public Map<String, String> errors() {
@@ -199,6 +248,10 @@ public final class DesignForm {
 	/** The request as sent: the draft, plus the palette when the helper takes one ({@code palette.roles}). */
 	public JsonObject requestJson() {
 		JsonObject r = DesignSpec.requestJson(draft());
+		// (U5b) set mode with the Style's parts: pin the version the player picked
+		if (bibleVersion() != null && r.has("bible")) {
+			r.addProperty("bibleVersion", bibleVersion());
+		}
 		JsonElement p = palette();
 		if (p != null && SetFeature.has("palette.roles")) {
 			r.add("palette", p.deepCopy());
@@ -214,13 +267,18 @@ public final class DesignForm {
 		JsonArray pr = new JsonArray();
 		profile.forEach(pr::add);
 		o.add("profile", pr);
-		o.addProperty("bible", bible);
+		o.addProperty("bible", bible());
+		o.addProperty("bibleVersion", bibleVersion());
+		o.addProperty("partsOffered", styleForm.partsOffered());
+		o.addProperty("useParts", styleForm.usePartsChosen());
 		o.addProperty("style", style());
 		o.addProperty("styleChip", styleChip());
 		o.add("styleForm", styleForm.view());
 		JsonElement pal = palette();
 		o.add("palette", pal == null ? com.google.gson.JsonNull.INSTANCE : pal);
 		o.addProperty("styleText", styleText.value());
+		o.addProperty("styleNote", styleNote.value());
+		o.addProperty("ownWords", ownWords());
 		o.addProperty("materials", materials.value());
 		JsonArray f = new JsonArray();
 		features().forEach(f::add);

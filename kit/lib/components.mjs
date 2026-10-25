@@ -8,6 +8,9 @@
 //     through `bp`: the Blueprint helpers (bp.set, bp.fill, bp.window, bp.stairs, bp.slab, bp.lantern, ...), the
 //     palette `bp.p` with the roles `bp.p.roles`, and the direction helpers `bp.kit` ({ DIR, OPPOSITE, CW, CCW, cellsOf })
 //   - the minimum set REQUIRED_COMPONENTS, plus any the bible adds
+//   - (S-THEME, Noah 2026-10-24) every block a component writes traces to one of the bible's roles (the role's block or a shape
+//     variant of it: slab, stairs, wall, fence, ...; the light role's fixture) or to the shared functional allowlist
+//     (connectors/style.mjs UNTHEMED_OK: ladders, chains, water, ...). The check warns on any other block (`S-THEME: ...`)
 //   - optional `export const meta = { <name>: { slot, label? } }`: where the test frame places a component the frame does
 //     not know (slot: wall | door | ground | roof | side; default ground)
 //
@@ -26,6 +29,8 @@ import { checkBlueprint } from './check.mjs';
 import { buildScene, renderIso } from './render.mjs';
 import { plain } from './nbt.mjs';
 import { encodePng } from './png.mjs';
+import { traceRole } from './connectors/style.mjs';
+import { fixtureFor } from './region/fixtures.mjs';
 
 export const REQUIRED_COMPONENTS = ['window', 'door_surround', 'lantern_post', 'roof_trim', 'chimney'];
 export const SLOTS = ['wall', 'door', 'ground', 'roof', 'side'];
@@ -104,7 +109,7 @@ export function frameAt(slot) {
  * `entrance` / `spawn` anchors, parts `walls` and `roof`, and optionally one component placed in its slot (as part
  * `<name>`). The template is cropped to the blocks' extent. Throws what the component throws.
  */
-export function buildFrame(p, component) {
+export function buildFrame(p, component, { also } = {}) {
   const S = 2 * MARGIN;
   const bp = new Blueprint({
     id: component ? `frame_${component.name}` : 'frame', name: component ? `Component ${component.name}` : 'Test frame', type: 'custom', tags: ['component'],
@@ -123,6 +128,7 @@ export function buildFrame(p, component) {
   }
   bp.spot('entrance', D, Z + 1, 180);
   bp.spot('spawn', D, Z + 3, 180);
+  if (also) also(bp);
   return fitToExtent(bp);
 }
 
@@ -193,6 +199,8 @@ export async function checkComponents(file, p) {
       r.errors.push(...c.errors);
       // only what the component adds (the bare frame has no warnings)
       r.warnings.push(...c.warnings.filter((w) => !base.warnings.includes(w)));
+      // (S-THEME) the blocks it writes that no role gives
+      for (const o of themeOffenders(bp, p)) r.warnings.push(`S-THEME: writes ${o.block.replace(/^minecraft:/, '')} (x${o.count}), which no role of the bible gives (use bp.p's role blocks or their shapes)`);
       out.frames.push({ name, bp });
     }
     r.ok = r.errors.length === 0;
@@ -204,6 +212,68 @@ export async function checkComponents(file, p) {
   }
   out.ok = out.errors.length === 0 && loaded.components.size > 0;
   return out;
+}
+
+/**
+ * (S-THEME) The blocks a component's frame writes beyond the bare frame that trace to no role of the palette (nor to the light
+ * role's fixture, nor the functional allowlist): [{ block, count }], sorted by block. `p.roles` are the roles.
+ */
+export function themeOffenders(bp, p) {
+  const bare = buildFrame(p);
+  const name = (c) => c.state?.name ?? String(c);
+  const roles = p.roles ?? {};
+  const light = roles.light ? fixtureFor(roles.light, roles.rail).light : null;
+  const memo = new Map();
+  const n = new Map();
+  // the frame is cropped to its extent: line the two up by the frame's own origin (the house's corner)
+  const [ax, ay, az] = [bp.ox, bp.oy, bp.oz];
+  const [bx, by, bz] = [bare.ox, bare.oy, bare.oz];
+  for (const [k, c] of bp.cells) {
+    const b = name(c);
+    if (b === 'minecraft:air' || b === 'minecraft:structure_void') continue;
+    const [x, y, z] = k.split(',').map(Number);
+    const twin = bare.cells.get(`${x - ax + bx},${y - ay + by},${z - az + bz}`);
+    if (twin && name(twin) === b) continue;
+    if (!memo.has(b)) memo.set(b, traceRole(b, roles, { lightFixture: light }));
+    if (memo.get(b)) continue;
+    n.set(b, (n.get(b) ?? 0) + 1);
+  }
+  return [...n].map(([block, count]) => ({ block, count })).sort((a, b) => a.block.localeCompare(b.block));
+}
+
+/**
+ * The parts test house: the test frame with every component of a library placed at once, and the facings the single-slot frame
+ * does not reach: a window on each of the four walls, the door surround on the door, a lantern post before the front and the back,
+ * roof trim along both eaves (south and north), the chimney on the east side and again on the west. A library component the frame
+ * does not know goes in its slot on the south side (as buildFrame). Returns the Blueprint (cropped); throws what a component throws.
+ */
+export function buildPartsHouse(p, components, meta = {}) {
+  const bp = buildFrame(p, null, { also: (b) => placeAll(b, components, meta) });
+  bp.id = 'parts_house';
+  bp.name = 'Parts test house';
+  return bp;
+}
+
+function placeAll(bp, components, meta) {
+  let n = 0;
+  const put = (name, at) => {
+    const fn = components.get(name);
+    if (fn) bp.part(`${name}_${++n}`, () => fn(bp, { ...at }, {}));
+  };
+  const known = new Set(REQUIRED_COMPONENTS);
+  // windows: one per wall, clear of the door (south, x = D) and the corners
+  put('window', { x: 2, y: 2, z: Z, facing: 'south', width: 1, height: 2 });
+  put('window', { x: X - 2, y: 2, z: 0, facing: 'north', width: 1, height: 2 });
+  put('window', { x: X, y: 2, z: 2, facing: 'east', width: 1, height: 2 });
+  put('window', { x: 0, y: 2, z: Z - 2, facing: 'west', width: 1, height: 2 });
+  put('door_surround', frameAt('door'));
+  put('lantern_post', { x: 1, y: 1, z: Z + 3, facing: 'south' });
+  put('lantern_post', { x: X - 1, y: 1, z: -3, facing: 'north' });
+  put('roof_trim', frameAt('roof'));
+  put('roof_trim', { x: -1, y: 5, z: -1, facing: 'north', length: X + 3 });
+  put('chimney', frameAt('side'));
+  put('chimney', { x: -1, y: 0, z: Math.floor(Z / 2) + 1, facing: 'west', top: RIDGE + 1 });
+  for (const name of components.keys()) if (!known.has(name)) put(name, frameAt(slotOf(name, meta)));
 }
 
 const BG = [236, 232, 224];

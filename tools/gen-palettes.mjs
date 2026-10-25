@@ -87,13 +87,45 @@ if (parityOut) {
   process.exit(0);
 }
 
-const json = JSON.stringify({ presets, woods, stones, roofs, ...(styles?.styleTable ? { styles: styles.styleTable() } : {}) }, null, 2) + '\n';
+const table = styles?.styleTable ? styles.styleTable() : null;
+const json = JSON.stringify({ presets, woods, stones, roofs, ...(table ? { styles: table } : {}), colors: await swatchColors(table) }, null, 2) + '\n';
 if (out) {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, json);
   console.error(`gen-palettes: ${Object.keys(presets).length} presets, ${woods.length} woods, ${stones.length} stones, ${roofs.length} roofs -> ${out}`);
 } else {
   process.stdout.write(json);
+}
+
+/**
+ * (Style unification U3) The swatch colours of the blocks the Style screens show: every block the Style table knows (wood parts,
+ * stone families, stairs/slab bases), every preset's roles, and the common role candidates (lights, glass, paths, terracotta,
+ * concrete, wool). Block id -> '#rrggbb', the side face's average from kit/lib/colors.mjs (generated from the game's textures), so a
+ * swatch or a preview sheet is the role's own block. Sorted by id.
+ */
+async function swatchColors(table) {
+  const colors = await import(pathToFileURL(path.join(kitDir, 'lib', 'colors.mjs')).href).then((m) => m.COLORS).catch(() => null);
+  if (!colors) return {};
+  const ids = new Set();
+  const add = (b) => { if (typeof b === 'string') ids.add(b.startsWith('minecraft:') ? b : `minecraft:${b}`); };
+  if (table) {
+    for (const parts of Object.values(table.woods ?? {})) Object.values(parts).forEach(add);
+    Object.keys(table.woodOf ?? {}).forEach(add);
+    Object.keys(table.stoneOf ?? {}).forEach(add);
+    Object.keys(table.stairsSlab ?? {}).forEach(add);
+    Object.values(table.fullOf ?? {}).forEach(add);
+    Object.values(table.fixed ?? {}).forEach(add);
+  }
+  for (const p of Object.values(PALETTES)) Object.values(p.roles ?? {}).forEach(add);
+  const ROLE_CANDIDATE = /(^|_)(lantern|torch|froglight|glowstone|shroomlight|sea_lantern|redstone_lamp|end_rod|glass|glass_pane|terracotta|concrete|wool|dirt_path|gravel|coarse_dirt|packed_mud|mud|calcite|clay|moss_block|rooted_dirt|podzol|snow_block|hay_block|bookshelf|basalt|smooth_basalt|dripstone_block|amethyst_block|copper|cut_copper)$/;
+  for (const b of Object.keys(colors)) if (ROLE_CANDIDATE.test(b) && !/glazed|candle|_bed$|banner|carpet/.test(b)) add(b);
+  const out = {};
+  for (const id of [...ids].sort()) {
+    const c = colors[id.slice('minecraft:'.length)];
+    if (c === undefined) continue;
+    out[id] = Array.isArray(c) ? c[1] : c;
+  }
+  return out;
 }
 
 /**
@@ -144,6 +176,9 @@ function formCases(sets) {
   fs.ashfall = formStyle({ id: 'bib_ashfall', name: 'Ashfall', version: 3, kind: 'bible', roles: sets['bible:ashfall'], suggestedFeatures: ['basement', 'chimney'], tags: ['nether', 'foundry'] });
   fs.cottage = formStyle({ id: 'bib_stone_cottage', name: 'Stone cottage', version: 2, kind: 'bible', roles: sets['mix:stone_cottage'], suggestedFeatures: ['garden', 'chimney', 'porch', 'balcony'], tags: ['rustic', 'stone'] });
   fs.inputs = formStyle({ kind: 'inputs', inputs: { wood: 'cherry', stone: 'bricks', roof: 'deepslate_tiles', accent: 'oak' } });
+  // (U5b) Styles with their own parts: a Claude-made one (on by default) and a built-in's hand-made copy with parts added (off)
+  fs.ashfallParts = formStyle({ id: 'bib_ashfall', name: 'Ashfall', version: 4, kind: 'bible', roles: sets['bible:ashfall'], suggestedFeatures: ['basement'], tags: ['nether'], parts: 6, partsDefault: true });
+  fs.medievalParts = formStyle({ id: 'bib_medieval_parts', name: 'Medieval (parts)', version: 1, kind: 'bible', roles: PALETTES.medieval.roles, suggestedFeatures: ['chimney', 'balcony'], tags: ['medieval'], parts: 5 });
   const forms = [];
   const run = (name, start, ops) => {
     let st = formNew({ ...start, style: start.style ? fs[start.style] : null });
@@ -180,6 +215,10 @@ function formCases(sets) {
   run('variant: an entry with plain inputs', { mode: 'variant', style: 'inputs' }, [
     ['main', 'roof', 'spruce'], ['role', 'light', 'glowstone'], ['main', 'roof', 'deepslate_tiles'], ['pick', 'cherry'], ['main', 'stone', 'cobblestone']]);
   run('variant: an entry with no palette', { mode: 'variant' }, [['main', 'wood', 'oak'], ['pick', 'dark'], ['main', 'accent', 'birch'], ['unpick']]);
+  run('new: parts: a Claude-made Style starts on, a copy with parts starts off, a mix sends the palette, refusals', { mode: 'new', features: [] }, [
+    ['pick', 'ashfallParts'], ['parts', false], ['parts', true], ['main', 'wood', 'oak'], ['revert'], ['pick', 'medievalParts'], ['parts', true], ['pick', 'medievalParts'],
+    ['pick', 'medieval'], ['parts', true], ['pick', 'ashfallParts'], ['unpick'], ['parts', true]]);
+  run('variant: parts are refused (they are in the design\'s code)', { mode: 'variant', style: 'ashfallParts' }, [['parts', true], ['main', 'wood', 'oak'], ['pick', 'medievalParts']]);
   // every built-in Style: picked on a new form, each row edited once
   for (const n of Object.keys(PALETTES)) {
     run(`new: ${n}, each row`, { mode: 'new', features: [] }, [['pick', n], ['main', 'wood', 'jungle'], ['main', 'stone', 'polished_blackstone_bricks'], ['main', 'roof', 'cut_copper'],

@@ -111,4 +111,31 @@ public interface Bibles {
 	default List<Bible> usable(@Nullable String owner) {
 		throw new UnsupportedOperationException("Bibles.usable needs Architect API since 1.41.0");
 	}
+
+	/**
+	 * (Style unification U5b) "Add parts…": a bible job ({@code bible.parts}, a helper with {@code "bible.parts"}; a Claude call, paid
+	 * like a bible job's components pass) that drafts a component set (parts) for an existing Style, seeded from its latest version:
+	 * its roles, shape hints, tags and owner are kept, and there is no drafting pass. It writes the next version of the same Style
+	 * (every earlier version stays). A Style with parts can then run in bible set mode ({@link Bible#parts}).
+	 * <ul>
+	 * <li>The player's Style (no owner, or a player UUID): {@code owner} null or that UUID.</li>
+	 * <li>A mod's Style: only that exact owner.</li>
+	 * <li>A built-in Style is the kit's: its parts go on a new hand-made copy based on it ({@code bib_<name>_parts}, version 1,
+	 * {@code basedOn} the built-in), owned by {@code owner}.</li>
+	 * </ul>
+	 * {@code version}: the version the caller looked at (refused when it is no longer the latest), or null. Completes with the job
+	 * ({@link BibleJob#bibleId()} and {@link BibleJob#version()} name the version it makes); fails (the message says why) for another
+	 * owner's Style, an unknown one, or one a bible job holds. Ask {@link #estimateParts()} first. Since NEXT.
+	 */
+	default CompletableFuture<BibleJob> addParts(String bibleId, @Nullable Integer version, @Nullable String owner) {
+		throw new UnsupportedOperationException("Bibles.addParts needs Architect API since NEXT");
+	}
+
+	/**
+	 * (Style unification U5b) What an "Add parts" job would cost and take ({@code bible.estimate} with {@code parts}): at most a bible
+	 * job's, until parts jobs are measured on their own (the basis says so). Since NEXT.
+	 */
+	default CompletableFuture<Estimate> estimateParts() {
+		throw new UnsupportedOperationException("Bibles.estimateParts needs Architect API since NEXT");
+	}
 }

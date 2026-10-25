@@ -35,6 +35,10 @@ import java.util.Optional;
  * @param basedOn (since 1.41.0) the Style it started from (a duplicate, or a hand edit of a built-in), or empty
  * @param origin (since 1.41.0) who made it: {@code builtin}, {@code claude} (a bible job; also every installed bible from before U1) or
  *     {@code hand} ({@link Bibles#save})
+ * @param parts (since NEXT, Style unification U5) the Style's OWN parts: the components that bible set mode uses. Empty = none: a
+ *     built-in Style other than rustic (whose library the kit ships), a hand-made Style without added parts ({@link Bibles#addParts}).
+ *     A Style without parts never runs set mode: a design naming it as its bible gets its roles and shape hints (the hybrid).
+ *     {@link #components} keeps its earlier meaning (the names a set-mode design would import) for compatibility.
  *
  * <p>Ownership (U1): {@code owner} empty, or a player UUID, is the player's: editable in Architect's UI. Any other owner (a mod's,
  * e.g. Steward's {@code steward_mc:settlement/<id>}) is Duplicate-only there, and only that owner saves new versions of it. Every save adds a version;
@@ -43,13 +47,30 @@ import java.util.Optional;
 public record Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
 	Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
 	boolean archived, Optional<JsonObject> critique, List<String> tags, List<String> suggestedFeatures, Optional<String> blurb,
-	Optional<BiblePin> basedOn, String origin) {
+	Optional<BiblePin> basedOn, String origin, List<String> parts) {
+	/**
+	 * The 1.41.0 constructor (no {@code parts}: a Claude-made bible's are its components, any other Style has none). Kept for binary
+	 * compatibility.
+	 */
+	public Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
+		Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
+		boolean archived, Optional<JsonObject> critique, List<String> tags, List<String> suggestedFeatures, Optional<String> blurb,
+		Optional<BiblePin> basedOn, String origin) {
+		this(id, name, version, versions, builtin, scope, roles, prose, sheetPath, components, owner, ext, format, restraint, archived, critique, tags,
+			suggestedFeatures, blurb, basedOn, origin, "claude".equals(origin) || (origin == null || origin.isBlank()) && !builtin ? components : List.of());
+	}
+
 	/** The 1.6.0 constructor (no Style fields: origin builtin for a built-in one, else claude). Kept for binary compatibility. */
 	public Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
 		Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
 		boolean archived, Optional<JsonObject> critique) {
 		this(id, name, version, versions, builtin, scope, roles, prose, sheetPath, components, owner, ext, format, restraint, archived, critique, List.of(),
-			List.of(), Optional.empty(), Optional.empty(), builtin ? "builtin" : "claude");
+			List.of(), Optional.empty(), Optional.empty(), builtin ? "builtin" : "claude", builtin ? List.of() : components);
+	}
+
+	/** Whether the Style has its own parts ({@link #parts}): only then can a design run in bible set mode with it. Since NEXT. */
+	public boolean hasParts() {
+		return !parts.isEmpty();
 	}
 
 	/**
@@ -83,6 +104,7 @@ public record Bible(String id, String name, int version, List<Integer> versions,
 		versions = List.copyOf(versions);
 		roles = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(roles));
 		components = List.copyOf(components);
+		parts = parts == null ? List.of() : List.copyOf(parts);
 		ext = ext == null ? new JsonObject() : ext;
 		format = format == 2 ? 2 : 1;
 		restraint = restraint == null ? Restraint.DEFAULT : restraint;

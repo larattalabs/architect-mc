@@ -190,6 +190,35 @@ public final class BiblesImpl implements Bibles {
 		});
 	}
 
+	/** (Style unification U5b) {@code bible.parts}: "Add parts…" for an existing Style. */
+	@Override
+	public CompletableFuture<BibleJob> addParts(String bibleId, @Nullable Integer version, @Nullable String owner) {
+		if (bibleId == null || !bibleId.matches("[a-z0-9_]{1,64}")) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("bibleId must match [a-z0-9_]{1,64}")));
+		}
+		if (owner != null && owner.length() > dev.larattalabs.architect.api.Limits.OWNER_MAX) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("owner is longer than "
+				+ dev.larattalabs.architect.api.Limits.OWNER_MAX)));
+		}
+		JsonObject m = DesignsImpl.msg("bible.parts");
+		m.addProperty("bibleId", bibleId);
+		if (version != null) {
+			m.addProperty("version", version);
+		}
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		return DesignsImpl.ask("bible.parts", "parts for a Style", m).thenApply(this::acked);
+	}
+
+	/** (Style unification U5b) {@code bible.estimate {parts: true}}. */
+	@Override
+	public CompletableFuture<Estimate> estimateParts() {
+		JsonObject m = DesignsImpl.msg("bible.estimate");
+		m.addProperty("parts", true);
+		return DesignsImpl.ask("bible.parts", "parts for a Style", m).thenApply(Wire4b::estimate);
+	}
+
 	@Override
 	public List<Bible> usable(@Nullable String owner) {
 		return all().stream().filter(b -> !b.archived()).filter(b -> b.builtin() || !b.modOwned() || (owner != null && owner.equals(b.owner().get())))

@@ -53,6 +53,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.SliceCoaDev.init(); // 6c close-out A hooks (dev.coa.*: keyed pins, discardPlan, plan files, the clock, the sweeps)
 		dev.larattalabs.architect.client.dev.StockpileDev.init(); // phase 6c slice Y1 hooks (dev.stockpile.*)
 		dev.larattalabs.architect.client.dev.SliceUi2bDev.init(); // slice UI-2b hooks (dev.ui2b.*, dev.gui.scale)
+		dev.larattalabs.architect.client.screen.U3Dev.init(); // Style unification U3 hooks (dev.u3.*)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		Toasts.install(); // lab-ui's one shared toast stack (never also register new Toasts(): it would draw every toast twice)

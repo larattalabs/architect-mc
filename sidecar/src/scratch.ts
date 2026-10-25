@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { BibleFiles } from './bibles.js';
-import { designBrief, type BriefOptions } from './claude/brief.js';
+import { designBrief, hintsOf, type BriefOptions, type StyleHints } from './claude/brief.js';
 import { CONTRACT_EXCERPT } from './claude/contract.js';
 import { KIT, refreshKit, rendererIn } from './designs.js';
 import type { BibleInfo, BiblePin, Design } from './protocol.js';
@@ -42,6 +42,8 @@ export interface PrepareInput {
   neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }> | undefined;
   /** (4c) the massing a detail pass is bound to (or a redirect starts from): copied into massing/ */
   massing?: ScratchMassing | undefined;
+  /** (Style unification U5a) a materials-only request's Style hints (guidance in the brief) */
+  styleHints?: StyleHints | undefined;
 }
 
 /** Create / refresh the scratch dir: fresh kit, BRIEF.md, CONTRACT.md and the remix source. */
@@ -105,7 +107,18 @@ export function prepareScratch(input: PrepareInput): string {
       renderer: !!rendererIn(scratch),
       examples,
       ...(remix ? { remix } : {}),
-      ...(input.bible ? { bible: { id: input.bible.pin.id, version: input.bible.pin.version, name: input.bible.info.name, roles: input.bible.info.roles, components: input.bible.info.components, hasProse: !!input.bible.files.md && fs.existsSync(input.bible.files.md), ...(input.bible.info.restraint ? { restraint: input.bible.info.restraint } : {}) } } : {}),
+      ...(input.bible
+        ? {
+            bible: {
+              id: input.bible.pin.id, version: input.bible.pin.version, name: input.bible.info.name, roles: input.bible.info.roles, components: input.bible.info.parts ?? input.bible.info.components,
+              hasProse: !!input.bible.files.md && fs.existsSync(input.bible.files.md), ...(input.bible.info.restraint ? { restraint: input.bible.info.restraint } : {}),
+              // (U5a) set mode only with the Style's own parts; else its roles and hints (the hybrid)
+              parts: (input.bible.info.parts ?? input.bible.info.components).length > 0,
+              hints: hintsOf(input.bible.info as unknown as Record<string, unknown>, input.bible.pin),
+            },
+          }
+        : {}),
+      ...(input.styleHints ? { styleHints: input.styleHints } : {}),
       playbook: fs.existsSync(path.join(scratch, KIT, 'PLAYBOOK.md')),
       ...(neighbours.length ? { neighbours } : {}),
       ...(massing ? { massing } : {}),

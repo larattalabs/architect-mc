@@ -2,6 +2,8 @@
 // Style unification U2 in-game step (docs/CONTRACT.md "Style unification U2" gate; DEV MODE: the slice's own step), on a CLIENT of a gate
 // shard (the Design tab and the Variants dialog are client screens; the sim sidecar, no Claude: $0). Through the screens' DevBridge hooks
 // (dev.design.*, dev.library.variants.*), driving the StyleForm behind them:
+//   (since 2026-10-24 "Use this style's parts" is on by default for a built-in: the steps below switch it off where they test the
+//   materials-only path, and check the default once)
 //   1. the Design tab with a Style: the chip medieval picks the built-in Style (materials, its suggested features marked as the Style's);
 //      free text means no Style (no palette); the chip again keeps the features; the request carries withStyle (the roles inline) and
 //      no bible; the design is done, its entry records the palette and pins medieval v1, has no bible/ folder and is built of its materials;
@@ -55,8 +57,13 @@ steps.ingame = async () => {
   check(f.styleForm?.style?.id === 'medieval' && f.styleForm.style.kind === 'preset' && f.styleChip === 'medieval', '1: the chip medieval picks the built-in Style', f.styleForm?.style);
   check(JSON.stringify(f.features) === '["porch","chimney","balcony"]' && f.styleForm.featureProvenance.chimney === 'style' && f.styleForm.featureProvenance.porch === 'hand',
     '1: its suggested features join the player\'s porch, marked as the Style\'s', { features: f.features, provenance: f.styleForm.featureProvenance });
-  check(f.request?.palette?.bible?.id === 'medieval' && f.request.palette.bible.roles?.wall === 'minecraft:white_terracotta' && !f.request.bible && f.request.style === 'medieval',
-    '1: the request carries withStyle(medieval): the roles inline, no bible', f.request?.palette);
+  check(f.partsOffered === true && f.useParts === true && f.request?.bible === 'medieval' && !f.request?.palette,
+    '1: "Use this style\'s parts" is on by default for a built-in (set mode with its own parts)', { useParts: f.useParts, bible: f.request?.bible });
+  // this driver is about the Style's materials, so the parts go off: the hybrid, withStyle
+  st = await call('dev.design.fill', { parts: false });
+  f = st.form;
+  check(f.request?.palette?.bible?.id === 'medieval' && f.request.palette.bible.roles?.wall === 'minecraft:white_concrete' && !f.request.bible && f.request.style === 'medieval',
+    '1: parts off: the request carries withStyle(medieval): the roles inline, no bible', f.request?.palette);
   st = await call('dev.design.fill', { style: 'a hobbit hole under a hill' });
   check(!st.form.request?.palette && st.form.request?.style === 'a hobbit hole under a hill' && st.form.styleChip == null, '1: free text means no Style: the words go, no palette', st.form.request);
   st = await call('dev.design.fill', { style: 'medieval' });
@@ -82,7 +89,7 @@ steps.ingame = async () => {
   data.mix = f.styleForm;
   const r = f.request?.palette?.bible?.roles ?? {};
   check(f.styleForm?.mix === true && f.request?.palette?.bible?.id === 'medieval', '2: a custom mix based on medieval', { mix: f.styleForm?.mix, id: f.request?.palette?.bible?.id });
-  check(r.frame === 'minecraft:birch_log' && r.floor === 'minecraft:birch_planks' && r.wall === 'minecraft:white_terracotta' && r.light === 'minecraft:soul_lantern',
+  check(r.frame === 'minecraft:birch_log' && r.floor === 'minecraft:birch_planks' && r.wall === 'minecraft:white_concrete' && r.light === 'minecraft:soul_lantern',
     '2: the frame and floor follow the wood, the Style\'s wall stays, the light is the player\'s', r);
   const pv = f.styleForm?.provenance ?? {};
   check(pv.frame === 'follows_wood' && pv.wall === 'style' && pv.light === 'hand' && f.styleForm.main?.wood === 'birch' && f.styleForm.mainProvenance?.wood === 'hand',
@@ -126,7 +133,7 @@ steps.ingame = async () => {
       '4: the saved Style picked in the Variants dialog: a re-skin (bible: id), materials only', v?.request);
     vs = await call('dev.library.variants.set', { wood: 'spruce' });
     const vr = vs.variants?.request;
-    check(vr?.palette?.bible?.id === saved.styleId && vr.palette.bible.roles?.frame === 'minecraft:spruce_log' && vr.palette.bible.roles?.wall === 'minecraft:white_terracotta',
+    check(vr?.palette?.bible?.id === saved.styleId && vr.palette.bible.roles?.frame === 'minecraft:spruce_log' && vr.palette.bible.roles?.wall === 'minecraft:white_concrete',
       '4: a Wood edit in the dialog: the roles inline, based on the saved Style (frame spruce, wall kept)', vr?.palette);
     vs = await call('dev.library.variants.set', { bible: saved.styleId });
     check(vs.variants?.request?.bible === saved.styleId, '4: picking the Style again reverts the edit (the re-skin again)', vs.variants?.request);
@@ -152,6 +159,7 @@ steps.ingame = async () => {
   // ---- 6. massing first with a Style: the massing carries no palette, its detail pass (Approve) does
   await call('dev.ui.open', { tab: 'design' });
   await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'L', name: 'U2 Massed Cabin', massingFirst: true });
+  await call('dev.design.fill', { parts: false });
   const sm = await call('dev.design.submit', {}, 30_000);
   const mid = sm.sent?.designId;
   check(!!mid && !sm.sent.error && sm.form?.massingFirst === true, `6: Design it with Massing first -> ${mid}`, sm.sent);

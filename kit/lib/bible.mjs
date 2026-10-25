@@ -42,10 +42,29 @@ export const DEFAULT_PROPORTIONS = { storey: 4, roofPitch: 1, overhang: 1, windo
 /** The names of the built-in bibles (the palette presets). */
 export const BUILTIN_BIBLES = Object.keys(PALETTE_PRESETS);
 
-/** The reference components of a built-in bible, if it ships one. */
+/**
+ * The component library of a built-in bible, if the kit ships one (kit/bibles/<name>/components.mjs). A built-in has parts only if
+ * the kit ships a library for it: rustic's (the reference) and, since the built-in parts were authored (2026-10-24,
+ * tools/builtin-parts.mjs promote), every other built-in's.
+ */
 export function builtinComponentsFile(name) {
   const f = path.join(BIBLES_DIR, name, 'components.mjs');
   return fs.existsSync(f) ? f : null;
+}
+
+/**
+ * The component names a library file exports (its `export function <name>`), the required ones first, then the rest in file
+ * order. Read from the source (synchronous, no import), so builtinBible can list a promoted library's extra parts.
+ */
+export function libraryComponentNames(file) {
+  let src = '';
+  try {
+    src = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const names = [...src.matchAll(/^export\s+(?:async\s+)?function\s+([a-z][a-z0-9_]{0,39})\s*\(/gm)].map((m) => m[1]);
+  return [...REQUIRED_COMPONENTS.filter((n) => names.includes(n)), ...names.filter((n) => !REQUIRED_COMPONENTS.includes(n))];
 }
 
 /**
@@ -66,7 +85,7 @@ export function builtinBible(name) {
     roles: rolesOfPalette(PALETTES[name]),
     proportions: { ...DEFAULT_PROPORTIONS, ...(meta?.hints?.proportions ?? {}) },
     ...(meta?.hints?.roofLanguage ? { roofLanguage: meta.hints.roofLanguage } : {}),
-    components: builtinComponentsFile(name) ? [...REQUIRED_COMPONENTS] : [],
+    components: builtinComponentsFile(name) ? libraryComponentNames(builtinComponentsFile(name)) : [],
     ...(meta ? { tags: [...meta.tags], suggestedFeatures: [...meta.suggestedFeatures], blurb: meta.blurb } : {}),
     origin: 'builtin',
   };

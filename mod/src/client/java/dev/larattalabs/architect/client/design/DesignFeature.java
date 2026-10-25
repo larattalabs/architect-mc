@@ -90,7 +90,20 @@ public final class DesignFeature {
 	 */
 	public static CompletableFuture<dev.larattalabs.architect.api.Bible> saveStyle(@Nullable String name) {
 		DesignForm f = form;
-		JsonObject style = f.styleForm.saveRequest(name == null || name.isBlank() ? null : name.strip());
+		return saveStyle(f.styleForm, name, () -> {
+			f.styleText.clear();
+			f.ownWordsMode = false;
+			f.sendError = null;
+		});
+	}
+
+	/**
+	 * (U3) "Save as style…" of any editor's Style ({@code sf}: the Design tab's, or a Variants dialog's): a new hand-made Style
+	 * ({@code bible.save}, free); {@code sf} then picks it, and {@code after} runs on the client thread.
+	 */
+	public static CompletableFuture<dev.larattalabs.architect.api.Bible> saveStyle(dev.larattalabs.architect.library.StyleForm sf, @Nullable String name,
+		Runnable after) {
+		JsonObject style = sf.saveRequest(name == null || name.isBlank() ? null : name.strip());
 		if (style == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("pick a Style first"));
 		}
@@ -99,10 +112,8 @@ public final class DesignFeature {
 		}
 		return dev.larattalabs.architect.apiimpl.ApiImpl.biblesImpl().save(null, style, null).thenApply(b -> {
 			net.minecraft.client.Minecraft.getInstance().execute(() -> {
-				f.styleForm.pick(dev.larattalabs.architect.library.StyleForm.Style.of(b));
-				f.bible = null;
-				f.styleText.clear();
-				f.sendError = null;
+				sf.pick(dev.larattalabs.architect.library.StyleForm.Style.of(b));
+				after.run();
 			});
 			return b;
 		});

@@ -65,6 +65,7 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
   'bible.request',
   'bible.revise',
   'bible.cancel',
+  'bible.parts',
   'reskin.request',
   'massing.redirect',
   'massing.delete',
@@ -78,6 +79,7 @@ import { ClientError, RefusedError } from './errors.js';
 import { checkSystemRefs } from './jobs/systemrefs.js';
 import { checkRarity } from './rarity.js';
 import { checkPaletteSpec } from './styles.js';
+import { hintsOf, type StyleHints } from './claude/brief.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
@@ -550,6 +552,8 @@ export class Sidecar {
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.estimate':
+        // (U5b) an "Add parts" job runs the components pass only: at most a bible job (no drafting pass)
+        if (msg.parts) return this.simLabel({ ...this.estimates.bibleParts(this.estimateCtx()) });
         if (msg.request?.rarity !== undefined) return checkRarity(this.config.kitDir, msg.request.rarity).then(() => this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) }));
         return this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) });
       case 'bible.cancel': {
@@ -589,6 +593,12 @@ export class Sidecar {
       // (Style unification U1) a hand-made Style: no Claude call
       case 'bible.save':
         return { ...this.bibleIndex.save({ id: msg.bibleId, owner: msg.owner, bible: msg.bible }) };
+      // (Style unification U3) the Style editor's test-house check: nothing saved
+      case 'bible.check':
+        return { ...this.bibleIndex.check({ bible: msg.bible, scope: msg.scope }) };
+      // (Style unification U5b) "Add parts…"
+      case 'bible.parts':
+        return this.bibleParts(msg);
       // ---- 5b
       case 'entry.versions':
         return { entryId: msg.entryId, head: this.versions.head(msg.entryId), versions: this.versions.list(msg.entryId) };
@@ -881,19 +891,38 @@ export class Sidecar {
     return caps.length ? Math.min(...caps) : undefined;
   }
 
-  /** The bible a design builds with (resolved), if any. */
+  /**
+   * The bible a design builds with (resolved), if any. (U5) A Style without parts hands out no components; an entry designed again
+   * (versionOf, polish, a report critique) whose source was made in set mode before U5 (a built-in or hand-made Style then got the kit's
+   * reference library, which its source imports) keeps the library the entry was built with: its own bible/components.mjs. That file is
+   * the entry's, not another Style's attached to a Style, and the design stays out of set mode (no restraint, the hybrid brief).
+   */
   private designBible(d: Design) {
     if (!d.request.bible) return undefined;
     try {
-      return this.bibleIndex.resolve({ id: d.request.bible, version: d.request.bibleVersion ?? 1 });
+      const r = this.bibleIndex.resolve({ id: d.request.bible, version: d.request.bibleVersion ?? 1 });
+      const own = r.files.components ? undefined : this.entryComponents(d);
+      return own ? { ...r, files: { ...r.files, components: own } } : r;
     } catch (e) {
       this.log.warn(`design ${d.id}: its bible ${d.request.bible} v${d.request.bibleVersion} is gone (${(e as Error).message})`);
       return undefined;
     }
   }
 
+  /** (U5) The bible/components.mjs of the entry a design re-designs (versionOf, polish, a report critique), if it has one. */
+  private entryComponents(d: Design): string | undefined {
+    const id = d.request.versionOf?.entryId ?? d.polish?.entryId ?? d.critiqueOf;
+    if (!id || !/^[a-z0-9_]+$/.test(id)) return undefined;
+    const v = d.polish?.fromVersion ?? d.request.versionOf?.baseVersion ?? this.versions.head(id);
+    for (const dir of [this.versions.versionDir(id, v), this.versions.dir(id)]) {
+      const f = dir ? path.join(dir, 'bible', 'components.mjs') : '';
+      if (f && fs.existsSync(f)) return f;
+    }
+    return undefined;
+  }
+
   /** prepareScratch's extras: the bible's files and up to 4 iso renders of finished earlier-wave siblings. */
-  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }>; massing?: ScratchMassing } {
+  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }>; massing?: ScratchMassing; styleHints?: StyleHints } {
     const b = this.designBible(d);
     // a massing job's neighbours are the earlier waves' massings; a design's, their finished entries
     const neighbours = (
@@ -911,7 +940,28 @@ export class Sidecar {
       const prev = this.massings.get(d.massing.id, d.request.redirect.fromVersion);
       if (prev) massing = { record: prev, role: 'redirect' };
     }
-    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}), ...(massing ? { massing } : {}) };
+    const styleHints = this.paletteHints(d);
+    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}), ...(massing ? { massing } : {}), ...(styleHints ? { styleHints } : {}) };
+  }
+
+  /**
+   * (Style unification U5a) The hybrid default: a materials-only request's Style hints (blurb, roof language, proportions,
+   * silhouette, motifs), from the Style its palette names (inline roles: the Style they came from, the pinned version else its
+   * head; a preset name: that built-in). None for plain palette inputs, or a Style that is gone.
+   */
+  paletteHints(d: Design): StyleHints | undefined {
+    const p = d.request.palette;
+    if (p === undefined || d.request.bible) return undefined;
+    const ref = typeof p === 'string' ? { id: p, version: undefined } : 'bible' in p ? { id: p.bible.id, version: p.bible.version } : undefined;
+    if (!ref) return undefined;
+    const info = (ref.version !== undefined ? this.bibleIndex.get(ref.id, ref.version) : undefined) ?? this.bibleIndex.get(ref.id);
+    return info ? hintsOf(info as unknown as Record<string, unknown>, { id: info.id, version: info.version }) : undefined;
+  }
+
+  /** (U5) Whether a design runs bible set mode: it names a bible, and that Style has its own parts. */
+  setMode(d: Design): boolean {
+    const b = d.request.bible ? this.designBible(d) : undefined;
+    return !!b && (b.info.parts ?? b.info.components).length > 0;
   }
 
   /** Before the pristine check: the bible files again from their source (Bash in the scratch dir could change them). */
@@ -957,13 +1007,25 @@ export class Sidecar {
     return { jobId: j.id, bibleId: j.bibleId, version: j.version, adopted: false };
   }
 
+  /** (U5b) bible.parts (an opKey's earlier job, else a new one): ack { jobId, bibleId, version, from, copy, adopted }. */
+  private bibleParts(msg: { bibleId: string; version?: number | undefined; owner?: string | undefined; model?: string | undefined; budgetUsd?: number | undefined; opKey?: string | undefined }): Record<string, unknown> {
+    const body = { parts: msg.bibleId, version: msg.version, model: msg.model, budgetUsd: msg.budgetUsd };
+    const prior = msg.opKey ? this.opKeys.check('bible', msg.owner, msg.opKey, body as Record<string, unknown>) : undefined;
+    const pj = prior ? this.bibles.get(prior) : undefined;
+    if (pj) return { jobId: pj.id, bibleId: pj.bibleId, version: pj.version, from: pj.request.partsOf, copy: pj.kind === 'request', adopted: true };
+    const r = this.bibles.parts(msg);
+    if (msg.opKey) this.opKeys.record('bible', msg.owner, msg.opKey, body as Record<string, unknown>, r.job.id);
+    return { jobId: r.job.id, bibleId: r.job.bibleId, version: r.job.version, from: r.from, copy: r.copy, adopted: false };
+  }
+
   // ---- (4c) the check and the install every designer shares -------------------------------------
 
   /** How a design is checked: the limits (the detail pass's hard size cap) and the extra build args (`--massing`). */
   checkPlan(d: Design, extra: string[] = []): { limits: Limits; extra: string[] } {
     const p = this.massings.checkPlan(d, { maxSize: d.request.maxSize, type: d.request.type, profile: d.request.profile });
     // (5a) a design with a bible is checked against its restraint (kit warnings `restraint: ...`)
-    const restraint = d.request.bible && !d.request.massing && this.kitHas('--restraint') ? ['--restraint', path.join('bible', 'bible.json')] : [];
+    // (U5a) only in set mode: a Style without its own parts has no restraint check
+    const restraint = d.request.bible && !d.request.massing && this.kitHas('--restraint') && this.setMode(d) ? ['--restraint', path.join('bible', 'bible.json')] : [];
     // (6c IRR, S-IRR-2) the lot's reserved cells: the checker refuses a design writing one (a kit without the flag: refused at the request)
     const reserved = d.request.reserved && !d.request.massing && this.kitHas('--reserved') ? ['--reserved', JSON.stringify(d.request.reserved)] : [];
     // (Style unification U1) materials only: the design is checked and installed built with the palette asked for, whatever its

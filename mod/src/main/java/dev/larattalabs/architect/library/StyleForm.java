@@ -31,6 +31,9 @@ import org.jspecify.annotations.Nullable;
  * <li>Features (NEW): picking a Style adds its suggested features (at most 6 in all), marked as the Style's. Swapping Styles keeps the
  * player's own picks, replaces the untouched suggestions, and never adds back a feature the player turned off.</li>
  * <li>Output: {@link #request()} is the palette half of the request; {@link #saveRequest} the "Save as style…" Style.</li>
+ * <li>(U5b) Parts: a Style with its own parts offers "Use this style's parts" in NEW mode ({@link #useParts(boolean)}; on when picked
+ * for a Claude-made Style, off for every other). On, with the Style's own materials, the request is bible set mode
+ * ({@code {bible, bibleVersion}}) instead of the palette; a custom mix sends the palette (the parts read the Style's roles).</li>
  * </ul>
  */
 public final class StyleForm {
@@ -51,8 +54,16 @@ public final class StyleForm {
 	 * UI may edit it in place ({@link Bible#editable()}); every other one is Duplicate-only ("Save as style…" always makes a new one).
 	 */
 	public record Style(@Nullable String id, String name, int version, String kind, Palettes.@Nullable Inputs inputs, Map<String, String> roles,
-		List<String> suggestedFeatures, List<String> tags, boolean editable, boolean modOwned) {
+		List<String> suggestedFeatures, List<String> tags, boolean editable, boolean modOwned, int parts, boolean partsDefault) {
+		/** Without parts (U2's shape). */
+		public Style(@Nullable String id, String name, int version, String kind, Palettes.@Nullable Inputs inputs, Map<String, String> roles,
+			List<String> suggestedFeatures, List<String> tags, boolean editable, boolean modOwned) {
+			this(id, name, version, kind, inputs, roles, suggestedFeatures, tags, editable, modOwned, 0, false);
+		}
+
 		public Style {
+			parts = kind.equals(INPUTS) ? 0 : Math.max(0, parts);
+			partsDefault = partsDefault && parts > 0;
 			Map<String, String> r = new LinkedHashMap<>();
 			roles.forEach((k, v) -> {
 				if (v != null) {
@@ -75,7 +86,9 @@ public final class StyleForm {
 					tags = m.tags();
 				}
 			}
-			return new Style(b.id(), b.name(), b.version(), b.builtin() ? PRESET : BIBLE, null, b.roles(), sf, tags, b.editable(), b.modOwned());
+			// (U5b) its own parts; "Use this style's parts" starts on for a built-in (Noah, 2026-10-24) and a Claude-made Style, off for a hand-made one
+			return new Style(b.id(), b.name(), b.version(), b.builtin() ? PRESET : BIBLE, null, b.roles(), sf, tags, b.editable(), b.modOwned(), b
+				.parts().size(), b.builtin() || "claude".equals(b.origin()));
 		}
 
 		/** A built-in Style from the kit's palettes (no helper needed); null when {@code p} has no roles for it. */
@@ -103,7 +116,8 @@ public final class StyleForm {
 			Map<String, String> r = new LinkedHashMap<>();
 			o.getAsJsonObject("roles").entrySet().forEach(e -> r.put(e.getKey(), e.getValue().getAsString()));
 			return new Style(o.get("id").getAsString(), o.get("name").getAsString(), o.get("version").getAsInt(), kind, null, r, strings(o
-				.getAsJsonArray("suggestedFeatures")), strings(o.getAsJsonArray("tags")), false, false);
+				.getAsJsonArray("suggestedFeatures")), strings(o.getAsJsonArray("tags")), false, false, o.has("parts") ? o.get("parts").getAsInt() : 0, o
+					.has("partsDefault") && o.get("partsDefault").getAsBoolean());
 		}
 
 		String key() {
@@ -131,6 +145,8 @@ public final class StyleForm {
 	private List<String> from = new ArrayList<>();
 	private List<String> mine = new ArrayList<>();
 	private List<String> off = new ArrayList<>();
+	/** (U5b) "Use this style's parts" (NEW mode, a Style with parts) */
+	private boolean useParts;
 	private final String originalKey;
 	private final Map<String, String> originalRoles;
 
@@ -145,6 +161,7 @@ public final class StyleForm {
 		if (style != null) {
 			base = style;
 			materials(style);
+			useParts = mode == Mode.NEW && style.partsDefault();
 		}
 		if (mode == Mode.NEW) {
 			List<String> l = new ArrayList<>(new LinkedHashSet<>(features));
@@ -221,6 +238,7 @@ public final class StyleForm {
 		boolean same = base != null && s.key().equals(base.key());
 		base = s;
 		materials(s);
+		useParts = mode == Mode.NEW && s.parts() > 0 && (same ? useParts : s.partsDefault());
 		if (mode == Mode.NEW && !same) {
 			List<String> next = new ArrayList<>(features.stream().filter(mine::contains).toList());
 			List<String> fr = new ArrayList<>();
@@ -237,6 +255,7 @@ public final class StyleForm {
 
 	/** No Style (free text): the materials go; NEW: so do the Style's untouched suggestions. */
 	public void unpick() {
+		useParts = false;
 		base = null;
 		roles = new LinkedHashMap<>();
 		main = null;
@@ -245,6 +264,38 @@ public final class StyleForm {
 			features = new ArrayList<>(features.stream().filter(f -> !from.contains(f)).toList());
 			from = new ArrayList<>();
 		}
+	}
+
+	/**
+	 * (U5b) "Use this style's parts": NEW mode, a Style with its own parts. Throws otherwise (a variant's parts are in its code; a Style
+	 * without parts needs "Add parts…" first).
+	 */
+	public void useParts(boolean on) {
+		if (mode != Mode.NEW) {
+			throw new IllegalStateException("a variant's parts are in its code");
+		}
+		if (base == null) {
+			throw new IllegalStateException("pick a Style first");
+		}
+		if (base.parts() <= 0) {
+			throw new IllegalStateException("this Style has no parts of its own (Add parts… first)");
+		}
+		useParts = on;
+	}
+
+	/** (U5b) The toggle as set (it stays on through a custom mix, which still sends the palette). */
+	public boolean usePartsChosen() {
+		return useParts;
+	}
+
+	/** (U5b) Whether "Use this style's parts" can be shown: NEW mode and a Style with its own parts. */
+	public boolean partsOffered() {
+		return mode == Mode.NEW && base != null && base.parts() > 0;
+	}
+
+	/** (U5b) Whether the request runs the Style's parts (bible set mode): offered, on, and the Style's own materials. */
+	public boolean partsOn() {
+		return partsOffered() && useParts && !mix();
 	}
 
 	/** Back to the picked Style's materials (features untouched). */
@@ -384,6 +435,12 @@ public final class StyleForm {
 		if (b == null) {
 			return new JsonObject();
 		}
+		if (mode == Mode.NEW && partsOn()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("bible", b.id());
+			o.addProperty("bibleVersion", b.version());
+			return o;
+		}
 		if (mode == Mode.NEW) {
 			return b.id() != null ? inline() : inputs();
 		}
@@ -477,6 +534,9 @@ public final class StyleForm {
 		features.forEach(f -> fp.addProperty(f, from.contains(f) ? StyleRoles.STYLE : StyleRoles.HAND));
 		o.add("featureProvenance", fp);
 		o.add("changed", mode == Mode.VARIANT ? new JsonPrimitive(changed()) : JsonNull.INSTANCE);
+		o.addProperty("parts", b == null ? 0 : b.parts());
+		o.addProperty("useParts", useParts);
+		o.addProperty("partsOn", partsOn());
 		o.add("request", request());
 		JsonElement save = saveRequest(null);
 		o.add("save", save == null ? JsonNull.INSTANCE : save);
