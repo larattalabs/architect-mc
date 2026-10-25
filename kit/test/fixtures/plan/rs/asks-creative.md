@@ -1,13 +1,11 @@
-# 59 asks: adjusted 12, blocked 3, fits 66, refused 26, unsupported 25
+# 59 asks: adjusted 12, blocked 4, fits 66, refused 28, unsupported 22
 # gap table (unsupported parts per block id):
   rule.shape               3
   tunnel.under             3
   connector.lift           2
-  connector.stair          2
   form.crater              2
   rule.variety             2
   connector.drawbridge     1
-  connector.ladder         1
   connector.rail           1
   form.floating_island     1
   form.hollow_mountain     1
@@ -55,7 +53,7 @@ grid_city/grid_city zone.standard fits
 harbour/harbour zone.standard fits
 harvest_hamlet/hamlet zone.standard fits
 hidden_village/hollow zone.standard adjusted
-hidden_village/cave_ladders connector.ladder unsupported UNSUPPORTED until 7a
+hidden_village/cave_ladders connector.ladder blocked DEPENDENCY
 hidden_village/waterfall_curtain form.waterfall adjusted
 hidden_village/mossy_palette rule.palette refused NO_FEATURE
 ice_village/village zone.standard adjusted
@@ -68,7 +66,7 @@ metropolis/capital zone.standard adjusted
 metropolis/city_wall connector.wall fits
 mining_town/mining_town zone.standard fits
 mining_town/street_1 connector.street fits
-mining_town/rail_1 connector.rail unsupported UNSUPPORTED until 7a
+mining_town/rail_1 connector.rail unsupported UNSUPPORTED until CR
 mushroom_town/hamlet zone.standard fits
 nether_outpost/outpost zone.standard fits
 no_right_angles/town zone.standard fits
@@ -78,7 +76,7 @@ no_two_alike/no_two_alike rule.variety unsupported UNSUPPORTED until RC
 nomad_camp/camp zone.standard fits
 old_new_town/town zone.standard fits
 old_new_town/hill_street connector.street fits
-old_new_town/quarter_stair connector.stair unsupported UNSUPPORTED until 7a
+old_new_town/quarter_stair connector.stair refused NO_CLIMB
 old_new_town/two_styles rule.palette refused NO_FEATURE
 one_block/reach zone.standard fits
 one_block/gentle_terraces form.terrace refused OVERLAP
@@ -107,7 +105,7 @@ ship_town/ship_deck zone.standard fits
 ship_town/ship_hull form.ship_hull unsupported UNSUPPORTED until unscheduled
 ship_town/ship_masts form.mast unsupported UNSUPPORTED until unscheduled
 sky_monastery/cloister zone.standard fits
-sky_monastery/long_stair connector.stair unsupported UNSUPPORTED until 7a
+sky_monastery/long_stair connector.stair refused NO_CLIMB
 sky_monastery/sky_island form.floating_island unsupported UNSUPPORTED until N-P0-1
 sorting_warehouse/trading_post zone.standard fits
 spiral_town/hill_town zone.standard fits
