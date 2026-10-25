@@ -141,7 +141,7 @@ steps.ingame = async () => {
   await shot('editor_own_words');
   await ui('style:medieval');
   f = await form();
-  check(f.ownWords === false && f.useParts === true && f.request?.bible === 'medieval', '1: the medieval chip picks the Style again (its parts on, the default)', f.styleChip);
+  check(f.ownWords === false && f.request?.palette?.bible?.id === 'medieval', '1: the medieval chip picks the Style again (the same Style: the parts stay as the player left them, off)', f.styleChip);
   await folds({ 'architect_mc.editor.features': true, 'architect_mc.editor.rules': true, 'architect_mc.editor.parameters': true, 'architect_mc.editor.what': false });
   await shot('editor_sections_open');
   await folds(FOLDS);

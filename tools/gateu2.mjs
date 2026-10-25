@@ -13,7 +13,7 @@
 //      the form then picks it (no longer a mix); its version folder is on disk;
 //   4. a variant re-skin: the Variants dialog of design 1 with the saved Style (unedited: the 4b re-skin, bible: id); the variant is built
 //      of its materials; a Wood edit in the dialog turns the request into the roles inline (the custom mix based on it);
-//   5. Remix… of the materials-only design picks its Style (parts on by default: bible medieval; off: palette, no bible);
+//   5. Remix… of the materials-only design picks its Style (palette, no bible: never set mode);
 //   6. Massing first with a Style: the massing request carries no palette, the detail pass (Approve) does, and is built of it.
 //
 //   node tools/gateu2.mjs ingame        (gate-chains.json step u2-ingame)
@@ -67,8 +67,6 @@ steps.ingame = async () => {
   st = await call('dev.design.fill', { style: 'a hobbit hole under a hill' });
   check(!st.form.request?.palette && st.form.request?.style === 'a hobbit hole under a hill' && st.form.styleChip == null, '1: free text means no Style: the words go, no palette', st.form.request);
   st = await call('dev.design.fill', { style: 'medieval' });
-  check(st.form.useParts === true && st.form.request?.bible === 'medieval', '1: the chip again: the Style\'s parts are on again (the default)');
-  st = await call('dev.design.fill', { parts: false });
   check(!!st.form.request?.palette && JSON.stringify(st.form.features) === '["porch","chimney","balcony"]', '1: the chip again: the Style back, the features as they were');
   const s1 = await call('dev.design.submit', {}, 30_000);
   check(!!s1.sent?.designId && !s1.sent.error, `1: Design it -> ${s1.sent?.designId}`, s1.sent);
@@ -153,11 +151,8 @@ steps.ingame = async () => {
   if (d1.entryId) {
     const rm = await call('dev.library.remix', { entry: d1.entryId });
     data.remix = { request: rm.request, styleForm: rm.styleForm?.style };
-    check(rm.request?.bible === 'medieval' && !rm.request?.palette && rm.request?.remix === d1.entryId,
-      '5: Remix… of the materials-only design: the medieval Style picked, its parts on (the default: set mode, bible medieval)', { palette: rm.request?.palette?.bible?.id, bible: rm.request?.bible });
-    await call('dev.design.fill', { parts: false });
-    check(rm.styleForm?.style?.id === 'medieval' && (await call('dev.design.state')).form.request?.palette?.bible?.id === 'medieval',
-      '5: with the parts off: its palette sent, no bible (the materials-only path)');
+    check(rm.request?.palette?.bible?.id === 'medieval' && !rm.request?.bible && rm.request?.remix === d1.entryId,
+      '5: Remix… of the materials-only design: the medieval Style picked, its palette sent, no bible (not set mode)', { palette: rm.request?.palette?.bible?.id, bible: rm.request?.bible });
     await call('dev.design.fill', { remix: null });
   }
 
