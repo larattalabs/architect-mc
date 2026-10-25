@@ -132,10 +132,12 @@ steps.unit = async () => {
   fs.writeFileSync(path.join(OUT, 'f3-asks-after.md'), after.text);
   // ((7a foundation) its ask movers compare without their `until`: tools/lib/f7a-norm.mjs)
   const { f7aAskLine } = await import('./lib/f7a-norm.mjs');
-  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], f7aAskLine(l)]));
+  // ((7a CL, on main since v0.44.0; nightly 2026-10-25) CL's three climbs (cave_ladders, quarter_stair, long_stair) compare by part and kind:
+  // fl-norm's clAskLine, as the other slices' asks items read them through flAsksFilter)
+  const { FL_MOVED_ASKS, flAsksFilter, clAskLine } = await import('./lib/fl-norm.mjs');
+  const lines = (t) => new Map(t.split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], clAskLine(f7aAskLine(l))]));
   const lb = lines(before.text), la = lines(after.text);
   // ((batch v0.41.0) the five asks FL moves by name are FL's to judge)
-  const { FL_MOVED_ASKS, flAsksFilter } = await import('./lib/fl-norm.mjs');
   const flAsk = (k) => FL_MOVED_ASKS.includes(`${k.split('/')[0]}.json`);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v && !flAsk(k)).map(([k]) => k);
   const cb = fs.existsSync(path.join(F, 'asks-before.md')) ? fs.readFileSync(path.join(F, 'asks-before.md'), 'utf8') : null, ca = fs.existsSync(path.join(F, 'asks-after.md')) ? fs.readFileSync(path.join(F, 'asks-after.md'), 'utf8') : null;
