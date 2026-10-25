@@ -2179,7 +2179,10 @@ Try one with `--host server --only <step>`, then mark it.
   packs and allowCommands 0) reads S1 as 572271bdae83 against the golden's 3e5bd5b77e40, in a fresh run dir too; a client that
   reused it in the same run dir failed the same way, which is why both hosts failed in housekeeping 2. Since housekeeping 3 the
   base stamp's recipe names its host (`tools/lib/basestamp.mjs` `gateHost`), so a base the other host made is moved aside and
-  rebuilt. The frozen site's count (item 6, recorded) varies from run to run on one host too (5904 on both hosts on
+  rebuilt. Since 2026-10-25 each host keeps its own base folder (`hostBaseName`: the server's is `G6B Seed Base Srv`, `G6B Flat Base
+  Srv`, `G6B Seed <n> Srv`; the client keeps the plain names), so in a mixed turbo run dir the two never rebuild each other's base
+  (the nightly of 2026-10-25 quarantined 11 copies of one); `dev.world.open` gives a create 120 s (10 s to open an existing world).
+  The frozen site's count (item 6, recorded) varies from run to run on one host too (5904 on both hosts on
   2026-10-19), as do the S2/S3 survey shas (recorded, not judged). It stays on the client.
 - y-ingame: both failures were the harness's (housekeeping 3). On the client, NOT_ALLOWED came from a survival base the headless
   server had made in the same run dir (its mark now records the host; the other host rebuilds it). Headless, the host opened the

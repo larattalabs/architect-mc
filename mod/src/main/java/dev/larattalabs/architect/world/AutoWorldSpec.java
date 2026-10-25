@@ -64,6 +64,34 @@ public record AutoWorldSpec(String name, Preset preset, long seed, Mode mode, bo
 		return new AutoWorldSpec(name, preset, seed, mode, cheats);
 	}
 
+	/**
+	 * (nightly 2026-10-25) DevBridge {@code dev.world.open}'s budget: the request answers once the client has the world loaded. Opening an
+	 * existing world keeps 10 s; making a new one (no folder of that name) gets 120 s, because under a loaded machine spawn selection
+	 * alone took ~9 s and the old flat 10 s timed out mid-create, leaving a half-made world (the gate base-world cascade).
+	 */
+	public static final long OPEN_EXISTING_MS = 10_000;
+	public static final long OPEN_CREATE_MS = 120_000;
+
+	/** The {@code dev.world.open} budget for a world that {@code exists} on disk already, or must be created. */
+	public static long openBudgetMs(boolean exists) {
+		return exists ? OPEN_EXISTING_MS : OPEN_CREATE_MS;
+	}
+
+	/**
+	 * The {@code ARCHITECT_AUTOWORLD_*} overrides a {@code dev.world.open} request gives ({@code field} -> its value or null for each of
+	 * name, mode, preset, seed, cheats); cheats normalised to 1/0.
+	 */
+	public static java.util.Map<String, String> overrides(Function<String, String> field) {
+		java.util.Map<String, String> over = new java.util.HashMap<>();
+		for (String k : new String[] {"name", "mode", "preset", "seed", "cheats"}) {
+			String v = field.apply(k);
+			if (v != null) {
+				over.put("ARCHITECT_AUTOWORLD_" + k.toUpperCase(Locale.ROOT), k.equals("cheats") ? (Boolean.parseBoolean(v) || v.equals("1") ? "1" : "0") : v);
+			}
+		}
+		return over;
+	}
+
 	/** Like the vanilla "Seed" box: a number is used as is, other text is hashed. */
 	public static long parseSeed(String s) {
 		try {

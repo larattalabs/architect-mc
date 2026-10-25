@@ -1517,7 +1517,7 @@ async function switchClient(sh, key) {
   const dev = await connectDev(sh, 30_000);
   try {
     await leaveWorld(dev);
-    await dev.call('dev.world.open', { name: c.world }, { timeoutMs: 60_000 });
+    await dev.call('dev.world.open', { name: c.world }, { timeoutMs: 150_000 }); // a create gets up to 120 s in the game
     await waitReady(sh, dev, Date.now() + cfg.clientStartMin * 60_000);
     sh.current = key;
   } finally {
@@ -1597,7 +1597,7 @@ async function restoreWorlds(sh, step) {
     }
   } finally {
     if (dev) {
-      await dev.call('dev.world.open', { name: cfg.clients[sh.current]?.world ?? own }, { timeoutMs: 60_000 });
+      await dev.call('dev.world.open', { name: cfg.clients[sh.current]?.world ?? own }, { timeoutMs: 150_000 }); // a create gets up to 120 s in the game
       await waitReady(sh, dev, Date.now() + cfg.clientStartMin * 60_000);
       dev.close();
     }

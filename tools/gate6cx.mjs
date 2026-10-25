@@ -89,6 +89,7 @@ async function run(name) {
 const ensure = async () => { if (!state.dev) await connect(); };
 async function fresh(name, from) {
   await leaveWorld();
+  if (L.baseSpec(from)) await L.ensureBase(from); // this host's base, made or rebuilt when missing or stale (tools/lib/basestamp.mjs)
   copyWorld(from, name);
   await openWorld(name);
 }
@@ -112,14 +113,8 @@ steps.stop = async () => {
 };
 steps.base = async () => {
   await ensure();
-  if (!fs.existsSync(path.join(SAVES, FLAT, 'level.dat'))) {
-    await leaveWorld();
-    await openWorld(FLAT, { mode: 'creative', preset: 'flat', seed: '2026100906', cheats: true });
-    await L.setRules('exact');
-    await tp(0.5, 200, 0.5);
-    await cmd('/save-all flush');
-    await leaveWorld();
-  }
+  // this host's stamped base (tools/lib/basestamp.mjs): an unstamped one made here before fed the other drivers' rebuild cascade
+  await L.ensureBase(FLAT);
   spendZero();
   return { worlds: [FLAT] };
 };

@@ -78,6 +78,19 @@ public final class AutoWorld {
 	}
 
 	/**
+	 * DevBridge dev.world.open's budget for these overrides: {@link AutoWorldSpec#openBudgetMs} of whether the world's folder exists. A
+	 * request that names no valid world gets the short budget (the open fails at once anyway).
+	 */
+	public static long openBudgetMs(Minecraft mc, java.util.Map<String, String> overrides) {
+		try {
+			AutoWorldSpec s = AutoWorldSpec.from(k -> overrides.containsKey(k) ? overrides.get(k) : ClientEnv.raw(k));
+			return AutoWorldSpec.openBudgetMs(mc.getLevelSource().levelExists(s.name()));
+		} catch (RuntimeException e) {
+			return AutoWorldSpec.OPEN_EXISTING_MS;
+		}
+	}
+
+	/**
 	 * Opens (or creates) the AutoWorld world, with {@code overrides} taking the place of the environment's
 	 * {@code ARCHITECT_AUTOWORLD_*} values (DevBridge {@code dev.world.open {name, mode, preset, seed, cheats}}).
 	 */
