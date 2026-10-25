@@ -11,6 +11,7 @@ import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
+import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
@@ -69,6 +70,7 @@ export const MOVED = Object.freeze({
   'valid/v64_vocc_copper.json': '§5: the artifact\'s palette row gains over: all', 'valid/v65_vocc_nowood.json': '§5: the artifact\'s palette row gains over: all',
   'vocc/r03_entry.json': '§5: the artifact\'s palette row gains over: all', 'vocc/r04_lenient.json': '§5: the artifact\'s palette row gains over: all',
   // ((7a foundation) the fixtures its catalogue changes move by name: tools/lib/f7a-norm.mjs)
+  ...THEME_REST_MOVED,
   ...F7A_MOVED,
 });
 /** The three lines §4 moves in the 59 asks as Steward recorded them now (Steward's own count, refused 9 -> 6). */

@@ -425,13 +425,18 @@ export function tunnelRoles(roles, cr = {}) {
   };
 }
 
-/** The lantern a tunnel hangs (the bible's light when it is a lantern, else a lantern), and the full block it sets flush in a wall. */
+/**
+ * The lantern a tunnel hangs (the bible's light when it is a lantern, else a lantern), and the light it sets flush in a wall: the
+ * light role's own full block when it is one (a bollard fixture), else the same lantern standing in a niche (theme rest: never
+ * glowstone).
+ */
 export function tunnelLights(lightBlock) {
   const name = String(lightBlock ?? 'minecraft:lantern').replace(/\[.*$/, '');
   const lantern = /(^|:)(soul_)?lantern$/.test(name) ? name : 'minecraft:lantern';
   const f = fixtureFor(name);
-  const flush = f.kind === 'bollard' ? f.light : 'minecraft:glowstone';
-  return { hanging: `${lantern}[hanging=true,waterlogged=false]`, standing: `${lantern}[hanging=false,waterlogged=false]`, flush, level: Math.min(lightLevel(`${lantern}[hanging=true,waterlogged=false]`), lightLevel(flush)) || 15 };
+  const standing = `${lantern}[hanging=false,waterlogged=false]`;
+  const flush = f.kind === 'bollard' ? f.light : standing;
+  return { hanging: `${lantern}[hanging=true,waterlogged=false]`, standing, flush, level: Math.min(lightLevel(`${lantern}[hanging=true,waterlogged=false]`), lightLevel(flush)) || 15 };
 }
 
 /**

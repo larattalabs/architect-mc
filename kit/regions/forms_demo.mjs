@@ -1,11 +1,12 @@
 // forms_demo (docs/CONTRACT.md 6c F1 §7): the forms I fixture, not a catalogue program. On S2's pinned claim (or its flat
 // variant) it grows up to 6 `iceSpike` clusters and 3 `rockSpire`s on land among the claim's natural ice, keeps that ice
 // (`keepNatural('ICE')`: the frozen sea and the natural spikes are never written: a form whose cells meet a kept cell, or come
-// within 1 of one, is not placed there), and lights each ice cluster with a soul-lantern post (block light 10: melt-safe beside
-// ice and snow, M17). The first spire is baked to a `voxels` op (`bake`, default on) so the gate sees a baked form realised.
+// within 1 of one, is not placed there), and lights each ice cluster with the bible's lamp fixture (light and rail roles, lampFixture). The first spire is baked to a `voxels` op (`bake`, default on) so the gate sees a baked form realised.
 // Two-plan flow: the first plan asks for the claim's volume; the second reads it. Deterministic: candidate sites are a sorted
 // scan of a grid, each form grown at plan time and tested cell by cell; no Math.random.
 import { region } from '../lib/region/program.mjs';
+import { fixtureCells } from '../lib/region/fixtures.mjs';
+import { lampFixture } from '../lib/region/props.mjs';
 import { fnv64 } from '../lib/noise.mjs';
 import { iceSpike } from '../lib/forms/iceSpike.mjs';
 import { rockSpire } from '../lib/forms/rockSpire.mjs';
@@ -17,7 +18,7 @@ export const params = {
   spikes: { type: 'int', min: 0, max: 12, default: 6, label: 'Ice-spike clusters' },
   spires: { type: 'int', min: 0, max: 6, default: 3, label: 'Rock spires' },
   bake: { type: 'bool', default: true, label: 'Bake the first spire' },
-  lamps: { type: 'bool', default: true, label: 'Soul-lantern posts' },
+  lamps: { type: 'bool', default: true, label: 'Lamp posts' },
 };
 
 const AIR = 'minecraft:air';
@@ -126,6 +127,8 @@ export function build(ctx, hooks = {}) {
   }
   const lamps = r.part('lamps', { stage: 'forms' });
   const lampCols = [];
+  const lampFx = lampFixture(r), lampStates = [];
+  const lampMat = (st) => { let i = lampStates.indexOf(st); if (i < 0) i = lampStates.push(st) - 1; return i; };
   for (let i = 0; i < P.spikes; i++) {
     const preset = SPIKES[i % SPIKES.length];
     const got = place('iceSpike', nSpikes, spikeSites, (fid, s) => iceSpike({ preset, at: [s.x, s.y, s.z], seed: fnv64(ctx.seed, 'iceSpike', fid).hex }, { groundAt }));
@@ -135,7 +138,7 @@ export function build(ctx, hooks = {}) {
     const f = { id: got.fid, kind: 'iceSpike', preset, at: [got.site.x, got.site.y, got.site.z], ops: got.gen.ops.length, spikes: got.gen.spikes.length, lamp: null };
     forms.push(f);
     if (!P.lamps) continue;
-    // a soul-lantern post on land 2 to 4 cells off the cluster's footprint, on the side nearest the claim's centre first
+    // a lamp post on land 2 to 4 cells off the cluster's footprint, on the side nearest the claim's centre first
     const b = got.gen.bounds;
     const cands = [];
     for (let d = 2; d <= 4; d++) cands.push([b.maxX + d, got.site.z], [b.minX - d, got.site.z], [got.site.x, b.maxZ + d], [got.site.x, b.minZ - d]);
@@ -143,15 +146,18 @@ export function build(ctx, hooks = {}) {
       if (!land(lx, lz) || takenCols.has(`${lx},${lz}`)) continue;
       const gy = survey.heightAt(lx, lz);
       if ([1, 2, 3].some((dy) => keptNear(lx, gy + dy, lz))) continue;
-      lampCols.push(lx, lz, gy + 1, gy + 2, 0, lx, lz, gy + 3, gy + 3, 1);
-      takenCols.add(`${lx},${lz}`);
-      f.lamp = [lx, gy + 3, lz];
+      // (theme rest) the bible's lamp fixture (light and rail roles: lampFixture), whatever its kind
+      const fc = fixtureCells(lampFx, [lx, gy + 1, lz]);
+      if (fc.foot.some(([fx, fz]) => (fx !== lx || fz !== lz) && (!land(fx, fz) || takenCols.has(`${fx},${fz}`)))) continue;
+      for (const [cx2, cy2, cz2, st] of fc.cells) lampCols.push(cx2, cz2, cy2, cy2, lampMat(st));
+      for (const [fx, fz] of fc.foot) takenCols.add(`${fx},${fz}`);
+      f.lamp = fc.lightAt;
       break;
     }
   }
   if (nSpires < P.spires || nSpikes < P.spikes) r.note(`forms_demo: placed ${nSpires}/${P.spires} spires and ${nSpikes}/${P.spikes} ice clusters (not enough land clear of kept ice)`);
   // IF_NATURAL: the post replaces a natural snow layer or plant, never a built block
-  if (lampCols.length) lamps._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: lampCols, materials: [lamps._mat('minecraft:spruce_fence', 'lamp post'), lamps._mat('minecraft:soul_lantern', 'lamp')], cond: 0, walk: false });
+  if (lampCols.length) lamps._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: lampCols, materials: lampStates.map((st) => lamps._mat(st, 'lamp')), cond: 0, walk: false });
   // anchors: the entrance and spawn on the land nearest the claim's centre; a hub; cameras on a ring above the claim
   const cx = (claim.minX + claim.maxX) >> 1, cz = (claim.minZ + claim.maxZ) >> 1;
   let best = null;

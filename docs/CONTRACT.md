@@ -25147,6 +25147,24 @@ palette on the detail pass only).
 - U4 (recorded, not fixed): the kit's example designs and the sim's copies of them build their walls from the wood set (`p.planks`),
   not the `wall` role, so a wall-defined Style (medieval, japanese, modern) only partly re-skins them.
 
+## Theme rest (`fix/theme-rest`, Noah 2026-10-24: "everything should be themed / fit"; as built)
+
+The five known exceptions of S-THEME are themed or documented, and `THEME_KNOWN` (`kit/lib/lint/theme.mjs`) is empty.
+| Exception | Became |
+|---|---|
+| T3 tunnel flush light (`connectors/tunnelGeom.mjs` `tunnelLights`) | The light role's own full block when it is a bollard fixture; else the same lantern the tunnel hangs, standing in a niche in the wall (no glowstone). Level and lamp spacing unchanged (both lanterns). |
+| route_demo's lamps | `lampFixture(r)`: the light and rail roles, like every other village lamp. Lamp spacing follows the light role's level (the soul lantern's 10 is gone). |
+| forms_demo's lamp posts | `lampFixture(r)` cells through `fixtureCells` (any kind: post, light, a gibbet's arm); the parameter label is "Lamp posts". |
+| HY-c water-gate grate | Kept as `minecraft:iron_bars[waterlogged=true]`, a functional block: the state is shared by the fluid op, the survival bill and the mod, and a fence does not keep mobs out of a waterlogged reach. `minecraft:iron_bars` is in `UNTHEMED_OK` (`connectors/style.mjs`). |
+| VOC-c no-wood swaps | A door or trapdoor of the swap chain's base when that base has one (a copper role gives `copper_door`, `copper_trapdoor`), else iron's, the only other door. `minecraft:iron_door` and `minecraft:iron_trapdoor` are in `UNTHEMED_OK`. |
+
+Intended deviations (the moved fixtures; the drivers' byte-identity checks name the tunnel ones through `tools/lib/theme-rest-norm.mjs` `THEME_REST_MOVED`):
+- goldens re-cut (`scenarios/goldens/`): crossings_demo_flat (tunnel lamp cells), forms_demo (lamp posts: the light role's fixture; 13875 -> 13869 cells), route_demo (lamp spacing from the light role's level; 11837 -> 11817 cells). Their headers record kit 0.42.0 now.
+- plan fixtures with a tunnel (glowstone -> the lantern in a niche): rs/rs04_tunnel, tunnel/tn05_water_3, tunnel/tn13_via_lenient, tunnel/tn14_glass_params, valid/v37_tunnel, valid/v38_auto_crossings, valid/v38b_auto_tunnel, valid/v40_postern.
+- lint fixture `kit/test/fixtures/lint/tunnel_hill`.
+`kit/test/fixtures/lint/tunnel_hill` was re-planned by the planner (step `t3b-fixture`, a headless checkPlan on a fresh copy of the seed world; same survey and frozen volume).
+Baseline: vocc-unit item 3 and hy-unit item 11 failed on origin/main 395fd5c8 too (CL's three asks, quarter_stair, long_stair, cave_ladders, against tables committed before CL); `tools/lib/fl-norm.mjs` `clAskLine` and the stair/ladder tally rows now compare them by part and kind.
+
 ## Style unification U3: the unified editor, the Style browser and editor, the Library screen (as built)
 
 Branch `slice/U3` (off U2, main v0.44.0 merged in). Client UI on lab-ui 0.2.0 plus one free, read-only sidecar op. No API change (no

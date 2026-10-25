@@ -308,8 +308,10 @@ export function swapState(state, chain, exclude) {
     const side = (x) => (x === 'true' ? 'low' : 'none');
     return mk(v, { east: side(props.east), north: side(props.north), south: side(props.south), up: 'true', waterlogged: props.waterlogged ?? 'false', west: side(props.west) });
   }
-  if (/_trapdoor$/.test(b)) return ok('minecraft:iron_trapdoor') ? keep('minecraft:iron_trapdoor', ['facing', 'half', 'open', 'powered', 'waterlogged']) : null;
-  if (/_door$/.test(b)) return ok('minecraft:iron_door') ? keep('minecraft:iron_door', ['facing', 'half', 'hinge', 'open', 'powered']) : null;
+  // (theme rest) a door or trapdoor of the chain's base when that base has one (a copper role: copper_door), else iron's: the only
+  // other door there is, a documented functional fallback (style.mjs UNTHEMED_OK)
+  if (/_trapdoor$/.test(b)) { const t = firstVariant('trapdoor') ?? (ok('minecraft:iron_trapdoor') ? 'minecraft:iron_trapdoor' : null); return t ? keep(t, ['facing', 'half', 'open', 'powered', 'waterlogged']) : null; }
+  if (/_door$/.test(b)) { const d = firstVariant('door') ?? (ok('minecraft:iron_door') ? 'minecraft:iron_door' : null); return d ? keep(d, ['facing', 'half', 'hinge', 'open', 'powered']) : null; }
   if (/_pressure_plate$/.test(b)) return ok('minecraft:stone_pressure_plate') ? keep('minecraft:stone_pressure_plate', ['powered']) : null;
   if (/_button$/.test(b)) return ok('minecraft:stone_button') ? keep('minecraft:stone_button', ['face', 'facing', 'powered']) : null;
   // a full block (planks, a log, wood, a stripped log, a stem, bamboo's block and mosaic): the base

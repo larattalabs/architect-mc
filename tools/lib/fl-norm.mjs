@@ -33,6 +33,14 @@ export function normIrJson(json) {
  * five free asks' lines (VOC-c's whole block for each), the gap table's free-layout rows and the tally line. The earlier slices' asks
  * items compare their tables through it.
  */
+/** (7a CL, on main) The three parts CL answers: quarter_stair and long_stair refused NO_CLIMB, cave_ladders blocked DEPENDENCY (were unsupported until 7a); the committed tables still hold the old answers, so their lines compare by part and kind only. */
+export const CL_ASK_PARTS = Object.freeze(['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair']);
+export const clAskLine = (l) => {
+  const m = /^(\s*)(?:([a-z0-9_]+)\/)?([a-z0-9_]+) (connector\.[a-z_]+) /.exec(l);
+  if (!m) return l;
+  const key = m[2] ? `${m[2]}/${m[3]}` : null;
+  return (key ? CL_ASK_PARTS.includes(key) : CL_ASK_PARTS.some((p) => p.endsWith(`/${m[3]}`))) ? `${m[1]}${m[2] ? `${m[2]}/` : ''}${m[3]} ${m[4]} CL` : l;
+};
 export function flAsksFilter(text) {
   const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));
   const out = [];
@@ -40,12 +48,13 @@ export function flAsksFilter(text) {
   for (const l of String(text).split('\n')) {
     if (/^# 59 asks/.test(l)) continue;
     if (/^\s+(layout\.(ring|grid|organic|spiral)|locator\.around|sketch\.outline)\s+\d+$/.test(l)) continue;
+    if (/^\s+connector\.(stair|ladder)\s+\d+$/.test(l)) continue; // (7a CL) the gap table's tally rows its three movers change
     const head = /^([a-z0-9_]+)(\/| )/.exec(l);
     if (head && !l.startsWith(' ')) inBlock = asks.includes(head[1]) && head[2] === ' ';
     if (head && asks.includes(head[1])) continue;
     if (inBlock && l.startsWith('  ')) continue;
     // ((7a foundation) the foundation's ask movers compare without their `until` (rail_1: until 7a -> CR): tools/lib/f7a-norm.mjs)
-    out.push(f7aAskLine(l));
+    out.push(clAskLine(f7aAskLine(l)));
   }
   return out.join('\n');
 }

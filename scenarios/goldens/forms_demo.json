@@ -3,15 +3,15 @@
  "version": 0,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/forms_demo/",
  "fromRun": "20261012-052203",
- "irSha": "611fae337c7049c77ee5cc4cd0b8e7cf49a90468ce456051038763f10fbdfd8a",
- "kitVersion": "0.19.0",
- "cells": 13875,
+ "irSha": "0c1ff5b568507691cc2094f48cac7839011e1a4c916842ac5c79958d4e846821",
+ "kitVersion": "0.42.0",
+ "cells": 13869,
  "tiles": {
   "forms|terrain|40,26": "a7327d3c405c0ed87bbd3b24aaad6f4d6e489a618e55866d46e7c37acc54f6f5",
-  "forms|terrain|40,27": "fd0379b2abda163d1f32e1a1d209539963cc342e83a15ad20579f2f562a0286d",
-  "forms|terrain|41,26": "7c763b61027c846d1db5968953359dfbbc0037ed7ad1a638cb29c41c878c06b3",
-  "forms|terrain|41,27": "b332b82e19378a7832721d009cd4faa519e6456d658c60e58ff50b769ba7cd6e",
-  "forms|terrain|42,26": "acf55f9633bf8b6473e4e7b893b9641307165e6eb554a796c1c3b61d5d491775",
+  "forms|terrain|40,27": "e96dce272290dea1ae04c5bbaeb95845398389f9a00749d25c37669df05884c9",
+  "forms|terrain|41,26": "1e2e4d83d1d2a225c5f468055723e107f7421ee744910c63133a5e3c12954832",
+  "forms|terrain|41,27": "bb650efe6c1bf6bcb8e3c99e5f0d5dfcdbbc0eeaeedaa4d0d34b6382afc7ea05",
+  "forms|terrain|42,26": "0e2a312539660fc6f4a79e7729c13b02709a3f8688b9a84d7aa981090ee446eb",
   "forms|terrain|42,27": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886"
  }
 }
