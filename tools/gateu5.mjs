@@ -3,8 +3,9 @@
 // and Add parts are client screens; the sim sidecar, no Claude: $0):
 //   1. Medieval's new wall: white_concrete (white_terracotta rendered salmon), wall_alt still calcite; its own parts (since the
 //      built-in parts, 2026-10-24: the kit ships kit/bibles/medieval/components.mjs);
-//   2. the hybrid default: a design with medieval from the Design tab is materials only (palette, no bible; the parts toggle offered
-//      and off, the built-ins' default); the
+//   2. a built-in on the Design tab: "Use this style's parts" is offered and ON by default (Noah, 2026-10-24: set mode with the
+//      Style's own parts, {bible: medieval, bibleVersion}, no palette); switched off it is the hybrid: materials only (palette, no
+//      bible); the
 //      sidecar's BRIEF.md carries the Style's look as guidance ("lean toward steep gables…") and no set-mode text; no bible/ folder;
 //   3. "Add parts…" through the sim ($0): the Style browser says "Parts: 5" for medieval, the + New style menu opens Add parts
 //      (Redraft) with the helper's estimate first, Draft parts runs a sim bible job that puts the parts on a hand-made copy of the
@@ -138,8 +139,13 @@ steps.ingame = async () => {
   await call('dev.ui.open', { tab: 'design' });
   await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'M', name: `U5 Hybrid ${tag}`, massingFirst: false });
   let f = await form();
+  check(f.partsOffered === true && f.useParts === true && f.request?.bible === 'medieval' && !f.request?.palette,
+    '2: medieval on the Design tab: the parts toggle offered and ON (set mode with its own parts, no palette)', { partsOffered: f.partsOffered, useParts: f.useParts, bible: f.request?.bible });
+  await shotOne('editor_builtin_parts_on');
+  await call('dev.design.fill', { parts: false });
+  f = await form();
   check(f.partsOffered === true && f.useParts === false && !f.request?.bible && f.request?.palette?.bible?.roles?.wall === 'minecraft:white_concrete',
-    '2: medieval on the Design tab: materials only (palette, new wall), no bible; the parts toggle offered, off', { partsOffered: f.partsOffered, useParts: f.useParts, bible: f.request?.bible });
+    '2: switched off: materials only (palette, new wall), no bible (the hybrid)', { partsOffered: f.partsOffered, useParts: f.useParts, bible: f.request?.bible });
   await shotOne('editor_hybrid');
   const s1 = await call('dev.design.submit', {}, 30_000);
   const d1 = s1.sent?.designId ? await designDone(s1.sent.designId) : { status: 'NONE' };

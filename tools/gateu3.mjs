@@ -122,7 +122,12 @@ steps.ingame = async () => {
   await call('dev.ui.open', { tab: 'design' });
   await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'M', name: `U3 Cabin ${tag}`, massingFirst: false });
   let f = await form();
-  check(f.styleForm?.style?.id === 'medieval' && !!f.request?.palette?.bible && f.request.style === 'medieval', '1: the editor picks medieval: its palette and style sent', f.request?.palette?.bible?.id);
+  check(f.styleForm?.style?.id === 'medieval' && f.partsOffered === true && f.useParts === true && f.request?.bible === 'medieval' && !f.request?.palette,
+    '1: the editor picks medieval: "Use this style\'s parts" is on by default (set mode with its own parts)', { useParts: f.useParts, bible: f.request?.bible });
+  // the rest of this section is about the Style's materials, so the parts go off
+  await call('dev.design.fill', { parts: false });
+  f = await form();
+  check(f.styleForm?.style?.id === 'medieval' && !!f.request?.palette?.bible && f.request.style === 'medieval', '1: parts off: medieval\'s palette and style sent', f.request?.palette?.bible?.id);
   await shot('editor_new');
   await call('dev.design.fill', { styleNote: 'mossy, lived-in', notes: 'two rooms' });
   f = await form();
@@ -136,7 +141,7 @@ steps.ingame = async () => {
   await shot('editor_own_words');
   await ui('style:medieval');
   f = await form();
-  check(f.ownWords === false && f.request?.palette?.bible?.id === 'medieval', '1: the medieval chip picks the Style again', f.styleChip);
+  check(f.ownWords === false && f.request?.palette?.bible?.id === 'medieval', '1: the medieval chip picks the Style again (the same Style: the parts stay as the player left them, off)', f.styleChip);
   await folds({ 'architect_mc.editor.features': true, 'architect_mc.editor.rules': true, 'architect_mc.editor.parameters': true, 'architect_mc.editor.what': false });
   await shot('editor_sections_open');
   await folds(FOLDS);

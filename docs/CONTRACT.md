@@ -25292,7 +25292,8 @@ them). Cozy's plaster is white_terracotta too: left as authored (not in this sli
 - **"Use this style's parts"** (`StyleForm`, NEW mode; the kit twin `formApply ['parts', on]`, `formPartsOn`, view `parts`, `useParts`,
   `partsOn`; parity fixture sequences for both):
   - offered only when the picked Style has its own parts;
-  - on when picked for a Claude-made Style (set mode as before U5), off for every other Style (the hybrid default);
+  - on when picked for a Claude-made Style (set mode as before U5) and, since 2026-10-24, for every built-in (section "Parts default on
+    for built-ins"); off for a hand-made Style (the hybrid default);
   - on, with the Style's own materials, the request is `{bible, bibleVersion}` instead of the palette; a custom mix sends the palette
     (the parts read the Style's roles), and the note says "Revert to use the parts";
   - picking another Style resets it to that Style's default.
@@ -25394,8 +25395,8 @@ all 16.
   there.
 - New kit test (`bible.test.mjs`): every library the kit ships passes its own roles with no warnings (S-THEME included), its parts
   house is clean, and `builtinBible` lists what the library exports.
-- **The toggle default is unchanged.** "Use this style's parts" stays off for built-ins (`StyleForm` partsDefault), so parts are
-  opt-in.
+- **The toggle default** stayed off for built-ins on this branch; Noah flipped it to on afterwards (section "Parts default on for
+  built-ins", below).
 - **Behaviour change, by the U5 rule:** a request whose `bible` names a built-in (`withBible`, a group, a remix) now runs set mode with
   that Style's own library instead of the hybrid. The nightly sets that pass oak or birch as `bible` (apitest, p4c-ui, p5a-ui, gate6cv,
   gate6c0b) go back to set mode. Their sim designs never import components, so no failure is expected; this is recorded for the
@@ -25482,3 +25483,23 @@ all 16.
   - water-lint: 126;
   - p3-lint: 16.
 - `./gradlew build --offline` in the worktree: BUILD SUCCESSFUL.
+
+## Parts default on for built-ins (fix/parts-default-on, 2026-10-24, $0)
+
+Noah approved the A/B's recommendation on 2026-10-24: "Use this style's parts" starts **on** for every built-in Style.
+- **The rule now.** On when picked for a built-in or a Claude-made Style; off for a hand-made one (on only by hand, when it has parts).
+  A Style without parts shows no toggle. Picking another Style resets the toggle to that Style's default; a custom mix still sends the
+  palette ("Revert to use the parts").
+- **Code.** `StyleForm.Style.of(Bible)`: `partsDefault = b.builtin() || origin == "claude"` (still ANDed with `parts > 0`). The kit
+  twin: `presetStyle` in `kit/lib/styles.mjs` takes `parts` from `builtinBible(name).components.length` and sets `partsDefault`.
+  `StyleForm.Style.preset(Palettes, name)` (the no-helper path) still has 0 parts, so no toggle there. Parity fixture
+  `kit/test/fixtures/style-parity.json` regenerated (`node tools/gen-palettes.mjs --parity ...`): every preset has `parts` > 0 and
+  `partsDefault` true.
+- **Behaviour.** A design from the Design tab with a built-in chip is now set mode with the Style's own library
+  (`{bible: <id>, bibleVersion}`, no palette) unless the player switches the toggle off (the hybrid: palette, materials only). A
+  remix or Variants dialog that picks a built-in follows the same default. Claude-made and hand-made Styles are unchanged.
+- **Tests and drivers.** `ApiStyleU5Test` (built-in case), `StyleFormTest` (replays the fixture), the kit parity tests. `u5-ingame`
+  step 2 checks the toggle ON for medieval, then off for the hybrid checks. `u2-ingame` and `u3-ingame` assumed materials-only for a
+  built-in picked on the Design tab: they check the default once, then switch the parts off (`dev.design.fill {parts: false}`) where
+  they test the materials path; u2 step 5 (remix) expects set mode by default. `u1-ingame` uses `withStyle` through the API, so is
+  unchanged.

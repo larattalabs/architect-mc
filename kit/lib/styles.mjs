@@ -312,7 +312,7 @@ export function builtinStyles() {
 //   variant mode, only when the Style or roles changed: a preset's name (unedited preset), the four inputs (roles equal to their plain
 //   fan-out), `bible: id` (an unedited installed Style: the 4b re-skin), else the roles inline based on the Style.
 // - Save as style: a bible.save request {name, roles, tags, suggestedFeatures, basedOn, origin: 'hand'}.
-// - (U5b) Parts: a Style with its own parts (`parts`: how many; `partsDefault`: on when picked, as a Claude-made Style is) offers
+// - (U5b) Parts: a Style with its own parts (`parts`: how many; `partsDefault`: on when picked, as a built-in or Claude-made Style is) offers
 //   "Use this style's parts" in new mode (['parts', on]). On, and the materials still the Style's, the request is set mode
 //   `{bible: id, bibleVersion: version}` instead of the palette; a custom mix sends the palette (the parts read the Style's own
 //   roles). Picking another Style resets it to that Style's default; the hybrid (off) is the default for every other Style.
@@ -340,12 +340,20 @@ export function formStyle(s) {
   };
 }
 
+/**
+ * How many parts every built-in ships (kit/bibles/<id>/components.mjs; bible.test.mjs checks it against builtinBible). Held here
+ * rather than read from bible.mjs so styles.mjs, which many drivers import, does not widen their step inputs to kit/bibles/**.
+ */
+export const BUILTIN_PARTS = 5;
+
 /** A built-in Style (a palette preset) with its metadata. */
 export function presetStyle(name) {
   const p = PALETTES[name];
   if (!p) throw new Error(`no built-in Style '${name}'`);
   const m = STYLE_META[name] ?? { tags: [], suggestedFeatures: [] };
-  return formStyle({ id: name, name: name.charAt(0).toUpperCase() + name.slice(1), version: 1, kind: 'preset', roles: p.roles, suggestedFeatures: m.suggestedFeatures, tags: m.tags });
+  return formStyle({ id: name, name: name.charAt(0).toUpperCase() + name.slice(1), version: 1, kind: 'preset', roles: p.roles, suggestedFeatures: m.suggestedFeatures, tags: m.tags,
+    // every built-in ships its own parts, and "Use this style's parts" starts on for it (Noah, 2026-10-24)
+    parts: BUILTIN_PARTS, partsDefault: true });
 }
 
 function materials(st, s) {

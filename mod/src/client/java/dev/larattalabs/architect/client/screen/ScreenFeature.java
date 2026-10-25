@@ -384,7 +384,7 @@ public final class ScreenFeature {
 			}
 		}
 		if (f.has("bible")) {
-			// (U5) any Style is picked (its parts on by default only for a Claude-made one); an unknown id is refused
+			// (U5) any Style is picked (its parts on by default for a built-in and a Claude-made one, off for a hand-made one); an unknown id is refused
 			String bid = f.isExplicitNull("bible") || "none".equals(f.str("bible")) ? null : f.str("bible");
 			var known = bid == null ? java.util.Optional.<dev.larattalabs.architect.api.Bible>empty() : dev.larattalabs.architect.client.design.SetFeature.bible(bid);
 			if (known.isPresent()) {
