@@ -2,6 +2,8 @@
 // Style unification U2 in-game step (docs/CONTRACT.md "Style unification U2" gate; DEV MODE: the slice's own step), on a CLIENT of a gate
 // shard (the Design tab and the Variants dialog are client screens; the sim sidecar, no Claude: $0). Through the screens' DevBridge hooks
 // (dev.design.*, dev.library.variants.*), driving the StyleForm behind them:
+//   (since 2026-10-24 "Use this style's parts" is on by default for a built-in: the steps below switch it off where they test the
+//   materials-only path, and check the default once)
 //   1. the Design tab with a Style: the chip medieval picks the built-in Style (materials, its suggested features marked as the Style's);
 //      free text means no Style (no palette); the chip again keeps the features; the request carries withStyle (the roles inline) and
 //      no bible; the design is done, its entry records the palette and pins medieval v1, has no bible/ folder and is built of its materials;
@@ -11,7 +13,7 @@
 //      the form then picks it (no longer a mix); its version folder is on disk;
 //   4. a variant re-skin: the Variants dialog of design 1 with the saved Style (unedited: the 4b re-skin, bible: id); the variant is built
 //      of its materials; a Wood edit in the dialog turns the request into the roles inline (the custom mix based on it);
-//   5. Remix… of the materials-only design picks its Style (palette, no bible: never set mode);
+//   5. Remix… of the materials-only design picks its Style (parts on by default: bible medieval; off: palette, no bible);
 //   6. Massing first with a Style: the massing request carries no palette, the detail pass (Approve) does, and is built of it.
 //
 //   node tools/gateu2.mjs ingame        (gate-chains.json step u2-ingame)
@@ -55,11 +57,18 @@ steps.ingame = async () => {
   check(f.styleForm?.style?.id === 'medieval' && f.styleForm.style.kind === 'preset' && f.styleChip === 'medieval', '1: the chip medieval picks the built-in Style', f.styleForm?.style);
   check(JSON.stringify(f.features) === '["porch","chimney","balcony"]' && f.styleForm.featureProvenance.chimney === 'style' && f.styleForm.featureProvenance.porch === 'hand',
     '1: its suggested features join the player\'s porch, marked as the Style\'s', { features: f.features, provenance: f.styleForm.featureProvenance });
+  check(f.partsOffered === true && f.useParts === true && f.request?.bible === 'medieval' && !f.request?.palette,
+    '1: "Use this style\'s parts" is on by default for a built-in (set mode with its own parts)', { useParts: f.useParts, bible: f.request?.bible });
+  // this driver is about the Style's materials, so the parts go off: the hybrid, withStyle
+  st = await call('dev.design.fill', { parts: false });
+  f = st.form;
   check(f.request?.palette?.bible?.id === 'medieval' && f.request.palette.bible.roles?.wall === 'minecraft:white_concrete' && !f.request.bible && f.request.style === 'medieval',
-    '1: the request carries withStyle(medieval): the roles inline, no bible', f.request?.palette);
+    '1: parts off: the request carries withStyle(medieval): the roles inline, no bible', f.request?.palette);
   st = await call('dev.design.fill', { style: 'a hobbit hole under a hill' });
   check(!st.form.request?.palette && st.form.request?.style === 'a hobbit hole under a hill' && st.form.styleChip == null, '1: free text means no Style: the words go, no palette', st.form.request);
   st = await call('dev.design.fill', { style: 'medieval' });
+  check(st.form.useParts === true && st.form.request?.bible === 'medieval', '1: the chip again: the Style\'s parts are on again (the default)');
+  st = await call('dev.design.fill', { parts: false });
   check(!!st.form.request?.palette && JSON.stringify(st.form.features) === '["porch","chimney","balcony"]', '1: the chip again: the Style back, the features as they were');
   const s1 = await call('dev.design.submit', {}, 30_000);
   check(!!s1.sent?.designId && !s1.sent.error, `1: Design it -> ${s1.sent?.designId}`, s1.sent);
@@ -144,14 +153,18 @@ steps.ingame = async () => {
   if (d1.entryId) {
     const rm = await call('dev.library.remix', { entry: d1.entryId });
     data.remix = { request: rm.request, styleForm: rm.styleForm?.style };
-    check(rm.request?.palette?.bible?.id === 'medieval' && !rm.request?.bible && rm.request?.remix === d1.entryId,
-      '5: Remix… of the materials-only design: the medieval Style picked, its palette sent, no bible (not set mode)', { palette: rm.request?.palette?.bible?.id, bible: rm.request?.bible });
+    check(rm.request?.bible === 'medieval' && !rm.request?.palette && rm.request?.remix === d1.entryId,
+      '5: Remix… of the materials-only design: the medieval Style picked, its parts on (the default: set mode, bible medieval)', { palette: rm.request?.palette?.bible?.id, bible: rm.request?.bible });
+    await call('dev.design.fill', { parts: false });
+    check(rm.styleForm?.style?.id === 'medieval' && (await call('dev.design.state')).form.request?.palette?.bible?.id === 'medieval',
+      '5: with the parts off: its palette sent, no bible (the materials-only path)');
     await call('dev.design.fill', { remix: null });
   }
 
   // ---- 6. massing first with a Style: the massing carries no palette, its detail pass (Approve) does
   await call('dev.ui.open', { tab: 'design' });
   await call('dev.design.fill', { reset: true, buildingType: 'cabin', style: 'medieval', size: 'L', name: 'U2 Massed Cabin', massingFirst: true });
+  await call('dev.design.fill', { parts: false });
   const sm = await call('dev.design.submit', {}, 30_000);
   const mid = sm.sent?.designId;
   check(!!mid && !sm.sent.error && sm.form?.massingFirst === true, `6: Design it with Massing first -> ${mid}`, sm.sent);

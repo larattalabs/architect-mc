@@ -20,8 +20,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Style unification U5: a Style's own parts ({@link Bible#parts}, additive, the 1.41.0 constructor kept), the wire's {@code parts} and
- * its fallback for an older helper or bible.json, "Use this style's parts" in the Style form (on for a Claude-made Style, off for any
- * other; set mode only with the Style's own materials), the browser's parts line, and the additive {@link Bibles} methods.
+ * its fallback for an older helper or bible.json, "Use this style's parts" in the Style form (on for a built-in and a Claude-made Style, off for a
+ * hand-made one; set mode only with the Style's own materials), the browser's parts line, and the additive {@link Bibles} methods.
  */
 class ApiStyleU5Test {
 	static final List<String> REQ = List.of("window", "door_surround", "lantern_post", "roof_trim", "chimney");
@@ -101,6 +101,14 @@ class ApiStyleU5Test {
 		assertTrue(f.request().has("palette"));
 		f.useParts(true);
 		assertTrue(f.partsOn());
+		// a built-in with its own parts: on when picked (Noah, 2026-10-24), set mode with the built-in's id
+		f.pick(StyleForm.Style.of(style("builtin", true, REQ)));
+		assertTrue(f.partsOffered() && f.partsOn());
+		assertEquals("bib_builtin", f.request().get("bible").getAsString());
+		assertFalse(f.request().has("palette"));
+		f.useParts(false);
+		assertFalse(f.partsOn());
+		assertTrue(f.request().has("palette"));
 		// a Style without parts: no toggle
 		f.pick(StyleForm.Style.preset(Palettes.FALLBACK, "medieval"));
 		assertFalse(f.partsOffered());

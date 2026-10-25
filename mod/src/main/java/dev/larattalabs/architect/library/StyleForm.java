@@ -86,9 +86,9 @@ public final class StyleForm {
 					tags = m.tags();
 				}
 			}
-			// (U5b) its own parts; "Use this style's parts" starts on for a Claude-made Style (set mode, as before U5), off otherwise
+			// (U5b) its own parts; "Use this style's parts" starts on for a built-in (Noah, 2026-10-24) and a Claude-made Style, off for a hand-made one
 			return new Style(b.id(), b.name(), b.version(), b.builtin() ? PRESET : BIBLE, null, b.roles(), sf, tags, b.editable(), b.modOwned(), b
-				.parts().size(), "claude".equals(b.origin()));
+				.parts().size(), b.builtin() || "claude".equals(b.origin()));
 		}
 
 		/** A built-in Style from the kit's palettes (no helper needed); null when {@code p} has no roles for it. */
