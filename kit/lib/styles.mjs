@@ -11,7 +11,6 @@
 // follow a main row: a wood role whose block is of the current wood's family, a stone role of the current stone's family.
 // Everything else was set by the Style (or by hand) and stays.
 import { BLOCKS, isCube, normalize, qualify } from './blocks.mjs';
-import { builtinBible } from './bible.mjs';
 import { CORE_ROLES, PALETTE_PRESETS, PALETTES, STONE_FAMILIES, WOODS, fullBlockOf, stoneFamilyOf, variant, woodFamilyOf, woodSetOf } from './kit.mjs';
 
 /** The four main rows of the Style editor, in order. */
@@ -341,6 +340,12 @@ export function formStyle(s) {
   };
 }
 
+/**
+ * How many parts every built-in ships (kit/bibles/<id>/components.mjs; bible.test.mjs checks it against builtinBible). Held here
+ * rather than read from bible.mjs so styles.mjs, which many drivers import, does not widen their step inputs to kit/bibles/**.
+ */
+export const BUILTIN_PARTS = 5;
+
 /** A built-in Style (a palette preset) with its metadata. */
 export function presetStyle(name) {
   const p = PALETTES[name];
@@ -348,7 +353,7 @@ export function presetStyle(name) {
   const m = STYLE_META[name] ?? { tags: [], suggestedFeatures: [] };
   return formStyle({ id: name, name: name.charAt(0).toUpperCase() + name.slice(1), version: 1, kind: 'preset', roles: p.roles, suggestedFeatures: m.suggestedFeatures, tags: m.tags,
     // every built-in ships its own parts, and "Use this style's parts" starts on for it (Noah, 2026-10-24)
-    parts: builtinBible(name).components.length, partsDefault: true });
+    parts: BUILTIN_PARTS, partsDefault: true });
 }
 
 function materials(st, s) {
