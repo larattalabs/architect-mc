@@ -109,6 +109,25 @@ Catalogue (`sinceApi: NEXT`, appended): `revision.keep`, `revision.add`, `revisi
    check `BesideReach.standing`'s `walls` (K1/K2) and the 7a connectors' readers when it switches the readers.
 10. **AD's dependency** names 7a's link pass, which moved to 7b (C:19876): AD's order needs re-checking (not RV's).
 
+11. **The same-tick check compares each cell with its capture.** A cell that changed is RACED unless the change is the tile's own: it
+    already holds its planned after (a dependent that popped), or the tile wrote the cell under or over it (a gravity block that fell).
+    A change two or more cells away caused by the tile's own writes (a long sand column, a vine) would still read RACED: item 21's natural
+    round (RV-d) is where that shows.
+12. **planRevision's survey** reads generated chunks (`GENERATED_ONLY`), loaded or not; the frozen heights go over it.
+
+## Not shown on this branch (each with its reason)
+
+| Item / row | Why not shown |
+|---|---|
+| 3: the pond (an added body) | added bodies are RV-c (§7: the fluids stage, settle, census, drain); the kit plans it, the mod refuses its realise `NOT_ALLOWED` (shown) |
+| 3: `rv_layers` (skipped and felled cells under an added relief form) | the gate's town is on a flat world with no trees; the kit's 300-revision test covers layering over terrain columns; the in-game felling row is RV-d's natural round |
+| 6: a PT build, a C17 area, an unfinished tile, `blockers` | the PT build and C17 refusals are in the kit's guard tests (rv-a) and in TileCheck's revision mode, not driven in game; `unfinished` needs a region with a failed tile (fault injection, RV-c); `blockers` is undo's (RV-c) |
+| 9: depth (LAYER_DEPTH) | not built: a revision does not pre-check stack depth; the journal's own depth limit applies at the commit (RV-c with undo's stacks) |
+| 10: undo's kill points (§4.4 steps 2-5, K6, mid-R4) | undo is RV-c |
+| 11: a candidate whose dirty tile's history moved without the head moving | needs an undo or a lot removal under a standing revision (RV-c, RV-d); `historySha` is unit-tested in the kit and computed at plan and accept in the mod |
+| 20: a site taking a cell between capture and write (the stop path, `Batches.failRest`) | DevBridge can set a block in that window (shown: RACED) but not place a site there; a site placed after the plan is refused at the tile's check (shown) |
+| 4, 5, 12-16, 18, 19, 21 | RV-c and RV-d (readers, realiseApproved's branch, plan/0 in game, lots and refills, survival, fluids, the natural round) |
+
 ## What was run
 
 (filled in below as runs finish)

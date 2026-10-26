@@ -83,6 +83,17 @@ final class InfraJob implements Placement.Job {
 	transient Value @Nullable [] raceBefores;
 	/** (6d RV) The cells a revision tile left unwritten because they changed (RACED), and those another site now holds. */
 	final List<Long> raced = new ArrayList<>();
+	/**
+	 * (6d RV) The cells this revision tile wrote so far. A cell that changed since its capture is the tile's own doing, not a race, when it
+	 * already holds its planned after (a dependent that popped), or a cell under or over it was written by this tile (a gravity block that
+	 * fell, its support written).
+	 */
+	private final it.unimi.dsi.fastutil.longs.LongOpenHashSet wrote = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+
+	private boolean selfMoved(long p) {
+		int x = Journal.x(p), y = Journal.y(p), z = Journal.z(p);
+		return wrote.contains(net.minecraft.core.BlockPos.asLong(x, y - 1, z)) || wrote.contains(net.minecraft.core.BlockPos.asLong(x, y + 1, z));
+	}
 	final List<Long> racedHeld = new ArrayList<>();
 	final List<String> notes = new ArrayList<>();
 	/** 6c 0c §3: a partial road's skipped spans, for its PlaceResult (not saved: the notes name them too). */
@@ -545,7 +556,8 @@ final class InfraJob implements Placement.Job {
 						Value v = afters[cursor];
 						m.set(Journal.x(p), Journal.y(p), Journal.z(p));
 						Value[] rb = raceBefores;
-						if (rb != null && cursor < rb.length && rb[cursor] != null && level.getBlockState(m) != WorldJournal.state(rb[cursor])) {
+						BlockState nowAt = rb == null ? null : level.getBlockState(m);
+						if (rb != null && cursor < rb.length && rb[cursor] != null && nowAt != WorldJournal.state(rb[cursor]) && nowAt != WorldJournal.state(v) && !selfMoved(p)) {
 							// (6d RV, §3.3) checked and written in the same tick: the cell changed since its capture, so it is not written
 							raced.add(p);
 							cursor++;
@@ -553,6 +565,9 @@ final class InfraJob implements Placement.Job {
 							continue;
 						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
+						if (rb != null) {
+							wrote.add(p);
+						}
 						if (v.nbt() != null) {
 							BlockEntity be = level.getBlockEntity(m);
 							if (be != null) {
