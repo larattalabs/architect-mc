@@ -165,6 +165,7 @@ public final class RegionsImpl implements Regions {
 
 	public static void init() {
 		dev.larattalabs.architect.site.Groups.GROUP_ENDED = RegionsImpl::groupEnded;
+		SiteEvents.SITE_REMOVED.register(Revisions::siteRemoved); // (6d RV, §4.6) a region's lot removed alone reads `removed`
 		DamageLog.init(); // (6c H) dev.entity.damage (a villager stand's drowning)
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(RegionsImpl::started);
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(s -> Heights.flush());
@@ -192,6 +193,7 @@ public final class RegionsImpl implements Regions {
 				revisionsPending = false;
 				Revisions.recover(s); // (6d RV, §4.3) revisions accepted before a stop: installed or ended
 			}
+			Revisions.undoTick(s); // (6d RV, §4.4) running undos take their next step
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
 			RegionHash.tick(s);
@@ -430,6 +432,11 @@ public final class RegionsImpl implements Regions {
 	}
 
 	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
+		return Revisions.undo(regionId, toPosition, actor); // (6d RV, §4.4)
+	}
+
+	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.PlanCheck> checkPlan(dev.larattalabs.architect.api.PlanRequest r) {
 		return PlanChecks.check(r);
 	}
@@ -578,11 +585,11 @@ public final class RegionsImpl implements Regions {
 			}
 			int[] sc = st.rec().claim; // [x0, y0, z0, x1, y1, z1]
 			int[] standing = {sc[0], sc[2], sc[3], sc[5]}, mine = {c.minX(), c.minZ(), c.maxX(), c.maxZ()};
-			String seam = BesideCheck.seamProblem(standing, st.ir().json(), mine);
+			String seam = BesideCheck.seamProblem(standing, Revisions.effective(st), mine); // (6d RV, §4.5) the effective IR
 			if (seam != null) {
 				return failedRaw(Reason.OVERLAP, "beside " + r.beside() + ": " + seam);
 			}
-			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, st.ir().json(), mine));
+			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, Revisions.effective(st), mine));
 			// (6c D3, §2.4) the reach inputs: the town claim's survey (resolution 1, loaded chunks only), the held columns over its claim
 			// (the journal now) and its standing data; the plan reads them only when its seam step finds no join
 			reachReady = reachInputs(r, st, standing);
@@ -700,7 +707,7 @@ public final class RegionsImpl implements Regions {
 			}
 			Live st = REGIONS.get(r.beside());
 			int[] tc = st == null ? null : st.rec().claim;
-			JsonObject town = st == null ? null : st.ir().json();
+			JsonObject town = st == null ? null : Revisions.effective(st);
 			return BesideVerdicts.fits(r.beside(), (JsonObject) o[1], tc == null ? null : new int[] {tc[0], tc[2], tc[3], tc[5]}, town, keyNote, t0);
 		});
 		out.whenComplete((v, e) -> DRY.remove(r));
@@ -737,11 +744,11 @@ public final class RegionsImpl implements Regions {
 		ServerLevel level = r.level();
 		JsonObject held;
 		try {
-			held = BesideReach.held(Sites.dimensionId(level), standing, st.rec().groupId, BesideReach.propsStages(st.ir().json()), null);
+			held = BesideReach.held(Sites.dimensionId(level), standing, st.rec().groupId, BesideReach.propsStages(Revisions.effective(st)), null);
 		} catch (IOException e) {
 			return CompletableFuture.failedFuture(refusal(Reason.JOURNAL_UNAVAILABLE, "beside: the held columns could not be read (" + e.getMessage() + ")"));
 		}
-		JsonObject std = BesideReach.standing(st.rec().id, standing, st.ir().json());
+		JsonObject std = BesideReach.standing(st.rec().id, standing, Revisions.effective(st));
 		return RegionSurvey.sample(level, standing[0], standing[1], standing[2], standing[3], 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
 			byte[] bytes = cols.encode();
 			return BlobPut.put(link, bytes, "survey").thenAccept(blobId -> {
@@ -1758,7 +1765,7 @@ public final class RegionsImpl implements Regions {
 		// the held set over the reach: as planned
 		BesideReach.Held h;
 		try {
-			h = BesideReach.scan(p.dimension(), rect, st.rec().groupId, BesideReach.propsStages(st.ir().json()), null);
+			h = BesideReach.scan(p.dimension(), rect, st.rec().groupId, BesideReach.propsStages(Revisions.effective(st)), null);
 		} catch (IOException e) {
 			return new String[] {"JOURNAL_UNAVAILABLE", "the held columns over the join's reach could not be read (" + e.getMessage() + ")"};
 		}
@@ -1889,7 +1896,7 @@ public final class RegionsImpl implements Regions {
 	/** (6c FL, S-FL-5) The road ext key of a plan region's street: {@code {zone, district?}}. */
 	public static final String STREET_EXT = "architect_mc:street";
 
-	private static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
+	static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
 		List<BlockPos> pts = new ArrayList<>();
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
 		// (6c RS, §5) a survival region's 4e road is a construction road (C16) from the owner's stockpile

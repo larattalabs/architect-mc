@@ -321,6 +321,16 @@ public final class Groups {
 		}
 	}
 
+	/** (6d RV) Whether a removal of this group's stage {@code stage} is in progress (running, not stalled). */
+	public static boolean stageRemovalRunning(String groupId, String stage) {
+		for (Removal r : REMOVALS) {
+			if (r.group.equals(groupId) && stage.equals(r.stage)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** (C23) Whether a whole-group removal of this group is in progress (not a stalled one). */
 	public static boolean removalRunning(String groupId) {
 		for (Removal r : REMOVALS) {

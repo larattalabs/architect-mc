@@ -220,7 +220,7 @@ public final class RealisedRecords {
 		}
 		if ("road".equals(i.itemKind)) {
 			String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
-			JsonObject sites = Realised.sites(world, region, 0);
+			JsonObject sites = Realised.sites(world, region, layer);
 			JsonObject was = sites != null && sites.has("roads") && sites.getAsJsonObject("roads").has(id) ? sites.getAsJsonObject("roads").getAsJsonObject(id)
 				: null;
 			JsonObject o = was != null ? was.deepCopy() : Realised.road(i.siteId == null ? "" : i.siteId, -1, List.of(), "placed");
@@ -232,7 +232,7 @@ public final class RealisedRecords {
 				o.addProperty("reason", i.reason);
 			}
 			o.addProperty("at", System.currentTimeMillis());
-			Realised.putSite(world, region, 0, "roads", id, o);
+			Realised.putSite(world, region, layer, "roads", id, o);
 		}
 	}
 
@@ -246,7 +246,7 @@ public final class RealisedRecords {
 		String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
 		JsonObject o = Realised.road("", 0, List.of(), "placing");
 		o.add("heldBy", held.deepCopy());
-		Realised.putSite(l.world(), region, 0, "roads", id, o);
+		Realised.putSite(l.world(), region, dev.larattalabs.architect.region.Revisions.layerOf(i.stage), "roads", id, o); // (6d RV) a revision's at its layer
 	}
 
 	/** A region road's job began (Batches): its site, its planned cells and the spans a partial road skipped. */
@@ -257,7 +257,7 @@ public final class RealisedRecords {
 			return;
 		}
 		String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
-		Realised.putSite(l.world(), region, 0, "roads", id, Realised.road(siteId, c.cells(), c.spans(), "placing"));
+		Realised.putSite(l.world(), region, dev.larattalabs.architect.region.Revisions.layerOf(i.stage), "roads", id, Realised.road(siteId, c.cells(), c.spans(), "placing"));
 	}
 
 	// ------------------------------------------------------------------ verify: the record against the journal and the world

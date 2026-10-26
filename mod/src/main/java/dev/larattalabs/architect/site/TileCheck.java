@@ -189,6 +189,14 @@ final class TileCheck {
 		return this;
 	}
 
+	/** (6d RV, §8) A survival region's revision: a cell over a block the region built (not natural) refuses survival_paid. */
+	private boolean survivalRevision;
+
+	TileCheck survivalRevision(boolean on) {
+		this.survivalRevision = on;
+		return this;
+	}
+
 	/** (RP) Records the tile's realised draft over {@code t}, the tile as evaluated ({@code tile} is it after the fluids gate). */
 	TileCheck provenance(Packed.@Nullable Tile t) {
 		this.original = t;
@@ -409,6 +417,9 @@ final class TileCheck {
 				} else if (inArea(x, z)) {
 					why = dev.larattalabs.architect.api.Reason.PROTECTED;
 					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is in the owner's protected area";
+				} else if (survivalRevision && ours.contains(q) && s != null && !CellCond.natural(s, dev.larattalabs.architect.placement.TerrainFit.flags(s))) {
+					why = dev.larattalabs.architect.api.Reason.NOT_ALLOWED;
+					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is over a block the region built and paid for (survival_paid)";
 				}
 				if (no != null) {
 					result = refused(why, no);

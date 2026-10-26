@@ -93,6 +93,8 @@ public final class Revisions {
 		public String regionStateBefore = RegionState.PLACED.name();
 		/** Every site it wrote, in write order (Steward's GR ask 1). */
 		public List<String> sites = new ArrayList<>();
+		/** (§4.6) Each refilled lot's state before the refill ({state, stage, siteId?, entry?, removedAt?}): the undo puts it back. */
+		public JsonObject refilledPrior = new JsonObject();
 
 		public JsonObject toJson() {
 			JsonObject o = new JsonObject();
@@ -125,6 +127,9 @@ public final class Revisions {
 			}
 			o.addProperty("regionStateBefore", regionStateBefore);
 			o.add("sites", arr(sites));
+			if (refilledPrior.size() > 0) {
+				o.add("refilledPrior", refilledPrior.deepCopy());
+			}
 			return o;
 		}
 
@@ -149,6 +154,7 @@ public final class Revisions {
 			r.actor = o.has("actor") ? o.get("actor").getAsString() : null;
 			r.regionStateBefore = str(o, "regionStateBefore", RegionState.PLACED.name());
 			r.sites = strings(o, "sites");
+			r.refilledPrior = o.get("refilledPrior") instanceof JsonObject rp ? rp.deepCopy() : new JsonObject();
 			return r;
 		}
 
@@ -387,11 +393,22 @@ public final class Revisions {
 		st.add("keepOut", RegionsImpl.keepOutOf(rec.dimension, rec.owner, c, false));
 		st.add("unfinished", unfinished(l));
 		JsonObject lots = new JsonObject();
+		java.util.Set<String> irrigated = new java.util.HashSet<>();
+		if (eff.get("lots") instanceof JsonArray el) {
+			for (JsonElement e : el) {
+				if (e instanceof JsonObject lo && lo.get("irrigation") instanceof JsonObject) {
+					irrigated.add(str(lo, "id", ""));
+				}
+			}
+		}
 		rec.lots.forEach((id, ls) -> {
 			JsonObject o = new JsonObject();
 			o.addProperty("state", ls.state);
 			if (ls.siteId != null) {
 				o.addProperty("siteId", ls.siteId);
+			}
+			if (irrigated.contains(id)) {
+				o.addProperty("irrigated", true); // (S-RV-14) an irrigated lot's refill is refused
 			}
 			lots.add(id, o);
 		});
@@ -543,6 +560,15 @@ public final class Revisions {
 	 * candidate's members. Returns {reason, message} for a refusal, else null.
 	 */
 	static String @Nullable [] prepare(RegionPlanRequest r, MinecraftServer s) {
+		return prepare(r, s, null);
+	}
+
+	/**
+	 * {@link #prepare}, with plan/0's revision input ({@code extra}, from {@link #parentInput}: the region, the parent artifact and its plan,
+	 * built parts and geometry): the region's history at every tile key of its claim and its held set's sha ride along (the artifact's
+	 * historySha and inputs.held, §9.3).
+	 */
+	static String @Nullable [] prepare(RegionPlanRequest r, MinecraftServer s, @Nullable JsonObject extra) {
 		String id = regionOf(r);
 		RegionsImpl.Live l = id == null ? null : RegionsImpl.live(id);
 		if (l == null) {
@@ -579,6 +605,18 @@ public final class Revisions {
 		} catch (IOException e) {
 			return new String[] {Reason.JOURNAL_UNAVAILABLE.name(), "the journal could not be read for the region's held columns: " + e.getMessage()};
 		}
+		if (extra != null) {
+			extra.entrySet().forEach(e -> in.add(e.getKey(), e.getValue().deepCopy()));
+			JsonObject hist = new JsonObject();
+			int[] c = rec.claim;
+			for (int tx = Math.floorDiv(c[0], Heights.TILE); tx <= Math.floorDiv(c[3], Heights.TILE); tx++) {
+				for (int tz = Math.floorDiv(c[2], Heights.TILE); tz <= Math.floorDiv(c[5], Heights.TILE); tz++) {
+					hist.addProperty(tx + "," + tz, historySha(l, tx + "," + tz));
+				}
+			}
+			in.add("history", hist);
+			in.addProperty("heldSha", sha256(in.getAsJsonObject("standing").get("held").toString()));
+		}
 		INPUT.put(r, in);
 		JsonObject cand = new JsonObject();
 		cand.addProperty("region", id);
@@ -589,6 +627,48 @@ public final class Revisions {
 		CANDIDATE.put(r, cand);
 		Architect.LOGGER.info("Region {}: revision {} planned on head {} (position {})", id, rid, rec.headRid, rec.position + 1);
 		return null;
+	}
+
+	/** (§9.1) The head's artifact: the realised plan's (C36's ext) at position 0, else the head revision's (null when planRevision made it). */
+	static @Nullable String headArtifact(RegionRec rec) {
+		if (rec.headRid == 0) {
+			return PlanChecks.artifactOf(rec);
+		}
+		Rev h = head(rec);
+		return h == null ? null : h.artifact;
+	}
+
+	/**
+	 * (§9.1, §9.2) plan/0's revision input from the parent artifact: the region, the parent (its rid, artifact and IR sha), and the parent's
+	 * plan, the parts it built (fits or adjusted; a dropped, unsupported or blocked part is checked as added) and their geometry.
+	 */
+	static JsonObject parentInput(RegionsImpl.Live l, String sha, JsonObject body) {
+		RegionRec rec = l.rec();
+		JsonObject o = new JsonObject();
+		o.addProperty("region", rec.id);
+		o.addProperty("parentRid", rec.headRid);
+		o.addProperty("parentArtifact", sha);
+		o.addProperty("parentIrSha", headIrSha(rec));
+		JsonObject parent = new JsonObject();
+		parent.add("plan", body.get("plan") == null ? new JsonObject() : body.get("plan").deepCopy());
+		JsonArray built = new JsonArray();
+		JsonObject geom = new JsonObject();
+		if (body.get("parts") instanceof JsonArray parts) {
+			for (JsonElement e : parts) {
+				JsonObject p = e.getAsJsonObject();
+				String cls = str(p, "class", "");
+				if (cls.equals("fits") || cls.equals("adjusted")) {
+					built.add(str(p, "part", ""));
+					if (p.get("geometry") instanceof JsonObject g && g.get("rect") instanceof JsonArray rect && rect.size() == 4) {
+						geom.add(str(p, "part", ""), rect.deepCopy());
+					}
+				}
+			}
+		}
+		parent.add("built", built);
+		parent.add("geometry", geom);
+		o.add("parent", parent);
+		return o;
 	}
 
 	/** Why a region can't be revised now, or null (§4.1, D3's standing rule). */
@@ -696,16 +776,31 @@ public final class Revisions {
 		}
 		Ir ir = p.ir();
 		JsonObject irJson = ir.json();
-		// (RV-b) what the later lanes bring: added bodies (RV-c), refills and survival (RV-d) refuse here, before anything is written
-		if (ir.stages().contains(RegionFluids.STAGE)) {
-			throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "revision " + rid + " adds a fluid body: added bodies come with RV-c (not in this build)");
+		// (§4.6) refills: each lot still removed or a pad (else the plan is stale), with the entry it is built with
+		for (String lot : refills(irJson)) {
+			RegionRec.Lot ls = rec.lots.get(lot);
+			if (ls == null || !("removed".equals(ls.state) || "pad".equals(ls.state))) {
+				throw RegionsImpl.refusal(Reason.PLAN_STALE, "revision " + rid + " refills lot " + lot + ", which is " + (ls == null ? "gone" : ls.state) + " now: plan it again");
+			}
+			if (!r.lotEntries().containsKey(lot)) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "revision " + rid + " refills lot " + lot + ": the realise names no entry for it (lotEntries)");
+			}
 		}
-		JsonObject rvm = irJson.get("revision") instanceof JsonObject x ? x : new JsonObject();
-		if (rvm.get("lots") instanceof JsonObject lo && lo.get("refill") instanceof JsonArray rf && !rf.isEmpty()) {
-			throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "revision " + rid + " refills lots: refills come with RV-d (not in this build)");
+		// (§8) survival, additive: in the region's own mode; never while a target of the region (its own or an earlier revision's) is
+		// still building (survival_unfinished); a cell over a paid block the region built refuses at the tile (TileCheck: survival_paid)
+		if (rec.survival() != RegionSurvival.planned(irJson)) {
+			throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "revision " + rid + " was planned " + (RegionSurvival.planned(irJson) ? "in survival" : "in creative") + " but region "
+				+ id + " builds " + (rec.survival() ? "in survival" : "in creative") + ": plan it again");
 		}
 		if (rec.survival()) {
-			throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "region " + id + " builds in survival: survival revisions come with RV-d (not in this build)");
+			if (!RegionSurvival.on(s)) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "region " + id + " builds in survival and this world is not in survival now");
+			}
+			String[] building = dev.larattalabs.architect.site.RegionTargets.firstBuilding(rec.groupId);
+			if (building != null) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "region " + id + "'s " + (building[1] != null ? building[1] : "target " + building[0])
+					+ " is still building (survival_unfinished): a revision is added over built work only");
+			}
 		}
 		String unavailable = WorldJournal.unavailable();
 		if (unavailable != null) {
@@ -760,10 +855,11 @@ public final class Revisions {
 		for (Ir.Lot lot : ir.lots()) {
 			rv.lotsAdded.add(lot.id());
 		}
+		rv.lotsRefilled.addAll(refills(irJson));
 		rv.opKey = r.opKey();
 		rv.actor = r.actor() == null ? null : r.actor().getStringUUID();
 		rv.regionStateBefore = rec.state.name();
-		rv.artifact = p.ext().has("architect_mc:artifact") ? p.ext().get("architect_mc:artifact").getAsString() : null;
+		rv.artifact = r.ext().get(PlanChecks.EXT_ARTIFACT) instanceof JsonElement ae && ae.isJsonPrimitive() ? ae.getAsString() : null; // (realiseApproved's)
 		rec.revisions.add(rv);
 		rec.headRid = rid;
 		rec.position = position;
@@ -783,9 +879,18 @@ public final class Revisions {
 		return id;
 	}
 
-	/** Every item key a revision installs, in order (the manifest's items, §4.3 step 2): its tiles by stage and set, then its lots. */
+	/** (§4.6) The lots a revision IR refills ({@code revision.lots.refill}). */
+	static List<String> refills(JsonObject irJson) {
+		JsonObject rvm = irJson.get("revision") instanceof JsonObject x ? x : new JsonObject();
+		return rvm.get("lots") instanceof JsonObject lo ? strings(lo, "refill") : List.of();
+	}
+
+	/** Every item key a revision installs, in order (the manifest's items, §4.3 step 2): its tiles by stage and set, then its lots (refills first). */
 	static List<String> itemKeys(Ir ir, int rid, @Nullable RealiseRequest r) {
 		List<String> out = new ArrayList<>();
+		for (String lot : refills(ir.json())) {
+			out.add("lot:" + lot);
+		}
 		for (String st : ir.stages()) {
 			String name = stageName(rid, st);
 			for (String key : ir.terrainTiles().getOrDefault(st, List.of())) {
@@ -793,6 +898,11 @@ public final class Revisions {
 			}
 			for (String key : ir.pathTiles().getOrDefault(st, List.of())) {
 				out.add(RegionsImpl.tileKey(name, "path", key));
+			}
+			for (Ir.Road road : ir.roads()) {
+				if (road.stage().equals(st)) {
+					out.add("road:" + road.id());
+				}
 			}
 			for (Ir.Lot lot : ir.lots()) {
 				if (lot.stage().equals(st) && (r == null || r.lotEntries().containsKey(lot.id()))) {
@@ -836,6 +946,46 @@ public final class Revisions {
 		revExt.addProperty("rid", rv.rid);
 		List<QItem> items = new ArrayList<>();
 		List<String> stages = new ArrayList<>();
+		// (§4.6) refills: the standing lot (its box from the effective IR) gets a building again, an item of the revision's first stage; the
+		// lot's state before is kept for the undo
+		List<String> refill = refills(ir.json());
+		if (!refill.isEmpty()) {
+			Ir eff = Ir.lenient(effective(l), rec.claim);
+			String first = stageName(rv.rid, ir.stages().get(0));
+			for (String lotId : refill) {
+				Ir.Lot lot = eff.lots().stream().filter(x -> x.id().equals(lotId)).findFirst().orElse(null);
+				RegionRec.Lot ls = rec.lots.computeIfAbsent(lotId, k -> new RegionRec.Lot());
+				if (!rv.refilledPrior.has(lotId)) {
+					JsonObject was = new JsonObject();
+					was.addProperty("state", ls.state);
+					was.addProperty("stage", ls.stage);
+					if (ls.siteId != null) {
+						was.addProperty("siteId", ls.siteId);
+					}
+					if (ls.entry != null) {
+						was.addProperty("entry", ls.entry);
+					}
+					if (ls.removedAt > 0) {
+						was.addProperty("removedAt", ls.removedAt);
+					}
+					rv.refilledPrior.add(lotId, was);
+				}
+				String entry = lotEntries.get(lotId);
+				if (lot == null || entry == null) {
+					continue;
+				}
+				Ir.Lot named = new Ir.Lot(lot.id(), first, lot.part(), lot.box(), lot.floorY(), lot.front(), lot.brief(), lot.max());
+				QItem li = RegionsImpl.lotItemOf(level, rec, eff, named, entry, new ArrayList<>(), lotEntries, rv.actor);
+				if (li != null) {
+					li.ext.add(EXT_REVISION, revExt.deepCopy());
+					items.add(li);
+					ls.stage = first;
+					ls.entry = entry;
+					ls.removedAt = 0;
+					ls.state = li.status == QItem.Status.FAILED ? "failed:" + li.reason : "queued";
+				}
+			}
+		}
 		for (String st : ir.stages()) {
 			String name = stageName(rv.rid, st);
 			stages.add(name);
@@ -859,6 +1009,20 @@ public final class Revisions {
 				q.ext.add(EXT_REVISION, revExt.deepCopy());
 				items.add(q);
 			}
+			// (a plan/0 revision's added zone brings its streets: 4e road items of the stage, after its tiles, key road:<id>; GR's extensions too)
+			List<String> roadKeys = new ArrayList<>();
+			for (Ir.Road road : ir.roads()) {
+				if (!road.stage().equals(st)) {
+					continue;
+				}
+				Ir.Road named = new Ir.Road(road.id(), name, road.points(), road.width(), road.surface(), road.lanterns(), road.lamp(), road.ext());
+				List<String> after = new ArrayList<>();
+				terrainKeys.forEach(k -> after.add(RegionsImpl.tileKey(name, "terrain", k)));
+				QItem q = RegionsImpl.roadItem(level, rec, named, after);
+				q.ext.add(EXT_REVISION, revExt.deepCopy());
+				items.add(q);
+				roadKeys.add(q.key);
+			}
 			for (Ir.Lot lot : ir.lots()) {
 				if (!lot.stage().equals(st)) {
 					continue;
@@ -872,8 +1036,9 @@ public final class Revisions {
 				}
 				ls.entry = entry;
 				Ir.Lot named = new Ir.Lot(lot.id(), name, lot.part(), lot.box(), lot.floorY(), lot.front(), lot.brief(), lot.max());
-				QItem li = RegionsImpl.lotItemOf(level, rec, ir, named, entry, new ArrayList<>(terrainKeys.stream().map(k -> RegionsImpl.tileKey(name, "terrain", k))
-					.toList()), lotEntries, rv.actor);
+				List<String> lotAfter = new ArrayList<>(terrainKeys.stream().map(k -> RegionsImpl.tileKey(name, "terrain", k)).toList());
+				lotAfter.addAll(roadKeys);
+				QItem li = RegionsImpl.lotItemOf(level, rec, ir, named, entry, lotAfter, lotEntries, rv.actor);
 				if (li != null) {
 					li.ext.add(EXT_REVISION, revExt.deepCopy());
 					items.add(li);
@@ -1000,7 +1165,10 @@ public final class Revisions {
 		if (rv == null) {
 			return;
 		}
-		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED);
+		// (§7) an added body not written or drained by its escape guard ends the revision PARTIAL (H's rule, the revision's own)
+		RegionsImpl.Live fl = liveFor(l, stageName(rid, RegionFluids.STAGE));
+		boolean drained = fl.rid() == rid && RegionFluids.anyDrained(fl);
+		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED) && !drained;
 		boolean any = b.items.stream().anyMatch(i -> i.status == QItem.Status.PLACED);
 		rv.state = b.status == QBatch.Status.DONE && allPlaced ? "PLACED" : any ? "PARTIAL" : "FAILED";
 		end(l, rv, RegionState.valueOf(rv.regionStateBefore));
@@ -1018,6 +1186,7 @@ public final class Revisions {
 		rv.cells = cells;
 		rec.state = before;
 		rec.busy = null;
+		readersMoved(l); // (§4.5) the land and the fluids records from the new head
 		Path opf = dir(l.world(), rec.id, rv.rid).resolve("op.json");
 		try {
 			JsonObject op = RegionStore.readJson(opf);
@@ -1034,6 +1203,498 @@ public final class Revisions {
 		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
 	}
 
+	// ------------------------------------------------------------------ undoRevision (§4.4): preflight, then one recoverable operation
+
+	/** The callers' futures of running undo operations, by opId (a same-target call joins it). Server thread. */
+	private static final Map<String, List<CompletableFuture<dev.larattalabs.architect.api.RemoveResult>>> UNDO_FUTURES = new java.util.HashMap<>();
+	/** The undo operations with a stage removal in flight from this session (the driver waits on it). */
+	private static final java.util.Set<String> UNDO_INFLIGHT = new java.util.HashSet<>();
+	/** TEST (dev.rv.undoFail): the next undo's stage removals are reported failed, as a player who stayed 10 minutes would. */
+	static volatile boolean failNextUndoStage;
+
+	static Path undoFile(Path world, String region, String opId) {
+		return RegionStore.region(world, region).resolve("rev").resolve("op-" + opId + ".json");
+	}
+
+	/**
+	 * Regions.undoRevision (§4.4). The preflight over the whole suffix (positions toPosition + 1 .. head), before anything is written,
+	 * refusing with every reason found: busy with another operation (OVERLAP_BUSY), a toPosition not below the head (NOT_ALLOWED), a
+	 * standing beside region joined to or reaching over what the suffix added (NOT_ALLOWED joined), a player in a member's box (OCCUPIED),
+	 * the owner's things in a suffix lot (NOT_ALLOWED blockers), survival targets still building (NOT_ALLOWED survival_building). Then the
+	 * manifest {@code rev/op-<opId>.json} and region.json (the suffix UNDOING, busy {@code undoing <opId>}) in one save: the commit point.
+	 * After it the operation is never abandoned: the suffix's bodies drain, its stages are undone top first ({@code Covered.KEEP}: a later
+	 * site over a suffix cell gets the before handed down), and only when every one ended removed are the revisions UNDONE and the head
+	 * moved. A call with the same target joins the running operation.
+	 */
+	public static CompletableFuture<dev.larattalabs.architect.api.RemoveResult> undo(String regionId, int toPosition, @Nullable String actor) {
+		MinecraftServer s = RegionsImpl.server();
+		if (s == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
+		}
+		return RegionsImpl.onServer(s, () -> undo0(s, regionId, toPosition, actor)).thenCompose(f -> f);
+	}
+
+	private static CompletableFuture<dev.larattalabs.architect.api.RemoveResult> undo0(MinecraftServer s, String regionId, int toPosition, @Nullable String actor) {
+		RegionsImpl.Live l = RegionsImpl.live(regionId);
+		if (l == null) {
+			throw RegionsImpl.refusal(Reason.OTHER, "no region " + regionId);
+		}
+		RegionRec rec = l.rec();
+		if (rec.busy != null && rec.busy.startsWith("undoing ")) {
+			String opId = rec.busy.substring(8).trim();
+			JsonObject op = readUndo(l, opId);
+			if (op != null && op.get("toPosition").getAsInt() == toPosition) {
+				CompletableFuture<dev.larattalabs.architect.api.RemoveResult> f = new CompletableFuture<>();
+				UNDO_FUTURES.computeIfAbsent(opId, k -> new ArrayList<>()).add(f);
+				op.remove("waiting");
+				writeUndo(l, op);
+				Architect.LOGGER.info("Region {}: undo {} joined (the same target, position {})", regionId, opId, toPosition);
+				return f;
+			}
+			throw RegionsImpl.refusal(Reason.OVERLAP_BUSY, "region " + regionId + " is busy (" + rec.busy + "): undo to position " + (op == null ? "?" : op.get(
+				"toPosition").getAsInt()) + " runs");
+		}
+		List<String> no = new ArrayList<>();
+		Reason why = null;
+		if (rec.busy != null || rec.state == RegionState.PLACING || rec.state == RegionState.REMOVING || rec.state == RegionState.PREPARING) {
+			throw RegionsImpl.refusal(Reason.OVERLAP_BUSY, "region " + regionId + " is busy (" + (rec.busy != null ? rec.busy : rec.state.name().toLowerCase(java.util.Locale.ROOT)) + ")");
+		}
+		if (toPosition < 0 || toPosition >= rec.position) {
+			throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "region " + regionId + "'s head is at position " + rec.position + ": undo takes it below (toPosition "
+				+ toPosition + ")");
+		}
+		List<Rev> suffix = suffix(rec, toPosition);
+		ServerLevel level = l.level(s);
+		if (level == null) {
+			throw RegionsImpl.refusal(Reason.NOT_LOADED, rec.dimension + " is not loaded");
+		}
+		// dependencies (§6.4): a standing beside region whose IR names what the suffix added, or whose reach or hold columns the suffix wrote
+		for (RegionsImpl.Live o : RegionsImpl.all()) {
+			if (o == l || !regionId.equals(o.rec().beside) || o.rec().state == RegionState.REMOVED || o.rec().state == RegionState.REMOVING) {
+				continue;
+			}
+			String text = o.ir().json().toString();
+			for (Rev r : suffix) {
+				if (text.contains("\"rv" + r.rid + "_") || text.contains(":rv" + r.rid + "_")) {
+					no.add("region " + o.rec().id + " is joined to what revision " + r.rid + " added (joined)");
+					why = Reason.NOT_ALLOWED;
+				}
+			}
+			JsonObject reach = o.ir().json().get("reach") instanceof JsonObject x ? x : null;
+			if (reach != null) {
+				BesideReach.Cols cols = BesideReach.colsOf(reach.get("runs") instanceof JsonArray a ? a : new JsonArray());
+				for (Rev r : suffix) {
+					for (String sid : r.sites) {
+						int[] b = boxOf(sid);
+						if (b != null && intersects(cols, b[0], b[2], b[3], b[5])) {
+							no.add("region " + o.rec().id + "'s reach crosses site " + sid + " of revision " + r.rid + " (joined)");
+							why = Reason.NOT_ALLOWED;
+						}
+					}
+				}
+			}
+		}
+		// Groups' own checks, dry: a player in a member's box; the owner's things in a suffix lot
+		for (Rev r : suffix) {
+			for (String sid : r.sites) {
+				int[] b = boxOf(sid);
+				if (b != null) {
+					for (var pl : level.players()) {
+						var p = pl.blockPosition();
+						if (p.getX() >= b[0] - 1 && p.getX() <= b[3] + 1 && p.getY() >= b[1] - 1 && p.getY() <= b[4] + 2 && p.getZ() >= b[2] - 1 && p.getZ() <= b[5] + 1
+							&& !pl.isSpectator()) {
+							no.add(pl.getName().getString() + " is in site " + sid + " of revision " + r.rid);
+							why = why == null ? Reason.OCCUPIED : why;
+						}
+					}
+				}
+				var inf = dev.larattalabs.architect.site.Infras.get(sid);
+				if (inf != null && inf.building()) {
+					no.add("target " + sid + " of revision " + r.rid + " is still building (survival_building): let it finish or cancel it first");
+					why = why == null ? Reason.NOT_ALLOWED : why;
+				}
+				var site = Sites.get(sid);
+				if (site != null) {
+					List<String> blockers = Sites.removalBlockers(level, site, rec.owner);
+					if (!blockers.isEmpty()) {
+						no.add(Sites.blockersMessage(sid, blockers) + " (blockers)");
+						why = why == null ? Reason.NOT_ALLOWED : why;
+					}
+					if (site.construction() != null && !dev.larattalabs.architect.site.Construction.BUILT.equals(site.construction().state())) {
+						no.add("site " + sid + " of revision " + r.rid + " is still building (survival_building): cancel it first");
+						why = why == null ? Reason.NOT_ALLOWED : why;
+					}
+				}
+			}
+		}
+		if (why != null) {
+			throw RegionsImpl.refusal(why, "undo of region " + regionId + " to position " + toPosition + " refused, nothing written: " + String.join("; ", no));
+		}
+		// the commit point: the manifest, then region.json in one save
+		String opId = "u" + Long.toString(System.currentTimeMillis(), 36);
+		JsonObject op = new JsonObject();
+		op.addProperty("op", "undo");
+		op.addProperty("opId", opId);
+		op.addProperty("toPosition", toPosition);
+		JsonArray rids = new JsonArray();
+		JsonArray stages = new JsonArray();
+		for (Rev r : suffix) {
+			rids.add(r.rid);
+			List<String> st = new ArrayList<>(r.stages);
+			java.util.Collections.reverse(st);
+			st.forEach(stages::add);
+		}
+		op.add("rids", rids);
+		op.add("stages", stages);
+		op.addProperty("phase", "drain");
+		if (actor != null) {
+			op.addProperty("actor", actor);
+		}
+		op.add("result", new JsonObject());
+		writeUndo(l, op);
+		for (Rev r : suffix) {
+			r.state = "UNDOING";
+		}
+		rec.busy = "undoing " + opId;
+		rec.manifest = "rev/op-" + opId + ".json";
+		RegionsImpl.save(l);
+		WorldJournal.kill("RVU1"); // the commit point: the manifest and region.json saved, nothing drained or removed
+		CompletableFuture<dev.larattalabs.architect.api.RemoveResult> f = new CompletableFuture<>();
+		UNDO_FUTURES.computeIfAbsent(opId, k -> new ArrayList<>()).add(f);
+		Architect.LOGGER.info("Region {}: undo {} to position {} (revisions {}, stages {})", regionId, opId, toPosition, rids, stages);
+		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+		undoStep(s, l, op);
+		return f;
+	}
+
+	static boolean intersects(BesideReach.Cols cols, int x0, int z0, int x1, int z1) {
+		for (int x = x0; x <= x1; x++) {
+			for (int z = z0; z <= z1; z++) {
+				if (cols.has(x, z)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (§4.6) A site removed alone (SiteEvents.SITE_REMOVED): a region's lot site marks its lot {@code removed} (its old site id and when;
+	 * the pad stands), as RegionView.lots shows it. A removal of the whole region, or of a revision being undone, is not "alone": the
+	 * region is REMOVING, or the lot's revision is UNDOING (its finish puts the lot back itself).
+	 */
+	static void siteRemoved(dev.larattalabs.architect.api.SiteView v, dev.larattalabs.architect.api.RemoveResult res) {
+		if (v.group() == null || !res.removed()) {
+			return;
+		}
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			RegionRec rec = l.rec();
+			if (!v.group().equals(rec.groupId) || rec.state == RegionState.REMOVING || rec.state == RegionState.REMOVED) {
+				continue;
+			}
+			for (var e : rec.lots.entrySet()) {
+				RegionRec.Lot ls = e.getValue();
+				if (v.id().equals(ls.siteId) && "placed".equals(ls.state)) {
+					int rid = layerOf(ls.stage);
+					Rev owner = rid == 0 ? null : rev(rec, rid);
+					if (owner != null && "UNDOING".equals(owner.state)) {
+						return;
+					}
+					ls.state = "removed";
+					ls.removedAt = System.currentTimeMillis();
+					RegionsImpl.save(l);
+					Architect.LOGGER.info("Region {}: lot {} removed alone (its site {}); its pad stands, a refill builds it again", rec.id, e.getKey(), v.id());
+					SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+					return;
+				}
+			}
+		}
+	}
+
+	/** (§4.6) An undone revision's refilled lots back to their states before it (state, stage, site id, entry), exactly. */
+	static void undoRefills(RegionRec rec, Rev r) {
+		for (var e : r.refilledPrior.entrySet()) {
+			JsonObject was = e.getValue().getAsJsonObject();
+			RegionRec.Lot ls = rec.lots.computeIfAbsent(e.getKey(), k -> new RegionRec.Lot());
+			ls.state = str(was, "state", "pad");
+			ls.stage = str(was, "stage", ls.stage);
+			ls.siteId = was.has("siteId") ? was.get("siteId").getAsString() : null;
+			ls.entry = was.has("entry") ? was.get("entry").getAsString() : null;
+			ls.removedAt = was.has("removedAt") ? was.get("removedAt").getAsLong() : 0L;
+		}
+	}
+
+	/**
+	 * (§4.5) The head moved (a revision ended or was undone): the readers that keep a copy of what the IR says are refreshed from the
+	 * effective IR. The land ({@code architect_mc:land}, a districts region's: Steward's GR ask 2, land.outside shrinks after an undo), and
+	 * the fluids records (each revision's bodies are their own; an undone revision's leave).
+	 */
+	static void readersMoved(RegionsImpl.Live l) {
+		RegionRec rec = l.rec();
+		if (rec.ext.has(DistrictLand.EXT_LAND)) {
+			int[] town = null;
+			if (rec.beside != null && RegionsImpl.live(rec.beside) instanceof RegionsImpl.Live tl) {
+				int[] tc = tl.rec().claim;
+				town = new int[] {tc[0], tc[2], tc[3], tc[5]};
+			}
+			JsonObject land = DistrictLand.of(effective(l), town, null);
+			if (land != null) {
+				rec.ext.add(DistrictLand.EXT_LAND, land);
+			}
+		}
+		for (Rev r : rec.revisions) {
+			if (!r.standing()) {
+				RegionFluids.forgetRevision(rec.id, r.rid);
+			}
+		}
+	}
+
+	/** The standing revisions above a position, top first. */
+	static List<Rev> suffix(RegionRec rec, int toPosition) {
+		List<Rev> out = new ArrayList<>();
+		for (Rev r : rec.revisions) {
+			if (r.position > toPosition && r.standing()) {
+				out.add(r);
+			}
+		}
+		out.sort(java.util.Comparator.comparingInt((Rev r) -> r.position).reversed());
+		return out;
+	}
+
+	/** A site's box [x0, y0, z0, x1, y1, z1] (a cell site's, a road's or a building site's), or null. */
+	static int @Nullable [] boxOf(String sid) {
+		var in = dev.larattalabs.architect.site.Infras.get(sid);
+		if (in != null) {
+			var b = in.box();
+			return new int[] {b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()};
+		}
+		var st = Sites.get(sid);
+		if (st != null) {
+			var b = st.restoreBox();
+			return new int[] {b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()};
+		}
+		return null;
+	}
+
+	static @Nullable JsonObject readUndo(RegionsImpl.Live l, String opId) {
+		try {
+			return RegionStore.readJson(undoFile(l.world(), l.rec().id, opId));
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	static void writeUndo(RegionsImpl.Live l, JsonObject op) {
+		try {
+			RegionStore.writeJson(undoFile(l.world(), l.rec().id, op.get("opId").getAsString()), op);
+		} catch (IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+	}
+
+	/**
+	 * One step of a running undo (from {@link #undo} and the tick driver): drain, then the next stage still standing undone (its removal
+	 * runs in Groups; the driver comes back when it ends), then the finish. Idempotent: every step reads what the journal and the group
+	 * say, never the in-memory story alone.
+	 */
+	static void undoStep(MinecraftServer s, RegionsImpl.Live l, JsonObject op) {
+		String opId = op.get("opId").getAsString();
+		if (UNDO_INFLIGHT.contains(opId) || op.has("waiting")) {
+			return;
+		}
+		RegionRec rec = l.rec();
+		String phase = op.get("phase").getAsString();
+		if (phase.equals("drain")) {
+			List<Integer> rids = new ArrayList<>();
+			op.getAsJsonArray("rids").forEach(e -> rids.add(e.getAsInt()));
+			if (!RegionFluids.drainRevisions(s, l, rids, opId)) {
+				return; // (the drain runs over ticks: the driver comes back)
+			}
+			op.addProperty("phase", "remove");
+			writeUndo(l, op);
+			WorldJournal.kill("RVU2"); // drained, nothing removed
+			phase = "remove";
+		}
+		if (phase.equals("remove")) {
+			SiteGroupRecView g = SiteGroupRecView.of(rec.groupId);
+			for (JsonElement e : op.getAsJsonArray("stages")) {
+				String st = e.getAsString();
+				if (dev.larattalabs.architect.site.Groups.stageRemovalRunning(rec.groupId, st)) {
+					return; // its removal runs (a resumed one after a load too): wait
+				}
+				dev.larattalabs.architect.api.Stage.State state = g.state(st);
+				if (state != dev.larattalabs.architect.api.Stage.State.PLACED && state != dev.larattalabs.architect.api.Stage.State.PARTIAL) {
+					continue; // undone already, or it never placed anything
+				}
+				UNDO_INFLIGHT.add(opId);
+				CompletableFuture<dev.larattalabs.architect.site.Groups.Removed> f = dev.larattalabs.architect.site.Groups.undoStage(s, rec.groupId, st, false,
+					dev.larattalabs.architect.site.Sites.Covered.KEEP);
+				f.whenComplete((res, ex) -> s.execute(() -> {
+					UNDO_INFLIGHT.remove(opId);
+					JsonObject cur = readUndo(l, opId);
+					if (cur == null) {
+						return;
+					}
+					boolean removed = ex == null && res.removed() && !failNextUndoStage;
+					if (failNextUndoStage) {
+						failNextUndoStage = false;
+					}
+					if (!removed) {
+						// stays UNDOING with its reason (§4.4): a same-target call or a world start resumes it
+						String why = ex != null ? "it failed: " + (ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()) : res.removed() ? "TEST: dev.rv.undoFail"
+							: String.join("; ", res.blockers());
+						cur.addProperty("waiting", "stage " + st + ": " + why);
+						writeUndo(l, cur);
+						for (Rev r : rec.revisions) {
+							if ("UNDOING".equals(r.state)) {
+								r.waiting = "undo " + opId + " waits: " + why;
+							}
+						}
+						RegionsImpl.save(l);
+						WAIT_SEEN.add(opId); // (it waits for a same-target call or a world start, not this session's driver)
+						completeUndo(opId, new dev.larattalabs.architect.api.RemoveResult(false, List.of(why), Map.of()));
+						return;
+					}
+					JsonObject agg = cur.getAsJsonObject("result");
+					agg.addProperty("restored", (agg.has("restored") ? agg.get("restored").getAsInt() : 0) + res.restored());
+					agg.addProperty("kept", (agg.has("kept") ? agg.get("kept").getAsInt() : 0) + res.kept());
+					JsonObject hd = agg.get("handedDown") instanceof JsonObject h ? h : new JsonObject();
+					res.handedDown().forEach((k, v) -> hd.addProperty(k, (hd.has(k) ? hd.get(k).getAsInt() : 0) + v));
+					agg.add("handedDown", hd);
+					JsonObject rf = agg.get("refund") instanceof JsonObject h ? h : new JsonObject();
+					res.refund().forEach((k, v) -> rf.addProperty(k, (rf.has(k) ? rf.get(k).getAsInt() : 0) + v));
+					agg.add("refund", rf);
+					writeUndo(l, cur);
+					undoStep(s, l, cur);
+				}));
+				return;
+			}
+			op.addProperty("phase", "removed");
+			writeUndo(l, op);
+			WorldJournal.kill("RVU3"); // every suffix stage removed, the revisions not yet UNDONE
+			phase = "removed";
+		}
+		if (phase.equals("removed")) {
+			finishUndo(s, l, op);
+		}
+	}
+
+	/** §4.4 step 5: the suffix UNDONE, the head at toPosition, the lots and stages it added gone, busy cleared, the manifest deleted. */
+	private static void finishUndo(MinecraftServer s, RegionsImpl.Live l, JsonObject op) {
+		RegionRec rec = l.rec();
+		String opId = op.get("opId").getAsString();
+		int to = op.get("toPosition").getAsInt();
+		java.util.Set<Integer> rids = new java.util.HashSet<>();
+		op.getAsJsonArray("rids").forEach(e -> rids.add(e.getAsInt()));
+		for (Rev r : rec.revisions) {
+			if (rids.contains(r.rid)) {
+				r.state = "UNDONE";
+				r.waiting = null;
+				for (String st : r.stages) {
+					rec.stages.remove(st);
+				}
+				for (String lot : r.lotsAdded) {
+					rec.lots.remove(lot);
+				}
+				undoRefills(rec, r);
+				PlanChecks.revisionUndone(l, r); // (C36, §9.5) its artifact tombstoned unless pinned
+			}
+		}
+		int headRid = 0;
+		for (Rev r : rec.revisions) {
+			if (r.position == to && r.standing()) {
+				headRid = r.rid;
+			}
+		}
+		rec.headRid = headRid;
+		rec.position = to;
+		rec.busy = null;
+		rec.manifest = null;
+		EFFECTIVE.keySet().removeIf(k -> k.startsWith(rec.id + "#"));
+		readersMoved(l);
+		RegionsImpl.save(l);
+		op.addProperty("phase", "done");
+		writeUndo(l, op);
+		try {
+			Files.deleteIfExists(undoFile(l.world(), rec.id, opId));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region {}: undo manifest {} not deleted: {}", rec.id, opId, e.toString());
+		}
+		JsonObject agg = op.getAsJsonObject("result");
+		Map<String, Integer> hd = new LinkedHashMap<>();
+		if (agg.get("handedDown") instanceof JsonObject h) {
+			h.entrySet().forEach(e -> hd.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		Map<String, Integer> rf = new LinkedHashMap<>();
+		if (agg.get("refund") instanceof JsonObject h) {
+			h.entrySet().forEach(e -> rf.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		Architect.LOGGER.info("Region {}: undo {} done: head {} at position {} ({} restored, {} kept, handed down {})", rec.id, opId, headRid, to, agg.has("restored")
+			? agg.get("restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd);
+		completeUndo(opId, new dev.larattalabs.architect.api.RemoveResult(true, List.of(), dev.larattalabs.architect.apiimpl.Views.items(rf), agg.has("restored") ? agg.get(
+			"restored").getAsInt() : 0, agg.has("kept") ? agg.get("kept").getAsInt() : 0, hd, List.of()));
+		SiteEvents.REGION_STATE.invoker().onState(RegionsImpl.view(l));
+	}
+
+	private static void completeUndo(String opId, dev.larattalabs.architect.api.RemoveResult r) {
+		List<CompletableFuture<dev.larattalabs.architect.api.RemoveResult>> fs = UNDO_FUTURES.remove(opId);
+		if (fs != null) {
+			fs.forEach(f -> f.complete(r));
+		}
+	}
+
+	/** The undo driver, every tick: each region whose busy names an undo takes its next step (after a load, or after a removal ends). */
+	static void undoTick(MinecraftServer s) {
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			String b = l.rec().busy;
+			if (b == null || !b.startsWith("undoing ")) {
+				continue;
+			}
+			String opId = b.substring(8).trim();
+			if (UNDO_INFLIGHT.contains(opId)) {
+				continue;
+			}
+			JsonObject op = readUndo(l, opId);
+			if (op == null) {
+				Architect.LOGGER.warn("Region {}: busy with undo {} but its manifest is gone: busy cleared", l.rec().id, opId);
+				l.rec().busy = null;
+				l.rec().manifest = null;
+				RegionsImpl.save(l);
+				continue;
+			}
+			if (op.has("waiting") && !UNDO_FUTURES.containsKey(opId)) {
+				// (a world start resumes a waiting operation: the waiting mark is the session's)
+				if (!WAIT_SEEN.add(opId)) {
+					continue;
+				}
+				op.remove("waiting");
+				writeUndo(l, op);
+			}
+			undoStep(s, l, op);
+		}
+	}
+
+	/** The waiting undos a world start already resumed once this session (so a waiting one isn't retried every tick). */
+	private static final java.util.Set<String> WAIT_SEEN = new java.util.HashSet<>();
+
+	/** A group's stage states, read once. */
+	record SiteGroupRecView(java.util.Map<String, dev.larattalabs.architect.api.Stage.State> states) {
+		static SiteGroupRecView of(String groupId) {
+			var g = dev.larattalabs.architect.site.Sites.group(groupId);
+			java.util.Map<String, dev.larattalabs.architect.api.Stage.State> m = new java.util.HashMap<>();
+			if (g != null) {
+				for (var st : g.stages()) {
+					m.put(st.name(), st.state());
+				}
+			}
+			return new SiteGroupRecView(m);
+		}
+
+		dev.larattalabs.architect.api.Stage.State state(String stage) {
+			return states.get(stage);
+		}
+	}
+
 	// ------------------------------------------------------------------ recovery (§4.3, idempotent)
 
 	/**
@@ -1044,6 +1705,9 @@ public final class Revisions {
 	static void started() {
 		IRS.clear();
 		EFFECTIVE.clear();
+		WAIT_SEEN.clear();
+		UNDO_INFLIGHT.clear();
+		UNDO_FUTURES.clear();
 	}
 
 	/** {@link #started}'s recovery, at the first tick (the batches are loaded by then). */
@@ -1094,8 +1758,9 @@ public final class Revisions {
 				continue;
 			}
 			if (rv.batchId != null && (!rv.sites.isEmpty() || written(l, rid))) {
-				// its batch ran (something of it is written) and is gone: ended by what it wrote
-				rv.state = "PARTIAL";
+				// its batch ran (something of it is written) and is gone: ended by what it wrote (the verifier's nit: PLACED when every tile of
+				// its IR has a committed record and every lot it built stands, else PARTIAL)
+				rv.state = complete(l, rv) ? "PLACED" : "PARTIAL";
 				end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 				continue;
 			}
@@ -1141,6 +1806,43 @@ public final class Revisions {
 				cols.flags[c] = sh.flags[k];
 			}
 		}
+	}
+
+	/** Whether every tile of a revision's IR has a committed realised record and every lot it added or refilled with an entry is placed. */
+	static boolean complete(RegionsImpl.Live l, Rev rv) {
+		Ir ir = irOf(l, rv.rid);
+		if (ir == null) {
+			return false;
+		}
+		RegionsImpl.Live rl = liveFor(l, rv.stages.isEmpty() ? null : rv.stages.get(0));
+		for (String st : ir.stages()) {
+			for (String set : List.of("terrain", "path")) {
+				for (String key : (set.equals("terrain") ? ir.terrainTiles() : ir.pathTiles()).getOrDefault(st, List.of())) {
+					Realised.Tile t;
+					try {
+						t = Realised.read(l.world(), l.rec().id, rv.rid, st, set, key);
+					} catch (IOException e) {
+						return false;
+					}
+					if (t == null || !"committed".equals(dev.larattalabs.architect.site.RealisedRecords.status(rl, t))) {
+						return false;
+					}
+				}
+			}
+		}
+		for (String lot : rv.lotsAdded) {
+			RegionRec.Lot ls = l.rec().lots.get(lot);
+			if (ls != null && ls.entry != null && !"placed".equals(ls.state)) {
+				return false;
+			}
+		}
+		for (String lot : rv.lotsRefilled) {
+			RegionRec.Lot ls = l.rec().lots.get(lot);
+			if (ls == null || !"placed".equals(ls.state)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** Whether anything of revision {@code rid} is written: a realised record at its layer. */
@@ -1261,6 +1963,7 @@ public final class Revisions {
 				}
 				o.add("siteExt", siteExt);
 			}
+			case "undoFail" -> o.addProperty("armed", failNextUndoStage = !req.has("on") || req.get("on").getAsBoolean());
 			case "history" -> {
 				JsonObject h = new JsonObject();
 				for (JsonElement k : req.getAsJsonArray("keys")) {

@@ -90,7 +90,13 @@ final class InfraJob implements Placement.Job {
 	 */
 	private final it.unimi.dsi.fastutil.longs.LongOpenHashSet wrote = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 
-	private boolean selfMoved(long p) {
+	private boolean selfMoved(long p, BlockState now, @Nullable Value before) {
+		// (the verifier's nit: only a gravity block that fell or landed, over or under a cell this tile wrote)
+		boolean gravity = now.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || before != null && WorldJournal.state(before)
+			.getBlock() instanceof net.minecraft.world.level.block.FallingBlock;
+		if (!gravity) {
+			return false;
+		}
 		int x = Journal.x(p), y = Journal.y(p), z = Journal.z(p);
 		return wrote.contains(net.minecraft.core.BlockPos.asLong(x, y - 1, z)) || wrote.contains(net.minecraft.core.BlockPos.asLong(x, y + 1, z));
 	}
@@ -224,12 +230,26 @@ final class InfraJob implements Placement.Job {
 
 	/** (6d RV) Whether this job writes a revision's tile ({@code tile} = {@code region|rv<rid>:<stage>|set|key}). */
 	private boolean revisionTile() {
+		return revisionWhere() != null;
+	}
+
+	/**
+	 * (6d RV) Where a revision's job writes: {region, journal stage, set, key} for a revision tile ({@code tile}), or for a revision's road
+	 * (its batch names the revision, its item the stage: set "road", key the item's); null for any other job.
+	 */
+	private String @Nullable [] revisionWhere() {
 		String t = tile;
-		if (t == null) {
-			return false;
+		if (t != null) {
+			String[] p = t.split("\\|");
+			return p.length >= 4 && dev.larattalabs.architect.region.Revisions.layerOf(p[1]) > 0 ? p : null;
 		}
-		String[] p = t.split("\\|");
-		return p.length >= 2 && dev.larattalabs.architect.region.Revisions.layerOf(p[1]) > 0;
+		var b = batchId == null ? null : Batches.get(batchId);
+		var i = b == null || itemKey == null ? null : b.item(itemKey);
+		if (i != null && b.ext.get(dev.larattalabs.architect.region.Revisions.EXT_REVISION) instanceof com.google.gson.JsonObject rv && dev.larattalabs.architect.region.Revisions
+			.layerOf(i.stage) > 0) {
+			return new String[] {rv.get("region").getAsString(), i.stage, "road", itemKey};
+		}
+		return null;
 	}
 
 	/**
@@ -238,7 +258,10 @@ final class InfraJob implements Placement.Job {
 	 * PARTIAL and undoRevision takes it away); a player's block alone is only RACED. Recorded in the revision layer's sites.json.
 	 */
 	private void racedEnd(MinecraftServer server) {
-		String[] p = tile.split("\\|");
+		String[] p = revisionWhere();
+		if (p == null) {
+			return;
+		}
 		long mine;
 		try {
 			JournalStore.Meta me = entry == null ? null : SiteJournal.store().meta(entry);
@@ -557,7 +580,7 @@ final class InfraJob implements Placement.Job {
 						m.set(Journal.x(p), Journal.y(p), Journal.z(p));
 						Value[] rb = raceBefores;
 						BlockState nowAt = rb == null ? null : level.getBlockState(m);
-						if (rb != null && cursor < rb.length && rb[cursor] != null && nowAt != WorldJournal.state(rb[cursor]) && nowAt != WorldJournal.state(v) && !selfMoved(p)) {
+						if (rb != null && cursor < rb.length && rb[cursor] != null && nowAt != WorldJournal.state(rb[cursor]) && nowAt != WorldJournal.state(v) && !selfMoved(p, nowAt, rb[cursor])) {
 							// (6d RV, §3.3) checked and written in the same tick: the cell changed since its capture, so it is not written
 							raced.add(p);
 							cursor++;
@@ -649,6 +672,7 @@ final class InfraJob implements Placement.Job {
 		}
 		List<long[]> pv = new ArrayList<>();
 		List<Value> vs = new ArrayList<>();
+		List<Value> bs = new ArrayList<>();
 		try {
 			for (long k : m.sections()) {
 				SectionCells sc = s.section(entry, k);
@@ -658,6 +682,7 @@ final class InfraJob implements Placement.Job {
 				for (int i = 0; i < sc.size(); i++) {
 					pv.add(new long[] {sc.pos(i)});
 					vs.add(sc.after(i) == null ? sc.before(i) : sc.after(i));
+					bs.add(sc.before(i));
 				}
 			}
 		} catch (IOException e) {
@@ -681,9 +706,16 @@ final class InfraJob implements Placement.Job {
 		});
 		positions = new long[pos.length];
 		afters = new Value[pos.length];
+		Value[] rb = new Value[pos.length];
 		for (int i = 0; i < order.length; i++) {
 			positions[i] = pos[order[i]];
 			afters[i] = vs.get(order[i]);
+			rb[i] = bs.get(order[i]);
+		}
+		// (6d RV, the verifier's nit) a revision tile resumed mid-write (after a load) keeps its same-tick check: its befores from the entry
+		// (a cell it wrote already holds its after, and is written again; one that changed to something else is RACED)
+		if (revisionTile()) {
+			raceBefores = rb;
 		}
 	}
 

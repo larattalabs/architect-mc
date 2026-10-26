@@ -162,6 +162,8 @@ public final class RegionRec {
 		public @Nullable String entry;
 		public @Nullable String siteId;
 		public String state = "pad";
+		/** (6d RV, §4.6) When its site was removed alone (state {@code removed}; its pad stands), else 0. */
+		public long removedAt;
 	}
 
 	public RegionRec(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String dimension, int[] claim, long createdAt) {
@@ -229,6 +231,9 @@ public final class RegionRec {
 				j.addProperty("siteId", l.siteId);
 			}
 			j.addProperty("state", l.state);
+			if (l.removedAt > 0) {
+				j.addProperty("removedAt", l.removedAt);
+			}
 			ls.add(k, j);
 		});
 		o.add("lots", ls);
@@ -323,6 +328,7 @@ public final class RegionRec {
 			l.entry = j.has("entry") ? j.get("entry").getAsString() : null;
 			l.siteId = j.has("siteId") ? j.get("siteId").getAsString() : null;
 			l.state = j.get("state").getAsString();
+			l.removedAt = j.has("removedAt") ? j.get("removedAt").getAsLong() : 0L;
 			r.lots.put(e.getKey(), l);
 		}
 		r.cellsWritten = o.get("cellsWritten").getAsLong();

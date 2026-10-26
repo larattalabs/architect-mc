@@ -99,7 +99,7 @@ public final class ApiRules {
 					case "region.walls.walk" -> "wallWalks"; // 7a K2: a wall's walk member (a railed, lit walk on the top, player only)
 					case "region.rockStairs" -> "rockStairs"; // 7a RK: plan/0's connector.rock_stair (a stair flight carved into rising ground; route row 11; since NEXT)
 					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
-					// ((6d RV) "plan.revision", the kit's plan/0 revision mode, becomes "planRevisions" with RV-d's checkPlan branch)
+					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
