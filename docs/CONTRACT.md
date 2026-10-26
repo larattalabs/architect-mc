@@ -25763,3 +25763,18 @@ version set (the coordinator assigns one at merge).
   (confirmBlocks in config/architect_mc.json). Undo last placement: Z twice (Controls to rebind)."
 - The placement HUD's "?" legend: "Esc cancel · Z undo last placement · 1,000+ blocks: Enter twice · ? hide".
 - README: the placement key table and the commands paragraph.
+
+### 5. Gate (DEV MODE; own run dir `../architect-mc-SAFETY-run`, ports 8902/8903, own lock)
+- Unit (pure): `PlaceConfirmTest` (9: the threshold edge, replaced vs terrain/trees/air/block entities, the Enter step with force
+  and Place on top, the prompts, the arm's repeat / 300 ms / 5 s / moved-key behaviour), `RemoveTokensTest` (4: once, the 30 s
+  edge, bound to site / force / person, pruning), `LastPlacedTest` (5: per player, removed and reused ids, owned since, depth,
+  clear). unit-mod 947 tests, 0 failures.
+- `safety-ingame` (tools/gatesafety.mjs, new): 38 ok. Shots: `armed_s2`, `armed_s4`, `armed_replacing_s2`, `remove_confirm_chat_s2`,
+  `undo_armed_s2`, `status_s2`, `status_s4`, `legend_s2` in the run's `gate-safety/shots/`.
+- Run `20261026-041050-change` at cd16fe60: unit-mod, water-lint, p3-lint, lint-structure (177), lint-look (14) PASS; safety-ingame
+  FAIL 3, all the driver reading the HUD rows before a frame was drawn (fixed in the driver: it waits 3 frames).
+- Run `20261026-041618-change` at 820bc634: **PASS 8/8**: safety-ingame 38, ui2b-ingame 31, u3-ingame 40, and the removal
+  regressions, because the Library's Remove moved into `PlayerRemove.remove`: 4e-orders 16, 4d-all 64, b-ingame 74; apijars (0.42.0,
+  0.41.0 and 0.40.1 jars, 46 ok each) and sim-jobs 33 (`apitest.mjs` changed).
+- The Status tab's note first sat in the right column, which is full at GUI scale 4 (off-screen in `status_s4`). Moved to the left
+  column. Run `20261026-043443-change` at 85706862: **PASS 4/4** (unit-mod 947, safety-ingame 38, ui2b-ingame 31, u3-ingame 40).
