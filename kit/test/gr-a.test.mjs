@@ -347,3 +347,22 @@ test('§6: a frontage junction next to a street end leaves the end terminal (its
   const ports = besidePorts({ graph: m.graph }).map((q) => q.node).sort();
   assert.deepEqual(ports, besidePorts({ graph: S.ir.graph }).map((q) => q.node).sort());
 });
+
+test('item 10 (kit): a second boundary growth continues from the first one\'s new end', async () => {
+  const { makeColumns } = await import('../lib/region/pack.mjs');
+  const W = 192, D = 256, claim = { minX: 0, minZ: 0, maxX: 191, maxZ: 255, minY: -64, maxY: 319 };
+  const c = makeColumns(0, 0, W, D, 1);
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) { const k = i + j * W; const w = i >= 90 && i < 100; c.ground[k] = 64; c.height[k] = 64; c.floor[k] = w ? 61 : 64; c.flags[k] = w ? 1 : 0; }
+  const q = await planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec: { districts: [{ id: 'quay', size: [48, 24], follow: { shore: {} }, lots: 2 }] }, lamps: false }, survey: c, claim, seed: '1' });
+  const st = (eff) => revisionStanding({ id: 'rg3', claim: [0, 0, 191, 255], effective: eff, held: { runs: [], town: [], terrain: [] } });
+  const eff0 = mergeEffective(q.ir);
+  const r1 = await reviseIR(eff0, { grow: { district: 'quay', lots: 2, prefer: 'extend' } }, { rid: 1, position: 1, parent: { rid: 0, irSha: q.irSha }, base: { irSha: q.irSha }, survey: c, standing: st(eff0) });
+  assert.equal(r1.ir.revision.grow.extension?.kind, 'boundary');
+  const eff1 = mergeEffective(q.ir, [{ rid: 1, position: 1, ir: r1.ir }]);
+  const r2 = await reviseIR(eff1, { grow: { district: 'quay', lots: 2, prefer: 'extend' } }, { rid: 2, position: 2, parent: { rid: 1, irSha: r1.irSha }, base: { irSha: q.irSha }, survey: c, standing: st(eff1) });
+  const x2 = r2.ir.revision.grow.extension;
+  assert.equal(x2?.kind, 'boundary', JSON.stringify(r2.ir.revision.grow));
+  assert.ok(x2.from === `${r1.ir.revision.grow.extension.road}_end` || /^quay_s\d$/.test(x2.from), x2.from);
+  const eff2 = mergeEffective(q.ir, [{ rid: 1, position: 1, ir: r1.ir }, { rid: 2, position: 2, ir: r2.ir }]);
+  assert.deepEqual(graphCut(eff2, { from: 'quay_s0' }), []);
+});

@@ -421,10 +421,17 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     const cols = survey.columns;
     if (!cols) return why('boundary');
     const c = eff.claim;
-    const routeEnds = (eff.graph?.nodes ?? []).filter((n) => n.kind === 'junction' && new RegExp(`^${district}_s\\d+$`).test(n.id) && Array.isArray(n.at));
+    // the route's ends: the street's own (`<d>_s<k>`) and an earlier boundary growth's new end (`route_st_<d>_..._g<n>_end`)
+    const endRe = new RegExp(`^(${district}_s\\d+|route_st_${district}_[a-z0-9_]*_g\\d+_end)$`);
+    const routeEnds = (eff.graph?.nodes ?? []).filter((n) => n.kind === 'junction' && endRe.test(n.id) && Array.isArray(n.at));
     const adj = adjacency(eff.graph);
-    // a free route end: no join or other route meets it (its only edges are the street's own)
-    const free = routeEnds.filter((n) => (adj.get(n.id) ?? []).every(({ edge }) => String(edge.path ?? '').startsWith(`route_st_${district}`) && !edge.external));
+    // a free route end: terminal (one edge, `along` edges aside), that edge the street's own (no join, no other route)
+    // (every edge the street's own; a grown end has only its own edge; a standing end an earlier growth continued from is not free)
+    const free = routeEnds.filter((n) => {
+      const es = (adj.get(n.id) ?? []).filter(({ edge }) => !edge.along);
+      if (!es.length || es.some(({ edge }) => edge.external || !String(edge.path ?? '').startsWith(`route_st_${district}`))) return false;
+      return /_g\d+_end$/.test(n.id) ? es.length === 1 : !es.some(({ edge }) => /_g\d+$/.test(String(edge.path ?? '')));
+    });
     if (!free.length) return why('boundary');
     const [length, depth] = followD.size ?? [64, 24];
     const t = traceBoundary(cols, c, followD.follow, { near: [free[0].at[0], free[0].at[2]], minLength: 16 });
