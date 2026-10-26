@@ -518,8 +518,9 @@ async function flightShots(tag, which, q) {
   out.push(await shot(`${tag}_${which}_foot`, [fx + rx * 3, foot[1] + 4, fz + rz * 3], [foot[0] + dx * 6 + 0.5, foot[1] + 4, foot[2] + dz * 6 + 0.5]));
   const [mx, mz] = c(foot[0] + dx * (mid - 2), foot[2] + dz * (mid - 2));
   out.push(await shot(`${tag}_${which}_mid`, [mx, midY + 2.4, mz], [mx + dx * 8, midY + 7, mz + dz * 8]));
-  const [ux, uz] = c(top[0] + dx * 4, top[2] + dz * 4);
-  out.push(await shot(`${tag}_${which}_top`, [ux + rx * 2, top[1] + 4.5, uz + rz * 2], [top[0] - dx * 8 + 0.5, top[1] - 5, top[2] - dz * 8 + 0.5]));
+  // the top: over the landing walk cell, looking back down the flight to its foot
+  const [ux, uz] = c(top[0] + dx * 3, top[2] + dz * 3);
+  out.push(await shot(`${tag}_${which}_top`, [ux, top[1] + 6.5, uz], [foot[0] + 0.5 + rx * 0.5, foot[1] + 2, foot[2] + 0.5 + rz * 0.5]));
   return out;
 }
 
@@ -543,11 +544,6 @@ steps.look = async () => {
     check(st.view.state === 'PLACED' && fl.length === 2, `look (${tag}): rockstairs_demo flat realised with its two flights (${st.view.state}; recorded, not judged: Noah's call, N-RK-1)`);
     out.bibles[tag] = { planId: p.planId, state: st.view.state, flights: fl.map((q) => ({ id: q.id, tread: q.tread, landing: q.landingBlock, lining: q.lining, portal: q.portal, light: q.light, from: q.from, to: q.to, bore: q.bore.filter(Boolean).length })) };
     for (const q of fl) out.shots.push(...await flightShots(tag, /carved/.test(q.id) ? 'carved' : 'bored', q));
-    if (tag === 'default' && fl[0]) {
-      await cmd('/time set 6000');
-      const q = fl.find((f) => /ridge/.test(f.id)) ?? fl[0];
-      out.shots.push(await shot(`${tag}_day_side`, [q.from[0] + 12.5, q.from[1] + 26, q.from[2] - 26.5], [q.from[0] + 12.5, q.from[1] + 8, q.from[2] + 20.5]));
-    }
     await call('dev.release', {}).catch(() => null);
     await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 300, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
     const rm = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000).catch((e) => ({ error: String(e?.message ?? e) }));
