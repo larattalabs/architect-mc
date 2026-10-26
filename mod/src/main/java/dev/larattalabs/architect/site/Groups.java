@@ -826,13 +826,19 @@ public final class Groups {
 		if (r.planned != null && resumeCommitted(server, r)) {
 			return;
 		}
-		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null && Infras.get(r.sites.get(0)) == null) {
-			if (Sites.pendingRecord(r.sites.get(0)) != null || Infras.pending(r.sites.get(0)) != null) {
+		// members with no standing record are not planned: gone ones leave the list wherever they stand (6d RV: a stage undo, a
+		// revision's undo, leaves its members in the group's list, and a member settled at a load leaves no record at all)
+		for (java.util.Iterator<String> it = r.sites.iterator(); it.hasNext();) {
+			String id = it.next();
+			if (Sites.get(id) != null || Infras.get(id) != null) {
+				continue;
+			}
+			if ((Sites.pendingRecord(id) != null || Infras.pending(id) != null) && !written(id)) {
 				// (6c X, C22) its restoration is unfinished (an earlier removal's): never answer removed over it
-				end(server, r, new Removed(false, List.of(r.sites.get(0) + " has an unfinished restoration that this removal cannot resume"), Map.copyOf(r.refund)));
+				end(server, r, new Removed(false, List.of(id + " has an unfinished restoration that this removal cannot resume"), Map.copyOf(r.refund)));
 				return;
 			}
-			r.sites.remove(0);
+			it.remove();
 		}
 		if (r.sites.isEmpty()) {
 			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund)));
