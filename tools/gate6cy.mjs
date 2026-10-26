@@ -107,6 +107,7 @@ async function run(name) {
 const ensure = async () => { if (!state.dev) await connect(); };
 async function fresh(name, from = SURV) {
   await leaveWorld();
+  if (L.baseSpec(from)) await L.ensureBase(from); // this host's base, made or rebuilt when missing or stale (tools/lib/basestamp.mjs)
   copyWorld(from, name);
   await openWorld(name);
   await call('dev.survival.set', { on: true });

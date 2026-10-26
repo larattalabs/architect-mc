@@ -970,7 +970,12 @@ Top first. Not fixed in v0.40.1.
   (`20261023-093624-slice`) and on the 032705 run before B's CellCond change. Not B's; find the second path write.
 
 - **RoadTerrain treats untouched natural packed ice (and other natural blocks) as a BUILT obstacle** (RS item 14, close-out B;
-  coordinator: its own slice, which needs fixture re-cuts and a look check).
+  coordinator: its own slice, which needs fixture re-cuts and a look check). **Fixed on fix/nightly-infra (2026-10-25):**
+  `RoadTerrain.kind` falls back to the mod's natural rule (`TerrainFit.natural`, plus the region writes' `CellCond.alsoNatural`):
+  a solid natural block is STONE ground, one with no collision a PLANT, never BUILT; farmland stays BUILT, ice over water stays WATER.
+  The kit's road model (`kit/lib/lint/roads.mjs` roadKind) reads the virtual world's `naturalBlock` the same way, with the frozen-water
+  check (`roadKindAt`). Unit: `RoadTerrainNaturalTest` (packed/blue/land ice, calcite; every natural block of the drift fixture).
+  No kit fixture moved (unit-kit 901 pass).
   - **What happens.** rs02 on a survival copy of S3's claim: road:street_e fails "the road changes no cell". All 12 of its columns
     stop (kept 4, blocked 8) on `minecraft:packed_ice` ground at 3750,151,-999..-997, which no journal entry holds.
   - **Cause.** `RoadTerrain.kind`'s ground lists lack natural blocks that `TerrainFit.natural` has (ice, packed ice, blue ice, calcite,

@@ -68,6 +68,11 @@ public final class DevCommands {
 	private DevCommands() {
 	}
 
+	/** The dev.world.open request's ARCHITECT_AUTOWORLD_* overrides. */
+	static java.util.Map<String, String> worldOverrides(JsonObject req) {
+		return dev.larattalabs.architect.world.AutoWorldSpec.overrides(k -> req.has(k) && !req.get(k).isJsonNull() ? req.get(k).getAsString() : null);
+	}
+
 	static void registerBuiltins() {
 		DevBridge.register("dev.ping", 5_000,
 			"{} -> {pong, frame, msSinceLastFrame, stalled, quitting}. Answered on the socket thread, so it works while the game loads or hangs;"
@@ -141,22 +146,17 @@ public final class DevCommands {
 				o.addProperty("left", was);
 				return o;
 			}));
-		DevBridge.register("dev.world.open", 10_000, "{name?, mode?: creative|survival|hardcore, preset?: flat|normal, seed?, cheats?: bool} - open "
+		// (nightly 2026-10-25) a create gets 120 s, an open of an existing world 10 s (AutoWorldSpec.openBudgetMs): the answer comes once the
+		// client has the world loaded, and a create's spawn selection alone took ~9 s under load
+		DevBridge.register("dev.world.open", req -> dev.larattalabs.architect.client.AutoWorld.openBudgetMs(Minecraft.getInstance(), worldOverrides(req)),
+			"{name?, mode?: creative|survival|hardcore, preset?: flat|normal, seed?, cheats?: bool} - open "
 			+ "(or create) the AutoWorld world again, from the title screen (the fields replace ARCHITECT_AUTOWORLD_*: another world); then dev.state "
-			+ "until ready",
+			+ "until ready. Budget 10 s to open, 120 s to create",
 			(req, mc) -> DevBridge.onClient(mc, () -> {
 				if (mc.level != null) {
 					throw new IllegalStateException("already in a world (dev.world.leave first)");
 				}
-				java.util.Map<String, String> over = new java.util.HashMap<>();
-				for (String k : new String[] {"name", "mode", "preset", "seed", "cheats"}) {
-					if (req.has(k) && !req.get(k).isJsonNull()) {
-						String v = req.get(k).getAsString();
-						over.put("ARCHITECT_AUTOWORLD_" + k.toUpperCase(java.util.Locale.ROOT), k.equals("cheats") ? (Boolean.parseBoolean(v) || v.equals("1") ? "1"
-							: "0") : v);
-					}
-				}
-				dev.larattalabs.architect.client.AutoWorld.openOrCreate(mc, over);
+				dev.larattalabs.architect.client.AutoWorld.openOrCreate(mc, worldOverrides(req));
 				JsonObject o = new JsonObject();
 				o.addProperty("opening", true);
 				return o;

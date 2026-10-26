@@ -34,6 +34,32 @@ export function gateHost(env = process.env) {
  * in the same run dir read S1's pinned survey as 572271bd (magma and bubble columns) instead of the golden's 3e5bd5b7 (w-ingame item
  * 7, failing "on both hosts" after a headless run had made the base), so a base made by the other host is stale.
  */
+/**
+ * (nightly 2026-10-25) One base world per host. A headless-server step and a client step share a run dir in a turbo run; with one
+ * 'G6B Seed Base' between them, each host found the other's stamp stale (baseRecipe's `host`), moved the world aside and made it
+ * again: 11 quarantined copies in one nightly run dir, and every rebuild a chance for dev.world.open's create to time out. So the
+ * server keeps its own copy, '<name> Srv' (as the prepared claim worlds already do, run6b claimWorldName); the client keeps the
+ * plain name, so existing run dirs and snapshots stay valid. The recipe (and its hash) is unchanged: the folder name is not in it.
+ */
+export const SERVER_SUFFIX = ' Srv';
+export const PINNED_SEED = '2026100906';
+/** The logical base name of a physical one ('G6B Seed Base Srv' -> 'G6B Seed Base'); other names unchanged. */
+export const logicalBaseName = (name) => (name.endsWith(SERVER_SUFFIX) && baseSpecOf(name.slice(0, -SERVER_SUFFIX.length)) ? name.slice(0, -SERVER_SUFFIX.length) : name);
+function baseSpecOf(name) {
+  if (name === 'G6B Flat Base') return { preset: 'flat', seed: PINNED_SEED };
+  if (name === 'G6B Seed Base') return { preset: 'normal', seed: PINNED_SEED };
+  const m = /^G6B Seed (\S+)$/.exec(name);
+  return m && m[1] !== 'Base' ? { preset: 'normal', seed: m[1] } : null;
+}
+/** The creation recipe inputs of a gate base world, by logical or host name ('G6B Flat Base' flat; 'G6B Seed Base' the pinned seed; 'G6B Seed <n>' seed n), else null. */
+export const baseSpec = (name) => baseSpecOf(logicalBaseName(name));
+/** This host's folder for a base world: the plain name on a client, '<name> Srv' on a headless server. Idempotent; a non-base name is returned as is. */
+export function hostBaseName(name, host = gateHost()) {
+  if (!baseSpec(name)) return name;
+  const logical = logicalBaseName(name);
+  return host === 'server' ? `${logical}${SERVER_SUFFIX}` : logical;
+}
+
 export function baseRecipe({ preset, seed }, { minecraft = minecraftVersion(), host = gateHost() } = {}) {
   return { v: BASE_RECIPE_VERSION, minecraft, host, mode: 'creative', cheats: true, preset, seed: String(seed), rules: preset === 'flat' ? 'exact' : 'default', spawn: [0.5, 200, 0.5] };
 }

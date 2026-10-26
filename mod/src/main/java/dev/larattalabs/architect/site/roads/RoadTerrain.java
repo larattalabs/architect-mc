@@ -3,6 +3,7 @@ package dev.larattalabs.architect.site.roads;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BambooStalkBlock;
 import net.minecraft.world.level.block.BaseFireBlock;
@@ -19,6 +20,7 @@ import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import dev.larattalabs.architect.placement.TerrainFit;
 
 /**
  * A level as {@link RoadPlan} kinds (AgentCraft {@code RoadTerrain} at {@code ab08a02}, with exposed ores as their own kind):
@@ -59,8 +61,15 @@ public final class RoadTerrain implements RoadPlan.World {
 		return kind(level, pos, level.getBlockState(pos));
 	}
 
-	/** The {@link RoadPlan} kind of {@code s} at {@code pos}. */
-	public static int kind(Level level, BlockPos pos, BlockState s) {
+	/**
+	 * The {@link RoadPlan} kind of {@code s} at {@code pos}. Natural ground is what {@link TerrainFit#natural} counts, with the region
+	 * writes' {@link dev.larattalabs.architect.region.CellCond#alsoNatural} (generated rock such as calcite, dripstone, obsidian): the
+	 * mod's natural rule, which the kit's virtual world and its road model (kit/lib/lint/roads.mjs roadKind) share, kept in step by
+	 * NaturalDriftTest. The specific kinds below sort the common blocks, and any other solid block that rule counts is STONE ground (one
+	 * with no collision a PLANT), never BUILT. Before, natural ground missing from these lists (packed, blue and land ice, calcite...) fell through to BUILT and a road
+	 * stopped on untouched packed ice (rs-survival item 14). Farmland stays BUILT on purpose: a player's field.
+	 */
+	public static int kind(BlockGetter level, BlockPos pos, BlockState s) {
 		if (s.isAir()) {
 			return RoadPlan.AIR;
 		}
@@ -118,14 +127,18 @@ public final class RoadTerrain implements RoadPlan.World {
 			|| s.is(Blocks.RED_SANDSTONE) || s.is(Blocks.CLAY) || s.is(Blocks.SNOW_BLOCK) || s.is(Blocks.TERRACOTTA)) {
 			return RoadPlan.STONE;
 		}
+		boolean open = s.getCollisionShape(level, pos).isEmpty();
+		if (TerrainFit.natural(s) || dev.larattalabs.architect.region.CellCond.alsoNatural(s)) {
+			return open ? RoadPlan.PLANT : RoadPlan.STONE;
+		}
 		if (s.canBeReplaced()) {
 			return RoadPlan.PLANT;
 		}
-		return s.getCollisionShape(level, pos).isEmpty() ? RoadPlan.BUILT_OPEN : RoadPlan.BUILT;
+		return open ? RoadPlan.BUILT_OPEN : RoadPlan.BUILT;
 	}
 
 	/** 6c W: water within {@code Columns.FROZEN_DEPTH} under the ice at {@code pos}, only ice or water between. */
-	static boolean frozenBelow(Level level, BlockPos pos) {
+	static boolean frozenBelow(BlockGetter level, BlockPos pos) {
 		BlockPos.MutableBlockPos p = pos.mutable();
 		for (int dy = 1; dy <= dev.larattalabs.architect.region.Columns.FROZEN_DEPTH; dy++) {
 			BlockState s = level.getBlockState(p.setY(pos.getY() - dy));

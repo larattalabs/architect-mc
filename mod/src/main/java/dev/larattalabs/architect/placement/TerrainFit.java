@@ -240,7 +240,7 @@ public final class TerrainFit {
 	 * {@code #dirt} no longer holds grass blocks, podzol, mycelium, moss or mud: {@code #substrate_overworld} does (before
 	 * it was used here, a grassy slope inside the box was never cleared and buried porches and doors). Generated ice too (6c S3).
 	 */
-	static boolean natural(BlockState s) {
+	public static boolean natural(BlockState s) {
 		return s.is(BlockTags.SUBSTRATE_OVERWORLD) || s.is(BlockTags.DIRT) || s.is(BlockTags.SAND) || s.is(BlockTags.BASE_STONE_OVERWORLD) || s.is(BlockTags.BASE_STONE_NETHER)
 			|| s.is(BlockTags.FLOWERS) || s.is(BlockTags.SAPLINGS) || s.is(BlockTags.SNOW) || s.is(Blocks.GRAVEL) || s.is(Blocks.CLAY)
 			|| s.is(Blocks.SNOW_BLOCK) || s.is(Blocks.POWDER_SNOW) || s.is(Blocks.FARMLAND) || s.is(Blocks.DIRT_PATH) || s.is(Blocks.SANDSTONE)

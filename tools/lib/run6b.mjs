@@ -7,7 +7,8 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './devclient.mjs';
-import { baseCurrent as baseCurrentIn, baseRecipe, gateHost, recipeHash, writeStamp } from './basestamp.mjs';
+import { baseCurrent as baseCurrentIn, baseRecipe, baseSpec, gateHost, hostBaseName, PINNED_SEED, quarantineBase, recipeHash, writeStamp } from './basestamp.mjs';
+export { baseSpec, hostBaseName };
 import { createHash } from 'node:crypto';
 import { gameWait as sprintWait } from './sprint.mjs';
 
@@ -72,6 +73,7 @@ export function clientPids() {
 
 /** Start the run worktree's client in `world` (created by AutoWorld when missing). `backend`: 'sim' (default) or 'claude'. */
 export async function startClient(world, { backend = 'sim', env = {} } = {}) {
+  world = hostBaseName(world); // a base world: this host's own copy (tools/lib/basestamp.mjs hostBaseName)
   if (clientPids().length) throw new Error(`a client of ${RUN} runs already: ${clientPids()}`);
   const opts = path.join(GAME_DIR, 'options.txt');
   // no vsync; no clouds (the gallery's cameras sit at cloud height; the graphics preset 'custom' lets renderClouds hold)
@@ -175,9 +177,16 @@ export async function leaveWorld() {
   for (let i = 0; i < 600; i++) { if (!(await call('dev.state')).inWorld) return; await sleep(500); }
   throw new Error('still in the world');
 }
+/**
+ * Opens `name` (a base world: this host's copy). dev.world.open answers once the client has the world loaded; making a new one gets up
+ * to 120 s there (DevCommands, AutoWorldSpec.OPEN_CREATE_MS: spawn selection alone took ~9 s under the nightly's load), so the wait here
+ * is longer than that.
+ */
+export const OPEN_TIMEOUT_MS = 150_000;
 export async function openWorld(name, opts = {}) {
+  name = hostBaseName(name);
   await leaveWorld();
-  await call('dev.world.open', { name, ...opts }, 30_000);
+  await call('dev.world.open', { name, ...opts }, OPEN_TIMEOUT_MS);
   for (let i = 0; i < 1800; i++) {
     await sleep(500);
     const st = await call('dev.state').catch(() => ({}));
@@ -186,51 +195,64 @@ export async function openWorld(name, opts = {}) {
   throw new Error(`world ${name} did not open`);
 }
 export function copyWorld(from, to) {
+  from = hostBaseName(from);
   const src = path.join(SAVES, from), dst = path.join(SAVES, to);
   if (!dst.startsWith(SAVES + path.sep) || !to.startsWith('G6B ')) throw new Error(`refusing to replace ${dst}`);
   fs.rmSync(dst, { recursive: true, force: true });
   execFileSync('cp', ['-c', '-R', src, dst]);
   fs.rmSync(path.join(dst, 'session.lock'), { force: true });
 }
-/** The creation recipe of a gate base world, by name ('G6B Flat Base' is flat; 'G6B Seed Base' the pinned seed; 'G6B Seed <n>' seed n). */
-const PINNED_SEED = '2026100906';
-export function baseSpec(name) {
-  if (name === 'G6B Flat Base') return { preset: 'flat', seed: PINNED_SEED };
-  if (name === 'G6B Seed Base') return { preset: 'normal', seed: PINNED_SEED };
-  const m = /^G6B Seed (\S+)$/.exec(name);
-  return m ? { preset: 'normal', seed: m[1] } : null;
-}
 /**
  * True when the base world exists and was made by the current creation recipe. A stale or unstamped one (a reused run dir's old
  * level.dat) is moved to ../saves-stale and false is returned, so the driver's "make it if missing" path rebuilds it.
  */
 export function baseCurrent(name, spec = baseSpec(name)) {
-  return baseCurrentIn(SAVES, name, spec, { log });
+  return baseCurrentIn(SAVES, hostBaseName(name), spec, { log });
 }
 /** Records the recipe in a base world the driver just made (call after leaving it). */
 export function stampBase(name, spec = baseSpec(name)) {
-  writeStamp(SAVES, name, baseRecipe(spec));
+  writeStamp(SAVES, hostBaseName(name), baseRecipe(spec));
 }
-/** Makes a gate base world (creative, cheats, the preset's rules, spawn tp, then left) unless one made by the current recipe exists. */
+/**
+ * Makes this host's gate base world (creative, cheats, the preset's rules, spawn tp, then left) unless one made by the current recipe
+ * exists. Returns its folder name (hostBaseName). The stamp is written only after a whole build; a build that fails leaves the game
+ * (waiting until it is out, so nothing still writes the folder) and moves the half-made world aside, so it is never taken for a base.
+ */
 export async function ensureBase(name) {
   const spec = baseSpec(name);
   if (!spec) throw new Error(`not a gate base world: ${name}`);
-  if (baseCurrent(name, spec)) return name;
+  const own = hostBaseName(name);
+  if (baseCurrent(own, spec)) return own;
   await leaveWorld();
-  await openWorld(name, { mode: 'creative', preset: spec.preset, seed: spec.seed, cheats: true });
-  await setRules(spec.preset === 'flat' ? 'exact' : 'default');
-  await tp(0.5, 200, 0.5);
-  await cmd('/save-all flush');
-  await leaveWorld();
-  stampBase(name, spec);
-  return name;
+  try {
+    await openWorld(own, { mode: 'creative', preset: spec.preset, seed: spec.seed, cheats: true });
+    await setRules(spec.preset === 'flat' ? 'exact' : 'default');
+    await tp(0.5, 200, 0.5);
+    await cmd('/save-all flush');
+    await leaveWorld();
+  } catch (e) {
+    let moved = 'left in place (the game may still hold it; the next run moves it aside as unstamped)';
+    try {
+      // a create that outlived the request goes on in the game: wait for it to land (up to 2 min), then leave and move it aside
+      let inWorld = false;
+      for (let i = 0; i < 120 && !inWorld; i++) { inWorld = !!(await call('dev.state')).inWorld; if (!inWorld) await sleep(1000); }
+      if (inWorld) {
+        await leaveWorld();
+        if (fs.existsSync(path.join(SAVES, own))) moved = `moved to ${quarantineBase(SAVES, own)}`;
+      }
+    } catch { /* the game is gone or stuck: the stamp check still refuses the world */ }
+    log(`base world "${own}" not made (${e.message}): ${moved}`);
+    throw e;
+  }
+  stampBase(own, spec);
+  return own;
 }
 /**
  * (6c V) The normal-preset base world of a world seed: 'G6B Seed Base' for 6b's pinned seed 2026100906 (made by gate6b base),
  * else 'G6B Seed <seed>', created here the first time, then left. A stale one (older creation recipe) is rebuilt.
  */
 export async function seedBase(seed) {
-  return ensureBase(!seed || String(seed) === PINNED_SEED ? 'G6B Seed Base' : `G6B Seed ${seed}`);
+  return ensureBase(!seed || String(seed) === PINNED_SEED ? 'G6B Seed Base' : `G6B Seed ${seed}`); // -> this host's folder
 }
 /**
  * (speed audit D, B4) Prepared claim worlds: a copy of the pinned seed's base with the chunks of one claim generated (and saved), served

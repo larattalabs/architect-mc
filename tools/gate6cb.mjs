@@ -215,6 +215,7 @@ async function groundAt(x, z) {
 async function freshWorld(name, base, rules) {
   await ensure();
   await leaveWorld();
+  if (L.baseSpec(base)) await L.ensureBase(base); // this host's base (tools/lib/basestamp.mjs)
   copyWorld(base, name);
   await openWorld(name);
   await L.setRules(rules);

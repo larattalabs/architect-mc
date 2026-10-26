@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { baseRecipe, recipeHash, baseStatus, baseCurrent, writeStamp, readStamp, quarantineBase, gateHost, STAMP_FILE } from '../../tools/lib/basestamp.mjs';
+import { baseRecipe, recipeHash, baseStatus, baseCurrent, writeStamp, readStamp, quarantineBase, gateHost, STAMP_FILE, baseSpec, hostBaseName, logicalBaseName } from '../../tools/lib/basestamp.mjs';
 
 const MC = { minecraft: '26.3' };
 function run() {
@@ -75,4 +75,50 @@ test('quarantine refuses anything that is not a G6B world inside saves', () => {
   assert.throws(() => quarantineBase(saves, 'Precious'), /refusing/);
   assert.throws(() => quarantineBase(saves, '../outside'), /refusing/);
   assert.ok(fs.existsSync(path.join(saves, 'Precious', 'level.dat')));
+});
+
+// (nightly 2026-10-25) a server step and a client step in one run dir each rebuilt the other's 'G6B Seed Base' (11 quarantined copies):
+// each host now keeps its own base folder, the server's '<name> Srv', with the same recipe apart from the host
+test('one base per host: names, idempotence, specs of either name', () => {
+  for (const n of ['G6B Seed Base', 'G6B Flat Base', 'G6B Seed 2026101102']) {
+    assert.equal(hostBaseName(n, 'client'), n);
+    assert.equal(hostBaseName(n, 'server'), `${n} Srv`);
+    assert.equal(hostBaseName(hostBaseName(n, 'server'), 'server'), `${n} Srv`, 'idempotent');
+    assert.equal(hostBaseName(`${n} Srv`, 'client'), n, 'a server name asked on a client is the client folder');
+    assert.equal(logicalBaseName(`${n} Srv`), n);
+    assert.deepEqual(baseSpec(`${n} Srv`), baseSpec(n));
+  }
+  assert.deepEqual(baseSpec('G6B Seed 2026101102 Srv'), { preset: 'normal', seed: '2026101102' });
+  assert.deepEqual(baseSpec('G6B Flat Base'), { preset: 'flat', seed: '2026100906' });
+  assert.deepEqual(baseSpec('G6B Seed Base'), { preset: 'normal', seed: '2026100906' });
+  assert.equal(baseSpec('G6B Seed Base Srv Srv'), null);
+  // not base worlds: unchanged
+  for (const n of ['G6B S3 Claim Srv v1', 'G6A Flat Base', 'G6B W Ingame', 'GY2 Base', 'G6B Seed']) {
+    assert.equal(hostBaseName(n, 'server'), n);
+    assert.equal(baseSpec(n), null);
+  }
+  assert.equal(hostBaseName('G6B Seed Base', undefined), 'G6B Seed Base', 'host from the environment: a client here');
+});
+
+test('one base per host: each host stamps its own folder; neither sees the other stale; the claim worlds keep their recipe hash', () => {
+  const { saves, world } = run();
+  const logs = [];
+  const opt = (host) => ({ ...MC, host, log: (m) => logs.push(m) });
+  for (const host of ['server', 'client']) {
+    const n = hostBaseName('G6B Seed Base', host);
+    assert.equal(baseCurrent(saves, n, spec, opt(host)), false, `${host}: missing`);
+    world(n);
+    writeStamp(saves, n, baseRecipe(spec, { ...MC, host }));
+  }
+  for (let round = 0; round < 3; round++) {
+    for (const host of ['server', 'client', 'server']) assert.equal(baseCurrent(saves, hostBaseName('G6B Seed Base', host), spec, opt(host)), true, `${host} round ${round}`);
+  }
+  assert.deepEqual(logs, [], 'nothing moved aside');
+  assert.ok(!fs.existsSync(path.join(path.dirname(saves), 'saves-stale')));
+  assert.equal(readStamp(saves, 'G6B Seed Base Srv').recipe.host, 'server');
+  assert.equal(readStamp(saves, 'G6B Seed Base').recipe.host, 'client');
+  // the old shared folder: a server-made world under the client's name is still stale for the client (housekeeping 3)
+  assert.equal(baseStatus(saves, 'G6B Seed Base Srv', baseRecipe(spec, { ...MC, host: 'client' })), 'stale');
+  // the recipe (what the claim worlds' marks record) is the folder-free spec: renaming moved no hash
+  assert.equal(recipeHash(baseRecipe(baseSpec('G6B Seed Base Srv'), { ...MC, host: 'server' })), recipeHash(baseRecipe(spec, { ...MC, host: 'server' })));
 });

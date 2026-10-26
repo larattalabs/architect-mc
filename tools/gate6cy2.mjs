@@ -90,7 +90,7 @@ async function leaveWorld() {
 
 async function openWorld(name, opts = {}) {
   await leaveWorld();
-  await call('dev.world.open', { name, ...opts }, 30_000);
+  await call('dev.world.open', { name, ...opts }, 150_000); // a create gets up to 120 s in the game (AutoWorldSpec.OPEN_CREATE_MS)
   for (let i = 0; i < 600; i++) {
     await sleep(500);
     const st = await call('dev.state').catch(() => ({}));
