@@ -228,6 +228,10 @@ if (!fs.existsSync(path.join(WT, 'tools', 'step-inputs.json'))) log('nightly: or
 
 const env = {};
 for (const [k, v] of Object.entries(process.env)) if (!/^(ANTHROPIC_|CLAUDE)/.test(k) && !/^GATE_NOTIFY/.test(k) && k !== 'AWS_BEARER_TOKEN_BEDROCK') env[k] = v;
+// (nightly 2026-10-25) launchd's bare environment (no TERM, no agent variables) makes vitest colour its summary even into a pipe, and the
+// drivers' /Tests\s+\d+ passed/ checks then fail on "Tests [22m [1m[32m25 passed" (sch-unit, p0-unit, coa-unit item 3, pt2-unit when
+// unit-sidecar's report could not be reused). Plain output, as every agent-launched run already gets.
+env.NO_COLOR = '1';
 const outFile = path.join(DAY, flag('--plan') ? 'plan.out' : 'gate-run.out');
 const t0 = Date.now();
 let current = null; // the runner child now running

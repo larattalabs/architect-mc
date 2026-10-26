@@ -12,6 +12,7 @@ import { normSiblingIr } from './batch-0410.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
+import { clAskLine } from './fl-norm.mjs'; // (7a CL) its three ask movers compare by part and kind
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
@@ -108,9 +109,13 @@ export async function unit(root, { check, log, OUT, nodeTest }) {
   out.asks = { before: before.text.split('\n')[0], after: after.text.split('\n')[0], moved };
   const cb = fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8'), ca = fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8');
   // ((7a foundation) a base past close-out A (main since v0.42.0): its table is the committed after; nothing moves, noted as FL's item 8)
-  const pastCoa = f7n(before.text) === f7n(ca);
+  // ((7a CL, on main since v0.44.0; nightly 2026-10-25) a base past CL answers its three climbs (cave_ladders blocked, quarter_stair and
+  // long_stair refused NO_CLIMB; unsupported in the committed after): past close-out A, the tables compare without CL's lines' answers, its
+  // gap-table rows and the tally line, as fl-norm's flAsksFilter does for the other slices' asks items)
+  const cln = (t) => t.split('\n').filter((l) => !/^# 59 asks/.test(l) && !/^\s+connector\.(stair|ladder)\s+\d+$/.test(l)).map((l) => clAskLine(f7aAskLine(l))).join('\n');
+  const pastCoa = cln(before.text) === cln(ca);
   if (pastCoa) {
-    check(f7n(after.text) === f7n(ca), `item 6: the base is past close-out A: the 59 asks' table on the base and here equal the committed asks-after.txt (${out.asks.after.slice(2)})`);
+    check(cln(after.text) === cln(ca), `item 6: the base is past close-out A: the 59 asks' table on the base and here equal the committed asks-after.txt (${out.asks.after.slice(2)})`);
     check(after.malformed === 0 && moved.length === 0, `item 6, §4: the base is past close-out A: 0 malformed, nothing moves (${moved.join(', ') || 'nothing moved'})`);
   } else check(f7n(before.text) === f7n(cb) && f7n(after.text) === f7n(ca), `item 6: the 59 asks' tables equal the committed ones (fixtures/plan/coa/asks-before.txt on the base kit, asks-after.txt here): ${out.asks.before.slice(2)} -> ${out.asks.after.slice(2)}`);
   if (!pastCoa) check(after.malformed === 0 && JSON.stringify(moved) === JSON.stringify([...ASKS_MOVED].sort()) && moved.every((k) => / blocked DEPENDENCY/.test(la.get(k))),

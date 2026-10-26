@@ -134,12 +134,16 @@ steps.unit = async () => {
   // item 2: byte identity against the merge base; item 3: of the 59 asks, only castle_city's answer moves
   const K = await import('./lib/gate7a-kit.mjs');
   const { K2_MOVED } = await import('./lib/gate7ak2-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'K2', except: K2_MOVED });
-  out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
+  // (K2 is on main since its merge, 23235708: on a base that has K2 (kit/test/k2.test.mjs there), castle_city's walk is the base's own,
+  // so it plans identically on both sides and moves nothing; as CL's driver reads its own onMain. The nightly 2026-10-25 failed here.)
+  const MERGED_IF = 'kit/test/k2.test.mjs';
+  const onMain = fs.existsSync(path.join(K.baseTree(root, 'K2').dir, MERGED_IF));
+  const u = await K.unchanged(root, { check, log, base: 'K2', except: K2_MOVED, mergedIf: MERGED_IF });
+  out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved, onMain };
   fs.writeFileSync(path.join(OUT, 'k2-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
   const asksMoved = u.moved.filter((f) => f.startsWith('asks/') && (f === 'asks/castle_city.json' || !(f in F7A_MOVED)));
-  check(JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)} (the foundation's own aside: F7A_MOVED)`);
+  check((JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) || (onMain && asksMoved.length === 0)) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)}${onMain ? ' (K2 on the base: its walk is the base\'s own)' : ''} (the foundation's own aside: F7A_MOVED)`);
   // the compact plan/0 (recorded; the bound is 96,000)
   out.compact = compactOf(path.join(root, 'kit'));
   check(out.compact !== null && out.compact <= 96_000, `the compact plan/0: ${out.compact} characters (the bound 96,000, the coordinator's 2026-10-23)`);

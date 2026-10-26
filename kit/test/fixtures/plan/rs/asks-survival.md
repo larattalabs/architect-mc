@@ -19,8 +19,8 @@ camp_to_city/camp_city zone.standard fits free 66641 held 1047 paid-items 54
 camp_to_city/city_wall connector.wall adjusted free 0 held 26 paid-items 9924
 camp_to_city cost.bom 9978 items; survival true
 castle_city/castle zone.standard adjusted free 55641 held 819 paid-items 54
-castle_city/curtain_wall connector.wall adjusted free 0 held 26 paid-items 9130
-castle_city cost.bom 9184 items; survival true
+castle_city/curtain_wall connector.wall adjusted free 0 held 170 paid-items 11647
+castle_city cost.bom 11701 items; survival true
 cat_sanctuary/sanctuary zone.standard adjusted free 20738 held 332 paid-items 57
 cat_sanctuary cost.bom 57 items; survival true
 cliff_monks/monastery zone.standard fits free 37016 held 795 paid-items 54
@@ -57,7 +57,7 @@ harbour cost.bom 57 items; survival true
 harvest_hamlet/hamlet zone.standard fits free 26164 held 627 paid-items 54
 harvest_hamlet cost.bom 54 items; survival true
 hidden_village/hollow zone.standard adjusted free 18680 held 332 paid-items 57
-hidden_village/cave_ladders connector.ladder unsupported
+hidden_village/cave_ladders connector.ladder blocked
 hidden_village/waterfall_curtain form.waterfall adjusted free 9 held 9 paid-items 244
 hidden_village/mossy_palette rule.palette refused
 hidden_village cost.bom 301 items; survival true
@@ -93,7 +93,7 @@ nomad_camp/camp zone.standard fits free 45903 held 1935 paid-items 54
 nomad_camp cost.bom 90 items; survival true
 old_new_town/town zone.standard fits free 61870 held 987 paid-items 54
 old_new_town/hill_street connector.street fits free 0 held 0 paid-items 0
-old_new_town/quarter_stair connector.stair unsupported
+old_new_town/quarter_stair connector.stair refused
 old_new_town/two_styles rule.palette refused
 old_new_town cost.bom 54 items; survival true
 one_block/reach zone.standard fits free 39074 held 747 paid-items 54
@@ -133,7 +133,7 @@ ship_town/ship_hull form.ship_hull unsupported
 ship_town/ship_masts form.mast unsupported
 ship_town cost.bom 54 items; survival true
 sky_monastery/cloister zone.standard fits free 34303 held 699 paid-items 54
-sky_monastery/long_stair connector.stair unsupported
+sky_monastery/long_stair connector.stair refused
 sky_monastery/sky_island form.floating_island unsupported
 sky_monastery cost.bom 54 items; survival true
 sorting_warehouse/trading_post zone.standard fits free 50870 held 759 paid-items 54
