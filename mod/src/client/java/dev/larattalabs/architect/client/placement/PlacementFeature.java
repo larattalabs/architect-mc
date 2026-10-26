@@ -17,7 +17,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import dev.larattalabs.labui.client.hud.HudZones;
+import dev.larattalabs.labui.ui.HudZone;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
@@ -57,8 +58,10 @@ public final class PlacementFeature {
 		}));
 		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.ghost", () -> GhostRenderer.submit(ctx)));
 		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.plot", () -> GhostRenderer.submitPlot(ctx)));
-		HudElementRegistry.addLast(Architect.id("hud/placement"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.placement", new PlacementHud()));
-		HudElementRegistry.addLast(Architect.id("hud/plot_marker"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.plot_marker", new PlotHud()));
+		// UI-0.3: lab-ui HUD zone pieces, bottom centre (laid out first: an aimed panel never moves for a toast or a status line);
+		// drawn over open screens as before
+		HudZones.add(Architect.id("hud/placement"), HudZone.BOTTOM_CENTER, new PlacementHud()).priority(70).whileScreenOpen(true);
+		HudZones.add(Architect.id("hud/plot_marker"), HudZone.BOTTOM_CENTER, new PlotHud()).priority(65).whileScreenOpen(true);
 		registerDev();
 	}
 

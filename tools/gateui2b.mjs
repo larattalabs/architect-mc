@@ -309,6 +309,8 @@ const galBudgetMs = Number(process.env.GATEUIG_BUDGET_MIN ?? 9) * 60_000;
 // GATEUIG_ONLY=screen/state,...: capture just those states (plus what they depend on), for re-shooting a few
 const ONLY = process.env.GATEUIG_ONLY ? new Set(process.env.GATEUIG_ONLY.split(',').map((x) => x.trim())) : null;
 const galOver = () => Date.now() - galT0 > galBudgetMs;
+/** GATEUIG_ONLY names a state under one of these screens (the region ghost and survival blocks need their setup). */
+const onlyWants = (...screens) => !ONLY || [...ONLY].some((k) => screens.some((sc) => k.startsWith(`${sc}/`)));
 const tryc = (control) => call('dev.ui.click', { control }).then(() => true, () => false);
 const errMsg = (e) => String(e?.message ?? e).replace(/\s+/g, ' ').slice(0, 300);
 
@@ -621,7 +623,7 @@ steps.gallery = async () => {
   await sec('ui', 'plot', 'marked_form', async () => { await openTab('design'); }, { closeScreen: true });
   await call('dev.plot.cancel', {}).catch(() => null);
   await call('dev.design.fill', { reset: true }).catch(() => null);
-  if (!ONLY) try {
+  if (onlyWants('region_ghost')) try {
     const claim = [-60, -60, 59, 59];
     const p = await L.plan('crater_works', claim, { surveyLoad: 'bounded:256' });
     await call('dev.region.ghost', { planId: p.planId }, 120_000);
@@ -634,7 +636,7 @@ steps.gallery = async () => {
 
   // ================================================================ the survival crate in the world, SiteHud, CrateScreen
   let siteB = null;
-  if (!ONLY) try {
+  if (onlyWants('sitehud', 'crate', 'hud')) try {
     await L.tp(9.5, 72, 0.5, 0, 25); await cmd('/gamemode creative');
     await call('dev.survival.set', { on: true });
     await call('dev.build.start', { blueprint: 'cabin', origin: ORIGIN, ground: true, turns: 0 });
@@ -646,6 +648,57 @@ steps.gallery = async () => {
     for (const mode of ['full', 'line', 'hidden']) {
       await sec('world', 'sitehud', mode, async () => { await call('dev.ui2b.siteHud', { mode }); await cam(6, 12, 30); }, { closeScreen: false });
     }
+    await call('dev.ui2b.siteHud', { mode: 'full' });
+    // UI-0.3 (lab-ui HUD zones): every Architect HUD piece at once, with a vanilla toast, two boss bars and an Architect toast:
+    // placement (bottom centre), the construction line and the region verdict (top centre), the helper strip (top left), the
+    // toasts (the column). dev.hud.zones is the layout drawn; no two slots may meet, and none may cross vanilla's pieces.
+    const zoneChecks = [];
+    await sec('ui', 'hud', 'all_at_once', async (s) => {
+      await cmd('/bossbar add architect:uig_a "Gallery boss bar"').catch(() => null);
+      await cmd('/bossbar add architect:uig_b "Second boss bar"').catch(() => null);
+      await cmd('/bossbar set architect:uig_a players @a');
+      await cmd('/bossbar set architect:uig_b players @a');
+      await call('dev.ui2b.siteHud', { mode: 'full' });
+      await call('dev.ui2b.helperPreview', { label: 'Installing the design helper (about 200 MB, first run only)…', npm: 'added 212 packages in 41s' });
+      await call('dev.ui03.regionHudPreview', { planId: 'crater_works', tiles: '12 of 40 tiles near', verdict: 'checker: ok · 31 204 of 200 000 cells' });
+      await call('dev.build.cancel').catch(() => null);
+      await call('dev.build.start', { blueprint: 'cabin', origin: [ORIGIN[0] + 22, 64, ORIGIN[2]], ground: true, turns: 0 });
+      await waitVerdict().catch(() => null);
+      await cam(6, 12, 30);
+      await cmd('/advancement revoke @s only minecraft:story/mine_stone').catch(() => null);
+      await cmd('/advancement grant @s only minecraft:story/mine_stone');
+      await call('dev.ui03.toast', { level: 'info', title: 'Stilt Swamp Fishing Village is built', subject: 'Stilt Swamp Fishing Village',
+        body: 'The construction site s-uig is finished; the crate gave back its leftovers', lines: 3 });
+      await sleep(900);
+      const z = await call('dev.hud.zones');
+      const gs = await call('dev.gui.scale', { scale: s });
+      zoneChecks.push({ scale: s, gui: [gs.guiWidth, gs.guiHeight], zones: z });
+    });
+    for (const zc of zoneChecks) {
+      const [gw] = zc.gui;
+      const slots = Object.values(zc.zones.zones ?? {}).flatMap((zo) => zo.slots ?? []);
+      const meet = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      const pairs = [];
+      for (let i = 0; i < slots.length; i++) for (let j = i + 1; j < slots.length; j++) if (meet(slots[i], slots[j])) pairs.push(`${slots[i].id} x ${slots[j].id}`);
+      const v = zc.zones.vanilla ?? {};
+      // vanilla's boss bars: 182 wide, centred, from the top to bossBottom; its toasts: 160 wide at the right, to toastsBottom
+      const boss = v.bossBottom > 0 ? { x: Math.floor(gw / 2) - 91, y: 0, w: 182, h: v.bossBottom } : null;
+      const toasts = v.toastsBottom > 0 ? { x: gw - 160, y: 0, w: 160, h: v.toastsBottom } : null;
+      const overVanilla = slots.filter((sl) => (boss && meet(sl, boss)) || (toasts && meet(sl, toasts))).map((sl) => sl.id);
+      const ids = slots.map((sl) => sl.id);
+      const want = ['architect_mc:hud/placement', 'architect_mc:hud/construction', 'architect_mc:hud/region_ghost', 'architect_mc:hud/helper_progress', 'lab_ui:toasts'];
+      const missing = want.filter((id) => !ids.includes(id));
+      GAL.notes.push(`hud/all_at_once s${zc.scale}: slots ${slots.map((sl) => `${sl.id}@${sl.x},${sl.y} ${sl.w}x${sl.h}${sl.collapsed ? ' collapsed' : ''}`).join('; ')}; `
+        + `vanilla boss ${v.bossBottom} toasts ${v.toastsBottom}; hidden ${JSON.stringify(Object.fromEntries(Object.entries(zc.zones.zones ?? {}).map(([k, zo]) => [k, zo.hidden])))}`);
+      check(pairs.length === 0 && overVanilla.length === 0 && missing.length === 0 && v.bossBottom > 0 && v.toastsBottom > 0,
+        `hud/all_at_once s${zc.scale}: ${slots.length} zone slots, none meet (${pairs.join(', ') || 'ok'}), none over vanilla's boss bars (bottom ${v.bossBottom}) `
+        + `or toasts (bottom ${v.toastsBottom}) (${overVanilla.join(', ') || 'ok'}), every piece shown (${missing.join(', ') || 'ok'})`, { slots, vanilla: v });
+    }
+    await cmd('/bossbar remove architect:uig_a').catch(() => null);
+    await cmd('/bossbar remove architect:uig_b').catch(() => null);
+    await call('dev.ui2b.helperPreview', { label: null }).catch(() => null);
+    await call('dev.ui03.regionHudPreview', { planId: null }).catch(() => null);
+    await call('dev.build.cancel').catch(() => null);
     await call('dev.ui2b.siteHud', { mode: 'full' });
     await sec('ui', 'crate', 'screen', async () => { await call('dev.crate.open', { site: siteB }); await sleep(600); });
     await sec('ui', 'crate', 'confirm_armed', async () => {

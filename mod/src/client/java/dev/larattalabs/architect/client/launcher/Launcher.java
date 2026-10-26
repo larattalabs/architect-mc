@@ -90,9 +90,9 @@ public final class Launcher {
 
 	public static void init() {
 		config = LauncherConfig.load();
-		// UI-2b: the install / first start as one progress strip
-		net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(Architect.id("hud/helper_progress"),
-			dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.helper_progress", new HelperProgressHud()));
+		// UI-2b: the install / first start as one progress strip; UI-0.3: a lab-ui HUD zone piece, top left, hideable
+		dev.larattalabs.labui.client.hud.HudZones.add(Architect.id("hud/helper_progress"), dev.larattalabs.labui.ui.HudZone.TOP_LEFT,
+			new HelperProgressHud()).priority(50);
 		Sidecar.init();
 		Sidecar.state().addListener(new SidecarState.Listener() {
 			@Override
@@ -721,9 +721,9 @@ public final class Launcher {
 			String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
 			switch (notice) {
 				case READY -> Toasts.push(Toasts.Level.INFO, "Architect is ready", "You can design buildings now.");
-				case NODE_MISSING -> Toasts.push(Toasts.Level.NEED, "Architect needs Node.js", "Install Node.js " + LauncherPlan.MIN_NODE
-					+ "+ to design buildings; placing works without it.", key, "status");
-				case CRASHED -> Toasts.push(Toasts.Level.WARN, "The design helper stopped", plain, key, "status");
+				case NODE_MISSING -> Toasts.push(Toasts.Spec.of(Toasts.Level.NEED, "Architect needs Node.js", "Install Node.js " + LauncherPlan.MIN_NODE
+					+ "+ to design buildings; placing works without it.").hint(key, "status").bodyLines(3));
+				case CRASHED -> Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "The design helper stopped", plain).hint(key, "status").bodyLines(3));
 				default -> {
 				}
 			}

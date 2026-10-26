@@ -29,6 +29,11 @@ public final class CompositeMesh {
 	static final int RED = 0xFFE0302A;
 	/** KEPT (phase 5b): cells the player changed that a KEEP delta leaves: a yellow frame. */
 	static final int YELLOW = 0xFFF5E11E;
+
+	/** The KEPT frame's colour (opaque), for a swatch beside the words that name those cells (UI-0.3). */
+	public static int keptColor() {
+		return YELLOW;
+	}
 	/** REMOVED: the frame's width on a face (blocks). */
 	static final float FRAME = 0.075f;
 	private static final float[] FACE_SHADE = {0.62f, 1.0f, 0.86f, 0.86f, 0.74f, 0.74f};

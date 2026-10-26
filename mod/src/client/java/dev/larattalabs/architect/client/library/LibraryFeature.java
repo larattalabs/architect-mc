@@ -595,8 +595,8 @@ public final class LibraryFeature {
 					});
 				}
 			}
-			case FAILED -> Toasts.push(Toasts.Level.WARN, (v.isImport() ? "Import failed: " : "Variant failed: ") + what,
-				firstLine(v.error() != null ? v.error() : v.step()), key, "designs");
+			case FAILED -> Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, (v.isImport() ? "Import failed: " : "Variant failed: ") + what,
+				firstLine(v.error() != null ? v.error() : v.step())).hint(key, "designs").bodyLines(3));
 			default -> {
 			}
 		}

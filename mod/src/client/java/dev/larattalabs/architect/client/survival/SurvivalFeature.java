@@ -5,7 +5,6 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.dev.DevBridge;
 import dev.larattalabs.architect.client.dev.Fields;
 import dev.larattalabs.labui.client.hud.Toasts;
-import dev.larattalabs.labui.client.ui.GuardedHud;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.site.Builder;
 import dev.larattalabs.architect.site.Site;
@@ -18,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -42,14 +40,17 @@ public final class SurvivalFeature {
 		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteClear.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.clear", () -> {
 			SiteGhosts.onClear(p);
 			if (p.finished()) {
-				Toasts.push(Toasts.Level.INFO, p.name() + " is built", "The construction site " + p.siteId() + " is finished; the crate gave back its leftovers");
+				// UI-0.3: the site's name is the subject (shortened first, so "is built" stays), the body may take 3 lines
+				Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, p.name() + " is built", "The construction site " + p.siteId()
+					+ " is finished; the crate gave back its leftovers").subject(p.name()).bodyLines(3));
 			}
 		}));
 		ClientPlayNetworking.registerGlobalReceiver(SiteNet.CrateOpen.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.crate", () ->
 			Minecraft.getInstance().gui.setScreen(new CrateScreen(p.siteId()))));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(SiteGhosts::clear));
 		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:survival.ghost.render", () -> SiteGhostRenderer.submit(ctx)));
-		HudElementRegistry.addLast(Architect.id("hud/construction"), GuardedHud.of("architect_mc:hud.construction", new SiteHud()));
+		// UI-0.3: a lab-ui HUD zone piece, top centre (may shrink to one line)
+		dev.larattalabs.labui.client.hud.HudZones.add(Architect.id("hud/construction"), dev.larattalabs.labui.ui.HudZone.TOP_CENTER, new SiteHud()).priority(60);
 		registerDev();
 	}
 

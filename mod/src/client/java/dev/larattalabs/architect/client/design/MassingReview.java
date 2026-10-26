@@ -15,6 +15,8 @@ import dev.larattalabs.architect.apiimpl.Wire4c;
 import dev.larattalabs.architect.client.hud.Keys;
 import dev.larattalabs.labui.client.hud.Toasts;
 import dev.larattalabs.labui.client.hud.UiBits;
+import dev.larattalabs.labui.client.hud.HudZones;
+import dev.larattalabs.architect.client.hud.HudInk;
 import dev.larattalabs.architect.client.placement.BuildPlacement;
 import dev.larattalabs.architect.client.placement.CompositePreview;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
@@ -43,9 +45,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -119,8 +118,9 @@ public final class MassingReview {
 			shownSet = null;
 			shownItems = List.of();
 		}));
-		HudElementRegistry.addLast(Architect.id("hud/massing_review"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.massing_review",
-			new Hud()));
+		// UI-0.3: a lab-ui HUD zone piece, bottom centre (beside the placement panel, which hides it while placing)
+		dev.larattalabs.labui.client.hud.HudZones.add(Architect.id("hud/massing_review"), dev.larattalabs.labui.ui.HudZone.BOTTOM_CENTER, new Hud())
+			.priority(60).whileScreenOpen(true);
 		MassingDev.register();
 	}
 
@@ -200,7 +200,7 @@ public final class MassingReview {
 			Toasts.push(Toasts.Level.INFO, "Massing ready: " + title(m), "v" + m.version() + ", " + m.parts().size() + " masses: Enter approves, R redirects",
 				key, "designs");
 		} else {
-			Toasts.push(Toasts.Level.WARN, "Massing ready: " + title(m), why, key, "designs");
+			Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Massing ready: " + title(m), why).hint(key, "designs").bodyLines(3));
 		}
 	}
 
@@ -496,38 +496,41 @@ public final class MassingReview {
 
 	// ------------------------------------------------------------------ HUD
 
-	/** The review bar (a design's massing) or the set's legend, above the hotbar. */
-	static final class Hud implements HudElement {
+	/** The review bar (a design's massing) or the set's legend, above the hotbar (UI-0.3: a {@code BOTTOM_CENTER} zone piece). */
+	static final class Hud implements HudZones.Element {
+		private List<String[]> lines = List.of();
+		private String[] hints = new String[0];
+
 		@Override
-		public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker dt) {
+		public HudZones.@Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 			Minecraft mc = Minecraft.getInstance();
+			lastRect = null;
 			if (mc.player == null || BuildPlacement.active()) {
-				return;
+				return null;
 			}
-			Font font = mc.font;
 			Review r = review;
 			boolean fresh = status != null && Util.getMillis() - statusAt < STATUS_MS;
 			List<String[]> lines = new ArrayList<>(); // {text, colour}
 			String[] hints = new String[0];
-			int maxW = Math.min(440, g.guiWidth() - 16);
+			int maxW = Math.min(440, f.guiWidth() - 16);
 			Kit.Padding p = Kit.padding("tooltip");
 			int inner = maxW - p.left() - p.right();
 			if (r != null) {
 				Massing m = r.massing();
 				String head = "Massing: " + r.title() + " v" + m.version() + (m.redirect().isPresent() ? " (redirected)" : "");
-				lines.add(new String[] {TextUtil.ellipsize(font, head, inner), Integer.toString(UiStyle.CREAM)});
+				lines.add(new String[] {TextUtil.ellipsize(font, head, inner), Integer.toString(HudInk.text())});
 				String detail = m.parts().size() + " masses (" + String.join(", ", m.parts().keySet()) + ") · " + m.size().x() + "×" + m.size().y() + "×"
 					+ m.size().z() + (r.plot() != null ? " · on your plot" : "") + String.format(Locale.ROOT, " · $%.2f", m.cost().usd());
-				lines.add(new String[] {TextUtil.ellipsize(font, detail, inner), Integer.toString(UiBits.activityOnInk())});
+				lines.add(new String[] {TextUtil.ellipsize(font, detail, inner), Integer.toString(HudInk.soft())});
 				lines.add(new String[] {TextUtil.ellipsize(font, sending ? "Sending…" : "Approve to design the detail inside these masses, or redirect it.", inner),
-					Integer.toString(UiStyle.SAGE)});
+					Integer.toString(HudInk.ok())});
 				hints = new String[] {"Enter", "approve", "R", "redirect…", "Backspace", "cancel"};
 			} else if (shownSet != null) {
 				JsonObject raw = Sidecar.state().group(shownSet);
 				Group gr = raw == null ? null : Wire4b.group(raw);
 				if (gr != null) {
 					lines.add(new String[] {TextUtil.ellipsize(font, "Set " + gr.name() + ": " + gr.awaiting().size() + " massing" + (gr.awaiting().size() == 1
-						? "" : "s") + " to approve", inner), Integer.toString(UiStyle.CREAM)});
+						? "" : "s") + " to approve", inner), Integer.toString(HudInk.text())});
 					StringBuilder sb = new StringBuilder("Left to right: ");
 					for (int i = 0; i < shownItems.size(); i++) {
 						String k = shownItems.get(i);
@@ -535,21 +538,20 @@ public final class MassingReview {
 						sb.append(i == 0 ? "" : "  ").append(i + 1).append(' ').append(name);
 					}
 					for (String l : TextUtil.wrapPlain(font, sb.toString(), inner).stream().limit(2).toList()) {
-						lines.add(new String[] {l, Integer.toString(UiBits.activityOnInk())});
+						lines.add(new String[] {l, Integer.toString(HudInk.soft())});
 					}
 					String k = Keys.screen == null ? "B" : Keys.label(Keys.screen);
 					lines.add(new String[] {TextUtil.ellipsize(font, "Approve, redirect or cancel each in the Designs tab (" + k + ")", inner), Integer.toString(
-						UiStyle.SAGE)});
+						HudInk.ok())});
 				}
 			}
 			if (fresh) {
 				for (String l : TextUtil.wrapPlain(font, status, inner)) {
-					lines.add(new String[] {l, Integer.toString(statusError ? 0xFFF07060 : UiStyle.CREAM)});
+					lines.add(new String[] {l, Integer.toString(statusError ? HudInk.error() : HudInk.text())});
 				}
 			}
 			if (lines.isEmpty()) {
-				lastRect = null;
-				return;
+				return null;
 			}
 			int textW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 			for (String[] l : lines) {
@@ -557,11 +559,18 @@ public final class MassingReview {
 			}
 			int w = Math.min(maxW, textW + p.left() + p.right());
 			int h = p.top() + lines.size() * 10 + (hints.length == 0 ? 0 : 15) + p.bottom() - 1;
-			int x = (g.guiWidth() - w) / 2;
-			int y = g.guiHeight() - 64 - h;
-			if (y < g.guiHeight() / 2 + 8) {
-				y = Math.max(g.guiHeight() / 2 + 8, g.guiHeight() - 26 - h);
-			}
+			this.lines = lines;
+			this.hints = hints;
+			return HudZones.Size.of(w, h);
+		}
+
+		@Override
+		public void draw(GuiGraphicsExtractor g, Font font, HudZones.Frame f, HudZones.Slot slot) {
+			Kit.Padding p = Kit.padding("tooltip");
+			int x = slot.x();
+			int y = slot.y();
+			int w = slot.w();
+			int h = slot.h();
 			lastRect = new int[] {x, y, w, h};
 			Panels.sprite(g, Kit.TOOLTIP, x, y, w, h, 0xF0FFFFFF);
 			int ty = y + p.top();

@@ -1,13 +1,10 @@
 package dev.larattalabs.architect.client.survival;
 
-import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.labui.client.ui.Kit;
 import dev.larattalabs.labui.client.ui.Panels;
 import dev.larattalabs.labui.client.ui.TextUtil;
-import dev.larattalabs.labui.client.ui.UiStyle;
 import dev.larattalabs.architect.survival.SiteNet;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
-import net.minecraft.client.DeltaTracker;
+import dev.larattalabs.labui.client.hud.HudZones;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -23,8 +20,11 @@ import org.jspecify.annotations.Nullable;
  * <p>UI-2b: the player sizes it ({@link UiPrefs#siteHud}, the J key or the Status tab): full (the line and its progress bar),
  * one line ("Log Cabin 62%", no bar), or hidden. While the placement HUD is up it shows one line at most, so the two and the
  * toasts don't stack. Colours are {@link HudInk}'s.
+ *
+ * <p>UI-0.3: a lab-ui {@link HudZones} element in {@code TOP_CENTER} (below vanilla's boss bars), which may shrink to its one-line
+ * form ({@link HudZones.Slot#collapsed()}: the short line, no bar) when the zone is short.
  */
-final class SiteHud implements HudElement {
+final class SiteHud implements HudZones.Element {
 	static final int RANGE = 64;
 
 	/** The line for a ghost, or null when its status hasn't come yet. */
@@ -92,32 +92,52 @@ final class SiteHud implements HudElement {
 		return m;
 	}
 
+	private SiteGhosts.@Nullable Ghost ghost;
+	private UiPrefs.SiteHud drawn = UiPrefs.SiteHud.HIDDEN;
+
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+	public HudZones.@Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
-		if (mc.gui.screen() != null) {
-			return;
-		}
+		ghost = null;
 		UiPrefs.SiteHud mode = mode();
 		if (mode == UiPrefs.SiteHud.HIDDEN) {
+			return null;
+		}
+		SiteGhosts.Ghost g = shown(mc);
+		String line = g == null ? null : mode == UiPrefs.SiteHud.LINE ? shortLine(g) : line(g);
+		if (line == null) {
+			return null;
+		}
+		ghost = g;
+		drawn = mode;
+		Kit.Padding p = Kit.padding("tooltip");
+		int maxW = Math.min(360, f.guiWidth() - 16);
+		String full = TextUtil.ellipsize(font, line, maxW - p.left() - p.right() - 4);
+		int w = font.width(full) + p.left() + p.right() + 4; // the short line is a prefix of the full one: it fits too
+		int lineH = font.lineHeight + p.top() + p.bottom() + 2;
+		int h = mode == UiPrefs.SiteHud.FULL ? font.lineHeight + p.top() + p.bottom() + 8 : lineH;
+		return HudZones.Size.of(w, h).shrinkTo(lineH);
+	}
+
+	@Override
+	public void draw(GuiGraphicsExtractor g, Font font, HudZones.Frame f, HudZones.Slot slot) {
+		SiteGhosts.Ghost gh = ghost;
+		if (gh == null || gh.status == null) {
 			return;
 		}
-		SiteGhosts.Ghost ghost = shown(mc);
-		String line = ghost == null ? null : mode == UiPrefs.SiteHud.LINE ? shortLine(ghost) : line(ghost);
+		// collapsed (the zone is short) or the player's LINE mode: the short line, no bar
+		boolean full = drawn == UiPrefs.SiteHud.FULL && !slot.collapsed();
+		String line = full ? line(gh) : shortLine(gh);
 		if (line == null) {
 			return;
 		}
-		Font font = mc.font;
 		Kit.Padding p = Kit.padding("tooltip");
-		int maxW = Math.min(360, g.guiWidth() - 16);
-		String text = TextUtil.ellipsize(font, line, maxW - p.left() - p.right() - 4);
-		int w = font.width(text) + p.left() + p.right() + 4;
-		boolean full = mode == UiPrefs.SiteHud.FULL;
-		int h = font.lineHeight + p.top() + p.bottom() + (full ? 8 : 2);
-		int x = (g.guiWidth() - w) / 2;
-		int y = 4;
-		Panels.sprite(g, Kit.TOOLTIP, x, y, w, h);
-		SiteNet.SiteStatus s = ghost.status;
+		String text = TextUtil.ellipsize(font, line, slot.w() - p.left() - p.right() - 4);
+		int x = slot.x();
+		int y = slot.y();
+		int w = slot.w();
+		Panels.sprite(g, Kit.TOOLTIP, x, y, w, slot.h());
+		SiteNet.SiteStatus s = gh.status;
 		double frac = s.total() == 0 ? 1 : (double) s.built() / s.total();
 		Panels.text(g, font, text, x + p.left() + 2, y + p.top(), s.crateMissing() ? HudInk.error() : HudInk.text());
 		if (!full) {

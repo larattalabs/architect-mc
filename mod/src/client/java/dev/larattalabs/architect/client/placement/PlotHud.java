@@ -5,39 +5,42 @@ import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.labui.client.ui.Kit;
 import dev.larattalabs.labui.client.ui.Panels;
 import dev.larattalabs.labui.client.ui.TextUtil;
-import dev.larattalabs.labui.client.ui.UiStyle;
 import java.util.ArrayList;
 import java.util.List;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
-import net.minecraft.client.DeltaTracker;
+import dev.larattalabs.labui.client.hud.HudZones;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.Util;
 
-/** The plot-marking HUD: the same ink panel as {@link PlacementHud}, with the step, the plot's size and limit, and the keys. */
-final class PlotHud implements HudElement {
+/**
+ * The plot-marking HUD: the same ink panel as {@link PlacementHud}, with the step, the plot's size and limit, and the keys. UI-0.3:
+ * a lab-ui {@link HudZones} element in {@code BOTTOM_CENTER} beside the placement panel (they never show together).
+ */
+final class PlotHud implements HudZones.Element {
 	/** The panel drawn last frame (x, y, w, h), null when hidden: toasts stop above it. */
 	static volatile int @org.jspecify.annotations.Nullable [] lastRect;
 
 	private static final long STATUS_MS = 6000;
 
+	private List<String[]> lines = List.of();
+	private String[] hints = new String[0];
+
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+	public HudZones.@org.jspecify.annotations.Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
+		lastRect = null;
 		if (mc.player == null) {
-			return;
+			return null;
 		}
-		Font font = mc.font;
 		PlotMarker.View v = PlotMarker.view();
 		String status = PlotMarker.status();
 		boolean fresh = status != null && Util.getMillis() - PlotMarker.statusAt < STATUS_MS;
 		if (v == null && (!fresh || BuildPlacement.view() != null)) {
 			// a stale "Plot marking cancelled" never sits on top of the placement panel (same place on the screen)
-			lastRect = null;
-			return;
+			return null;
 		}
-		int maxW = Math.min(420, g.guiWidth() - 16);
+		int maxW = Math.min(420, f.guiWidth() - 16);
 		Kit.Padding p = Kit.padding("tooltip");
 		int inner = maxW - p.left() - p.right();
 		int cream = dev.larattalabs.architect.client.hud.HudInk.text();
@@ -82,13 +85,20 @@ final class PlotHud implements HudElement {
 		}
 		int w = Math.min(maxW, textW + p.left() + p.right());
 		int hgt = p.top() + lines.size() * 10 + (hints.length == 0 ? 0 : 15) + p.bottom() - 1;
-		int x = (g.guiWidth() - w) / 2;
-		int y = g.guiHeight() - 64 - hgt;
-		if (y < g.guiHeight() / 2 + 8) {
-			// a short screen: keep the crosshair (the corner is aimed with it) clear
-			boolean bars = mc.gameMode != null && mc.gameMode.getPlayerMode().isSurvival();
-			y = Math.max(g.guiHeight() / 2 + 8, g.guiHeight() - (bars ? 50 : 26) - hgt);
-		}
+		this.lines = lines;
+		this.hints = hints;
+		return HudZones.Size.of(w, hgt);
+	}
+
+	@Override
+	public void draw(GuiGraphicsExtractor g, Font font, HudZones.Frame f, HudZones.Slot slot) {
+		Kit.Padding p = Kit.padding("tooltip");
+		int x = slot.x();
+		int y = slot.y();
+		int w = slot.w();
+		int hgt = slot.h();
+		int inner = Math.min(420, f.guiWidth() - 16) - p.left() - p.right();
+		int hintW = hints.length == 0 ? 0 : UiBits.hintsWidth(font, hints);
 		lastRect = new int[] {x, y, w, hgt};
 		Panels.sprite(g, Kit.TOOLTIP, x, y, w, hgt, 0xF0FFFFFF);
 		int ty = y + p.top();

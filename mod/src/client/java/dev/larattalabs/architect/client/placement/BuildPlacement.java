@@ -48,7 +48,7 @@ import org.jspecify.annotations.Nullable;
  * can walk around the ghost; a DevBridge start with an explicit origin is locked there.
  */
 public final class BuildPlacement {
-	/** The placement (or plot-marking) HUD panel drawn last frame (x, y, w, h) or null: toasts stop above it. */
+	/** The placement (or plot-marking) HUD panel drawn last frame (x, y, w, h) or null (its lab-ui HUD zone slot; QA and SiteHud's one-line rule). */
 	public static int @org.jspecify.annotations.Nullable [] hudRect() {
 		int[] r = PlacementHud.lastRect;
 		if (r == null) {

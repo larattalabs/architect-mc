@@ -5,7 +5,6 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.labui.client.ui.Kit;
 import dev.larattalabs.labui.client.ui.Panels;
 import dev.larattalabs.labui.client.ui.TextUtil;
-import dev.larattalabs.labui.client.ui.UiStyle;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.placement.CompositeMesh;
 import dev.larattalabs.architect.region.GhostPlan;
@@ -21,9 +20,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -67,7 +63,9 @@ public final class RegionGhost {
 	public static void init() {
 		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("architect_mc:placement.regionGhost", () -> tick(mc)));
 		net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.register((h, mc) -> mc.execute(RegionGhost::hide));
-		HudElementRegistry.addLast(Architect.id("hud/region_ghost"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.region_ghost", new Hud()));
+		// UI-0.3: the verdict panel is a lab-ui HUD zone piece (top centre, may shrink to one line); kept over open screens as before
+		dev.larattalabs.labui.client.hud.HudZones.add(Architect.id("hud/region_ghost"), dev.larattalabs.labui.ui.HudZone.TOP_CENTER, new Hud()).priority(50)
+			.whileScreenOpen(true);
 	}
 
 	/** Shows the ghost of {@code planId} (stages up to {@code stage}; null: all), replacing any shown. */
@@ -111,6 +109,11 @@ public final class RegionGhost {
 
 	public static boolean on() {
 		return plan != null;
+	}
+
+	/** DevBridge {@code dev.ui03.regionHudPreview}: the verdict panel with {planId, tiles line, verdict} while no plan is shown; null: off. */
+	public static void previewHud(String @Nullable [] planTilesVerdict) {
+		Hud.preview = planTilesVerdict;
 	}
 
 	/** DevBridge {@code dev.region.ghost}: what is shown. */
@@ -309,28 +312,59 @@ public final class RegionGhost {
 	}
 
 	/** The verdict line: the checker summary and the cell budget, at the top of the screen. */
-	static final class Hud implements HudElement {
+	/**
+	 * The verdict panel (UI-0.3: a lab-ui {@code HudZones} element in {@code TOP_CENTER}, below vanilla's boss bars): the plan and
+	 * its tiles, then the checker's verdict; shrinks to one line ("Region plan id: verdict") when the zone is short.
+	 */
+	static final class Hud implements dev.larattalabs.labui.client.hud.HudZones.Element {
+		private String head = "";
+		private String verdict = "";
+		private String planId = "";
+		/** DevBridge {@code dev.ui03.regionHudPreview}: draw the panel with this head and verdict while no plan is shown (null: off). */
+		static volatile String @Nullable [] preview;
+
 		@Override
-		public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+		public dev.larattalabs.labui.client.hud.HudZones.@Nullable Size measure(Font font, dev.larattalabs.labui.client.hud.HudZones.Frame f, int zoneW) {
 			GhostPlan p = plan;
-			Minecraft mc = Minecraft.getInstance();
-			if (p == null || mc.player == null) {
+			String[] pv = preview;
+			head = "";
+			if (p == null && pv == null || Minecraft.getInstance().player == null) {
+				return null;
+			}
+			Kit.Padding pad = Kit.padding("tooltip");
+			if (p != null) {
+				planId = p.planId();
+				head = "Region plan " + p.planId() + (p.stage() == null ? "" : " up to " + p.stage()) + " · " + SHOWN.size() + " of " + p.tiles().size()
+					+ " tiles near";
+				verdict = p.verdict();
+			} else {
+				planId = pv[0];
+				head = "Region plan " + pv[0] + " · " + pv[1];
+				verdict = pv[2];
+			}
+			int maxW = Math.min(520, f.guiWidth() - 16);
+			int w = Math.min(maxW, Math.max(font.width(head), font.width(verdict)) + pad.left() + pad.right());
+			int h = pad.top() + 20 + pad.bottom() - 1;
+			return dev.larattalabs.labui.client.hud.HudZones.Size.of(w, h).shrinkTo(h - 10);
+		}
+
+		@Override
+		public void draw(GuiGraphicsExtractor g, Font font, dev.larattalabs.labui.client.hud.HudZones.Frame f, dev.larattalabs.labui.client.hud.HudZones.Slot slot) {
+			if (head.isEmpty()) {
 				return;
 			}
-			Font font = mc.font;
 			Kit.Padding pad = Kit.padding("tooltip");
-			String head = "Region plan " + p.planId() + (p.stage() == null ? "" : " up to " + p.stage()) + " · " + SHOWN.size() + " of " + p.tiles().size()
-				+ " tiles near";
-			int maxW = Math.min(520, g.guiWidth() - 16);
-			int inner = maxW - pad.left() - pad.right();
-			int w = Math.min(maxW, Math.max(font.width(head), font.width(p.verdict())) + pad.left() + pad.right());
-			int h = pad.top() + 20 + pad.bottom() - 1;
-			int x = (g.guiWidth() - w) / 2;
-			int y = 6;
-			Panels.sprite(g, Kit.TOOLTIP, x, y, w, h, 0xF0FFFFFF);
-			g.text(font, TextUtil.ellipsize(font, head, inner), x + pad.left(), y + pad.top(), UiStyle.CREAM, false);
-			g.text(font, TextUtil.ellipsize(font, p.verdict(), inner), x + pad.left(), y + pad.top() + 10, p.verdict().contains("NOT ok") ? 0xFFF0A060
-				: UiStyle.SAGE, false);
+			int inner = slot.w() - pad.left() - pad.right();
+			int x = slot.x();
+			int y = slot.y();
+			int verdictInk = verdict.contains("NOT ok") ? dev.larattalabs.architect.client.hud.HudInk.warn() : dev.larattalabs.architect.client.hud.HudInk.ok();
+			Panels.sprite(g, Kit.TOOLTIP, x, y, slot.w(), slot.h(), 0xF0FFFFFF);
+			if (slot.collapsed()) {
+				g.text(font, TextUtil.ellipsize(font, "Region plan " + planId + ": " + verdict, inner), x + pad.left(), y + pad.top(), verdictInk, false);
+				return;
+			}
+			g.text(font, TextUtil.ellipsize(font, head, inner), x + pad.left(), y + pad.top(), dev.larattalabs.architect.client.hud.HudInk.text(), false);
+			g.text(font, TextUtil.ellipsize(font, verdict, inner), x + pad.left(), y + pad.top() + 10, verdictInk, false);
 		}
 	}
 }
