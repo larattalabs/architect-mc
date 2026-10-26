@@ -25689,6 +25689,6 @@ HUD text uses lab-ui's on-dark tokens.
   range stays `">=0.3.0 <0.4.0"`; the jar nests `lab_ui-0.3.1.jar`. The Gradle cache note above applies to 0.3.1 too.
 - At ad65e07d: `gate-run change --only unit-mod,ui2b-ingame` **PASS 2/2** (run `20261026-025349-change`); the gallery's `hud/all_at_once`
   (GATEUIG_ONLY) at GUI scale 2 and 4: no two zone slots meet and none crosses vanilla's boss bars or toasts at either scale (s4:
-  the region verdict now at y 92, below the toasts' 64; every piece shown, the helper strip too, at y 40 below "Now playing"-free
-  top left beside the boss bars). The scale-4 overlap above is fixed. Vanilla's chat (not a zone piece) still runs under the
+  the region verdict now at y 92, below the toasts' 64; every piece shown, the helper strip too, at y 40, below the boss bars beside it in the
+  top left). The scale-4 overlap above is fixed. Vanilla's chat (not a zone piece) still runs under the
   placement panel's left edge at s4, as before this slice.
