@@ -440,6 +440,7 @@ steps.undo = async () => {
   check(gy > -64 && gy < 200, `the flat world's ground: y ${gy}`);
   const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
   const before = await hashOf(BOX);
+  const B0 = await cellsOf(BOX);
   const T = await town({ cottage_1: STUB, cottage_2: STUB });
   const region = T.region;
   const S0 = await cellsOf(BOX);
@@ -550,8 +551,9 @@ steps.undo = async () => {
   await sleep(2000);
   // (cottage_1's building was removed alone and never refilled after: the region's removal takes the rest)
   const after = await hashOf(BOX);
-  out.remove = { result: rem, flat: after === before };
-  check(rem.removed !== false && after === before, `item 8: Regions.remove with 3 revisions standing (a mound, a pond, a lot): E-flat 0 over claim + 8 (${after === before})`);
+  const dd = after === before ? null : diff(B0, await cellsOf(BOX));
+  out.remove = { result: rem, flat: after === before, diff: dd };
+  check(rem.removed !== false && after === before, `item 8: Regions.remove with 3 revisions standing (a mound, a pond, a lot): E-flat 0 over claim + 8 (${after === before})${dd ? `: ${dd.n} cells differ ${json(dd.first.slice(0, 8))} (${json(rem)})` : ''}`);
   await L.leaveWorld();
   spendZero();
   return out;
@@ -616,7 +618,7 @@ steps.plan0 = async () => {
   await sleep(2000);
   const flat = (await hashOf(BOX)) === before;
   const dflat = flat ? null : diff(B0, await cellsOf(BOX));
-  check(rem.removed !== false && flat, `the region removed: E-flat 0${dflat ? `: ${dflat.n} cells differ` : ''}`, dflat?.first);
+  check(rem.removed !== false && flat, `the region removed: E-flat 0${dflat ? `: ${dflat.n} cells differ ${json(dflat.first.slice(0, 8))} (${json(rem)})` : ''}`, dflat?.first);
   await L.leaveWorld();
   spendZero();
   return out;
