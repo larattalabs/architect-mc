@@ -53,8 +53,9 @@ LF changes API Steward calls in three places, all additive:
 
 ## Gate evidence
 
-See CONTRACT "Phase 7a slice LF as built" (Gate row) for the runs, and the gallery link. The verifier re-runs items 8 (exact undo), 9
-(StillOurs) and 10 (survival).
+See CONTRACT "Phase 7a slice LF as built" (Gate and Look rows). Head bd0f495d: gate run 20261026-223501-change PASS 12/12 and lf-look
+20261026-225948-change PASS; gate-verifier PASS on items 8 (exact undo), 9 (StillOurs) and 10 (survival bills = BOM). Gallery:
+https://claude.ai/artifact/DSfY1N32us1YRUa3vLJNTL (private).
 
 ## Next
 
