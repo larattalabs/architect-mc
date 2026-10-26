@@ -93,6 +93,9 @@ gate anything:
   running clients. A new clone or worktree gets its own `cp -c -R` copy with `daemon/*/registry.bin*` deleted before any Gradle command (a
   copied registry still lists the original's live daemons, so `--stop` or a daemon connect reaches them); stop only the daemons
   you started, by PID.
+- **Clean up after yourself (Noah, 2026-10-26).** When your slice is pushed and reported, remove the worktrees and run dirs you
+  created (`git worktree remove <path>`, no --force; if git refuses because of leftovers, list them in your report) and stop
+  your own daemons and clients by PID. Hundreds of stale worktrees and Minecraft run dirs made macOS's fseventsd grow to 40 GB.
 - **Everything generated is themed (Noah, 2026-10-24).** Every block a generator, connector or region writes comes from the
   style's roles (or their slab/stairs/wall/fence shape variants), with a fallback to the nearest role, never a hard-coded oak
   or stone. Only a short shared allowlist of functional blocks (ladder, air, water, …) is exempt. The structure lint (S-THEME, step lint-structure) checks it.
