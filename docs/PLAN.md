@@ -1301,3 +1301,16 @@ Queued from U5:
 - **For Noah:** default "Use this style's parts" on for every built-in (recommended), or keep it off. Decided 2026-10-24: **on** (`fix/parts-default-on`, CONTRACT "Parts default on for built-ins").
 - Queued: japanese's set-mode accent share (R1B 0.171) is worth a look; parts jobs have their own estimate kind now that 15 are
   measured ($0.25-0.72, 1-3 min; the estimate said at most $1.16-1.55).
+
+## Jobs & spend panel (Noah, 2026-10-26)
+Design in docs/JOBS-PANEL.md; mock approved: https://claude.ai/artifact/VPc1AcQBiLSiznsaWc4JLF. Decisions (the recommendations):
+1. Steward's Y inbox stays the deep decision screen; K is the cross-mod overview panel.
+2. K is the key (check it against the 26.3 defaults).
+3. The spend total covers today, in dollar estimates labelled "estimate".
+4. A steward's idea does not light the nameplate "!"; "!" means blocked on you. Ideas show in the panel and the HUD pill.
+Slices:
+- J1, lab-ui 0.4.0 (M): JobBoard registry, the panel screen, the shared needs-you pill in TOP_LEFT, the K key registered once.
+- J2, Steward (M, parallel): a server-side Attention single source for the inbox, nameplate and board; the usage-limit reset as a number; an agreement test.
+- J3, Architect JobFeed (S): after J1.
+- J4, Steward publishes its rows (S): after J1+J2.
+- J5, toast refs plus gallery shots (S).
