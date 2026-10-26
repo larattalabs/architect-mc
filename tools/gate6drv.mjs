@@ -11,7 +11,7 @@
 //                                      against the 0.47.0, 0.45.0 and 0.44.0 apitest jars and the 0.47.0 mod surface
 //     ingame    (rv-ingame)            items 3, 6, 11, 20 in game on a flat town (flat_village, pads): every refusal before anything is written
 //                                      (lot COVERED, street OVERLAP, a site's cells OVERLAP held, a non-additive edit, a theme, a refill, an
-//                                      added body until RV-c); an added mound and a rock spire realised as revision 1 over the whole-world
+//                                      added body plans, its realise in rv-undo); an added mound and a rock spire realised as revision 1 over the whole-world
 //                                      oracle (claim + 8, every cell); the head, the states, the region's own state again, the layer's
 //                                      records; two candidates on one parent (the second PLAN_STALE parent_moved, nothing written); a site
 //                                      placed after a plan on its cell refusing that tile at its check; a block set between a tile's capture
@@ -313,9 +313,8 @@ steps.ingame = async () => {
   // another site's cells (a Steward addition's shape: a cell site) on a free spot: held, refused OVERLAP
   const site = await call('dev.cells.place', { kind: 'test:rv_steward', cells: [[CX + 104, gy + 1, CZ + 104, 'minecraft:cobblestone']], naturalOnly: false, owner: 'steward_mc:test' }, 300_000);
   refusals.held = await rvPlan(region, { parts: [col('a', CX + 104, CZ + 104)] });
-  // an added body: the kit plans it, the mod refuses it at realise (RV-c brings added bodies), nothing written
+  // an added body plans (a candidate; RV-c realises bodies: rv-undo's item 19), nothing written
   const pond = await rvPlan(region, { parts: [{ id: 'pond', call: { fn: 'pond', rect: [CX + 90, CZ + 40, CX + 96, CZ + 46] } }] });
-  refusals.pondRealise = pond.refused ? { refused: pond.refused } : await call('dev.region.realise', { planId: pond.planId }, 300_000);
   out.refusals = refusals;
   const code = (r) => String(r?.refused ?? '').split(':')[0];
   check(code(refusals.lot) === 'COVERED', `a write in a standing lot box refuses COVERED: ${refusals.lot.refused}`);
@@ -324,7 +323,7 @@ steps.ingame = async () => {
   check(code(refusals.theme) === 'NOT_ALLOWED' && /theme/.test(refusals.theme.refused), `a raw oak block refuses NOT_ALLOWED [theme] (everything generated is themed): ${refusals.theme.refused}`);
   check(code(refusals.refillPlaced) === 'NOT_ALLOWED', `a refill of a lot that isn't the region's refuses NOT_ALLOWED: ${refusals.refillPlaced.refused}`);
   check(code(refusals.nothing) === 'NOT_ALLOWED', `a revision adding nothing refuses NOT_ALLOWED: ${refusals.nothing.refused}`);
-  check(String(refusals.pondRealise.refused ?? '').startsWith('NOT_ALLOWED'), `an added body is planned by the kit and refused at realise until RV-c (NOT_ALLOWED): ${json(refusals.pondRealise)}`);
+  check(!pond.refused && pond.planId, `an added body plans as a candidate (its realise: rv-undo item 19): ${pond.planId ?? pond.refused}`);
   let s0 = await rvState(region);
   const h1 = await hashOf(BOX);
   check(h1 !== h0 && s0.headRid === 0 && s0.position === 0 && s0.busy === null && s0.revisions.length === 0, `nothing written by any refusal: the head 0, no revision record, busy null (the claim's hash moved only by the test's own site: ${h0 !== h1})`);

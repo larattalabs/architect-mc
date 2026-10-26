@@ -1515,7 +1515,21 @@ public final class Revisions {
 			WorldJournal.kill("RVU2"); // drained, nothing removed
 			phase = "remove";
 		}
+		if (phase.equals("remove") || phase.equals("removed")) {
+			for (JsonElement e : op.getAsJsonArray("stages")) {
+				if (dev.larattalabs.architect.site.Groups.stageRemovalRunning(rec.groupId, e.getAsString())) {
+					return; // a stage's removal runs (a resumed one after a load too): wait for it before anything else
+				}
+			}
+		}
+		if (phase.equals("removed") && standAgain(s, rec, op)) {
+			// a stop after RVU3 lost a stage undo's writes: the sites check brought its members back; their stages undo again
+			op.addProperty("phase", "remove");
+			writeUndo(l, op);
+			phase = "remove";
+		}
 		if (phase.equals("remove")) {
+			standAgain(s, rec, op);
 			SiteGroupRecView g = SiteGroupRecView.of(rec.groupId);
 			for (JsonElement e : op.getAsJsonArray("stages")) {
 				String st = e.getAsString();
@@ -1577,6 +1591,15 @@ public final class Revisions {
 		if (phase.equals("removed")) {
 			finishUndo(s, l, op);
 		}
+	}
+
+	/** The suffix stages already UNDONE whose members stand again after a stop read PLACED again (their undo runs again); any? */
+	private static boolean standAgain(MinecraftServer s, RegionRec rec, JsonObject op) {
+		boolean any = false;
+		for (JsonElement e : op.getAsJsonArray("stages")) {
+			any |= !dev.larattalabs.architect.site.Groups.standingAgain(s, rec.groupId, e.getAsString()).isEmpty();
+		}
+		return any;
 	}
 
 	/** §4.4 step 5: the suffix UNDONE, the head at toPosition, the lots and stages it added gone, busy cleared, the manifest deleted. */

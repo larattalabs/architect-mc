@@ -331,6 +331,29 @@ public final class Groups {
 		return false;
 	}
 
+	/**
+	 * (6d RV) An UNDONE stage some of whose members stand again (a stop lost its restore's writes and the load's sites check brought their
+	 * records back: "it stands again"): the stage reads PLACED again so that its undo runs again. Answers the members standing. Server thread.
+	 */
+	public static List<String> standingAgain(MinecraftServer server, String groupId, String stage) {
+		SiteGroupRec g = Sites.group(groupId);
+		SiteGroupRec.StageRec st = g == null ? null : g.stage(stage);
+		if (st == null || st.state() != Stage.State.UNDONE) {
+			return List.of();
+		}
+		List<String> standing = new ArrayList<>();
+		for (String id : st.sites()) {
+			if (Sites.get(id) != null || Infras.get(id) != null) {
+				standing.add(id);
+			}
+		}
+		if (!standing.isEmpty()) {
+			Architect.LOGGER.warn("Group {}: stage {} was undone but {} stand again after a stop: its undo runs again", groupId, stage, standing);
+			Batches.setStage(server, g, stage, Stage.State.PLACED);
+		}
+		return standing;
+	}
+
 	/** (C23) Whether a whole-group removal of this group is in progress (not a stalled one). */
 	public static boolean removalRunning(String groupId) {
 		for (Removal r : REMOVALS) {
