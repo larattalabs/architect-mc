@@ -9,16 +9,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Phase 7a slice LF DevBridge hooks (docs/DEVBRIDGE.md; CONTRACT LF §9 items 1 and 5): the ride probe. Vanilla's own movement is the
- * authority: the player is put in a bubble column and moved tick by tick by {@code LivingEntity.travel} (no input while it rides, then the
- * forward input to step off), after {@code Entity.baseTick} (its fluid state) and before the column's push, which is vanilla's own
- * {@code BubbleColumnBlock.entityInside} rule read in its bytecode ({@code onInsideBubbleColumn} under the top, {@code onAboveBubbleColumn} at
- * it), for every column block the player's box meets; the player rides in creative (physics, no harm), its mode put back. An up ride starts
- * on the base (feet at {@code y0 + 1}), rides until it surfaces over the column's top ({@code yT}, level with the top walk cell's block),
- * then swims and steps toward the face onto the top walk cell ({@code exit}, feet); a down ride starts in the open top (feet at
- * {@code yT + 1}) and is carried to the floor ({@code y0 + 1}), then leaves
- * through the airlock (its doors opened for the step, as a rider opens them, then closed) to the approach ({@code exit}). The player is put
- * back where it stood. Since NEXT.
+ * Phase 7a slice LF DevBridge hooks (docs/DEVBRIDGE.md; CONTRACT LF §9 items 1 and 5). {@code dev.lift.ride}, the ride probe: vanilla's own
+ * movement is the authority. The player is put in a bubble column and ticked as vanilla ticks a living entity ({@code Entity.baseTick},
+ * then {@code LivingEntity.aiStep} with its input: its {@code travel} moves it, its {@code applyEffectsFromBlocks} gives the column's own
+ * push, {@code BubbleColumnBlock.entityInside}), in creative (physics, no harm). An up ride starts on the base (feet at {@code y0 + 1}),
+ * rides until it surfaces over the column's top ({@code yT}, level with the top walk cell's block), then swims and steps toward the face
+ * and lands on the face's top; a down ride starts in the open top (feet at {@code yT + 1}), is carried to the floor ({@code y0 + 1}), then
+ * leaves through the airlock (its doors opened for the step, as a rider opens them, then closed) to the approach ({@code exit}). The player
+ * is put back where it stood, its game mode and {@code noPhysics} restored. {@code dev.lift.spawnRule}: vanilla's drowned spawn rules at a
+ * cell. Since NEXT.
  */
 public final class SliceLfDev {
 	private SliceLfDev() {
@@ -51,7 +50,7 @@ public final class SliceLfDev {
 			});
 		DevBridge.register("dev.lift.ride", 120_000, "{x, z, y0, yT, drag (false: up over soul sand, true: down over magma), face: [dx, dz] (toward "
 			+ "the face), exit: [x, y, z] (feet: the top walk cell for an up ride, the approach for a down ride), doors?: [[x, y, z]] (a down ride's "
-			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column (baseTick, LivingEntity.travel and the column's own push each tick) -> {reached, "
+			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column (baseTick and aiStep each tick: vanilla's travel and the column's own push) -> {reached, "
 			+ "maxY, minY, ticks, air, exited, exitAt, rode, error?, stack?}", (req, mc) -> {
 				int x = req.get("x").getAsInt(), z = req.get("z").getAsInt(), y0 = req.get("y0").getAsInt(), yT = req.get("yT").getAsInt();
 				boolean drag = req.has("drag") && req.get("drag").getAsBoolean();
@@ -97,23 +96,6 @@ public final class SliceLfDev {
 					}
 				});
 			});
-	}
-
-	/**
-	 * The column's push on the player this tick, as vanilla's {@code BubbleColumnBlock.entityInside} gives it (read in its bytecode): for each
-	 * bubble column block the player's box meets, {@code onAboveBubbleColumn(drag, pos)} when the block over it has no collision and no fluid
-	 * (the column's top), else {@code onInsideBubbleColumn(drag)}.
-	 */
-	static void bubblePush(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player) {
-		net.minecraft.world.phys.AABB b = player.getBoundingBox().deflate(1.0E-5);
-		for (BlockPos q : BlockPos.betweenClosed(BlockPos.containing(b.minX, b.minY, b.minZ), BlockPos.containing(b.maxX, b.maxY, b.maxZ))) {
-			BlockState s = level.getBlockState(q);
-			if (!s.is(net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN)) continue;
-			boolean dragDown = s.getValue(net.minecraft.world.level.block.BubbleColumnBlock.DRAG_DOWN);
-			BlockState over = level.getBlockState(q.above());
-			if (over.getCollisionShape(level, q).isEmpty() && over.getFluidState().isEmpty()) player.onAboveBubbleColumn(dragDown, q.immutable());
-			else player.onInsideBubbleColumn(dragDown);
-		}
 	}
 
 	/**
