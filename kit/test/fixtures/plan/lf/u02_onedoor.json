@@ -29,7 +29,7 @@
   },
   "expect": {
     "part": "cliff_lift",
-    "class": "fits"
+    "rule": "M10:lift"
   },
   "plan": {
     "schemaVersion": "plan/0",
