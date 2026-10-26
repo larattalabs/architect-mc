@@ -62,6 +62,7 @@ public final class PlacementFeature {
 		// drawn over open screens as before
 		HudZones.add(Architect.id("hud/placement"), HudZone.BOTTOM_CENTER, new PlacementHud()).priority(70).whileScreenOpen(true);
 		HudZones.add(Architect.id("hud/plot_marker"), HudZone.BOTTOM_CENTER, new PlotHud()).priority(65).whileScreenOpen(true);
+		UndoLastKey.init();
 		registerDev();
 	}
 
@@ -127,14 +128,11 @@ public final class PlacementFeature {
 					BuildPlacement.setLocked(!BuildPlacement.locked());
 				}
 			}
-			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
-				if (!repeat) {
-					BuildPlacement.confirm(e.hasShiftDown());
-				}
-			}
+			// SAFETY: a big placement asks for Enter twice (BuildPlacement.enter); Esc first disarms that, then cancels
+			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> BuildPlacement.enter(e.hasShiftDown(), repeat);
 			case InputConstants.KEY_ESCAPE, InputConstants.KEY_BACKSPACE -> {
 				if (!repeat) {
-					BuildPlacement.cancel();
+					BuildPlacement.escape();
 				}
 			}
 			// UI-2b: "?" (Shift+/ on a US layout; plain / still opens chat) or H shows / hides the key legend and the refusals' detail
@@ -181,6 +179,11 @@ public final class PlacementFeature {
 	}
 
 	// ------------------------------------------------------------------ dev
+
+	/** {@link #xyz} for other dev hooks. */
+	public static int[] origin(Fields f, String field) {
+		return xyz(f, field);
+	}
 
 	static int[] xyz(Fields f, String field) {
 		JsonElement el = f.json().get(field);
@@ -286,6 +289,35 @@ public final class PlacementFeature {
 					return o;
 				}));
 			});
+		// SAFETY: Enter and Esc through the keyboard's own path (PlacementFeature.onKey), unlike dev.build.confirm (the scripted,
+		// already-confirmed place that existing drivers use)
+		DevBridge.register("dev.build.enter", 30_000, "{shift?: false, repeat?: false} - (SAFETY) press Enter as the keyboard does: a big placement "
+			+ "arms on the first press (state.safety.armed, the HUD's countdown) and places on a second, fresh one at least 300 ms later; replies "
+			+ "when the server answered if it placed: {sent, placed?, siteId?, message?} + state", (req, mc) -> {
+				Fields f = Fields.of(req);
+				boolean shift = f.optBool("shift", false);
+				boolean repeat = f.optBool("repeat", false);
+				return DevBridge.onClient(mc, () -> {
+					requireActive();
+					onKey(repeat ? InputConstants.REPEAT : InputConstants.PRESS, new KeyEvent(InputConstants.KEY_RETURN, 0, shift ? InputConstants.MOD_SHIFT : 0));
+					return BuildPlacement.inFlightNow();
+				}).thenCompose(fut -> (fut == null ? java.util.concurrent.CompletableFuture.<BuildPlacement.Result>completedFuture(null) : fut)
+					.thenCompose(r -> DevBridge.onClient(mc, () -> {
+						JsonObject o = BuildPlacement.state();
+						o.addProperty("sent", r != null);
+						if (r != null) {
+							o.addProperty("placed", r.placed());
+							o.addProperty("siteId", r.buildingId());
+							o.addProperty("message", r.message());
+						}
+						return o;
+					})));
+			});
+		DevBridge.register("dev.build.escape", 10_000, "{} - (SAFETY) press Esc as the keyboard does: disarms an armed big confirm, else cancels",
+			(req, mc) -> DevBridge.onClient(mc, () -> {
+				onKey(InputConstants.PRESS, new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
+				return BuildPlacement.state();
+			}));
 		DevBridge.register("dev.build.legend", 10_000, "{on?: bool (default: toggle)} - the placement HUD's key legend and refusal detail "
 			+ "(the ? or H key) (UI-2b)", (req, mc) -> {
 				Boolean on = Fields.of(req).optBool("on");

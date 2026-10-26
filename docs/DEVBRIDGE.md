@@ -112,7 +112,12 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | hook | arguments, result |
 |---|---|
 | `dev.build.cancel` | {} - leave placement mode (Esc) |
-| `dev.build.confirm` | {force?: bool} - place it (Enter; force = Shift+Enter, only after a block-entity refusal); replies when the server answered: {placed, siteId, message} + state |
+| `dev.build.confirm` | {force?: bool} - place it (a confirmed Enter: it skips SAFETY's big-placement confirm, as scripts and the API do; force = Shift+Enter, only after a block-entity refusal); replies when the server answered: {placed, siteId, message} + state |
+| `dev.build.enter` | (SAFETY) {shift?, repeat?} - Enter through the keyboard's path: a big placement arms first (`state.safety`: blocks, replaced, threshold, big, armed, secondsLeft, prompt), a second fresh press at least 300 ms later places; {sent, placed?, siteId?, message?} + state |
+| `dev.build.escape` | (SAFETY) {} - Esc through the keyboard's path: disarms an armed big confirm, else cancels |
+| `dev.safety.threshold` | (SAFETY) {blocks?} - the big-placement threshold (`confirmBlocks` in config/architect_mc.json), set and saved when given |
+| `dev.safety.placeOwned` | (SAFETY) {blueprint, origin, owner} - place a site as another mod does through the API (siteOwner set; never the undo key's) |
+| `dev.safety.undo` | (SAFETY) {} - the Undo last placement key's state: {key, armedSite, secondsLeft, busy, lastMessage, latest}; press it with `dev.key {mapping: 'key.architect_mc.undo_last'}` |
 | `dev.build.legend` | {on?: bool (default: toggle)} - the placement HUD's key legend and refusal detail (the ? or H key) (UI-2b) |
 | `dev.build.lock` | {on?: bool (default: toggle)} - lock the ghost where it is / follow the look again |
 | `dev.build.nudge` | {forward?, right?, up?} - move the ghost (blocks, relative to where the player faces) |

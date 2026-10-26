@@ -31,9 +31,11 @@ import org.jspecify.annotations.Nullable;
  * /architect place &lt;id&gt; [rotation] [force]
  *                                   place in front of the player (ground row at the feet, entrance facing the player, its
  *                                   approach ending 2 blocks ahead; rotation overrides the automatic one)
- * /architect remove &lt;site&gt; [force|forget]
+ * /architect remove &lt;site&gt; [force] [confirm [token]] | forget | undo
  *                                   restore the terrain (force: although the player's things are inside, they are lost;
- *                                   forget: only drop the record, the blocks stay)
+ *                                   forget: only drop the record, the blocks stay). SAFETY: without confirm it answers with a
+ *                                   summary and a one-time [Confirm] link (30 s); undo (the "Placed" line's [Undo]) goes ahead
+ *                                   while the site is the player's latest own placement, else asks the same way
  * /architect reload                 reload the library (bundled + yours): the count, and [show] for the problems
  * /architect reload problems [page] [filter]
  *                                   the last reload's problems, paged
@@ -74,6 +76,7 @@ public final class SiteCommands {
 	}
 
 	public static void init() {
+		PlayerRemove.init();
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, env) -> dispatcher.register(Commands.literal("architect")
 			.executes(SiteCommands::open)
 			.then(Commands.literal("list").executes(SiteCommands::list).then(Commands.argument(ChatLists.ARG, StringArgumentType.greedyString()).executes(SiteCommands::list)))
@@ -96,9 +99,16 @@ public final class SiteCommands {
 						Sites.all().forEach(x -> b.suggest(x.id()));
 						return b.buildFuture();
 					})
-					.executes(ctx -> remove(ctx, false, false))
+					// SAFETY: remove and remove force answer with a summary and a one-time [Confirm] (30 s); confirm (typed) goes ahead;
+					// undo is the "Placed" line's [Undo]: one click while it is the player's latest own placement; forget writes no blocks
+					.executes(ctx -> removeAsk(ctx, false, null))
 					.then(Commands.literal("forget").executes(ctx -> remove(ctx, true, false)))
-					.then(Commands.literal("force").executes(ctx -> remove(ctx, false, true)))))
+					.then(Commands.literal("confirm").executes(ctx -> remove(ctx, false, false))
+						.then(Commands.argument("token", StringArgumentType.word()).executes(ctx -> removeToken(ctx, false))))
+					.then(Commands.literal("undo").executes(SiteCommands::removeUndo))
+					.then(Commands.literal("force").executes(ctx -> removeAsk(ctx, true, null))
+						.then(Commands.literal("confirm").executes(ctx -> remove(ctx, false, true))
+							.then(Commands.argument("token", StringArgumentType.word()).executes(ctx -> removeToken(ctx, true)))))))
 			.then(Commands.literal("survival")
 				.executes(SiteCommands::survivalShow)
 				.then(Commands.literal("on").executes(ctx -> survivalSet(ctx, true)))
@@ -583,6 +593,7 @@ public final class SiteCommands {
 			ServerPlayer owner = src.getPlayer();
 			Site b = Sites.place(level, bp, new BlockPos(o[0], o[1], o[2]), Rotation.values()[turns], force,
 				owner == null ? null : owner.getUUID().toString());
+			PlayerRemove.record(owner == null ? null : owner.getUUID().toString(), b); // SAFETY: the undo key's candidates
 			String note = Sites.lastNote();
 			if (b.building()) {
 				src.sendSuccess(() -> Component.literal("Construction site " + b.id() + " (" + bp.name() + ") placed: feed its crate (right-click it, or "
@@ -628,6 +639,91 @@ public final class SiteCommands {
 			src.sendFailure(Component.literal("Removing " + id + " failed: " + e));
 			return 0;
 		}
+	}
+
+	// ------------------------------------------------------------------ SAFETY: confirm before remove
+
+	/** Who asked, for a token: the player's UUID, else the source's name (the console, a command block). */
+	private static String who(CommandSourceStack src) {
+		ServerPlayer p = src.getPlayer();
+		return p != null ? p.getUUID().toString() : "source:" + src.getTextName();
+	}
+
+	/**
+	 * {@code /architect remove <site> [force]}: nothing is removed; the answer says what goes ("Remove cabin_3 (Cabin, 2,340
+	 * blocks; the ground is put back)?") with a [Confirm] link ({@code ... confirm <token>}, one use, {@value RemoveTokens#TTL_MS}
+	 * ms) and the typed form. An unknown id answers as remove does (did you mean).
+	 */
+	private static int removeAsk(CommandContext<CommandSourceStack> ctx, boolean force, @Nullable String lead) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		Site s = Sites.get(id);
+		Infra infra = s == null ? Infras.get(id) : null;
+		if (s == null && infra == null) {
+			return remove(ctx, false, force); // the unknown-site answer (did you mean)
+		}
+		String question = s != null ? removeQuestion(s) : "Remove " + infra.describe() + "? Its cells are restored as they were.";
+		String tail = force ? " force" : "";
+		String token = RemoveTokens.INSTANCE.issue(id, force, who(src));
+		String run = "/architect remove " + id + tail + " confirm " + token;
+		String typed = "/architect remove " + id + tail + " confirm";
+		net.minecraft.network.chat.MutableComponent m = Component.literal((lead == null ? "" : lead) + question + (force ? " (force)" : "") + " ");
+		m.append(Component.literal("[Confirm]").withStyle(x -> x.withColor(net.minecraft.ChatFormatting.AQUA).withUnderlined(true)
+			.withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(run))
+			.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(Component.literal("Remove it now (this link works once, for "
+				+ RemoveTokens.TTL_MS / 1000 + " s)\n" + typed)))));
+		m.append(Component.literal(" (" + RemoveTokens.TTL_MS / 1000 + " s) or type " + typed));
+		src.sendSuccess(() -> m, false);
+		return 1;
+	}
+
+	/** The summary line of {@link #removeAsk} for a site. */
+	static String removeQuestion(Site s) {
+		Blueprint bp = Blueprints.get(s.blueprint());
+		String name = bp == null ? s.blueprint() : bp.name();
+		dev.larattalabs.architect.placement.TemplateGrid g = dev.larattalabs.architect.placement.TemplateGrid.of(s.blueprint());
+		String blocks = g == null ? "" : ", " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.placement.PlaceConfirm
+			.blocks(g)) + " blocks";
+		String owned = s.owner() == null ? "" : " It is owned by " + (s.owner().indexOf(':') > 0 ? s.owner().substring(0, s.owner().indexOf(':'))
+			: s.owner()) + " (" + s.owner() + "): removing it may break that mod's plans.";
+		return (s.construction() != null ? "Take down construction site " + s.id() + " (" + name + "; the built blocks and the crate's items come back "
+			+ "to you, the ground is put back)?" : "Remove " + s.id() + " (" + name + blocks + "; the ground is put back)?") + owned;
+	}
+
+	/** {@code ... confirm <token>}: the [Confirm] link. Good once, for {@value RemoveTokens#TTL_MS} ms, for this site and person. */
+	private static int removeToken(CommandContext<CommandSourceStack> ctx, boolean force) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		RemoveTokens.Check c = RemoveTokens.INSTANCE.use(StringArgumentType.getString(ctx, "token"), id, force, who(src));
+		return switch (c) {
+			case OK -> remove(ctx, false, force);
+			case EXPIRED -> {
+				src.sendFailure(Component.literal("That [Confirm] has expired (" + RemoveTokens.TTL_MS / 1000 + " s): nothing was removed. Run /architect "
+					+ "remove " + id + (force ? " force" : "") + " again"));
+				yield 0;
+			}
+			case INVALID -> {
+				src.sendFailure(Component.literal("That [Confirm] is not valid any more (it works once, for the site and person it was made for): "
+					+ "nothing was removed. Run /architect remove " + id + (force ? " force" : "") + " again"));
+				yield 0;
+			}
+		};
+	}
+
+	/**
+	 * {@code /architect remove <site> undo}, the "Placed" line's [Undo]: one click while the site is the running player's latest
+	 * own placement this session (undoing what you just did puts back the ground of a moment ago); otherwise (placed since, an
+	 * older site, someone else's) it asks like {@code remove}.
+	 */
+	private static int removeUndo(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		ServerPlayer p = src.getPlayer();
+		Site latest = p == null ? null : PlayerRemove.latestOwn(p.getUUID().toString());
+		if (latest != null && latest.id().equals(id)) {
+			return remove(ctx, false, false);
+		}
+		return removeAsk(ctx, false, Sites.get(id) == null ? null : id + " is not your latest placement any more. ");
 	}
 
 	// ------------------------------------------------------------------ phase 4e: roads, cell sites, the journal

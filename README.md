@@ -344,9 +344,12 @@ and make variants before you add a key.
 | Arrow keys | Nudge forward, back, left and right |
 | <kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Raise / lower |
 | <kbd>L</kbd> | Lock it in place (walk around it) or follow your view again |
-| <kbd>Enter</kbd> | Place |
+| <kbd>Enter</kbd> | Place. A big build (1,000+ blocks, or one replacing blocks that aren't terrain) asks for <kbd>Enter</kbd> again within 5 s; set `confirmBlocks` in `config/architect_mc.json` |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> | Place anyway, after a warning about block entities in the box |
-| <kbd>Esc</kbd> / <kbd>Backspace</kbd> | Cancel |
+| <kbd>Esc</kbd> / <kbd>Backspace</kbd> | Cancel (when a big build is waiting for its second <kbd>Enter</kbd>, the first <kbd>Esc</kbd> only stops that) |
+
+Outside placement, <kbd>Z</kbd> (**Undo last placement**, rebindable under Controls) pressed twice within 5 s removes the
+newest site you placed this session, never one another mod owns.
 
 **While marking a plot:** <kbd>Enter</kbd> sets a corner, <kbd>PgUp</kbd>/<kbd>PgDn</kbd> change the height
 (<kbd>Shift</kbd> for 4 at a time), <kbd>Backspace</kbd> goes back a corner, <kbd>Esc</kbd> cancels.
@@ -355,7 +358,8 @@ and make variants before you add a key.
 **Deconstruct** (press it twice). Hoppers and droppers feed it from any side.
 
 **Commands:** `/architect` opens the screen, `/architect place <id> [rotation]`, `/architect remove <site>` (in
-survival, deconstructs a construction site), `/architect list`, `/architect reload`, `/architect survival` (shows the
+survival, deconstructs a construction site; it first says what goes, with a [Confirm] link that works once for 30 s, or
+type `/architect remove <site> confirm`), `/architect list`, `/architect reload`, `/architect survival` (shows the
 toggle) and `/architect site state <site>` (progress and what's missing). These need no cheats.
 `/architect survival on|off` and `/architect site finish <site>` need permission level 2, and `site finish` also needs
 creative mode.

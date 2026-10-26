@@ -1080,29 +1080,9 @@ public final class ArchitectScreen extends Screen {
 	 * [Cancel]"); {@code covered} null = ask when covered, else KEEP (hand-down) or CASCADE (both).
 	 */
 	private void removeSite(Site s, boolean force, Sites.@org.jspecify.annotations.Nullable Covered covered) {
-		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
-			try {
-				var sl = Sites.levelOf(level.getServer(), s);
-				if (covered == null) {
-					java.util.List<String> over = dev.larattalabs.architect.site.SiteJournal.coveringSites(s.id());
-					if (!over.isEmpty()) {
-						int n = dev.larattalabs.architect.site.SiteJournal.siteJson(s.id()).get("covered").getAsInt();
-						return "?" + n + " cell" + (n == 1 ? "" : "s") + " of this site " + (n == 1 ? "is" : "are") + " under " + String.join(", ", over.stream()
-							.map(Sites::describe).toList()) + "; they stay until " + (over.size() == 1 ? "it is" : "they are") + " removed";
-					}
-				}
-				if (Sites.removeLarge(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered) != null) {
-					return "Removing " + s.id() + " over ticks (a large site)";
-				}
-				Sites.Removed gone = Sites.removeDetailed(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered);
-				String both = gone.cascaded().isEmpty() ? "" : " (with " + String.join(", ", gone.cascaded()) + ")";
-				return gone.site().construction() != null ? "Deconstructed " + gone.site().id() + both + "; refunds dropped where its crate stood, the terrain "
-					+ "is back" : "Removed " + gone.site().id() + both + "; the terrain is back" + (gone.handedDown().isEmpty() ? ""
-						: " (covered cells stay until " + String.join(", ", gone.handedDown().keySet()) + " goes)");
-			} catch (Sites.SiteException ex) {
-				return "!" + ex.getMessage();
-			}
-		}).whenComplete((msg, err) -> {
+		// SAFETY: the one removal path the "Undo last placement" key shares (PlayerRemove.remove)
+		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> dev.larattalabs.architect.site.PlayerRemove.remove(level, s, force,
+			covered)).whenComplete((msg, err) -> {
 			String m = err != null ? "!" + err.getMessage() : msg;
 			if (m.startsWith("?")) {
 				coveredArmed = s.id();
@@ -2470,6 +2450,15 @@ public final class ArchitectScreen extends Screen {
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
 		ry += 12;
+		// SAFETY: the big-placement confirm's threshold and the undo key
+		String safety = "Safety: placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
+			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (confirmBlocks in config/architect_mc.json). Undo last "
+			+ "placement: " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice (Controls to rebind).";
+		for (String line : TextUtil.wrapPlain(font, safety, colW)) {
+			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
+			ry += 10;
+		}
+		ry += 2;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);

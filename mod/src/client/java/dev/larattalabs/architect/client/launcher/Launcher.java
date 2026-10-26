@@ -174,6 +174,17 @@ public final class Launcher {
 		return config;
 	}
 
+	/** SAFETY: a placement of at least this many blocks asks for Enter twice ({@code confirmBlocks} in config/architect_mc.json). */
+	public static int confirmBlocks() {
+		return config.confirmBlocks();
+	}
+
+	/** SAFETY: sets and saves {@code confirmBlocks} (DevBridge; the file is the player's way to change it). */
+	public static void setConfirmBlocks(int blocks) {
+		config = config.withConfirmBlocks(blocks);
+		config.save();
+	}
+
 	// ------------------------------------------------------------------ control
 
 	/** (Re)starts the launch sequence on the worker thread (client start, the Status tab's Restart). */

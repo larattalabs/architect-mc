@@ -54,6 +54,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.StockpileDev.init(); // phase 6c slice Y1 hooks (dev.stockpile.*)
 		dev.larattalabs.architect.client.dev.SliceUi2bDev.init(); // slice UI-2b hooks (dev.ui2b.*, dev.gui.scale)
 		dev.larattalabs.architect.client.dev.SliceUi03Dev.init(); // slice UI-0.3 hooks (dev.hud.zones, dev.ui03.*)
+		dev.larattalabs.architect.client.dev.SliceSafetyDev.init(); // slice SAFETY hooks (dev.safety.*)
 		dev.larattalabs.architect.client.screen.U3Dev.init(); // Style unification U3 hooks (dev.u3.*)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();

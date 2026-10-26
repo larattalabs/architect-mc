@@ -196,7 +196,7 @@ steps.ingame = async () => {
   const lc = pst.lastChat;
   const undo = lc?.links?.find((l) => l.text === '[Undo]');
   const lib = lc?.links?.find((l) => l.text === '[Open in Library]');
-  check(placed.placed === true && undo?.click === 'run_command' && undo.value === `/architect remove ${siteA}` && lib?.value === `/architect library ${siteA}`,
+  check(placed.placed === true && undo?.click === 'run_command' && undo.value === `/architect remove ${siteA} undo` && lib?.value === `/architect library ${siteA}`,
     `"Placed" chat line: [Undo] -> ${undo?.value}, [Open in Library] -> ${lib?.value} ("${lc?.text}")`, lc);
   const toasts = await call('dev.ui2b.toasts');
   out.toasts = toasts;
@@ -227,7 +227,7 @@ steps.ingame = async () => {
     `clicking [Open in Library] opens Library > Placed with ${siteA} selected (tab ${ui.tab}, showPlaced ${ui.showPlaced}, selected ${ui.selectedSite}; screen ${opened.screen})`, ui.error);
   out.shots.push(...await atScales('library_placed', null, [2]));
   await call('dev.screen', { open: null });
-  const undone = await call('dev.ui2b.click', { value: undo?.value ?? `/architect remove ${siteA}` });
+  const undone = await call('dev.ui2b.click', { value: undo?.value ?? `/architect remove ${siteA} undo` });
   await sleep(1500);
   await call('dev.screen', { open: null });
   const sites = await call('dev.sites.state');
@@ -235,7 +235,7 @@ steps.ingame = async () => {
   const hist = await chat('/architect list site');
   out.listSites = texts(hist);
 
-  for (const id of row) await chat(`/architect remove ${id}`);
+  for (const id of row) await chat(`/architect remove ${id} confirm`); // SAFETY: plain remove asks first
 
   // ---------------------------------------------------------------- item 6: the construction HUD; item 5: the crate's Confirm
   await call('dev.survival.set', { on: true });
@@ -243,7 +243,7 @@ steps.ingame = async () => {
   await waitVerdict();
   const cs = await call('dev.build.confirm', {}, 60_000);
   const siteB = cs.siteId;
-  check(cs.placed === true && /^Construction site/.test(cs.message) && (await buildState()).lastChat?.links?.some((l) => l.value === `/architect remove ${siteB}`),
+  check(cs.placed === true && /^Construction site/.test(cs.message) && (await buildState()).lastChat?.links?.some((l) => l.value === `/architect remove ${siteB} undo`),
     `a construction site's line also carries [Undo] ("${cs.message}")`);
   // the placement HUD's last status line stays 8 s; the construction HUD keeps to one line while it shows
   for (let i = 0; i < 40 && (await buildState()).hudRect; i++) await sleep(300);
@@ -587,7 +587,7 @@ steps.gallery = async () => {
     await openTab('library'); await call('dev.ui.click', { control: 'library:placed' });
     if (row[0]) await call('dev.ui.click', { control: `site:${row[0]}` }).catch(() => null);
   });
-  for (const id of row) await chat(`/architect remove ${id}`).catch(() => null);
+  for (const id of row) await chat(`/architect remove ${id} confirm`).catch(() => null);
   await sleep(2000);
 
   // ================================================================ plot markers and the region ghost (world)
