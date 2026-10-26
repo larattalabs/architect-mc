@@ -29,7 +29,7 @@ export function liftRules({ vw, lifts, want, findings, metrics, finding, light }
       // the base and the column
       const want0 = sh.kind === 'up' ? 'minecraft:soul_sand' : 'minecraft:magma_block';
       if (nameOf(st(sx, y0, sz)) === want0) row.base++; else bad10.push([sx, y0, sz]);
-      for (let y = y0 + 1; y <= yT - 1; y++) {
+      for (let y = y0 + 1; y <= yT; y++) {
         row.column++;
         const s = st(sx, y, sz);
         const drag = /drag=false/.test(s) ? 'up' : 'down';
@@ -58,9 +58,9 @@ export function liftRules({ vw, lifts, want, findings, metrics, finding, light }
       for (const [t, v] of [[2, sh.v], [3, sh.v - 1], [3, sh.v + 1]]) {
         const [x, z] = at(t, v);
         row.rails++;
-        if (!P.barrier[vw.get(x, yT + 1, z)]) { row.railBad++; bad10.push([x, yT + 1, z]); }
+        if (!P.barrier[vw.get(x, yT + 2, z)]) { row.railBad++; bad10.push([x, yT + 2, z]); }
       }
-      for (let y = yT; y <= yT + 2; y++) if (!P.passable[vw.get(sx, y, sz)] || P.solid[vw.get(sx, y, sz)]) { row.headBad++; bad10.push([sx, y, sz]); break; }
+      for (let y = yT + 1; y <= yT + 3; y++) if (!P.passable[vw.get(sx, y, sz)] || P.solid[vw.get(sx, y, sz)]) { row.headBad++; bad10.push([sx, y, sz]); break; }
       // M5 at the foot (the approach) and the top (the top walk cell)
       if (want.has('M5')) {
         for (const [x, z, y] of [[...at(0, sh.v), y0], [...at(4, sh.v), yT]]) {

@@ -14,8 +14,9 @@ import net.minecraft.world.phys.Vec3;
  * forward input to step off), after {@code Entity.baseTick} (its fluid state) and before the column's push, which is vanilla's own
  * {@code BubbleColumnBlock.entityInside} rule read in its bytecode ({@code onInsideBubbleColumn} under the top, {@code onAboveBubbleColumn} at
  * it), for every column block the player's box meets; the player rides in creative (physics, no harm), its mode put back. An up ride starts
- * on the base (feet at {@code y0 + 1}), rides until its feet pass the rim ({@code yT}), then steps toward the face onto the top walk cell
- * ({@code exit}, feet); a down ride starts in the open top (feet at {@code yT}) and is carried to the floor ({@code y0 + 1}), then leaves
+ * on the base (feet at {@code y0 + 1}), rides until it surfaces over the column's top ({@code yT}, level with the top walk cell's block),
+ * then swims and steps toward the face onto the top walk cell ({@code exit}, feet); a down ride starts in the open top (feet at
+ * {@code yT + 1}) and is carried to the floor ({@code y0 + 1}), then leaves
  * through the airlock (its doors opened for the step, as a rider opens them, then closed) to the approach ({@code exit}). The player is put
  * back where it stood. Since NEXT.
  */
@@ -137,7 +138,7 @@ public final class SliceLfDev {
 					{
 						player.getAbilities().flying = false;
 						player.setAirSupply(player.getMaxAirSupply());
-						player.teleportTo(x + 0.5, drag ? yT + 0.1 : y0 + 1.0, z + 0.5);
+						player.teleportTo(x + 0.5, drag ? yT + 1.1 : y0 + 1.0, z + 0.5);
 						player.setYRot(yaw);
 						player.setXRot(0);
 						player.setDeltaMovement(Vec3.ZERO);
@@ -148,7 +149,7 @@ public final class SliceLfDev {
 							step(player, 0f, false);
 							maxY = Math.max(maxY, player.getY());
 							minY = Math.min(minY, player.getY());
-							reached = drag ? player.getY() <= y0 + 1.2 : player.getY() >= yT + 0.5;
+							reached = drag ? player.getY() <= y0 + 1.2 : player.getY() >= yT + 0.8; // (up: surfaced over the column's top, level with the top walk cell's block)
 						}
 						o.addProperty("reached", reached);
 						o.addProperty("maxY", maxY);
@@ -186,6 +187,12 @@ public final class SliceLfDev {
 								q.add(Math.round(player.getX() * 10) / 10.0);
 								q.add(Math.round(player.getY() * 10) / 10.0);
 								q.add(Math.round(player.getZ() * 10) / 10.0);
+								q.add(player.horizontalCollision);
+								q.add(player.getPose().toString());
+								// (the cells ahead at the feet and the head, for a stuck rider's evidence)
+								BlockPos ahead = BlockPos.containing(player.getX() + Math.signum(-Math.sin(Math.toRadians(yaw))) * 0.6, player.getY() + 0.1, player.getZ() + Math.signum(Math.cos(Math.toRadians(yaw))) * 0.6);
+								q.add(net.minecraft.world.level.block.Block.BLOCK_STATE_REGISTRY.getId(level.getBlockState(ahead)) + ":" + level.getBlockState(ahead));
+								q.add(String.valueOf(level.getBlockState(ahead.above())));
 								path.add(q);
 							}
 						}

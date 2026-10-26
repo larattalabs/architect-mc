@@ -482,15 +482,15 @@ steps.ingame = async () => {
 async function buildColumn(x, z, g, rise, { down = false, water = true, light = false } = {}) {
   const yT = g + rise;
   await cmd(`/fill ${x - 3} ${g + 1} ${z - 6} ${x + 3} ${yT} ${z - 1} minecraft:stone`);
-  await cmd(`/fill ${x - 2} ${g} ${z} ${x + 2} ${yT} ${z + 2} minecraft:stone_bricks`);
-  await cmd(`/fill ${x} ${g + 1} ${z} ${x} ${yT + 3} ${z} minecraft:air`);
+  await cmd(`/fill ${x - 2} ${g} ${z} ${x + 2} ${yT + 1} ${z + 2} minecraft:stone_bricks`);
+  await cmd(`/fill ${x} ${g + 1} ${z} ${x} ${yT + 4} ${z} minecraft:air`);
   await cmd(`/setblock ${x} ${g} ${z} ${down ? 'minecraft:magma_block' : 'minecraft:soul_sand'}`);
   for (const dz of [1, 2]) {
     await cmd(`/setblock ${x} ${g + 1} ${z + dz} minecraft:oak_door[facing=north,half=lower]`);
     await cmd(`/setblock ${x} ${g + 2} ${z + dz} minecraft:oak_door[facing=north,half=upper]`);
   }
   if (light) for (let y = g + 3; y < yT; y += 6) await cmd(`/setblock ${x - 1} ${y} ${z} minecraft:sea_lantern`);
-  if (water) await cmd(`/fill ${x} ${g + 1} ${z} ${x} ${yT - 1} ${z} minecraft:water`);
+  if (water) await cmd(`/fill ${x} ${g + 1} ${z} ${x} ${yT} ${z} minecraft:water`);
   return { col: [x, z], y0: g, yT, top: [x, yT + 1, z - 1], approach: [x, g + 1, z + 3], doors: [[x, g + 1, z + 1], [x, g + 1, z + 2]] };
 }
 
@@ -508,12 +508,12 @@ steps.probe = async () => {
   const colUp = await buildColumn(X, Z, g, 8);
   const colDown = await buildColumn(X + 20, Z, g, 8, { down: true });
   await L.gameWait(5000, { real: sleep, label: 'lf probe columns form, 100 ticks' });
-  const states = async (c) => { const o = []; for (let y = c.y0 + 1; y < c.yT; y++) o.push(await stateAt(c.col[0], y, c.col[1])); return o; };
+  const states = async (c) => { const o = []; for (let y = c.y0 + 1; y <= c.yT; y++) o.push(await stateAt(c.col[0], y, c.col[1])); return o; };
   out.formed = { up: await states(colUp), down: await states(colDown) };
   check(out.formed.up.every((s) => s === 'minecraft:bubble_column[drag=false]') && out.formed.down.every((s) => s === 'minecraft:bubble_column[drag=true]'), `item 1: water poured over soul sand becomes bubble_column[drag=false], over magma [drag=true] (${json({ up: [...new Set(out.formed.up)], down: [...new Set(out.formed.down)] })})`);
   // (b) a written bubble_column over its base stays (the fluids stage writes the states directly)
   const colW = await buildColumn(X + 40, Z, g, 8, { water: false });
-  await cmd(`/fill ${X + 40} ${g + 1} ${Z} ${X + 40} ${g + 7} ${Z} minecraft:bubble_column[drag=false]`);
+  await cmd(`/fill ${X + 40} ${g + 1} ${Z} ${X + 40} ${g + 8} ${Z} minecraft:bubble_column[drag=false]`);
   await L.gameWait(10_000, { real: sleep, label: 'lf probe written column, 200 ticks' });
   out.written = await states(colW);
   check(out.written.every((s) => s === 'minecraft:bubble_column[drag=false]'), `item 1: a written bubble_column over its soul sand stays (${json([...new Set(out.written)])})`);

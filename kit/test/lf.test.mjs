@@ -49,7 +49,7 @@ test('§2 the tower: rows and lanes, two layers on every open side, the airlock\
   assert.equal(g.cost, LIFT.cost + LIFT.costPer * 30);
   const sh = g.shafts[0];
   assert.deepEqual([sh.col, sh.base, sh.top, sh.approach], [[1060, 2030], [1060, 64, 2030], [1060, 94, 2029], [1060, 64, 2033]]);
-  assert.equal(sh.cells.length, 29, 'the column from y0 + 1 to yT - 1');
+  assert.equal(sh.cells.length, 30, 'the column from y0 + 1 to yT (its top level with the face\'s)');
   const at = new Map(g.cells.map((c) => [`${c[0]},${c[1]},${c[2]}`, c]));
   // the base under the column; every cell beside a column cell (the inner layer) and the one beyond (the outer) written
   assert.equal(at.get('1060,64,2030')[3], 'base');
@@ -65,9 +65,9 @@ test('§2 the tower: rows and lanes, two layers on every open side, the airlock\
   }
   // the rim's rails on the shaft's three open sides (not the face side) and the roof's open edges; nothing over the top for 3
   const rails = new Set(g.rails.map((c) => c.join(',')));
-  for (const k of ['1060,95,2031', '1059,95,2030', '1061,95,2030']) assert.ok(rails.has(k), `rail ${k}`);
-  assert.ok(!rails.has('1060,95,2029'), 'the face side is the exit');
-  for (let y = 94; y <= 96; y++) assert.ok(!at.has(`1060,${y},2030`) || at.get(`1060,${y},2030`)[3] === 'clear', `clear over the top at ${y}`);
+  for (const k of ['1060,96,2031', '1059,96,2030', '1061,96,2030']) assert.ok(rails.has(k), `rail ${k}`);
+  assert.ok(!rails.has('1060,96,2029'), 'the face side is the exit');
+  for (let y = 95; y <= 97; y++) assert.ok(!at.has(`1060,${y},2030`) || at.get(`1060,${y},2030`)[3] === 'clear', `clear over the top at ${y}`);
   // a light every 6 up the inner layer (y0 + 3, + 9, ...), alternating sides; two lamps by the outer door, one on a rail post at the top
   const lights = g.cells.filter((c) => c[3] === 'light').map((c) => c[1]).sort((u, v) => u - v);
   assert.deepEqual(lights, [67, 73, 79, 85, 91]);
@@ -148,7 +148,7 @@ test('v7a_lf_cliff: fits; the crossing, the graph edge, the body (its bubble set
   const op = fluidOps(ir).find((o) => o.part === 'cliff_lift');
   assert.ok(op, 'the lift\'s body');
   assert.deepEqual(op.bubble.map((d) => d.state), [BUBBLE.up, BUBBLE.down]);
-  assert.equal(op.bubble.reduce((n, d) => n + d.cells.reduce((m, q) => m + q[3] - q[2] + 1, 0), 0), 58, 'two columns of 29');
+  assert.equal(op.bubble.reduce((n, d) => n + d.cells.reduce((m, q) => m + q[3] - q[2] + 1, 0), 0), 60, 'two columns of 30');
   assert.equal(op.spill.length, 0);
   const ge = ir.graph.edges.find((e) => e.type === 'lift');
   assert.ok(ge, 'the graph edge typed lift');

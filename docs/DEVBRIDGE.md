@@ -388,7 +388,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
-  feet at `y0 + 1`; a down ride in its open top, feet at `yT`) in creative (physics, no harm; its mode put back) and moved tick by tick:
+  feet at `y0 + 1`; a down ride in its open top, feet at `yT + 1`) in creative (physics, no harm; its mode put back) and moved tick by tick:
   `Entity.baseTick` (its fluid state), `LivingEntity.travel` with no input, then the column's push as vanilla's
   `BubbleColumnBlock.entityInside` gives it (`onInsideBubbleColumn`, or `onAboveBubbleColumn` at the top) for every column block its box
   meets, until its feet pass the

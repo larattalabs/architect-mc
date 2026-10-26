@@ -8,18 +8,20 @@
 // on the right, -1 on the left), the layer between them (v = s) shared:
 //
 //      t=5  .  .  F  .  .               F  face (natural where site-solid, else written as shell); the top walk cell (4, v) at yT
-//      t=4  .  F  F  F  .               S  the shaft: the base (soul sand, a down shaft's magma) at y0, bubble_column y0+1..yT-1, open at yT
+//      t=4  .  F  F  F  .               S  the shaft: the base (soul sand, a down shaft's magma) at y0, bubble_column y0+1..yT (level with the face's top), open over it
 //      t=3  o  i  S  i  o               i  the inner layer (the shaft's shell); o the outer layer
 //      t=2  o  o  D  o  o               D  the airlock's doors: the inner (t=2) and the outer (t=1) door, y0+1 (lower) and y0+2 (upper)
 //      t=1  o  o  D  o  o
 //      t=0        a                     a  the approach walk cell (the route's)
 //          -2 -1  0 +1 +2
 //
-// Every tower cell from y0 to yT is written: the plinth course at y0 (the base role), the layers y0+1..yT-1 (the shell role), the cap
-// course at yT (the cap role) round the open shaft top; under a column standing lower than y0 the base role fills down to its ground
+// (The column's top is level with the face's top: a rider the column lifts clears the top walk cell's block and steps onto it; the ride
+// probe measured a lift of under a block over a column's top.)
+// Every tower cell from y0 to yT + 1 is written: the plinth course at y0 (the base role), the layers y0+1..yT (the shell role), the cap
+// course at yT + 1 (the cap role: the rim) round the open shaft top; under a column standing lower than y0 the base role fills down to its ground
 // (at most LIFT.fillMax). Two layers on every open side mean a single breach reaches nothing outside (H §2.5 by construction). The face
 // side's two cells behind each shaft, (4, v) and (5, v), and the cells beside the first, (4, v +- 1), are site-solid at every y the water
-// stands, else written as shell (ANCHOR when they can't be). The rim at yT is railed (the rail role at yT + 1) on the shaft's three open
+// stands, else written as shell (ANCHOR when they can't be). The rim at yT + 1 is railed (the rail role at yT + 2) on the shaft's three open
 // sides and round the roof's open edges; the face side is the exit. Lights: the light role's niche block in the inner layer every
 // LIFT.lightEvery up (so no shaft cell is at block light 0: drowned), two by the outer door at y0 + 2, one on a rail post at the top.
 import { rightOf, SITE_SOLID } from './ropeGeom.mjs';
@@ -154,8 +156,8 @@ export function checkLift(land, a, dir, opts = {}) {
   const faceTops = new Map(); // "t,v" -> the top y the face cell must stand to
   for (const sh of L.shafts) {
     faceTops.set(`4,${sh.v}`, yT);
-    faceTops.set(`5,${sh.v}`, yT - 1);
-    for (const w of [sh.v - 1, sh.v + 1]) if (!faceTops.has(`4,${w}`)) faceTops.set(`4,${w}`, yT - 1);
+    faceTops.set(`5,${sh.v}`, yT);
+    for (const w of [sh.v - 1, sh.v + 1]) if (!faceTops.has(`4,${w}`)) faceTops.set(`4,${w}`, yT);
   }
   const faceNatural = [], faceWritten = [], weak = [];
   for (const [key, top] of [...faceTops].sort((p, q) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0))) {
@@ -177,11 +179,11 @@ export function checkLift(land, a, dir, opts = {}) {
   const deep = [];
   for (const [t, v] of tower) { const [x, z] = at(t, v); const g = land.groundAt(x, z); if (y0 - g > LIFT.fillMax) deep.push({ at: [x, g, z], depth: y0 - g }); }
   if (deep.length) return fail('ANCHOR', { why: 'foot', columns: deep.slice(0, 12), count: deep.length, fillMax: LIFT.fillMax });
-  // ---- HEADROOM: 3 clear over every shaft's top (yT .. yT + 2), 2 over the top walk cells (no overhang, no trunk)
+  // ---- HEADROOM: 3 clear over every shaft's top (yT + 1 .. yT + 3), 2 over the top walk cells (no overhang, no trunk)
   const meets = [];
   for (const sh of L.shafts) {
     const [sx, sz] = at(3, sh.v), [tx, tz] = at(4, sh.v);
-    for (const [x, z, y1, y2, what] of [[sx, sz, yT, yT + LIFT.headroom - 1, 'shaft'], [tx, tz, yT + 1, yT + 2, 'top']]) {
+    for (const [x, z, y1, y2, what] of [[sx, sz, yT + 1, yT + LIFT.headroom, 'shaft'], [tx, tz, yT + 1, yT + 2, 'top']]) {
       if (land.topAt(x, z) > land.groundAt(x, z) && land.topAt(x, z) >= y1) { meets.push({ at: [x, y1, z], why: 'tree', what }); continue; }
       for (let y = y1; y <= y2; y++) {
         if (what === 'shaft' && y <= land.groundAt(x, z)) continue; // (the shaft's own column is cleared to yT: the land's ground there is the tower's)
@@ -207,7 +209,7 @@ export function checkLift(land, a, dir, opts = {}) {
   // ---- PROTECTED: keep-out, builds, other regions, lot boxes and aprons, walls, the claim margin, an earlier route's columns, a body's cells
   const prot = footprint.filter(([x, z]) => land.blocked(x, z) || (land.inClaim && !land.inClaim(x, z)) || land.built?.(x, z));
   const body = [];
-  if (land.kept) for (const [x, z] of footprint) for (let y = Math.min(y0, land.groundAt(x, z)) - 1; y <= yT + 2; y++) { const k = land.kept(x, y, z); if (k) { body.push({ at: [x, y, z], body: k.body ?? k }); break; } }
+  if (land.kept) for (const [x, z] of footprint) for (let y = Math.min(y0, land.groundAt(x, z)) - 1; y <= yT + 3; y++) { const k = land.kept(x, y, z); if (k) { body.push({ at: [x, y, z], body: k.body ?? k }); break; } }
   if (prot.length || body.length) return fail('PROTECTED', { columns: prot.slice(0, 12), count: prot.length, ...(body.length ? { kind: 'body', bodies: body.slice(0, 12) } : {}) });
   // ---- the cells
   const out = [];
@@ -224,7 +226,7 @@ export function checkLift(land, a, dir, opts = {}) {
   const shafts = [];
   for (const sh of L.shafts) {
     const [sx, sz] = at(3, sh.v), [tx, tz] = at(4, sh.v), [ox, oz] = at(0, sh.v);
-    shafts.push({ v: sh.v, kind: sh.kind, col: [sx, sz], base: [sx, y0, sz], cells: Array.from({ length: rise - 1 }, (_, k) => [sx, y0 + 1 + k, sz]), top: [tx, yT, tz], approach: [ox, y0, oz],
+    shafts.push({ v: sh.v, kind: sh.kind, col: [sx, sz], base: [sx, y0, sz], cells: Array.from({ length: rise }, (_, k) => [sx, y0 + 1 + k, sz]), top: [tx, yT, tz], approach: [ox, y0, oz],
       doors: [1, 2].map((t) => at(t, sh.v)) });
   }
   const lightSide = (sh) => (L.mid === null ? null : -L.s * (sh.kind === 'up' ? 1 : -1)); // (the outer side of each shaft: never the shared layer)
@@ -232,7 +234,7 @@ export function checkLift(land, a, dir, opts = {}) {
   if (!unsafe.noLight) {
     for (const sh of L.shafts) {
       let k = 0;
-      for (let y = y0 + 3; y <= yT - 1; y += LIFT.lightEvery, k++) {
+      for (let y = y0 + 3; y <= yT; y += LIFT.lightEvery, k++) {
         const w = lightSide(sh) ?? (k % 2 === 0 ? -1 : 1);
         lightCells.set(`3,${sh.v + w},${y}`, true);
       }
@@ -250,7 +252,7 @@ export function checkLift(land, a, dir, opts = {}) {
       put(x, y0, z, 'base', sh.kind);
       inner.push([x, y0, z]);
       // the shaft's own column cleared (the land in it) from y0 + 1 to the top's head room; the fluids stage writes its bubble cells
-      for (let y = y0 + 1; y <= yT + LIFT.headroom - 1; y++) if (land.classAt(x, y, z) !== 'AIR') put(x, y, z, 'clear');
+      for (let y = y0 + 1; y <= yT + LIFT.headroom; y++) if (land.classAt(x, y, z) !== 'AIR') put(x, y, z, 'clear');
       continue;
     }
     const isOuter = outerLayer(t, v) && !innerTV.has(`${t},${v}`);
@@ -261,7 +263,7 @@ export function checkLift(land, a, dir, opts = {}) {
     }
     put(x, y0, z, 'plinth');
     const dsh = doorAt.get(`${t},${v}`);
-    for (let y = y0 + 1; y <= yT - 1; y++) {
+    for (let y = y0 + 1; y <= yT; y++) {
       if (dsh && (y === y0 + 1 || y === y0 + 2)) { put(x, y, z, 'door', y === y0 + 1 ? 'lower' : 'upper', FACING(dx, dz)); (innerTV.has(`${t},${v}`) ? inner : outer).push([x, y, z]); continue; }
       // (the broken variant oneDoor: the outer door's cells an open doorway)
       if (unsafe.oneDoor && t === 1 && shaftV(v) && (y === y0 + 1 || y === y0 + 2)) { put(x, y, z, 'clear'); continue; }
@@ -270,13 +272,13 @@ export function checkLift(land, a, dir, opts = {}) {
       put(x, y, z, innerTV.has(`${t},${v}`) ? 'inner' : 'outer');
       (innerTV.has(`${t},${v}`) ? inner : outer).push([x, y, z]);
     }
-    put(x, yT, z, 'cap');
-    (innerTV.has(`${t},${v}`) ? inner : outer).push([x, yT, z]);
+    put(x, yT + 1, z, 'cap');
+    (innerTV.has(`${t},${v}`) ? inner : outer).push([x, yT + 1, z]);
     // (a column of the land standing over yT: left as it is; the roof's rail skips it)
   }
   // the written face cells (shell), the rest of the face natural
   for (const [x, y, z] of faceWritten) put(x, y, z, 'face');
-  // the rails at yT + 1: round the shafts' open tops (but the face side) and along the roof's open edges
+  // the rails at yT + 2 (on the rim, the cap course): round the shafts' open tops (but the face side) and along the roof's open edges
   const roofSet = new Set(tower.filter(([t, v]) => !shaftCol.has(`${t},${v}`)).map(([t, v]) => at(t, v).join(',')));
   const holeSet = new Set(L.shafts.map((sh) => at(3, sh.v).join(',')));
   const faceTopAt = (x, z) => {
@@ -288,23 +290,24 @@ export function checkLift(land, a, dir, opts = {}) {
     for (const [t, v] of tower) {
       if (shaftCol.has(`${t},${v}`)) continue;
       const [x, z] = at(t, v);
-      if (land.groundAt(x, z) > yT || land.classAt(x, yT + 1, z) !== 'AIR' && !OPEN.has(land.classAt(x, yT + 1, z))) continue;
+      if (land.groundAt(x, z) > yT || !OPEN.has(land.classAt(x, yT + 2, z))) continue;
       let edge = false;
       for (const [ex, ez] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + ex, nz = z + ez, nk = `${nx},${nz}`;
         if (holeSet.has(nk)) { edge = true; break; }
         if (roofSet.has(nk)) continue;
+        // (a drop of 2 or more from the roof's surface at yT + 2: the face's top beside it is a step of 1)
         if (faceTopAt(nx, nz) < yT) { edge = true; break; }
       }
-      if (edge) rails.push([x, yT + 1, z]);
+      if (edge) rails.push([x, yT + 2, z]);
     }
   }
   for (const [x, y, z] of rails) put(x, y, z, 'rail');
-  // the top lamp: on the rail post at the outer row's corner (the first one railed), at yT + 2
+  // the top lamp: on the rail post at the outer row's corner (the first one railed), at yT + 3
   if (!unsafe.noLight) {
     const corners = [at(1, L.lo), at(1, L.hi)];
     const post = corners.find(([x, z]) => rails.some((q) => q[0] === x && q[2] === z)) ?? null;
-    if (post) put(post[0], yT + 2, post[1], 'lamp');
+    if (post) put(post[0], yT + 3, post[1], 'lamp');
   }
   const cost = LIFT.cost + LIFT.costPer * rise + (down ? LIFT.costDown : 0);
   return { ok: true, ...base, lanes: L, shafts, cells: out, inner, outer, faceNatural, faceWritten, footprint, rails, cost };
@@ -382,7 +385,9 @@ export function writeLift(r, g, opts = {}) {
   const bubble = g.shafts.map((sh) => ({ drag: sh.kind === 'down', cells: sh.cells }));
   const allCells = g.shafts.flatMap((sh) => sh.cells);
   const solids = [...g.outer, ...g.faceNatural, ...g.faceWritten];
-  const body = r.fluidBody(allCells, { id: opts.bodyId, part: opts.planPart ?? null, kind: 'lift', fluid: 'water', level: g.yT - 1, shellRole: null, stage: opts.stage, solid: solids, volume: false, bubble,
+  const body = r.fluidBody(allCells, { id: opts.bodyId, part: opts.planPart ?? null, kind: 'lift', fluid: 'water', level: g.yT, shellRole: null, stage: opts.stage, solid: solids, volume: false, bubble,
+    // (the exit: the cell over the top walk cell, beside the column's open top, is where a rider leaves; no flow rises there)
+    outlets: g.shafts.map((sh) => [sh.top[0], g.yT + 1, sh.top[2]]),
     ...(opts._unsafe?.predictShort ? { _unsafe: { predictShort: true } } : {}) });
   const id = opts.id ?? `lift_${(r.meta.lifts?.length ?? 0) + 1}`;
   const up = g.shafts.find((sh) => sh.kind === 'up'), dn = g.shafts.find((sh) => sh.kind === 'down') ?? null;
