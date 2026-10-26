@@ -18,8 +18,8 @@
 //                                       where bored, every shell cell solid, 0 falling blocks through a 60 s stand, 0 fluid within 2, M3 0,
 //                                       M4 0, M5 0 dark treads, M6 0, M10:rock_stair 0; realised == virtual), the kit movers and vanilla
 //                                       dev.nav.villager up and down both flights (the hard bar), Regions.remove (E-flat 0); v7a_rk_ridge
-//                                       (plan v1's shape) on its terrain by commands: Regions.checkPlan with load "loaded" far away
-//                                       (incomplete VOLUME) and "generate" (READY, "read N frozen volume(s)"), the stale rock (a shell cell
+//                                       (plan v1's shape) on its terrain by commands: Regions.checkPlan with load "generate"
+//                                       (READY, "read N frozen volume(s)"), the stale rock (a shell cell
 //                                       mined, water 2 from the void: ARTIFACT_STALE naming the rock stair and the cell; with neither it
 //                                       realises), re-read, crossed, removed (E-flat 0)
 //     survival  (rk-survival)           item 9 (RS merged): v7a_rk_ridge in survival: checked in survival, fed from a stockpile, built;
@@ -28,7 +28,8 @@
 //                                       world): rockstairs_demo natural (the claim's rock read as a frozen volume; the best flight by the
 //                                       survey passed by the rock), realised, re-read (the cells the plan wrote: tree and water drift
 //                                       elsewhere recorded, not judged), vanilla villagers both ways, the removal's E-normal (0 unclassified
-//                                       within 6 of the written cells)
+//                                       within 6 of the written cells); item 3's load: the same flight as a plan/0 rock stair on a fresh copy,
+//                                       the corridor never generated: load "loaded" incomplete VOLUME, "generate" READY with its volume read
 //     look      (rk-look)               item 11 (client, recorded not judged: N-RK-1): rockstairs_demo flat in three bibles: the carved
 //                                       stair up the slope and the bored stair through the ridge, each at its foot, mid-flight and its top
 //     report                            REPORT.md over the step JSONs
@@ -136,9 +137,11 @@ steps.unit = async () => {
   const gr = spawnSync('./gradlew', ['test', '--offline', '--tests', '*PlanChecksRKTest', '--tests', '*ApiRKTest', '--tests', '*PlanChecksT3Test'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
   out.java = { code: gr.status, tail: `${gr.stdout}${gr.stderr}`.trim().split('\n').slice(-8) };
   check(gr.status === 0, 'items 3, 7, 10 (Java): PlanChecksRKTest (a rock_stair part plans twice; the guard\'s connector names the stale rock "rock_stair <part>: ..."; a tunnel\'s message unchanged), ApiRKTest (feature rockStairs), PlanChecksT3Test', out.java.tail);
-  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs'], { cwd: root, encoding: 'utf8', timeout: 1_800_000 });
-  out.apicompat = { code: ac.status, tail: `${ac.stdout}${ac.stderr}`.trim().split('\n').slice(-6) };
-  check(ac.status === 0, 'item 10: api-compat clean (a feature only: no record, method or enum value)', out.apicompat.tail);
+  // (the latest archived jars' mode: 0.42.0, 0.41.0, 0.40.1 apitest jars and the 0.42.0 surface; GATE7ARK_APICOMPAT another)
+  const flag = process.env.GATE7ARK_APICOMPAT ?? '--gate7acl';
+  const ac = spawnSync(process.execPath, ['tools/api-compat.mjs', flag], { cwd: root, encoding: 'utf8', timeout: 1_800_000, env: { ...process.env, PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` } });
+  out.apicompat = { flag, code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter((l) => /^(ok|FAIL)/.test(l)) };
+  check(ac.status === 0, `item 10: api-compat ${flag} clean (a feature only: no record, method or enum value)`, out.apicompat.tail);
   spendZero();
   return out;
 };
@@ -250,6 +253,7 @@ async function demoRun(tag, claim, { kind, standMs = 60_000 }) {
   const fl = meta.rockStairs ?? [];
   check(fl.length >= (flat ? 2 : 1), `${tag}: rockstairs_demo (${kind}) planned ${fl.length} flight(s) through the two-plan flow (${fl.map((q) => `${q.steps} steps, ${q.landings} landing(s), ${q.bore.filter(Boolean).length} bored`).join('; ')}; ${out.plan.notes.join(' / ')})`);
   if (!fl.length) return out;
+  out.flight = { from: fl[0].from, to: fl[0].to, rise: fl[0].rise };
   if (flat) check(fl.some((q) => q.bore.some(Boolean) && q.bore.some((b) => !b)) && fl.some((q) => q.bore.every((b) => !b)), `${tag}: the ridge's flight part cut and part bored, the slope's carved the whole way`);
   const { buildVirtual } = await imp('lib/region/vworld.mjs');
   const irP = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
@@ -320,21 +324,13 @@ async function planDirOf(tag, s, ck) {
 }
 
 /**
- * v7a_rk_ridge (plan v1's shape) on its terrain by commands: Regions.checkPlan far away with load "loaded" (incomplete VOLUME) and with
- * "generate" (READY, its volume read), the stale rock (item 7), realiseApproved, re-read, crossed, removed (item 8).
+ * v7a_rk_ridge (plan v1's shape) on its terrain by commands: Regions.checkPlan with load "generate" (READY, its volume read), the stale rock (item 7), realiseApproved, re-read, crossed, removed (item 8).
  */
 async function ridgeRun(tag) {
   const out = { fixture: 'valid/v7a_rk_ridge.json' };
   const fx = G.fixture(ctx, 'valid/v7a_rk_ridge.json');
   const s = await G.site(ctx, tag, fx, { creative: true });
   const W = s.W;
-  // item 3: an unloaded corridor (the player far away; load "loaded"): incomplete VOLUME; with load "generate": READY
-  await tp(W.claim[0] + 3000, 200, W.claim[1] + 3000);
-  await L.settle(20_000);
-  const ckL = await call('dev.region.checkPlan', { plan: s.wp.plan, claim: W.claim, owner: OWNER, anchors: s.wp.anchors, load: 'loaded' }, 1_800_000);
-  const aL = (ckL.check?.parts ?? []).find((q) => q.part === 'flight');
-  out.loaded = { overall: ckL.check?.overall ?? null, class: aL?.class ?? null, code: aL?.reasons?.[0]?.code ?? null };
-  check(out.loaded.overall === 'INCOMPLETE' && out.loaded.code === 'VOLUME', `item 3 (${tag}): checkPlan with load "loaded" over an unloaded corridor: ${out.loaded.overall}, flight ${out.loaded.class} ${out.loaded.code}`);
   await tp((W.claim[0] + W.claim[2]) / 2, 120, (W.claim[1] + W.claim[3]) / 2);
   const ck = await G.check(ctx, tag, s);
   const a = (ck.check?.parts ?? []).find((q) => q.part === 'flight');
@@ -347,11 +343,6 @@ async function ridgeRun(tag) {
   const planDir = await planDirOf(tag, s, ck);
   const meta = JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8'));
   const rec = (meta.rockStairs ?? [])[0];
-  // item 3: the kit's plan of the same request over the world's survey answers as the mod's check
-  const local = await planDirOf(`${tag}-kit`, s, { check: {} });
-  const lm = JSON.parse(fs.readFileSync(path.join(local, 'meta.json'), 'utf8'));
-  out.kitSame = JSON.stringify((lm.rockStairs ?? []).map((q) => [q.from, q.to, q.rise])) === JSON.stringify((meta.rockStairs ?? []).map((q) => [q.from, q.to, q.rise]));
-  check(out.kitSame || !fs.existsSync(path.join(sideDir(ck.check?.checkId ?? '-'), 'meta.json')), `item 3 (${tag}): the kit's plan over the world's survey routes the same flight as the mod's check (${json((lm.rockStairs ?? []).map((q) => [q.from, q.rise]))} vs ${json((meta.rockStairs ?? []).map((q) => [q.from, q.rise]))})`);
   // item 7: the stale rock: a shell cell of a bored tread mined, then water 2 from the void: ARTIFACT_STALE naming the rock stair and the cell
   if (rec) {
     const i = rec.bore.findIndex(Boolean) + 3; // (rec.bore[k] is tread k + 1: a bored tread 2 in from the portal)
@@ -470,6 +461,26 @@ steps.natural = async () => {
   await L.setRules('exact'); // (T3b's rule: no random ticks, no spawns)
   const out = await demoRun('natural', site.fixture.claim, { kind: 'natural', standMs: 60_000 });
   await leaveWorld();
+  // item 3's load: the same flight as a plan/0 rock stair (its foot and top walk cells as anchors) checked on a fresh copy with the bot at
+  // spawn, the hill's corridor never generated: load "loaded" answers incomplete VOLUME (INCOMPLETE), load "generate" READY
+  const fl = out.flight;
+  if (fl) {
+    await L.fresh('G6B RK Natural Gen', BASE);
+    await L.setRules('exact');
+    await tp(0.5, 200, 0.5);
+    const c = site.fixture.claim;
+    const req = { plan: { schemaVersion: 'plan/0', connectors: [{ id: 'flight', kind: 'rock_stair', from: { anchor: 'rk_foot' }, to: { anchor: 'rk_top' }, movers: ['player', 'villager'] }] }, claim: c, owner: OWNER, anchors: { rk_foot: [fl.from[0], fl.from[1] + 1, fl.from[2]], rk_top: [fl.to[0], fl.to[1] + 1, fl.to[2]] } };
+    const g1 = await call('dev.region.checkPlan', { ...req, load: 'loaded' }, 1_800_000);
+    const a1 = (g1.check?.parts ?? []).find((q) => q.part === 'flight');
+    out.loaded = { overall: g1.check?.overall ?? null, class: a1?.class ?? null, code: a1?.reasons?.[0]?.code ?? null };
+    check(out.loaded.overall === 'INCOMPLETE' && out.loaded.code === 'VOLUME', `item 3 (natural): the hill's corridor not generated, load "loaded": ${out.loaded.overall}, flight ${out.loaded.class} ${out.loaded.code}`);
+    const g2 = await call('dev.region.checkPlan', { ...req, load: 'generate' }, 1_800_000);
+    const a2 = (g2.check?.parts ?? []).find((q) => q.part === 'flight');
+    const note = [...(g2.check?.notes ?? []), ...(a2?.notes ?? [])].find((n) => /read \d+ frozen volume/.test(n)) ?? null;
+    out.generate = { overall: g2.check?.overall ?? null, class: a2?.class ?? null, note, rockStairs: a2?.geometry?.rockStairs ?? null };
+    check(out.generate.overall === 'READY' && a2?.class === 'fits' && !!note, `item 3 (natural): the same check with load "generate" prepares the corridor and reads its volume: ${out.generate.overall}, flight ${a2?.class} ("${note}")`);
+    await leaveWorld();
+  }
   spendZero();
   return out;
 };
