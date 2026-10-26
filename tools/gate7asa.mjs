@@ -347,16 +347,17 @@ steps.look = async () => {
       const st = await L.waitRegion(region, 3_600_000);
       out.runs[tag] = { state: st.view.state, spiral: g };
       const [fx0, fy, fz] = g.foot, [tx, ty, tz] = g.top.at;
-      const cx = (fx0 + tx) / 2, cz = (fz + tz) / 2, mid = Math.round((fy + ty) / 2);
-      // the whole spiral from the south-west, high; a close-up of the treads and rails half way up; the lookout deck from over it; the
-      // foot and its approach; a landing (the first one) from beside it
-      out.shots.push(await shot(`${tag}_whole`, [cx - 22.5, ty + 6, cz + 22.5], [cx + 0.5, mid, cz + 0.5]));
-      out.shots.push(await shot(`${tag}_closeup`, [cx + 9.5, mid + 3, cz + 9.5], [cx + 0.5, mid, cz + 0.5]));
-      out.shots.push(await shot(`${tag}_lookout`, [tx + 6.5, ty + 7, tz + 6.5], [tx + 0.5, ty + 1, tz + 0.5]));
-      out.shots.push(await shot(`${tag}_foot`, [fx0 + 0.5 - 10 * Math.sign(cx - fx0 || 1), fy + 4, fz + 6.5], [fx0 + 0.5, fy + 2, fz + 0.5]));
+      // the cameras round the host's axis (the lookout's node stands over it): the whole spiral from 26 out, a close-up half way up from
+      // 13 out, a landing low down, the lookout deck from over it, the foot and its approach; at dusk (the lamps) in the default bible
+      const ax = tx + 0.5, az = tz + 0.5, mid = Math.round((fy + ty) / 2), low = fy + Math.min(9, Math.round((ty - fy) / 3));
+      out.shots.push(await shot(`${tag}_whole`, [ax - 24, ty + 8, az + 24], [ax, mid, az]));
+      out.shots.push(await shot(`${tag}_closeup`, [ax + 12, mid + 4, az + 12], [ax, mid, az]));
+      out.shots.push(await shot(`${tag}_landing`, [ax - 11, low + 3, az - 11], [ax, low, az]));
+      out.shots.push(await shot(`${tag}_lookout`, [ax + 7, ty + 8, az + 7], [ax, ty + 1, az]));
+      out.shots.push(await shot(`${tag}_foot`, [fx0 + 0.5 - 9 * Math.sign(tx - fx0 || 1), fy + 4, fz + 0.5 - 9 * Math.sign(tz - fz || 1)], [fx0 + 0.5, fy + 2, fz + 0.5]));
       if (!bible) {
         await cmd('/time set 13000');
-        out.shots.push(await shot(`${tag}_dusk`, [cx - 16.5, ty + 2, cz + 16.5], [cx + 0.5, mid, cz + 0.5]));
+        out.shots.push(await shot(`${tag}_dusk`, [ax - 18, mid + 6, az + 18], [ax, mid, az]));
       }
       // (no removal: the look's world is a fresh copy, left behind; a removal waits on the spectator camera standing in the box)
       await call('dev.release', {}).catch(() => null);
