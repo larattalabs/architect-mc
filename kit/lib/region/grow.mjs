@@ -235,17 +235,20 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   const ends = extendableEnds(eff, standing, runs, O);
 
   /** Can a lot (world rect) with its pad (rect + 1 + PAD_MAX) and its lane cells stand here? null, or the blocking kind. */
+  // (the blocking kind: the one kind when a single class blocks the slot (so a slot only held reads `held`), else `frontage`)
   const fits = (rect, laneCells, entrance, { padIgnore = null } = {}) => {
     const pad = growR(rect, 1 + PAD_MAX);
+    const kinds = new Set();
     for (let z = pad[1]; z <= pad[3]; z++) for (let x = pad[0]; x <= pad[2]; x++) {
       if (padIgnore && padIgnore(x, z)) continue;
       const p = O.problem(x, z);
-      if (p) return p.kind;
+      if (p) kinds.add(p.kind === 'beside' ? 'held' : p.kind);
     }
-    for (const [x, , z] of laneCells) { const p = O.problem(x, z); if (p) return p.kind; }
-    for (const b of standingBoxes) if (rectsMeet(growR(rect, rules.lotGap), b)) return 'lot';
-    for (const t of taken) if (rectsMeet(growR(rect, t.gap), t.rect)) return 'growth';
-    for (const [x, , z] of laneCells) for (const t of taken) if (t.lot && x >= t.rect[0] - 1 && x <= t.rect[2] + 1 && z >= t.rect[1] - 1 && z <= t.rect[3] + 1) return 'growth';
+    for (const [x, , z] of laneCells) { const p = O.problem(x, z); if (p) kinds.add(p.kind === 'beside' ? 'held' : p.kind); }
+    for (const b of standingBoxes) if (rectsMeet(growR(rect, rules.lotGap), b)) kinds.add('lot');
+    for (const t of taken) if (rectsMeet(growR(rect, t.gap), t.rect)) kinds.add('growth');
+    for (const [x, , z] of laneCells) for (const t of taken) if (t.lot && x >= t.rect[0] - 1 && x <= t.rect[2] + 1 && z >= t.rect[1] - 1 && z <= t.rect[3] + 1) kinds.add('growth');
+    if (kinds.size) return kinds.size === 1 ? [...kinds][0] : 'frontage';
     // the land: dry, slope at most maxSlope, the pad within PAD_MAX at the entrance's y
     let lo = Infinity, hi = -Infinity;
     for (let x = rect[0]; x <= rect[2]; x++) for (let z = rect[1]; z <= rect[3]; z++) {
@@ -490,8 +493,10 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   const unplaced = left.map((s) => {
     const m = unplacedWhy.get(s.id) ?? new Map();
     const kinds = { held: 'held', body: 'body', beside: 'held', claim: 'claim', town: 'claim', street: 'street', layout: 'layout', boundary: 'boundary' };
-    let kind = 'frontage', n = -1;
-    for (const [k, c] of [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1))) { const kk = kinds[k] ?? 'frontage'; if (c > n) { n = c; kind = kk; } }
+    // (the most frequent single-class blocker among the slots tried; a slot blocked by several classes, or by a standing lot or road,
+    // is plain `frontage`)
+    let kind = 'frontage', n = 0;
+    for (const [k, c] of [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1))) { const kk = kinds[k]; if (kk && c > n) { n = c; kind = kk; } }
     if (extWhy.has(s.id) && ['boundary', 'street', 'claim', 'layout'].includes(kinds[extWhy.get(s.id)])) kind = kinds[extWhy.get(s.id)];
     return { id: s.id, reason: 'NO_ROOM', kind };
   });

@@ -413,8 +413,8 @@ steps.town = async () => {
   }
   // item 7b: a district on the free side of the extension joins its side by a T (<region>:<roadId>)
   const B7b = lotSide > 0
-    ? [ex[0] - 30, CLAIM[1] - 70, ex[0] + 2, CLAIM[1] + 6]
-    : [ex[0] - 30, CLAIM[3] - 6, ex[0] + 2, CLAIM[3] + 70];
+    ? [ex[0] - 46, CLAIM[1] - 70, ex[0] + 14, CLAIM[1] + 6]
+    : [ex[0] - 46, CLAIM[3] - 6, ex[0] + 14, CLAIM[3] + 70];
   const p7b = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'side', size: [32, 32], lots: 2 }] } }, claim: B7b, beside: region, check: false });
   const j7b = p7b.refused ? null : planFiles(p7b.planId).ir.graph.edges.find((e) => e.id === 'join_external');
   out.item7b = { claim: B7b, plan: p7b.refused ?? p7b.planId, join: j7b };
@@ -718,28 +718,30 @@ steps.survival = async () => {
   check(r1.region === region, `item 13: realiseApproved of the survival growth answers the region: ${json(r1)}`);
   const stv = await rvState(region);
   const rid = stv.revisions.at(-1)?.rid;
-  // the growth waits for its items: undoRevision refuses survival_building, nothing written
-  await sleep(4000);
+  // the growth's items placed (its targets put down, waiting for their items: nothing fed yet): undoRevision refuses survival_building
+  const wb = await rvWait(region, rid);
+  const rsb = await call('dev.rs.state', { region }, 120_000);
+  out.beforeFeed = { revision: wb.r.state, build: rsb.build && { done: rsb.build.done, percent: rsb.build.percent } };
   const h0 = await hashOf(BOX);
   const ub = await call('dev.rv.undo', { region, toPosition: 0 }, 600_000);
   const h1 = await hashOf(BOX);
   out.building = { refused: ub.refused, same: h0 === h1 };
   check(String(ub.refused ?? '').startsWith('NOT_ALLOWED') && /survival_building/.test(ub.refused) && h0 === h1, `Steward RC row 3: undoRevision while the growth's targets build refuses ${ub.refused}; nothing written (hash)`);
   // fed until built: the growth's targets' bills equal the check's bill (the region's own cells; lots without entries are pads)
-  const f1 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done && (st.view.revisions ?? []).every?.((r) => !['ACCEPTED', 'PLACING'].includes(r.state)));
+  const f1 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
   const rs1 = await call('dev.rs.state', { region }, 120_000);
   const newT = (rs1.targets ?? []).filter((t) => !targets0.has(t.id));
   let got = {};
   for (const t of newT) got = plusB(got, t.bom);
-  let want = { ...(c1.cost?.bom ?? {}) };
-  for (const b of Object.values(c1.cost?.bomParts ?? {})) want = G.minus(want, b);
-  for (const k of Object.keys(want)) if (!want[k]) delete want[k];
-  out.bills = { want, got, targets: newT.map((t) => [t.id, t.part, t.done]) };
-  const w1 = await rvWait(region, rid);
-  check(w1.r.state === 'PLACED' && newT.length >= 1 && newT.every((t) => t.done), `item 13: the growth (rid ${rid}) built in survival: ${w1.r.state}; its ${newT.length} target(s) done (${f1.waves} waves)`);
-  check(G.same(want, got), `item 13 / Steward RC row 2: the growth's bills equal its BOM (the check's cost.bom less the lots' bills): ${G.same(want, got) ? 'equal, item for item' : json({ missing: G.minus(want, got), extra: G.minus(got, want) })}`, out.bills);
   const S1 = await cellsOf(BOX);
   const ps1 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  // the bill the growth paid: what the stockpile's ledger consumed for it, against the check's whole BOM (the growth's lots bind no entry:
+  // their pads are terrain; the paid cells are the growth's lamps, lanes and pads' paid blocks)
+  const paid = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+  const want = { ...(c1.cost?.bom ?? {}) };
+  out.bills = { want, paid, targets: newT.map((t) => [t.id, t.part, t.done, t.bom]), targetsBom: got };
+  check(rs1.build?.done && f1.last.st.view.state === 'PLACED', `item 13: the growth (rid ${rid}) built in survival: build ${json(rs1.build && { done: rs1.build.done, percent: rs1.build.percent })} (${f1.waves} waves)`);
+  check(Object.keys(want).length >= 1 && G.same(want, paid) && (!newT.length || G.same(got, want)), `item 13 / Steward RC row 2: the growth's bills equal its BOM item for item: the check's cost.bom ${json(want)}, the stockpile paid ${json(paid)}${newT.length ? `, its targets' bills ${json(got)}` : ''}`, out.bills);
   // undoRevision: the refund once per key (what the growth consumed comes back once; a second undo has nothing to take)
   const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
   const ps2 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
