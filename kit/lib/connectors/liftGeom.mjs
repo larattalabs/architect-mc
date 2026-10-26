@@ -20,8 +20,8 @@
 // Every tower cell from y0 to yT + 1 is written: the plinth course at y0 (the base role), the layers y0+1..yT (the shell role), the cap
 // course at yT + 1 (the cap role: the rim) round the open shaft top; under a column standing lower than y0 the base role fills down to its ground
 // (at most LIFT.fillMax). Two layers on every open side mean a single breach reaches nothing outside (H §2.5 by construction). The face
-// side's two cells behind each shaft, (4, v) and (5, v), and the cells beside the first, (4, v +- 1), are site-solid at every y the water
-// stands, else written as shell (ANCHOR when they can't be). The rim at yT + 1 is railed (the rail role at yT + 2) on the shaft's three open
+// side's two cells behind each shaft, (4, v) and (5, v), and the cells beside the first, (4, v +- 1), are written as shell at every y the
+// water stands wherever the plan may write; a site-solid cell it may not write stays natural; anything else is ANCHOR. The rim at yT + 1 is railed (the rail role at yT + 2) on the shaft's three open
 // sides and round the roof's open edges; the face side is the exit. Lights: the light role's niche block in the inner layer every
 // LIFT.lightEvery up (so no shaft cell is at block light 0: drowned), two by the outer door at y0 + 2, one on a rail post at the top.
 import { rightOf, SITE_SOLID } from './ropeGeom.mjs';
@@ -167,9 +167,12 @@ export function checkLift(land, a, dir, opts = {}) {
     const from = Math.min(y0 + 1, g + 1);
     if (y0 - g > LIFT.fillMax) { weak.push({ at: [x, g, z], why: 'deep', depth: y0 - g }); continue; }
     for (let y = from; y <= top; y++) {
+      // (written as shell wherever the plan may write: the natural face's 2.5D reading can't see a cave or an overhang behind it, and the
+      // fluids stage's gate refuses a body whose shell does not hold (lf-natural's first run: 18 cells); a site-solid cell the plan may
+      // not write stays natural, judged by the gate at realise; anything else is ANCHOR)
+      if (writable(x, y, z)) { faceWritten.push([x, y, z]); continue; }
       if (solid(x, y, z)) { if (y > y0) faceNatural.push([x, y, z]); continue; }
-      if (writable(x, y, z)) faceWritten.push([x, y, z]);
-      else weak.push({ at: [x, y, z], class: land.classAt(x, y, z) });
+      weak.push({ at: [x, y, z], class: land.classAt(x, y, z) });
     }
   }
   if (weak.length) return fail('ANCHOR', { why: 'face', cells: weak.slice(0, 12), count: weak.length });

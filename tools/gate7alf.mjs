@@ -264,7 +264,10 @@ async function item5(tag, { meta, world, rep }) {
     const down = q.downTop ? nodeReached(walkGraph(world, [[q.downTop[0], q.downTop[1] + 1, q.downTop[2]]], { mover: 'player' }), [q.downFoot[0], q.downFoot[1] + 1, q.downFoot[2]]) : null;
     out.movers[q.id] = { up, down, villager: vil };
   }
-  check(Object.values(out.movers).every((v) => v.up && v.down !== false && !v.villager), `item 5 (${tag}, the hard bar): the kit player from the approach through the airlock to the top cell, and back by the down column where there is one; the kit villager refused (${json(out.movers)})`);
+  // (the villager: on a flat world or the fixture's cliff the lift is the only way up, so the kit villager never reaches the top; on a
+  // natural site it may walk round: recorded there, the column itself never a villager's move: check.mjs walkGraph)
+  const vOk = (v) => tag === 'natural' || !v.villager;
+  check(Object.values(out.movers).every((v) => v.up && v.down !== false && vOk(v)), `item 5 (${tag}, the hard bar): the kit player from the approach through the airlock to the top cell, and back by the down column where there is one; the kit villager refused${tag === 'natural' ? ' (natural: a villager walking round recorded)' : ''} (${json(out.movers)})`);
   return out;
 }
 
