@@ -156,7 +156,7 @@ export function checkLift(land, a, dir, opts = {}) {
   const faceTops = new Map(); // "t,v" -> the top y the face cell must stand to
   for (const sh of L.shafts) {
     faceTops.set(`4,${sh.v}`, yT);
-    faceTops.set(`5,${sh.v}`, yT);
+    faceTops.set(`5,${sh.v}`, yT - 1); // (at yT it is the landing walk cell, the route's: the ground or its surface holds a breach of (4, v))
     for (const w of [sh.v - 1, sh.v + 1]) if (!faceTops.has(`4,${w}`)) faceTops.set(`4,${w}`, yT);
   }
   const faceNatural = [], faceWritten = [], weak = [];

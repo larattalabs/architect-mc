@@ -53,6 +53,9 @@ test('§2 the tower: rows and lanes, two layers on every open side, the airlock\
   const at = new Map(g.cells.map((c) => [`${c[0]},${c[1]},${c[2]}`, c]));
   // the base under the column; every cell beside a column cell (the inner layer) and the one beyond (the outer) written
   assert.equal(at.get('1060,64,2030')[3], 'base');
+  // the landing walk cell (one past the top walk cell, at yT) is the route's: the tower never writes it (a survival build bills each cell once)
+  assert.ok(!at.has('1060,94,2028'), 'the landing cell is not the tower\'s');
+  assert.equal(at.get('1060,93,2028')?.[3], 'face', 'the face\'s second layer under it is');
   for (const [x, y, z] of sh.cells) {
     for (const [ax, az, bx, bz] of [[1059, 2030, 1058, 2030], [1061, 2030, 1062, 2030], [1060, 2031, 1060, 2032]]) {
       assert.ok(at.has(`${ax},${y},${az}`) && at.has(`${bx},${y},${bz}`), `two layers beside ${x},${y},${z} toward ${ax},${az}`);
