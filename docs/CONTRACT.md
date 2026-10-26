@@ -25673,10 +25673,10 @@ HUD text uses lab-ui's on-dark tokens.
 
 ### Gate (DEV MODE)
 - `gate-run change --only unit-mod,lint-structure,lint-look,water-lint,p3-lint,ui2b-ingame,u3-ingame,u5-ingame` at 1b9dc738: **PASS
-  8/8** in 5m25s (unit-mod 929 tests; u3 40 ok; u5 32 ok; ui2b 31 ok; run `20261026-022336-change`); re-run at the head after the
-  hudRect fix (below).
+  8/8** in 5m25s (unit-mod 929 tests; u3 40 ok; u5 32 ok; ui2b 31 ok; run `20261026-022336-change`); re-run at 295767d5 (after the
+  hudRect fix): **PASS 8/8** in 5m03s (run `20261026-024010-change`).
 - UI gallery, `GATEUIG_ONLY` = the HUD and in-world states (ghost/*, placement_hud/*, toast/placed, plot/*, region_ghost/plan,
-  sitehud/*, hud/all_at_once, status/helper_strip): 33 shots, 0 failed; `hud/all_at_once` s2 and s4 pass (no slot meets another).
+  sitehud/*, hud/all_at_once, status/helper_strip), at 295767d5: 33 shots, 0 failed; `hud/all_at_once`: no two slots meet at s2 or s4.
   s2: all five pieces plus the vanilla toast and boss bars, nothing over vanilla's pieces. s4 (480x270 GUI): the helper strip is
   hidden (no room top left beside the boss bars; as designed) and the toasts fold into "+2 more" below vanilla's two advancement
   toasts.
