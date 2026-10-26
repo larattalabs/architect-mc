@@ -63,7 +63,8 @@ export function tunnelRules({ ir, vw, tunnels, want, findings, metrics, finding 
     row.coverMin = coverMin === Infinity ? null : coverMin;
     row.boreRun = best;
     if (lowCover.length) f3(lowCover.length, lowCover.slice(0, 12).map((i) => [fx + dx * i, t.from[1], fz + dz * i]), `tunnel ${t.id}: ${lowCover.length} bore cell(s) under fewer than 2 site-solid cells`);
-    if (best < 4) f3(1, [t.from], `tunnel ${t.id}: its longest bore is ${best} cells (at least 4)`);
+    // ((7a RK) a rock stair's record carries boreMin 0: an all-cut flight is a stair cut into the hillside)
+    if (best < (t.boreMin ?? 4)) f3(1, [t.from], `tunnel ${t.id}: its longest bore is ${best} cells (at least 4)`);
     // ---- the shell of the bore cells' voids: solid
     const open = [];
     for (const [x, y, z] of t.floor ?? []) {

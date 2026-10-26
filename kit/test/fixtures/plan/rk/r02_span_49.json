@@ -1,0 +1,53 @@
+{
+  "about": "a cliff 49 high (plateau at 113 from x 1092) and approach 0: the only flight landing at the top node rises 49, past 48: refused SPAN",
+  "on": "flat",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1092,
+        "z0": 2000,
+        "x1": 1200,
+        "z1": 2159,
+        "y": 113
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1090,
+      65,
+      2080
+    ],
+    "top": [
+      1152,
+      114,
+      2080
+    ]
+  },
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flight",
+        "kind": "rock_stair",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "movers": [
+          "player",
+          "villager"
+        ],
+        "approach": 0
+      }
+    ]
+  },
+  "expect": {
+    "part": "flight",
+    "class": "refused",
+    "code": "SPAN"
+  }
+}
