@@ -4,7 +4,7 @@ Branch `slice/K3` (worktree `../architect-mc-K3`, run dir `../architect-mc-K3-ru
 docs/CONTRACT.md "Phase 7a slice K3"; the as-built goes there when the gate passes, and this file is deleted then. Versions are `NEXT`
 placeholders throughout (the coordinator stamps them at merge).
 
-**State: the contract text and the API are ready. Stop before merging: Steward's RC first (S-K3-3).**
+**State: the contract text and the API are ready; the DEV MODE gate passed (CONTRACT "Phase 7a slice K3 as built", Gate). Stop before merging: Steward's RC first (S-K3-3).** Gallery: https://claude.ai/artifact/X1tdDP5xUzEGyXefe58Ywo.
 
 ## RC note for Steward
 
