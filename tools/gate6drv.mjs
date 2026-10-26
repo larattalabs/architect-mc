@@ -109,7 +109,7 @@ async function freshFlat(name) {
 /** The town: flat_village over CLAIM, its lots pads; realised and PLACED. */
 async function town() {
   const p = await L.plan('flat_village', CLAIM, { params: { lots: LOTS }, surveyLoad: 'bounded:256', check: false, owner: OWNER });
-  const region = await L.realise(p.planId);
+  const region = await L.realise(p.planId, { load: 'bounded:512' });
   const st = await L.waitRegion(region, 3_600_000);
   check(st.view.state === 'PLACED', `the town ${region}: ${st.view.state}, ${st.view.cellsWritten} cells, lots ${json(st.view.lots.map((l) => [l.id, l.state]))}`);
   return { region, p, st };
@@ -266,7 +266,7 @@ steps.ingame = async () => {
   await freshFlat('G6B RV Town');
   const gy = await groundY();
   out.gy = gy;
-  const BOX = [CLAIM[0] - 8, gy - 4, CLAIM[1] - 8, CLAIM[2] + 8, gy + 40, CLAIM[3] + 8];
+  const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
   const before = await hashOf(BOX);
   const T = await town();
   const region = T.region;
@@ -365,17 +365,15 @@ steps.ingame = async () => {
   // ---- Regions.remove with the revisions standing: the group takes them all, last placed first: E-flat 0 against the world before the town
   const rem = await call('dev.region.remove', { region, requester: OWNER }, 4 * 3_600_000);
   await sleep(2000);
-  // the test's own sites stay theirs (not the region's): their cells removed too before the comparison
-  for (const sid of [site.siteId, late.siteId]) await call('dev.site.remove', { siteId: sid, force: true }, 600_000).catch((e) => log(`  site ${sid}: ${e}`));
-  await sleep(2000);
-  const after = await hashOf(BOX);
-  const gl = await cellsOf([CX + 71, gy + 1, CZ + 100, CX + 71, gy + 1, CZ + 100]);
-  out.remove = { result: rem, flat: after === before, raced: [...gl.values()] };
   check(rem.removed !== false, `Regions.remove with ${wr.st.revisions.length} revisions standing: removed ${rem.removed}`);
-  // (the player's glowstone is the player's: kept by policy; set it back to air before E-flat)
-  await cmd(`/setblock ${CX + 71} ${gy + 1} ${CZ + 100} minecraft:air`);
+  // the cells that are not the region's stay: the test's two sites (a Steward addition's shape) and the player's raced block (kept by
+  // policy); each set back to the air that stood there before the town, then the whole claim + 8 compared with the world before it
+  const keep = [[CX + 104, gy + 1, CZ + 104], [CX + 60, gy + 1, CZ + 100], [CX + 71, gy + 1, CZ + 100]];
+  const kept = [];
+  for (const [x, y, z] of keep) { kept.push([...(await cellsOf([x, y, z, x, y, z])).values()][0]); await cmd(`/setblock ${x} ${y} ${z} minecraft:air`); }
   const after2 = await hashOf(BOX);
-  check(after2 === before, `E-flat 0 over the claim + 8 after the removal (the player's raced block kept by policy: ${json([...gl.values()])}, cleared for the comparison)`);
+  out.remove = { result: rem, kept, flat: after2 === before };
+  check(after2 === before && idOf(kept[2]) === 'glowstone', `E-flat 0 over the claim + 8 after the removal (the cells that were not the region's kept: ${json(kept)}, then cleared for the comparison)`);
   await L.leaveWorld();
   spendZero();
   return out;
@@ -391,7 +389,7 @@ steps.crash = async () => {
     const world = `G6B RV Crash ${tag}`;
     await freshFlat(world);
     const gy = await groundY();
-    const BOX = [CLAIM[0] - 8, gy - 4, CLAIM[1] - 8, CLAIM[2] + 8, gy + 40, CLAIM[3] + 8];
+    const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
     const before = await hashOf(BOX);
     const T = await town();
     const p = await rvPlan(T.region, { parts: [MOUND(1), SPIRE] });

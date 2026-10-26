@@ -950,14 +950,10 @@ public final class Revisions {
 			if (p == want) {
 				raceAt = null;
 				raceState = null;
-				try {
-					var state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(net.minecraft.core.registries.BuiltInRegistries.BLOCK, st, false)
-						.blockState();
-					level.setBlock(new net.minecraft.core.BlockPos(at[0], at[1], at[2]), state, net.minecraft.world.level.block.Block.UPDATE_ALL);
-					Architect.LOGGER.info("Revision race (TEST): {} set at {} between its tile's capture and its write", st, java.util.Arrays.toString(at));
-				} catch (Exception e) {
-					Architect.LOGGER.warn("Revision race (TEST): {} not set: {}", st, e.toString());
-				}
+				// (as a player's command would: through the server's own /setblock, never Architect's write path)
+				var srv = level.getServer();
+				srv.getCommands().performPrefixedCommand(srv.createCommandSourceStack().withSuppressedOutput(), "setblock " + at[0] + " " + at[1] + " " + at[2] + " " + st);
+				Architect.LOGGER.info("Revision race (TEST): {} set at {} between its tile's capture and its write", st, java.util.Arrays.toString(at));
 				return;
 			}
 		}
