@@ -933,8 +933,10 @@ steps.look = async () => {
     await L.settle(2500);
     const f = path.join(OUT, 'shots', `${name}.png`);
     fs.mkdirSync(path.dirname(f), { recursive: true });
-    const r = await call('dev.screenshot', { file: f, waitChunks: true }, 120_000).catch((e) => ({ error: String(e) }));
-    out[name] = { file: f, ok: !r.error && fs.existsSync(f), at, yaw, pitch };
+    const r = await call('dev.screenshot', { name: `gr_${name}`, frames: 10, chunkTimeoutMs: 60_000 }, 180_000).catch((e) => ({ error: String(e) }));
+    if (r.path && fs.existsSync(r.path)) fs.copyFileSync(r.path, f);
+    out.shots ??= {};
+    out.shots[name] = { file: f, ok: !r.error && fs.existsSync(f), at, yaw, pitch, error: r.error };
     return r;
   };
   await cmd('/time set day');
@@ -953,7 +955,8 @@ steps.look = async () => {
   await shot('town_grown', [CX + 40, gy + 45, CZ + 130], 200, 35);
   out.frontage = (await rvIr(T.region, g1.revisionOf.rid)).revision.grow;
   out.extension = ir2.revision.grow;
-  check(Object.values(out).filter((v) => v?.file).every((v) => v.ok), `N-GR-1 / N-GR-2: ${Object.values(out).filter((v) => v?.file).length} shots of the grown town (before, the frontage, the extension from above and along its street, the whole)`);
+  const shots = Object.values(out.shots ?? {});
+  check(shots.length === 5 && shots.every((v) => v.ok), `N-GR-1 / N-GR-2: ${shots.filter((v) => v.ok).length}/${shots.length} shots of the grown town (before, the frontage, the extension from above and along its street, the whole)`, out.shots);
   await L.leaveWorld();
   return out;
 };
