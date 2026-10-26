@@ -45,9 +45,11 @@ final class PlacementHud implements HudZones.Element {
 	@Override
 	public HudZones.@Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
-		lastRect = null;
 		measured = List.of();
+		// lastRect stays the slot drawn last frame while the panel is shown: the top-centre pieces measure after this zone and
+		// SiteHud reads hudRect() (one line while the panel is up)
 		if (mc.player == null) {
+			lastRect = null;
 			lastRows = List.of();
 			return null;
 		}
@@ -55,6 +57,7 @@ final class PlacementHud implements HudZones.Element {
 		String status = BuildPlacement.status();
 		boolean fresh = status != null && Util.getMillis() - BuildPlacement.statusAt < STATUS_MS;
 		if (v == null && !fresh) {
+			lastRect = null;
 			lastRows = List.of();
 			return null;
 		}

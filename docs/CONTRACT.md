@@ -25629,9 +25629,12 @@ HUD text uses lab-ui's on-dark tokens.
   main (92b2d13) declares `"lab_ui": ">=0.1.0 <0.3.0"`. Fabric loads the highest bundled lab-ui (0.3.0 from Architect), so the two
   mods do not load together until Steward widens its range to `<0.4.0` (0.3.0 is additive over 0.2.0; the seams are
   `Toasts.install()` also installing the zones and the toasts' Guard kind `lab_ui:toasts`). Don't merge before Steward's range moves.
-  Main's `.gradle-home` holds no lab_ui 0.3.0: resolve it online once (`GITHUB_ACTOR`/`GITHUB_TOKEN` from `gh auth token`) when this
-  merges, or the build-cache worktree (`architect-mc-buildcache`, seeded from main's home) can't build offline (the runner logs
-  "build artifact NOT available", which only turns off coverage-mode keys).
+  **Gradle caches (a coordinator step at merge):** every checkout built 0.2.0 from the sibling `../lab-ui` at v0.2.0, so no shared
+  `.gradle-home` holds lab_ui 0.3.0: main's, the gate seed's (`architect-mc-6a-run/.gradle-home`, cloned into every fresh run dir),
+  the build-cache worktree's and each existing run worktree's hold only 0.1.0. Resolve 0.3.0 online once into main's and the seed's
+  (`GITHUB_ACTOR`/`GITHUB_TOKEN` from `gh auth token`), or offline builds there fail (the nightly's client build; the runner's
+  "build artifact NOT available", which only turns off coverage-mode keys). This slice's runs worked because its run dir was
+  pre-seeded from the slice worktree's home.
 - **HudInk** is a set of thin aliases of `UiStyle.OnDark`: `text`, `soft`→`muted`, `error`, `warn`, `ok`, `note`→`accent`,
   `armed`→`selected`, `bar`, `track`, `chipEdge`→`rule` (error and warn change value: #F2948B and the amber #F2B66A).
 - **Zones** (`HudZones.add`, ids are also the Guard kinds):
@@ -25661,18 +25664,22 @@ HUD text uses lab-ui's on-dark tokens.
 - **DevBridge** (docs/DEVBRIDGE.md): `dev.hud.zones`, `dev.ui03.regionHudPreview`, `dev.ui03.toast`.
 - **UI gallery** (`tools/gateui2b.mjs gallery`): new state `hud/all_at_once` (placement, the construction line, the region verdict,
   the helper strip, an Architect toast with a subject, a vanilla advancement toast and two boss bars) at GUI scale 2 and 4. It checks
-  through `dev.hud.zones` that no two zone slots meet and every fixed piece is placed (the helper strip may be hidden); a slot over
-  vanilla's boss bars or toasts goes to index.json `issues` (non-blocking). `GATEUIG_ONLY` now reaches the region ghost and the
+  through `dev.hud.zones` that no two zone slots meet, every fixed piece is placed (the helper strip may be hidden) and no slot
+  crosses vanilla's boss bars or toasts; any miss is logged `WARN` and listed in index.json `issues` (non-blocking: only an empty
+  gallery fails the step, as before).
+- **Changed on screen:** a placement status tail ("Placement cancelled", 8 s) and the plot-marking panel used to draw at the same
+  spot over each other; they now stack in the bottom-centre zone. `GATEUIG_ONLY` now reaches the region ghost and the
   survival states (`onlyWants`).
 
 ### Gate (DEV MODE)
 - `gate-run change --only unit-mod,lint-structure,lint-look,water-lint,p3-lint,ui2b-ingame,u3-ingame,u5-ingame` at 1b9dc738: **PASS
-  8/8** in 5m25s (unit-mod 929 tests; u3 40 ok; u5 32 ok; ui2b 31 ok; run `20261026-022336-change`).
+  8/8** in 5m25s (unit-mod 929 tests; u3 40 ok; u5 32 ok; ui2b 31 ok; run `20261026-022336-change`); re-run at the head after the
+  hudRect fix (below).
 - UI gallery, `GATEUIG_ONLY` = the HUD and in-world states (ghost/*, placement_hud/*, toast/placed, plot/*, region_ghost/plan,
   sitehud/*, hud/all_at_once, status/helper_strip): 33 shots, 0 failed; `hud/all_at_once` s2 and s4 pass (no slot meets another).
   s2: all five pieces plus the vanilla toast and boss bars, nothing over vanilla's pieces. s4 (480x270 GUI): the helper strip is
   hidden (no room top left beside the boss bars; as designed) and the toasts fold into "+2 more" below vanilla's two advancement
   toasts.
-- **Found (lab-ui follow-up, not fixed here):** at s4 with two vanilla toasts the region verdict's slot (y 63, 246 wide, centred)
+- **Not met: "no overlap" at GUI scale 4 (lab-ui follow-up, not fixable in Architect):** at s4 with two vanilla toasts the region verdict's slot (y 63, 246 wide, centred)
   reaches 1 GUI px into vanilla's toast column (toasts to y 64). lab-ui's `HudLayout` TOP_CENTER starts below the boss bars and
   "Now playing" but not below vanilla's own toasts when a wide centre piece reaches their column.

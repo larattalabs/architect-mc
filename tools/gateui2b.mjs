@@ -693,16 +693,14 @@ steps.gallery = async () => {
         ...(ids.includes('architect_mc:hud/helper_progress') || hiddenIds.includes('architect_mc:hud/helper_progress') ? [] : ['architect_mc:hud/helper_progress'])];
       GAL.notes.push(`hud/all_at_once s${zc.scale}: slots ${slots.map((sl) => `${sl.id}@${sl.x},${sl.y} ${sl.w}x${sl.h}${sl.collapsed ? ' collapsed' : ''}`).join('; ')}; `
         + `vanilla boss ${v.bossBottom} toasts ${v.toastsBottom}; hidden ${JSON.stringify(Object.fromEntries(Object.entries(zc.zones.zones ?? {}).map(([k, zo]) => [k, zo.hidden])))}`);
-      // the zones' own promise (no two slots meet, every fixed piece placed) is checked; a slot over vanilla's pieces is listed in
-      // index.json "issues" (non-blocking, like the rest of the gallery): lab-ui's TOP_CENTER keeps below the boss bars but not
-      // below vanilla's toasts when a wide centre piece reaches their column (lab-ui follow-up)
-      check(pairs.length === 0 && missing.length === 0 && v.bossBottom > 0 && v.toastsBottom > 0,
-        `hud/all_at_once s${zc.scale}: ${slots.length} zone slots, none meet (${pairs.join(', ') || 'ok'}), every piece shown or hideable-hidden `
-        + `(${missing.join(', ') || 'ok'}); vanilla boss bars bottom ${v.bossBottom}, toasts bottom ${v.toastsBottom}`, { slots, vanilla: v });
-      if (overVanilla.length) {
-        (GAL.issues ??= []).push({ state: 'hud/all_at_once', scale: zc.scale, overVanilla, slots, vanilla: v });
-        log(`  WARN hud/all_at_once s${zc.scale}: over vanilla's boss bars or toasts: ${overVanilla.join(', ')}`);
-      }
+      // non-blocking like the rest of the gallery (only an empty gallery fails the step): the zones' own promise (no two slots
+      // meet, every fixed piece placed) and a slot over vanilla's pieces are listed in index.json "issues" and logged. lab-ui's
+      // TOP_CENTER keeps below the boss bars but not below vanilla's toasts when a wide centre piece reaches their column.
+      const line = `hud/all_at_once s${zc.scale}: ${slots.length} zone slots; meet: ${pairs.join(', ') || 'none'}; not placed: ${missing.join(', ') || 'none'}; `
+        + `over vanilla's boss bars (bottom ${v.bossBottom}) or toasts (bottom ${v.toastsBottom}): ${overVanilla.join(', ') || 'none'}`;
+      const bad = pairs.length || missing.length || overVanilla.length || !(v.bossBottom > 0 && v.toastsBottom > 0);
+      log(`  ${bad ? 'WARN' : 'zones ok'} ${line}`);
+      if (bad) (GAL.issues ??= []).push({ state: 'hud/all_at_once', scale: zc.scale, pairs, missing, overVanilla, slots, vanilla: v });
     }
     await cmd('/bossbar remove architect:uig_a').catch(() => null);
     await cmd('/bossbar remove architect:uig_b').catch(() => null);

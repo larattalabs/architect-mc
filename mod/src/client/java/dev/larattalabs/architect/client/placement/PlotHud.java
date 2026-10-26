@@ -29,8 +29,8 @@ final class PlotHud implements HudZones.Element {
 	@Override
 	public HudZones.@org.jspecify.annotations.Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
-		lastRect = null;
 		if (mc.player == null) {
+			lastRect = null;
 			return null;
 		}
 		PlotMarker.View v = PlotMarker.view();
@@ -38,6 +38,7 @@ final class PlotHud implements HudZones.Element {
 		boolean fresh = status != null && Util.getMillis() - PlotMarker.statusAt < STATUS_MS;
 		if (v == null && (!fresh || BuildPlacement.view() != null)) {
 			// a stale "Plot marking cancelled" never sits on top of the placement panel (same place on the screen)
+			lastRect = null;
 			return null;
 		}
 		int maxW = Math.min(420, f.guiWidth() - 16);
