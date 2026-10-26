@@ -64,6 +64,7 @@ export function flightProfile(y0, rise, landing = ROCK.landing) {
 }
 
 const key = (x, y, z) => `${x},${y},${z}`;
+const lampSetOf = (lamps) => new Set(lamps.map((l) => key(l[0], l[1], l[2])));
 const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
 /**
@@ -307,6 +308,27 @@ export function rockStairGeom(land, a, dir, rise, opts = {}) {
     if (V.has(k) || F.has(k) || lined.has(k) || portalCells.has(k)) continue;
     if (LINED_CLASSES.includes(land.classAt(x, y - 1, z)) && y - 1 <= land.groundAt(x, z)) lined.set(k, [x, y - 1, z, 'support']);
   }
+  // ---- (Noah's look, 2026-10-26) the copings: a side parapet whose neighbour uphill along the flight stands 1 higher (a stepped run
+  // beside a flight cut into a slope) is capped with a bottom slab, so the run rises in half steps and reads as one sloped, coped rail
+  // rather than a post per cell. A level run, and the last post where the run meets the top landing, are never capped: they stand at
+  // the parapet's normal height, 1 over their ground. A cap sits on its post (never floats) in open air over the land.
+  const caps = [];
+  if (!u.noCaps) {
+    const parY = new Map();
+    for (const c of lined.values()) if (c[3] === 'parapet') parY.set(`${c[0]},${c[2]}`, c[1]);
+    const upX = dx * P.up, upZ = dz * P.up;
+    for (const c of lined.values()) {
+      if (c[3] !== 'parapet') continue;
+      const [x, y, z] = c;
+      // (a post whose uphill neighbour stands 1 higher: its cap's top is half a block under that post's, so the run rises in half steps;
+      // a level run, and the run's last post where it meets the top landing, stay joined walls at the normal height)
+      if (parY.get(`${x + upX},${z + upZ}`) !== y + 1) continue;
+      const k = key(x, y + 1, z);
+      if (V.has(k) || F.has(k) || lined.has(k) || portalCells.has(k) || lampSetOf(lamps).has(k)) continue;
+      if (y + 1 <= land.groundAt(x, z) || !['AIR', 'PLANT'].includes(land.classAt(x, y + 1, z))) continue;
+      caps.push([x, y + 1, z, 'cap']);
+    }
+  }
   // ---- the guard cells (§3, T3's stale rule): the void, the shell, the treads and the buffer, as per-column y runs (by x, z, y)
   const G = new Set();
   for (const m of [V, S, B, F]) for (const k of m.keys()) G.add(k);
@@ -328,7 +350,7 @@ export function rockStairGeom(land, a, dir, rise, opts = {}) {
   return {
     ok: true, ys, kinds, cover, bore, cuts: bore.map((b, i) => i >= 1 && !b), voids, floor: [...F.values()],
     lined: u.noLining ? [] : [...lined.values()].filter((c) => !lampSet.has(key(c[0], c[1], c[2]))),
-    portals, lamps, guard, carved, lo, hi, width, height, landing, length: L, rise, steps: P.steps, landings: P.landings, from: [x0, y0, z0], dir: [dx, dz],
+    portals, lamps, caps, guard, carved, lo, hi, width, height, landing, length: L, rise, steps: P.steps, landings: P.landings, from: [x0, y0, z0], dir: [dx, dz],
     to: ends.to, facing: facingOf(P.up > 0 ? [dx, dz] : [-dx, -dz]),
   };
 }
@@ -367,6 +389,19 @@ export function rockStairLights(lightBlock) {
   const f = fixtureFor(name);
   const block = f.light;
   return { hang: false, hanging: block, flush: block, standing: block, level: lightLevel(block) || 15 };
+}
+
+/**
+ * (Noah's look, 2026-10-26) The slab that copes a stepped parapet run: the lining's own slab (the parapet is its wall block), else the
+ * trim role's, else the nearest role with a slab (foundation, structure, path, floor, wall, roof); a bottom slab. Null when no role has one.
+ */
+export function rockStairCapSlab(r, liningBlock) {
+  const roles = r.roles ?? {};
+  for (const b of [liningBlock, ...['trim', 'foundation', 'structure', 'path', 'floor', 'wall', 'roof'].map((n) => roles[n])]) {
+    const v = b ? shapeOf(String(b).replace(/\[.*$/, ''), 'slab') : null;
+    if (v) return `${v.replace(/\[.*$/, '')}[type=bottom,waterlogged=false]`;
+  }
+  return null;
 }
 
 const JOIN = Object.freeze({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] });
@@ -434,6 +469,9 @@ export function rockStair(r, a, b, opts = {}) {
   for (const [x, y, z, why] of g.lined) put(x, y, z, why === 'parapet' ? parName : liningB);
   for (const pt of g.portals) for (const [x, y, z] of pt.cells) put(x, y, z, portalB);
   for (const [x, y, z, kind] of g.lamps) put(x, y, z, kind === 'hanging' ? lights.hanging : kind === 'flush' ? lights.flush : lights.standing);
+  // (Noah's look) the copings' slab: the parapet's own family (the lining's slab), else the trim's, else the nearest role with a slab
+  const capSlab = g.caps.length ? rockStairCapSlab(r, liningB) : null;
+  if (capSlab) for (const [x, y, z] of g.caps) put(x, y, z, capSlab);
   const voidSet = new Set(g.voids.map((c) => key(c[0], c[1], c[2])));
   const nameAt = (x, y, z) => {
     const k = key(x, y, z);
@@ -454,6 +492,7 @@ export function rockStair(r, a, b, opts = {}) {
     else solid.push(x, z, y, y, M.portal);
   }
   for (const [x, y, z, kind] of g.lamps) solid.push(x, z, y, y, M[kind]);
+  if (capSlab) for (const [x, y, z] of g.caps) solid.push(x, z, y, y, matOf(capSlab));
   if (early !== solid && early.length) {
     const lp = r.parts.find((q) => q.id === `${p.id}_lining`) ?? r.part(`${p.id}_lining`, { stage: opts.liningStage, set: 'path' });
     (r.meta.parts[lp.id] ??= {}).kind ??= 'path';
@@ -475,7 +514,7 @@ export function rockStair(r, a, b, opts = {}) {
     from: [...a], to: [...b], dir, lo: g.lo, hi: g.hi, facing: g.facing, ys: g.ys, kinds: g.kinds.slice(1),
     bore: g.bore.slice(1), cover: g.cover.slice(1), floor: treads.map((c) => [c[0], c[1], c[2], c[3]]), beds: g.floor.filter((c) => c[3] === 'bed').map((c) => [c[0], c[1], c[2]]),
     voids: g.voids.map((c) => [c[0], c[1], c[2]]), portals: g.portals.map((q) => ({ i: q.i, out: q.out, cells: q.cells.map((c) => [c[0], c[1], c[2], c[3]]) })),
-    lamps: g.lamps.map((c) => [c[0], c[1], c[2], c[3]]), lined: g.lined.length, carved: g.carved, guard: g.guard,
+    lamps: g.lamps.map((c) => [c[0], c[1], c[2], c[3]]), ...(capSlab && g.caps.length ? { caps: g.caps.map((c) => [c[0], c[1], c[2]]) } : {}), lined: g.lined.length, carved: g.carved, guard: g.guard,
     lining: liningB, portal: portalB, tread, landingBlock: landingB, light: lights.hanging, bom,
     // the tread blocks (feet one over: check.mjs's M5 over `cells`), and the journal's counts
     cells: treads.map((c) => [c[0], c[1], c[2]]), counts: { carved: g.carved, lined: g.lined.length, written: (solid.length + walk.length + (early === solid ? 0 : early.length)) / 5 + g.carved },

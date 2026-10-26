@@ -270,11 +270,34 @@ test('rockstairs_demo flat: the ridge (cut, bored, cut) and the carved slope (cu
     const [rid, carv] = [fl.find((q) => /ridge/.test(q.id)), fl.find((q) => /carved/.test(q.id))];
     assert.ok(rid.bore.some(Boolean) && rid.bore.some((x) => !x), `${tag}: the ridge flight part cut and part bored`);
     assert.ok(carv.bore.every((x) => !x), `${tag}: the carved flight cut the whole way`);
+    // (Noah's look, 2026-10-26) the carved flight's stepped parapets are coped with a slab, each on its wall post; the run's top post
+    // (where it meets the top landing) stands uncapped at the normal height, 1 over its ground
+    assert.ok((carv.caps ?? []).length >= 8, `${tag}: the stepped parapets coped (${(carv.caps ?? []).length} caps)`);
     const c = checkRegion({ ir: p.ir, survey: s.bytes, blobs: (sha) => p.blobs.get(sha) ?? null, meta: p.meta, volumes: volumes.map((v) => v.decoded) });
     assert.deepEqual(c.findings.filter((f) => /^(M3|M4|M6|M10)/.test(f.rule)).map((f) => f.message), [], tag);
     assert.equal(c.metrics.M5rockStair.darkSpawnable, 0, tag);
     const { vw } = buildVirtual({ ir: p.ir, survey: s.bytes, blobs: (sha) => p.blobs.get(sha) ?? null, volumes: volumes.map((v) => v.decoded) });
     assert.deepEqual(themeOffenders(p.ir, vw).offenders, [], `${tag}: unthemed blocks`);
+    for (const [x, y, z] of carv.caps) {
+      const cap = vw.pal.states[vw.get(x, y, z)], post = vw.pal.states[vw.get(x, y - 1, z)];
+      assert.match(cap, /_slab\[.*type=bottom/, `${tag}: a cap at ${x},${y},${z} is a bottom slab (${cap})`);
+      assert.equal(BLOCKS[splitState(post).name]?.family, 'wall', `${tag}: the cap at ${x},${y},${z} sits on a wall post (${post})`);
+      assert.match(post, /up=true/, `${tag}: the post under a cap is a post (up=true)`);
+    }
+    const [dx, dz] = carv.dir;
+    const top = carv.to;
+    for (const v of [carv.lo - 1, carv.hi + 1]) {
+      const [rx, rz] = [-dz, dx];
+      // the last side post before the top landing: at its ground + 1, no cap over it
+      for (let t = 1; t <= 3; t++) {
+        const x = top[0] - dx * t + rx * v, z = top[2] - dz * t + rz * v;
+        let y = -1;
+        for (let yy = top[1] + 8; yy >= top[1] - 4; yy--) if (/_wall\b|_wall\[/.test(vw.pal.states[vw.get(x, yy, z)] ?? '')) { y = yy; break; }
+        if (y < 0) continue;
+        assert.ok(!/_slab/.test(vw.pal.states[vw.get(x, y + 1, z)] ?? ''), `${tag}: the post ${t} below the top landing (${x},${y},${z}) is not capped`);
+        break;
+      }
+    }
     const bad = connectableFaults(p.ir, vw);
     assert.ok(bad.n > 10, `${tag}: parapets checked: ${bad.n}`);
     assert.deepEqual(bad.sides, [], `${tag}: parapet sides that disagree with their neighbours`);
