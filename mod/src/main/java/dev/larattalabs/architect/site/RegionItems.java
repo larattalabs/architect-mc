@@ -83,11 +83,12 @@ public final class RegionItems {
 
 	static void tryStartTile(MinecraftServer server, QBatch b, QItem i) {
 		String[] t = tileOf(i);
-		RegionsImpl.Live r = RegionsImpl.live(t[0]);
-		if (r == null) {
+		RegionsImpl.Live r0 = RegionsImpl.live(t[0]);
+		if (r0 == null) {
 			Batches.fail(b, i, Reason.OTHER, "region " + t[0] + " is not loaded");
 			return;
 		}
+		RegionsImpl.Live r = dev.larattalabs.architect.region.Revisions.liveFor(r0, t[1]); // (6d RV) a revision's tile: its IR, plan and layer
 		ServerLevel level = r.level(server);
 		if (level == null) {
 			Batches.fail(b, i, Reason.NOT_LOADED, r.rec().dimension + " is not loaded");
@@ -300,7 +301,8 @@ public final class RegionItems {
 			// ((6c D3) a reach plan's reach columns are claimed land for writing)
 			var reach = r.ir().json().get("reach") instanceof com.google.gson.JsonObject rc && rc.get("runs") instanceof com.google.gson.JsonArray runs
 				? dev.larattalabs.architect.region.BesideReach.colsOf(runs) : null;
-			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, reach).consent(consent).heights(hts); // (C31) the owner's areas bound felling
+			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, reach).consent(consent).heights(hts) // (C31) the owner's areas bound felling
+				.revision(r.rid() > 0); // (6d RV) a revision's tile refuses what it must keep off
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
 		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner))
@@ -379,7 +381,9 @@ public final class RegionItems {
 			Architect.LOGGER.warn("Region {}: tile {} has unfrozen columns after its freeze", r.rec().id, t[3]);
 			return;
 		}
-		TileStream.request(t[0], r.rec().planId, r.rec().irSha, x -> r.irJson(), RegionsImpl.blobSource(r), t[1], t[2], t[3], w.encode());
+		// (6d RV) a revision's tile names its plan and IR, and the stage its IR names (t[1] is the journal's rv<rid>:<stage>)
+		TileStream.request(t[0], r.planIdForTiles(), r.irShaForTiles(), x -> r.irJson(), RegionsImpl.blobSource(r), t[1], dev.larattalabs.architect.region.Revisions
+			.plainStage(t[1]), t[2], t[3], w.encode());
 	}
 
 	// ------------------------------------------------------------------ ahead of the writer
@@ -434,9 +438,11 @@ public final class RegionItems {
 		if (b.loadChunks > 0 && !next.isEmpty() && !next.get(0).ticketed && !jobRunning) {
 			return; // the head (the next to write) takes the budget first
 		}
+		RegionsImpl.Live base = r;
 		for (int n = 1; n < next.size(); n++) {
 			QItem i = next.get(n);
 			String[] t = tileOf(i);
+			r = dev.larattalabs.architect.region.Revisions.liveFor(base, t[1]); // (6d RV)
 			Pipe p = pipe(b, i);
 			if (p.frozen) {
 				TileStream.Tile tile = TileStream.get(t[0], t[1], t[2], t[3]);

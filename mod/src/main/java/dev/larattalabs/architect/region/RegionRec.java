@@ -69,6 +69,18 @@ public final class RegionRec {
 	 * permission level 2): their cells may be written. Validated once at the request; kept so a resumed region keeps it.
 	 */
 	public final java.util.Set<String> consented = new java.util.LinkedHashSet<>();
+	/**
+	 * (6d RV) The region's revisions ({@link Revisions}): the next rid to give (monotonic, never reused), the head (its rid, 0 for the
+	 * realised plan, and its position), {@code busy} ({@code revising <rid>} or {@code undoing <opId>}), the running operation's manifest
+	 * (a path under the region's directory), and every revision record but candidates (those live with their plans), oldest first.
+	 * Written only once the region has had a revision planned (an unrevised region's record is unchanged).
+	 */
+	public int nextRid;
+	public int headRid;
+	public int position;
+	public @Nullable String busy;
+	public @Nullable String manifest;
+	public final List<Revisions.Rev> revisions = new ArrayList<>();
 	/** (6c PT) The region's findings: per build kept out, its blocking count and first 8 cells ({@code BuildHit}), merged per tile. */
 	public final Map<String, JsonObject> buildHits = new LinkedHashMap<>();
 
@@ -250,6 +262,22 @@ public final class RegionRec {
 		if (brush != null) {
 			o.add("brush", brush.deepCopy());
 		}
+		if (nextRid > 0) {
+			JsonObject rv = new JsonObject();
+			rv.addProperty("nextRid", nextRid);
+			rv.addProperty("headRid", headRid);
+			rv.addProperty("position", position);
+			if (busy != null) {
+				rv.addProperty("busy", busy);
+			}
+			if (manifest != null) {
+				rv.addProperty("manifest", manifest);
+			}
+			JsonArray list = new JsonArray();
+			revisions.forEach(x -> list.add(x.toJson()));
+			rv.add("list", list);
+			o.add("revisions", rv);
+		}
 		if (!consented.isEmpty()) {
 			JsonArray cs = new JsonArray();
 			consented.forEach(cs::add);
@@ -323,6 +351,16 @@ public final class RegionRec {
 		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;
 		r.beside = o.has("beside") && o.get("beside").isJsonPrimitive() ? o.get("beside").getAsString() : null;
 		r.survival = o.get("survival") instanceof JsonObject sv ? sv.deepCopy() : null;
+		if (o.get("revisions") instanceof JsonObject rv) {
+			r.nextRid = rv.get("nextRid").getAsInt();
+			r.headRid = rv.get("headRid").getAsInt();
+			r.position = rv.get("position").getAsInt();
+			r.busy = rv.has("busy") ? rv.get("busy").getAsString() : null;
+			r.manifest = rv.has("manifest") ? rv.get("manifest").getAsString() : null;
+			if (rv.get("list") instanceof JsonArray list) {
+				list.forEach(e -> r.revisions.add(Revisions.Rev.fromJson(e.getAsJsonObject())));
+			}
+		}
 		return r;
 	}
 

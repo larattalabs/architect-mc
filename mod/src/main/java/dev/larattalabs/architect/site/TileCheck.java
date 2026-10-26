@@ -175,6 +175,20 @@ final class TileCheck {
 		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim, reach));
 	}
 
+	/**
+	 * (6d RV, docs/CONTRACT.md "Phase 6d slice RV" §3.2, §5) A revision's tile: it layers only over the region's own terrain-set tile entries;
+	 * a cell another entry holds (another site, a lot or its deltas, a road, another owner, or the region's own path-set, road or lot
+	 * entries), a player's build cell or a cell in the owner's protected area refuses the tile (COVERED for a building site, OVERLAP for any
+	 * other holder or a build, PROTECTED), never skipped. Its other cells are decided as a realise's.
+	 */
+	private boolean revision;
+	private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<String> holderOf = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+
+	TileCheck revision(boolean on) {
+		this.revision = on;
+		return this;
+	}
+
 	/** (RP) Records the tile's realised draft over {@code t}, the tile as evaluated ({@code tile} is it after the fluids gate). */
 	TileCheck provenance(Packed.@Nullable Tile t) {
 		this.original = t;
@@ -379,6 +393,28 @@ final class TileCheck {
 			}
 			byte c = dev.larattalabs.architect.region.Realised.decide(owned, buildKept, unbreakable, condPasses, same);
 			code[cursor] = c;
+			if (revision) {
+				// (6d RV, §3.2, §5.1) held, a player's build, the owner's area: the revision's tile refuses, nothing of it written
+				String no = null;
+				dev.larattalabs.architect.api.Reason why = null;
+				if (c == dev.larattalabs.architect.region.Realised.HELD) {
+					String site = holderOf.get(q);
+					boolean box = site != null && Sites.get(site) != null;
+					why = box ? dev.larattalabs.architect.api.Reason.COVERED : dev.larattalabs.architect.api.Reason.OVERLAP;
+					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is held by " + (site == null ? "another entry" : "site " + site)
+						+ (box ? "" : " {kind: held}");
+				} else if (c == dev.larattalabs.architect.region.Realised.BUILD) {
+					why = dev.larattalabs.architect.api.Reason.OVERLAP;
+					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is a player's build " + bd + " (PLAYER_BUILD)";
+				} else if (inArea(x, z)) {
+					why = dev.larattalabs.architect.api.Reason.PROTECTED;
+					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is in the owner's protected area";
+				}
+				if (no != null) {
+					result = refused(why, no);
+					return false;
+				}
+			}
 			switch (c) {
 				case dev.larattalabs.architect.region.Realised.HELD -> {
 					ok = false;
@@ -823,6 +859,9 @@ final class TileCheck {
 				// (6c B) a brush stroke layers over its owner's other strokes' tile entries as over its own
 				boolean mine = (mm.kind().equals(RegionKinds.TERRAIN) || mm.kind().equals(RegionKinds.PATH)) && (regionGroup.equals(mm.group())
 					|| layerGroups.contains(mm.group()));
+				if (revision && mm.kind().equals(RegionKinds.PATH)) {
+					mine = false; // (6d RV, §5.2) a revision never writes over the region's own path-set cells
+				}
 				SectionCells sc;
 				try {
 					sc = js.section(id, k);
@@ -835,6 +874,9 @@ final class TileCheck {
 				LongOpenHashSet into = mine ? ours : others;
 				for (int i = 0; i < sc.size(); i++) {
 					into.add(sc.pos(i));
+					if (revision && !mine) {
+						holderOf.putIfAbsent(sc.pos(i), mm.site()); // (6d RV) the refusal names its holder
+					}
 				}
 				if (mine) {
 					overSites.merge(mm.site(), sc.size(), Integer::sum);

@@ -276,3 +276,9 @@ test('the catalogue: revision.keep, add and refill supported, grow (until GR) an
   assert.equal(e['revision.grow'].until, 'GR');
   assert.equal(e['revision.change'].until, 'RV2');
 });
+
+test('the mod\'s merge parity fixture (fixtures/rv/merge.json) is what make-merge.mjs writes', async () => {
+  const { makeMerge } = await import('./fixtures/rv/make-merge.mjs');
+  const want = `${JSON.stringify(await makeMerge())}\n`;
+  assert.equal(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'rv', 'merge.json'), 'utf8'), want);
+});

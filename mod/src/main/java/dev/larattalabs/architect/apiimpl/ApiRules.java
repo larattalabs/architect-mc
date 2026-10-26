@@ -97,6 +97,8 @@ public final class ApiRules {
 					case "region.climbs" -> "climbConnectors"; // 7a CL: plan/0's connector.stair, connector.switchback and connector.ladder (since 1.41.0)
 					case "region.walls.along" -> "wallAlong"; // 7a K2: plan/0's wall.along (a wall along a shore, biome edge or ridge)
 					case "region.walls.walk" -> "wallWalks"; // 7a K2: a wall's walk member (a railed, lit walk on the top, player only)
+					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
+					// ((6d RV) "plan.revision", the kit's plan/0 revision mode, becomes "planRevisions" with RV-d's checkPlan branch)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
 	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
-	@Nullable RegionBuild build) {
+	@Nullable RegionBuild build, int position, @Nullable String busy, List<RevisionView> revisions) {
 	public RegionView {
 		ext = ext == null ? new JsonObject() : ext;
 		stages = List.copyOf(stages);
@@ -25,6 +25,20 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		cellsSkipped = Map.copyOf(cellsSkipped);
 		actions = actions == null ? List.of() : List.copyOf(actions);
 		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
+		revisions = revisions == null ? List.of() : List.copyOf(revisions);
+	}
+
+	/**
+	 * The 1.38.0 constructor: no revisions (since NEXT, 6d RV: {@code position}, the head's place in the revision chain, 0 when unrevised;
+	 * {@code busy}, {@code revising <rid>} or {@code undoing <opId>} while a revision writes or an undo runs, else null; {@code revisions},
+	 * every revision but candidates, oldest first).
+	 */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits, @Nullable String beside,
+		@Nullable RegionBuild build) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, buildHits,
+			beside, build, 0, null, List.of());
 	}
 
 	/**

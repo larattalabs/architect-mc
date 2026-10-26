@@ -23,6 +23,7 @@ import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
 import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
+import { revisionSeed } from './revise.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
 export const KIT_VERSION = '0.43.0';
@@ -416,7 +417,9 @@ export async function planRegion(o) {
     vocabStyle = styleOf({ roles: o.roles ?? {}, patterns: o.patterns ?? undefined, rarity: o.rarity ?? undefined });
     passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
-    const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
+    // ((6d RV, §2.3) a revision's seed is fnv64(the base's seed, rid), whatever the request names)
+    const seed = o.revision && id === 'revise' && o.revision.effective?.seed !== undefined && Number.isInteger(o.revision.rid) ? revisionSeed(o.revision.effective.seed, o.revision.rid)
+      : o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),

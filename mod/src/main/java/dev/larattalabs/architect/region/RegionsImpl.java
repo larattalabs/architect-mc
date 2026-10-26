@@ -77,7 +77,20 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** A region in memory: its record, IR and world. */
-	public record Live(RegionRec rec, Ir ir, Path world) {
+	public record Live(RegionRec rec, Ir ir, Path world, int rid, @Nullable String revPlanId, @Nullable String revIrSha) {
+		public Live(RegionRec rec, Ir ir, Path world) {
+			this(rec, ir, world, 0, null, null);
+		}
+
+		/** (6d RV) The plan id and IR sha a tile request names: a revision's own (its IR), else the region's. */
+		public String planIdForTiles() {
+			return revPlanId != null ? revPlanId : rec.planId;
+		}
+
+		public String irShaForTiles() {
+			return revIrSha != null ? revIrSha : rec.irSha;
+		}
+
 		public @Nullable ServerLevel level(MinecraftServer server) {
 			return Sites.levelOf(server, rec.dimension);
 		}
@@ -141,6 +154,7 @@ public final class RegionsImpl implements Regions {
 	private static @Nullable MinecraftServer server;
 	private static long lastProgress;
 	private static int nextRegion = 1;
+	private static volatile boolean revisionsPending;
 
 	private RegionsImpl() {
 	}
@@ -173,6 +187,10 @@ public final class RegionsImpl implements Regions {
 			if (reconcilePending) {
 				reconcilePending = false;
 				reconcileRemovals();
+			}
+			if (revisionsPending) {
+				revisionsPending = false;
+				Revisions.recover(s); // (6d RV, §4.3) revisions accepted before a stop: installed or ended
 			}
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
@@ -244,6 +262,8 @@ public final class RegionsImpl implements Regions {
 		PlanChecks.sweepKeyedPins(s);
 		PlanRetention.sweep(s);
 		reconcilePending = true;
+		Revisions.started(); // (6d RV) caches; the manifests resume at the first tick (the batches load at SERVER_STARTED too)
+		revisionsPending = true;
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
 	}
 
@@ -405,6 +425,11 @@ public final class RegionsImpl implements Regions {
 	// ------------------------------------------------------------------ (6c P0) plan check v0 ({@link PlanChecks})
 
 	@Override
+	public CompletableFuture<RegionPlan> planRevision(String regionId, dev.larattalabs.architect.api.RevisionRequest r) {
+		return Revisions.plan(regionId, r); // (6d RV)
+	}
+
+	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.PlanCheck> checkPlan(dev.larattalabs.architect.api.PlanRequest r) {
 		return PlanChecks.check(r);
 	}
@@ -508,6 +533,14 @@ public final class RegionsImpl implements Regions {
 
 	/** {@link #plan0} up to the planned message: {planned, ir, survey} (a dry plan stops here: nothing is kept). */
 	private CompletableFuture<Object[]> plan0raw(RegionPlanRequest r, MinecraftServer s) {
+		// (6d RV) a revision's plan: the region's standing rules, its rid and its revision input (Revisions.prepare)
+		String revRegion = Revisions.regionOf(r);
+		if (revRegion != null) {
+			String[] no = Revisions.prepare(r, s);
+			if (no != null) {
+				return failedRaw(Reason.valueOf(no[0]), no[1]);
+			}
+		}
 		if (r.level().dimension() != Level.OVERWORLD) {
 			return failedRaw(Reason.NOT_ALLOWED, "regions are Overworld only in this version");
 		}
@@ -560,6 +593,9 @@ public final class RegionsImpl implements Regions {
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 		progress(s, null, "planning");
 		CompletableFuture<Object[]> out = reachReady.thenCompose(rv -> RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, r.surveyLoad())).thenCompose(cols -> {
+			if (revRegion != null) {
+				Revisions.overlayFrozen(cols, s.getWorldPath(LevelResource.ROOT), revRegion); // (6d RV) the region's frozen heights where it froze them
+			}
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
 			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> planOnce(link, r, blobId, surveySha, survey, null).thenCompose(o -> {
@@ -616,6 +652,8 @@ public final class RegionsImpl implements Regions {
 			}));
 		});
 		out.whenComplete((p, e) -> {
+			Revisions.INPUT.remove(r);
+			Revisions.CANDIDATE.remove(r);
 			BESIDE.remove(r);
 			REACH.remove(r);
 			REACH_SURVEY.remove(r);
@@ -849,6 +887,14 @@ public final class RegionsImpl implements Regions {
 		if (bg != null) {
 			m.add("biomes", bg); // (6c D2) read-only after sampling
 		}
+		// (6d RV) a revision's inputs (the kit's --revision) and the base IR's roles (the revision IR's are the base's, §2.3)
+		JsonObject rvIn = Revisions.INPUT.get(r);
+		if (rvIn != null) {
+			m.add("revision", rvIn);
+			if (rvIn.get("effective") instanceof JsonObject eff && eff.get("roles") instanceof JsonObject roles) {
+				m.add("roles", roles.deepCopy());
+			}
+		}
 		MinecraftServer s = r.level().getServer();
 		return link.send(m).thenCompose(ack -> {
 			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
@@ -879,6 +925,7 @@ public final class RegionsImpl implements Regions {
 				}
 				planned.addProperty("planId", planId);
 				planned.addProperty("surveySha", surveySha);
+				Revisions.annotate(r, planned, irJson); // (6d RV) a candidate's revisionOf
 				return new Object[] {planned, irJson, survey};
 			}));
 		});
@@ -1004,6 +1051,7 @@ public final class RegionsImpl implements Regions {
 				missing += q.join() ? 0 : 1;
 			}
 			long seed = Long.parseUnsignedLong(ir.seed());
+			Revisions.recordHistory(planned); // (6d RV, §3.4) a candidate's history at its dirty tiles, at the plan
 			PlanRec p = new PlanRec(planId, str(planned, "programId", ir.id()), str(irJson, "programSha"), planned.get("irSha").getAsString(), planned.get(
 				"surveySha").getAsString(), seed, Sites.dimensionId(level), ir.claim(), r.owner(), r.ext(), planned, ir, chunks.size(), missing, opKey, opHash);
 			PLANS.put(planId, p);
@@ -1105,7 +1153,7 @@ public final class RegionsImpl implements Regions {
 		int format = pl.has("irFormat") && pl.get("irFormat").isJsonPrimitive() ? pl.get("irFormat").getAsInt() : p.ir().format();
 		return new RegionPlan(p.planId(), p.programId(), p.programSha() == null ? "" : p.programSha(), p.irSha(), p.surveySha(), p.seed(), lots,
 			p.ir().stages(), anchors, new RegionBudget(b[0], b[1], b[2], tiles, p.chunks(), p.chunksToGenerate()), notes, Wire6b.report(pl.get("report")),
-			Wire6b.previews(pl.get("previews"), pl.get("sitePlan")), format);
+			Wire6b.previews(pl.get("previews"), pl.get("sitePlan")), format, Revisions.revisionOf(pl));
 	}
 
 	static Direction dir(String s) {
@@ -1364,6 +1412,11 @@ public final class RegionsImpl implements Regions {
 			if (stale != null) {
 				throw refusal(Reason.PLAN_STALE, stale);
 			}
+			if (Revisions.isRevision(p)) {
+				// (6d RV) a revision's blobs go into its region's dir; no new region, and the dirty tiles' history replaces the drift check
+				id[0] = p.planned().getAsJsonObject("revisionOf").get("region").getAsString();
+				return CompletableFuture.<Drift.@Nullable Result>completedFuture(null);
+			}
 			id[0] = "rg" + nextRegion++; // reserved now: the blob copies go into its dir before the record exists
 			return Drift.check(level, p);
 		}).thenCompose(f -> f).thenComposeAsync(drift -> { // off the server thread: the copies are file I/O
@@ -1397,6 +1450,13 @@ public final class RegionsImpl implements Regions {
 
 	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift, @Nullable String reserved, @Nullable String blobError) {
 		PlanRec p = planRec(r.planId());
+		// (6d RV) a revision candidate: accepted onto its region (Revisions.realise), never a region of its own
+		if (p != null && Revisions.isRevision(p)) {
+			if (blobError != null) {
+				throw refusal(Reason.OTHER, blobError);
+			}
+			return Revisions.realise(s, r, p);
+		}
 		if (p == null && PlanRetention.discarded(r.planId())) {
 			throw new RegionException(Reason.PLAN_STALE, "region plan " + r.planId() + " was discarded", PlanRetention.DISCARDED);
 		}
@@ -1758,10 +1818,15 @@ public final class RegionsImpl implements Regions {
 	}
 
 	private static QItem tileItem(RegionRec rec, PlanRec p, String stage, String set, String key, List<String> after) {
+		return tileItemOf(rec, p.ir().json(), p.ir(), stage, set, key, after);
+	}
+
+	/** A tile item; (6d RV) a revision's with its journal stage ({@code rv<rid>:<s>}) and its own IR (whose stage is the plain name). */
+	static QItem tileItemOf(RegionRec rec, JsonObject irJson, Ir ir, String stage, String set, String key, List<String> after) {
 		int[] t = Ir.tile(key);
 		JsonObject ext = new JsonObject();
 		ext.addProperty(RegionItems.EXT_TILE, stage + "|" + set + "|" + key);
-		dev.larattalabs.architect.site.RegionWaitTags.tagTile(ext, rec.id, p.ir(), stage, set, key); // (6c close-out A, §8) its region and parts
+		dev.larattalabs.architect.site.RegionWaitTags.tagTile(ext, rec.id, ir, Revisions.plainStage(stage), set, key); // (6c close-out A, §8) its region and parts
 		// (6c RS, §5) the flags from the region's mode (the latent bug: queued creative-only, a toggle switched on failed them)
 		QItem q = new QItem(tileKey(stage, set, key), stage, after, "tile", rec.dimension, Heights.TILE * t[0], rec.claim[1], Heights.TILE * t[1], 0, false,
 			ext, null, rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -1863,6 +1928,12 @@ public final class RegionsImpl implements Regions {
 	}
 
 	private static @Nullable QItem lotItem(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, List<String> after, RealiseRequest r) {
+		return lotItemOf(level, rec, ir, lot, entry, after, r.lotEntries(), r.actor() == null ? null : r.actor().getStringUUID());
+	}
+
+	/** {@link #lotItem} with the actor's UUID (6d RV: a revision's lots, installed again after a restart). */
+	static @Nullable QItem lotItemOf(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, List<String> after, Map<String, String> lotEntries,
+		@Nullable String actorUuid) {
 		String bpId = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;
 		Blueprint bp = Blueprints.get(bpId);
 		// (6c X, C19) the plan's lot ext (the caller's keys, from params.lots[].ext) onto the lot's site; then Architect's own key, which wins
@@ -1885,8 +1956,8 @@ public final class RegionsImpl implements Regions {
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, dropped(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
 		}
 		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
-		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, r.actor() == null ? null
-			: r.actor().getStringUUID(), rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
+		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, actorUuid, rec.survival(),
+			dev.larattalabs.architect.survival.SurvivalWorld.on());
 		q.layer = true;
 		q.consented.addAll(rec.consented); // (6c PT) the realise's consented builds
 		if (!f.fits()) {
@@ -2075,8 +2146,8 @@ public final class RegionsImpl implements Regions {
 			return true;
 		}
 		RegionRec rec = l.rec();
-		if (!rec.stages.containsKey(stage)) {
-			return true;
+		if (!rec.stages.containsKey(stage) || Revisions.layerOf(stage) > 0) {
+			return true; // (6d RV) a revision's stages check every cell at its write instead (§3.3)
 		}
 		// the stage that runs first (in the group's order: a reorder may change it) was checked at region start
 		boolean first = rec.stages.entrySet().stream().allMatch(e -> e.getKey().equals(stage) || e.getValue().startedAt == 0);
@@ -2186,7 +2257,10 @@ public final class RegionsImpl implements Regions {
 		if ("tile".equals(i.itemKind) && i.status == QItem.Status.FAILED) {
 			rec.skip("failedTiles", 1);
 		}
-		dev.larattalabs.architect.site.RealisedRecords.itemDone(l, b, i); // (RP)
+		dev.larattalabs.architect.site.RealisedRecords.itemDone(Revisions.liveFor(l, i.stage), b, i); // (RP; 6d RV: a revision's own layer)
+		if (Revisions.isRevisionBatch(b)) {
+			Revisions.itemDone(l, b, i); // (6d RV) its sites
+		}
 		dirty(l);
 	}
 
@@ -2323,6 +2397,10 @@ public final class RegionsImpl implements Regions {
 		if (l == null) {
 			return;
 		}
+		if (Revisions.isRevisionBatch(b)) {
+			Revisions.batchDone(l, b); // (6d RV) a revision ended: the region reads its own state again
+			return;
+		}
 		// (6c H) a body not written (its containment check failed) or drained by the escape guard ends the region PARTIAL (S-H-6: no new state)
 		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED) && !RegionFluids.anyDrained(l);
 		l.rec().state = b.status == QBatch.Status.DONE && allPlaced ? RegionState.PLACED : b.status == QBatch.Status.DONE ? RegionState.PARTIAL
@@ -2402,7 +2480,7 @@ public final class RegionsImpl implements Regions {
 			st.add(new StageProgress(name, sr == null ? Stage.State.PLANNED : sr.state(), s.tilesDone, s.tilesTotal, s.cells));
 		});
 		List<LotState> lots = new ArrayList<>();
-		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
+		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state, Revisions.lotRevision(ls))));
 		Refusal waiting = null;
 		for (var e : r.drift.entrySet()) {
 			if (e.getValue().startsWith("held:")) {
@@ -2439,7 +2517,8 @@ public final class RegionsImpl implements Regions {
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l));
+			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList(), r.beside, dev.larattalabs.architect.site.RegionTargets.build(l),
+			r.position, r.busy, Revisions.views(r));
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
