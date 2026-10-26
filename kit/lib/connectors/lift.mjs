@@ -240,7 +240,7 @@ export function emit(K) {
     let refusal = null;
     for (const g of segs) {
       const dir = g.dir;
-      const t = checkLift(land, g.approach, dir, { down: !!g.down, side: g.side, rise: o?.rise ?? undefined, _unsafe: o?.unsafe && Object.keys(o.unsafe).length ? o.unsafe : undefined });
+      const t = checkLift(land, g.approach, dir, { down: !!g.down, side: g.side, move: g.move, rise: o?.rise ?? undefined, _unsafe: o?.unsafe && Object.keys(o.unsafe).length ? o.unsafe : undefined });
       if (!t.ok) { refusal = { code: t.code === 'NO_CLIMB' ? 'UNREACHABLE' : t.code, message: `the lift could not be written: ${t.code}`, evidence: { edge: x.meta.id, ...(t.evidence ?? {}) } }; break; }
       const hit = [];
       if (store.length) {

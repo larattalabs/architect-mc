@@ -84,6 +84,12 @@ test('§2 the tower: rows and lanes, two layers on every open side, the airlock\
   const dat = new Map(d.cells.map((c) => [`${c[0]},${c[1]},${c[2]}`, c]));
   assert.deepEqual(dat.get('1062,64,2030').slice(3), ['base', 'down']);
   assert.equal(dat.get('1061,80,2030')[3], 'inner', 'the shared layer');
+  // the route's walk cell past the top, (5, v) at yT, on the lane it moves on only: the other lane's is the face's
+  assert.equal(dat.get('1060,94,2028'), undefined, 'up: the landing past the up top is the route\'s');
+  assert.equal(dat.get('1062,94,2028')?.[3], 'face', 'up: past the down top, the face');
+  const dd = new Map(checkLift(land, [1060, 64, 2033], [0, -1], { down: true, side: 'right', move: 'down' }).cells.map((c) => [`${c[0]},${c[1]},${c[2]}`, c]));
+  assert.equal(dd.get('1062,94,2028'), undefined, 'down: the start past the down top is the route\'s');
+  assert.equal(dd.get('1060,94,2028')?.[3], 'face', 'down: past the up top, the face');
   assert.deepEqual(BUBBLE, { up: 'minecraft:bubble_column[drag=false]', down: 'minecraft:bubble_column[drag=true]' });
 });
 

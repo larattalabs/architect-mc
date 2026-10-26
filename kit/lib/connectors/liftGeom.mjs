@@ -123,7 +123,7 @@ export function liftBlocks(mat, R) {
 /**
  * The check of one lift (§2, §3) over `land` ({groundAt, topAt, waterAt, blocked(x, z) -> bool, classAt(x, y, z), kept?(x, y, z) -> body
  * | null, built?(x, z) -> bool (an earlier edge's column), inClaim?(x, z)}) from the approach walk cell `a` = [x, y0, z] toward `dir`.
- * `opts`: {down, side ('right' | 'left'), rise: {min, max}, _unsafe: {oneLayer, oneDoor, noLight}}. Returns `{ok: false, code, evidence}`
+ * `opts`: {down, side ('right' | 'left'), move ('up' | 'down': the route's lane past the top; default up), rise: {min, max}, _unsafe: {oneLayer, oneDoor, noLight}}. Returns `{ok: false, code, evidence}`
  * (§3's order: NO_CLIMB, SPAN, ANCHOR, HEADROOM, WATER, PROTECTED) or the geometry `{ok: true, y0, yT, rise, dir, side, down, lanes,
  * shafts: [{v, kind, col, base, cells (the bubble cells), top (the top walk cell, [x, yT, z]), approach ([x, y0, z]), doors}], cells:
  * [[x, y, z, kind, ...]] (the written cells, kinds: fill plinth base inner outer cap door face light lamp rail post clear), inner (the
@@ -153,10 +153,13 @@ export function checkLift(land, a, dir, opts = {}) {
   const solid = (x, y, z) => SITE_SOLID.includes(land.classAt(x, y, z));
   const writable = (x, y, z) => !land.blocked(x, z) && !(land.inClaim && !land.inClaim(x, z)) && !UNWRITABLE.has(land.classAt(x, y, z)) && !land.kept?.(x, y, z) && !land.built?.(x, z);
   // ---- ANCHOR: the face side of every shaft (the two cells behind it, the cells beside the first) site-solid or writable
+  const routeV = opts.move === 'down' && down ? 2 * L.s : 0; // the lane whose (5, v) at yT is the route's walk cell
   const faceTops = new Map(); // "t,v" -> the top y the face cell must stand to
   for (const sh of L.shafts) {
     faceTops.set(`4,${sh.v}`, yT);
-    faceTops.set(`5,${sh.v}`, yT - 1); // (at yT it is the landing walk cell, the route's: the ground or its surface holds a breach of (4, v))
+    // (the route's walk cell past the top, (5, v) at yT, on the lane it moves on: up lands past the up shaft's top, down starts past the
+    // down shaft's; the ground or its surface holds a breach of (4, v) there. The other lane's is the face's, written to yT)
+    faceTops.set(`5,${sh.v}`, sh.v === routeV ? yT - 1 : yT);
     for (const w of [sh.v - 1, sh.v + 1]) if (!faceTops.has(`4,${w}`)) faceTops.set(`4,${w}`, yT);
   }
   const faceNatural = [], faceWritten = [], weak = [];

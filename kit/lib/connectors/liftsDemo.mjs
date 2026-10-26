@@ -109,7 +109,7 @@ export function emitDemoLifts(r, ctx, edges, { stage = 'links', base = null } = 
     if (!e.ok) continue;
     for (const g of e.segments ?? []) {
       if (g.kind !== 'lift') continue;
-      const t = checkLift(land, g.approach, g.dir, { down: g.down, side: g.side });
+      const t = checkLift(land, g.approach, g.dir, { down: g.down, side: g.side, move: g.move });
       if (!t.ok) throw new Error(`lifts_demo: edge ${e.id}'s lift no longer checks: ${t.code} ${JSON.stringify(t.evidence).slice(0, 200)}`);
       const res = writeLift(r, t, { part: `lift_${e.id}_tower`.slice(0, 48), stage, bodyId: `lift_${e.id}`.slice(0, 48), planPart: null, mats, id: `lift_${e.id}`.slice(0, 48), edge: e.id, movers: ['player'],
         sturdy: (x, y, z) => ['ROCK', 'SOIL'].includes(land.classAt(x, y, z)) });
