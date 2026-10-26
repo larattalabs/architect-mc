@@ -80,7 +80,10 @@ async function waitVerdict(ms = 15_000) {
 const sites = async () => (await call('dev.sites.state')).sites.map((s) => s.id);
 const exists = async (id) => (await sites()).includes(id);
 const start = async (origin = ORIGIN) => { await call('dev.build.start', { blueprint: 'cabin', origin, ground: true, turns: 0 }); return waitVerdict(); };
-const enter = (o = {}) => call('dev.build.enter', o, 60_000);
+// the HUD rows in the state are the last frame drawn: let a few frames draw after a key before reading them
+const drawn = async (r) => { await call('dev.wait', { frames: 3 }); const st = await buildState(); return { ...st, sent: r.sent, placed: r.placed, siteId: r.siteId, message: r.message }; };
+const enter = async (o = {}) => drawn(await call('dev.build.enter', o, 60_000));
+const escape = async () => drawn(await call('dev.build.escape'));
 const setThreshold = (blocks) => call('dev.safety.threshold', { blocks });
 async function waitFor(fn, ms = 10_000, every = 250) {
   const end = Date.now() + ms;
@@ -140,7 +143,7 @@ steps.ingame = async () => {
   const held = await enter({ repeat: true });
   check(held.sent === false && held.safety.armed === true, 'a held Enter (OS key repeat) never places', held.safety);
   // Esc disarms (the ghost stays)
-  const esc = await call('dev.build.escape');
+  const esc = await escape();
   check(esc.active === true && esc.safety.armed === false && !esc.hud.some((r) => /Press Enter again/.test(r)), `Esc disarms, the ghost stays (active ${esc.active})`, esc.safety);
   // re-arm at GUI scale 4 for the shot
   await scale(4);
@@ -203,8 +206,8 @@ steps.ingame = async () => {
   a1 = await enter();
   check(a1.hud.some((r) => /Press Enter again to place .*, replacing 1 that isn't terrain/.test(r)), `the armed line names what it replaces (${JSON.stringify(a1.hud)})`, a1.hud);
   out.shots.push(await shot('armed_replacing_s2'));
-  const e1 = await call('dev.build.escape');
-  const e2 = await call('dev.build.escape');
+  const e1 = await escape();
+  const e2 = await escape();
   check(e1.active === true && e2.active === false, `Esc disarms first, a second Esc cancels (active ${e1.active} then ${e2.active})`);
   await cmd(`/setblock ${cell.join(' ')} minecraft:air`);
 
