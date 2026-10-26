@@ -95,6 +95,14 @@ import org.jspecify.annotations.Nullable;
  * drain leaves the decor (it drains the sources, then the group undo restores the decor and the bed: H's order; a coral that died
  * meanwhile is still the entry's, {@code StillOurs} via {@code Coral.canonical}), while every other drain (escape, unsettled, upstream,
  * recheck, a wave's clear) takes water decor back with the sources. Not a course member: a coral pond is not ordered.
+ * <p>
+ * (7a LF, "Phase 7a slice LF" §4, Since NEXT) A body op's {@code bubble} set ({@code [{state, cells: runs}]}: a lift's column) is the body's
+ * own cells written as {@code bubble_column} states (drag=false over soul sand, drag=true over magma) instead of water sources: the
+ * stage's tiles write them (the kit's evaluator, as a grate's bars), a re-write ({@link #writeBody}) writes them again where the cell is
+ * open, and the forced tick gives them a block tick (vanilla keeps the column over its base) instead of a fluid tick (their face
+ * neighbours outside the body still get H's fluid tick). The census counts a bubble cell as a source of the body only as a bubble column
+ * of its drag; the gate's check reads a bubble cell holding a bubble column as open; every drain takes it back with the sources (the
+ * removal's too: the shaft's cells first, then after the settle bound the shell, doors and base: H §4.1). Not a course member.
  */
 public final class RegionFluids {
 	public static final String STAGE = "fluids";
@@ -196,6 +204,8 @@ public final class RegionFluids {
 		@Nullable LongOpenHashSet decorSet;
 
 		@Nullable LongOpenHashSet grateSet;
+		/** (7a LF) Body cells written as bubble columns, and each one's drag (true: down, over magma). */
+		final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap bubble = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
 
 		/** (6c HY) Whether a cell is a grate cell. */
 		boolean gratePos(long p) {
@@ -407,6 +417,8 @@ public final class RegionFluids {
 				b.grate = runs(o.get("grate"));
 				// (6c F3-c) the decor set
 				decor(o.get("decor"), b);
+				// (7a LF) the bubble set
+				bubble(o.get("bubble"), b);
 				if (o.get("after") instanceof JsonArray af) {
 					List<String> ids = new ArrayList<>();
 					for (JsonElement e : af) {
@@ -532,6 +544,27 @@ public final class RegionFluids {
 		b.decorSet = null;
 	}
 
+	/** (7a LF) A fluid op's bubble set {@code [{state, cells: runs}]}: its cells and each one's drag. */
+	static void bubble(@Nullable JsonElement e, Body b) {
+		if (!(e instanceof JsonArray a)) {
+			return;
+		}
+		for (JsonElement d : a) {
+			if (!(d instanceof JsonObject o)) {
+				continue;
+			}
+			boolean drag = RegionsImpl.str(o, "state", "").contains("drag=true");
+			for (long p : runs(o.get("cells"))) {
+				b.bubble.put(p, drag);
+			}
+		}
+	}
+
+	/** (7a LF) The bubble column state a bubble cell of the body is written as. */
+	static BlockState bubbleState(boolean drag) {
+		return Blocks.BUBBLE_COLUMN.defaultBlockState().setValue(net.minecraft.world.level.block.BubbleColumnBlock.DRAG_DOWN, drag);
+	}
+
 	/**
 	 * (6c F3-c) Whether a body cell's world state is open for the gate's check: air, water, lava or ice, a grate cell's bars, or a decor
 	 * cell holding its own decor's block (the stage's tiles wrote it before a stop).
@@ -542,6 +575,9 @@ public final class RegionFluids {
 		}
 		if (body.grate.length > 0 && now.is(Blocks.IRON_BARS) && body.gratePos(p)) {
 			return true;
+		}
+		if (now.is(Blocks.BUBBLE_COLUMN) && body.bubble.containsKey(p)) {
+			return true; // (7a LF) a bubble cell holding its column (the stage's tiles wrote it before a stop)
 		}
 		String d = body.decorState.get(p);
 		return d != null && now.getBlock() == parse(d).getBlock();
@@ -1063,20 +1099,7 @@ public final class RegionFluids {
 			if (!"pending".equals(bs.state)) {
 				continue;
 			}
-			LongOpenHashSet own = new LongOpenHashSet(b.cells);
-			Fluid f = b.source();
-			for (long p : b.cells) {
-				BlockPos bp = BlockPos.of(p);
-				level.scheduleTick(bp, f, 1);
-				n++;
-				for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
-					BlockPos q = bp.relative(d);
-					if (!own.contains(q.asLong())) {
-						level.scheduleTick(q, f, 1);
-						n++;
-					}
-				}
-			}
+			n += forceBody(level, b);
 			bs.state = "written";
 			bs.sources = b.cells.length;
 			bs.spill = b.spill.length;
@@ -1170,7 +1193,7 @@ public final class RegionFluids {
 			}
 			BlockPos bp = BlockPos.of(p);
 			BlockState now = level.getBlockState(bp);
-			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : src;
+			BlockState to = ice.contains(p) ? Blocks.ICE.defaultBlockState() : grate.contains(p) ? bars : b.bubble.containsKey(p) ? bubbleState(b.bubble.get(p)) : src;
 			boolean open = now.isAir() || !now.getFluidState().isEmpty() || now.is(Blocks.ICE) || now.is(Blocks.FROSTED_ICE) || grate.contains(p) && now.is(Blocks.IRON_BARS);
 			if (open && now != to) {
 				dev.larattalabs.architect.placed.Placed.set(level, bp, to, Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS);
@@ -1203,14 +1226,22 @@ public final class RegionFluids {
 		}
 	}
 
-	/** One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2); the ticks scheduled. */
+	/**
+	 * One fluid tick on every source of a body and every face neighbour that is no body cell (§3.2); the ticks scheduled. (7a LF) A bubble
+	 * cell gets a block tick instead (BubbleColumnBlock.tick keeps the column over its base, or turns it back to water); its neighbours
+	 * outside the body get the fluid tick as any source's.
+	 */
 	static int forceBody(ServerLevel level, Body b) {
 		int n = 0;
 		LongOpenHashSet own = new LongOpenHashSet(b.cells);
 		Fluid f = b.source();
 		for (long p : b.cells) {
 			BlockPos bp = BlockPos.of(p);
-			level.scheduleTick(bp, f, 1);
+			if (b.bubble.containsKey(p)) {
+				level.scheduleTick(bp, Blocks.BUBBLE_COLUMN, 1);
+			} else {
+				level.scheduleTick(bp, f, 1);
+			}
 			n++;
 			for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
 				BlockPos q = bp.relative(d);
@@ -1266,6 +1297,8 @@ public final class RegionFluids {
 			if (own.contains(p)) {
 				if (!(f.isSource() && f.getType().isSame(src))) {
 					mismatch.add(c);
+				} else if (b.bubble.containsKey(p) && !(s.is(Blocks.BUBBLE_COLUMN) && s.getValue(net.minecraft.world.level.block.BubbleColumnBlock.DRAG_DOWN) == b.bubble.get(p))) {
+					mismatch.add(c); // (7a LF) a bubble cell is the body's source only as its column (the census counts it so)
 				}
 				continue;
 			}

@@ -157,6 +157,14 @@ public interface ArchitectApi {
 	 * with its crossing {@code {type, rise, steps, cover}}, the siteplan's {@code rockStairs[]}. A plan with one is checked in the
 	 * two-plan flow as a tunnel's (its corridor's frozen volume; {@code limits.volume}), and an artifact's stale rock names it
 	 * ({@code ARTIFACT_STALE} "rock_stair &lt;part&gt;: ..."). No new record, method or reason.
+	 * Since NEXT (7a LF), an LF helper ({@code region.lifts}) adds {@code "liftConnectors"}: plan/0's {@code connector.lift} (a bubble column
+	 * against a face rising 4 to 64 in a tower 2 thick, entered through a two-door airlock and left over a railed rim; {@code down}: a second
+	 * column; route row 9; player only) is compiled, the graph edge typed {@code lift} with its crossing {@code {type, rise, down}}, the
+	 * siteplan's {@code lifts[]}, the {@code architect_mc:fluids} rows of its body. The column is a fluid body (H): written in the
+	 * {@code fluids} stage as {@code bubble_column} states (the IR kind {@code bubbleColumns}), census-exact, drained first on removal. The
+	 * journal's "still ours" gains a global row: a cell written as a bubble column holds as any bubble column, a water source or air, and a
+	 * cell written as a water source holds as a bubble column (deltas, {@code versionOf}, adopt counts and survival matches read it). No new
+	 * record, method or reason.
 	 */
 	Set<String> features();
 }

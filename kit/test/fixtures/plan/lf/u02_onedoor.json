@@ -1,0 +1,55 @@
+{
+  "about": "(7a LF, the broken variant _unsafe.oneDoor) v7a_lf_cliff with one door in the airlock (the outer door left out): M10:lift's doors",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 94
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      95,
+      2016
+    ]
+  },
+  "expect": {
+    "part": "cliff_lift",
+    "class": "fits"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "cliff_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "down": true,
+        "ext": {
+          "architect_mc:unsafe": {
+            "oneDoor": true
+          }
+        }
+      }
+    ]
+  }
+}

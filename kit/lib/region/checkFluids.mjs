@@ -40,7 +40,9 @@ export function bodiesOf(ir) {
       const j = splitJoins(o.joins);
       out.push({ id: o.id, part: o.part ?? null, irPart: p.id, pi, fluid: o.fluid, level: o.level, cells: fromRuns(o.cells), shell: fromRuns(o.shell), spill: fromRuns(o.spill), joins: fromRuns(j.natural), watch: fromRuns(o.watch), ice: fromRuns(o.ice), predicted: o.predicted ?? [], settleTicks: o.settleTicks,
         lining: fromRuns(o.lining), after: Array.isArray(o.after) ? o.after : [], planJoins: j.plan.map((q) => ({ body: q.body, cells: fromRuns(q.cells) })), grate: fromRuns(o.grate), course: isCourseOp(o),
-        decor: decorCellsOf(o.decor).map((c) => [c[0], c[1], c[2]]) });
+        decor: decorCellsOf(o.decor).map((c) => [c[0], c[1], c[2]]),
+        // ((7a LF) a lift's bubble columns (decor's shape: [{state, cells}]); a lift body is `lift`)
+        bubble: decorCellsOf(o.bubble).map((c) => [c[0], c[1], c[2]]), bubbleStates: decorCellsOf(o.bubble), lift: Array.isArray(o.bubble) && o.bubble.length > 0 });
     }
   });
   return out;
@@ -370,8 +372,14 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
     if (!s) { s = new Set(b.decor.map((c) => k3(...c))); decorOf.set(b.id, s); }
     return s.has(k3(x, y, z)) && ir.parts[pi]?.id === b.irPart;
   };
+  // ((7a LF, §2) a lift's face is the land itself where it is site-solid: an unwritten shell cell of a lift body holds when the land there
+  // is fluid-stopping and no gravity block (its natural face); every other shell cell is written, as any body's)
+  const liftBody = new Set(bodies.filter((b) => b.lift).map((b) => b.id));
   const shellCheck = (x, y, z, b) => {
-    if (!(vw.flags(x, y, z) & F_WRITTEN)) return 'not written';
+    if (!(vw.flags(x, y, z) & F_WRITTEN)) {
+      if (liftBody.has(b.id)) { const i = vw.get(x, y, z); return !P.fs[i] ? 'not fluid-stopping (the natural face)' : P.gravity[i] ? 'a gravity block (the natural face)' : null; }
+      return 'not written';
+    }
     const pi = vw.partAt(x, y, z);
     if (fluidsStage >= 0 && stageOfPart(pi) >= fluidsStage && !ownDecor(b, x, y, z, pi)) return 'not written before the fluids stage';
     const i = vw.get(x, y, z);
@@ -399,12 +407,14 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   // ((6c HY) a course's lining and weir stand with its shell: M25:shell and the single breach cover them; its plan joins are declared)
   const sim = simulate(world, bodies.map((b) => (b.course
     ? { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: [...b.shell, ...b.lining], spill: b.spill, joins: [...b.joins, ...b.planJoins.flatMap((q) => q.cells)], spillLands: b.planJoins.length > 0 }
-    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins })), { breach: true });
+    : { id: b.id, part: b.part, irPart: b.irPart, fluid: b.fluid, level: b.level, cells: b.cells, shell: b.shell, spill: b.spill, joins: b.joins, ...(b.lift ? { carried: b.bubble } : {}) })), { breach: true });
   const per = [];
   if (want.has('M25')) {
     for (const f of sim.findings) findings.push(finding(f.rule, bodies.find((b) => b.id === f.body)?.irPart ?? null, 'fluids', f.count, f.sample, `body ${f.body}: ${f.message}`));
     // no frozen volume over a body's box (its cells, shell and the 2-cell buffer): a finding, never a pass (§9)
     for (const b of bodies) {
+      // ((7a LF, §4) a lift asks no frozen volume: its shell is the plan's own, its natural face read 2.5D (the shell check above))
+      if (b.lift) continue;
       const miss = [];
       for (const q of [...b.cells, ...b.shell, ...b.lining]) if (!covered(q[0], q[1], q[2])) { miss.push(q); if (miss.length >= 16) break; }
       if (miss.length) findings.push(finding('M25:shell', b.irPart, 'fluids', miss.length, miss, `body ${b.id}: no volume: ${miss.length}+ cell(s) of its cells and shell outside every frozen volume the plan read (a body is checked against the frozen world, never a 2.5D guess)`));
@@ -418,7 +428,7 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
   }
   bodies.forEach((b, i) => {
     const s = sim.bodies[i];
-    per.push({ id: b.id, part: b.part, fluid: b.fluid, cells: b.cells.length, shell: b.shell.length, spill: b.spill.length, joins: b.joins.length, watch: b.watch.length, reached: s.reached.length, breach: s.breach?.length ?? 0, settleTicks: b.settleTicks, predicted: b.predicted.length, predictedNow: s.predicted.length, ...(b.decor.length ? { decor: b.decor.length } : {}) });
+    per.push({ id: b.id, part: b.part, fluid: b.fluid, cells: b.cells.length, shell: b.shell.length, spill: b.spill.length, joins: b.joins.length, watch: b.watch.length, reached: s.reached.length, breach: s.breach?.length ?? 0, settleTicks: b.settleTicks, predicted: b.predicted.length, predictedNow: s.predicted.length, ...(b.decor.length ? { decor: b.decor.length } : {}), ...(b.lift ? { bubble: b.bubble.length } : {}) });
   });
   // ---- M25:wet: the plan meta's wet writes (piers, harbour walls, quays) through natural water
   const wetBad = [];

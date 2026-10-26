@@ -21,6 +21,7 @@ import { tunnelRules } from './checkTunnels.mjs';
 import { catwalkRules } from './checkCatwalks.mjs';
 import { climbRules } from './checkClimbs.mjs'; // (7a CL)
 import { rockStairRules } from './checkRockStairs.mjs'; // (7a RK)
+import { liftRules } from './checkLifts.mjs'; // (7a LF)
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
 import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
@@ -150,8 +151,13 @@ export function walkGraph(vw, starts, { mover = 'player', reach = false } = {}) 
       }
     }
     if (V) continue; // no climbing
-    // climbing
+    // ((7a LF) bubble columns: an up column (drag=false, over soul sand) carries the player up through it to its surface, a down column
+    // (drag=true, over magma) down to its floor; neither the other way)
     const here = vw.get(x, y, z);
+    if (P.bubble[here] && /drag=false/.test(P.states[here]) && P.passable[vw.get(x, y + 1, z)]) push(x, y + 1, z);
+    const under = vw.get(x, y - 1, z);
+    if (P.bubble[under] && !/drag=false/.test(P.states[under]) && (P.bubble[here] || P.air[here])) push(x, y - 1, z);
+    // climbing
     if (P.climb[here] || P.climb[vw.get(x, y + 1, z)]) {
       if (P.passable[vw.get(x, y + 2, z)] && (P.climb[vw.get(x, y + 1, z)] || standAt(x, y + 1, z))) push(x, y + 1, z);
     }
@@ -489,6 +495,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (Array.isArray(meta?.climbs) && meta.climbs.length) time('M10', () => climbRules({ vw, climbs: meta.climbs, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (7a RK) rock stairs (checkRockStairs.mjs): T3b's M3:tunnel, M3:gravity, M4:tunnel and M6 over the flight's void and shell, and M10:rock_stair
   if (Array.isArray(meta?.rockStairs) && meta.rockStairs.length) time('M3', () => rockStairRules({ ir, vw, rockStairs: meta.rockStairs, meta, want, findings, metrics, partStage, finding }));
+  // (7a LF) lifts (checkLifts.mjs): the base, the column's drag, the shell 2 thick, the airlock, the rim's rails, the head room, the light
+  if (Array.isArray(meta?.lifts) && meta.lifts.length) time('M10', () => liftRules({ vw, lifts: meta.lifts, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (6c H) fluid bodies (the IR's fluid ops) and wet writes (meta.wet): only when the plan has either
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));

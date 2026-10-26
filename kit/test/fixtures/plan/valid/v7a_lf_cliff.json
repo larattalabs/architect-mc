@@ -1,0 +1,25 @@
+{
+  "about": "(7a LF) a synthetic 30-high cliff (its top at 94, the foot at 64) across the claim; a path from the gate to the cliff's foot, then a lift up the face with a down column beside it (down: true), its foot 15 and its top 13 from the face: a player-only bubble column lift, Steward's winch lift on a site that has a face",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      { "x0": 1000, "z0": 2000, "x1": 1159, "z1": 2029, "y": 94 }
+    ]
+  },
+  "anchors": {
+    "gate": [1060, 65, 2096],
+    "foot": [1060, 65, 2048],
+    "top": [1060, 95, 2016]
+  },
+  "covers": ["connector.lift"],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      { "id": "foot_path", "kind": "path", "from": { "anchor": "gate" }, "to": { "anchor": "foot" } },
+      { "id": "cliff_lift", "kind": "lift", "from": { "anchor": "foot" }, "to": { "anchor": "top" }, "down": true }
+    ]
+  }
+}

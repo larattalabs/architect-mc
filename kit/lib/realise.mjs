@@ -24,7 +24,7 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp', 'volume:blocks', 'fluid', 'volume:fluids', 'courses', 'survival', 'coralDecor', 'bubbleColumns']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
@@ -44,6 +44,9 @@ export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'ma
 // (6c F3-c) 'coralDecor': a fluid op with a `decor` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], the coral grown in the body):
 // a body cell's decor is written over its source (decor wins its cells), a bed cell's (a shell cell, not one of the op's cells) as
 // ALWAYS_OURS over the shell's earlier stage. A mod or kit before F3 would drop the coral, so it refuses the plan PLAN_STALE.
+// (7a LF) 'bubbleColumns': a fluid op with a `bubble` set (kit/lib/fluids/body.mjs: [{state, cells: runs}], a lift's column): each cell
+// is written as its bubble_column state over its source (it wins the cell, as a grate's bars). A mod or kit before LF would write still
+// water (no lift), so it refuses the plan PLAN_STALE.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -135,6 +138,7 @@ export function walkKinds(ir) {
     // (6c HY) a course's fluid op (body.mjs isCourseOp, inlined: this module may not import body.mjs)
     if (o.op === 'fluid' && (['after', 'lining', 'grate'].some((m) => Array.isArray(o[m]) && o[m].length > 0) || (Array.isArray(o.joins) && o.joins.some((j) => j && !Array.isArray(j))))) k.add('courses');
     if (o.op === 'fluid' && Array.isArray(o.decor) && o.decor.length > 0) k.add('coralDecor'); // (6c F3-c)
+    if (o.op === 'fluid' && Array.isArray(o.bubble) && o.bubble.length > 0) k.add('bubbleColumns'); // (7a LF)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -391,7 +395,17 @@ export function compileIR(ir, opts = {}) {
         const grate = o.grate !== undefined && o.grate.length ? mat('minecraft:iron_bars[waterlogged=true]') : null;
         const lists = new Map();
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (const [runs, m] of [[o.cells, src], [o.ice ?? [], ice], ...(grate !== null ? [[o.grate, grate]] : [])]) {
+        // ((7a LF) a bubble column cell, written after its source, so the column wins the cell: a bubble_column state)
+        const bubble = [];
+        if (o.bubble !== undefined) {
+          if (!Array.isArray(o.bubble)) throw new Error(`${where}: a fluid op's bubble must be [{state, cells: runs}, ...]`);
+          if (o.bubble.length && o.fluid !== 'water') throw new Error(`${where}: only water makes a bubble column`);
+          for (const d of o.bubble) {
+            if (!d || typeof d.state !== 'string' || !/^minecraft:bubble_column\[drag=(true|false)\]$/.test(d.state) || !Array.isArray(d.cells)) throw new Error(`${where}: a bubble entry must be {state: minecraft:bubble_column[drag=...], cells: runs}`);
+            bubble.push([d.cells, mat(d.state)]);
+          }
+        }
+        for (const [runs, m] of [[o.cells, src], [o.ice ?? [], ice], ...(grate !== null ? [[o.grate, grate]] : []), ...bubble]) {
           if (!Array.isArray(runs)) throw new Error(`${where}: fluid cells must be column runs [[x, z, y0, y1], ...]`);
           for (const q of runs) {
             if (!Array.isArray(q) || q.length !== 4 || !q.every(Number.isInteger) || q[2] > q[3]) throw new Error(`${where}: a fluid run must be [x, z, y0, y1] integers, y0 <= y1`);

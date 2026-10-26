@@ -1,0 +1,76 @@
+{
+  "about": "(7a LF) v7a_lf_cliff with the face behind every shaft column a player's sand (a frozen volume's PLAYER cells, x 1040..1080, the 2 cells in from the face, the foot to the top): the face is not site-solid and no shell can be written there: ANCHOR {why: face}",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 94
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      95,
+      2016
+    ]
+  },
+  "volume": {
+    "given": [
+      [
+        1036,
+        58,
+        2020,
+        1084,
+        100,
+        2040
+      ]
+    ],
+    "edits": [
+      {
+        "box": [
+          1040,
+          65,
+          2028,
+          1080,
+          94,
+          2029
+        ],
+        "class": "PLAYER"
+      }
+    ]
+  },
+  "expect": {
+    "part": "sand_lift",
+    "class": "refused",
+    "code": "ANCHOR"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "sand_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "down": true
+      }
+    ]
+  }
+}

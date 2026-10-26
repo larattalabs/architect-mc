@@ -35,6 +35,9 @@ export const CONNECTOR_DEFAULTS = Object.freeze({
   // in structure, then foundation (capped with the trim's slab); a ladder's rest landing the floor role's slab, its rails and gate the
   // rail role's; the ladder block itself is vanilla's (no role))
   stair: { tread: ['path'], rail: ['rail'] }, switchback: { retaining: ['structure', 'foundation'] }, ladder: { ladder: [], landing: ['floor'], rail: ['rail'], gate: ['rail'] },
+  // ((7a LF, N-LF-1) the tower's two layers in structure (then foundation, wall), its plinth course and fill in foundation (then structure),
+  // its roof course in trim; the door the frame's wood family's (K1's rule), the rails the rail role's fence: liftGeom.mjs liftRoles reads
+  // the chains (here empty, as RK's: the slot resolves to the bible's named role only))
   rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] },
   catwalk: { deck: ['floor', 'path'], bracket: ['frame'], rail: ['rail'] }, // ((7a CW, N-CW-1) a plank deck in floor then path, brackets in frame, fence rails)
   stairs_around: { tread: [], rail: [], deck: [] },
@@ -110,7 +113,10 @@ export const UNTHEMED_OK = Object.freeze(new Set(['minecraft:air', 'minecraft:ca
   // (theme rest, Noah 2026-10-24) iron, where nothing else does the job: bars hold HY-c's water gate (still water passes, mobs don't:
   // a fence would not, and the grate state is shared with the mod's fluid op); iron's door and trapdoor are the only doors VOC-c's
   // no-wood rule can swap a wooden one for when the plan's roles have none of their own (a copper role gives copper_door first)
-  'minecraft:iron_bars', 'minecraft:iron_door', 'minecraft:iron_trapdoor']));
+  'minecraft:iron_bars', 'minecraft:iron_door', 'minecraft:iron_trapdoor',
+  // (7a LF) a lift's column: the bubble column is its water (a source the column carries a rider in), soul sand the only block that makes
+  // an up column and magma the only one that makes a down column (vanilla 26.3's BubbleColumnBlock): no role can stand in for them
+  'minecraft:bubble_column', 'minecraft:soul_sand', 'minecraft:magma_block']));
 const SHAPES = Object.freeze(['slab', 'stairs', 'wall', 'fence', 'fence_gate', 'door', 'trapdoor', 'pressure_plate', 'button']);
 /**
  * The role a block traces to (Noah: "everything should be themed"): the role whose block, or one of whose shape variants (slab,

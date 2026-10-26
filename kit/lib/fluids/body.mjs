@@ -32,6 +32,14 @@
 //            grate cell is); live coral blocks replace bed cells (shell floor cells, solid to solid). The evaluator writes them after
 //            the sources (decor wins its cells); a bed cell's block is written ALWAYS_OURS over the shell's earlier stage.
 // A decor set makes the IR require `coralDecor` (a mod or kit before F3 refuses it PLAN_STALE rather than drop the coral).
+//
+// (7a LF, "Phase 7a slice LF" §2, §4) A lift's column is its body's (only when non-empty: every other op is byte for byte as before):
+//   bubble   [{state, cells: runs}] sorted by state: body cells written as `minecraft:bubble_column[drag=false]` (up, over soul sand) or
+//            `[drag=true]` (down, over magma) instead of a water source. Each is still one of `cells` (a source for the sim, the census
+//            and the escape guard: a bubble column's fluid is a water source); the evaluator writes the state after the sources (it
+//            wins its cells, as a grate's bars do); the mod gives these cells a block tick instead of a fluid tick (vanilla keeps the
+//            column over its base). The body asks no frozen volume (its shell is the plan's own, the face's natural cells read 2.5D).
+// A bubble set makes the IR require `bubbleColumns` (a mod or kit before LF would write still water: no lift).
 import { simulate, settleBound } from './sim.mjs';
 import { FLUIDS, FLUIDS_STAGE } from './kinds.mjs';
 import { kindOf } from './world.mjs';
@@ -52,6 +60,10 @@ export const GRATE_STATE = 'minecraft:iron_bars[waterlogged=true]';
 export const COURSES_KIND = 'courses';
 /** (6c F3-c) The IR kind a body op with a `decor` set needs (realise.mjs KINDS_FORMAT2, IrStale.KINDS_FORMAT2). */
 export const CORAL_DECOR_KIND = 'coralDecor';
+/** (7a LF) The IR kind a body op with a `bubble` set needs (realise.mjs KINDS_FORMAT2, IrStale.KINDS_FORMAT2): a lift's bubble columns. */
+export const BUBBLE_KIND = 'bubbleColumns';
+/** (7a LF) The bubble column states a body cell may be written as (26.3: drag=false carries up, drag=true down). */
+export const BUBBLE_STATES = Object.freeze(['minecraft:bubble_column[drag=false]', 'minecraft:bubble_column[drag=true]']);
 /** (6c HY) The op members that make a fluid op a course's (any of them non-empty: the IR requires `courses`). */
 export const COURSE_MEMBERS = Object.freeze(['after', 'lining', 'grate']);
 
@@ -275,8 +287,9 @@ function cellsOf(list, what, claim) {
  *   body's own grown box, else the own box is),
  *   _unsafe.noLiningCell: true | [x, y, z] (that lining cell left unwritten, still declared), _unsafe.after: [ids] (the op's `after`
  *   as given, the dependency order broken: M25:order; in game the head is written first).
+ * (7a LF, additive) opts also take: bubble: [{drag: false | true, cells: [[x, y, z]]}] (body cells written as bubble columns; water only).
  * Returns the body record: {id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks, path} (HY:
- * plus lining, after, planJoins, grate).
+ * plus lining, after, planJoins, grate; LF: bubble).
  */
 export function fluidBody(r, cellsIn, opts = {}) {
   const { id, part = null, kind = 'pond', fluid = 'water', shellRole = 'structure', breach = true, _unsafe = null } = opts;
@@ -320,6 +333,17 @@ export function fluidBody(r, cellsIn, opts = {}) {
   else if (Array.isArray(opts.ice)) ice = cellsOf(opts.ice, 'ice', claim).filter((c) => own.has(k3(...c)));
   if (ice.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water is capped with ice`);
   for (const g of grate) if (!own.has(k3(...g))) throw new Error(`fluidBody ${id}: grate cell ${g.join(', ')} is not a cell of the body`);
+  // ((7a LF) the bubble columns: body cells, water only, one state each)
+  const bubble = [];
+  for (const b of Array.isArray(opts.bubble) ? opts.bubble : []) {
+    const state = BUBBLE_STATES[b?.drag ? 1 : 0];
+    for (const c of cellsOf(b?.cells ?? [], 'bubble', claim)) {
+      if (!own.has(k3(...c))) throw new Error(`fluidBody ${id}: bubble cell ${c.join(', ')} is not a cell of the body`);
+      bubble.push([c[0], c[1], c[2], state]);
+    }
+  }
+  if (bubble.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water makes a bubble column`);
+  if (new Set(bubble.map((c) => k3(c[0], c[1], c[2]))).size !== bubble.length) throw new Error(`fluidBody ${id}: a bubble cell is listed twice`);
   if (grate.length && fluid !== 'water') throw new Error(`fluidBody ${id}: only water stands behind a grate`);
   // ((6c F3-c, §3.4) the coral parts inside this body: their cells are the body's own `decor` set, grown before the flow is simulated;
   // one coral's cells are never another's; `_unsafe.coralOtherPart` writes a coral's cells as its own part's op instead (M25:clear))
@@ -415,6 +439,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
   if (opAfter.length) op.after = opAfter;
   if (lining.length) op.lining = toRuns(lining);
   if (grate.length) op.grate = toRuns(grate);
+  // ((7a LF) the bubble set, only when non-empty)
+  if (bubble.length) op.bubble = decorRuns(bubble);
   // ((6c F3-c) the decor set, only when non-empty)
   const decorCells = corals.filter((c) => !c.other).flatMap((c) => c.gen.decor);
   if (decorCells.length) op.decor = decorRuns(decorCells);
@@ -427,8 +453,8 @@ export function fluidBody(r, cellsIn, opts = {}) {
   const skip = planJoins.length ? [...spill, ...joins, ...planJoins.flatMap((j) => j.cells)] : [...spill, ...joins];
   const guardRuns = volume ? toRuns(bufferOf(cells, wall, skip, 2).concat(wall, joins)) : null;
   const rec = { id, part, kind, fluid, level, cells, shell, spill, joins, watch, ice, predicted, settleTicks: op.settleTicks, path: b.path, findings: sim.findings, raised, volume, volumeState, volumeCells: vcells, guardRuns,
-    lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary) };
-  (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState, ...(decorCells.length ? { decor: decorCells.length } : {}) });
+    lining, after: opAfter, planJoins, grate, decor: decorCells.map((c) => [c[0], c[1], c[2]]), corals: corals.map(coralSummary), ...(bubble.length ? { bubble: bubble.map((c) => [...c]) } : {}) };
+  (r.meta.waters ??= []).push({ id, part, kind, fluid, level, cells: cells.length, spill: spill.length, ice: ice.length, settleTicks: op.settleTicks, shell: shell.length, watch: watch.length, raised, volume: volumeState, ...(decorCells.length ? { decor: decorCells.length } : {}), ...(bubble.length ? { bubble: bubble.length } : {}) });
   (r._fluidBodies ??= []).push(rec);
   return rec;
 }

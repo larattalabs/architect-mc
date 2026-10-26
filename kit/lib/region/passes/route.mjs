@@ -71,7 +71,8 @@ const isInt = Number.isInteger;
  *   blocks(state) -> Uint8Array | null      cells every edge treats as hard obstacles (the wall cells), crossed only by a move
  *   expand(state, S)                        relaxes the move's candidates from an expanded state (S below)
  *   cells(state, m) -> {cells, data}        the path cells of a move after its start cell ([[x, y, z]]), and the segment's data
- *   commit(state, env, edgeOut, moves, lat) after an edge routes (the gate move opens its gates for the later edges)
+ *   commit(state, env, edgeOut, moves, lat) after an edge routes (the gate move opens its gates for the later edges); (7a LF) true
+ *                                           when the row's blocks changed (re-read for the later edges)
  *   prune(state, from, to) -> note | null   (optional) before an edge's search: a reason no route can exist (a sealed wall between its
  *                                           ends: the edge fails NO_ROUTE at once, instead of spending the node budget)
  *   fail?(state, edgeOut, inS) -> bool      (K1b, optional) an edge that found no route: the row names why (sets edgeOut.failed);
@@ -930,7 +931,14 @@ export function routePass(survey, volumes, intent) {
         if (kind >= 5) ms.push({ code: kind, i0: ck % W, j0: Math.floor(ck / W), dx: DIRS[h][0], dz: DIRS[h][1], n: Math.max(Math.abs((k % W) - (ck % W)), Math.abs(Math.floor(k / W) - Math.floor(ck / W))), y0: cy, y1: y, arg: a });
         ck = k; cy = y;
       }
-      for (const x of sp) x.m.commit(x.st, env, edgeOut, ms, { lo: sctx.latLo, hi: sctx.latHi });
+      // ((7a LF) a row whose commit answers true changed its blocks (a routed lift's tower is hard for every later edge): re-read them;
+      // every other row's commit answers nothing, so the pass is as before)
+      let reblock = false;
+      for (const x of sp) if (x.m.commit(x.st, env, edgeOut, ms, { lo: sctx.latLo, hi: sctx.latHi }) === true) reblock = true;
+      if (reblock) {
+        specialBlocks = null;
+        for (const x of special) { const b = x.m.blocks(x.st); if (b) { specialBlocks ??= new Uint8Array(n); for (let k = 0; k < n; k++) specialBlocks[k] |= b[k]; } }
+      }
     }
   }
   out.routed = out.edges.filter((x) => x.ok).length;
