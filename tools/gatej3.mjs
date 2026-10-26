@@ -221,11 +221,30 @@ steps.ingame = async () => {
   await shotOne('panel_from_toast_s4');
   await shot('panel_approved', async () => openOn(`architect_mc:design/${mid}`));
 
+  // ---- 6. Open (Enter) on a row: the panel closes and the row's link runs (the panel opened over the Architect screen, its parent)
+  const enterOn = async (row) => {
+    await call('dev.gui.scale', { scale: 2 });
+    await call('dev.screen', { open: null });
+    await call('dev.ui.open', { tab: 'status' });
+    await call('dev.j3.open', { row });
+    const sel = (await j3()).selectedRow;
+    const k2 = await call('dev.key', { key: 'enter' });
+    await sleep(500);
+    return { sel, k2 };
+  };
+  let en = await enterOn(`architect_mc:design/${did}`);
+  const lib = await call('dev.library.state');
+  check(en.sel === `architect_mc:design/${did}` && lib.screenTab === 'library' && lib.selected?.id === d1.entryId && !(await j3()).panel,
+    `6: Enter on the done design opens the Library on ${lib.selected?.id} (want ${d1.entryId})`, { sel: en.sel, tab: lib.screenTab, selected: lib.selected?.id });
+  en = await enterOn(`architect_mc:set/${gid}`);
+  ui = await call('dev.ui.state');
+  check(en.sel === `architect_mc:set/${gid}` && ui.tab === 'designs' && ui.selectedDesign === gid, `6: Enter on the set opens the Designs tab on ${ui.selectedDesign}`, { tab: ui.tab, sel: ui.selectedDesign });
+
   // nothing left waiting for later steps
   await call('dev.gui.scale', { scale: 2 });
   await call('dev.screen', { open: null });
   st = await j3();
-  check(st.needsYou === 0, `6: nothing waits at the end (needsYou ${st.needsYou})`, st.pill);
+  check(st.needsYou === 0, `7: nothing waits at the end (needsYou ${st.needsYou})`, st.pill);
   data.shots = shots.map((s) => path.basename(s));
   return data;
 };

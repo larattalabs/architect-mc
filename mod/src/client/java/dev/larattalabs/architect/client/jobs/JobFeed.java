@@ -152,12 +152,13 @@ public final class JobFeed {
 			case "cancel_design" -> () -> Sidecar.designCancel(a.id());
 			case "cancel_set" -> () -> SetFeature.cancelGroup(a.id());
 			case "cancel_bible" -> () -> SetFeature.cancelBible(a.id());
-			case "raise_set" -> () -> SetFeature.extendGroup(a.id(), a.usd()).thenRun(() -> {
+			// group.extend sets the budget only: a set paused at its budget also needs group.resume (on the client thread, after the ack)
+			case "raise_set" -> () -> SetFeature.extendGroup(a.id(), a.usd()).thenRun(() -> Minecraft.getInstance().execute(() -> {
 				JsonObject g = Sidecar.state().group(a.id());
 				if (g != null && Wire4b.group(g).status() == Group.Status.PAUSED_BUDGET) {
 					SetFeature.resumeGroup(a.id());
 				}
-			});
+			}));
 			default -> () -> {
 			};
 		};

@@ -1191,7 +1191,7 @@ public final class ArchitectScreen extends Screen {
 		UiBits.dotPill(g, font, fam, pill, cx + cw - ow, cy - 1, UiBits.ink());
 		// (J3) the Jobs & spend panel, left of the helper pill: "Jobs (K)", with how many wait for the player
 		int waiting = dev.larattalabs.labui.ui.JobBoardModel.needsYouCount(dev.larattalabs.labui.client.jobs.JobBoard.model().rows());
-		String jl = "Jobs" + (waiting > 0 ? " · " + waiting + " need you" : "") + " (" + dev.larattalabs.labui.client.jobs.JobBoard.keyLabel() + ")";
+		String jl = "Jobs" + (waiting > 0 ? " · " + waiting + (waiting == 1 ? " needs you" : " need you") : "") + " (" + dev.larattalabs.labui.client.jobs.JobBoard.keyLabel() + ")";
 		int jw = font.width(jl) + 12;
 		int jx = cx + cw - ow - 6 - jw;
 		Hit jh = new Hit("header:jobs", jl, jx, cy - 3, jw, 13, true, waiting > 0, () -> dev.larattalabs.labui.client.jobs.JobBoard.open(null));
