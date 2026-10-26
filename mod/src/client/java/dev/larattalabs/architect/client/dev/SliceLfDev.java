@@ -23,6 +23,30 @@ public final class SliceLfDev {
 	}
 
 	public static void init() {
+		DevBridge.register("dev.lift.spawnRule", 60_000, "{x, y, z, tries?: 400} - (7a LF) vanilla's drowned spawn rules at a cell (its biome, its block light): "
+			+ "SpawnPlacements.isSpawnPositionOk and checkSpawnRules(DROWNED, NATURAL) over `tries` random draws -> {placementOk, passed, tries, light, "
+			+ "biome}", (req, mc) -> {
+				int x = req.get("x").getAsInt(), y = req.get("y").getAsInt(), z = req.get("z").getAsInt();
+				int tries = req.has("tries") ? req.get("tries").getAsInt() : 400;
+				return ServerTasks.callOnServer((server) -> {
+					net.minecraft.server.level.ServerLevel level = server.overworld();
+					BlockPos p = new BlockPos(x, y, z);
+					JsonObject o = new JsonObject();
+					o.addProperty("placementOk", net.minecraft.world.entity.SpawnPlacements.isSpawnPositionOk(net.minecraft.world.entity.EntityTypes.DROWNED, level, p));
+					net.minecraft.util.RandomSource r = net.minecraft.util.RandomSource.create(7L);
+					int passed = 0;
+					for (int i = 0; i < tries; i++) {
+						if (net.minecraft.world.entity.SpawnPlacements.checkSpawnRules(net.minecraft.world.entity.EntityTypes.DROWNED, level, net.minecraft.world.entity.EntitySpawnReason.NATURAL, p, r)) {
+							passed++;
+						}
+					}
+					o.addProperty("passed", passed);
+					o.addProperty("tries", tries);
+					o.addProperty("light", level.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, p));
+					o.addProperty("biome", level.getBiome(p).unwrapKey().map(k -> k.identifier().toString()).orElse("?"));
+					return o;
+				});
+			});
 		DevBridge.register("dev.lift.ride", 120_000, "{x, z, y0, yT, drag (false: up over soul sand, true: down over magma), face: [dx, dz] (toward "
 			+ "the face), exit: [x, y, z] (feet: the top walk cell for an up ride, the approach for a down ride), doors?: [[x, y, z]] (a down ride's "
 			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column by LivingEntity.travel and applyEffectsFromBlocks -> {reached, "
