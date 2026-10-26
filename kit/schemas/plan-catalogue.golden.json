@@ -374,10 +374,32 @@
   },
   {
    "id": "connector.rock_stair",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     2,
+     48
+    ],
+    "width": [
+     1,
+     3
+    ],
+    "height": [
+     2,
+     4
+    ],
+    "landing": [
+     4,
+     12
+    ],
+    "cover": 2,
+    "fluidBuffer": 2,
+    "approach": 32,
+    "volume": true
+   },
+   "note": "RK: a straight stair flight carved into rising ground, open where the ground over it is thin, bored where it is thick, lined where soil or sand shows, lit; one flight per run (a route chains runs with walks); every tread on site-solid ground (else ANCHOR: a built stair is connector.stair); needs a frozen volume (load as for tunnels)."
   },
   {
    "id": "connector.switchback",

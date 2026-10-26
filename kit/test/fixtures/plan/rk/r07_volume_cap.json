@@ -1,0 +1,117 @@
+{
+  "about": "ends 220 apart (approach 32) with a peak at y 300 between: the corridor is over 4,000,000 cells: incomplete VOLUME (cap edgeCells), never asked",
+  "on": "flat",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1095,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 65
+      },
+      {
+        "x0": 1096,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 66
+      },
+      {
+        "x0": 1097,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 67
+      },
+      {
+        "x0": 1098,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 68
+      },
+      {
+        "x0": 1099,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 69
+      },
+      {
+        "x0": 1100,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 70
+      },
+      {
+        "x0": 1101,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 71
+      },
+      {
+        "x0": 1102,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 72
+      },
+      {
+        "x0": 1103,
+        "z0": 2000,
+        "x1": 1239,
+        "z1": 2159,
+        "y": 84
+      },
+      {
+        "x0": 1150,
+        "z0": 2070,
+        "x1": 1152,
+        "z1": 2090,
+        "y": 300
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1010,
+      65,
+      2080
+    ],
+    "top": [
+      1230,
+      85,
+      2080
+    ]
+  },
+  "volume": {},
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flight",
+        "kind": "rock_stair",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "movers": [
+          "player",
+          "villager"
+        ],
+        "approach": 32
+      }
+    ]
+  },
+  "expect": {
+    "part": "flight",
+    "class": "incomplete",
+    "code": "VOLUME",
+    "cap": "edgeCells"
+  }
+}
