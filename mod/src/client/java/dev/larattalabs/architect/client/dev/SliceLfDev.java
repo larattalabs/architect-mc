@@ -161,7 +161,7 @@ public final class SliceLfDev {
 						for (int k = 0; k < 200 && reached && !exited; k++) {
 							player.setYRot(yaw);
 							player.setYHeadRot(yaw);
-							step(player, 1f, !drag && player.isInWater()); // (an up rider swims up out of the column and steps onto the ledge; a down rider walks out)
+							step(player, 1f, !drag && player.isInWater() || player.horizontalCollision); // (an up rider swims up out of the column and steps onto the ledge; a down rider walks out; either jumps a step it meets, as a player does)
 							// (landed on the exit's level: standing on the ground in the exit cell or the next one or two along the heading, the lane
 							// the same: a rider launched over the rim lands a step or two in from the top walk cell)
 							int hx = (int) Math.signum(Math.round(-Math.sin(Math.toRadians(yaw)))), hz = (int) Math.signum(Math.round(Math.cos(Math.toRadians(yaw))));
