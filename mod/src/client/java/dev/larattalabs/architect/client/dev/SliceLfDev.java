@@ -179,7 +179,7 @@ public final class SliceLfDev {
 						for (int k = 0; k < 200 && reached && !exited; k++) {
 							player.setYRot(yaw);
 							player.setYHeadRot(yaw);
-							step(player, 1f, !drag); // (an up rider swims up and steps off onto the ledge; a down rider walks out)
+							step(player, 1f, !drag && player.isInWater()); // (an up rider swims up out of the column and steps onto the ledge; a down rider walks out)
 							// (in the exit cell, standing on its block or within a half step of it)
 							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) <= 1.0;
 							if (k % 5 == 0 && path.size() < 40) {
