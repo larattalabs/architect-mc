@@ -257,9 +257,9 @@ async function nav(meta, ir) {
 /** The P2 SMOKE row: realised == virtual for the walls (the lots' own blocks are their designs'). */
 async function smoke(tag, planDir, after, before) {
   const RV = await import('./lib/realised-virtual.mjs');
-  const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: false });
+  const rv = await RV.realisedVsVirtual(planDir, after, before, { lots: true });
   check(RV.realisedOk(rv, ['walls'], { strict: true }).pass && (rv.byKind.walls?.differ ?? 0) === 0 && (rv.byKind.walls?.written ?? 0) > 0, `item 4/P2 SMOKE (${tag}): realised == virtual per writer kind, ${rv.differ} of ${rv.written} differ (walls ${rv.byKind.walls?.differ ?? '?'} of ${rv.byKind.walls?.written ?? 0}): ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`);
-  return { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
+  return { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first, lanterns: rv.lanterns };
 }
 
 /** realiseApproved, expecting a refusal: {refused, message}. */
@@ -366,20 +366,32 @@ steps.survival = async () => {
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
   out.billsDiffer = differ;
   check(differ.length === 0, `survival: the check's cost.survival.bom against the targets' bills put down, per part: ${differ.length ? differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ') : 'equal, item for item (BOM exact)'}`, bills);
-  // the gatehouse's site never bills a passage cell: its target's bill is its design's blocks less the ones its passage drops (the walled
-  // design's blocks there)
+  // the gatehouse's site never bills, queues, writes or owns a passage cell: its ext reports the blocks the passage drops (the walled
+  // design's blocks there), its queue holds none of them (its bill is its design less them), its journal entries none
   const gl = lots0.find((l) => l.id === 'gatehouse_1');
-  const tgt = (rs.targets ?? []).find((t) => t.part === 'lot:gatehouse_1' || t.lot === 'gatehouse_1');
-  const { bomOf } = await imp('lib/connectors/bom.mjs');
   const K = await kitK();
   const { resolveRoles } = await imp('lib/region/plan.mjs');
   const bp = D.gatehouseDesign(K, 'probe', gl, resolveRoles({}), { openPassage: false });
-  const pass = new Set(D.frameOf(gl).passage.map(([u, y, v]) => `${u},${y + 1},${v}`));
-  const stateOf = (c) => (Object.keys(c.state.props).length ? `${c.state.name}[${Object.entries(c.state.props).map(([a, b]) => `${a}=${b}`).join(',')}]` : c.state.name);
-  const kept = [...bp.cells].filter(([k, c]) => !pass.has(k) && c.state.name !== 'minecraft:air').map(([, c]) => stateOf(c));
-  const dropped = [...bp.cells].filter(([k, c]) => pass.has(k) && c.state.name !== 'minecraft:air').length;
-  out.gatehouse = { target: tgt ? { part: tgt.part, bom: tgt.bom } : null, dropped, want: bomOf(kept) };
-  check(!!tgt && dropped > 0 && G.same(tgt.bom, out.gatehouse.want), `survival: the gatehouse's site bills its design less the ${dropped} blocks its passage drops (never billed, written or owned): ${tgt ? json(G.minus(tgt.bom, out.gatehouse.want)) : 'no target'} off`, out.gatehouse);
+  const passF = new Set(D.frameOf(gl).passage.map(([u, y, v]) => `${u},${y + 1},${v}`));
+  const dropped = [...bp.cells].filter(([k, c]) => passF.has(k) && c.state.name !== 'minecraft:air').length;
+  const kept = [...bp.cells].filter(([k, c]) => !passF.has(k) && c.state.name !== 'minecraft:air').length;
+  const passW = runsOf(gl.onWall.passage.cells);
+  const passSet = new Set(passW.map((c) => c.join(',')));
+  const sid = (st.view.lots ?? []).find((l) => l.id === 'gatehouse_1')?.siteId ?? null;
+  const all = await call('dev.sites.state', {}, 30_000);
+  const site = [...(all.sites ?? []), ...(all.placed ?? [])].find((q) => q.id === sid) ?? null;
+  const queued = sid ? await call('dev.site.cells', { site: sid }, 60_000).catch(() => ({})) : {};
+  const qKeys = Object.keys(queued).filter((k) => /^-?\d+,-?\d+,-?\d+$/.test(k));
+  const inQueue = qKeys.filter((k) => passSet.has(k)).length;
+  let owned = 0;
+  for (const c of passW.filter((_, k) => k % 9 === 0)) {
+    const sj = await call('dev.journal.at', { x: c[0], y: c[1], z: c[2] }, 30_000).catch(() => ({}));
+    if ((sj.stack ?? sj.entries ?? []).some((e) => e.site === sid)) owned++;
+  }
+  out.gatehouse = { site: sid, dropped, kept, reported: site?.ext?.['architect_mc:passageDropped'] ?? null, queued: qKeys.length, inQueue, ownedSampled: owned };
+  check(!!sid && dropped > 0 && out.gatehouse.reported === dropped, `survival: the gatehouse's site reports the ${dropped} design blocks its passage drops (ext architect_mc:passageDropped ${out.gatehouse.reported})`, out.gatehouse);
+  check(!!sid && inQueue === 0 && (qKeys.length === 0 || qKeys.length === kept), `survival: its site never queues (so never bills or writes) a passage cell: ${inQueue} of its ${qKeys.length} queued cells (its design less the dropped: ${kept})`, out.gatehouse);
+  check(!!sid && owned === 0, `survival: no sampled passage cell is in its site's journal entries (${owned}): undo and removal never touch the passage`, out.gatehouse);
   const d = await G.twinDiff(ctx, T.box, T.file, crateAt);
   out.twin = d;
   check(d.mismatches === 0, `survival: the build equals its INSTANT twin cell for cell (the crates aside; the passage open in both): ${d.mismatches} differ`, d.list);

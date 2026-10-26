@@ -98,6 +98,7 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
       if (dark.length) findings.push(finding('M5', part, stage, dark.length, dark, `wall ${w.id}: ${dark.length} dark spawnable cell(s) on its gates' walks or its top`));
     }
     // ---- M8:wall: the top over the foot and over the standable ground within 2
+    const lotCol = w.lots?.length ? new Set(w.lots.flatMap((q) => { const o = []; for (let lx = q.box[0]; lx <= q.box[3]; lx++) for (let lz = q.box[2]; lz <= q.box[5]; lz++) o.push(key(lx, lz)); return o; })) : null;
     const low = [], bypass = [];
     let footMin = Infinity, overMin = Infinity;
     for (const [x, z, T] of w.cells) {
@@ -112,6 +113,8 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
         const nx = x + dx, nz = z + dz;
         if (wallCell.has(key(nx, nz)) && !gateCell.has(key(nx, nz))) continue;
         if (!vw.inClaim(nx, nz)) continue;
+        // ((7a K3) a lot on the wall's line is the wall there: its building's floors are no ground beside the wall)
+        if (lotCol?.has(key(nx, nz))) continue;
         const s = standY(nx, nz, top + 2, true);
         if (s === null) continue;
         const sH2 = 2 * s + Math.round(2 * (P.top[vw.get(nx, s, nz)] ?? 1));
