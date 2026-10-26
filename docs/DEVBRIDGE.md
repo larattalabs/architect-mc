@@ -664,3 +664,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   the block after its capture, before its write). `dev.journal.killAt` takes RV1 (the manifest written, nothing accepted), RV2 (the effective
   snapshot written, region.json not), RV3 (accepted, nothing installed), RV4 (installed, nothing written). `dev.region.realised {layer: rid}`
   reads a revision's records.
+
+- **2026-10-26 (6d slice RV, RV-c and RV-d):** new `dev.rv.undo {region, toPosition, actor?}` (`Regions.undoRevision` -> its
+  `RemoveResult` as JSON, `seconds`; a refusal `{refused: "<REASON>: ..."}`), `dev.rv.undoFail {on?}` (TEST: the next suffix stage undo
+  answers removed false, so the undo stays UNDOING) and `dev.rv.siteRemove {site, force?, requester?}` (API `Sites.remove`: a lot removed alone). `dev.rv.state`
+  gains each site's ext (`siteExt`). `dev.journal.killAt` takes RVU1 (the undo's manifest and region.json saved, nothing drained), RVU2
+  (drained, nothing removed) and RVU3 (every suffix stage removed, the revisions not yet UNDONE); the 4e points K6 and GW fire inside the
+  undo's stage removals too.

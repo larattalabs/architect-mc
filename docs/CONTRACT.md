@@ -25798,7 +25798,7 @@ version set (the coordinator assigns one at merge).
 - The Status tab's note first sat in the right column, which is full at GUI scale 4 (off-screen in `status_s4`). Moved to the left
   column. Run `20261026-043443-change` at 85706862: **PASS 4/4** (unit-mod 947, safety-ingame 38, ui2b-ingame 31, u3-ingame 40).
 
-## Phase 6d slice RV, lanes RV-a and RV-b as built (branch `slice/RV`, 2026-10-26, DEV MODE; RV-c and RV-d to come)
+## Phase 6d slice RV, lanes RV-a to RV-d as built (branch `slice/RV`, 2026-10-26, DEV MODE)
 
 Built against "Phase 6d slice RV" (FROZEN 2026-10-20) and §13's split: RV-a (the kit) and RV-b (the mod foundation) on one branch; RV-c (undo
 and fluids) and RV-d (readers, realiseApproved's branch, lots and refills, survival) follow on the interface frozen here. Versions are `NEXT`.
@@ -25820,3 +25820,16 @@ The resume notes, Steward's RC note, the exact API, the frozen interface, the tw
 - **Sidecar:** `region.plan`'s `revision` member; features `region.revise`, `plan.revision`.
 - **Gate:** `tools/gate6drv.mjs` (`rv-unit`, `rv-ingame`, `rv-crash`; chain `6drv`, impact rule "6d RV"). Evidence: HANDOFF-RV.md "What was
   run".
+- **Mod (RV-c):** `Revisions.undo` (Regions.undoRevision, §4.4): the preflight (busy, the target, joined, a player, blockers, survival
+  building), the manifest `rev/op-<opId>.json`, the phases drain -> remove -> removed -> done over ticks (`undoTick`), kill points
+  RVU1-RVU3, a stopped stage leaving the region UNDOING (resumed by a same-target call or a world start), stages a stop brought back
+  undone again (`Groups.standingAgain`). Added bodies: a revision's own fluids record (`RegionFluids`, `<region>#rv<rid>`,
+  `fluids-rv<rid>.json`), drained holder-aware at its undo and the region's removal.
+- **Mod (RV-d):** the readers on the effective IR (beside data, reach inputs, the seam, the town checks, `architect_mc:land` recomputed when
+  the head moves); lots removed alone (`removed`, `removedAt`) and refills (realise, install, undo back to the prior state); survival
+  revisions (the mode, `survival_unfinished`, TileCheck's `survival_paid`); checkPlan's revision branch and realiseApproved's (PlanChecks:
+  the parent artifact must be the head's, else `PLAN_STALE` `NEEDS_REPAIR parent_moved`); revision roads; a refused plan gives its rid back.
+  The verifier's three RV-b nits fixed (recover's end, the resumed tile's race check, the gravity exemption's scope).
+- **Shared fix:** `Groups`' whole-group removal skips members with no standing record wherever they stand, and a pending record whose
+  restore was written this session is not "unfinished".
+- **Gate (RV-c/RV-d):** `rv-undo`, `rv-plan0`, `rv-undo-crash` in chain `6drv`. Steward's RC note and the run ids: HANDOFF-RV.md.

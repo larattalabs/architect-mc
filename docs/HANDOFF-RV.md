@@ -1,4 +1,4 @@
-# 6d RV (additive revisions): RV-a and RV-b handoff, and the RC note for Steward
+# 6d RV (additive revisions): RV-a, RV-b, RV-c and RV-d handoff, and the RC notes for Steward
 
 Branch `slice/RV` off `origin/main` (e8c0c2dc, then c5df0fea: Steward's GR review). The binding text is docs/CONTRACT.md "Phase 6d slice
 RV" (FROZEN 2026-10-20) with its §13 split: this branch is **RV-a** (the kit) and **RV-b** (the mod foundation). RV-c (undo and fluids) and
@@ -6,7 +6,8 @@ RV-d (readers, realiseApproved's branch, lots and refills, survival) come after 
 placeholders (no constant moved). $0: sim and stub only. Ports 8960-8969, run dir `../architect-mc-RV-run`, runs in
 `artifacts/gate-runs-RV/`.
 
-**Status: stopped before merging, as asked. RV changes the API Steward calls, so it needs Steward's RC (S-RV-10, shared with GR's).**
+**Status: stopped before merging, as asked. RV-a/b passed Steward's RC at f59b132a (free 43, stub 85 with its revisionFlow). RV-c and
+RV-d are on the same branch now (section "RC note for RV-c and RV-d" below): they need Steward's RC too.**
 
 ## RC note for Steward (relay)
 
@@ -42,7 +43,7 @@ What ships in RV-a + RV-b, and what Steward can call now:
 7. **Keys:** your scheme is recorded in the contract (no `dplan`/`dgrow` keys anywhere now): each build plans and realises under
    `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check), with ext `steward_mc:district=<id>` and
    `steward_mc:build=<buildId>`; a growth is an ordinary build under the same scheme.
-8. **Not in this build** (refused, nothing written, so you can code against the final shape now): an added fluid body is planned but its
+8. **Not in RV-a/b** (superseded: RV-c and RV-d build all of these, see below; refused, nothing written, so you can code against the final shape now): an added fluid body is planned but its
    realise refuses `NOT_ALLOWED` until RV-c; refills and survival revisions refuse `NOT_ALLOWED` until RV-d; `undoRevision` throws
    `UnsupportedOperationException` (the API default) until RV-c; plan/0's revision mode answers in the kit (keep, add, refill, grow, change)
    but `checkPlan` does not send it the parent yet (RV-d), so a plan with `revision.parentArtifact` is checked as today's.
@@ -72,6 +73,102 @@ candidates are never in the view). Journal stages are `rv<rid>:<stage>`; the rev
 Sidecar: `region.plan` gains `revision` (the kit's `--revision`); features `region.revise`, `plan.revision`.
 Catalogue (`sinceApi: NEXT`, appended): `revision.keep`, `revision.add`, `revision.refill` supported; `revision.grow` (until GR) and
 `revision.change` (until RV2) reserved. plan/0's lot spec gains the optional `refill: true`.
+
+## RC note for RV-c and RV-d (relay)
+
+Everything below is on `slice/RV` after the RV-a/b RC (merged with main at 87ed021e, RK). The API is unchanged from RV-a/b's (no new
+member); what changed is behaviour behind it.
+
+**From Steward's RC of RV-a/b:**
+
+- **A refusal at plan takes no rid (settled: not consumed).** A rid is taken when the plan starts (the revision's part ids and seed
+  need it), and a plan that is refused or fails gives it back: the region's `nextRid` steps back when no later plan took one meanwhile.
+  So the observation (a `NOT_ALLOWED [theme]` refusal making the accepted revision rid 2) no longer happens. Gaps remain possible and are
+  harmless: a candidate that planned but was never realised keeps its rid (two candidates on one parent need two), and a failure after a
+  later plan took a rid leaves its gap. Rids stay monotonic and are never reused (an undone revision keeps its rid; the next plan takes a
+  new one). Test: rv-ingame plans six refusals (lot, street, theme, refill, empty, held) and then a pond candidate, and checks
+  `nextRid == 1` and the pond's rid is 1.
+- **Refusals over a lot and over a street piece** are covered in rv-ingame (they were already, in item 6): a write in a standing lot's
+  box refuses `COVERED [lot]`, a write on the town's street refuses `OVERLAP [road|path]`, nothing written in either case.
+
+**What RV-c and RV-d add, and what Steward can call now:**
+
+1. **`undoRevision(regionId, toPosition, actor)`** (RV-c) undoes every revision above `toPosition` in one recoverable operation, last
+   first. It answers a `RemoveResult` (`removed`, `blockers`, `refund`, `restored`, `kept`, `handedDown`).
+   - **Preflight, nothing written on a refusal:**
+     - `toPosition` not below the head: `NOT_ALLOWED`.
+     - The region busy: `OVERLAP_BUSY` (a call with the same target joins the running undo instead).
+     - A beside region joined to what the suffix added (its IR names an `rv<rid>_` id, or its reach crosses a suffix site): `NOT_ALLOWED`
+       (joined).
+     - A player in a suffix site's box: `OCCUPIED`.
+     - A suffix site's removal blockers (the owner's things in a lot): `NOT_ALLOWED` (blockers).
+     - A survival target still building: `NOT_ALLOWED` (`survival_building`).
+   - **Then, saved at each step:** the manifest `rev/op-<opId>.json`; `busy` is `undoing <opId>`. The suffix's added bodies drain
+     (holder-aware, as a region removal's). Each suffix stage (`rv<rid>:<stage>`) is undone top first, keeping covered cells
+     (`Covered.KEEP`): a Steward site over a revision cell is handed the cell; a player's block is kept and reported in `kept`.
+   - **Afterwards:**
+     - The revisions read `UNDONE`, and the head is the revision at `toPosition` (0: the realised plan).
+     - The lots and stages they added are gone, and refilled lots are back to their exact earlier state (state, site id, entry).
+     - `busy` is cleared, and the readers move with the head.
+     - An undone revision's plan/0 artifact is tombstoned (unless pinned).
+   - **If a stage's undo stops** (a player stays, a blocker appears), the undo answers `removed: false` with the reason. The region
+     stays `UNDOING` and busy, with `RevisionView.waiting` set. A same-target call or a world start resumes it; any other revision or
+     undo refuses `OVERLAP_BUSY`.
+2. **Added fluid bodies** (RV-c) realise: a pond added by a revision gets its fluids stage and settles. The bodies are their own record
+   (`fluids-rv<rid>.json`, keyed `<region>#rv<rid>`) and show in the region's fluid report with their `rid`. They drain holder-aware at
+   the revision's undo and at the region's removal.
+3. **Lots removed alone and refills** (RV-d):
+   - **Removing a lot's site** (`Sites.remove`) marks the lot `removed` (`LotState.state`), keeping its old site id; its pad stands.
+   - **A refill** (`spec.refill: [lotId]`, or plan/0's lot `refill: true`) builds a removed lot (or a pad) again as a new revision;
+     `LotState.revision` names it.
+   - **Undoing the refill** puts the lot back to `removed` with its old site id.
+   - **Refusals:** a standing lot refuses a refill `NOT_ALLOWED`, and an irrigated lot refuses `NOT_ALLOWED [irrigated]`.
+4. **plan/0 revisions through `checkPlan` and `realiseApproved`** (RV-d): a plan whose `revision.parentArtifact` names the region's head
+   artifact is checked against the region: the town as standing, new parts as added. Its artifact carries `revisionOf`, `dirty`,
+   `historySha` and `inputs.held`.
+   - **`realiseApproved`** of that artifact realises it as the next revision, answering the region's own id.
+   - **A check on an artifact that isn't the head** answers `PLAN_STALE` with `NEEDS_REPAIR parent_moved` (naming the head's artifact).
+   - **A changed zone** answers `unsupported revision.change`.
+5. **Survival revisions** (RV-d) are additive, in the region's own mode.
+   - **Planned in the other mode:** a revision planned in creative and realised in survival (or the reverse) refuses `NOT_ALLOWED`
+     (plan it again).
+   - **An unfinished survival target** of the region refuses `NOT_ALLOWED` (`survival_unfinished`).
+   - **A tile over a paid block the region built** refuses at its check (`survival_paid`).
+6. **Readers on the effective IR** (RV-d): the beside data, reach and hold inputs, the seam, the town checks and the land
+   (`architect_mc:land`) all read the head's effective IR. After an undo the land is recomputed from the older head, so **`land.outside`
+   shrinks** (your GR ask 2), and an undone revision's fluid record is forgotten.
+7. **Revision roads** (a revision's street extension) go through the same path as tiles: the same-tick race check, records at the
+   revision's layer, and the `architect_mc:revision` ext on the site.
+8. **`Regions.remove`** with revisions standing removes everything: E-flat 0 with three revisions (a mound and spire, a pond, a built lot).
+
+**The verifier's three nits from RV-a/b, fixed:**
+1. **`recover` ending PARTIAL when the batch and the end save were lost:** it now reads every item's outcome, so the revision ends
+   `PLACED` when everything placed. A revision whose batch is gone with nothing written is installed again.
+2. **No race check on a tile resumed mid-write:** a resumed tile's race check now reads the befores saved in its journal entry, so a
+   resumed tile is checked like a fresh one.
+3. **The gravity exemption's scope:** the exemption for a change over or under a written cell (`selfMoved`) is limited to gravity
+   blocks, so a player's change there now reads RACED.
+
+**Found and fixed on the way (shared code, for the coordinator):**
+- **Groups' whole-group removal:**
+  - It skipped only leading members with no record, so a member gone from the middle of the list (a stage undone earlier, a member
+    settled at a load) hit an NPE.
+  - It also refused when a member's restore had been written in this session but its pending record wasn't settled yet ("unfinished
+    restoration").
+  - Fix: members with no standing record now leave the list wherever they are; a pending record whose restore was written this session
+    no longer counts as unfinished.
+- **`Groups.standingAgain`:** if a stop loses an undone stage's writes, the load's sites check brings the members back ("it stands
+  again"). The undo now sees that and undoes those stages again; this is what made GW and RVU3 pass.
+
+**Not shown (each with its reason):**
+
+| Item | Why |
+|---|---|
+| Survival revisions in game | Implemented (the mode check, `survival_unfinished`, `survival_paid`), but the gate has no survival round for RV yet. It would need a survival town with a stockpile, which is the verifier's survival re-run. |
+| `land.outside` shrinking, in game | `readersMoved` recomputes `architect_mc:land` from the effective IR after every undo and realise. The gate's flat town has no district and no land ext to read, so the shrink is not shown in game; RV-d's undo is shown on the world and the artifact (rv-plan0, rv-undo). |
+| The undo preflight's `joined` and `survival_building` refusals | Not driven: no beside region was built on revision parts, and no survival round (above). |
+| Item 21 (the natural round), `rv_layers` over trees | The gate's worlds are flat. |
+| The depth limit (LAYER_DEPTH) | Not pre-checked; the journal's own limit applies at commit. |
 
 ## The interface frozen for RV-c, RV-d and GR (§13)
 
@@ -116,7 +213,7 @@ Catalogue (`sinceApi: NEXT`, appended): `revision.keep`, `revision.add`, `revisi
     round (RV-d) is where that shows.
 12. **planRevision's survey** reads generated chunks (`GENERATED_ONLY`), loaded or not; the frozen heights go over it.
 
-## Not shown on this branch (each with its reason)
+## Not shown in RV-a/b (each with its reason; RV-c/RV-d's rows are in their RC note above)
 
 | Item / row | Why not shown |
 |---|---|
@@ -169,3 +266,44 @@ placed (an `end()` save lost; conservative); a tile resumed mid-write after a re
 (it could read `ACCEPTED` while its batch placed).
 
 **Still to come:** Steward's RC (after RV-c/RV-d, or now for the shape, at the coordinator's call).
+
+### RV-c and RV-d: what was run ($0; DEV MODE)
+
+| Check | Where | Result |
+|---|---|---|
+| kit suite | `node --test kit/test/*.test.mjs` (after the merge of main) | **922/922** |
+| sidecar | `npm run check` | **784/784** (system-refs' compact plan/0 bound 96,000 -> 100,000: main measures 95,276 after RK; RV's catalogue entries and the lot's `refill` add 1,121, so 96,397) |
+| mod | `./gradlew build --offline` at c28b5875 | **BUILD SUCCESSFUL, 962 tests, 0 failures** |
+| instant lints | `tools/lint.mjs structure`, `look`; the water lint (`kit/lint/*.lint.mjs`); p3-lint (in the mod build) | structure 65/0, look 13/0, water 128/0 |
+| api-compat | vs the 0.47.0, 0.45.0 and 0.44.0 apitest jars; `--surface` vs the 0.47.0 mod jar | clean |
+| step-inputs | `node tools/step-inputs.mjs build` | unchanged |
+| **chain 6drv** | run `artifacts/gate-runs-RV/20261026-195843-6drv` at c28b5875, ports 8960/8961 | **PASS: rv-unit 4/0, rv-ingame 28/0, rv-crash 27/0, rv-undo 22/0, rv-plan0 10/0, rv-undo-crash 20/0** |
+
+- **rv-undo (items 7, 8, 14, 16, 19):**
+  - **Item 7:** the head undone gives the world just before it (0 cells different over claim + 8). An undo to the head's own position
+    refuses `NOT_ALLOWED`.
+  - **Item 7 with things in the way:** an undo to 0 in one operation, with a Steward site over a revision cell, a waterlogged stair over
+    a pond source and a player's glowstone. It hands down `{c8: 1, c9: 2}` and keeps 1 cell; after the Steward sites are removed, the
+    world before revision 1 differs by 0 cells.
+  - **Item 19:** the stair keeps its water; every other pond cell drained.
+  - **A new revision after the undo** gets rid 4 (never reused), and its undo is exact.
+  - **Item 14:** a lot removed alone reads `removed`. Its refill is revision 5; undoing the refill gives the lot back `removed` with
+    its old site id, the world as before. A standing lot refuses a refill.
+  - **Item 16:** a stopped undo stays `UNDOING`; while busy, other calls refuse `OVERLAP_BUSY`; the same-target call resumes it.
+  - **Item 8:** `Regions.remove` with three revisions standing: E-flat 0.
+- **rv-plan0 (item 4):**
+  - A town is checked and realised through checkPlan and realiseApproved.
+  - A revision plan (the town kept, a pond added) checks READY, with `revisionOf`, `dirty` and `historySha`. It realises as revision 1
+    (58 water cells).
+  - A check on the old parent answers `PLAN_STALE NEEDS_REPAIR parent_moved`; a changed zone answers `unsupported revision.change`.
+  - The undo gives the world as before, and the artifact is tombstoned. Removal: E-flat 0.
+- **rv-undo-crash (item 10's undo half):** kills at RVU1 (drain), RVU2 (remove), K6, GW (a member written, the next pending; no
+  autosave) and RVU3 (removed, not yet UNDONE). Each one: halted, restarted, resumed and finished at position 0 with both revisions
+  `UNDONE`, the world before revision 1 (0 cells different), then the region removed.
+
+Earlier runs, and what they found:
+- `20261026-190116-6drv`: the group removal's NPE and the "unfinished restoration" after an undo.
+- `20261026-193113-6drv`: GW left 131 cells and RVU3 left 1545 cells, because a stop lost an undone stage's writes and the sites check
+  brought the stage's members back while the undo went on (the `standingAgain` fix). It also showed rv-ingame still expecting the pond
+  refusal.
+- `20261026-192046-6drv` and `20261026-194931-6drv`: the fixed steps passing.
