@@ -158,5 +158,12 @@ Earlier runs (the fixes they found): `20261026-172944-6drv` (the gate's cell rea
 added). A recovery path for a batch lost before its save (RV4 with the async queue save) and planRevision's refusals as Reasons were fixed
 before the passing run.
 
-**Not yet done:** the gate-verifier's review of the diff and this evidence, with its re-run of rv-crash (crash recovery is strict in DEV
-MODE); Steward's RC (after RV-c/RV-d, or now for the shape, at the coordinator's call).
+**Gate-verifier (review + strict re-run of rv-crash): PASS.** Run `artifacts/gate-runs-RV-verify/20261026-181129-6drv` at bcde362a (ports
+8962/8963): rv-crash 27/0, every row as above; rv-a.test re-run 10/0. No real defects. It accepted the RG4+save control judgment (RP §6's
+PLACING leftover, "deferred to undo hardening B"), noting the comparison checks the count only (hardening: assert the cell is in the
+halted tile and its entry the PLACING one). Its nits, for RV-c: `recover` ends a revision whose batch is gone PARTIAL even if every item
+placed (an `end()` save lost; conservative); a tile resumed mid-write after a restart has no race check (`raceBefores` is transient);
+`selfMoved` also spares a player's change over or under a written cell. Fixed after the review: a resumed revision reads `PLACING` again
+(it could read `ACCEPTED` while its batch placed).
+
+**Still to come:** Steward's RC (after RV-c/RV-d, or now for the shape, at the coordinator's call).

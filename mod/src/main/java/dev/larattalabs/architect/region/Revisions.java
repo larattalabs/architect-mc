@@ -1076,7 +1076,9 @@ public final class Revisions {
 				continue;
 			}
 			if (rv.batchId != null && Batches.get(rv.batchId) != null) {
+				rv.state = "PLACING"; // (its install's save may have been lost after the batch's)
 				Architect.LOGGER.info("Region {}: revision {} resumes with its batch {}", rec.id, rid, rv.batchId);
+				RegionsImpl.save(l);
 				continue;
 			}
 			boolean found = false;
@@ -1087,6 +1089,7 @@ public final class Revisions {
 				}
 			}
 			if (found) {
+				rv.state = "PLACING";
 				RegionsImpl.save(l);
 				continue;
 			}
