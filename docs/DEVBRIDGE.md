@@ -641,3 +641,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   its last use, its tombstone, whether it waits in `discard-pending.json`), `dev.coa.clock {days}` (the retention clock's offset: last
   uses written and sweeps judged at now + days; 0 resets), `dev.coa.sweep` (the world-start sweeps now: keyed pins, then plans ->
   `{pinsEnded, plans}`) and `dev.coa.planByKey {owner?, opKey}` (`Regions.planByKey`, a use of the plan -> `{planId}`).
+
+- **2026-10-25 (slice UI-0.3, lab-ui 0.3.0 HUD zones):** new (`SliceUi03Dev`, client only) `dev.hud.zones {}` (lab-ui
+  `HudZones.json()`: each zone's `bounds`, its `slots` `{id, x, y, w, h, collapsed}`, `hidden`, `overflow`, `vanilla` `{bossBottom,
+  effectsBottom, toastsBottom, nowPlayingBottom}` and `registered`), `dev.ui03.regionHudPreview {planId?: string|null, tiles?, verdict?}`
+  (the region ghost's verdict panel with these words while no region ghost is shown; null planId: off) and `dev.ui03.toast {level?,
+  title, body, subject?, lines?}` (`Toasts.push(Spec)`). Architect's HUD pieces are zone elements now (`architect_mc:hud/placement`,
+  `hud/plot_marker`, `hud/massing_review` bottom centre; `hud/construction`, `hud/region_ghost` top centre; `hud/helper_progress` top
+  left); `dev.build.state`'s `hudRect` is the placement slot drawn last frame (as before).

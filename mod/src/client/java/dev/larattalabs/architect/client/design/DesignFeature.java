@@ -316,7 +316,8 @@ public final class DesignFeature {
 		if (d.raw().has("massing")) {
 			// (4c) a massing job: never a library entry; MassingReview shows it when its massing is installed
 			if (d.status() == DesignStatus.FAILED) {
-				Toasts.push(Toasts.Level.WARN, "Massing failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()), key, "designs");
+				Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Massing failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step())).hint(key,
+					"designs").bodyLines(3));
 			}
 			return;
 		}
@@ -327,14 +328,15 @@ public final class DesignFeature {
 			if (d.status() == DesignStatus.DONE) {
 				Toasts.push(Toasts.Level.INFO, "Critique ready: " + of, firstLine(d.step()), key, "library");
 			} else if (d.status() == DesignStatus.FAILED) {
-				Toasts.push(Toasts.Level.WARN, "Critique failed: " + of, firstLine(d.error() != null ? d.error() : d.step()), key, "designs");
+				Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Critique failed: " + of, firstLine(d.error() != null ? d.error() : d.step())).hint(key,
+					"designs").bodyLines(3));
 			}
 			return;
 		}
 		switch (d.status()) {
 			case DONE -> done(d, key);
-			case FAILED -> Toasts.push(Toasts.Level.WARN, "Design failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()), key,
-				"designs");
+			case FAILED -> Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Design failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()))
+				.hint(key, "designs").bodyLines(3));
 			default -> {
 			}
 		}
@@ -374,7 +376,8 @@ public final class DesignFeature {
 			}
 			lastReload = blueprintId + (loaded ? ": loaded" : ": NOT loaded");
 			if (!loaded) {
-				Toasts.push(Toasts.Level.WARN, "The new design did not load", blueprintId + ": " + String.join("; ", Blueprints.lastProblems()));
+				Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "The new design did not load", blueprintId + ": " + String.join("; ", Blueprints.lastProblems()))
+					.bodyLines(3));
 			}
 			return loaded;
 		});

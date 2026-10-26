@@ -10,8 +10,7 @@ import dev.larattalabs.labui.client.ui.Panels;
 import dev.larattalabs.labui.client.ui.TextUtil;
 import java.util.ArrayList;
 import java.util.List;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
-import net.minecraft.client.DeltaTracker;
+import dev.larattalabs.labui.client.hud.HudZones;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -29,29 +28,40 @@ import org.jspecify.annotations.Nullable;
  * <li>notes and the last status line;</li>
  * <li>the keys: one "? keys" hint, the full legend after "?" (or H).</li>
  * </ol>
- * Colours are {@link HudInk}'s (lab-ui tokens). After a placement (or a cancel) the last status line stays for a few seconds.
+ * Colours are {@link HudInk}'s (lab-ui on-dark tokens). After a placement (or a cancel) the last status line stays for a few seconds.
+ *
+ * <p>UI-0.3: a lab-ui {@link HudZones} element in {@code BOTTOM_CENTER} (the zone's floor is this panel's old place: 64 px above
+ * the bottom, dropping to just above the hotbar on a short screen, never over the crosshair). {@link #measure} builds the rows
+ * and fits them to that height ({@code HudFit}); {@link #draw} paints them at the slot. A fixed size: never hidden.
  */
-final class PlacementHud implements HudElement {
+final class PlacementHud implements HudZones.Element {
 	private static final long STATUS_MS = 8000;
 	private static final int LINE = 10;
 	private static final int CHIP_H = 11;
 
+	/** The rows measured this frame, drawn at the slot. */
+	private List<Row> measured = List.of();
+
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+	public HudZones.@Nullable Size measure(Font font, HudZones.Frame f, int zoneW) {
 		Minecraft mc = Minecraft.getInstance();
+		measured = List.of();
+		// lastRect stays the slot drawn last frame while the panel is shown: the top-centre pieces measure after this zone and
+		// SiteHud reads hudRect() (one line while the panel is up)
 		if (mc.player == null) {
-			return;
+			lastRect = null;
+			lastRows = List.of();
+			return null;
 		}
-		Font font = mc.font;
 		BuildPlacement.View v = BuildPlacement.view();
 		String status = BuildPlacement.status();
 		boolean fresh = status != null && Util.getMillis() - BuildPlacement.statusAt < STATUS_MS;
 		if (v == null && !fresh) {
 			lastRect = null;
 			lastRows = List.of();
-			return;
+			return null;
 		}
-		int maxW = Math.min(420, g.guiWidth() - 16);
+		int maxW = Math.min(420, f.guiWidth() - 16);
 		Kit.Padding p = Kit.padding("tooltip");
 		int inner = maxW - p.left() - p.right();
 		boolean legend = BuildPlacement.legend();
@@ -114,8 +124,9 @@ final class PlacementHud implements HudElement {
 		for (int i = 0; i < keys.length; i++) {
 			add.accept(Row.keys(keys[i]), i == keys.length - 1 ? 8 : 5); // the last key row holds "?" (hide) or "? keys"
 		}
-		// fit a short screen: never over the crosshair (the ghost is aimed with it); creative has no hearts above the hotbar
-		boolean bars = mc.gameMode != null && mc.gameMode.getPlayerMode().isSurvival();
+		// fit a short screen: never over the crosshair (the ghost is aimed with it); creative has no hearts above the hotbar (the
+		// zone's own floor: HudLayout BOTTOM_CENTER)
+		boolean bars = f.survivalBars();
 		int fixed = p.top() + p.bottom() - 1;
 		int[] hs = new int[rows.size()];
 		int[] ps = new int[rows.size()];
@@ -123,7 +134,7 @@ final class PlacementHud implements HudElement {
 			hs[i] = rows.get(i).height();
 			ps[i] = prio.get(i);
 		}
-		boolean[] keep = dev.larattalabs.architect.placement.HudFit.keep(hs, ps, fixed, g.guiHeight() - (bars ? 50 : 26) - (g.guiHeight() / 2 + 8));
+		boolean[] keep = dev.larattalabs.architect.placement.HudFit.keep(hs, ps, fixed, f.guiHeight() - (bars ? 50 : 26) - (f.guiHeight() / 2 + 8));
 		List<Row> fit = new ArrayList<>();
 		for (int i = 0; i < rows.size(); i++) {
 			if (keep[i]) {
@@ -132,19 +143,27 @@ final class PlacementHud implements HudElement {
 		}
 		rows.clear();
 		rows.addAll(fit);
-		// size and place
 		int textW = 0;
 		int h = fixed;
 		for (Row r : rows) {
 			textW = Math.max(textW, r.width(font));
 			h += r.height();
 		}
-		int w = Math.min(maxW, textW + p.left() + p.right());
-		int x = (g.guiWidth() - w) / 2;
-		int y = g.guiHeight() - 64 - h;
-		if (y < g.guiHeight() / 2 + 8) {
-			y = Math.max(g.guiHeight() / 2 + 8, g.guiHeight() - (bars ? 50 : 26) - h);
+		measured = List.copyOf(rows);
+		return HudZones.Size.of(Math.min(maxW, textW + p.left() + p.right()), h);
+	}
+
+	@Override
+	public void draw(GuiGraphicsExtractor g, Font font, HudZones.Frame f, HudZones.Slot slot) {
+		List<Row> rows = measured;
+		if (rows.isEmpty()) {
+			return;
 		}
+		Kit.Padding p = Kit.padding("tooltip");
+		int x = slot.x();
+		int y = slot.y();
+		int w = slot.w();
+		int h = slot.h();
 		lastRect = new int[] {x, y, w, h};
 		Panels.sprite(g, Kit.TOOLTIP, x, y, w, h, 0xF0FFFFFF);
 		int ty = y + p.top();

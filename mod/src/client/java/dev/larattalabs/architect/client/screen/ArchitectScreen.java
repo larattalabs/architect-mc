@@ -1536,8 +1536,10 @@ public final class ArchitectScreen extends Screen {
 							.changed() + ")");
 					}
 				});
-				if (!c.kept().isEmpty()) {
-					info.add(c.kept().size() + " cell(s) you changed stay as they are (yellow)");
+				// UI-0.3: the kept cells' frame colour as a swatch beside the words (no colour word: colour is never the only signal)
+				String keptLine = c.kept().isEmpty() ? null : c.kept().size() + " cell(s) you changed stay as they are (framed in the preview)";
+				if (keptLine != null) {
+					info.add(keptLine);
 				}
 				if (!c.bom().isEmpty()) {
 					info.add("needs " + summarize(c.bom()));
@@ -1549,7 +1551,13 @@ public final class ArchitectScreen extends Screen {
 					info.add("! " + rf.message());
 				}
 				for (String l : info.subList(0, Math.min(info.size(), 9))) {
-					g.text(font, TextUtil.ellipsize(font, l, dw), dx, y, l.startsWith("!") ? UiBits.errorText() : UiBits.muted(), false);
+					if (l == keptLine) {
+						g.fill(dx, y, dx + 7, y + 7, UiBits.muted());
+						g.fill(dx + 1, y + 1, dx + 6, y + 6, dev.larattalabs.architect.placement.CompositeMesh.keptColor());
+						g.text(font, TextUtil.ellipsize(font, l, dw - 10), dx + 10, y, UiBits.muted(), false);
+					} else {
+						g.text(font, TextUtil.ellipsize(font, l, dw), dx, y, l.startsWith("!") ? UiBits.errorText() : UiBits.muted(), false);
+					}
 					y += 10;
 				}
 				y += 2;

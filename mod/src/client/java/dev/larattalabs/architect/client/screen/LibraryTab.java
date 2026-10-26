@@ -545,7 +545,7 @@ final class LibraryTab {
 		if (badge != null) {
 			int bw = font.width(badge) + 6;
 			g.fill(x + 3, y + ph - 10, x + 3 + bw, y + ph, UiStyle.withAlpha(c.imported() ? UiStyle.TEAL : UiStyle.WALNUT, 220));
-			g.text(font, badge, x + 6, y + ph - 9, UiStyle.CREAM, false);
+			g.text(font, badge, x + 6, y + ph - 9, UiStyle.OnDark.text(), false); // on the dark badge bar: the on-dark token
 		}
 		g.text(font, TextUtil.ellipsize(font, c.name(), w - 6), x + 3, y + ph + 4, UiBits.ink(), false);
 		g.text(font, TextUtil.ellipsize(font, c.type() + " · " + c.sizeText(), w - 6), x + 3, y + ph + 14, UiBits.muted(), false);
