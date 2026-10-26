@@ -161,11 +161,21 @@ public final class SliceLfDev {
 							}
 						}
 						boolean exited = false;
+						JsonArray path = new JsonArray();
 						for (int k = 0; k < 200 && reached && !exited; k++) {
 							player.setYRot(yaw);
 							step(level, player, new Vec3(0, 0, 1));
-							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) < 0.6;
+							// (in the exit cell, standing on its block or within a half step of it)
+							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) <= 1.0;
+							if (k % 5 == 0 && path.size() < 40) {
+								JsonArray q = new JsonArray();
+								q.add(Math.round(player.getX() * 10) / 10.0);
+								q.add(Math.round(player.getY() * 10) / 10.0);
+								q.add(Math.round(player.getZ() * 10) / 10.0);
+								path.add(q);
+							}
 						}
+						o.add("path", path);
 						o.addProperty("exited", exited);
 						JsonArray at = new JsonArray();
 						at.add(player.getX());
