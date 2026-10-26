@@ -25589,8 +25589,9 @@ catalogue **14** (unchanged).
 | api-compat | the 0.44.0, 0.43.0 and 0.42.0 apitest jars and the 0.44.0 mod jar's 1.41.0 surface (2600 members): clean |
 | step-inputs | `check`: 255 steps, every closure inside its recorded set |
 
-No in-game steps: nothing was merged or resolved on this branch (the slices' own in-game steps passed at their merges: u2 33/33,
-u3 39/39, u5 31/31 then 32 with parts default on).
+No in-game steps: nothing was merged or resolved on this branch (the slices' own in-game steps passed at their merges; the latest,
+at fix/parts-default-on: u2-ingame 34, u3-ingame 40, u5-ingame 32). At d6ce7fbf's parent, re-run: `--check` consistent, step-inputs
+255 steps, and release-version, catalogue-since, cl, k2 and f7a-foundation tests 42/42.
 
 ### Jars
 
