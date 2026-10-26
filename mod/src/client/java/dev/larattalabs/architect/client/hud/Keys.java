@@ -8,12 +8,19 @@ import net.minecraft.client.input.KeyEvent;
 
 /**
  * Architect's key mappings (Options > Controls > Key Binds > Architect, rebindable like any vanilla key): the Architect
- * screen ({@code B}) and the construction HUD's full / one line / hidden ({@code J}, UI-2b). Registered once.
+ * screen ({@code B}), the construction HUD's full / one line / hidden ({@code J}, UI-2b) and Undo last placement ({@code Z},
+ * SAFETY). Registered once.
  */
 public final class Keys {
 	public static KeyMapping screen;
 	/** UI-2b: the construction HUD full / one line / hidden ({@code J}). */
 	public static KeyMapping siteHud;
+	/**
+	 * SAFETY: "Undo last placement" ({@code Z}): removes the newest site this player placed this session, after a second press
+	 * within 5 s. Z is free in vanilla 26.3 (its letter defaults are W A S D E F Q T O P L G C X), in Architect (B, J; R, H, L only
+	 * while placing) and in Steward (Y, I, U, and K for the jobs panel).
+	 */
+	public static KeyMapping undoLast;
 	private static boolean registered;
 
 	private Keys() {
@@ -34,6 +41,8 @@ public final class Keys {
 			1));
 		siteHud = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.site_hud", InputConstants.Type.KEYBOARD, InputConstants.KEY_J, cat,
 			2));
+		undoLast = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.undo_last", InputConstants.Type.KEYBOARD, InputConstants.KEY_Z,
+			cat, 3));
 	}
 
 	/**

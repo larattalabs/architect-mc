@@ -86,11 +86,15 @@ public final class BuildPlacement {
 	 * @param snapBox the whole box place() snapshots and checks (foundation and approach included)
 	 * @param hazards the site warnings' cells ({@link SiteWarnings}: water, lava, drops and cave openings in front of the
 	 *                entrance, gullies and caves under the approach) as quadruples; {@code site} the warnings themselves
+	 * @param blocks (SAFETY) the blocks the design writes (its template's non-air cells, {@code PlaceConfirm.blocks})
+	 * @param replaced (SAFETY) the solid blocks it writes over or its approach clears that are not terrain or trees ({@code
+	 *                 PlaceConfirm.replaces})
 	 */
 	record View(Blueprint bp, GhostModel model, int ox, int oy, int oz, int turns, String front, int[] obstructed, int obstructedCount,
 		int[] blocked, int blockedCount, List<String> refusals, boolean playerInside, boolean locked, boolean pending, boolean forceArmed,
 		int[] water, int waterCount, int[] lava, int lavaCount, int[] fill, int fillCount, int[] clear, int clearCount, List<String> notes,
-		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site, List<Integer> noteInk) {
+		int snapMinY, Approach.Plan approach, int[] path, Anchors.Bounds snapBox, int[] hazards, SiteWarnings.Result site, List<Integer> noteInk, int blocks,
+		int replaced) {
 		Anchors.Bounds box() {
 			return new Anchors.Bounds(ox, oy, oz, ox + model.sizeX - 1, oy + model.sizeY - 1, oz + model.sizeZ - 1);
 		}
@@ -98,7 +102,7 @@ public final class BuildPlacement {
 		View with(boolean locked, boolean pending, boolean forceArmed) {
 			return new View(bp, model, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, refusals, playerInside, locked,
 				pending, forceArmed, water, waterCount, lava, lavaCount, fill, fillCount, clear, clearCount, notes, snapMinY, approach, path, snapBox, hazards,
-				site, noteInk);
+				site, noteInk, blocks, replaced);
 		}
 	}
 
@@ -156,6 +160,14 @@ public final class BuildPlacement {
 	private static long ticks;
 	/** UI-2b: the HUD's key legend and the refusals' detail, toggled by "?" (or H); kept across placements this session. */
 	private static boolean legend;
+	/**
+	 * SAFETY: the two-press confirm of a big placement ({@link dev.larattalabs.architect.placement.PlaceConfirm}), keyed on the
+	 * exact site ({@link #verdictKey}), so a moved or turned ghost never matches an old arm.
+	 */
+	private static final dev.larattalabs.labui.ui.ConfirmArm BIG = new dev.larattalabs.labui.ui.ConfirmArm(dev.larattalabs.architect.placement
+		.PlaceConfirm.WINDOW_MS);
+	/** SAFETY: the current design's block count (its template's non-air cells), set on start and reload. */
+	private static int designBlocks;
 	/** UI-2b: the last "Placed" chat line (with its [Undo] / [Open in Library] links), for the DevBridge. */
 	private static net.minecraft.network.chat.@Nullable Component lastChat;
 
@@ -221,6 +233,7 @@ public final class BuildPlacement {
 		bp = b;
 		entry = Blueprints.entry(blueprintId);
 		cells = c;
+		designBlocks = nonAir(c);
 		level = mc.level;
 		mc.gui.setScreen(null);
 		setStatus(null, false);
@@ -301,6 +314,7 @@ public final class BuildPlacement {
 		pending = false;
 		forceArmed = false;
 		layerArmed = false;
+		BIG.cancel();
 		lastAim = null;
 		tooFar = false;
 		verdict = null;
@@ -317,6 +331,7 @@ public final class BuildPlacement {
 		userTurns = Math.floorMod(userTurns + quarterTurns, 4);
 		forceArmed = false;
 		layerArmed = false;
+		BIG.cancel();
 		update(Minecraft.getInstance(), true);
 	}
 
@@ -332,6 +347,7 @@ public final class BuildPlacement {
 		nudgeY += up;
 		forceArmed = false;
 		layerArmed = false;
+		BIG.cancel();
 		update(mc, true);
 	}
 
@@ -349,6 +365,7 @@ public final class BuildPlacement {
 			nudgeX = nudgeY = nudgeZ = 0;
 		}
 		locked = on;
+		BIG.cancel();
 		update(mc, true);
 	}
 
@@ -439,6 +456,7 @@ public final class BuildPlacement {
 						+ (note == null ? "" : " (" + note + ")"));
 				} else {
 					Site placed = Sites.place(sl, b, origin, rotation, useForce, owner, null, null, null, Sites.playerOf(server, owner), null, useLayer);
+					dev.larattalabs.architect.site.PlayerRemove.record(owner, placed); // SAFETY: the undo key's candidates
 					String note = Sites.lastNote();
 					r = placed.building()
 						? new Result(true, placed.id(), "Construction site " + placed.id() + " (" + b.name() + ") placed: feed its crate (right-click it, "
@@ -467,9 +485,103 @@ public final class BuildPlacement {
 		return f;
 	}
 
+	// ------------------------------------------------------------------ SAFETY: Enter twice for a big placement
+
+	/** The design's non-air cells (a template's air cells have colour 0, {@link TemplateCells#color}). */
+	private static int nonAir(GhostModel.Cells c) {
+		GhostModel m = GhostModel.of(c, 0);
+		int n = 0;
+		for (int i = 0; i < m.count(); i++) {
+			if (m.argb(i) != 0) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/** The configured threshold ({@code confirmBlocks}). */
+	public static int confirmThreshold() {
+		return dev.larattalabs.architect.client.launcher.Launcher.confirmBlocks();
+	}
+
+	/** Whether the ghost's placement is big ({@link dev.larattalabs.architect.placement.PlaceConfirm#big}). */
+	static boolean big(View v) {
+		return dev.larattalabs.architect.placement.PlaceConfirm.big(v.blocks(), v.replaced(), confirmThreshold());
+	}
+
+	/** The key the big confirm is armed on: the exact site (design, origin, turns, the site moved). */
+	private static String bigKey(View v) {
+		return verdictKey(v, false);
+	}
+
+	/** Whether the big confirm is armed for the ghost as it is now (the HUD's countdown). */
+	static boolean bigArmed() {
+		View v = view();
+		return v != null && BIG.armed(bigKey(v), net.minecraft.util.Util.getMillis());
+	}
+
+	/** The armed HUD line with its countdown, or null when not armed. */
+	static @Nullable String bigPrompt() {
+		View v = view();
+		long now = net.minecraft.util.Util.getMillis();
+		if (v == null || !BIG.armed(bigKey(v), now)) {
+			return null;
+		}
+		return dev.larattalabs.architect.placement.PlaceConfirm.prompt(moving != null, v.blocks(), v.replaced(), BIG.secondsLeft(now));
+	}
+
+	/**
+	 * Enter (Shift: {@code shift}) from the keyboard ({@code repeat}: an OS key repeat): a small clean placement, a refusal-to-be
+	 * and a refusal's own second press (Shift+Enter when force is armed, Enter for Place on top) go to {@link #confirm} at once;
+	 * a big one arms on the first press (the HUD counts down) and places on a second, fresh press within
+	 * {@value dev.larattalabs.architect.placement.PlaceConfirm#WINDOW_MS} ms (lab-ui {@code ConfirmArm.pressByKey}: a held key or
+	 * a double tap within {@code UiRules.KEY_CONFIRM_MS} never confirms). Returns the placement's future when it was sent, else
+	 * null.
+	 */
+	public static @Nullable CompletableFuture<Result> enter(boolean shift, boolean repeat) {
+		View v = view;
+		if (!active || preview() || v == null) {
+			return null;
+		}
+		if (pending && inFlight != null) {
+			return inFlight;
+		}
+		boolean refused = !v.refusals().isEmpty() || v.playerInside();
+		Sites.Verdict sv = serverVerdict();
+		refused |= sv != null && !sv.ok();
+		var step = dev.larattalabs.architect.placement.PlaceConfirm.enter(big(v), refused, layerArmed, forceArmed, shift);
+		if (step == dev.larattalabs.architect.placement.PlaceConfirm.Step.PLACE) {
+			if (repeat) {
+				return null; // a held Enter never places (as before)
+			}
+			return confirm(shift);
+		}
+		var r = BIG.pressByKey(bigKey(v), net.minecraft.util.Util.getMillis(), repeat);
+		if (r == dev.larattalabs.labui.ui.ConfirmArm.Result.CONFIRMED) {
+			return confirm(shift);
+		}
+		return null;
+	}
+
+	/** The placement in flight (DevBridge), or null. */
+	static @Nullable CompletableFuture<Result> inFlightNow() {
+		return pending ? inFlight : null;
+	}
+
+	/** Esc / Backspace: disarms an armed big confirm (the ghost stays), else cancels placement as before. */
+	public static void escape() {
+		if (bigArmed()) {
+			BIG.cancel();
+			setStatus("Not placed: the confirm was cancelled (Enter arms it again)", false);
+			return;
+		}
+		cancel();
+	}
+
 	private static void onResult(Result r, View refused) {
 		pending = false;
 		inFlight = null;
+		BIG.cancel();
 		lastResult = r;
 		if (r.placed()) {
 			boolean moved = moving != null;
@@ -526,7 +638,8 @@ public final class BuildPlacement {
 		net.minecraft.network.chat.MutableComponent m = net.minecraft.network.chat.Component.literal(r.message().replace(
 			". Undo: the [Undo] link in chat, or Library > Placed > Remove", "") + " ");
 		if (!moved && id != null) {
-			m.append(link("[Undo]", "/architect remove " + id, construction ? "Take the construction site down (its blocks come back to you)"
+			// SAFETY: "undo" stays one click while it is the player's latest own placement (else it asks like remove)
+			m.append(link("[Undo]", "/architect remove " + id + " undo", construction ? "Take the construction site down (its blocks come back to you)"
 				: "Remove it: the ground comes back as it was")).append(" ");
 		}
 		if (id != null) {
@@ -570,6 +683,7 @@ public final class BuildPlacement {
 			entry = e;
 			bp = e.blueprint();
 			cells = TemplateCells.of(bp.id());
+			designBlocks = cells == null ? 0 : nonAir(cells);
 			java.util.Arrays.fill(MODELS, null);
 		}
 		update(mc, false);
@@ -760,6 +874,7 @@ public final class BuildPlacement {
 		if (!same) {
 			forceArmed = false;
 			layerArmed = false;
+			BIG.cancel();
 		}
 		scanned = spot;
 		ticksSinceScan = 0;
@@ -810,11 +925,15 @@ public final class BuildPlacement {
 		// snapshot-box-local flags: 1 = obstructed, 2 = foreign block entity
 		byte[] flags = new byte[qx * qy * qz];
 		int obstructedCount = 0;
+		int replaced = 0;
 		for (int i = 0; i < m.count(); i++) {
 			p.set(ox + m.x(i), oy + m.y(i), oz + m.z(i));
 			BlockState s = lv.getBlockState(p);
 			if (GhostModel.classify(m.y(i), m.groundY, s.isAir(), s.canBeReplaced(), false) == GhostModel.Conflict.OBSTRUCTED) {
 				obstructedCount++;
+				if (dev.larattalabs.architect.placement.PlaceConfirm.replaces(TerrainFit.flags(s))) {
+					replaced++; // SAFETY: a solid block that is not terrain or a tree
+				}
 				flags[((oy + m.y(i) - snapBox.minY()) * qz + oz + m.z(i) - snapBox.minZ()) * qx + ox + m.x(i) - snapBox.minX()] |= 1;
 			}
 		}
@@ -823,8 +942,12 @@ public final class BuildPlacement {
 			int x = approach.clear()[i];
 			int y = approach.clear()[i + 1];
 			int z = approach.clear()[i + 2];
-			if ((world.flags(x, y, z) & TerrainFit.NATURAL) == 0) {
+			int wf = world.flags(x, y, z);
+			if ((wf & TerrainFit.NATURAL) == 0) {
 				obstructedCount++;
+				if (dev.larattalabs.architect.placement.PlaceConfirm.replaces(wf)) {
+					replaced++;
+				}
 				flags[((y - snapBox.minY()) * qz + z - snapBox.minZ()) * qx + x - snapBox.minX()] |= 1;
 			}
 		}
@@ -903,7 +1026,7 @@ public final class BuildPlacement {
 			pending, forceArmed, shellOf(concat(plan.water(), approach.water())), plan.waterCount() + approach.waterCount(),
 			shellOf(concat(plan.lava(), approach.lava())), plan.lavaCount() + approach.lavaCount(), shellOf(concat(plan.fill(), approach.fill())),
 			plan.fillCount(), shellOf(concat(plan.clear(), approach.clear())), plan.clearCount(), List.copyOf(notes), snapBox.minY(), approach,
-			shellOf(approach.path()), snapBox, shellOf(site.cells()), site, List.copyOf(noteInk));
+			shellOf(approach.path()), snapBox, shellOf(site.cells()), site, List.copyOf(noteInk), designBlocks, replaced);
 	}
 
 	private static int[] concat(int[] a, int[] b) {
@@ -1118,6 +1241,16 @@ public final class BuildPlacement {
 			o.add("serverVerdict", sj);
 		}
 		o.addProperty("ready", v.refusals().isEmpty() && sv != null && sv.ok());
+		// SAFETY: the big-placement confirm
+		JsonObject sf = new JsonObject();
+		sf.addProperty("blocks", v.blocks());
+		sf.addProperty("replaced", v.replaced());
+		sf.addProperty("threshold", confirmThreshold());
+		sf.addProperty("big", big(v));
+		sf.addProperty("armed", bigArmed());
+		sf.addProperty("secondsLeft", bigArmed() ? BIG.secondsLeft(net.minecraft.util.Util.getMillis()) : 0);
+		sf.addProperty("prompt", bigPrompt());
+		o.add("safety", sf);
 		JsonObject r = new JsonObject();
 		r.addProperty("cells", v.model().count());
 		r.addProperty("visibleCells", v.model().visibleCount());
