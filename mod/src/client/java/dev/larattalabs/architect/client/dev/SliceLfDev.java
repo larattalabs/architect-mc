@@ -115,11 +115,20 @@ public final class SliceLfDev {
 		}
 	}
 
-	/** One tick of a rider: Entity.baseTick (its fluid state: in water, the eye under it, the air), travel with the input, the column's push. */
-	static void step(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player, Vec3 input) {
+	/**
+	 * One tick of a rider, as vanilla's own tick moves a living entity: {@code Entity.baseTick} (its fluid state: in water, the eye under it,
+	 * the air), then {@code LivingEntity.aiStep} with the input (forward {@code zza}, {@code jumping}: a jump from the ground or a swim up
+	 * in water), whose {@code travel} moves it and whose {@code applyEffectsFromBlocks} gives the column's push
+	 * ({@code BubbleColumnBlock.entityInside}).
+	 */
+	static void step(net.minecraft.server.level.ServerPlayer player, float forward, boolean jump) {
 		player.baseTick();
-		player.travel(input);
-		bubblePush(level, player);
+		player.zza = forward;
+		player.xxa = 0;
+		player.setJumping(jump);
+		player.aiStep();
+		player.setJumping(false);
+		player.zza = 0;
 	}
 
 	/** One ride (the hook's body): ride, then step off. */
@@ -136,7 +145,7 @@ public final class SliceLfDev {
 						boolean reached = false;
 						int t = 0;
 						for (; t < maxTicks && !reached; t++) {
-							step(level, player, Vec3.ZERO);
+							step(player, 0f, false);
 							maxY = Math.max(maxY, player.getY());
 							minY = Math.min(minY, player.getY());
 							reached = drag ? player.getY() <= y0 + 1.2 : player.getY() >= yT + 0.5;
@@ -168,7 +177,8 @@ public final class SliceLfDev {
 						JsonArray path = new JsonArray();
 						for (int k = 0; k < 200 && reached && !exited; k++) {
 							player.setYRot(yaw);
-							step(level, player, new Vec3(0, 0, 1));
+							player.setYHeadRot(yaw);
+							step(player, 1f, !drag); // (an up rider swims up and steps off onto the ledge; a down rider walks out)
 							// (in the exit cell, standing on its block or within a half step of it)
 							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) <= 1.0;
 							if (k % 5 == 0 && path.size() < 40) {
