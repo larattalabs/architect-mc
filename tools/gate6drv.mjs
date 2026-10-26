@@ -475,10 +475,11 @@ steps.undo = async () => {
   const mound = [...S1].filter(([k, v]) => idOf(v) !== idOf(S0.get(k) ?? 'minecraft:air') && at3(k)[0] === CX + 97).map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
   const source = [...S2].filter(([k, v]) => idOf(v) === 'water' && idOf(S1.get(k) ?? 'air') !== 'water').map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
   const spireCell = [...S1].filter(([k, v]) => idOf(v) !== 'air' && idOf(S0.get(k) ?? 'minecraft:air') === 'air' && at3(k)[0] >= CX + 96 && at3(k)[2] <= CZ + 30).map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
-  const steward = await call('dev.cells.place', { kind: 'test:rv_steward', cells: [[mound[0], mound[1], mound[2], 'minecraft:mossy_cobblestone']], naturalOnly: false, overlap: 'LAYER', owner: 'steward_mc:test' }, 300_000);
-  const stair = await call('dev.cells.place', { kind: 'test:rv_stair', cells: [[source[0], source[1], source[2], 'minecraft:stone_brick_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]']], naturalOnly: false, overlap: 'LAYER', owner: 'steward_mc:test' }, 300_000);
+  const steward = await call('dev.cells.place', { kind: 'test:rv_steward', cells: [[mound[0], mound[1], mound[2], 'minecraft:mossy_cobblestone']], naturalOnly: false, overlap: 'LAYER', owner: OWNER }, 300_000);
+  const stair = await call('dev.cells.place', { kind: 'test:rv_stair', cells: [[source[0], source[1], source[2], 'minecraft:stone_brick_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]']], naturalOnly: false, overlap: 'LAYER', owner: OWNER }, 300_000);
   await cmd(`/setblock ${spireCell[0]} ${spireCell[1]} ${spireCell[2]} minecraft:glowstone`);
   out.over = { steward, stair, mound, source, spireCell };
+  if (!steward.placed || !stair.placed) log(`  the Steward sites: ${json(steward)} ${json(stair)}`);
   check(steward.placed && stair.placed, `a Steward site over a revision cell (${steward.siteId} at ${json(mound)}), a waterlogged stair over a pond source (${stair.siteId} at ${json(source)}), a player's glowstone on the spire (${json(spireCell)})`);
   const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
   st = await rvState(region);
@@ -574,6 +575,7 @@ steps.plan0 = async () => {
   const gy = await groundY();
   const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
   const before = await hashOf(BOX);
+  const B0 = await cellsOf(BOX);
   const c0 = await checkPlan(P0_TOWN, CLAIM);
   check(c0.overall === 'READY' && /^[0-9a-f]{64}$/.test(c0.artifactSha ?? ''), `the parent plan checked: ${c0.overall}, artifact ${c0.artifactSha?.slice(0, 12)}`);
   const ra = await call('dev.region.realiseApproved', { sha: c0.artifactSha, lotEntries: { h1: STUB } }, 300_000);
@@ -612,7 +614,9 @@ steps.plan0 = async () => {
   check(u.removed === true && a1?.removed === true && d.n === 0, `the revision undone: the world as before it (${d.n} cells differ); its artifact tombstoned (${a1?.removed})`, d.first);
   const rem = await call('dev.region.remove', { region, requester: OWNER }, 4 * 3_600_000);
   await sleep(2000);
-  check(rem.removed !== false && (await hashOf(BOX)) === before, `the region removed: E-flat 0`);
+  const flat = (await hashOf(BOX)) === before;
+  const dflat = flat ? null : diff(B0, await cellsOf(BOX));
+  check(rem.removed !== false && flat, `the region removed: E-flat 0${dflat ? `: ${dflat.n} cells differ` : ''}`, dflat?.first);
   await L.leaveWorld();
   spendZero();
   return out;
