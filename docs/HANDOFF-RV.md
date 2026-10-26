@@ -307,3 +307,15 @@ Earlier runs, and what they found:
   brought the stage's members back while the undo went on (the `standingAgain` fix). It also showed rv-ingame still expecting the pond
   refusal.
 - `20261026-192046-6drv` and `20261026-194931-6drv`: the fixed steps passing.
+
+**Gate-verifier for RV-c/RV-d: PASS.** A strict re-run at 164c1f4e, run `artifacts/gate-runs-RV-verify/20261026-201328-6drv` (ports
+8962/8963): rv-crash 27/0, rv-undo 22/0, rv-undo-crash 20/0, with every kill point halting and resuming. `rv-a.test` 10/0.
+- **Code review of f59b132a..164c1f4e found no defects:**
+  - The pruning loop can't answer removed over an unfinished restoration.
+  - `standingAgain` resets only the suffix's own stages whose own members stand.
+  - `giveBack` runs on the server thread and only on failure, so it never reuses a rid.
+  - The undo's phases are idempotent.
+- **Nits:**
+  - RG4+save is still judged against its control by count (as at RV-a/b).
+  - A misplaced javadoc above `RIDS` (fixed after the review).
+  - `Groups.written` is a session-wide set (harmless).

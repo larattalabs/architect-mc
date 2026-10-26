@@ -487,7 +487,6 @@ public final class Revisions {
 
 	/** The revision inputs of plans under way (the plan message's {@code revision} member), by request. */
 	static final Map<RegionPlanRequest, JsonObject> INPUT = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
-	/** The candidate of a plan under way (planned.revisionOf), by request. */
 	/** The rid a plan in flight took (region id, rid): a plan that fails gives it back while no later plan took one (see {@link #giveBack}). */
 	static final Map<RegionPlanRequest, Object[]> RIDS = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
@@ -512,6 +511,7 @@ public final class Revisions {
 		});
 	}
 
+	/** The candidate of a plan under way (planned.revisionOf), by request. */
 	static final Map<RegionPlanRequest, JsonObject> CANDIDATE = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
 	/**
