@@ -77,9 +77,11 @@ export function resolve(K, p) {
   const toEnd = (part.via ?? []).length ? part.via[0] : part.to;
   if (sameEnd(part.from, toEnd)) return { class: 'refused', notes, reasons: [{ code: 'NO_CLIMB', message: 'both ends are one place: nothing to climb (R18)', evidence: { from: part.from, to: toEnd, rise: 0, need: ROCK.riseMin } }] };
   if (o.rise && isInt(o.rise.min) && isInt(o.rise.max) && o.rise.min > o.rise.max) return { class: 'refused', notes, reasons: [{ code: 'SPAN', message: `rise.min ${o.rise.min} is over rise.max ${o.rise.max}`, evidence: { rise: o.rise } }] };
-  // NO_CLIMB (§4): the ends rise less than 2 (a path walks it)
+  // NO_CLIMB (§4): the ends rise less than 2 (a path walks it); not judged over an end the survey could not read (MISSING: the
+  // corridor answers incomplete VOLUME, prepare and check again)
   const e = endsOf(K, p);
-  if (e && Math.abs(e.b[1] - e.a[1]) < ROCK.riseMin) return { class: 'refused', notes, reasons: [{ code: 'NO_CLIMB', message: `the ends rise ${Math.abs(e.b[1] - e.a[1])}, under ${ROCK.riseMin}: nothing to climb (a path walks it)`, evidence: { rise: e.b[1] - e.a[1], need: ROCK.riseMin, from: e.a, to: e.b } }] };
+  const unread = e && [e.a, e.b].some((q) => K.env.S.missingAt(q[0], q[2]));
+  if (e && !unread && Math.abs(e.b[1] - e.a[1]) < ROCK.riseMin) return { class: 'refused', notes, reasons: [{ code: 'NO_CLIMB', message: `the ends rise ${Math.abs(e.b[1] - e.a[1])}, under ${ROCK.riseMin}: nothing to climb (a path walks it)`, evidence: { rise: e.b[1] - e.a[1], need: ROCK.riseMin, from: e.a, to: e.b } }] };
   return null;
 }
 
