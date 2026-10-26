@@ -1,0 +1,78 @@
+{
+  "about": "(7a SA) a ring deck at 84 under the mushroom's cap (its lowest cell near the stem at 85): refused HEADROOM (2 clear over the deck)",
+  "terrain": {
+    "W": 160,
+    "D": 120,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "claim_w",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "shroom",
+        "kind": "giant_mushroom",
+        "preset": "brown",
+        "height": [
+          20,
+          24
+        ],
+        "where": {
+          "near": {
+            "anchor": "claim_center",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "stair",
+        "kind": "stairs_around",
+        "from": {
+          "part": "town"
+        },
+        "around": {
+          "feature": {
+            "part": "shroom"
+          }
+        },
+        "top": {
+          "y": 84
+        }
+      }
+    ]
+  }
+}

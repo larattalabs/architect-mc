@@ -20,6 +20,7 @@ import { tunnelRules } from './checkTunnels.mjs';
 // (7a CW) catwalks (M10:catwalk)
 import { catwalkRules } from './checkCatwalks.mjs';
 import { climbRules } from './checkClimbs.mjs'; // (7a CL)
+import { spiralRules } from './checkSpirals.mjs'; // (7a SA)
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
 import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
@@ -486,6 +487,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (Array.isArray(meta?.catwalks) && meta.catwalks.length) time('M10', () => catwalkRules({ ir, vw, catwalks: meta.catwalks, meta, want, findings, metrics, partStage, finding }));
   // (7a CL) climbs (checkClimbs.mjs): stair flights, ladder faces, rest landings, the top gate, M8 and M5 over the treads and landings
   if (Array.isArray(meta?.climbs) && meta.climbs.length) time('M10', () => climbRules({ vw, climbs: meta.climbs, want, findings, metrics, finding, light: () => blockLight(vw) }));
+  // (7a SA) spirals (checkSpirals.mjs): steps, standing and head room, attached, the outer edge, rails (M8), lit (M5)
+  if (Array.isArray(meta?.spirals) && meta.spirals.length) time('M10', () => spiralRules({ ir, vw, spirals: meta.spirals, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (6c H) fluid bodies (the IR's fluid ops) and wet writes (meta.wet): only when the plan has either
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));

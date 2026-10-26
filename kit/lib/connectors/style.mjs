@@ -37,7 +37,9 @@ export const CONNECTOR_DEFAULTS = Object.freeze({
   stair: { tread: ['path'], rail: ['rail'] }, switchback: { retaining: ['structure', 'foundation'] }, ladder: { ladder: [], landing: ['floor'], rail: ['rail'], gate: ['rail'] },
   rock_stair: { tread: [], lining: [], portal: [] }, lift: { shell: [], base: [], door: [], cap: [] },
   catwalk: { deck: ['floor', 'path'], bracket: ['frame'], rail: ['rail'] }, // ((7a CW, N-CW-1) a plank deck in floor then path, brackets in frame, fence rails)
-  stairs_around: { tread: [], rail: [], deck: [] },
+  // ((7a SA, N-SA-1) treads in structure's stairs (then path, floor, foundation: the first with stairs, spiralGeom.mjs spiralRoles; the
+  // host's own wood is the land's look, not a role), fence rails of the rail role (then frame), a deck of the floor role's slab (then path))
+  stairs_around: { tread: ['structure', 'path', 'floor', 'foundation'], rail: ['rail', 'frame'], deck: ['floor', 'path'] },
 });
 
 /** A bible's `connectors` member checked: null when fine, else a message (role names must be roles of the bible). */
@@ -126,5 +128,7 @@ export function traceRole(block, roles, { lightFixture = null } = {}) {
     for (const sh of SHAPES) { const v = shapeOf(base, sh); if (v && v.replace(/\[.*$/, '') === name) return `${r}.${sh}`; }
   }
   if (lightFixture && String(lightFixture).replace(/\[.*$/, '') === name) return 'light';
+  // ((7a SA, M17) the light role's fixture in its cold variant (a soul lantern or soul torch, light 10) where ice is within reach)
+  if (lightFixture && String(lightFixture).replace(/\[.*$/, '').replace('minecraft:', 'minecraft:soul_') === name) return 'light.soul';
   return null;
 }

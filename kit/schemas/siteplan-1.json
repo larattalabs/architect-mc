@@ -26,7 +26,7 @@
     "graph": { "type": "object", "required": ["derived", "nodes", "edges"], "additionalProperties": false, "properties": {
       "derived": { "type": "boolean" },
       "nodes": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "ref", "at", "level"], "additionalProperties": false, "properties": {
-        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction", "plaza", "gate", "access"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" }, "part": { "type": "string" },
+        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction", "plaza", "gate", "access", "lookout"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" }, "part": { "type": "string" },
         "ports": { "type": "array", "items": { "type": "object", "required": ["name", "at", "facing", "width"], "additionalProperties": false, "properties": {
           "name": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" }, "facing": { "enum": ["north", "south", "east", "west", "up"] }, "width": { "type": "integer", "minimum": 1 } } } } } } },
       "edges": { "type": "array", "items": { "type": "object", "required": ["id", "from", "to", "type", "path", "stage", "mover"], "additionalProperties": false, "properties": {

@@ -1,0 +1,104 @@
+{
+  "about": "(7a SA, \u00a76, item 6: KC) a spiral round a rock spire whose foot and leg pass a fountain (its basin, spout, shell and watched apron) 7 off: the spiral, placed after the body, keeps off its hard cells (a lamp in a watch cell skipped); M25:clear 0",
+  "terrain": {
+    "W": 160,
+    "D": 120,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "claim_w",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "spire",
+        "kind": "rock_spire",
+        "preset": "pinnacle",
+        "height": [
+          32,
+          32
+        ],
+        "where": {
+          "near": {
+            "anchor": "kc_spire",
+            "within": 2
+          }
+        }
+      },
+      {
+        "id": "fount",
+        "kind": "fountain",
+        "basin": 5,
+        "spout": 2,
+        "where": {
+          "near": {
+            "anchor": "kc_fount",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "stair",
+        "kind": "stairs_around",
+        "from": {
+          "part": "town"
+        },
+        "around": {
+          "feature": {
+            "part": "spire"
+          }
+        }
+      }
+    ]
+  },
+  "anchors": {
+    "kc_spire": [
+      1080,
+      65,
+      2056
+    ],
+    "kc_fount": [
+      1056,
+      65,
+      2052
+    ]
+  },
+  "volume": {},
+  "expect": {
+    "part": "stair",
+    "clear": 0
+  }
+}

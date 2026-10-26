@@ -1,0 +1,80 @@
+{
+  "about": "(7a SA) a 1-wide villager spiral: refused MOVER (a villager spiral is 2 wide)",
+  "terrain": {
+    "W": 160,
+    "D": 120,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "claim_w",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "spire",
+        "kind": "rock_spire",
+        "preset": "pinnacle",
+        "height": [
+          32,
+          32
+        ],
+        "where": {
+          "near": {
+            "anchor": "claim_center",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "stair",
+        "kind": "stairs_around",
+        "from": {
+          "part": "town"
+        },
+        "around": {
+          "feature": {
+            "part": "spire"
+          }
+        },
+        "width": 1,
+        "movers": [
+          "player",
+          "villager"
+        ]
+      }
+    ]
+  }
+}

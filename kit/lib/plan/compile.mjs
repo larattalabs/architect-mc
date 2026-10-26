@@ -1468,12 +1468,15 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // (6c T3, R19, S-T3-6) a tunnel's via is read leniently: the first leg (from to via[0]), the rest listed in its notes; (7a, R26) so is
     // a climb's, a rock stair's, a lift's and a catwalk's
     const tunnelVia = (TUNNEL_KINDS.includes(p.kind) || ROUTED_7A.includes(p.kind)) && (p.part.via ?? []).length;
-    const ends = tunnelVia ? [p.part.from, p.part.via[0]] : [p.part.from, ...(p.part.via ?? []), p.part.to];
+    // ((7a SA) a hosted connector's own far end: its hook's route node (a spiral's foot approach), in place of a `to`)
+    const own = h7?.mod.legEnd ? h7.mod.legEnd(K, p) : null;
+    const ends = own ? [p.part.from, own] : tunnelVia ? [p.part.from, p.part.via[0]] : [p.part.from, ...(p.part.via ?? []), p.part.to];
     if (tunnelVia) connNotes.set(p.id, [...(connNotes.get(p.id) ?? []), `via read leniently: the first leg only (to via[0]); ${p.part.via.length > 1 ? `via[1..${p.part.via.length - 1}] and ` : ''}to not read (R19)`]);
     const pts = [];
     let err = null;
     for (let k = 0; k < ends.length && !err; k++) {
       const other = ends[k === ends.length - 1 ? k - 1 : k + 1];
+      if (own && k === 1) { pts.push(own); continue; }
       const e = endpointNode(env, ends[k], other, geom, zoneEmit, lotZone, r, p, `${k === 0 ? 'from' : k === ends.length - 1 ? 'to' : `via[${k - 1}]`}`);
       if (e.error) err = e.error; else pts.push(e);
     }
@@ -1901,6 +1904,8 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   const feet = (x, z, name, facing = null) => ({ name, at: [x, S.groundAt(x, z) + 1, z], node: { at: [x, S.groundAt(x, z) + 1, z], kind: 'junction', ...(facing ? { facing } : {}) } });
   const posOf = (q) => {
     if (!q) return centre(env.claim);
+    // ((7a SA) a hook's own route node, or a point: its position)
+    if (Array.isArray(q.at)) return [q.at[0], q.at[2]];
     if (q.anchor) return env.anchors.get(q.anchor);
     if (q.build !== undefined) { const b = env.buildRects.find((x) => x.id === q.build); if (b) return centre(b.rect); }
     if (q.part && geom.get(q.part)?.rect) return centre(geom.get(q.part).rect);
