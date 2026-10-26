@@ -352,6 +352,8 @@ steps.ingame = async () => {
   check(w1.st.headRid === p1.revisionOf.rid && w1.st.position === 1 && w1.st.state === 'PLACED' && w1.st.busy === null, `the head ${w1.st.headRid} at position ${w1.st.position}; the region reads PLACED again (its own state), busy cleared`);
   check(w1.st.effectiveHead === p1.revisionOf.rid && w1.st.effectiveParts.some((x) => x.startsWith(`rv${p1.revisionOf.rid}_`)) && w1.st.effectiveFiles.includes(`${p1.revisionOf.rid}.json`), `the effective IR: head ${w1.st.effectiveHead}, ${w1.st.effectiveParts.length} parts (the revision's among them), snapshot ${json(w1.st.effectiveFiles)}`);
   check(w1.r.sites.length >= 1 && w1.r.stages.every((x) => x.startsWith(`rv${p1.revisionOf.rid}:`)), `the revision's sites ${json(w1.r.sites)} and journal stages ${json(w1.r.stages)} (Steward's ask: one revision, its sites)`);
+  const sx = w1.st.siteExt ?? {};
+  check(w1.r.sites.every((sid) => sx[sid]?.rid === p1.revisionOf.rid && sx[sid]?.region === region), `every site the revision wrote carries ext architect_mc:revision {region, rid} on its record: ${json(Object.fromEntries(w1.r.sites.map((sid) => [sid, sx[sid] ?? null])))}`);
   const rec1 = await call('dev.region.realised', { region, layer: p1.revisionOf.rid, verify: false }, 600_000);
   check((rec1.tiles ?? []).length >= 1 && rec1.tiles.every((t) => t.status === 'committed'), `the revision's realised records at layer ${p1.revisionOf.rid}: ${(rec1.tiles ?? []).length}, all committed`, (rec1.tiles ?? []).map((t) => [t.stage, t.set, t.key, t.status]));
   const view = w1.st.view;

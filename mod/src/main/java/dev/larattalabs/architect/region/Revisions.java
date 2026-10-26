@@ -1249,6 +1249,17 @@ public final class Revisions {
 					items.add(Integer.toString(r.rid), bi);
 				}
 				o.add("items", items);
+				// every revision site's ext architect_mc:revision, as its record carries it (a cell site, road or lot site)
+				JsonObject siteExt = new JsonObject();
+				for (Rev r : rec.revisions) {
+					for (String sid : r.sites) {
+						var in = dev.larattalabs.architect.site.Infras.get(sid);
+						var st = in == null ? dev.larattalabs.architect.site.Sites.get(sid) : null;
+						JsonObject ext = in != null ? in.ext() : st != null ? st.ext() : null;
+						siteExt.add(sid, ext == null || !ext.has(EXT_REVISION) ? null : ext.get(EXT_REVISION).deepCopy());
+					}
+				}
+				o.add("siteExt", siteExt);
 			}
 			case "history" -> {
 				JsonObject h = new JsonObject();
