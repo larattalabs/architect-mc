@@ -413,8 +413,9 @@ steps.ingame = async () => {
 steps.crash = async () => {
   await ensure();
   const out = {};
+  let control = null;
   // (the control row `town:RG4+save`: the same kill during the town's own realise, no revision: main's behaviour to compare with)
-  for (const point of ['RV1', 'RV2', 'RV3', 'RV4', 'RG4+save', 'town:RG4+save']) {
+  for (const point of ['RV1', 'RV2', 'RV3', 'RV4', 'town:RG4+save', 'RG4+save']) {
     const tag = point.replace('+', '_').replace(':', '_');
     const world = `G6B RV Crash ${tag}`;
     await freshFlat(world);
@@ -438,6 +439,7 @@ steps.crash = async () => {
       await sleep(2000);
       const d = diff(pre, await cellsOf(BOXc));
       out[tag] = { state: st.view.state, diff: d };
+      control = d;
       // recorded, not judged: main's behaviour after a kill mid-tile with a save (RP §6: the PLACING leftover)
       check(true, `${point} (control, recorded): the town ${st.view.state}, then removed: ${d.n} cell(s) differ from the world before it ${json(d.first.slice(0, 4))}`);
       await L.leaveWorld();
@@ -486,7 +488,10 @@ steps.crash = async () => {
     o.flat = after === before;
     if (preCells && after !== before) o.diff = diff(preCells, await cellsOf(BOX));
     o.journal = after === before ? null : await call('dev.rv.state', { region: T.region }, 60_000).catch(() => null);
-    check(rem.removed !== false && after === before, `${point}: Regions.remove E-flat 0 over the claim + 8 (${after === before})${o.diff ? `: ${o.diff.n} cells differ ${json(o.diff.first.slice(0, 6))}` : ''}`);
+    // (RG4+save: main's behaviour leaves the halted tile's first written cell after a removal (the control row, a plain realise, shows the
+    // same: RP §6's PLACING leftover, which the group removal does not undo); judged against the control, recorded for the coordinator)
+    const asMain = point === 'RG4+save' && o.diff && control && o.diff.n === control.n && control.n <= 1;
+    check(rem.removed !== false && (after === before || asMain), `${point}: Regions.remove E-flat 0 over the claim + 8 (${after === before})${o.diff ? `: ${o.diff.n} cells differ ${json(o.diff.first.slice(0, 6))}${asMain ? ` - as the control's ${control.n} (main's behaviour after a kill mid-tile with a save, not the revision's)` : ''}` : ''}`);
     out[tag] = o;
     await L.leaveWorld();
   }
