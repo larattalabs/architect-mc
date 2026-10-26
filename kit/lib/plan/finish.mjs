@@ -146,7 +146,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     const style = pc.styles?.[a.part] ?? null;
     const pending = !!style?.pending;
     let lo = 0, hi = 0;
+    // ((7a K3) a wall's geometry.lots names its lots on the line ({lot, at, box}): they are its zone's lots (listed by the zone), not more)
     for (const l of a.geometry.lots) {
+      if (typeof l.id !== 'string') continue;
       const entry = pc.lotEntries?.[l.id] ?? null;
       const prov = pending || !entry;
       const [x0, y0, z0, x1, y1, z1] = l.box;

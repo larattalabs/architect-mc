@@ -1393,8 +1393,8 @@ function emitWall(K, W) {
   // the checker: each box, its floor, its passage's cells as a gate of kind passage, its outer faces) and the record's
   if (W.lots?.length) {
     const pass = (q) => (q.onWall?.passage ? { width: q.onWall.passage.width, height: q.onWall.passage.height, front: q.onWall.passage.front, back: q.onWall.passage.back } : null);
-    geometry.lots = W.lots.map((q) => ({ lot: q.lot, at: q.at, box: q.box, front: q.front, ...(pass(q) ? { passage: pass(q) } : {}) }));
-    record.lots = geometry.lots.map((q) => ({ lot: q.lot, at: q.at, box: q.box }));
+    geometry.wallLots = W.lots.map((q) => ({ lot: q.lot, at: q.at, box: q.box, front: q.front, ...(pass(q) ? { passage: pass(q) } : {}) }));
+    record.lots = geometry.wallLots.map((q) => ({ lot: q.lot, at: q.at, box: q.box }));
     meta.lots = W.lots.map((q) => {
       const ps = q.onWall?.passage;
       const cells = [];

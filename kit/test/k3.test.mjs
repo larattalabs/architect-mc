@@ -127,6 +127,8 @@ test('§3, §4, §6: the castle: towers on the corners, the gatehouse on the gat
     assert.equal(sp.walls[0].lots.length, 5);
     assert.ok(sp.walls[0].lots.find((q) => q.lot === 'gatehouse_1').passage.width >= 3);
     // the artifact: each wall lot is its zone's, with onWall (outer faces and a gatehouse's passage, lot-relative too) and ports
+    assert.ok(r.artifact.lots.every((l) => typeof l.id === 'string' && l.zone === 'castle'), 'every artifact lot is a zone\'s, with its id (none from the wall\'s geometry)');
+    assert.equal(new Set(r.artifact.lots.map((l) => l.id)).size, r.artifact.lots.length, 'no lot twice');
     const art = r.artifact.lots.filter((l) => l.onWall);
     assert.equal(art.length, 5);
     for (const l of art) {

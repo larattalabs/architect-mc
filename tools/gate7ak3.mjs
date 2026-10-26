@@ -283,8 +283,8 @@ steps.ingame = async () => {
   fs.writeFileSync(path.join(OUT, 'k3-castle-check.json'), `${JSON.stringify(ck, null, 1)}\n`);
   check(cks.every((c) => c.check?.artifactSha && c.check.artifactSha === ck.check.artifactSha), `item 10: 3 checks give one artifact (${cks.map((c) => c.check?.artifactSha?.slice(0, 12)).join(', ')})`);
   const w = (ck.check?.parts ?? []).find((a) => a.part === 'curtain_wall');
-  out.check = { overall: ck.check?.overall, parts: (ck.check?.parts ?? []).map((a) => [a.part, a.class]), wall: w && { class: w.class, provisional: w.provisional, lots: w.geometry?.lots?.map((q) => [q.lot, q.at]) } };
-  check(ck.check?.overall === 'READY' && w?.class === 'fits' && w?.provisional === true && (w.geometry?.lots?.length ?? 0) === 5, `item 4: k3_castle_flat (plan v1's shape) checks READY through Regions.checkPlan; the wall fits, provisional, its 5 lots on the line (${json(out.check.wall)})`);
+  out.check = { overall: ck.check?.overall, parts: (ck.check?.parts ?? []).map((a) => [a.part, a.class]), wall: w && { class: w.class, provisional: w.provisional, lots: w.geometry?.wallLots?.map((q) => [q.lot, q.at]) } };
+  check(ck.check?.overall === 'READY' && w?.class === 'fits' && w?.provisional === true && (w.geometry?.wallLots?.length ?? 0) === 5, `item 4: k3_castle_flat (plan v1's shape) checks READY through Regions.checkPlan; the wall fits, provisional, its 5 lots on the line (${json(out.check.wall)})`);
   if (!ck.check?.artifactSha) { await leaveWorld(); return out; }
   const sha = ck.check.artifactSha;
   const lots = await artifactLots(sha);
@@ -427,7 +427,7 @@ steps.look = async () => {
     await cmd('/time set 6000');
     const ck = await call('dev.region.checkPlan', { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate', ...(bible ? { bible } : {}) }, 1_800_000);
     const w = (ck.check?.parts ?? []).find((q) => q.part === 'curtain_wall');
-    check(ck.check?.overall === 'READY' && (w?.geometry?.lots?.length ?? 0) === 5, `look (${tag}): the castle checks READY in ${bible ?? 'the default bible'} with its 5 wall lots (recorded, not judged: Noah's call, N-K3-1)`);
+    check(ck.check?.overall === 'READY' && (w?.geometry?.wallLots?.length ?? 0) === 5, `look (${tag}): the castle checks READY in ${bible ?? 'the default bible'} with its 5 wall lots (recorded, not judged: Noah's call, N-K3-1)`);
     if (!ck.check?.artifactSha) { await leaveWorld(); continue; }
     const lots = await artifactLots(ck.check.artifactSha);
     const ids = await writeDesigns(lots, { bible });
@@ -435,7 +435,7 @@ steps.look = async () => {
     const region = await G.realise(ctx, ck.check.artifactSha, entries);
     const st = await L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
     out.runs[tag] = { state: st.view.state };
-    const gh = w.geometry.lots.find((q) => q.passage), t2 = w.geometry.lots.find((q) => q.lot === 'tower_2');
+    const gh = w.geometry.wallLots.find((q) => q.passage), t2 = w.geometry.wallLots.find((q) => q.lot === 'tower_2');
     const ring = w.geometry.ring;
     const cx = (ring[0] + ring[2]) / 2, cz = (ring[1] + ring[3]) / 2, top = Math.max(...lots.filter((l) => l.onWall).map((l) => l.box[1])) + 8;
     const [fx0, fy, fz] = gh.passage.front, [bx, , bz] = gh.passage.back;
