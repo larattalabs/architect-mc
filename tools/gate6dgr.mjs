@@ -597,6 +597,74 @@ steps.beside = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ gr-along: item 10 (an along district grown: frontage, then its boundary)
+
+steps.along = async () => {
+  await ensure();
+  const out = {};
+  const world = 'G6B GR Along';
+  await freshFlat(world);
+  const gy = await groundY();
+  const T = await grTown({ gy, addition: false, pt: false, claim: [CX, CZ, CX + 111, CZ + 111] });
+  const A = [CX, CZ, CX + 111, CZ + 111];
+  // d3_shore (D3's fixture, longer): a water strip east of the town's claim, a shore district along it (a short band: room to grow along)
+  const B = [A[2] + 1, A[1] - 60, A[2] + 110, A[3] + 60];
+  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] - 50} ${A[2] + 80} ${gy} ${A[1] + 60} minecraft:water`);
+  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] + 61} ${A[2] + 80} ${gy} ${A[3] + 50} minecraft:water`);
+  const shore = { spec: { districts: [{ id: 'quay', size: [48, 24], lots: 2, follow: { shore: {} } }] } };
+  const p = await planReq({ program: 'districts', params: shore, claim: B, beside: T.region, check: false });
+  if (p.refused) { check(false, `item 10: the shore district's plan refused (${p.refused})`); await L.leaveWorld(); return out; }
+  const r = await L.realise(p.planId, { lots: {} });
+  const s0 = await L.waitRegion(r, 3_600_000);
+  check(s0.view.state === 'PLACED', `item 10: a shore district ${r} beside ${T.region} PLACED`);
+  const BOX = [B[0] - 4, gy - 12, B[1] - 4, B[2] + 4, gy + 24, B[3] + 4];
+  const W0 = await cellsOf(BOX);
+  const land0 = landOf(s0.view);
+  const g = await growPlan(r, { district: 'quay', lots: 3, prefer: 'frontage' }, { program: 'districts' });
+  check(!g.refused, `item 10: the along district's growth (3 lots) planned: ${g.refused ?? `rid ${g.revisionOf?.rid}`}`);
+  if (g.refused) { await L.leaveWorld(); return out; }
+  const w = await rvRealise(r, g, { lots: {} });
+  const ir = await rvIr(r, g.revisionOf.rid);
+  const gm = ir.revision.grow;
+  out.grow = gm;
+  check(w.r.state === 'PLACED' && gm.lots.length === 3, `item 10: grown by ${gm.lots.length} lots: frontage ${json(gm.frontage.map((f) => f.lot))}, extension ${json(gm.extension && { kind: gm.extension.kind, lots: gm.extension.lots })}; ${w.r.state}`);
+  // frontage first (S-GR-1); along the boundary only when the frontage is full
+  check(gm.frontage.length >= 1 && (!gm.extension || gm.extension.kind === 'boundary'), `item 10: frontage first, then the boundary (${gm.frontage.length} on frontage)`);
+  // walkable from every grown lot to the district's street end (its route end junction)
+  const effA = effectiveOf(world, r, (await rvState(r)).headRid, planFiles(p.planId).ir);
+  const endNode = effA.graph.nodes.find((n) => /^quay_s\d+$/.test(n.id));
+  const nav = {};
+  for (const l of ir.lots) {
+    const e = l.ext?.['architect_mc:village']?.entrance;
+    if (!e || !endNode) continue;
+    const there = await call('dev.nav.villager', { from: e, to: endNode.at, range: 320 }, 120_000).catch((x) => ({ error: String(x) }));
+    nav[l.id] = !!there.canReach;
+  }
+  out.nav = nav;
+  check(Object.values(nav).length === 3 && Object.values(nav).every(Boolean), `item 10: every grown lot walkable to the district's street end ${endNode?.id} (${json(nav)})`);
+  const { graphCut } = await imp('lib/region/grow.mjs');
+  check(graphCut(effA, { from: endNode?.id }).length === 0, `item 10: graph.cut [] from the street end`);
+  // a second growth along the boundary (prefer extend): the band grows (land v 2: a district mask part with its revision)
+  const g2 = await growPlan(r, { district: 'quay', lots: 2, prefer: 'extend' }, { program: 'districts' });
+  let land2 = null;
+  if (!g2.refused) {
+    const w2 = await rvRealise(r, g2, { lots: {} });
+    const ir2 = await rvIr(r, g2.revisionOf.rid);
+    land2 = landOf((await call('dev.region.state', { region: r }, 60_000)).view);
+    out.grow2 = ir2.revision.grow;
+    check(w2.r.state === 'PLACED' && ir2.revision.grow.extension?.kind === 'boundary' && land2?.parts?.some((q) => q.kind === 'district' && q.shape === 'mask' && q.revision === g2.revisionOf.rid), `item 10: a growth along the boundary (prefer extend): ${w2.r.state}, extension ${json(ir2.revision.grow.extension && { kind: ir2.revision.grow.extension.kind, from: ir2.revision.grow.extension.from, lots: ir2.revision.grow.extension.lots })}; land v ${land2?.v} holds the new band (a district mask part, revision ${g2.revisionOf.rid}); outside ${land0?.outside?.cells} -> ${land2?.outside?.cells}`);
+  } else check(false, `item 10: the boundary growth refused: ${g2.refused}`);
+  // both undone: the world before the growths; land.outside back
+  const u = await call('dev.rv.undo', { region: r, toPosition: 0 }, 4 * 3_600_000);
+  const d = diff(W0, await cellsOf(BOX));
+  const landU = landOf((await call('dev.region.state', { region: r }, 60_000)).view);
+  check(u.removed === true && d.n === 0 && landU?.outside?.cells === land0?.outside?.cells, `item 10: undoRevision to 0: the world before the growths (${d.n} differ); land.outside ${landU?.outside?.cells} = ${land0?.outside?.cells}`, d.first);
+  await removeRegion(r);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ gr-plan0: item 6 (plan/0's revision.grow through checkPlan and realiseApproved)
 
 const P0_LOT = (id) => ({ id, type: 'house', size: [9, 9] });
@@ -718,10 +786,14 @@ steps.survival = async () => {
   check(r1.region === region, `item 13: realiseApproved of the survival growth answers the region: ${json(r1)}`);
   const stv = await rvState(region);
   const rid = stv.revisions.at(-1)?.rid;
-  // the growth's items placed (its targets put down, waiting for their items: nothing fed yet): undoRevision refuses survival_building
-  const wb = await rvWait(region, rid);
-  const rsb = await call('dev.rs.state', { region }, 120_000);
-  out.beforeFeed = { revision: wb.r.state, build: rsb.build && { done: rsb.build.done, percent: rsb.build.percent } };
+  // the growth's targets put down and waiting for their items (nothing fed yet): undoRevision refuses survival_building
+  let rsb = null;
+  for (let i = 0; i < 60; i++) {
+    rsb = await call('dev.rs.state', { region }, 120_000);
+    if ((rsb.targets ?? []).some((t) => !targets0.has(t.id) && !t.done)) break;
+    await sleep(2000);
+  }
+  out.beforeFeed = { build: rsb?.build && { done: rsb.build.done, percent: rsb.build.percent }, waiting: (rsb?.targets ?? []).filter((t) => !targets0.has(t.id)).map((t) => [t.id, t.done]) };
   const h0 = await hashOf(BOX);
   const ub = await call('dev.rv.undo', { region, toPosition: 0 }, 600_000);
   const h1 = await hashOf(BOX);
@@ -803,7 +875,9 @@ steps.crash = async () => {
     const o = { revision: w.r.state, items };
     check(w.r.state === 'PLACED' && Object.values(items).every((x) => x.startsWith('PLACED')) && batches.size === 1 && Object.keys(items).some((k) => k.startsWith('road:')), `${point}: after the restart the growth ${w.r.state}; its items ${json(Object.entries(items).map(([k, x]) => [k.split(':')[0], x.split('@')[0]]))} each once (one batch; its street piece among them)`);
     const t = tagged(w.st, w.r, T.region);
-    check(t.bad.length === 0, `${point}: every site of the growth tagged after the recovery (${json(t.kinds)})`);
+    const placedSites = [...new Set(Object.values(items).map((x) => x.split('@')[1]).filter(Boolean))].sort();
+    const listed = [...w.r.sites].sort();
+    check(t.bad.length === 0 && json(listed) === json(placedSites), `${point}: every site of the growth listed in RevisionView.sites and tagged after the recovery (${json(t.kinds)}; ${listed.length} listed, ${placedSites.length} placed by its items)`);
     const u = await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000);
     const d = diff(S0, await cellsOf(BOX));
     o.undo = { removed: u.removed, diff: d };

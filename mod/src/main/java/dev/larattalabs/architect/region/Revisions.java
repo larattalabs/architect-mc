@@ -1257,6 +1257,21 @@ public final class Revisions {
 		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED) && !drained;
 		boolean any = b.items.stream().anyMatch(i -> i.status == QItem.Status.PLACED);
 		rv.state = b.status == QBatch.Status.DONE && allPlaced ? "PLACED" : any ? "PARTIAL" : "FAILED";
+		// (6d GR, Ask 1) the revision's sites from its batch, in item order: an item placed before a halt whose itemDone was not saved
+		// (the region record lost with the stop) is listed too, so RevisionView.sites names every site the revision wrote
+		List<String> sites = new ArrayList<>();
+		for (QItem i : b.items) {
+			if (i.status == QItem.Status.PLACED && i.siteId != null && !sites.contains(i.siteId)) {
+				sites.add(i.siteId);
+			}
+		}
+		for (String sid : rv.sites) {
+			if (!sites.contains(sid)) {
+				sites.add(sid);
+			}
+		}
+		rv.sites.clear();
+		rv.sites.addAll(sites);
 		end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 	}
 
@@ -1342,6 +1357,14 @@ public final class Revisions {
 		}
 		List<String> no = new ArrayList<>();
 		Reason why = null;
+		// (6d GR, Steward's RC row 3) a survival revision still building its targets: say so (survival_building), not merely busy
+		if (rec.busy != null && rec.busy.startsWith("revising ") && rec.survival()) {
+			String[] building = dev.larattalabs.architect.site.RegionTargets.firstBuilding(rec.groupId);
+			if (building != null) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "undo of region " + regionId + " refused, nothing written: " + rec.busy + " is still building "
+					+ (building[1] != null ? building[1] : "target " + building[0]) + " (survival_building): let it finish or cancel it first");
+			}
+		}
 		if (rec.busy != null || rec.state == RegionState.PLACING || rec.state == RegionState.REMOVING || rec.state == RegionState.PREPARING) {
 			throw RegionsImpl.refusal(Reason.OVERLAP_BUSY, "region " + regionId + " is busy (" + (rec.busy != null ? rec.busy : rec.state.name().toLowerCase(java.util.Locale.ROOT)) + ")");
 		}
