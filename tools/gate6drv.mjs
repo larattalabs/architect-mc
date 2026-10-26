@@ -1,0 +1,464 @@
+#!/usr/bin/env node
+// Slice 6d RV gate (additive revisions; docs/CONTRACT.md "Phase 6d slice RV" §14, lanes RV-a and RV-b) against the headless server of the RV
+// run worktree (GATE6B_RUN, default `../architect-mc-RV-run`; the sim sidecar, no Claude). $0: no Claude call anywhere.
+//
+//   node tools/gate6drv.mjs <step>
+//     start [world] | stop | base      the headless server (or client) and the flat base world
+//     unit      (rv-unit)              items 1, 2, 17 offline: the kit's rv-a.test (reviseIR, the guard and M29:revision per class and broken
+//                                      variant, the effective-IR merge, historySha, 300 seeded revisions, plan/0's revision mode and artifact,
+//                                      determinism with 1 and 4 workers), the kit's byte-identity suites (goldens, plan fixtures, the asks),
+//                                      RevisionsTest and RealisedTest (the mod's merge equals the kit's; names; the record), api-compat
+//                                      against the 0.47.0, 0.45.0 and 0.44.0 apitest jars and the 0.47.0 mod surface
+//     ingame    (rv-ingame)            items 3, 6, 11, 20 in game on a flat town (flat_village, pads): every refusal before anything is written
+//                                      (lot COVERED, street OVERLAP, a site's cells OVERLAP held, a non-additive edit, a theme, a refill, an
+//                                      added body until RV-c); an added mound and a rock spire realised as revision 1 over the whole-world
+//                                      oracle (claim + 8, every cell); the head, the states, the region's own state again, the layer's
+//                                      records; two candidates on one parent (the second PLAN_STALE parent_moved, nothing written); a site
+//                                      placed after a plan on its cell refusing that tile at its check; a block set between a tile's capture
+//                                      and its write RACED, not written; Regions.remove with two revisions standing: E-flat 0
+//     crash     (rv-crash)             item 10's realise half: kills at RV1 (the manifest), RV2 (the effective snapshot, before region.json),
+//                                      RV3 (accepted, nothing installed), RV4 (installed, nothing written) and RG4+save (a revision tile mid-
+//                                      write): after each restart the state the manifest names, one batch, the revision PLACED (or never
+//                                      accepted for RV1/RV2, then realised again), and Regions.remove E-flat 0
+//     report                            REPORT.md over the step JSONs
+//
+// Evidence: artifacts/gate6d-rv/<step>.json in the main checkout (GATE6DRV_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
+// Ports: 8960/8961 (the RV lane's own range 8960-8969).
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-RV-run');
+process.env.GATE6B_OUT = process.env.GATE6DRV_OUT ?? process.env.GATE6B_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate6d-rv');
+process.env.GATE6B_SIDECAR_PORT ??= '8960';
+process.env.GATE6B_DEV_PORT ??= '8961';
+fs.mkdirSync(process.env.GATE6B_OUT, { recursive: true });
+const L = await import('./lib/run6b.mjs');
+const { OUT, check, connect, log, results, root, state, startClient, stopClient, call, cmd, sleep } = L;
+
+L.refuseKeys();
+const KIT = path.join(root, 'kit');
+const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
+const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
+
+const OWNER = 'test:rv';
+const FLAT = 'G6B Flat Base';
+const CX = 11200, CZ = 11200;
+/** The town's claim: 112 x 112 (D3's flat_village fixture shape), its lots pads (no entries). */
+const CLAIM = [CX, CZ, CX + 111, CZ + 111];
+const LOTS = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }, { id: 'cottage_2', type: 'cottage', size: [9, 9] }];
+
+const steps = {};
+async function run(name) {
+  for (const k of Object.keys(results)) delete results[k];
+  const t0 = Date.now();
+  let data, error;
+  log(`== ${name}`);
+  try {
+    data = await steps[name]();
+  } catch (e) {
+    log(String(e?.stack ?? e));
+    error = String(e?.stack ?? e);
+    check(false, `${name}: ${String(e?.message ?? e).slice(0, 300)}`);
+  }
+  if (!['stop', 'start'].includes(name)) L.write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), load1: os.loadavg()[0], error, results: { ...results }, data });
+}
+const ensure = async () => { if (!state.dev) await connect(); };
+function spendZero() {
+  fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice RV is $0: sim and stub only, no Claude call' }, null, 2)}\n`);
+}
+
+// ------------------------------------------------------------------ cells
+
+function norm(s) {
+  const m = /^([^[]+)(?:\[([^\]]*)\])?$/.exec(String(s));
+  if (!m) return String(s);
+  const id = m[1].includes(':') ? m[1] : `minecraft:${m[1]}`;
+  const props = m[2] ? m[2].split(',').filter(Boolean).sort() : [];
+  return props.length ? `${id}[${props.join(',')}]` : id;
+}
+function asState(nbt) {
+  const bs = /^Block\{([a-z0-9_.-]+:[a-z0-9_./-]+)\}(\[[^\]]*\])?/.exec(nbt);
+  if (bs) return norm(`${bs[1]}${bs[2] ?? ''}`);
+  return nbt;
+}
+const idOf = (s) => String(s).replace(/\[.*$/, '').replace(/^minecraft:/, '');
+async function cellsOf(b) {
+  const h = await call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]], cells: true }, 300_000);
+  return new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), asState(l.slice(sp + 1).split(' be=')[0])]; }));
+}
+const hashOf = async (b) => (await call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] }, 300_000)).sha256;
+
+async function groundY() {
+  const c = await cellsOf([CX + 100, -64, CZ + 100, CX + 100, 255, CZ + 100]);
+  let g = -64;
+  for (const [k, s] of c) { const y = Number(k.split(',')[1]); if (idOf(s) !== 'air' && y > g) g = y; }
+  return g;
+}
+
+async function freshFlat(name) {
+  await L.fresh(name, FLAT);
+  await L.setRules('exact');
+  await L.tp(CX + 56, 60, CZ + 56);
+}
+
+/** The town: flat_village over CLAIM, its lots pads; realised and PLACED. */
+async function town() {
+  const p = await L.plan('flat_village', CLAIM, { params: { lots: LOTS }, surveyLoad: 'bounded:256', check: false, owner: OWNER });
+  const region = await L.realise(p.planId);
+  const st = await L.waitRegion(region, 3_600_000);
+  check(st.view.state === 'PLACED', `the town ${region}: ${st.view.state}, ${st.view.cellsWritten} cells, lots ${json(st.view.lots.map((l) => [l.id, l.state]))}`);
+  return { region, p, st };
+}
+
+async function rvPlan(region, spec, opts = {}) {
+  const r = await call('dev.rv.plan', { region, spec, ...opts }, 900_000);
+  log(`  rv plan ${region}: ${r.refused ? `refused ${r.refused}` : `${r.planId} rid ${r.revisionOf?.rid} parent ${r.revisionOf?.parentRid} stages ${json(r.stages)}`}`);
+  return r;
+}
+const rvState = (region) => call('dev.rv.state', { region }, 60_000);
+/** Waits for a region's revision to end: busy cleared and the revision past PLACING. */
+async function rvWait(region, rid, timeoutMs = 1_800_000) {
+  const t0 = Date.now();
+  let st;
+  while (Date.now() - t0 < timeoutMs) {
+    st = await rvState(region);
+    const r = st.revisions.find((x) => x.rid === rid);
+    if (st.busy === null && r && !['ACCEPTED', 'PLACING'].includes(r.state)) return { st, r };
+    await sleep(L.pollDelayMs(Date.now() - t0));
+  }
+  throw new Error(`revision ${rid} of ${region} did not end (${json(st?.revisions?.map((x) => [x.rid, x.state]))}, busy ${st?.busy})`);
+}
+
+// a free spot of the town (east of its lots and street; the D3 fixture's town keeps x >= 88 free on a flat world)
+const MOUND = (rid) => ({ id: `mound${rid}`, call: { fn: 'columns', cols: [CX + 96, CZ + 92, 0, 1, 0, CX + 97, CZ + 92, 0, 2, 0, CX + 98, CZ + 93, 0, 0, 0], from: { surface: 1 }, to: { surface: 1 }, materials: ['rock'], cond: 0 } });
+const SPIRE = { id: 'spire', call: { fn: 'form', generator: 'rockSpire', params: { at: [CX + 100, 0, CZ + 20], height: [10, 12] } } };
+
+// ------------------------------------------------------------------ the oracle (§14): the expected world, independent of the revision code
+
+/**
+ * The expected world after a revision: the snapshot with the revision IR's tiles applied, evaluated by the kit (evalTile) on the frozen
+ * heights (a flat world: ground `gy` everywhere), stage by stage and set by set against the evolving expected world, each cell's condition
+ * tested as the virtual world does (vworld.mjs's rule: IF_NATURAL a natural cell, IF_SOLID natural solid, IF_AIR_OR_FLUID air or fluid,
+ * ALWAYS_OURS ours or natural), a no-op skipped. No held or protected cell is in a clean revision's way (the refusals are their own items).
+ */
+async function oracle(ir, snapshot, gy) {
+  const R = await imp('lib/realise.mjs');
+  const { unpack } = await imp('lib/region/pack.mjs');
+  const { synthColumns } = await imp('lib/region/synth.mjs');
+  const { Palette } = await imp('lib/region/vworld.mjs');
+  const pal = new Palette();
+  const exp = new Map(snapshot);
+  const ours = new Set();
+  const air = 'minecraft:air';
+  for (const stage of ir.stages) for (const set of ['terrain', 'path']) for (const key of ir.tiles?.[stage]?.[set] ?? []) {
+    const [tx, tz] = key.split(',').map(Number);
+    const win = synthColumns({ minX: tx * 64 - 8, minZ: tz * 64 - 8, width: 80, depth: 80, world: () => ({ g: gy, h: gy, f: gy, flags: 0 }) });
+    const e = R.evalTile(ir, key, win, { stage, set });
+    for (const c of unpack(e.payload).cells) {
+      const k = `${c.x},${c.y},${c.z}`;
+      const cur = pal.of(exp.get(k) ?? air);
+      let ok;
+      switch (c.cond) {
+        case 1: ok = pal.natural[cur] && !pal.air[cur] && !pal.fluid[cur] && pal.solid[cur]; break;
+        case 2: ok = pal.air[cur] || pal.fluid[cur]; break;
+        case 3: ok = ours.has(k) || pal.natural[cur]; break;
+        default: ok = pal.natural[cur];
+      }
+      if (!ok || norm(exp.get(k) ?? air) === norm(c.state)) continue;
+      exp.set(k, norm(c.state));
+      ours.add(k);
+    }
+  }
+  return exp;
+}
+function diff(a, b, max = 12) {
+  const out = [];
+  let n = 0;
+  for (const k of new Set([...a.keys(), ...b.keys()])) {
+    const x = norm(a.get(k) ?? 'minecraft:air'), y = norm(b.get(k) ?? 'minecraft:air');
+    if (x !== y) { n++; if (out.length < max) out.push(`${k} expected ${x} got ${y}`); }
+  }
+  return { n, first: out };
+}
+
+// ------------------------------------------------------------------ client and worlds
+
+steps.start = async () => {
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['-C', L.RUN, 'checkout', '-q', '--detach', head]);
+  execFileSync('npm', ['run', 'build'], { cwd: path.join(L.RUN, 'sidecar'), stdio: 'ignore' });
+  await startClient(process.argv[3] ?? 'G6B RV Lobby', { backend: 'sim' });
+  spendZero();
+  return { head };
+};
+steps.stop = async () => {
+  try { await connect(10_000); } catch { /* by PID below */ }
+  await stopClient();
+};
+steps.base = async () => {
+  await ensure();
+  await L.ensureBase(FLAT);
+  spendZero();
+  return { worlds: [FLAT] };
+};
+
+// ------------------------------------------------------------------ offline (items 1, 2, 17; api-compat)
+
+async function javaTests(patterns, minTests) {
+  const { srcGradle } = await import('./lib/src-gradle.mjs');
+  const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
+  const args = ['test', '--offline', '-q', ...patterns.flatMap((p) => ['--tests', p])];
+  const g = srcGradle(root, () => spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }));
+  const dir = path.join(root, 'mod', 'build', 'test-results', 'test');
+  let tests = 0, failures = 0;
+  const names = [];
+  for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.xml') || !patterns.some((p) => f.includes(p.replaceAll('*', '')))) continue;
+    const x = fs.readFileSync(path.join(dir, f), 'utf8');
+    const m = /tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"/.exec(x);
+    if (m) { tests += +m[1]; failures += +m[2] + +m[3]; names.push(`${f.replace(/^TEST-|\.xml$/g, '')}: ${m[1]}/${+m[2] + +m[3]}`); }
+  }
+  return { code: g.status, tests, failures, names, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').slice(-12), ok: g.status === 0 && tests >= minTests && failures === 0 };
+}
+function nodeTest(files, timeout = 3_600_000) {
+  const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
+  const t = `${r.stdout}${r.stderr}`;
+  const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
+  return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
+}
+
+/** The archived apitest jars and mod surface api-compat checks against (built from their tags: GATE6DRV_JARS, default artifacts/gate6d-rv/jars). */
+export function apiJars() {
+  const A = process.env.GATE6DRV_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'gate6d-rv', 'jars');
+  const R44 = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'release-0440', 'v0440');
+  return { jars: [path.join(A, 'architect_apitest-0.47.0.jar'), path.join(A, 'architect_apitest-0.45.0.jar'), path.join(R44, 'architect_apitest-0.44.0.jar')], surface: path.join(A, 'architect_mc-0.47.0.jar') };
+}
+
+steps.unit = async () => {
+  const out = {};
+  out.kit = nodeTest(['kit/test/rv-a.test.mjs']);
+  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 10, `items 1 and 17 (kit rv-a.test): reviseIR's additions, ids, stages and seed; the guard per class and M29:revision per broken variant; the effective-IR merge; historySha; 300 seeded synthetic revisions (deterministic, nothing standing named, no write where the standing region forbids); plan/0's revision mode (keep, add, refill, grow, change) and its artifact; the revision IR over 3 plans and its tile shas with 1 and 4 workers; the catalogue's revision.* entries; the mod's parity fixture: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  out.identity = nodeTest(['kit/test/scenario-goldens.test.mjs', 'kit/test/region-golden.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/districts-d3-parity.test.mjs', 'kit/test/rp.test.mjs', 'kit/test/plan-p0.test.mjs']);
+  check(out.identity.code === 0 && out.identity.fail === 0, `item 2 (byte identity): the scenario and region goldens, the plan fixtures valid/*, the 59 asks, D3's parity fixture, RP's writers and the catalogue: ${out.identity.pass} pass, ${out.identity.fail} fail`, out.identity.failing);
+  out.java = await javaTests(['*RevisionsTest*', '*RealisedTest*', '*ApiDTest*'], 20);
+  check(out.java.ok, `RevisionsTest (the mod's merge equals the kit's mergeEffective; stage names; the record round trip; an unrevised region's record unchanged), RealisedTest, ApiDTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
+  const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
+  const J = apiJars();
+  out.apicompat = [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
+    const ac = fs.existsSync(args.at(-1)) ? spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 900_000, env }) : { status: -1, stdout: `missing ${args.at(-1)}`, stderr: '' };
+    return { args: args.slice(1).map((a) => path.basename(a)), code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter(Boolean).slice(-3) };
+  });
+  check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible with the 0.47.0, 0.45.0 and 0.44.0 apitest jars and the 0.47.0 mod surface', out.apicompat);
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ in game (items 3, 6, 11, 20; removal)
+
+steps.ingame = async () => {
+  await ensure();
+  const out = {};
+  await freshFlat('G6B RV Town');
+  const gy = await groundY();
+  out.gy = gy;
+  const BOX = [CLAIM[0] - 8, gy - 4, CLAIM[1] - 8, CLAIM[2] + 8, gy + 40, CLAIM[3] + 8];
+  const before = await hashOf(BOX);
+  const T = await town();
+  const region = T.region;
+  const lot = T.st.view.lots[0];
+  const ir0 = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', T.p.planId, 'ir.json'), 'utf8'));
+  const hall = ir0.lots.find((l) => l.id === 'hall_1').box;
+  const road = ir0.roads[0];
+
+  // ---- item 6: refusals, nothing written (the world's hash and the head unchanged)
+  const h0 = await hashOf(BOX);
+  const col = (id, x, z) => ({ id, call: { fn: 'columns', cols: [x, z, 0, 0, 0], from: { surface: 1 }, to: { surface: 1 }, materials: ['structure'], cond: 0 } });
+  const refusals = {
+    lot: await rvPlan(region, { parts: [col('a', hall.minX + 2, hall.minZ + 2)] }),
+    street: await rvPlan(region, { parts: [col('a', road.points[0][0] + 2, road.points[0][2])] }),
+    theme: await rvPlan(region, { parts: [{ id: 'oak', call: { fn: 'columns', cols: [CX + 100, CZ + 100, 0, 0, 0], from: { surface: 1 }, to: { surface: 1 }, materials: ['minecraft:oak_planks'] } }] }),
+    refillPlaced: await rvPlan(region, { parts: [], refill: ['nolot'] }),
+    nothing: await rvPlan(region, { parts: [] }),
+  };
+  // another site's cells (a Steward addition's shape: a cell site) on a free spot: held, refused OVERLAP
+  const site = await call('dev.cells.place', { kind: 'test:rv_steward', cells: [[CX + 104, gy + 1, CZ + 104, 'minecraft:cobblestone']], naturalOnly: false, owner: 'steward_mc:test' }, 300_000);
+  refusals.held = await rvPlan(region, { parts: [col('a', CX + 104, CZ + 104)] });
+  // an added body: the kit plans it, the mod refuses it at realise (RV-c brings added bodies), nothing written
+  const pond = await rvPlan(region, { parts: [{ id: 'pond', call: { fn: 'pond', rect: [CX + 90, CZ + 40, CX + 96, CZ + 46] } }] });
+  refusals.pondRealise = pond.refused ? { refused: pond.refused } : await call('dev.region.realise', { planId: pond.planId }, 300_000);
+  out.refusals = refusals;
+  const code = (r) => String(r?.refused ?? '').split(':')[0];
+  check(code(refusals.lot) === 'COVERED', `a write in a standing lot box refuses COVERED: ${refusals.lot.refused}`);
+  check(code(refusals.street) === 'OVERLAP', `a write on the street refuses OVERLAP {kind: road|path}: ${refusals.street.refused}`);
+  check(code(refusals.held) === 'OVERLAP' && /held/.test(refusals.held.refused), `a write on another site's cell (${site.siteId}) refuses OVERLAP {kind: held}: ${refusals.held.refused}`);
+  check(code(refusals.theme) === 'NOT_ALLOWED' && /theme/.test(refusals.theme.refused), `a raw oak block refuses NOT_ALLOWED [theme] (everything generated is themed): ${refusals.theme.refused}`);
+  check(code(refusals.refillPlaced) === 'NOT_ALLOWED', `a refill of a lot that isn't the region's refuses NOT_ALLOWED: ${refusals.refillPlaced.refused}`);
+  check(code(refusals.nothing) === 'NOT_ALLOWED', `a revision adding nothing refuses NOT_ALLOWED: ${refusals.nothing.refused}`);
+  check(String(refusals.pondRealise.refused ?? '').startsWith('NOT_ALLOWED'), `an added body is planned by the kit and refused at realise until RV-c (NOT_ALLOWED): ${json(refusals.pondRealise)}`);
+  let s0 = await rvState(region);
+  const h1 = await hashOf(BOX);
+  check(h1 !== h0 && s0.headRid === 0 && s0.position === 0 && s0.busy === null && s0.revisions.length === 0, `nothing written by any refusal: the head 0, no revision record, busy null (the claim's hash moved only by the test's own site: ${h0 !== h1})`);
+  check(s0.nextRid >= 2, `every plan took a rid (monotonic, never reused): nextRid ${s0.nextRid}`);
+
+  // ---- item 3: an added mound and spire, realised as the region's next layers, against the whole-world oracle
+  const snap = await cellsOf(BOX);
+  const p1 = await rvPlan(region, { parts: [MOUND(1), SPIRE] });
+  check(!p1.refused && p1.revisionOf?.parentRid === 0 && p1.revisionOf?.position === 1, `revision planned: ${p1.planId} rid ${p1.revisionOf?.rid} on head 0, position 1`);
+  s0 = await rvState(region);
+  check(s0.headRid === 0 && s0.position === 0, 'a candidate never moves the head');
+  const rir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p1.planId, 'ir.json'), 'utf8'));
+  const r1 = await L.realise(p1.planId);
+  check(r1 === region, `the realise of a revision answers its region: ${r1}`);
+  const w1 = await rvWait(region, p1.revisionOf.rid);
+  const got = await cellsOf(BOX);
+  const exp = await oracle(rir, snap, gy);
+  const d1 = diff(exp, got);
+  out.add = { rid: p1.revisionOf.rid, revision: w1.r, diff: d1, cells: w1.r.cells };
+  check(w1.r.state === 'PLACED' && d1.n === 0, `item 3: revision ${p1.revisionOf.rid} ${w1.r.state} (${w1.r.cells} cells); the whole claim + 8 against the oracle (the kit's own evaluation of the revision IR on the frozen heights, stage by stage, over the snapshot): ${d1.n} cells differ`, d1.first);
+  check(w1.st.headRid === p1.revisionOf.rid && w1.st.position === 1 && w1.st.state === 'PLACED' && w1.st.busy === null, `the head ${w1.st.headRid} at position ${w1.st.position}; the region reads PLACED again (its own state), busy cleared`);
+  check(w1.st.effectiveHead === p1.revisionOf.rid && w1.st.effectiveParts.some((x) => x.startsWith(`rv${p1.revisionOf.rid}_`)) && w1.st.effectiveFiles.includes(`${p1.revisionOf.rid}.json`), `the effective IR: head ${w1.st.effectiveHead}, ${w1.st.effectiveParts.length} parts (the revision's among them), snapshot ${json(w1.st.effectiveFiles)}`);
+  check(w1.r.sites.length >= 1 && w1.r.stages.every((x) => x.startsWith(`rv${p1.revisionOf.rid}:`)), `the revision's sites ${json(w1.r.sites)} and journal stages ${json(w1.r.stages)} (Steward's ask: one revision, its sites)`);
+  const rec1 = await call('dev.region.realised', { region, layer: p1.revisionOf.rid, verify: false }, 600_000);
+  check((rec1.tiles ?? []).length >= 1 && rec1.tiles.every((t) => t.status === 'committed'), `the revision's realised records at layer ${p1.revisionOf.rid}: ${(rec1.tiles ?? []).length}, all committed`, (rec1.tiles ?? []).map((t) => [t.stage, t.set, t.key, t.status]));
+  const view = w1.st.view;
+  check(view.position === 1 && view.revisions?.length === 1 && view.revisions[0].state === 'PLACED', `RegionView: position ${view.position}, revisions ${json(view.revisions?.map((r) => [r.rid, r.state]))}`);
+
+  // ---- item 11: two candidates on one parent; the second PLAN_STALE parent_moved, nothing written
+  const ca = await rvPlan(region, { parts: [MOUND(2)] });
+  const cb = await rvPlan(region, { parts: [{ ...MOUND(3), call: { ...MOUND(3).call, cols: [CX + 96, CZ + 98, 0, 1, 0] } }] });
+  check(!ca.refused && !cb.refused && ca.revisionOf.parentRid === p1.revisionOf.rid && cb.revisionOf.parentRid === p1.revisionOf.rid, `two candidates on head ${p1.revisionOf.rid}: rids ${ca.revisionOf?.rid}, ${cb.revisionOf?.rid}`);
+  await L.realise(ca.planId);
+  const wa = await rvWait(region, ca.revisionOf.rid);
+  const hb = await hashOf(BOX);
+  const rb = await call('dev.region.realise', { planId: cb.planId }, 300_000);
+  const hb2 = await hashOf(BOX);
+  out.heads = { a: wa.r, b: rb };
+  check(wa.r.state === 'PLACED' && String(rb.refused ?? '').startsWith('PLAN_STALE') && /parent_moved/.test(rb.refused) && hb === hb2, `the first candidate accepted (${wa.r.state}, head ${wa.st.headRid}); the second refuses ${rb.refused}; nothing written (${hb === hb2})`);
+
+  // ---- §3.2: a site placed after the plan on a target cell: the tile refuses at its check, the revision ends with nothing of that tile
+  const pc = await rvPlan(region, { parts: [col('late', CX + 60, CZ + 100)] });
+  const late = await call('dev.cells.place', { kind: 'test:rv_late', cells: [[CX + 60, gy + 1, CZ + 100, 'minecraft:mossy_cobblestone']], naturalOnly: false, owner: 'steward_mc:test' }, 300_000);
+  const hl = await hashOf(BOX);
+  await L.realise(pc.planId);
+  const wl = await rvWait(region, pc.revisionOf.rid);
+  const hl2 = await hashOf(BOX);
+  out.lateSite = { revision: wl.r, site: late.siteId };
+  check(wl.r.state === 'FAILED' && /OVERLAP|COVERED/.test(wl.r.waiting ?? '') && hl === hl2 && wl.st.state === 'PLACED', `a site placed on a target cell after the plan (${late.siteId}): the tile refuses at its check (${wl.r.waiting}); the revision ${wl.r.state}, nothing written (${hl === hl2}), the region PLACED`);
+
+  // ---- item 20: a player's block set between a tile's capture and its write: RACED, not written; the rest written
+  const pr = await rvPlan(region, { parts: [{ id: 'race', call: { fn: 'columns', cols: [CX + 70, CZ + 100, 0, 0, 0, CX + 71, CZ + 100, 0, 0, 0, CX + 72, CZ + 100, 0, 0, 0], from: { surface: 1 }, to: { surface: 1 }, materials: ['rock'], cond: 0 } }] });
+  await call('dev.rv.race', { at: [CX + 71, gy + 1, CZ + 100], state: 'minecraft:glowstone' }, 10_000);
+  await L.realise(pr.planId);
+  const wr = await rvWait(region, pr.revisionOf.rid);
+  const rc = await cellsOf([CX + 70, gy + 1, CZ + 100, CX + 72, gy + 1, CZ + 100]);
+  out.race = { revision: wr.r, cells: Object.fromEntries(rc) };
+  const racedCell = rc.get(`${CX + 71},${gy + 1},${CZ + 100}`);
+  const others = [rc.get(`${CX + 70},${gy + 1},${CZ + 100}`), rc.get(`${CX + 72},${gy + 1},${CZ + 100}`)];
+  check(wr.r.state === 'PLACED' && idOf(racedCell) === 'glowstone' && others.every((s) => idOf(s) !== 'air' && idOf(s) !== 'glowstone'), `item 20 (a player's block): the raced cell keeps the player's glowstone (${racedCell}), unwritten; the tile's other cells written (${json(others)}); the revision ${wr.r.state}`);
+  await call('dev.rv.race', { at: null }, 10_000);
+
+  // ---- Regions.remove with the revisions standing: the group takes them all, last placed first: E-flat 0 against the world before the town
+  const rem = await call('dev.region.remove', { region, requester: OWNER }, 4 * 3_600_000);
+  await sleep(2000);
+  // the test's own sites stay theirs (not the region's): their cells removed too before the comparison
+  for (const sid of [site.siteId, late.siteId]) await call('dev.site.remove', { siteId: sid, force: true }, 600_000).catch((e) => log(`  site ${sid}: ${e}`));
+  await sleep(2000);
+  const after = await hashOf(BOX);
+  const gl = await cellsOf([CX + 71, gy + 1, CZ + 100, CX + 71, gy + 1, CZ + 100]);
+  out.remove = { result: rem, flat: after === before, raced: [...gl.values()] };
+  check(rem.removed !== false, `Regions.remove with ${wr.st.revisions.length} revisions standing: removed ${rem.removed}`);
+  // (the player's glowstone is the player's: kept by policy; set it back to air before E-flat)
+  await cmd(`/setblock ${CX + 71} ${gy + 1} ${CZ + 100} minecraft:air`);
+  const after2 = await hashOf(BOX);
+  check(after2 === before, `E-flat 0 over the claim + 8 after the removal (the player's raced block kept by policy: ${json([...gl.values()])}, cleared for the comparison)`);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ crash (item 10, the realise half)
+
+steps.crash = async () => {
+  await ensure();
+  const out = {};
+  for (const point of ['RV1', 'RV2', 'RV3', 'RV4', 'RG4+save']) {
+    const tag = point.replace('+', '_');
+    const world = `G6B RV Crash ${tag}`;
+    await freshFlat(world);
+    const gy = await groundY();
+    const BOX = [CLAIM[0] - 8, gy - 4, CLAIM[1] - 8, CLAIM[2] + 8, gy + 40, CLAIM[3] + 8];
+    const before = await hashOf(BOX);
+    const T = await town();
+    const p = await rvPlan(T.region, { parts: [MOUND(1), SPIRE] });
+    const rid = p.revisionOf.rid;
+    await call('dev.journal.killAt', { point }, 10_000);
+    L.realise(p.planId).catch(() => null);
+    let down = false;
+    for (let i = 0; i < 180 && !down; i++) {
+      await sleep(2000);
+      const s = await call('dev.state', {}, 10_000).catch(() => null);
+      down = !!s && s.inWorld === false;
+    }
+    check(down, `${point}: the kill point halted the server`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
+    const rdir = path.join(L.SAVES, world, 'architect-regions', T.region);
+    const atHalt = { manifest: fs.existsSync(path.join(rdir, 'rev', String(rid), 'op.json')), effective: fs.existsSync(path.join(rdir, 'effective', `${rid}.json`)), record: JSON.parse(fs.readFileSync(path.join(rdir, 'region.json'), 'utf8')).revisions ?? null };
+    await L.openWorld(world);
+    await L.tp(CX + 56, 60, CZ + 56);
+    await sleep(3000);
+    let st = await rvState(T.region);
+    const accepted = !!st.revisions.find((r) => r.rid === rid);
+    const o = { atHalt, acceptedAfterRestart: accepted, headAfterRestart: st.headRid };
+    if (point === 'RV1' || point === 'RV2') {
+      check(!accepted && st.headRid === 0 && st.busy === null && atHalt.manifest && (point === 'RV1' || atHalt.effective), `${point}: halted with the manifest${point === 'RV2' ? ' and the effective snapshot' : ''} on disk and region.json not renamed: after the restart nothing accepted (head ${st.headRid}), the snapshot an orphan never read (effective head ${st.effectiveHead})`);
+      await L.realise(p.planId);
+    } else {
+      check(accepted && st.headRid === rid, `${point}: accepted before the halt (region.json renamed): after the restart the head is ${st.headRid}`);
+    }
+    const w = await rvWait(T.region, rid);
+    st = w.st;
+    const items = st.items[String(rid)] ?? {};
+    const batches = new Set(st.revisions.map((r) => r.batchId).filter(Boolean));
+    o.revision = w.r;
+    o.items = items;
+    check(w.r.state === 'PLACED' && Object.values(items).every((s) => s.startsWith('PLACED')) && batches.size === 1, `${point}: the revision ${w.r.state}, its items ${json(Object.values(items).map((s) => s.split('@')[0]))} (each key once), one batch`);
+    const rem = await call('dev.region.remove', { region: T.region, requester: OWNER }, 4 * 3_600_000);
+    await sleep(2000);
+    const after = await hashOf(BOX);
+    o.flat = after === before;
+    check(rem.removed !== false && after === before, `${point}: Regions.remove E-flat 0 over the claim + 8 (${after === before})`);
+    out[tag] = o;
+    await L.leaveWorld();
+  }
+  spendZero();
+  return out;
+};
+
+steps.report = async () => {
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|ingame|crash)\.json$/.test(f));
+  const lines = ['# Gate slice 6d RV (RV-a, RV-b)', '', `head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
+  for (const f of files.sort()) {
+    const j = JSON.parse(fs.readFileSync(path.join(OUT, f), 'utf8'));
+    lines.push(`## ${j.step} (${Math.round(j.seconds)} s, head ${String(j.head).slice(0, 10)})`, '');
+    for (const [m, r] of Object.entries(j.results ?? {})) lines.push(`- ${r?.ok ? 'ok  ' : 'FAIL'} ${m}`);
+    lines.push('');
+  }
+  fs.writeFileSync(path.join(OUT, 'REPORT.md'), `${lines.join('\n')}\n`);
+  return { files };
+};
+
+const name = process.argv[2];
+if (!steps[name]) {
+  console.error(`usage: node tools/gate6drv.mjs <${Object.keys(steps).join(' | ')}>`);
+  process.exit(2);
+}
+await run(name);
+const f = L.fails();
+log(f ? `${f} FAILURE(S)` : 'all checks passed');
+if (state.dev) await state.dev.close?.();
+process.exit(f ? 1 : 0);

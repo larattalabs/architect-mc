@@ -929,6 +929,40 @@ public final class Revisions {
 		}
 	}
 
+	/** (dev.rv.race, gate item 20) TEST: a block set on one cell of the next revision tile that writes it, after its capture, before its write. */
+	private static volatile int @Nullable [] raceAt;
+	private static volatile @Nullable String raceState;
+
+	public static void armRace(int @Nullable [] pos, @Nullable String state) {
+		raceAt = pos;
+		raceState = state;
+	}
+
+	/** The armed race, if this tile writes its cell (InfraJob, entering its write). */
+	public static void raceHook(ServerLevel level, long[] positions) {
+		int[] at = raceAt;
+		String st = raceState;
+		if (at == null || st == null) {
+			return;
+		}
+		long want = net.minecraft.core.BlockPos.asLong(at[0], at[1], at[2]);
+		for (long p : positions) {
+			if (p == want) {
+				raceAt = null;
+				raceState = null;
+				try {
+					var state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(net.minecraft.core.registries.BuiltInRegistries.BLOCK, st, false)
+						.blockState();
+					level.setBlock(new net.minecraft.core.BlockPos(at[0], at[1], at[2]), state, net.minecraft.world.level.block.Block.UPDATE_ALL);
+					Architect.LOGGER.info("Revision race (TEST): {} set at {} between its tile's capture and its write", st, java.util.Arrays.toString(at));
+				} catch (Exception e) {
+					Architect.LOGGER.warn("Revision race (TEST): {} not set: {}", st, e.toString());
+				}
+				return;
+			}
+		}
+	}
+
 	/** Whether a batch is a revision's. */
 	public static boolean isRevisionBatch(QBatch b) {
 		return b.ext.get(EXT_REVISION) instanceof JsonObject;
@@ -1105,6 +1139,13 @@ public final class Revisions {
 	 */
 	public static JsonObject dev(MinecraftServer s, String op, JsonObject req) throws IOException {
 		String region = str(req, "region", "");
+		if ("race".equals(op)) {
+			int[] at = req.get("at") instanceof JsonArray a ? new int[] {a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()} : null;
+			armRace(at, str(req, "state", "minecraft:cobblestone"));
+			JsonObject r = new JsonObject();
+			r.addProperty("armed", at != null);
+			return r;
+		}
 		RegionsImpl.Live l = RegionsImpl.live(region);
 		if (l == null) {
 			throw new IllegalArgumentException("no live region " + region);

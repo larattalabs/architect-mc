@@ -56,6 +56,8 @@ public final class SliceRvDev {
 			+ "its snapshot files, every manifest, the RegionView and the revision batches' items");
 		op("dev.rv.history", "history", "{region, keys: [\"tx,tz\"]} - (6d RV, §3.4) historySha per key");
 		op("dev.rv.standing", "standing", "{region} - (6d RV, §5.3) ctx.standing as a revision plan would send it");
+		op("dev.rv.race", "race", "{at: [x,y,z] | null, state?: minecraft:cobblestone} - (6d RV, item 20) TEST: the next revision tile that writes that "
+			+ "cell gets the block set there after its capture, before its write (the cell is then RACED, not written)");
 		op("dev.rv.ir", "ir", "{region, rid} - (6d RV) a revision's IR (rev/<rid>/ir.json)");
 	}
 }

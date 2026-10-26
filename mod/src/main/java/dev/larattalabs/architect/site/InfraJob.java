@@ -513,6 +513,9 @@ final class InfraJob implements Placement.Job {
 					dropsBefore = record.box().volume() <= 4_000_000 ? Sites.Drops.before(level, record.box()).uuids() : null;
 					phase = WRITE;
 					cursor = 0;
+					if (raceBefores != null) {
+						dev.larattalabs.architect.region.Revisions.raceHook(level, positions); // (6d RV) TEST: dev.rv.race, between the check and the write
+					}
 					return false;
 				}
 				case WRITE -> {
