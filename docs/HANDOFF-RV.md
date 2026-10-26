@@ -30,9 +30,10 @@ What ships in RV-a + RV-b, and what Steward can call now:
 4. **While it writes** the region reads `PLACING` and `RegionView.busy` is `revising <rid>`; another revision refuses `OVERLAP_BUSY`.
    **Afterwards the region reads its own pre-revision state again** (your point 1); the revision's outcome (`PLACED`, `PARTIAL`, `FAILED`) is
    only in `RegionView.revisions`.
-5. **Your GR review, ask 1 (one growth = one history entry):** every site a revision writes (its tile cell sites, its lots, and GR's street
-   pieces when GR lands) carries ext `architect_mc:revision {region, rid}` on its batch and items, and `RevisionView.sites` lists them in
-   write order. `LotState.revision` names the revision that added a lot (0: the realised plan's). Log one history entry per `rid`; undo it
+5. **Your GR review, ask 1 (one growth = one history entry):** every site a revision writes carries ext `architect_mc:revision {region, rid}`
+   (its batch and items carry it, and the site records take the item's ext), and `RevisionView.sites` lists them in write order. Verified in
+   game for tile cell sites (rv-ingame reads each site record's ext); lot sites take the same item ext but no lot was built in this gate
+   (RV-d's lots and refills verify it), and GR's street pieces will. `LotState.revision` names the revision that added a lot (0: the realised plan's). Log one history entry per `rid`; undo it
    with `undoRevision` (RV-c).
 6. **Ask 2 (`land.outside` shrinks after `undoRevision`):** confirmed as the design. `architect_mc:land` and every other reader read the
    effective IR of the **head** (`effective/<head>.json`, §4.5); `undoRevision` moves the head down, so the land is recomputed from the older
@@ -132,12 +133,13 @@ Catalogue (`sinceApi: NEXT`, appended): `revision.keep`, `revision.add`, `revisi
 
 | Check | Where | Result |
 |---|---|---|
-| kit suite | `node --test kit/test/*.test.mjs` at 854bb2d6 (+ the four catalogue tests fixed after) | 910 tests; rv-a.test 11/0; the catalogue tests 0 fail after reading the `revision.*` entries as rv-a's |
-| sidecar | `npm run check` (tests and the bundle) | 784/784 |
-| mod | `./gradlew build --offline` | 959 tests, 0 failed after ApiDTest (RegionView's new components) and PredicatePathsTest (the race hook through /setblock) were fixed; RevisionsTest 5/0 |
+| kit suite | `node --test kit/test/*.test.mjs` at bfa97ee8 (the head's code) | **912/912** |
+| sidecar | `npm run check` (tests and the bundle), at 854bb2d6 (unchanged since) | 784/784 |
+| mod | `./gradlew build --offline` at bfa97ee8 | **BUILD SUCCESSFUL, 959 tests, 0 failures** (ApiDTest reads RegionView's new components; PredicatePathsTest: the race hook goes through /setblock) |
 | instant lints | lint-structure, lint-look, water-lint (kit/lint), p3-lint (LedgerLintTest, RegionFluidsLintTest, in rv-unit) | structure 64/0, look 13/0, water 126/0, p3 pass |
 | api-compat | `tools/api-compat.mjs` vs the 0.47.0 and 0.45.0 apitest jars (built from their tags: `artifacts/gate6d-rv/jars`, SOURCE.txt) and 0.44.0's (`artifacts/release-0440/v0440`), `--surface` vs the 0.47.0 mod jar | clean (every referenced member; the whole surface) |
 | **chain 6drv** | run `artifacts/gate-runs-RV/20261026-180250-6drv` at 5ba05fca, ports 8960/8961, run dir `../architect-mc-RV-run` | **PASS: rv-unit 4/0, rv-ingame 27/0, rv-crash 27/0** |
+| **chain 6drv at the head's code** | run `artifacts/gate-runs-RV/20261026-182335-6drv` at bfa97ee8 | **PASS: rv-unit 4/0, rv-ingame 28/0 (adds: every revision site's record carries `architect_mc:revision {region, rid}`), rv-crash 27/0** |
 
 rv-ingame (items 3, 6, 11, 20): the refusals (COVERED lot, OVERLAP road, OVERLAP held, NOT_ALLOWED theme/refill/empty, the added body at
 realise) wrote nothing; revision 8 (a mound and a rock spire, 1382 cells) matched the whole-world oracle over claim + 8 with 0 cells
