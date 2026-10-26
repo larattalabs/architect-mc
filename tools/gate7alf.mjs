@@ -501,9 +501,10 @@ steps.probe = async () => {
   await L.fresh('G6B LF Probe', FLAT);
   await L.setRules('exact');
   await cmd('/difficulty normal');
-  const g = -61; // (the superflat base's grass)
   const X = 7000, Z = 7000;
-  await tp(X, 20, Z + 20);
+  const g = await core.groundOf(ctx, [X - 8, Z - 8, X + 130, Z + 8]); // (the flat base's ground, read from its survey)
+  out.ground = g;
+  await tp(X, g + 30, Z + 20);
   // (a) water poured over soul sand and over magma becomes the columns (the scheduled tick from the base)
   const colUp = await buildColumn(X, Z, g, 8);
   const colDown = await buildColumn(X + 20, Z, g, 8, { down: true });
