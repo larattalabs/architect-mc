@@ -443,10 +443,29 @@
   },
   {
    "id": "connector.stairs_around",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     4,
+     64
+    ],
+    "width": [
+     1,
+     2
+    ],
+    "villagerMinWidth": 2,
+    "outerEdge": 2,
+    "landingEvery": 8,
+    "hosts": [
+     "rock_spire",
+     "ice_spike",
+     "giant_tree",
+     "giant_mushroom"
+    ]
+   },
+   "note": "SA: a spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout (top summit: a deck over the summit; canopy: a ring deck under the leaves or cap; {y}); a T2 path leg joins from to its foot. The lookout is player-only unless movers name villagers (then 2 wide)."
   },
   {
    "id": "wall.line",

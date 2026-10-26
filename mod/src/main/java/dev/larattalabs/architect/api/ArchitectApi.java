@@ -157,6 +157,10 @@ public interface ArchitectApi {
 	 * with its crossing {@code {type, rise, steps, cover}}, the siteplan's {@code rockStairs[]}. A plan with one is checked in the
 	 * two-plan flow as a tunnel's (its corridor's frozen volume; {@code limits.volume}), and an artifact's stale rock names it
 	 * ({@code ARTIFACT_STALE} "rock_stair &lt;part&gt;: ..."). No new record, method or reason.
+	 * Since NEXT (7a SA), an SA helper ({@code region.spirals}) adds {@code "spiralStairs"}: plan/0's {@code connector.stairs_around} (a
+	 * spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout, a path leg from
+	 * {@code from} to its foot) is compiled; the graph gains a {@code lookout} node and an edge typed {@code stairs_around} with its
+	 * crossing {@code {type, host, rise, turns}}; the siteplan's {@code spirals[]}. No new record, method or reason.
 	 */
 	Set<String> features();
 }
