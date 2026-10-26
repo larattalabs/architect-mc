@@ -295,3 +295,43 @@ test('item 6 (kit): plan/0 revision.grow: a zone gaining 2 lots answers fits sta
   z2.program.lots.pop();
   assert.equal((await p0({ ...P0_TOWN, zones: [z2], revision: { n: 1, parentArtifact: parent.artifactSha } }, sv.bytes, sv.claim, rv)).check.parts.find((q) => q.part === 'town').reasons[0].block, 'revision.change');
 });
+
+// ---- GR-b: along districts (§5, item 10's kit half)
+test('item 10 (kit): an along district grows on free frontage of its street first, then along its boundary: a new band, its street from the free route end, the mask recorded; land v 2 holds the band', async () => {
+  const { makeColumns } = await import('../lib/region/pack.mjs');
+  const W = 192, D = 192, claim = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 };
+  const c = makeColumns(0, 0, W, D, 1);
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) { const k = i + j * W; const w = i >= 90 && i < 100; c.ground[k] = 64; c.height[k] = 64; c.floor[k] = w ? 61 : 64; c.flags[k] = w ? 1 : 0; }
+  const q = await planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec: { districts: [{ id: 'quay', size: [64, 24], follow: { shore: {} }, lots: 2 }] }, lamps: false }, survey: c, claim, seed: '1' });
+  const eff = mergeEffective(q.ir);
+  const st = revisionStanding({ id: 'rg3', claim: [0, 0, 191, 191], effective: eff, held: { runs: [], town: [], terrain: [] } });
+  const ctx = { rid: 1, position: 1, parent: { rid: 0, irSha: q.irSha }, base: { irSha: q.irSha }, survey: c, standing: st };
+  // frontage first (S-GR-1): 3 lots on the free side of the standing street, no extension
+  const f = await reviseIR(eff, { grow: { district: 'quay', lots: 3 } }, ctx);
+  assert.equal(f.ir.revision.grow.extension, null);
+  assert.equal(f.ir.revision.grow.frontage.length, 3);
+  assert.ok(f.ir.revision.grow.frontage.every((x) => x.street === 'route_st_quay_1'));
+  assert.deepEqual(graphCut(mergeEffective(q.ir, [{ rid: 1, position: 1, ir: f.ir }]), { from: 'quay_s0' }), []);
+  // extend first: the boundary extension (its band continues the standing one, outside it), every lot dry and on land
+  const e = await reviseIR(eff, { grow: { district: 'quay', lots: 4, prefer: 'extend' } }, ctx);
+  const g = e.ir.revision.grow;
+  assert.equal(g.extension?.kind, 'boundary', JSON.stringify(g));
+  assert.ok(g.extension.lots.length >= 2);
+  assert.equal(g.follow.district, 'quay');
+  const road = e.ir.roads.find((x) => x.id === g.extension.road);
+  assert.ok(road.ext['architect_mc:band'] && road.ext['architect_mc:street'].district === 'quay');
+  for (const l of e.ir.lots) for (let x = l.box.minX; x <= l.box.maxX; x++) assert.ok(x < 90 || x >= 100, `${l.id} on land`);
+  const K = standingClasses(st);
+  const cells = await cellsOf(e, c);
+  assert.equal(cells.filter(([x, , z]) => columnProblem(K, x, z)).length, 0);
+  const m = mergeEffective(q.ir, [{ rid: 1, position: 1, ir: e.ir }]);
+  assert.deepEqual(graphCut(m, { from: 'quay_s0' }), []);
+  const land = districtLand(m, null);
+  assert.ok(land.parts.some((p) => p.kind === 'district' && p.id === 'quay' && p.shape === 'mask' && p.revision === 1));
+  assert.ok(land.parts.some((p) => p.kind === 'grown' && p.revision === 1));
+  // where the boundary ends inside the claim: the rest unplaced NO_ROOM {kind: boundary} (a claim cut 8 past the band's south end)
+  const cut = { ...eff, claim: { ...eff.claim, minZ: Math.max(0, Math.min(...q.ir.lots.map((l) => l.box.minZ)) - 8) } };
+  const n = await reviseIR(cut, { grow: { district: 'quay', lots: 6, prefer: 'extend', extend: 'auto' } }, { ...ctx, standing: revisionStanding({ id: 'rg3', claim: [0, cut.claim.minZ, 191, 191], effective: cut, held: { runs: [], town: [], terrain: [] } }) }).catch((x) => x);
+  const un = n instanceof Error ? [{ kind: /\[([a-z]+)\]/.exec(n.message)?.[1] }] : n.ir.revision.grow.unplaced;
+  assert.ok(un.length >= 1 && un.some((u) => u.kind === 'boundary' || u.kind === 'frontage'), JSON.stringify(un));
+});

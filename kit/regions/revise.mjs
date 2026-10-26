@@ -151,7 +151,8 @@ export default function revise(ctx) {
     ...(growth ? { grow: {
       format: growth.format, district: growth.district, lots: grown.lots,
       frontage: growth.lots.filter((l) => l.slot.kind === 'frontage').map((l) => ({ street: l.slot.street, side: l.slot.side, u: l.slot.u, lot: l.spec.id })),
-      extension: growth.extension ? { from: growth.extension.from, road: growth.extension.newRoad, along: growth.extension.road, run: [...growth.extension.run],
+      ...(growth.extension?.kind === 'boundary' ? { follow: { district: growth.extension.district, mask: growth.extension.mask } } : {}),
+      extension: growth.extension ? { ...(growth.extension.kind ? { kind: growth.extension.kind } : {}), from: growth.extension.from, road: growth.extension.newRoad, along: growth.extension.road, run: [...growth.extension.run],
         lots: growth.lots.filter((l) => l.slot.kind === 'extension').map((l) => l.spec.id) } : null,
       unplaced: growth.unplaced, lamps: grown.lamps.length,
     } } : {}),

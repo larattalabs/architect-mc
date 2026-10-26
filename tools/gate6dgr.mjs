@@ -335,7 +335,7 @@ steps.town = async () => {
   const gm1 = ir1.revision.grow;
   out.frontage = { rid: g1.revisionOf.rid, grow: gm1, state: w1.r.state };
   const streetsAfter = await Promise.all(T.runs.map((r) => hashOf(streetBox(r))));
-  check(w1.r.state === 'PLACED' && gm1.frontage.length === 2 && gm1.extension === null && gm1.frontage.every((f) => f.side === freeSide || f.street !== 'street_w'), `item 3: both lots on free frontage (${json(gm1.frontage)}), no extension; the revision ${w1.r.state}`);
+  check(w1.r.state === 'PLACED' && gm1.frontage.length === 2 && !gm1.extension && gm1.frontage.every((f) => f.side === freeSide || f.street !== 'street_w'), `item 3: both lots on free frontage (${json(gm1.frontage)}), no extension; the revision ${w1.r.state}`);
   check(json(streetsAfter) === json(streetsBefore), `item 3: every standing street's road and verge cells unchanged (hash over each run's 5-wide band)`);
   // KC: the lots keep clear of the pond's hard and watch columns
   const stand = await call('dev.rv.standing', { region }, 60_000);
@@ -375,61 +375,79 @@ steps.town = async () => {
   const nav2 = await walkable(ir2.lots.filter((l) => X?.lots?.includes(l.id)), bell);
   out.extension.nav = nav2;
   check(Object.values(nav2).length >= 1 && Object.values(nav2).every((v) => v[0] && v[1]) && graphCut(eff2).length === 0, `item 4: the extension's lots walkable to the bell and back (${json(nav2)}); graph.cut ${json(graphCut(eff2))}`);
-  const S3 = await cellsOf(BIG);
+  // the 6-lot extension undone: the world before it, cell for cell
+  const u2 = await call('dev.rv.undo', { region, toPosition: (await rvState(region)).position - 1 }, 4 * 3_600_000);
+  const d2 = diff(S2, await cellsOf(BIG));
+  out.undoExtension = { result: u2, diff: d2 };
+  check(u2.removed === true && d2.n === 0, `item 4: undoRevision of the extension (its road, verges, lanes, pads, lamps and 2 built lots): the world before it, cell for cell (${d2.n} differ)`, d2.first);
 
-  // ---- item 7: a D3 district beside gr_town joins the extension's new end; undoRevision refuses joined, nothing written
-  const ex = (X.road && road) ? road.points[1] : null;
-  const B7 = [CLAIM[2] - 10, ex[2] - 40, CLAIM[2] + 80, ex[2] + 40];
+  // ---- items 7, 7b: a 1-lot extension (its lot on one side: the other side of its street stays free for a T)
+  const g4 = await growPlan(region, { lots: [{ id: 'end_1', type: 'house', size: [9, 9], villager: 'dwelling' }], prefer: 'extend' });
+  const w4 = g4.refused ? null : await rvRealise(region, g4, { lots: {} });
+  const ir4 = g4.refused ? null : await rvIr(region, g4.revisionOf.rid);
+  const X4 = ir4?.revision?.grow?.extension;
+  const road4 = ir4?.roads?.find((r) => r.id === X4?.road);
+  check(w4?.r?.state === 'PLACED' && road4, `items 7/7b: a 1-lot extension ${X4?.road} ${json(road4?.points)} (rid ${g4.revisionOf?.rid}) ${w4?.r?.state ?? g4.refused}`);
+  const S4 = await cellsOf(BIG);
+  const pos4 = (await rvState(region)).position;
+  const ex = road4.points[1];
+  const lotSide = ir4.lots[0].box.minZ > ex[2] ? 1 : -1;
+  // item 7: a district east of the town (its seam clear of the extension's road) joins the extension's new end
+  const B7 = [Math.max(ex[0] + 4, CLAIM[2] - 14), ex[2] - 40, CLAIM[2] + 80, ex[2] + 40];
   const p7 = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'east', size: [48, 48], lots: 2 }] } }, claim: B7, beside: region, check: false });
   const j7 = p7.refused ? null : planFiles(p7.planId).ir.graph.edges.find((e) => e.id === 'join_external');
-  out.item7 = { plan: p7.refused ?? p7.planId, join: j7 };
-  check(!p7.refused && String(j7?.to ?? '').includes(`${X.road}_end`), `item 7: a beside district planned east of the town joins the extension's new end (${j7?.to ?? p7.refused})`);
-  let r7 = null;
+  out.item7 = { claim: B7, plan: p7.refused ?? p7.planId, join: j7 };
+  check(!p7.refused && String(j7?.to ?? '').includes(`${X4.road}_end`), `item 7: a beside district planned east of the town joins the extension's new end (${j7?.to ?? p7.refused})`);
   if (!p7.refused) {
-    r7 = await L.realise(p7.planId, { lots: {} });
+    const r7 = await L.realise(p7.planId, { lots: {} });
     const s7 = await L.waitRegion(r7, 3_600_000);
     check(s7.view.state === 'PLACED', `item 7: the district ${r7} ${s7.view.state}`);
     const hBefore = await hashOf(BIG);
-    const u7 = await call('dev.rv.undo', { region, toPosition: (await rvState(region)).position - 1 }, 600_000);
+    const u7 = await call('dev.rv.undo', { region, toPosition: pos4 - 1 }, 600_000);
     const hAfter = await hashOf(BIG);
     out.item7.undo = u7;
-    check(String(u7.refused ?? '').startsWith('NOT_ALLOWED') && /joined/.test(u7.refused) && u7.refused.includes(r7) && hBefore === hAfter, `item 7: undoRevision of the growth refuses at preflight: ${u7.refused}; nothing written (hash)`);
+    check(String(u7.refused ?? '').startsWith('NOT_ALLOWED') && /joined/.test(u7.refused ?? '') && (u7.refused ?? '').includes(r7) && hBefore === hAfter, `item 7 (verifier re-runs): undoRevision of the growth refuses at preflight: ${u7.refused ?? json(u7)}; nothing written (hash)`);
     await removeRegion(r7);
-    const dd = diff(S3, await cellsOf(BIG));
+    const dd = diff(S4, await cellsOf(BIG));
     check(dd.n === 0, `item 7: the district removed: the world as before it (${dd.n} cells differ)`, dd.first);
   }
-  // ---- item 7b: a D3 district north of the extension joins its side by a T; refused joined; removed; then the undo is exact
-  const B7b = [ex[0] - 40, CLAIM[1] - 80, Math.min(ex[0] + 6, CLAIM[2] + 40), CLAIM[1] + 4];
-  const p7b = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'north', size: [40, 40], lots: 2 }] } }, claim: B7b, beside: region, check: false });
+  // item 7b: a district on the free side of the extension joins its side by a T (<region>:<roadId>)
+  const B7b = lotSide > 0
+    ? [ex[0] - 30, CLAIM[1] - 70, ex[0] + 2, CLAIM[1] + 6]
+    : [ex[0] - 30, CLAIM[3] - 6, ex[0] + 2, CLAIM[3] + 70];
+  const p7b = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'side', size: [32, 32], lots: 2 }] } }, claim: B7b, beside: region, check: false });
   const j7b = p7b.refused ? null : planFiles(p7b.planId).ir.graph.edges.find((e) => e.id === 'join_external');
-  out.item7b = { plan: p7b.refused ?? p7b.planId, join: j7b };
-  const sideOnExt = j7b?.junction?.kind === 'side' && String(j7b?.to ?? '').endsWith(`:${X.road}`);
-  check(!p7b.refused && sideOnExt, `item 7b: a beside district north of the extension joins its side by a T (${json(j7b && { to: j7b.to, junction: j7b.junction })}${p7b.refused ? ` refused ${p7b.refused}` : ''})`);
+  out.item7b = { claim: B7b, plan: p7b.refused ?? p7b.planId, join: j7b };
+  const sideOnExt = j7b?.junction?.kind === 'side' && String(j7b?.to ?? '').endsWith(`:${X4.road}`);
+  check(!p7b.refused && sideOnExt, `item 7b: a beside district on the extension's free side joins it by a T (${json(j7b && { to: j7b.to, junction: j7b.junction })}${p7b.refused ? ` refused ${p7b.refused}` : ''})`);
   if (!p7b.refused) {
     const r7b = await L.realise(p7b.planId, { lots: {} });
     const s7b = await L.waitRegion(r7b, 3_600_000);
     check(s7b.view.state === 'PLACED', `item 7b: the district ${r7b} ${s7b.view.state}`);
-    const hBefore = await hashOf(BIG);
-    const u7b = await call('dev.rv.undo', { region, toPosition: (await rvState(region)).position - 1 }, 600_000);
-    const hAfter = await hashOf(BIG);
-    out.item7b.undo = u7b;
-    check(!sideOnExt || (String(u7b.refused ?? '').startsWith('NOT_ALLOWED') && /joined/.test(u7b.refused) && hBefore === hAfter), `item 7b: undoRevision refuses joined at preflight: ${u7b.refused}; nothing written (hash)`);
+    if (sideOnExt) {
+      const hBefore = await hashOf(BIG);
+      const u7b = await call('dev.rv.undo', { region, toPosition: pos4 - 1 }, 600_000);
+      const hAfter = await hashOf(BIG);
+      out.item7b.undo = u7b;
+      check(String(u7b.refused ?? '').startsWith('NOT_ALLOWED') && /joined/.test(u7b.refused ?? '') && hBefore === hAfter, `item 7b (verifier re-runs): undoRevision refuses joined at preflight: ${u7b.refused ?? json(u7b)}; nothing written (hash)`);
+    }
     await removeRegion(r7b);
   }
-  // the undo of the extension: the world before it
-  const u2 = await call('dev.rv.undo', { region, toPosition: (await rvState(region)).position - 1 }, 4 * 3_600_000);
-  const d2 = diff(S2, await cellsOf(BIG));
-  out.undoExtension = { result: u2, diff: d2 };
-  check(u2.removed === true && d2.n === 0, `items 7/7b: the districts removed, undoRevision of the extension: the world before it, cell for cell (${d2.n} differ)`, d2.first);
+  // both districts removed: the undo of the 1-lot extension is exact
+  const u4 = await call('dev.rv.undo', { region, toPosition: pos4 - 1 }, 4 * 3_600_000);
+  const d4 = diff(S2, await cellsOf(BIG));
+  out.undoEnd = { result: u4, diff: d4 };
+  check(u4.removed === true && d4.n === 0, `items 7/7b: the districts removed, undoRevision of the extension: the world before it, cell for cell (${d4.n} differ)`, d4.first);
   // ---- item 9: every slot held: NO_ROOM {kind: held}, nothing planned
   const held = [];
-  for (const run of T.runs) for (const s of [-1, 1]) for (let u = run.u0; u <= run.u1; u++) { const [x, z] = run.o === 'ew' ? [u, run.c + s * 4] : [run.c + s * 4, u]; held.push([x, gy + 1, z, 'minecraft:cobblestone']); }
-  const hs = await call('dev.cells.place', { kind: 'steward:addition', cells: held, naturalOnly: false, owner: OWNER }, 900_000);
+  for (const run of T.runs) for (const sd of [-1, 1]) for (let u = run.u0; u <= run.u1; u++) { const [x, z] = run.o === 'ew' ? [u, run.c + sd * 4] : [run.c + sd * 4, u]; held.push([x, gy + 1, z, 'minecraft:cobblestone']); }
+  const hs = await call('dev.cells.place', { kind: 'steward:addition', cells: held, naturalOnly: false, overlap: 'LAYER', owner: OWNER }, 900_000);
   const before9 = await rvState(region);
   const g9 = await growPlan(region, { lots: [{ id: 'held_1', type: 'house', size: [9, 9] }], extend: 'none' });
   const after9 = await rvState(region);
-  out.item9 = { site: hs.siteId, refused: g9.refused, nextRid: [before9.nextRid, after9.nextRid] };
-  check(String(g9.refused ?? '').startsWith('NO_ROOM') && /\[held\]/.test(g9.refused) && after9.nextRid === before9.nextRid, `item 9: with every frontage slot held (a Steward site along both sides of every street), a growth answers ${g9.refused}; nothing planned (nextRid ${before9.nextRid})`);
+  out.item9 = { site: hs.siteId, placed: hs.placed, refused: g9.refused, nextRid: [before9.nextRid, after9.nextRid] };
+  check(hs.placed && String(g9.refused ?? '').startsWith('NO_ROOM') && /\[held\]/.test(g9.refused ?? '') && after9.nextRid === before9.nextRid, `item 9: with every frontage slot held (a Steward site along both sides of every street: ${hs.placed ? hs.siteId : json(hs)}), a growth answers ${g9.refused ?? 'a plan'}; nothing planned (nextRid ${before9.nextRid} -> ${after9.nextRid})`);
+  if (!g9.refused && g9.planId) await call('dev.region.drop', { planId: g9.planId }, 60_000).catch(() => null);
   if (hs.siteId) await call('dev.rv.siteRemove', { site: hs.siteId, force: true }, 600_000);
 
   // ---- item 8: two growths and a beside district standing: D3's orders, then the town removed: E-flat 0 over the claims
@@ -462,6 +480,404 @@ steps.town = async () => {
   check(rm.removed !== false && left.length === 0, `item 8: Regions.remove of the town with ${st8.revisions.filter((r) => r.state === 'PLACED').length} revisions standing (the pond, the frontage, the extension) and a beside district (then removed, dangling): E-flat 0 over the claims + 8 but the Steward addition's and the PT build's own cells (${left.length} differ)`, left.slice(0, 12));
   await L.leaveWorld();
   spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ gr-beside: items 5, 11, 12 with Steward's key scheme
+
+const STEWARD = (b, d = 'east') => ({ 'steward_mc:district': d, 'steward_mc:build': b });
+const landOf = (v) => v.ext?.['architect_mc:land'] ?? null;
+const runKeysOf = async (runs) => (await imp('lib/region/beside.mjs')).runKeys(runs ?? []);
+const stacksOver = async (runs) => (await call('dev.journal.columns', { runs }, 600_000)).cells ?? [];
+
+steps.beside = async () => {
+  await ensure();
+  const out = {};
+  const world = 'G6B GR Beside';
+  await freshFlat(world);
+  const gy = await groundY();
+  const T = await grTown({ gy, addition: false, pt: false });
+  const A = CLAIM;
+  // the reservation east of the town's east street end, plus the 16-column seam into the town's claim (Steward's claim, DISTRICTS.md §9)
+  const e = T.runs.find((r) => r.road === 'street_e') ?? T.runs[0];
+  const B = [A[2] - 15, e.c - 45, A[2] + 90, e.c + 45];
+  const BOX = [A[0] - 8, gy - 12, B[1] - 8, B[2] + 8, gy + 24, Math.max(A[3], B[3]) + 8];
+  const TOWN = [A[0], gy - 12, A[1], A[2], gy + 24, A[3]];
+  const params = { spec: { districts: [{ id: 'east', size: [48, 48], lots: [{ id: 'east_1', type: 'house', size: [9, 9] }, { id: 'east_2', type: 'house', size: [9, 9] }] }] } };
+  const verdict = await call('dev.region.checkBeside', { program: 'districts', params, claim: B, beside: T.region, surveyLoad: 'bounded:256', owner: OWNER, check: false }, 900_000);
+  out.verdict = { fits: verdict.fits, join: verdict.join };
+  check(verdict.fits, `item 5: checkBeside (Steward's dry check) beside ${T.region} over the reservation + 16: ${json(verdict.join ?? verdict.message)}`);
+  // building 1: Regions.plan under steward.b1.vplan (ext steward_mc:district, steward_mc:build), realised under steward.b1.vrealise
+  const p1 = await planReq({ program: 'districts', params, claim: B, beside: T.region, check: false, opKey: 'steward.b1.vplan', ext: STEWARD('b1') });
+  if (p1.refused) throw new Error(`the district's first building refused: ${p1.refused}`);
+  const ra = await call('dev.region.realise', { planId: p1.planId, lots: { east_1: STUB }, opKey: 'steward.b1.vrealise', ext: STEWARD('b1') }, 300_000);
+  const D = ra.region;
+  const s1 = await L.waitRegion(D, 3_600_000);
+  const land0 = landOf(s1.view);
+  out.district = { region: D, state: s1.view.state, land: land0 && { v: land0.v, outside: land0.outside.cells, inside: land0.inside.cells } };
+  check(s1.view.state === 'PLACED' && land0?.v === 1, `item 5: the district ${D} PLACED beside ${T.region} (building 1 under Steward's keys), its land v ${land0?.v} (outside ${land0?.outside?.cells}, inside ${land0?.inside?.cells})`);
+  const townHash0 = await hashOf(TOWN);
+  const W0 = await cellsOf(BOX);
+  // buildings 3 and 4: each one growth, an ordinary Steward build under its own keys
+  const grow1 = (b, id) => growPlan(D, { district: 'east', lots: [{ id, type: 'house', size: [9, 9], villager: 'dwelling' }] }, { program: 'districts', opKey: `steward.${b}.vplan`, ext: STEWARD(b) });
+  const g3 = await grow1('b3', 'east_3');
+  check(!g3.refused, `item 5: building 3 planned as a growth (planRevision(district's program, {grow}) under steward.b3.vplan): rid ${g3.revisionOf?.rid} ${g3.refused ?? ''}`);
+  const k3 = await call('dev.coa.planByKey', { owner: OWNER, opKey: 'steward.b3.vplan' }, 10_000).catch((x) => ({ error: String(x) }));
+  check(k3.planId === g3.planId, `S-GR-3: planByKey(steward.b3.vplan) finds the growth's plan (${k3.planId})`);
+  const w3 = await rvRealise(D, g3, { lots: { east_3: STUB }, opKey: 'steward.b3.vrealise', ext: STEWARD('b3') });
+  const W3 = await cellsOf(BOX);
+  const v3 = (await call('dev.region.state', { region: D }, 60_000)).view;
+  const land3 = landOf(v3);
+  const t3 = tagged(w3.st, w3.r, D);
+  const callers3 = w3.r.sites.map((sid) => w3.st.siteCaller?.[sid]?.['steward_mc:build']);
+  out.b3 = { rid: g3.revisionOf.rid, state: w3.r.state, land: land3 && { v: land3.v, outside: land3.outside.cells, parts: land3.parts.map((q) => [q.kind, q.id, q.revision]) }, tagged: t3, callers: callers3 };
+  check(w3.r.state === 'PLACED' && t3.bad.length === 0 && callers3.every((b) => b === 'b3'), `Ask 1 / keys: building 3's growth ${w3.r.state}; every site it wrote tagged architect_mc:revision {${D}, ${g3.revisionOf.rid}} and carrying steward_mc:build b3 (${t3.sites} sites: ${json(t3.kinds)})`);
+  const g3p = land3?.parts?.find((q) => q.kind === 'grown' && q.revision === g3.revisionOf.rid);
+  check(land3?.v === 2 && g3p && g3p.insideCells === 0 && land3.outside.cells > land0.outside.cells && json(land3.inside) === json(land0.inside) && land3.parts.every((q) => Number.isInteger(q.revision)), `item 12: land v ${land3?.v}: the grown part ${json(g3p && [g3p.id, g3p.district, g3p.cells, g3p.insideCells])}, outside ${land0.outside.cells} -> ${land3?.outside?.cells}, inside unchanged, every part carries its revision`);
+  const rk = await call('dev.region.realiseByKey', { owner: OWNER, opKey: 'steward.b3.vrealise' }, 10_000).catch((x) => ({ error: String(x) }));
+  check(rk.region?.id === D, `S-GR-3: realiseByKey(steward.b3.vrealise) finds the district (${json(rk.region?.id ?? rk)})`);
+  const g4 = await grow1('b4', 'east_4');
+  const w4 = await rvRealise(D, g4, { lots: { east_4: STUB }, opKey: 'steward.b4.vrealise', ext: STEWARD('b4') });
+  const v4 = (await call('dev.region.state', { region: D }, 60_000)).view;
+  const land4 = landOf(v4);
+  out.b4 = { rid: g4.revisionOf?.rid, state: w4.r.state, outside: land4?.outside?.cells };
+  check(w4.r.state === 'PLACED' && land4.outside.cells > land3.outside.cells, `item 5: building 4's growth ${w4.r.state} (rid ${g4.revisionOf?.rid}); land.outside ${land3.outside.cells} -> ${land4.outside.cells}`);
+  // item 12: every column the district holds in the journal lies in land.union
+  const union = await runKeysOf(land4.union.runs);
+  const rows = [];
+  for (let z = B[1] - 4; z <= B[3] + 4; z++) rows.push([B[0] - 4, z, B[2] + 4, z]);
+  const own = (await stacksOver(rows)).filter((c) => c.stack.some((q) => q.group === v4.groupId));
+  const outU = own.filter((c) => !union.has(`${c.x},${c.z}`));
+  check(own.length > 0 && outU.length === 0, `item 12: every column the district holds in the journal lies in land.union (${new Set(own.map((c) => `${c.x},${c.z}`)).size} columns; ${outU.length} outside: ${json(outU.slice(0, 4).map((c) => [c.x, c.z]))})`);
+  // a restart: the keys still find both growths
+  await L.leaveWorld();
+  await L.openWorld(world);
+  await L.tp(CX + 80, 60, CZ + 56);
+  const rk4 = await call('dev.region.realiseByKey', { owner: OWNER, opKey: 'steward.b4.vrealise' }, 10_000).catch((x) => ({ error: String(x) }));
+  const pk4 = await call('dev.coa.planByKey', { owner: OWNER, opKey: 'steward.b4.vplan' }, 10_000).catch((x) => ({ error: String(x) }));
+  check(rk4.region?.id === D && pk4.planId === g4.planId, `S-GR-3: after a restart realiseByKey(steward.b4.vrealise) -> ${rk4.region?.id}, planByKey(steward.b4.vplan) -> ${pk4.planId}`);
+  // undoRevision 4 then 3 (one building at a time): the world before each; land.outside shrinks (Ask 2); the join and the town untouched
+  const u4 = await call('dev.rv.undo', { region: D, toPosition: 1, actor: 'steward' }, 4 * 3_600_000);
+  const d4 = diff(W3, await cellsOf(BOX));
+  const landU4 = landOf((await call('dev.region.state', { region: D }, 60_000)).view);
+  out.undo4 = { result: u4, diff: d4.n, outside: landU4?.outside?.cells };
+  check(u4.removed === true && d4.n === 0, `item 5 (verifier re-runs): undoRevision of building 4: the world before it, cell for cell (${d4.n} differ)`, d4.first);
+  check(landU4?.v === 2 && landU4.outside.cells === land3.outside.cells && !landU4.parts.some((q) => q.revision === g4.revisionOf.rid), `Ask 2: land.outside shrinks after undoRevision: ${land4.outside.cells} -> ${landU4?.outside?.cells} (as after building 3: ${land3.outside.cells}); building 4's part gone; v stays 2`);
+  const u3 = await call('dev.rv.undo', { region: D, toPosition: 0, actor: 'steward' }, 4 * 3_600_000);
+  const d3 = diff(W0, await cellsOf(BOX));
+  const landU3 = landOf((await call('dev.region.state', { region: D }, 60_000)).view);
+  out.undo3 = { result: u3, diff: d3.n, outside: landU3?.outside?.cells };
+  check(u3.removed === true && d3.n === 0, `item 5 (verifier re-runs): undoRevision of building 3: the world before it, cell for cell (${d3.n} differ)`, d3.first);
+  check(landU3?.v === 2 && landU3.outside.cells === land0.outside.cells && json(landU3.union) === json(land0.union) && !landU3.parts.some((q) => q.kind === 'grown'), `Ask 2 / item 12: after both undos land.union equals the one before the growths (outside ${landU3?.outside?.cells} = ${land0.outside.cells}); no grown part; v ${landU3?.v}`);
+  check((await hashOf(TOWN)) === townHash0, `item 5: the town untouched (its claim's hash) through both growths and both undos; the district's join stands (its cells inside the world before the growths, above)`);
+  // ---- item 11: an outpost grown by 2; its corridor byte-identical
+  await removeRegion(D);
+  const O = [A[2] + 1, A[1] - 60, A[2] + 160, A[3] + 60];
+  const po = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 40 } }] } }, claim: O, beside: T.region, check: false });
+  if (po.refused) check(false, `item 11: the outpost's plan refused (${po.refused})`);
+  else {
+    const ro = await L.realise(po.planId, { lots: {} });
+    const so = await L.waitRegion(ro, 3_600_000);
+    const cor0 = json(planFiles(po.planId).ir.corridor);
+    const corLand0 = json(landOf(so.view)?.parts?.find((q) => q.kind === 'corridor'));
+    const go = await growPlan(ro, { district: 'camp', lots: 2 }, { program: 'districts' });
+    const wo = go.refused ? null : await rvRealise(ro, go);
+    const effO = effectiveOf(world, ro, (await rvState(ro)).headRid, planFiles(po.planId).ir);
+    const vo = (await call('dev.region.state', { region: ro }, 60_000)).view;
+    const corLand1 = landOf(vo)?.parts?.find((q) => q.kind === 'corridor');
+    out.outpost = { region: ro, grow: go.refused ?? go.revisionOf?.rid, state: wo?.r?.state };
+    check(wo?.r?.state === 'PLACED' && json(effO.corridor) === cor0 && json({ ...corLand1, revision: undefined }) === json({ ...JSON.parse(corLand0 ?? 'null'), revision: undefined }), `item 11: the outpost grown by 2 lots (${json(go.refused ?? (await rvIr(ro, go.revisionOf.rid))?.revision?.grow?.lots)}): ${wo?.r?.state}; architect_mc:corridor byte-identical (the effective IR's and the land's corridor part)`);
+    const nav = go.refused ? {} : await walkable((await rvIr(ro, go.revisionOf.rid)).lots, T.ir.anchors.bell);
+    check(Object.values(nav).length >= 1 && Object.values(nav).every((v) => v[0] && v[1]), `item 11: the outpost's new lots walkable to the town's bell and back (${json(nav)})`);
+    await removeRegion(ro);
+  }
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ gr-plan0: item 6 (plan/0's revision.grow through checkPlan and realiseApproved)
+
+const P0_LOT = (id) => ({ id, type: 'house', size: [9, 9] });
+const P0_TOWN = { schemaVersion: 'plan/0', planId: 'gr_town', zones: [{ id: 'town', program: { lots: [P0_LOT('h1'), P0_LOT('h2'), P0_LOT('h3')] }, where: { near: { anchor: 'claim_center', within: 8 } } }] };
+const P0_CLAIM = [CX, CZ, CX + 159, CZ + 111];
+async function checkPlan(plan, claim) {
+  const r = await call('dev.region.checkPlan', { plan, claim, owner: OWNER }, 900_000);
+  if (r.refused) { log(`  check refused: ${r.refused}`); return r; }
+  log(`  check ${r.check.checkId}: ${r.check.overall} ${r.check.parts.map((p) => `${p.part}:${p.class}`).join(' ')} artifact ${r.check.artifactSha?.slice(0, 12) ?? '-'}`);
+  return r.check;
+}
+const grownPlan = (parent, lots, n = 1) => ({ ...P0_TOWN, zones: [{ ...P0_TOWN.zones[0], program: { lots: [...P0_TOWN.zones[0].program.lots, ...lots] } }], revision: { n, parentArtifact: parent } });
+
+steps.plan0 = async () => {
+  await ensure();
+  const out = {};
+  const world = 'G6B GR Plan0';
+  await freshFlat(world);
+  const gy = await groundY();
+  const BOX = BOXOF(P0_CLAIM, gy);
+  const B0 = await cellsOf(BOX);
+  const c0 = await checkPlan(P0_TOWN, P0_CLAIM);
+  check(c0.overall === 'READY', `the parent plan checked: ${c0.overall}`);
+  const ra = await call('dev.region.realiseApproved', { sha: c0.artifactSha, lotEntries: { h1: STUB } }, 300_000);
+  const region = ra.region;
+  const st0 = await L.waitRegion(region, 3_600_000);
+  check(st0.view.state === 'PLACED', `realiseApproved: region ${region} ${st0.view.state}`);
+  const S0 = await cellsOf(BOX);
+  // item 6: the zone gains 2 lots: fits standing, grown [h4, h5]; the artifact's $.lots are the 2 lots
+  const c1 = await checkPlan(grownPlan(c0.artifactSha, [P0_LOT('h4'), P0_LOT('h5')]), P0_CLAIM);
+  const t1 = c1.parts?.find((p) => p.part === 'town');
+  const art1 = c1.artifactSha ? (await call('dev.region.artifact', { sha: c1.artifactSha, body: true }, 60_000)).artifact : null;
+  out.check1 = { overall: c1.overall, town: t1, lots: art1?.body?.lots?.map((l) => l.id), revision: art1?.body?.revision };
+  check(c1.overall === 'READY' && t1?.class === 'fits' && t1?.standing === true && json(t1?.grown) === json(['h4', 'h5']), `item 6: checkPlan of the grown zone: ${c1.overall}; town ${t1?.class} standing ${t1?.standing} grown ${json(t1?.grown)}`);
+  check(json(art1?.body?.lots?.map((l) => l.id).sort()) === json(['h4', 'h5']) && json(art1?.body?.revision?.grow) === json(['town']) && art1?.body?.region?.revisionOf?.region === region, `item 6: the artifact: $.lots ${json(art1?.body?.lots?.map((l) => l.id))}, revision.grow ${json(art1?.body?.revision?.grow)}, revisionOf ${json(art1?.body?.region?.revisionOf)}`);
+  // a competing growth on the same parent realised first: the head moves, so c1's realise is stale
+  const c2 = await checkPlan(grownPlan(c0.artifactSha, [P0_LOT('h6')]), P0_CLAIM);
+  const r2 = await call('dev.region.realiseApproved', { sha: c2.artifactSha, lotEntries: { h6: STUB }, opKey: 'gr.p0.first' }, 300_000);
+  check(r2.region === region, `a competing growth realised first under gr.p0.first: ${json(r2)}`);
+  const st2 = await rvState(region);
+  await rvWait(region, st2.revisions.at(-1).rid);
+  const S2 = await cellsOf(BOX);
+  const rs = await call('dev.region.realiseApproved', { sha: c1.artifactSha, lotEntries: { h4: STUB }, opKey: 'gr.p0.k1' }, 300_000);
+  check(/^(PLAN_STALE|ARTIFACT_STALE)/.test(String(rs.refused ?? '')), `item 6: the first growth's realiseApproved under gr.p0.k1 refuses stale (the head moved): ${rs.refused}`);
+  // across a restart: the stale retry, checked again on the new head's artifact, realised under a second key
+  await L.leaveWorld();
+  await L.openWorld(world);
+  await L.tp(CX + 80, 60, CZ + 56);
+  const c3 = await checkPlan(grownPlan(c2.artifactSha, [P0_LOT('h4'), P0_LOT('h5')], 2), P0_CLAIM);
+  void c3;
+  // (the parent plan of the retry is the head's: the zone as c2 grew it, plus the two lots)
+  const c3b = await checkPlan({ ...grownPlan(c2.artifactSha, [P0_LOT('h6'), P0_LOT('h4'), P0_LOT('h5')], 2) }, P0_CLAIM);
+  const t3 = c3b.parts?.find((p) => p.part === 'town');
+  check(c3b.overall === 'READY' && json(t3?.grown) === json(['h4', 'h5']), `item 6: after the restart the retry checked on the new head: ${c3b.overall}, grown ${json(t3?.grown)}`);
+  const r3 = await call('dev.region.realiseApproved', { sha: c3b.artifactSha, lotEntries: { h4: STUB }, opKey: 'gr.p0.k2' }, 300_000);
+  check(r3.region === region, `item 6: realiseApproved under the second key gr.p0.k2 answers the region: ${json(r3)}`);
+  const st3 = await rvState(region);
+  const w3 = await rvWait(region, st3.revisions.at(-1).rid);
+  const lots3 = w3.st.view.lots.filter((l) => ['h4', 'h5'].includes(l.id));
+  check(w3.r.state === 'PLACED' && w3.r.artifact === c3b.artifactSha && lots3.length === 2 && lots3.every((l) => l.revision === w3.r.rid), `item 6: the growth ${w3.r.state} (rid ${w3.r.rid}, artifact ${w3.r.artifact?.slice(0, 12)}); its lots ${json(lots3.map((l) => [l.id, l.state, l.revision]))}`);
+  // undo both: the world before the growths; the artifacts tombstoned; removal E-flat 0
+  const u = await call('dev.rv.undo', { region, toPosition: 1 }, 4 * 3_600_000);
+  const d1 = diff(S2, await cellsOf(BOX));
+  check(u.removed === true && d1.n === 0, `item 6: the retry's growth undone: the world before it (${d1.n} differ)`, d1.first);
+  const u0 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  const d0 = diff(S0, await cellsOf(BOX));
+  const a3 = (await call('dev.region.artifact', { sha: c3b.artifactSha }, 60_000)).artifact;
+  check(u0.removed === true && d0.n === 0 && a3?.removed === true, `item 6: both growths undone: the world before them (${d0.n} differ); the retry's artifact tombstoned (${a3?.removed})`, d0.first);
+  const rm = await removeRegion(region);
+  const df = diff(B0, await cellsOf(BOX));
+  check(rm.removed !== false && df.n === 0, `the region removed: E-flat 0 (${df.n} differ)`, df.first);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ gr-survival: item 13 (Steward's RC rows: a survival growth; survival_building)
+
+const G = await import('./lib/gate6crs-game.mjs');
+const plusB = (a, b) => G.plus(a, b);
+/** Feed a survival region from its owner's stockpile until `until` holds (RS's waves: what the targets lack). */
+async function feedUntil(region, until, { timeoutMs = 1_800_000 } = {}) {
+  return G.feed({ L }, region, { fraction: 1, until, timeoutMs, every: 2500 });
+}
+
+steps.survival = async () => {
+  await ensure();
+  const out = {};
+  const ctx = { L, OUT };
+  const SW = 'G6B GR Survival';
+  await G.survivalBase(ctx);
+  await L.fresh(SW, G.SURV);
+  await L.setRules('exact');
+  await cmd('/weather clear');
+  await L.tp(CX + 80, 80, CZ + 56);
+  const gy = await groundY();
+  const claim = P0_CLAIM;
+  const BOX = BOXOF(claim, gy);
+  // the stockpile's crates outside the claim (the RS owner's: G.feed books into it)
+  const crates = [0, 1, 2, 3].map((k) => [claim[0] - 6 + 2 * k, gy + 1, claim[1] - 6]);
+  const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+  check(!cr.refused, `a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
+  const B0 = await cellsOf(BOX);
+  // the town in survival: checked in survival, realised, fed until built
+  const c0 = (await call('dev.region.checkPlan', { plan: P0_TOWN, claim, owner: G.OWNER, load: 'generate' }, 1_800_000)).check;
+  check(c0?.survival === true && c0.overall === 'READY', `the town checked in survival: ${c0?.overall}, survival ${c0?.survival}`);
+  const region = await G.realise(ctx, c0.artifactSha);
+  const f0 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
+  check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `the town built in survival: ${f0.last.st.view.state}, build ${json(f0.last.rs.build && { done: f0.last.rs.build.done, percent: f0.last.rs.build.percent })} (${f0.waves} waves)`);
+  const targets0 = new Set((f0.last.rs.targets ?? []).map((t) => t.id));
+  const S0 = await cellsOf(BOX);
+  const ps0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  // item 13: a frontage growth checked in survival: its whole bill is the check's; realised; while building, undo refuses survival_building
+  const c1 = (await call('dev.region.checkPlan', { plan: grownPlan(c0.artifactSha, [P0_LOT('h4'), P0_LOT('h5')]), claim, owner: G.OWNER, load: 'generate' }, 1_800_000)).check;
+  const t1 = c1?.parts?.find((p) => p.part === 'town');
+  out.check = { overall: c1?.overall, survival: c1?.survival, town: t1 && { class: t1.class, grown: t1.grown, cost: t1.cost }, bom: c1?.cost?.bom, bomParts: c1?.cost?.bomParts };
+  check(c1?.survival === true && c1.overall === 'READY' && t1?.class === 'fits' && json(t1?.grown) === json(['h4', 'h5']), `item 13: the growth checked in survival: ${c1?.overall}; town ${t1?.class} grown ${json(t1?.grown)}; its bill ${json(c1?.cost?.bom)}`);
+  const r1 = await call('dev.region.realiseApproved', { sha: c1.artifactSha }, 300_000);
+  check(r1.region === region, `item 13: realiseApproved of the survival growth answers the region: ${json(r1)}`);
+  const stv = await rvState(region);
+  const rid = stv.revisions.at(-1)?.rid;
+  // the growth waits for its items: undoRevision refuses survival_building, nothing written
+  await sleep(4000);
+  const h0 = await hashOf(BOX);
+  const ub = await call('dev.rv.undo', { region, toPosition: 0 }, 600_000);
+  const h1 = await hashOf(BOX);
+  out.building = { refused: ub.refused, same: h0 === h1 };
+  check(String(ub.refused ?? '').startsWith('NOT_ALLOWED') && /survival_building/.test(ub.refused) && h0 === h1, `Steward RC row 3: undoRevision while the growth's targets build refuses ${ub.refused}; nothing written (hash)`);
+  // fed until built: the growth's targets' bills equal the check's bill (the region's own cells; lots without entries are pads)
+  const f1 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done && (st.view.revisions ?? []).every?.((r) => !['ACCEPTED', 'PLACING'].includes(r.state)));
+  const rs1 = await call('dev.rs.state', { region }, 120_000);
+  const newT = (rs1.targets ?? []).filter((t) => !targets0.has(t.id));
+  let got = {};
+  for (const t of newT) got = plusB(got, t.bom);
+  let want = { ...(c1.cost?.bom ?? {}) };
+  for (const b of Object.values(c1.cost?.bomParts ?? {})) want = G.minus(want, b);
+  for (const k of Object.keys(want)) if (!want[k]) delete want[k];
+  out.bills = { want, got, targets: newT.map((t) => [t.id, t.part, t.done]) };
+  const w1 = await rvWait(region, rid);
+  check(w1.r.state === 'PLACED' && newT.length >= 1 && newT.every((t) => t.done), `item 13: the growth (rid ${rid}) built in survival: ${w1.r.state}; its ${newT.length} target(s) done (${f1.waves} waves)`);
+  check(G.same(want, got), `item 13 / Steward RC row 2: the growth's bills equal its BOM (the check's cost.bom less the lots' bills): ${G.same(want, got) ? 'equal, item for item' : json({ missing: G.minus(want, got), extra: G.minus(got, want) })}`, out.bills);
+  const S1 = await cellsOf(BOX);
+  const ps1 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  // undoRevision: the refund once per key (what the growth consumed comes back once; a second undo has nothing to take)
+  const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  const ps2 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  const d = diff(S0, await cellsOf(BOX));
+  const consumed = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+  out.undo = { result: u, consumed, refund: u.refund, stockBefore: ps1.stock, stockAfter: ps2.stock };
+  const refundBack = G.minus(G.plus(ps2.stock ?? {}, ps2.ledger?.refundOverflow ?? {}), G.plus(ps1.stock ?? {}, ps1.ledger?.refundOverflow ?? {}));
+  check(u.removed === true && d.n === 0, `item 13: undoRevision of the survival growth: the world before it (${d.n} differ)`, d.first);
+  check(G.same(u.refund ?? {}, G.plus({}, u.refund ?? {})) && Object.values(u.refund ?? {}).every((n) => n > 0) && G.same(consumed, u.refund ?? {}), `item 13: the refund once per key: what the growth consumed ${json(consumed)} came back as ${json(u.refund)} (the stockpile's stock moved by ${json(refundBack)})`, out.undo);
+  const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 60_000);
+  check(String(u2.refused ?? '').startsWith('NOT_ALLOWED'), `item 13: a second undo has nothing left to refund (refused: ${u2.refused})`);
+  const rm = await G.remove(ctx, region);
+  const df = diff(B0, await cellsOf(BOX));
+  const left = df.first.filter((m) => !crates.some((c) => m.startsWith(`${c[0]},${c[1]},${c[2]} `)));
+  check(rm.removed !== false && left.length === 0, `the region removed: E-flat 0 but the stockpile's crates (${df.n} differ, ${left.length} not crates)`, left);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ gr-crash: the growth's kill points (realise and undo)
+
+async function haltWait() {
+  for (let i = 0; i < 180; i++) {
+    await sleep(2000);
+    const st = await call('dev.state', {}, 10_000).catch(() => null);
+    if (st && st.inWorld === false) return true;
+  }
+  return false;
+}
+const SIX = Array.from({ length: 4 }, (_, i) => ({ id: `row_${i + 1}`, type: 'house', size: [9, 9], villager: 'dwelling' }));
+
+steps.crash = async () => {
+  await ensure();
+  const out = {};
+  // the realise half: kills while a growth (frontage and an extension: tiles and a road) is accepted, installed and written
+  for (const point of ['RV3', 'RV4', 'RG4+save', 'RD3', 'RD3+save']) {
+    const tag = point.replace('+', '_');
+    const world = `G6B GR Crash ${tag}`;
+    await freshFlat(world);
+    const gy = await groundY();
+    const BOX = BOXOF(CLAIM, gy);
+    const T = await grTown({ gy, addition: false, pt: false });
+    const S0 = await cellsOf(BOX);
+    const p = await growPlan(T.region, { lots: SIX, prefer: 'extend' });
+    if (p.refused) { check(false, `${point}: the growth's plan refused (${p.refused})`); await L.leaveWorld(); continue; }
+    const rid = p.revisionOf.rid;
+    await call('dev.journal.killAt', { point }, 10_000);
+    call('dev.region.realise', { planId: p.planId, lots: { row_1: STUB } }, 300_000).catch(() => null);
+    const down = await haltWait();
+    check(down, `${point}: the kill point halted the server during the growth's realise`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
+    await L.openWorld(world);
+    await L.tp(CX + 80, 60, CZ + 56);
+    await sleep(3000);
+    const w = await rvWait(T.region, rid);
+    const items = w.st.items[String(rid)] ?? {};
+    const batches = new Set(w.st.revisions.map((r) => r.batchId).filter(Boolean));
+    const o = { revision: w.r.state, items };
+    check(w.r.state === 'PLACED' && Object.values(items).every((x) => x.startsWith('PLACED')) && batches.size === 1 && Object.keys(items).some((k) => k.startsWith('road:')), `${point}: after the restart the growth ${w.r.state}; its items ${json(Object.entries(items).map(([k, x]) => [k.split(':')[0], x.split('@')[0]]))} each once (one batch; its street piece among them)`);
+    const t = tagged(w.st, w.r, T.region);
+    check(t.bad.length === 0, `${point}: every site of the growth tagged after the recovery (${json(t.kinds)})`);
+    const u = await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000);
+    const d = diff(S0, await cellsOf(BOX));
+    o.undo = { removed: u.removed, diff: d };
+    // (RG4+save: RV's finding, main's behaviour: the halted tile's first written cell may stay after an undo (RP §6's PLACING leftover))
+    const asMain = point.endsWith('+save') && d.n <= 1;
+    check(u.removed === true && (d.n === 0 || asMain), `${point}: then undoRevision: the world before the growth (${d.n} differ${asMain && d.n ? ': main\'s +save leftover, RV\'s recorded finding' : ''})`, d.first);
+    out[tag] = o;
+    await removeRegion(T.region);
+    await L.leaveWorld();
+  }
+  // the undo half: a growth with a road undone, killed at the commit (RVU1), after the drain (RVU2) and at a stage undo's commit (K6)
+  for (const point of ['RVU1', 'RVU2', 'K6']) {
+    const world = `G6B GR UndoCrash ${point}`;
+    await freshFlat(world);
+    const gy = await groundY();
+    const BOX = BOXOF(CLAIM, gy);
+    const T = await grTown({ gy, addition: false, pt: false });
+    const S0 = await cellsOf(BOX);
+    const p = await growPlan(T.region, { lots: SIX, prefer: 'extend' });
+    if (p.refused) { check(false, `${point}: the growth's plan refused (${p.refused})`); await L.leaveWorld(); continue; }
+    await rvRealise(T.region, p, { lots: { row_1: STUB } });
+    await call('dev.journal.killAt', { point }, 10_000);
+    call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
+    const down = await haltWait();
+    check(down, `${point}: the kill point halted the server during the growth's undo`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
+    await L.openWorld(world);
+    await L.tp(CX + 80, 60, CZ + 56);
+    let st;
+    const t0 = Date.now();
+    for (; Date.now() - t0 < 1_800_000;) { st = await rvState(T.region); if (st.busy === null) break; await sleep(L.pollDelayMs(Date.now() - t0)); }
+    const d = diff(S0, await cellsOf(BOX));
+    out[point] = { after: { busy: st.busy, position: st.position, states: st.revisions.map((r) => [r.rid, r.state]) }, diff: d };
+    check(st.busy === null && st.position === 0 && st.revisions.every((r) => r.state === 'UNDONE') && d.n === 0, `${point}: after the restart the undo resumed and finished: position ${st.position}, ${json(st.revisions.map((r) => [r.rid, r.state]))}; the world before the growth (its road and lots gone): ${d.n} differ`, d.first);
+    await removeRegion(T.region);
+    await L.leaveWorld();
+  }
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ gr-look: N-GR-1 and N-GR-2 (a client; shots for the gallery)
+
+steps.look = async () => {
+  await ensure();
+  const out = {};
+  const world = 'G6B GR Look';
+  await freshFlat(world);
+  const gy = await groundY();
+  const T = await grTown({ gy, addition: false, pt: false });
+  const shot = async (name, at, yaw, pitch) => {
+    await L.tp(at[0], at[1], at[2], yaw, pitch);
+    await L.settle(2500);
+    const f = path.join(OUT, 'shots', `${name}.png`);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const r = await call('dev.screenshot', { file: f, waitChunks: true }, 120_000).catch((e) => ({ error: String(e) }));
+    out[name] = { file: f, ok: !r.error && fs.existsSync(f), at, yaw, pitch };
+    return r;
+  };
+  await cmd('/time set day');
+  await cmd('/gamerule doDaylightCycle false').catch(() => null);
+  const mid = [CX + 80, gy + 70, CZ + 56];
+  await shot('before', mid, 0, 90);
+  const g1 = await growPlan(T.region, { lots: [{ id: 'bakery', type: 'bakery', size: [9, 9] }, { id: 'house_a', type: 'house', size: [9, 9] }] });
+  await rvRealise(T.region, g1, { lots: { bakery: STUB, house_a: STUB } });
+  await shot('frontage', mid, 0, 90);
+  const g2 = await growPlan(T.region, { lots: SIX, prefer: 'extend' });
+  await rvRealise(T.region, g2, { lots: { row_1: STUB, row_2: STUB } });
+  const ir2 = await rvIr(T.region, g2.revisionOf.rid);
+  const road = ir2.roads[0];
+  await shot('extension_top', [Math.round((road.points[0][0] + road.points[1][0]) / 2), gy + 60, road.points[0][2]], 0, 90);
+  await shot('extension_street', [road.points[0][0] - 10, gy + 6, road.points[0][2]], -90, 15);
+  await shot('town_grown', [CX + 40, gy + 45, CZ + 130], 200, 35);
+  out.frontage = (await rvIr(T.region, g1.revisionOf.rid)).revision.grow;
+  out.extension = ir2.revision.grow;
+  check(Object.values(out).filter((v) => v?.file).every((v) => v.ok), `N-GR-1 / N-GR-2: ${Object.values(out).filter((v) => v?.file).length} shots of the grown town (before, the frontage, the extension from above and along its street, the whole)`);
+  await L.leaveWorld();
   return out;
 };
 

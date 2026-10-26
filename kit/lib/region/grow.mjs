@@ -18,6 +18,9 @@ import { STREET_RULES, PAD_MAX, toWorld, toLocal, frontOf, rectWorld, surfaceOps
 import { columnProblem, standingClasses, ridPrefix } from './revise.mjs';
 import { isStreetId, runKeys } from './beside.mjs';
 import { fixtureFor, fixtureCells, roadLamp } from './fixtures.mjs';
+import { traceBoundary, normalAt } from './boundary.mjs';
+import { followLots, smoothLine, maskRuns, FOLLOW_PAD } from './followEmit.mjs';
+import { FLAG_WATER, FLAG_LAVA, FLAG_MISSING } from './pack.mjs';
 
 export const GROW_FORMAT = 'grow/1';
 /** A frontage lot's lane length (the rows between the verge row and its front edge): the pad's batter (PAD_MAX) plus one stays off the verge. */
@@ -58,7 +61,9 @@ export function streetRuns(eff) {
   for (const rd of eff.roads ?? []) {
     const flagged = !!rd.ext?.['architect_mc:street'];
     if (!flagged && !isStreetId(rd.id)) continue;
-    if (/^(route_)?st_/.test(rd.id) || /^route_/.test(rd.id)) continue;
+    // (§5, GR-b) a following district's street, `route_st_<d>_<n>` (a T2 route): frontage on its straight runs, no §4 extension
+    const fm = /^route_st_([a-z][a-z0-9_]*?)_\d+$/.exec(rd.id);
+    if (!fm && (/^(route_)?st_/.test(rd.id) || /^route_/.test(rd.id))) continue;
     const pts = rd.points ?? [];
     for (let i = 0; i + 1 < pts.length; i++) {
       const a = pts[i], b = pts[i + 1];
@@ -67,9 +72,10 @@ export function streetRuns(eff) {
       const [ua, c] = toLocal(o, a[0], a[2]), [ub] = toLocal(o, b[0], b[2]);
       const u0 = Math.min(ua, ub), u1 = Math.max(ua, ub);
       if (u1 - u0 + 1 < MIN_RUN && pts.length > 2) continue;
-      const d = districtOfRoad(rd);
+      if (fm && u1 - u0 + 1 < MIN_RUN) continue;
+      const d = fm ? fm[1] : districtOfRoad(rd);
       out.push({ road: rd.id, seg: i, o, c, u0, u1, y: a[1] ?? b[1] ?? null, width: rd.width ?? 3, lanterns: rd.lanterns !== false, lamp: rd.lamp ?? null, surface: rd.surface ?? null,
-        ext: rd.ext ?? null, district: d, prefix: d ? `${d}_` : '', twoPoint: pts.length === 2, grown: Number.isInteger(rd.rid) && rd.rid > 0 });
+        ext: rd.ext ?? null, district: d, prefix: d ? `${d}_` : '', twoPoint: pts.length === 2 && !fm, follow: !!fm, grown: Number.isInteger(rd.rid) && rd.rid > 0 });
     }
   }
   return out.sort((p, q) => (p.road < q.road ? -1 : p.road > q.road ? 1 : p.seg - q.seg));
@@ -221,6 +227,9 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   const taken = []; // [{rect, gap}] the growth's own: its lots (gap lotGap), its lanes and pads (gap 0)
   const unplacedWhy = new Map(); // id -> Map(kind -> n)
   const tally = (id, kind) => { if (!unplacedWhy.has(id)) unplacedWhy.set(id, new Map()); const m = unplacedWhy.get(id); m.set(kind, (m.get(kind) ?? 0) + 1); };
+  // (the extension's own reason for a lot it could not take: it names why the street could not carry it, read before the tallies)
+  const extWhy = new Map();
+  const extTally = (id, kind) => { extWhy.set(id, kind); tally(id, kind); };
   const rules = STREET_RULES;
   const ends = extendableEnds(eff, standing, runs, O);
 
@@ -301,16 +310,23 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
 
   // ---- §4 the extension: one end, a straight run, lots on both sides as V's
   let extension = null;
+  const followD = isDistricts && district ? (eff.params?.spec?.districts ?? eff.params?.districts ?? []).find((d) => d.id === district && d.follow) : null;
   const extend = (left) => {
     if (extendWhat === 'none' || !left.length) return left;
+    if (followD) return extendBoundary(left);
     let cands = ends.filter((e) => e.ok);
     if (extendWhat !== 'auto') {
       const e = ends.find((q) => q.node === extendWhat);
       if (!e) throw new Error(`NOT_ALLOWED: [call] grow.extend '${extendWhat}' is not a street end of ${district ? `district ${district}` : 'the region'}`);
-      if (!e.ok) { for (const s of left) tally(s.id, e.why === 'room' ? 'claim' : e.why === 'layout' ? 'layout' : e.why === 'held' ? 'held' : 'street'); return left; }
+      if (!e.ok) { for (const s of left) extTally(s.id, e.why === 'room' ? 'claim' : e.why === 'layout' ? 'layout' : e.why === 'held' ? 'held' : 'street'); return left; }
       cands = [e];
     }
-    if (!cands.length) { for (const s of left) tally(s.id, ends.some((e) => e.why === 'layout') && !ends.some((e) => e.ok) ? 'layout' : 'street'); return left; }
+    if (!cands.length) {
+      const ws = new Set(ends.map((e) => e.why));
+      const k = ws.has('held') ? 'held' : ws.has('room') ? 'claim' : ws.has('layout') && ends.every((e) => e.why === 'layout') ? 'layout' : 'street';
+      for (const s of left) extTally(s.id, k);
+      return left;
+    }
     let best = null;
     for (const e of cands) {
       const t = tryExtension(e, left);
@@ -318,11 +334,11 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
       const dist = pl ? Math.abs(e.u - toLocal(e.run.o, pl.at[0], pl.at[2])[0]) : 0;
       if (!best || t.lots.length > best.t.lots.length || (t.lots.length === best.t.lots.length && dist < best.dist)) best = { e, t, dist };
     }
-    if (!best.t.lots.length) { for (const s of left) tally(s.id, best.t.why ?? 'street'); return left; }
+    if (!best.t.lots.length) { for (const s of left) extTally(s.id, best.t.why ?? 'street'); return left; }
     for (const l of best.t.lots) takeLot(l);
     extension = best.t.ext;
     const got = new Set(best.t.lots.map((l) => l.spec));
-    for (const s of left) if (!got.has(s)) tally(s.id, best.t.why ?? 'street');
+    for (const s of left) if (!got.has(s)) extTally(s.id, best.t.why ?? 'street');
     return left.filter((s) => !got.has(s));
   };
   const tryExtension = (e, left) => {
@@ -394,6 +410,74 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     return { lots, why, ext: { from: e.node, road: run.road, newRoad: `${run.road}_g${rid}`, run: [uS, uEnd], o, c, y: y0, dir, lanterns: run.lanterns, ext: run.ext, district: fd, zone: flag?.zone ?? fd ?? 'town' } };
   };
 
+  // ---- §5 an along district's extension: the boundary traced again over the claim's survey, a new band continuing the standing one
+  // from its free route end along the spine, its street a ground road along the band's middle, its lots as D2's (followLots)
+  const extendBoundary = (left) => {
+    const why = (k) => { for (const s0 of left) extTally(s0.id, k); return left; };
+    const cols = survey.columns;
+    if (!cols) return why('boundary');
+    const c = eff.claim;
+    const routeEnds = (eff.graph?.nodes ?? []).filter((n) => n.kind === 'junction' && new RegExp(`^${district}_s\\d+$`).test(n.id) && Array.isArray(n.at));
+    const adj = adjacency(eff.graph);
+    // a free route end: no join or other route meets it (its only edges are the street's own)
+    const free = routeEnds.filter((n) => (adj.get(n.id) ?? []).every(({ edge }) => String(edge.path ?? '').startsWith(`route_st_${district}`) && !edge.external));
+    if (!free.length) return why('boundary');
+    const [length, depth] = followD.size ?? [64, 24];
+    const t = traceBoundary(cols, c, followD.follow, { near: [free[0].at[0], free[0].at[2]], minLength: 16 });
+    if (t.none) return why('boundary');
+    const spine = t.spine;
+    const nearest = (p) => spine.reduce((bi, q, i) => (Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1])) < Math.max(Math.abs(spine[bi][0] - p[0]), Math.abs(spine[bi][1] - p[1])) ? i : bi), 0);
+    let best = null;
+    for (const end of [...free].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      const other = routeEnds.find((n) => n !== end) ?? null;
+      const iE = nearest([end.at[0], end.at[2]]);
+      const dirI = other ? Math.sign(iE - nearest([other.at[0], other.at[2]])) || 1 : 1;
+      const need = left.reduce((a, s0) => a + s0.size[0] + 3, 0) + 8;
+      const win = [];
+      for (let i = iE + dirI; i >= 0 && i < spine.length && win.length < Math.min(need, length * 2); i += dirI) win.push(spine[i]);
+      if (win.length < 16) continue;
+      const flagsAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? FLAG_MISSING : cols.flags[i + j * cols.width]; };
+      let sign = 0;
+      if (t.kind !== 'ridge') { let votes = 0; win.forEach((p, i) => { const [nx, nz] = normalAt(win, i); votes += flagsAt(Math.round(p[0] + nx * 2), Math.round(p[1] + nz * 2)) & FLAG_WATER ? -1 : 1; }); sign = votes >= 0 ? 1 : -1; }
+      const off = t.kind === 'ridge' ? 0 : depth >> 1;
+      const lo = t.kind === 'ridge' ? -(depth >> 1) : 0, hi = t.kind === 'ridge' ? depth >> 1 : depth;
+      const line = [], mask = new Set(), seen = new Set();
+      win.forEach((p, i) => {
+        const [nx, nz] = normalAt(win, i);
+        const q = [Math.round(p[0] + nx * off * sign), Math.round(p[1] + nz * off * sign)];
+        const k = `${q[0]},${q[1]}`;
+        if (!seen.has(k)) { seen.add(k); line.push(q); }
+        for (let tt = lo; tt <= hi; tt++) mask.add(`${Math.round(p[0] + nx * tt * (sign || 1))},${Math.round(p[1] + nz * tt * (sign || 1))}`);
+      });
+      // the street: from the end node along the band's middle, stopping where the land, the claim or the standing region stops it
+      const okAt = ([x, z]) => !(flagsAt(x, z) & (FLAG_WATER | FLAG_LAVA | FLAG_MISSING)) && !O.problem(x, z);
+      const sm = smoothLine([[end.at[0], end.at[2]], ...line]);
+      const run = [];
+      for (let i = 1; i < sm.length; i++) { const q = sm[i]; let ok = true; for (let dx = -2; dx <= 2 && ok; dx++) for (let dz = -2; dz <= 2 && ok; dz++) if (!okAt([q[0] + dx, q[1] + dz])) ok = false; if (!ok) break; run.push(q); }
+      if (run.length < 16) continue;
+      const P = run.map(([x, z]) => [x, survey.groundAt ? survey.groundAt(x, z) : survey.heightAt(x, z), z]);
+      for (const k of [...mask]) { const [x, z] = k.split(',').map(Number); if (O.problem(x, z)) mask.delete(k); }
+      const placedL = followLots(survey, { mask }, P, left, { keepOut: [], taken: [...standingBoxes, ...taken.map((q) => q.rect)] });
+      const ok = placedL.lots.filter((l) => {
+        const pad = growR(l.rect, 1 + FOLLOW_PAD);
+        for (let z = pad[1]; z <= pad[3]; z++) for (let x = pad[0]; x <= pad[2]; x++) if (O.problem(x, z)) return false;
+        return true;
+      });
+      if (!best || ok.length > best.lots.length) best = { end, run, P, mask, lots: ok };
+    }
+    if (!best || !best.lots.length) return why('boundary');
+    const roadId = streetRuns(eff).find((r) => r.follow && r.district === district)?.road ?? `route_st_${district}_1`;
+    extension = { kind: 'boundary', from: best.end.id, fromPort: 'route', road: roadId, newRoad: `${roadId}_g${rid}`, run: [0, best.run.length - 1], path: best.P, mask: maskRuns(best.mask), district, zone: district };
+    const got = new Set();
+    for (const l of best.lots) {
+      const lot = { spec: l.spec, rect: l.rect, front: l.front, floorY: l.floorY, entrance: l.entrance, laneTo: l.lane, laneCells: l.laneCells, follow: true, street: l.street, slot: { kind: 'extension', street: extension.newRoad, side: 0, u: l.at }, run: { o: 'ew', c: 0 } };
+      takeLot(lot);
+      got.add(l.spec);
+    }
+    for (const s0 of left) if (!got.has(s0)) extTally(s0.id, 'boundary');
+    return left.filter((s0) => !got.has(s0));
+  };
+
   let left = [...ordered];
   if (prefer === 'extend') left = extend(left);
   if (left.length) {
@@ -404,9 +488,10 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   if (prefer === 'frontage' && left.length && !extension) left = extend(left);
   const unplaced = left.map((s) => {
     const m = unplacedWhy.get(s.id) ?? new Map();
-    const kinds = { held: 'held', body: 'body', beside: 'held', claim: 'claim', town: 'claim', street: 'street', layout: 'layout' };
+    const kinds = { held: 'held', body: 'body', beside: 'held', claim: 'claim', town: 'claim', street: 'street', layout: 'layout', boundary: 'boundary' };
     let kind = 'frontage', n = -1;
     for (const [k, c] of [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1))) { const kk = kinds[k] ?? 'frontage'; if (c > n) { n = c; kind = kk; } }
+    if (extWhy.has(s.id) && ['boundary', 'street', 'claim', 'layout'].includes(kinds[extWhy.get(s.id)])) kind = kinds[extWhy.get(s.id)];
     return { id: s.id, reason: 'NO_ROOM', kind };
   });
   if (!placed.length) {
@@ -437,7 +522,7 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     const s = l.spec;
     const lot = pads.lot(s.id, {
       at: [l.rect[0], l.rect[1]], size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1], floor: l.floorY, front: l.front,
-      max: [l.rect[2] - l.rect[0] + 1, 32, l.rect[3] - l.rect[1] + 1], brief: s.brief, pad: { maxCut: PAD_MAX, maxFill: PAD_MAX, edge: 'slope' }, stage: sl,
+      max: [l.rect[2] - l.rect[0] + 1, 32, l.rect[3] - l.rect[1] + 1], brief: s.brief, pad: { maxCut: l.follow ? FOLLOW_PAD : PAD_MAX, maxFill: l.follow ? FOLLOW_PAD : PAD_MAX, edge: 'slope' }, stage: sl,
       ext: { ...(s.ext ?? {}), 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, lane: `lane_${s.id}`, slot: l.slot.kind, landmark: s.landmark, placement: s.placement }, 'architect_mc:grown': { revision: rid, street: l.slot.street, side: l.slot.side, u: l.slot.u } },
     });
     boxes.push({ id: s.id, ...lot.box });
@@ -455,7 +540,15 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     const run = list[0].run;
     // the standing stops on this street: its junctions (and earlier growths'), and the plaza's port that the street's edges end at
     const stops = [];
-    for (const n of effNodes) if (n.kind === 'junction' && n.ref === roadId && Array.isArray(n.at)) { const [u, v] = toLocal(run.o, n.at[0], n.at[2]); if (v === run.c) stops.push({ u, end: `${n.id}.street` }); }
+    // (a junction on the run's centre line between its ends: the street's own (V's ref is the road; a following street's `<d>_street` and
+    // its route ends `<d>_s<k>`, whose port is `route`), and earlier growths')
+    for (const n of effNodes) {
+      if (n.kind !== 'junction' || !Array.isArray(n.at)) continue;
+      const [u, v] = toLocal(run.o, n.at[0], n.at[2]);
+      if (v !== run.c || u < run.u0 || u > run.u1) continue;
+      const port = (n.ports ?? []).find((q) => q.name === 'street') ?? (n.ports ?? []).find((q) => q.name === 'route');
+      if (port && (n.ref === roadId || (run.follow && (n.ref === `${run.district}_street` || n.id.startsWith(`${run.district}_s`))) || /_g\d+_j\d+$/.test(n.id))) stops.push({ u, end: `${n.id}.${port.name}` });
+    }
     for (const e of eff.graph?.edges ?? []) {
       if (e.path !== roadId || e.type !== 'road') continue;
       for (const end of [e.from, e.to]) {
@@ -493,7 +586,41 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
   // ---- the extension: verges, the road, junctions at its lots' entrances, the chain from the standing end to the new end
   const roads = [];
   const X = plan.extension;
-  if (X) {
+  if (X && X.kind === 'boundary') {
+    // (§5) the new band's street (a ground road through the band's middle), its lots' lanes, the graph chain from the route end
+    const street = r.part(`${pre}street`, { stage: ss, set: 'path' });
+    const pts = X.path.filter((_, i) => i === 0 || i === X.path.length - 1 || i % 8 === 0).map(([x, , z]) => [x, null, z]);
+    const fixture = fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
+    const made = street.road(pts, { width: 3, surface: 'path', lanterns: true, mode: 'ground', id: X.newRoad, lamp: roadLamp(fixture) });
+    const rd = r.roads.find((q) => q.id === X.newRoad);
+    if (rd) rd.ext = { ...(rd.ext ?? {}), 'architect_mc:street': { zone: X.zone, district: X.district }, 'architect_mc:band': { district: X.district, runs: X.mask } };
+    else r.paths.filter((q) => q.id.startsWith(X.newRoad)).forEach((q) => { q.ext = { 'architect_mc:band': { district: X.district, runs: X.mask } }; });
+    void made;
+    roads.push(X.newRoad);
+    const ext = lotsOut.filter((l) => l.slot.kind === 'extension').sort((a, b) => a.slot.u - b.slot.u);
+    const lanesB = lanes;
+    for (const l of ext) surfaceOps(lanesB, l.laneCells.map((c) => [c[0], c[1], c[2]]), 'path');
+    let prev = `${X.from}.${X.fromPort}`, k = 0;
+    for (const l of ext) {
+      const id = `${X.newRoad}_e${++k}`;
+      const at = [l.street[0], l.street[1] + 1, l.street[2]];
+      const port = `lane_${l.spec.id}`;
+      r.graphNode({ id, kind: 'junction', ref: X.newRoad, at, ports: [{ name: 'street', at, facing: 'up', width: 3 }, { name: port, at, facing: 'up', width: 1 }] });
+      nodes.push(id);
+      pushEdge({ id: `${X.newRoad}#${k}`, from: prev, to: `${id}.street`, type: 'road', width: 3, stage: sg, path: X.newRoad });
+      prev = `${id}.street`;
+      r.graphNode({ id: `lot:${l.spec.id}`, kind: 'lot', ref: l.spec.id, at: l.entrance, ports: [{ name: 'entrance', at: l.entrance, facing: l.front, width: 1 }] });
+      nodes.push(`lot:${l.spec.id}`);
+      r.graphEdge({ id: port, from: `lot:${l.spec.id}.entrance`, to: `${id}.${port}`, type: 'path', width: 1, path: port, stage: sg });
+      edges.push(port);
+    }
+    const last = X.path[X.path.length - 1];
+    const endId = `${X.newRoad}_end`;
+    const at = [last[0], last[1] + 1, last[2]];
+    r.graphNode({ id: endId, kind: 'junction', ref: X.newRoad, at, ports: [{ name: 'street', at, facing: 'up', width: 3 }] });
+    nodes.push(endId);
+    pushEdge({ id: `${X.newRoad}#end`, from: prev, to: `${endId}.street`, type: 'road', width: 3, stage: sg, path: X.newRoad });
+  } else if (X) {
     const o = X.o, c = X.c;
     const [ua, ub] = [Math.min(X.run[0], X.run[1]), Math.max(X.run[0], X.run[1])];
     const verges = r.part(`${pre}verges`, { stage: sg, set: 'path' });
@@ -544,6 +671,7 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
   const lamps = [];
   const placedLamps = [];
   for (const l of lotsOut) {
+    if (l.follow) continue; // (an along district's grown lots take no apron lamp: D2's own lots have none)
     const [eu, ev] = toLocal(l.run.o, l.entrance[0], l.entrance[2]);
     const sideU = -1;
     const [x, z] = toWorld(l.run.o, eu + sideU, ev);
