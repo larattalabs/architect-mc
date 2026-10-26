@@ -210,7 +210,7 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   assert.deepEqual(cl(d.reservedToSupported), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual(cl(d.schemaVersionBumps).map((x) => x.id).sort(), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual([cl(d.added), d.removed, d.retired, d.otherStateChanges, cl(d.untilChanged), cl(d.notesChanged), cl(d.limitsChanged)], [[], [], [], [], [], [], []]);
-  for (const id of ['connector.ladder', 'connector.stair', 'connector.switchback']) { const e = golden.entries.find((x) => x.id === id); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api); assert.equal(e.state, 'supported'); }
+  for (const id of ['connector.ladder', 'connector.stair', 'connector.switchback']) { const e = golden.entries.find((x) => x.id === id); assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.41.0', `${id}: ${e.sinceApi}`); assert.equal(e.state, 'supported'); } // (released in v0.44.0 at API 1.41.0: a later release's golden.api moves on, the stamp stays)
 });
 
 test('§10 item 13: determinism: three checks of each valid climb fixture identical (answers, IR, artifact sha)', async () => {
