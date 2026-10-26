@@ -358,9 +358,8 @@ steps.look = async () => {
         await cmd('/time set 13000');
         out.shots.push(await shot(`${tag}_dusk`, [cx - 16.5, ty + 2, cz + 16.5], [cx + 0.5, mid, cz + 0.5]));
       }
+      // (no removal: the look's world is a fresh copy, left behind; a removal waits on the spectator camera standing in the box)
       await call('dev.release', {}).catch(() => null);
-      const rm = await G.remove(ctx, region).catch((e) => ({ error: String(e?.message ?? e) }));
-      out.runs[tag].remove = { removed: rm.removed ?? null, error: rm.error ?? null };
       await leaveWorld();
     }
   }
