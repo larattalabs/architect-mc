@@ -135,7 +135,8 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
   }
   const first = await checkPlanLocal(plan, o);
   const need = first.res.needVolumes ?? [];
-  const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel');
+  // ((7a RK §3) a rock stair asks its corridor as a tunnel does: PlanChecks.hasTunnel counts it)
+  const hasTunnel = (plan.connectors ?? []).some((p) => p?.kind === 'tunnel' || p?.kind === 'rock_stair');
   // (6c H, §10) the trigger widened: a body part (pond, fountain, waterfall, moat), a quay, or a part that took the wet fallback (meta.wet)
   const hasH = [...(plan.forms ?? []), ...(plan.connectors ?? [])].some((p) => ['pond', 'fountain', 'waterfall', 'quay', 'channel'].includes(p?.kind)) || (first.res.meta?.wet ?? []).length > 0 || first.check?.wetAsked === true
     || /"(farmPond|irrigate)":true/.test(JSON.stringify(plan.zones ?? [])); // ((6c IRR) irrigate too: PlanChecks.hasH)

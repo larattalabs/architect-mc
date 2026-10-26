@@ -586,10 +586,11 @@ export class Region {
         // bridge's span and a tunnel's bore, but the route writes a bridge's far landing (the segment's last cell: on the walk's fill it is
         // no natural ground; the walk after the span starts from it)
         // ((7a CW) and a catwalk's landing, the same way: the run's deck is the links stage's)
-        if (g.kind === 'bridge' || g.kind === 'catwalk') {
+        // ((7a RK) and a rock stair's landing walk cell, the same way as a catwalk's: the flight's treads are the links stage's)
+        if (g.kind === 'bridge' || g.kind === 'catwalk' || g.kind === 'rock_stair') {
           const land = cells[cells.length - 1];
           // ((7a CW) a catwalk's landing: only its lanes' row across the run (the single cell's square would reach back over the deck)
-          const across = g.kind === 'catwalk' ? (q) => (g.dir[0] !== 0 ? q[0] === land[0] : q[1] === land[2]) : () => true;
+          const across = g.kind === 'catwalk' || g.kind === 'rock_stair' ? (q) => (g.dir[0] !== 0 ? q[0] === land[0] : q[1] === land[2]) : () => true;
           const fp = footprintOf([land], e.width).filter((q) => across(q) && !taken.has(`${q[0]},${q[1]}`)).map((q) => [q[0], q[1], q[2], q[3]]);
           if (fp.length) rec.paths.push(p._routeRun(`${rid}_${n}l`, fp, mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells: [land], noRetain, fillTop, guardCols, noGuard }));
           return;

@@ -441,11 +441,17 @@ public final class PlanChecks {
 	/** (6c T3) The last check's volume pass (DevBridge {@code dev.region.checkPlan}'s {@code volumePass}; gate item 14, recorded). */
 	public static volatile @Nullable JsonObject lastVolumePass;
 
-	/** Whether a plan has a part of connector kind {@code tunnel} (only those ask for volumes in a check, CONTRACT T3 §6). */
+	/** (7a RK §3) The connector kinds whose check plans twice for their corridor's frozen volume: a tunnel's and a rock stair's. */
+	static final java.util.Set<String> VOLUME_CONNECTORS = java.util.Set.of("tunnel", "rock_stair");
+
+	/**
+	 * Whether a plan has a part of connector kind {@code tunnel} (only those ask for volumes in a check, CONTRACT T3 §6), or (7a RK §3,
+	 * F3's {@code hasVolume}) {@code rock_stair}.
+	 */
 	static boolean hasTunnel(JsonObject plan) {
 		if (plan.get("connectors") instanceof JsonArray a) {
 			for (JsonElement e : a) {
-				if (e instanceof JsonObject p && p.get("kind") instanceof JsonElement k && k.isJsonPrimitive() && "tunnel".equals(k.getAsString())) {
+				if (e instanceof JsonObject p && p.get("kind") instanceof JsonElement k && k.isJsonPrimitive() && VOLUME_CONNECTORS.contains(k.getAsString())) {
 					return true;
 				}
 			}
@@ -1445,7 +1451,7 @@ public final class PlanChecks {
 				before = dev.larattalabs.architect.region.volume.Arvx.decode(dev.larattalabs.architect.region.volume.Arvx.gunzip(Files.readAllBytes(vols.resolve(sha
 					+ ".bin"))));
 			} catch (IOException | RuntimeException e) {
-				return CompletableFuture.completedFuture((fluids ? "" : "tunnel ") + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
+				return CompletableFuture.completedFuture((fluids ? "" : connectorOf(g) + " ") + part + ": the frozen volume " + sha.substring(0, Math.min(12, sha.length()))
 					+ " it was checked against is gone (" + e.getMessage() + "): check again");
 			}
 			int chunks = ((bb.maxX() >> 4) - (bb.minX() >> 4) + 1) * ((bb.maxZ() >> 4) - (bb.minZ() >> 4) + 1);
@@ -1458,8 +1464,13 @@ public final class PlanChecks {
 			});
 			samples.put(key, sample);
 		}
-		return sample.thenApply(bn -> fluids ? waterDiff(part, bn.before(), bn.now(), g.getAsJsonArray("runs")) : rockDiff(part, bn.before(), bn.now(), g.getAsJsonArray(
-			"runs")));
+		return sample.thenApply(bn -> fluids ? waterDiff(part, bn.before(), bn.now(), g.getAsJsonArray("runs")) : rockDiff(connectorOf(g), part, bn.before(), bn.now(),
+			g.getAsJsonArray("runs")));
+	}
+
+	/** (7a RK §3) A rock guard's connector as its ARTIFACT_STALE names it: the guard's {@code connector} ("rock_stair"), else "tunnel". */
+	static String connectorOf(JsonObject g) {
+		return g.get("connector") instanceof JsonElement c && c.isJsonPrimitive() && "rock_stair".equals(c.getAsString()) ? "rock_stair" : "tunnel";
 	}
 
 	/** A guard's frozen volume as planned and the same box sampled again (one per volume and check, shared by the guards on it). */
@@ -1468,6 +1479,12 @@ public final class PlanChecks {
 	/** The guard cells' classes before and now (PLANT as AIR; MISSING now not judged): null when equal, else the message. */
 	static @Nullable String rockDiff(String part, dev.larattalabs.architect.region.volume.Arvx.Decoded before, dev.larattalabs.architect.region.volume.Arvx.Decoded now,
 		JsonArray runs) {
+		return rockDiff("tunnel", part, before, now, runs);
+	}
+
+	/** (7a RK §3) The rock diff above with the connector its message names ("tunnel", "rock_stair"). */
+	static @Nullable String rockDiff(String connector, String part, dev.larattalabs.architect.region.volume.Arvx.Decoded before,
+		dev.larattalabs.architect.region.volume.Arvx.Decoded now, JsonArray runs) {
 		int[] b = before.box();
 		var classes = dev.larattalabs.architect.api.VoxelClass.values();
 		int air = dev.larattalabs.architect.api.VoxelClass.AIR.ordinal(), plant = dev.larattalabs.architect.api.VoxelClass.PLANT.ordinal();
@@ -1493,7 +1510,7 @@ public final class PlanChecks {
 				}
 			}
 		}
-		return n == 0 ? null : "tunnel " + part + ": the rock it was checked against changed since the check, " + n + " cell" + (n == 1 ? "" : "s") + ": " + String
+		return n == 0 ? null : connector + " " + part + ": the rock it was checked against changed since the check, " + n + " cell" + (n == 1 ? "" : "s") + ": " + String
 			.join("; ", named);
 	}
 

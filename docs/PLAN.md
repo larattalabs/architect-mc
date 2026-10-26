@@ -1325,3 +1325,10 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 - **Wave 3:** GJ walled-town gate join, FB flood warning. The GM (fancy gates) contract is drafted alongside; GM is built after K3 and GJ.
 - **Then:** FS, LC, AD.
 - **Deferred:** the nav slice (seconds/risk/nav.json/steward mover) waits until Steward's villager phase asks. M8 fall protection as an error is decided at FB from its count.
+
+## Steward's GR review (2026-10-26; steward-mc docs/ARCHITECT-ASKS.md "GR review"): folded into GR
+- S-GR-1 to S-GR-5 and S-GR-7: the defaults are OK. A growth that a later district joined gets the NOT_ALLOWED "joined" reason.
+- S-GR-6: no dry growth check needed (planRevision plus discardPlan covers it).
+- Fixture correction (gr_beside, item 5): Steward has no dplan/dgrow keys. Each build plans and realises under steward.<buildId>.vplan / steward.<buildId>.vrealise (.vrealise2 after a stale re-check), and both carry ext steward_mc:district=<id> and steward_mc:build=<buildId>. The first building plans with Regions.plan beside the town, with a claim of the reservation plus 16 columns into the town's claim. A growth is an ordinary Steward build with the same key scheme.
+- Ask 1: a growth's realise names its revision id, and EVERY site it wrote (buildings, lanes, street pieces, not only lots via LotState.revision) is identifiable as that revision's. Steward logs one history entry per growth and undoes it with undoRevision. RV should carry the revision id on realised sites.
+- Ask 2: confirm land.outside shrinks after undoRevision (§7), so Steward can recompute its saved land.

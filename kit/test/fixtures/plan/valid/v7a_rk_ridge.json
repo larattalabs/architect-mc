@@ -1,0 +1,130 @@
+{
+  "about": "(7a RK) a rock stair up a ridge's flank on the flat claim: the ground rises 1 a cell from x 1095 (65) to 1102 (72), then a cliff to a plateau at 84 (20 over the flat); a 2-wide villager flight of rise 20 (two landings) from the foot to the plateau: flush (cut) on the slope, bored under the cliff, cut again near the top; a sand band 2 thick over the bored roofs (x 1103-1108, y 80-81), lined. The frozen crossings_demo ridge (1:1 flanks) keeps every tread within 2 of the surface, so no tread could bore: this ridge is steeper (an as-built deviation)",
+  "on": "flat",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1095,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 65
+      },
+      {
+        "x0": 1096,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 66
+      },
+      {
+        "x0": 1097,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 67
+      },
+      {
+        "x0": 1098,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 68
+      },
+      {
+        "x0": 1099,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 69
+      },
+      {
+        "x0": 1100,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 70
+      },
+      {
+        "x0": 1101,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 71
+      },
+      {
+        "x0": 1102,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 72
+      },
+      {
+        "x0": 1103,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 84
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1090,
+      65,
+      2080
+    ],
+    "top": [
+      1125,
+      85,
+      2080
+    ]
+  },
+  "volume": {
+    "edits": [
+      {
+        "box": [
+          1103,
+          80,
+          2070,
+          1108,
+          81,
+          2090
+        ],
+        "class": "LOOSE"
+      }
+    ]
+  },
+  "sand": [
+    [
+      1103,
+      80,
+      2070,
+      1108,
+      81,
+      2090
+    ]
+  ],
+  "covers": [
+    "connector.rock_stair"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flight",
+        "kind": "rock_stair",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "movers": [
+          "player",
+          "villager"
+        ]
+      }
+    ]
+  }
+}

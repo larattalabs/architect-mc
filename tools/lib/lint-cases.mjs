@@ -160,7 +160,7 @@ function structureCases() {
   out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
   out.push({ id: 'k2:walk', covers: ['k2-ingame #6 (the walk, realised: the player round it and up and down every access, M8 on walk cells, M5, M3, head room)', 'k2-natural #7 (along, realised)'], run: k2Walk });
-  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['cw', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1], ['cl', 1], ['k2', 1], ['sa', 1]]) {
+  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['cw', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1], ['cl', 1], ['k2', 1], ['rk', 1], ['sa', 1]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
   }
   for (const w of ['bridge', 'rope', 'tunnel', 'catwalk']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
@@ -177,6 +177,7 @@ const P0COVERS = {
   vocc: ['vocc-ingame #3', 'vocc-ingame #8', 'vocc-ingame #9'], cw: ['cw-ingame #5 (M10:catwalk, M8, M6, M5, M3 on the plan; the broken variants caught)', 'cw-ingame #6 (KC: the catwalk past the falls, M25:clear 0)'], irr: ['irr-ingame #1'], h: ['h-ingame #23'], valid: ['Steward-shaped plans (risk 6)'],
   cl: ['cl-ingame #7 (the refusal set: NO_CLIMB, MOVER, ANCHOR, SPAN, UNREACHABLE; the walked stair adjusted)'],
   k2: ['k2-unit (the refusal set: NO_FEATURE, NO_ROOM {class, walk, access}, UNREACHABLE {kind: wall})'],
+  rk: ['rk-unit (the refusal set: NO_CLIMB, SPAN, ANCHOR, WATER, PROTECTED, VOLUME; KC WATER {kind: body}; the broken variants caught)'],
   sa: ['sa-ingame #5 (M10:spiral, M8, M6, M5, M3 on the plan; the refusal set NO_FEATURE, SPAN, HEADROOM, MOVER; the broken variants caught)', 'sa-unit #6 (KC: the spiral past the fountain, M25:clear 0)'],
 };
 const CLCOVERS = { flat: ['cl-ingame #7 (flights, rails, rungs against their face, rest landings, the top gate, M5 0, M3 0)'], natural: ['cl-natural #7 (the stair and the switchback on S3)'] };

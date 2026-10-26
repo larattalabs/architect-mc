@@ -1,0 +1,127 @@
+{
+  "about": "broken variant: the one flight with its lamps off (_unsafe.noLamps): its bored treads are dark: the checker's M5 (metrics.M5rockStair) catches it",
+  "on": "flat",
+  "terrain": {
+    "bands": [
+      {
+        "x0": 1095,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 65
+      },
+      {
+        "x0": 1096,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 66
+      },
+      {
+        "x0": 1097,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 67
+      },
+      {
+        "x0": 1098,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 68
+      },
+      {
+        "x0": 1099,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 69
+      },
+      {
+        "x0": 1100,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 70
+      },
+      {
+        "x0": 1101,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 71
+      },
+      {
+        "x0": 1102,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 72
+      },
+      {
+        "x0": 1103,
+        "z0": 2000,
+        "x1": 1170,
+        "z1": 2159,
+        "y": 84
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1094,
+      65,
+      2080
+    ],
+    "top": [
+      1119,
+      85,
+      2080
+    ]
+  },
+  "volume": {
+    "edits": [
+      {
+        "box": [
+          1103,
+          80,
+          2070,
+          1108,
+          81,
+          2090
+        ],
+        "class": "LOOSE"
+      }
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flight",
+        "kind": "rock_stair",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "movers": [
+          "player",
+          "villager"
+        ],
+        "approach": 0,
+        "ext": {
+          "architect_mc:unsafe": {
+            "noLamps": true
+          }
+        }
+      }
+    ]
+  },
+  "expect": {
+    "part": "flight",
+    "rule": "M5"
+  }
+}
