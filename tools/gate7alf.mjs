@@ -58,6 +58,7 @@ process.env.GATE6B_DEV_PORT ??= '8981';
 fs.mkdirSync(process.env.GATE6B_OUT, { recursive: true });
 const L = await import('./lib/run6b.mjs');
 const { OUT, call, check, cmd, connect, leaveWorld, log, results, root, state, startClient, stopClient, tp } = L;
+const core = await import('./lib/gate6chy-core.mjs');
 const B = await import('./lib/gate6chy-b.mjs');
 const G = await import('./lib/gate6crs-game.mjs');
 
@@ -71,7 +72,7 @@ const SITE_FILE = path.join(root, 'scenarios', 'sites', 'cliff_face.json');
 const JARS = path.join(path.resolve(root, '..', 'architect-mc'), 'artifacts', 'gate7a-lf', 'jars');
 const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
 const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
-const ctx = { L, OUT, KIT, imp, json, root, check, log, B };
+const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
 const sideDir = (id) => path.join(L.SIDECAR_DATA, 'regions', 'plans', id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (x, y, z) => `${x},${y},${z}`;
@@ -286,8 +287,8 @@ async function rides(tag, recs, n = RIDES) {
       const doors = sh.doors.map(([x, z]) => [x, q.y0 + 1, z]);
       const runs = [];
       for (let i = 0; i < n; i++) {
-        const r = await call('dev.lift.ride', { x: sh.col[0], z: sh.col[1], y0: q.y0, yT: q.yT, drag: !up, face: [dx, dz], exit, ...(up ? {} : { doors }) }, 120_000).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
-        runs.push({ ok: !!r.ok, reached: r.reached ?? null, exited: r.exited ?? null, maxY: r.maxY ?? null, minY: r.minY ?? null, ticks: r.ticks ?? null, exitAt: r.exitAt ?? null, ...(r.error ? { error: r.error } : {}) });
+        const r = await call('dev.lift.ride', { x: sh.col[0], z: sh.col[1], y0: q.y0, yT: q.yT, drag: !up, face: [dx, dz], exit, ...(up ? {} : { doors }) }, 120_000).catch((e) => ({ rode: false, error: String(e?.message ?? e) }));
+        runs.push({ ok: !!r.rode, reached: r.reached ?? null, exited: r.exited ?? null, maxY: r.maxY ?? null, minY: r.minY ?? null, ticks: r.ticks ?? null, exitAt: r.exitAt ?? null, ...(r.error ? { error: r.error } : {}) });
       }
       void rx; void rz;
       out[`${q.id}:${sh.kind}`] = { rise: q.rise, runs, ok: runs.filter((r) => r.ok).length };
@@ -321,7 +322,7 @@ async function breach(tag, rec, body) {
 }
 
 /** Plan lifts_demo, realise (PLACED once the bodies settled), census, re-read, movers, rides, a stand, remove. */
-async function demoRun(tag, claim, { kind, params = {}, standMs = 120_000 }) {
+async function demoRun(tag, claim, { kind, params = {}, standMs = 60_000 }) {
   const out = { claim, kind };
   const flat = kind === 'flat';
   await tp((claim[0] + claim[2]) / 2, flat ? -20 : 200, (claim[1] + claim[3]) / 2);
@@ -359,13 +360,11 @@ async function demoRun(tag, claim, { kind, params = {}, standMs = 120_000 }) {
   out.census = {};
   for (const b of bodies) out.census[b.id] = await census(b, fluidBefore.get(b.id));
   check(Object.values(out.census).every((c) => c.ok), `item 4 (${tag}): the census exact: every shaft cell a bubble column of its drag, 0 fluid elsewhere in its watch box (${Object.entries(out.census).map(([k, c]) => `${k} ${c.columns}/${c.cells} columns, ${c.outsideCount} outside, ${c.wrong.length} wrong`).join('; ')})`, Object.values(out.census).flatMap((c) => [...c.wrong, ...c.outside]).slice(0, 12));
-  // a stand (default rules for the flat world: random ticks, the time running): 0 fluid outside the shafts
-  if (flat) { for (const r of ['random_tick_speed 3', 'advance_time true']) await cmd(`/gamerule ${r}`); }
+  // a stand (the world's exact rules: E-flat is judged after it; cliffRun stands at default rules)
   await L.gameWait(standMs, { real: sleep, label: `lf ${tag} stand` });
-  if (flat) { for (const r of ['random_tick_speed 0', 'advance_time false']) await cmd(`/gamerule ${r}`); }
   out.stand = {};
   for (const b of bodies) out.stand[b.id] = await census(b, fluidBefore.get(b.id));
-  check(Object.values(out.stand).every((c) => c.ok), `item 6 (${tag}): a ${standMs / 1000} s stand${flat ? ' at default rules (random ticks, the time running)' : ''}: still every column cell a column, 0 fluid outside the shafts (${Object.entries(out.stand).map(([k, c]) => `${k} ${c.columns}/${c.cells}, ${c.outsideCount} outside`).join('; ')})`);
+  check(Object.values(out.stand).every((c) => c.ok), `item 6 (${tag}): a ${standMs / 1000} s stand: still every column cell a column, 0 fluid outside the shafts (${Object.entries(out.stand).map(([k, c]) => `${k} ${c.columns}/${c.cells}, ${c.outsideCount} outside`).join('; ')})`);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const R = await realisedOf(planDir, before, after);
   out.item5 = await item5(tag, R);
@@ -435,6 +434,13 @@ async function cliffRun(tag) {
   out.census = {};
   for (const b of bodies) out.census[b.id] = await census(b, fluidBefore.get(b.id));
   check(Object.values(out.census).every((c) => c.ok), `item 4 (${tag}): the census exact: ${Object.entries(out.census).map(([k, c]) => `${k} ${c.columns}/${c.cells} columns, ${c.outsideCount} outside`).join('; ')}`, Object.values(out.census).flatMap((c) => [...c.wrong, ...c.outside]).slice(0, 12));
+  // item 6: a 2-minute stand at default rules (random ticks, the time running): 0 fluid outside the shaft
+  for (const r of ['random_tick_speed 3', 'advance_time true']) await cmd(`/gamerule ${r}`);
+  await L.gameWait(120_000, { real: sleep, label: `lf ${tag} stand at default rules` });
+  for (const r of ['random_tick_speed 0', 'advance_time false']) await cmd(`/gamerule ${r}`);
+  out.stand = {};
+  for (const b of bodies) out.stand[b.id] = await census(b, fluidBefore.get(b.id));
+  check(Object.values(out.stand).every((c) => c.ok), `item 6 (${tag}): a 120 s stand at default rules (random ticks, the time running): still every column cell a column, 0 fluid outside the shaft (${Object.entries(out.stand).map(([k, c]) => `${k} ${c.columns}/${c.cells}, ${c.outsideCount} outside`).join('; ')})`);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
   const R = await realisedOf(planDir, before, after);
   out.item5 = await item5(tag, R);
@@ -445,9 +451,11 @@ async function cliffRun(tag) {
   const rm = await G.remove(ctx, region);
   const d = await G.diff(ctx, box, pre);
   const bc = out.breach?.cell ? out.breach.cell.join(',') : null;
-  const rest = d.list.filter((m) => m.pos !== bc);
-  out.exact = { removed: rm.removed, mismatches: d.mismatches, rest: rest.length, list: d.list.slice(0, 20) };
-  check(rm.removed && rest.length === 0, `item 8 (${tag}): Regions.remove (the column drained first, then the shell): E-flat ${rest.length} (${d.mismatches - rest.length} at the breached cell, put back by a command: its own record, not the region's)`, rest.slice(0, 8));
+  // (the stand's random ticks turn grass under the terrain's bands to dirt: the world's growth, classified; the breached cell: a command's)
+  const growth = d.list.filter((m) => m.class === 'growth');
+  const rest = d.list.filter((m) => m.pos !== bc && m.class !== 'growth');
+  out.exact = { removed: rm.removed, mismatches: d.mismatches, growth: growth.length, rest: rest.length, list: d.list.filter((m) => m.class !== 'growth').slice(0, 20) };
+  check(rm.removed && rest.length === 0, `item 8 (${tag}): Regions.remove (the column drained first, then the shell): E-flat ${rest.length} unclassified (${growth.length} growth from the default-rules stand's random ticks, recorded; ${d.mismatches - rest.length - growth.length} at the breached cell, put back by a command: its own record, not the region's)`, rest.slice(0, 8));
   await leaveWorld();
   return out;
 }
@@ -541,10 +549,10 @@ steps.probe = async () => {
   const towers = [['up8', colUp, false], ['up30', dark, false], ['up48', await buildColumn(X + 100, Z, g, 48), false], ['down30', await buildColumn(X + 120, Z, g, 30, { down: true }), true]];
   await L.gameWait(5000, { real: sleep, label: 'lf probe columns form' });
   for (const [name, c, down] of towers) {
-    const r = await call('dev.lift.ride', { x: c.col[0], z: c.col[1], y0: c.y0, yT: c.yT, drag: down, face: [0, -1], exit: down ? c.approach : c.top, ...(down ? { doors: c.doors } : {}) }, 120_000).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+    const r = await call('dev.lift.ride', { x: c.col[0], z: c.col[1], y0: c.y0, yT: c.yT, drag: down, face: [0, -1], exit: down ? c.approach : c.top, ...(down ? { doors: c.doors } : {}) }, 120_000).catch((e) => ({ rode: false, error: String(e?.message ?? e) }));
     out.rides[name] = r;
   }
-  check(Object.values(out.rides).every((r) => r.ok), `item 1: the bot player rides (dev.lift.ride: LivingEntity.travel and the column's own push): ${Object.entries(out.rides).map(([k, r]) => `${k} ${r.ok ? 'ok' : 'FAIL'} (reached ${r.reached}, exited ${r.exited}, y ${r.minY?.toFixed?.(1)}..${r.maxY?.toFixed?.(1)}, ${r.ticks} ticks)`).join('; ')}`, out.rides);
+  check(Object.values(out.rides).every((r) => r.rode), `item 1: the bot player rides (dev.lift.ride: LivingEntity.travel and the column's own push): ${Object.entries(out.rides).map(([k, r]) => `${k} ${r.rode ? 'ok' : 'FAIL'} (reached ${r.reached}, exited ${r.exited}, y ${r.minY?.toFixed?.(1)}..${r.maxY?.toFixed?.(1)}, ${r.ticks} ticks)`).join('; ')}`, out.rides);
   await leaveWorld();
   spendZero();
   return out;

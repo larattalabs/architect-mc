@@ -6,5 +6,6 @@
 // on both trees.
 export const LF_MOVED = Object.freeze({
   'asks-8703dbd/treetop_village.json': 'storehouse_lift: unsupported {connector.lift, until 7a} -> refused NO_CLIMB with a path wouldFit (the asks claim is flat)',
+  'rs/rs02_walled.json': 'its pending lift (lip_w to the stone anchor, required false): unsupported {connector.lift, until 7a} -> refused NO_CLIMB (no face within the approach); the later connectors\' leg ids shift by one (the lift\'s leg is routed now), every other answer the same',
   'asks-8703dbd/upside_down.json': 'winch_lift: unsupported {connector.lift, until 7a} -> refused NO_CLIMB with a path wouldFit (the asks claim is flat)',
 });

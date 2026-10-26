@@ -51,7 +51,7 @@ public final class SliceLfDev {
 		DevBridge.register("dev.lift.ride", 120_000, "{x, z, y0, yT, drag (false: up over soul sand, true: down over magma), face: [dx, dz] (toward "
 			+ "the face), exit: [x, y, z] (feet: the top walk cell for an up ride, the approach for a down ride), doors?: [[x, y, z]] (a down ride's "
 			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column (baseTick, LivingEntity.travel and the column's own push each tick) -> {reached, "
-			+ "maxY, minY, ticks, exited, exitAt, ok}", (req, mc) -> {
+			+ "maxY, minY, ticks, air, exited, exitAt, rode, error?, stack?}", (req, mc) -> {
 				int x = req.get("x").getAsInt(), z = req.get("z").getAsInt(), y0 = req.get("y0").getAsInt(), yT = req.get("yT").getAsInt();
 				boolean drag = req.has("drag") && req.get("drag").getAsBoolean();
 				JsonArray face = req.getAsJsonArray("face");
@@ -74,7 +74,7 @@ public final class SliceLfDev {
 						player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
 						return ride(level, player, o, x, z, y0, yT, drag, yaw, ep, doors, maxTicks, opened, was);
 					} catch (RuntimeException e) {
-						o.addProperty("ok", false);
+						o.addProperty("rode", false);
 						o.addProperty("error", e.toString());
 						JsonArray st = new JsonArray();
 						for (StackTraceElement t : e.getStackTrace()) {
@@ -172,7 +172,7 @@ public final class SliceLfDev {
 						at.add(player.getY());
 						at.add(player.getZ());
 						o.add("exitAt", at);
-						o.addProperty("ok", reached && exited);
+						o.addProperty("rode", reached && exited); // (not "ok": the bridge's envelope owns that name)
 					}
 		return o;
 	}
