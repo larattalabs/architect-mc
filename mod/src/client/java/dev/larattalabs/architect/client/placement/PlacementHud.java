@@ -189,6 +189,9 @@ final class PlacementHud implements HudZones.Element {
 		if (BuildPlacement.layerArmed()) {
 			c.add(new Chip("▲ place on top: Enter", HudInk.armed(), true));
 		}
+		if (BuildPlacement.bigArmed()) {
+			c.add(new Chip("! confirm armed: Enter", HudInk.armed(), true)); // SAFETY
+		}
 		return c;
 	}
 
@@ -203,12 +206,20 @@ final class PlacementHud implements HudZones.Element {
 		if (v.refusals().isEmpty()) {
 			// S4: "Ready" only once the server checked the exact site; its reasons when it would refuse
 			dev.larattalabs.architect.site.Sites.Verdict sv = BuildPlacement.serverVerdict();
+			// SAFETY: an armed big placement shows its countdown in place of "Ready" (or "Checking"); unarmed, Ready says Enter twice
+			String armed = BuildPlacement.preview() || sv != null && !sv.ok() ? null : BuildPlacement.bigPrompt();
+			if (armed != null) {
+				rows.add(Row.text(TextUtil.ellipsize(font, "▲ " + armed, inner), HudInk.armed()));
+				return;
+			}
 			if (sv == null) {
 				rows.add(Row.progress("Checking the site with the server…"));
 				return;
 			}
 			if (sv.ok()) {
-				String ready = BuildPlacement.preview() ? "Preview: the server would place it here" : BuildPlacement.moving() != null
+				boolean big = !BuildPlacement.preview() && BuildPlacement.big(v);
+				String ready = BuildPlacement.preview() ? "Preview: the server would place it here" : big ? dev.larattalabs.architect.placement.PlaceConfirm
+					.readyLine(BuildPlacement.moving() != null, v.blocks(), v.replaced()) : BuildPlacement.moving() != null
 					? "Ready: Enter moves it here (the old site comes back as it was)" : "Ready: Enter places it";
 				rows.add(Row.text(TextUtil.ellipsize(font, "✔ " + ready, inner), HudInk.ok()));
 				return;
@@ -258,16 +269,23 @@ final class PlacementHud implements HudZones.Element {
 			if (v.forceArmed()) {
 				k.addAll(List.of("Shift+Enter", "force"));
 			}
-			k.addAll(List.of("Enter", BuildPlacement.layerArmed() ? "on top" : "place", "Esc", "cancel"));
+			boolean armed = BuildPlacement.bigArmed();
+			k.addAll(List.of("Enter", armed ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place", "Esc", armed ? "disarm" : "cancel"));
 			String[] a = k.toArray(String[]::new);
 			return UiBits.hintsWidth(font, a) <= inner ? new String[][] {a} : new String[][] {{"?", "keys", "Enter", "place"}};
 		}
 		List<String> all = new ArrayList<>(List.of("R", "rotate", "Shift+R", "back", "Arrows", "nudge", "PgUp/Dn", "raise", "L", v.locked() ? "unlock" : "lock",
-			"Enter", BuildPlacement.layerArmed() ? "on top" : "place"));
+			"Enter", BuildPlacement.bigArmed() ? "confirm" : BuildPlacement.layerArmed() ? "on top" : "place"));
 		if (v.forceArmed()) {
 			all.addAll(List.of("Shift+Enter", "force"));
 		}
-		all.addAll(List.of("Esc", "cancel", "?", "hide"));
+		all.addAll(List.of("Esc", BuildPlacement.bigArmed() ? "disarm" : "cancel"));
+		// SAFETY: the undo key (outside placement) and the confirm threshold
+		if (dev.larattalabs.architect.client.hud.Keys.undoLast != null) {
+			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast), "undo last placement"));
+		}
+		all.addAll(List.of(dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+", "blocks: Enter twice"));
+		all.addAll(List.of("?", "hide"));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();
 		for (int i = 0; i < all.size(); i += 2) {

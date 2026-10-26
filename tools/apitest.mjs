@@ -272,7 +272,7 @@ switch (step) {
     for (const c of ['/gamemode survival @a', '/gamerule advance_time false', '/time set 6000', '/gamerule spawn_mobs false', '/kill @e[type=!player]', '/kill @e[type=item]']) await cmd(c);
     await api('clear');
     // a rerun in the same world: take down what an earlier run left
-    for (const old of (await api('sites')).all) await cmd(`/architect remove ${old.id} force`);
+    for (const old of (await api('sites')).all) await cmd(`/architect remove ${old.id} force confirm`); // SAFETY: without confirm it only asks
 
     // ---- version, features, jobs stub
     const v = await api('version');

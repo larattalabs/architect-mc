@@ -25692,3 +25692,89 @@ HUD text uses lab-ui's on-dark tokens.
   the region verdict now at y 92, below the toasts' 64; every piece shown, the helper strip too, at y 40, below the boss bars beside it in the
   top left). The scale-4 overlap above is fixed. Vanilla's chat (not a zone piece) still runs under the
   placement panel's left edge at s4, as before this slice.
+
+## SAFETY: confirm before big placements and `/architect remove`, an undo key (slice/SAFETY, 2026-10-26, $0; as built)
+PLAN "UI/UX roadmap additions" (safety on big actions). Client and command behaviour only: no API change (no Steward RC), no
+version set (the coordinator assigns one at merge).
+
+### 1. Enter twice for a big placement
+- **Big** (`placement/PlaceConfirm.big`, pure): the placement would replace at least one solid block that is not terrain (a
+  template cell or an entrance-approach clear over a block whose `TerrainFit.flags` carry neither `NATURAL` nor `TREE`: planks, glass,
+  a player's wall, a road surface; grass, dirt, stone, sand, logs and leaves are what a site clears by design, and a block entity is
+  the force refusal's business), **or** the design writes at least `confirmBlocks` blocks (its template's non-air cells).
+- `confirmBlocks` lives in Architect's client config, `config/architect_mc.json` (beside `autoStart` and `nodePath`), default
+  **1000**, values below 1 or unreadable mean the default; an older file gains the key on load.
+- **One Enter** (`BuildPlacement.enter`, called by the keyboard and `dev.build.enter`; `PlaceConfirm.enter`, pure): small and clean
+  places at once, as before. Big and not refused: the first Enter arms a lab-ui `ConfirmArm` (5 s window) keyed on the exact site
+  (design, origin, turns, the site moved), the second fresh Enter places. `pressByKey`: an OS key repeat never arms or places, and
+  a second press within 300 ms (`UiRules.KEY_CONFIRM_MS`) is ignored.
+- **Composes with force and Place on top (one confirm, never stacked):** a ghost the client or the server would refuse goes to the
+  server on the first Enter as before (it says why, and arms force over a block entity or Place on top over an overlap). Shift+Enter
+  with force armed and Enter with Place on top armed are themselves the deliberate second press, so they place at once.
+- **Disarm:** Esc (or Backspace) while armed only disarms ("Not placed: the confirm was cancelled") and the ghost stays; a second Esc
+  cancels as before. Rotating, nudging, (un)locking, a ghost that follows the look onto another spot, a result, and the 5 s window
+  all disarm too.
+- **HUD:** unarmed, a big ready ghost reads "✔ Ready: Enter twice places it (2,340 blocks)" (or "(replaces 3 blocks that aren't
+  terrain)"). Armed, the verdict row is "▲ Press Enter again to place 2,340 blocks (4)" (", replacing N that aren't terrain" when that
+  is why), in `HudInk.armed()`, with a "! confirm armed: Enter" chip and the key row "Enter confirm · Esc disarm".
+- **Moves** take the same rule (moving a site writes the same blocks): "Press Enter again to move it here: …".
+- **Scripts are unchanged:** `dev.build.confirm` stays the already-confirmed place (as the API's place, which has no ghost), so no
+  existing driver changes. `dev.build.enter` / `dev.build.escape` drive the keyboard's path.
+
+### 2. `/architect remove` asks first
+- `/architect remove <site>` and `/architect remove <site> force` remove nothing. They answer with a summary and a link:
+  "Remove cabin_3 (Cabin, 2,340 blocks; the ground is put back)? [Confirm] (30 s) or type /architect remove cabin_3 confirm"; a
+  construction site reads "Take down construction site …; the built blocks and the crate's items come back to you"; a site a mod
+  owns adds "It is owned by steward_mc (…): removing it may break that mod's plans."; a road or cell site, "Remove <road>? …".
+- **[Confirm]** runs `/architect remove <site> [force] confirm <token>`. The token (`site/RemoveTokens`, pure) names the site, the
+  force flag and who asked (the player's UUID, else the source's name), is good for **30 s** and **once**. Expired: "That [Confirm] has
+  expired (30 s): nothing was removed. Run … again". Wrong, used or someone else's: "… is not valid any more …".
+- **Typed** `/architect remove <site> [force] confirm` goes ahead (typing it is the deliberate act). `forget` is unchanged (it writes
+  no blocks). An unknown id answers as before (did you mean), with no link.
+- **The "Placed" line's [Undo] stays one click:** it now runs `/architect remove <site> undo`, which goes ahead while that site is
+  the running player's newest own placement this session (§3's record). Undoing what you just placed puts back the ground of a
+  moment ago and loses nothing of yours; the dangerous cases are a typed or tab-completed id and a link scrolled back to later. So once
+  you have placed something since, or the site is older, or not yours, `undo` asks like `remove` ("cabin_1 is not your latest
+  placement any more. Remove …? [Confirm]"). `/architect place`'s own "Undo: /architect remove <id>" hint now asks first.
+- **Drivers updated:** `tools/apitest.mjs` (a rerun's cleanup: `force confirm`) and `tools/gateui2b.mjs` (its cleanups:
+  `confirm`; the [Undo] link's value: `… undo`). `dev.sites.remove`, the API's remove and the Library call `Sites.remove*` directly
+  and are unchanged; no other driver or Steward runs the command (searched `tools/`, `scenarios/`, `apitest/`, `../steward-mc`).
+
+### 3. Undo last placement (a key)
+- A rebindable KeyMapping **"Undo last placement"** (`key.architect_mc.undo_last`), category Architect, default **Z**.
+  Conflict check (26.3's `Options` defaults read from the deobf jar: W A S D E F Q T O P L G C X, Space, Shift, Ctrl, Tab, `/`,
+  1-9, F1/F2/F5/F11; F3+letter debug combos only with F3): Z is free in vanilla, in Architect (B screen, J construction HUD; R, H, L,
+  arrows, PgUp/PgDn, Enter, Esc, Backspace only while placing) and in Steward (Y inbox, I inspect, U survey, K the upcoming jobs
+  panel). Mnemonic: Ctrl+Z.
+- **What it undoes:** the newest site this player placed in this session (`site/LastPlaced`, pure; `site/PlayerRemove`) that still
+  stands as placed (same id and `placedAt`) and that no mod owns (checked when pressed, so a site adopted since is skipped). Only
+  Architect's own player paths record: the ghost's Enter and `/architect place`; a site placed through the API (another mod, even
+  with the player as actor) or as a batch / group member never is. The record is per server start (cleared on start and stop).
+- **Confirm:** the first press arms a lab-ui `ConfirmArm` (5 s) on that site, with a toast ("Undo last placement?", "Remove cabin_3
+  (Cabin); the ground comes back", hint "Z again to undo") and an action-bar countdown ("Press Z again to remove cabin_3 (Cabin)
+  (4)"). A second press within 5 s (and at least 300 ms later) re-checks that it is still the newest own site and removes it through
+  `PlayerRemove.remove`, the very path Library > Placed > Remove now calls (extracted from `ArchitectScreen.removeSite`): a large site
+  over ticks, a construction site deconstructed with refunds, a covered site answered with the covered question and a pointer to the
+  Library. "Undone" / "Not undone" toasts. Nothing standing: "Nothing to undo". Ignored while placing, marking a plot or with a
+  screen open.
+
+### 4. Where the player sees it
+- Status tab, left column under the helper buttons (the right column is full at GUI scale 4), a "Safety" heading: "Placing 1,000+ blocks, or over blocks that aren't terrain, takes Enter twice
+  (confirmBlocks in config/architect_mc.json). Undo last placement: Z twice (Controls to rebind)."
+- The placement HUD's "?" legend: "Esc cancel · Z undo last placement · 1,000+ blocks: Enter twice · ? hide".
+- README: the placement key table and the commands paragraph.
+
+### 5. Gate (DEV MODE; own run dir `../architect-mc-SAFETY-run`, ports 8902/8903, own lock)
+- Unit (pure): `PlaceConfirmTest` (9: the threshold edge, replaced vs terrain/trees/air/block entities, the Enter step with force
+  and Place on top, the prompts, the arm's repeat / 300 ms / 5 s / moved-key behaviour), `RemoveTokensTest` (4: once, the 30 s
+  edge, bound to site / force / person, pruning), `LastPlacedTest` (5: per player, removed and reused ids, owned since, depth,
+  clear). unit-mod 947 tests, 0 failures.
+- `safety-ingame` (tools/gatesafety.mjs, new): 38 ok. Shots: `armed_s2`, `armed_s4`, `armed_replacing_s2`, `remove_confirm_chat_s2`,
+  `undo_armed_s2`, `status_s2`, `status_s4`, `legend_s2` in the run's `gate-safety/shots/`.
+- Run `20261026-041050-change` at cd16fe60: unit-mod, water-lint, p3-lint, lint-structure (177), lint-look (14) PASS; safety-ingame
+  FAIL 3, all the driver reading the HUD rows before a frame was drawn (fixed in the driver: it waits 3 frames).
+- Run `20261026-041618-change` at 820bc634: **PASS 8/8**: safety-ingame 38, ui2b-ingame 31, u3-ingame 40, and the removal
+  regressions, because the Library's Remove moved into `PlayerRemove.remove`: 4e-orders 16, 4d-all 64, b-ingame 74; apijars (0.42.0,
+  0.41.0 and 0.40.1 jars, 46 ok each) and sim-jobs 33 (`apitest.mjs` changed).
+- The Status tab's note first sat in the right column, which is full at GUI scale 4 (off-screen in `status_s4`). Moved to the left
+  column. Run `20261026-043443-change` at 85706862: **PASS 4/4** (unit-mod 947, safety-ingame 38, ui2b-ingame 31, u3-ingame 40).
