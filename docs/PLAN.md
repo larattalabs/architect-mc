@@ -1314,3 +1314,6 @@ Slices:
 - J3, Architect JobFeed (S): after J1.
 - J4, Steward publishes its rows (S): after J1+J2.
 - J5, toast refs plus gallery shots (S).
+
+## Queued (coordinator, 2026-10-26)
+- The Status tab's right column runs off the bottom at GUI scale 4 (the "Critique and revise" row is clipped); found by SAFETY. Make the Status tab scroll, or fold its sections, with the lab-ui ScrollList/CollapsibleSection.
