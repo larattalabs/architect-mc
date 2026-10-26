@@ -102,9 +102,10 @@ describe('systemRefs: expansion from the kit', () => {
     // with catalogue 9: IRR's irrigate member and VOC-c's strict rule.palette def together reach 76,652 (each alone stayed under).
     // (6c FL/F3, Steward's S-FL-8) 80,000 -> 84,000: FL's descriptions and F3's five lean form defs together may pass 80,000
     // (7a foundation) 84,000 -> 96,000: the seven 7a defs (strict, connector.routed's members each), NO_CLIMB and R25-R27 measured
-    // 92,556 (the coordinator, 2026-10-23, asked of Steward)
+    // 92,556 (the coordinator, 2026-10-23, asked of Steward). (6d RV) 96,000 -> 100,000: main measured 95,276 after RK; RV's five
+    // revision.* catalogue entries and the lot's refill member add 1,121 (96,397)
     console.log(`# compact plan/0: ${compact.length} characters`);
-    expect(compact.length).toBeLessThan(96_000);
+    expect(compact.length).toBeLessThan(100_000);
   });
 });
 

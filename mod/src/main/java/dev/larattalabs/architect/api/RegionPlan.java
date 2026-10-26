@@ -16,13 +16,20 @@ import org.jspecify.annotations.Nullable;
  */
 public record RegionPlan(String planId, String programId, String programSha, String irSha, String surveySha, long seed, List<LotSpec> lots,
 	List<String> stages, Map<String, BlockPos> anchors, RegionBudget budget, List<String> notes, @Nullable CheckReport report,
-	@Nullable RegionPreviews previews, int irFormat) {
+	@Nullable RegionPreviews previews, int irFormat, @Nullable RevisionOf revisionOf) {
 	public RegionPlan {
 		lots = List.copyOf(lots);
 		stages = List.copyOf(stages);
 		anchors = Map.copyOf(anchors);
 		notes = List.copyOf(notes);
 		irFormat = irFormat <= 0 ? 1 : irFormat;
+	}
+
+	/** The 1.9.0 constructor: no revisionOf (since NEXT, 6d RV: a revision plan's {@link RevisionOf}; null for any other plan). */
+	public RegionPlan(String planId, String programId, String programSha, String irSha, String surveySha, long seed, List<LotSpec> lots,
+		List<String> stages, Map<String, BlockPos> anchors, RegionBudget budget, List<String> notes, @Nullable CheckReport report,
+		@Nullable RegionPreviews previews, int irFormat) {
+		this(planId, programId, programSha, irSha, surveySha, seed, lots, stages, anchors, budget, notes, report, previews, irFormat, null);
 	}
 
 	/** The 1.8.0 constructor: no report, no previews, IR format 1. */
