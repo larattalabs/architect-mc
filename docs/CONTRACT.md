@@ -25619,3 +25619,60 @@ them by default; turn that off and the Style guides Claude's design instead, and
 them. Everything Architect generates (climbs, tunnel lights, lamps, doors) now takes its blocks from the Style, roads no longer stall on
 natural ground like packed ice, and medieval walls are white instead of pink. For mod authors, API 1.42.0 adds `Bible.parts`,
 `Bibles.addParts` and `Bibles.estimateParts`, all additive.
+
+## UI-0.3 adoption: lab-ui 0.3.0 HUD zones and on-dark tokens (slice/UI03, 2026-10-26, $0; as built)
+
+PLAN "In-world interfaces" (lab-ui 0.3, before U3): Architect's HUD pieces register into lab-ui's shared HUD zones, and its dark
+HUD text uses lab-ui's on-dark tokens.
+- **lab-ui 0.3.0.** `mod/gradle.properties` `lab_ui_version=0.3.0`; `fabric.mod.json` `"lab_ui": ">=0.3.0 <0.4.0"` (Architect calls
+  0.3 API: `HudZones`, `UiStyle.OnDark`, `Toasts.Spec`). The jar nests `lab_ui-0.3.0.jar`. **Co-loading with Steward:** Steward's
+  main (92b2d13) declares `"lab_ui": ">=0.1.0 <0.3.0"`. Fabric loads the highest bundled lab-ui (0.3.0 from Architect), so the two
+  mods do not load together until Steward widens its range to `<0.4.0` (0.3.0 is additive over 0.2.0; the seams are
+  `Toasts.install()` also installing the zones and the toasts' Guard kind `lab_ui:toasts`). Don't merge before Steward's range moves.
+  Main's `.gradle-home` holds no lab_ui 0.3.0: resolve it online once (`GITHUB_ACTOR`/`GITHUB_TOKEN` from `gh auth token`) when this
+  merges, or the build-cache worktree (`architect-mc-buildcache`, seeded from main's home) can't build offline (the runner logs
+  "build artifact NOT available", which only turns off coverage-mode keys).
+- **HudInk** is a set of thin aliases of `UiStyle.OnDark`: `text`, `soft`→`muted`, `error`, `warn`, `ok`, `note`→`accent`,
+  `armed`→`selected`, `bar`, `track`, `chipEdge`→`rule` (error and warn change value: #F2948B and the amber #F2B66A).
+- **Zones** (`HudZones.add`, ids are also the Guard kinds):
+
+  | piece | id | zone | priority | size |
+  |---|---|---|---|---|
+  | placement panel | `architect_mc:hud/placement` | BOTTOM_CENTER | 70 | fixed (rows still fit by `HudFit` to the crosshair) |
+  | plot marking | `architect_mc:hud/plot_marker` | BOTTOM_CENTER | 65 | fixed |
+  | massing review / set legend | `architect_mc:hud/massing_review` | BOTTOM_CENTER | 60 | fixed |
+  | construction line (SiteHud) | `architect_mc:hud/construction` | TOP_CENTER | 60 | shrinks to its one-line form (no bar) |
+  | region ghost verdict | `architect_mc:hud/region_ghost` | TOP_CENTER | 50 | shrinks to one line ("Region plan id: verdict") |
+  | helper install strip | `architect_mc:hud/helper_progress` | TOP_LEFT | 50 | hideable (optional) |
+
+  The bottom-centre pieces and the region verdict keep drawing over open screens (`whileScreenOpen(true)`), as before; the
+  construction line and the helper strip hide under screens, as before. Each element measures in `measure` (rows built once a
+  frame) and paints at its slot in `draw`; `lastRect` / `hudRect` / `dev.build.state.hud` are set from the slot drawn.
+  `Toasts.avoid(BuildPlacement::hudRect)` is gone: the toast column ends above the bottom-centre slots (lab-ui `HudLayout`).
+  SiteHud's own rule (at most one line while placing) is a product rule and stays.
+- **Toasts.** `Toasts.push(Spec)` where it helps: "<site> is built" with the site's name as the subject and 3 body lines; the
+  failure toasts (design, massing, critique, variant/import, massing not opened, the new design did not load), "Architect needs
+  Node.js" and "The design helper stopped" with 3 body lines. The Placed toast is unchanged (ui2b checks it stays short).
+- **Colours on dark surfaces.** The massing HUD (`CREAM`, `SAGE`, `activityOnInk`, `0xFFF07060`) and the region verdict (`CREAM`,
+  `SAGE`, `0xFFF0A060`) use HudInk (on-dark tokens); the Library card's badge text on its walnut/teal bar uses `OnDark.text()`. Ghost
+  and world category colours (GhostRenderer, CompositeMesh, RegionGhost cells) and paper screens are unchanged. The site update
+  preview's "(yellow)" is a 7x7 swatch of the KEPT frame colour (`CompositeMesh.keptColor()`) beside "N cell(s) you changed stay as
+  they are (framed in the preview)".
+- **DevBridge** (docs/DEVBRIDGE.md): `dev.hud.zones`, `dev.ui03.regionHudPreview`, `dev.ui03.toast`.
+- **UI gallery** (`tools/gateui2b.mjs gallery`): new state `hud/all_at_once` (placement, the construction line, the region verdict,
+  the helper strip, an Architect toast with a subject, a vanilla advancement toast and two boss bars) at GUI scale 2 and 4. It checks
+  through `dev.hud.zones` that no two zone slots meet and every fixed piece is placed (the helper strip may be hidden); a slot over
+  vanilla's boss bars or toasts goes to index.json `issues` (non-blocking). `GATEUIG_ONLY` now reaches the region ghost and the
+  survival states (`onlyWants`).
+
+### Gate (DEV MODE)
+- `gate-run change --only unit-mod,lint-structure,lint-look,water-lint,p3-lint,ui2b-ingame,u3-ingame,u5-ingame` at 1b9dc738: **PASS
+  8/8** in 5m25s (unit-mod 929 tests; u3 40 ok; u5 32 ok; ui2b 31 ok; run `20261026-022336-change`).
+- UI gallery, `GATEUIG_ONLY` = the HUD and in-world states (ghost/*, placement_hud/*, toast/placed, plot/*, region_ghost/plan,
+  sitehud/*, hud/all_at_once, status/helper_strip): 33 shots, 0 failed; `hud/all_at_once` s2 and s4 pass (no slot meets another).
+  s2: all five pieces plus the vanilla toast and boss bars, nothing over vanilla's pieces. s4 (480x270 GUI): the helper strip is
+  hidden (no room top left beside the boss bars; as designed) and the toasts fold into "+2 more" below vanilla's two advancement
+  toasts.
+- **Found (lab-ui follow-up, not fixed here):** at s4 with two vanilla toasts the region verdict's slot (y 63, 246 wide, centred)
+  reaches 1 GUI px into vanilla's toast column (toasts to y 64). lab-ui's `HudLayout` TOP_CENTER starts below the boss bars and
+  "Now playing" but not below vanilla's own toasts when a wide centre piece reaches their column.
