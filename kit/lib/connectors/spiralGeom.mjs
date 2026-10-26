@@ -33,7 +33,7 @@ import { joinedState, splitState } from './climbGeom.mjs';
 import { BLOCKS, isCube } from '../blocks.mjs';
 
 /** The limits (catalogue: `connector.stairs_around`). */
-export const SPIRAL = Object.freeze({ riseMin: 4, riseMax: 64, landingEvery: 8, landing: 2, railDrop: 3, headroom: 2, outerMax: 2, merge: 3, canopyGap: 3, approachMax: 24, maxSteps: 4096, maxTries: 20000, lookahead: 10, widthMin: 1, widthMax: 2, villagerMinWidth: 2 });
+export const SPIRAL = Object.freeze({ riseMin: 4, riseMax: 64, landingEvery: 8, landing: 2, railDrop: 3, headroom: 2, outerMax: 2, merge: 3, canopyGap: 3, approachMax: 24, clear: 3, maxSteps: 4096, maxTries: 20000, lookahead: 10, widthMin: 1, widthMax: 2, villagerMinWidth: 2 });
 /** The host kinds (R27). */
 export const HOST_KINDS = Object.freeze(['rock_spire', 'ice_spike', 'giant_tree', 'giant_mushroom']);
 /** The default top per host kind (§2). */
@@ -307,6 +307,9 @@ export function spiralPlan(host, o) {
   const topCell = (x, y, z) => topAt.get(y)?.has(k2(x, z)) ?? false;
   // a cell a walker may stand in: it and the 2 over it free of the host, the top and the land
   const free = (x, y, z) => { for (let t = 0; t <= SPIRAL.headroom; t++) if (isHost(x, y + t, z) || topCell(x, y + t, z) || !land.open(x, y + t, z)) return false; return true; };
+  // (a cell a rising tread follows is clear 3 over it: a walker stepping down onto it from that tread carries its head through the
+  // third: vanilla's fall check, and the kit's mover's)
+  const clear3 = (x, y, z) => !isHost(x, y + SPIRAL.clear, z) && !topCell(x, y + SPIRAL.clear, z) && land.open(x, y + SPIRAL.clear, z);
   const side = (u, x, z) => DIR4.some(([dx, dz]) => u.has(k2(x + dx, z + dz)));
   const ring = (u, x, z) => DIR8.some(([dx, dz]) => u.has(k2(x + dx, z + dz)));
 
@@ -319,7 +322,7 @@ export function spiralPlan(host, o) {
     const [x, z] = k.split(',').map(Number);
     if (!side(Ub, x, z)) continue;
     const g = land.groundAt(x, z);
-    if (Math.abs(g - g0) > 1 || !free(x, g + 1, z)) continue;
+    if (Math.abs(g - g0) > 1 || !free(x, g + 1, z) || isHost(x, g, z)) continue;
     const dot = (2 * x - ab[0]) * (2 * F[0] - ab[0]) + (2 * z - ab[1]) * (2 * F[1] - ab[1]);
     cands.push({ x, z, g, dot, dF: Math.abs(x - F[0]) + Math.abs(z - F[1]) });
   }
@@ -333,7 +336,8 @@ export function spiralPlan(host, o) {
       let ok = true, e = null;
       for (let t = 1; t <= SPIRAL.approachMax; t++) {
         const x = c.x + nx * t, z = c.z + nz * t, g = land.groundAt(x, z), last = cells[cells.length - 1];
-        if (Math.abs(g - last[1]) > 1 || blocked(x, z) || land.waterAt?.(x, z) || !free(x, g + 1, z)) { ok = false; why = { at: [x, g, z], why: blocked(x, z) ? 'protected' : land.waterAt?.(x, z) ? 'water' : Math.abs(g - last[1]) > 1 ? 'step' : 'headroom' }; break; }
+        // (the approach is written on the ground: never on a host cell there, a root at the surface)
+        if (Math.abs(g - last[1]) > 1 || blocked(x, z) || land.waterAt?.(x, z) || !free(x, g + 1, z) || isHost(x, g, z)) { ok = false; why = { at: [x, g, z], why: blocked(x, z) ? 'protected' : land.waterAt?.(x, z) ? 'water' : Math.abs(g - last[1]) > 1 ? 'step' : isHost(x, g, z) ? 'host' : 'headroom' }; break; }
         if (!hard(x, z)) { e = [x, g, z]; break; }
         cells.push([x, g, z]);
       }
@@ -350,11 +354,11 @@ export function spiralPlan(host, o) {
   // ---- the walk
   const walk = []; // {x, y, z, kind: 'tread' | 'flat' | 'ground', facing, support}
   const used = new Set();
-  // the levels each column is walked at (the approach's too): a column is walked again only 4 or more over or under (the head room of
+  // the levels each column is walked at (the approach's too): a column is walked again only 5 or more over or under (the head room of
   // the one under, and a support under a tread, stay clear)
   const colY = new Map();
   const markCol = (x, y, z) => { const k = k2(x, z); if (!colY.has(k)) colY.set(k, []); colY.get(k).push(y); };
-  const spaced = (x, y, z) => (colY.get(k2(x, z)) ?? []).every((v) => Math.abs(v - y) >= 4);
+  const spaced = (x, y, z) => (colY.get(k2(x, z)) ?? []).every((v) => Math.abs(v - y) >= 5);
   for (const [x, g, z] of approach) markCol(x, g, z);
   let p = [foot.x, foot.z], y = foot.g, rising = 0, flats = 0, entry = null;
   const pick = (yt, list) => {
@@ -369,6 +373,7 @@ export function spiralPlan(host, o) {
       if (onGround ? !free(q[0], yt + 1, q[1]) || isHost(q[0], yt, q[1]) : !free(q[0], yt, q[1])) continue;
       // the hug: a rising tread on a side of U, a flat one in its ring; the wide modes (a detour round an obstacle) within 2 of U
       if (list === 'rise' ? !side(u, q[0], q[1]) : list === 'flat' ? !ring(u, q[0], q[1]) : !ring(dilate(u, 1), q[0], q[1])) continue;
+      if (yt > y && !clear3(p[0], y, p[1])) continue;
       const c = cross(p, q, a), rp = r2(p, a), rq = r2(q, a);
       // (inward and outward only straight toward or away from the axis: the cardinal of the larger offset)
       const ox = a[0] - 2 * p[0], oz = a[1] - 2 * p[1], rad = Math.abs(ox) >= Math.abs(oz) ? [Math.sign(ox), 0] : [0, Math.sign(oz)];
@@ -566,17 +571,48 @@ export function spiralPlan(host, o) {
   // the head room cells of every walk cell (lanes, deck, approach): the rails, beds and lamps that would stand in one are dropped
   const head = new Set();
   for (const w of lanes) for (let t = 1; t <= SPIRAL.headroom; t++) head.add(k3(w.x, w.y + t, w.z));
+  // (the third over a cell a rising tread follows, the foot's too)
+  const lane1 = lanes.filter((w) => w.lane === 1);
+  if (lane1[0]?.kind === 'tread') head.add(k3(foot.x, foot.g + SPIRAL.clear, foot.z));
+  for (let i = 0; i + 1 < lane1.length; i++) if (lane1[i + 1].kind === 'tread') { const w = lane1[i]; head.add(k3(w.x, w.y + SPIRAL.clear, w.z)); for (const v of lanes) if (v.lane === 2 && v.i === w.i) head.add(k3(v.x, v.y + SPIRAL.clear, v.z)); }
   for (const [x, yy, z] of deckCells) for (let t = 1; t <= SPIRAL.headroom; t++) head.add(k3(x, yy + t, z));
   for (const [x, g, z] of approach) for (let t = 1; t <= SPIRAL.headroom; t++) head.add(k3(x, g + t, z));
   const keepB = [], keepR = [], keepL = [];
   let skipped = 0;
-  for (let i = 0; i < beds.length; i++) {
-    const [x, yy, z] = beds[i];
-    const kb = k3(x, yy, z), kr = k3(x, yy + 1, z);
-    if (solids.has(kb) || solids.has(kr) || head.has(kb) || head.has(kr) || isHost(x, yy, z) || isHost(x, yy + 1, z) || !land.open(x, yy + 1, z)) { skipped++; continue; }
-    solids.set(kb, 'bed'); solids.set(kr, 'rail');
-    keepB.push(beds[i]); keepR.push(rails[i]);
-  }
+  // a bed and its rail where neither stands in a walk cell's head room or another cell; then no bed floats (a corner's diagonal bed
+  // stays only while a bed or a walk cell beside it does: Noah's look, no floating posts); a bed a floating one's rail had blocked is
+  // tried again
+  const kept = new Set(), dropped = new Set();
+  const keepPass = () => {
+    let added = false;
+    for (let i = 0; i < beds.length; i++) {
+      if (kept.has(i) || dropped.has(i)) continue;
+      const [x, yy, z] = beds[i];
+      const kb = k3(x, yy, z), kr = k3(x, yy + 1, z);
+      if (solids.has(kb) || solids.has(kr) || head.has(kb) || head.has(kr) || isHost(x, yy, z) || isHost(x, yy + 1, z) || !land.open(x, yy + 1, z)) continue;
+      solids.set(kb, 'bed'); solids.set(kr, 'rail');
+      kept.add(i); added = true;
+    }
+    return added;
+  };
+  const floatPass = () => {
+    let removed = false;
+    for (let more = true; more;) {
+      more = false;
+      const bedAt = new Set([...kept].map((i) => k3(beds[i][0], beds[i][1], beds[i][2])));
+      for (const i of [...kept]) {
+        const [x, yy, z] = beds[i];
+        const held = !land.open(x, yy - 1, z) || isHost(x, yy - 1, z) || solids.has(k3(x, yy - 1, z)) || DIR4.some(([dx, dz]) => { const k = k3(x + dx, yy, z + dz); return walkAt.has(k) || bedAt.has(k) || isHost(x + dx, yy, z + dz) || topCell(x + dx, yy, z + dz); });
+        if (held) continue;
+        solids.delete(k3(x, yy, z)); solids.delete(k3(x, yy + 1, z));
+        kept.delete(i); dropped.add(i); more = true; removed = true;
+      }
+    }
+    return removed;
+  };
+  for (let round = 0; round < 16; round++) { keepPass(); if (!floatPass()) break; }
+  for (const i of [...kept].sort((u, v) => u - v)) { keepB.push(beds[i]); keepR.push(rails[i]); }
+  skipped = beds.length - keepB.length;
   for (const l of lampSpots) {
     const k = k3(l[0], l[1], l[2]);
     if (!keepR.some((r) => r[0] === l[0] && r[2] === l[2] && r[1] === l[1] - 1) || solids.has(k) || head.has(k) || isHost(l[0], l[1], l[2])) continue;
@@ -586,7 +622,9 @@ export function spiralPlan(host, o) {
   const low = [];
   for (const k of head) { const [x, yy, z] = k.split(',').map(Number); if (solids.has(k) || isHost(x, yy, z) || !land.open(x, yy, z)) low.push({ at: [x, yy, z], why: solids.has(k) ? solids.get(k) : isHost(x, yy, z) ? 'host' : 'land' }); }
   if (low.length) return fail('HEADROOM', `${low.length} cell(s) over the spiral's walk stand less than 2 clear (the host, the land or the spiral itself)`, { cells: low.slice(0, 12), count: low.length });
-  // never written: the host (by construction), water, keep-out and the like, a body's hard cells
+  // never written: the host (checked here over every cell the spiral writes), water, keep-out and the like, a body's hard cells
+  const onHost = [...solids.keys()].filter((k) => host.has(k));
+  if (onHost.length) return fail('HEADROOM', `${onHost.length} cell(s) the spiral would write are the host's (a spiral never cuts its host)`, { why: 'host', cells: onHost.slice(0, 12).map((k) => ({ at: k.split(',').map(Number), why: 'host' })), count: onHost.length });
   const cols = new Set([...solids.keys()].map((k) => { const [x, , z] = k.split(',').map(Number); return k2(x, z); }));
   const prot = [...cols].filter((k) => { const [x, z] = k.split(',').map(Number); return blocked(x, z); });
   if (prot.length) return fail('PROTECTED', `${prot.length} column(s) the spiral writes are keep-out, protected, a build, another region, a lot box or apron, or the claim margin`, { columns: prot.slice(0, 12).map((k) => k.split(',').map(Number)), count: prot.length });

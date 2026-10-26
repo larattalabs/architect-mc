@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FIX } from './plan-helpers.mjs';
 import { run, svOf, part } from './plan-p0-shared.mjs';
-import { checkRegion } from '../lib/region/check.mjs';
+import { checkRegion, walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { SPIRAL, sections, spiralPlan, spiralRoles, spiralCells } from '../lib/connectors/spiralGeom.mjs';
 import * as hooks from '../lib/connectors/spiral.mjs';
 import { sitePlan } from '../lib/region/siteplan.mjs';
@@ -136,7 +136,13 @@ test('the valid fixtures fit; M10:spiral, M3, M6, M8 and M5 clean on the spiral;
     for (const op of ir.parts[hi].ops) void op;
     const states = [];
     vw.eachWritten((x, y, z, idx, fl, p) => { if (p === pi) states.push(vw.pal.states[idx]); if (p === hi) host.add(`${x},${y},${z}`); });
-    for (const k of [...m.deckCells, ...m.rails, ...m.supports, ...m.corbel].map((q) => q.slice(0, 3).join(','))) assert.ok(!host.has(k), `${name}: ${k} is a host cell the spiral wrote`);
+    for (const k of [...m.deckCells, ...m.rails, ...m.supports, ...m.corbel, ...m.approach, ...m.lamps].map((q) => q.slice(0, 3).join(','))) assert.ok(!host.has(k), `${name}: ${k} is a host cell the spiral wrote`);
+    // the kit's movers foot <-> lookout both ways (the villager on a villager spiral)
+    for (const mover of name === 'v7a_sa_villager.json' ? ['player', 'villager'] : ['player']) {
+      const a = [m.foot[0], m.foot[1] + 1, m.foot[2]], b = [m.top[0], m.top[1] + 1, m.top[2]];
+      assert.ok(nodeReached(walkGraph(vw, [a], { mover }), b), `${name}: ${mover} up`);
+      assert.ok(nodeReached(walkGraph(vw, [b], { mover }), a), `${name}: ${mover} down`);
+    }
     // cost.bom: exactly the states the spiral's part wrote
     assert.deepEqual(a.cost.bom, bomOf(states), name);
     assert.deepEqual(m.bom, a.cost.bom, name);
