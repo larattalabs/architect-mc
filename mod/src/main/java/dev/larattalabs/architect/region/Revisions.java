@@ -500,10 +500,36 @@ public final class Revisions {
 			JsonObject of = new JsonObject();
 			of.addProperty("region", regionId);
 			ext.add(EXT_REVISION_OF, of);
+			// (the region's land is generated: its survey reads every generated chunk, loaded or not; the frozen heights go over it)
 			RegionPlanRequest r = new RegionPlanRequest(PROGRAM, req.params(), level, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), null, null, null,
-				LoadPolicy.LOADED_ONLY, l.rec().owner, ext, req.opKey(), null);
+				LoadPolicy.GENERATED_ONLY(4096), l.rec().owner, ext, req.opKey(), null);
 			return RegionsImpl.INSTANCE.plan(r);
-		}).thenCompose(f -> f);
+		}).thenCompose(f -> f).handle((p, e) -> {
+			if (e == null) {
+				return p;
+			}
+			throw refused(e);
+		});
+	}
+
+	/** The kit's named refusal at the head of a plan failure ({@code CODE: [kind] message}), the guard's (§5). */
+	private static final Pattern REFUSAL = Pattern.compile("(?:^|: )(COVERED|OVERLAP_BUSY|OVERLAP_OWNED|OVERLAP|PROTECTED|NOT_ALLOWED|REGION_LIMIT|PLAN_STALE|LAYER_DEPTH): (\\[[a-z_]+\\] )?");
+
+	/**
+	 * A planRevision failure as the caller reads it: a refusal already (a Reason) as it is; the kit's guard's named refusal (§5.1, §5.2,
+	 * §2.2) as a {@link RegionsImpl.RegionException} with its Reason and the kit's message; anything else as it came.
+	 */
+	static RuntimeException refused(Throwable e) {
+		Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
+		if (c instanceof dev.larattalabs.architect.api.ArchitectRefused r) {
+			return r;
+		}
+		String msg = String.valueOf(c.getMessage());
+		Matcher m = REFUSAL.matcher(msg);
+		if (m.find()) {
+			return RegionsImpl.refusal(Reason.valueOf(m.group(1)), msg.substring(m.start() == 0 ? 0 : m.start() + 2));
+		}
+		return c instanceof RuntimeException re ? re : new java.util.concurrent.CompletionException(c);
 	}
 
 	/** Whether a region plan request is a revision's (planRevision's own ext). */
@@ -1064,12 +1090,15 @@ public final class Revisions {
 				RegionsImpl.save(l);
 				continue;
 			}
-			if (rv.batchId != null) {
-				// its batch ran and is gone: ended by what its stages wrote
-				rv.state = rv.sites.isEmpty() ? "FAILED" : "PARTIAL";
+			if (rv.batchId != null && (!rv.sites.isEmpty() || written(l, rid))) {
+				// its batch ran (something of it is written) and is gone: ended by what it wrote
+				rv.state = "PARTIAL";
 				end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 				continue;
 			}
+			// (the queue's file is written off the server thread: a stop right after the install may lose the batch; nothing of it written,
+			// it is installed again, idempotent by item key)
+			rv.batchId = null;
 			Architect.LOGGER.info("Region {}: revision {} accepted before a stop and not installed: installing", rec.id, rid);
 			install(s, l, rv, op);
 		}
@@ -1108,6 +1137,19 @@ public final class Revisions {
 				cols.floor[c] = sh.floor[k];
 				cols.flags[c] = sh.flags[k];
 			}
+		}
+	}
+
+	/** Whether anything of revision {@code rid} is written: a realised record at its layer. */
+	static boolean written(RegionsImpl.Live l, int rid) {
+		Path d = Realised.dir(l.world(), l.rec().id, rid);
+		if (!Files.isDirectory(d)) {
+			return false;
+		}
+		try (var st = Files.list(d)) {
+			return st.anyMatch(f -> f.getFileName().toString().endsWith(".bin"));
+		} catch (IOException e) {
+			return true;
 		}
 	}
 

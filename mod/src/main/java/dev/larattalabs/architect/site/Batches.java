@@ -327,11 +327,14 @@ public final class Batches {
 		List<SiteGroupRec.StageRec> recs = new ArrayList<>(g.stages());
 		List<SiteGroupRec.StageRec> added = new ArrayList<>();
 		for (String st : stages) {
-			if (g.stage(st) != null) {
-				continue;
-			}
 			List<String> keys = items.stream().filter(i -> i.stage.equals(st)).map(i -> i.key).toList();
 			SiteGroupRec.StageRec sr = new SiteGroupRec.StageRec(st, keys, autoApprove ? Stage.State.APPROVED : Stage.State.PLANNED, List.of(), id);
+			SiteGroupRec.StageRec was = g.stage(st);
+			if (was != null) {
+				// (installed again after a stop lost its batch: the stage is this batch's now, its sites kept)
+				recs.set(recs.indexOf(was), new SiteGroupRec.StageRec(st, keys, sr.state(), was.sites(), id));
+				continue;
+			}
 			recs.add(sr);
 			added.add(sr);
 		}

@@ -81,10 +81,15 @@ function norm(s) {
   const props = m[2] ? m[2].split(',').filter(Boolean).sort() : [];
   return props.length ? `${id}[${props.join(',')}]` : id;
 }
+/** A dev.box.hash cell line's state as "minecraft:x[k=v,...]" (props sorted): its `Block{...}[...]` form or its NBT form. */
 function asState(nbt) {
   const bs = /^Block\{([a-z0-9_.-]+:[a-z0-9_./-]+)\}(\[[^\]]*\])?/.exec(nbt);
   if (bs) return norm(`${bs[1]}${bs[2] ?? ''}`);
-  return nbt;
+  const n = /(?:Name|id)\s*:\s*["']?([a-z0-9_.-]+:[a-z0-9_./-]+)/i.exec(nbt)?.[1];
+  if (!n) return nbt;
+  const pm = /properties\s*:\s*\{([^}]*)\}/i.exec(nbt)?.[1];
+  const props = pm ? [...pm.matchAll(/["']?([a-z0-9_]+)["']?\s*:\s*["']?([a-z0-9_]+)["']?/g)].map((m) => `${m[1]}=${m[2]}`).sort() : [];
+  return norm(props.length ? `${n}[${props.join(',')}]` : n);
 }
 const idOf = (s) => String(s).replace(/\[.*$/, '').replace(/^minecraft:/, '');
 async function cellsOf(b) {
@@ -136,7 +141,8 @@ async function rvWait(region, rid, timeoutMs = 1_800_000) {
 
 // a free spot of the town (east of its lots and street; the D3 fixture's town keeps x >= 88 free on a flat world)
 const MOUND = (rid) => ({ id: `mound${rid}`, call: { fn: 'columns', cols: [CX + 96, CZ + 92, 0, 1, 0, CX + 97, CZ + 92, 0, 2, 0, CX + 98, CZ + 93, 0, 0, 0], from: { surface: 1 }, to: { surface: 1 }, materials: ['rock'], cond: 0 } });
-const SPIRE = { id: 'spire', call: { fn: 'form', generator: 'rockSpire', params: { at: [CX + 100, 0, CZ + 20], height: [10, 12] } } };
+/** A rock spire on the ground (rockSpire's `at` y is the plan ground). */
+const SPIRE = (gy) => ({ id: 'spire', call: { fn: 'form', generator: 'rockSpire', params: { at: [CX + 100, gy, CZ + 20], height: [10, 12] } } });
 
 // ------------------------------------------------------------------ the oracle (§14): the expected world, independent of the revision code
 
@@ -176,6 +182,24 @@ async function oracle(ir, snapshot, gy) {
   }
   return exp;
 }
+/** The revision IR's intended cells (every stage and set, conditions aside) against a box: how many, and how many outside. */
+async function intendedInBox(ir, gy, box) {
+  const R = await imp('lib/realise.mjs');
+  const { unpack } = await imp('lib/region/pack.mjs');
+  const { synthColumns } = await imp('lib/region/synth.mjs');
+  let cells = 0, out = 0, minY = Infinity, maxY = -Infinity;
+  for (const stage of ir.stages) for (const set of ['terrain', 'path']) for (const key of ir.tiles?.[stage]?.[set] ?? []) {
+    const [tx, tz] = key.split(',').map(Number);
+    const win = synthColumns({ minX: tx * 64 - 8, minZ: tz * 64 - 8, width: 80, depth: 80, world: () => ({ g: gy, h: gy, f: gy, flags: 0 }) });
+    for (const c of unpack(R.evalTile(ir, key, win, { stage, set }).payload).cells) {
+      cells++;
+      minY = Math.min(minY, c.y); maxY = Math.max(maxY, c.y);
+      if (c.x < box[0] || c.x > box[3] || c.y < box[1] || c.y > box[4] || c.z < box[2] || c.z > box[5]) out++;
+    }
+  }
+  return { cells, out, minY, maxY };
+}
+
 function diff(a, b, max = 12) {
   const out = [];
   let n = 0;
@@ -245,8 +269,8 @@ steps.unit = async () => {
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 10, `items 1 and 17 (kit rv-a.test): reviseIR's additions, ids, stages and seed; the guard per class and M29:revision per broken variant; the effective-IR merge; historySha; 300 seeded synthetic revisions (deterministic, nothing standing named, no write where the standing region forbids); plan/0's revision mode (keep, add, refill, grow, change) and its artifact; the revision IR over 3 plans and its tile shas with 1 and 4 workers; the catalogue's revision.* entries; the mod's parity fixture: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   out.identity = nodeTest(['kit/test/scenario-goldens.test.mjs', 'kit/test/region-golden.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/districts-d3-parity.test.mjs', 'kit/test/rp.test.mjs', 'kit/test/plan-p0.test.mjs']);
   check(out.identity.code === 0 && out.identity.fail === 0, `item 2 (byte identity): the scenario and region goldens, the plan fixtures valid/*, the 59 asks, D3's parity fixture, RP's writers and the catalogue: ${out.identity.pass} pass, ${out.identity.fail} fail`, out.identity.failing);
-  out.java = await javaTests(['*RevisionsTest*', '*RealisedTest*', '*ApiDTest*'], 20);
-  check(out.java.ok, `RevisionsTest (the mod's merge equals the kit's mergeEffective; stage names; the record round trip; an unrevised region's record unchanged), RealisedTest, ApiDTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
+  out.java = await javaTests(['*RevisionsTest*', '*RealisedTest*', '*ApiDTest*', '*PredicatePathsTest*', '*LedgerLintTest*', '*RegionFluidsLintTest*'], 20);
+  check(out.java.ok, `RevisionsTest (the mod's merge equals the kit's mergeEffective; stage names; the record round trip; an unrevised region's record unchanged), RealisedTest, ApiDTest, PredicatePathsTest and p3-lint's LedgerLintTest and RegionFluidsLintTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
   const J = apiJars();
   out.apicompat = [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
@@ -266,6 +290,7 @@ steps.ingame = async () => {
   await freshFlat('G6B RV Town');
   const gy = await groundY();
   out.gy = gy;
+  check(gy > -64 && gy < 200, `the flat world's ground: y ${gy}`);
   const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
   const before = await hashOf(BOX);
   const T = await town();
@@ -307,7 +332,7 @@ steps.ingame = async () => {
 
   // ---- item 3: an added mound and spire, realised as the region's next layers, against the whole-world oracle
   const snap = await cellsOf(BOX);
-  const p1 = await rvPlan(region, { parts: [MOUND(1), SPIRE] });
+  const p1 = await rvPlan(region, { parts: [MOUND(1), SPIRE(gy)] });
   check(!p1.refused && p1.revisionOf?.parentRid === 0 && p1.revisionOf?.position === 1, `revision planned: ${p1.planId} rid ${p1.revisionOf?.rid} on head 0, position 1`);
   s0 = await rvState(region);
   check(s0.headRid === 0 && s0.position === 0, 'a candidate never moves the head');
@@ -318,6 +343,10 @@ steps.ingame = async () => {
   const got = await cellsOf(BOX);
   const exp = await oracle(rir, snap, gy);
   const d1 = diff(exp, got);
+  // every cell the revision IR intends lies inside the compared box (an out-of-box write would make the oracle blind to it)
+  const yr = [...exp.keys()].filter((k) => !snap.has(k) || norm(snap.get(k)) !== norm(exp.get(k))).map((k) => Number(k.split(',')[1]));
+  const inBox = await intendedInBox(rir, gy, BOX);
+  check(inBox.out === 0 && inBox.cells > 0, `the revision IR's ${inBox.cells} intended cells all inside the compared box (y ${inBox.minY}..${inBox.maxY} within ${BOX[1]}..${BOX[4]}; ${inBox.out} outside); ${yr.length} cells expected to change`);
   out.add = { rid: p1.revisionOf.rid, revision: w1.r, diff: d1, cells: w1.r.cells };
   check(w1.r.state === 'PLACED' && d1.n === 0, `item 3: revision ${p1.revisionOf.rid} ${w1.r.state} (${w1.r.cells} cells); the whole claim + 8 against the oracle (the kit's own evaluation of the revision IR on the frozen heights, stage by stage, over the snapshot): ${d1.n} cells differ`, d1.first);
   check(w1.st.headRid === p1.revisionOf.rid && w1.st.position === 1 && w1.st.state === 'PLACED' && w1.st.busy === null, `the head ${w1.st.headRid} at position ${w1.st.position}; the region reads PLACED again (its own state), busy cleared`);
@@ -392,7 +421,7 @@ steps.crash = async () => {
     const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
     const before = await hashOf(BOX);
     const T = await town();
-    const p = await rvPlan(T.region, { parts: [MOUND(1), SPIRE] });
+    const p = await rvPlan(T.region, { parts: [MOUND(1), SPIRE(gy)] });
     const rid = p.revisionOf.rid;
     await call('dev.journal.killAt', { point }, 10_000);
     L.realise(p.planId).catch(() => null);

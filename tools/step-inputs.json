@@ -59994,7 +59994,10 @@
    },
    "testFilters": [
     "*ApiDTest*",
+    "*LedgerLintTest*",
+    "*PredicatePathsTest*",
     "*RealisedTest*",
+    "*RegionFluidsLintTest*",
     "*RevisionsTest*"
    ],
    "testFiltersComplete": true,
@@ -60328,7 +60331,10 @@
    },
    "testFilters": [
     "*ApiDTest*",
+    "*LedgerLintTest*",
+    "*PredicatePathsTest*",
     "*RealisedTest*",
+    "*RegionFluidsLintTest*",
     "*RevisionsTest*"
    ],
    "testFiltersComplete": true,
@@ -60668,7 +60674,10 @@
    },
    "testFilters": [
     "*ApiDTest*",
+    "*LedgerLintTest*",
+    "*PredicatePathsTest*",
     "*RealisedTest*",
+    "*RegionFluidsLintTest*",
     "*RevisionsTest*"
    ],
    "testFiltersComplete": true,
