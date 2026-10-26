@@ -454,7 +454,14 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
         for (let tt = lo; tt <= hi; tt++) mask.add(`${Math.round(p[0] + nx * tt * (sign || 1))},${Math.round(p[1] + nz * tt * (sign || 1))}`);
       });
       // the street: from the end node along the band's middle, stopping where the land, the claim or the standing region stops it
-      const okAt = ([x, z]) => !(flagsAt(x, z) & (FLAG_WATER | FLAG_LAVA | FLAG_MISSING)) && !O.problem(x, z);
+      // (within 3 of the end node the new street meets the standing one: the standing street's own classes (its road, path, held and
+      // written columns) are its contact there, as an extension's past-end cell is §4's)
+      const nearEnd = (x, z) => Math.max(Math.abs(x - end.at[0]), Math.abs(z - end.at[2])) <= 3;
+      const okAt = ([x, z]) => {
+        if (flagsAt(x, z) & (FLAG_WATER | FLAG_LAVA | FLAG_MISSING)) return false;
+        const p = O.problem(x, z);
+        return !p || (nearEnd(x, z) && ['road', 'path', 'held', 'written'].includes(p.kind));
+      };
       const sm = smoothLine([[end.at[0], end.at[2]], ...line]);
       const run = [];
       for (let i = 1; i < sm.length; i++) { const q = sm[i]; let ok = true; for (let dx = -2; dx <= 2 && ok; dx++) for (let dz = -2; dz <= 2 && ok; dz++) if (!okAt([q[0] + dx, q[1] + dz])) ok = false; if (!ok) break; run.push(q); }

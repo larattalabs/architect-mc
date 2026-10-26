@@ -608,9 +608,10 @@ steps.along = async () => {
   const T = await grTown({ gy, addition: false, pt: false, claim: [CX, CZ, CX + 111, CZ + 111] });
   const A = [CX, CZ, CX + 111, CZ + 111];
   // d3_shore (D3's fixture, longer): a water strip east of the town's claim, a shore district along it (a short band: room to grow along)
-  const B = [A[2] + 1, A[1] - 60, A[2] + 110, A[3] + 60];
-  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] - 50} ${A[2] + 80} ${gy} ${A[1] + 60} minecraft:water`);
-  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] + 61} ${A[2] + 80} ${gy} ${A[3] + 50} minecraft:water`);
+  // (the claim runs 150 north of the town: the band's free route end has shore to grow along)
+  const B = [A[2] + 1, A[1] - 150, A[2] + 110, A[3] + 20];
+  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] - 145} ${A[2] + 80} ${gy} ${A[1] - 40} minecraft:water`);
+  await cmd(`/fill ${A[2] + 70} ${gy - 3} ${A[1] - 39} ${A[2] + 80} ${gy} ${A[3] + 15} minecraft:water`);
   const shore = { spec: { districts: [{ id: 'quay', size: [48, 24], lots: 2, follow: { shore: {} } }] } };
   const p = await planReq({ program: 'districts', params: shore, claim: B, beside: T.region, check: false });
   if (p.refused) { check(false, `item 10: the shore district's plan refused (${p.refused})`); await L.leaveWorld(); return out; }
