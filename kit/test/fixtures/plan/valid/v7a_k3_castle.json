@@ -1,0 +1,135 @@
+{
+  "about": "(7a K3, \u00a710) castle_city's shape on S7's flat claim: a zone with four tower lots and a gatehouse, wall.around with `lots` (the towers on the ring's corners, the gatehouse straddling the gate run nearest claim_e (`near`), front out), a walk, and a road from claim_e through the gatehouse's passage into the zone",
+  "on": "s7",
+  "covers": [
+    "connector.wall",
+    "wall.around"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "k3_castle",
+    "zones": [
+      {
+        "id": "castle",
+        "program": {
+          "lots": [
+            {
+              "id": "gatehouse_1",
+              "type": "gatehouse",
+              "size": [
+                13,
+                11
+              ]
+            },
+            {
+              "id": "tower_1",
+              "type": "tower",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "tower_2",
+              "type": "tower",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "tower_3",
+              "type": "tower",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "tower_4",
+              "type": "tower",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "curtain_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "castle"
+            }
+          }
+        },
+        "height": 8,
+        "walk": true,
+        "lots": [
+          {
+            "lot": "tower_1",
+            "at": "corner"
+          },
+          {
+            "lot": "tower_2",
+            "at": "corner"
+          },
+          {
+            "lot": "tower_3",
+            "at": "corner"
+          },
+          {
+            "lot": "tower_4",
+            "at": "corner"
+          },
+          {
+            "lot": "gatehouse_1",
+            "at": "gate",
+            "near": {
+              "anchor": "claim_e"
+            }
+          }
+        ]
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "castle"
+        }
+      }
+    ]
+  }
+}

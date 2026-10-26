@@ -1336,3 +1336,23 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 ## Looks approved (Noah, 2026-10-26)
 - SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
 - RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.
+
+## Queued from slice K3 (builder, 2026-10-26)
+
+- **K3 is built on `slice/K3` and waits for Steward's RC (S-K3-3).** The RC note and the exact API delta are in docs/HANDOFF-K3.md.
+- **Routes joining gate landings** (K2's finding above): still queued. K3 sites no lot on a `wall.along`, so its gate landings are
+  K2's, and a fix there would move K2's fixtures. It belongs with GJ or its own slice.
+- **T2's self-crossing retry** (Watch, above): K3 keeps the ends open (the route edge's `keepEnds: true`) only on its own inner lanes, the
+  1-wide path from a gatehouse's back port to its zone's street end. Every other edge is T2's, byte for byte. The general fix is still
+  its own slice.
+- **The GM seam** (Noah's fancier gates, above): GM sits in a K3 gatehouse with no API change. HANDOFF-K3 "GM seam" covers it:
+  - `onWall.passage` holds the passage's cells, ports, facing and `lintelY`;
+  - the passage cells are the region's (the `architect_mc:passage` mask);
+  - `passage` is its own segment kind and graph edge type.
+- **A wall lot bound or re-versioned after its realise** (a delta, `versionOf`) is not bind-checked again. The contract scopes the check
+  to `realiseApproved`, so a later design can open the wall. Fold it into the 6d revision work (RV), whose bind path sees it.
+- **IRR's `RegionsImpl.dropped()` counts the template's air cells**, though its javadoc says non-air. Found by K3's Java work.
+  `irrigationDropped` and the provisional cost range's subtraction are therefore inflated. K3's passage count uses non-air blocks;
+  IRR's count is unchanged. A one-line fix plus a re-check of IRR's fixtures.
+- **The compact plan/0 is at 95,975 of 96,000** after K3's `connector.wall.lots` (no description, to fit). The next schema addition needs
+  the bound raised (Steward's call, S-FL-8's line) or a trim.

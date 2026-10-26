@@ -123,7 +123,15 @@ export function emitWalk(E) {
       put(c.x, Y, c.z, odd(i) ? slabState : walkFull);
       if (odd(i)) put(c.x, Y - 1, c.z, walkFull);
       // (a dead end: a rail across the walk)
-      if (ends.has(i)) { put(c.x, Y + 1, c.z, '#rail'); railCells.push([c.x, Y + 1, c.z]); continue; }
+      if (ends.has(i)) {
+        put(c.x, Y + 1, c.z, '#rail'); railCells.push([c.x, Y + 1, c.z]);
+        // ((7a K3) a dead end at a lot's box: the rail runs on across the inner rail's corbel column, so no corbel beside it is a ledge)
+        if (W.cutPos?.size && c.depth === 0 && nrm[i] && !unsafe.noRail) {
+          const x = c.x - nrm[i][0], z = c.z - nrm[i][1], g = W.G.at(x, z);
+          if (!W.cellAt.has(key(x, z)) && g >= 0 && W.G.ob[g] === 0 && S2[i] - 2 * (stand(x, z) + 1) > 6) { put(x, Y, z, odd(i) ? slabState : walkFull); put(x, Y + 1, z, '#rail'); corbels.push([x, Y, z]); railCells.push([x, Y + 1, z]); }
+        }
+        continue;
+      }
       walkCells.push([c.x, Y + 1, c.z, i]);
     } else {
       put(c.x, Y, c.z, body);
@@ -199,6 +207,16 @@ export function emitWalk(E) {
     return null;
   };
   const wrap = (i) => (W.closed ? ((i % n) + n) % n : i);
+  // ((7a K3) a wall cut by the lots on its line: its walk is segments between the boxes (each ends at a box face: a rail across), each
+  // with its own access, its own lamps and its own runs; none: the whole walk, as before)
+  const cut = W.cutPos?.size ? W.cutPos : null;
+  const segments = [];
+  if (cut) {
+    const startOf = [];
+    for (let i = 0; i < n; i++) if (!cut.has(i) && cut.has(((i - 1) % n + n) % n)) startOf.push(i);
+    for (const a of startOf) { let b = a; while (!cut.has((b + 1) % n) && (b + 1) % n !== a) b++; segments.push([a, b]); }
+  }
+  const segOf = (i) => { for (let q = 0; q < segments.length; q++) { const [a, b] = segments[q]; const d = ((i - a) % n + n) % n; if (d <= b - a) return q; } return -1; };
   const missing = [];
   for (const g of [...W.gates].sort((a, b) => a.a - b.a)) {
     for (const side of [-1, 1]) {
@@ -220,6 +238,14 @@ export function emitWalk(E) {
     for (let s = 0; s <= 2 * FLIGHT_SHIFT; s++) for (const dir of [1, -1]) cands.push([wrap(p + (s >> 1) * (s & 1 ? -1 : 1)), dir]);
     if (!access(cands.filter(([q]) => q >= 0 && q < n), 'no gate')) missing.push('the wall\'s one access');
   }
+  // ((7a K3) each walk segment between two boxes: an access at its middle when it has none)
+  for (const [a, b] of segments) {
+    if (accesses.some((x) => segOf(x.top) === segments.findIndex((q) => q[0] === a))) continue;
+    const m = a + ((b - a) >> 1);
+    const cands = [];
+    for (let s0 = 0; s0 <= 2 * FLIGHT_SHIFT && s0 <= b - a; s0++) for (const dir of [1, -1]) { const p0 = m + (s0 >> 1) * (s0 & 1 ? -1 : 1); if (p0 >= a && p0 <= b) cands.push([wrap(p0), dir]); }
+    if (!access(cands, 'a walk between lots')) missing.push(`the walk from ${wrap(a)} to ${wrap(b)}`);
+  }
   if (missing.length && wk.access === 'stair') return { refuse: { code: 'NO_ROOM', message: `no room for a flight up the inner face (access: stair) at ${missing.join(', ')}: its band (the flight's cells plus 1) meets a lot, a street, a lamp or a prop, or the ground`, evidence: { why: 'access', at: missing } } };
   if (missing.length) notes.push(`walk: no access at ${missing.join(', ')} (no room for a flight or a ladder)`);
   // `every`: an access along a run longer than it (the runs between accesses, and an open wall's ends)
@@ -227,7 +253,16 @@ export function emitWalk(E) {
     const ps = [...new Set(accesses.map((a) => a.top))].sort((a, b) => a - b);
     const runs = [];
     if (!ps.length) break;
-    if (W.closed) ps.forEach((p, q) => { const nx = q + 1 < ps.length ? ps[q + 1] : ps[0] + n; runs.push([p, nx]); });
+    if (cut) {
+      // ((7a K3) per segment: its start to its first access, between accesses, its last to its end)
+      for (const [a, b] of segments) {
+        const qs = ps.map((p) => (p < a ? p + n : p)).filter((p) => p >= a && p <= b).sort((u, v) => u - v);
+        if (!qs.length) continue;
+        runs.push([a, qs[0]]);
+        qs.forEach((p, q) => { if (q + 1 < qs.length) runs.push([p, qs[q + 1]]); });
+        runs.push([qs[qs.length - 1], b]);
+      }
+    } else if (W.closed) ps.forEach((p, q) => { const nx = q + 1 < ps.length ? ps[q + 1] : ps[0] + n; runs.push([p, nx]); });
     else { runs.push([0, ps[0]]); ps.forEach((p, q) => { if (q + 1 < ps.length) runs.push([p, ps[q + 1]]); }); runs.push([ps[ps.length - 1], n - 1]); }
     let added = false;
     for (const [a, b] of runs) {
@@ -296,13 +331,15 @@ export function emitWalk(E) {
     const light = fixture.kind === 'hanging_lantern' ? fixture.light.replace('hanging=true', 'hanging=false') : fixture.light;
     const every = Math.max(4, Math.floor((12 * fixture.level) / 15));
     const want = [];
-    for (let i = W.closed ? 0 : Math.min(2, n - 1); i < n; i += every) want.push(i);
-    if (!W.closed && want[want.length - 1] < n - 3) want.push(n - 3);
+    // ((7a K3) per segment: from 2 past its start every `every` positions, and one 2 before its end)
+    if (cut) for (const [a, b] of segments) { let last = null; for (let i = a + 2; i <= b - 2; i += every) { want.push(wrap(i)); last = i; } if (last === null || b - 2 - last >= every >> 1) want.push(wrap(Math.max(a, b - 2))); }
+    else for (let i = W.closed ? 0 : Math.min(2, n - 1); i < n; i += every) want.push(i);
+    if (!cut && !W.closed && want[want.length - 1] < n - 3) want.push(n - 3);
     const used = new Set();
     for (const i0 of want) {
       for (const d of [0, 1, -1, 2, -2]) {
         const i = wrap(i0 + d);
-        if (i < 0 || i >= n || used.has(i) || ends.has(i)) continue;
+        if (i < 0 || i >= n || used.has(i) || ends.has(i) || (cut && (cut.has(i) || segOf(i) !== segOf(i0)))) continue;
         const o = outer[i];
         if (!o || stubs.has(key(o.x, o.z)) || !parapetAt.has(key(o.x, o.z)) && par) continue;
         if (par && st.crenels && (i & 1) === 0) continue; // a merlon: the gap beside it
@@ -340,6 +377,8 @@ export function emitWalk(E) {
   for (let q = 0; q + 1 < nodes.length || (W.closed && nodes.length > 1 && q < nodes.length); q++) {
     const a = nodes[q], b = nodes[(q + 1) % nodes.length];
     if (a === b) break;
+    // ((7a K3) no run across a lot's box: neighbouring accesses of one segment only)
+    if (cut && segOf(a.top) !== segOf(b.top)) continue;
     edges.push({ id: `walk:${W.id}_${q + 1}`.slice(0, 64), from: a.id, to: b.id, length: W.closed ? ((b.top - a.top + n) % n || n) : b.top - a.top });
     if (!W.closed && q + 2 >= nodes.length) break;
   }

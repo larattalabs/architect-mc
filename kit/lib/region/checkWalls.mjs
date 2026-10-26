@@ -29,7 +29,9 @@ function highest(vw, x, z, yMin, yMax, pred) {
 }
 
 /** The wall rules: findings and `metrics.walls` ({[id]: {...}}). */
-export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partStage, finding }) {
+// ((7a K3) `boundLots`: a realised world whose wall lots hold their bound designs: the closure walks through the designs' own blocks (the
+// lots on a wall's line are no obstacle boxes then), so their closed outer faces and open passage are what is judged)
+export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partStage, finding, boundLots = false }) {
   const P = vw.pal;
   const out = {};
   const claim = vw.claim;
@@ -82,7 +84,8 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     if (light) {
       const dark = [];
       let cells = 0, tops = 0;
-      for (const g of w.gates) for (const [x, z] of g.cells) { cells++; if (P.spawn[vw.get(x, g.y, z)] && !(light.at(x, g.y + 1, z) > 0)) dark.push([x, g.y + 1, z]); }
+      // ((7a K3) a gatehouse's passage is lit by its design, the lot's: not the wall's)
+      for (const g of w.gates) if (g.kind !== 'passage') for (const [x, z] of g.cells) { cells++; if (P.spawn[vw.get(x, g.y, z)] && !(light.at(x, g.y + 1, z) > 0)) dark.push([x, g.y + 1, z]); }
       for (const [x, z, T] of w.cells) {
         if (gateCell.has(key(x, z))) continue;
         // the wall's own top (a trunk over it is felled at realise: 6a's rule)
@@ -123,7 +126,10 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     if (bypass.length && want.has('M8')) findings.push(finding('M8:wall', part, stage, bypass.length, bypass, `wall ${w.id}: ${bypass.length} column(s) under 2 above a standable cell within 2 (a terrain bypass)`));
     // ---- M2:wall, closure (a closed wall): blocked gates keep every mover in; open gates join both sides
     if (w.closed && w.inside) {
-      m.closure = closure(ir, vw, meta, w, gateCell);
+      // ((7a K3) bound: the wall's lots' boxes lifted for the closure, then put back)
+      const lifted = boundLots && w.lots?.length ? liftLots(vw, w.lots.map((q) => q.lot)) : null;
+      try { m.closure = closure(ir, vw, meta, w, gateCell); } finally { lifted?.(); }
+      if (lifted) m.closure.bound = w.lots.map((q) => q.lot);
       if (want.has('M2')) {
         for (const mv of ['player', 'villager']) {
           const c = m.closure[mv];
@@ -132,11 +138,26 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
         }
       }
       if (w.joined?.length) m.closure.provisional = { joined: w.joined };
+      // ((7a K3, §5) the lots on its line: their boxes are unknown openings until their designs bind (the movers treat a box as an
+      // obstacle, its passage as a gate))
+      if (w.lots?.length) m.closure.provisional = { ...(m.closure.provisional ?? {}), lots: w.lots.map((q) => q.lot) };
     }
     if (w.walk) m.walk = walkRules({ vw, w, part, stage, light, want, findings, finding });
     out[w.id] = m;
   }
   metrics.walls = out;
+}
+
+/** (7a K3) The lots `ids` taken out of the virtual world's lot columns (no obstacle boxes); returns the function that puts them back. */
+function liftLots(vw, ids) {
+  const saved = [];
+  for (let i = 0; i < vw.lots.length; i++) {
+    if (!ids.includes(vw.lots[i].id)) continue;
+    const b = vw.lots[i].box;
+    for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) if (vw.inClaim(x, z)) { const c = vw.colIndex(x, z); if (vw.lotCol[c] === i + 1) { saved.push(c); vw.lotCol[c] = 0; } }
+    saved.push(-(i + 1));
+  }
+  return () => { let li = 0; for (let k = saved.length - 1; k >= 0; k--) { if (saved[k] < 0) li = -saved[k]; else vw.lotCol[saved[k]] = li; } };
 }
 
 /**
@@ -148,6 +169,9 @@ export function closure(ir, vw, meta, w, gateCell) {
   const O = { minX: x0 - (t - 1), minZ: z0 - (t - 1), maxX: x1 + (t - 1), maxZ: z1 + (t - 1) };
   const isIn = (x, z) => x > x0 && x < x1 && z > z0 && z < z1;
   const isOut = (x, z) => x < O.minX || x > O.maxX || z < O.minZ || z > O.maxZ;
+  // ((7a K3) a cell in a lot on the wall's line (its design's rooms, bound) is neither in nor out: a leak is a cell outside them all)
+  const lotBoxes = (w.lots ?? []).map((q) => q.box);
+  const inLot = (x, z) => lotBoxes.some((b) => x >= b[0] && x <= b[3] && z >= b[2] && z <= b[5]);
   // the walk nodes (lot entrances and anchors) and the probes: the cells just inside and just outside each gate
   const nodes = walkNodes(ir, meta, null).map((n) => n.at);
   const probes = { in: [], out: [] };
@@ -178,7 +202,7 @@ export function closure(ir, vw, meta, w, gateCell) {
       const g = walkGraph(vw, inside.length ? inside : [], { mover });
       for (let i = 0; i < g.reached.length; i += 3) {
         const x = g.reached[i], y = g.reached[i + 1], z = g.reached[i + 2];
-        if (isOut(x, z)) { leaks++; if (leakSample.length < 20) leakSample.push([x, y, z]); }
+        if (isOut(x, z) && !inLot(x, z)) { leaks++; if (leakSample.length < 20) leakSample.push([x, y, z]); }
       }
     } finally { restore(); }
     // gates open: each side's nodes from the other's

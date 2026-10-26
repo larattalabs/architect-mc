@@ -386,7 +386,7 @@ export const MELT = Object.freeze({ ice: 10, snow: 11 });
  * meta.json). Or `world` (a realised dump world) with `ir` and `meta` for the rule inputs. Options: `prefix` (M2/M3 after
  * each stage, default true), `rules` (a subset). Returns the report (kit/REGIONS.md "The checker report").
  */
-export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId, besideReach = null } = {}) {
+export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId, besideReach = null, boundLots = false } = {}) {
   const t0 = performance.now();
   const ms = { perRule: {} };
   const findings = [];
@@ -479,7 +479,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (meta?.route) time('M2', () => routeRules({ ir, vw, route: meta.route, want, findings, metrics, partStage, graph }));
   // (7a K1) walls and gates (M2:wall, M8:wall: checkWalls.mjs, K1a) and rope bridges (M10:rope: checkRopes.mjs, K1b); each leaves vw
   // as it found it
-  if (Array.isArray(meta?.walls) && meta.walls.length) time('M2', () => wallRules({ ir, vw, walls: meta.walls, meta, want, findings, metrics, partStage, finding }));
+  if (Array.isArray(meta?.walls) && meta.walls.length) time('M2', () => wallRules({ ir, vw, walls: meta.walls, meta, want, findings, metrics, partStage, finding, boundLots }));
   if (Array.isArray(meta?.ropes) && meta.ropes.length) time('M10', () => ropeRules({ ir, vw, ropes: meta.ropes, meta, want, findings, metrics, partStage, finding }));
   // (6c T3) bridges (checkBridges.mjs, T3a) and tunnels (checkTunnels.mjs, T3b), each only when the plan meta records some
   if (Array.isArray(meta?.bridges) && meta.bridges.length) time('M10', () => bridgeRules({ ir, vw, bridges: meta.bridges, meta, want, findings, metrics, partStage, finding }));

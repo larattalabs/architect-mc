@@ -163,9 +163,10 @@ function stairProfile(n, checkpoints, landingEvery, what) {
 
 /** Create the region builder for a program's ctx. */
 export function region(ctx) {
-  if (ctx.__region) throw new Error('region(ctx) may be called once per plan');
+  // ((7a K3) a plan compiled once more (a wall lot sent back to its zone: compile.mjs runCheck) takes a fresh region: `__regionAgain`)
+  if (ctx.__region && !ctx.__regionAgain) throw new Error('region(ctx) may be called once per plan');
   const r = new Region(ctx);
-  Object.defineProperty(ctx, '__region', { value: r, enumerable: false });
+  Object.defineProperty(ctx, '__region', { value: r, enumerable: false, configurable: true });
   return r;
 }
 
@@ -434,7 +435,7 @@ export class Region {
       const k1 = {};
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       // ((7a foundation) and the 7a rows' opaque per-edge `t7` options and the edge's `profile` over the built-in moves)
-      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
+      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial', 'keepEnds']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
       // ((6c D3) a reach join: its own `frame` (rects), its `to` end's `lead`, `graded` (no 4e road: its columns are exactly its
       // footprint) and its own `part`; absent: as before)
       const d3 = {};
@@ -598,6 +599,8 @@ export class Region {
         // (6c T3b: a tunnel segment's own handling goes here)
         if (g.kind === 'tunnel') return;
         if (g.kind === 'rope') return;
+        // ((7a K3) a gatehouse's passage: the lot's design and pad (the route writes nothing in the box)
+        if (g.kind === 'passage') return;
         // (7a foundation) a lift's, a catwalk's or a rock stair's own cells are the links stage's (rows 9-11; their slices write them)
         if (ROW_SEGMENTS_7A.includes(g.kind)) return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
@@ -701,7 +704,8 @@ export class Region {
     // (7a K1) a gate in a wall is a node too
     // ((7a K2) a wall walk's access (a flight or a ladder up its inner face) too)
     // ((7a SA) a spiral's top is a lookout)
-    if (!['lot', 'plaza', 'junction', 'gate', 'access', 'lookout'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate, access or lookout`);
+    // ((7a K3) a gatehouse's passage through its box: ports front and back)
+    if (!['lot', 'plaza', 'junction', 'gate', 'access', 'lookout', 'passage'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate, access, lookout or passage`);
     this.graphIds.add(id);
     const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
     this.graph.nodes.push(n);
@@ -714,7 +718,8 @@ export class Region {
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
     // ((7a K2) and a wall walk's run between two accesses: wall_walk)
-    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', 'wall_walk', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel, wall_walk or a 7a connector kind (${KINDS_7A.join(', ')})`);
+    // ((7a K3) and a gatehouse's passage, front port to back port: passage)
+    if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', 'wall_walk', 'passage', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel, wall_walk, passage or a 7a connector kind (${KINDS_7A.join(', ')})`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     // ((6c D3, §3.5) a side junction's edge names the street road: `<regionId>:<roadId>` with `junction {kind: side, ...}`)
     const sideTo = external && junction?.kind === 'side' && /^[A-Za-z0-9_.-]{1,64}:[A-Za-z0-9_#.-]{1,64}$/.test(String(to));

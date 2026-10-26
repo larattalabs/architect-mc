@@ -161,6 +161,14 @@ public interface ArchitectApi {
 	 * spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout, a path leg from
 	 * {@code from} to its foot) is compiled; the graph gains a {@code lookout} node and an edge typed {@code stairs_around} with its
 	 * crossing {@code {type, host, rise, turns}}; the siteplan's {@code spirals[]}. No new record, method or reason.
+	 * Since NEXT (7a K3), a K3 helper ({@code region.walls.lots}) adds {@code "wallLots"}: the towers, corner lots and gatehouses a wall
+	 * names are sited on the wall's line (withheld from their zone's street; a gatehouse straddles a gate run with a passage through it,
+	 * routes cross the wall there); the plan-check artifact's {@code lots[].onWall} ({@code wall}, {@code at}, {@code floorY}, the box's
+	 * {@code outerFaces} and a gatehouse's {@code passage}) and {@code lots[].ports}; the siteplan's {@code walls[].lots}. When a lot on a
+	 * wall binds, {@link Regions#realiseApproved} refuses {@link Reason#ARTIFACT_STALE} ("lot &lt;id&gt; on wall &lt;wall&gt;: ...")
+	 * if its design leaves the wall's outer faces open (air, a door, a fence gate or a trapdoor there) or the passage floor is not
+	 * standable; the realise drops the entry's blocks on a gatehouse's passage (IRR's rule) and the lot's site never owns those cells.
+	 * No new record, method or reason.
 	 */
 	Set<String> features();
 }

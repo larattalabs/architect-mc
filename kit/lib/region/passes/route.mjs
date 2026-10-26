@@ -599,6 +599,8 @@ export function routePass(survey, volumes, intent) {
   const special = SPECIAL_MOVES.map((m) => ({ m, st: m.init(env, it) })).filter((x) => x.st);
   // (6c H) a shell column of plan water: the bridge row's head room there is the shell's real top (its rim, or the bank over it)
   if (topFix) for (const x of special) if (x.m.name === 'bridge' && x.st.top) for (const [k, t] of topFix) if (t > x.st.top[k]) x.st.top[k] = t;
+  // ((7a K3) the gate row's passages, when a wall has one)
+  const passageState = special.find((x) => x.m.name === 'gate' && x.st.passages)?.st ?? null;
   let specialBlocks = null;
   for (const x of special) { const b = x.m.blocks(x.st); if (b) { specialBlocks ??= new Uint8Array(n); for (let k = 0; k < n; k++) specialBlocks[k] |= b[k]; } }
   const builtY = new Int16Array(n).fill(NONE); // an earlier edge's footprint: its surface (or tread) y
@@ -715,6 +717,20 @@ export function routePass(survey, volumes, intent) {
           if ((mk.hard[k] || mk.guard[k]) && !en.facing) continue;
           // never into keep-out or water
           const x = c.minX + i * r, z = c.minZ + j * r;
+          if (!_unsafe.noKeepOut && (it.keepOut ?? []).some((b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3])) continue;
+          if (env.flags[k] & (FLAG_WATER | FLAG_LAVA)) continue;
+          blockedW[k] = 0;
+        }
+      }
+      // ((7a K3, §4) a gatehouse passage's ports: straight out of each face through the lot's apron and margins (as a lot's front),
+      // so a route reaches the passage move; only when a wall has a passage)
+      const gs = passageState;
+      if (gs) for (const p of gs.passages) for (const [kp, f] of [[p.kf, p.facing], [p.kb, [-p.facing[0], -p.facing[1]]]]) {
+        const A = Math.floor((hi + 2 + r - 1) / r);
+        for (let t = 0; t <= A; t++) {
+          const i = (kp % W) + f[0] * t, j = Math.floor(kp / W) + f[1] * t;
+          if (i < 0 || j < 0 || i >= W || j >= D) continue;
+          const k = i + j * W, x = c.minX + i * r, z = c.minZ + j * r;
           if (!_unsafe.noKeepOut && (it.keepOut ?? []).some((b) => x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3])) continue;
           if (env.flags[k] & (FLAG_WATER | FLAG_LAVA)) continue;
           blockedW[k] = 0;
@@ -861,7 +877,8 @@ export function routePass(survey, volumes, intent) {
       const b = build(true);
       // ((7a CL) a climb edge's retry never blocks an end cell or a cell beside it: a crossing at the goal would block the goal itself,
       // and no retry could then succeed (other edges keep T2's rule, byte for byte)
-      const keepEnds = (sb) => { if (CLIMB_TREE_PROFILES.has(e.profile)) for (const en of ends) { const i0 = en.k % W, j0 = Math.floor(en.k / W); for (let j = Math.max(0, j0 - 1); j <= Math.min(D - 1, j0 + 1); j++) for (let i = Math.max(0, i0 - 1); i <= Math.min(W - 1, i0 + 1); i++) sb[i + j * W] = 0; } return sb; };
+      // ((7a K3) and an edge that asks for it, `keepEnds: true`: a wall's inner lane, ending on a gatehouse's back port against its box)
+      const keepEnds = (sb) => { if (CLIMB_TREE_PROFILES.has(e.profile) || e.keepEnds === true) for (const en of ends) { const i0 = en.k % W, j0 = Math.floor(en.k / W); for (let j = Math.max(0, j0 - 1); j <= Math.min(D - 1, j0 + 1); j++) for (let i = Math.max(0, i0 - 1); i <= Math.min(W - 1, i0 + 1); i++) sb[i + j * W] = 0; } return sb; };
       if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
       let cmask = b.free ?? b.blockedW;
