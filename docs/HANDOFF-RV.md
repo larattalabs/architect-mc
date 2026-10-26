@@ -128,6 +128,35 @@ Catalogue (`sinceApi: NEXT`, appended): `revision.keep`, `revision.add`, `revisi
 | 20: a site taking a cell between capture and write (the stop path, `Batches.failRest`) | DevBridge can set a block in that window (shown: RACED) but not place a site there; a site placed after the plan is refused at the tile's check (shown) |
 | 4, 5, 12-16, 18, 19, 21 | RV-c and RV-d (readers, realiseApproved's branch, plan/0 in game, lots and refills, survival, fluids, the natural round) |
 
-## What was run
+## What was run ($0: sim and stub only; DEV MODE)
 
-(filled in below as runs finish)
+| Check | Where | Result |
+|---|---|---|
+| kit suite | `node --test kit/test/*.test.mjs` at 854bb2d6 (+ the four catalogue tests fixed after) | 910 tests; rv-a.test 11/0; the catalogue tests 0 fail after reading the `revision.*` entries as rv-a's |
+| sidecar | `npm run check` (tests and the bundle) | 784/784 |
+| mod | `./gradlew build --offline` | 959 tests, 0 failed after ApiDTest (RegionView's new components) and PredicatePathsTest (the race hook through /setblock) were fixed; RevisionsTest 5/0 |
+| instant lints | lint-structure, lint-look, water-lint (kit/lint), p3-lint (LedgerLintTest, RegionFluidsLintTest, in rv-unit) | structure 64/0, look 13/0, water 126/0, p3 pass |
+| api-compat | `tools/api-compat.mjs` vs the 0.47.0 and 0.45.0 apitest jars (built from their tags: `artifacts/gate6d-rv/jars`, SOURCE.txt) and 0.44.0's (`artifacts/release-0440/v0440`), `--surface` vs the 0.47.0 mod jar | clean (every referenced member; the whole surface) |
+| **chain 6drv** | run `artifacts/gate-runs-RV/20261026-180250-6drv` at 5ba05fca, ports 8960/8961, run dir `../architect-mc-RV-run` | **PASS: rv-unit 4/0, rv-ingame 27/0, rv-crash 27/0** |
+
+rv-ingame (items 3, 6, 11, 20): the refusals (COVERED lot, OVERLAP road, OVERLAP held, NOT_ALLOWED theme/refill/empty, the added body at
+realise) wrote nothing; revision 8 (a mound and a rock spire, 1382 cells) matched the whole-world oracle over claim + 8 with 0 cells
+different, every intended cell inside the compared box; head, position, the region PLACED again, the effective IR and its snapshot, the
+layer's two records committed, the sites `c5`, `c6`; two candidates on one parent (the second `PLAN_STALE parent_moved`, nothing written);
+a site placed after the plan refused its tile at the check (`OVERLAP ... held by site c7`; the revision FAILED, nothing written, the region
+PLACED); a player's block set between capture and write kept and unwritten (RACED), the tile's other cells written; `Regions.remove` with 4
+revisions standing: E-flat 0 (the cells that are not the region's kept, then cleared).
+
+rv-crash (item 10's realise half): RV1, RV2 (nothing accepted after the restart, the snapshot an orphan; realised again), RV3, RV4
+(accepted; recovered and installed once: one batch, each key once), RG4+save (a revision tile mid-write): each revision PLACED, then
+`Regions.remove`: E-flat 0 for RV1-RV4. **RG4+save leaves one cell** (the halted tile's first written cell) after the removal, and so does
+the control row (the same kill in the town's own realise, no revision): **main's behaviour**, RP §6's PLACING leftover (the first attempt's
+entry left PLACING is not undone by the group removal). Judged against the control; a finding for the coordinator's queue.
+
+Earlier runs (the fixes they found): `20261026-172944-6drv` (the gate's cell reader and the spire's y: the flat ground read as 255),
+`20261026-173848-6drv` (the compared box missed the spire's footing), `20261026-175007-6drv` (RG4+save's leftover cell found; the control row
+added). A recovery path for a batch lost before its save (RV4 with the async queue save) and planRevision's refusals as Reasons were fixed
+before the passing run.
+
+**Not yet done:** the gate-verifier's review of the diff and this evidence, with its re-run of rv-crash (crash recovery is strict in DEV
+MODE); Steward's RC (after RV-c/RV-d, or now for the shape, at the coordinator's call).
