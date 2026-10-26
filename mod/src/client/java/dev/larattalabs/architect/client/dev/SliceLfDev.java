@@ -180,8 +180,12 @@ public final class SliceLfDev {
 							player.setYRot(yaw);
 							player.setYHeadRot(yaw);
 							step(player, 1f, !drag && player.isInWater()); // (an up rider swims up out of the column and steps onto the ledge; a down rider walks out)
-							// (in the exit cell, standing on its block or within a half step of it)
-							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) <= 1.0;
+							// (landed on the exit's level: standing on the ground in the exit cell or the next one or two along the heading, the lane
+							// the same: a rider launched over the rim lands a step or two in from the top walk cell)
+							int hx = (int) Math.signum(Math.round(-Math.sin(Math.toRadians(yaw)))), hz = (int) Math.signum(Math.round(Math.cos(Math.toRadians(yaw))));
+							BlockPos bp = player.blockPosition();
+							int along = (bp.getX() - ep.getX()) * hx + (bp.getZ() - ep.getZ()) * hz, lateral = (bp.getX() - ep.getX()) * hz - (bp.getZ() - ep.getZ()) * hx;
+							exited = player.onGround() && Math.abs(player.getY() - ep.getY()) <= 0.5 && along >= 0 && along <= 2 && lateral == 0;
 							if (k % 5 == 0 && path.size() < 40) {
 								JsonArray q = new JsonArray();
 								q.add(Math.round(player.getX() * 10) / 10.0);
