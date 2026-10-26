@@ -59,6 +59,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		Toasts.install(); // lab-ui's one shared toast stack (never also register new Toasts(): it would draw every toast twice)
+		dev.larattalabs.architect.client.jobs.JobFeed.init(); // (J3) Architect's jobs and ledger in lab-ui's Jobs & spend panel (K)
 		// UI-0.3: no Toasts.avoid: the placement, plot and massing panels are BOTTOM_CENTER zone pieces, laid out before the toast
 		// column, which ends above them (lab-ui HudLayout)
 		ClientLifecycleEvents.CLIENT_STARTED.register(ArchitectClient::onStarted);

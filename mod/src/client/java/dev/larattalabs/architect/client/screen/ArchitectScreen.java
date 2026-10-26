@@ -232,6 +232,20 @@ public final class ArchitectScreen extends Screen {
 		return open(Tab.LIBRARY);
 	}
 
+	/** (J3) Opens the Designs tab on a job (the Jobs panel's Open for a set, bible, running design or variant). */
+	public static ArchitectScreen openJob(String jobId) {
+		selectedDesign = jobId;
+		return open(Tab.DESIGNS);
+	}
+
+	/** (J3) Opens the Library on its designs with {@code entryId} selected (the Jobs panel's Open for a finished design or variant). */
+	public static ArchitectScreen openEntry(String entryId) {
+		ArchitectScreen s = open(Tab.LIBRARY);
+		s.showDesigns();
+		LibraryFeature.select(entryId);
+		return s;
+	}
+
 	private static boolean showPlaced;
 	private static @Nullable String selectedDesign;
 	private static @Nullable String selectedEntry;
@@ -1175,6 +1189,17 @@ public final class ArchitectScreen extends Screen {
 		}
 		int ow = UiBits.dotPillWidth(font, pill);
 		UiBits.dotPill(g, font, fam, pill, cx + cw - ow, cy - 1, UiBits.ink());
+		// (J3) the Jobs & spend panel, left of the helper pill: "Jobs (K)", with how many wait for the player
+		int waiting = dev.larattalabs.labui.ui.JobBoardModel.needsYouCount(dev.larattalabs.labui.client.jobs.JobBoard.model().rows());
+		String jl = "Jobs" + (waiting > 0 ? " · " + waiting + (waiting == 1 ? " needs you" : " need you") : "") + " (" + dev.larattalabs.labui.client.jobs.JobBoard.keyLabel() + ")";
+		int jw = font.width(jl) + 12;
+		int jx = cx + cw - ow - 6 - jw;
+		Hit jh = new Hit("header:jobs", jl, jx, cy - 3, jw, 13, true, waiting > 0, () -> dev.larattalabs.labui.client.jobs.JobBoard.open(null));
+		hits.add(jh);
+		boolean jhov = jh.contains(mouseX, mouseY);
+		dev.larattalabs.labui.client.widget.Paint.box(g, jx, cy - 3, jw, 13, jhov ? UiStyle.rowHover() : UiStyle.withAlpha(UiStyle.PAPER, 255),
+			waiting > 0 ? UiStyle.selectedEdge() : jhov ? UiStyle.rowHoverEdge() : UiStyle.chipEdge());
+		g.text(font, jl, jx + 6, cy, UiBits.ink(), false);
 		// tabs
 		int ty = cy + 16;
 		int tx = cx;

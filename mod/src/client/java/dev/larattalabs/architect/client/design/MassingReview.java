@@ -197,10 +197,11 @@ public final class MassingReview {
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
 		String why = open(m.id());
 		if (why == null) {
-			Toasts.push(Toasts.Level.INFO, "Massing ready: " + title(m), "v" + m.version() + ", " + m.parts().size() + " masses: Enter approves, R redirects",
-				key, "designs");
+			Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, "Massing ready: " + title(m), "v" + m.version() + ", " + m.parts().size()
+				+ " masses: Enter approves, R redirects").hint(key, "designs").ref(dev.larattalabs.architect.jobs.JobRows.designRow(m.designId())));
 		} else {
-			Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Massing ready: " + title(m), why).hint(key, "designs").bodyLines(3));
+			Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Massing ready: " + title(m), why).hint(key, "designs").bodyLines(3).ref(dev.larattalabs.architect.jobs.JobRows.designRow(m
+				.designId())));
 		}
 	}
 
@@ -296,6 +297,31 @@ public final class MassingReview {
 		if (r == null) {
 			return CompletableFuture.completedFuture(null);
 		}
+		return approve(r);
+	}
+
+	/**
+	 * (J3) Approve a massing by id, with or without its review open (the Jobs panel's Approve): the detail pass of its latest version,
+	 * on the plot it was made for, with the critique and Style the Design tab asked for. A set's massing is refused (its set approves it).
+	 */
+	public static CompletableFuture<@Nullable String> approve(String massingId) {
+		Review open = review;
+		if (open != null && open.massing().id().equals(massingId)) {
+			return approve(open);
+		}
+		Massing m = known(massingId);
+		if (m == null) {
+			say("The helper has no massing " + massingId, true);
+			return CompletableFuture.completedFuture(null);
+		}
+		if (m.group().isPresent()) {
+			say(massingId + " belongs to the set " + m.group().get() + ": approve it in the Designs tab", true);
+			return CompletableFuture.completedFuture(null);
+		}
+		return approve(new Review(m, title(m), new int[4], PLOT_BY_MASSING.get(m.id())));
+	}
+
+	private static CompletableFuture<@Nullable String> approve(Review r) {
 		if (!Sidecar.connected()) {
 			say("The design helper is not running", true);
 			return CompletableFuture.completedFuture(null);
@@ -322,7 +348,10 @@ public final class MassingReview {
 			if (id != null) {
 				DesignFeature.trackDetail(id, r.plot());
 			}
-			close();
+			Review shown = review;
+			if (shown != null && shown.massing().id().equals(r.massing().id())) {
+				close();
+			}
 			say("Approved " + r.title() + " v" + r.massing().version() + ": the detail design (" + id + ") is under way; the Designs tab shows it",
 				false);
 			return id;
@@ -391,8 +420,9 @@ public final class MassingReview {
 		}
 		String why = showSet(g.id());
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
-		Toasts.push(Toasts.Level.INFO, "To approve: " + g.name(), why != null ? why : g.awaiting().size() + " massing" + (g.awaiting().size() == 1 ? ""
-			: "s") + " in a row ahead; approve in the Designs tab", key, "designs");
+		Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, "To approve: " + g.name(), why != null ? why : g.awaiting().size() + " massing" + (g.awaiting()
+			.size() == 1 ? "" : "s") + " in a row ahead; approve in the Designs tab").hint(key, "designs").ref(dev.larattalabs.architect.jobs.JobRows
+			.setRow(g.id())));
 	}
 
 	/** Shows a set's massings in a row in front of the player. Returns why not, or null. */
