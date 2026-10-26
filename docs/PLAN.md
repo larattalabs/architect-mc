@@ -1317,3 +1317,11 @@ Slices:
 
 ## Queued (coordinator, 2026-10-26)
 - The Status tab's right column runs off the bottom at GUI scale 4 (the "Critique and revise" row is clipped); found by SAFETY. Make the Status tab scroll, or fold its sections, with the lab-ui ScrollList/CollapsibleSection.
+
+## Feature order (Noah, 2026-10-26): interleave growth with 7a
+The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
+- **Wave 1:** RV (6d additive revisions: RV-a, then RV-b), SA spiral stairs, RK rock stairs. Noah approves the SA and RK looks.
+- **Wave 2:** the rest of RV, then GR (growing a standing region), LF lifts, K3 towers and gatehouses. Noah approves a grown street, new-lot placement and the castle.
+- **Wave 3:** GJ walled-town gate join, FB flood warning. The GM (fancy gates) contract is drafted alongside; GM is built after K3 and GJ.
+- **Then:** FS, LC, AD.
+- **Deferred:** the nav slice (seconds/risk/nav.json/steward mover) waits until Steward's villager phase asks. M8 fall protection as an error is decided at FB from its count.
