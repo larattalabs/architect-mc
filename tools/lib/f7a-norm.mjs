@@ -8,10 +8,6 @@ export const F7A_MOVED = Object.freeze({
   // ((7a K2) the slices' own movers, each slice its line: K2 reads castle_city's params.wall_walk (its walk round the ring))
   'asks/castle_city.json': '7a K2: curtain_wall\'s params.wall_walk read as walk: true (its notes, geometry and IR; still adjusted)',
 });
-/** (7a SA) What SA moves, by name: e15 drops c_stairs_around (connector.stairs_around supported). */
-export const SA_MOVED = Object.freeze({
-  'extension/e15_every_reserved_a.json': '7a SA: c_stairs_around left the fixture (connector.stairs_around supported)',
-});
 
 /** The recorded parts (ask/part) whose answer the foundation moves only by its `until` (connector.rail: 7a -> CR). */
 export const F7A_ASK_PARTS = Object.freeze(['mining_town/rail_1']);

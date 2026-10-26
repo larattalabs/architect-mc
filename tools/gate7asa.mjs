@@ -12,7 +12,7 @@
 //                                       lint's p0:sa case; the catalogue diff (pre-7a -> the golden: connector.stairs_around reserved ->
 //                                       supported); the Java ApiSATest
 //     unchanged (sa-unit)               item 2: every committed plan fixture without a spiral plans as on the merge base (answers, IR, the
-//                                       first plan; tools/lib/gate7a-kit.mjs), but the named movers (F7A_MOVED, SA_MOVED)
+//                                       first plan; tools/lib/gate7a-kit.mjs), but the foundation's named movers (F7A_MOVED, on main already); SA moves no committed fixture (e15 drops c_stairs_around: its other answers are as before)
 //     ingame    (sa-ingame)             items 3-5 and 7 on flat worlds (headless): v7a_sa_spire (plan v1's shape) on its terrain built
 //                                       by commands through Regions.checkPlan then realiseApproved; v7a_sa_spike, v7a_sa_tree and the
 //                                       2-wide v7a_sa_villager likewise; each re-read from the dumps (M10:spiral 0, M3 0 in its part, M5
@@ -129,9 +129,9 @@ steps.unit = async () => {
 };
 
 steps.unchanged = async () => {
-  const { F7A_MOVED, SA_MOVED } = await import('./lib/f7a-norm.mjs');
+  const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'SA', except: { ...F7A_MOVED, ...SA_MOVED }, mergedIf: 'kit/lib/connectors/spiralGeom.mjs' });
+  const u = await K.unchanged(root, { check, log, base: 'SA', except: F7A_MOVED, mergedIf: 'kit/lib/connectors/kinds7a.mjs' });
   fs.writeFileSync(path.join(OUT, 'sa-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   return { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
 };
@@ -212,23 +212,6 @@ async function smoke(tag, planDir, after, before) {
   return { written: rv.written, differ: rv.differ, byKind: rv.byKind, first: rv.first };
 }
 
-/** A fixture's plan, planned here by the kit over the world's survey of its claim (what the mod's check plans): a plan dir for the re-read. */
-async function localPlanDir(tag, s) {
-  const H = await imp('test/plan-helpers.mjs');
-  const file = path.join(OUT, `${tag}-survey.arsv`);
-  await call('dev.region.survey', { claim: s.W.claim, surveyLoad: 'bounded:256', file }, 900_000);
-  const bytes = fs.readFileSync(file);
-  const claim = { minX: s.W.claim[0], minZ: s.W.claim[1], maxX: s.W.claim[2], maxZ: s.W.claim[3], minY: -64, maxY: 319 };
-  const r = await H.checkPlanLocal(s.wp.plan, { survey: bytes, claim, anchors: s.wp.anchors, protected: s.wp.protected ?? [] });
-  const dir = path.join(OUT, `${tag}-plan`);
-  fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'ir.json'), r.res.irJson);
-  fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(r.res.meta));
-  fs.writeFileSync(path.join(dir, 'survey.bin'), bytes);
-  for (const [sha, b] of r.res.blobs) fs.writeFileSync(path.join(dir, 'blobs', `${sha}.bin`), b);
-  return { dir, check: r.check };
-}
-
 /**
  * A plan/0 fixture on its terrain built by commands in a fresh flat world (RS's site helper): Regions.checkPlan (load: generate),
  * realiseApproved, re-read (the kit's plan of the same request over the world's survey as the virtual world), crossed, removed.
@@ -241,10 +224,6 @@ async function fixtureRun(tag, name, { villager = false } = {}) {
   out.check = { overall: ck.check?.overall ?? null, parts: (ck.check?.parts ?? []).map((a) => ({ part: a.part, class: a.class, spirals: a.geometry?.spirals, reasons: a.reasons })) };
   check(ck.check?.overall === 'READY' && (ck.check?.parts ?? []).every((a) => a.class === 'fits'), `item 3 (${tag}): ${name} (plan v1's shape) checks READY through Regions.checkPlan (${json(out.check.parts.map((a) => [a.part, a.class, (a.spirals ?? []).map((c) => [c.host, c.rise, c.turns, c.top?.kind])]))})`);
   if (!ck.check?.artifactSha) return out;
-  const local = await localPlanDir(tag, s);
-  const keyOf = (parts) => JSON.stringify(parts.map((a) => [a.part, a.class, a.geometry?.spirals]));
-  out.local = { overall: local.check.overall, same: keyOf(local.check.parts) === keyOf(ck.check.parts ?? []) };
-  check(out.local.same, `item 3 (${tag}): the kit's plan of the same request over the world's survey answers as the mod's check (the virtual world the re-read compares against)`);
   const box = G.boxOf(s.W);
   const before = path.join(OUT, `${tag}-before.arwd.gz`), after = path.join(OUT, `${tag}-after.arwd.gz`);
   await call('dev.region.dump', { box, file: before, light: true }, 1_800_000);
@@ -255,9 +234,13 @@ async function fixtureRun(tag, name, { villager = false } = {}) {
   check(st.view.state === 'PLACED', `item 3 (${tag}): realised from its approved artifact (${st.view.state})`);
   await L.settle(5000);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
-  const R = await realisedOf(local.dir, before, after);
+  // (the check's own plan dir: the mod's plan, its seed and survey, is the virtual world the re-read compares against, as CL's)
+  const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId ?? st.view.planId);
+  check(fs.existsSync(path.join(planDir, 'ir.json')), `item 3 (${tag}): the check's plan dir (${path.basename(planDir)})`);
+  if (!fs.existsSync(path.join(planDir, 'ir.json'))) { await leaveWorld(); return out; }
+  const R = await realisedOf(planDir, before, after);
   out.item5 = await item5(tag, R, { villager });
-  out.smoke = await smoke(tag, local.dir, after, before);
+  out.smoke = await smoke(tag, planDir, after, before);
   if (villager) {
     await cmd('/kill @e[type=!minecraft:player]');
     out.nav = await nav(R.meta);
