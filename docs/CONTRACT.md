@@ -21474,7 +21474,7 @@ None use `beside` or `endpoint.region` (D1's gap table): unchanged.
 | 2 | Byte identity | D3's pinned set and every non-`[wall]` answer unchanged |
 | 3 | Join through a gate | on `d3_walled` and `gj_town_wall`: `Regions.plan` (beside) then `Regions.realise`; the join reaches the street through the gate; the gate's cells unchanged (hash) |
 | 4 | Villagers (hard bar) | vanilla `dev.nav.villager` from every district lot to the town's bell and back, through the gate (its door opened by them): 100%; kit movers 100% |
-| 5 | Steward's shapes | `checkBeside` then the real plan under `dplan`, `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
+| 5 | Steward's shapes | `checkBeside` then the real plan under Steward's key `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`) (corrected 2026-10-26, Steward's GR review: there is no `dplan` key), `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
 | 6 | District removed first (verifier re-runs) | 0 changed cells over the town's and the wall region's claims but the join's own columns, which equal the world before the district |
 | 7 | Town or wall region removed first (verifier re-runs) | the gate gone with its region (E-flat 0 over that claim minus the district's held columns); the join's runs standing, `dangling` set; then the district removed: E-flat 0 over every claim |
 | 8 | Refusals, nothing written | `gj_sealed`: `NO_JOIN [wall]`; `gj_fence` with a villager join: `NO_JOIN [wall]` naming the fence gate; the gate walled up after the plan: `ARTIFACT_STALE` naming it; each 0 changed cells |
@@ -21693,7 +21693,7 @@ with its `undo` is saved before or after the R2 journal commit, i.e. whether a k
 **Answers:**
 - **RV:** as proposed. S-RV-2: Steward treats `REGION_LIMIT` like `NO_ROOM` (full, so it proposes a district). S-RV-13:
   Steward stops laying `street#n` on region towns once GR ships. S-RV-14: a refused irrigated refill is fine.
-- **GR:** as proposed. OpKeys `dgrow`/`drealise` for districts, `vgrow:<build>`/`vgrowrealise:<build>` for towns. No dry
+- **GR:** as proposed. OpKeys (corrected 2026-10-26, Steward's GR review: there are no `dgrow`/`drealise` or `vgrow` keys): a growth is an ordinary Steward build under `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`), for districts and towns alike. No dry
   check; Steward plans at acceptance and uses `discardPlan`.
 - **FS, LC:** as proposed.
 - **AD:** S-AD-1 is lazy, per point 4. S-AD-2, S-AD-3 and S-AD-4: yes.
@@ -22507,7 +22507,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 **Fixtures:**
 - **`gr_town`:** RV's `rv_town` (6 lots, 4 built, partly built; a Steward addition and a PT build by the street).
 - **`gr_beside`:** a D3 beside district (plain, its join to the town's street end) with 2 lots, realised as Steward does (a
-  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `dplan`).
+  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26: no `dplan` key).
 - **`gr_along`:** a D2 shore district on `d3_shore` (D3's fixture), 2 lots.
 - **`gr_outpost`:** a D2 outpost (gap 40) with 2 lots.
 - Plan fixtures: `v8x_6d_gr_zone` (a revision of `rv_town`'s kept plan whose street zone gains 2 lots), `v8x_6d_gr_district`.
@@ -22518,7 +22518,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 2 | Byte identity | RV's pinned set unchanged; programs without `params.grow` unchanged |
 | 3 | Town frontage | `gr_town` grown by 2 lots through `planRevision` then `realise` with stub blueprints: both on the lot-free side; verge and road cells unchanged (hash); every new lot walkable to the bell (player and villager, `dev.nav.villager`) and connected in the graph (`graph.cut = []`, the lot node reachable from the bell over edges) |
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
-| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
+| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26: no `dgrow` key), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
 | 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` at preflight (RV §4.4, §6.4), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
 | 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
@@ -22554,7 +22554,7 @@ still works (D3's town-first order, `dangling`).
   town fills in before it sprawls. Or extension first? Default: frontage first.
 - **S-GR-2. One building, one revision.** Your district's "second building extending that street" is one growth (one revision) per
   accepted building, undone alone (LIFO). A batch of buildings may be one growth with several lots. Fine? Default: yes.
-- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`dgrow:<district>:<k>`, `drealise:<district>:<k>`), found again by
+- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26 from `dgrow`/`drealise`, which Steward has none of), found again by
   `planByKey` and `realiseByKey` after a restart. Default: as proposed.
 - **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
   extend (`NO_ROOM {kind: layout}`). Default: yes.
