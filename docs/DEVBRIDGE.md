@@ -386,6 +386,16 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
+  exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
+  feet at `y0 + 1`; a down ride in its open top, feet at `yT`) in creative (physics, no harm; its mode put back) and moved tick by tick:
+  `Entity.baseTick` (its fluid state), `LivingEntity.travel` with no input, then the column's push as vanilla's
+  `BubbleColumnBlock.entityInside` gives it (`onInsideBubbleColumn`, or `onAboveBubbleColumn` at the top) for every column block its box
+  meets, until its feet pass the
+  rim (up) or reach the floor (down); then it steps toward the face onto `exit` (up), or opens the airlock's `doors` (lower halves; closed
+  again after) and walks out to `exit` (down). Returns `{reached, maxY, minY, ticks, air, exited, exitAt, ok}`; the player is put back
+  where it stood. `dev.lift.spawnRule {x, y, z, tries?: 400}`: vanilla's drowned spawn rules at a cell (`SpawnPlacements.isSpawnPositionOk`
+  and `checkSpawnRules(DROWNED, NATURAL)` over `tries` seeded draws) -> `{placementOk, passed, tries, light, biome}`.
 - **2026-10-24 (Style unification U3):** new (`U3Dev`, client only) `dev.u3.state`, `dev.u3.sections`, `dev.u3.browser.open`,
   `dev.u3.browser`, `dev.u3.click`, `dev.u3.editor.fill`, `dev.u3.describe.fill`, `dev.u3.picker`, `dev.u3.back`, `dev.u3.saveAs`;
   `dev.design.fill {styleNote, ownWords}`. Changed: the Architect screen's pop-ups are searchable lists (`option:<popup>:<id>` are now

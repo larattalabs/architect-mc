@@ -530,7 +530,8 @@ steps.probe = async () => {
   // (d) drowned: vanilla's spawn rules in a river biome pass in a dark column and never in a lit one (the light every 6 rests on it)
   const dark = await buildColumn(X + 60, Z, g, 30);
   const lit = await buildColumn(X + 80, Z, g, 30, { light: true });
-  await cmd(`/fillbiome ${X + 50} ${g - 2} ${Z - 10} ${X + 90} ${g + 40} ${Z + 10} minecraft:river`);
+  // (the box under /fillbiome's 32,768-cell limit: the two columns, their cells' biome)
+  for (const c of [dark, lit]) { const r = await cmd(`/fillbiome ${c.col[0] - 2} ${g - 1} ${c.col[1] - 2} ${c.col[0] + 2} ${c.yT + 1} ${c.col[1] + 2} minecraft:river`); out.fillbiome = [...(out.fillbiome ?? []), (r.messages ?? []).join(' ')]; }
   await L.gameWait(5000, { real: sleep, label: 'lf probe columns form' });
   const cellAt = (c) => ({ x: c.col[0], y: c.y0 + 12, z: c.col[1] });
   out.drowned = { dark: await call('dev.lift.spawnRule', { ...cellAt(dark), tries: 600 }, 60_000), lit: await call('dev.lift.spawnRule', { ...cellAt(lit), tries: 600 }, 60_000) };

@@ -11,8 +11,9 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Phase 7a slice LF DevBridge hooks (docs/DEVBRIDGE.md; CONTRACT LF §9 items 1 and 5): the ride probe. Vanilla's own movement is the
  * authority: the player is put in a bubble column and moved tick by tick by {@code LivingEntity.travel} (no input while it rides, then the
- * forward input to step off), with {@code Entity.applyEffectsFromBlocks} over each tick's movement, so the column's push is vanilla's own
- * {@code BubbleColumnBlock.entityInside} ({@code onInsideBubbleColumn} under the top, {@code onAboveBubbleColumn} over it). An up ride starts
+ * forward input to step off), after {@code Entity.baseTick} (its fluid state) and before the column's push, which is vanilla's own
+ * {@code BubbleColumnBlock.entityInside} rule read in its bytecode ({@code onInsideBubbleColumn} under the top, {@code onAboveBubbleColumn} at
+ * it), for every column block the player's box meets; the player rides in creative (physics, no harm), its mode put back. An up ride starts
  * on the base (feet at {@code y0 + 1}), rides until its feet pass the rim ({@code yT}), then steps toward the face onto the top walk cell
  * ({@code exit}, feet); a down ride starts in the open top (feet at {@code yT}) and is carried to the floor ({@code y0 + 1}), then leaves
  * through the airlock (its doors opened for the step, as a rider opens them, then closed) to the approach ({@code exit}). The player is put
@@ -49,7 +50,7 @@ public final class SliceLfDev {
 			});
 		DevBridge.register("dev.lift.ride", 120_000, "{x, z, y0, yT, drag (false: up over soul sand, true: down over magma), face: [dx, dz] (toward "
 			+ "the face), exit: [x, y, z] (feet: the top walk cell for an up ride, the approach for a down ride), doors?: [[x, y, z]] (a down ride's "
-			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column by LivingEntity.travel and applyEffectsFromBlocks -> {reached, "
+			+ "airlock, lower halves), maxTicks?: 600} - (7a LF) the player rides the column (baseTick, LivingEntity.travel and the column's own push each tick) -> {reached, "
 			+ "maxY, minY, ticks, exited, exitAt, ok}", (req, mc) -> {
 				int x = req.get("x").getAsInt(), z = req.get("z").getAsInt(), y0 = req.get("y0").getAsInt(), yT = req.get("yT").getAsInt();
 				boolean drag = req.has("drag") && req.get("drag").getAsBoolean();
@@ -67,7 +68,60 @@ public final class SliceLfDev {
 					float yaw = (float) Math.toDegrees(Math.atan2(-sx, sz));
 					java.util.List<BlockPos> opened = new java.util.ArrayList<>();
 					java.util.List<BlockState> was = new java.util.ArrayList<>();
+					net.minecraft.world.level.GameType mode = player.gameMode();
 					try {
+						// (physics: a spectator passes through blocks and fluids; creative, not flying, rides as a survival player does, unharmed)
+						player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+						return ride(level, player, o, x, z, y0, yT, drag, yaw, ep, doors, maxTicks, opened, was);
+					} catch (RuntimeException e) {
+						o.addProperty("ok", false);
+						o.addProperty("error", e.toString());
+						JsonArray st = new JsonArray();
+						for (StackTraceElement t : e.getStackTrace()) {
+							if (st.size() < 12) st.add(t.toString());
+						}
+						o.add("stack", st);
+						return o;
+					} finally {
+						for (int i = opened.size() - 1; i >= 0; i--) {
+							level.setBlock(opened.get(i), was.get(i), 2);
+						}
+						player.teleportTo(home.x, home.y, home.z);
+						player.setDeltaMovement(Vec3.ZERO);
+						player.setGameMode(mode);
+					}
+				});
+			});
+	}
+
+	/**
+	 * The column's push on the player this tick, as vanilla's {@code BubbleColumnBlock.entityInside} gives it (read in its bytecode): for each
+	 * bubble column block the player's box meets, {@code onAboveBubbleColumn(drag, pos)} when the block over it has no collision and no fluid
+	 * (the column's top), else {@code onInsideBubbleColumn(drag)}.
+	 */
+	static void bubblePush(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player) {
+		net.minecraft.world.phys.AABB b = player.getBoundingBox().deflate(1.0E-5);
+		for (BlockPos q : BlockPos.betweenClosed(BlockPos.containing(b.minX, b.minY, b.minZ), BlockPos.containing(b.maxX, b.maxY, b.maxZ))) {
+			BlockState s = level.getBlockState(q);
+			if (!s.is(net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN)) continue;
+			boolean dragDown = s.getValue(net.minecraft.world.level.block.BubbleColumnBlock.DRAG_DOWN);
+			BlockState over = level.getBlockState(q.above());
+			if (over.getCollisionShape(level, q).isEmpty() && over.getFluidState().isEmpty()) player.onAboveBubbleColumn(dragDown, q.immutable());
+			else player.onInsideBubbleColumn(dragDown);
+		}
+	}
+
+	/** One tick of a rider: Entity.baseTick (its fluid state: in water, the eye under it, the air), travel with the input, the column's push. */
+	static void step(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player, Vec3 input) {
+		player.baseTick();
+		player.travel(input);
+		bubblePush(level, player);
+	}
+
+	/** One ride (the hook's body): ride, then step off. */
+	static JsonObject ride(net.minecraft.server.level.ServerLevel level, net.minecraft.server.level.ServerPlayer player, JsonObject o, int x, int z, int y0, int yT, boolean drag, float yaw,
+		BlockPos ep, JsonArray doors, int maxTicks, java.util.List<BlockPos> opened, java.util.List<BlockState> was) {
+					{
 						player.getAbilities().flying = false;
 						player.setAirSupply(player.getMaxAirSupply());
 						player.teleportTo(x + 0.5, drag ? yT + 0.1 : y0 + 1.0, z + 0.5);
@@ -78,9 +132,7 @@ public final class SliceLfDev {
 						boolean reached = false;
 						int t = 0;
 						for (; t < maxTicks && !reached; t++) {
-							Vec3 from = player.position();
-							player.travel(Vec3.ZERO);
-							player.applyEffectsFromBlocks(from, player.position());
+							step(level, player, Vec3.ZERO);
 							maxY = Math.max(maxY, player.getY());
 							minY = Math.min(minY, player.getY());
 							reached = drag ? player.getY() <= y0 + 1.2 : player.getY() >= yT + 0.5;
@@ -110,10 +162,8 @@ public final class SliceLfDev {
 						}
 						boolean exited = false;
 						for (int k = 0; k < 200 && reached && !exited; k++) {
-							Vec3 from = player.position();
 							player.setYRot(yaw);
-							player.travel(new Vec3(0, 0, 1));
-							player.applyEffectsFromBlocks(from, player.position());
+							step(level, player, new Vec3(0, 0, 1));
 							exited = player.blockPosition().getX() == ep.getX() && player.blockPosition().getZ() == ep.getZ() && Math.abs(player.getY() - ep.getY()) < 0.6;
 						}
 						o.addProperty("exited", exited);
@@ -123,16 +173,8 @@ public final class SliceLfDev {
 						at.add(player.getZ());
 						o.add("exitAt", at);
 						o.addProperty("ok", reached && exited);
-					} finally {
-						for (int i = opened.size() - 1; i >= 0; i--) {
-							level.setBlock(opened.get(i), was.get(i), 2);
-						}
-						player.teleportTo(home.x, home.y, home.z);
-						player.setDeltaMovement(Vec3.ZERO);
 					}
-					return o;
-				});
-			});
+		return o;
 	}
 
 	/** The cells of a JSON array of [x, y, z] as block positions. */
