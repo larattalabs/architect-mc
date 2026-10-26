@@ -69,9 +69,12 @@ public final class SliceLfDev {
 					java.util.List<BlockPos> opened = new java.util.ArrayList<>();
 					java.util.List<BlockState> was = new java.util.ArrayList<>();
 					net.minecraft.world.level.GameType mode = player.gameMode();
+					boolean noPhysics = player.noPhysics;
 					try {
-						// (physics: a spectator passes through blocks and fluids; creative, not flying, rides as a survival player does, unharmed)
+						// (physics: a spectator passes through blocks and fluids; creative, not flying, rides as a survival player does, unharmed;
+						// noPhysics is the spectator's, kept by Player.tick, which no ride runs: cleared for the ride)
 						player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+						player.noPhysics = false;
 						return ride(level, player, o, x, z, y0, yT, drag, yaw, ep, doors, maxTicks, opened, was);
 					} catch (RuntimeException e) {
 						o.addProperty("rode", false);
@@ -89,6 +92,7 @@ public final class SliceLfDev {
 						player.teleportTo(home.x, home.y, home.z);
 						player.setDeltaMovement(Vec3.ZERO);
 						player.setGameMode(mode);
+						player.noPhysics = noPhysics;
 					}
 				});
 			});
