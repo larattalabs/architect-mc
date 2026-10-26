@@ -25759,7 +25759,7 @@ version set (the coordinator assigns one at merge).
   screen open.
 
 ### 4. Where the player sees it
-- Status tab, under the construction HUD row: "Safety: placing 1,000+ blocks, or over blocks that aren't terrain, takes Enter twice
+- Status tab, left column under the helper buttons (the right column is full at GUI scale 4), a "Safety" heading: "Placing 1,000+ blocks, or over blocks that aren't terrain, takes Enter twice
   (confirmBlocks in config/architect_mc.json). Undo last placement: Z twice (Controls to rebind)."
 - The placement HUD's "?" legend: "Esc cancel · Z undo last placement · 1,000+ blocks: Enter twice · ? hide".
 - README: the placement key table and the commands paragraph.

@@ -2349,6 +2349,17 @@ public final class ArchitectScreen extends Screen {
 				java.net.URI.create(LauncherPlan.NODE_INSTALL_URL)));
 		}
 		y += 24;
+		// SAFETY: the big-placement confirm's threshold and the undo key (the left column: the right one is full at GUI scale 4)
+		g.text(font, "Safety", lx, y, UiStyle.CLAY_DARK, false);
+		y += 12;
+		String safety = "Placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
+			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (confirmBlocks in config/architect_mc.json). Undo last "
+			+ "placement: " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice (Controls to rebind).";
+		for (String line : TextUtil.wrapPlain(font, safety, colW)) {
+			g.text(font, line, lx, y, UiBits.muted(), false);
+			y += 10;
+		}
+		y += 6;
 		List<String> tail = Launcher.logTail();
 		if (!tail.isEmpty()) {
 			int th = Math.min(footerY - 4 - y, tail.size() * 9 + 6);
@@ -2450,15 +2461,6 @@ public final class ArchitectScreen extends Screen {
 			.HIDDEN, () -> dev.larattalabs.architect.client.design.UiPrefs.setSiteHud(hudMode.next())));
 		g.text(font, TextUtil.ellipsize(font, hl, colW), rx, ry + 2, UiStyle.link(), false);
 		ry += 12;
-		// SAFETY: the big-placement confirm's threshold and the undo key
-		String safety = "Safety: placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
-			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (confirmBlocks in config/architect_mc.json). Undo last "
-			+ "placement: " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice (Controls to rebind).";
-		for (String line : TextUtil.wrapPlain(font, safety, colW)) {
-			g.text(font, line, rx, ry + 2, UiBits.muted(), false);
-			ry += 10;
-		}
-		ry += 2;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);
