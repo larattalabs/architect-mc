@@ -317,7 +317,7 @@ public final class DesignFeature {
 			// (4c) a massing job: never a library entry; MassingReview shows it when its massing is installed
 			if (d.status() == DesignStatus.FAILED) {
 				Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Massing failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step())).hint(key,
-					"designs").bodyLines(3));
+					"designs").bodyLines(3).ref(dev.larattalabs.architect.jobs.JobRows.designRow(d.id())));
 			}
 			return;
 		}
@@ -326,17 +326,18 @@ public final class DesignFeature {
 			String of = d.raw().get("critiqueOf").getAsString();
 			REPORT_PENDING.remove(of);
 			if (d.status() == DesignStatus.DONE) {
-				Toasts.push(Toasts.Level.INFO, "Critique ready: " + of, firstLine(d.step()), key, "library");
+				Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, "Critique ready: " + of, firstLine(d.step())).hint(key, "library").ref(dev.larattalabs.architect.jobs.JobRows.designRow(d
+					.id())));
 			} else if (d.status() == DesignStatus.FAILED) {
 				Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Critique failed: " + of, firstLine(d.error() != null ? d.error() : d.step())).hint(key,
-					"designs").bodyLines(3));
+					"designs").bodyLines(3).ref(dev.larattalabs.architect.jobs.JobRows.designRow(d.id())));
 			}
 			return;
 		}
 		switch (d.status()) {
 			case DONE -> done(d, key);
 			case FAILED -> Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, "Design failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()))
-				.hint(key, "designs").bodyLines(3));
+				.hint(key, "designs").bodyLines(3).ref(dev.larattalabs.architect.jobs.JobRows.designRow(d.id())));
 			default -> {
 			}
 		}
@@ -356,8 +357,8 @@ public final class DesignFeature {
 			PLOT_BY_BLUEPRINT.put(bp, plot);
 		}
 		String size = d.size() == null ? "" : " (" + d.size()[0] + "×" + d.size()[1] + "×" + d.size()[2] + ")";
-		Toasts.push(Toasts.Level.INFO, "Design ready: " + d.title(), (bp == null ? d.id() : bp) + size + (plot != null ? ": place it on your plot"
-			: ": review and place it") + " from the Library.", key, "library");
+		Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, "Design ready: " + d.title(), (bp == null ? d.id() : bp) + size + (plot != null
+			? ": place it on your plot" : ": review and place it") + " from the Library.").hint(key, "library").ref(dev.larattalabs.architect.jobs.JobRows.designRow(d.id())));
 		if (bp != null) {
 			reload(bp);
 		}

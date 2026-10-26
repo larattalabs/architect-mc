@@ -583,9 +583,9 @@ public final class LibraryFeature {
 		String what = title(v);
 		switch (v.status()) {
 			case DONE -> {
-				Toasts.push(Toasts.Level.INFO, (v.isImport() ? "Imported: " : "Variant ready: ") + (v.name() != null ? v.name() : what),
+				Toasts.push(Toasts.Spec.of(Toasts.Level.INFO, (v.isImport() ? "Imported: " : "Variant ready: ") + (v.name() != null ? v.name() : what),
 					(v.blueprintId() == null ? v.id() : v.blueprintId()) + (v.size() == null ? "" : " (" + v.size()[0] + "×" + v.size()[1] + "×"
-						+ v.size()[2] + ")") + ": in the Library.", key, "library");
+						+ v.size()[2] + ")") + ": in the Library.").hint(key, "library").ref(dev.larattalabs.architect.jobs.JobRows.variantRow(v.id())));
 				if (v.blueprintId() != null) {
 					String bp = v.blueprintId();
 					DesignFeature.reload(bp).thenAccept(ok -> {
@@ -596,7 +596,7 @@ public final class LibraryFeature {
 				}
 			}
 			case FAILED -> Toasts.push(Toasts.Spec.of(Toasts.Level.WARN, (v.isImport() ? "Import failed: " : "Variant failed: ") + what,
-				firstLine(v.error() != null ? v.error() : v.step())).hint(key, "designs").bodyLines(3));
+				firstLine(v.error() != null ? v.error() : v.step())).hint(key, "designs").bodyLines(3).ref(dev.larattalabs.architect.jobs.JobRows.variantRow(v.id())));
 			default -> {
 			}
 		}
