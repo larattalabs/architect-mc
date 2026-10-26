@@ -1,5 +1,5 @@
 {
-  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined); T3: connector.bridge and connector.tunnel left it when they shipped, connector.tube and connector.drawbridge (a bridge whose params name a mechanism, R18) joined; tunnel.under is answered by the compiler only (a tunnel without cover), so T3b's fixtures cover it; H: connector.channel shipped (channel.moat), so the from/to channel c_channel answers channel.course (reserved until HY, R21); HY: channel.course shipped (the from/to channel c_channel left it, a course now), channel.aqueduct joined the catalogue reserved but is answered by the compiler only (a valley past a course's fill), so HY-b's fixtures cover it; FL: layout.ring, layout.spiral, layout.grid, layout.organic, locator.around and sketch.outline left the list when they shipped (z2-z5, z7 and z11 stay in the plan and answer); 7a foundation: connector.span_bridge left the list when it became a supported alias of connector.bridge (R25), connector.rail and connector.branch_walk stay (until CR and 7b); 7a CW: connector.catwalk left the list when it shipped (the face form); CL: connector.stair, connector.switchback and connector.ladder left the list when they shipped; 7a K2: wall.along left the list when it shipped",
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge; K1: connector.auto, connector.wall, connector.gate and connector.rope_bridge left it when they shipped, wall.along and layout.elevated joined); T3: connector.bridge and connector.tunnel left it when they shipped, connector.tube and connector.drawbridge (a bridge whose params name a mechanism, R18) joined; tunnel.under is answered by the compiler only (a tunnel without cover), so T3b's fixtures cover it; H: connector.channel shipped (channel.moat), so the from/to channel c_channel answers channel.course (reserved until HY, R21); HY: channel.course shipped (the from/to channel c_channel left it, a course now), channel.aqueduct joined the catalogue reserved but is answered by the compiler only (a valley past a course's fill), so HY-b's fixtures cover it; FL: layout.ring, layout.spiral, layout.grid, layout.organic, locator.around and sketch.outline left the list when they shipped (z2-z5, z7 and z11 stay in the plan and answer); 7a foundation: connector.span_bridge left the list when it became a supported alias of connector.bridge (R25), connector.rail and connector.branch_walk stay (until CR and 7b); 7a CW: connector.catwalk left the list when it shipped (the face form); CL: connector.stair, connector.switchback and connector.ladder left the list when they shipped; 7a K2: wall.along left the list when it shipped; 7a RK: connector.rock_stair left the list when it shipped",
   "on": "s7",
   "expect": {
     "all": [
@@ -14,10 +14,6 @@
       {
         "part": "c_rail",
         "block": "connector.rail"
-      },
-      {
-        "part": "c_rock_stair",
-        "block": "connector.rock_stair"
       },
       {
         "part": "c_lift",
@@ -236,16 +232,6 @@
       {
         "id": "c_rail",
         "kind": "rail",
-        "from": {
-          "anchor": "claim_n"
-        },
-        "to": {
-          "anchor": "claim_s"
-        }
-      },
-      {
-        "id": "c_rock_stair",
-        "kind": "rock_stair",
         "from": {
           "anchor": "claim_n"
         },

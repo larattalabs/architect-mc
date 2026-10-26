@@ -152,6 +152,11 @@ public interface ArchitectApi {
 	 * shore, a biome edge or a ridge, open, its gates where routes cross and {@code gates.min} evenly) and {@code "wallWalks"}
 	 * ({@code region.walls.walk}: a wall's {@code walk} member, a railed and lit walk on its top with stairs or ladders up from the
 	 * inside, player only; the siteplan's {@code walls[].walk}, graph edges {@code type: wall_walk}). No new record or method.
+	 * Since NEXT (7a RK), an RK helper ({@code region.rockStairs}) adds {@code "rockStairs"}: plan/0's {@code connector.rock_stair} (a straight
+	 * stair flight carved or bored into rising ground, lined and lit; route row 11) is compiled, the graph edge typed {@code rock_stair}
+	 * with its crossing {@code {type, rise, steps, cover}}, the siteplan's {@code rockStairs[]}. A plan with one is checked in the
+	 * two-plan flow as a tunnel's (its corridor's frozen volume; {@code limits.volume}), and an artifact's stale rock names it
+	 * ({@code ARTIFACT_STALE} "rock_stair &lt;part&gt;: ..."). No new record, method or reason.
 	 */
 	Set<String> features();
 }
