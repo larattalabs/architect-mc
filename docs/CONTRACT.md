@@ -25778,3 +25778,26 @@ version set (the coordinator assigns one at merge).
   0.41.0 and 0.40.1 jars, 46 ok each) and sim-jobs 33 (`apitest.mjs` changed).
 - The Status tab's note first sat in the right column, which is full at GUI scale 4 (off-screen in `status_s4`). Moved to the left
   column. Run `20261026-043443-change` at 85706862: **PASS 4/4** (unit-mod 947, safety-ingame 38, ui2b-ingame 31, u3-ingame 40).
+
+## Phase 6d slice RV, lanes RV-a and RV-b as built (branch `slice/RV`, 2026-10-26, DEV MODE; RV-c and RV-d to come)
+
+Built against "Phase 6d slice RV" (FROZEN 2026-10-20) and §13's split: RV-a (the kit) and RV-b (the mod foundation) on one branch; RV-c (undo
+and fluids) and RV-d (readers, realiseApproved's branch, lots and refills, survival) follow on the interface frozen here. Versions are `NEXT`.
+The resume notes, Steward's RC note, the exact API, the frozen interface, the twelve deviations and the rows not shown are in
+`docs/HANDOFF-RV.md` (it goes when RV's gate passes).
+
+- **Kit (RV-a):** `kit/lib/region/revise.mjs` (`reviseIR`, `revisionStanding`, `standingClasses`, `columnProblem`, the guard, `M29:revision`,
+  `mergeEffective`, `historySha`, `revisionSeed`, `dirtyKeys`, `intendedCells`), `kit/regions/revise.mjs` (the `revise` program: calls
+  `columns`, `fill`, `carve`, `terrace`, `pond`, `form`, `lot`; role materials only; the five broken variants), planRegion's `revision` input
+  (ctx.revision, the guard, the IR's `revision` member, the seed), the checker's `M29` (`checkRegion({standing})`), the CLI's `--revision`,
+  plan/0's revision mode (`kit/lib/plan/revision.mjs`: keep, add, refill, grow, change; the standing region hard to added parts; the
+  artifact's `region.revisionOf`, `dirty`, `historySha`, `inputs.held`, refilled lots), the catalogue's five `revision.*` entries, the lot
+  spec's `refill`. Tests: `kit/test/rv-a.test.mjs` (items 1, 2, 17).
+- **Mod (RV-b):** `region/Revisions.java` (the record and states, planRevision, the standing data, the candidate's history, the realise:
+  CAS, `rev/<rid>/ir.json` and `op.json`, `effective/<rid>.json`, region.json, the install as a batch in the region's group, the end, the
+  recovery), RegionRec's `revisions`, the revision tile path (TileStream's wire stage, RegionItems' revision Live, TileCheck's revision
+  mode, InfraJob's same-tick check, RealisedRecords' layer), `Batches.queueRevision`/`failRest`, the API (`Since NEXT`), `dev.rv.*`, kill
+  points RV1-RV4. Tests: `RevisionsTest` (the mod's merge equals the kit's on `kit/test/fixtures/rv/merge.json`).
+- **Sidecar:** `region.plan`'s `revision` member; features `region.revise`, `plan.revision`.
+- **Gate:** `tools/gate6drv.mjs` (`rv-unit`, `rv-ingame`, `rv-crash`; chain `6drv`, impact rule "6d RV"). Evidence: HANDOFF-RV.md "What was
+  run".
