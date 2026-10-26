@@ -503,7 +503,7 @@ steps.beside = async () => {
   const B = [A[2] - 15, e.c - 45, A[2] + 90, e.c + 45];
   const BOX = [A[0] - 8, gy - 12, B[1] - 8, B[2] + 8, gy + 24, Math.max(A[3], B[3]) + 8];
   const TOWN = [A[0], gy - 12, A[1], A[2], gy + 24, A[3]];
-  const params = { spec: { districts: [{ id: 'east', size: [48, 48], lots: [{ id: 'east_1', type: 'house', size: [9, 9] }, { id: 'east_2', type: 'house', size: [9, 9] }] }] } };
+  const params = { spec: { districts: [{ id: 'east', size: [64, 56], lots: [{ id: 'east_1', type: 'house', size: [9, 9] }, { id: 'east_2', type: 'house', size: [9, 9] }] }] } };
   const verdict = await call('dev.region.checkBeside', { program: 'districts', params, claim: B, beside: T.region, surveyLoad: 'bounded:256', owner: OWNER, check: false }, 900_000);
   out.verdict = { fits: verdict.fits, join: verdict.join };
   check(verdict.fits, `item 5: checkBeside (Steward's dry check) beside ${T.region} over the reservation + 16: ${json(verdict.join ?? verdict.message)}`);
@@ -537,6 +537,7 @@ steps.beside = async () => {
   const rk = await call('dev.region.realiseByKey', { owner: OWNER, opKey: 'steward.b3.vrealise' }, 10_000).catch((x) => ({ error: String(x) }));
   check(rk.region?.id === D, `S-GR-3: realiseByKey(steward.b3.vrealise) finds the district (${json(rk.region?.id ?? rk)})`);
   const g4 = await grow1('b4', 'east_4');
+  if (g4.refused) throw new Error(`building 4's growth refused: ${g4.refused}`);
   const w4 = await rvRealise(D, g4, { lots: { east_4: STUB }, opKey: 'steward.b4.vrealise', ext: STEWARD('b4') });
   const v4 = (await call('dev.region.state', { region: D }, 60_000)).view;
   const land4 = landOf(v4);

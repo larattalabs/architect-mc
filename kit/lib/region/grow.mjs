@@ -144,7 +144,8 @@ export function extendableEnds(eff, st, runs, O = growObstacles(eff, st)) {
     const dir = nu === run.u1 ? 1 : -1;
     const e = { node: n.id, road: run.road, run, dir, at: [...n.at], u: nu, ok: false };
     out.push(e);
-    const edges = adj.get(n.id) ?? [];
+    // (a frontage junction's `along` edges ride on the standing road: they never make an end non-terminal, §6)
+    const edges = (adj.get(n.id) ?? []).filter(({ edge }) => !edge.along);
     if (!run.twoPoint) { e.why = 'layout'; continue; }
     if (edges.length !== 1) { e.why = edges.length ? 'join' : 'edges'; continue; }
     const only = edges[0].edge;
@@ -496,7 +497,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   });
   if (!placed.length) {
     const k = unplaced.every((u) => u.kind === unplaced[0]?.kind) ? unplaced[0]?.kind ?? 'frontage' : 'frontage';
-    throw new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}`);
+    throw new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}; street ends ${ends.map((e) => `${e.node} ${e.ok ? 'extendable' : e.why}`).join(', ') || 'none'}`);
   }
   return { format: GROW_FORMAT, district, prefix, lots: placed, extension, unplaced, ends: ends.map((e) => ({ node: e.node, ok: e.ok, ...(e.why ? { why: e.why } : {}) })) };
 }

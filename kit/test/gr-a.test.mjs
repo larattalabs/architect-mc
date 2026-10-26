@@ -335,3 +335,15 @@ test('item 10 (kit): an along district grows on free frontage of its street firs
   const un = n instanceof Error ? [{ kind: /\[([a-z]+)\]/.exec(n.message)?.[1] }] : n.ir.revision.grow.unplaced;
   assert.ok(un.length >= 1 && un.some((u) => u.kind === 'boundary' || u.kind === 'frontage'), JSON.stringify(un));
 });
+
+test('§6: a frontage junction next to a street end leaves the end terminal (its along edges ride on the road): extendable, and D3 still sees the end', async () => {
+  const S = await town();
+  const r = await reviseIR(S.eff, { grow: { lots: [{ id: 'near_end', type: 'house', size: [9, 9] }] } }, ctxOf(S));
+  const m = mergeEffective(S.ir, [{ rid: 1, position: 1, ir: r.ir }]);
+  const touched = new Set(r.ir.graph.edges.filter((e) => e.along).flatMap((e) => [e.from, e.to].map((x) => String(x).split('.')[0])));
+  const ends = extendableEnds(m, S.standing, streetRuns(m));
+  for (const e of ends) if (touched.has(e.node)) assert.equal(e.ok, true, `${e.node} stays extendable`);
+  const { besidePorts } = await import('../lib/region/districtsEmit.mjs');
+  const ports = besidePorts({ graph: m.graph }).map((q) => q.node).sort();
+  assert.deepEqual(ports, besidePorts({ graph: S.ir.graph }).map((q) => q.node).sort());
+});
