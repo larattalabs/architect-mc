@@ -87,6 +87,19 @@ test('§2 the tower: rows and lanes, two layers on every open side, the airlock\
   assert.deepEqual(BUBBLE, { up: 'minecraft:bubble_column[drag=false]', down: 'minecraft:bubble_column[drag=true]' });
 });
 
+test('§2 the down column\'s foot: its approach row walkable at y0 (a step over the foot cleared, a dip filled); on level land nothing written', () => {
+  const flat = checkLift(cliffLand().land, [1060, 64, 2033], [0, -1], { down: true, side: 'right' });
+  assert.ok(flat.ok);
+  assert.equal(flat.cells.filter((c) => c[2] === 2033).length, 0, 'level land: the foot written nowhere');
+  const step = (y) => { const s = flatSurvey({ W: 160, D: 112, bands: [{ x0: 1000, z0: 2000, x1: 1159, z1: 2029, y: 94 }, { x0: 1061, z0: 2033, x1: 1062, z1: 2033, y }] }); return surveyLiftLand(surveyApi(s.bytes, s.claim), { claim: s.claim }); };
+  const up = checkLift(step(66), [1060, 64, 2033], [0, -1], { down: true, side: 'right' });
+  assert.ok(up.ok);
+  assert.deepEqual(up.cells.filter((c) => c[2] === 2033).map((c) => c.slice(0, 4)).sort(), [[1061, 65, 2033, 'clear'], [1061, 66, 2033, 'clear'], [1062, 65, 2033, 'clear'], [1062, 66, 2033, 'clear']]);
+  const dip = checkLift(step(62), [1060, 64, 2033], [0, -1], { down: true, side: 'right' });
+  assert.ok(dip.ok);
+  assert.deepEqual(dip.cells.filter((c) => c[2] === 2033).map((c) => c.slice(0, 4)).sort(), [[1061, 63, 2033, 'fill'], [1061, 64, 2033, 'plinth'], [1062, 63, 2033, 'fill'], [1062, 64, 2033, 'plinth']]);
+});
+
 test('§2 (H §2.5) the single breach of any shell cell reaches nothing outside the tower: the outer layer and the face hold it', () => {
   const { land } = cliffLand(94);
   const g = checkLift(land, [1060, 64, 2033], [0, -1], { down: true, side: 'left' });

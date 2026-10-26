@@ -214,6 +214,23 @@ export function checkLift(land, a, dir, opts = {}) {
   const body = [];
   if (land.kept) for (const [x, z] of footprint) for (let y = Math.min(y0, land.groundAt(x, z)) - 1; y <= yT + 3; y++) { const k = land.kept(x, y, z); if (k) { body.push({ at: [x, y, z], body: k.body ?? k }); break; } }
   if (prot.length || body.length) return fail('PROTECTED', { columns: prot.slice(0, 12), count: prot.length, ...(body.length ? { kind: 'body', bodies: body.slice(0, 12) } : {}) });
+  // ---- the down column's foot: the approach row from beside the up approach to the down shaft's own (0, s) .. (0, 2s), walkable at y0
+  // (its ground filled up to y0, at most fillMax; 2 clear over it): a down rider leaves the airlock onto it (lf-natural: the natural
+  // down approach a step over the foot, the rider stuck in the outer door). On land already level, nothing is written.
+  const apron = [];
+  if (down) {
+    for (const v of [L.s, 2 * L.s]) {
+      const [x, z] = at(0, v);
+      const g = land.groundAt(x, z);
+      if (y0 - g > LIFT.fillMax) return fail('ANCHOR', { why: 'foot', columns: [{ at: [x, g, z], depth: y0 - g }], count: 1, fillMax: LIFT.fillMax });
+      if (land.waterAt(x, z)) return fail('WATER', { columns: [[x, z]], count: 1 });
+      const fill = [], clear = [];
+      for (let y = g + 1; y <= y0; y++) fill.push(y);
+      for (let y = y0 + 1; y <= y0 + 2; y++) if (!OPEN.has(land.classAt(x, y, z))) clear.push(y);
+      if ((fill.length || clear.length) && ([...fill, ...clear].some((y) => !writable(x, y, z)))) return fail('PROTECTED', { columns: [[x, z]], count: 1, why: 'foot' });
+      apron.push({ x, z, fill, clear });
+    }
+  }
   // ---- the cells
   const out = [];
   const put = (x, y, z, kind, ...extra) => out.push([x, y, z, kind, ...extra]);
@@ -278,6 +295,11 @@ export function checkLift(land, a, dir, opts = {}) {
     put(x, yT + 1, z, 'cap');
     (innerTV.has(`${t},${v}`) ? inner : outer).push([x, yT + 1, z]);
     // (a column of the land standing over yT: left as it is; the roof's rail skips it)
+  }
+  // the down column's foot (above): filled to y0 (its top the plinth's), cleared 2 over
+  for (const { x, z, fill, clear } of apron) {
+    for (const y of fill) put(x, y, z, y === y0 ? 'plinth' : 'fill');
+    for (const y of clear) put(x, y, z, 'clear');
   }
   // the written face cells (shell), the rest of the face natural
   for (const [x, y, z] of faceWritten) put(x, y, z, 'face');
