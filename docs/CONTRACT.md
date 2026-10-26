@@ -25683,3 +25683,12 @@ HUD text uses lab-ui's on-dark tokens.
 - **Not met: "no overlap" at GUI scale 4 (lab-ui follow-up, not fixable in Architect):** at s4 with two vanilla toasts the region verdict's slot (y 63, 246 wide, centred)
   reaches 1 GUI px into vanilla's toast column (toasts to y 64). lab-ui's `HudLayout` TOP_CENTER starts below the boss bars and
   "Now playing" but not below vanilla's own toasts when a wide centre piece reaches their column.
+
+### lab-ui 0.3.1 (coordinator, 2026-10-26)
+- `lab_ui_version=0.3.1` (lab-ui PR #4: TOP_CENTER starts below vanilla's toasts when its widest piece reaches their column); the
+  range stays `">=0.3.0 <0.4.0"`; the jar nests `lab_ui-0.3.1.jar`. The Gradle cache note above applies to 0.3.1 too.
+- At ad65e07d: `gate-run change --only unit-mod,ui2b-ingame` **PASS 2/2** (run `20261026-025349-change`); the gallery's `hud/all_at_once`
+  (GATEUIG_ONLY) at GUI scale 2 and 4: no two zone slots meet and none crosses vanilla's boss bars or toasts at either scale (s4:
+  the region verdict now at y 92, below the toasts' 64; every piece shown, the helper strip too, at y 40 below "Now playing"-free
+  top left beside the boss bars). The scale-4 overlap above is fixed. Vanilla's chat (not a zone piece) still runs under the
+  placement panel's left edge at s4, as before this slice.
