@@ -111,7 +111,69 @@ Regions.realiseByKey(owner, opKey)   // also finds a growth realised under its k
 
 ## What was run ($0; DEV MODE)
 
-(filled in below as the runs finish)
+| Check | Where | Result |
+|---|---|---|
+| kit suite | `node --test kit/test/*.test.mjs` at 9dfb900b | **935/935** |
+| GR's kit tests | `kit/test/gr-a.test.mjs` (12), `gr-parity.test.mjs` (1); rv-a.test 10, plan-p0, districts-d3 and its parity | all pass |
+| sidecar | `npm run check`: 50/51 files under machine load (versions.test.ts a 60 s hook timeout), that file alone 17/17 | pass |
+| mod | `./gradlew test --offline` (the whole suite, incl. DistrictLandGrTest, DistrictLandTest, RevisionsTest, ApiDTest, PlanCatalogueTest) | **EXIT 0** |
+| instant lints | `tools/lint.mjs structure` 65/0 (S-THEME clean), `look` 13/0, water lint (`kit/lint/*.lint.mjs`) 128/0, p3-lint in the mod build | pass |
+| api-compat | `tools/api-compat.mjs` vs the 0.47.0 and 0.45.0 apitest jars (`artifacts/gate6d-rv/jars`) and `--surface` vs the 0.47.0 mod jar (in gr-unit) | clean |
+| step-inputs | `node tools/step-inputs.mjs build` after the gr-* steps and the "6d GR" impact rule | rebuilt |
+| **chain 6dgr** | run `artifacts/gate-runs-GR/20261026-224525-6dgr` at 5394546c (ports 8960-8963, 2 shards) | **gr-unit 5/0, gr-town 28/0, gr-beside 18/0, gr-plan0 12/0, gr-survival 12/0, gr-crash 34/0 PASS**; gr-along 8/1 (its second growth's expectation: fixed below) |
+| gr-along | run `artifacts/gate-runs-GR/20261026-232113-6dgr` at 9dfb900b (driver-only change) | **PASS 10/0** |
+| gr-look | run `artifacts/gate-runs-GR-look/20261026-223101-6dgr-look` (a client) | PASS 2/0; 5 shots |
+| **gate-verifier** | review of 0cd4a088..5394546c (Revisions, TileCheck, RegionItems, InfraJob, RegionsImpl, DistrictLand/land.mjs, grow.mjs, revise, districtsEmit, reach) and a strict re-run on its own ports 8968/8969: `artifacts/gate-runs-GR-verify/20261026-224604-6dgr` | **PASS: no defects; gr-town 28/0, gr-beside 18/0, gr-survival 12/0, gr-crash 34/0** |
+
+**gr-town (items 3, 4, 7, 7b, 8, 9; Ask 1):** an added pond (RV) on the lot-free frontage; 2 lots grown on free frontage nearest the square
+(street_e's lot-free side), every standing street's road and verges unchanged (hash), the lots clear of the pond's hard and watch columns
+(KC), the Steward addition untouched; every growth site tagged `architect_mc:revision` (tile cell sites and lot sites); every new lot
+walkable to the bell and back (`dev.nav.villager`), graph.cut []. A 6-lot extension `street_e_g3` (41 long, flagged `{zone: town}`), the
+new end terminal and the old end 2 edges, its street piece tagged, its lots walkable; its undo cell for cell. A 1-lot extension; a beside
+district planned east joins its new end (`rg1:street_e_g4_end.street`): `undoRevision` refused at preflight `NOT_ALLOWED ... (joined)`
+naming the district, nothing written (hash); the district removed: the world as before it. A district on the extension's free side joins
+it by a T (`rg1:street_e_g4`, junction side s): refused `joined`, nothing written; removed; the undo exact. Every frontage slot held (a
+Steward site along both sides of every street): `NO_ROOM [held]`, no rid taken. The town removed with its pond, frontage and extension
+standing and a beside district (then removed, dangling): E-flat 0 over the claims + 8 (the Steward addition's and the PT build's own cells
+aside).
+
+**gr-beside (items 5, 11, 12; S-GR-3; Asks 1, 2):** the `gr_beside` flow above. checkBeside fits (the end, the reach); building 1 PLACED,
+land v 1. Building 3 as a growth under `steward.b3.vplan` (planByKey finds it), realised under `steward.b3.vrealise`: every site tagged
+and carrying `steward_mc:build b3`; land v 2: the grown part `rv1` (district east, insideCells 0), outside 781 -> 896, inside unchanged,
+every part's revision; realiseByKey finds the district. Building 4: outside 896 -> 1156; every column the district holds in the journal in
+land.union (584 columns). After a restart, realiseByKey(`steward.b4.vrealise`) and planByKey(`steward.b4.vplan`) find them.
+`undoRevision` 4: the world before it (0 cells), outside 1156 -> 896; then 3: the world before it (0 cells), union equal to the one before
+the growths, no grown part, v 2. The town's claim hash unchanged throughout. An outpost grown by 2: its corridor byte-identical, the new
+lots walkable to the town's bell.
+
+**gr-along (item 10):** a shore district (d3_shore, longer) grown by 3: 2 on its street's free frontage, 1 along the boundary (a new band
+from the free route end); every grown lot walkable to the street end; graph.cut []; land v 2 holds the band (a district mask part,
+revision 1), outside 1465 -> 2570; a further growth where the boundary ends inside the claim answers `NO_ROOM [boundary]`, nothing
+planned; undo to 0: the world before the growths, outside back to 1465.
+
+**gr-plan0 (item 6):** checkPlan of the zone gaining h4, h5: READY, `fits` `standing` `grown [h4, h5]`; the artifact's `$.lots` are the two,
+`revision.grow [town]`; a competing growth realised first under one key; the first artifact's realiseApproved under `gr.p0.k1` refuses
+stale; after a restart the retry checked on the new head and realised under `gr.p0.k2`: PLACED, its lots with their revision; both undone
+exactly, the artifact tombstoned; removal E-flat 0.
+
+**gr-survival (item 13; Steward's RC rows 2 and 3):** a survival town checked, realised and fed; the growth checked in survival (READY,
+`grown [h4, h5]`, bill `{lantern: 2, oak_fence: 2}`), realised; **while its targets build, `undoRevision` refuses `NOT_ALLOWED ...
+(survival_building)`, nothing written (hash)**; fed and built: **the stockpile paid exactly the check's BOM**; `undoRevision`: the world before
+it, the refund `{lantern: 2, oak_fence: 2}` = what it consumed, once (a second undo has nothing left); removal E-flat 0 but the crates.
+
+**gr-crash:** kills during a growth's realise (6 lots, an extension: tiles, a road, a lot): RV3, RV4, RG4+save, RD3 (the road after its
+first cell), RD3+save: after each restart the growth PLACED, each item once in one batch (the street piece among them),
+`RevisionView.sites` lists every site its items placed, all tagged; then `undoRevision`: the world before it (0 cells; RG4+save and
+RD3+save 1 cell: RP §6's PLACING leftover, RV's recorded finding, main's behaviour). Kills during the undo of a growth with a road: RVU1,
+RVU2, K6: resumed and finished, the revision UNDONE, the world before it (0 cells).
+
+Earlier runs and what they found (all in `artifacts/gate-runs-GR/`): `20261026-210152-6dgr` (frontage/extension green; the test's beside
+district overlapped the extension, a side T went elsewhere), `20261026-212345-6dgr` (a frontage junction's `along` edge made a street end
+non-terminal: fixed in grow, D3's besidePorts and streetNetwork; RG4+save: a revision's own halted path tile held its cell against the next
+tile: fixed in TileCheck; the survival undo answered OVERLAP_BUSY while revising: now `survival_building`), `20261026-215349-6dgr` (town,
+beside, crash green; `RevisionView.sites` missed a site placed before a halt: rebuilt from the batch at the end), `20261026-222746-6dgr`
+(crash, survival green), `gate-runs-GR-b/20261026-223536-6dgr` (a boundary growth could not continue from an earlier growth's end:
+fixed).
 
 ## Conflicts with the frozen text, and deviations (for the coordinator)
 
@@ -156,4 +218,14 @@ Regions.realiseByKey(owner, opKey)   // also finds a growth realised under its k
 
 ## Not shown (each with its reason)
 
-(filled in below)
+| Item | Why |
+|---|---|
+| 15, the natural round (S3's pinned claim) | The gate's worlds are flat (as RV's item 21); growth on natural ground is covered offline (300 seeded towns on synthetic terrain, gr-a) |
+| FL grid, ring, spiral towns in game | The search treats their straight street runs as any street's (unit-tested on `streetRuns`); no FL town was grown in game |
+| plan/0 `program.districts` growth (`v8x_6d_gr_district`) | Not built: a districts zone gaining lots answers unsupported; districts grow through `planRevision` (gr-beside) |
+| The player mover (item 3 says "player and villager") | `dev.nav.villager` both ways only; the kit's player walk is not run on the revision (its virtual world holds only the growth) |
+| A growth's `joined` via a frontage junction | Detected by the same id match (the revision's added nodes); not driven (D3 joins ends and street sides, never a frontage junction) |
+
+Look note for Noah (gallery https://claude.ai/artifact/JAfWetdckqZnmPgE2HHu8T, private; shots also in the scratchpad `gr-shots/`): where
+the old street ends beside a standing lot, the extension's first verge cell on that side is the lot's apron corner and stays grass (one
+cell). Paving it would write inside a standing lot's apron. A follow-up could let the verge take that one corner cell.
