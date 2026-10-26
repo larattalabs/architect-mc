@@ -121,7 +121,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean; revision?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -279,6 +279,7 @@ export class Regions {
       lotBlocks: tool.includes("'lot-blocks'"), // (6c VOC-c) the bound lots' block histograms (--lot-blocks)
       survival: tool.includes("survival: 'flag'"), // (6c RS) a plan in survival (--survival: the world's mode)
       besideReach: tool.includes("'beside-reach'"), // (6c D3) the reach inputs beside a standing region (--beside-reach)
+      revision: /revision: 1/.test(tool), // (6d RV) a revision's inputs (--revision)
     };
     const perm = permissionFlag();
     try {
@@ -370,6 +371,9 @@ export class Regions {
     const reachIn = info.caps.besideReach && msg.besideReach ? msg.besideReach : null;
     const reachOne = (q: { surveyBlobId: string }) => this.host.blobs.read(q.surveyBlobId);
     const reachSurveys = reachIn ? ('surveyBlobId' in reachIn ? { '': reachOne(reachIn as { surveyBlobId: string }) } : Object.fromEntries(Object.entries(reachIn as Record<string, { surveyBlobId: string }>).map(([id, q]) => [id, reachOne(q)]))) : null;
+    // (6d RV) a revision's inputs (an older kit has no --revision: the mod sends none to a helper without the region.revise feature)
+    const revision = info.caps.revision && msg.revision ? msg.revision : null;
+    if (msg.revision && !info.caps.revision) throw new ClientError(`the kit (${info.kitVersion}) cannot plan a revision (its plan CLI has no --revision)`);
     // (6c D3, §7.1) a dry plan (Regions.checkBeside): its own directory, deleted when the run ends; nothing kept, no blob published
     const dry = msg.dry === true;
     const planId = `${dry ? 'd' : 'p'}${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
@@ -404,6 +408,7 @@ export class Regions {
       const idx = 'surveyBlobId' in reachIn ? files('', reachIn as { held: unknown; standing: unknown }) : Object.fromEntries(Object.entries(reachIn as Record<string, { held: unknown; standing: unknown }>).map(([id, q]) => [id, files(id, q)]));
       fs.writeFileSync(path.join(dir, 'beside-reach.json'), JSON.stringify(idx));
     }
+    if (revision) fs.writeFileSync(path.join(dir, 'revision.json'), JSON.stringify(revision));
     if (biomes) fs.writeFileSync(path.join(dir, 'biomes.json'), JSON.stringify(biomes));
     if (lotBlocks) fs.writeFileSync(path.join(dir, 'lotblocks.json'), JSON.stringify(lotBlocks));
     const request = {
@@ -421,6 +426,7 @@ export class Regions {
       ...(keepOut.length ? { keepOut } : {}),
       ...(beside ? { beside: { id: beside.id } } : {}),
       ...(reachIn ? { besideReach: true } : {}),
+      ...(revision ? { revision: { rid: (revision as { rid: number }).rid } } : {}),
       ...(dry ? { dry: true } : {}),
       ...(passes.length ? { passes } : {}),
       ...(planCache ? { planCheck: true } : {}),
@@ -430,7 +436,7 @@ export class Regions {
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb }))
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb }))
       .finally(() => {
         this.planning.delete(planId);
         // (6c D3, §7.1) a dry plan keeps nothing: its directory goes, success or failure
@@ -538,7 +544,7 @@ export class Regions {
     return keys.length;
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -557,6 +563,7 @@ export class Regions {
       ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
       ...(o.beside ? ['--beside', path.join(dir, 'beside.json')] : []),
       ...(o.besideReach ? ['--beside-reach', path.join(dir, 'beside-reach.json')] : []),
+      ...(o.revision ? ['--revision', path.join(dir, 'revision.json')] : []),
       ...(o.biomes ? ['--biomes', path.join(dir, 'biomes.json')] : []),
       ...(o.lotBlocks ? ['--lot-blocks', path.join(dir, 'lotblocks.json')] : []),
       ...(o.survival ? ['--survival'] : []),
@@ -572,7 +579,9 @@ export class Regions {
   checkArgs(dir: string): string[] {
     // ((6c D3) a reach plan's check reads the reach inputs: its reach columns lie in the town's claim, M28:beside reads the held set)
     const reach = fs.existsSync(path.join(dir, 'beside-reach.json')) && this.kitInfo().caps.besideReach ? ['--beside-reach', path.join(dir, 'beside-reach.json')] : [];
-    return ['check', path.join(dir, 'ir.json'), '--survey', path.join(dir, 'survey.bin'), ...this.sideDirArgs(dir), ...reach, '--out', dir, '--json'];
+    // ((6d RV) a revision's check reads its standing data: M29:revision)
+    const rev = fs.existsSync(path.join(dir, 'revision.json')) && this.kitInfo().caps.revision ? ['--revision', path.join(dir, 'revision.json')] : [];
+    return ['check', path.join(dir, 'ir.json'), '--survey', path.join(dir, 'survey.bin'), ...this.sideDirArgs(dir), ...reach, ...rev, '--out', dir, '--json'];
   }
 
   /** (6b) `preview <ir.json> --survey <f> [--blobs <dir>] [--volumes <dir>] --views a,b [--axes <f>] --out <planDir> --json` */
@@ -626,7 +635,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
