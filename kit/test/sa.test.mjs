@@ -87,6 +87,22 @@ test('the tops: summit, canopy (3 under the lowest leaf over the trunk), {y}; wi
   assert.deepEqual([...S(70)], ['0,0']);
 });
 
+test('KC in the geometry: a body\'s hard cell in the spiral\'s way refuses OVERLAP {kind: body}; a lamp alone is never refused', () => {
+  const cone = discs((y) => Math.max(1, 5 - Math.floor((y - 64) / 5)), 84);
+  const base = { kind: 'rock_spire', at: [0, 64, 0], from: [0, 40], land: flat(), hard: (x, z) => Math.abs(x) <= 6 && Math.abs(z) <= 6 };
+  const s = spiralPlan(cone, base);
+  assert.ok(s.ok);
+  // a body whose hard cells are the spiral's third tread
+  const t = s.walk.filter((w) => w.kind === 'tread')[2];
+  const ov = spiralPlan(cone, { ...base, kept: (x, y, z) => (x === t.x && y === t.y && z === t.z ? { body: 'w_pond', part: 'pond', set: 'hard' } : null) });
+  assert.equal(ov.code, 'OVERLAP');
+  assert.equal(ov.evidence.kind, 'body');
+  assert.deepEqual(ov.evidence.cells[0].at, [t.x, t.y, t.z]);
+  // a lamp cell is the emit's (skipped in a watch cell), never a refusal
+  const lamp = s.lampSpots[0];
+  if (lamp) assert.ok(spiralPlan(cone, { ...base, kept: (x, y, z) => (x === lamp[0] && y === lamp[1] && z === lamp[2] ? { body: 'w_pond', set: 'hard' } : null) }).ok);
+});
+
 test('the geometry\'s refusals: SPAN under 4 and over 64, HEADROOM under a cap, with their evidence', () => {
   const low = discs(() => 2, 66);
   const sp = spiralPlan(low, { kind: 'rock_spire', at: [0, 64, 0], from: [0, 40], land: flat() });

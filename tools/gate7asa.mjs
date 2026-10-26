@@ -352,7 +352,13 @@ steps.look = async () => {
       const ax = tx + 0.5, az = tz + 0.5, mid = Math.round((fy + ty) / 2), low = fy + Math.min(9, Math.round((ty - fy) / 3));
       out.shots.push(await shot(`${tag}_whole`, [ax - 24, ty + 8, az + 24], [ax, mid, az]));
       out.shots.push(await shot(`${tag}_closeup`, [ax + 12, mid + 4, az + 12], [ax, mid, az]));
-      out.shots.push(await shot(`${tag}_landing`, [ax - 11, low + 3, az - 11], [ax, low, az]));
+      // (the first landing: its two flat cells from outside, looking back at the host)
+      const pmeta = (() => { try { return JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId ?? st.view.planId, 'meta.json'), 'utf8')); } catch { return null; } })();
+      const land = pmeta?.spirals?.[0]?.walk?.find((w) => w[3] === 'landing');
+      if (land) {
+        const dx = land[0] + 0.5 - ax, dz = land[2] + 0.5 - az, n = Math.max(1, Math.abs(dx) + Math.abs(dz));
+        out.shots.push(await shot(`${tag}_landing`, [land[0] + 0.5 + (9 * dx) / n, land[1] + 4, land[2] + 0.5 + (9 * dz) / n], [land[0] + 0.5, land[1] + 1, land[2] + 0.5]));
+      } else out.shots.push(await shot(`${tag}_landing`, [ax - 11, low + 3, az - 11], [ax, low, az]));
       out.shots.push(await shot(`${tag}_lookout`, [ax + 7, ty + 8, az + 7], [ax, ty + 1, az]));
       out.shots.push(await shot(`${tag}_foot`, [fx0 + 0.5 - 9 * Math.sign(tx - fx0 || 1), fy + 4, fz + 0.5 - 9 * Math.sign(tz - fz || 1)], [fx0 + 0.5, fy + 2, fz + 0.5]));
       if (!bible) {

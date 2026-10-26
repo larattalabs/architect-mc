@@ -208,7 +208,7 @@ export function emit(K) {
       const rec = {
         id: `spiral_${p.id}`.slice(0, 48), kind: 'stairs_around', part: part.id, recPart: p.id, stage, host: o.host, form: o.form, hostKind: o.hostKind, rise: s.rise, turns: s.turns, width: o.width, movers: [...o.movers],
         top: [nx, ny, nz], topKind: s.topKind, topY: s.D, foot: [...s.foot], end: [...s.end], entry: [...s.entry], axis: [...s.axis],
-        walk: s.walk.filter((w) => w.lane === 1).map((w) => [w.x, w.y, w.z, w.kind]), outer: s.walk.filter((w) => w.lane === 2).map((w) => [w.x, w.y, w.z, w.kind]),
+        walk: s.walk.filter((w) => w.lane === 1).map((w) => [w.x, w.y, w.z, w.landing ? 'landing' : w.kind]), outer: s.walk.filter((w) => w.lane === 2).map((w) => [w.x, w.y, w.z, w.kind]),
         deckCells: walk, deck: s.top.deck.map((q) => [...q]), corbel: s.top.corbel.map((q) => q.slice(0, 3)), topBeds: s.top.beds.map((q) => [...q]), rails: cells.filter((c) => c[4] === 'rail').map((c) => [c[0], c[1], c[2]]), lamps: cells.filter((c) => c[4] === 'lamp').map((c) => [c[0], c[1], c[2]]),
         supports: s.supports.map((q) => q.slice(0, 3)), approach: s.approach.map((q) => [...q]), treads: s.treads, landings: s.landings, railsSkipped: s.railsSkipped, ...(lampsSkipped ? { lampsSkipped } : {}),
         light: o.R.light, bom, ...(Object.keys(o.unsafe).length ? { _unsafe: { ...o.unsafe } } : {}),
