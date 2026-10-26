@@ -645,16 +645,15 @@ steps.along = async () => {
   check(Object.values(nav).length === 3 && Object.values(nav).every(Boolean), `item 10: every grown lot walkable to the district's street end ${endNode?.id} (${json(nav)})`);
   const { graphCut } = await imp('lib/region/grow.mjs');
   check(graphCut(effA, { from: endNode?.id }).length === 0, `item 10: graph.cut [] from the street end`);
-  // a second growth along the boundary (prefer extend): the band grows (land v 2: a district mask part with its revision)
-  const g2 = await growPlan(r, { district: 'quay', lots: 2, prefer: 'extend' }, { program: 'districts' });
-  let land2 = null;
-  if (!g2.refused) {
-    const w2 = await rvRealise(r, g2, { lots: {} });
-    const ir2 = await rvIr(r, g2.revisionOf.rid);
-    land2 = landOf((await call('dev.region.state', { region: r }, 60_000)).view);
-    out.grow2 = ir2.revision.grow;
-    check(w2.r.state === 'PLACED' && ir2.revision.grow.extension?.kind === 'boundary' && land2?.parts?.some((q) => q.kind === 'district' && q.shape === 'mask' && q.revision === g2.revisionOf.rid), `item 10: a growth along the boundary (prefer extend): ${w2.r.state}, extension ${json(ir2.revision.grow.extension && { kind: ir2.revision.grow.extension.kind, from: ir2.revision.grow.extension.from, lots: ir2.revision.grow.extension.lots })}; land v ${land2?.v} holds the new band (a district mask part, revision ${g2.revisionOf.rid}); outside ${land0?.outside?.cells} -> ${land2?.outside?.cells}`);
-  } else check(false, `item 10: the boundary growth refused: ${g2.refused}`);
+  // the boundary growth's band in land v 2 (a district mask part with its revision); then the boundary ends inside the claim: a second
+  // growth along it answers NO_ROOM [boundary], nothing planned (§5)
+  const land1 = landOf((await call('dev.region.state', { region: r }, 60_000)).view);
+  check(gm.extension?.kind === 'boundary' && land1?.v === 2 && land1.parts.some((q) => q.kind === 'district' && q.shape === 'mask' && q.revision === g.revisionOf.rid) && land1.outside.cells > land0.outside.cells, `item 10: land v ${land1?.v} holds the new band (a district mask part, revision ${g.revisionOf.rid}); outside ${land0?.outside?.cells} -> ${land1?.outside?.cells}`);
+  const before2 = await rvState(r);
+  const g2 = await growPlan(r, { district: 'quay', lots: 2, prefer: 'extend', extend: 'auto' }, { program: 'districts' });
+  const after2 = await rvState(r);
+  out.grow2 = g2.refused ?? g2.planId;
+  check(/^NO_ROOM/.test(String(g2.refused ?? '')) && /\[(boundary|frontage)\]/.test(g2.refused) && after2.nextRid === before2.nextRid, `item 10: where the boundary ends inside the claim (the shore's end 13 spine cells past the band) a further growth answers ${g2.refused ?? 'a plan'}; nothing planned`);
   // both undone: the world before the growths; land.outside back
   const u = await call('dev.rv.undo', { region: r, toPosition: 0 }, 4 * 3_600_000);
   const d = diff(W0, await cellsOf(BOX));
