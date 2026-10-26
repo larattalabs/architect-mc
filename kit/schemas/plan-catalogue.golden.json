@@ -1112,9 +1112,9 @@
   {
    "id": "revision.grow",
    "sinceApi": "NEXT",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "GR"
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "6d GR: in a revision plan, a zone whose program.lots only gains lots (every standing lot spec equal) grows: the added lots go on its streets' free frontage nearest the square, then on one straight extension from a free street end; the zone answers fits with standing: true and grown: [ids] (unplaced lots listed NO_ROOM). A districts zone grows through Regions.planRevision."
   },
   {
    "id": "revision.change",

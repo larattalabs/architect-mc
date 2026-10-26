@@ -268,12 +268,12 @@ test('plan/0 revision mode: keep, add, refill, grow, change; the artifact\'s rev
   assert.equal(cls.classOf.get('town').klass, 'keep');
 });
 
-test('the catalogue: revision.keep, add and refill supported, grow (until GR) and change (until RV2) reserved, each NEXT', async () => {
+test('the catalogue: revision.keep, add, refill and (6d GR) grow supported, change (until RV2) reserved, each NEXT', async () => {
   const { planCatalogue } = await import('../lib/plan/catalogue.mjs');
   const e = Object.fromEntries(planCatalogue().entries.filter((x) => x.id.startsWith('revision.')).map((x) => [x.id, x]));
   assert.deepEqual(Object.keys(e).sort(), ['revision.add', 'revision.change', 'revision.grow', 'revision.keep', 'revision.refill']);
   for (const id of ['revision.keep', 'revision.add', 'revision.refill']) assert.equal(e[id].state, 'supported');
-  assert.equal(e['revision.grow'].until, 'GR');
+  assert.equal(e['revision.grow'].state, 'supported'); // (6d GR)
   assert.equal(e['revision.change'].until, 'RV2');
 });
 

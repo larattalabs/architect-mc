@@ -17,6 +17,7 @@ import { region } from '../lib/region/program.mjs';
 import { emitPond } from '../lib/fluids/pond.mjs';
 import { fluidRolesOf } from '../lib/fluids/place.mjs';
 import { columnProblem, ridPrefix, standingClasses } from '../lib/region/revise.mjs';
+import { growPlan, emitGrowth, growObstacles } from '../lib/region/grow.mjs';
 
 export const id = 'revise';
 export const description = 'An additive revision of a standing region (6d RV): new parts, lots, refills and bodies over it.';
@@ -46,7 +47,9 @@ export default function revise(ctx) {
   const unsafe = P.unsafe && typeof P.unsafe === 'object' ? P.unsafe : {};
   const parts = Array.isArray(P.parts) ? P.parts : [];
   const refill = Array.isArray(P.refill) ? P.refill.map(String) : [];
-  if (!parts.length && !refill.length && !Object.keys(unsafe).length) throw new Error('NOT_ALLOWED: [empty] a revision adds at least one part or refill');
+  // (6d GR) a growth: spec.grow {lots, district?, prefer?, extend?} (the mod maps Regions.planRevision(region, (its program, {grow})) here)
+  const G = P.grow && typeof P.grow === 'object' ? P.grow : null;
+  if (!parts.length && !refill.length && !G && !Object.keys(unsafe).length) throw new Error('NOT_ALLOWED: [empty] a revision adds at least one part or refill');
   const eff = RV.effective;
   const st = RV.standing;
   const pre = ridPrefix(RV.rid);
@@ -55,7 +58,18 @@ export default function revise(ctx) {
   const used = new Set();
   for (const p of parts) used.add(p?.call?.stage ?? baseStages[0]);
   if (unsafe.removePart || unsafe.underLot || unsafe.overRoad || unsafe.overPath || unsafe.ignoreHeld) used.add(baseStages[0]);
-  if (!used.size) used.add(baseStages[0]);
+  if (!used.size && !G) used.add(baseStages[0]);
+  // (6d GR) the growth's stages: the base's own ground, street, lots and props (V's), else its first stage
+  const gst = (n) => (baseStages.includes(n) ? n : baseStages[0]);
+  const growStages = G ? { ground: gst('ground'), street: gst('street'), lots: gst('lots'), props: gst('props') } : null;
+  let growth = null;
+  if (G) {
+    if (!st) throw new Error('revise: a growth needs ctx.standing (Regions.planRevision sends it)');
+    growth = growPlan({ eff, standing: st, survey: ctx.survey, grow: G, rid: RV.rid });
+    used.add(growStages.ground); used.add(growStages.lots);
+    if (growth.extension) used.add(growStages.street);
+    used.add(growStages.props);
+  }
   // (a body needs the region's `fluids` stage, last: H's settle and census run in it, §7)
   if (parts.some((p) => p?.call?.fn === 'pond')) used.add('fluids');
   const stages = [...baseStages.filter((s) => used.has(s) && s !== 'fluids'), ...[...used].filter((s) => !baseStages.includes(s) && s !== 'fluids').sort(), ...(used.has('fluids') ? ['fluids'] : [])];
@@ -94,6 +108,20 @@ export default function revise(ctx) {
       throw new Error(`NOT_ALLOWED: [call] part ${q.id}: fn ${JSON.stringify(c.fn)} is not a revision primitive (columns, fill, carve, terrace, pond, form, lot)`);
     }
   }
+  // (6d GR) the growth's parts, lots, road and graph (grow.mjs); its record in the revision member
+  let grown = null;
+  if (growth) {
+    r._growObstacles = growObstacles(eff, st);
+    grown = emitGrowth(r, growth, { rid: RV.rid, eff, stages: growStages, laneWidth: Number.isInteger(eff?.params?.laneWidth) ? eff.params.laneWidth : 2, keepOut: ctx.keepOut ?? [] });
+    if (unsafe.growVerge) {
+      // the broken variant: a grown lane writes a standing verge cell (the guard lets it through: only M29 catches it)
+      const run = growth.lots.find((l) => l.slot.kind === 'frontage')?.run;
+      if (run) {
+        const [x, z] = run.o === 'ew' ? [run.u0 + 1, run.c + 2] : [run.c + 2, run.u0 + 1];
+        r.part(`${pre}unsafe_grow_verge`, { stage: growStages.ground, set: 'path' }).columns({ abs: 0 }, { abs: 0 }, [x, z, ctx.survey.groundAt(x, z), ctx.survey.groundAt(x, z), 0], [themed(r, 'path', 'grow_verge')], { cond: 0 });
+      }
+    }
+  }
   // the broken variants (the checker's tests): each writes the forbidden thing the guard then lets through
   const y = (x, z) => ctx.survey.groundAt(x, z) + 1;
   const one = (name, at, mat = 'structure') => {
@@ -120,6 +148,13 @@ export default function revise(ctx) {
     graph: { nodes: r.graph.nodes.map((n) => n.id), edges: r.graph.edges.map((e) => e.id) }, seed: ctx.seed,
     ...(Object.keys(unsafe).length ? { _unsafe: Object.keys(unsafe).filter((k) => unsafe[k]).sort() } : {}),
     ...(unsafe.removePart && eff?.parts?.length ? { remove: [eff.parts[0].id] } : {}),
+    ...(growth ? { grow: {
+      format: growth.format, district: growth.district, lots: grown.lots,
+      frontage: growth.lots.filter((l) => l.slot.kind === 'frontage').map((l) => ({ street: l.slot.street, side: l.slot.side, u: l.slot.u, lot: l.spec.id })),
+      extension: growth.extension ? { from: growth.extension.from, road: growth.extension.newRoad, along: growth.extension.road, run: [...growth.extension.run],
+        lots: growth.lots.filter((l) => l.slot.kind === 'extension').map((l) => l.spec.id) } : null,
+      unplaced: growth.unplaced, lamps: grown.lamps.length,
+    } } : {}),
   };
   return r;
 }
