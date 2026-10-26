@@ -125,17 +125,17 @@ public interface Bibles {
 	 * </ul>
 	 * {@code version}: the version the caller looked at (refused when it is no longer the latest), or null. Completes with the job
 	 * ({@link BibleJob#bibleId()} and {@link BibleJob#version()} name the version it makes); fails (the message says why) for another
-	 * owner's Style, an unknown one, or one a bible job holds. Ask {@link #estimateParts()} first. Since NEXT.
+	 * owner's Style, an unknown one, or one a bible job holds. Ask {@link #estimateParts()} first. Since 1.42.0.
 	 */
 	default CompletableFuture<BibleJob> addParts(String bibleId, @Nullable Integer version, @Nullable String owner) {
-		throw new UnsupportedOperationException("Bibles.addParts needs Architect API since NEXT");
+		throw new UnsupportedOperationException("Bibles.addParts needs Architect API since 1.42.0");
 	}
 
 	/**
 	 * (Style unification U5b) What an "Add parts" job would cost and take ({@code bible.estimate} with {@code parts}): at most a bible
-	 * job's, until parts jobs are measured on their own (the basis says so). Since NEXT.
+	 * job's, until parts jobs are measured on their own (the basis says so). Since 1.42.0.
 	 */
 	default CompletableFuture<Estimate> estimateParts() {
-		throw new UnsupportedOperationException("Bibles.estimateParts needs Architect API since NEXT");
+		throw new UnsupportedOperationException("Bibles.estimateParts needs Architect API since 1.42.0");
 	}
 }

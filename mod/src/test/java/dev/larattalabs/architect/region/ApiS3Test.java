@@ -10,7 +10,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * Phase 6c slice S3 (docs/CONTRACT.md "Phase 6c slice S3" §5): API NEXT (set at merge by tools/release-version.mjs) with no new records,
+ * Phase 6c slice S3 (docs/CONTRACT.md "Phase 6c slice S3" §5): API 1.38.0 (v0.41.0; set at merge by tools/release-version.mjs) with no new records,
  * methods, reasons or IR kinds; the features {@code terracedZones} (an S3 helper, {@code region.terracedZones}: plan/0's {@code terraces}
  * member) and {@code scenarioS3} ({@code region.monastery}: its kit bundles the {@code terraced_monastery} program).
  */

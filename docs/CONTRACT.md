@@ -25523,3 +25523,99 @@ Noah approved the A/B's recommendation on 2026-10-24: "Use this style's parts" s
   built-in picked on the Design tab: they check the default once, then switch the parts off (`dev.design.fill {parts: false}`) where
   they test the materials path; u2 step 5 (remix) expects set mode by default. `u1-ingame` uses `withStyle` through the API, so is
   unchanged.
+
+## Release v0.45.0 as integrated (Style unification U2+U3+U5, built-in parts, the theme fixes, nightly 2026-10-25; branch `release/0.45.0`, 2026-10-25, DEV MODE)
+
+Branch `release/0.45.0` over origin/main 35956e4d, which already holds every merge since v0.44.0: slice/U2 (3ce866b6), fix/cl-theme
+(80b3828e), slice/U3 (85479e02), slice/U5 (f05674a0), chore/builtin-parts (4f50b8d1), fix/parts-default-on (331ea0f6), fix/theme-rest
+(51025796), fix/nightly-1025 (719c472a) and fix/nightly-infra (35956e4d). No merge resolutions. Not merged, tagged or published: the
+coordinator does that. DEV MODE: a cheap tag, no release-tier run. **Versions:** API **1.42.0**, mod **0.45.0**, kit **0.43.0**,
+catalogue **14** (unchanged).
+
+### What it does for a player
+
+- **One design editor** (U2, U3): the Design tab and the Library's Variants dialog share one editor (What / Style / Materials / Features
+  / Rules / Parameters, folding sections). Wood, Stone, Roof and Accent are picked from swatches; any change is a "custom mix" with
+  Revert and Save as style…. Words can go alongside a Style.
+- **A Style browser and editor** (U3): cards drawn in each Style's own blocks, Yours / Built-in / Made by Claude / Settlements,
+  favourites and tags; New, Duplicate and Edit; a free test-house check before a save. The Library has more rows, Place / Edit / ⋯
+  (Delete behind a confirm), a jobs strip and mouse massing approval.
+- **Styles with their own parts** (U5, built-in parts): all 16 built-in Styles ship their own components, and "Use this style's
+  parts" starts on for them. Off, a Style's look is guidance for Claude on top of its materials (the hybrid). "Add parts…" drafts
+  parts for any Style that lacks them. No Style borrows another's components any more. Medieval's wall is white concrete (it rendered
+  pink).
+- **Everything is themed** (fix/cl-theme, fix/theme-rest): climbs' fittings, tunnel lights, village and forms lamps and the no-wood
+  door swaps all come from the Style's roles; only a short list of functional blocks (ladder, iron bars, the iron door fallback, …)
+  is exempt.
+- **Nightly fixes** (2026-10-25): roads no longer stop on untouched natural ground such as packed ice (RoadTerrain uses the mod's
+  natural rule, rs-survival item 14), one gate base world per host, and `dev.world.open` allows 120 s to create a world.
+
+### What it does for Steward
+
+- Java, since **1.42.0** (additive): `Bible.parts()` (a new last record component) and `Bible.hasParts()`; `Bibles.addParts(bibleId,
+  version, owner)` and `Bibles.estimateParts()`, defaults that throw on an older API (their messages now name 1.42.0). The 1.41.0,
+  1.6.0 and 1.2.0 `Bible` constructors are kept (`ApiStyleU5Test`). Nothing Steward constructs changed shape, so no Steward RC
+  (DEV MODE).
+- Sidecar features `bible.check` (free, read-only Style validation) and `bible.parts` (Add parts), appended last to `FEATURES`.
+- Behaviour Steward could see: a design or group naming a **built-in** Style as its bible now runs set mode with that built-in's own
+  parts (in v0.44.0 a built-in other than rustic got rustic's components). Steward passes no built-in ids as a bible (U5 §4), and its
+  Claude-made settlement bibles keep set mode exactly as before.
+- plan/0: no catalogue change (catalogue 14; `plan-catalogue-diff` against v0.44.0's golden: nothing but the api). Kit output version
+  moved (0.42.0 -> 0.43.0), so a region planned on kit 0.42.0 goes `PLAN_STALE` and Steward re-checks it.
+
+### Versions
+
+`node tools/release-version.mjs --api 1.42.0 --mod 0.45.0 --kit 0.43.0`, one run (5b975e73):
+- API minor (1.41.0 -> 1.42.0) for U5's methods and the two features; kit 0.42.0 -> 0.43.0.
+- **Catalogue 14, kept**: plan.json and the golden are unchanged since v0.44.0, so no `--catalogue` and no archive.
+- 6 placeholders stamped: `Bible.parts` and `hasParts` javadoc, `Bibles.addParts`/`estimateParts` javadoc and both runtime messages
+  ("needs Architect API since 1.42.0"). By hand: ApiS3Test's stale "API NEXT" prose (S3 shipped at 1.38.0). Afterwards no `NEXT`
+  placeholder remains in mod/src, sidecar/src or kit/schemas (SiteGhosts' and SiteGhostRenderer's constants named `NEXT` are code).
+- 8 goldens re-cut, kitVersion and irSha only; tiles, cells and blobs identical: crossings_demo_flat, forms_demo, grove_demo,
+  grove_demo_flat, links_demo, links_demo_flat, route_demo, s3.
+- `--check` (strict, release context): consistent, every tracked golden re-plans byte for byte. `catalogue-since-check`: every
+  sinceApi at or below 1.42.0.
+- e5b59134: three kit tests read CL's and K2's catalogue flips as NEXT or the golden's api; released in v0.44.0 at 1.41.0, they now
+  stay 1.41.0 (cl.test item 12, k2.test item 11, f7a-foundation item 2; 400339d1's fix, one release on).
+
+### Suites (under the CPU budget: node --test concurrency 6, vitest 4 workers, gradle 4 workers)
+
+| Suite | Result |
+|---|---|
+| mod | `./gradlew build --offline --no-daemon` at e5b59134: 929 tests, 0 failed, 1 skipped; lab-ui 0.2.0 from `../lab-ui` at its tag |
+| kit | `node --test kit/test/*.test.mjs` at 5b975e73: 899/902. The three are the stale sinceApi reads above, fixed in e5b59134; those files re-run 33/33 |
+| sidecar | `npm run check`: 784/784 (51 files), plus the bundle |
+| lints | lint-structure 64 cases, 0 failing; S-THEME 0 offenders (14 theme-checked plans, 42,854 cells; `THEME_KNOWN` empty). lint-look 13, 0 failing |
+| api-compat | the 0.44.0, 0.43.0 and 0.42.0 apitest jars and the 0.44.0 mod jar's 1.41.0 surface (2600 members): clean |
+| step-inputs | `check`: 255 steps, every closure inside its recorded set |
+
+No in-game steps: nothing was merged or resolved on this branch (the slices' own in-game steps passed at their merges; the latest,
+at fix/parts-default-on: u2-ingame 34, u3-ingame 40, u5-ingame 32). At d6ce7fbf's parent, re-run: `--check` consistent, step-inputs
+255 steps, and release-version, catalogue-since, cl, k2 and f7a-foundation tests 42/42.
+
+### Jars
+
+`artifacts/release-0450/v0450/` (local evidence, not committed): `architect_mc-0.45.0.jar` sha256
+d23dd17d3774c678f5608b742c068271f5150b44cf201d5fa1d2868f5f9297ad, its sources jar, `architect_apitest-0.45.0.jar` and
+`architect_devserver-0.45.0.jar`, with `SOURCE.txt` and `SHA256SUMS`. Built at e5b59134 with the sidecar bundle; the branch head
+differs only in docs/. The tag's CI build differs by build stamps.
+
+### Known issues carried forward
+
+- **pt-ingame item 15**: the classifier's per-tick CPU bar (1 ms) misses in most runs; accepted by Noah as a timing bar, carried
+  forward.
+- U5's massing gap: with Massing first a Style's hints reach only the detail pass. U4's example designs build walls from the wood set
+  (a wall-defined Style only partly re-skins them).
+- The nightly 2026-10-25's pending re-runs (docs/NIGHTLY-1025.md): the timing steps (mp, b, pt, 6ct1, s7, megalite) and 0a-keys /
+  d2-ingame, strict, kept (c) only while their re-runs pass.
+- Everything listed under v0.44.0's not fixed since (CL's and K2's queued items, PLAN).
+
+### Release notes
+
+Architect 0.45.0 brings Styles together in one place. Designing and making variants now use the same editor, where you pick a Style,
+tweak its wood, stone, roof and accent from swatches, and save your mix as a new Style. A new Style browser shows every Style as a card
+drawn in its own blocks, with a free check before you save. All sixteen built-in Styles now come with their own building parts and use
+them by default; turn that off and the Style guides Claude's design instead, and "Add parts…" can give parts to any Style that lacks
+them. Everything Architect generates (climbs, tunnel lights, lamps, doors) now takes its blocks from the Style, roads no longer stall on
+natural ground like packed ice, and medieval walls are white instead of pink. For mod authors, API 1.42.0 adds `Bible.parts`,
+`Bibles.addParts` and `Bibles.estimateParts`, all additive.

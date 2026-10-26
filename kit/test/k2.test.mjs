@@ -67,7 +67,8 @@ test('item 11: the catalogue: wall.along reserved -> supported, nothing else of 
   assert.deepEqual([mine(d.untilChanged), mine(d.otherStateChanges), mine(d.limitsChanged), d.added, d.removed, d.retired], [[], [], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'w', block: 'wall.along' }]);
   const e = golden.entries.find((x) => x.id === 'wall.along');
-  assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api, e.sinceApi);
+  // (released in v0.44.0 at API 1.41.0: a later release's golden.api moves on, the stamp stays)
+  assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.41.0', e.sinceApi);
   // the walk member: strict, R15 unchanged in shape
   const def = PLAN_SCHEMA.$defs['connector.wall'].properties.walk;
   assert.ok(def.oneOf.length === 2);
