@@ -273,7 +273,8 @@ test('a wall naming no lot is K1\'s (no lots, no passage, no lane); 3 checks of 
     assert.ok(!r.res.ir.graph.edges.some((e) => e.type === 'passage'));
     assert.ok(!r.artifact?.lots?.some((l) => l.onWall));
   }
-  for (const [d, name] of [['valid', 'v7a_k3_castle.json'], ['k3', 'k3_castle_flat.json']]) {
+  // (and the fallback's two-pass compile, a fresh region on the rerun: r01 and the KC row)
+  for (const [d, name] of [['valid', 'v7a_k3_castle.json'], ['k3', 'k3_castle_flat.json'], ['k3', 'r01_back_to_zone.json'], ['k3', 'k01_castle_fountain.json']]) {
     const rs = [await run(fx(d, name)), await run(fx(d, name)), await run(fx(d, name))];
     assert.ok(rs.every((x) => x.artifactSha && x.artifactSha === rs[0].artifactSha), `${name}: one artifact sha`);
     assert.ok(rs.every((x) => JSON.stringify(x.check.parts) === JSON.stringify(rs[0].check.parts)), `${name}: one answer set`);

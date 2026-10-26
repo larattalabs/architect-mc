@@ -20,7 +20,9 @@ K3 changes what Steward designs and binds, and adds a `realiseApproved` refusal.
      `onWall.outerFaces.lotCells`; a typed member for them is still S-K3-2's "later".
    - The design must fill its lot's box across the line. A design narrower than its box leaves the wall open at the box's faces and is
      refused.
-3. **A bind refusal and its repair**: bind a tower whose door is on an outer face. `realiseApproved` refuses `ARTIFACT_STALE` with
+3. **A bind refusal and its repair.** The refusal comes as `ARTIFACT_STALE`, the reason a changed site gets. Branch on the message prefix
+   "lot <id> on wall <wall>:" and send that case to the design repair loop, not to a stale re-check, which would retry forever.
+   Bind a tower whose door is on an outer face. `realiseApproved` refuses `ARTIFACT_STALE` with
    "lot tower_N on wall curtain_wall: the design leaves the wall open at x,y,z ... (n cells)" and writes nothing. Repair the design
    (door on an inner face) and bind again.
 4. **Villagers through the gatehouse**: realised, every lot inside reaches the gatehouse's front port through its passage and back.

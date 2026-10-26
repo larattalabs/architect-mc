@@ -16,7 +16,7 @@
 //   child  the row under a lot box (floorY - 1) inside its footprint: a realised lot entry lays its own foundation there; or a path
 //          block within 8 columns of a lot's entrance (the entry's own approach path, 4e's PATH join)
 //   joined (7a K3) the same block with only its connections changed (a fence's, a wall block's or a pane's sides, a wall's `up`), within 8
-//          of a realised lot box: the lot's design beside it joined it (vanilla's neighbour update, which runs on along a wall's run a few
+//          of a realised lot box on a wall's line (onWall): the lot's design beside it joined it (vanilla's neighbour update, which runs on along a wall's run a few
 //          cells: a parapet under a merlon or a lamp takes vanilla's `up` there), as a wall meets a tower
 //   differ anything else: the writer did not write what the plan says.
 // The gate: `differ` 0 for every kind on a flat variant; on a natural one `differ` 0 too, with kept / road / plant recorded.
@@ -54,7 +54,9 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
   const inLot = (x, y, z) => lotBoxes.some((l) => x >= l.minX && x <= l.maxX && y >= l.minY && y <= l.maxY && z >= l.minZ && z <= l.maxZ);
   const CONNECT = new Set(['north', 'south', 'east', 'west', 'up']);
   // (within 8: a wall block's shape update runs on along its run from the junction, a few cells each way)
-  const nearLot = (x, y, z) => lotBoxes.some((l) => x >= l.minX - 8 && x <= l.maxX + 8 && y >= l.minY - 1 && y <= l.maxY && z >= l.minZ - 8 && z <= l.maxZ + 8);
+  // (only a wall's own lots, the ones on its line (onWall): every other lot keeps strict connection states)
+  const wallLotBoxes = lots ? (F.ir.lots ?? []).filter((l) => l.onWall).map((l) => l.box) : [];
+  const nearLot = (x, y, z) => wallLotBoxes.some((l) => x >= l.minX - 8 && x <= l.maxX + 8 && y >= l.minY - 1 && y <= l.maxY && z >= l.minZ - 8 && z <= l.maxZ + 8);
   const joinedOnly = (want, got) => { const a = parse(want), c = parse(got); return a.name === c.name && Object.entries(a.props).every(([k, v]) => CONNECT.has(k) || c.props[k] === v); };
   const underLot = (x, y, z) => lotBoxes.some((l) => x >= l.minX && x <= l.maxX && y === l.minY - 1 && z >= l.minZ && z <= l.maxZ);
   const { lotEntrance } = await imp('lib/region/check.mjs');
