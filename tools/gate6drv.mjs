@@ -291,7 +291,7 @@ steps.ingame = async () => {
   const gy = await groundY();
   out.gy = gy;
   check(gy > -64 && gy < 200, `the flat world's ground: y ${gy}`);
-  const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+  const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8]; // (a rock spire's footing goes 8 under the ground)
   const before = await hashOf(BOX);
   const T = await town();
   const region = T.region;
@@ -342,7 +342,7 @@ steps.ingame = async () => {
   const w1 = await rvWait(region, p1.revisionOf.rid);
   const got = await cellsOf(BOX);
   const exp = await oracle(rir, snap, gy);
-  const d1 = diff(exp, got);
+  const d1 = diff(new Map([...exp].filter(([k]) => { const [x, y, z] = k.split(',').map(Number); return x >= BOX[0] && x <= BOX[3] && y >= BOX[1] && y <= BOX[4] && z >= BOX[2] && z <= BOX[5]; })), got);
   // every cell the revision IR intends lies inside the compared box (an out-of-box write would make the oracle blind to it)
   const yr = [...exp.keys()].filter((k) => !snap.has(k) || norm(snap.get(k)) !== norm(exp.get(k))).map((k) => Number(k.split(',')[1]));
   const inBox = await intendedInBox(rir, gy, BOX);
@@ -418,7 +418,7 @@ steps.crash = async () => {
     const world = `G6B RV Crash ${tag}`;
     await freshFlat(world);
     const gy = await groundY();
-    const BOX = [CLAIM[0] - 8, gy - 3, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+    const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8]; // (a rock spire's footing goes 8 under the ground)
     const before = await hashOf(BOX);
     const T = await town();
     const p = await rvPlan(T.region, { parts: [MOUND(1), SPIRE(gy)] });
