@@ -427,6 +427,7 @@ public final class PlanChecks {
 			RegionsImpl.REACH_SURVEY.remove(rp);
 			Revisions.INPUT.remove(rp);
 			Revisions.CANDIDATE.remove(rp);
+			Revisions.giveBack(rp, e != null);
 			if (e == null) {
 				out.complete(pc);
 				return;

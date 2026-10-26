@@ -488,6 +488,30 @@ public final class Revisions {
 	/** The revision inputs of plans under way (the plan message's {@code revision} member), by request. */
 	static final Map<RegionPlanRequest, JsonObject> INPUT = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 	/** The candidate of a plan under way (planned.revisionOf), by request. */
+	/** The rid a plan in flight took (region id, rid): a plan that fails gives it back while no later plan took one (see {@link #giveBack}). */
+	static final Map<RegionPlanRequest, Object[]> RIDS = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+
+	/**
+	 * (Steward's RC of RV-a/b) A refused or failed revision plan does not keep its rid: the region's {@code nextRid} steps back when it is
+	 * still that rid (no later plan took one meanwhile), so an accepted revision's rid counts only candidates that planned. A failure after
+	 * a later plan took a rid leaves a gap (rids are monotonic and never reused; a gap names no revision). Any thread.
+	 */
+	static void giveBack(RegionPlanRequest r, boolean failed) {
+		Object[] t = RIDS.remove(r);
+		MinecraftServer s = RegionsImpl.server();
+		if (t == null || !failed || s == null) {
+			return;
+		}
+		s.execute(() -> {
+			RegionsImpl.Live l = RegionsImpl.live((String) t[0]);
+			if (l != null && l.rec().nextRid == (int) t[1]) {
+				l.rec().nextRid--;
+				RegionsImpl.save(l);
+				Architect.LOGGER.info("Region {}: the refused plan's rid {} given back", t[0], t[1]);
+			}
+		});
+	}
+
 	static final Map<RegionPlanRequest, JsonObject> CANDIDATE = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
 	/**
@@ -520,7 +544,7 @@ public final class Revisions {
 			// (the region's land is generated: its survey reads every generated chunk, loaded or not; the frozen heights go over it)
 			RegionPlanRequest r = new RegionPlanRequest(PROGRAM, req.params(), level, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), null, null, null,
 				LoadPolicy.GENERATED_ONLY(4096), l.rec().owner, ext, req.opKey(), null);
-			return RegionsImpl.INSTANCE.plan(r);
+			return RegionsImpl.INSTANCE.plan(r).whenComplete((p, e) -> giveBack(r, e != null));
 		}).thenCompose(f -> f).handle((p, e) -> {
 			if (e == null) {
 				return p;
@@ -587,6 +611,7 @@ public final class Revisions {
 		}
 		int rid = ++rec.nextRid;
 		RegionsImpl.save(l);
+		RIDS.put(r, new Object[] {id, rid});
 		JsonObject eff = effective(l);
 		JsonObject in = new JsonObject();
 		in.addProperty("rid", rid);

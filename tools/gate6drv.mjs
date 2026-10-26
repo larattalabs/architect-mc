@@ -327,7 +327,8 @@ steps.ingame = async () => {
   let s0 = await rvState(region);
   const h1 = await hashOf(BOX);
   check(h1 !== h0 && s0.headRid === 0 && s0.position === 0 && s0.busy === null && s0.revisions.length === 0, `nothing written by any refusal: the head 0, no revision record, busy null (the claim's hash moved only by the test's own site: ${h0 !== h1})`);
-  check(s0.nextRid >= 2, `every plan took a rid (monotonic, never reused): nextRid ${s0.nextRid}`);
+  // (Steward's RC of RV-a/b) a refused plan gives its rid back: the six refusals above took none; only the pond's candidate holds rid 1
+  check(s0.nextRid === 1 && pond.revisionOf?.rid === 1, `refusals at plan take no rid (six refused, then the pond's candidate is rid ${pond.revisionOf?.rid}): nextRid ${s0.nextRid}`);
 
   // ---- item 3: an added mound and spire, realised as the region's next layers, against the whole-world oracle
   const snap = await cellsOf(BOX);
