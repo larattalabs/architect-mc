@@ -112,9 +112,9 @@ async function freshFlat(name) {
 }
 
 /** The town: flat_village over CLAIM, its lots pads; realised and PLACED. */
-async function town() {
+async function town(lots = null) {
   const p = await L.plan('flat_village', CLAIM, { params: { lots: LOTS }, surveyLoad: 'bounded:256', check: false, owner: OWNER });
-  const region = await L.realise(p.planId, { load: 'bounded:512' });
+  const region = await L.realise(p.planId, { load: 'bounded:512', ...(lots ? { lots } : {}) });
   const st = await L.waitRegion(region, 3_600_000);
   check(st.view.state === 'PLACED', `the town ${region}: ${st.view.state}, ${st.view.cellsWritten} cells, lots ${json(st.view.lots.map((l) => [l.id, l.state]))}`);
   return { region, p, st };
@@ -410,6 +410,265 @@ steps.ingame = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ RV-c and RV-d in game: undo, fluids, refills (items 7, 8, 14, 16, 19; 12's land)
+
+const STUB = 'g6a_stub_9';
+/** A pond in a free corner of the town (east of its lots). */
+const POND = (rid) => ({ id: `pond${rid}`, call: { fn: 'pond', rect: [CX + 88, CZ + 30, CX + 94, CZ + 36], depth: 2 } });
+/** An added lot (a 9 x 9 box south-east), its id in the revision rv<rid>_shed. */
+const SHED = { id: 'shed', call: { fn: 'lot', at: [CX + 96, CZ + 70], size: [9, 9] } };
+const at3 = (k) => k.split(',').map(Number);
+
+/** Realise a revision plan and wait for it. */
+async function rvRealise(region, p, opts = {}) {
+  const r = await call('dev.region.realise', { planId: p.planId, ...opts }, 300_000);
+  if (r.refused) throw new Error(`realise refused: ${r.refused}`);
+  return rvWait(region, p.revisionOf.rid);
+}
+/** The cells of `a` that differ from `b` over the box, but the listed exceptions ("x,y,z" -> the state expected there). */
+function diffExcept(want, got, except = new Map()) {
+  const w = new Map(want);
+  for (const [k, v] of except) w.set(k, v);
+  return diff(w, got);
+}
+
+steps.undo = async () => {
+  await ensure();
+  const out = {};
+  await freshFlat('G6B RV Undo');
+  const gy = await groundY();
+  check(gy > -64 && gy < 200, `the flat world's ground: y ${gy}`);
+  const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+  const before = await hashOf(BOX);
+  const T = await town({ cottage_1: STUB, cottage_2: STUB });
+  const region = T.region;
+  const S0 = await cellsOf(BOX);
+  // three revisions: a mound and a spire; a pond (an added body); a lot with a building
+  const p1 = await rvPlan(region, { parts: [MOUND(1), SPIRE(gy)] });
+  const w1 = await rvRealise(region, p1);
+  const S1 = await cellsOf(BOX);
+  const p2 = await rvPlan(region, { parts: [POND(2)] });
+  const w2 = await rvRealise(region, p2);
+  const fl = await call('dev.fluid.state', { region }, 60_000).catch((e) => ({ error: String(e) }));
+  const rows = (w2.st.view.ext?.['architect_mc:fluids'] ?? []).filter((r) => r.rid === p2.revisionOf.rid);
+  const S2 = await cellsOf(BOX);
+  const water2 = [...S2].filter(([k, v]) => idOf(v) === 'water' && idOf(S1.get(k) ?? 'air') !== 'water').length;
+  out.pond = { revision: w2.r, rows, water: water2, fluid: fl };
+  check(w2.r.state === 'PLACED' && rows.length >= 1 && rows.every((r) => r.state === 'settled') && water2 > 0, `item 19 (added body): revision ${p2.revisionOf.rid} ${w2.r.state}, its body rows ${json(rows.map((r) => [r.body, r.state, r.sources]))} (rid ${p2.revisionOf.rid}), ${water2} water cells`);
+  const p3 = await rvPlan(region, { parts: [SHED] });
+  const shedId = `rv${p3.revisionOf?.rid}_shed`;
+  const w3 = await rvRealise(region, p3, { lots: { [shedId]: STUB } });
+  const S3 = await cellsOf(BOX);
+  const shed = w3.st.view.lots.find((l) => l.id === shedId);
+  check(w3.r.state === 'PLACED' && shed?.state === 'placed' && shed.revision === p3.revisionOf.rid && w3.r.sites.includes(shed.siteId), `an added lot built: ${json(shed)}, the revision's sites ${json(w3.r.sites)}`);
+  // ---- item 7, row 1: the head undone: the world just before it, cell for cell
+  const u1 = await call('dev.rv.undo', { region, toPosition: 2 }, 4 * 3_600_000);
+  let st = await rvState(region);
+  const d1 = diff(S2, await cellsOf(BOX));
+  out.undoHead = { result: u1, diff: d1, head: st.headRid, position: st.position };
+  check(u1.removed === true && d1.n === 0 && st.position === 2 && st.headRid === p2.revisionOf.rid && st.busy === null && !st.view.lots.some((l) => l.id === shedId), `item 7 (the head undone): ${json(u1)}; the world just before it over claim + 8: ${d1.n} cells differ; the head ${st.headRid} at position ${st.position}; the lot gone`, d1.first);
+  check(st.revisions.find((r) => r.rid === p3.revisionOf.rid)?.state === 'UNDONE', `revision ${p3.revisionOf.rid} UNDONE`);
+  // ---- the refusals: toPosition not below the head; then a Steward site over a revision cell, a waterlogged stair over a pond source, a
+  // player's block on the spire: undo to 0 in one operation
+  const r0 = await call('dev.rv.undo', { region, toPosition: 2 }, 60_000);
+  check(String(r0.refused ?? '').startsWith('NOT_ALLOWED'), `an undo to the head's own position refuses NOT_ALLOWED: ${r0.refused}`);
+  const mound = [...S1].filter(([k, v]) => idOf(v) !== idOf(S0.get(k) ?? 'minecraft:air') && at3(k)[0] === CX + 97).map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
+  const source = [...S2].filter(([k, v]) => idOf(v) === 'water' && idOf(S1.get(k) ?? 'air') !== 'water').map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
+  const spireCell = [...S1].filter(([k, v]) => idOf(v) !== 'air' && idOf(S0.get(k) ?? 'minecraft:air') === 'air' && at3(k)[0] >= CX + 96 && at3(k)[2] <= CZ + 30).map(([k]) => at3(k)).sort((a, b) => b[1] - a[1])[0];
+  const steward = await call('dev.cells.place', { kind: 'test:rv_steward', cells: [[mound[0], mound[1], mound[2], 'minecraft:mossy_cobblestone']], naturalOnly: false, overlap: 'LAYER', owner: 'steward_mc:test' }, 300_000);
+  const stair = await call('dev.cells.place', { kind: 'test:rv_stair', cells: [[source[0], source[1], source[2], 'minecraft:stone_brick_stairs[facing=north,half=bottom,shape=straight,waterlogged=true]']], naturalOnly: false, overlap: 'LAYER', owner: 'steward_mc:test' }, 300_000);
+  await cmd(`/setblock ${spireCell[0]} ${spireCell[1]} ${spireCell[2]} minecraft:glowstone`);
+  out.over = { steward, stair, mound, source, spireCell };
+  check(steward.placed && stair.placed, `a Steward site over a revision cell (${steward.siteId} at ${json(mound)}), a waterlogged stair over a pond source (${stair.siteId} at ${json(source)}), a player's glowstone on the spire (${json(spireCell)})`);
+  const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  st = await rvState(region);
+  const got2 = await cellsOf(BOX);
+  const k = (q) => `${q[0]},${q[1]},${q[2]}`;
+  const ex = new Map([[k(mound), 'minecraft:mossy_cobblestone'], [k(source), got2.get(k(source))], [k(spireCell), 'minecraft:glowstone']]);
+  const d2 = diffExcept(S0, got2, ex);
+  const water = [...got2].filter(([q, v]) => /water/.test(v) && !/water/.test(S0.get(q) ?? '')).length;
+  out.undoAll = { result: u2, diff: d2, head: st.headRid, water, stairNow: got2.get(k(source)) };
+  check(u2.removed === true && st.position === 0 && st.headRid === 0 && d2.n === 0, `item 7 (undo to 0 after 2 revisions, one operation): ${json({ removed: u2.removed, kept: u2.kept, handedDown: u2.handedDown })}; the world before revision 1 over claim + 8 but the three cells not the region's: ${d2.n} cells differ`, d2.first);
+  check(/stairs/.test(got2.get(k(source)) ?? '') && /waterlogged=true/.test(got2.get(k(source)) ?? '') && water === 1, `item 19 (holder-aware drain): the Steward's waterlogged stair over the pond source kept its water (${got2.get(k(source))}); every other pond cell drained (${water} water cell(s) left, the stair's)`);
+  check(u2.kept >= 1 && Object.keys(u2.handedDown ?? {}).length >= 1, `the player's glowstone kept and reported (kept ${u2.kept}); the Steward sites' cells handed down (${json(u2.handedDown)})`);
+  // the Steward's sites removed after: their cells come back to the land before the revisions (the befores handed down)
+  for (const sid of [steward.siteId, stair.siteId]) await call('dev.rv.siteRemove', { site: sid, force: true }, 600_000);
+  await sleep(1500);
+  await cmd(`/setblock ${spireCell[0]} ${spireCell[1]} ${spireCell[2]} ${S0.get(k(spireCell)) ?? 'minecraft:air'}`);
+  const d3 = diff(S0, await cellsOf(BOX));
+  check(d3.n === 0, `item 7 (a Steward site over a revision cell, the undo, then the site removed): the world before revision 1 over claim + 8: ${d3.n} cells differ`, d3.first);
+  // ---- undo, then a new revision: a new rid at the freed position, its files apart, its undo exact
+  const p4 = await rvPlan(region, { parts: [MOUND(4)] });
+  check(p4.revisionOf?.position === 1 && p4.revisionOf.rid > p3.revisionOf.rid, `a new revision after the undo: rid ${p4.revisionOf?.rid} (never reused) at position ${p4.revisionOf?.position}`);
+  await rvRealise(region, p4);
+  const u4 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  const d4 = diff(S0, await cellsOf(BOX));
+  check(u4.removed === true && d4.n === 0, `its undo exact: ${d4.n} cells differ`, d4.first);
+  // ---- item 14: a lot removed alone reads removed; refilled; the refill undone (the state and the old site id back)
+  st = await rvState(region);
+  const cot = st.view.lots.find((l) => l.id === 'cottage_1');
+  const rm = await call('dev.rv.siteRemove', { site: cot.siteId, force: true, requester: OWNER }, 600_000);
+  await sleep(1500);
+  st = await rvState(region);
+  const removed = st.view.lots.find((l) => l.id === 'cottage_1');
+  check(rm.removed && removed.state === 'removed' && removed.siteId === cot.siteId, `item 14: cottage_1's site ${cot.siteId} removed alone: the lot reads ${removed.state} with its old site id`);
+  const Sr = await cellsOf(BOX);
+  const p5 = await rvPlan(region, { parts: [], refill: ['cottage_1'] });
+  const w5 = await rvRealise(region, p5, { lots: { cottage_1: STUB } });
+  const refilled = w5.st.view.lots.find((l) => l.id === 'cottage_1');
+  check(w5.r.state === 'PLACED' && refilled.state === 'placed' && refilled.siteId !== cot.siteId && refilled.revision === p5.revisionOf.rid && w5.r.lotsRefilled.includes('cottage_1'), `the refill: ${json(refilled)}, revision ${json([w5.r.rid, w5.r.state, w5.r.lotsRefilled])}`);
+  const p5b = await rvPlan(region, { parts: [], refill: ['cottage_2'] });
+  check(String(p5b.refused ?? '').startsWith('NOT_ALLOWED'), `a refill of a lot that stands refuses: ${p5b.refused}`);
+  const u5 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  st = await rvState(region);
+  const back = st.view.lots.find((l) => l.id === 'cottage_1');
+  const d5 = diff(Sr, await cellsOf(BOX));
+  check(u5.removed && back.state === 'removed' && back.siteId === cot.siteId && back.revision === 0 && d5.n === 0, `the refill undone: the lot ${json(back)} (removed, its old site id); the world as before the refill: ${d5.n} cells differ`, d5.first);
+  // ---- item 16: an undo that cannot finish stays UNDOING with its reason; the region busy; a same-target call resumes it
+  const p6 = await rvPlan(region, { parts: [MOUND(6)] });
+  await rvRealise(region, p6);
+  await call('dev.rv.undoFail', { region, on: true }, 10_000);
+  const u6 = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  st = await rvState(region);
+  const busyPlan = await rvPlan(region, { parts: [MOUND(7)] });
+  const other = await call('dev.rv.undo', { region, toPosition: 1 }, 60_000);
+  out.waiting = { u6, busy: st.busy, rev: st.revisions.find((r) => r.rid === p6.revisionOf.rid), busyPlan, other };
+  check(u6.removed === false && /^undoing /.test(st.busy ?? '') && st.revisions.find((r) => r.rid === p6.revisionOf.rid)?.state === 'UNDOING', `item 16: an undo that stops (TEST) answers removed false (${json(u6.blockers)}) and stays UNDOING; the region busy (${st.busy})`);
+  check(String(busyPlan.refused ?? '').startsWith('OVERLAP_BUSY') && String(other.refused ?? '').startsWith('OVERLAP_BUSY'), `while busy: a revision refuses ${busyPlan.refused}; an undo to another target refuses ${other.refused}`);
+  const u6b = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  st = await rvState(region);
+  check(u6b.removed === true && st.busy === null && st.position === 0, `the same-target call resumes it: removed ${u6b.removed}, busy ${st.busy}, position ${st.position}`);
+  // ---- item 8: Regions.remove with three revisions standing (a mound, a pond, a lot): E-flat 0 against the world before the town
+  const pa = await rvPlan(region, { parts: [MOUND(8)] });
+  await rvRealise(region, pa);
+  const pb = await rvPlan(region, { parts: [POND(9)] });
+  await rvRealise(region, pb);
+  const pc = await rvPlan(region, { parts: [SHED] });
+  await rvRealise(region, pc, { lots: { [`rv${pc.revisionOf.rid}_shed`]: STUB } });
+  const rem = await call('dev.region.remove', { region, requester: OWNER }, 4 * 3_600_000);
+  await sleep(2000);
+  // (cottage_1's building was removed alone and never refilled after: the region's removal takes the rest)
+  const after = await hashOf(BOX);
+  out.remove = { result: rem, flat: after === before };
+  check(rem.removed !== false && after === before, `item 8: Regions.remove with 3 revisions standing (a mound, a pond, a lot): E-flat 0 over claim + 8 (${after === before})`);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ RV-d in game: plan/0's revision mode through checkPlan and realiseApproved (items 4, 12)
+
+const P0_TOWN = { schemaVersion: 'plan/0', planId: 'rv_town', zones: [{ id: 'town', program: { lots: [{ id: 'h1', type: 'house', size: [9, 9] }, { id: 'h2', type: 'house', size: [9, 9] }, { id: 'h3', type: 'house', size: [9, 9] }] }, where: { near: { anchor: 'claim_center', within: 8 } } }] };
+const P0_POND = { id: 'pond', kind: 'pond', where: { near: { anchor: 'claim_center', within: 48 } }, size: { w: 7, d: 7 }, depth: 2 };
+async function checkPlan(plan, claim) {
+  const r = await call('dev.region.checkPlan', { plan, claim, owner: OWNER }, 900_000);
+  if (r.refused) { log(`  check refused: ${r.refused}`); return r; }
+  log(`  check ${r.check.checkId}: ${r.check.overall} ${r.check.parts.map((p) => `${p.part}:${p.class}`).join(' ')} artifact ${r.check.artifactSha?.slice(0, 12) ?? '-'}`);
+  return r.check;
+}
+
+steps.plan0 = async () => {
+  await ensure();
+  const out = {};
+  await freshFlat('G6B RV Plan0');
+  const gy = await groundY();
+  const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+  const before = await hashOf(BOX);
+  const c0 = await checkPlan(P0_TOWN, CLAIM);
+  check(c0.overall === 'READY' && /^[0-9a-f]{64}$/.test(c0.artifactSha ?? ''), `the parent plan checked: ${c0.overall}, artifact ${c0.artifactSha?.slice(0, 12)}`);
+  const ra = await call('dev.region.realiseApproved', { sha: c0.artifactSha, lotEntries: { h1: STUB } }, 300_000);
+  const region = ra.region;
+  const st0 = await L.waitRegion(region, 3_600_000);
+  check(st0.view.state === 'PLACED', `realiseApproved: region ${region} ${st0.view.state}`);
+  const S0 = await cellsOf(BOX);
+  // the revision plan: the town kept (the same canonical JSON), a pond added
+  const rev = (body, parent) => ({ ...P0_TOWN, ...body, revision: { n: 1, parentArtifact: parent } });
+  const c1 = await checkPlan(rev({ forms: [P0_POND] }, c0.artifactSha), CLAIM);
+  const town1 = c1.parts?.find((p) => p.part === 'town'), pond1 = c1.parts?.find((p) => p.part === 'pond');
+  const art1 = (await call('dev.region.artifact', { sha: c1.artifactSha, body: true }, 60_000)).artifact;
+  out.check1 = { overall: c1.overall, town: town1, pond: pond1, revisionOf: art1?.body?.region?.revisionOf, dirty: art1?.body?.dirty, historySha: art1?.body?.historySha };
+  check(c1.overall === 'READY' && town1?.class === 'fits' && pond1 && ['fits', 'adjusted'].includes(pond1.class), `item 4: the revision plan checked: ${c1.overall}; the town ${town1?.class} (standing), the pond ${pond1?.class}`);
+  check(art1?.body?.region?.revisionOf?.region === region && art1.body.dirty?.length >= 1 && Object.keys(art1.body.historySha ?? {}).length === art1.body.dirty.length, `the revision artifact: revisionOf ${json(art1?.body?.region?.revisionOf)}, dirty ${json(art1?.body?.dirty)}, historySha per dirty key`);
+  const ra1 = await call('dev.region.realiseApproved', { sha: c1.artifactSha }, 300_000);
+  check(ra1.region === region, `realiseApproved of the revision artifact answers its region: ${json(ra1)}`);
+  const st1 = await rvState(region);
+  const rid1 = st1.revisions.at(-1)?.rid;
+  const w1 = await rvWait(region, rid1);
+  const water = [...(await cellsOf(BOX))].filter(([k, v]) => idOf(v) === 'water' && idOf(S0.get(k) ?? 'air') !== 'water').length;
+  check(w1.r.state === 'PLACED' && w1.r.artifact === c1.artifactSha && water > 0 && w1.st.state === 'PLACED', `the revision ${rid1} ${w1.r.state} (its artifact ${w1.r.artifact?.slice(0, 12)}), ${water} water cells; the region PLACED`);
+  // a check on the old parent: the head moved (parent_moved)
+  const cs = await checkPlan(rev({ forms: [{ ...P0_POND, id: 'pond2' }] }, c0.artifactSha), CLAIM);
+  check(String(cs.refused ?? '').startsWith('PLAN_STALE') && /parent_moved/.test(cs.refused), `a revision plan on the old parent: ${cs.refused}`);
+  // a changed standing part answers unsupported revision.change (RV2)
+  const z2 = JSON.parse(JSON.stringify(P0_TOWN.zones[0]));
+  z2.program.lots[0].size = [11, 9];
+  const cc = await checkPlan({ ...P0_TOWN, zones: [z2], forms: [P0_POND], revision: { n: 2, parentArtifact: c1.artifactSha } }, CLAIM);
+  const tc = cc.parts?.find((p) => p.part === 'town');
+  check(tc?.class === 'unsupported' && tc.reasons?.[0]?.block === 'revision.change' && cc.parts.find((p) => p.part === 'pond')?.class === 'fits', `item 4: a changed zone answers ${tc?.class} ${tc?.reasons?.[0]?.block}; the kept pond fits (standing)`);
+  // undo: the artifact tombstoned; the world as before the revision
+  const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+  const a1 = (await call('dev.region.artifact', { sha: c1.artifactSha }, 60_000)).artifact;
+  const d = diff(S0, await cellsOf(BOX));
+  check(u.removed === true && a1?.removed === true && d.n === 0, `the revision undone: the world as before it (${d.n} cells differ); its artifact tombstoned (${a1?.removed})`, d.first);
+  const rem = await call('dev.region.remove', { region, requester: OWNER }, 4 * 3_600_000);
+  await sleep(2000);
+  check(rem.removed !== false && (await hashOf(BOX)) === before, `the region removed: E-flat 0`);
+  await L.leaveWorld();
+  spendZero();
+  return out;
+};
+
+// ------------------------------------------------------------------ crash, the undo half (item 10: §4.4 steps 2, 3, K6, mid-R4, after 4)
+
+steps.undoCrash = async () => {
+  await ensure();
+  const out = {};
+  for (const point of ['RVU1', 'RVU2', 'K6', 'GW', 'RVU3']) {
+    const world = `G6B RV UndoCrash ${point}`;
+    await freshFlat(world);
+    const gy = await groundY();
+    const BOX = [CLAIM[0] - 8, gy - 12, CLAIM[1] - 8, CLAIM[2] + 8, gy + 20, CLAIM[3] + 8];
+    const T = await town();
+    const S0 = await cellsOf(BOX);
+    const p1 = await rvPlan(T.region, { parts: [MOUND(1), SPIRE(gy)] });
+    await rvRealise(T.region, p1);
+    const p2 = await rvPlan(T.region, { parts: [POND(2)] });
+    await rvRealise(T.region, p2);
+    await call('dev.journal.killAt', { point }, 10_000);
+    call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
+    let down = false;
+    for (let i = 0; i < 180 && !down; i++) {
+      await sleep(2000);
+      const st = await call('dev.state', {}, 10_000).catch(() => null);
+      down = !!st && st.inWorld === false;
+    }
+    check(down, `${point}: the kill point halted the server during the undo`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
+    const rdir = path.join(L.SAVES, world, 'architect-regions', T.region);
+    const rec = JSON.parse(fs.readFileSync(path.join(rdir, 'region.json'), 'utf8')).revisions;
+    const ops = fs.existsSync(path.join(rdir, 'rev')) ? fs.readdirSync(path.join(rdir, 'rev')).filter((f) => f.startsWith('op-')) : [];
+    const manifest = ops.length ? JSON.parse(fs.readFileSync(path.join(rdir, 'rev', ops[0]), 'utf8')) : null;
+    await L.openWorld(world);
+    await L.tp(CX + 56, 60, CZ + 56);
+    // the undo resumes by itself at the first tick (the driver), from the phase its manifest names
+    let st;
+    const t0 = Date.now();
+    for (; Date.now() - t0 < 1_800_000; ) {
+      st = await rvState(T.region);
+      if (st.busy === null) break;
+      await sleep(L.pollDelayMs(Date.now() - t0));
+    }
+    const d = diff(S0, await cellsOf(BOX));
+    out[point] = { atHalt: { busy: rec?.busy ?? null, phase: manifest?.phase ?? null }, after: { busy: st.busy, position: st.position, states: st.revisions.map((r) => [r.rid, r.state]) }, diff: d };
+    check(rec?.busy?.startsWith('undoing ') && manifest && st.busy === null && st.position === 0 && st.revisions.every((r) => r.state === 'UNDONE') && d.n === 0, `${point}: halted with the undo committed (busy ${rec?.busy}, phase ${manifest?.phase}); after the restart it resumed and finished: position ${st.position}, ${json(st.revisions.map((r) => [r.rid, r.state]))}; the world before revision 1: ${d.n} cells differ`, d.first);
+    const rem = await call('dev.region.remove', { region: T.region, requester: OWNER }, 4 * 3_600_000);
+    check(rem.removed !== false, `${point}: then the region removed (${rem.removed})`);
+    await L.leaveWorld();
+  }
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ crash (item 10, the realise half)
 
 steps.crash = async () => {
@@ -502,7 +761,7 @@ steps.crash = async () => {
 };
 
 steps.report = async () => {
-  const files = fs.readdirSync(OUT).filter((f) => /^(unit|ingame|crash)\.json$/.test(f));
+  const files = fs.readdirSync(OUT).filter((f) => /^(unit|ingame|crash|undo|plan0|undoCrash)\.json$/.test(f));
   const lines = ['# Gate slice 6d RV (RV-a, RV-b)', '', `head ${execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim()}`, ''];
   for (const f of files.sort()) {
     const j = JSON.parse(fs.readFileSync(path.join(OUT, f), 'utf8'));

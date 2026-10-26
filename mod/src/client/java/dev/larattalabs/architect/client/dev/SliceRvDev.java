@@ -77,6 +77,27 @@ public final class SliceRvDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.rv.siteRemove", 600_000, "{site, force?: true, requester?} - (6d RV gate) Sites.remove through the API (a cell site, a road or a "
+			+ "building site alike) -> {removed, blockers, restored, kept, handedDown}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String site = f.nonBlank("site");
+				boolean force = f.optBool("force", true);
+				String requester = f.optStr("requester", null);
+				return ServerTasks.callOnServer(s -> ArchitectApi.get().sites(s).remove(site, new dev.larattalabs.architect.api.RemoveOptions(force, requester))).thenCompose(x -> x)
+					.handle((r, e) -> {
+						JsonObject o = new JsonObject();
+						if (e != null) {
+							o.addProperty("refused", RegionDev.reason(e));
+							return o;
+						}
+						o.addProperty("removed", r.removed());
+						o.add("blockers", new com.google.gson.Gson().toJsonTree(r.blockers()));
+						o.addProperty("restored", r.restored());
+						o.addProperty("kept", r.kept());
+						o.add("handedDown", new com.google.gson.Gson().toJsonTree(r.handedDown()));
+						return o;
+					});
+			});
 		op("dev.rv.undoFail", "undoFail", "{on?: true} - (6d RV) TEST: the next undo stage's removal is reported failed (as a player who stayed 10 minutes): the "
 			+ "undo stays UNDOING with its reason; a same-target call resumes it");
 		op("dev.rv.state", "state", "{region} - (6d RV) the head, position, busy, manifest and revision records (sites), the effective IR's head, parts and sha, "
