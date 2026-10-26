@@ -17,7 +17,8 @@
 // lane (counted up to the surface), else a **cut** tread, open above (its lanes carved to the surface) with parapets where a side
 // stands 2 or more over the tread (M8). A rock stair needs no bore: an all-cut flight is a stair cut into the hillside.
 import { latOn, rightOf, SITE_SOLID } from './ropeGeom.mjs';
-import { FLUID_CLASSES, LINED_CLASSES, PROTECTED_CLASSES, TUNNEL, facingOf, tunnelLights, tunnelRoles } from './tunnelGeom.mjs';
+import { FLUID_CLASSES, LINED_CLASSES, PROTECTED_CLASSES, facingOf, tunnelRoles } from './tunnelGeom.mjs';
+import { fixtureFor, lightLevel } from '../region/fixtures.mjs';
 import { shapeOf } from './style.mjs';
 import { bomOf } from './bom.mjs';
 import { BLOCKS } from '../blocks.mjs';
@@ -351,6 +352,23 @@ export function rockStairRoles(r) {
   return { lining, portal: blockOf(tr.portal) ?? tr.portal, tread, landing: cube(treadBase) ? treadBase : lining, light: has('light') ? roles.light : null };
 }
 
+/**
+ * The lights a flight sets from the bible's light role (theme: never a lantern the bible did not name): a lantern role hangs its lantern
+ * from the bore's roof and stands it in a wall niche or on the side's ground; a full light block (a bollard fixture: a sea lantern,
+ * glowstone, a froglight) is set flush in the wall or stood on the ground, never hung; a torch stands in a niche or on the ground; any
+ * other fixture's light block stands. `hang`: whether a lamp can hang (only a lantern). `level` the least light level of the three.
+ */
+export function rockStairLights(lightBlock) {
+  const name = String(lightBlock ?? 'minecraft:lantern').replace(/\[.*$/, '');
+  if (/(^|:)(soul_)?lantern$/.test(name)) {
+    const hanging = `${name}[hanging=true,waterlogged=false]`, standing = `${name}[hanging=false,waterlogged=false]`;
+    return { hang: true, hanging, flush: standing, standing, level: Math.min(lightLevel(hanging), lightLevel(standing)) || 15 };
+  }
+  const f = fixtureFor(name);
+  const block = f.light;
+  return { hang: false, hanging: block, flush: block, standing: block, level: lightLevel(block) || 15 };
+}
+
 const JOIN = Object.freeze({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] });
 /** A wall block's (or fence's) sides joined as kit.mjs finalize joins them: to its own kind, panes, gates and full cubes. */
 function joinedWall(name, x, y, z, at) {
@@ -390,10 +408,10 @@ export function rockStair(r, a, b, opts = {}) {
   const landingB = r.material(R.landing, `${what} landing`);
   const treadName = R.tread ? r.material(R.tread, `${what} tread`) : null;
   const lightB = r.material(R.light ? 'light' : 'minecraft:lantern', `${what} light`);
-  const lights = tunnelLights(lightB);
+  const lights = rockStairLights(lightB);
   const land = opts.land;
   if (!land) throw new Error(`${what}: needs opts.land (tunnelLand over the plan survey and its frozen volumes)`);
-  const g = rockStairGeom(land, a, dir, rise, { width, height, landing, lining: opts.lining, portal: opts.portal, lampLevel: lights.level, _unsafe: opts._unsafe });
+  const g = rockStairGeom(land, a, dir, rise, { width, height, landing, lining: opts.lining, portal: opts.portal, lampLevel: lights.level, hanging: lights.hang, _unsafe: opts._unsafe });
   if (!g.ok) throw Object.assign(new Error(`${what}: ROCK_STAIR ${g.code}: ${g.evidence?.message ?? JSON.stringify(g.evidence).slice(0, 200)}`), { rockStair: g });
   const tread = treadName ? `${String(treadName).replace(/\[.*$/, '')}[facing=${g.facing},half=bottom,shape=straight,waterlogged=false]` : landingB;
   const stairs = shapeOf(portalB, 'stairs');
