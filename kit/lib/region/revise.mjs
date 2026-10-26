@@ -273,8 +273,9 @@ export function mergeEffective(base, revisions = []) {
     for (const p of ir.parts ?? []) out.parts.push({ ...JSON.parse(JSON.stringify(p)), rid: r.rid });
     for (const l of ir.lots ?? []) out.lots.push({ ...JSON.parse(JSON.stringify(l)), rid: r.rid });
     for (const x of ir.roads ?? []) out.roads.push({ ...JSON.parse(JSON.stringify(x)), rid: r.rid });
-    for (const n of ir.revision?.graph?.nodes ?? ir.graph?.nodes ?? []) nodes.push(JSON.parse(JSON.stringify(n)));
-    for (const e of ir.revision?.graph?.edges ?? ir.graph?.edges ?? []) edges.push(JSON.parse(JSON.stringify(e)));
+    // (a revision IR's graph holds only its additions; its revision member lists their ids)
+    for (const n of ir.graph?.nodes ?? []) nodes.push(JSON.parse(JSON.stringify(n)));
+    for (const e of ir.graph?.edges ?? []) edges.push(JSON.parse(JSON.stringify(e)));
     list.push({ rid: r.rid, position: r.position, irSha: r.irSha ?? sha256Hex(canonicalJson(ir)), stages: [...(ir.stages ?? [])],
       parts: (ir.parts ?? []).map((p) => p.id), lots: { add: (ir.lots ?? []).map((l) => l.id), refill: [...(ir.revision?.lots?.refill ?? [])] }, roads: (ir.roads ?? []).map((x) => x.id) });
   }
