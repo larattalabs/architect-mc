@@ -149,7 +149,7 @@ export function sections(host, kind, at, y0) {
     const all = setOf(cells);
     const ps = pieces(all);
     // the piece nearest the reference (the centroid of the section below, else the axis); ties by the piece's first key
-    const d2 = (piece) => { let m = Infinity; for (const k of piece) { const [x, z] = k.split(',').map(Number); const v = (2 * x - ref[0]) ** 2 + (2 * z - ref[1]) ** 2; if (v < m) m = v; } return m; };
+    const d2 = (piece) => { let m = Infinity; for (const k of piece) { const [x, z] = k.split(',').map(Number); const dx = 2 * x - ref[0], dz = 2 * z - ref[1], v = dx * dx + dz * dz; if (v < m) m = v; } return m; };
     ps.sort((a, b) => d2(a) - d2(b) || ([...a][0] < [...b][0] ? -1 : 1));
     let sec = new Set(ps[0]);
     // the near pieces join it (within SPIRAL.merge), until none is left that near
@@ -171,7 +171,7 @@ export function sections(host, kind, at, y0) {
 
 /** CCW (seen from above, north up) cross of p and q about the doubled axis a: > 0 when q is counter-clockwise of p. */
 const cross = (p, q, a) => { const d1x = 2 * p[0] - a[0], d1z = 2 * p[1] - a[1], d2x = 2 * q[0] - a[0], d2z = 2 * q[1] - a[1]; return d1z * d2x - d1x * d2z; };
-const r2 = (p, a) => (2 * p[0] - a[0]) ** 2 + (2 * p[1] - a[1]) ** 2;
+const r2 = (p, a) => { const dx = 2 * p[0] - a[0], dz = 2 * p[1] - a[1]; return dx * dx + dz * dz; };
 /** The octant (0..7, counter-clockwise from east) of p about the doubled axis a (integer comparisons only). */
 function octant(p, a) {
   const dx = 2 * p[0] - a[0], dz = -(2 * p[1] - a[1]); // (dz up: north positive)

@@ -160,7 +160,7 @@ function structureCases() {
   out.push({ id: 'd2:crest', covers: ['d2-ingame #7', 'd2-ingame #9 (the crest instance)', 'd2-ingame #5', 'd2-ingame #12'], run: d2Crest });
   out.push({ id: 'pathbibles', covers: ['w-ingame #8', 'w-ingame #9'], run: pathBibles });
   out.push({ id: 'k2:walk', covers: ['k2-ingame #6 (the walk, realised: the player round it and up and down every access, M8 on walk cells, M5, M3, head room)', 'k2-natural #7 (along, realised)'], run: k2Walk });
-  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['cw', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1], ['cl', 1], ['k2', 1]]) {
+  for (const [dir, n] of [['kc', 1], ['irr', 1], ['rope', 1], ['tunnel', 2], ['t3a', 2], ['k1a', 1], ['refused', 1], ['voc', 1], ['vocc', 1], ['cw', 1], ['h', 2], ['hy', 3], ['valid', 6], ['fl', 2], ['f3', 2], ['rs', 1], ['cl', 1], ['k2', 1], ['sa', 1]]) {
     for (let k = 0; k < n; k++) out.push({ id: `p0:${dir}${n > 1 ? `/${k + 1}` : ''}`, covers: P0COVERS[dir] ?? [], run: () => corpus(dir, k, n) });
   }
   for (const w of ['bridge', 'rope', 'tunnel', 'catwalk']) out.push({ id: `even:${w}`, covers: EVENCOVERS[w], run: () => evenFuzz(w) });
@@ -177,6 +177,7 @@ const P0COVERS = {
   vocc: ['vocc-ingame #3', 'vocc-ingame #8', 'vocc-ingame #9'], cw: ['cw-ingame #5 (M10:catwalk, M8, M6, M5, M3 on the plan; the broken variants caught)', 'cw-ingame #6 (KC: the catwalk past the falls, M25:clear 0)'], irr: ['irr-ingame #1'], h: ['h-ingame #23'], valid: ['Steward-shaped plans (risk 6)'],
   cl: ['cl-ingame #7 (the refusal set: NO_CLIMB, MOVER, ANCHOR, SPAN, UNREACHABLE; the walked stair adjusted)'],
   k2: ['k2-unit (the refusal set: NO_FEATURE, NO_ROOM {class, walk, access}, UNREACHABLE {kind: wall})'],
+  sa: ['sa-ingame #5 (M10:spiral, M8, M6, M5, M3 on the plan; the refusal set NO_FEATURE, SPAN, HEADROOM, MOVER; the broken variants caught)', 'sa-unit #6 (KC: the spiral past the fountain, M25:clear 0)'],
 };
 const CLCOVERS = { flat: ['cl-ingame #7 (flights, rails, rungs against their face, rest landings, the top gate, M5 0, M3 0)'], natural: ['cl-natural #7 (the stair and the switchback on S3)'] };
 /** (7a CL) climbs_demo planned by the kit over a flat 240x176 survey or S3's (route_demo's golden survey). */
@@ -196,7 +197,7 @@ const EVENCOVERS = { bridge: ['even-width bridges (c4f1c8f9)'], rope: ['even-wid
 
 // (the corpus gates the lint's own S- rules and error findings; the connector re-reads are gated on the scenario plans and the fuzz)
 // ((7a K2) k2: the walks' and along walls' re-reads gate in the corpus too: M2/M8/M6/M5:walk, M2:wall, M8:wall, M3)
-const CONNECTOR_DIRS = new Set(['k2']);
+const CONNECTOR_DIRS = new Set(['k2', 'sa']);
 /** The corpus: every fixture of a plan/0 dir (the k-th of n slices); broken variants must be caught, refusals must be the expected code. */
 async function corpus(dir, k, n) {
   const files = fs.readdirSync(path.join(KIT, 'test', 'fixtures', 'plan', dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().filter((_, i) => i % n === k);
