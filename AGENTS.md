@@ -29,7 +29,7 @@ gate anything:
 
 - **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
-- **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../architect-mc-<x>`). Never commit to main directly.
+- **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`, `../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
   per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
@@ -52,7 +52,7 @@ gate anything:
 ## Build and test
 
 - **Java:** `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home`. In a new worktree, first run
-  `cp -c -R ~/Developer/LarattaLabs/architect-mc/.gradle-home . && rm -f .gradle-home/daemon/*/registry.bin*` (an APFS clone, cheap;
+  `cp -c -R ~/Developer/LarattaLabs/Minecraft/architect-mc/.gradle-home . && rm -f .gradle-home/daemon/*/registry.bin*` (an APFS clone, cheap;
   the copied daemon registry would otherwise point Gradle at the original's live daemons). Then
   `cd mod && ./gradlew build --offline`.
 - **lab-ui** (`dev.larattalabs:lab_ui`, the shared UI library, jar-in-jar): `LAB_UI_DIR`/`-Plab_ui.dir` forces a

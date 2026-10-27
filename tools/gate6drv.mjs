@@ -258,8 +258,8 @@ function nodeTest(files, timeout = 3_600_000) {
 
 /** The archived apitest jars and mod surface api-compat checks against (built from their tags: GATE6DRV_JARS, default artifacts/gate6d-rv/jars). */
 export function apiJars() {
-  const A = process.env.GATE6DRV_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'gate6d-rv', 'jars');
-  const R44 = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'release-0440', 'v0440');
+  const A = process.env.GATE6DRV_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts', 'gate6d-rv', 'jars');
+  const R44 = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts', 'release-0440', 'v0440');
   return { jars: [path.join(A, 'architect_apitest-0.47.0.jar'), path.join(A, 'architect_apitest-0.45.0.jar'), path.join(R44, 'architect_apitest-0.44.0.jar')], surface: path.join(A, 'architect_mc-0.47.0.jar') };
 }
 

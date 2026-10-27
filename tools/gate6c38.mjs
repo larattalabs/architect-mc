@@ -30,7 +30,7 @@ L.refuseKeys();
 const FLAT = 'G6B Flat Base';
 const OWNER = 'test:c38';
 const JAVA_HOME = process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
-const MAIN_ARTIFACTS = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
+const MAIN_ARTIFACTS = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts');
 const steps = {};
 const ensure = async () => { if (!state.dev) await connect(); };
 

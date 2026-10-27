@@ -30,7 +30,7 @@ L.refuseKeys();
 const FLAT = 'G6B Flat Base';
 const OWNER = 'test:c37';
 const JAVA_HOME = process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
-const ARTIFACTS = process.env.C37_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts', 'gate7a-k1');
+const ARTIFACTS = process.env.C37_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts', 'gate7a-k1');
 const steps = {};
 const planDir = (planId) => path.join(L.SIDECAR_DATA, 'regions', 'plans', planId);
 const ensure = async () => { if (!state.dev) await connect(); };
