@@ -396,7 +396,9 @@ steps.town = async () => {
   const gat = ck0.check?.parts?.find((x) => x.part === 'tg')?.geometry?.at;
   out.firstCheck = { overall: ck0.check?.overall, gate: gat ?? null };
   if (!gat) { check(false, `gj_town_wall's gate placed (${json(out.firstCheck)})`); await leaveWorld(); return out; }
-  anchors.inner = [gat[0] - 8, g0 + 1, gat[2]];
+  // (3 inside the gate, 7 off its axis: beside the join's inner run, its watch columns reaching the run's edge; 8 straight in sits on the
+  // street's end and refuses, LEAK into a cottage north of it: the kit rehearsal)
+  anchors.inner = [gat[0] - 3, g0 + 1, gat[2] + 7];
   const all = [A[0] - 40, -64, A[1] - 40, A[2] + 120, 160, A[3] + 40];
   const world0 = await dump(all, 'townwall-world0');
   const ck = await call('dev.region.checkPlan', { plan: townWallPlan(true), claim: A, anchors, owner: OWNER }, 900_000);
@@ -554,14 +556,15 @@ steps.steward = async () => {
   const p2 = await planReq({ program: 'districts', params: ONE('east'), claim: B, beside: T.region, check: false, opKey: 'steward.b1.vplan2', ext: STEWARD('b1') });
   if (p2.refused) throw new Error(`the re-plan refused: ${p2.refused}`);
   await kill();
-  const r2 = await call('dev.region.realise', { planId: p2.planId, lots: {}, opKey: 'steward.b1.vrealise2', ext: STEWARD('b1') }, 300_000);
+  const r2 = await call('dev.region.realise', { planId: p2.planId, lots: {}, opKey: 'steward.b1.vrealise2', ext: STEWARD('b1') }, 300_000).catch((e) => ({ refused: String(e) }));
   const D = r2.region;
   const s2 = D ? await L.waitRegion(D, 3_600_000) : null;
-  check(s2?.view?.state === 'PLACED' && s2.view.ext?.['steward_mc:build'] === 'b1', `item 5: the re-plan realised under steward.b1.vrealise2: ${D} PLACED through the gate, its ext Steward's (${json({ district: s2?.view?.ext?.['steward_mc:district'], build: s2?.view?.ext?.['steward_mc:build'] })})`);
+  check(!!D && s2?.view?.state === 'PLACED' && s2.view.ext?.['steward_mc:build'] === 'b1', `item 5: the re-plan realised under steward.b1.vrealise2: ${D} PLACED through the gate, its ext Steward's (${json({ district: s2?.view?.ext?.['steward_mc:district'], build: s2?.view?.ext?.['steward_mc:build'], refused: r2.refused ?? null })})`);
+  if (!D) { await leaveWorld(); spendZero(); return out; }
   await leaveWorld();
   await L.openWorld(world);
   const rk = await call('dev.region.realiseByKey', { owner: OWNER, opKey: 'steward.b1.vrealise2' }, 10_000).catch((x) => ({ error: String(x) }));
-  check(rk.region?.id === D, `item 5: after a restart realiseByKey(steward.b1.vrealise2) finds the district (${json(rk.region?.id ?? rk)})`);
+  check(!!D && rk.region?.id === D, `item 5: after a restart realiseByKey(steward.b1.vrealise2) finds the district (${json(rk.region?.id ?? rk)})`);
   await kill();
   await undo(D);
   // v7a_gj_endpoint through checkPlan then realiseApproved

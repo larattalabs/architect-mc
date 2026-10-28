@@ -224,6 +224,17 @@ public final class GateJoin {
 		return a;
 	}
 
+	/**
+	 * Whether the block standing is the one the wall wrote, by type: a door's open and powered are volatile (its type compares), and a
+	 * dirt path the world turned to dirt (vanilla, a block once over it) is still the walk.
+	 */
+	static boolean sameKind(BlockState wrote, BlockState now) {
+		if (wrote.getBlock() == now.getBlock()) {
+			return true;
+		}
+		return wrote.is(net.minecraft.world.level.block.Blocks.DIRT_PATH) && now.is(net.minecraft.world.level.block.Blocks.DIRT);
+	}
+
 	/** Whether a block may stand in a gate's opening: air (or any non-colliding air-like block), a door or a fence gate, in any state. */
 	static boolean openingBlock(BlockState s) {
 		Block b = s.getBlock();
@@ -358,15 +369,19 @@ public final class GateJoin {
 			return new String[] {"JOURNAL_UNAVAILABLE", name + ": the journal could not be read (" + e.getMessage() + ")"};
 		}
 		String[] bad = {null};
+		// the opening first (a player's block in it names the gate as not clear), then the holder and the blocks the wall wrote
 		cols.forEach((x, z) -> {
-			for (int yy = y; yy <= y + h && bad[0] == null; yy++) {
-				BlockPos p = new BlockPos(x, yy, z);
-				BlockState now = level.getBlockState(p);
-				if (yy > y && !openingBlock(now)) {
+			for (int yy = y + 1; yy <= y + h && bad[0] == null; yy++) {
+				BlockState now = level.getBlockState(new BlockPos(x, yy, z));
+				if (!openingBlock(now)) {
 					bad[0] = name + " is not clear at " + x + ", " + yy + ", " + z + " (" + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(now.getBlock())
 						+ "); re-plan";
-					return;
 				}
+			}
+		});
+		cols.forEach((x, z) -> {
+			for (int yy = y; yy <= y + h && bad[0] == null; yy++) {
+				BlockState now = level.getBlockState(new BlockPos(x, yy, z));
 				Top t = top.get(BlockPos.asLong(x, yy, z));
 				if (t == null) {
 					continue; // a cell the wall never wrote (air it found there): nothing of the gate's to compare
@@ -375,7 +390,7 @@ public final class GateJoin {
 					bad[0] = name + " at " + x + ", " + yy + ", " + z + " is held since the plan by another site; re-plan";
 					return;
 				}
-				if (t.after() != null && t.after().getBlock() != now.getBlock()) {
+				if (t.after() != null && !sameKind(t.after(), now)) {
 					bad[0] = name + " at " + x + ", " + yy + ", " + z + " is " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(now.getBlock())
 						+ ", not the " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(t.after().getBlock()) + " its wall wrote; re-plan";
 					return;
