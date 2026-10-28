@@ -9,8 +9,6 @@
 //   Steward's first recordings: kit/test/fixtures/plan/asks-8703dbd, plan-helpers.mjs asksFirstPath, asks-first.mjs) and the fixtures
 //   close-out A's items 4, 5, 7 and 9 move.
 import { f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its ask movers' until normalised
-import { LF_ASK_PARTS } from './lf-norm.mjs'; // (7a LF) its two lifts compare by part and kind only
-import { K3_ASK_PARTS } from './k3-norm.mjs'; // (7a K3) its four walls compare by part and kind only
 export const COA_REREC_ASKS = Object.freeze(['arcology', 'end_city_ruins', 'one_block', 'redstone_gate', 'rival_families', 'spiral_town', 'swamp_stilts',
   'terraced_hill', 'treetop_village', 'two_districts', 'underwater_domes', 'upside_down'].map((a) => `asks/${a}.json`));
 export const COA_MOVED_FIXTURES = Object.freeze([...COA_REREC_ASKS, 'asks/mage_exiles.json', 'valid/v64_vocc_copper.json', 'valid/v65_vocc_nowood.json',
@@ -44,9 +42,13 @@ const moverLine = (l, parts, tag) => {
   return (key ? parts.includes(key) : parts.some((p) => p.endsWith(`/${m[3]}`))) ? `${m[1]}${m[2] ? `${m[2]}/` : ''}${m[3]} ${m[4]} ${tag}` : l;
 };
 export const clAskLine = (l) => moverLine(l, CL_ASK_PARTS, 'CL');
-/** (7a LF, on main) storehouse_lift and winch_lift answer refused NO_CLIMB (were unsupported until 7a): compared by part and kind only. */
+/** (7a LF, on main) storehouse_lift and winch_lift answer refused NO_CLIMB (were unsupported until 7a; lf-norm LF_MOVED): the committed tables
+ * (KC item 3, H-a item 10, HY-b item 11) still hold the old answers, so their lines compare by part and kind only. */
+export const LF_ASK_PARTS = Object.freeze(['treetop_village/storehouse_lift', 'upside_down/winch_lift']);
 export const lfAskLine = (l) => moverLine(l, LF_ASK_PARTS, 'LF');
-/** (7a K3, on main) fort_wall, city_wall (camp_to_city), curtain_wall (castle_city) and town_wall answer fits (were adjusted): by part and kind only. */
+/** (7a K3, on main) fort_wall, city_wall (camp_to_city), curtain_wall (castle_city) and town_wall answer fits, provisional (were adjusted; k3-norm
+ * K3_MOVED): compared by part and kind only, as CL's and LF's. */
+export const K3_ASK_PARTS = Object.freeze(['border_fort/fort_wall', 'camp_to_city/city_wall', 'castle_city/curtain_wall', 'walled_town/town_wall']);
 export const k3AskLine = (l) => moverLine(l, K3_ASK_PARTS, 'K3');
 export function flAsksFilter(text) {
   const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));

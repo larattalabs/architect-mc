@@ -9,7 +9,3 @@ export const LF_MOVED = Object.freeze({
   'rs/rs02_walled.json': 'its pending lift (lip_w to the stone anchor, required false): unsupported {connector.lift, until 7a} -> refused NO_CLIMB (no face within the approach); the later connectors\' leg ids shift by one (the lift\'s leg is routed now), every other answer the same',
   'asks-8703dbd/upside_down.json': 'winch_lift: unsupported {connector.lift, until 7a} -> refused NO_CLIMB with a path wouldFit (the asks claim is flat)',
 });
-
-/** (7a LF) The recorded ask parts LF re-answers (unsupported until 7a -> refused NO_CLIMB): the earlier slices' asks tables (KC item 3, H-a
- * item 10, HY-b item 11) compare their lines by part and kind only, through fl-norm's flAsksFilter (lfAskLine). */
-export const LF_ASK_PARTS = Object.freeze(['treetop_village/storehouse_lift', 'upside_down/winch_lift']);
