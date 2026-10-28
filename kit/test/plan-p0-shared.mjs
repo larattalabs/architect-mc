@@ -21,7 +21,7 @@ export const run = async (fx, extra = {}) => {
   const vocc = (fx.plan?.rules ?? []).some((r) => r?.kind === 'palette') && (fx.style || fx.lotDesigns);
   const lb = vocc ? await fixtureLotBlocks(fx) : null;
   // ((6c D3) a fixture's `besideReach`: per standing region its claim's terrain (flatSurvey), held columns and standing data)
-  const besideReach = fx.besideReach ? Object.fromEntries(Object.entries(fx.besideReach).map(([id, q]) => [id, { survey: flatSurvey(q.terrain).bytes, held: q.held, standing: q.standing }])) : null;
+  const besideReach = fx.besideReach ? Object.fromEntries(Object.entries(fx.besideReach).map(([id, q]) => [id, { survey: flatSurvey(q.terrain).bytes, held: q.held, standing: q.standing, ...(q.gates ? { gates: q.gates } : {}) }])) : null;
   const o = { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(besideReach ? { besideReach } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...(vocc ? { style: fixtureStyle(fx) } : {}), ...(lb ? { lotBlocks: lb } : {}), ...extra };
   return fx.volume ? checkPlanVolumes(fx.plan, { ...o, volume: fx.volume }) : checkPlanLocal(fx.plan, o);
 };

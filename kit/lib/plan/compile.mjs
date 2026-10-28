@@ -27,6 +27,7 @@ import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
 import { reachFor, chooseReach, LEAD } from '../region/reach.mjs';
+import { aroundOf, gateMeta } from '../region/gateJoin.mjs';
 import { keyRuns as keyRunsOf } from '../region/beside.mjs';
 import { PASSES } from '../region/passes/index.mjs';
 import { placeFollow } from '../region/followEmit.mjs';
@@ -1571,11 +1572,19 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const reachLeg = (l) => l.from.reach ?? l.to.reach ?? null;
       const edges = group.map((l, i) => {
         const rl = reachLeg(l), flip = !!l.from.reach;
-        return { id: `c${conns.indexOf(l.conn)}l${l.k}`, from: flip ? l.to.name : l.from.name, to: flip ? l.from.name : l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), ...(l.k1 ?? {}), ...(rl ? { frame: rl.frame, lead: LEAD, graded: true, part: 'route_join' } : {}), _i: i };
+        // ((7a GJ) through a gate: this edge ends at the gate's outer cell; its `_g` edge runs on from the inner cell to the junction)
+        const to = rl?.gate ? rl.gate.G.out.name : flip ? l.from.name : l.to.name;
+        return { id: `c${conns.indexOf(l.conn)}l${l.k}`, from: flip ? l.to.name : l.from.name, to, width: l.width, ...(l.movers ? { movers: l.movers } : {}), ...(l.k1 ?? {}), ...(rl ? { frame: rl.frame, lead: LEAD, graded: true, part: 'route_join', ...(rl.gate ? { behindNear: 2 } : {}) } : {}), _i: i };
+      });
+      const gateEdges = group.flatMap((l, i) => {
+        const rl = reachLeg(l);
+        if (!rl?.gate) return [];
+        return [{ id: `${edges[i].id}_g`, from: rl.gate.G.in.name, to: l.from.reach ? l.from.name : l.to.name, width: l.width, ...(l.movers ? { movers: l.movers } : {}), frame: rl.innerFrame, lead: LEAD, graded: true, part: 'route_join', behindNear: 2 }];
       });
       const RL = group.map(reachLeg).find((x) => x) ?? null;
       const nodes = {};
       for (const l of group) for (const e of [l.from, l.to]) if (e.node) nodes[e.name] = e.node;
+      for (const l of group) { const g = reachLeg(l)?.gate; if (g) for (const q of [g.G.out, g.G.in]) nodes[q.name] = { at: [...q.at], kind: 'junction', facing: [...q.facing] }; }
       let out;
       try {
         // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
@@ -1590,8 +1599,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         // (7a foundation) rows 9-11's pass-level inputs (intent.rockStair, intent.lift, intent.catwalk), each only when its hook gives one
         const t7 = {};
         if (K) for (const x of HOOKS_7A) { if (!x.intent) continue; const v = x.mod.passInput(K); if (v) t7[x.intent] = v; }
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base || wallBase ? { base: mergeBases(rope?.base ?? null, wallBase) } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}), ...t7,
-          ...(RL ? { survey: RL.api, frame: [RL.claimR], hard: [...env.standingHard, ...(rope?.hard ?? []), ...RL.hard], noRetain: (x, z) => !(x >= RL.claimR[0] && x <= RL.claimR[2] && z >= RL.claimR[1] && z <= RL.claimR[3]) && (RL.hardKeys.has(`${x},${z}`) || !(x >= RL.town[0] && x <= RL.town[2] && z >= RL.town[1] && z <= RL.town[3])) && !RL.cand.contact.includes(`${x},${z}`) } : {}) });
+        out = r.pass('route', { nodes, edges: [...edges.map(({ _i, ...e }) => e), ...gateEdges], maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(terracedPlan ? { guard: true } : {}), ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base || wallBase ? { base: mergeBases(rope?.base ?? null, wallBase) } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}), ...(bridge ? { bridge } : {}), ...(tunnel ? { tunnel } : {}), ...(fluids ? { fluids } : {}), ...t7,
+          ...(RL ? { survey: RL.api, frame: [RL.claimR], hard: [...env.standingHard, ...(rope?.hard ?? []), ...RL.hard], noRetain: RL.noRetain ?? ((x, z) => !(x >= RL.claimR[0] && x <= RL.claimR[2] && z >= RL.claimR[1] && z <= RL.claimR[3]) && (RL.hardKeys.has(`${x},${z}`) || !(x >= RL.town[0] && x <= RL.town[2] && z >= RL.town[1] && z <= RL.town[3])) && !RL.cand.contact.includes(`${x},${z}`)) } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1601,7 +1610,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const byEdge = new Map(out.edges.map((e) => [e.id, e]));
       const metaEdges = new Map((r.meta.route?.edges ?? []).map((e) => [e.id, e]));
       const bad = new Set();
-      for (let i = 0; i < group.length; i++) { const e = byEdge.get(edges[i].id); if (!e?.ok) bad.add(group[i].conn.id); }
+      for (let i = 0; i < group.length; i++) { const e = byEdge.get(edges[i].id); if (!e?.ok || (reachLeg(group[i])?.gate && !byEdge.get(`${edges[i].id}_g`)?.ok)) bad.add(group[i].conn.id); }
       if (!bad.size) {
         // (7a K1) the routed edges (their gates opened, their rope spans) for the gate steps and the links stage
         if (K) { for (let i = 0; i < group.length; i++) K.routed.push({ conn: group[i].conn, leg: group[i], edge: byEdge.get(edges[i].id), meta: metaEdges.get(edges[i].id), part }); wallsRouted(K, out.data.edges); }
@@ -1617,7 +1626,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
           const id = `x_${en.name}`.slice(0, 64);
           // ((6c D3, §3.5) a reach junction: an end as D1 plus its junction, a side `<region>:<roadId>` with its junction)
           const to = en.external.node ? `${en.external.region}:${en.external.node}.${en.external.port}` : `${en.external.region}:${en.external.road}`;
-          if (n && !r.graphIds.has(id)) r.graphEdge({ id, from: `${n.id}.${n.ports[0].name}`, to, type: 'road', width: l.width, path: en.reach ? 'route_join' : part, stage: stageOf('routes'), external: true, ...(en.external.junction ? { junction: en.external.junction } : {}) });
+          if (n && !r.graphIds.has(id)) r.graphEdge({ id, from: `${n.id}.${n.ports[0].name}`, to, type: 'road', width: l.width, path: en.reach ? 'route_join' : part, stage: stageOf('routes'), external: true, ...(en.external.junction ? { junction: en.external.junction } : {}), ...(en.external.via ? { via: en.external.via, crossing: en.external.crossing } : {}) });
+          // ((7a GJ, §3) the traverse between the gate's two nodes: never written, its segment the gate)
+          const gt = en.reach?.gate;
+          const go = gt && r.graph.nodes.find((x) => x.id === gt.G.out.name), gi = gt && r.graph.nodes.find((x) => x.id === gt.G.in.name);
+          if (go && gi && !r.graphIds.has(`${id}_gate`.slice(0, 64))) r.graphEdge({ id: `${id}_gate`.slice(0, 64), from: `${go.id}.${go.ports[0].name}`, to: `${gi.id}.${gi.ports[0].name}`, type: 'road', width: Math.min(l.width, gt.width), path: 'route_join', stage: stageOf('routes'), via: en.external.via, crossing: en.external.crossing, segments: [{ kind: 'gate', gate: gt.id, region: gt.region }] });
         }
         // ((6c D3) the reach: the leg's written columns outside the claim and the contact columns it holds)
         if (RL) {
@@ -1930,17 +1943,19 @@ export function unplacedBlocked(err, answers) {
  */
 /** (6c D3) A reach leg's record (as the districts pass's reachRecord): its written columns outside the claim, the contact columns held. */
 function reachMeta(r, RL, edgeId) {
-  const rec = r.meta.route.edges.find((e) => e.id === edgeId);
+  // ((7a GJ) through a gate: both edges; never a gate cell)
+  const recs = r.meta.route.edges.filter((e) => e.id === edgeId || (RL.gate && e.id === `${edgeId}_g`));
   const c = RL.claimR, out = new Set();
-  for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!(x >= c[0] && x <= c[2] && q[1] >= c[1] && q[1] <= c[3])) out.add(`${x},${q[1]}`);
+  for (const rec of recs) for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!(x >= c[0] && x <= c[2] && q[1] >= c[1] && q[1] <= c[3])) out.add(`${x},${q[1]}`);
   const contact = new Set(RL.cand.contact);
+  for (const k of out) if (RL.gate && RL.gateCols.has(k)) throw new Error(`UNREACHABLE: the leg into region ${RL.region} writes ${k}, a cell of gate ${RL.gate.id}`);
   for (const k of out) if (RL.hardKeys.has(k) && !contact.has(k)) throw new Error(`UNREACHABLE: the leg into region ${RL.region} writes ${k}, a column it or another site holds`);
   const hold = RL.cand.hold.filter((k) => contact.has(k));
   for (const k of hold) out.add(k);
   const runs = keyRunsOf(out);
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (const q of runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
-  return { standing: RL.region, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRunsOf(hold), junction: RL.cand.junction, contact: keyRunsOf(RL.cand.contact) };
+  return { standing: RL.region, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRunsOf(hold), junction: RL.cand.junction, contact: keyRunsOf(RL.cand.contact), ...(RL.gate ? { gate: gateMeta(RL.gate) } : {}) };
 }
 
 /** (6c D3) The reach inputs for a standing region: ctx.besideReach, one (its standing id) or a map {regionId: inputs}; null without. */
@@ -1964,7 +1979,7 @@ function reachEndpoint(env, st, op, tag, where) {
   const end = { x: op[0], z: op[1], at: [op[0], S.groundAt(op[0], op[1]) + 1, op[1]], facing: null };
   let J;
   try {
-    J = chooseReach({ planCols: env.cols, R, beside: st, claim: claimR, yRange: [c.minY, c.maxY], districtEnds: [end], baseHard: env.standingHard, keepOut: [], maxGrade: 0.25, volumes: env.ctx.volumes ?? [], route: PASSES.route });
+    J = chooseReach({ planCols: env.cols, R, around: aroundOf(env.ctx.besideReach ?? null, st.id), beside: st, claim: claimR, yRange: [c.minY, c.maxY], districtEnds: [end], baseHard: env.standingHard, keepOut: [], maxGrade: 0.25, volumes: env.ctx.volumes ?? [], route: PASSES.route });
   } catch (e) {
     const m = /^NO_JOIN: \[([a-z]+)\] (.*)$/.exec(String(e.message));
     if (!m) throw e;
@@ -1973,8 +1988,12 @@ function reachEndpoint(env, st, op, tag, where) {
   const cand = J.cand;
   env.reachUsed = st.id;
   const name = `r_${tag}`;
-  return { name, at: [...cand.at], node: { at: [...cand.at], kind: 'junction', facing: [...cand.facing] }, external: { region: st.id, node: cand.node ?? null, port: cand.port ?? null, road: cand.road, junction: cand.junction },
-    reach: { region: st.id, cand, api: J.api, U: J.U, frame: J.frame, claimR, town: [...st.claim], K: J.K, hardKeys: J.hardKeys, hard: J.hard } };
+  // ((7a GJ, §1) through a gate of a walled town: the leg to its outer cell, the traverse, and a second edge from its inner cell to the
+  // junction (`gate.G`: its two nodes); the external edge names the gate (§5))
+  const gate = J.gate ? { ...J.gate, G: { out: { name: `${name}_go`, at: [(J.gate.legs ?? [J.gate.outer])[0][0], J.gate.y + 1, (J.gate.legs ?? [J.gate.outer])[0][1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: [(J.gate.legs ?? [, J.gate.inner])[1][0], J.gate.y + 1, (J.gate.legs ?? [, J.gate.inner])[1][1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } } : null;
+  const junction = gate ? { kind: 'gate', gate: gate.id, at: [...gate.at], then: cand.junction } : cand.junction;
+  return { name, at: [...cand.at], node: { at: [...cand.at], kind: 'junction', facing: [...cand.facing] }, external: { region: st.id, node: cand.node ?? null, port: cand.port ?? null, road: cand.road, junction, ...(gate ? { via: `${gate.region}:${gate.id}`, crossing: { type: 'gate', lands: gate.id } } : {}) },
+    reach: { region: st.id, cand, api: J.api, U: J.U, frame: J.frame, claimR, town: [...st.claim], K: J.K, hardKeys: J.hardKeys, hard: J.hard, ...(gate ? { gate, innerFrame: J.innerFrame, noRetain: J.noRetain, gateCols: J.gateCols } : {}) } };
 }
 
 function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {

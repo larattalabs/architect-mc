@@ -385,6 +385,14 @@ public final class PlanChecks {
 			int[] sc = st.rec().claim;
 			int[] stc = {sc[0], sc[2], sc[3], sc[5]};
 			reachReady = reachReady.thenCompose(v -> RegionsImpl.reachInputs(rp, st, stc, true));
+			// ((7a GJ, §4) a wall region round it: its inputs too, within the 2 per check; the kit reads them only through a gate)
+			RegionsImpl.Live wr = GateJoin.wallRegionRound(st);
+			if (wr != null && nr < 2 && !named.contains(wr.rec().id)) {
+				nr++;
+				int[] wc = wr.rec().claim;
+				int[] wrc = {wc[0], wc[2], wc[3], wc[5]};
+				reachReady = reachReady.thenCompose(v -> RegionsImpl.reachInputs(rp, wr, wrc, true));
+			}
 		}
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();
 		RegionsImpl.progress(s, null, "planning");

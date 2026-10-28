@@ -20,7 +20,7 @@ import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
 import { edgeColumns, footprintOf } from './passes/route.mjs';
 import { LEAD, chooseReach, reachFor } from './reach.mjs';
-import { aroundOf } from './gateJoin.mjs';
+import { aroundOf, gateMeta } from './gateJoin.mjs';
 import { keyRuns } from './beside.mjs';
 import { CHAIN_WIDTH, chainTerraces, emitTerraces, junctionOf, layoutTerraces, parseTerraces, ringOf, terraceEnds } from './terraces.mjs';
 import { BANDS, DISTRICTS_MAX, DISTRICT_GAP, DISTRICT_INF, EXACT_MAX, LOT_UNPLACED, PREFER_TAGS, UNPLACED, assignDistricts, bandOf, candidateCost, districtCandidates, levelBands, rectsMeet, spanningEdges } from './passes/districts.mjs';
@@ -536,7 +536,7 @@ export function emitDistricts(r, intent = {}) {
     addNode(join.a); addNode(GJ.out); addNode(GJ.in); addNode(join.b);
     edges.push({ id: 'join', from: join.a.name, to: GJ.out.name, width: DISTRICT_ROUTE_WIDTH, frame: reachJ.frame, lead: LEAD, graded: true, part: 'route_join', behindNear: 2 });
     edges.push({ id: 'join_in', from: GJ.in.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, frame: reachJ.innerFrame, lead: LEAD, graded: true, part: 'route_join', behindNear: 2 });
-  } else if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, ...(reachJ ? { frame: reachJ.frame, lead: LEAD, graded: true, ...(U0.wideReach ? {} : { part: 'route_join' }), ...(U0.writeVerge ? { keepBehind: true } : {}) } : {}) }); }
+  } else if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, ...(reachJ ? { frame: reachJ.frame, lead: LEAD, graded: true, ...(U0.wideReach ? {} : { part: 'route_join' }), ...(U0.writeVerge ? { keepBehind: true } : {}), ...(reachJ.G ? { behindNear: 2 } : {}) } : {}) }); }
   let routed = null;
   const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => (Lof(d).terraced ? layouts[d.id].ring : streetRects(Lof(d))));
   const reachIn = reachJ ? { survey: reachJ.api, frame: [reachJ.claimR], noRetain: reachJ.noRetain } : {};
@@ -677,7 +677,9 @@ function reachStep({ r, ctx, claim, beside, ds, ends, endNode, base, keepOut, rk
   const a = J.best.end.node;
   const b = { name, at: [...J.cand.at], facing: [...J.cand.facing] };
   // ((7a GJ, §1, §3) through a gate: two legs, to its outer cell and on from its inner cell; the traverse between is never written)
-  const G = J.gate ? { out: { name: `${name}_go`, at: [J.gate.outer[0], J.gate.y + 1, J.gate.outer[1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: [J.gate.inner[0], J.gate.y + 1, J.gate.inner[1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } : null;
+  // ((§3) a narrow gate's legs end one cell further out each side: J.gate.legs)
+  const [lo, li] = J.gate?.legs ?? [J.gate?.outer, J.gate?.inner];
+  const G = J.gate ? { out: { name: `${name}_go`, at: [lo[0], J.gate.y + 1, lo[1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: [li[0], J.gate.y + 1, li[1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } : null;
   return { ...J, G, join: { a, b, q: { node: J.cand.node ?? null, port: J.cand.port ?? null, road: J.cand.road }, dry: J.best.dry } };
 }
 
@@ -709,10 +711,6 @@ function reachRecord(r, J, beside, unsafe = {}) {
   return { standing: beside.id, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRuns(hold), junction: J.cand.junction, contact: keyRuns(J.cand.contact), ...(J.G ? { gate: gateMeta(J.gate) } : {}) };
 }
 
-/** (7a GJ, §3) The gate a join crosses, as the IR's `reach.gate` and the plan meta record it (the traverse: never written, never held). */
-function gateMeta(g) {
-  return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed } : {}) };
-}
 
 /**
  * (6c D3, ruling B) A reach join's lamps: `lampOk` (a lamp column outside this claim: in the town's claim, unheld, off the footprint and

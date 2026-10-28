@@ -13,10 +13,20 @@ export const GATE_JOIN_WIDTH = 3;
 /** (§3) A villager needs 2 clear over the walk; the contract's 3 is the opening K1a builds (a lower one is used, noted). */
 export const GATE_MIN_HEIGHT = 2;
 
-/** The reach inputs of the regions round the town (a map's other entries: a wall region round it, §4), sorted by id. */
+/**
+ * The reach inputs of the wall regions round the town (§4): a map's other entries that have gates and whose claim holds the town claim's
+ * centre (the mod's GateJoin.wallRegionRound; a plan check's map may name a second endpoint region, never read here), sorted by id.
+ */
 export function aroundOf(besideReach, townId) {
-  if (!besideReach || besideReach.survey) return [];
-  return Object.keys(besideReach).filter((id) => id !== townId).sort().map((id) => besideReach[id]);
+  if (!besideReach || besideReach.survey || !besideReach[townId]) return [];
+  const t = besideReach[townId].standing.claim, cx = (t[0] + t[2]) >> 1, cz = (t[1] + t[3]) >> 1;
+  return Object.keys(besideReach).filter((id) => id !== townId).sort().map((id) => besideReach[id])
+    .filter((a) => (a.gates ?? []).length && cx >= a.standing.claim[0] && cx <= a.standing.claim[2] && cz >= a.standing.claim[1] && cz <= a.standing.claim[3]);
+}
+
+/** (§3) The gate a join crosses, as the IR's `reach.gate` and the plan meta record it (the traverse: never written, never held). */
+export function gateMeta(g) {
+  return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed, legs: g.legs.map((q) => [...q]) } : {}) };
 }
 
 /** Every gate of the town's walls and of the wall regions round it, each with its region (sorted by region, then gate id). */
@@ -98,7 +108,7 @@ export function gateStep(D) {
   const open = (x, z) => { const i = x - U.minX, j = z - U.minZ; if (i >= 0 && j >= 0 && i < W && j < Dp && !blocked[i + j * W]) wide[i + j * W] = 0; };
   for (const q of districtEnds) if (Array.isArray(q.facing)) for (let t = 0; t <= 4; t++) open(q.x + q.facing[0] * t, q.z + q.facing[1] * t);
   for (const c of candidates) for (let t = 0; t <= LEAD + 1; t++) open(c.at[0] + c.facing[0] * t, c.at[2] + c.facing[1] * t);
-  for (const g of gates) for (let t = 0; t <= LEAD + 1; t++) { open(g.outer[0] + g.facing[0] * t, g.outer[1] + g.facing[1] * t); open(g.inner[0] - g.facing[0] * t, g.inner[1] - g.facing[1] * t); }
+  for (const g of gates) for (let t = 0; t <= LEAD + 2; t++) { open(g.outer[0] + g.facing[0] * t, g.outer[1] + g.facing[1] * t); open(g.inner[0] - g.facing[0] * t, g.inner[1] - g.facing[1] * t); }
   const flood = (x0, z0) => {
     const seen = new Uint8Array(W * Dp), st = [];
     const i0 = x0 - U.minX, j0 = z0 - U.minZ;
@@ -119,6 +129,9 @@ export function gateStep(D) {
   const at = (seen, x, z) => { const i = x - U.minX, j = z - U.minZ; return i >= 0 && j >= 0 && i < W && j < Dp && seen[i + j * W] === 1; };
   const seenEnds = districtEnds.map((q) => flood(q.x, q.z));
   // ---- each gate: classified, its two cells checked, its legs' pairs (§2)
+  const narrowOf = (g) => g.width < GATE_JOIN_WIDTH;
+  const endOut = (g) => (narrowOf(g) ? [g.outer[0] + g.facing[0], g.outer[1] + g.facing[1]] : g.outer);
+  const endIn = (g) => (narrowOf(g) ? [g.inner[0] - g.facing[0], g.inner[1] - g.facing[1]] : g.inner);
   const cheb = (p, q) => Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]));
   const viable = [];
   for (const g of gates) {
@@ -131,13 +144,13 @@ export function gateStep(D) {
       if (Math.abs(api.groundAt(x, z) - g.y) > 1) return `its ${name} cell (${x}, ${z}) is not within 1 of the gate's walk (${api.groundAt(x, z)} vs ${g.y})`;
       return null;
     };
-    const cw = cellWhy(g.outer, 'outer') ?? cellWhy(g.inner, 'inner');
+    const cw = cellWhy(g.outer, 'outer') ?? cellWhy(g.inner, 'inner') ?? (narrowOf(g) ? cellWhy(endOut(g), 'outer leg\'s end') ?? cellWhy(endIn(g), 'inner leg\'s end') : null);
     if (cw) { tried.push({ region: g.region, id: g.id, why: cw }); continue; }
-    const ends = districtEnds.map((q, qi) => ({ q, qi })).filter(({ qi }) => at(seenEnds[qi], g.outer[0], g.outer[1]));
-    const sIn = flood(g.inner[0], g.inner[1]);
+    const ends = districtEnds.map((q, qi) => ({ q, qi })).filter(({ qi }) => at(seenEnds[qi], endOut(g)[0], endOut(g)[1]));
+    const sIn = flood(endIn(g)[0], endIn(g)[1]);
     const cands = candidates.map((c, ci) => ({ c, ci })).filter(({ c }) => at(sIn, c.at[0], c.at[2]));
     if (!ends.length || !cands.length) { tried.push({ region: g.region, id: g.id, why: !ends.length ? 'no walk from a district end reaches its outer cell' : 'no walk from its inner cell reaches a street end or side' }); continue; }
-    const b1 = Math.min(...ends.map(({ q }) => 10 * cheb([q.x, q.z], g.outer))), b2 = Math.min(...cands.map(({ c }) => 10 * cheb(g.inner, [c.at[0], c.at[2]])));
+    const b1 = Math.min(...ends.map(({ q }) => 10 * cheb([q.x, q.z], endOut(g)))), b2 = Math.min(...cands.map(({ c }) => 10 * cheb(endIn(g), [c.at[0], c.at[2]])));
     viable.push({ g, ends, cands, b1, b2, bound: b1 + b2 });
   }
   if (!viable.length) refuse();
@@ -145,7 +158,11 @@ export function gateStep(D) {
   viable.sort((p, q) => p.bound - q.bound || p.b1 - q.b1 || (p.g.region < q.g.region ? -1 : p.g.region > q.g.region ? 1 : 0) || (p.g.id < q.g.id ? -1 : p.g.id > q.g.id ? 1 : 0));
   // ---- the routes: both legs share D3's 48 dry routes of 2M expansions each (§2)
   let dry = 0, cut = false, best = null;
-  const feetOut = (g) => [g.outer[0], g.y + 1, g.outer[1]], feetIn = (g) => [g.inner[0], g.y + 1, g.inner[1]];
+  // (§3) a gate narrower than the join: the legs stop one cell further out each side, and the cell each side of the traverse is walked
+  // at the gate's width on its own ground (checked within 1 of the walk, never written: the join narrowed there)
+  const legOut = (g) => (g.width < GATE_JOIN_WIDTH ? [g.outer[0] + g.facing[0], g.outer[1] + g.facing[1]] : g.outer);
+  const legIn = (g) => (g.width < GATE_JOIN_WIDTH ? [g.inner[0] - g.facing[0], g.inner[1] - g.facing[1]] : g.inner);
+  const feetOut = (g) => [legOut(g)[0], g.y + 1, legOut(g)[1]], feetIn = (g) => [legIn(g)[0], g.y + 1, legIn(g)[1]];
   const dryRoute = (from, to, hard, frame) => {
     dry++;
     const out = route(U, volumes, {
@@ -161,8 +178,8 @@ export function gateStep(D) {
     const g = v.g, fOut = [g.facing[0], g.facing[1]], fIn = [-g.facing[0], -g.facing[1]];
     // the leg out: the cheapest district end to the outer cell (arriving square on, heading in)
     let l1 = null;
-    for (const { q, qi } of [...v.ends].sort((p, q2) => cheb([p.q.x, p.q.z], g.outer) - cheb([q2.q.x, q2.q.z], g.outer) || p.qi - q2.qi)) {
-      if (l1 && 10 * cheb([q.x, q.z], g.outer) >= l1.cost) break;
+    for (const { q, qi } of [...v.ends].sort((p, q2) => cheb([p.q.x, p.q.z], endOut(g)) - cheb([q2.q.x, q2.q.z], endOut(g)) || p.qi - q2.qi)) {
+      if (l1 && 10 * cheb([q.x, q.z], endOut(g)) >= l1.cost) break;
       if (dry >= REACH_DRY_MAX) { cut = true; break; }
       const e = dryRoute({ at: q.at, facing: q.facing }, { at: feetOut(g), facing: fOut, lead: LEAD }, hardNone, F);
       if (e.ok && (!l1 || e.cost < l1.cost)) l1 = { cost: e.cost, length: e.length, end: q, qi };
@@ -171,9 +188,9 @@ export function gateStep(D) {
     if (best && l1.cost + v.b2 >= best.cost) continue;
     // the leg in: the inner cell (leaving square on, heading in) to the cheapest D3 candidate
     let l2 = null;
-    for (const { c, ci } of [...v.cands].sort((p, q) => cheb(g.inner, [p.c.at[0], p.c.at[2]]) - cheb(g.inner, [q.c.at[0], q.c.at[2]]) || p.ci - q.ci)) {
-      if (l2 && 10 * cheb(g.inner, [c.at[0], c.at[2]]) >= l2.cost) break;
-      if (best && l1.cost + 10 * cheb(g.inner, [c.at[0], c.at[2]]) >= best.cost) break;
+    for (const { c, ci } of [...v.cands].sort((p, q) => cheb(endIn(g), [p.c.at[0], p.c.at[2]]) - cheb(endIn(g), [q.c.at[0], q.c.at[2]]) || p.ci - q.ci)) {
+      if (l2 && 10 * cheb(endIn(g), [c.at[0], c.at[2]]) >= l2.cost) break;
+      if (best && l1.cost + 10 * cheb(endIn(g), [c.at[0], c.at[2]]) >= best.cost) break;
       if (dry >= REACH_DRY_MAX) { cut = true; break; }
       const e = dryRoute({ at: feetIn(g), facing: fIn }, { at: c.at, facing: c.facing, lead: LEAD }, hardRects(hardKeys, c), [claimR, town]);
       if (e.ok && (!l2 || e.cost < l2.cost || (e.cost === l2.cost && ci < l2.ci))) l2 = { cost: e.cost, length: e.length, cand: c, ci };
@@ -190,8 +207,8 @@ export function gateStep(D) {
   const narrowed = g.width < GATE_JOIN_WIDTH ? g.width : null;
   const gate = {
     region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}),
-    cells: keyRuns(g.cells.map(([x, z]) => `${x},${z}`)), outer: [...g.outer], inner: [...g.inner], ...(narrowed ? { narrowed } : {}),
-    legs: { out: { cost: best.l1.cost, length: best.l1.length }, in: { cost: best.l2.cost, length: best.l2.length } },
+    cells: keyRuns(g.cells.map(([x, z]) => `${x},${z}`)), outer: [...g.outer], inner: [...g.inner], ...(narrowed ? { narrowed, legs: [endOut(g), endIn(g)] } : {}),
+    costs: { out: { cost: best.l1.cost, length: best.l1.length }, in: { cost: best.l2.cost, length: best.l2.length } },
   };
   const contact = new Set(cand.contact);
   const gateCols = new Set(g.cells.map(([x, z]) => `${x},${z}`));
