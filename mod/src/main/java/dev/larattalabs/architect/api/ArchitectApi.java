@@ -161,6 +161,14 @@ public interface ArchitectApi {
 	 * spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout, a path leg from
 	 * {@code from} to its foot) is compiled; the graph gains a {@code lookout} node and an edge typed {@code stairs_around} with its
 	 * crossing {@code {type, host, rise, turns}}; the siteplan's {@code spirals[]}. No new record, method or reason.
+	 * Since NEXT (7a LF), an LF helper ({@code region.lifts}) adds {@code "liftConnectors"}: plan/0's {@code connector.lift} (a bubble column
+	 * against a face rising 4 to 64 in a tower 2 thick, entered through a two-door airlock and left over a railed rim; {@code down}: a second
+	 * column; route row 9; player only) is compiled, the graph edge typed {@code lift} with its crossing {@code {type, rise, down}}, the
+	 * siteplan's {@code lifts[]}, the {@code architect_mc:fluids} rows of its body. The column is a fluid body (H): written in the
+	 * {@code fluids} stage as {@code bubble_column} states (the IR kind {@code bubbleColumns}), census-exact, drained first on removal. The
+	 * journal's "still ours" gains a global row: a cell written as a bubble column holds as any bubble column, a water source or air, and a
+	 * cell written as a water source holds as a bubble column (deltas, {@code versionOf}, adopt counts and survival matches read it). No new
+	 * record, method or reason.
 	 * Since NEXT (7a K3), a K3 helper ({@code region.walls.lots}) adds {@code "wallLots"}: the towers, corner lots and gatehouses a wall
 	 * names are sited on the wall's line (withheld from their zone's street; a gatehouse straddles a gate run with a passage through it,
 	 * routes cross the wall there); the plan-check artifact's {@code lots[].onWall} ({@code wall}, {@code at}, {@code floorY}, the box's

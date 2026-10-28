@@ -386,6 +386,18 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
+  exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
+  feet at `y0 + 1`; a down ride in its open top, feet at `yT + 1`; `yT` is the column's top cell, level with the face's top) in creative
+  (physics, no harm; its game mode and `noPhysics` put back) and ticked as vanilla ticks a living entity: `Entity.baseTick` (its fluid
+  state), then `LivingEntity.aiStep` with its input, whose `travel` moves it and whose `applyEffectsFromBlocks` gives the column's own push
+  (`BubbleColumnBlock.entityInside`). It rides with no input until it surfaces over the top (up) or stands on the floor (down); then it
+  moves forward toward the face, swimming up while in the water, and lands on the face's top within two cells of `exit` in its lane (up),
+  or opens the airlock's `doors` (lower halves; closed again after) and walks out onto `exit` (down). Returns `{reached, maxY, minY, ticks,
+  air, exited, exitAt, path, rode}` (`error`, `stack` on an exception; the result is `rode`: the bridge's envelope owns `ok`); the player
+  is put back where it stood. `dev.lift.spawnRule {x, y, z, tries?: 400}`: vanilla's drowned spawn rules at a cell
+  (`SpawnPlacements.isSpawnPositionOk` and `checkSpawnRules(DROWNED, NATURAL)` over `tries` seeded draws) -> `{placementOk, passed, tries,
+  light, biome}`.
 - **2026-10-24 (Style unification U3):** new (`U3Dev`, client only) `dev.u3.state`, `dev.u3.sections`, `dev.u3.browser.open`,
   `dev.u3.browser`, `dev.u3.click`, `dev.u3.editor.fill`, `dev.u3.describe.fill`, `dev.u3.picker`, `dev.u3.back`, `dev.u3.saveAs`;
   `dev.design.fill {styleNote, ownWords}`. Changed: the Architect screen's pop-ups are searchable lists (`option:<popup>:<id>` are now
@@ -671,3 +683,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   gains each site's ext (`siteExt`). `dev.journal.killAt` takes RVU1 (the undo's manifest and region.json saved, nothing drained), RVU2
   (drained, nothing removed) and RVU3 (every suffix stage removed, the revisions not yet UNDONE); the 4e points K6 and GW fire inside the
   undo's stage removals too.
+
+- **2026-10-26 (6d slice GR):** `dev.rv.plan` takes `params` (a growth: `{grow: {lots, district?, prefer?, extend?}}`, with `program`
+  the region's own: `flat_village`, `districts`) in place of `spec`, and `ext` (the caller's ext on the candidate, e.g. Steward's
+  `steward_mc:district` and `steward_mc:build`; `architect_mc:*` refused). `dev.rv.state` gains `siteCaller` (each revision site's kind,
+  `infra` or `site`, and its ext keys that are not `architect_mc:*`: the realise's ext carried onto every item). `dev.region.plan` and
+  `dev.region.realise` take `ext` (the plan's and the realise's). `dev.journal.killAt` takes RD3 (a revision's road, a street extension,
+  after its first cell; `RD3+save` with the chunks saved first).

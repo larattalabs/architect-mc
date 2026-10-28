@@ -604,6 +604,8 @@ final class InfraJob implements Placement.Job {
 							WorldJournal.kill("K3");
 							if (tile != null) {
 								WorldJournal.kill("RG4"); // phase 6a: a region tile in P5
+							} else if (record.ext() != null && record.ext().has("architect_mc:revision")) {
+								WorldJournal.kill("RD3"); // (6d GR) a revision's road (a street extension) mid-write
 							}
 						}
 					}

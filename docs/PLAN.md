@@ -1336,6 +1336,27 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 ## Looks approved (Noah, 2026-10-26)
 - SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
 - RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.
+- LF lifts (gallery https://claude.ai/artifact/DSfY1N32us1YRUa3vLJNTL): approved (2026-10-27).
+
+## GM contract notes (Steward, 2026-10-27), to fold into the GM contract before it builds
+- The mechanism envelope is merged into the lot's existing `DesignRequest.Reserved` entry in the artifact (Steward option a: zero Steward change). For the design, the envelope cells are hard "never write", like the existing set; only Architect's region writes the mechanism blocks.
+- "Add a portcullis to a standing gate" stays a reserved follow-up through Steward's versionOf/revision change-request path (not ruled out).
+- Rest state open by default suits Steward (a settlement shouldn't wall out its own steward). Steward un-reserves connector.drawbridge in the GM RC.
+
+## GM decisions (Noah, 2026-10-27)
+1. **A proper lifting portcullis, not the sliding split grate.** The bars (the style's fence/bars role, with iron bars as the functional fallback) hang as one 3-high grid across the passage and lift straight UP into the gatehouse's winch room above the lintel. Mechanism: Java vertical piston extenders (one per column, tileable side by side), hidden in the winch room and needing at least 4 clear cells above the lintel; the K3 gatehouse's GM envelope grows to fit. The 1-block-per-piston limit is why this needs extenders, not plain sticky pistons. gm-probe must prove the extender on the running 26.3 server (20 open/close cycles, no dropped bars) before the slice builds on it; if it can't be made reliable, stop and report rather than fall back silently. Research note: the classic vanilla portcullis (a GameSkinny guide) is a 3-high gate on sticky-piston rows with timed repeaters; extenders are Java-only and timing-sensitive, hence the probe. This was GM-lift (about +1.5 days); it's now the default portcullis.
+2. **Rest state: open by day.** A daylight sensor on a sky-exposed cell the gatehouse design gives (roof or crenel) drives open by day and shut at night. Controls at BOTH passage ends (a lever inside and outside; mobs can't flip levers) let a player open it at night, or close it by day. The contract specifies the logic: the daylight sensor sets the default, the levers override it, and there is a clear rule for which wins and when it resets (e.g. an override holds until the next dawn/dusk change). Villagers pass by day; a closed gate at night is player-only (MOVER).
+3. **Drawbridge:** the flipping iron-trapdoor deck (GM-c).
+4. **K1 wall gates** get the iron swing door pair too (GM-b).
+Steward's notes from the section above apply: the envelope is merged into the lot's reserved set (never-write for designs), and the retrofit is a follow-up.
+- GM day cycle (Noah, 2026-10-27): storms may close the gate. A daylight sensor reading lower in rain or thunder by day is accepted (N-GM-2 answered: storms close it).
+
+## Coordinator handover and the v0.48.0 batch (2026-10-27)
+- New coordinator session took over from "AgentCraft Mods". GR merged (970de3bc) after Steward's RC PASS; LF and K3 follow their RCs, then v0.48.0 (API 1.43.0, kit 0.44.0, catalogue 15).
+- **GM gatehouse box (answered, docs/gm-contract 9b64bbf9 §4):** Steward designs wall gatehouses; every `onWall` lot has an exact `fitBox` sent as-is (no approach margin, no MIN_XZ = 7 clamp); 11 x 3 x 9 is the mechanism minimum, not the box.
+- **K3 RC needs Steward's K3 adoption slice (k3-rc):** exact boxes for onWall lots, tower/gatehouse types, the passage as reserved, the closed-faces brief line plus the outer faces named in words, ARTIFACT_STALE "lot on wall" routed to a per-lot versionOf repair (2 rounds). Architect added the sim stand-in for wall lots and `sim:outerdoor` on slice/K3 (f91b4696); Steward passes `ext["architect:wallLot"].outerFaces` (corner towers need it).
+- **GR follow-up (queued):** a growth's NO_ROOM `[street]` from the extension hides the real blocker (a wall part in the verge, a slope, or a reach shorter than the lot's width); name it. Seen on Steward's walled survival town "Supply Walls" (correct refusal until GJ).
+- **Queued for Noah after v0.48.0:** a lot realise waits with no time limit on OCCUPIED (animals) or PLAYER_IN_BOX; Steward's e2e stalls were these. Consider a time limit or pushing animals out.
 
 ## Queued from slice K3 (builder, 2026-10-26)
 

@@ -13,7 +13,7 @@
 //                                    (k2:walk and its broken variants, p0:k2), item 2 (byte identity: every committed plan fixture, the 59
 //                                    asks among them, as on the merge base but the named exceptions: tools/lib/gate7ak2-kit.mjs K2_MOVED),
 //                                    item 3 (the recorded plans: castle_city the only answer that changes, by its walk), the compact plan/0
-//                                    (recorded; bound 96,000), the sidecar's features and plan check
+//                                    (recorded; bound 100,000), the sidecar's features and plan check
 //     ingame    (k2-ingame)          items 4, 5, 6 and 9 (headless) on S7's flat claim: v7a_k2_walk checked 3 times under /tick freeze (one
 //                                    artifact), realised (irSha and tile shas the artifact's; realised = virtual over every written cell), on
 //                                    the realised dump: closure (both movers, gates blocked) and every node across, no route cell under a wall
@@ -144,9 +144,9 @@ steps.unit = async () => {
   const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
   const asksMoved = u.moved.filter((f) => f.startsWith('asks/') && (f === 'asks/castle_city.json' || !(f in F7A_MOVED)));
   check((JSON.stringify(asksMoved) === JSON.stringify(['asks/castle_city.json']) || (onMain && asksMoved.length === 0)) && !u.differ.length, `item 3 (§8): of Steward's recorded plans only castle_city's answer changes (by its walk): moved ${json(asksMoved)}${onMain ? ' (K2 on the base: its walk is the base\'s own)' : ''} (the foundation's own aside: F7A_MOVED)`);
-  // the compact plan/0 (recorded; the bound is 96,000)
+  // the compact plan/0 (recorded; the bound is 100,000 (6d RV raised it, 2026-10-26))
   out.compact = compactOf(path.join(root, 'kit'));
-  check(out.compact !== null && out.compact <= 96_000, `the compact plan/0: ${out.compact} characters (the bound 96,000, the coordinator's 2026-10-23)`);
+  check(out.compact !== null && out.compact <= 100_000, `the compact plan/0: ${out.compact} characters (the bound 100,000, the coordinator's 2026-10-23)`);
   const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts test/jobs.test.ts');
   out.sidecar = s.out.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ');
   check(s.code === 0, `item 12 (API): the sidecar's plan check and features (region.walls.along, region.walls.walk appended): ${out.sidecar}`);

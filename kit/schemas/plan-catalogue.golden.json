@@ -420,10 +420,23 @@
   },
   {
    "id": "connector.lift",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7a"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     4,
+     64
+    ],
+    "approach": 32,
+    "shell": 2,
+    "lightEvery": 6,
+    "headroom": 3,
+    "movers": [
+     "player"
+    ]
+   },
+   "note": "LF: a bubble column against a face rising 4 to 64 (soul sand under it carries a rider up; down: a second column over magma carries one down), in a tower 2 thick on every open side, entered through a two-door airlock at the foot, left over a railed rim onto the face's top. Player-only by kind (movers naming villager: MOVER, with a stair). Winch, rope and elevator lifts read as this block. No frozen volume."
   },
   {
    "id": "connector.branch_walk",
@@ -1131,9 +1144,9 @@
   {
    "id": "revision.grow",
    "sinceApi": "NEXT",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "GR"
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "6d GR: in a revision plan, a zone whose program.lots only gains lots (every standing lot spec equal) grows: the added lots go on its streets' free frontage nearest the square, then on one straight extension from a free street end; the zone answers fits with standing: true and grown: [ids] (unplaced lots listed NO_ROOM). A districts zone grows through Regions.planRevision."
   },
   {
    "id": "revision.change",

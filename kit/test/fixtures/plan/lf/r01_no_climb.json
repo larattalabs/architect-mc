@@ -1,0 +1,41 @@
+{
+  "about": "(7a LF) a lift between two points of a flat claim: no face rises 4: refused NO_CLIMB {rise: 0, need: 4} with a path wouldFit that fits alone (S-7a-2)",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      65,
+      2016
+    ]
+  },
+  "expect": {
+    "part": "flat_lift",
+    "class": "refused",
+    "code": "NO_CLIMB"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "flat_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        }
+      }
+    ]
+  }
+}

@@ -183,6 +183,7 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SlicePT2Dev.init(); // 6c PT2: dev.pt2.*
 		dev.larattalabs.architect.devserver.gen.SliceT3Dev.init(); // 6c T3a: dev.t3.boat
 		dev.larattalabs.architect.devserver.gen.SliceClDev.init(); // 7a CL: dev.climb
+		dev.larattalabs.architect.devserver.gen.SliceLfDev.init(); // 7a LF: dev.lift.ride
 		dev.larattalabs.architect.devserver.gen.SliceHDev.init(); // 6c H: dev.fluid.*, dev.entity.damage
 		dev.larattalabs.architect.devserver.gen.SliceVocDev.init(); // 6c VOC: dev.vocab.*
 		dev.larattalabs.architect.devserver.gen.SliceCuDev.init(); // 6c CU: dev.copper.use

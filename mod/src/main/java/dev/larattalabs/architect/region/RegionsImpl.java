@@ -521,7 +521,29 @@ public final class RegionsImpl implements Regions {
 	public Optional<RegionView> realiseByKey(@Nullable String owner, String opKey) {
 		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
 		Live l = regionByKey(owner, key);
+		if (l == null) {
+			Object[] rv = revisionByKey(owner, key); // (6d GR, S-GR-3) a revision realised under the key: its region (RegionView.revisions names it)
+			l = rv == null ? null : (Live) rv[0];
+		}
 		return l == null ? Optional.empty() : Optional.of(view(l));
+	}
+
+	/**
+	 * (6d GR, S-GR-3) The standing revision realised under {@code key} by {@code owner}'s region ({@code [Live, Revisions.Rev]}), or null: a
+	 * growth is an ordinary keyed build (Steward's {@code steward.<buildId>.vrealise}); an undone revision frees its key, as a removed region.
+	 */
+	static Object @Nullable [] revisionByKey(@Nullable String owner, String key) {
+		for (Live l : REGIONS.values()) {
+			if (!java.util.Objects.equals(owner, l.rec().owner)) {
+				continue;
+			}
+			for (Revisions.Rev r : l.rec().revisions) {
+				if (key.equals(r.opKey) && r.standing()) {
+					return new Object[] {l, r};
+				}
+			}
+		}
+		return null;
 	}
 
 	private static @Nullable Live regionByKey(@Nullable String owner, String key) {
@@ -1347,6 +1369,16 @@ public final class RegionsImpl implements Regions {
 			String scope = RegionKeys.scope(owner, "region.realise", key);
 			Live live = regionByKey(owner, key);
 			KeyedRealise kr = REALISE_KEYS.get(scope);
+			// (6d GR, S-GR-3) a revision realised under the key: the same plan answers its region again; another plan conflicts
+			Object[] rvk = live == null && kr == null ? revisionByKey(owner, key) : null;
+			if (rvk != null) {
+				Revisions.Rev rv = (Revisions.Rev) rvk[1];
+				if (rv.planId.equals(r.planId())) {
+					Architect.LOGGER.info("Region {}: revision {}'s realise adopted by opKey {}", ((Live) rvk[0]).rec().id, rv.rid, key);
+					return CompletableFuture.completedFuture(((Live) rvk[0]).rec().id);
+				}
+				throw conflict(key, owner, ((Live) rvk[0]).rec().id);
+			}
 			switch (keyOutcome(live == null ? null : live.rec().opHash, kr == null ? null : kr.hash(), hash)) {
 				case CONFLICT -> throw conflict(key, owner, live == null ? null : live.rec().id);
 				case ADOPT_REGION -> {

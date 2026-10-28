@@ -14,6 +14,7 @@
 //   back drops its registrations (dropOverflows) before its feeder emits.
 //   Crossings (§8.3): a course registers each still reach a wall line crosses (registerCrossing(K, rec), gate.mjs's record); HY-c's wall
 //   reads crossingsOf(K).
+import { LIFT_KINDS } from '../connectors/kinds7a.mjs';
 import * as pond from './pond.mjs';
 import * as fountain from './fountain.mjs';
 import * as waterfall from './waterfall.mjs';
@@ -177,6 +178,9 @@ export function crossingsOf(K) {
  */
 export function fluidStageWanted(C) {
   if (C.order.some((p) => isBodyPart(p) && C.okClass(p.id))) return true;
+  // ((7a LF, §4) a lift's column is a body: the fluids stage, last)
+  // (routed after this is decided: a lift part not answered yet asks for it; one refused before routing never writes a body)
+  if (C.order.some((p) => p.family === 'connector' && LIFT_KINDS.includes(p.kind) && (!C.answers.has(p.id) || C.okClass(p.id)))) return true;
   // ((6c IRR) a farm lot asking irrigate brings its sources, on a wet claim too)
   return !!pond.stageWanted(C) || irrigate.stageWanted(C);
 }

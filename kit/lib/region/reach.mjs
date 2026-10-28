@@ -109,7 +109,10 @@ export function streetNetwork(standing, graph) {
   const nodes = new Map((graph?.nodes ?? []).map((n) => [n.id, n]));
   const deg = new Map(), first = new Map();
   for (const e of graph?.edges ?? []) {
-    if (e.external) continue;
+    // ((6d GR §6) a growth's frontage `along` edges ride on the standing road: never counted, so an end stays terminal)
+    // (the frontage junction itself, the along edge's `to`, is never terminal: it stands on the street, not at its end)
+    if (e.along) { const j = String(e.to).split('.')[0]; deg.set(j, (deg.get(j) ?? 0) + 2); }
+    if (e.external || e.along) continue;
     for (const [a, b] of [[e.from, e.to], [e.to, e.from]]) {
       const n = String(a).split('.')[0];
       deg.set(n, (deg.get(n) ?? 0) + 1);

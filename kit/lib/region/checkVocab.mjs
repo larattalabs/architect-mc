@@ -71,7 +71,12 @@ export function vocabScan({ ir, vw, meta = null, lava = null }) {
   const P = vw.pal;
   const F = factsOf(P);
   const bodyCells = new Set();
-  for (const b of bodiesOf(ir)) for (const q of b.cells) bodyCells.add(k3(q[0], q[1], q[2]));
+  // ((7a LF) a lift's own column: the bubble cells its op writes, each with its state; the base under it converts water by design)
+  const bubbleAt = new Map();
+  for (const b of bodiesOf(ir)) {
+    for (const q of b.cells) bodyCells.add(k3(q[0], q[1], q[2]));
+    for (const d of b.bubbleStates ?? []) bubbleAt.set(k3(d[0], d[1], d[2]), d[3]);
+  }
   const natLava = natLavaOf(vw);
   const isWater = (i) => P.water[i] && !P.lava[i];
   const logs = [];
@@ -108,6 +113,8 @@ export function vocabScan({ ir, vw, meta = null, lava = null }) {
     if (c.hazard && HAZARD[c.hazard] && HAZARD[c.hazard].beside === 'water') {
       for (const [dx, dy, dz] of waterReachOffsets(HAZARD[c.hazard].reach)) {
         const q = vw.get(x + dx, y + dy, z + dz);
+        // ((7a LF) the conversion is the plan's: a body's bubble cell of exactly the state this block makes)
+        if (bubbleAt.size && bubbleAt.get(k3(x + dx, y + dy, z + dz)) === HAZARD[c.hazard].becomes) continue;
         if (isWater(q) && !natLava(x + dx, y + dy, z + dz)) { push(out.convert, pi, c.name, [x, y, z]); break; }
       }
     }

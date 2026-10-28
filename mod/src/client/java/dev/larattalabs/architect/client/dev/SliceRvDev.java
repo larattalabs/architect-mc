@@ -26,16 +26,23 @@ public final class SliceRvDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.rv.plan", 900_000, "{region, spec: {parts: [{id, call}], refill?: [lotId], unsafe?}, opKey?, program?: revise} - (6d RV) "
-			+ "Regions.planRevision -> {planId, irSha, revisionOf: {region, rid, position, parentRid, parentIrSha}, stages, ms} or {refused}", (req, mc) -> {
+		DevBridge.register("dev.rv.plan", 900_000, "{region, spec: {parts: [{id, call}], refill?: [lotId], unsafe?, grow?} | params: {grow: {lots, district?, prefer?, "
+			+ "extend?}}, opKey?, program?: revise | the region's program (a growth), ext?} - (6d RV, GR) Regions.planRevision -> {planId, irSha, revisionOf: {region, rid, "
+			+ "position, parentRid, parentIrSha}, stages, ms} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
 				JsonObject params = new JsonObject();
-				params.add("spec", req.has("spec") ? req.getAsJsonObject("spec").deepCopy() : new JsonObject());
+				if (req.get("params") instanceof JsonObject pr) {
+					params = pr.deepCopy(); // (6d GR) {grow: {...}} with the region's own program
+				} else {
+					params.add("spec", req.has("spec") ? req.getAsJsonObject("spec").deepCopy() : new JsonObject());
+				}
+				JsonObject ext = req.get("ext") instanceof JsonObject e ? e.deepCopy() : new JsonObject();
 				String key = f.optStr("opKey", null);
 				String program = f.optStr("program", Revisions.PROGRAM);
 				long t0 = System.nanoTime();
-				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().planRevision(region, new RevisionRequest(program, params, key, "dev")))
+				JsonObject fp = params;
+				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().planRevision(region, new RevisionRequest(program, fp, key, "dev", ext)))
 					.thenCompose(x -> x).handle((p, e) -> {
 						JsonObject o = new JsonObject();
 						if (e != null) {

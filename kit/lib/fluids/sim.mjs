@@ -18,7 +18,7 @@
 //            true}]  ((6c HY) spillLands: the body's spill ends in another body of the plan (a course's step): a mover swept along it ends
 //            up in that body, so its spill's surface cells are judged for M25:exit there (by the landing body's own rule), not here;
 //            M25:trap covers them as before. The shell a course passes includes its lining and weir: M25:shell and the single breach
-//            cover them)
+//            cover them; (7a LF) carried: [[x, y, z]]: a lift's bubble column cells, which carry a mover: never M25:trap)
 //   breach: true also runs the single-breach flow per shell cell at or under the surface (§2.5): its reach in `breach` per body.
 // Returns, per body (in input order): {id, reached: [[x, y, z]] (cells included), spill: reached minus cells, predicted: [[x, y, z,
 // level]] (the block state's level, 1..7 flowing, 8 falling; every non-source cell the steady state holds), path (the longest
@@ -459,7 +459,9 @@ export function simulate(world, bodies, { breach = false } = {}) {
           q.push([x + dx, y + dy, z + dz]);
         }
       }
-      const trap = fluidCells.filter((c) => !dist.has(k3(...c)));
+      // ((7a LF) a bubble column's cells carry a mover (up to the surface, or down to its airlock): never trapped)
+      const carried = Array.isArray(b.carried) && b.carried.length ? new Set(b.carried.map((c) => k3(c[0], c[1], c[2]))) : null;
+      const trap = fluidCells.filter((c) => !dist.has(k3(...c)) && !(carried && carried.has(k3(...c))));
       add('trap', b, trap, `${trap.length} fluid cell(s) under a ceiling with no open surface within ${TRAP_REACH}`);
       if (world.exit && b.exits !== false) {
         // an exit: a cell a villager stands on (its feet cell), within EXIT_REACH (Manhattan, x and z) of the surface cell, its bank at

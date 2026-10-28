@@ -390,6 +390,14 @@ public final class Revisions {
 			beside.add(b);
 		}
 		st.add("beside", beside);
+		// (6d GR §2.3) a district beside a town: the town's claim (a district's growth never takes town land)
+		if (rec.beside != null && RegionsImpl.live(rec.beside) instanceof RegionsImpl.Live tl && tl.rec().state != RegionState.REMOVED && tl.rec().state != RegionState.REMOVING) {
+			JsonObject town = new JsonObject();
+			town.addProperty("id", tl.rec().id);
+			int[] tc = tl.rec().claim;
+			town.add("claim", BesideReach.arr(new int[] {tc[0], tc[2], tc[3], tc[5]}));
+			st.add("town", town);
+		}
 		st.add("keepOut", RegionsImpl.keepOutOf(rec.dimension, rec.owner, c, false));
 		st.add("unfinished", unfinished(l));
 		JsonObject lots = new JsonObject();
@@ -529,20 +537,28 @@ public final class Revisions {
 			if (l == null) {
 				throw RegionsImpl.refusal(Reason.OTHER, "no region " + regionId);
 			}
-			if (!PROGRAM.equals(req.program())) {
-				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "a revision is planned with the bundled program '" + PROGRAM + "' (got '" + req.program() + "'; growth is GR's)");
+			// (6d GR §9) a growth: the region's own program with params {grow}, or revise with {grow} or {spec: {grow}}: revise's spec.grow
+			JsonObject params = growParams(req);
+			if (params == null) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "a revision is planned with the bundled program '" + PROGRAM + "', or a growth with the region's program and params {grow} (got '"
+					+ req.program() + "')");
+			}
+			for (String k : req.ext().keySet()) {
+				if (k.startsWith("architect_mc:")) {
+					throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "the revision's ext key " + k + " is Architect's own");
+				}
 			}
 			ServerLevel level = l.level(s);
 			if (level == null) {
 				throw RegionsImpl.refusal(Reason.NOT_LOADED, l.rec().dimension + " is not loaded");
 			}
 			int[] c = l.rec().claim;
-			JsonObject ext = new JsonObject();
+			JsonObject ext = req.ext().deepCopy();
 			JsonObject of = new JsonObject();
 			of.addProperty("region", regionId);
 			ext.add(EXT_REVISION_OF, of);
 			// (the region's land is generated: its survey reads every generated chunk, loaded or not; the frozen heights go over it)
-			RegionPlanRequest r = new RegionPlanRequest(PROGRAM, req.params(), level, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), null, null, null,
+			RegionPlanRequest r = new RegionPlanRequest(PROGRAM, params, level, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), null, null, null,
 				LoadPolicy.GENERATED_ONLY(4096), l.rec().owner, ext, req.opKey(), null);
 			return RegionsImpl.INSTANCE.plan(r).whenComplete((p, e) -> giveBack(r, e != null));
 		}).thenCompose(f -> f).handle((p, e) -> {
@@ -553,8 +569,37 @@ public final class Revisions {
 		});
 	}
 
-	/** The kit's named refusal at the head of a plan failure ({@code CODE: [kind] message}), the guard's (§5). */
-	private static final Pattern REFUSAL = Pattern.compile("(?:^|: )(COVERED|OVERLAP_BUSY|OVERLAP_OWNED|OVERLAP|PROTECTED|NOT_ALLOWED|REGION_LIMIT|PLAN_STALE|LAYER_DEPTH): (\\[[a-z_]+\\] )?");
+	/**
+	 * (6d GR §9) The revise program's params of a request: {@code revise} with its own params ({@code {grow}} at the top moves into
+	 * {@code spec.grow}); any other program only as a growth ({@code params.grow}, the region's own program: a flat_village, districts or
+	 * plan_v0 region), mapped to {@code {spec: {grow}}}. Null: not a revision this program can plan.
+	 */
+	static @Nullable JsonObject growParams(RevisionRequest req) {
+		JsonObject p = req.params();
+		JsonObject grow = p.get("grow") instanceof JsonObject g ? g : null;
+		if (PROGRAM.equals(req.program())) {
+			if (grow == null) {
+				return p;
+			}
+			JsonObject out = p.deepCopy();
+			out.remove("grow");
+			JsonObject spec = out.get("spec") instanceof JsonObject sp ? sp : new JsonObject();
+			spec.add("grow", grow.deepCopy());
+			out.add("spec", spec);
+			return out;
+		}
+		if (grow == null) {
+			return null;
+		}
+		JsonObject spec = new JsonObject();
+		spec.add("grow", grow.deepCopy());
+		JsonObject out = new JsonObject();
+		out.add("spec", spec);
+		return out;
+	}
+
+	/** The kit's named refusal at the head of a plan failure ({@code CODE: [kind] message}), the guard's (§5); (6d GR) a growth's NO_ROOM. */
+	private static final Pattern REFUSAL = Pattern.compile("(?:^|: )(COVERED|OVERLAP_BUSY|OVERLAP_OWNED|OVERLAP|PROTECTED|NOT_ALLOWED|REGION_LIMIT|PLAN_STALE|LAYER_DEPTH|NO_ROOM): (\\[[a-z_]+\\] )?");
 
 	/**
 	 * A planRevision failure as the caller reads it: a refusal already (a Reason) as it is; the kit's guard's named refusal (§5.1, §5.2,
@@ -847,6 +892,14 @@ public final class Revisions {
 		r.lotEntries().forEach(le::addProperty);
 		op.add("lotEntries", le);
 		op.addProperty("autoApprove", r.autoApprove());
+		// (6d GR, Steward's keys) the caller's own ext (not architect_mc:*), carried onto every item the revision writes, so its sites name it
+		JsonObject callerExt = new JsonObject();
+		r.ext().entrySet().forEach(e -> {
+			if (!e.getKey().startsWith("architect_mc:")) {
+				callerExt.add(e.getKey(), e.getValue().deepCopy());
+			}
+		});
+		op.add("ext", callerExt);
 		op.addProperty("state", "prepared");
 		try {
 			Files.createDirectories(rd);
@@ -970,6 +1023,7 @@ public final class Revisions {
 		revExt.addProperty("region", rec.id);
 		revExt.addProperty("rid", rv.rid);
 		List<QItem> items = new ArrayList<>();
+		JsonObject callerExt = op.get("ext") instanceof JsonObject ce ? ce : new JsonObject();
 		List<String> stages = new ArrayList<>();
 		// (§4.6) refills: the standing lot (its box from the effective IR) gets a building again, an item of the revision's first stage; the
 		// lot's state before is kept for the undo
@@ -1072,6 +1126,13 @@ public final class Revisions {
 			}
 			RegionRec.Stage sp = rec.stages.computeIfAbsent(name, k -> new RegionRec.Stage());
 			sp.tilesTotal = ir.terrainTiles().getOrDefault(st, List.of()).size() + ir.pathTiles().getOrDefault(st, List.of()).size();
+		}
+		for (QItem q : items) {
+			callerExt.entrySet().forEach(e -> {
+				if (!q.ext.has(e.getKey())) {
+					q.ext.add(e.getKey(), e.getValue().deepCopy());
+				}
+			});
 		}
 		LoadPolicy load = LoadPolicy.GENERATED_ONLY(Math.max(64, 36 + 2 * 36));
 		boolean auto = op.has("autoApprove") && op.get("autoApprove").getAsBoolean();
@@ -1196,6 +1257,21 @@ public final class Revisions {
 		boolean allPlaced = b.items.stream().allMatch(i -> i.status == QItem.Status.PLACED) && !drained;
 		boolean any = b.items.stream().anyMatch(i -> i.status == QItem.Status.PLACED);
 		rv.state = b.status == QBatch.Status.DONE && allPlaced ? "PLACED" : any ? "PARTIAL" : "FAILED";
+		// (6d GR, Ask 1) the revision's sites from its batch, in item order: an item placed before a halt whose itemDone was not saved
+		// (the region record lost with the stop) is listed too, so RevisionView.sites names every site the revision wrote
+		List<String> sites = new ArrayList<>();
+		for (QItem i : b.items) {
+			if (i.status == QItem.Status.PLACED && i.siteId != null && !sites.contains(i.siteId)) {
+				sites.add(i.siteId);
+			}
+		}
+		for (String sid : rv.sites) {
+			if (!sites.contains(sid)) {
+				sites.add(sid);
+			}
+		}
+		rv.sites.clear();
+		rv.sites.addAll(sites);
 		end(l, rv, RegionState.valueOf(rv.regionStateBefore));
 	}
 
@@ -1281,6 +1357,14 @@ public final class Revisions {
 		}
 		List<String> no = new ArrayList<>();
 		Reason why = null;
+		// (6d GR, Steward's RC row 3) a survival revision still building its targets: say so (survival_building), not merely busy
+		if (rec.busy != null && rec.busy.startsWith("revising ") && rec.survival()) {
+			String[] building = dev.larattalabs.architect.site.RegionTargets.firstBuilding(rec.groupId);
+			if (building != null) {
+				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "undo of region " + regionId + " refused, nothing written: " + rec.busy + " is still building "
+					+ (building[1] != null ? building[1] : "target " + building[0]) + " (survival_building): let it finish or cancel it first");
+			}
+		}
 		if (rec.busy != null || rec.state == RegionState.PLACING || rec.state == RegionState.REMOVING || rec.state == RegionState.PREPARING) {
 			throw RegionsImpl.refusal(Reason.OVERLAP_BUSY, "region " + regionId + " is busy (" + (rec.busy != null ? rec.busy : rec.state.name().toLowerCase(java.util.Locale.ROOT)) + ")");
 		}
@@ -1300,8 +1384,19 @@ public final class Revisions {
 			}
 			String text = o.ir().json().toString();
 			for (Rev r : suffix) {
-				if (text.contains("\"rv" + r.rid + "_") || text.contains(":rv" + r.rid + "_")) {
-					no.add("region " + o.rec().id + " is joined to what revision " + r.rid + " added (joined)");
+				String hit = text.contains("\"rv" + r.rid + "_") || text.contains(":rv" + r.rid + "_") ? "rv" + r.rid + "_" : null;
+				// (6d GR §6) a growth's roads (<roadId>_g<n>) and nodes (<roadId>_g<n>_j<k>, _e<k>, _end) carry no rv prefix: an end join names
+				// <region>:<node>.<port>, a side join <region>:<roadId>
+				if (hit == null) {
+					for (String name : addedNames(l, r)) {
+						if (text.contains("\"" + regionId + ":" + name + ".") || text.contains("\"" + regionId + ":" + name + "\"")) {
+							hit = name;
+							break;
+						}
+					}
+				}
+				if (hit != null) {
+					no.add("region " + o.rec().id + " is joined to what revision " + r.rid + " added (" + hit + ") (joined)");
 					why = Reason.NOT_ALLOWED;
 				}
 			}
@@ -1392,6 +1487,21 @@ public final class Revisions {
 		return f;
 	}
 
+	/** (6d GR §6) The road and graph node ids a revision added (its IR's revision member), which a beside region's join may name. */
+	static List<String> addedNames(RegionsImpl.Live l, Rev r) {
+		List<String> out = new ArrayList<>();
+		Ir ir = irOf(l, r.rid);
+		if (ir != null && ir.json().get("revision") instanceof JsonObject rv) {
+			if (rv.get("roads") instanceof JsonObject ro) {
+				out.addAll(strings(ro, "add"));
+			}
+			if (rv.get("graph") instanceof JsonObject g) {
+				out.addAll(strings(g, "nodes"));
+			}
+		}
+		return out;
+	}
+
 	static boolean intersects(BesideReach.Cols cols, int x0, int z0, int x1, int z1) {
 		for (int x = x0; x <= x1; x++) {
 			for (int z = z0; z <= z1; z++) {
@@ -1462,7 +1572,13 @@ public final class Revisions {
 				int[] tc = tl.rec().claim;
 				town = new int[] {tc[0], tc[2], tc[3], tc[5]};
 			}
-			JsonObject land = DistrictLand.of(effective(l), town, null);
+			// (6d GR §7: v 2 once revised; a dangling district keeps its standingRemoved, D3 S-D3-3)
+			Long removedAt = rec.ext.get(DistrictLand.EXT_LAND) instanceof JsonObject old && old.get("standingRemoved") instanceof JsonElement sr && sr.isJsonPrimitive()
+				? sr.getAsLong() : null;
+			if (removedAt != null && rec.ext.get(DistrictLand.EXT_LAND) instanceof JsonObject old2 && old2.get("standingClaim") instanceof JsonArray sc && sc.size() == 4) {
+				town = new int[] {sc.get(0).getAsInt(), sc.get(1).getAsInt(), sc.get(2).getAsInt(), sc.get(3).getAsInt()};
+			}
+			JsonObject land = DistrictLand.of(effective(l), town, removedAt, !rec.revisions.isEmpty());
 			if (land != null) {
 				rec.ext.add(DistrictLand.EXT_LAND, land);
 			}
@@ -2010,6 +2126,26 @@ public final class Revisions {
 					}
 				}
 				o.add("siteExt", siteExt);
+				// (6d GR, Steward's keys) each revision site's caller ext (its non-architect keys) and the site's kind
+				JsonObject siteCaller = new JsonObject();
+				for (Rev r : rec.revisions) {
+					for (String sid : r.sites) {
+						var in = dev.larattalabs.architect.site.Infras.get(sid);
+						var st = in == null ? dev.larattalabs.architect.site.Sites.get(sid) : null;
+						JsonObject ext = in != null ? in.ext() : st != null ? st.ext() : null;
+						JsonObject c = new JsonObject();
+						c.addProperty("kind", in != null ? "infra" : st != null ? "site" : "gone");
+						if (ext != null) {
+							ext.entrySet().forEach(e -> {
+								if (!e.getKey().startsWith("architect_mc:")) {
+									c.add(e.getKey(), e.getValue().deepCopy());
+								}
+							});
+						}
+						siteCaller.add(sid, c);
+					}
+				}
+				o.add("siteCaller", siteCaller);
 			}
 			case "undoFail" -> o.addProperty("armed", failNextUndoStage = !req.has("on") || req.get("on").getAsBoolean());
 			case "history" -> {

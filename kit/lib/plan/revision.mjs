@@ -4,7 +4,7 @@
 //   keep    same id, the same canonical JSON                         fits, standing: true, cost 0      revision.keep (supported)
 //   add     a new id, or one the parent didn't build                 checked against the standing region revision.add (supported)
 //   refill  a zone equal to the parent's but for lots that gain `refill: true`, each lot removed or pad   fits, refill  revision.refill
-//   grow    a zone whose program.lots only gains lots                unsupported until GR               revision.grow (reserved)
+//   grow    a zone whose program.lots only gains lots                fits standing, grown (6d GR §8)    revision.grow (supported)
 //   change  an id gone from the plan, or the same id changed         unsupported until RV2              revision.change (reserved)
 // The mod sends the parent and the standing region as ctx.revision (not enumerable): {rid?, region, parentRid, parentArtifact,
 // parentIrSha, parent: {plan, built: [ids], geometry?: {id: [x0, z0, x1, z1]}}, standing (§5.3), history?: {key: sha}, heldSha?}.
