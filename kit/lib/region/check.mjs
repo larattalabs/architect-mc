@@ -25,14 +25,15 @@ import { rockStairRules } from './checkRockStairs.mjs'; // (7a RK)
 import { spiralRules } from './checkSpirals.mjs'; // (7a SA)
 import { liftRules } from './checkLifts.mjs'; // (7a LF)
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
-import { fluidRules } from './checkFluids.mjs';
+import { fluidRules, floodRule, floodMessage, bodiesOf } from './checkFluids.mjs';
+// (7a FB) M16 flood behaviour (a warning): floodRule over the walk graph's cells, the walk-marked floors and the lot boxes
 import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
 // (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
 import { vocabRules } from './checkVocab.mjs';
 import { formRulesVw } from './checkForms.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28', 'M29'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28', 'M29', 'M16'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
@@ -506,6 +507,15 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if ((want.has('M25') || want.has('M20')) && (ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid')) || (Array.isArray(meta?.wet) && meta.wet.length))) {
     time('M25', () => fluidRules({ ir, vw, meta, vols: irVolumes(ir, volumes, blobs), want, findings, metrics, partStage, finding }));
   }
+  // ---- (7a FB) M16 flood behaviour: only on a plan with bodies (every other report is unchanged); the walk cells are the player graph's
+  // and the feet over every walk-marked floor (any network's)
+  if (want.has('M16') && ir.parts.some((p) => (p.ops ?? []).some((o) => o.op === 'fluid'))) time('M16', () => {
+    const walk = [...graph.reached];
+    vw.eachWritten((x, y, z, idx, f) => { if ((f & F_WALK) && !P.air[idx]) walk.push(x, y + 1, z); });
+    const r = floodRule({ vw, bodies: bodiesOf(ir), walk });
+    metrics.M16 = r.metrics;
+    for (const f of r.found) findings.push(finding('M16', f.irPart, 'fluids', f.walk + f.lot, f.cells, floodMessage(f)));
+  });
 
   // ---- (6c D3) M28:beside and M25:clear's foreign bodies: a districts plan with a reach into a standing town's claim
   if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage, ...(want.has('M5') ? { light: () => blockLight(vw) } : {}) }); });
