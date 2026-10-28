@@ -574,6 +574,7 @@
             "lamps": { "enum": ["every", "none"] } } }
         ], "oneOfMessage": "walk is a boolean or {width?, access?, every?, lamps?}", "description": "(K2) A railed, lit wall walk on the top (player only): width 1..2 (default 1; the wall needs thickness >= width + 1, the outer course the parapet), access stair, ladder or auto (default: a flight up the inner face at each gate, a ladder where a flight has no room), an access every 16..128 walk cells (default 64), lamps every (default) or none. params.wall_walk: true reads as walk: true." },
         "waterDepth": { "type": "integer", "minimum": 0, "maximum": 8, "description": "(H) The deepest natural water the wall may stand in (a harbour wall; default 6). Only a wall that fails on water is searched again with wet sections (the wet fallback)." },
+        "lots": { "type": "array", "maxItems": 16, "items": { "type": "object", "required": ["lot"], "additionalProperties": false, "properties": { "lot": { "$ref": "#/$defs/id" }, "at": { "enum": ["corner", "gate", "run"] }, "near": { "$ref": "#/$defs/endpoint" } } } },
         "params": { "type": "object", "description": "Read leniently, never malformed (R17): height, closed, gates (a number) and torches: true are read when no first-class member says otherwise; every other key is listed in the answer's notes." }
       }
     },

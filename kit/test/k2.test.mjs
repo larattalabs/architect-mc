@@ -304,12 +304,13 @@ test('items 2, 3: a wall without along or walk is K1a\'s; castle_city reads its 
   const A = asksSurvey();
   const r = await checkPlanLocal(f.answer.plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
   const w = part(r, 'curtain_wall');
-  assert.equal(w.class, 'adjusted', 'adjusted as today (its gate_lot join, K3 changes it)');
+  assert.equal(w.class, 'fits', '(7a K3) its lots stand on the ring: no join deviation left');
   assert.ok(w.notes.includes('params.wall_walk read as walk: true'));
   assert.ok(!w.notes.includes('params.wall_walk not read'));
   const wk = r.res.meta.walls.find((x) => x.id === 'curtain_wall').walk;
   assert.ok(wk.cells.length > 300, 'the walk round the ring');
-  assert.ok(wk.accesses.filter((a) => /^gate /.test(a.why)).length >= 1, 'an access at its gate');
+  // ((7a K3) its gate is the gatehouse's passage now, and its lots cut the walk into segments: an access on each one)
+  assert.ok(wk.accesses.length >= 5, 'accesses on the walk\'s segments between its lots (every one reached: below)');
   const rep = checkRegion({ ir: r.res.ir, survey: A.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, meta: r.res.meta, prefix: false });
   const m = rep.metrics.walls.curtain_wall.walk;
   assert.deepEqual([m.reached, m.accessesUp, m.accessesDown, m.edges.bad, m.headroom.bad, m.dark], [m.cells, m.accesses, m.accesses, 0, 0, 0]);

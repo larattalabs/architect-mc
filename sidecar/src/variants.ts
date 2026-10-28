@@ -23,6 +23,7 @@ import type { BiblePin, DesignRequest, Outbound, PaletteSpec, ParamValues, Reski
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 import { SIM_COPY_FAIL, SIM_COPY_SIZE } from './copies.js';
+import { isWallLotRequest } from './massings.js';
 
 /** (0b) the kit's recipe (kit/lib/variation.mjs chooseRecipe) */
 export interface CopyRecipe {
@@ -594,7 +595,7 @@ export class VariantRunner {
         const recipe = parsed.recipe;
         const derived = { id: bible.id ?? v.bible.id, version: bible.version ?? v.bible.version, ...(bible.name ? { name: bible.name } : {}), roles: recipe.roles };
         fs.writeFileSync(path.join(scratch, 'copy-bible.json'), `${JSON.stringify(derived, null, 2)}\n`);
-        const extra = ['--bible', 'copy-bible.json', ...(Object.keys(recipe.values ?? {}).length ? ['--values', JSON.stringify(recipe.values)] : []), ...(recipe.mirror ? ['--mirror'] : []), ...(massingFile ? ['--massing', massingFile] : []), '--restraint', 'group-bible.json'];
+        const extra = ['--bible', 'copy-bible.json', ...(Object.keys(recipe.values ?? {}).length ? ['--values', JSON.stringify(recipe.values)] : []), ...(recipe.mirror ? ['--mirror'] : []), ...(massingFile ? ['--massing', massingFile] : []), ...(massingFile && req && isWallLotRequest(req) ? ['--massing-cap', `${req.maxSize.x},${req.maxSize.y},${req.maxSize.z}`] : []), '--restraint', 'group-bible.json'];
         this.host.variants.update(v.id, { step: `building ${bp} (recipe ${attempt + 1}: ${recipeLabel(recipe)})`, copy: { ...c, attempts: attempt + 1, recipe: recipeRecord(recipe, v, c) } });
         const res = fault ? simFault(fault) : await checkDesign(cfg.kitDir, scratch, bp, { maxSize: req?.maxSize, type, ...(profile ? { profile } : {}) }, KIT_TIMEOUT_MS, extra);
         if (!res.ok) {

@@ -164,12 +164,19 @@ export class VWorld {
     this.lots.push(lot);
     const b = lot.box;
     for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) if (this.inClaim(x, z)) this.lotCol[this.colIndex(x, z)] = li + 1;
+    // ((7a K3) a gatehouse's passage is the region's, open through the box (the design never writes there: the realise drops it))
+    const pc = lot.onWall?.passage?.cells;
+    if (Array.isArray(pc) && pc.length) {
+      (this.passage ??= new Set());
+      for (let i = 0; i + 3 < pc.length; i += 4) for (let y = pc[i + 2]; y <= pc[i + 3]; y++) this.passage.add(`${pc[i]},${y},${pc[i + 1]}`);
+    }
   }
   lotAt(x, y, z) {
     if (!this.inClaim(x, z)) return null;
     const li = this.lotCol[this.colIndex(x, z)];
     if (!li) return null;
     const b = this.lots[li - 1].box;
+    if (this.passage?.has(`${x},${y},${z}`)) return null;
     return y >= b.minY && y <= b.maxY ? this.lots[li - 1] : null;
   }
   /** Every written cell: cb(x, y, z, idx, flags, part). */

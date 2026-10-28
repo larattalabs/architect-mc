@@ -30,6 +30,7 @@ import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWa
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
 import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
+import { LOT_KEYS, lotBand, siteWallLots, viaLots, wallLotsOf } from './wallLots.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -100,7 +101,7 @@ function standMap(K, walk) {
  * (K1-target) a standing region of the owner the wall rings: its lots stay hard, its roads, paths and ways are walk cells (crossings
  * that get gates) at the surveyed ground.
  */
-function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = true } = {}) {
+function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = true, exceptLots = null } = {}) {
   const env = K.env, r = K.r;
   const zoneRects = [];
   for (const p of K.order) {
@@ -108,7 +109,8 @@ function gridOf(K, { allowZones = [], walkStanding = null, wet = null, bodies = 
     const z = K.res.get(p.id);
     for (const q of z?.rects ?? (z?.rect ? [z.rect] : [])) zoneRects.push(q);
   }
-  const lots = r.lots.map((l) => grow(l.box, 1));
+  // ((7a K3) a re-plan of a wall's own line (bodyBlame, the harbour fallback, a wouldFit) never meets the lots it sited on it)
+  const lots = r.lots.filter((l) => !exceptLots?.has(l.id)).map((l) => grow(l.box, 1));
   // ((6c F3 §3.2) a grown form's column mask (its runs), else its bounds)
   const forms = r.forms.flatMap((f) => (f.columns ? Array.from({ length: f.columns.length / 3 }, (_, i) => ({ minX: f.columns[3 * i + 1], minZ: f.columns[3 * i], maxX: f.columns[3 * i + 2], maxZ: f.columns[3 * i] })) : f.bounds ? [f.bounds] : []));
   const protectedR = [...env.protectedAreas.map((a) => a.rect), ...env.keepOut];
@@ -178,8 +180,14 @@ function settingsOf(K, p) {
   // ((7a K2, §1) the walk: the member, else params.wall_walk; with no thickness given the wall is walk.width + 1 thick (the outer course
   // the parapet))
   const walk = walkOf(w, P.read);
+  // ((7a K3, §1) the lots the wall names: its `lots` member, else its recorded params mapped (each mapped key read, no longer listed as
+  // not read); params.gates as a list of lot ids sets gates.min to its length. A wall naming none: K1's, byte for byte)
+  const L3 = K.lotSpec ? wallLotsOf(w, K.lotSpec, form) : { named: [], read: [], gatesMin: null };
+  if (L3.read.length) P.notes = P.notes.filter((nt) => !L3.read.some((k) => nt === `params.${k} not read`));
+  const gm3 = L3.gatesMin !== null && !Number.isInteger(g) && !Number.isInteger(g?.min) && P.read.gatesMin === undefined ? L3.gatesMin : null;
+  const gatesMin3 = gm3 ?? gatesMin;
   return {
-    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin), walk,
+    form, P, closed, sealed, gatesMin: sealed ? 0 : gatesMin3, gatesMax: sealed ? 0 : Math.max(gatesMax, gatesMin3), walk, named: L3.named, lotKeys: L3.read,
     height: w.height ?? P.read.height ?? WALL_DEFAULTS.height, thickness: w.thickness ?? (walk ? walk.width + 1 : WALL_DEFAULTS.thickness),
     crenels: w.crenels ?? WALL_DEFAULTS.crenels, corners: w.corners ?? WALL_DEFAULTS.corners, lamps: w.lamps ?? P.read.lamps ?? 'gates',
   };
@@ -194,10 +202,18 @@ function lineOf(K, p, st, wet = null, bodies = true) {
   if (st.form === 'around') {
     const tg = aroundTarget(K, w.where.around.feature);
     if (tg.error) return { error: tg.error };
-    const [r0, r1] = Array.isArray(w.where.around.ring) ? w.where.around.ring : WALL_DEFAULTS.ring;
+    let [r0, r1] = Array.isArray(w.where.around.ring) ? w.where.around.ring : WALL_DEFAULTS.ring;
+    // ((7a K3, §3) the band: with lots on the line, the ring keeps the deepest one clear of the zone's lots + 1 (noted; past ring.max a
+    // move deviation)
+    const band = st.siting?.length ? lotBand(st.siting, K.lotSpec) : null;
+    if (band !== null && band > r0) {
+      notes.push(`ring.min raised from ${r0} to ${band} for the lots on the line (the deepest straddles it)`);
+      if (band > r1) { devs.push({ what: 'move', value: band - r1 }); r1 = band + (r1 - r0); }
+      r0 = band;
+    }
     const order = [];
     for (let d = r0; d <= r1; d++) order.push(d);
-    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet, bodies });
+    const G = gridOf(K, { walkStanding: tg.standing?.id ?? null, wet, bodies, exceptLots: st.sitedIds });
     const pl = placeRing(G, tg.rect, order, t);
     // ((6c D3, S-D3-6) a ring round a standing region that another standing region's reach (a district's join) blocks: {kind: region})
     const reachBlocks = tg.standing && K.env.standing.some((a) => a !== tg.standing && Array.isArray(a.reach) && a.reach.length);
@@ -217,14 +233,18 @@ function lineOf(K, p, st, wet = null, bodies = true) {
       const g = K.geom.get(inside.part);
       if (!g?.rect || K.byId.get(inside.part)?.family !== 'zone') return { error: { code: 'NO_FEATURE', message: `wall.edge runs on a zone or the claim (${inside.part} is not a zone with a rect)`, evidence: { inside } } };
       R = g.rect;
-      for (let d = -(t - 1); d <= WALL_DEFAULTS.edgeStep; d++) order.push(d);
+      // ((7a K3, §3) the band: lots on the line keep the edge ring out past the zone's lots + 1 (noted))
+      const band = st.siting?.length ? lotBand(st.siting, K.lotSpec) : null;
+      const d0 = band !== null && band > -(t - 1) ? band : -(t - 1);
+      if (d0 !== -(t - 1)) notes.push(`the edge ring stands ${d0} out of zone ${inside.part} for the lots on the line (the deepest straddles it)`);
+      for (let d = d0; d <= Math.max(WALL_DEFAULTS.edgeStep, d0 + WALL_DEFAULTS.edgeStep); d++) order.push(d);
       what = `zone ${inside.part}`;
     }
-    const G = gridOf(K, { allowZones: inside.part ? [inside.part] : [], wet, bodies });
+    const G = gridOf(K, { allowZones: inside.part && !st.siting?.length ? [inside.part] : [], wet, bodies, exceptLots: st.sitedIds });
     const pl = placeRing(G, R, order, t);
     if (!pl.ok) return { error: { code: pl.code, message: `no clear ring on the edge of ${what} (${pl.side} side: ${blockerText(pl.blockers)})`, evidence: { side: pl.side, blockers: pl.blockers, edge: arr(R) } } };
     // a side that stepped off the edge: its cells (a move deviation)
-    const step = Math.max(...['n', 'e', 's', 'w'].map((s) => Math.abs(pl.o[s] - order[0])));
+    const step = Math.max(...['n', 'e', 's', 'w'].map((s2) => Math.abs(pl.o[s2] - order[0])));
     if (step) { devs.push({ what: 'move', value: step }); notes.push(`${inside.claim ? 'stepped in from' : 'stepped out of'} ${what}'s edge by up to ${step} (the street layout or an obstacle reaches it)`); }
     return { ...ringOf(K, pl, t, st, notes), devs, notes, target: { rect: R, what, zone: inside.part ?? null }, G };
   }
@@ -378,6 +398,7 @@ function runFree(W, a, b) {
   for (let i = a - 1; i <= b + 1; i++) {
     if (W.positions[i].axis !== ax) return false;
     if (W.ends.includes(i)) return false;
+    if (W.cutPos?.has(i)) return false; // ((7a K3) a lot's box: no wall there)
     if (W.gates.some((g) => i >= g.a - 1 && i <= g.b + 1)) return false;
     // ((6c HY-c, §8.3) a water gate's positions and their neighbours hold no walk gate)
     if (W.waterPos && (W.waterPos.has(i) || W.waterPos.has(i - 1) || W.waterPos.has(i + 1))) return false;
@@ -450,6 +471,14 @@ export function planWalls(K) {
     const dep = K.depState(p);
     if (dep) { K.ans(p, dep); continue; }
     const st = settingsOf(K, p);
+    // ((7a K3, §1-§3) the lots this ring sites on its line: the named lots of its own zone the zone withheld (K.withheld); the others
+    // keep K1's join deviation (a lot of another zone, an unsited lot, a line's or an along wall's named lots)
+    if ((st.form === 'around' || st.form === 'edge') && st.named.length) {
+      const zid = p.part.where?.around?.feature?.part ?? p.part.where?.inside?.part ?? null;
+      const held = zid ? K.withheld?.get(zid) : null;
+      st.siting = st.named.filter((q) => held?.has(q.lot));
+      st.sitedIds = new Set(st.siting.map((q) => q.lot));
+    }
     // ((7a K2, §1) a walk needs thickness >= walk.width + 1 (the outer course is the parapet): a given thickness too thin is refused
     // NO_ROOM {why: walk}, the thicker wall its wouldFit (re-checked alone)
     if (st.walk && st.thickness < st.walk.width + 1) {
@@ -511,15 +540,31 @@ export function planWalls(K) {
       W.gates.push(makeGate(W, { a: c.positions[0], b: c.positions[1], y: ys.length ? Math.max(...ys) : K.env.S.groundAt(p0.x, p0.z), h: WALL_DEFAULTS.gateHeight, auto: true, kind: 'network', routed: true }));
       W.opened++;
     }
+    // ((7a K3, §3) the lots on the line: sited (corners, gates, runs), the cut, their passages; a lot that fits nowhere goes back to its
+    // zone (K.back: the plan is compiled once more with it laid out in its zone, and K1's join deviation for it)
+    W.lots = [];
+    if (st.siting?.length && W.I) {
+      const sl = siteWallLots(K, W, st.siting);
+      W.lots = sl.sited;
+      for (const b of sl.back) { (K.back ??= new Map()).set(b.lot, b.why); notes.push(`${b.lot}: back to its zone (${b.why})`); }
+      for (const q of W.lots) notes.push(`${q.lot}: on the line at ${q.at === 'corner' ? `the ${['north-west', 'north-east', 'south-east', 'south-west'][q.corner]} corner` : q.at === 'gate' ? 'a gate run (its passage the gate)' : 'a run'}, front ${q.front}`);
+    } else if (st.siting?.length) for (const q of st.siting) (K.back ??= new Map()).set(q.lot, 'the wall has no ring');
+    // (a wall.line's via lots: K1's joined lots, with their onWall records (a gatehouse's passage where the line runs across it))
+    if (st.form === 'line' && W.joined.length && K.lotSpec) for (const v of viaLots(K, W)) { W.lots.push(v.rec); notes.push(...v.notes); }
+    // (a passage counts against gates.max as an open gate)
+    W.opened += W.lots.filter((q) => q.onWall?.passage).length;
+    const onLine = new Set(W.lots.map((q) => q.lot));
     // S-K1-2: lots named to join the wall that stand beside it: a join deviation each (the lot, its box, its distance)
     const joins = [];
-    for (const j of st.P.joins) {
+    for (const j of [...st.P.joins, ...st.named.filter((q) => !st.P.joins.some((x) => x.lot === q.lot)).map((q) => ({ key: q.key, lot: q.lot }))]) {
+      if (onLine.has(j.lot)) continue;
       const l = K.r.lots.find((x) => x.id === j.lot);
       if (!l) { notes.push(K.lotZone.has(j.lot) ? `params.${j.key} names ${j.lot}, which its zone did not place` : `params.${j.key} names ${j.lot}, not a lot of this plan`); continue; }
       if (joins.some((x) => x.lot === j.lot) || W.joined.includes(j.lot)) continue;
       let d = Infinity;
       for (const c of W.cells) d = Math.min(d, boxGap(l.box, c.x, c.z));
-      joins.push({ what: 'join', kind: 'join', value: Math.max(1, d), lot: l.id, key: j.key, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], note: `${j.key}: ${l.id} stands ${d} from the wall, beside it (lots on the wall line wait for FL's layout.ring or a later slice)` });
+      const why3 = !(j.key === 'lots' || st.lotKeys?.includes(j.key)) ? '(lots on the wall line wait for FL\'s layout.ring or a later slice)' : K.back?.has(l.id) ? `(it fits nowhere on the line: ${K.back.get(l.id)})` : st.form === 'line' || st.form === 'along' ? `(a ${st.form === 'line' ? 'wall.line' : 'wall.along'} sites no lot on its line but its via lots)` : `(not a lot of the wall's own zone)`;
+      joins.push({ what: 'join', kind: 'join', value: Math.max(1, d), lot: l.id, key: j.key, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], note: `${j.key}: ${l.id} stands ${d} from the wall, beside it ${why3}` });
     }
     W.joins = joins;
     K.walls.push(W);
@@ -804,7 +849,9 @@ export function wallsPassInput(K) {
     for (const [x, z] of stubCells(W)) if (!W.cellAt.has(key(x, z))) cells.push([x, z, 3]);
     // ((6c HY-c) a standing water gate counts against gates.max: the route pass opens fewer)
     const wg = waterGates(K, W).length;
-    return { id: W.id, max: W.st.gatesMax, opened: W.opened + wg, cells, open, ...(W.closed && W.I ? { inside: [W.I.minX, W.I.minZ, W.I.maxX, W.I.maxZ] } : {}) };
+    // ((7a K3, §4) a gatehouse's passage: an open gate (the passage move) from its front port to its back port, through its box)
+    const passages = (W.lots ?? []).filter((q) => q.onWall?.passage).map((q) => ({ lot: q.lot, front: q.onWall.passage.front, back: q.onWall.passage.back, facing: q.onWall.passage.facing }));
+    return { id: W.id, max: W.st.gatesMax, opened: W.opened + wg, cells, open, ...(W.closed && W.I ? { inside: [W.I.minX, W.I.minZ, W.I.maxX, W.I.maxZ] } : {}), ...(passages.length ? { passages } : {}) };
   });
 }
 
@@ -910,7 +957,8 @@ export function finishGates(K) {
     // ((7a K2, §2) an along wall's gates.min: placed before routing (alongMinGates); nothing more here
     if (W.form === 'along') { alongMinGates(K, W); continue; }
     if (!W.closed || W.st.sealed) continue;
-    let want = W.st.gatesMin - W.gates.length;
+    // ((7a K3) a gatehouse's passage is one of its gates)
+    let want = W.st.gatesMin - W.gates.length - (W.lots ?? []).filter((q) => q.onWall?.passage).length;
     // ((6c HY-c) the standing water gates count against gates.max: gates.min adds no gate past it)
     if (W.waterPos) want = Math.min(want, W.st.gatesMax - W.gates.length - waterGates(K, W).length);
     if (want <= 0) continue;
@@ -946,7 +994,7 @@ export function finishGates(K) {
       W.gates.push(makeGate(W, { a: best.a, b: best.b, y: K.env.S.groundAt(mid.x, mid.z), h: WALL_DEFAULTS.gateHeight, auto: true, kind: 'min' }));
       added++;
     }
-    if (added < want) W.notes.push(`gates.min ${W.st.gatesMin}: room for ${W.gates.length}`);
+    if (added < want) W.notes.push(`gates.min ${W.st.gatesMin}: room for ${W.gates.length + (W.lots ?? []).filter((q) => q.onWall?.passage).length}`);
   }
   // the wall answers: fits, or adjusted with its deviations (move, joins); notes; the geometry comes with the emission
   for (const W of K.walls) {
@@ -957,7 +1005,7 @@ export function finishGates(K) {
     const deviations = [...j.deviations, ...W.joins.map(({ note, ...d }) => { void note; return d; })];
     const notes = mergeNotes([...W.notes, ...W.joins.map((d) => d.note)]);
     const klass = j.klass === 'refused' ? 'refused' : deviations.length ? 'adjusted' : 'fits';
-    W.answer = { class: klass, deviations, notes, ...(j.klass === 'refused' ? { reasons: [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }] } : {}), ...(W.joined.length ? { provisional: true } : {}) };
+    W.answer = { class: klass, deviations, notes, ...(j.klass === 'refused' ? { reasons: [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }] } : {}), ...(W.joined.length || W.lots?.length ? { provisional: true } : {}) };
     K.ans(p, W.answer);
   }
 }
@@ -988,6 +1036,11 @@ function mergeNotes(n) {
 /** The corner stubs' cells of a closed ring with corners: tower (3x3, or t+1 square, over each corner's band square). */
 function stubCells(W) {
   if (W.st.corners !== 'tower' || !W.I || !W.closed) return [];
+  // ((7a K3) a corner holding a lot's box has no stub)
+  if (W.lots?.length) return stubCells0(W).filter(([x, z]) => !W.lots.some((q) => x >= q.box[0] && x <= q.box[3] && z >= q.box[2] && z <= q.box[5]));
+  return stubCells0(W);
+}
+function stubCells0(W) {
   const t = W.st.thickness, I = W.I, s = Math.max(3, t + 1), out = [];
   for (const [cx, cz, sx, sz] of [[I.minX, I.minZ, -1, -1], [I.maxX, I.minZ, 1, -1], [I.maxX, I.maxZ, 1, 1], [I.minX, I.maxZ, -1, 1]]) {
     const ox = sx < 0 ? cx - (s - 1) : cx, oz = sz < 0 ? cz - (s - 1) : cz;
@@ -1276,6 +1329,16 @@ function emitWall(K, W) {
     const c0 = W.cells.find((c) => c.pos === ((g.a + g.b) >> 1)) ?? W.cells[0];
     r.graphNode({ id: `gate:${g.id}`.slice(0, 64), kind: 'gate', ref: W.id, at: g.at, ports: [{ name: 'gate', at: g.at, facing: facingOut(W, c0), width: g.width }] });
   }
+  // ((7a K3, §6, §8) each gatehouse's passage: a node (kind passage, its lot the ref) with its two ports, front (outside) and back
+  // (inside), and an edge between them (type passage: an open gate, both movers; the doors are the design's)
+  for (const q of W.lots ?? []) {
+    const ps = q.onWall?.passage;
+    if (!ps) continue;
+    const id = `passage:${q.lot}`.slice(0, 64);
+    const back = { north: 'south', south: 'north', east: 'west', west: 'east' }[ps.facing];
+    r.graphNode({ id, kind: 'passage', ref: q.lot, at: [...ps.front], ports: [{ name: 'front', at: [...ps.front], facing: ps.facing, width: ps.width }, { name: 'back', at: [...ps.back], facing: back, width: ps.width }] });
+    r.graphEdge({ id: `pg_${q.lot}`.slice(0, 64), from: `${id}.front`, to: `${id}.back`, type: 'passage', width: ps.width, path: `w_${W.id}`.slice(0, 48), stage: K.stageOf('links'), movers: ['player', 'villager'], crossing: { type: 'passage', wall: W.id, lot: q.lot } });
+  }
   // ((7a K2, §3) the walk's accesses (kind access) and its runs between them (type wall_walk, player only)
   if (walkOut) {
     for (const a of walkOut.nodes) r.graphNode({ id: a.id, kind: 'access', ref: W.id, at: a.at, ports: [{ name: 'walk', at: a.at, facing: 'up', width: st.walk.width }] });
@@ -1322,8 +1385,31 @@ function emitWall(K, W) {
   // ((6c HY-c) the water gates: meta walls[].waterGates, the record's, the answer's geometry and its crossing)
   const wgOut = wgs.map((q) => ({ course: q.course, body: q.body, cells: q.cells, lintel: q.lintel, level: q.level, grate: q.grate.length }));
   if (wgOut.length) meta.waterGates = wgOut;
-  const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
-  const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  // ((7a K3) a cut position has no cells: its top is no top)
+  const Tc = W.cutPos?.size ? T.filter((_, i) => !W.cutPos.has(i)) : T;
+  const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
+  const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  // ((7a K3, §6, §8) the lots on the line: the answer's geometry and siteplan's walls[].lots ({lot, at, box, passage?}); the meta's (for
+  // the checker: each box, its floor, its passage's cells as a gate of kind passage, its outer faces) and the record's
+  if (W.lots?.length) {
+    const pass = (q) => (q.onWall?.passage ? { width: q.onWall.passage.width, height: q.onWall.passage.height, front: q.onWall.passage.front, back: q.onWall.passage.back } : null);
+    geometry.wallLots = W.lots.map((q) => ({ lot: q.lot, at: q.at, box: q.box, front: q.front, ...(pass(q) ? { passage: pass(q) } : {}) }));
+    record.lots = geometry.wallLots.map((q) => ({ lot: q.lot, at: q.at, box: q.box }));
+    meta.lots = W.lots.map((q) => {
+      const ps = q.onWall?.passage;
+      const cells = [];
+      if (ps) for (let i = 0; i < ps.cells.length; i += 4) if (ps.cells[i + 2] === q.floorY) cells.push([ps.cells[i], ps.cells[i + 1]]);
+      return { lot: q.lot, at: q.at, box: q.box, floorY: q.floorY, front: q.front, ...(ps ? { passage: { cells, y: q.floorY - 1, h: ps.height, width: ps.width, front: ps.front, back: ps.back } } : {}) };
+    });
+    // (a passage is a gate of the wall's to the checker: blocked in the closure's closed test, open across)
+    for (const q of meta.lots) if (q.passage) {
+      meta.gates.push({ id: `${q.lot}_passage`, at: q.passage.front, width: q.passage.width, door: 'none', frame: 'design', auto: false, kind: 'passage', lot: q.lot, y: q.passage.y, h: q.passage.h, cells: q.passage.cells });
+      // (the answer's and the record's gates list it too: the wall's gate there is the lot's passage)
+      geometry.gates.push({ id: `${q.lot}_passage`, at: q.passage.front, width: q.passage.width, door: 'none', auto: false, kind: 'passage' });
+      record.gates.push({ id: `${q.lot}_passage`, at: q.passage.front, width: q.passage.width, door: 'none', frame: 'design', auto: false, kind: 'passage', y: q.passage.y, h: q.passage.h, lot: q.lot });
+    }
+    if (W.cutPos?.size) meta.cut = [...W.cutPos].sort((a, b) => a - b);
+  }
   if (walkOut) { meta.walk = walkOut.meta; geometry.walk = walkOut.geometry; record.walk = { width: st.walk.width, runs: walkOut.edges.length, accesses: walkOut.meta.accesses.length }; }
   // ((7a K2, §2, §7) an along wall: its spine (corners), the window used and each run's offset; meta and siteplan carry the spine)
   if (W.along) {

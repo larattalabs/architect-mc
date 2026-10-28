@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { zeroCost } from './jobs/cost.js';
+import { keptForKey } from './opkeys.js';
 import type { Store } from './store.js';
 import type { Conformance, Design, DesignRequest, DesignStatus, Outbound } from './protocol.js';
 import { truncate } from './util/text.js';
@@ -102,8 +103,10 @@ export class DesignBook {
 
   private trim(): void {
     const all = this.all;
+    const now = this.ctx.now();
     while (all.length > DESIGN_KEEP) {
-      const i = all.findIndex((d) => isFinalDesign(d));
+      // (7a K3) a design with an opKey is kept at least 30 days after it is final (Designs.designByKey finds it), as keyed groups are
+      const i = all.findIndex((d) => isFinalDesign(d) && !keptForKey(d, now));
       if (i < 0) break;
       all.splice(i, 1);
     }

@@ -169,6 +169,22 @@ public interface ArchitectApi {
 	 * journal's "still ours" gains a global row: a cell written as a bubble column holds as any bubble column, a water source or air, and a
 	 * cell written as a water source holds as a bubble column (deltas, {@code versionOf}, adopt counts and survival matches read it). No new
 	 * record, method or reason.
+	 * Since NEXT (7a K3), a K3 helper ({@code region.walls.lots}) adds {@code "wallLots"}: the towers, corner lots and gatehouses a wall
+	 * names are sited on the wall's line (withheld from their zone's street; a gatehouse straddles a gate run with a passage through it,
+	 * routes cross the wall there); the plan-check artifact's {@code lots[].onWall} ({@code wall}, {@code at}, {@code floorY}, the box's
+	 * {@code outerFaces} and a gatehouse's {@code passage}) and {@code lots[].ports}; the siteplan's {@code walls[].lots}. When a lot on a
+	 * wall binds, {@link Regions#realiseApproved} refuses {@link Reason#ARTIFACT_STALE} ("lot &lt;id&gt; on wall &lt;wall&gt;: ...")
+	 * if its design leaves the wall's outer faces open (air, a door, a fence gate or a trapdoor there) or the passage floor is not
+	 * standable; the realise drops the entry's blocks on a gatehouse's passage (IRR's rule) and the lot's site never owns those cells.
+	 * No new record, method or reason.
+	 * Since NEXT (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
+	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
+	 * of {@link Designs#get}.
+	 * Since NEXT (7a K3), a helper with {@code wallLots.exactMassing} adds {@code "wallLots.exactMassing"} (the same name): a design
+	 * request carrying {@code ext["architect:wallLot"]} (a wall lot; its maxSize the lot's exact box) has, in a massing-first group, a
+	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
+	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
+	 * method or reason.
 	 */
 	Set<String> features();
 }

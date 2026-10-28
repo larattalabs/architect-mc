@@ -7,7 +7,8 @@
 // structure, palette, sidecar, anchor and size rules, no floating, parts, and the entrance reaching into the building; no
 // door, light, interior or type-geometry rules. opts.massing (a massing's sidecar) adds massing conformance
 // (lib/massing.mjs checkConformance): its errors join the errors, its issues the warnings (prefixed `massing:`), and the
-// result gets `conformance: { ok, errors, issues }`.
+// result gets `conformance: { ok, errors, issues }`. (Since NEXT) opts.massingCap {x,y,z}: the conformance size cap in place of the
+// massing's size + 2 (a wall lot's exact box).
 // `imported` (an .nbt the player built and saved, docs/CONTRACT.md "Import / export"): the rules inherited from
 // AgentCraft about how the building works (anchors, doors, light) and the size-vs-extent match become warnings; the
 // structure format, palette validity (vanilla blocks with valid properties), the sidecar and --max stay errors.
@@ -443,7 +444,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
   // ---- massing conformance (phase 4c): the size cap is an error, the rest warnings
   let conformance;
   if (opts.massing !== undefined) {
-    const c = checkConformance(sidecar, opts.massing);
+    const c = checkConformance(sidecar, opts.massing, opts.massingCap ? { cap: opts.massingCap } : {});
     conformance = { ok: c.ok, errors: c.errors, issues: c.issues };
     for (const m of c.errors) err(`massing: ${m}`);
     for (const m of c.issues) warn(`massing: ${m}`);

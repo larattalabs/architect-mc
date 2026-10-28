@@ -116,4 +116,27 @@ class LotMaskTest {
 			assertArrayEquals(w, new int[] {f.ox() + r[0], f.oz() + r[1]}, row[0] + " " + sx + "x" + sz + " " + d[2]);
 		}
 	}
+
+	@Test
+	void thePassageKeyJoinsTheMask() {
+		// (7a K3) the mask is the union of the irrigation and the passage keys; only the irrigation key is the drain's (Sites.drainIrrigation)
+		JsonObject ext = new JsonObject();
+		ext.add(LotMask.EXT_PASSAGE, LotMask.extOfAny(JsonParser.parseString("[12,20,64,66]").getAsJsonArray()));
+		assertEquals("[12,20,64,66]", ext.getAsJsonObject(LotMask.EXT_PASSAGE).get("cells").toString());
+		assertFalse(ext.has(LotMask.EXT), "a passage-only lot has no irrigation key: drainIrrigation leaves it");
+		var m = LotMask.of(ext);
+		assertTrue(m.test(Journal.pos(12, 64, 20)) && m.test(Journal.pos(12, 66, 20)));
+		assertFalse(m.test(Journal.pos(12, 67, 20)));
+		ext.add(LotMask.EXT, LotMask.extOf(JsonParser.parseString("[[10,20,64,64]]").getAsJsonArray()));
+		var both = LotMask.cells(ext);
+		assertEquals(4, both.size());
+		assertTrue(both.contains(Journal.pos(10, 64, 20)) && both.contains(Journal.pos(12, 65, 20)));
+		// nested and flat runs read the same; malformed ones are skipped, never thrown
+		assertArrayEquals(new int[] {1, 2, 3, 4}, LotMask.flatRuns(JsonParser.parseString("[[1,2,3,4],[5,6],\"x\"]").getAsJsonArray()));
+		assertArrayEquals(new int[] {1, 2, 3, 4}, LotMask.flatRuns(JsonParser.parseString("[1,2,3,4,5]").getAsJsonArray()));
+		assertArrayEquals(new int[0], LotMask.flatRuns(JsonParser.parseString("[1,\"a\",3,4]").getAsJsonArray()));
+		JsonObject bad = new JsonObject();
+		bad.add(LotMask.EXT_PASSAGE, JsonParser.parseString("{\"cells\":[]}"));
+		assertNull(LotMask.of(bad));
+	}
 }

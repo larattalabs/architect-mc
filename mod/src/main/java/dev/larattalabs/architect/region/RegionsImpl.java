@@ -1994,6 +1994,15 @@ public final class RegionsImpl implements Regions {
 			ext.add(dev.larattalabs.architect.site.LotMask.EXT, dev.larattalabs.architect.site.LotMask.extOf(irr));
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, dropped(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
 		}
+		// (7a K3, §5) a gatehouse's passage on a wall: the realise drops the entry's blocks there (IRR's rule) and the lot's site never owns
+		// them (LotMask's second key; the mask is the union); how many of the entry's non-air blocks it drops is reported (passageDropped)
+		JsonObject pass = lotPassage(ir, lot.id());
+		if (pass != null) {
+			ext.add(dev.larattalabs.architect.site.LotMask.EXT_PASSAGE, pass);
+			JsonObject only = new JsonObject();
+			only.add(dev.larattalabs.architect.site.LotMask.EXT_PASSAGE, pass);
+			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_PASSAGE_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(only)));
+		}
 		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, actorUuid, rec.survival(),
 			dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -2019,6 +2028,55 @@ public final class RegionsImpl implements Regions {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * (7a K3) A lot's passage cells in the IR ({@code lots[].onWall.passage.cells}: column runs, flat or nested) as the mask's ext value
+	 * {@code {cells: [flat runs]}}, or null: not on a wall, no passage, or malformed (never throws).
+	 */
+	static @Nullable JsonObject lotPassage(Ir ir, String lotId) {
+		if (ir.json().get("lots") instanceof JsonArray lots) {
+			for (JsonElement e : lots) {
+				if (e instanceof JsonObject lo && lo.get("id") instanceof com.google.gson.JsonPrimitive id && lotId.equals(id.getAsString())) {
+					return passageExt(lo);
+				}
+			}
+		}
+		return null;
+	}
+
+	/** (7a K3) The passage mask's ext value of a lot (IR or artifact: {@code onWall.passage.cells}), or null. */
+	static @Nullable JsonObject passageExt(JsonObject lot) {
+		if (lot.get("onWall") instanceof JsonObject w && w.get("passage") instanceof JsonObject p && p.get("cells") instanceof JsonArray c) {
+			JsonObject o = dev.larattalabs.architect.site.LotMask.extOfAny(c);
+			return o.getAsJsonArray("cells").isEmpty() ? null : o;
+		}
+		return null;
+	}
+
+	/**
+	 * (7a K3) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell. {@link #dropped} counts the template's
+	 * air cells too (its IRR count is kept as it is).
+	 */
+	static int droppedBlocks(String bpId, LotFitting.Fit f, java.util.function.@Nullable LongPredicate mask) {
+		var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
+		return grid == null ? 0 : droppedBlocks(grid, f.turns(), f.ox(), f.oy(), f.oz(), mask);
+	}
+
+	/** {@link #droppedBlocks(String, LotFitting.Fit, java.util.function.LongPredicate)} over a grid. Pure. */
+	static int droppedBlocks(dev.larattalabs.architect.placement.TemplateGrid grid, int turns, int ox, int oy, int oz,
+		java.util.function.@Nullable LongPredicate mask) {
+		if (mask == null) {
+			return 0;
+		}
+		var m = grid.ghost(turns);
+		int n = 0;
+		for (int i = 0; i < m.count(); i++) {
+			if (!grid.states()[i].isAir() && mask.test(net.minecraft.core.BlockPos.asLong(ox + m.x(i), oy + m.y(i), oz + m.z(i)))) {
+				n++;
+			}
+		}
+		return n;
 	}
 
 	/** (6c IRR) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell (the count the realise drops). */

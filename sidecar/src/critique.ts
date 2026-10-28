@@ -21,7 +21,7 @@ import { addCost, zeroCost } from './jobs/cost.js';
 import { criticHash } from './critichash.js';
 import { bibleOptsIn, promptMetrics } from './rarity.js';
 import { isFinalJob } from './jobs/book.js';
-import { CRITIQUE_VIEWS, DesignRequest as DesignRequestSchema, type Cost, type CritiqueRecord, type CritiqueRound, type CritiqueSpec, type Design, type DesignRequest, type EndReason, type Job } from './protocol.js';
+import { CRITIQUE_VIEWS, DesignRequest as DesignRequestSchema, MAX_SIZE_MIN_XZ, type Cost, type CritiqueRecord, type CritiqueRound, type CritiqueSpec, type Design, type DesignRequest, type EndReason, type Job } from './protocol.js';
 import type { Sidecar } from './sidecar.js';
 import { ClientError } from './sidecar.js';
 import { truncate } from './util/text.js';
@@ -666,7 +666,7 @@ export class Critiques {
     const clamp = (v: unknown, lo: number, hi: number) => Math.max(lo, Math.min(hi, typeof v === 'number' ? Math.round(v) : hi));
     const base: DesignRequest = parsed.success
       ? { ...parsed.data }
-      : ({ type: typeof bp.type === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(bp.type) ? bp.type : 'custom', style: 'as built', features: [], maxSize: { x: clamp(size.x, 7, 96), y: clamp(size.y, 6, 64), z: clamp(size.z, 7, 96) }, ...(typeof bp.name === 'string' ? { name: bp.name.slice(0, 40) } : {}) } as DesignRequest);
+      : ({ type: typeof bp.type === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(bp.type) ? bp.type : 'custom', style: 'as built', features: [], maxSize: { x: clamp(size.x, MAX_SIZE_MIN_XZ, 96), y: clamp(size.y, 6, 64), z: clamp(size.z, MAX_SIZE_MIN_XZ, 96) }, ...(typeof bp.name === 'string' ? { name: bp.name.slice(0, 40) } : {}) } as DesignRequest);
     const { group: _g, itemKey: _k, wave: _w, role: _r, redirect: _re, massing: _m, fromMassing: _f, massingVersion: _mv, ...clean } = base;
     // (U1) a materials-only entry is critiqued without a bible (its pin only names the Style its roles came from)
     const req: DesignRequest = { ...clean, ...setModePin(bp), critique: { ...(spec ?? {}), mode: 'report' } };

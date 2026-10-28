@@ -36,6 +36,7 @@ import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 import { eachColumn } from '../forms/states.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
+import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
 import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
@@ -910,7 +911,24 @@ export function isCoursePart(p) {
  * planCheck record for its `meta.planCheck`. `templates`: name -> {module} for N-P0-1 (the caller runs a whole-claim template first and passes
  * `whole: {zone, region}`).
  */
-export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
+/**
+ * The plan check (P0's compile). (7a K3, §2) A wall lot that fits nowhere on its wall's line (or whose wall placed no line) goes back to
+ * its zone: the plan is compiled once more with it laid out in the zone (and K1's join deviation for it), at most twice more. A plan
+ * whose walls name no lot compiles once, as before.
+ */
+export function runCheck(ctx, P, opts) {
+  let back = new Map();
+  for (let round = 0; ; round++) {
+    const out = runCheckOnce(ctx, P, opts, back);
+    const more = out.k3Back;
+    delete out.k3Back;
+    if (!more || round >= 2 || [...more.keys()].every((k) => back.has(k))) return out;
+    back = new Map([...back, ...more]);
+    if (!ctx.__regionAgain) Object.defineProperty(ctx, '__regionAgain', { value: true, enumerable: false });
+  }
+}
+
+function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = new Map()) {
   // (6d RV, §9) a revision of a realised plan (revision.parentArtifact and the mod's revision input): the standing region is hard to every
   // added part (its footprint, bodies, held columns and beside regions' reach, as a D1 standing region's footprint is)
   const REV = revisionInput(ctx, P.plan);
@@ -936,6 +954,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     return { region: r, record: { ...record, malformed: V.malformed, answers: [], partOf: {}, notes, hit: null, order: [] } };
   }
   const lotZone = V.lotZone;
+  // ((7a K3, §2) the lots each zone's ring walls site on their lines: the zone is laid out without them (none: every plan as before)
+  const withheld = withheldOf(V, new Set(k3Back.keys()));
+  const heldPart = (p) => (withheld.has(p.id) ? { ...p, part: withhold(p.part, withheld.get(p.id)) } : p);
   const geomOf = (id) => {
     if (geom.has(id)) return geom.get(id);
     if (lotZone.has(id)) { const z = res.get(lotZone.get(id)); const l = z?.layout?.lots?.find((x) => x.spec.id === id); return l ? { rect: arrRect(l.rect) } : null; }
@@ -1098,7 +1119,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
       // H footprint (KC §5), never cached
       const ignoreBody = p.part.ext?.['architect_mc:unsafe']?.zoneIgnoresBody === true;
-      const z = resolveFreeZone(env, p, geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
+      const z = resolveFreeZone(env, heldPart(p), geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
@@ -1107,17 +1128,19 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (p.family === 'zone') {
       // ((6c FL, KC §5) a street zone whose locator names an H body keeps clear of its footprint: never cached, so the cache stays exact)
       const bodyDep = whereParts(p.part.where).some((id) => keep.some((r) => r.part === id));
-      const key = cacheKey(env, p, geom);
+      // ((7a K3) a zone with withheld wall lots: laid out, keyed and cached without them)
+      const ph = heldPart(p);
+      const key = cacheKey(env, ph, geom);
       const hit = bodyDep ? null : env.cacheIn?.(key);
       let z;
       if (hit && hit.rect && !zonesAccepted.some((o) => meets(grow(arrRect(hit.rect), ZONE_GAP), o.rect))) {
-        z = rehydrateZone(env, p, hit);
+        z = rehydrateZone(env, ph, hit);
         if (z) z.cached = true;
       }
-      if (!z) z = resolveZone(env, p, geomOf, { keep: bodyDep ? keep : null });
+      if (!z) z = resolveZone(env, ph, geomOf, { keep: bodyDep ? keep : null });
       // the overlap pass: a zone meeting one placed before it is placed again around them (never cached)
       if ((z.klass === 'fits' || z.klass === 'adjusted') && zonesAccepted.some((o) => meets(grow(z.rect, ZONE_GAP), o.rect))) {
-        const again = resolveZone(env, p, geomOf, { obstacles: zonesAccepted.map((o) => o.rect), keep: bodyDep ? keep : null });
+        const again = resolveZone(env, ph, geomOf, { obstacles: zonesAccepted.map((o) => o.rect), keep: bodyDep ? keep : null });
         z = again;
         if (z.klass === 'fits' || z.klass === 'adjusted') {
           z.deviations = [...(z.deviations ?? [])];
@@ -1456,6 +1479,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     // ((close-out A, §4) a wall's or gate's endpoint on a piece its zone could not place: blocked, as a route's)
     unplacedBlocked: (err) => unplacedBlocked(err, answers),
     record: {}, routed: [], overflows, keep, props: propsPlanned,
+    // ((7a K3) the wall lots: the zones' withheld sets, each lot's type and size, the lots sent back by an earlier compile)
+    withheld, lotSpec: lotSpecOf(V), back: new Map(k3Back),
   });
   let K = k1Parts.length ? makeK() : null;
   if (K) planWalls(K);
@@ -1714,6 +1739,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // ---- (7a K1) step 4: gates by crossing, auto gates and gates.min; step 5: the links stage (walls and gates, rope spans), each
   // part under a checkpoint
   if (K) {
+    // ((7a K3, §4) the inner lanes: each gatehouse's back port to its zone's nearest street end, the wall's own edges)
+    if (K.walls?.some((W) => W.lots?.some((q) => q.onWall?.passage && q.at !== 'via'))) wallLanes(K, stageOf);
     finishGates(K);
     emitWalls(K);
     emitRopes(K);
@@ -1760,6 +1787,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   }
   if (!r.anchors.entrance) stubAnchors(r, env);
 
+  // ---- (7a K3, §2) a withheld lot that stands on no line (it fitted nowhere, its wall placed no line or was refused at emission) goes
+  // back to its zone: the plan is compiled once more (runCheck)
+  const backOut = new Map();
+  if (withheld.size) {
+    const onLine = new Map();
+    for (const W of K?.walls ?? []) if (okClass(W.id)) for (const q of W.lots ?? []) onLine.set(q.lot, W.id);
+    for (const [zid, ids] of withheld) for (const id of ids) if (!onLine.has(id)) backOut.set(id, K?.back?.get(id) ?? `its wall ${okClass(zid) ? 'placed no line for it' : 'did not fit'}`);
+  }
   // ---- 6. geometry into the answers (zones: rect, lots, street ends; forms: bounds)
   for (const p of V.parts) {
     const a = answers.get(p.id);
@@ -1789,6 +1824,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       if (e?.free) {
         // (6c FL, §6) a free layout's geometry: V's members plus layout, streets, hub and (around, outline) mask
         const lots = e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }));
+        lots.push(...wallLotsOfZone(K, p.id));
         a.geometry = freeGeometry(z, e, lots);
         const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
         a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
@@ -1796,6 +1832,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       }
       const lots = e ? e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }))
         : r.lots.map((l) => ({ id: l.id, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], entrance: r.meta.lots[l.id]?.entrance, front: l.front }));
+      // ((7a K3, §6) the zone's lots on its walls' lines: its own lots, standing outside its rect (onWall says why; S-K3-4))
+      if (e) lots.push(...wallLotsOfZone(K, p.id));
       a.geometry = { rect: rectArr(z.rect), ...(e ? { bell: e.L.res.bell, shared: e.L.shared?.kind, orientation: e.L.orientation, unplaced: e.L.unplaced.map((u) => u.id) } : { whole: true }), lots };
       const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
       const pend = styleOf(P.plan, p.part)?.pending !== undefined;
@@ -1814,13 +1852,15 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     r.meta.revision = { format: 'revision/1', naming: 'plan', rid: REV.rid ?? 0, position: REV.position ?? 0, base: REV.base ?? null, parent: { rid: REV.parentRid ?? 0, irSha: REV.parentIrSha ?? null },
       lots: { add: r.lots.map((l) => l.id), refill: revRec.refill }, roads: { add: r.roads.map((x) => x.id) }, graph: { nodes: r.graph.nodes.map((n) => n.id), edges: r.graph.edges.map((e) => e.id) }, seed: ctx.seed };
   }
-  return { region: r, record: {
+  return { ...(backOut.size ? { k3Back: backOut } : {}), region: r, record: {
     ...record, malformed: null, answers: V.parts.map((p) => answers.get(p.id)).filter(Boolean), order: V.order, partOf, notes, hit,
     zones: Object.fromEntries([...zoneEmit.entries()].map(([id, e]) => [id, { prefix: e.prefix }])),
     lotZone: Object.fromEntries(lotZone), lotMeta: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, { role: l.lot?.role ?? null, label: l.lot?.label ?? null, ext: l.lot?.ext ?? null }]))), lotEntries: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]))),
     styles: Object.fromEntries(V.parts.filter((p) => p.family === 'zone' || p.family === 'connector').map((p) => [p.id, styleOf(P.plan, p.part) ?? null])),
     cacheOut: hit ? {} : env.cacheOut, protectedRects: env.protectedAreas.map((a) => rectArr(a.rect)),
     ...(K ? { links: K.record } : {}),
+    // ((7a K3, §6) the lots on walls' lines: each one's onWall record and a gatehouse's ports (the artifact's lots[]), only when there are some)
+    ...(K?.walls?.some((W) => W.lots?.length) ? { wallLots: Object.fromEntries(K.walls.filter((W) => okClass(W.id)).flatMap((W) => (W.lots ?? []).map((q) => [q.lot, { onWall: q.onWall, ...(q.ports ? { ports: q.ports } : {}) }]))) } : {}),
     // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
     ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
     ...(paletteRules.length ? { palette: paletteRules } : {}),
@@ -2200,4 +2240,72 @@ function mergeExtras(base, extras) {
     out = next;
   }
   return out;
+}
+
+/** (7a K3, §6) The zone's lots standing on its walls' lines, as its answer's geometry lists its lots (id, box, entrance, front, size). */
+function wallLotsOfZone(K, zid) {
+  const out = [];
+  for (const W of K?.walls ?? []) {
+    if (!['fits', 'adjusted'].includes(K.answers.get(W.id)?.class)) continue;
+    for (const q of W.lots ?? []) {
+      if (q.at === 'via' || K.lotSpec(q.lot)?.zone !== zid) continue;
+      out.push({ id: q.lot, box: [...q.box], entrance: q.entrance, front: q.front, size: [...q.size] });
+    }
+  }
+  return out;
+}
+
+/**
+ * (7a K3, §4) The inner lanes: from each gatehouse's back port (on a ring wall round a zone) to the zone's street end nearest it, 1 wide,
+ * both movers, routed as the wall's own edges (its part wl_<wall>_lanes, under a checkpoint; the walls keep their gates: none opens).
+ * A lane that finds no route is noted on the wall.
+ */
+function wallLanes(K, stageOf) {
+  const env = K.env, r = K.r;
+  const nodes = {}, edges = [];
+  const want = [];
+  for (const W of K.walls) {
+    const zid = W.target?.zone ?? null, z = zid ? K.zoneEmit.get(zid) : null;
+    if (!z) continue;
+    for (const q of W.lots ?? []) {
+      const ps = q.onWall?.passage;
+      if (!ps || q.at === 'via') continue;
+      const ends = [];
+      if (z.districts) for (const e of Object.values(z.districts.ends ?? {})) for (const x of e) ends.push({ x: x.x, z: x.z, facing: x.facing ?? null });
+      else if (z.free) for (const x of freeEnds(z.L)) ends.push(x);
+      else if (z.L?.orientation && z.L.road) {
+        const o = z.L.orientation, sv = z.L.road.sv;
+        for (const [u, sg] of [[z.L.u0 - 1, -1], [z.L.u1 + 1, 1]]) { const [x, zz] = toWorld(o, u, sv); ends.push({ x, z: zz, facing: o === 'ew' ? [sg, 0] : [0, sg] }); }
+      }
+      if (!ends.length) continue;
+      const b = ps.back, d = (e) => Math.max(Math.abs(e.x - b[0]), Math.abs(e.z - b[2]));
+      const e = [...ends].sort((p1, p2) => d(p1) - d(p2) || p1.x - p2.x || p1.z - p2.z)[0];
+      const bf = { north: [0, 1], south: [0, -1], east: [-1, 0], west: [1, 0] }[q.front];
+      const from = `wlb_${q.lot}`.slice(0, 40), to = `wls_${q.lot}`.slice(0, 40);
+      nodes[from] = { at: [...b], kind: 'junction', facing: bf };
+      nodes[to] = { at: [e.x, env.S.groundAt(e.x, e.z) + 1, e.z], kind: 'junction', ...(e.facing ? { facing: e.facing } : {}) };
+      edges.push({ id: `wl_${q.lot}`.slice(0, 40), from, to, width: 1, movers: ['player', 'villager'], keepEnds: true });
+      want.push({ W, q });
+    }
+  }
+  if (!edges.length) return;
+  const cp = K.checkpoint();
+  try {
+    const walls = wallsPassInput(K).map((w) => ({ ...w, max: 0, opened: 0 }));
+    const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect))];
+    const part = `wl_lanes`;
+    // (the connectors' route meta stays: the lanes' edges are appended to it)
+    const prior = r.meta.route ?? null;
+    const out = r.pass('route', { nodes, edges, maxGrade: 0.25, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), walls });
+    if (prior) r.meta.route = { ...prior, edges: [...prior.edges, ...(r.meta.route?.edges ?? [])] };
+    const bad = out.data.edges.filter((x) => !x.ok);
+    for (const x of bad) { const w = want[edges.findIndex((e) => e.id === x.id)]; w.W.notes.push(`${w.q.lot}: no inner lane from its back port to the street (${x.failed})`); }
+    for (const x of out.data.edges) if (x.ok) { const w = want[edges.findIndex((e) => e.id === x.id)]; w.q.lane = { length: x.length }; }
+    const ad = K.addedSince(cp);
+    const owner = want[0].W.id;
+    K.mark(owner, ad);
+  } catch (e) {
+    K.rollback(cp);
+    for (const w of want) w.W.notes.push(`${w.q.lot}: no inner lane (${e.message})`);
+  }
 }

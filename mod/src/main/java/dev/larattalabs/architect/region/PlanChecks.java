@@ -1404,6 +1404,11 @@ public final class PlanChecks {
 		int res = inputs.has("surveyRes") ? inputs.get("surveyRes").getAsInt() : 1;
 		// (3) provisional lots: an entry past its fit box or the top of its cost range refuses now, before the survey
 		String lotWhy = lotProblem(body, r.lotEntries());
+		// (7a K3, §5) every lot on a wall with a bound entry (the artifact's own and the request's): its outer faces closed, its passage
+		// floor standable; refused the same way, before anything is queued
+		if (lotWhy == null) {
+			lotWhy = WallLotCheck.problem(body, lots);
+		}
 		if (lotWhy != null) {
 			return refused(Reason.ARTIFACT_STALE, lotWhy);
 		}
@@ -1751,7 +1756,8 @@ public final class PlanChecks {
 			}
 			long top = l.getAsJsonArray("costRange").get(1).getAsLong();
 			// ((6c IRR, §5) an entry's blocks on the lot's irrigation cells are dropped at the realise: not counted, so this is the count placed)
-			long cells = cells(id) - irrigationDropped(l, bp, id);
+			// ((7a K3, §5) and on a gatehouse's passage, likewise)
+			long cells = cells(id) - irrigationDropped(l, bp, id) - WallLotCheck.passageDropped(l, bp, id);
 			if (cells > top) {
 				return "lot " + e.getKey() + ": entry " + e.getValue() + " is " + cells + " cells, past the top of its approved cost range (" + top + "): approve again";
 			}

@@ -18,6 +18,10 @@ import org.jspecify.annotations.Nullable;
  * writer and the foundation/approach writes ({@link PlaceJob}: masked blocks are dropped), the site's BOX entry ({@link SiteJournal}:
  * masked cells are never captured, so removal, undo, a {@code versionOf} delta, PT2's adopt and Steward's claim and release never touch
  * them) and the delta planner (no growth into a masked cell).
+ *
+ * <p>(7a K3, CONTRACT K3 §5) A gatehouse lot on a wall carries its passage the same way, under {@link #EXT_PASSAGE}: the mask is the
+ * union of both keys, so every consumer above honours the passage too. Only the irrigation key drains fluids at removal
+ * ({@code Sites.drainIrrigation}).
  */
 public final class LotMask {
 	private LotMask() {
@@ -28,19 +32,73 @@ public final class LotMask {
 	/** The site ext key reporting how many of the entry's non-air blocks the mask dropped. */
 	public static final String EXT_DROPPED = "architect_mc:irrigationDropped";
 
-	/** The mask's cells (packed positions), or null when {@code ext} has none. */
+	/** (7a K3) The site ext key holding a gatehouse lot's passage cells (the same {@code {cells: [flat runs]}} value as {@link #EXT}). */
+	public static final String EXT_PASSAGE = "architect_mc:passage";
+	/** (7a K3) The site ext key reporting how many of the entry's non-air blocks the passage mask dropped. */
+	public static final String EXT_PASSAGE_DROPPED = "architect_mc:passageDropped";
+
+	/** The mask's cells (packed positions): the union of {@link #EXT} and {@link #EXT_PASSAGE}; null when {@code ext} has neither. */
 	public static @Nullable LongOpenHashSet cells(@Nullable JsonObject ext) {
-		if (ext == null || !(ext.get(EXT) instanceof JsonObject m) || !(m.get("cells") instanceof JsonArray a) || a.isEmpty()) {
+		if (ext == null) {
 			return null;
 		}
 		LongOpenHashSet out = new LongOpenHashSet();
-		for (int i = 0; i + 3 < a.size(); i += 4) {
-			int x = a.get(i).getAsInt(), z = a.get(i + 1).getAsInt(), y0 = a.get(i + 2).getAsInt(), y1 = a.get(i + 3).getAsInt();
-			for (int y = y0; y <= y1; y++) {
-				out.add(Journal.pos(x, y, z));
+		for (String key : new String[] {EXT, EXT_PASSAGE}) {
+			if (ext.get(key) instanceof JsonObject m && m.get("cells") instanceof JsonArray a) {
+				addRuns(a, out);
 			}
 		}
 		return out.isEmpty() ? null : out;
+	}
+
+	/**
+	 * Adds the cells of column runs {@code [x, z, y0, y1, ...]} (flat) or {@code [[x, z, y0, y1], ...]} (nested) to {@code out}; a
+	 * malformed run is skipped (never throws).
+	 */
+	public static void addRuns(@Nullable JsonArray a, LongOpenHashSet out) {
+		int[] flat = flatRuns(a);
+		for (int i = 0; i + 3 < flat.length; i += 4) {
+			for (int y = flat[i + 2]; y <= flat[i + 3]; y++) {
+				out.add(Journal.pos(flat[i], y, flat[i + 1]));
+			}
+		}
+	}
+
+	/**
+	 * Column runs, flat ({@code [x, z, y0, y1, ...]}) or nested ({@code [[x, z, y0, y1], ...]}), as a flat int array; malformed
+	 * entries are skipped (a nested run without 4 ints, a flat tail short of 4, a non-number). Never throws; empty for null.
+	 */
+	public static int[] flatRuns(@Nullable JsonArray a) {
+		if (a == null || a.isEmpty()) {
+			return new int[0];
+		}
+		it.unimi.dsi.fastutil.ints.IntArrayList out = new it.unimi.dsi.fastutil.ints.IntArrayList();
+		if (a.get(0) instanceof JsonArray) {
+			for (JsonElement r : a) {
+				int[] v = r instanceof JsonArray ra && ra.size() == 4 ? ints(ra) : null;
+				if (v != null) {
+					out.addElements(out.size(), v);
+				}
+			}
+		} else {
+			int[] v = ints(a);
+			if (v != null) {
+				out.addElements(out.size(), v, 0, v.length - v.length % 4);
+			}
+		}
+		return out.toIntArray();
+	}
+
+	/** Every element of {@code a} as an int, or null when one is not a number. */
+	static int @Nullable [] ints(JsonArray a) {
+		int[] v = new int[a.size()];
+		for (int i = 0; i < v.length; i++) {
+			if (!(a.get(i) instanceof com.google.gson.JsonPrimitive p) || !p.isNumber()) {
+				return null;
+			}
+			v[i] = p.getAsInt();
+		}
+		return v;
 	}
 
 	/** The mask as a predicate over packed positions, or null when there is none. */
@@ -61,6 +119,17 @@ public final class LotMask {
 			for (JsonElement v : r.getAsJsonArray()) {
 				flat.add(v.getAsInt());
 			}
+		}
+		JsonObject o = new JsonObject();
+		o.add("cells", flat);
+		return o;
+	}
+
+	/** (7a K3) The mask's ext value from column runs, flat or nested: {@code {cells: [flat runs]}} (malformed runs skipped). */
+	public static JsonObject extOfAny(@Nullable JsonArray runs) {
+		JsonArray flat = new JsonArray();
+		for (int v : flatRuns(runs)) {
+			flat.add(v);
 		}
 		JsonObject o = new JsonObject();
 		o.add("cells", flat);
