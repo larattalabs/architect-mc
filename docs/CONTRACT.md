@@ -26005,6 +26005,14 @@ stay the light role's W fixtures (K1 §Gates). An immovable role block never bec
   **height at least 9 from floorY to the roof underside** (lintel at floorY+3, 4 clear cells, roof above; the recorded 11 high fits).
   **Brief lines:** "keep 4 clear cells above the passage lintel for the winch room" and "give a sky-exposed roof or crenel cell for the
   daylight sensor".
+- **Who designs the gatehouse, and its box (coordinator, 2026-10-27, answers Steward's S-GM-1 box question).** Architect never
+  designs a wall gatehouse: Steward's design loop designs it and binds it through `realiseApproved`, as K3 built. A lot with `onWall`
+  (towers and gatehouses alike, from K3 on, not only GM) comes with an **exact box**: its `fitBox` is the box the wall was cut to.
+  Steward sends that footprint and height **as they are**, with **no approach margin** (the passage ports and the doors on inner faces
+  are the approach; the outer faces must reach the box's faces or `WallLotCheck` refuses `ARTIFACT_STALE`) and **no MIN_XZ = 7 clamp**
+  (a design larger than the box fails `lotProblem`; a box under 7 on a side is legitimate). **11 x 3 x 9 is the minimum for a
+  mechanism, not the box:** the box is the lot's own size as the plan asked for it (the recorded fixture: 13 x 11, 11 high). A box
+  under the minimum is not refused: the wall is `adjusted`, the passage stays plain, deviation `what: mechanism` (§9).
 - **K1 wall gates (GM-b, decided: both).** Only `swing` (no pistons, so no recess): K1a's wooden double door becomes the iron swing door
   pair and the button; a run needs `width + 2` as today. A K1 gate in a wall of thickness under 3 keeps its wooden door. Portcullis and
   slide are not offered on a K1 gate (they need a winch room or 4 cells of jamb a side).
@@ -26139,10 +26147,9 @@ to hold on the H/HY main).
 
 ### Open questions for Steward
 
-- **S-GM-1. Brief lines.** Does the design loop take two brief lines ("keep 4 clear cells above the lintel", "give a sky-exposed
-  roof or crenel cell")? The envelope itself rides the existing `Reserved` entry (decided, zero Steward change). Default: yes.
-
-(Answered and removed: the second reserved set, which is now the merge into the existing entry; "add a portcullis to a standing gate",
+(Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
+backstory so its 2000-char notes cap cannot clip them; the gatehouse box is answered in §4 (exact `fitBox`, no approach margin or
+MIN_XZ clamp; 11 x 3 x 9 a minimum), and Steward special-cases `onWall` lots in GM's RC. The second reserved set, which is now the merge into the existing entry; "add a portcullis to a standing gate",
 which is a reserved follow-up through versionOf/revision.)
 
 ### Open questions for Noah
