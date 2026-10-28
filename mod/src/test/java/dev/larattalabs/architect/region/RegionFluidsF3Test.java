@@ -106,7 +106,7 @@ class RegionFluidsF3Test {
 	@Test
 	void theKindAndStillOurs() {
 		assertTrue(IrStale.KINDS_FORMAT2.contains("coralDecor"));
-		assertEquals(IrStale.KINDS_FORMAT2.size() - 1, IrStale.KINDS_FORMAT2.indexOf("coralDecor"), "appended at the end");
+		assertEquals(IrStale.KINDS_FORMAT2.indexOf("survival") + 1, IrStale.KINDS_FORMAT2.indexOf("coralDecor"), "appended at the end (then 7a LF's bubbleColumns after it)");
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "coralDecor"), null), "this mod reads it");
 		assertNotNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "coralDecor-v2"), null), "an unknown kind is refused");
 		// a coral that died in a drained pond is still the live one the entry wrote (CU's chain, F3-a's Coral), a fan's facing compares

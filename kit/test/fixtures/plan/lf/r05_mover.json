@@ -1,0 +1,138 @@
+{
+  "about": "(7a LF) a lift whose movers name villager, up a slope rising 12 at 1:2 across the claim (no face): the ends climb 12, so not NO_CLIMB; a lift is player-only by kind (S-7a-8): refused MOVER, with a stair wouldFit that fits alone",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 76
+      },
+      {
+        "x0": 1000,
+        "z0": 2030,
+        "x1": 1159,
+        "z1": 2031,
+        "y": 75
+      },
+      {
+        "x0": 1000,
+        "z0": 2032,
+        "x1": 1159,
+        "z1": 2033,
+        "y": 74
+      },
+      {
+        "x0": 1000,
+        "z0": 2034,
+        "x1": 1159,
+        "z1": 2035,
+        "y": 73
+      },
+      {
+        "x0": 1000,
+        "z0": 2036,
+        "x1": 1159,
+        "z1": 2037,
+        "y": 72
+      },
+      {
+        "x0": 1000,
+        "z0": 2038,
+        "x1": 1159,
+        "z1": 2039,
+        "y": 71
+      },
+      {
+        "x0": 1000,
+        "z0": 2040,
+        "x1": 1159,
+        "z1": 2041,
+        "y": 70
+      },
+      {
+        "x0": 1000,
+        "z0": 2042,
+        "x1": 1159,
+        "z1": 2043,
+        "y": 69
+      },
+      {
+        "x0": 1000,
+        "z0": 2044,
+        "x1": 1159,
+        "z1": 2045,
+        "y": 68
+      },
+      {
+        "x0": 1000,
+        "z0": 2046,
+        "x1": 1159,
+        "z1": 2047,
+        "y": 67
+      },
+      {
+        "x0": 1000,
+        "z0": 2048,
+        "x1": 1159,
+        "z1": 2049,
+        "y": 66
+      },
+      {
+        "x0": 1000,
+        "z0": 2050,
+        "x1": 1159,
+        "z1": 2051,
+        "y": 65
+      },
+      {
+        "x0": 1000,
+        "z0": 2052,
+        "x1": 1159,
+        "z1": 2053,
+        "y": 64
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2060
+    ],
+    "top": [
+      1060,
+      77,
+      2016
+    ]
+  },
+  "expect": {
+    "part": "villager_lift",
+    "class": "refused",
+    "code": "MOVER"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "villager_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        },
+        "movers": [
+          "player",
+          "villager"
+        ]
+      }
+    ]
+  }
+}

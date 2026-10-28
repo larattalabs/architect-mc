@@ -73,13 +73,24 @@ public final class StillOurs {
 	 * (6c H §4.3) A cell an entry wrote as a water source or an ice cap is still the entry's in any water state (any level), as ice or
 	 * frosted ice, or as air (it froze, thawed, flowed, or a bucket took it); one written as a lava source in any lava state or as air.
 	 * Nothing else changes: a player's block in a pond is not the entry's.
+	 * <p>
+	 * (7a LF §4, Since NEXT) A cell written as a bubble column is still the entry's as any bubble column (either drag: vanilla turns the
+	 * column over its base), as a water source, or as air; and a cell written as a water source is still the entry's as a bubble column
+	 * (water over soul sand or magma becomes one). A player's block in a shaft cell is not the entry's.
 	 */
 	public static boolean fluidHolds(BlockState now, BlockState after) {
 		var a = after.getBlock();
 		var n = now.getBlock();
+		boolean bubbleNow = n == net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN;
+		if (a == net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN) {
+			return bubbleNow || n == net.minecraft.world.level.block.Blocks.WATER && now.getFluidState().isSource() || now.isAir();
+		}
 		boolean waterOrIce = n == net.minecraft.world.level.block.Blocks.WATER || n == net.minecraft.world.level.block.Blocks.ICE
 			|| n == net.minecraft.world.level.block.Blocks.FROSTED_ICE || now.isAir();
-		if (a == net.minecraft.world.level.block.Blocks.WATER && after.getFluidState().isSource() || a == net.minecraft.world.level.block.Blocks.ICE) {
+		if (a == net.minecraft.world.level.block.Blocks.WATER && after.getFluidState().isSource()) {
+			return waterOrIce || bubbleNow; // ((7a LF) a source over soul sand or magma is a bubble column now)
+		}
+		if (a == net.minecraft.world.level.block.Blocks.ICE) {
 			return waterOrIce;
 		}
 		if (a == net.minecraft.world.level.block.Blocks.LAVA && after.getFluidState().isSource()) {

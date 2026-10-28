@@ -1,0 +1,75 @@
+{
+  "about": "(7a LF) v7a_lf_cliff with an overhang of rock 2 over the cliff's top (y 96) reaching 4 out from the face (z 2030..2033, x 1040..1080, a frozen volume's ROCK cells): under 3 clear over every shaft's top: HEADROOM",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 94
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      95,
+      2016
+    ]
+  },
+  "volume": {
+    "given": [
+      [
+        1036,
+        58,
+        2020,
+        1084,
+        100,
+        2040
+      ]
+    ],
+    "edits": [
+      {
+        "box": [
+          1040,
+          96,
+          2030,
+          1080,
+          97,
+          2033
+        ],
+        "class": "ROCK"
+      }
+    ]
+  },
+  "expect": {
+    "part": "roof_lift",
+    "class": "refused",
+    "code": "HEADROOM"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "roof_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "about": "(7a LF, KC) a pond at the cliff's foot near where the first tower would stand (near the anchor pond, within 2): placed first, the lift keeps clear of its hard and watched cells (the row's kept cells; the tower moves along the face), both fit, M25:clear 0",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 94
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      95,
+      2016
+    ],
+    "pond": [
+      1058,
+      65,
+      2037
+    ]
+  },
+  "volume": {},
+  "expect": {
+    "part": "pond_lift",
+    "class": "fits"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "foot_pond",
+        "kind": "pond",
+        "where": {
+          "near": {
+            "anchor": "pond",
+            "within": 2
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "pond_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        }
+      }
+    ]
+  }
+}

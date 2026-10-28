@@ -598,7 +598,9 @@ export class Region {
         // (6c T3b: a tunnel segment's own handling goes here)
         if (g.kind === 'tunnel') return;
         if (g.kind === 'rope') return;
-        // (7a foundation) a lift's, a catwalk's or a rock stair's own cells are the links stage's (rows 9-11; their slices write them)
+        // (7a foundation) a lift's, a catwalk's or a rock stair's own cells are the links stage's (rows 9-11; their slices write them);
+        // ((7a LF) a lift's landing is the land itself: the face's top beside the shaft (its shell's rim: the tower's, never a walk's), or
+        // a down column's approach at the foot)
         if (ROW_SEGMENTS_7A.includes(g.kind)) return;
         if (g.kind === 'walk' || g.kind === 'landing' || g.kind === 'gate') {
           // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns

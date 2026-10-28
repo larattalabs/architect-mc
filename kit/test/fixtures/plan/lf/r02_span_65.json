@@ -1,0 +1,50 @@
+{
+  "about": "(7a LF) a cliff 65 high (its top at 129): no lift rises past 64: refused SPAN {rise: 65, max: 64}",
+  "terrain": {
+    "W": 160,
+    "D": 112,
+    "x0": 1000,
+    "z0": 2000,
+    "bands": [
+      {
+        "x0": 1000,
+        "z0": 2000,
+        "x1": 1159,
+        "z1": 2029,
+        "y": 129
+      }
+    ]
+  },
+  "anchors": {
+    "foot": [
+      1060,
+      65,
+      2048
+    ],
+    "top": [
+      1060,
+      130,
+      2016
+    ]
+  },
+  "expect": {
+    "part": "tall_lift",
+    "class": "refused",
+    "code": "SPAN"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "tall_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "foot"
+        },
+        "to": {
+          "anchor": "top"
+        }
+      }
+    ]
+  }
+}
