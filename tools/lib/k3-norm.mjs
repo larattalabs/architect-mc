@@ -12,3 +12,7 @@ export const K3_MOVED = Object.freeze({
   'asks-8703dbd/redstone_gate.json': why('joins read by type; every lot back to the zone (the raised band meets the moat\'s body), K1\'s join deviations noted why: the same class as before'),
   'k1a/unread_keys.json': why('towers read: h1 sited on the ring\'s corner (no join deviation; the expect updated)'),
 });
+
+/** (7a K3) The recorded ask parts K3 re-answers (adjusted -> fits, provisional: their lots read and sited on the wall): the earlier slices'
+ * asks tables (KC item 3, H-a item 10, HY-b item 11) compare their lines by part and kind only, through fl-norm's flAsksFilter (k3AskLine). */
+export const K3_ASK_PARTS = Object.freeze(['border_fort/fort_wall', 'camp_to_city/city_wall', 'castle_city/curtain_wall', 'walled_town/town_wall']);
