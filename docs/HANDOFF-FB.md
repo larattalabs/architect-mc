@@ -6,10 +6,11 @@ Branch `slice/FB`, worktree `../_work/architect-mc-FB`. Kit only, $0, no Minecra
 - [x] M16 in `kit/lib/region/checkFluids.mjs` (`floodRule`, `floodMessage`, `FLOOD`), wired in `check.mjs` (appended to RULES, a warning,
   only on a plan with a fluid op; `metrics.M16`).
 - [x] `kit/test/fb.test.mjs` (gate item 1).
-- [ ] the count over every committed fixture and the 59 asks (item 2): `tools/gate7afb.mjs count`.
-- [ ] byte identity (item 3): `tools/gate7afb.mjs unchanged` (gate7a-kit, base `../architect-mc-FB-main`).
-- [ ] `fb-unit` in gate-chains + impact; step-inputs rebuilt and checked.
-- [ ] kit suite, instant lints, gate-verifier review, push.
+- [x] the count over every committed fixture and the 59 asks (item 2): `tools/gate7afb.mjs count`.
+- [x] byte identity (item 3): `tools/gate7afb.mjs unchanged` (gate7a-kit, base `../architect-mc-FB-main`).
+- [x] `fb-unit` in gate-chains + impact; step-inputs rebuilt and checked.
+- [x] kit suite (963/963), instant lints (run 20261028-172238-change; see the contract's as-built)
+- [ ] gate-verifier review, push.
 
 ## Decisions
 - Barrier = a non-air fluid-stopping cell (P.fs, M25's notion): doors, panes, bars, grates, fences count 1; air/torch/grass 0; a
