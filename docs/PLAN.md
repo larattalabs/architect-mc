@@ -1337,3 +1337,8 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 - SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
 - RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.
 - LF lifts (gallery https://claude.ai/artifact/DSfY1N32us1YRUa3vLJNTL): approved (2026-10-27).
+
+## GM contract notes (Steward, 2026-10-27), to fold into the GM contract before it builds
+- The mechanism envelope is merged into the lot's existing `DesignRequest.Reserved` entry in the artifact (Steward option a: zero Steward change). For the design, the envelope cells are hard "never write", like the existing set; only Architect's region writes the mechanism blocks.
+- "Add a portcullis to a standing gate" stays a reserved follow-up through Steward's versionOf/revision change-request path (not ruled out).
+- Rest state open by default suits Steward (a settlement shouldn't wall out its own steward). Steward un-reserves connector.drawbridge in the GM RC.
