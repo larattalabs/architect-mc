@@ -25971,7 +25971,7 @@ stay the light role's W fixtures (K1 §Gates). An immovable role block never bec
 
 | Surface | Delta |
 |---|---|
-| plan/0 `connector.wall.lots[]` (K3's member) | `mech?: "portcullis" \| "slide" \| "swing"` and `rest?: "open" \| "closed"` on a gate lot. **The compact schema has 25 bytes of room**, and this costs about 70: GM pays by shortening existing descriptions (at least 60 bytes) or the coordinator raises the 96,000 bound; the lenient route first: `params.mechanism` and `params.gate_mech` on a wall are read for `lots` absent (§9 of K3 style) |
+| plan/0 `connector.wall.lots[]` (K3's member) | `mech?: "portcullis" \| "slide" \| "swing"` and `rest?: "open" \| "closed"` on a gate lot. **The compact schema has 25 bytes of room**, and this costs about 70: GM pays by shortening existing descriptions (at least 60 bytes) or the coordinator raises the 96,000 bound; the lenient route first: `params.mechanism` and `params.gate_mech` on a wall are read when `lots` is absent (K3's lenient rule, R17) |
 | plan/0 `connector.drawbridge` | No schema change: `params.mechanism` (`redstone` or `piston`, both mean the trapdoor deck) and `params.movable` are read. The kind flips from reserved to supported: **catalogue bump** (`sinceApi` the next number), the `redstone_gate / drawbridge` row moves off `unsupported` (C:14084) and the plan builder names the byte-identity mover (§10 item 2) |
 | Feature | `gateMechanisms` (`region.walls.mechanisms`; sidecar `FEATURES`, `ApiRules`, `ArchitectApi` javadoc "Since NEXT (7a GM)") |
 | Wall answer | `geometry.wallLots[].passage.mechanism {kind, rest, who}`; `provisional` unchanged; a deviation `what: mechanism` when the box is too narrow (§9) |
