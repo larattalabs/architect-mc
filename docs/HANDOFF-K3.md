@@ -87,6 +87,9 @@ refuses a keyed request rather than dropping the key).
 4. **Ordering:** `get`, `designByKey` and the cancel outcome report DONE only once the entry's new version is installed and loaded on
    the server, the moment DESIGN_DONE fires (a DESIGN_DONE listener already sees DONE). Before that a finished design reads as its last
    non-final status (RENDERING if the game saw none). FAILED and CANCELLED are reported when final.
+   `SiteEvents.DESIGN_UPDATED` is outside the guarantee: it can still carry a DONE record before the install, as before. Key off
+   DESIGN_DONE, `get`, `designByKey` or the outcome. A lookup that returns a DONE design this game never reported installs it and
+   fires DESIGN_DONE first, then answers.
 
 ## The exact API delta (all additive; no existing record, method, constructor or enum value removed or changed; api-compat clean)
 
