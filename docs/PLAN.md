@@ -1349,3 +1349,4 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 3. **Drawbridge:** the flipping iron-trapdoor deck (GM-c).
 4. **K1 wall gates** get the iron swing door pair too (GM-b).
 Steward's notes from the section above apply: the envelope is merged into the lot's reserved set (never-write for designs), and the retrofit is a follow-up.
+- GM day cycle (Noah, 2026-10-27): storms may close the gate. A daylight sensor reading lower in rain or thunder by day is accepted (N-GM-2 answered: storms close it).
