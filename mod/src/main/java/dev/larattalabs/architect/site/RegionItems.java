@@ -302,7 +302,8 @@ public final class RegionItems {
 			var reach = r.ir().json().get("reach") instanceof com.google.gson.JsonObject rc && rc.get("runs") instanceof com.google.gson.JsonArray runs
 				? dev.larattalabs.architect.region.BesideReach.colsOf(runs) : null;
 			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, reach).consent(consent).heights(hts) // (C31) the owner's areas bound felling
-				.revision(r.rid() > 0).survivalRevision(r.rid() > 0 && rec.survival()); // (6d RV) a revision's tile refuses what it must keep off
+				.revision(r.rid() > 0).survivalRevision(r.rid() > 0 && rec.survival()) // (6d RV) a revision's tile refuses what it must keep off
+				.revisionOf(rec.id, r.rid()); // (6d GR) and layers over its own path-set entries (a halted attempt's leftover)
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
 		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner))

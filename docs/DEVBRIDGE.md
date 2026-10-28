@@ -671,3 +671,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   gains each site's ext (`siteExt`). `dev.journal.killAt` takes RVU1 (the undo's manifest and region.json saved, nothing drained), RVU2
   (drained, nothing removed) and RVU3 (every suffix stage removed, the revisions not yet UNDONE); the 4e points K6 and GW fire inside the
   undo's stage removals too.
+
+- **2026-10-26 (6d slice GR):** `dev.rv.plan` takes `params` (a growth: `{grow: {lots, district?, prefer?, extend?}}`, with `program`
+  the region's own: `flat_village`, `districts`) in place of `spec`, and `ext` (the caller's ext on the candidate, e.g. Steward's
+  `steward_mc:district` and `steward_mc:build`; `architect_mc:*` refused). `dev.rv.state` gains `siteCaller` (each revision site's kind,
+  `infra` or `site`, and its ext keys that are not `architect_mc:*`: the realise's ext carried onto every item). `dev.region.plan` and
+  `dev.region.realise` take `ext` (the plan's and the realise's). `dev.journal.killAt` takes RD3 (a revision's road, a street extension,
+  after its first cell; `RD3+save` with the chunks saved first).

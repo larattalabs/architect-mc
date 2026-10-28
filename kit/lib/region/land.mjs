@@ -13,6 +13,8 @@ import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
 /** The record's version (6d's grown parts move it to 2, §11). */
 export const LAND_V = 1;
+/** (6d GR §7) The record's version once the region has had a revision (it stays 2 after undoRevision). */
+export const LAND_V2 = 2;
 
 const k2 = (x, z) => `${x},${z}`;
 function opCols(op, into) {
@@ -30,6 +32,7 @@ function roadCols(rd, into) {
     for (const k of crossOffsets(w)) into.add(k2(c.x + r[0] * k, c.z + r[1] * k));
   }
 }
+const ids0 = (ir) => (ir.params?.spec?.districts ?? ir.params?.districts ?? []).map((d) => d.id);
 const boxCols = (b, into) => { for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) into.add(k2(x, z)); };
 const rectOfKeys = (keys) => {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
@@ -42,11 +45,24 @@ const rectOfKeys = (keys) => {
  * `standingRemoved` (the time the standing region was removed, or null). Returns the record (§6's shape), or null for an IR that is not a
  * districts plan (no districts in its params).
  */
-export function districtLand(ir, standingClaim = null, { standingRemoved = null } = {}) {
+export function districtLand(ir, standingClaim = null, { standingRemoved = null, revised = false } = {}) {
   const ds = ir.params?.spec?.districts ?? ir.params?.districts ?? null;
   if (!Array.isArray(ds)) return null;
   const town = Array.isArray(standingClaim) ? standingClaim : null;
   const inTown = (k) => { if (!town) return false; const i = k.indexOf(','); const x = Number(k.slice(0, i)), z = Number(k.slice(i + 1)); return x >= town[0] && x <= town[2] && z >= town[1] && z <= town[3]; };
+  // ((6d GR §7) v 2 once the region has had a revision (an effective IR with revisions, or `revised`: the mod's record says one was
+  // accepted). A revision's parts, lots and roads (the effective IR's entries carrying `rid`) are its own `grown` part, never a district's
+  // or `extra`; every part carries `revision` (0: the realised plan's). An ungrown region's record is v 1, byte-identical.)
+  const v2 = revised || (Array.isArray(ir.revisions) && ir.revisions.length > 0);
+  const ridOf = (x) => (Number.isInteger(x?.rid) && x.rid > 0 ? x.rid : 0);
+  const grownBy = new Map(); // rid -> {cols: Set, district, mask?}
+  if (v2) {
+    const g = (rid) => { if (!grownBy.has(rid)) grownBy.set(rid, { cols: new Set(), districts: new Set(), bands: [] }); return grownBy.get(rid); };
+    for (const p of ir.parts ?? []) if (ridOf(p)) { const q = g(p.rid); for (const op of p.ops ?? []) opCols(op, q.cols); for (const d of ids0(ir)) if (p.id.startsWith(`rv${p.rid}_${d}_`)) q.districts.add(d); }
+    for (const l of ir.lots ?? []) if (ridOf(l)) { const q = g(l.rid); boxCols(l.box, q.cols); }
+    for (const rd of ir.roads ?? []) if (ridOf(rd)) { const q = g(rd.rid); roadCols(rd, q.cols); const d = rd.ext?.['architect_mc:street']?.district; if (typeof d === 'string') q.districts.add(d); const b = rd.ext?.['architect_mc:band']; if (b && typeof b.district === 'string' && Array.isArray(b.runs)) q.bands.push(b); }
+  }
+  ir = v2 ? { ...ir, parts: (ir.parts ?? []).filter((p) => !ridOf(p)), lots: (ir.lots ?? []).filter((l) => !ridOf(l)), roads: (ir.roads ?? []).filter((x) => !ridOf(x)) } : ir;
   const partById = new Map((ir.parts ?? []).map((p) => [p.id, p]));
   const written = new Set();
   for (const p of ir.parts ?? []) for (const op of p.ops ?? []) opCols(op, written);
@@ -113,6 +129,15 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null 
   // ---- extra: written columns in no other part
   const extra = new Set([...written].filter((k) => !claimed.has(k)));
   push('extra', 'written', extra);
+  // ---- (6d GR §7) each revision's grown land: its own part, by rid
+  for (const rid of [...grownBy.keys()].sort((a, b) => a - b)) {
+    const q = grownBy.get(rid);
+    // (§5) an along district's new band: its own district part (the mask the revision recorded on its road, architect_mc:band)
+    for (const b of q.bands) push('district', b.district, runKeys(b.runs), { shape: 'mask', revision: rid });
+    const ds = [...q.districts].sort();
+    push('grown', `rv${rid}`, q.cols, { district: ds.length === 1 ? ds[0] : ds.length ? ds.join(',') : null, revision: rid });
+  }
+  if (v2) for (const p of parts) if (p.revision === undefined) p.revision = 0;
   // ---- union, outside, inside
   const union = new Set();
   for (const p of parts) {
@@ -122,7 +147,7 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null 
   const outside = new Set([...union].filter((k) => !inTown(k))), inside = new Set([...union].filter((k) => inTown(k)));
   const rec = (keys) => ({ runs: keyRuns(keys), rect: rectOfKeys(keys), cells: keys.size });
   return {
-    v: LAND_V, standing: ir.beside?.id ?? null, standingClaim: town ? [...town] : null, standingRemoved: standingRemoved ?? null,
+    v: v2 ? LAND_V2 : LAND_V, standing: ir.beside?.id ?? null, standingClaim: town ? [...town] : null, standingRemoved: standingRemoved ?? null,
     outside: rec(outside), inside: rec(inside), union: rec(union), parts,
   };
 }

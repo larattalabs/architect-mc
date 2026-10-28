@@ -12,6 +12,7 @@
 // Every coordinate is an integer cell; scores are integers; candidate scans run x then z; ties by scan order. No clock but
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
 import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
+import { growPlan, emitGrowth, growObstacles } from '../region/grow.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from '../region/village.mjs';
@@ -975,6 +976,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // (a kept or refilled part stands: fits for its dependents, never emitted)
   const emitOk = (id) => okClass(id) && !kept.has(id);
   let revRec = null;
+  const growZones = [], growGeom = new Map();
   if (REV) {
     const cls = classifyRevision(P.plan, REV.parent, REV.standing?.lots ?? {});
     revRec = revisionRecord(REV, cls);
@@ -990,6 +992,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         kept.add(p.id);
         const g = REV.parent.geometry?.[p.id];
         if (Array.isArray(g) && g.length === 4) geom.set(p.id, { rect: arrRect(g) });
+      } else if (c.klass === 'grow' && REV.effective && !p.part.program?.districts) {
+        // (6d GR §8) a zone whose lots only gain lots grows: the added lots go on its streets' free frontage, then one extension (grow.mjs),
+        // emitted below once the region exists; the zone stands (fits, standing, grown)
+        kept.add(p.id);
+        growZones.push({ p, lots: c.lots });
       } else {
         const blk = c.klass === 'grow' ? 'revision.grow' : 'revision.change';
         ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: c.klass === 'grow' ? `zone ${p.id} gains lots ${c.lots.join(', ')}: growing a standing zone is GR's (revision.grow)` : `part ${p.id} differs from the parent's${c.why ? ` (${c.why})` : ''}: changing a standing part is RV2's (revision.change)`, block: blk, until: c.klass === 'grow' ? 'GR' : 'RV2' }].map(clean) });
@@ -1209,6 +1216,29 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // ((6c H) the fluids stage is a body's alone: a stage that falls back to the last never lands in it)
   const lastSolid = () => r.stageList[r.stageList.length - 1] === FLUIDS_STAGE && r.stageList.length > 1 ? r.stageList[r.stageList.length - 2] : r.stageList[r.stageList.length - 1];
   const stageOf = (s) => (r.stageList.includes(s) ? s : s === 'routes' || s === 'props' || s === 'lots' || s === 'links' ? lastSolid() : r.stageList[0]);
+  // ---- (6d GR §8) the growing zones: each a growth over the standing region (its streets, the effective IR and ctx.standing)
+  for (const { p, lots } of growZones) {
+    const specs = lotSpecs(p.part).filter((l) => lots.includes(l.id));
+    const g0 = REV.parent.geometry?.[p.id];
+    try {
+      const plan = growPlan({ eff: REV.effective, standing: REV.standing, survey: env.S, grow: { lots: specs, zone: p.id }, rid: REV.rid ?? 0 });
+      const c0 = checkpoint(r);
+      r._growObstacles = growObstacles(REV.effective, REV.standing);
+      emitGrowth(r, plan, { rid: REV.rid ?? 0, eff: REV.effective, stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots'), props: stageOf('props') } });
+      mark(p.id, addedSince(r, c0));
+      const grown = plan.lots.map((l) => l.spec.id);
+      ans(p, { class: 'fits', notes: [`standing; grown by ${grown.join(', ')} (revision.grow)${plan.unplaced.length ? `; unplaced ${plan.unplaced.map((u) => `${u.id} (NO_ROOM ${u.kind})`).join(', ')}` : ''}`] });
+      const a = answers.get(p.id);
+      a.standing = true;
+      a.grown = grown;
+      if (plan.unplaced.length) a.unplaced = plan.unplaced.map((u) => ({ id: u.id, code: 'NO_ROOM', kind: u.kind }));
+      growGeom.set(p.id, { rect: Array.isArray(g0) && g0.length === 4 ? g0 : null, lots: r.lots.filter((l) => grown.includes(l.id)).map((l) => ({ id: l.id, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], entrance: r.meta.lots[l.id]?.entrance, front: l.front, size: [l.box.maxX - l.box.minX + 1, l.box.maxZ - l.box.minZ + 1] })) });
+    } catch (e) {
+      const m = /^NO_ROOM: \[([a-z_]+)\] /.exec(e.message);
+      answers.delete(p.id);
+      ans(p, { class: 'refused', reasons: [{ code: m ? 'NO_ROOM' : 'OVERLAP', message: e.message.slice(0, 400), evidence: { kind: m?.[1] ?? null, lots } }] });
+    }
+  }
   const zoneEmit = new Map(); // zone id -> {L, lots, prefix}
   let villages = 0, laneCells = [], reserved = new Set();
   const propsPlanned = [];
@@ -1734,6 +1764,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   for (const p of V.parts) {
     const a = answers.get(p.id);
     if (!a || !['fits', 'adjusted'].includes(a.class)) continue;
+    if (growGeom.has(p.id)) { // (6d GR §8) a grown zone: its standing rect and the lots the growth adds (the artifact's $.lots)
+      const g = growGeom.get(p.id);
+      a.geometry = { ...(g.rect ? { rect: g.rect } : {}), lots: g.lots, grown: g.lots.map((l) => l.id) };
+      const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
+      a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || g.lots.some((l) => !entries.get(l.id));
+      continue;
+    }
     if (kept.has(p.id)) { const g = geom.get(p.id); if (g?.rect) a.geometry = { rect: rectArr(g.rect) }; continue; } // (6d RV) standing
     if (p.family === 'zone') {
       const z = res.get(p.id), e = zoneEmit.get(p.id);

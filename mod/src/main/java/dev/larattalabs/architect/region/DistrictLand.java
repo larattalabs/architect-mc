@@ -23,6 +23,8 @@ import org.jspecify.annotations.Nullable;
 public final class DistrictLand {
 	/** The record's version (6d's grown parts move it to 2). */
 	public static final int V = 1;
+	/** (6d GR §7) The version once the region has had a revision (it stays 2 after undoRevision). Since NEXT. */
+	public static final int V2 = 2;
 	public static final String EXT_LAND = "architect_mc:land";
 
 	private static final Pattern JOIN_PATH = Pattern.compile("^route_join_\\d+[lg]?$");
@@ -35,6 +37,20 @@ public final class DistrictLand {
 
 	/** The record, or null for an IR that is not a districts plan (no districts in its params). */
 	public static @Nullable JsonObject of(JsonObject ir, int @Nullable [] town, @Nullable Long standingRemoved) {
+		return of(ir, town, standingRemoved, false);
+	}
+
+	/**
+	 * (6d GR §7) The record of an effective IR: v 2 once the region has had a revision ({@code revised}, or an effective IR with
+	 * revisions); a revision's parts, lots and roads (the entries carrying {@code rid}) are its own {@code grown} part {@code rv<rid>}
+	 * ({@code district}, {@code revision}), never a district's or {@code extra}; every part carries {@code revision} (0: the realised plan's).
+	 */
+	public static @Nullable JsonObject of(JsonObject ir0, int @Nullable [] town, @Nullable Long standingRemoved, boolean revised) {
+		JsonObject ir = ir0;
+		boolean v2 = revised || (ir0.get("revisions") instanceof JsonArray rv && !rv.isEmpty());
+		TreeMap<Integer, Cols> grown = new TreeMap<>();
+		TreeMap<Integer, java.util.TreeSet<String>> grownD = new TreeMap<>();
+		TreeMap<Integer, List<JsonObject>> grownBands = new TreeMap<>();
 		JsonArray ds = null;
 		if (ir.get("params") instanceof JsonObject params) {
 			if (params.get("spec") instanceof JsonObject spec && spec.get("districts") instanceof JsonArray a) {
@@ -45,6 +61,54 @@ public final class DistrictLand {
 		}
 		if (ds == null) {
 			return null;
+		}
+		if (v2) {
+			List<String> dids = new ArrayList<>();
+			for (JsonElement de : ds) {
+				String id = BesideReach.str(de.getAsJsonObject(), "id");
+				if (id != null) {
+					dids.add(id);
+				}
+			}
+			ir = ir0.deepCopy();
+			for (String fam : List.of("parts", "lots", "roads")) {
+				JsonArray keep = new JsonArray();
+				if (ir.get(fam) instanceof JsonArray a) {
+					for (JsonElement e : a) {
+						JsonObject x = e.getAsJsonObject();
+						int rid = x.get("rid") instanceof JsonElement r && r.isJsonPrimitive() ? r.getAsInt() : 0;
+						if (rid <= 0) {
+							keep.add(x);
+							continue;
+						}
+						Cols c = grown.computeIfAbsent(rid, k -> new Cols());
+						java.util.TreeSet<String> dd = grownD.computeIfAbsent(rid, k -> new java.util.TreeSet<>());
+						switch (fam) {
+							case "parts" -> {
+								opsCols(x, c);
+								for (String d : dids) {
+									if (str(x, "id").startsWith("rv" + rid + "_" + d + "_")) {
+										dd.add(d);
+									}
+								}
+							}
+							case "lots" -> boxCols(x.getAsJsonObject("box"), c);
+							default -> {
+								roadCols(x, c);
+								if (x.get("ext") instanceof JsonObject ex && ex.get("architect_mc:street") instanceof JsonObject f && f.get("district") instanceof JsonElement d
+									&& d.isJsonPrimitive()) {
+									dd.add(d.getAsString());
+								}
+								if (x.get("ext") instanceof JsonObject ex2 && ex2.get("architect_mc:band") instanceof JsonObject b && b.get("district") instanceof JsonElement bd
+									&& bd.isJsonPrimitive() && b.get("runs") instanceof JsonArray) {
+									grownBands.computeIfAbsent(rid, k -> new ArrayList<>()).add(b);
+								}
+							}
+						}
+					}
+					ir.add(fam, keep);
+				}
+			}
 		}
 		Cols written = new Cols();
 		JsonArray parts = ir.get("parts") instanceof JsonArray p ? p : new JsonArray();
@@ -217,6 +281,31 @@ public final class DistrictLand {
 			}
 		});
 		push(out, claimed, town, "extra", "written", extra, new JsonObject());
+		// (6d GR §7) each revision's grown land, by rid
+		for (Map.Entry<Integer, Cols> e : grown.entrySet()) {
+			for (JsonObject b : grownBands.getOrDefault(e.getKey(), List.of())) {
+				JsonObject bx = new JsonObject();
+				bx.addProperty("shape", "mask");
+				bx.addProperty("revision", e.getKey());
+				push(out, claimed, town, "district", b.get("district").getAsString(), BesideReach.colsOf(b.getAsJsonArray("runs")), bx);
+			}
+			JsonObject gx = new JsonObject();
+			java.util.TreeSet<String> dd = grownD.getOrDefault(e.getKey(), new java.util.TreeSet<>());
+			if (dd.isEmpty()) {
+				gx.add("district", com.google.gson.JsonNull.INSTANCE);
+			} else {
+				gx.addProperty("district", String.join(",", dd));
+			}
+			gx.addProperty("revision", e.getKey());
+			push(out, claimed, town, "grown", "rv" + e.getKey(), e.getValue(), gx);
+		}
+		if (v2) {
+			for (JsonObject p : out) {
+				if (!p.has("revision")) {
+					p.addProperty("revision", 0);
+				}
+			}
+		}
 		// union, outside, inside
 		Cols union = new Cols();
 		for (JsonObject p : out) {
@@ -230,7 +319,7 @@ public final class DistrictLand {
 		Cols outside = new Cols(), inside = new Cols();
 		union.forEach((x, z) -> (in(town, x, z) ? inside : outside).add(x, z));
 		JsonObject o = new JsonObject();
-		o.addProperty("v", V);
+		o.addProperty("v", v2 ? V2 : V);
 		if (ir.get("beside") instanceof JsonObject bs && bs.get("id") instanceof JsonElement bid && bid.isJsonPrimitive()) {
 			o.addProperty("standing", bid.getAsString());
 		} else {

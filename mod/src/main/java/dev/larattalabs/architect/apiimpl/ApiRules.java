@@ -100,9 +100,13 @@ public final class ApiRules {
 					case "region.rockStairs" -> "rockStairs"; // 7a RK: plan/0's connector.rock_stair (a stair flight carved into rising ground; route row 11; since NEXT)
 					case "region.spirals" -> "spiralStairs"; // 7a SA: plan/0's connector.stairs_around (a spiral round a spire, spike, tree or mushroom)
 					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
+					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since NEXT)
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
+			}
+			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
+				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews

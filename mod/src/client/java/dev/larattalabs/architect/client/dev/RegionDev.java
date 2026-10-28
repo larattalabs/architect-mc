@@ -101,7 +101,7 @@ public final class RegionDev {
 
 	public static void init() {
 		DevBridge.register("dev.region.plan", 900_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded|generated:<n>|bounded:<n>, "
-			+ "owner?, check?: true, bible? (6c V), opKey? (6c X), beside? (6c D1: a standing region's id)} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
+			+ "owner?, check?: true, bible? (6c V), opKey? (6c X), beside? (6c D1: a standing region's id), ext? (6d GR)} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
 			+ "(ext architect_mc:check), and the answer adds report, summary, previews, irFormat, requires, kitVersion, needVolumes, progress", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String program = f.nonBlank("program");
@@ -113,7 +113,8 @@ public final class RegionDev {
 				String bible = f.optStr("bible", null);
 				String planKey = f.optStr("opKey", null);
 				String beside = f.optStr("beside", null);
-				JsonObject ext = new JsonObject();
+				// (6d GR gate) the caller's ext on the plan (Steward's keys: steward_mc:district, steward_mc:build)
+				JsonObject ext = req.get("ext") instanceof JsonObject ce ? ce.deepCopy() : new JsonObject();
 				if (!f.optBool("check", true)) {
 					ext.addProperty(RegionsImpl.EXT_CHECK, false);
 				}
@@ -243,7 +244,7 @@ public final class RegionDev {
 			});
 		});
 		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin; with fitLots: the first entry that fits each lot), "
-			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds, opKey? (6c X)} - phase 6a: "
+			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds, opKey? (6c X), ext? (6d GR)} - phase 6a: "
 			+ "Regions.realise -> {region} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.nonBlank("planId");
@@ -277,7 +278,8 @@ public final class RegionDev {
 							}
 						}
 					}
-					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject(), maxWait,
+					JsonObject rext = req.get("ext") instanceof JsonObject ce ? ce.deepCopy() : new JsonObject(); // (6d GR gate) the caller's ext
+					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, rext, maxWait,
 						realiseKey)),
 						id -> {
 							JsonObject o = new JsonObject();

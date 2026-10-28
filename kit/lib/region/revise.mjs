@@ -116,13 +116,13 @@ export function columnProblem(K, x, z, unsafe = {}) {
   if (c && (x < c[0] || x > c[2] || z < c[1] || z > c[3])) return { kind: 'claim' };
   if (K.isProtected(x, z)) return { kind: 'protected' };
   if (!unsafe.underLot && K.lot.has(k)) return { kind: 'lot' };
-  if (!unsafe.overRoad && K.road.has(k)) return { kind: 'road', id: K.road.get(k).id };
+  if (!unsafe.overRoad && !unsafe.growVerge && K.road.has(k)) return { kind: 'road', id: K.road.get(k).id };
   // (overRoad lets a road's verge through too: a 4e road's columns are its path-set verges' as well)
-  if (!unsafe.overPath && !unsafe.overRoad && K.path.has(k)) return { kind: 'path', id: K.path.get(k).id };
+  if (!unsafe.overPath && !unsafe.overRoad && !unsafe.growVerge && K.path.has(k)) return { kind: 'path', id: K.path.get(k).id };
   if (K.body.has(k)) return { kind: 'body' };
   if (K.beside.has(k)) return { kind: 'beside', region: K.beside.get(k) };
   // (every broken variant lets the held class through: a lot's, road's or path's columns are held by its own site)
-  if (!(unsafe.ignoreHeld || unsafe.overRoad || unsafe.overPath || unsafe.underLot) && K.held.has(k) && !K.terrain.has(k)) return { kind: 'held' };
+  if (!(unsafe.ignoreHeld || unsafe.overRoad || unsafe.overPath || unsafe.underLot || unsafe.growVerge) && K.held.has(k) && !K.terrain.has(k)) return { kind: 'held' };
   return null;
 }
 
@@ -140,8 +140,10 @@ export function nonAdditive(ir, st) {
   const pre = rv.naming === 'plan' ? '' : ridPrefix(rv.rid);
   const out = [];
   const has = (list, id) => (list ?? []).includes(id);
+  // ((6d GR §6) a growth's lots keep the caller's ids (unique across the region, M14): never a standing id, but no prefix)
+  const grown = new Set(rv.grow?.lots ?? []);
   for (const p of ir.parts ?? []) if (has(st.ids?.parts, p.id) || !p.id.startsWith(pre)) out.push({ what: 'part', id: p.id });
-  for (const l of ir.lots ?? []) if (has(st.ids?.lots, l.id) || !l.id.startsWith(pre)) out.push({ what: 'lot', id: l.id });
+  for (const l of ir.lots ?? []) if (has(st.ids?.lots, l.id) || (!l.id.startsWith(pre) && !grown.has(l.id))) out.push({ what: 'lot', id: l.id });
   for (const r of ir.roads ?? []) if (has(st.ids?.roads, r.id)) out.push({ what: 'road', id: r.id });
   for (const p of ir.parts ?? []) for (const o of p.ops ?? []) if (o.op === 'fluid' && has(st.ids?.bodies, o.id)) out.push({ what: 'body', id: o.id });
   for (const n of ir.graph?.nodes ?? []) if (has(st.ids?.nodes, n.id)) out.push({ what: 'node', id: n.id });
@@ -305,7 +307,7 @@ export async function reviseIR(effective, request, ctx) {
   const c = effective.claim;
   return planRegion({
     programFile: path.join(here, '..', '..', 'regions', 'revise.mjs'),
-    params: { spec: { parts: request.parts ?? [], refill: request.refill ?? [], ...(request.unsafe ? { unsafe: request.unsafe } : {}) } },
+    params: { spec: { parts: request.parts ?? [], refill: request.refill ?? [], ...(request.grow ? { grow: request.grow } : {}), ...(request.unsafe ? { unsafe: request.unsafe } : {}) } },
     survey: ctx.survey, claim: { minX: c.minX, minZ: c.minZ, maxX: c.maxX, maxZ: c.maxZ, minY: ctx.claimY?.[0] ?? c.minY, maxY: ctx.claimY?.[1] ?? c.maxY },
     seed: revisionSeed(effective.seed ?? '0', ctx.rid), roles: ctx.roles ?? effective.roles ?? {}, ...(ctx.fluids ? { fluids: ctx.fluids } : {}),
     volumes: ctx.volumes ?? [], node: ctx.node ?? undefined, kitVersion: ctx.kitVersion ?? undefined,

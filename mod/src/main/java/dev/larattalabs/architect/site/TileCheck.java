@@ -189,6 +189,31 @@ final class TileCheck {
 		return this;
 	}
 
+	/** (6d GR) The revision this tile belongs to (its region and rid): its own path-set entries are its, not the region's standing ones. */
+	private @Nullable String revisionRegion;
+	private int revisionRid;
+
+	TileCheck revisionOf(String region, int rid) {
+		this.revisionRegion = region;
+		this.revisionRid = rid;
+		return this;
+	}
+
+	/**
+	 * (6d GR) Whether a journal entry's site is this revision's own (its ext {@code architect_mc:revision {region, rid}}): a path-set tile of
+	 * the same revision that a halt left PLACING and the resume wrote again (RP §6's leftover), which the revision's later tiles layer over
+	 * as over any of its own cells. A standing path cell (the region's realised plan or an earlier revision) is never this revision's.
+	 */
+	private boolean ownRevisionSite(@Nullable String site) {
+		if (revisionRegion == null || site == null) {
+			return false;
+		}
+		Infra in = Infras.get(site);
+		com.google.gson.JsonObject ext = in == null ? null : in.ext();
+		return ext != null && ext.get("architect_mc:revision") instanceof com.google.gson.JsonObject rv && rv.get("rid") != null && rv.get("rid").getAsInt() == revisionRid
+			&& rv.get("region") != null && revisionRegion.equals(rv.get("region").getAsString());
+	}
+
 	/** (6d RV, §8) A survival region's revision: a cell over a block the region built (not natural) refuses survival_paid. */
 	private boolean survivalRevision;
 
@@ -870,8 +895,8 @@ final class TileCheck {
 				// (6c B) a brush stroke layers over its owner's other strokes' tile entries as over its own
 				boolean mine = (mm.kind().equals(RegionKinds.TERRAIN) || mm.kind().equals(RegionKinds.PATH)) && (regionGroup.equals(mm.group())
 					|| layerGroups.contains(mm.group()));
-				if (revision && mm.kind().equals(RegionKinds.PATH)) {
-					mine = false; // (6d RV, §5.2) a revision never writes over the region's own path-set cells
+				if (revision && mm.kind().equals(RegionKinds.PATH) && !ownRevisionSite(mm.site())) {
+					mine = false; // (6d RV, §5.2) a revision never writes over the region's own path-set cells ((6d GR) but its own)
 				}
 				SectionCells sc;
 				try {

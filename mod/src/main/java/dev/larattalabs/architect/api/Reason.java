@@ -92,6 +92,10 @@ package dev.larattalabs.architect.api;
  * counts plus each bound lot's entry). The message names the rule, the family, the share, the measured share, the cells and the worst
  * lot with its entry; {@link ArchitectRefused#detail()} is the rule id. Nothing was written: bind another entry to the lot (or drop
  * {@code required}). {@link Regions#checkPalette} answers the same measure before any realise.</li>
+ * <li>{@code NO_ROOM} (6d GR, since NEXT): {@link Regions#planRevision} of a growth ({@code params.grow}) that places no lot: the message
+ * starts {@code NO_ROOM: [<kind>]} with kind {@code frontage}, {@code street}, {@code claim}, {@code held}, {@code body} or {@code layout};
+ * nothing was planned. A growth that places some lots answers a plan and lists the rest in its IR's {@code revision.grow.unplaced}.
+ * Read it as full (Steward: like {@code REGION_LIMIT}, propose a district).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -114,5 +118,7 @@ public enum Reason {
 	// PT2 (6c slice PT2)
 	ADOPT_REFUSED,
 	// 1.37.0 (6c slice VOC-c; the CU/IRR/VOC-c batch, v0.40.0)
-	PALETTE
+	PALETTE,
+	// NEXT (6d slice GR): a growth with no lot that fits (the message names the kind: frontage, street, claim, held, body, layout)
+	NO_ROOM
 }
