@@ -152,6 +152,13 @@ export function simWallLot(req: { type: string; maxSize?: Size3 | undefined; not
   return { type: req.type, size: [W, m.y, D], passage: req.type === 'gatehouse' ? simStandInPassage(W, D, req.reserved?.cells ?? []) : null, outerDoor: faults.has('outerdoor'), ...(of ? { outerFaces: of } : {}) };
 }
 
+/** (Since NEXT, 7a K3) What the wall-lot stand-in builds for a spec (its size, front and anchors), built once with the kit's own module. */
+export async function simWallLotBuilt(kitDir: string, id: string, spec: SimWallLotSpec): Promise<Built> {
+  const mod = (await import(pathToFileURL(path.join(kitDir, 'lib', 'wallLotDesigns.mjs')).href)) as { standInDesign: (id: string, spec: SimWallLotSpec) => Built };
+  const b = mod.standInDesign(id, { ...spec, outerDoor: false });
+  return { size: { x: b.size.x, y: b.size.y, z: b.size.z }, ...(b.front ? { front: b.front } : {}), ...(b.anchors ? { anchors: b.anchors } : {}) };
+}
+
 /** kit/lib/wallLotDesigns.mjs standInPassage, mirrored (the sidecar records the passage in the design source). */
 function simStandInPassage(W: number, D: number, reserved: Array<[number, number, number]>): Array<[number, number, number]> {
   const at = new Set(reserved.map(([u, y, v]) => `${u},${y},${v}`));
@@ -625,6 +632,8 @@ export class SimDesigner implements Designer {
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
     const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
     const wallLot = d.massing || req.versionOf ? undefined : simWallLot(req);
+    // (since NEXT, 7a K3) a wall lot's massing takes its box: the stand-in massing of the wall-lot stand-in the detail pass builds
+    const wallLotMassing = d.massing && !req.redirect ? simWallLot(req) : undefined;
     let source: string;
     let what: string;
     let note = '';
@@ -636,6 +645,13 @@ export class SimDesigner implements Designer {
         source = withDesignId(r2.source, bp);
         what = `massing ${prev.id} v${prev.version} redirected (${r2.change})`;
         note = r2.change;
+      } else if (wallLotMassing) {
+        // (since NEXT, 7a K3) a wall lot: one box the size of the wall-lot stand-in (exactly the lot's footprint), so the detail pass
+        // (the stand-in again) conforms and fills the box
+        const built = await simWallLotBuilt(cfg.kitDir, bp, wallLotMassing);
+        source = standInMassing(bp, req.type, built);
+        what = `a wall-lot stand-in massing ${built.size.x}x${built.size.y}x${built.size.z} (the lot's box)`;
+        note = 'a wall-lot stand-in massing (the lot\'s box)';
       } else {
         const ex = simMassingSource(cfg.kitDir, req.type);
         const exSize = ex ? await massingSize(ex) : undefined;

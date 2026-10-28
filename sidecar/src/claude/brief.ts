@@ -3,6 +3,7 @@
 // one line of progress per tool call.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { BUILDING_TYPES, type BuildingType, type Context, type DesignRequest, type Massing } from '../protocol.js';
+import { isWallLotRequest } from '../massings.js';
 
 /** design agent turns per job (the first + follow-ups after a failed check) */
 export const MAX_DESIGN_ROUNDS = 4;
@@ -188,7 +189,7 @@ function partLines(m: Massing): string[] {
 }
 
 /** (4c) the binding-massing section of a detail pass's BRIEF.md. */
-export function massingBindingSection(m: Massing, maxSize: DesignRequest['maxSize']): string[] {
+export function massingBindingSection(m: Massing, maxSize: DesignRequest['maxSize'], exact = false): string[] {
   return [
     `## The approved massing (binding): \`${m.id}\` v${m.version}`,
     '',
@@ -196,7 +197,9 @@ export function massingBindingSection(m: Massing, maxSize: DesignRequest['maxSiz
     `- **The same part names**: wrap each mass in \`bp.part('<same name>', () => { ... }, { roof: '<same form>' })\`. The parts (design coordinates, size ${m.size.x}x${m.size.y}x${m.size.z}):`,
     ...partLines(m),
     '- **Each part\'s box within 1 of the massing\'s on every face**, and **the same roof form** per part.',
-    `- **The total size within 2 of the massing\'s, and never more than x ${maxSize.x}, y ${maxSize.y}, z ${maxSize.z}** (the massing\'s size + 2, capped by the request): a bigger design is refused.`,
+    exact
+      ? `- **A wall lot: fill the lot\'s box exactly, x ${maxSize.x} by z ${maxSize.z}, up to y ${maxSize.y}** (the box is the cap, not the massing\'s size + 2). It stands on a wall\'s line and its faces close the wall: keep the faces outside the wall closed at ground level (doors face in); a smaller design leaves the wall open and is refused when it is placed.`
+      : `- **The total size within 2 of the massing\'s, and never more than x ${maxSize.x}, y ${maxSize.y}, z ${maxSize.z}** (the massing\'s size + 2, capped by the request): a bigger design is refused.`,
     '- Detail goes inside and on the masses: walls, openings, trim, roofs, furnishings, lighting. Extra parts of your own (`openings`, `furnishings`) are fine.',
     `- The check adds the massing conformance: \`--massing massing/${m.id}.blueprint.json\` in the build command below. Its size errors fail the design; fix its \`massing:\` warnings too.`,
     '',
@@ -222,6 +225,8 @@ export function massingBrief(req: DesignRequest, bp: string, opts: BriefOptions)
     `- style: "${req.style}". It shapes the silhouette: roof forms and pitch, storeys, towers, wings, porches.`,
     `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'} (only the ones that are volumes: a porch, a tower, a wing, a chimney column).`,
     `- **maximum size: x <= ${m.x}, y <= ${m.y}, z <= ${m.z}** (the whole template, roofs and overhangs included). This is a hard limit: a bigger massing is refused.`,
+    // (since NEXT, 7a K3) a wall lot: the massing takes its box
+    isWallLotRequest(req) ? `- **a wall lot: the massing\'s footprint must be exactly x ${m.x} by z ${m.z}** (the template, y up to ${m.y}): this building stands on a wall\'s line and its faces close the wall, so its masses reach the box\'s faces. The faces outside the wall stay closed at ground level (doors face in). A massing of any other footprint is refused.` : '',
     plot,
     req.notes ? `- notes from the player: ${req.notes}` : '',
     req.group ? `- this is the massing of item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece' : ''}) of a design group, wave ${req.wave ?? 1}.` : '',
@@ -415,7 +420,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
   const bound = opts.massing?.role === 'detail' ? opts.massing : undefined;
   // (4c) a detail pass's hard cap: min(massing size + 2, request.maxSize)
   const m = bound?.maxSize ?? req.maxSize;
-  const massingArg = bound ? ` --massing massing/${bound.record.id}.blueprint.json` : '';
+  // (since NEXT, 7a K3) a wall lot's detail: the box caps the conformance size too
+  const massingArg = bound ? ` --massing massing/${bound.record.id}.blueprint.json${isWallLotRequest(req) ? ` --massing-cap ${m.x},${m.y},${m.z}` : ''}` : '';
   const ex = examplesFor(req.type, opts.examples);
   const plot = req.plot
     ? `- plot: a marked plot of ${req.plot.dx} x ${req.plot.dz} blocks${req.plot.height ? `, up to ${req.plot.height} high` : ''}${req.plot.front ? `, its front facing ${req.plot.front}` : ''}. The mod turns the design so its \`front\` faces the plot's front; design it with \`front: 'south'\` as usual.`
@@ -442,7 +448,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     req.group ? `- this is item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece, the most elaborate and recognisable' : ': it supports the landmarks, simpler and smaller'}) of a design group, wave ${req.wave ?? 1}.` : '',
     '',
     ...contextSection(req.context),
-    ...(bound ? massingBindingSection(bound.record, m) : []),
+    ...(bound ? massingBindingSection(bound.record, m, isWallLotRequest(req)) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
     // (Style unification U5a) a materials-only request: the Style's hints as guidance (the hybrid default; never set mode)
     ...(!opts.bible && req.palette !== undefined ? styleHintLines(opts.styleHints) : []),

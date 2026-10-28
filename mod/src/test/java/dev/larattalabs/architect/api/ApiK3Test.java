@@ -24,6 +24,9 @@ class ApiK3Test {
 		assertTrue(ApiRules.features(2, List.of("region.walls.lots")).contains("wallLots"));
 		assertFalse(ApiRules.features(2, List.of("region.walls", "region.walls.walk", "region.walls.along")).contains("wallLots"), "a K1/K2 helper has no wallLots");
 		assertFalse(ApiRules.features(1, List.of("region.walls.lots")).contains("wallLots"), "protocol 1 has no helper features");
+		// (since NEXT) a wall lot's massing takes its box, its detail's cap is the box
+		assertTrue(ApiRules.features(2, List.of("wallLots.exactMassing")).contains("wallLots.exactMassing"));
+		assertFalse(ApiRules.features(2, List.of("region.walls.lots")).contains("wallLots.exactMassing"), "a K3 helper before NEXT caps by massing + 2");
 	}
 
 	/** design.opKeys (7a K3, Steward's RC): the feature, the record component, the copy methods, the new methods and types. */

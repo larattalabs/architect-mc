@@ -337,3 +337,21 @@ test('check.mjs / build.mjs --massing: warning lines, the size cap fails the che
   assert.equal(run('build.mjs', ['cabin', '--out', tmp, '--massing', path.join(tmp, 'nope.json')]).status, 2);
   assert.equal(run('build.mjs', ['cabin', '--out', tmp, '--profile', 'massing']).status, 1);
 });
+
+// (since NEXT, 7a K3) --massing-cap: a wall lot's detail fills its exact box whatever its massing's size; the cap replaces massing + 2
+test('conformance --massing-cap (7a K3): the cap replaces the massing size + 2 for the size error, nothing else changes', () => {
+  const m = { id: 'm', massing: true, front: 'south', size: { x: 13, y: 20, z: 11 }, parts: { a: { box: [0, 0, 0, 12, 19, 10] } } };
+  const d = { id: 'd', front: 'south', size: { x: 13, y: 28, z: 11 }, parts: { a: { box: [0, 0, 0, 12, 19, 10] } } };
+  assert.deepEqual(checkConformance(d, m).errors, ["size: y is 28, over the massing's 20 + 2 (the approved massing caps the size)"]);
+  assert.deepEqual(checkConformance(d, m, { cap: { x: 13, y: 40, z: 11 } }).errors, []);
+  assert.deepEqual(checkConformance({ ...d, size: { x: 14, y: 28, z: 11 } }, m, { cap: { x: 13, y: 40, z: 11 } }).errors, ["size: x is 14, over the cap 13 (the lot's box)"]);
+  assert.deepEqual(checkConformance({ ...d, front: 'east' }, m, { cap: { x: 13, y: 40, z: 11 } }).errors.length, 1);
+  // build.mjs passes it through (an example detail against its own massing, capped below its size: refused)
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'k3-cap-'));
+  const mf = path.join(MASSINGS, 'cabin_massing', 'cabin_massing.blueprint.json');
+  const r = run('build.mjs', ['cabin', '--out', tmp, '--massing', mf, '--massing-cap', '1,1,1', '--json']);
+  const j = JSON.parse(r.stdout.trim().split('\n').at(-1));
+  assert.ok(j.conformance.errors.some((e) => /over the cap 1 \(the lot's box\)/.test(e)), JSON.stringify(j.conformance));
+  assert.equal(JSON.parse(run('build.mjs', ['cabin', '--out', tmp, '--massing', mf, '--massing-cap', '99,99,99', '--json']).stdout.trim().split('\n').at(-1)).conformance.errors.length, 0);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});

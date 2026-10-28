@@ -347,3 +347,20 @@ test('(since NEXT) the stand-in in exact boxes under 7: a 5-wide gatehouse\'s pa
     }
   }
 });
+
+// (since NEXT) a wide tower's floor is past one lantern's reach: the stand-in lights it (Steward's 13 x 11 castle_city towers were
+// refused "light: ... no block light" once their detail could fill the box)
+test('the wall-lot stand-in tower lights every storey at any box (13 x 11, 17 x 15, 21 x 21; 9 x 9 keeps its one lamp)', async () => {
+  const { checkBlueprint } = await import('../lib/check.mjs');
+  const lanterns = (bp) => [...bp.cells.values()].filter((v) => /lantern/.test(String(v.state?.name))).length;
+  for (const [W, D] of [[13, 11], [17, 15], [21, 21], [9, 9], [3, 3]]) {
+    const bp = standInDesign('t', { type: 'tower', size: [W, 40, D], passage: null, outerDoor: false });
+    const r = checkBlueprint(bp, { type: 'tower' });
+    assert.ok(r.ok, `${W}x${D}: ${r.errors.join('; ')}`);
+    assert.deepEqual([bp.size.x, bp.size.z], [W, D]);
+  }
+  // the 9 x 9 tower's lamps are as before (one per storey plus the top's two): more lamps only where one does not reach
+  const nine = standInDesign('t', { type: 'tower', size: [9, 40, 9], passage: null, outerDoor: false });
+  const wide = standInDesign('t', { type: 'tower', size: [13, 40, 11], passage: null, outerDoor: false });
+  assert.ok(lanterns(wide) > lanterns(nine), `${lanterns(wide)} vs ${lanterns(nine)}`);
+});

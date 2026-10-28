@@ -172,6 +172,11 @@ public interface ArchitectApi {
 	 * Since NEXT (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.
+	 * Since NEXT (7a K3), a helper with {@code wallLots.exactMassing} adds {@code "wallLots.exactMassing"} (the same name): a design
+	 * request carrying {@code ext["architect:wallLot"]} (a wall lot; its maxSize the lot's exact box) has, in a massing-first group, a
+	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
+	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
+	 * method or reason.
 	 */
 	Set<String> features();
 }

@@ -67,6 +67,26 @@ notes still carry it, so the repair request can pass the notes through unchanged
   - the inner lanes, edges `route_wl_<lot>`.
 - **Zone geometry** (street, lot positions) moves for every zone whose wall names lots, because the zone is laid out without them.
 
+## RC note for Steward: wall lots in massing-first groups (feature `wallLots.exactMassing`)
+
+Steward's K3 RC on 1e1d41b6 found every box-filling wall-lot detail refused in a massing-first group: a detail pass is capped at
+min(massing size + 2, maxSize), and the sim's massing was the kit's tower example (9 wide), so towers 13x28x11 hit 11x26x11 and the
+gatehouse 17x13x15 hit 13x14x12. With Claude the same happened whenever a massing came out smaller than the box. Fixed, keyed on the
+wall-lot sign `ext["architect:wallLot"]` (send it on every wall lot, as now; `{outerFaces: onWall.outerFaces.lotCells}`, an object).
+For such a request:
+- **The massing takes its box.** The sim's massing is one box of the stand-in's size (exactly the box's x and z). With Claude, the
+  massing brief says the footprint must be exactly the box, and the massing check fails a round whose size x or z differs from
+  maxSize ("a wall lot's massing must fill its box's footprint exactly: ..."), so the repair round fixes it.
+- **The detail's cap is the box** (maxSize), for `--max` and for the kit's massing conformance (`--massing-cap`, new): the detail may
+  be any height up to the box's, not only the massing's + 2. The detail brief says to fill the box exactly.
+- Other requests are unchanged (massing + 2). A copy item that is a wall lot is checked against its own box the same way.
+- **Also fixed:** the stand-in tower lit only one lamp per storey, so a 13 x 11 (or wider) tower failed the kit's light rule once it
+  could fill its box. It now adds lamps until every inner cell is within 12 of one (a 9 x 9 tower is unchanged).
+
+What Steward does: nothing new beyond sending the ext (already the case). Check `ArchitectApi.features().contains("wallLots.exactMassing")`
+before relying on a massing-first wall lot; an older helper caps the detail by massing + 2. `sim:outerdoor` works under massing-first:
+the detail carries the outer door in round 1 (the bind refuses it, Steward's side) and a versionOf fixes it in the same box.
+
 ## RC note for Steward: request identity, confirmed cancel, DONE ordering (feature `design.opKeys`)
 
 All additive and binary compatible; check `ArchitectApi.features().contains("design.opKeys")` before using any of it (an older helper
@@ -97,6 +117,7 @@ refuses a keyed request rather than dropping the key).
 |---|---|
 | Feature | `wallLots` from the helper's `region.walls.lots` (sidecar `FEATURES`, `ApiRules`, `ArchitectApi` javadoc "Since NEXT (7a K3)"). |
 | Feature `design.opKeys` (added for the RC) | `DesignRequest.opKey` (a new last component; the 1.41.0 canonical constructor kept) and `withOpKey`; `Designs.designByKey`, `Designs.cancelDesign` (defaults that throw); the new record `CancelOutcome` with enum `Kind`; wire `design.request.opKey`, `design.byKey`, `design.cancelConfirm`. |
+| Feature `wallLots.exactMassing` (added for the RC) | No new record or method. A wall lot (`ext["architect:wallLot"]`) in a massing-first group: its massing's footprint is exactly its box (checked), its detail capped by the box; kit `build.mjs`/`check.mjs --massing-cap x,y,z`. Javadoc in `ArchitectApi.features()`, `ApiRules` maps it by name. |
 | plan/0 `connector.wall` | New strict member `lots: [{lot: id, at?: corner \| gate \| run, near?: endpoint}]`, at most 16, `lot` required. It is the only addition to the schema, terse because the compact plan/0 has a 96,000 bound: 95,975 now, 228 more than main's 95,747. |
 | Lenient params (R17) | Read when `lots` is absent: `corner_lots` and `towers` (corners first, then runs); `gate_lot`, `gateLots`, `gate` (a lot id) and `gates` (a list of lot ids, which also sets `gates.min` to its length); `joins` and `anchors` by the lot's type, else its id stem. Each mapped key leaves the "params.X not read" notes. |
 | Plan behaviour | A ring wall (`wall.around` or `wall.edge` on a zone) withholds its named lots from the zone's street or free layout and sites them on its line. The band raises `ring.min` to ceil(depth / 2) + 2: noted, with a `move` deviation only past `ring.max`. A lot that fits nowhere goes back to its zone: the plan compiles once more and keeps K1's `join` deviation, noting why. A `wall.line` keeps its `via` lots (K1's joined lots) and adds their `onWall`. A `wall.along` sites none. A wall naming no lot is K1's, byte for byte. |

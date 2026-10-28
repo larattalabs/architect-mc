@@ -160,10 +160,24 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
   const lampAt = [[W - 2, D - 2 > 1 ? D - 2 : 1], ...inner].find((c) => !same(c, ladderAt) && !same(c, entrance)) ?? null;
   let spawn = [W - 2, Math.min(2, D - 2)];
   if (same(spawn, ladderAt) || same(spawn, lampAt)) spawn = entrance;
+  // (since NEXT) a wide tower's floor (13 x 11 and up) is past one lantern's reach: more lamps per storey, each at the inner cell
+  // farthest from the lamps so far (else the nearest free cell to it), until every inner cell is within 12 of one (a lantern's light
+  // reaches 14); a tower one lamp lights keeps exactly that lamp
+  const lamps = lampAt ? [lampAt] : [];
+  const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+  const taken = (c) => same(c, ladderAt) || same(c, entrance) || same(c, spawn) || lamps.some((l) => same(c, l));
+  for (;;) {
+    if (!lamps.length) break;
+    const far = inner.map((c) => [c, Math.min(...lamps.map((l) => dist(c, l)))]).filter(([, d]) => d > 12).sort((a, b) => b[1] - a[1])[0];
+    if (!far) break;
+    const at = inner.filter((c) => !taken(c)).sort((a, b) => dist(a, far[0]) - dist(b, far[0]))[0];
+    if (!at) break;
+    lamps.push(at);
+  }
   bp.part('stair', () => {
     // a ladder up the back wall's inside (column 1 or 2), through every floor to the deck
     if (climb) bp.ladder(1, 1, 1, topY, 'south');
-    if (lampAt) for (let s = 1; s <= storeys; s++) lamp(bp, B, lampAt[0], 5 * (s - 1) + 1, lampAt[1]);
+    for (const at of lamps) for (let s = 1; s <= storeys; s++) lamp(bp, B, at[0], 5 * (s - 1) + 1, at[1]);
   });
   bp.part('top', () => {
     if (roof && B.roofStairs) {
