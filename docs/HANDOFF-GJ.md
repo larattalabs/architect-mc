@@ -19,7 +19,14 @@ the deviations, with reasons). D3's as-built wins over GJ's facts about D3. Bran
 - [x] lints: lint-structure 67/0, lint-look 13/0, water-lint 130/0 (p3-lint: in the gradle build)
 - [x] driver `tools/gate7agj.mjs`; steps `gj-unit`, `gj-ingame`, `gj-town`, `gj-steward` (chain `7agj`, impact rule "7a GJ");
       step-inputs rebuilt, `check` clean. `gj-unit` + `apicompat` run directly: PASS (0 failures)
-- [ ] the in-game steps: **ON HOLD** (the coordinator, 2026-10-28: no Minecraft runs while Steward's K3 RC runs; wait for the go)
+- [~] the in-game steps (released by the coordinator 18:20):
+      - run `20261028-182318-change`: gj-unit 4/0, **gj-ingame 19/0** (items 3, 4, 6, 7, 9 on the gated d3_walled), gj-town 9/1 (the
+        fountain refused: its anchor sat on the street end), gj-steward 14/2 (the stale floor bug below; fixed in fc914018)
+      - run `20261028-184554-change` at fc914018: **gj-steward 17/0** (items 5, 8, 9); gj-town 2/4: with the fountain off the axis the
+        ring [4, 8] refused round it. Fixed after (kit rehearsal): ring [8, 14], the fountain 7 straight in from the gate (on the inner
+        run), every part READY in the kit. **gj-town needs one more run.**
+      - the bug run 1 found: a block across the opening turns the walk's dirt_path to dirt (vanilla), and the re-check then stayed stale
+        forever; now the opening is checked first and dirt for dirt_path is the walk (GateJoin.sameKind)
 - [ ] gate-verifier (it re-runs items 6, 7, 9: `gj-ingame` and `gj-steward`'s refusals), then push and "ready to merge"
 
 ## Resume

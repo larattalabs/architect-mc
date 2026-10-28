@@ -375,7 +375,7 @@ steps.ingame = async () => {
 /** gj_town_wall's plan/0: a street town zone, its own K1 ring with a wooden-door gate at `east`, `fount` a fountain near `inner`. */
 const townWallPlan = (fount) => ({ schemaVersion: 'plan/0',
   zones: [{ id: 'town', program: { lots: TOWN_LOTS, layout: 'street', orientation: 'ew' }, where: { near: { anchor: 'stone', within: 16 } } }],
-  connectors: [{ id: 'town_wall', kind: 'wall', where: { around: { feature: { part: 'town' }, ring: [4, 8] } }, height: 5 }, { id: 'tg', kind: 'gate', wall: 'town_wall', door: 'door', width: 3, at: { anchor: 'east' } }],
+  connectors: [{ id: 'town_wall', kind: 'wall', where: { around: { feature: { part: 'town' }, ring: [8, 14] } }, height: 5 }, { id: 'tg', kind: 'gate', wall: 'town_wall', door: 'door', width: 3, at: { anchor: 'east' } }],
   ...(fount ? { forms: [{ id: 'fount', kind: 'fountain', basin: 5, spout: 3, where: { near: { anchor: 'inner', within: 4 } } }] } : {}) });
 
 steps.town = async () => {
@@ -396,9 +396,9 @@ steps.town = async () => {
   const gat = ck0.check?.parts?.find((x) => x.part === 'tg')?.geometry?.at;
   out.firstCheck = { overall: ck0.check?.overall, gate: gat ?? null };
   if (!gat) { check(false, `gj_town_wall's gate placed (${json(out.firstCheck)})`); await leaveWorld(); return out; }
-  // (3 inside the gate, 7 off its axis: beside the join's inner run, its watch columns reaching the run's edge; 8 straight in sits on the
-  // street's end and refuses, LEAK into a cottage north of it: the kit rehearsal)
-  anchors.inner = [gat[0] - 3, g0 + 1, gat[2] + 7];
+  // (7 straight inside the gate, on the join's cheapest inner run to the street's end, with the ring at [8, 14] so the fountain, the
+  // ring and the gate all fit: the kit rehearsal; at [4, 8] the ring refuses round it, and off the axis it LEAKs into a cottage)
+  anchors.inner = [gat[0] - 7, g0 + 1, gat[2]];
   const all = [A[0] - 40, -64, A[1] - 40, A[2] + 120, 160, A[3] + 40];
   const world0 = await dump(all, 'townwall-world0');
   const ck = await call('dev.region.checkPlan', { plan: townWallPlan(true), claim: A, anchors, owner: OWNER }, 900_000);
