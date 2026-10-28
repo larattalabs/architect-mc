@@ -1336,3 +1336,4 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 ## Looks approved (Noah, 2026-10-26)
 - SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
 - RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.
+- LF lifts (gallery https://claude.ai/artifact/DSfY1N32us1YRUa3vLJNTL): approved (2026-10-27).
