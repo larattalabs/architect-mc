@@ -11,7 +11,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param type a preset building type ({@code house, cabin, cottage, tower, shop, tavern, barn, smithy, chapel, gatehouse,
  *     custom}) or, since 1.2.0 with a 4b helper, an open type ({@code [a-z][a-z0-9_]{0,39}}, e.g. {@code hellish_lair})
- * @param maxSize x/z 7..96, y 6..64
+ * @param maxSize x/z 3..96 (since NEXT, 7a K3: a wall lot's exact box; 7..96 before), y 6..64. The sidecar checks it; the mod
+ *     sends it as given
  * @param remix a library id to remix, or null
  * @param owner, ext, model, budgetUsd sent to the sidecar only when it speaks protocol 2; owner and ext are kept by the mod
  *              either way ({@link Designs#list}, ext copied into the new entry)

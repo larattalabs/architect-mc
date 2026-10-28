@@ -55,6 +55,11 @@ export const Status = z.object({
 export type Status = z.infer<typeof Status>;
 
 const Size = (lo: number, hi: number) => z.number().int().min(lo).max(hi);
+/**
+ * (7a K3, since NEXT) The least maxSize x and z: 3, the smallest frame a design stands in (a ring of walls round one column). Before NEXT
+ * it was 7. A wall lot (K3) is designed in its exact box, and Steward's boxes can be under 7 a side (a plan lot is at least 5).
+ */
+export const MAX_SIZE_MIN_XZ = 3;
 
 /** A marked plot (the mod's DesignSpec.Plot), informational for the designer. */
 export const Plot = z.object({
@@ -76,7 +81,7 @@ const DesignRequestBase = z.object({
   style: z.string().trim().min(1).max(40).describe('"rustic", "medieval", "modern", ... (chips or any text)'),
   materials: z.string().trim().max(200).optional().describe('free text, e.g. "spruce and cobblestone"'),
   features: z.array(z.string().regex(FEATURE_RE)).max(6).describe('porch, chimney, balcony, garden, skylights, courtyard, big_windows, basement, ...'),
-  maxSize: z.object({ x: Size(7, 96), y: Size(6, 64), z: Size(7, 96) }).describe('the largest template allowed (including roof overhangs, porch, garden)'),
+  maxSize: z.object({ x: Size(MAX_SIZE_MIN_XZ, 96), y: Size(6, 64), z: Size(MAX_SIZE_MIN_XZ, 96) }).describe('the largest template allowed (including roof overhangs, porch, garden); x/z 3..96 (7..96 before NEXT), y 6..64'),
   plot: Plot.optional(),
   remix: z.string().regex(/^[a-z0-9_]+$/).max(64).optional().describe('start from this library id'),
   name: z.string().trim().min(1).max(40).optional().describe('display name; also names the id (gen_<slug>)'),

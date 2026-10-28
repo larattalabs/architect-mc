@@ -120,13 +120,16 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
   const H = topY + extra;
   const { bp, B } = start(K, id, 'tower', W, H, D, roles, [1, 1, 1, W - 2, topY - 1, D - 2], palette);
   const isOuter = new Set(outer.map(([u, , v]) => `${u},${v}`));
+  // (a 3 x 3 tower has one inner column: no ladder and no inner floors, the column the entrance's; its deck is only a cap)
+  const climb = (W - 2) * (D - 2) > 1;
+  let entrance = null;
   bp.part('main', () => {
     bp.fill([0, 0, 0, W - 1, 0, D - 1], B.floor);
     for (let y = 1; y < topY; y++) for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
       if (!(x === 0 || x === W - 1 || z === 0 || z === D - 1)) { bp.air(x, y, z); continue; }
       bp.set(x, y, z, y % 5 === 0 ? B.trim : B.body);
     }
-    for (let s = 1; s < storeys; s++) bp.fill([1, 5 * s, 1, W - 2, 5 * s, D - 2], B.floor);
+    if (climb) for (let s = 1; s < storeys; s++) bp.fill([1, 5 * s, 1, W - 2, 5 * s, D - 2], B.floor);
   }, { roof: roof ? 'hip' : 'flat', storeys });
   bp.part('openings', () => {
     // slit windows on every face above row 3, two per face per storey
@@ -145,12 +148,22 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
     if (outerDoor) { const o = outer.find(([u, , v]) => u > 0 && u < W - 1 && (v === 0 || v === D - 1)); if (o) door = [o[0], o[2]]; }
     if (doorAt) door = [doorAt[0], doorAt[1]];
     if (door) bp.door(door[0], 1, door[1], door[1] === 0 ? 'north' : 'south');
-    bp.spot('entrance', door ? door[0] : (W - 1) >> 1, door ? (door[1] === 0 ? 1 : D - 2) : D - 2, door && door[1] === 0 ? 0 : 180, { y: 1 });
+    entrance = [door ? door[0] : (W - 1) >> 1, door ? (door[1] === 0 ? 1 : D - 2) : D - 2];
+    bp.spot('entrance', entrance[0], entrance[1], door && door[1] === 0 ? 0 : 180, { y: 1 });
   });
+  // the lamps: inside the corner by the front (a small tower's: the first inner cell that is neither the ladder's nor the entrance's;
+  // none in a 3 x 3); the spawn: inside the far corner from the ladder, two rows in (a small tower's: the entrance's cell when that is taken)
+  const ladderAt = climb ? [1, 1] : null;
+  const same = (a, b) => !!a && !!b && a[0] === b[0] && a[1] === b[1];
+  const inner = [];
+  for (let v = 1; v < D - 1; v++) for (let u = 1; u < W - 1; u++) inner.push([u, v]);
+  const lampAt = [[W - 2, D - 2 > 1 ? D - 2 : 1], ...inner].find((c) => !same(c, ladderAt) && !same(c, entrance)) ?? null;
+  let spawn = [W - 2, Math.min(2, D - 2)];
+  if (same(spawn, ladderAt) || same(spawn, lampAt)) spawn = entrance;
   bp.part('stair', () => {
     // a ladder up the back wall's inside (column 1 or 2), through every floor to the deck
-    bp.ladder(1, 1, 1, topY, 'south');
-    for (let s = 1; s <= storeys; s++) lamp(bp, B, W - 2, 5 * (s - 1) + 1, D - 2 > 1 ? D - 2 : 1);
+    if (climb) bp.ladder(1, 1, 1, topY, 'south');
+    if (lampAt) for (let s = 1; s <= storeys; s++) lamp(bp, B, lampAt[0], 5 * (s - 1) + 1, lampAt[1]);
   });
   bp.part('top', () => {
     if (roof && B.roofStairs) {
@@ -160,10 +173,13 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
       lamp(bp, B, W - 2, topY + 1, D - 2);
       bp.roofHip(0, 0, W - 1, D - 1, topY + 2, { stairs: B.roofStairs, top: B.roofBlock, lining: B.roofBlock });
     } else crenelTop(bp, B, W, D, topY);
-    bp.air(1, topY, 1); // the ladder's hatch through the deck
-    bp.ladder(1, 1, topY, topY, 'south');
+    if (climb) {
+      bp.air(1, topY, 1); // the ladder's hatch through the deck
+      bp.ladder(1, 1, topY, topY, 'south');
+    } else if (B.lantern) bp.set(1, topY - 1, 1, B.light, { hanging: 'true' }); // (a 3 x 3 tower: the light hung under the deck down its one column
+    else bp.set(1, topY, 1, B.light); //  or set in the deck itself)
   }, { roof: roof ? 'hip' : 'flat' });
-  bp.spot('spawn', W - 2, 2, 180, { y: 1 });
+  bp.spot('spawn', spawn[0], spawn[1], 180, { y: 1 });
   return bp;
 }
 
@@ -203,9 +219,9 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
       if (badFloor) bp.set(x, 0, z, B.fence);
     }
     // (the opening is the passage's reserved cells, rows 1..3: the realise drops anything there, so its arch is the lintel course)
-    // lamps in niches in the passage's side walls, midway through
+    // lamps in niches in the passage's side walls, midway through (not where a side wall is the box's own face: a 5-wide gatehouse)
     const zm = (D - 1) >> 1;
-    for (const x of [p0 - 1, p1 + 1]) { bp.air(x, 2, zm); lamp(bp, B, x, 2, zm); bp.set(x, 1, zm, B.body); }
+    for (const x of [p0 - 1, p1 + 1].filter((q) => q > 0 && q < W - 1)) { bp.air(x, 2, zm); lamp(bp, B, x, 2, zm); bp.set(x, 1, zm, B.body); }
   });
   bp.part('rooms', () => {
     // the side rooms: a door each on the back face (an inner face), a lamp inside; the ladder up from the east room to the hall and the top
@@ -241,12 +257,13 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
 
 /**
  * The passage columns of a gatehouse stand-in from a request's reserved cells (in the lot's frame, [u, y, v]; they may be merged with an
- * irrigation set): the columns u reserved at the feet row (y 0) on every row v front to back, else every u reserved, else the middle 3.
+ * irrigation set): the columns u reserved at the feet row (y 0) on every row v front to back, else every u reserved, else the middle 3;
+ * only columns inside the side faces (0 < u < W - 1: a 5-wide gatehouse's passage is u 1..3, its side walls the box's faces).
  * Returns the passage's cells [[u, y, v]] (rows 0..2, every v) of a frame W x D.
  */
 export function standInPassage(W, D, reserved = []) {
   const at = new Set(reserved.map(([u, y, v]) => `${u},${y},${v}`));
-  const us = [...new Set(reserved.map(([u]) => u))].filter((u) => u > 1 && u < W - 2).sort((a, b) => a - b);
+  const us = [...new Set(reserved.map(([u]) => u))].filter((u) => u > 0 && u < W - 1).sort((a, b) => a - b);
   let cols = us.filter((u) => [...Array(D).keys()].every((v) => at.has(`${u},0,${v}`)));
   if (!cols.length) cols = us;
   if (!cols.length) { const c = (W - 3) >> 1; cols = [c, c + 1, c + 2]; }

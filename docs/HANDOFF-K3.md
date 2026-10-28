@@ -20,6 +20,10 @@ K3 changes what Steward designs and binds, and adds a `realiseApproved` refusal.
      `onWall.outerFaces.lotCells`; a typed member for them is still S-K3-2's "later".
    - The design must fill its lot's box across the line. A design narrower than its box leaves the wall open at the box's faces and is
      refused.
+   - **Send the exact box:** maxSize = the lot's fitBox in its frame (front to the south), no approach margin and no 7 minimum.
+     `DesignRequest.maxSize` x/z now accepts 3..96 (was 7..96; y stays 6..64) in protocol 1, protocol 2 and group items. K3's siting
+     emits boxes of at least 5 a side. An older sidecar still refuses x/z under 7: send a box under 7 only when the helper advertises
+     `wallLots`.
 3. **A bind refusal and its repair.** The refusal comes as `ARTIFACT_STALE`, the reason a changed site gets. Branch on the message prefix
    "lot <id> on wall <wall>:" and send that case to the design repair loop, not to a stale re-check, which would retry forever.
    Bind a tower whose door is on an outer face. `realiseApproved` refuses `ARTIFACT_STALE` with
@@ -38,8 +42,10 @@ What it builds (`kit/lib/wallLotDesigns.mjs` `standInDesign`, the gate's stub de
 - The footprint is exactly the box (reserved.size when it fits maxSize). The height is the stub's: a tower is 2 x its smaller side + 3,
   so about 23 for a 9 x 9 under the 40 cap.
 - **A gatehouse:** the passage open on the reserved columns over a standable floor, and its side-room doors on the back face. That is
-  safe for any outer-face set.
-- **A tower:** one door on the front face, at the middlemost cell off the outer faces. **Pass a tower's
+  safe for any outer-face set. Its side rooms need **9 across** (wall, room, wall, the 3-wide passage, wall, room, wall); a narrower
+  gatehouse box builds (a 5-wide one's passage is u 1..3, its side walls the box's faces) but the kit's gatehouse rules (an outside
+  door, a lit interior) refuse it, so the sim reports the design failed.
+- **A tower:** builds and checks in any box down to 3 x 3. One door on the front face, at the middlemost cell off the outer faces. **Pass a tower's
   `onWall.outerFaces.lotCells` unchanged as `ext["architect:wallLot"].outerFaces`.** Without it the door is the front's middle. That is
   right for a run or via tower, but castle_city's corner towers have that cell outer, and their inner front cells mirror each other
   (u 1..3 or 5..7), so no blind door is safe and the bind refuses them. The ext ends up in the entry's blueprint JSON `ext`.

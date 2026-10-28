@@ -155,7 +155,7 @@ export function simWallLot(req: { type: string; maxSize?: Size3 | undefined; not
 /** kit/lib/wallLotDesigns.mjs standInPassage, mirrored (the sidecar records the passage in the design source). */
 function simStandInPassage(W: number, D: number, reserved: Array<[number, number, number]>): Array<[number, number, number]> {
   const at = new Set(reserved.map(([u, y, v]) => `${u},${y},${v}`));
-  const us = [...new Set(reserved.map(([u]) => u))].filter((u) => u > 1 && u < W - 2).sort((a, b) => a - b);
+  const us = [...new Set(reserved.map(([u]) => u))].filter((u) => u > 0 && u < W - 1).sort((a, b) => a - b);
   let cols = us.filter((u) => Array.from({ length: D }, (_, v) => v).every((v) => at.has(`${u},0,${v}`)));
   if (!cols.length) cols = us;
   if (!cols.length) {

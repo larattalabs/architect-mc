@@ -170,6 +170,45 @@ describe.skipIf(!hasKit)('the wall-lot stand-in (sim backend, real kit)', () => 
     expect(h2.every(([k, b]) => isDoor(b) && !isOuter(k) && k.endsWith(`,${D - 1}`)), JSON.stringify(h2)).toBe(true);
   }, 180_000);
 
+  it('(since NEXT) exact boxes under 7: 3 x 3, 5 x 3 and 3 x 5 towers build, check and close every face; a gatehouse needs 9 across (9 x 3 builds), 5 x 3 is refused by the kit', async () => {
+    h = await harness();
+    // a face cell that is not a full-height wall block (Java's bind counts these as open: lanterns, panes, slabs, ... as well as air and doors)
+    const thin = (b: string) => open(b) || /lantern|torch|pane|slab|stairs|fence|carpet|ladder|_wall$|button|lever|sign/.test(b.replace(/\[.*$/, ''));
+    for (const [W, D] of [[3, 3], [5, 3], [3, 5]] as Array<[number, number]>) {
+      const e = await done(h, { type: 'tower', name: `Tower ${W}x${D}`, maxSize: { x: W, y: 40, z: D }, notes: BRIEF });
+      const c = await cellsOf(h, e);
+      expect([c.size.x, c.size.z], `tower ${W}x${D}`).toEqual([W, D]);
+      const holes = openFaceCells(c, W, D);
+      expect(holes.filter(([k]) => /^\d+,[12],/.test(k)).length, `tower ${W}x${D}: ${JSON.stringify(holes)}`).toBe(2);
+      expect(holes.every(([k, b]) => isDoor(b) && k.endsWith(`,${D - 1}`)), JSON.stringify(holes)).toBe(true);
+      const bad: string[] = [];
+      for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) for (let y = 1; y <= 3; y++) {
+        if (x !== 0 && x !== W - 1 && z !== 0 && z !== D - 1) continue;
+        const b = c.at(x, y, z);
+        if (thin(b) && !isDoor(b)) bad.push(`${x},${y},${z} ${b}`);
+      }
+      expect(bad, `tower ${W}x${D}`).toEqual([]);
+    }
+    // a gatehouse: the stand-in's side rooms (a door each, the ladder) need 9 across (wall, room, wall, the 3-wide passage, wall, room,
+    // wall); 9 x 3 builds and checks
+    const W = 9, D = 3, cols = [3, 4, 5];
+    const e = await done(h, { type: 'gatehouse', name: 'Gate 9x3', maxSize: { x: W, y: 40, z: D }, notes: BRIEF, reserved: passageReserved(W, D, cols) });
+    const c = await cellsOf(h, e);
+    expect([c.size.x, c.size.z]).toEqual([W, D]);
+    for (const u of cols) for (let v = 0; v < D; v++) {
+      for (let y = 1; y <= 3; y++) expect(c.at(u, y, v), `passage ${u},${y},${v}`).toBe('minecraft:air');
+      expect(c.at(u, 0, v), `floor ${u},0,${v}`).not.toMatch(/air$|fence|slab|stairs|carpet/);
+    }
+    const holes = openFaceCells(c, W, D).filter(([k]) => !cols.includes(Number(k.split(',')[0])));
+    expect(holes.every(([k, b]) => isDoor(b) && k.endsWith(',0')), JSON.stringify(holes)).toBe(true);
+    // 5 x 3 parses and builds (the passage u 1..3 open, its side walls the box's faces, closed), but a 5-wide gatehouse has no room for a
+    // door, so the kit's gatehouse rules (an outside door, a lit interior) refuse the stand-in: the sim reports it failed
+    const g = h.sc.requestDesign(DesignRequest.parse(request({ type: 'gatehouse', name: 'Gate 5x3', maxSize: { x: 5, y: 40, z: 3 }, notes: BRIEF, reserved: passageReserved(5, 3, [1, 2, 3]) })));
+    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.designs.get(g.id)!.status), 60_000);
+    const gx = h.sc.designs.get(g.id)!;
+    expect([gx.status, gx.error]).toEqual(['failed', expect.stringMatching(/gatehouse 5x3[\s\S]*no outside door/)]);
+  }, 240_000);
+
   it('a tower request without the wall-lot signs keeps the kit example', async () => {
     h = await harness();
     const e = await done(h, { type: 'tower', name: 'Watch', maxSize: { x: 64, y: 64, z: 64 } });

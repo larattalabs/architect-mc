@@ -320,3 +320,30 @@ test('the stub designs (tools/lib/gate7ak3-designs.mjs): exactly the lot\'s fram
     }
   }
 });
+
+test('(since NEXT) the stand-in in exact boxes under 7: a 5-wide gatehouse\'s passage is u 1..3 (its side walls the box\'s faces, closed full height); 3 x 3, 5 x 3 and 3 x 5 towers close every face but their front door', () => {
+  const thin = /air$|door$|fence_gate$|trapdoor$|lantern|torch|pane|slab|stairs|fence$|carpet|ladder/;
+  const at = (bp, u, y, v) => bp.nameAt(u, y, v) ?? 'minecraft:air';
+  const reserved = [];
+  for (const u of [1, 2, 3]) for (let v = 0; v < 3; v++) for (const y of [0, 1, 2]) reserved.push([u, y, v]);
+  const pass = standInPassage(5, 3, reserved);
+  assert.deepEqual([...new Set(pass.map(([u]) => u))], [1, 2, 3]);
+  // (and the middle three of a 5-wide box with no reserved cells)
+  assert.deepEqual([...new Set(standInPassage(5, 3).map(([u]) => u))], [1, 2, 3]);
+  for (const p of [PALETTES.rustic, palette({ bible: 'dark' })]) {
+    const g = standInDesign('si_g5', { type: 'gatehouse', size: [5, 40, 3], passage: pass }, p);
+    assert.deepEqual([g.size.x, g.size.z], [5, 3]);
+    for (const [u, y, v] of pass) assert.equal(at(g, u, y + 1, v), 'minecraft:air', `passage ${u},${y},${v}`);
+    for (const x of [0, 4]) for (let z = 0; z < 3; z++) for (let y = 1; y <= 3; y++) assert.ok(!thin.test(at(g, x, y, z)), `side face ${x},${y},${z} closed (${at(g, x, y, z)})`);
+    for (const [W, D] of [[3, 3], [5, 3], [3, 5]]) {
+      const t = standInDesign(`si_t${W}${D}`, { type: 'tower', size: [W, 40, D] }, p);
+      assert.deepEqual([t.size.x, t.size.z], [W, D]);
+      const open = [];
+      for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) for (let y = 1; y <= 3; y++) {
+        if (x !== 0 && x !== W - 1 && z !== 0 && z !== D - 1) continue;
+        if (thin.test(at(t, x, y, z))) open.push([x, y, z, at(t, x, y, z)]);
+      }
+      assert.ok(open.length === 2 && open.every(([x, y, z, b]) => /door$/.test(b) && z === D - 1 && x === (W - 1) >> 1 && y <= 2), `tower ${W}x${D}: ${JSON.stringify(open)}`);
+    }
+  }
+});
