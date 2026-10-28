@@ -25924,4 +25924,13 @@ is a reserved box and is skipped with "not standing as built"). The kit's third 
 
 ### Evidence
 
-(filled in below as the gate runs)
+| item | where | result |
+|---|---|---|
+| offline | the worktree at fcbff955 | kit 969/969, mod build 975/0, sidecar `npm run check` pass, lint-structure 67/0, lint-look 13/0, water-lint 130/0, api-compat, step-inputs check clean |
+| step `gj-unit` | run `20261028-182318-change` at fc914018 | PASS, 4 ok / 0 FAIL |
+| 3, 4, 6, 7, 9 (step `gj-ingame`) | the same run | PASS, 19 ok / 0 FAIL |
+| 5, 8, 9 (step `gj-steward`) | run `20261028-184554-change` at fc914018 | PASS, 17 ok / 0 FAIL (after the re-check fix: a dirt path the world turned to dirt is still the walk) |
+| 3, 4, 7, 10 (step `gj-town`) | run `20261028-185215-change` at fcbff955 | PASS, 10 ok / 0 FAIL (ring [8, 14], the fountain 7 in from the gate on the inner run) |
+
+The first in-game round found one mod bug (the stale re-check after vanilla turned the walk's dirt path to dirt) and two fixture
+problems in `gj_town_wall` (the fountain's anchor on the street end, then the ring [4, 8] too tight round an off-axis fountain), all fixed.
