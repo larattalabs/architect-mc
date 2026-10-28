@@ -25850,3 +25850,257 @@ The resume notes, Steward's RC note, the exact API, the frozen interface, the tw
 - **Shared fix:** `Groups`' whole-group removal skips members with no standing record wherever they stand, and a pending record whose
   restore was written this session is not "unfinished".
 - **Gate (RV-c/RV-d):** `rv-undo`, `rv-plan0`, `rv-undo-crash` in chain `6drv`. Steward's RC note and the run ids: HANDOFF-RV.md.
+
+## Slice GM, gate mechanisms (draft)
+
+Status: **draft for Noah and Steward; not frozen.** Written 2026-10-27 against main 6b876fa1 and `origin/slice/K3` (K3 is not on main yet:
+its contract and as-built live on that branch, `docs/CONTRACT.md` there, and main's line numbers shift when K3 merges; `K3:C:` below means
+that branch). Noah's ask (PLAN:1125, 2026-10-23): "fancier gates, piston or redstone driven". NEXT-FEATURES.md:34 holds the queue entry.
+
+GM gives a K3 gatehouse's passage a **working gate**: a sliding grate (the portcullis), a sliding solid door, or an iron double door, each
+worked by levers, buttons or a plate and written in a settled rest state; and it flips `connector.drawbridge` from reserved to supported
+with a trapdoor deck. The look comes from the style's roles; only functional redstone and piston blocks are added to `UNTHEMED_OK`.
+
+**GM changes what Steward designs and binds** (a larger reserved envelope, a wider gatehouse box) **and what removal must undo** (powered
+and moving blocks), so Steward's RC comes before release (GATES policy 4) and the verifier re-runs the removal items.
+
+- **Branch:** `slice/GM` (or `GM-a`, `GM-b`, `GM-c`, §11), worktree `../_work/architect-mc-GM`. **Spend:** $0. DEV MODE gate.
+- **Scope:** mechanisms (§2), blocks (§3), placement (§4), plan and API (§5), routing (§6), realise and undo (§7), survival (§8), refusals (§9).
+- **Not in scope:** a lifting portcullis (§1; Noah's question N-GM-1), a swinging or hinged drawbridge, flying machines, a daylight sensor
+  (it needs a sky-exposed cell the design would have to give; deferred), pistons in K1 wall gates (§4), generated (undesigned)
+  gatehouses, mechanisms on a `wall.along`.
+- **Depends on:** K3 (merged first: the passage, `onWall.passage`, the `architect_mc:passage` mask, `pg_<lot>`), GJ (open-gate rule), K1a
+  (gates, `door`), T3a (`connector.bridge`) and H/HY (the moat) for GM-c only, S-THEME (`UNTHEMED_OK`), 6c PT (piston records).
+
+### 0. Facts this builds on
+
+- **K3's seam** (`origin/slice/K3:docs/HANDOFF-K3.md` "GM seam"; `K3:C:21276` §4, `K3:C:21288` §5, `K3:C:21300` §6):
+  - `onWall.passage {width, height 3, cells, lotCells, floor, front, back, lintelY, facing}`; the passage cells are the region's under
+    `architect_mc:passage` (no design writes or owns them; the realise drops the entry's blocks there and counts them);
+  - `pg_<lot>` is its own edge type with movers player and villager; the route's segment kind is `passage`; M2:wall counts a passage as a
+    gate (blocked in the closed test, open across: `K3:C:21288`);
+  - `pw = max(3, widest street, road, path, auto connector)`, at most `w - 2`, odd (`K3:C:21276`); `lintelY = floorY + 3`;
+  - `DesignRequest.reserved` carries `passage.lotCells`; bind refuses `ARTIFACT_STALE` "lot <id> on wall <wall>: ..." (`K3:C:21288`);
+  - the plan/0 compact schema stands at 95,975 of 96,000 bytes (HANDOFF-K3, API delta): **25 bytes of room** (§5).
+- **K1 gates** (C:12487): a wall opening of `width` x `height` in a run of at least `width + 2`, jambs and lintel in the frame role,
+  `door: door` (the frame role's wood, a wooden double door) or `fence_gate`. The recorded ask is `redstone_gate`
+  (`kit/test/fixtures/plan/asks/redstone_gate.json`): `main_gate` (width 3, height 4, arch), `moat` (`connector.channel`, width 5, depth 3,
+  ring [8, 14]), `gatehouse_1` (13 x 11, brief "portcullis behind" the drawbridge) and `drawbridge` (`connector.drawbridge`, `from
+  claim_s`, `to gatehouse_1`, `params {mechanism: "redstone", movable: true}`).
+- **Reserved kind:** `connector.drawbridge` is `until: mechanism` in catalogue 6 (S-T3-7, C:13368); the recorded drawbridge answers
+  `unsupported {block: connector.drawbridge}` (C:14084), and the validator maps a bridge whose params name `mechanism` or `movable: true` to
+  it (C:13396, T3 foundation row).
+- **Themed blocks:** `UNTHEMED_OK` (`kit/lib/connectors/style.mjs:111`) holds ladders, chains, fluids, `iron_bars` (HY-c's grate, C:25196)
+  and `iron_door`, `iron_trapdoor` (VOC-c, C:25197). `traceRole` (`style.mjs:118`) traces buttons, pressure plates, doors, trapdoors,
+  fences, walls and gates through the roles' shape variants (`SHAPES`, `style.mjs:113`); S-THEME is `kit/lib/lint/theme.mjs`.
+- **Undo:** BOX restores run 4d's updates, with "no update into a covered position" (C:1709). Cell writes use `Sites.CELL_FLAGS`
+  (`UPDATE_CLIENTS | UPDATE_SKIP_ALL_SIDEEFFECTS`, `Sites.java:111`); `Sites.FLAGS` suppresses drops (`Sites.java:109`). Pistons already
+  carry a moved block's placer record on its `MovingPistonBlockEntity` (PT §2, C:10533; `PistonBaseBlockMixin.java:18`). `TickDeferral`
+  drops ticks at covered positions (C:1715). `piston_head` and `moving_piston` cost nothing in the survival data (`vocab/survival.mjs:61`).
+- **Fluids:** water is free in survival (N-H-1, C:8213); the moat is placed after the wall and keeps clear of it (H-a, C:16189).
+
+### 1. What vanilla allows (this decides the designs) and the probe
+
+A piston moves its line (at most 12 blocks) **one cell**; a sticky piston pulls back **one** block; a retracted piston base moves, an
+extended one does not; block-entity blocks and obsidian-class blocks do not move; a door is destroyed by a piston; a fence or wall has 1.5
+collision. These are the long-standing Java rules; **the 26.3 server is not assumed: item 0 of the gate (`gm-probe`) checks each of
+them against the running mod** and the slice stops if one fails.
+
+- **A lifting 3-high portcullis needs 3 cells of travel.** One stroke lifts it 1. It needs a stacked "extender" of pistons timed by a
+  repeater ladder, a tall slot above the lintel (about 6 cells through the hall floor), and a fault that leaves it half up. **Not in
+  GM v1 (N-GM-1).** If Noah wants it, it is `GM-lift`, about +1.5 days.
+- **The middle column of a 3-wide opening cannot leave by sideways strokes.** So GM's grate and sliding door are **split gates**: two
+  leaves, one per side lane, slide 1 cell into the jambs, and a fixed **mullion** (1 column) stands between. Open, the passage is two
+  1-wide, 3-high lanes beside the mullion (the villager walk and the player walk both fit); closed, three full-height columns.
+- **A drawbridge cannot swing or slide 5 cells.** A deck of **iron trapdoors** flips instead (§2): nothing is pushed through water, and a
+  waterlogged trapdoor keeps its fluid when it opens, so undo has no fluid re-flow to worry about (E-flat).
+- **Mover width:** with a mechanism the gate is 3 wide: K3's `pw` is capped at 3 (§5); a wider street narrows at the gate.
+
+### 2. The mechanisms
+
+`mech` names the kind; `rest` the settled state the realise writes (default `open`, §6). Power means *close* for the sliding kinds and
+*open* for `swing`, so `rest: open` portcullis and `rest: closed` swing need no inverter and nothing is powered at rest.
+
+| Kind | Moves | Rest | Triggers (who) | Notes |
+|---|---|---|---|---|
+| `portcullis` | two leaf columns (3 high each) of bars, 1 cell, into the jamb recess; mullion fixed | open; power closes | lever at the front end and the back end of the passage, either closes it (player) | leaf = rail role's fence, else its wall, else `iron_bars`; mullion = structure role |
+| `slide` (the piston double door) | the same two leaves, solid | open; power closes | the same levers | leaf = structure role's block, else the first role with a movable full block; flush and hidden when open |
+| `swing` | two iron doors (2 high) and a fence/bars transom above; mullion between | **closed**; power opens | outside: a button (role shape; player; opens 1.0 s stone or 1.5 s wood: enough to step through); inside: a pressure plate on the back end's floor (anyone inside) and a lever to hold it open (player) | iron doors only open by power, so villagers cannot open a closed one; arrows press a wooden button |
+| `drawbridge` (GM-c) | a row of iron trapdoors across the moat flips up one by one (a repeater ripple, one redstone tick a cell) | lowered (a deck); power raises | a lever on the gatehouse's front end (player), a second on the near bank | a `connector.bridge` beam over the moat with `deck: trapdoor` (§5); raised, the span is open water |
+
+Stock sizes (pw = 3): `portcullis` and `slide` use 6 sticky pistons (3 a side), 6 leaf blocks, 3 mullion blocks; `swing` uses 2 iron
+doors, 2 transom blocks and 3 mullion blocks and no piston. Cell layout and timing live in one pure module (`kit/lib/connectors/gmCircuit.mjs`),
+which also returns the **settled** state for each rest (§7); this contract fixes the envelope, not the wire-by-wire layout, and `gm-probe`
+proves every circuit before the build rests on it.
+
+### 3. Blocks: roles first, functional redstone second
+
+Everything visible comes from the style's roles through the shape variants S-THEME already traces; nothing is added for looks.
+
+| Part | Block | From |
+|---|---|---|
+| Leaf, transom, drawbridge posts | fence, else wall of the rail role; else `iron_bars` (already in `UNTHEMED_OK`) | rail role; the fallback is used when a role has none, or its block is immovable |
+| Solid leaf, mullion, jamb lining, bus sleepers | the structure role's full block (else trim, else foundation) | structure role; a block that does not move (obsidian-class, a block entity) is skipped for the next role |
+| Button, plate | the role's `button` / `pressure_plate` shape (stone for a stone role, wood for wood) | S-THEME already traces them (`style.mjs:113`) |
+| Doors, deck | `iron_door`, `iron_trapdoor` | already in `UNTHEMED_OK` (VOC-c): redstone-only is the point |
+
+New `UNTHEMED_OK` entries (each with its reason in a comment at `style.mjs:111`):
+
+| Block | Reason |
+|---|---|
+| `minecraft:lever` | the only toggle; no role has one and its colour is fixed |
+| `minecraft:piston`, `minecraft:sticky_piston` | the drive; no role has one. Sticky for the sliding kinds (the pull back) |
+| `minecraft:piston_head`, `minecraft:moving_piston` | their own parts; the realise writes a head only for an extended piston, `moving_piston` is never written but the lints read live dumps |
+| `minecraft:redstone_wire`, `minecraft:repeater` | the bus and the ripple delay; functional, one colour |
+
+Not added: observer, comparator, daylight detector, slime or honey (no design here needs them), redstone torch, redstone lamp. Gate lamps
+stay the light role's W fixtures (K1 §Gates). An immovable role block never becomes a leaf: `gm-unit` item 3 checks every bible.
+
+### 4. Where it sits
+
+- **K3 gatehouses (v1).** The envelope is the passage plus the **mechanism envelope** (§5): the plane `d = 1` from the front face
+  (u in [-4, 4], rows floorY..floorY+3: the leaf and piston row, the recess, the bus), and the trigger cells in the first and last plane of the
+  passage (a lever on the jamb at row floorY+1, a plate on the floor row). Nothing is cut through the winch hall: the levers are at the
+  passage ends, so the hall above stays the design's. **Box:** at least `pw + 8 = 11` wide (recorded: 13 x 11), depth at least 3.
+- **K1 wall gates (GM-b, optional).** Only `swing` (no pistons, so no recess): K1a's wooden double door becomes the two iron doors and
+  the button; a run needs `width + 2` as today. A K1 gate in a wall of thickness under 3 keeps its wooden door. Portcullis and slide are
+  not offered on a K1 gate (they need 4 cells of jamb a side).
+- **Not on** rope or catwalk gates, K2 along-walls (no passage cells), or a gatehouse without a passage.
+
+### 5. Plan, artifact and the API delta (additive)
+
+| Surface | Delta |
+|---|---|
+| plan/0 `connector.wall.lots[]` (K3's member) | `mech?: "portcullis" \| "slide" \| "swing"` and `rest?: "open" \| "closed"` on a gate lot. **The compact schema has 25 bytes of room**, and this costs about 70: GM pays by shortening existing descriptions (at least 60 bytes) or the coordinator raises the 96,000 bound; the lenient route first: `params.mechanism` and `params.gate_mech` on a wall are read for `lots` absent (§9 of K3 style) |
+| plan/0 `connector.drawbridge` | No schema change: `params.mechanism` (`redstone` or `piston`, both mean the trapdoor deck) and `params.movable` are read. The kind flips from reserved to supported: **catalogue bump** (`sinceApi` the next number), the `redstone_gate / drawbridge` row moves off `unsupported` (C:14084) and the plan builder names the byte-identity mover (§10 item 2) |
+| Feature | `gateMechanisms` (`region.walls.mechanisms`; sidecar `FEATURES`, `ApiRules`, `ArchitectApi` javadoc "Since NEXT (7a GM)") |
+| Wall answer | `geometry.wallLots[].passage.mechanism {kind, rest, who}`; `provisional` unchanged; a deviation `what: mechanism` when the box is too narrow (§9) |
+| Artifact `onWall.passage.mechanism` | `{kind, rest, width: 3, cells, lotCells, triggers: [{kind: lever\|button\|plate, at, side: front\|back, who: player\|anyone}], states: {open, closed}}`. `cells` and `lotCells` are the **mechanism envelope** (same flat form as the passage's); `states` names the moved-cell sets. Also on the IR (`lots[].onWall.passage.mechanism`) |
+| `DesignRequest.reserved` | Steward passes `passage.lotCells` **and** `passage.mechanism.lotCells`. A design that fills them is not refused: the realise drops the entry's blocks there and counts them (`architect_mc:mechanismDropped`), as for the passage |
+| siteplan/1 | `walls[].lots[].passage.mechanism`; `connector.drawbridge` appears in `bridges` with `deck: "trapdoor"` and `movable: true` |
+| Graph | `pg_<lot>` gains `state: "open" \| "closed"` (the rest state) and `mechanism {kind, toggle: "player"}`; its `movers` are `[player, villager]` when `state` is open, `[player]` when closed. Route edges keep the `passage` segment |
+| Realise | The mechanism envelope joins the passage's region mask: a new key `architect_mc:mechanism` in `LotMask` (both are region-owned, journaled and undone with the region; only irrigation drains at removal) |
+
+`DesignRequest` gets no new member; the box minimum is a plan refusal and a brief line ("keep 5 cells of jamb a side of the passage
+clear of ladders and stairs"). K3's `pwOf` caps at 3 when a lot has `mech`.
+
+### 6. Routing, closure, villagers, mobs
+
+- **Open or closed is a rest state, written once.** The graph and the plan see the rest state: `open` is a normal passage edge (cost 0,
+  villagers and players), `closed` is a player-only edge (`movers [player]`), because villagers open wooden doors, not iron doors or pistons.
+  A plan that needs a villager route through a `rest: closed` gate answers `MOVER`, as K3 does for a fence-gate passage (`K3:C:21276`).
+- **Default `rest: open`** (Noah's choice, N-GM-2): K3's villager-reach bar and GJ's join stay true, and a player closes the gate (a
+  siege) by a lever. Open by day and closed at night needs a daylight sensor on sky; deferred.
+- **Closure:** M2:wall already treats a passage as a gate (blocked in the closed test, open across: `K3:C:21288`), so it needs no change; the
+  answer gains `gates[].mechanism`. When the gate is closed in the world, the line is sealed: all three columns are blocked (grate bars or
+  solid) and the swing doors are iron. Mob seal: bars block walkers, solid leaves block everything walkable; spiders and flyers are not in
+  the closure model (as for K1's fence gate).
+- **GJ:** a `rest: open` mechanism gate is an **open** gate (GJ §2 admits it); a `rest: closed` one is skipped like a fence gate and named in
+  the refusal. A join never writes a mechanism cell (it is a passage cell).
+- **Triggers are player-only outside:** a lever or a button (stone or wood; arrows press wood). A plate is inside the box only (a plate
+  outside would be pressed by mobs and defeat the seal). The drawbridge's raise is a lever, never a plate.
+- **A player-only toggle** is the lever; `swing`'s plate is "anyone inside", which a hostile mob inside the wall also presses.
+
+### 7. Realise, removal and undo of powered blocks and pistons
+
+The hard part. The rules, in the order a build and a removal run:
+
+1. **Realise writes a settled rest state, one write per cell, no updates delivered** (`Sites.CELL_FLAGS`). `gmCircuit.settle(rest)` is the
+   rest state with every dependent property consistent (a retracted piston unpowered, wire `power` 0, a lever off; for `swing` closed,
+   doors shut and unpowered; an extended base is written together with its head only if a future kind needs it, never a lone head). A
+   unit test settles each circuit twice under a pure evaluator and requires a fixed point, and `gm-ingame` requires **no block to move in
+   the 40 ticks after the realise**.
+2. **Write order:** structure (jamb lining, mullion, leaves in the recess), pistons, sleepers, wire and repeaters, triggers last. Every
+   intermediate state is unpowered, so nothing can fire during a build (construction-site builds in survival use the same order, §8).
+3. **Both states are owned.** The envelope is the union of the open and closed cell sets (the lane cells are passage cells already). The
+   journal captures all of them `before` (one tick, under 50k cells: C:1663) and the `after` capture sees the rest state.
+4. **"Built" and `realised == virtual` ignore dynamic properties** (`extended`, `powered`, `power`, `open`, `short`, `locked`) of the
+   envelope's blocks, and accept a `moving_piston` where a piston or its head belongs. A player who flips the lever has not unbuilt the
+   gate; LC's land-change report does not list it.
+5. **Removal step 0 (quiesce), before `refusePlayerIn`:** finalise any `moving_piston` in the envelope (wait up to 20 ticks, else call
+   its `finalTick`), drop scheduled block ticks and queued block events at envelope positions (`TickDeferral`, C:1715), and clear power
+   sources first (levers, plate, buttons, wire, repeaters).
+6. **Restore the envelope with `CELL_FLAGS | UPDATE_SUPPRESS_DROPS`**: no neighbour or shape update is delivered **into** an envelope cell
+   (C:1709's rule, now with the envelope as the covered set), so a cleared lever or dust cannot fire a piston mid-restore and a lone piston
+   head cannot pop and drop. Heads and `moving_piston` go first, then bases, then the rest.
+7. **What a piston can move out of the envelope.** Every line is at most 7 cells in the plane and ends in a free cell (a lane or a
+   recess) in a clean gate, so nothing leaves. A player block in a lane lengthens the line; the line is still inside u in [-4, 4] or the
+   piston fails to extend. A foreign-block chain that shoves a wall block outside the envelope is the player's leak: the record rides the
+   moving block (PT §2), removal reports it as a `moved` note and E-flat does not cover it.
+8. **A piston-moved block of the player's** in a recess is a `removalBlockers` case like any placed block in the box (C:1696).
+9. **Drawbridge deck:** an iron trapdoor over the moat is written `waterlogged: true` where the moat is, so opening never changes the
+   cell's fluid; the moat's own HY undo restores the water (water cells are not pushed, only the trapdoor's `open` property toggles, which
+   is a dynamic property in item 4).
+
+### 8. Survival
+
+- **Bill:** the written rest state, by item: the cost data already prices pistons (`sv: craft`), `piston_head` and `moving_piston` free
+  (`vocab/survival.mjs:61`), wire as redstone dust. `portcullis` and `slide`: 6 sticky pistons (6 pistons and 6 slime balls), about 18
+  dust, 2 repeaters, 2 levers, 6 leaf and 3 mullion blocks. `swing`: 2 iron doors, 1 button, 1 plate, 1 lever, 2 transom blocks. A
+  drawbridge adds a trapdoor a cell, a sleeper a cell and a repeater every 14. The BOM does not depend on the gate's live state.
+- **Rare items:** slime balls (swamps, slime chunks) gate the sliding kinds; the bill names them so a stockpile can plan. Observers and
+  quartz are not used.
+- **Order:** the construction queue builds in §7's order and the triggers last; the site's "built" uses §7 item 4.
+
+### 9. Refusals
+
+| Case | Answer |
+|---|---|
+| The gatehouse box under 11 wide or 3 deep | the wall `adjusted`: a plain K3 passage, deviation `what: mechanism`, noted; an explicit `rest` or `mech` on a `required` part is `refused NO_ROOM {kind: mechanism, need: 11}` |
+| `mech` on a lot with no passage, or on a `wall.along` | `adjusted`, ignored, noted |
+| A villager route through a `rest: closed` gate | `MOVER {gate}` (as a fence-gate passage) |
+| `connector.drawbridge` with no moat or gap | `NO_GAP` (T3a's rule); on water that T3a still refuses, `WATER` with H's evidence |
+| Bind: the envelope leaves the box, or the box is narrower than 11 | `ARTIFACT_STALE` "lot <id> on wall <wall>: the mechanism envelope ..." (through `realiseApproved`'s lot refusal; nothing written) |
+| Removal while a piston is mid-move | not refused: §7 item 5 settles it first |
+| `portcullis` with `lift` | `unsupported` (reserved; N-GM-1) |
+
+### 10. Gate (slice tier, $0)
+
+Fixtures: `v7a_gm_portcullis`, `v7a_gm_slide`, `v7a_gm_swing` (a K3 castle gatehouse each, the `v7a_k3_castle` shape), `v7a_gm_drawbridge`
+(`redstone_gate`'s shape: wall, moat, gatehouse, trapdoor deck), plus refusal fixtures (box 9, `mech` on a lot with no passage).
+
+| # | Step | Check | Bar |
+|---|---|---|---|
+| 0 | `gm-probe` | on the real server, in a flat world: 20 cycles of each circuit; stroke 1, push 12, sticky pull 1, iron door/trapdoor redstone-only, fence 1.5 collision, wire-on-piston powering | each assumption of §1 holds on 26.3; else stop and report |
+| 1 | `gm-unit` | the geometry per kind and bible (no immovable leaf), `settle` fixed point, the envelope inside the box, the dropped counts, the plan member, the artifact's `mechanism`, the graph `state`/`movers`, S-THEME clean (the new `UNTHEMED_OK` set only), plan/0 size under its bound, 3 checks identical | 0 failing |
+| 2 | Byte identity | every committed fixture planned as on main, `redstone_gate`'s `drawbridge` row the named mover (`unsupported` -> `fits` or `NO_GAP`), K3's recorded plans unchanged | 0 other differ |
+| 3 | `gm-ingame` | `checkPlan` READY, entries bound, `realiseApproved`; **a toggle through a real `useItemOn` on the lever and the button** (not `/setblock`), 20 cycles each: the leaves move in 2-6 ticks, the closed state blocks the kit's and vanilla `dev.nav.villager`'s paths and a player walk (0 of N), the open state passes them (100%); no block moves in 40 ticks after the realise; the pressed plate opens `swing` | all bars |
+| 4 | Undo | `Regions.remove` in the **open** state, the **closed** state, and **mid-move** (remove issued 2 ticks into a toggle), each E-flat 0 over the claim; a player block in a lane: removal as §7 item 7/8; the verifier re-runs these | E-flat 0 x3 |
+| 5 | Drawbridge (GM-c) | the deck flips raised and lowered 10 times over a moat of width 5, depth 3; raised, 0 walks cross; lowered, villagers cross; `Regions.remove` raised and lowered: E-flat 0 incl. the moat's water | all bars |
+| 6 | `gm-survival` | a `slide` and a `swing` gate in survival: the construction queue builds in order with nothing firing; bills equal `cost.survival.bom` item for item and equal the INSTANT twin; E-flat 0 after removal; slime named in the bill | bills equal |
+| 7 | KC and closure | a fountain in the band as K3; M2:wall closure with the gate open (100% across) and closed (0 leaks) | 0 |
+| 8 | `gm-look` | the gallery below | recorded; Noah approves (N-GM-3) |
+
+**Gallery for Noah ("the gate in action"):** for each kind in the default, infernal and coastal bibles, with the mod's screenshot driver:
+the gatehouse from the road, **closed and open**; the passage from inside; the outside lever close-up; a **frame sequence of one toggle**
+(ticks 0, 2, 4, 6, 10; the leaves sliding, the doors swinging, the deck rippling up) as strips; a dusk shot. One private page, with a
+before/after slider per kind. Chain tier: slice plus `region/**` and `api/**` (units, apijars, k1a-unit, k3-unit, GM's `gm-unit`,
+`gm-ingame`, `gm-survival`, `gm-look`; driver `tools/gate7agm.mjs`). Steward's RC follows.
+
+### 11. Size and split
+
+**About 3.5 days, L**, plus the RC (it changes what a gatehouse reserves and what Steward binds): `gm-probe` and the circuit module (1), the
+plan member, artifact, graph and Feature (0.7), the mod's envelope mask, bind, quiesce and restore (1), survival order and the bill
+(0.3), the stub designs and fixtures (0.2), the look (0.3). **Split:** `GM-a` (portcullis, slide and swing in K3 gatehouses: the above
+less the drawbridge, about 2.5 d), `GM-b` (K1 swing gates, 0.4 d, after GM-a), `GM-c` (the drawbridge over H's moat: T3a's bridge with
+a trapdoor deck, the flip of `connector.drawbridge`, about 1 d; needs a T3a bridge over water to hold on the H/HY main). `GM-lift` is
++1.5 d, only if Noah asks.
+
+### Open questions for Steward
+
+- **S-GM-1. The reserved envelope.** Steward passes `passage.mechanism.lotCells` in `DesignRequest.reserved` (a gatehouse 11 wide at
+  least). Does the design loop accept a second reserved set, and the brief line about jambs? Default: yes.
+- **S-GM-2. An offer.** "Add a portcullis to the main gate" is a delta on a standing gatehouse (a revision): not v1 (a standing gate's
+  jambs are the design's cells; RV-b territory). Default: the plan states `mech` at plan time only.
+
+### Open questions for Noah
+
+- **N-GM-1. Portcullis form.** A 3-high lifting portcullis is not a one-stroke piston job (§1); GM's grate **slides sideways** into the jambs
+  (two lanes and a mullion when open). A true lift (extenders, a tall slot, +1.5 days, more to break) is `GM-lift`. Default: the sliding
+  grate now, the lift only if you miss it in the gallery.
+- **N-GM-2. Default state.** `open` (villagers pass; a lever shuts it), `closed` (the iron swing doors; players only, villagers locked
+  out), or open by day (needs a roof sensor cell, deferred)? Default: **open**, with `swing` closed because it is a vault door.
+- **N-GM-3. Drawbridge form.** A deck of iron trapdoors that flips up in a ripple (vanilla, nothing pushed through water), not a
+  hinged or sliding bridge (flying machines; the journal cannot undo them). Default: the flipping deck as `GM-c`.
+- **N-GM-4. K1 wall gates.** Give the plain wall gates the iron `swing` door and button too (`GM-b`, 0.4 d), or only K3 gatehouses?
+  Default: both.
