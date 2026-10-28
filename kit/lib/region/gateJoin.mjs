@@ -174,7 +174,8 @@ export function gateStep(D) {
   };
   const hardNone = hardRects(hardKeys, null);
   for (const v of viable) {
-    if (best && v.bound >= best.cost) break;
+    // (a gate whose bound ties the best is still costed: equal totals go to the gate nearest the district, then its id)
+    if (best && v.bound > best.cost) break;
     const g = v.g, fOut = [g.facing[0], g.facing[1]], fIn = [-g.facing[0], -g.facing[1]];
     // the leg out: the cheapest district end to the outer cell (arriving square on, heading in)
     let l1 = null;
@@ -185,19 +186,22 @@ export function gateStep(D) {
       if (e.ok && (!l1 || e.cost < l1.cost)) l1 = { cost: e.cost, length: e.length, end: q, qi };
     }
     if (!l1) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from a district end to its outer cell' }); if (cut) break; continue; }
-    if (best && l1.cost + v.b2 >= best.cost) continue;
+    if (best && l1.cost + v.b2 > best.cost) continue;
     // the leg in: the inner cell (leaving square on, heading in) to the cheapest D3 candidate
     let l2 = null;
     for (const { c, ci } of [...v.cands].sort((p, q) => cheb(endIn(g), [p.c.at[0], p.c.at[2]]) - cheb(endIn(g), [q.c.at[0], q.c.at[2]]) || p.ci - q.ci)) {
       if (l2 && 10 * cheb(endIn(g), [c.at[0], c.at[2]]) >= l2.cost) break;
-      if (best && l1.cost + 10 * cheb(endIn(g), [c.at[0], c.at[2]]) >= best.cost) break;
+      if (best && l1.cost + 10 * cheb(endIn(g), [c.at[0], c.at[2]]) > best.cost) break;
       if (dry >= REACH_DRY_MAX) { cut = true; break; }
       const e = dryRoute({ at: feetIn(g), facing: fIn }, { at: c.at, facing: c.facing, lead: LEAD }, hardRects(hardKeys, c), [claimR, town]);
       if (e.ok && (!l2 || e.cost < l2.cost || (e.cost === l2.cost && ci < l2.ci))) l2 = { cost: e.cost, length: e.length, cand: c, ci };
     }
     if (!l2) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from its inner cell to a street end or side' }); if (cut) break; continue; }
     const cost = l1.cost + l2.cost;
-    if (!best || cost < best.cost) best = { cost, g, l1, l2 };
+    const key = (b) => [b.b1, b.g.region, b.g.id];
+    const before = (a, b) => { const p = key(a), q = key(b); return p[0] - q[0] || (p[1] < q[1] ? -1 : p[1] > q[1] ? 1 : 0) || (p[2] < q[2] ? -1 : p[2] > q[2] ? 1 : 0); };
+    const cand = { cost, g, l1, l2, b1: v.b1 };
+    if (!best || cost < best.cost || (cost === best.cost && before(cand, best) < 0)) best = cand;
   }
   if (!best) {
     if (cut && !tried.some((t) => !/budget/.test(t.why))) throw new Error(`NO_JOIN: [budget] ${REACH_DRY_MAX} dry routes through the gates of region ${beside.id} found none (${gates.length} gate(s); ${why})`);

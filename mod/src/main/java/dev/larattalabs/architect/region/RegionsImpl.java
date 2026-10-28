@@ -622,7 +622,9 @@ public final class RegionsImpl implements Regions {
 			} else {
 				int[] wc = wr.rec().claim;
 				int[] wrc = {wc[0], wc[2], wc[3], wc[5]};
-				reachReady = reachInputs(r, st, standing, true).thenCompose(v -> reachInputs(r, wr, wrc, true));
+				// (the second region's journal scan, stands check and survey on the server thread: the first's blob upload completes elsewhere)
+				MinecraftServer ws = r.level().getServer();
+				reachReady = reachInputs(r, st, standing, true).thenCompose(v -> onServer(ws, () -> reachInputs(r, wr, wrc, true)).thenCompose(f -> f));
 			}
 		}
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a program following a biome edge reads it (ctx.biomes)

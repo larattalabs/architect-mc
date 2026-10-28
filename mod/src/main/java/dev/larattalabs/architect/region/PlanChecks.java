@@ -391,7 +391,8 @@ public final class PlanChecks {
 				nr++;
 				int[] wc = wr.rec().claim;
 				int[] wrc = {wc[0], wc[2], wc[3], wc[5]};
-				reachReady = reachReady.thenCompose(v -> RegionsImpl.reachInputs(rp, wr, wrc, true));
+				// (on the server thread: the previous region's blob upload completes elsewhere)
+				reachReady = reachReady.thenCompose(v -> RegionsImpl.onServer(s, () -> RegionsImpl.reachInputs(rp, wr, wrc, true)).thenCompose(f -> f));
 			}
 		}
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();

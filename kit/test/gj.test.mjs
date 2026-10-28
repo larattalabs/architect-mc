@@ -224,3 +224,19 @@ test('item 5 (plan/0): v7a_gj_endpoint\'s endpoint.region reaches the walled tow
   assert.equal(ext.junction.kind, 'gate');
   assert.equal([...runKeys(r.res.ir.reach.runs)].filter((k) => runKeys(g.cells).has(k)).length, 0, 'no gate cell written');
 });
+
+test('item 1 (ties): two gates of equal total cost: the one nearest the district, then the gate id', () => {
+  // a ring with two gates on its east side, symmetric about the street (the district end on the street's line): equal costs
+  const t = synthWalled({ gz: 40, c: 48 });
+  const g2 = { ...t.gate, id: 'ring_g0', at: [t.gate.at[0], 65, 56], cells: t.gate.cells.map(([x, z]) => [x, z + 16]), outer: [t.gate.outer[0], 56], inner: [t.gate.inner[0], 56] };
+  for (const [x, z] of g2.cells) t.wall.add(`${x},${z}`);
+  const R = { ...t.R, gates: [t.gate, g2] };
+  const claim = [96, 0, 135, 95];
+  const run = (ez) => chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R, beside: t.beside, claim, districtEnds: [{ x: 104, z: ez, at: [104, 65, ez], facing: [-1, 0] }], route: routePass });
+  // nearer the south gate: it wins; nearer the north one: it wins; on the line between them: the lower id on equal costs
+  assert.equal(run(60).gate.id, 'ring_g0');
+  assert.equal(run(36).gate.id, 'ring_g1');
+  const mid = run(48);
+  assert.ok(['ring_g0', 'ring_g1'].includes(mid.gate.id));
+  assert.equal(run(48).gate.id, mid.gate.id, 'deterministic');
+});
