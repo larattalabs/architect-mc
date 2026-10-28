@@ -1350,3 +1350,10 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 4. **K1 wall gates** get the iron swing door pair too (GM-b).
 Steward's notes from the section above apply: the envelope is merged into the lot's reserved set (never-write for designs), and the retrofit is a follow-up.
 - GM day cycle (Noah, 2026-10-27): storms may close the gate. A daylight sensor reading lower in rain or thunder by day is accepted (N-GM-2 answered: storms close it).
+
+## Coordinator handover and the v0.48.0 batch (2026-10-27)
+- New coordinator session took over from "AgentCraft Mods". GR merged (970de3bc) after Steward's RC PASS; LF and K3 follow their RCs, then v0.48.0 (API 1.43.0, kit 0.44.0, catalogue 15).
+- **GM gatehouse box (answered, docs/gm-contract 9b64bbf9 §4):** Steward designs wall gatehouses; every `onWall` lot has an exact `fitBox` sent as-is (no approach margin, no MIN_XZ = 7 clamp); 11 x 3 x 9 is the mechanism minimum, not the box.
+- **K3 RC needs Steward's K3 adoption slice (k3-rc):** exact boxes for onWall lots, tower/gatehouse types, the passage as reserved, the closed-faces brief line plus the outer faces named in words, ARTIFACT_STALE "lot on wall" routed to a per-lot versionOf repair (2 rounds). Architect added the sim stand-in for wall lots and `sim:outerdoor` on slice/K3 (f91b4696); Steward passes `ext["architect:wallLot"].outerFaces` (corner towers need it).
+- **GR follow-up (queued):** a growth's NO_ROOM `[street]` from the extension hides the real blocker (a wall part in the verge, a slope, or a reach shorter than the lot's width); name it. Seen on Steward's walled survival town "Supply Walls" (correct refusal until GJ).
+- **Queued for Noah after v0.48.0:** a lot realise waits with no time limit on OCCUPIED (animals) or PLAYER_IN_BOX; Steward's e2e stalls were these. Consider a time limit or pushing animals out.
