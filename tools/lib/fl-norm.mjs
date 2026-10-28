@@ -35,12 +35,21 @@ export function normIrJson(json) {
  */
 /** (7a CL, on main) The three parts CL answers: quarter_stair and long_stair refused NO_CLIMB, cave_ladders blocked DEPENDENCY (were unsupported until 7a); the committed tables still hold the old answers, so their lines compare by part and kind only. */
 export const CL_ASK_PARTS = Object.freeze(['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair']);
-export const clAskLine = (l) => {
+const moverLine = (l, parts, tag) => {
   const m = /^(\s*)(?:([a-z0-9_]+)\/)?([a-z0-9_]+) (connector\.[a-z_]+) /.exec(l);
   if (!m) return l;
   const key = m[2] ? `${m[2]}/${m[3]}` : null;
-  return (key ? CL_ASK_PARTS.includes(key) : CL_ASK_PARTS.some((p) => p.endsWith(`/${m[3]}`))) ? `${m[1]}${m[2] ? `${m[2]}/` : ''}${m[3]} ${m[4]} CL` : l;
+  return (key ? parts.includes(key) : parts.some((p) => p.endsWith(`/${m[3]}`))) ? `${m[1]}${m[2] ? `${m[2]}/` : ''}${m[3]} ${m[4]} ${tag}` : l;
 };
+export const clAskLine = (l) => moverLine(l, CL_ASK_PARTS, 'CL');
+/** (7a LF, on main) storehouse_lift and winch_lift answer refused NO_CLIMB (were unsupported until 7a; lf-norm LF_MOVED): the committed tables
+ * (KC item 3, H-a item 10, HY-b item 11) still hold the old answers, so their lines compare by part and kind only. */
+export const LF_ASK_PARTS = Object.freeze(['treetop_village/storehouse_lift', 'upside_down/winch_lift']);
+export const lfAskLine = (l) => moverLine(l, LF_ASK_PARTS, 'LF');
+/** (7a K3, on main) fort_wall, city_wall (camp_to_city), curtain_wall (castle_city) and town_wall answer fits, provisional (were adjusted; k3-norm
+ * K3_MOVED): compared by part and kind only, as CL's and LF's. */
+export const K3_ASK_PARTS = Object.freeze(['border_fort/fort_wall', 'camp_to_city/city_wall', 'castle_city/curtain_wall', 'walled_town/town_wall']);
+export const k3AskLine = (l) => moverLine(l, K3_ASK_PARTS, 'K3');
 export function flAsksFilter(text) {
   const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));
   const out = [];
@@ -49,12 +58,13 @@ export function flAsksFilter(text) {
     if (/^# 59 asks/.test(l)) continue;
     if (/^\s+(layout\.(ring|grid|organic|spiral)|locator\.around|sketch\.outline)\s+\d+$/.test(l)) continue;
     if (/^\s+connector\.(stair|ladder)\s+\d+$/.test(l)) continue; // (7a CL) the gap table's tally rows its three movers change
+    if (/^\s+connector\.lift\s+\d+$/.test(l)) continue; // (7a LF) the gap table's tally row its two lifts change
     const head = /^([a-z0-9_]+)(\/| )/.exec(l);
     if (head && !l.startsWith(' ')) inBlock = asks.includes(head[1]) && head[2] === ' ';
     if (head && asks.includes(head[1])) continue;
     if (inBlock && l.startsWith('  ')) continue;
     // ((7a foundation) the foundation's ask movers compare without their `until` (rail_1: until 7a -> CR): tools/lib/f7a-norm.mjs)
-    out.push(clAskLine(f7aAskLine(l)));
+    out.push(k3AskLine(lfAskLine(clAskLine(f7aAskLine(l)))));
   }
   return out.join('\n');
 }
