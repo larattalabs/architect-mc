@@ -62,7 +62,7 @@ export const OPS_RESERVED = [];
 export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'survival', 'tiles', 'utility', 'volumes',
   // ((6c D3) a districts plan's `beside`, `corridor` (D1, D2) and `reach` (D3): known members the evaluator reads only for `reach`)
-  'beside', 'corridor', 'reach'];
+  'beside', 'corridor', 'reach', 'revision'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.

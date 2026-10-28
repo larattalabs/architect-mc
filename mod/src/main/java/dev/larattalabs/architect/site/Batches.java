@@ -301,6 +301,88 @@ public final class Batches {
 		return b;
 	}
 
+	/**
+	 * (6d RV, §4.3 step 4) A region revision's items as a new batch in the region's own group: the revision's stages appended to the group
+	 * (each named {@code rv<rid>:<stage>}, its batch this one), the items queued. The batch ext names the region ({@link RegionItems#EXT_REGION})
+	 * and the revision ({@code architect_mc:revision {region, rid}}), so every site it writes is the revision's. Idempotent per item key: a
+	 * stage already in the group is not added again.
+	 */
+	public static QBatch queueRevision(MinecraftServer server, String regionId, int rid, String groupId, @Nullable String owner, JsonObject ext, List<QItem> items,
+		List<String> stages, int loadChunks, boolean generate, boolean autoApprove, int maxWaitSeconds) {
+		String id = newId();
+		JsonObject bext = ext.deepCopy();
+		bext.addProperty(RegionItems.EXT_REGION, regionId);
+		JsonObject rv = new JsonObject();
+		rv.addProperty("region", regionId);
+		rv.addProperty("rid", rid);
+		bext.add(dev.larattalabs.architect.region.Revisions.EXT_REVISION, rv);
+		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, dev.larattalabs.architect.batch.WaitLimit.regionTicks(maxWaitSeconds), loadChunks, false, false,
+			autoApprove, false, null, System.currentTimeMillis());
+		b.generate = generate;
+		chunkBound(b);
+		SiteGroupRec g = Sites.group(groupId);
+		if (g == null) {
+			throw new IllegalStateException("revision " + rid + " of region " + regionId + ": its group " + groupId + " is gone");
+		}
+		List<SiteGroupRec.StageRec> recs = new ArrayList<>(g.stages());
+		List<SiteGroupRec.StageRec> added = new ArrayList<>();
+		for (String st : stages) {
+			List<String> keys = items.stream().filter(i -> i.stage.equals(st)).map(i -> i.key).toList();
+			SiteGroupRec.StageRec sr = new SiteGroupRec.StageRec(st, keys, autoApprove ? Stage.State.APPROVED : Stage.State.PLANNED, List.of(), id);
+			SiteGroupRec.StageRec was = g.stage(st);
+			if (was != null) {
+				// (installed again after a stop lost its batch: the stage is this batch's now, its sites kept)
+				recs.set(recs.indexOf(was), new SiteGroupRec.StageRec(st, keys, sr.state(), was.sites(), id));
+				continue;
+			}
+			recs.add(sr);
+			added.add(sr);
+		}
+		Sites.putGroup(server, new SiteGroupRec(g.id(), g.owner(), g.ext(), g.sites(), recs, g.state(), g.sharedCrate(), g.crate(), g.crateAt(), g.createdAt(), g
+			.delivered(), g.removedAt()));
+		BATCHES.put(id, b);
+		Placement.save(server, false);
+		Architect.LOGGER.info("Queued revision {} of region {} as batch {} ({} item(s), stages {}) in group {}", rid, regionId, id, items.size(), stages, groupId);
+		for (SiteGroupRec.StageRec st : added) {
+			ApiEvents.stageState(groupId, st);
+		}
+		for (QItem q : items) {
+			if (q.status == QItem.Status.FAILED) {
+				ApiEvents.itemFailed(b, q);
+			}
+		}
+		CHANGED.add(id);
+		return b;
+	}
+
+	/**
+	 * (6d RV, §3.3) A revision stopped by a refusing holder at its write: every item of its batch not yet started fails with the reason
+	 * (its placed items stand; the batch ends and the revision reads PARTIAL).
+	 */
+	public static void failRest(String batchId, Reason why, String msg) {
+		QBatch b = BATCHES.get(batchId);
+		if (b == null) {
+			return;
+		}
+		for (QItem i : List.copyOf(b.items)) {
+			if (i.status == QItem.Status.QUEUED || i.status == QItem.Status.WAITING) {
+				fail(b, i, why, msg);
+			}
+		}
+		CHANGED.add(batchId);
+	}
+
+	/** (6d RV) The batches queued for a group (a region's revisions' among them). */
+	public static List<QBatch> ofGroup(String groupId) {
+		List<QBatch> out = new ArrayList<>();
+		for (QBatch b : BATCHES.values()) {
+			if (groupId.equals(b.group)) {
+				out.add(b);
+			}
+		}
+		return out;
+	}
+
 	/** The stage-site token of a delta item (phase 5b): {@code delta:<siteId>:<delta entry>} (never a group site). */
 	public static final String DELTA_TOKEN = "delta:";
 

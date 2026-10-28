@@ -117,7 +117,7 @@
       { "id": "connector.lift", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.lift", "limits": { "rise": [4, 64], "approach": 32, "shell": 2, "lightEvery": 6, "headroom": 3, "movers": ["player"] }, "note": "LF: a bubble column against a face rising 4 to 64 (soul sand under it carries a rider up; down: a second column over magma carries one down), in a tower 2 thick on every open side, entered through a two-door airlock at the foot, left over a railed rim onto the face's top. Player-only by kind (movers naming villager: MOVER, with a stair). Winch, rope and elevator lifts read as this block. No frozen volume." },
       { "id": "connector.branch_walk", "sinceApi": "1.40.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "A deck along a giant tree's branches between canopy lots: needs layout.elevated and F3's branch skeleton (S-7a-4)." },
       { "id": "connector.span_bridge", "sinceApi": "1.40.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.bridge", "aliasOf": "connector.bridge", "note": "A supported alias of connector.bridge (a gap with a floor within 24: the bridge's beam): the part is checked and answered as connector.bridge, noted (R25, S-7a-3)." },
-      { "id": "connector.stairs_around", "sinceApi": "1.23.0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.stairs_around", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.stairs_around", "limits": { "rise": [4, 64], "width": [1, 2], "villagerMinWidth": 2, "outerEdge": 2, "landingEvery": 8, "hosts": ["rock_spire", "ice_spike", "giant_tree", "giant_mushroom"] }, "note": "SA: a spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout (top summit: a deck over the summit; canopy: a ring deck under the leaves or cap; {y}); a T2 path leg joins from to its foot. The lookout is player-only unless movers name villagers (then 2 wide)." },
       { "id": "wall.line", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall through from, via[] and to (each leg searched by T2's A* with a wall profile); a lot endpoint is a joined lot." },
       { "id": "wall.around", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall round a part, build or protected area, or (K1-target) one of the owner's standing regions, around {feature: {region}} (where.around on a wall: the wall's own member, not locator.around; its region not feature.region)." },
       { "id": "wall.edge", "sinceApi": "1.32.0", "schemaVersion": 1, "state": "supported", "note": "K1: a wall on the edge of a zone or the claim (where.inside)." },
@@ -180,7 +180,12 @@
       { "id": "endpoint.build", "sinceApi": "1.24.0", "schemaVersion": 1, "state": "supported", "note": "PT (C32): {build: id, port?: door | door_<n>}: a road ends on the door's apron (the cells outside it)." },
       { "id": "sketch.point", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
       { "id": "sketch.outline", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "polygon: the zone's mask; polyline: the street's line." },
-      { "id": "dependency.after", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" }
+      { "id": "dependency.after", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported" },
+      { "id": "revision.keep", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "note": "6d RV: in a revision plan (revision.parentArtifact), a part equal to the parent's built part (same id, same canonical JSON) answers fits with standing: true and cost 0." },
+      { "id": "revision.add", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "note": "6d RV: in a revision plan, a new part (or one the parent didn't build) is checked against the standing region: its lots plus 1, roads, paths, bodies and held columns are hard." },
+      { "id": "revision.refill", "sinceApi": "NEXT", "schemaVersion": 1, "state": "supported", "note": "6d RV: in a revision plan, a zone equal to the parent's but for lots with refill: true (each removed or pad) answers fits; the lots are built again (an irrigated lot is refused, S-RV-14)." },
+      { "id": "revision.grow", "sinceApi": "NEXT", "schemaVersion": 0, "state": "reserved", "until": "GR" },
+      { "id": "revision.change", "sinceApi": "NEXT", "schemaVersion": 0, "state": "reserved", "until": "RV2" }
     ]
   },
 
@@ -392,6 +397,7 @@
         "entry": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,100}(@[0-9]{1,6})?$", "description": "A library entry (id or id@version) already designed for this lot; absent: the building is provisional (a cost range) until Steward binds one." },
         "farmPond": { "type": "boolean", "description": "(H, S-H-2) A farm lot's small pond: a 3x3, 1-deep sunk water body within 2 of the lot, outside its restore box, removed with the region; only on a claim with no surface water (never added in a freezing biome). Off by default." },
         "irrigate": { "type": "boolean", "description": "(IRR, S-IRR-1) A working farm's irrigation: one open 1x1 water source in every 9x9 of the farm lot's field (the lot less a 1-column border and its front row), each flush with the field, its four sides farmland, so every field column is within 4 of water. The sources are the region's, inside the lot's box; the lot's design leaves them (the artifact's lots[].irrigation). Set it only for a working or automated farm the card asks for; a homely farm keeps farmPond. false on a lot overrides its zone. Only on a farm lot (villager farm, given or implied by its type); never in a freezing biome. Off by default." },
+        "refill": { "const": true, "description": "(6d RV, §9.2) In a revision plan (revision.parentArtifact): build this standing lot again (its state removed or pad), with the entry given; the zone otherwise equal to the parent's. The only way a revision plan asks for a refill (an entry change alone answers revision.change)." },
         "ext": { "$ref": "#/$defs/ext" }
       }
     },

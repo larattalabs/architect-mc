@@ -6,7 +6,7 @@
 // A cell's kind comes from the plan meta's connector records first (a bridge, tunnel, rope or wall record names its part and box: its
 // cells inside that box are the connector's), then from the part's ops (fluid, scatter, relief, voxels), then its stage and id.
 
-export const WRITER_KINDS = Object.freeze(['ground', 'relief', 'street', 'route', 'forms', 'lots', 'props', 'scatter', 'walls', 'bridges', 'rope', 'tunnels', 'fluids', 'catwalks']);
+export const WRITER_KINDS = Object.freeze(['ground', 'relief', 'street', 'route', 'forms', 'lots', 'props', 'scatter', 'walls', 'bridges', 'rope', 'tunnels', 'fluids', 'catwalks', 'spirals']);
 
 const inBox = (b, x, y, z) => b && x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
 
@@ -41,6 +41,7 @@ export function writerKinds(ir, meta = null) {
   for (const r of meta?.ropes ?? []) recs.push({ kind: 'rope', sub: 'slab', part: r.part, box: r.box ?? null });
   for (const w of meta?.walls ?? []) recs.push({ kind: 'walls', sub: null, part: w.part ?? null, box: w.box ?? null });
   for (const c of meta?.catwalks ?? []) recs.push({ kind: 'catwalks', sub: null, part: c.part, box: c.box }); // (7a CW)
+  for (const c of meta?.spirals ?? []) recs.push({ kind: 'spirals', sub: null, part: c.part, box: null }); // (7a SA)
   const kinds = ir.parts.map((p) => partKind(ir, p));
   return (x, y, z, pi) => {
     const p = ir.parts[pi];

@@ -666,3 +666,20 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   title, body, subject?, lines?}` (`Toasts.push(Spec)`). Architect's HUD pieces are zone elements now (`architect_mc:hud/placement`,
   `hud/plot_marker`, `hud/massing_review` bottom centre; `hud/construction`, `hud/region_ghost` top centre; `hud/helper_progress` top
   left); `dev.build.state`'s `hudRect` is the placement slot drawn last frame (as before).
+
+- **2026-10-26 (6d slice RV, RV-a and RV-b):** new (`SliceRvDev`, generated headless too) `dev.rv.plan {region, spec: {parts, refill?,
+  unsafe?}, opKey?, program?}` (`Regions.planRevision` -> `{planId, irSha, stages, revisionOf}` or `{refused: "<REASON>: [kind] ..."}`; the
+  realise is `dev.region.realise` of its plan id), `dev.rv.state {region}` (the head, position, nextRid, busy, manifest, every revision record
+  with its sites, the effective IR's head, part ids, sha and snapshot files, every `rev/<rid>/op.json`, the RegionView and the revision
+  batches' items), `dev.rv.history {region, keys}` (historySha per tile key), `dev.rv.standing {region}` (ctx.standing as a plan sends it),
+  `dev.rv.ir {region, rid}` and `dev.rv.race {at: [x, y, z] | null, state?}` (TEST, gate item 20: the next revision tile writing that cell gets
+  the block after its capture, before its write). `dev.journal.killAt` takes RV1 (the manifest written, nothing accepted), RV2 (the effective
+  snapshot written, region.json not), RV3 (accepted, nothing installed), RV4 (installed, nothing written). `dev.region.realised {layer: rid}`
+  reads a revision's records.
+
+- **2026-10-26 (6d slice RV, RV-c and RV-d):** new `dev.rv.undo {region, toPosition, actor?}` (`Regions.undoRevision` -> its
+  `RemoveResult` as JSON, `seconds`; a refusal `{refused: "<REASON>: ..."}`), `dev.rv.undoFail {on?}` (TEST: the next suffix stage undo
+  answers removed false, so the undo stays UNDOING) and `dev.rv.siteRemove {site, force?, requester?}` (API `Sites.remove`: a lot removed alone). `dev.rv.state`
+  gains each site's ext (`siteExt`). `dev.journal.killAt` takes RVU1 (the undo's manifest and region.json saved, nothing drained), RVU2
+  (drained, nothing removed) and RVU3 (every suffix stage removed, the revisions not yet UNDONE); the 4e points K6 and GW fire inside the
+  undo's stage removals too.

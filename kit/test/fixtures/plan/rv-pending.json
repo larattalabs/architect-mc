@@ -1,0 +1,12 @@
+{
+ "about": "(6d RV) the revision.* blocks answer only in a revision plan (revision.parentArtifact with the mod's revision input: a parent artifact and a standing region), which no valid/ or extension/ fixture can carry: kit/test/rv-a.test.mjs's plan/0 test checks each class (keep, add, refill supported; grow, change reserved).",
+ "ids": [
+  "revision.keep",
+  "revision.add",
+  "revision.refill"
+ ],
+ "reserved": [
+  "revision.grow",
+  "revision.change"
+ ]
+}

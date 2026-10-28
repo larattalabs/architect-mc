@@ -7,6 +7,7 @@ import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
 import { parseReachInput, reachFor, unionColumns } from './reach.mjs';
 import { besideRules } from './checkBeside.mjs';
+import { reviseRules } from './revise.mjs';
 import { asColumns } from './pack.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { decodeVoxels } from './voxels.mjs';
@@ -21,6 +22,7 @@ import { tunnelRules } from './checkTunnels.mjs';
 import { catwalkRules } from './checkCatwalks.mjs';
 import { climbRules } from './checkClimbs.mjs'; // (7a CL)
 import { rockStairRules } from './checkRockStairs.mjs'; // (7a RK)
+import { spiralRules } from './checkSpirals.mjs'; // (7a SA)
 import { liftRules } from './checkLifts.mjs'; // (7a LF)
 // (6c H) the fluid rules: M25 containment per body and wet write, M20 fire for lava bodies (checkFluids.mjs, H-core)
 import { fluidRules } from './checkFluids.mjs';
@@ -30,12 +32,13 @@ import { vocabRules } from './checkVocab.mjs';
 import { formRulesVw } from './checkForms.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28', 'M29'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
 // ((6c D3) M28:beside, a districts plan's writes into a standing town's claim, is an error)
-const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25', 'M28']);
+// ((6d RV) M29:revision, a revision's write over what it must keep off, or a non-additive edit, is an error)
+const ERRORS = new Set(['M1', 'M13', 'M14', 'M20', 'M25', 'M28', 'M29']);
 // (6c VOC-b) per sub-rule severities over the rule's own: M27's state and convert are errors (the rest of M27 and M26 warnings); M20 (b),
 // natural lava near a plan-written flammable, is a warning
 const SUB_SEVERITY = Object.freeze({ 'M27:state': 'error', 'M27:convert': 'error', 'M20:natural': 'warning' });
@@ -391,7 +394,7 @@ export const MELT = Object.freeze({ ice: 10, snow: 11 });
  * meta.json). Or `world` (a realised dump world) with `ir` and `meta` for the rule inputs. Options: `prefix` (M2/M3 after
  * each stage, default true), `rules` (a subset). Returns the report (kit/REGIONS.md "The checker report").
  */
-export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId, besideReach = null } = {}) {
+export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, world = null, prefix = true, rules = RULES, planId, besideReach = null, standing = null } = {}) {
   const t0 = performance.now();
   const ms = { perRule: {} };
   const findings = [];
@@ -495,6 +498,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (Array.isArray(meta?.climbs) && meta.climbs.length) time('M10', () => climbRules({ vw, climbs: meta.climbs, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (7a RK) rock stairs (checkRockStairs.mjs): T3b's M3:tunnel, M3:gravity, M4:tunnel and M6 over the flight's void and shell, and M10:rock_stair
   if (Array.isArray(meta?.rockStairs) && meta.rockStairs.length) time('M3', () => rockStairRules({ ir, vw, rockStairs: meta.rockStairs, meta, want, findings, metrics, partStage, finding }));
+  // (7a SA) spirals (checkSpirals.mjs): steps, standing and head room, attached, the outer edge, rails (M8), lit (M5)
+  if (Array.isArray(meta?.spirals) && meta.spirals.length) time('M10', () => spiralRules({ ir, vw, spirals: meta.spirals, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (7a LF) lifts (checkLifts.mjs): the base, the column's drag, the shell 2 thick, the airlock, the rim's rails, the head room, the light
   if (Array.isArray(meta?.lifts) && meta.lifts.length) time('M10', () => liftRules({ vw, lifts: meta.lifts, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (6c H) fluid bodies (the IR's fluid ops) and wet writes (meta.wet): only when the plan has either
@@ -504,6 +509,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
 
   // ---- (6c D3) M28:beside and M25:clear's foreign bodies: a districts plan with a reach into a standing town's claim
   if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage, ...(want.has('M5') ? { light: () => blockLight(vw) } : {}) }); });
+  // ---- (6d RV) M29:revision: a revision IR against ctx.standing (the standing region it adds to; only with the standing data)
+  if (ir.revision && standing && want.has('M29')) time('M29', () => { metrics.M29 = reviseRules({ ir, vw, standing, findings, finding }); });
 
   // ---- (6c VOC-b) M26, M27 and M20 widened, on every IR (checkVocab.mjs): natural lava is looked for only where the survey or a frozen
   // volume holds some

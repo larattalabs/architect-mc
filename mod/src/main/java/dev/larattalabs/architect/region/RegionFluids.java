@@ -599,9 +599,14 @@ public final class RegionFluids {
 		return out.toLongArray();
 	}
 
-	/** The region's fluids (loaded on first use), or null when its IR has no body. */
+	/**
+	 * The region's fluids (loaded on first use), or null when its IR has no body. (6d RV, §7) A revision's bodies are their own record: the
+	 * revision's Live ({@link Revisions#liveFor}) reads the bodies of its IR alone, keyed {@code <region>#rv<rid>}, saved in
+	 * {@code fluids-rv<rid>.json}; the realised plan's are the region's as before.
+	 */
 	static @Nullable Regional of(RegionsImpl.Live l) {
-		Regional st = STATE.get(l.rec().id);
+		String key = key(l);
+		Regional st = STATE.get(key);
 		if (st != null) {
 			return st.bodies.isEmpty() ? null : st;
 		}
@@ -610,8 +615,43 @@ public final class RegionFluids {
 		if (!st.bodies.isEmpty()) {
 			load(l, st);
 		}
-		STATE.put(l.rec().id, st);
+		STATE.put(key, st);
 		return st.bodies.isEmpty() ? null : st;
+	}
+
+	/** (6d RV) The record's key: the region, or {@code <region>#rv<rid>} for a revision's bodies. */
+	static String key(RegionsImpl.Live l) {
+		return l.rid() == 0 ? l.rec().id : l.rec().id + "#rv" + l.rid();
+	}
+
+	/** (6d RV) A revision's bodies' record is forgotten (an undo finished: its revision UNDONE; its file stays). */
+	public static void forgetRevision(String regionId, int rid) {
+		Regional st = STATE.remove(regionId + "#rv" + rid);
+		if (st != null) {
+			hold(null, st, false);
+		}
+	}
+
+	/** (6d RV) The fluids stage's name in a revision ({@code rv<rid>:fluids}) or a region. */
+	static String stageOf(RegionsImpl.Live l) {
+		return l.rid() == 0 ? STAGE : Revisions.stageName(l.rid(), STAGE);
+	}
+
+	/** (6d RV) The region's records in removal order: its standing revisions' (top first), then its own. */
+	static List<RegionsImpl.Live> lives(RegionsImpl.Live base) {
+		List<RegionsImpl.Live> out = new ArrayList<>();
+		List<Revisions.Rev> revs = new ArrayList<>(base.rec().revisions);
+		revs.sort(java.util.Comparator.comparingInt((Revisions.Rev r) -> r.position).reversed());
+		for (Revisions.Rev r : revs) {
+			if (!"UNDONE".equals(r.state) && !"STALE".equals(r.state) && !r.stages.isEmpty()) {
+				RegionsImpl.Live rl = Revisions.liveFor(base, r.stages.get(0));
+				if (rl.rid() == r.rid) {
+					out.add(rl);
+				}
+			}
+		}
+		out.add(base);
+		return out;
 	}
 
 	/** Whether the region has fluid bodies. */
@@ -627,10 +667,11 @@ public final class RegionFluids {
 	 * checked.
 	 */
 	public static boolean gate(MinecraftServer s, QBatch b, @Nullable String stage) {
-		if (!STAGE.equals(stage) || !RegionItems.isRegion(b)) {
+		if (stage == null || !STAGE.equals(Revisions.plainStage(stage)) || !RegionItems.isRegion(b)) {
 			return true;
 		}
-		RegionsImpl.Live l = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		RegionsImpl.Live l0 = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		RegionsImpl.Live l = l0 == null ? null : Revisions.liveFor(l0, stage); // (6d RV) a revision's bodies
 		Regional st = l == null ? null : of(l);
 		if (st != null && st.recheck) {
 			ServerLevel level = l.level(s);
@@ -654,9 +695,9 @@ public final class RegionFluids {
 				// (6c close-out A, §8) with waitsFor {target, part, waiter, say}: what the bodies wait for, sayable
 				String[] first = dev.larattalabs.architect.site.RegionTargets.firstBuilding(l.rec().groupId);
 				if (first != null) {
-					RegionItems.waitStageFor(b, STAGE, first[0], first[1], waiting);
+					RegionItems.waitStageFor(b, stage, first[0], first[1], waiting);
 				} else {
-					RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, waiting);
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, waiting);
 				}
 				return false;
 			}
@@ -666,7 +707,7 @@ public final class RegionFluids {
 			AABB box = boxOf(body.cells).inflate(1);
 			for (ServerPlayer p : level.getEntitiesOfClass(ServerPlayer.class, box)) {
 				if (!p.isSpectator()) {
-					RegionItems.waitStage(b, STAGE, Reason.PLAYER_IN_BOX, "a player is in or next to fluid body " + body.id + " (" + p.getName().getString() + ")");
+					RegionItems.waitStage(b, stage, Reason.PLAYER_IN_BOX, "a player is in or next to fluid body " + body.id + " (" + p.getName().getString() + ")");
 					return false;
 				}
 			}
@@ -679,7 +720,7 @@ public final class RegionFluids {
 				in.add(e.getType().getDescriptionId().replaceAll("^entity\\.minecraft\\.", ""));
 			}
 			if (!in.isEmpty()) {
-				RegionItems.waitStage(b, STAGE, Reason.OCCUPIED, "in fluid body " + body.id + "'s box: " + String.join(", ", in) + " (move them out)");
+				RegionItems.waitStage(b, stage, Reason.OCCUPIED, "in fluid body " + body.id + "'s box: " + String.join(", ", in) + " (move them out)");
 				return false;
 			}
 		}
@@ -732,7 +773,7 @@ public final class RegionFluids {
 			Map<String, Integer> charge = chargeOf(st);
 			if (!charge.isEmpty()) {
 				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge)) {
-					RegionItems.waitStage(b, STAGE, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
 						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
 					return false;
 				}
@@ -984,7 +1025,7 @@ public final class RegionFluids {
 
 	/** Server thread (RegionItems): a fluids-stage tile's cells without the cells of a body that is not written. */
 	public static Packed.Tile filter(RegionsImpl.Live l, String stage, Packed.Tile t) {
-		if (!STAGE.equals(stage)) {
+		if (!STAGE.equals(Revisions.plainStage(stage))) {
 			return t;
 		}
 		Regional st = of(l);
@@ -1043,7 +1084,7 @@ public final class RegionFluids {
 
 	/** Whether the fluids stage's tiles may be checked ahead (the gate ran): a tile of a body not written must leave its cells first. */
 	public static boolean checkedAhead(RegionsImpl.Live l, String stage) {
-		if (!STAGE.equals(stage)) {
+		if (!STAGE.equals(Revisions.plainStage(stage))) {
 			return true;
 		}
 		Regional st = of(l);
@@ -1054,9 +1095,13 @@ public final class RegionFluids {
 
 	/** Server tick: the forced ticks once the stage's tiles are placed, then each settling body's census. */
 	public static void tick(MinecraftServer s) {
-		for (RegionsImpl.Live l : RegionsImpl.all()) {
-			if (l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVING || l.rec().state == dev.larattalabs.architect.api.RegionState.REMOVED) {
+		for (RegionsImpl.Live l0 : RegionsImpl.all()) {
+			if (l0.rec().state == dev.larattalabs.architect.api.RegionState.REMOVING || l0.rec().state == dev.larattalabs.architect.api.RegionState.REMOVED) {
 				continue;
+			}
+			for (RegionsImpl.Live l : lives(l0)) { // (6d RV) the region's bodies and each standing revision's
+			if (l.rid() > 0 && l0.rec().busy != null && l0.rec().busy.startsWith("undoing ")) {
+				continue; // (an undo drains them: no census of its own meanwhile)
 			}
 			Regional st = of(l);
 			if (st == null) {
@@ -1078,16 +1123,20 @@ public final class RegionFluids {
 				st.lastCensus = level.getGameTime();
 				settle(level, l, st);
 			}
+			}
 		}
 	}
 
 	/** Whether every item of the region's fluids stage ended (placed or failed). */
 	static boolean stageWritten(RegionsImpl.Live l) {
-		QBatch b = Batches.get(l.rec().batchId);
+		// (6d RV) a revision's stage is in its own batch
+		Revisions.Rev rv = l.rid() == 0 ? null : Revisions.rev(l.rec(), l.rid());
+		String bid = l.rid() == 0 ? l.rec().batchId : rv == null ? null : rv.batchId;
+		QBatch b = bid == null ? null : Batches.get(bid);
 		if (b == null) {
 			return false;
 		}
-		List<QItem> items = b.inStage(STAGE);
+		List<QItem> items = b.inStage(stageOf(l));
 		return !items.isEmpty() && items.stream().allMatch(i -> i.status.terminal());
 	}
 
@@ -1718,13 +1767,16 @@ public final class RegionFluids {
 			return false;
 		}
 		RegionsImpl.Live l = RegionsImpl.live(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		if (l != null && b.ext.get(Revisions.EXT_REVISION) instanceof JsonObject rv) {
+			l = Revisions.liveFor(l, Revisions.stageName(rv.get("rid").getAsInt(), STAGE)); // (6d RV) a revision's batch holds for its own bodies
+		}
 		Regional st = l == null ? null : of(l);
 		return st != null && ("writing".equals(st.phase) || "settling".equals(st.phase)) && stageWritten(l);
 	}
 
 	/** Whether a body of the region was not written or was drained (the region ends PARTIAL, §2.4, §3.4). */
 	public static boolean anyDrained(RegionsImpl.Live l) {
-		Regional st = of(l);
+		Regional st = of(l); // (a revision's Live: its own bodies)
 		// ((6c IRR) a source drained with its removed lot is no failure of the region)
 		return st != null && !"gate".equals(st.phase) && st.states.values().stream().anyMatch(x -> "drained".equals(x.state) && !x.lotRemoved);
 	}
@@ -1753,7 +1805,7 @@ public final class RegionFluids {
 		if (l == null) {
 			return -1;
 		}
-		java.util.Set<String> ids = lotBodies(l.ir().json(), lotId);
+		java.util.Set<String> ids = lotBodies(Revisions.effective(l), lotId); // (6d RV, §4.5)
 		Regional st = ids.isEmpty() ? null : of(l);
 		if (st == null) {
 			return -1;
@@ -1952,27 +2004,63 @@ public final class RegionFluids {
 	 */
 	/** (6c D3, Steward's RC) Whether a region group's removal began draining its fluid bodies (it wrote the world). Server thread. */
 	public static boolean drainStarted(String group) {
-		for (RegionsImpl.Live x : RegionsImpl.all()) {
-			if (group.equals(x.rec().groupId)) {
-				Regional st = of(x);
-				return st != null && st.removal != null;
+		for (RegionsImpl.Live x0 : RegionsImpl.all()) {
+			if (group.equals(x0.rec().groupId)) {
+				for (RegionsImpl.Live x : lives(x0)) { // (6d RV) its revisions' bodies too
+					Regional st = of(x);
+					if (st != null && st.removal != null) {
+						return true;
+					}
+				}
+				return false;
 			}
 		}
 		return false;
 	}
 
 	public static boolean removalGate(MinecraftServer s, String group) {
-		RegionsImpl.Live l = null;
+		RegionsImpl.Live l0 = null;
 		for (RegionsImpl.Live x : RegionsImpl.all()) {
 			if (group.equals(x.rec().groupId)) {
-				l = x;
+				l0 = x;
 				break;
 			}
 		}
-		Regional st = l == null ? null : of(l);
-		if (st == null || "done".equals(st.removal)) {
+		if (l0 == null) {
 			return true;
 		}
+		// (6d RV, §6) the standing revisions' bodies first (top first), then the region's own: every body drains before any solid goes
+		for (RegionsImpl.Live x : lives(l0)) {
+			Regional st = of(x);
+			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, group)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * (6d RV, §4.4 step 3, §7) An undo's drain of its suffix's bodies (the revisions {@code rids}, top first): H's drain-first protocol
+	 * scoped to them (each body's sources, ice and the watched cells holding new fluid back to their befores; a cell an entry outside the
+	 * region holds on top is not drained: the undo's hand-down gives it that cell's before), then one settle bound. Saved per body in the
+	 * revision's own record, so a restart resumes it. True when every suffix body is drained and settled.
+	 */
+	public static boolean drainRevisions(MinecraftServer s, RegionsImpl.Live l, List<Integer> rids, String opId) {
+		for (int rid : rids) {
+			RegionsImpl.Live x = Revisions.liveFor(l, Revisions.stageName(rid, STAGE));
+			if (x.rid() != rid) {
+				continue;
+			}
+			Regional st = of(x);
+			if (st != null && !"done".equals(st.removal) && !gateOne(s, x, st, l.rec().groupId)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** (6d RV) One record's removal drain (the region's, or a revision's): {@link #removalGate}'s body. */
+	private static boolean gateOne(MinecraftServer s, RegionsImpl.Live l, Regional st, String group) {
 		ServerLevel level = l.level(s);
 		if (level == null) {
 			return true;
@@ -2086,6 +2174,21 @@ public final class RegionFluids {
 	/** The report in the region's ext: one entry per body that ended (S-H-6), in plan order. */
 	static void report(RegionsImpl.Live l, Regional st) {
 		JsonArray a = new JsonArray();
+		// (6d RV) the region's rows and each standing revision's (with its rid): one report over the effective IR's bodies
+		RegionsImpl.Live base = RegionsImpl.live(l.rec().id);
+		List<RegionsImpl.Live> all = base == null ? List.of(l) : lives(base);
+		java.util.Collections.reverse(all);
+		for (RegionsImpl.Live x : all) {
+			Regional xs = x.rid() == l.rid() ? st : of(x);
+			if (xs != null) {
+				rows(a, x.rid(), xs);
+			}
+		}
+		l.rec().ext.add(EXT, a);
+		RegionsImpl.save(l);
+	}
+
+	private static void rows(JsonArray a, int rid, Regional st) {
 		for (Body b : st.bodies) {
 			BodyState bs = st.states.get(b.id);
 			if (!bs.ended()) {
@@ -2116,10 +2219,11 @@ public final class RegionFluids {
 			if (bs.breached > 0) {
 				o.addProperty("breach", bs.breached); // (6c IRR, S-IRR-3) a breach's flow over its own field, taken back by a drain
 			}
+			if (rid > 0) {
+				o.addProperty("rid", rid); // (6d RV) a revision's body
+			}
 			a.add(o);
 		}
-		l.rec().ext.add(EXT, a);
-		RegionsImpl.save(l);
 	}
 
 	/** The region's fluids record as JSON (DevBridge {@code dev.fluid.state}). */
@@ -2167,7 +2271,7 @@ public final class RegionFluids {
 	}
 
 	private static Path file(RegionsImpl.Live l) {
-		return RegionStore.region(l.world(), l.rec().id).resolve("fluids.json");
+		return RegionStore.region(l.world(), l.rec().id).resolve(l.rid() == 0 ? "fluids.json" : "fluids-rv" + l.rid() + ".json");
 	}
 
 	static void save(RegionsImpl.Live l, Regional st) {
@@ -2235,7 +2339,7 @@ public final class RegionFluids {
 			Architect.LOGGER.warn("Region {}: fluids.json could not be saved: {}", l.rec().id, e.toString());
 		}
 		if (st.removal == null) {
-			Realised.bodies(l.world(), l.rec().id, realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't)
+			Realised.bodies(l.world(), l.rec().id, l.rid(), realisedRows(st)); // (RP) the realise's body outcomes, after fluids.json (a removal's drains aren't); (6d RV) a revision's at its layer
 		}
 	}
 
@@ -2394,6 +2498,12 @@ public final class RegionFluids {
 			Regional st = STATE.remove(regionId);
 			if (st != null) {
 				hold(null, st, false);
+			}
+			// (6d RV) and its revisions' records
+			for (String k : List.copyOf(STATE.keySet())) {
+				if (k.startsWith(regionId + "#rv")) {
+					hold(null, STATE.remove(k), false);
+				}
 			}
 		}
 	}

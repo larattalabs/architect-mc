@@ -11,7 +11,7 @@ All are unblocked now: F3 (SA's hosts), K2 (K3), D3 (GJ) have merged; the 6c clo
 
 | # | Slice | Player sees | Size | Depends on | Steward RC? |
 |---|---|---|---|---|---|
-| 1 | **SA** spirals (`connector.stairs_around`, C:21035) | A spiral stair round a rock spire, ice spike, giant tree or mushroom up to a railed lookout | M (1.25 d) | F3 (done) | No |
+| 1 | **SA** spirals (`connector.stairs_around`, C:21035) **built on `slice/SA` (2026-10-26), ready to merge; as built C "Phase 7a slice SA as built"** | A spiral stair round a rock spire, ice spike, giant tree or mushroom up to a railed lookout | M (1.25 d) | F3 (done) | No |
 | 2 | **RK** rock stairs (C:20724) | A straight stair flight carved or bored into a hillside, lined and lit | M (1.5-2 d; Java `hasVolume`) | T3b bore (done) | No |
 | 3 | **LF** lifts (C:20861) | Bubble-column lift tower against a cliff face (airlock doors, sea lanterns); player-only | L (2.5 d) | none | **Yes** (global StillOurs row, new fluids-stage body; C:20865, C:19898) |
 | 4 | **K3** wall lots (C:21162) | Towers on wall corners, gatehouses straddling a gate with a passage; closure re-checked when the lot binds | L (2.5 d) | K2 (done) | **Yes** (new `realiseApproved` refusal, Steward binds these lots) |

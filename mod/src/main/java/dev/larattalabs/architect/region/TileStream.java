@@ -88,13 +88,20 @@ public final class TileStream {
 		public volatile long askAgainAt;
 		/** (RP) The kit's writers of the tile (ARWR v1, gunzipped), when the helper sent them; else null. */
 		public volatile byte @Nullable [] writers;
+		/** (6d RV) The stage name on the wire (the plan IR's own): a revision tile's {@code stage} is its journal stage {@code rv<rid>:<s>}. */
+		public final String wire;
 
 		Tile(String region, String planId, String stage, String set, String key) {
+			this(region, planId, stage, set, key, stage);
+		}
+
+		Tile(String region, String planId, String stage, String set, String key, String wire) {
 			this.region = region;
 			this.planId = planId;
 			this.stage = stage;
 			this.set = set;
 			this.key = key;
+			this.wire = wire;
 		}
 
 		public Packed.@Nullable Tile cells() {
@@ -192,11 +199,17 @@ public final class TileStream {
 	 */
 	public static boolean request(String region, String planId, String irSha, Function<Void, JsonObject> ir, BlobSource blobs, String stage, String set,
 		String key, byte[] heights) {
+		return request(region, planId, irSha, ir, blobs, stage, stage, set, key, heights);
+	}
+
+	/** (6d RV) As above, with the stage the plan's IR names ({@code wireStage}) apart from the journal's ({@code stage}: {@code rv<rid>:<s>}). */
+	public static boolean request(String region, String planId, String irSha, Function<Void, JsonObject> ir, BlobSource blobs, String stage, String wireStage,
+		String set, String key, byte[] heights) {
 		Link l = link;
 		if (l == null || !l.connected()) {
 			return false;
 		}
-		Tile t = new Tile(region, planId, stage, set, key);
+		Tile t = new Tile(region, planId, stage, set, key, wireStage);
 		t.linkGen = l.generation();
 		t.requestedAt = System.nanoTime();
 		TILES.put(id(region, stage, set, key), t);
@@ -207,7 +220,7 @@ public final class TileStream {
 		JsonArray tiles = new JsonArray();
 		JsonObject one = new JsonObject();
 		one.addProperty("key", key);
-		one.addProperty("stage", stage);
+		one.addProperty("stage", wireStage);
 		one.addProperty("set", set);
 		one.addProperty("heights", Base64.getEncoder().encodeToString(heights));
 		tiles.add(one);
@@ -487,7 +500,7 @@ public final class TileStream {
 		String set = m.has("set") ? m.get("set").getAsString() : "";
 		String planId = m.has("planId") ? m.get("planId").getAsString() : "";
 		for (Tile x : TILES.values()) {
-			if (x.planId.equals(planId) && x.key.equals(key) && x.stage.equals(stage) && x.set.equals(set) && x.phase == Phase.REQUESTED) {
+			if (x.planId.equals(planId) && x.key.equals(key) && x.wire.equals(stage) && x.set.equals(set) && x.phase == Phase.REQUESTED) {
 				t = x;
 				break;
 			}

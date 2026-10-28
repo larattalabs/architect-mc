@@ -19,6 +19,10 @@ import { synthColumns } from '../lib/region/synth.mjs';
 import { finishCheck } from '../lib/plan/finish.mjs';
 import { fillMissing } from '../lib/region/plan.mjs';
 import { asColumns, canonicalJson as canonicalJsonOf } from '../lib/region/pack.mjs';
+import { withStandingIds } from '../lib/region/revise.mjs';
+
+/** (6d RV) a revision input's standing data, its ids filled from its effective IR (M29:revision). */
+const revisionStandingOf = (rv) => withStandingIds(rv?.standing ?? null, rv?.effective ?? null);
 
 class Usage extends Error {}
 
@@ -41,7 +45,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1 }); // (6c RS) --survival: plan in survival (the world's mode)
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1 }); // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -94,6 +98,8 @@ async function plan(argv) {
   const biomes = opts.biomes ? readJson(opts.biomes, '--biomes') : null;
   // (6c VOC-c) the bound lots' block histograms (a file: {lot: {block: n}}; the mod's, for a plan with a palette rule)
   const lotBlocks = opts['lot-blocks'] ? readJson(opts['lot-blocks'], '--lot-blocks') : null;
+  // (6d RV) a revision's inputs (a file: {rid, position, parent, base, effective, standing}; the sidecar's revision.json)
+  const revision = opts.revision ? readJson(opts.revision, '--revision') : null;
   // (6c F2) the local stamp library (<dir>/<feature>/<seed>.bin; local-only, N-F2-1)
   if (opts.stamps && !fs.existsSync(opts.stamps)) throw new Usage(`--stamps: no dir ${opts.stamps}`);
   // (6c P0) the plan check's cache: <dir>/<key>.json, read only (the sidecar keeps it per owner)
@@ -101,7 +107,7 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}) });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}) });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
@@ -197,10 +203,10 @@ function loadBesideReach(f) {
 }
 
 function check(argv) {
-  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', 'no-prefix': 'flag', 'plan-id': 1, 'beside-reach': 1 });
+  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', 'no-prefix': 'flag', 'plan-id': 1, 'beside-reach': 1, revision: 1 });
   if (pos.length !== 1 || !opts.survey) throw new Usage('check <ir.json> --survey s.bin [--blobs dir] [--volumes dir] [--meta meta.json] [--out dir] [--json]');
   const L = loadPlan(pos, opts);
-  const report = checkRegion({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, prefix: !opts['no-prefix'], planId: opts['plan-id'], ...(opts['beside-reach'] ? { besideReach: loadBesideReach(opts['beside-reach']) } : {}) });
+  const report = checkRegion({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, prefix: !opts['no-prefix'], planId: opts['plan-id'], ...(opts['beside-reach'] ? { besideReach: loadBesideReach(opts['beside-reach']) } : {}), ...(opts.revision ? { standing: revisionStandingOf(readJson(opts.revision, '--revision')) } : {}) });
   delete report._world;
   report.irSha = createHash('sha256').update(L.irText).digest('hex');
   const out = opts.out ?? L.dir;

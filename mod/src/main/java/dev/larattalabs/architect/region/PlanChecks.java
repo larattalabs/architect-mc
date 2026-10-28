@@ -270,6 +270,42 @@ public final class PlanChecks {
 		BoundingBox c = r.claim();
 		ServerLevel level = r.level();
 		String dim = Sites.dimensionId(level);
+		// (6d RV, §9.1) a revision of a realised plan: the region realised from the parent artifact (or a standing revision of it), the
+		// parent the head's, the claim the region's; its parent's plan, built parts and geometry go to the kit with the revision input
+		JsonObject revParent = null;
+		RegionsImpl.Live revOf = null;
+		if (r.plan().get("revision") instanceof JsonObject rvp && rvp.get("parentArtifact") instanceof JsonElement pae && pae.isJsonPrimitive()) {
+			String pa = pae.getAsString();
+			for (RegionsImpl.Live l : RegionsImpl.all()) {
+				if (l.rec().state == RegionState.REMOVED || l.rec().state == RegionState.REMOVING) {
+					continue;
+				}
+				boolean mine = pa.equals(artifactOf(l.rec())) || l.rec().revisions.stream().anyMatch(x -> pa.equals(x.artifact) && x.standing());
+				if (mine) {
+					revOf = l;
+				}
+			}
+			if (revOf == null) {
+				return refused(Reason.ARTIFACT_UNAPPROVED, "NO_FEATURE {why: parent}: no standing region was realised from artifact " + pa.substring(0, Math.min(12, pa
+					.length())) + " (revision.parentArtifact)");
+			}
+			if (!java.util.Objects.equals(revOf.rec().owner, r.owner())) {
+				return refused(Reason.OVERLAP_OWNED, "NO_FEATURE {why: parent}: region " + revOf.rec().id + " is " + (revOf.rec().owner == null ? "the player's" : revOf.rec().owner
+					+ "'s"));
+			}
+			String head = Revisions.headArtifact(revOf.rec());
+			if (!pa.equals(head)) {
+				return refused(Reason.PLAN_STALE, "NEEDS_REPAIR parent_moved: artifact " + pa.substring(0, 12) + " is not region " + revOf.rec().id + "'s head; the head's artifact is "
+					+ (head == null ? "none (its head revision was planned with planRevision)" : head));
+			}
+			Optional<PlanArtifact> pArt = artifact(pa);
+			if (pArt.isEmpty() || pArt.get().body() == null) {
+				return refused(Reason.ARTIFACT_UNAPPROVED, "NO_FEATURE {why: parent}: artifact " + pa.substring(0, 12) + " is gone");
+			}
+			revParent = Revisions.parentInput(revOf, pa, pArt.get().body());
+			int[] rc = revOf.rec().claim;
+			c = new BoundingBox(rc[0], rc[1], rc[2], rc[3], rc[4], rc[5]);
+		}
 		Protection prot = protection(dim, r.owner(), new int[] {c.minX(), c.minZ(), c.maxX(), c.maxZ()});
 		JsonObject params = new JsonObject();
 		params.add("plan", r.plan().deepCopy());
@@ -306,8 +342,21 @@ public final class PlanChecks {
 		JsonObject fp = new JsonObject();
 		fp.addProperty("sha", prot.sha());
 		params.add("fingerprint", fp);
-		RegionPlanRequest rp = new RegionPlanRequest(PROGRAM, params, level, c, null, r.bible(), r.bibleVersion(), LoadPolicy.LOADED_ONLY, r.owner(), new JsonObject(),
+		JsonObject rpExt = new JsonObject();
+		if (revOf != null) {
+			JsonObject of = new JsonObject();
+			of.addProperty("region", revOf.rec().id);
+			rpExt.add(Revisions.EXT_REVISION_OF, of);
+		}
+		RegionPlanRequest rp = new RegionPlanRequest(PROGRAM, params, level, c, null, r.bible(), r.bibleVersion(), LoadPolicy.LOADED_ONLY, r.owner(), rpExt,
 			null);
+		if (revOf != null) {
+			String[] no = Revisions.prepare(rp, s, revParent);
+			if (no != null) {
+				return refused(Reason.valueOf(no[0]), no[1]);
+			}
+		}
+		final RegionsImpl.Live revRegion = revOf;
 		JsonObject extra = new JsonObject();
 		extra.addProperty("planCache", r.owner() == null ? "player" : r.owner());
 		JsonArray views = new JsonArray();
@@ -342,7 +391,12 @@ public final class PlanChecks {
 		// (6c T3, Steward's S-T3-6) load: "generate" lets the survey and the tunnels' volume pass load (and generate) their chunks
 		LoadPolicy load = r.load() != null && r.load().loads() ? r.load() : null;
 		long t0 = System.nanoTime();
-		reachReady.thenCompose(rv -> RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, load != null ? load : LoadPolicy.LOADED_ONLY)).thenCompose(cols -> {
+		final BoundingBox cc = c;
+		reachReady.thenCompose(rv -> RegionSurvey.sample(level, cc.minX(), cc.minZ(), cc.maxX(), cc.maxZ(), 1, revRegion != null ? LoadPolicy.GENERATED_ONLY(4096) : load != null
+			? load : LoadPolicy.LOADED_ONLY)).thenCompose(cols -> {
+			if (revRegion != null) {
+				Revisions.overlayFrozen(cols, s.getWorldPath(LevelResource.ROOT), revRegion.rec().id); // (6d RV) the region's frozen heights
+			}
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
 			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> RegionsImpl.planOnce(link, rp, blobId, surveySha, survey, null, false, extra)
@@ -371,6 +425,9 @@ public final class PlanChecks {
 		})).thenCompose(f -> f).whenComplete((pc, e) -> {
 			RegionsImpl.REACH.remove(rp);
 			RegionsImpl.REACH_SURVEY.remove(rp);
+			Revisions.INPUT.remove(rp);
+			Revisions.CANDIDATE.remove(rp);
+			Revisions.giveBack(rp, e != null);
 			if (e == null) {
 				out.complete(pc);
 				return;
@@ -846,7 +903,7 @@ public final class PlanChecks {
 			if (c[0] > xz[2] + m || c[3] < xz[0] - m || c[2] > xz[3] + m || c[5] < xz[1] - m) {
 				continue;
 			}
-			JsonObject bd = BesideCheck.besideData(rec.id, new int[] {c[0], c[2], c[3], c[5]}, l.ir().json(), xz);
+			JsonObject bd = BesideCheck.besideData(rec.id, new int[] {c[0], c[2], c[3], c[5]}, Revisions.effective(l), xz); // (6d RV, §4.5)
 			// (6c D3, §9) a district's reach (its join in a town's claim): hard to every later plan
 			if (l.ir().json().get("reach") instanceof JsonObject reach && reach.get("runs") instanceof JsonArray runs) {
 				bd.add("reach", runs.deepCopy());
@@ -1162,6 +1219,14 @@ public final class PlanChecks {
 				&& sha.equals(e.getAsString())) {
 				out.add(rec.id);
 			}
+			// (6d RV, §9.5) a standing revision's artifact is kept while the revision stands
+			if (rec.state != RegionState.REMOVED) {
+				for (Revisions.Rev r : rec.revisions) {
+					if (sha.equals(r.artifact) && r.standing()) {
+						out.add(rec.id);
+					}
+				}
+			}
 		}
 		return out;
 	}
@@ -1225,6 +1290,19 @@ public final class PlanChecks {
 	 */
 	static void regionRemoved(RegionRec rec, boolean atLoad) {
 		MinecraftServer s = server;
+		// (6d RV, §9.5) Regions.remove tombstones every revision's artifact too (unless pinned)
+		if (s != null && !atLoad) {
+			Path dir = artifacts(s.getWorldPath(LevelResource.ROOT));
+			for (Revisions.Rev r : rec.revisions) {
+				if (r.artifact != null && SHA.matcher(r.artifact).matches()) {
+					try {
+						sweep(dir, r.artifact, pins(dir, r.artifact));
+					} catch (IOException | RuntimeException e) {
+						Architect.LOGGER.warn("Artifact {} sweep: {}", r.artifact, e.toString());
+					}
+				}
+			}
+		}
 		String sha = artifactOf(rec);
 		if (s == null || sha == null) {
 			return;
@@ -1240,6 +1318,20 @@ public final class PlanChecks {
 			sweep(dir, sha, pins(dir, sha));
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Artifact {} sweep: {}", sha, e.toString());
+		}
+	}
+
+	/** (6d RV, §9.5) An undone revision's artifact is tombstoned unless pinned (or held otherwise). Server thread. */
+	static void revisionUndone(RegionsImpl.Live l, Revisions.Rev r) {
+		MinecraftServer s = server;
+		if (s == null || r.artifact == null || !SHA.matcher(r.artifact).matches()) {
+			return;
+		}
+		Path dir = artifacts(s.getWorldPath(LevelResource.ROOT));
+		try {
+			sweep(dir, r.artifact, pins(dir, r.artifact));
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Artifact {} sweep: {}", r.artifact, e.toString());
 		}
 	}
 
@@ -1337,6 +1429,11 @@ public final class PlanChecks {
 			}
 			return RegionSurvey.sample(level, x0, z0, x1, z1, res, LoadPolicy.LOADED_ONLY);
 		}).thenCompose(now -> RegionsImpl.onServer(s, () -> {
+			// (6d RV, §9.4) a revision artifact: the land now with its region's frozen heights over it (as its check surveyed it); its tiles are
+			// the revision's own (the dirty ones)
+			if (body.getAsJsonObject("region").get("revisionOf") instanceof JsonObject ro && ro.get("region") instanceof JsonElement rid && rid.isJsonPrimitive()) {
+				Revisions.overlayFrozen(now, s.getWorldPath(LevelResource.ROOT), rid.getAsString());
+			}
 			String drift = terrainDiff(plan, now, body.getAsJsonObject("region").getAsJsonObject("tiles"), x0, z0, x1, z1);
 			if (drift != null) {
 				throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, "the land under the plan's tiles changed since the check: " + drift);

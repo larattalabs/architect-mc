@@ -33,7 +33,7 @@ export function validateLots(v, where = 'lots') {
     if (!l || typeof l !== 'object' || Array.isArray(l)) throw new Error(`${w} must be an object`);
     // (6c H, S-H-2) farmPond is the compiler's (a farm lot's pond, read from the plan part): accepted here, never in the layout's lot;
     // ((6c IRR) irrigate likewise: the compiler's, a farm lot's sources)
-    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief', 'ext', 'farmPond', 'irrigate'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
+    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief', 'ext', 'farmPond', 'irrigate', 'refill'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
     if (l.farmPond !== undefined && typeof l.farmPond !== 'boolean') throw new Error(`${w}.farmPond must be true or false`);
     if (l.irrigate !== undefined && typeof l.irrigate !== 'boolean') throw new Error(`${w}.irrigate must be true or false`);
     if (typeof l.id !== 'string' || !LOT_ID_RE.test(l.id)) throw new Error(`${w}.id must match ${LOT_ID_RE}`);

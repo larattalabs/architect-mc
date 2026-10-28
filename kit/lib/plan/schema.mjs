@@ -281,6 +281,8 @@ function refsOf(family, part) {
     (Array.isArray(part.avoid) ? part.avoid : []).forEach((f, i) => feature(f, `$.avoid[${i}]`));
     // (K1) a gate's place (at), its wall and the connector whose crossing it is
     if (part.at) endpoint(part.at, '$.at');
+    // ((7a SA, R27) a spiral's host is an implicit dependency (R3))
+    if (family === 'connector' && part.kind === 'stairs_around' && part.around?.feature) feature(part.around.feature, '$.around.feature');
     if (family === 'connector' && part.kind === 'gate') {
       if (typeof part.wall === 'string') parts.push({ id: part.wall, path: '$.wall', as: 'wall' });
       if (typeof part.crossing === 'string') parts.push({ id: part.crossing, path: '$.crossing', as: 'crossing' });

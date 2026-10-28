@@ -154,7 +154,7 @@ Carried forward:
 
 ## After phase 3: asks from Steward (accepted 2026-10-05)
 
-Steward (`~/Developer/LarattaLabs/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
+Steward (`~/Developer/LarattaLabs/Minecraft/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
 for A1-A9 (`steward-mc/docs/ARCHITECT-ASKS.md`). All are accepted. Each must also be useful to Architect players on its
 own. A9 is phase 3 itself. Order (Noah can reorder):
 
@@ -1332,3 +1332,7 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 - Fixture correction (gr_beside, item 5): Steward has no dplan/dgrow keys. Each build plans and realises under steward.<buildId>.vplan / steward.<buildId>.vrealise (.vrealise2 after a stale re-check), and both carry ext steward_mc:district=<id> and steward_mc:build=<buildId>. The first building plans with Regions.plan beside the town, with a claim of the reservation plus 16 columns into the town's claim. A growth is an ordinary Steward build with the same key scheme.
 - Ask 1: a growth's realise names its revision id, and EVERY site it wrote (buildings, lanes, street pieces, not only lots via LotState.revision) is identifiable as that revision's. Steward logs one history entry per growth and undoes it with undoRevision. RV should carry the revision id on realised sites.
 - Ask 2: confirm land.outside shrinks after undoRevision (§7), so Steward can recompute its saved land.
+
+## Looks approved (Noah, 2026-10-26)
+- SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
+- RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.

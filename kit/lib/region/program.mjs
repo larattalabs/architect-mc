@@ -702,7 +702,8 @@ export class Region {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a gate in a wall is a node too
     // ((7a K2) a wall walk's access (a flight or a ladder up its inner face) too)
-    if (!['lot', 'plaza', 'junction', 'gate', 'access'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate or access`);
+    // ((7a SA) a spiral's top is a lookout)
+    if (!['lot', 'plaza', 'junction', 'gate', 'access', 'lookout'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza, junction, gate, access or lookout`);
     this.graphIds.add(id);
     const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
     this.graph.nodes.push(n);
