@@ -17,7 +17,7 @@ import net.minecraft.world.phys.Vec3;
  * and lands on the face's top; a down ride starts in the open top (feet at {@code yT + 1}), is carried to the floor ({@code y0 + 1}), then
  * leaves through the airlock (its doors opened for the step, as a rider opens them, then closed) to the approach ({@code exit}). The player
  * is put back where it stood, its game mode and {@code noPhysics} restored. {@code dev.lift.spawnRule}: vanilla's drowned spawn rules at a
- * cell. Since NEXT.
+ * cell. Since 1.43.0.
  */
 public final class SliceLfDev {
 	private SliceLfDev() {

@@ -96,7 +96,7 @@ import org.jspecify.annotations.Nullable;
  * meanwhile is still the entry's, {@code StillOurs} via {@code Coral.canonical}), while every other drain (escape, unsettled, upstream,
  * recheck, a wave's clear) takes water decor back with the sources. Not a course member: a coral pond is not ordered.
  * <p>
- * (7a LF, "Phase 7a slice LF" §4, Since NEXT) A body op's {@code bubble} set ({@code [{state, cells: runs}]}: a lift's column) is the body's
+ * (7a LF, "Phase 7a slice LF" §4, Since 1.43.0) A body op's {@code bubble} set ({@code [{state, cells: runs}]}: a lift's column) is the body's
  * own cells written as {@code bubble_column} states (drag=false over soul sand, drag=true over magma) instead of water sources: the
  * stage's tiles write them (the kit's evaluator, as a grate's bars), a re-write ({@link #writeBody}) writes them again where the cell is
  * open, and the forced tick gives them a block tick (vanilla keeps the column over its base) instead of a fluid tick (their face

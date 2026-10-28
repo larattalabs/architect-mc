@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.42.0";
+	String VERSION = "1.43.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -152,16 +152,16 @@ public interface ArchitectApi {
 	 * shore, a biome edge or a ridge, open, its gates where routes cross and {@code gates.min} evenly) and {@code "wallWalks"}
 	 * ({@code region.walls.walk}: a wall's {@code walk} member, a railed and lit walk on its top with stairs or ladders up from the
 	 * inside, player only; the siteplan's {@code walls[].walk}, graph edges {@code type: wall_walk}). No new record or method.
-	 * Since NEXT (7a RK), an RK helper ({@code region.rockStairs}) adds {@code "rockStairs"}: plan/0's {@code connector.rock_stair} (a straight
+	 * Since 1.43.0 (7a RK), an RK helper ({@code region.rockStairs}) adds {@code "rockStairs"}: plan/0's {@code connector.rock_stair} (a straight
 	 * stair flight carved or bored into rising ground, lined and lit; route row 11) is compiled, the graph edge typed {@code rock_stair}
 	 * with its crossing {@code {type, rise, steps, cover}}, the siteplan's {@code rockStairs[]}. A plan with one is checked in the
 	 * two-plan flow as a tunnel's (its corridor's frozen volume; {@code limits.volume}), and an artifact's stale rock names it
 	 * ({@code ARTIFACT_STALE} "rock_stair &lt;part&gt;: ..."). No new record, method or reason.
-	 * Since NEXT (7a SA), an SA helper ({@code region.spirals}) adds {@code "spiralStairs"}: plan/0's {@code connector.stairs_around} (a
+	 * Since 1.43.0 (7a SA), an SA helper ({@code region.spirals}) adds {@code "spiralStairs"}: plan/0's {@code connector.stairs_around} (a
 	 * spiral stair round a rock spire, an ice spike, a giant tree's trunk or a giant mushroom's stem to a railed lookout, a path leg from
 	 * {@code from} to its foot) is compiled; the graph gains a {@code lookout} node and an edge typed {@code stairs_around} with its
 	 * crossing {@code {type, host, rise, turns}}; the siteplan's {@code spirals[]}. No new record, method or reason.
-	 * Since NEXT (7a LF), an LF helper ({@code region.lifts}) adds {@code "liftConnectors"}: plan/0's {@code connector.lift} (a bubble column
+	 * Since 1.43.0 (7a LF), an LF helper ({@code region.lifts}) adds {@code "liftConnectors"}: plan/0's {@code connector.lift} (a bubble column
 	 * against a face rising 4 to 64 in a tower 2 thick, entered through a two-door airlock and left over a railed rim; {@code down}: a second
 	 * column; route row 9; player only) is compiled, the graph edge typed {@code lift} with its crossing {@code {type, rise, down}}, the
 	 * siteplan's {@code lifts[]}, the {@code architect_mc:fluids} rows of its body. The column is a fluid body (H): written in the
@@ -169,7 +169,7 @@ public interface ArchitectApi {
 	 * journal's "still ours" gains a global row: a cell written as a bubble column holds as any bubble column, a water source or air, and a
 	 * cell written as a water source holds as a bubble column (deltas, {@code versionOf}, adopt counts and survival matches read it). No new
 	 * record, method or reason.
-	 * Since NEXT (7a K3), a K3 helper ({@code region.walls.lots}) adds {@code "wallLots"}: the towers, corner lots and gatehouses a wall
+	 * Since 1.43.0 (7a K3), a K3 helper ({@code region.walls.lots}) adds {@code "wallLots"}: the towers, corner lots and gatehouses a wall
 	 * names are sited on the wall's line (withheld from their zone's street; a gatehouse straddles a gate run with a passage through it,
 	 * routes cross the wall there); the plan-check artifact's {@code lots[].onWall} ({@code wall}, {@code at}, {@code floorY}, the box's
 	 * {@code outerFaces} and a gatehouse's {@code passage}) and {@code lots[].ports}; the siteplan's {@code walls[].lots}. When a lot on a
@@ -177,10 +177,10 @@ public interface ArchitectApi {
 	 * if its design leaves the wall's outer faces open (air, a door, a fence gate or a trapdoor there) or the passage floor is not
 	 * standable; the realise drops the entry's blocks on a gatehouse's passage (IRR's rule) and the lot's site never owns those cells.
 	 * No new record, method or reason.
-	 * Since NEXT (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
+	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.
-	 * Since NEXT (7a K3), a helper with {@code wallLots.exactMassing} adds {@code "wallLots.exactMassing"} (the same name): a design
+	 * Since 1.43.0 (7a K3), a helper with {@code wallLots.exactMassing} adds {@code "wallLots.exactMassing"} (the same name): a design
 	 * request carrying {@code ext["architect:wallLot"]} (a wall lot; its maxSize the lot's exact box) has, in a massing-first group, a
 	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
 	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,

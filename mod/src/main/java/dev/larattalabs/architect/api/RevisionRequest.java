@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  * ({@code [A-Za-z0-9_.:-]{1,128}}, scoped by the region's owner: the same key and body answer the same candidate, also after a restart);
  * {@code actor} who asks (a player's UUID or a mod id), recorded; (6d GR) {@code ext} the caller's own data kept on the candidate plan
  * (e.g. Steward's {@code steward_mc:district}, {@code steward_mc:build}; {@code architect_mc:*} keys are Architect's and refused).
- * Since NEXT.
+ * Since 1.43.0.
  */
 public record RevisionRequest(String program, JsonObject params, @Nullable String opKey, @Nullable String actor, JsonObject ext) {
 	public RevisionRequest {

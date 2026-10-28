@@ -269,7 +269,7 @@ public interface Regions {
 	 * refuses {@link Reason#NOT_ALLOWED} ({@code not_additive}). Answers a candidate: a {@link RegionPlan} with {@link RegionPlan#revisionOf()}.
 	 * Any number of candidates may stand on one parent; {@link #realise} of one accepts it (the parent must still be the head and the
 	 * region's history at its tiles unchanged, else {@link Reason#PLAN_STALE}) and writes it as the region's next layers; the others go
-	 * STALE. Since NEXT.
+	 * STALE. Since 1.43.0.
 	 */
 	default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r) {
 		throw new UnsupportedOperationException("Regions.planRevision needs Architect API NEXT");
@@ -281,7 +281,7 @@ public interface Regions {
 	 * {@link Reason#NOT_ALLOWED}: {@code joined}, {@code blockers}, survival, fluids; {@code toPosition} not below the head); then the
 	 * suffix's bodies drain and its sites are removed; afterwards the head is {@code toPosition} and every reader (the view, the land
 	 * {@code architect_mc:land}, the beside data) reads the older effective IR. Once begun it is never abandoned: a call with the same
-	 * target returns the running operation. Since NEXT.
+	 * target returns the running operation. Since 1.43.0.
 	 */
 	default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
 		throw new UnsupportedOperationException("Regions.undoRevision needs Architect API NEXT");

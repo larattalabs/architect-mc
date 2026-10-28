@@ -23,7 +23,7 @@ import org.jspecify.annotations.Nullable;
 public final class DistrictLand {
 	/** The record's version (6d's grown parts move it to 2). */
 	public static final int V = 1;
-	/** (6d GR §7) The version once the region has had a revision (it stays 2 after undoRevision). Since NEXT. */
+	/** (6d GR §7) The version once the region has had a revision (it stays 2 after undoRevision). Since 1.43.0. */
 	public static final int V2 = 2;
 	public static final String EXT_LAND = "architect_mc:land";
 

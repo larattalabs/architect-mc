@@ -97,15 +97,15 @@ public final class ApiRules {
 					case "region.climbs" -> "climbConnectors"; // 7a CL: plan/0's connector.stair, connector.switchback and connector.ladder (since 1.41.0)
 					case "region.walls.along" -> "wallAlong"; // 7a K2: plan/0's wall.along (a wall along a shore, biome edge or ridge)
 					case "region.walls.walk" -> "wallWalks"; // 7a K2: a wall's walk member (a railed, lit walk on the top, player only)
-					case "region.rockStairs" -> "rockStairs"; // 7a RK: plan/0's connector.rock_stair (a stair flight carved into rising ground; route row 11; since NEXT)
-					case "region.lifts" -> "liftConnectors"; // 7a LF: plan/0's connector.lift (a bubble column against a face; route row 9; since NEXT)
+					case "region.rockStairs" -> "rockStairs"; // 7a RK: plan/0's connector.rock_stair (a stair flight carved into rising ground; route row 11; since 1.43.0)
+					case "region.lifts" -> "liftConnectors"; // 7a LF: plan/0's connector.lift (a bubble column against a face; route row 9; since 1.43.0)
 					case "region.spirals" -> "spiralStairs"; // 7a SA: plan/0's connector.stairs_around (a spiral round a spire, spike, tree or mushroom)
 					case "region.walls.lots" -> "wallLots"; // 7a K3: towers and gatehouses as lots on a wall's line
 					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
-					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since NEXT)
+					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since 1.43.0)
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
-					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since NEXT)
-					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since NEXT)
+					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
+					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

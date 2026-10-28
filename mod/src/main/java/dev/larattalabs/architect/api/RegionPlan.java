@@ -25,7 +25,7 @@ public record RegionPlan(String planId, String programId, String programSha, Str
 		irFormat = irFormat <= 0 ? 1 : irFormat;
 	}
 
-	/** The 1.9.0 constructor: no revisionOf (since NEXT, 6d RV: a revision plan's {@link RevisionOf}; null for any other plan). */
+	/** The 1.9.0 constructor: no revisionOf (since 1.43.0, 6d RV: a revision plan's {@link RevisionOf}; null for any other plan). */
 	public RegionPlan(String planId, String programId, String programSha, String irSha, String surveySha, long seed, List<LotSpec> lots,
 		List<String> stages, Map<String, BlockPos> anchors, RegionBudget budget, List<String> notes, @Nullable CheckReport report,
 		@Nullable RegionPreviews previews, int irFormat) {

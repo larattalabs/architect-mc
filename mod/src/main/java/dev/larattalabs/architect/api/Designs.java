@@ -34,7 +34,7 @@ public interface Designs {
 	void cancel(String designId);
 
 	/**
-	 * A design the helper reports. Since NEXT (7a K3), ordering: a design reads as DONE only once its entry's new version is
+	 * A design the helper reports. Since 1.43.0 (7a K3), ordering: a design reads as DONE only once its entry's new version is
 	 * installed and loaded on the server, the same moment {@link SiteEvents#DESIGN_DONE} fires (a listener of DESIGN_DONE already
 	 * sees DONE here). Until then a design the helper has finished reads as its last non-final status (as this game last saw it;
 	 * RENDERING when it saw none). FAILED and CANCELLED are reported as soon as they are final.
@@ -189,7 +189,7 @@ public interface Designs {
 	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper is not connected (never "empty" then); a helper without
 	 * {@code "design.opKeys"} fails it too. Ordering as {@link #get}: DONE only once the entry's new version is installed and loaded
 	 * on the server, when {@link SiteEvents#DESIGN_DONE} fires (a DONE record this game had not reported yet is installed and
-	 * reported first, then answered). Since NEXT.
+	 * reported first, then answered). Since 1.43.0.
 	 */
 	default CompletableFuture<Optional<Design>> designByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Designs.designByKey needs Architect API NEXT");
@@ -205,7 +205,7 @@ public interface Designs {
 	 * with status CANCELLED. Fails exceptionally while the helper can't be reached ({@link ArchitectRefused}
 	 * {@link Reason#SIDECAR_UNAVAILABLE}), or when the turn has not stopped within the helper's wait (15 s; the design stays
 	 * cancelled: ask again). Ordering as {@link #get}: a DONE design only once installed and loaded on the server. The old
-	 * {@link #cancel} is unchanged. Since NEXT.
+	 * {@link #cancel} is unchanged. Since 1.43.0.
 	 */
 	default CompletableFuture<CancelOutcome> cancelDesign(String designId) {
 		throw new UnsupportedOperationException("Designs.cancelDesign needs Architect API NEXT");

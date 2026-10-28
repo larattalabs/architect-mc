@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param type a preset building type ({@code house, cabin, cottage, tower, shop, tavern, barn, smithy, chapel, gatehouse,
  *     custom}) or, since 1.2.0 with a 4b helper, an open type ({@code [a-z][a-z0-9_]{0,39}}, e.g. {@code hellish_lair})
- * @param maxSize x/z 3..96 (since NEXT, 7a K3: a wall lot's exact box; 7..96 before), y 6..64. The sidecar checks it; the mod
+ * @param maxSize x/z 3..96 (since 1.43.0, 7a K3: a wall lot's exact box; 7..96 before), y 6..64. The sidecar checks it; the mod
  *     sends it as given
  * @param remix a library id to remix, or null
  * @param owner, ext, model, budgetUsd sent to the sidecar only when it speaks protocol 2; owner and ext are kept by the mod
@@ -42,7 +42,7 @@ import org.jspecify.annotations.Nullable;
  *     roof?, accent?}}) or a Style's roles inline ({@code {bible: {id, version, roles}}}, {@link #withStyle}). Never bible set mode
  *     (no shared components, no restraint): {@code bible} excludes it (both set: refused). The entry records it as its
  *     {@code palette}; with roles inline, also {@code {id, version}} as its {@code bible} pin. Null = none (the designer picks)
- * @param opKey (since NEXT, 7a K3, a helper with {@code "design.opKeys"}) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}),
+ * @param opKey (since 1.43.0, 7a K3, a helper with {@code "design.opKeys"}) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}),
  *     scoped by (owner, kind "design", opKey); a null owner means the player. Sending again with the same key and the same body
  *     answers the first design's id and starts no new job, in any state (for a {@code versionOf}, never
  *     {@link Reason#VERSION_REFUSED} {@code busy}); with a different body the future fails {@link ArchitectRefused}
@@ -129,7 +129,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 
 	/**
 	 * A copy with this operation key (null = none; checked when sent: {@code [A-Za-z0-9_.:-]{1,128}}). Needs a helper with
-	 * {@code "design.opKeys"}. Since NEXT.
+	 * {@code "design.opKeys"}. Since 1.43.0.
 	 */
 	public DesignRequest withOpKey(@Nullable String key) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,

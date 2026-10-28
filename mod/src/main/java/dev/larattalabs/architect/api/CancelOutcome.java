@@ -3,7 +3,7 @@ package dev.larattalabs.architect.api;
 import java.util.Optional;
 
 /**
- * What {@link Designs#cancelDesign} found and did (since NEXT, 7a K3; a helper with {@code "design.opKeys"}).
+ * What {@link Designs#cancelDesign} found and did (since 1.43.0, 7a K3; a helper with {@code "design.opKeys"}).
  *
  * @param kind {@link Kind#CANCELLED}, {@link Kind#ALREADY_FINAL} or {@link Kind#UNKNOWN}
  * @param design the design as it ended, with its final {@link Design#cost()}: status CANCELLED for {@link Kind#CANCELLED}, DONE or
