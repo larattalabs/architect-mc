@@ -7,6 +7,7 @@
 // The standing data comes from ctx.besideReach (the check's `besideReach`). Pure.
 import { keyRuns, runKeys } from './beside.mjs';
 import { reachClasses } from './reach.mjs';
+import { mergedClasses } from './gateJoin.mjs';
 
 const k2 = (x, z) => `${x},${z}`;
 
@@ -14,14 +15,17 @@ const k2 = (x, z) => `${x},${z}`;
  * The beside rules over a built virtual world `vw` of `ir`: pushes findings (M28:beside, M25:clear) and returns the metrics
  * {outside, reachCells, held, footprint, bodies, unheld, wrongWriter}.
  */
-export function besideRules({ ir, vw, besideReach, findings, finding, partStage = new Map(), light = null }) {
+export function besideRules({ ir, vw, besideReach, around = [], findings, finding, partStage = new Map(), light = null }) {
   const c = ir.claim;
   const inClaim = (x, z) => x >= c.minX && x <= c.maxX && z >= c.minZ && z <= c.maxZ;
   const reach = runKeys(ir.reach?.runs ?? []);
   const hold = runKeys(ir.reach?.hold ?? []);
   // ((6c D3, ruling B) the join's lamps on reach columns: written by the lamps' part)
   const lampCols = runKeys(ir.reach?.lamps ?? []);
-  const K = besideReach ? reachClasses(besideReach) : null;
+  // ((7a GJ, §4) a gate join's: the town's classes and the wall regions' round it)
+  const K = besideReach ? mergedClasses(reachClasses(besideReach), around) : null;
+  // ((7a GJ, §3) the gate a join crosses: none of its cells is written (the traverse is the wall's)
+  const gateCols = runKeys(ir.reach?.gate?.cells ?? []);
   const town = besideReach?.standing?.id ?? ir.reach?.standing ?? ir.beside?.id ?? '?';
   // the written cells outside the claim, per column, with their writer parts
   const outside = new Map();
@@ -32,8 +36,9 @@ export function besideRules({ ir, vw, besideReach, findings, finding, partStage 
     if (!o) { o = { x, z, y, parts: new Set() }; outside.set(k, o); }
     o.parts.add(part >= 0 ? ir.parts[part]?.id ?? null : null);
   });
-  const m = { outside: outside.size, reachCells: reach.size, wrongWriter: 0, notReach: 0, held: 0, footprint: 0, bodies: 0, unheld: 0 };
-  const bad = { writer: [], notReach: [], held: [], footprint: [], body: [], unheld: [] };
+  const m = { outside: outside.size, reachCells: reach.size, wrongWriter: 0, notReach: 0, held: 0, footprint: 0, bodies: 0, unheld: 0, ...(ir.reach?.gate ? { gate: 0 } : {}) };
+  const bad = { writer: [], notReach: [], held: [], footprint: [], body: [], unheld: [], gate: [] };
+  if (gateCols.size) vw.eachWritten((x, y, z) => { if (gateCols.has(k2(x, z))) { m.gate++; bad.gate.push([x, y, z]); } });
   for (const [k, o] of outside) {
     if (!reach.has(k)) { m.notReach++; bad.notReach.push([o.x, o.y, o.z]); continue; }
     if ([...o.parts].some((p) => p !== 'route_join' && !(lampCols.has(k) && /^props(_|$)/.test(String(p))))) { m.wrongWriter++; bad.writer.push([o.x, o.y, o.z]); }
@@ -52,6 +57,7 @@ export function besideRules({ ir, vw, besideReach, findings, finding, partStage 
     for (const k of hold) if (!K.terrain.has(k)) { const [x, z] = k.split(',').map(Number); m.held++; bad.held.push([x, 0, z]); }
   }
   const stage = partStage.get('route_join') ?? null;
+  if (bad.gate.length) findings.push(finding('M28:beside', 'route_join', stage, bad.gate.length, bad.gate, `${bad.gate.length} cell(s) written in gate ${ir.reach.gate.region}:${ir.reach.gate.id}'s columns (a join crosses a gate, never writes it)`));
   if (bad.notReach.length) findings.push(finding('M28:beside', null, null, bad.notReach.length, bad.notReach, `${bad.notReach.length} column(s) written outside the district's claim are not reach cells (only the join's reach may write there)`));
   if (bad.writer.length) findings.push(finding('M28:beside', null, null, bad.writer.length, bad.writer, `${bad.writer.length} reach column(s) are written by a part other than route_join (only the join and its lamps write outside the claim)`));
   if (bad.held.length) findings.push(finding('M28:beside', 'route_join', stage, bad.held.length, bad.held, `${bad.held.length} reach column(s) are held (by region ${town} or another site) outside the contact columns its terrain alone holds`));

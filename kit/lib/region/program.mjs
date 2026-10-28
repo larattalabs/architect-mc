@@ -443,6 +443,9 @@ export class Region {
       if (e.graded === true) d3.graded = true;
       if (typeof e.part === 'string') d3.part = e.part;
       if (e.keepBehind === true) d3.keepBehind = true;
+      // ((7a GJ) a gate join's legs: only the columns behind the junction within this of it are not its (a leg may pass the street's
+      // side of its junction line further off: round a street end to a side T))
+      if (isInt(e.behindNear) && e.behindNear > 0) d3.behindNear = e.behindNear;
       return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}), ...(e.stairs === false ? { stairs: false } : {}), k1, d3 };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
@@ -550,6 +553,7 @@ export class Region {
       }
       return top;
     };
+    const ownParts = new Map();
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
@@ -562,7 +566,8 @@ export class Region {
       if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       // ((6c D3) an edge with its own part: its paths there)
       p = p0;
-      if (e.d3.part) { p = this.part(e.d3.part, { stage, set: 'path' }); (this.meta.parts[p.id] ??= {}).kind = 'path'; }
+      // ((7a GJ) a gate join's two legs share their part, route_join)
+      if (e.d3.part) { p = ownParts.get(e.d3.part) ?? this.part(e.d3.part, { stage, set: 'path' }); ownParts.set(e.d3.part, p); (this.meta.parts[p.id] ??= {}).kind = 'path'; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
       if (d.gates) rec.gates = d.gates; // (7a K1) the gates the edge crossed (only when the plan has walls)
       let n = 0;
@@ -572,7 +577,15 @@ export class Region {
       // is its; absent: as before)
       if (e.d3.lead && !e.d3.keepBehind && Array.isArray(e.b.facing)) {
         const [gx, , gz] = e.b.at, [fx, fz] = e.b.facing;
-        const behind = (o) => (o.x - gx) * fx + (o.z - gz) * fz < 0;
+        const near = e.d3.behindNear ? (o) => Math.max(Math.abs(o.x - gx), Math.abs(o.z - gz)) <= e.d3.behindNear : () => true;
+        const behind = (o) => (o.x - gx) * fx + (o.z - gz) * fz < 0 && near(o);
+        ec.cols = ec.cols.filter((o) => !behind(o));
+        ec.bySeg = ec.bySeg.map((l) => l.filter((o) => !behind(o)));
+      }
+      // ((7a GJ) a gate join's leg in leaves its gate's inner cell square on: no column behind it (the gate's walk, the wall) is its)
+      if (e.d3.behindNear && Array.isArray(e.a.facing)) {
+        const [gx, , gz] = e.a.at, [fx, fz] = e.a.facing;
+        const behind = (o) => (o.x - gx) * fx + (o.z - gz) * fz < 0 && Math.max(Math.abs(o.x - gx), Math.abs(o.z - gz)) <= e.d3.behindNear;
         ec.cols = ec.cols.filter((o) => !behind(o));
         ec.bySeg = ec.bySeg.map((l) => l.filter((o) => !behind(o)));
       }
@@ -711,7 +724,7 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing, junction }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing, junction, via }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
@@ -719,7 +732,8 @@ export class Region {
     if (!['road', 'path', 'rope_bridge', 'bridge', 'tunnel', 'wall_walk', ...KINDS_7A].includes(type)) throw new Error(`graph edge ${id}: type must be road, path, rope_bridge, bridge, tunnel, wall_walk or a 7a connector kind (${KINDS_7A.join(', ')})`);
     // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
     // ((6c D3, §3.5) a side junction's edge names the street road: `<regionId>:<roadId>` with `junction {kind: side, ...}`)
-    const sideTo = external && junction?.kind === 'side' && /^[A-Za-z0-9_.-]{1,64}:[A-Za-z0-9_#.-]{1,64}$/.test(String(to));
+    // ((7a GJ, §5) a gate junction's: its `then`'s)
+    const sideTo = external && (junction?.kind === 'side' || (junction?.kind === 'gate' && junction.then?.kind === 'side')) && /^[A-Za-z0-9_.-]{1,64}:[A-Za-z0-9_#.-]{1,64}$/.test(String(to));
     if (external && !sideTo && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
     for (const end of external ? [from] : [from, to]) {
       const [n, p] = String(end).split('.');
@@ -735,6 +749,8 @@ export class Region {
     if (crossing !== undefined) e.crossing = { ...crossing };
     // ((6c D3) a reach join's junction: {kind: end|side, at, side?, u?})
     if (junction !== undefined) e.junction = JSON.parse(JSON.stringify(junction));
+    // ((7a GJ, §5) a gate join's edges: the gate crossed, `<region>:<gate id>`)
+    if (via !== undefined) e.via = String(via);
     this.graph.edges.push(e);
     return e;
   }

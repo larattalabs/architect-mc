@@ -6,6 +6,7 @@
 import { FLAG_MISSING, FLAG_WATER, asColumns, makeColumns } from './pack.mjs';
 import { sampleIndex, surveyApi } from './survey.mjs';
 import { isStreetId, keyRuns, runKeys } from './beside.mjs';
+import { gateStep } from './gateJoin.mjs';
 
 /** At most this many dry routes in the reach step (§2.2). */
 export const REACH_DRY_MAX = 48;
@@ -27,6 +28,10 @@ const inRect = (q, x, z) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3];
 const meets = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const runsOk = (a) => Array.isArray(a) && a.length <= 1 << 20 && a.every((q) => Array.isArray(q) && q.length === 4 && q.every(Number.isInteger) && q[0] <= q[2] && q[1] <= q[3]);
 
+const xz = (q) => Array.isArray(q) && q.length === 2 && q.every(Number.isInteger);
+const gateOk = (g) => g && typeof g.id === 'string' && typeof g.wall === 'string' && Number.isInteger(g.y) && Number.isInteger(g.h) && Number.isInteger(g.width)
+  && xz(g.facing) && ['none', 'door', 'fence_gate'].includes(g.door) && Array.isArray(g.cells) && g.cells.length <= 4096 && g.cells.every(xz) && xz(g.outer) && xz(g.inner);
+
 /**
  * Validate `besideReach` (the mod's region.plan member, the kit's --beside-reach): `{survey (ARSV bytes or a columns object, resolution 1,
  * the town's claim), held: {runs, town, terrain}, standing: besideStanding(...)}`. Throws on a bad shape; returns it normalised.
@@ -39,10 +44,14 @@ export function parseBesideReach(o) {
   for (const k of ['runs', 'town', 'terrain']) if (!runsOk(h[k] ?? [])) throw new Error(`besideReach.held.${k} must be row runs [x0, z, x1, z]`);
   const st = o.standing;
   if (!st || typeof st.id !== 'string' || !Array.isArray(st.claim) || st.claim.length !== 4) throw new Error('besideReach.standing must name the standing region (id, claim)');
+  // ((7a GJ, §2) its walls' gates (besideGates' records, the mod's BesideReach.gates with `stands`), only when it has any: never in
+  // `standing`, whose sha every reach IR records)
+  if (o.gates !== undefined && (!Array.isArray(o.gates) || o.gates.length > 256 || !o.gates.every(gateOk))) throw new Error('besideReach.gates must be gate records {id, wall, y, h, width, facing, door, cells, outer, inner}');
   return {
     survey,
     held: { runs: (h.runs ?? []).map((q) => [...q]), town: (h.town ?? []).map((q) => [...q]), terrain: (h.terrain ?? []).map((q) => [...q]) },
     standing: JSON.parse(JSON.stringify(st)),
+    ...(o.gates !== undefined ? { gates: JSON.parse(JSON.stringify(o.gates)) } : {}),
   };
 }
 
@@ -69,8 +78,10 @@ export function reachFor(R, id) {
  * The reach frame's survey: the bounding box of the district's claim and the town's on one resolution-1 grid. A column of the district's
  * claim is the plan survey's, one of the town's claim (outside the district's) the reach survey's, any other FLAG_MISSING.
  */
-export function unionColumns(planCols, reachCols, claim, town) {
-  const x0 = Math.min(claim[0], town[0]), z0 = Math.min(claim[1], town[1]), x1 = Math.max(claim[2], town[2]), z1 = Math.max(claim[3], town[3]);
+export function unionColumns(planCols, reachCols, claim, town, extras = []) {
+  // ((7a GJ, §4) `extras`: [{cols, rect}] more standing claims (a wall region round the town), read after the town's)
+  const x0 = Math.min(claim[0], town[0], ...extras.map((e) => e.rect[0])), z0 = Math.min(claim[1], town[1], ...extras.map((e) => e.rect[1]));
+  const x1 = Math.max(claim[2], town[2], ...extras.map((e) => e.rect[2])), z1 = Math.max(claim[3], town[3], ...extras.map((e) => e.rect[3]));
   const W = x1 - x0 + 1, D = z1 - z0 + 1;
   const out = makeColumns(x0, z0, W, D, 1);
   const rx0 = reachCols.minX, rz0 = reachCols.minZ, rx1 = rx0 + reachCols.width - 1, rz1 = rz0 + reachCols.depth - 1;
@@ -79,6 +90,10 @@ export function unionColumns(planCols, reachCols, claim, town) {
     let src = null, k = -1;
     if (inRect(claim, x, z)) { src = planCols; k = sampleIndex(planCols, x, z); }
     else if (inRect(town, x, z) && x >= rx0 && x <= rx1 && z >= rz0 && z <= rz1) { src = reachCols; k = (x - rx0) + (z - rz0) * reachCols.width; }
+    else for (const e of extras) {
+      const c = e.cols;
+      if (inRect(e.rect, x, z) && x >= c.minX && x < c.minX + c.width && z >= c.minZ && z < c.minZ + c.depth) { src = c; k = (x - c.minX) + (z - c.minZ) * c.width; break; }
+    }
     if (!src) { out.flags[o] = FLAG_MISSING; continue; }
     out.ground[o] = src.ground[k]; out.height[o] = src.height[k]; out.floor[o] = src.floor[k]; out.flags[o] = src.flags[k];
   }
@@ -324,7 +339,7 @@ export { rectOf, inRect };
  * `route`: the route pass (passes/route.mjs routePass). Returns {best: {end, dry}, cand, api, U, frame, claimR, town, K, hardKeys, hard,
  * noRetain, nearTownLamp, tried, count, candidates}.
  */
-export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], districtEnds, baseHard = [], clearTrees = [], keepOut = [], maxGrade = 0.25, volumes = [], seamPorts = 0, unsafe = {}, route }) {
+export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], districtEnds, baseHard = [], clearTrees = [], keepOut = [], maxGrade = 0.25, volumes = [], seamPorts = 0, unsafe = {}, route, around = [] }) {
   const claimR = [...claim], town = [...beside.claim];
   const why = seamPorts ? `no dry route from a district to its ${seamPorts} street end(s) in the seam` : 'no street end of it lies inside this claim';
   if (!claimsMeet(claimR, town)) throw new Error(`NO_JOIN: [apart] this claim neither overlaps nor touches region ${beside.id}'s claim, so the join can't reach into it (${why})`);
@@ -337,7 +352,9 @@ export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], d
   const K = reachClasses(R);
   const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds, unsafe });
   if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
-  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) throw new Error(`NO_JOIN: [wall] every street end and side of region ${beside.id} is enclosed by ${K.walls?.size ? "a wall (its own, or another owner's held columns)" : "another owner's held columns"} (a wall round the town: joining through its gate is 7a's) (${why})`);
+  // ((7a GJ) the third step: through a standing gate of the town's wall or of a wall region round it (§2); none: NO_JOIN [wall] with the
+  // gates tried)
+  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) return gateStep({ planCols, R, around, beside, claimR, town, yRange, districtEnds, candidates, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe, route, why });
   const hardKeys = reachHardKeys(K, claimR, town, { unsafe });
   // a pair whose junction no 4-connected walk from its district end reaches (over the frame, around the hard columns and rects, every
   // candidate's contact columns open) can't route: skipped before any dry route (a superset of what the route pass reaches)

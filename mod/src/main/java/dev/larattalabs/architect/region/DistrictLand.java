@@ -234,10 +234,17 @@ public final class DistrictLand {
 				extra.addProperty("district", district);
 			}
 			String jk = ext == null ? null : ext.get("junction") instanceof JsonObject j ? str(j, "kind") : "end";
+			// (7a GJ, §5) through a gate: the junction it ends at (the gate junction's `then`), and the gate it crosses (`via`)
+			if ("gate".equals(jk) && ext.get("junction") instanceof JsonObject j && j.get("then") instanceof JsonObject th) {
+				jk = BesideReach.str(th, "kind");
+			}
 			if (jk == null) {
 				extra.add("junction", com.google.gson.JsonNull.INSTANCE);
 			} else {
 				extra.addProperty("junction", jk);
+			}
+			if (ext != null && BesideReach.str(ext, "via") != null) {
+				extra.addProperty("via", BesideReach.str(ext, "via"));
 			}
 			push(out, claimed, town, "join", "join", join, extra);
 		}

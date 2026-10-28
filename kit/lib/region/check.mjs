@@ -7,6 +7,7 @@ import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
 import { parseReachInput, reachFor, unionColumns } from './reach.mjs';
 import { besideRules } from './checkBeside.mjs';
+import { aroundOf } from './gateJoin.mjs';
 import { reviseRules } from './revise.mjs';
 import { asColumns } from './pack.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
@@ -404,8 +405,11 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   let vw = world, clipped = {};
   // ((6c D3) a reach plan is built over the reach frame's survey (its reach columns lie in the town's claim); `besideReach`: the plan's
   // reach inputs, parsed, the standing data M28 reads)
-  const BR = besideReach && ir.reach ? reachFor(parseReachInput(besideReach), ir.reach.standing) : null;
-  if (!vw && ir.reach && BR) survey = unionColumns(fillMissing(survey).columns, asColumns(BR.survey), [ir.claim.minX, ir.claim.minZ, ir.claim.maxX, ir.claim.maxZ], BR.standing.claim);
+  const BRall = besideReach && ir.reach ? parseReachInput(besideReach) : null;
+  const BR = BRall ? reachFor(BRall, ir.reach.standing) : null;
+  // ((7a GJ, §4) a gate join's frame also takes the wall regions' claims round the town: their surveys and classes)
+  const around = BRall && ir.reach.gate ? aroundOf(BRall, ir.reach.standing) : [];
+  if (!vw && ir.reach && BR) survey = unionColumns(fillMissing(survey).columns, asColumns(BR.survey), [ir.claim.minX, ir.claim.minZ, ir.claim.maxX, ir.claim.maxZ], BR.standing.claim, around.map((a) => ({ cols: asColumns(a.survey), rect: [...a.standing.claim] })));
   if (!vw) {
     const filled = fillMissing(survey).columns;
     let tPrefix = 0, lastWritten = -1, lastSup = null;
@@ -508,7 +512,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   }
 
   // ---- (6c D3) M28:beside and M25:clear's foreign bodies: a districts plan with a reach into a standing town's claim
-  if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, findings, finding, partStage, ...(want.has('M5') ? { light: () => blockLight(vw) } : {}) }); });
+  if (ir.reach && (want.has('M28') || want.has('M25'))) time('M28', () => { metrics.M28 = besideRules({ ir, vw, besideReach: BR, around, findings, finding, partStage, ...(want.has('M5') ? { light: () => blockLight(vw) } : {}) }); });
   // ---- (6d RV) M29:revision: a revision IR against ctx.standing (the standing region it adds to; only with the standing data)
   if (ir.revision && standing && want.has('M29')) time('M29', () => { metrics.M29 = reviseRules({ ir, vw, standing, findings, finding }); });
 

@@ -1207,6 +1207,7 @@ const ReachInputs = z
     surveySha: Sha256Hex.optional(),
     held: z.object({ runs: Runs, town: Runs, terrain: Runs }).describe('the held columns over the town claim: every one, the town\'s alone, its terrain\'s alone'),
     standing: z.object({ id: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/), claim: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]) }).passthrough(),
+    gates: z.array(z.object({ id: z.string(), wall: z.string() }).passthrough()).max(256).optional().describe("(7a GJ) the standing region's gates (from its IR, with the world's `stands`): a district joins a walled town through one"),
   })
   .passthrough();
 

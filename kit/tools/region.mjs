@@ -197,7 +197,8 @@ function loadBesideReach(f) {
   const o = readJson(f, '--beside-reach');
   const dir = path.dirname(f);
   const file = (v, json) => (typeof v === 'string' ? (json ? JSON.parse(fs.readFileSync(path.resolve(dir, v), 'utf8')) : fs.readFileSync(path.resolve(dir, v))) : v);
-  const one = (q) => ({ survey: file(q.survey, false), held: file(q.held, true), standing: file(q.standing, true) });
+  // ((7a GJ) its gates, when it has any)
+  const one = (q) => ({ survey: file(q.survey, false), held: file(q.held, true), standing: file(q.standing, true), ...(q.gates !== undefined ? { gates: file(q.gates, true) } : {}) });
   // (a plan check's: one per standing region its endpoint.region names, {regionId: {survey, held, standing}})
   try { return o.survey !== undefined ? one(o) : Object.fromEntries(Object.entries(o).map(([id, q]) => [id, one(q)])); } catch (e) { throw new Usage(`--beside-reach: ${e.message}`); }
 }

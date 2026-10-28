@@ -614,7 +614,16 @@ public final class RegionsImpl implements Regions {
 			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, Revisions.effective(st), mine));
 			// (6c D3, §2.4) the reach inputs: the town claim's survey (resolution 1, loaded chunks only), the held columns over its claim
 			// (the journal now) and its standing data; the plan reads them only when its seam step finds no join
-			reachReady = reachInputs(r, st, standing);
+			// ((7a GJ, §4) and a wall region round the town (its own claim's survey, held columns, standing data and gates): the reach inputs
+			// then travel as a map {town, wall region}; the plan reads the wall region's only where D3 would answer NO_JOIN [wall])
+			Live wr = GateJoin.wallRegionRound(st);
+			if (wr == null) {
+				reachReady = reachInputs(r, st, standing);
+			} else {
+				int[] wc = wr.rec().claim;
+				int[] wrc = {wc[0], wc[2], wc[3], wc[5]};
+				reachReady = reachInputs(r, st, standing, true).thenCompose(v -> reachInputs(r, wr, wrc, true));
+			}
 		}
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a program following a biome edge reads it (ctx.biomes)
 		BIOMES.put(r, BiomeGrid.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ()));
@@ -771,6 +780,9 @@ public final class RegionsImpl implements Regions {
 			return CompletableFuture.failedFuture(refusal(Reason.JOURNAL_UNAVAILABLE, "beside: the held columns could not be read (" + e.getMessage() + ")"));
 		}
 		JsonObject std = BesideReach.standing(st.rec().id, standing, Revisions.effective(st));
+		// ((7a GJ, §2) its walls' gates as the world holds them now; only when it has any: never in `standing`, whose sha a reach IR records)
+		JsonArray gates = GateJoin.gates(st.rec().id, Revisions.effective(st));
+		GateJoin.standsCheck(level, gates);
 		return RegionSurvey.sample(level, standing[0], standing[1], standing[2], standing[3], 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
 			byte[] bytes = cols.encode();
 			return BlobPut.put(link, bytes, "survey").thenAccept(blobId -> {
@@ -779,6 +791,9 @@ public final class RegionsImpl implements Regions {
 				o.addProperty("surveySha", Packed.sha256(bytes));
 				o.add("held", held);
 				o.add("standing", std);
+				if (!gates.isEmpty()) {
+					o.add("gates", gates);
+				}
 				if (map) {
 					REACH.computeIfAbsent(r, k -> new JsonObject()).add(st.rec().id, o);
 				} else {
@@ -1128,6 +1143,18 @@ public final class RegionsImpl implements Regions {
 		o.add("held", in.get("held").deepCopy());
 		o.add("standingData", in.get("standing").deepCopy());
 		o.addProperty("surveySha", str(in, "surveySha"));
+		// ((7a GJ, §4) a gate join through a wall region round the town: that region's inputs and survey too, kept with the plan)
+		JsonObject all = REACH.get(r);
+		String around = rc.get("gate") instanceof JsonObject gt ? str(gt, "region") : null;
+		if (around != null && !around.equals(town) && all != null && !all.has("held") && all.get(around) instanceof JsonObject ar && sv.get(around) != null) {
+			JsonObject a = new JsonObject();
+			a.addProperty("standing", around);
+			a.add("held", ar.get("held").deepCopy());
+			a.add("standingData", ar.get("standing").deepCopy());
+			a.addProperty("surveySha", str(ar, "surveySha"));
+			o.add("around", a);
+			RegionStore.write(RegionStore.plan(w, planId).resolveSibling(planId + ".reach-around-survey.bin"), sv.get(around));
+		}
 		RegionStore.writeJson(RegionStore.plan(w, planId).resolveSibling(planId + ".reach.json"), o);
 		RegionStore.write(RegionStore.plan(w, planId).resolveSibling(planId + ".reach-survey.bin"), sv.get(town));
 	}
@@ -1770,6 +1797,16 @@ public final class RegionsImpl implements Regions {
 		String busy = besideBusy(st);
 		if (busy != null) {
 			return new String[] {"OVERLAP_BUSY", "beside: region " + town + " is " + busy};
+		}
+		// ((7a GJ, §7) a gate join: the gate still stands as planned (held by its wall's region with the blocks it wrote, its opening clear))
+		if (reach.get("gate") instanceof JsonObject gate) {
+			MinecraftServer sv = server();
+			ServerLevel gl = sv == null ? null : Sites.levelOf(sv, p.dimension());
+			String[] gw = gl == null ? new String[] {"ARTIFACT_STALE", "gate " + str(gate, "id") + ": its dimension is not loaded; re-plan"} : GateJoin.recheck(p
+				.dimension(), gl, gate);
+			if (gw != null) {
+				return gw;
+			}
 		}
 		BesideReach.Cols cols = BesideReach.colsOf(reach.getAsJsonArray("runs"));
 		BesideReach.Cols contact = BesideReach.colsOf(reach.get("contact") instanceof JsonArray ca ? ca : new JsonArray());
@@ -2947,13 +2984,27 @@ public final class RegionsImpl implements Regions {
 	 * (6c D1, CONTRACT D §3) The standing region {@code id} was removed first (allowed: journal layering): every region planned beside
 	 * it reports its join's end as dangling in its ext ({@code architect_mc:beside.dangling}, since when), saved, and logged.
 	 */
+	/** (7a GJ) The region whose gate a district's join crosses (its IR's {@code reach.gate.region}), or null. */
+	static @Nullable String gateRegionOf(Live o) {
+		JsonObject ir = Revisions.effective(o);
+		return ir != null && ir.get("reach") instanceof JsonObject rc && rc.get("gate") instanceof JsonObject g ? str(g, "region") : null;
+	}
+
 	private static void danglingJoins(String id, long at) {
 		for (Live o : List.copyOf(REGIONS.values())) {
-			if (!id.equals(o.rec().beside)) {
+			// ((7a GJ, §6) a district joined through a gate of the removed region (a wall region round its town): dangling too, its land's
+			// standingRemoved set; `gateRemoved` names the gate's region, `region` stays its town)
+			String via = !id.equals(o.rec().beside) && o.rec().beside != null && o.rec().state != RegionState.REMOVED ? gateRegionOf(o) : null;
+			if (!id.equals(o.rec().beside) && !id.equals(via)) {
 				continue;
 			}
 			JsonObject note = o.rec().ext.get(EXT_BESIDE) instanceof JsonObject n ? n : new JsonObject();
-			note.addProperty("region", id);
+			if (id.equals(via)) {
+				note.addProperty("region", o.rec().beside);
+				note.addProperty("gateRemoved", id);
+			} else {
+				note.addProperty("region", id);
+			}
 			note.addProperty("dangling", true);
 			note.addProperty("since", at);
 			o.rec().ext.add(EXT_BESIDE, note);

@@ -19,7 +19,8 @@ import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
 import { edgeColumns, footprintOf } from './passes/route.mjs';
-import { LEAD, chooseReach } from './reach.mjs';
+import { LEAD, chooseReach, reachFor } from './reach.mjs';
+import { aroundOf } from './gateJoin.mjs';
 import { keyRuns } from './beside.mjs';
 import { CHAIN_WIDTH, chainTerraces, emitTerraces, junctionOf, layoutTerraces, parseTerraces, ringOf, terraceEnds } from './terraces.mjs';
 import { BANDS, DISTRICTS_MAX, DISTRICT_GAP, DISTRICT_INF, EXACT_MAX, LOT_UNPLACED, PREFER_TAGS, UNPLACED, assignDistricts, bandOf, candidateCost, districtCandidates, levelBands, rectsMeet, spanningEdges } from './passes/districts.mjs';
@@ -528,11 +529,19 @@ export function emitDistricts(r, intent = {}) {
   // (`_unsafe.wideReach`: the join in the routes part, a non-join writer outside the claim; `_unsafe.writeVerge`: its footprint behind the
   // junction kept, a T graded into the verge: broken variants M28:beside must catch)
   const U0 = it._unsafe ?? {};
-  if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, ...(reachJ ? { frame: reachJ.frame, lead: LEAD, graded: true, ...(U0.wideReach ? {} : { part: 'route_join' }), ...(U0.writeVerge ? { keepBehind: true } : {}) } : {}) }); }
+  // ((7a GJ, §3) a gate join: the leg out (`join`, to the gate's outer cell) and the leg in (`join_in`, from its inner cell), both
+  // `route_join`; `_unsafe.writeGate`: one edge straight through the gate, its cells not hard (a broken variant M28:beside must catch))
+  const GJ = reachJ?.G && !U0.writeGate ? reachJ.G : null;
+  if (join && GJ) {
+    addNode(join.a); addNode(GJ.out); addNode(GJ.in); addNode(join.b);
+    edges.push({ id: 'join', from: join.a.name, to: GJ.out.name, width: DISTRICT_ROUTE_WIDTH, frame: reachJ.frame, lead: LEAD, graded: true, part: 'route_join', behindNear: 2 });
+    edges.push({ id: 'join_in', from: GJ.in.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, frame: reachJ.innerFrame, lead: LEAD, graded: true, part: 'route_join', behindNear: 2 });
+  } else if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH, ...(reachJ ? { frame: reachJ.frame, lead: LEAD, graded: true, ...(U0.wideReach ? {} : { part: 'route_join' }), ...(U0.writeVerge ? { keepBehind: true } : {}) } : {}) }); }
   let routed = null;
   const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => (Lof(d).terraced ? layouts[d.id].ring : streetRects(Lof(d))));
   const reachIn = reachJ ? { survey: reachJ.api, frame: [reachJ.claimR], noRetain: reachJ.noRetain } : {};
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing, ...(reachJ ? reachJ.hard : [])], keepOut: [...(it.keepOut ?? []), ...(rko ?? [])], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear), ...[...terr.values()].flatMap((t) => t.L.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR]))], roadSurface: 'path', lamp: roadLamp(lampFixture(r)), ...(terr.size ? { guard: true } : {}), ...reachIn });
+  const reachHard = reachJ ? (reachJ.G && U0.writeGate ? keyRuns([...reachJ.hardKeys].filter((k) => !reachJ.gateCols.has(k))) : reachJ.hard) : [];
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing, ...reachHard], keepOut: [...(it.keepOut ?? []), ...(rko ?? [])], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear), ...[...terr.values()].flatMap((t) => t.L.lots.map((l) => [l.entrance[0] - END_CLEAR, l.entrance[2] - END_CLEAR, l.entrance[0] + END_CLEAR, l.entrance[2] + END_CLEAR]))], roadSurface: 'path', lamp: roadLamp(lampFixture(r)), ...(terr.size ? { guard: true } : {}), ...reachIn });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // a following street that does not route refuses the plan, named
   for (const d of placedNow) if (follows.has(d.id) && !byId.get(`st_${d.id}`)?.ok) throw new Error(`NO_EDGE: the street of district ${d.id} along the ${follows.get(d.id).pf.kind.replace('_', ' ')} did not route (${byId.get(`st_${d.id}`)?.failed ?? 'not routed'})`);
@@ -557,18 +566,26 @@ export function emitDistricts(r, intent = {}) {
     r.graphEdge({ id: `${en.name}_link`, from: `${en.name}.${r.graph.nodes.find((x) => x.id === en.name).ports[0].name}`, to, type: 'road', width: DISTRICT_ROUTE_WIDTH, path: `${en.d.id}_street`, stage: stages.routes });
   };
   for (const p of chosen) if (byId.get(`d_${p.a}__${p.b}`.slice(0, 48))?.ok) { linkEnd(p.na); linkEnd(p.nb); }
-  if (join && byId.get('join')?.ok && beside) {
+  // ((7a GJ) a gate join routed: both its legs)
+  const joinOk = !!byId.get('join')?.ok && (!GJ || !!byId.get('join_in')?.ok);
+  if (join && joinOk && beside) {
     linkEnd(join.a);
     // the external edge (7a turns it into a typed link, S-D-2): this region's join node to the standing region's port
     const jn = r.graph.nodes.find((x) => x.id === join.b.name);
     // ((6c D3, §3.5) a reach join's edge names its junction: a street end as D1 plus `junction {kind: end, at}`, a side `<town>:<roadId>`
     // with `junction {kind: side, at, side, u}`)
     const to = join.q.node ? `${beside.id}:${join.q.node}.${join.q.port}` : `${beside.id}:${join.q.road}`;
-    r.graphEdge({ id: 'join_external', from: `${jn.id}.${jn.ports[0].name}`, to, type: 'road', width: DISTRICT_ROUTE_WIDTH, path: 'route_join', stage: stages.routes, external: true, ...(reachJ ? { junction: reachJ.cand.junction } : {}) });
+    // ((7a GJ, §5) through a gate: `via`, the gate junction (then D3's) and the crossing; the traverse an edge of its own between the legs)
+    const gx = GJ ? { via: `${reachJ.gate.region}:${reachJ.gate.id}`, junction: { kind: 'gate', gate: reachJ.gate.id, at: [...reachJ.gate.at], then: reachJ.cand.junction }, crossing: { type: 'gate', lands: reachJ.gate.id } } : null;
+    if (GJ) {
+      const go = r.graph.nodes.find((x) => x.id === GJ.out.name), gi = r.graph.nodes.find((x) => x.id === GJ.in.name);
+      if (go && gi) r.graphEdge({ id: 'join_gate', from: `${go.id}.${go.ports[0].name}`, to: `${gi.id}.${gi.ports[0].name}`, type: 'road', width: Math.min(DISTRICT_ROUTE_WIDTH, reachJ.gate.width), path: 'route_join', stage: stages.routes, via: gx.via, crossing: gx.crossing, segments: [{ kind: 'gate', gate: reachJ.gate.id, region: reachJ.gate.region }] });
+    }
+    r.graphEdge({ id: 'join_external', from: `${jn.id}.${jn.ports[0].name}`, to, type: 'road', width: DISTRICT_ROUTE_WIDTH, path: 'route_join', stage: stages.routes, external: true, ...(gx ?? (reachJ ? { junction: reachJ.cand.junction } : {})) });
   }
   const failed = (routed?.edges ?? []).filter((e) => !e.ok);
-  if (join && byId.get('join')?.ok && !beside) linkEnd(join.a);
-  if (join && !byId.get('join')?.ok) throw new Error(`NO_JOIN: ${reachJ ? '[route] ' : ''}the join to ${beside ? `region ${beside.id}` : it.joinTo.name} did not route (${byId.get('join')?.failed ?? 'not routed'})`);
+  if (join && joinOk && !beside) linkEnd(join.a);
+  if (join && !joinOk) throw new Error(`NO_JOIN: ${reachJ ? '[route] ' : ''}the join to ${beside ? `region ${beside.id}` : it.joinTo.name} did not route (${byId.get('join')?.ok === false || !byId.get('join') ? byId.get('join')?.failed ?? 'not routed' : `its leg in from gate ${reachJ.gate.id}: ${byId.get('join_in')?.failed ?? 'not routed'}`})`);
   // ---- (6c D3, §2.3) the reach: the join's written columns outside this claim, and the contact columns it holds
   if (reachJ) r.meta.reach = reachRecord(r, reachJ, beside, U0);
   // ---- (6c D2) an outpost's corridor: the routes that reach it (its join, its spanning-tree edges), each footprint grown by 2: the
@@ -576,7 +593,7 @@ export function emitDistricts(r, intent = {}) {
   const corridor = {};
   const metaEdge = (id) => r.meta.route?.edges?.find((e) => e.id === id && e.ok);
   for (const d of placedNow.filter((x) => x.outpost)) {
-    const ids = [...chosen.filter((p) => p.a === d.id || p.b === d.id).map((p) => `d_${p.a}__${p.b}`.slice(0, 48)), ...(join && join.a.d.id === d.id ? ['join'] : [])];
+    const ids = [...chosen.filter((p) => p.a === d.id || p.b === d.id).map((p) => `d_${p.a}__${p.b}`.slice(0, 48)), ...(join && join.a.d.id === d.id ? ['join', ...(GJ ? ['join_in'] : [])] : [])];
     const cells = new Set();
     for (const id of ids) { const e = metaEdge(id); if (e) for (const q of footprintOf(e.path, DISTRICT_ROUTE_WIDTH + 4)) cells.add(`${q[0]},${q[1]}`); }
     corridor[d.id] = { edges: ids, runs: maskRuns(cells), cells: cells.size };
@@ -598,11 +615,11 @@ export function emitDistricts(r, intent = {}) {
     // off the town's footprint and bodies, never a contact column), none within LAMP_GAP of a town lamp (N-D3-2), and the cover holds
     // over its walk cells in the town on their own, the town's own lights counted)
     const RL = reachJ ? reachLamps(reachJ, claim, r) : null;
-    const lampOk = RL ? (e, q) => e.id !== 'join' || ((q.x >= claim.minX && q.x <= claim.maxX && q.z >= claim.minZ && q.z <= claim.maxZ) || RL.lampOk(q.x, q.z)) && !reachJ.nearTownLamp(q.x, q.z) : null;
+    const lampOk = RL ? (e, q) => (e.id !== 'join' && e.id !== 'join_in') || ((q.x >= claim.minX && q.x <= claim.maxX && q.z >= claim.minZ && q.z <= claim.maxZ) || RL.lampOk(q.x, q.z)) && !reachJ.nearTownLamp(q.x, q.z) : null;
     if (it.routeLamps !== false && r.meta.route) for (const e of r.meta.route.edges) { const l = lampSpots(e); const sp = lampOk ? l.spots.filter((q) => lampOk(e, q)) : l.spots; extra.push(...sp); if (sp.length) extraCap[`route:${e.id}`] = RL && e.id === 'join' ? l.cap + RL.extraCap : l.cap; }
     const fixture = it.lampFixture ? fixtureFor(it.lampFixture, r.material('rail', 'lamp post')) : lampFixture(r);
     if (RL) r._reachSurvey = reachJ.U;
-    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap, ...(RL ? { reach: { lampOk: RL.lampOk, targets: RL.targets, lights: RL.lights, area: (x, z) => x >= reachJ.town[0] && x <= reachJ.town[2] && z >= reachJ.town[1] && z <= reachJ.town[3] } } : {}) });
+    const cover = lightCover(r, { fixture, stage: stages.props, keepOut, reserved, laneCells, extra, extraCap, ...(RL ? { reach: { lampOk: RL.lampOk, targets: RL.targets, lights: RL.lights, area: (x, z) => reachJ.frame.slice(1).some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]) } } : {}) });
     if (RL) { delete r._reachSurvey; reachAddLamps(r, claim, cover.lamps); }
     lamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length, ...(cover.reach ? { reach: cover.reach } : {}) };
   }
@@ -622,7 +639,7 @@ export function emitDistricts(r, intent = {}) {
     edges: [...chosen.map((p) => { const id = `d_${p.a}__${p.b}`.slice(0, 48); const e = byId.get(id); return { id, a: p.a, b: p.b, kind: p.kind, dryCost: p.cost, ok: !!e?.ok, failed: e?.failed ?? null }; }),
       ...(join ? [{ id: 'join', a: join.a.d.id, b: beside ? `${beside.id}:${join.q.node ?? join.q.road}` : join.b.name, kind: 'join', dryCost: join.dry.cost, ok: !!byId.get('join')?.ok, failed: byId.get('join')?.failed ?? null }] : [])],
     treeCost: span.treeCost, loopCost: span.loopCost, failedEdges: failed.map((e) => e.id),
-    join: join ? (beside ? { region: beside.id, node: join.q.node, port: join.q.port, at: join.b.at, from: join.a.name, district: join.a.d.id, ...(reachJ ? { road: join.q.road, step: 'reach', junction: reachJ.cand.junction, tried: reachJ.tried, candidates: reachJ.count } : {}) } : { to: join.b.name, at: join.b.at, from: join.a.name, district: join.a.d.id }) : null,
+    join: join ? (beside ? { region: beside.id, node: join.q.node, port: join.q.port, at: join.b.at, from: join.a.name, district: join.a.d.id, ...(reachJ ? { road: join.q.road, step: 'reach', junction: reachJ.cand.junction, tried: reachJ.tried, candidates: reachJ.count } : {}), ...(GJ ? { via: `${reachJ.gate.region}:${reachJ.gate.id}`, gate: gateMeta(reachJ.gate) } : {}) } : { to: join.b.name, at: join.b.at, from: join.a.name, district: join.a.d.id }) : null,
     bells: Object.fromEntries(placedNow.map((d) => [d.id, bellOf(d)])),
     ...(follows.size ? { follow: Object.fromEntries([...follows.entries()].filter(([id]) => placedNow.some((d) => d.id === id)).map(([id, f]) => [id, {
       kind: f.pf.kind, side: f.pf.side, rect: rectArr(f.pf.rect), mask: maskRuns(f.pf.mask), maskCells: f.pf.mask.size, boundary: f.pf.window, line: f.pf.line,
@@ -652,11 +669,16 @@ export function emitDistricts(r, intent = {}) {
  */
 function reachStep({ r, ctx, claim, beside, ds, ends, endNode, base, keepOut, rko, maxGrade, seamPorts, unsafe }) {
   const districtEnds = ds.flatMap((d) => ends.get(d.id).map((e) => { const n = endNode(d, e); return { x: e.x, z: e.z, at: n.at, facing: n.facing, node: n }; }));
-  const J = chooseReach({ planCols: r.survey.columns, R: ctx.besideReach, beside, claim: [claim.minX, claim.minZ, claim.maxX, claim.maxZ], yRange: [claim.minY, claim.maxY], districtEnds, baseHard: base.hard, clearTrees: base.clearTrees, keepOut: rko ? [...keepOut, ...rko] : keepOut, maxGrade, volumes: ctx.volumes ?? [], seamPorts, unsafe, route: PASSES.route });
+  // ((7a GJ, §4) a map of reach inputs: the town's, and a wall region's round it)
+  const R = reachFor(ctx.besideReach, beside.id);
+  if (!R) throw new Error(`NO_JOIN: the reach inputs name no region ${beside.id}`);
+  const J = chooseReach({ planCols: r.survey.columns, R, around: aroundOf(ctx.besideReach, beside.id), beside, claim: [claim.minX, claim.minZ, claim.maxX, claim.maxZ], yRange: [claim.minY, claim.maxY], districtEnds, baseHard: base.hard, clearTrees: base.clearTrees, keepOut: rko ? [...keepOut, ...rko] : keepOut, maxGrade, volumes: ctx.volumes ?? [], seamPorts, unsafe, route: PASSES.route });
   const name = `join_${beside.id}`.replace(/[^a-z0-9_]/g, '_');
   const a = J.best.end.node;
   const b = { name, at: [...J.cand.at], facing: [...J.cand.facing] };
-  return { ...J, join: { a, b, q: { node: J.cand.node ?? null, port: J.cand.port ?? null, road: J.cand.road }, dry: J.best.dry } };
+  // ((7a GJ, §1, §3) through a gate: two legs, to its outer cell and on from its inner cell; the traverse between is never written)
+  const G = J.gate ? { out: { name: `${name}_go`, at: [J.gate.outer[0], J.gate.y + 1, J.gate.outer[1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: [J.gate.inner[0], J.gate.y + 1, J.gate.inner[1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } : null;
+  return { ...J, G, join: { a, b, q: { node: J.cand.node ?? null, port: J.cand.port ?? null, road: J.cand.road }, dry: J.best.dry } };
 }
 
 /**
@@ -666,15 +688,17 @@ function reachStep({ r, ctx, claim, beside, ds, ends, endNode, base, keepOut, rk
  */
 function reachRecord(r, J, beside, unsafe = {}) {
   const broken = !!(unsafe.ignoreHeld || unsafe.writeVerge || unsafe.wideReach || unsafe.noHold);
-  const rec = r.meta.route.edges.find((e) => e.id === 'join');
+  // ((7a GJ) a gate join's two legs; never a gate cell: the traverse is the wall's)
+  const recs = r.meta.route.edges.filter((e) => e.id === 'join' || (J.G && e.id === 'join_in'));
   const out = new Set();
   const inClaim = (x, z) => x >= J.claimR[0] && x <= J.claimR[2] && z >= J.claimR[1] && z <= J.claimR[3];
-  for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!inClaim(x, q[1])) out.add(`${x},${q[1]}`);
+  for (const rec of recs) for (const q of rec?.written ?? []) for (let x = q[0]; x <= q[2]; x++) if (!inClaim(x, q[1])) out.add(`${x},${q[1]}`);
   const contact = new Set(J.cand.contact);
   for (const k of out) {
     const [x, z] = k.split(',').map(Number);
-    if (broken) continue;
-    if (!(x >= J.town[0] && x <= J.town[2] && z >= J.town[1] && z <= J.town[3])) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}) outside both claims`);
+    if (broken || unsafe.writeGate) continue;
+    if (!J.frame.slice(1).some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3])) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}) outside ${J.G ? 'the standing claims' : 'both claims'}`);
+    if (J.G && J.gateCols.has(k)) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}), a cell of gate ${J.gate.id}`);
     if (J.hardKeys.has(k) && !contact.has(k)) throw new Error(`NO_JOIN: [route] the join writes (${x}, ${z}), a column region ${beside.id} or another site holds`);
   }
   const hold = unsafe.noHold ? [] : J.cand.hold.filter((k) => contact.has(k));
@@ -682,7 +706,12 @@ function reachRecord(r, J, beside, unsafe = {}) {
   const runs = keyRuns(out);
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (const q of runs) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[2]); z0 = Math.min(z0, q[1]); z1 = Math.max(z1, q[1]); }
-  return { standing: beside.id, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRuns(hold), junction: J.cand.junction, contact: keyRuns(J.cand.contact) };
+  return { standing: beside.id, runs, rect: runs.length ? [x0, z0, x1, z1] : null, cells: out.size, hold: keyRuns(hold), junction: J.cand.junction, contact: keyRuns(J.cand.contact), ...(J.G ? { gate: gateMeta(J.gate) } : {}) };
+}
+
+/** (7a GJ, §3) The gate a join crosses, as the IR's `reach.gate` and the plan meta record it (the traverse: never written, never held). */
+function gateMeta(g) {
+  return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed } : {}) };
 }
 
 /**
@@ -695,10 +724,9 @@ function reachLamps(J, claim, r) {
   const reachCols = new Set();
   for (const q of r.meta.reach?.runs ?? []) for (let x = q[0]; x <= q[2]; x++) reachCols.add(`${x},${q[1]}`);
   const contact = new Set(J.cand.contact);
-  const lampOk = (x, z) => !inClaim(x, z) && x >= J.town[0] && x <= J.town[2] && z >= J.town[1] && z <= J.town[3] && !J.hardKeys.has(`${x},${z}`) && !contact.has(`${x},${z}`) && !reachCols.has(`${x},${z}`);
-  const rec = r.meta.route.edges.find((e) => e.id === 'join');
+  const lampOk = (x, z) => !inClaim(x, z) && J.frame.slice(1).some((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]) && !J.hardKeys.has(`${x},${z}`) && !contact.has(`${x},${z}`) && !reachCols.has(`${x},${z}`) && !(J.G && J.gateCols.has(`${x},${z}`));
   const targets = [];
-  if (rec?.ok) for (const o of edgeColumns({ path: rec.path, segments: rec.segments, landings: rec.landings ?? [], width: rec.width ?? DISTRICT_ROUTE_WIDTH }).cols) if (!inClaim(o.x, o.z) && reachCols.has(`${o.x},${o.z}`)) targets.push([o.x, o.y + 1, o.z]);
+  for (const rec of r.meta.route.edges.filter((e) => e.id === 'join' || (J.G && e.id === 'join_in'))) if (rec?.ok) for (const o of edgeColumns({ path: rec.path, segments: rec.segments, landings: rec.landings ?? [], width: rec.width ?? DISTRICT_ROUTE_WIDTH }).cols) if (!inClaim(o.x, o.z) && reachCols.has(`${o.x},${o.z}`)) targets.push([o.x, o.y + 1, o.z]);
   return { lampOk, targets, lights: J.lights ?? [], extraCap: Math.max(1, Math.floor((targets.length / 3 + 9) / 10)) };
 }
 

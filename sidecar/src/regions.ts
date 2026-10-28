@@ -398,14 +398,16 @@ export class Regions {
     // (6c D3, §2.4) the reach inputs kept with the plan: reach-survey.bin, held.json, standing.json, named by beside-reach.json (a plan
     // check's per region: reach-survey-<id>.bin, ...)
     if (reachIn && reachSurveys) {
-      const files = (id: string, q: { held: unknown; standing: unknown }) => {
+      // ((7a GJ, §2) a standing region's gates, when it has any: gates.json next to them)
+      const files = (id: string, q: { held: unknown; standing: unknown; gates?: unknown }) => {
         const sfx = id ? `-${id}` : '';
         fs.writeFileSync(path.join(dir, `reach-survey${sfx}.bin`), reachSurveys[id]!);
         fs.writeFileSync(path.join(dir, `held${sfx}.json`), JSON.stringify(q.held));
         fs.writeFileSync(path.join(dir, `standing${sfx}.json`), JSON.stringify(q.standing));
-        return { survey: `reach-survey${sfx}.bin`, held: `held${sfx}.json`, standing: `standing${sfx}.json` };
+        if (q.gates !== undefined) fs.writeFileSync(path.join(dir, `gates${sfx}.json`), JSON.stringify(q.gates));
+        return { survey: `reach-survey${sfx}.bin`, held: `held${sfx}.json`, standing: `standing${sfx}.json`, ...(q.gates !== undefined ? { gates: `gates${sfx}.json` } : {}) };
       };
-      const idx = 'surveyBlobId' in reachIn ? files('', reachIn as { held: unknown; standing: unknown }) : Object.fromEntries(Object.entries(reachIn as Record<string, { held: unknown; standing: unknown }>).map(([id, q]) => [id, files(id, q)]));
+      const idx = 'surveyBlobId' in reachIn ? files('', reachIn as { held: unknown; standing: unknown; gates?: unknown }) : Object.fromEntries(Object.entries(reachIn as Record<string, { held: unknown; standing: unknown; gates?: unknown }>).map(([id, q]) => [id, files(id, q)]));
       fs.writeFileSync(path.join(dir, 'beside-reach.json'), JSON.stringify(idx));
     }
     if (revision) fs.writeFileSync(path.join(dir, 'revision.json'), JSON.stringify(revision));
