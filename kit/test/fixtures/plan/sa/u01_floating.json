@@ -1,0 +1,80 @@
+{
+  "about": "(7a SA) the broken variant floating: the treads' supports left out (M10:spiral and M3 catch it)",
+  "terrain": {
+    "W": 160,
+    "D": 120,
+    "x0": 1000,
+    "z0": 2000,
+    "y": 64
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "claim_w",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "spike",
+        "kind": "ice_spike",
+        "preset": "classic",
+        "height": [
+          24,
+          24
+        ],
+        "where": {
+          "near": {
+            "anchor": "claim_center",
+            "within": 8
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "stair",
+        "kind": "stairs_around",
+        "from": {
+          "part": "town"
+        },
+        "around": {
+          "feature": {
+            "part": "spike"
+          }
+        },
+        "ext": {
+          "architect_mc:unsafe": {
+            "floating": true
+          }
+        }
+      }
+    ]
+  }
+}
