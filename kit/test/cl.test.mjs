@@ -206,7 +206,8 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   // (the foundation's entries are f7a-foundation.test.mjs's, the other 7a slices' flips (CW's catwalk, ...) theirs)
   const F = ['connector.span_bridge', 'connector.rail', 'connector.branch_walk', ...['rock_stair', 'lift', 'catwalk', 'stairs_around'].map((k) => `connector.${k}`)];
   // (K2's wall ids, wall.along's flip among them, are k2.test.mjs's)
-  const cl = (xs) => xs.filter((x) => !F.includes(x.id ?? x) && !/^(wall\.|connector\.(wall|gate)$)/.test(x.id ?? x));
+  // ((6d RV) the revision.* entries are rv-a.test.mjs's)
+  const cl = (xs) => xs.filter((x) => !F.includes(x.id ?? x) && !/^(wall\.|connector\.(wall|gate)$|revision\.)/.test(x.id ?? x));
   assert.deepEqual(cl(d.reservedToSupported), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual(cl(d.schemaVersionBumps).map((x) => x.id).sort(), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual([cl(d.added), d.removed, d.retired, d.otherStateChanges, cl(d.untilChanged), cl(d.notesChanged), cl(d.limitsChanged)], [[], [], [], [], [], [], []]);

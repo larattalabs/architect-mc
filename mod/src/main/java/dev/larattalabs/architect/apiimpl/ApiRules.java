@@ -100,6 +100,8 @@ public final class ApiRules {
 					case "region.rockStairs" -> "rockStairs"; // 7a RK: plan/0's connector.rock_stair (a stair flight carved into rising ground; route row 11; since NEXT)
 					case "region.spirals" -> "spiralStairs"; // 7a SA: plan/0's connector.stairs_around (a spiral round a spire, spike, tree or mushroom)
 					case "region.walls.lots" -> "wallLots"; // 7a K3: towers and gatehouses as lots on a wall's line
+					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
+					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

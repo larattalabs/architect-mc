@@ -23,6 +23,7 @@ import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
 import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
+import { revisionSeed } from './revise.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
 export const KIT_VERSION = '0.43.0';
@@ -416,7 +417,9 @@ export async function planRegion(o) {
     vocabStyle = styleOf({ roles: o.roles ?? {}, patterns: o.patterns ?? undefined, rarity: o.rarity ?? undefined });
     passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
-    const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
+    // ((6d RV, §2.3) a revision's seed is fnv64(the base's seed, rid), whatever the request names)
+    const seed = o.revision && id === 'revise' && o.revision.effective?.seed !== undefined && Number.isInteger(o.revision.rid) ? revisionSeed(o.revision.effective.seed, o.revision.rid)
+      : o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),
@@ -450,6 +453,8 @@ export async function planRegion(o) {
     Object.defineProperty(ctx, 'beside', { enumerable: true, get: () => { if (!beside) return null; besideRead = true; return JSON.parse(JSON.stringify(beside)); } });
     // (6c D3) not enumerable: a program's ctx copies stay as they were
     Object.defineProperty(ctx, 'besideReach', { enumerable: false, get: () => besideReach });
+    // (6d RV) a revision's inputs (Regions.planRevision: {rid, position, parent, base, effective, standing}); not enumerable, as besideReach
+    if (o.revision) Object.defineProperty(ctx, 'revision', { enumerable: false, value: o.revision });
     out = await mod.default(ctx);
     regionObj = out;
     ctx.__id = id; ctx.__params = params;
@@ -523,6 +528,8 @@ export async function planRegion(o) {
   // (6c D2) the biome grid the plan read (its sha), and an outpost's corridor (settlement land its road crosses: row runs per outpost)
   if (biomesRead) ir.biomes = { sha: sha256Hex(canonicalJson({ minX: biomes.minX, minZ: biomes.minZ, res: biomes.res, width: biomes.width, depth: biomes.depth, palette: biomes.palette, ids: [...biomes.ids] })) };
   if (r.meta.corridor) ir.corridor = r.meta.corridor;
+  // (6d RV, §2.3) a revision IR's member (only the revise program sets it: every other IR is unchanged)
+  if (r.meta.revision) ir.revision = r.meta.revision;
   // (6c D3, §2.3) the reach: the join's columns outside the claim and the contact columns it holds, with the shas of the reach inputs
   if (reachM) {
     const { encodeColumns } = await import('./pack.mjs');
@@ -686,6 +693,15 @@ export async function planRegion(o) {
       again.meta.planCheck.clear = { refused: Object.keys({ ...(o.clearRefuse ?? {}), ...fresh }).sort(), pass: (o._clearPass ?? 0) + 1, counts: sc.counts };
       return again;
     }
+  }
+  // (6d RV, §2.5, §5) a revision IR: the guard over its own virtual world against ctx.standing (the first refusal thrown; a broken
+  // variant's class let through for the checker's M29:revision)
+  if (o.revision && r.meta.revision) {
+    const { reviseGuard, intendedCells, withStandingIds } = await import('./revise.mjs');
+    const irObj = JSON.parse(irJson);
+    const cells = await intendedCells(irObj, survey, (sha) => sideBytes.get(sha));
+    const u = ctx.__params?.spec?.unsafe;
+    reviseGuard({ ir: irObj, cells, standing: withStandingIds(o.revision.standing ?? {}, o.revision.effective), unsafe: u && typeof u === 'object' ? u : {} });
   }
   // ((6c D3) a reach plan's evaluation survey (the reach frame's): the plan check's artifact evaluates its tiles over it)
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}) };

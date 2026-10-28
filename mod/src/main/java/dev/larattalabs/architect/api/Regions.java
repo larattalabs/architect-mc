@@ -259,4 +259,31 @@ public interface Regions {
 	default CompletableFuture<Boolean> discardPlan(String planId) {
 		throw new UnsupportedOperationException("Regions.discardPlan needs Architect API 1.39.0");
 	}
+
+	/**
+	 * (6d RV) Plans an additive revision of a standing region (docs/CONTRACT.md "Phase 6d slice RV"): new parts, lots, refills and bodies
+	 * evaluated alone and layered over the region; it never removes or changes a standing part, road, lot box or body. The region must
+	 * stand (PLACED, PARTIAL, or FAILED with cells) and not be busy ({@link Reason#OVERLAP_BUSY}); the request's parts must keep off its
+	 * paths, roads, lot boxes plus 1, bodies, held columns and beside regions' reach ({@link Reason#COVERED}, {@link Reason#OVERLAP},
+	 * {@link Reason#PROTECTED}), and off its unfinished tiles ({@link Reason#NOT_ALLOWED}, {@code unfinished}); a non-additive request
+	 * refuses {@link Reason#NOT_ALLOWED} ({@code not_additive}). Answers a candidate: a {@link RegionPlan} with {@link RegionPlan#revisionOf()}.
+	 * Any number of candidates may stand on one parent; {@link #realise} of one accepts it (the parent must still be the head and the
+	 * region's history at its tiles unchanged, else {@link Reason#PLAN_STALE}) and writes it as the region's next layers; the others go
+	 * STALE. Since NEXT.
+	 */
+	default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r) {
+		throw new UnsupportedOperationException("Regions.planRevision needs Architect API NEXT");
+	}
+
+	/**
+	 * (6d RV) Undoes the region's revisions above {@code toPosition}, whole and last first, in one recoverable operation (§4.4): a preflight
+	 * over the whole suffix refuses with every reason found and nothing written ({@link Reason#OVERLAP_BUSY}, {@link Reason#OCCUPIED},
+	 * {@link Reason#NOT_ALLOWED}: {@code joined}, {@code blockers}, survival, fluids; {@code toPosition} not below the head); then the
+	 * suffix's bodies drain and its sites are removed; afterwards the head is {@code toPosition} and every reader (the view, the land
+	 * {@code architect_mc:land}, the beside data) reads the older effective IR. Once begun it is never abandoned: a call with the same
+	 * target returns the running operation. Since NEXT.
+	 */
+	default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
+		throw new UnsupportedOperationException("Regions.undoRevision needs Architect API NEXT");
+	}
 }

@@ -616,16 +616,21 @@ public final class Realised {
 	 * drained) with the flags that ended it. Only rows that changed are written.
 	 */
 	static void bodies(Path world, String region, Map<String, JsonObject> rows) {
+		bodies(world, region, 0, rows);
+	}
+
+	/** (6d RV) {@link #bodies} at a layer: a revision's bodies in its own layer's sites.json. */
+	static void bodies(Path world, String region, int layer, Map<String, JsonObject> rows) {
 		Map<String, JsonObject> changed = new java.util.LinkedHashMap<>();
 		rows.forEach((id, row) -> {
-			String k = region + "|" + id;
+			String k = region + "|" + layer + "|" + id;
 			String v = row.toString();
-			if (!v.equals(BODY_ROWS.get(k)) || !Files.isRegularFile(sitesFile(world, region, 0))) {
+			if (!v.equals(BODY_ROWS.get(k)) || !Files.isRegularFile(sitesFile(world, region, layer))) {
 				changed.put(id, row);
 				BODY_ROWS.put(k, v);
 			}
 		});
-		putSites(world, region, 0, "bodies", changed);
+		putSites(world, region, layer, "bodies", changed);
 	}
 
 	// ------------------------------------------------------------------ byte streams

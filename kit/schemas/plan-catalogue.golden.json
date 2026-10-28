@@ -1106,6 +1106,41 @@
    "sinceApi": "1.23.0",
    "schemaVersion": 1,
    "state": "supported"
+  },
+  {
+   "id": "revision.keep",
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "6d RV: in a revision plan (revision.parentArtifact), a part equal to the parent's built part (same id, same canonical JSON) answers fits with standing: true and cost 0."
+  },
+  {
+   "id": "revision.add",
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "6d RV: in a revision plan, a new part (or one the parent didn't build) is checked against the standing region: its lots plus 1, roads, paths, bodies and held columns are hard."
+  },
+  {
+   "id": "revision.refill",
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "6d RV: in a revision plan, a zone equal to the parent's but for lots with refill: true (each removed or pad) answers fits; the lots are built again (an irrigated lot is refused, S-RV-14)."
+  },
+  {
+   "id": "revision.grow",
+   "sinceApi": "NEXT",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "GR"
+  },
+  {
+   "id": "revision.change",
+   "sinceApi": "NEXT",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "RV2"
   }
  ]
 }

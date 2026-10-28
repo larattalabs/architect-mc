@@ -3,6 +3,7 @@
 // library entry, pending styles), the overall result, the light preview (per-part bounds and a 1:4 class map PNG) and, for READY or
 // NEEDS_REPAIR, the resolved artifact: canonical JSON with no ids, timestamps or paths, named by its sha. Pure but for the PNG
 // bytes it returns; tools/region.mjs writes the files.
+import { dirtyKeys } from '../region/revise.mjs';
 import { evalTile } from '../realise.mjs';
 import { canonicalJson, sha256Hex, FLAG_MISSING, FLAG_WATER } from '../region/pack.mjs';
 import { windowFromSurvey } from '../region/survey.mjs';
@@ -200,6 +201,21 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       // blocks, the parts' counts, the bound lots' counts at check time). Only in a plan with one
       ...(pc.paletteRows?.length ? { palette: pc.paletteRows } : {}),
     };
+    // (6d RV, §9.3) a revision plan's artifact: whose revision it is, the tiles it writes (dirty) with the region's history at each (compared
+    // at accept), the held set it was planned against, and the refilled lots beside the added ones. Only in a revision plan
+    if (pc.revision) {
+      const rv = pc.revision;
+      const dirty = dirtyKeys(ir);
+      artifact.region.revisionOf = { region: rv.region, parentRid: rv.parentRid, parentArtifact: rv.parentArtifact, parentIrSha: rv.parentIrSha };
+      artifact.dirty = dirty;
+      artifact.historySha = Object.fromEntries(dirty.map((k) => [k, rv.history?.[k] ?? null]));
+      artifact.inputs.held = rv.heldSha;
+      for (const l of rv.refillLots ?? []) {
+        const spec = (inputs.plan ?? ir.params.plan)?.zones?.find((z) => z.id === l.zone)?.program?.lots?.find((x) => x.id === l.id) ?? {};
+        artifact.lots.push({ id: l.id, zone: l.zone, box: l.box, role: spec.role ?? null, label: spec.label ?? null, ext: spec.ext ?? null, front: null, entrance: null, entry: spec.entry ?? null, provisional: !spec.entry, refill: true });
+      }
+      artifact.revision = { keep: rv.keep, add: rv.add, refill: rv.refill, grow: rv.grow, change: rv.change };
+    }
     artifactSha = sha256Hex(canonicalJson(artifact));
   }
   // (6c H §10) a part took the wet fallback (the plan meta's wet records, or a wet write that asked a volume and rolled back:

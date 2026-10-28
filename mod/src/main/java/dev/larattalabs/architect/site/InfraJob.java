@@ -75,6 +75,32 @@ final class InfraJob implements Placement.Job {
 	transient Value[] leafAfter = new Value[0];
 	/** Phase 6a: the region tile this job writes ({@code region|stage|set|key}), or null. */
 	@Nullable String tile;
+	/**
+	 * (6d RV, docs/CONTRACT.md "Phase 6d slice RV" §3.3) A revision tile's befores, kept past the PLACING commit: each cell is checked
+	 * against the world in the tick it is written, and a cell that changed since its capture (a player's block, another site placed over
+	 * it) is not written (RACED). Null for any other job (a realise's plain tiles keep their write loop) and after a load (no befores).
+	 */
+	transient Value @Nullable [] raceBefores;
+	/** (6d RV) The cells a revision tile left unwritten because they changed (RACED), and those another site now holds. */
+	final List<Long> raced = new ArrayList<>();
+	/**
+	 * (6d RV) The cells this revision tile wrote so far. A cell that changed since its capture is the tile's own doing, not a race, when it
+	 * already holds its planned after (a dependent that popped), or a cell under or over it was written by this tile (a gravity block that
+	 * fell, its support written).
+	 */
+	private final it.unimi.dsi.fastutil.longs.LongOpenHashSet wrote = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+
+	private boolean selfMoved(long p, BlockState now, @Nullable Value before) {
+		// (the verifier's nit: only a gravity block that fell or landed, over or under a cell this tile wrote)
+		boolean gravity = now.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || before != null && WorldJournal.state(before)
+			.getBlock() instanceof net.minecraft.world.level.block.FallingBlock;
+		if (!gravity) {
+			return false;
+		}
+		int x = Journal.x(p), y = Journal.y(p), z = Journal.z(p);
+		return wrote.contains(net.minecraft.core.BlockPos.asLong(x, y - 1, z)) || wrote.contains(net.minecraft.core.BlockPos.asLong(x, y + 1, z));
+	}
+	final List<Long> racedHeld = new ArrayList<>();
 	final List<String> notes = new ArrayList<>();
 	/** 6c 0c §3: a partial road's skipped spans, for its PlaceResult (not saved: the notes name them too). */
 	final List<dev.larattalabs.architect.api.RoadSpan> skipped = new ArrayList<>();
@@ -202,6 +228,62 @@ final class InfraJob implements Placement.Job {
 	 */
 	static final int TILE_SLICED_CELLS = 8192;
 
+	/** (6d RV) Whether this job writes a revision's tile ({@code tile} = {@code region|rv<rid>:<stage>|set|key}). */
+	private boolean revisionTile() {
+		return revisionWhere() != null;
+	}
+
+	/**
+	 * (6d RV) Where a revision's job writes: {region, journal stage, set, key} for a revision tile ({@code tile}), or for a revision's road
+	 * (its batch names the revision, its item the stage: set "road", key the item's); null for any other job.
+	 */
+	private String @Nullable [] revisionWhere() {
+		String t = tile;
+		if (t != null) {
+			String[] p = t.split("\\|");
+			return p.length >= 4 && dev.larattalabs.architect.region.Revisions.layerOf(p[1]) > 0 ? p : null;
+		}
+		var b = batchId == null ? null : Batches.get(batchId);
+		var i = b == null || itemKey == null ? null : b.item(itemKey);
+		if (i != null && b.ext.get(dev.larattalabs.architect.region.Revisions.EXT_REVISION) instanceof com.google.gson.JsonObject rv && dev.larattalabs.architect.region.Revisions
+			.layerOf(i.stage) > 0) {
+			return new String[] {rv.get("region").getAsString(), i.stage, "road", itemKey};
+		}
+		return null;
+	}
+
+	/**
+	 * (6d RV, §3.3) A revision tile's raced cells, after its write: each one another entry now holds (a site placed over it since the
+	 * capture) is a refusing holder, and the revision stops there (its tiles written so far stand, the rest of its items fail: it ends
+	 * PARTIAL and undoRevision takes it away); a player's block alone is only RACED. Recorded in the revision layer's sites.json.
+	 */
+	private void racedEnd(MinecraftServer server) {
+		String[] p = revisionWhere();
+		if (p == null) {
+			return;
+		}
+		long mine;
+		try {
+			JournalStore.Meta me = entry == null ? null : SiteJournal.store().meta(entry);
+			mine = me == null ? Long.MIN_VALUE : me.layer();
+		} catch (Sites.SiteException e) {
+			mine = Long.MIN_VALUE;
+		}
+		for (long c : raced) {
+			try {
+				for (WorldJournal.Layer l : WorldJournal.stack(dimension, c)) {
+					if (!siteId.equals(l.meta().site()) && l.meta().active() && !WorldJournal.LEAVES.equals(l.meta().kind()) && l.meta().layer() > mine) {
+						racedHeld.add(c);
+						break;
+					}
+				}
+			} catch (java.io.IOException e) {
+				racedHeld.add(c);
+			}
+		}
+		dev.larattalabs.architect.region.Revisions.raced(server, p[0], p[1], p[2], p[3], siteId, raced, racedHeld, batchId);
+	}
+
 	private int oneTickCells() {
 		return tile != null ? TILE_SLICED_CELLS : SiteJournal.ONE_TICK_CELLS;
 	}
@@ -325,6 +407,7 @@ final class InfraJob implements Placement.Job {
 		extrasInto(level, s, txn);
 		commit = s.submit(txn);
 		entry = id;
+		raceBefores = revisionTile() ? befores : null;
 		befores = null;
 		phase = COMMIT;
 		return true;
@@ -363,6 +446,7 @@ final class InfraJob implements Placement.Job {
 		extrasInto(level, s, txn);
 		commit = s.submit(txn);
 		entry = id;
+		raceBefores = revisionTile() ? befores : null;
 		befores = null;
 		cursor = 0;
 		phase = COMMIT;
@@ -463,6 +547,9 @@ final class InfraJob implements Placement.Job {
 					dropsBefore = record.box().volume() <= 4_000_000 ? Sites.Drops.before(level, record.box()).uuids() : null;
 					phase = WRITE;
 					cursor = 0;
+					if (raceBefores != null) {
+						dev.larattalabs.architect.region.Revisions.raceHook(level, positions); // (6d RV) TEST: dev.rv.race, between the check and the write
+					}
 					return false;
 				}
 				case WRITE -> {
@@ -491,7 +578,19 @@ final class InfraJob implements Placement.Job {
 						long p = positions[cursor];
 						Value v = afters[cursor];
 						m.set(Journal.x(p), Journal.y(p), Journal.z(p));
+						Value[] rb = raceBefores;
+						BlockState nowAt = rb == null ? null : level.getBlockState(m);
+						if (rb != null && cursor < rb.length && rb[cursor] != null && nowAt != WorldJournal.state(rb[cursor]) && nowAt != WorldJournal.state(v) && !selfMoved(p, nowAt, rb[cursor])) {
+							// (6d RV, §3.3) checked and written in the same tick: the cell changed since its capture, so it is not written
+							raced.add(p);
+							cursor++;
+							n++;
+							continue;
+						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
+						if (rb != null) {
+							wrote.add(p);
+						}
 						if (v.nbt() != null) {
 							BlockEntity be = level.getBlockEntity(m);
 							if (be != null) {
@@ -511,6 +610,10 @@ final class InfraJob implements Placement.Job {
 					if (dropsBefore != null) {
 						Sites.Drops.of(level, record.box(), dropsBefore).clearNew(level);
 					}
+					if (!raced.isEmpty()) {
+						racedEnd(server); // (6d RV) the raced cells recorded; a holder among them stops the revision
+					}
+					raceBefores = null;
 					commit = SiteJournal.complete(siteId, WorldJournal.empty(new dev.larattalabs.architect.placement.Anchors.Bounds(0, 0, 0, 0, 0, 0)), extras
 						.isEmpty() ? null : this::extrasActive);
 					phase = AFTER_COMMIT;
@@ -569,6 +672,7 @@ final class InfraJob implements Placement.Job {
 		}
 		List<long[]> pv = new ArrayList<>();
 		List<Value> vs = new ArrayList<>();
+		List<Value> bs = new ArrayList<>();
 		try {
 			for (long k : m.sections()) {
 				SectionCells sc = s.section(entry, k);
@@ -578,6 +682,7 @@ final class InfraJob implements Placement.Job {
 				for (int i = 0; i < sc.size(); i++) {
 					pv.add(new long[] {sc.pos(i)});
 					vs.add(sc.after(i) == null ? sc.before(i) : sc.after(i));
+					bs.add(sc.before(i));
 				}
 			}
 		} catch (IOException e) {
@@ -601,9 +706,16 @@ final class InfraJob implements Placement.Job {
 		});
 		positions = new long[pos.length];
 		afters = new Value[pos.length];
+		Value[] rb = new Value[pos.length];
 		for (int i = 0; i < order.length; i++) {
 			positions[i] = pos[order[i]];
 			afters[i] = vs.get(order[i]);
+			rb[i] = bs.get(order[i]);
+		}
+		// (6d RV, the verifier's nit) a revision tile resumed mid-write (after a load) keeps its same-tick check: its befores from the entry
+		// (a cell it wrote already holds its after, and is written again; one that changed to something else is RACED)
+		if (revisionTile()) {
+			raceBefores = rb;
 		}
 	}
 

@@ -21526,7 +21526,7 @@ None use `beside` or `endpoint.region` (D1's gap table): unchanged.
 | 2 | Byte identity | D3's pinned set and every non-`[wall]` answer unchanged |
 | 3 | Join through a gate | on `d3_walled` and `gj_town_wall`: `Regions.plan` (beside) then `Regions.realise`; the join reaches the street through the gate; the gate's cells unchanged (hash) |
 | 4 | Villagers (hard bar) | vanilla `dev.nav.villager` from every district lot to the town's bell and back, through the gate (its door opened by them): 100%; kit movers 100% |
-| 5 | Steward's shapes | `checkBeside` then the real plan under `dplan`, `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
+| 5 | Steward's shapes | `checkBeside` then the real plan under Steward's key `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`) (corrected 2026-10-26, Steward's GR review: there is no `dplan` key), `realiseByKey` after a restart (D3 item 6's flow); `v7a_gj_endpoint` through `checkPlan` then `realiseApproved` |
 | 6 | District removed first (verifier re-runs) | 0 changed cells over the town's and the wall region's claims but the join's own columns, which equal the world before the district |
 | 7 | Town or wall region removed first (verifier re-runs) | the gate gone with its region (E-flat 0 over that claim minus the district's held columns); the join's runs standing, `dangling` set; then the district removed: E-flat 0 over every claim |
 | 8 | Refusals, nothing written | `gj_sealed`: `NO_JOIN [wall]`; `gj_fence` with a villager join: `NO_JOIN [wall]` naming the fence gate; the gate walled up after the plan: `ARTIFACT_STALE` naming it; each 0 changed cells |
@@ -21745,7 +21745,7 @@ with its `undo` is saved before or after the R2 journal commit, i.e. whether a k
 **Answers:**
 - **RV:** as proposed. S-RV-2: Steward treats `REGION_LIMIT` like `NO_ROOM` (full, so it proposes a district). S-RV-13:
   Steward stops laying `street#n` on region towns once GR ships. S-RV-14: a refused irrigated refill is fine.
-- **GR:** as proposed. OpKeys `dgrow`/`drealise` for districts, `vgrow:<build>`/`vgrowrealise:<build>` for towns. No dry
+- **GR:** as proposed. OpKeys (corrected 2026-10-26, Steward's GR review: there are no `dgrow`/`drealise` or `vgrow` keys): a growth is an ordinary Steward build under `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`), for districts and towns alike. No dry
   check; Steward plans at acceptance and uses `discardPlan`.
 - **FS, LC:** as proposed.
 - **AD:** S-AD-1 is lazy, per point 4. S-AD-2, S-AD-3 and S-AD-4: yes.
@@ -22559,7 +22559,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 **Fixtures:**
 - **`gr_town`:** RV's `rv_town` (6 lots, 4 built, partly built; a Steward addition and a PT build by the street).
 - **`gr_beside`:** a D3 beside district (plain, its join to the town's street end) with 2 lots, realised as Steward does (a
-  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `dplan`).
+  `checkBeside` reservation, then `Regions.plan` with the first building's lot under `steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26: no `dplan` key).
 - **`gr_along`:** a D2 shore district on `d3_shore` (D3's fixture), 2 lots.
 - **`gr_outpost`:** a D2 outpost (gap 40) with 2 lots.
 - Plan fixtures: `v8x_6d_gr_zone` (a revision of `rv_town`'s kept plan whose street zone gains 2 lots), `v8x_6d_gr_district`.
@@ -22570,7 +22570,7 @@ About **4.5-5.5 days** of work, **3 elapsed**:
 | 2 | Byte identity | RV's pinned set unchanged; programs without `params.grow` unchanged |
 | 3 | Town frontage | `gr_town` grown by 2 lots through `planRevision` then `realise` with stub blueprints: both on the lot-free side; verge and road cells unchanged (hash); every new lot walkable to the bell (player and villager, `dev.nav.villager`) and connected in the graph (`graph.cut = []`, the lot node reachable from the bell over edges) |
 | 4 | Town extension | `gr_town` grown by 6 lots (`prefer: extend`): one extension from the extendable end, its road joined to the standing road, flagged; the new end terminal; walkable as item 3 |
-| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`dgrow:<district>:<k>`), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
+| 5 | Steward's district, two buildings | `gr_beside`: building 3 then building 4, each a growth under Steward's opKeys (`steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26: no `dgrow` key), each realised; `undoRevision` of building 4 then 3 (verifier re-runs): the world before each, cell for cell; the district's join and the town untouched (hash) |
 | 6 | plan/0 | `v8x_6d_gr_zone` through `checkPlan` (zone `fits standing`, 2 added lots `fits`) then `realiseApproved`, with one stale retry under a second key across a restart |
 | 7 | Later districts (end join) | after item 4: a D3 district beside `gr_town` joins the extension's new end (`besidePorts` on the effective IR). `undoRevision` of the growth then refuses `NOT_ALLOWED {why: joined, region}` at preflight (RV §4.4, §6.4), and nothing is written (hash). Once the district is removed, the undo succeeds: the world before the growth |
 | 7b | Later districts (side join) | after item 4: a D3 district north of the extension joins its side by a T (`<region>:<roadId>` of `street_e_g<n>`); `undoRevision` of the growth refuses `joined` at preflight, nothing written (hash); the district removed, then the undo is exact |
@@ -22606,7 +22606,7 @@ still works (D3's town-first order, `dangling`).
   town fills in before it sprawls. Or extension first? Default: frontage first.
 - **S-GR-2. One building, one revision.** Your district's "second building extending that street" is one growth (one revision) per
   accepted building, undone alone (LIFO). A batch of buildings may be one growth with several lots. Fine? Default: yes.
-- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`dgrow:<district>:<k>`, `drealise:<district>:<k>`), found again by
+- **S-GR-3. Opkeys.** Growth plans and realises under your keys (`steward.<buildId>.vplan` / `steward.<buildId>.vrealise` (`.vrealise2` after a stale re-check; ext `steward_mc:district=<id>`, `steward_mc:build=<buildId>`); corrected 2026-10-26 from `dgrow`/`drealise`, which Steward has none of), found again by
   `planByKey` and `realiseByKey` after a restart. Default: as proposed.
 - **S-GR-4. Rings and spirals.** FL rings, spirals and organic layouts grow only on free frontage of their straight runs; they never
   extend (`NO_ROOM {kind: layout}`). Default: yes.
@@ -25830,3 +25830,39 @@ version set (the coordinator assigns one at merge).
   0.41.0 and 0.40.1 jars, 46 ok each) and sim-jobs 33 (`apitest.mjs` changed).
 - The Status tab's note first sat in the right column, which is full at GUI scale 4 (off-screen in `status_s4`). Moved to the left
   column. Run `20261026-043443-change` at 85706862: **PASS 4/4** (unit-mod 947, safety-ingame 38, ui2b-ingame 31, u3-ingame 40).
+
+## Phase 6d slice RV, lanes RV-a to RV-d as built (branch `slice/RV`, 2026-10-26, DEV MODE)
+
+Built against "Phase 6d slice RV" (FROZEN 2026-10-20) and §13's split: RV-a (the kit) and RV-b (the mod foundation) on one branch; RV-c (undo
+and fluids) and RV-d (readers, realiseApproved's branch, lots and refills, survival) follow on the interface frozen here. Versions are `NEXT`.
+The resume notes, Steward's RC note, the exact API, the frozen interface, the twelve deviations and the rows not shown are in
+`docs/HANDOFF-RV.md` (it goes when RV's gate passes).
+
+- **Kit (RV-a):** `kit/lib/region/revise.mjs` (`reviseIR`, `revisionStanding`, `standingClasses`, `columnProblem`, the guard, `M29:revision`,
+  `mergeEffective`, `historySha`, `revisionSeed`, `dirtyKeys`, `intendedCells`), `kit/regions/revise.mjs` (the `revise` program: calls
+  `columns`, `fill`, `carve`, `terrace`, `pond`, `form`, `lot`; role materials only; the five broken variants), planRegion's `revision` input
+  (ctx.revision, the guard, the IR's `revision` member, the seed), the checker's `M29` (`checkRegion({standing})`), the CLI's `--revision`,
+  plan/0's revision mode (`kit/lib/plan/revision.mjs`: keep, add, refill, grow, change; the standing region hard to added parts; the
+  artifact's `region.revisionOf`, `dirty`, `historySha`, `inputs.held`, refilled lots), the catalogue's five `revision.*` entries, the lot
+  spec's `refill`. Tests: `kit/test/rv-a.test.mjs` (items 1, 2, 17).
+- **Mod (RV-b):** `region/Revisions.java` (the record and states, planRevision, the standing data, the candidate's history, the realise:
+  CAS, `rev/<rid>/ir.json` and `op.json`, `effective/<rid>.json`, region.json, the install as a batch in the region's group, the end, the
+  recovery), RegionRec's `revisions`, the revision tile path (TileStream's wire stage, RegionItems' revision Live, TileCheck's revision
+  mode, InfraJob's same-tick check, RealisedRecords' layer), `Batches.queueRevision`/`failRest`, the API (`Since NEXT`), `dev.rv.*`, kill
+  points RV1-RV4. Tests: `RevisionsTest` (the mod's merge equals the kit's on `kit/test/fixtures/rv/merge.json`).
+- **Sidecar:** `region.plan`'s `revision` member; features `region.revise`, `plan.revision`.
+- **Gate:** `tools/gate6drv.mjs` (`rv-unit`, `rv-ingame`, `rv-crash`; chain `6drv`, impact rule "6d RV"). Evidence: HANDOFF-RV.md "What was
+  run".
+- **Mod (RV-c):** `Revisions.undo` (Regions.undoRevision, §4.4): the preflight (busy, the target, joined, a player, blockers, survival
+  building), the manifest `rev/op-<opId>.json`, the phases drain -> remove -> removed -> done over ticks (`undoTick`), kill points
+  RVU1-RVU3, a stopped stage leaving the region UNDOING (resumed by a same-target call or a world start), stages a stop brought back
+  undone again (`Groups.standingAgain`). Added bodies: a revision's own fluids record (`RegionFluids`, `<region>#rv<rid>`,
+  `fluids-rv<rid>.json`), drained holder-aware at its undo and the region's removal.
+- **Mod (RV-d):** the readers on the effective IR (beside data, reach inputs, the seam, the town checks, `architect_mc:land` recomputed when
+  the head moves); lots removed alone (`removed`, `removedAt`) and refills (realise, install, undo back to the prior state); survival
+  revisions (the mode, `survival_unfinished`, TileCheck's `survival_paid`); checkPlan's revision branch and realiseApproved's (PlanChecks:
+  the parent artifact must be the head's, else `PLAN_STALE` `NEEDS_REPAIR parent_moved`); revision roads; a refused plan gives its rid back.
+  The verifier's three RV-b nits fixed (recover's end, the resumed tile's race check, the gravity exemption's scope).
+- **Shared fix:** `Groups`' whole-group removal skips members with no standing record wherever they stand, and a pending record whose
+  restore was written this session is not "unfinished".
+- **Gate (RV-c/RV-d):** `rv-undo`, `rv-plan0`, `rv-undo-crash` in chain `6drv`. Steward's RC note and the run ids: HANDOFF-RV.md.

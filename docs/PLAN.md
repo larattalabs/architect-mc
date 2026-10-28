@@ -154,7 +154,7 @@ Carried forward:
 
 ## After phase 3: asks from Steward (accepted 2026-10-05)
 
-Steward (`~/Developer/LarattaLabs/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
+Steward (`~/Developer/LarattaLabs/Minecraft/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
 for A1-A9 (`steward-mc/docs/ARCHITECT-ASKS.md`). All are accepted. Each must also be useful to Architect players on its
 own. A9 is phase 3 itself. Order (Noah can reorder):
 

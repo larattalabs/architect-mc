@@ -11,6 +11,7 @@
 //      the overall result and the artifact after the budget pass).
 // Every coordinate is an integer cell; scores are integers; candidate scans run x then z; ties by scan order. No clock but
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
+import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from '../region/village.mjs';
@@ -927,6 +928,10 @@ export function runCheck(ctx, P, opts) {
 }
 
 function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = new Map()) {
+  // (6d RV, §9) a revision of a realised plan (revision.parentArtifact and the mod's revision input): the standing region is hard to every
+  // added part (its footprint, bodies, held columns and beside regions' reach, as a D1 standing region's footprint is)
+  const REV = revisionInput(ctx, P.plan);
+  if (REV?.standing) P = { ...P, standing: [...(P.standing ?? []), standingEntry(REV.standing)] };
   const env = makeEnv(ctx, P, performance.now());
   for (const [name, t] of templates) WHOLE_CLAIM.set(name, { claim: t.catalogue?.claim ?? { min: [64, 64], max: [1024, 1024] }, module: t });
   const V = validatePlan(P.plan, { anchors: Object.keys(env.anchorsGiven) });
@@ -985,6 +990,34 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     else if (p.verdict === 'unsupported') ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: p.reason.message, block: p.block, until: p.reason.until ?? undefined, path: p.reason.path }].map(clean) });
   }
   const byId = V.byId;
+  // ---- (6d RV, §9.2) a revision plan's parts against the parent's: kept and refilled parts stand (no IR part), grown and changed ones
+  // answer unsupported (GR, RV2), added ones compile below as any part. Only with a revision input: every other check is unchanged.
+  const kept = new Set();
+  // (a kept or refilled part stands: fits for its dependents, never emitted)
+  const emitOk = (id) => okClass(id) && !kept.has(id);
+  let revRec = null;
+  if (REV) {
+    const cls = classifyRevision(P.plan, REV.parent, REV.standing?.lots ?? {});
+    revRec = revisionRecord(REV, cls);
+    for (const p of V.parts) {
+      if (answers.has(p.id)) continue;
+      const c = cls.classOf.get(p.id);
+      if (!c || c.klass === 'add') continue;
+      if (c.klass === 'keep' || c.klass === 'refill') {
+        ans(p, { class: 'fits', notes: [c.klass === 'keep' ? 'standing: kept from the parent artifact (revision.keep)' : `standing; refill ${c.refill.join(', ')} (revision.refill)`] });
+        const a = answers.get(p.id);
+        a.standing = true;
+        if (c.refill) a.refill = [...c.refill];
+        kept.add(p.id);
+        const g = REV.parent.geometry?.[p.id];
+        if (Array.isArray(g) && g.length === 4) geom.set(p.id, { rect: arrRect(g) });
+      } else {
+        const blk = c.klass === 'grow' ? 'revision.grow' : 'revision.change';
+        ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: c.klass === 'grow' ? `zone ${p.id} gains lots ${c.lots.join(', ')}: growing a standing zone is GR's (revision.grow)` : `part ${p.id} differs from the parent's${c.why ? ` (${c.why})` : ''}: changing a standing part is RV2's (revision.change)`, block: blk, until: c.klass === 'grow' ? 'GR' : 'RV2' }].map(clean) });
+      }
+    }
+    if (cls.gone.length) notes.push(`revision: ${cls.gone.map((g) => g.id).join(', ')} gone from the plan: removing a standing part is RV2's (revision.change, unsupported)`);
+  }
   // (6c VOC-c) a palette rule is measured on the plan's output (kit/lib/region/plan.mjs, after the IR: kit/lib/plan/palette.mjs); here it
   // holds its place in the answers and its lenient read is recorded (only in a plan that has one: every other record is unchanged)
   const paletteRules = [];
@@ -1266,7 +1299,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
   };
   for (const p of order) {
-    if (p.family !== 'zone' || !okClass(p.id) || res.get(p.id).whole) continue;
+    if (p.family !== 'zone' || !emitOk(p.id) || res.get(p.id).whole) continue;
     const z = res.get(p.id);
     if (z.districts) {
       // (D2) an outpost is emitted after the other zones (its road joins the nearest one's street end)
@@ -1347,7 +1380,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   }
   // relief: one pass per relief form, around its zones' lots
   for (const p of order) {
-    if (p.family !== 'form' || p.kind !== 'relief' || !okClass(p.id)) continue;
+    if (p.family !== 'form' || p.kind !== 'relief' || !emitOk(p.id)) continue;
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
     const lots = res.get(p.id).zones.flatMap((zid) => (zoneEmit.get(zid)?.L?.lots ?? []).map((l) => l.lot));
@@ -1372,7 +1405,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   // terrace and spikes; (6c F3) the grown forms, placed here on the zones' layouts (forms/hooks.mjs)
   const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, keepBy: (x, y, z) => keptBy(keep, x, y, z), stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
   for (const p of order) {
-    if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !okClass(p.id)) continue;
+    if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !emitOk(p.id)) continue;
     if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); else if (p.kind in CAVE) f3CaveEmit(f3C(), p); continue; }
     const f = res.get(p.id);
     const cp = checkpoint(r);
@@ -1449,7 +1482,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   // course that no longer fits drops its overflows before its feeder emits)
   for (const p of order) if (isHPart(p) && !okClass(p.id)) { dropOverflows(overflows, p.id); releaseKeep(keep, p.id); }
   for (const p of emitOrder(order.filter(isHPart), overflows)) {
-    if (!isHPart(p) || !okClass(p.id)) continue;
+    if (!isHPart(p) || !emitOk(p.id)) continue;
     const cp = checkpoint(r);
     const bodies0 = (r._fluidBodies ?? []).length, wet0 = (r.meta.wet ?? []).length;
     try {
@@ -1714,7 +1747,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   // ((6c KC) the broken variant `lampOnRim` (an H part's ext architect_mc:unsafe): a lantern written by the lamps over the first shell cell
   // of the part's first body (its rim); M25:clear's hard clause catches it)
   for (const p of order) {
-    if (!isHPart(p) || !okClass(p.id) || p.part.ext?.['architect_mc:unsafe']?.lampOnRim !== true) continue;
+    if (!isHPart(p) || !emitOk(p.id) || p.part.ext?.['architect_mc:unsafe']?.lampOnRim !== true) continue;
     const b = (r._fluidBodies ?? []).find((q) => q.part === p.id);
     if (!b?.shell?.length) continue;
     const top = b.shell.reduce((a, c) => (c[1] > a[1] || (c[1] === a[1] && (c[0] < a[0] || (c[0] === a[0] && c[2] < a[2]))) ? c : a), b.shell[0]);
@@ -1736,6 +1769,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   for (const p of V.parts) {
     const a = answers.get(p.id);
     if (!a || !['fits', 'adjusted'].includes(a.class)) continue;
+    if (kept.has(p.id)) { const g = geom.get(p.id); if (g?.rect) a.geometry = { rect: rectArr(g.rect) }; continue; } // (6d RV) standing
     if (p.family === 'zone') {
       const z = res.get(p.id), e = zoneEmit.get(p.id);
       if (e?.districts) {
@@ -1776,6 +1810,11 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     else if (p.family === 'form' && p.kind === 'relief') a.geometry = { around: res.get(p.id).zones };
   }
   const hit = env.hitTime ? 'maxMs' : null;
+  // (6d RV, §2.3) a revision plan's IR member: the added lots, refills and roads; part ids stay the plan's (naming: plan, §9)
+  if (REV && revRec) {
+    r.meta.revision = { format: 'revision/1', naming: 'plan', rid: REV.rid ?? 0, position: REV.position ?? 0, base: REV.base ?? null, parent: { rid: REV.parentRid ?? 0, irSha: REV.parentIrSha ?? null },
+      lots: { add: r.lots.map((l) => l.id), refill: revRec.refill }, roads: { add: r.roads.map((x) => x.id) }, graph: { nodes: r.graph.nodes.map((n) => n.id), edges: r.graph.edges.map((e) => e.id) }, seed: ctx.seed };
+  }
   return { ...(backOut.size ? { k3Back: backOut } : {}), region: r, record: {
     ...record, malformed: null, answers: V.parts.map((p) => answers.get(p.id)).filter(Boolean), order: V.order, partOf, notes, hit,
     zones: Object.fromEntries([...zoneEmit.entries()].map(([id, e]) => [id, { prefix: e.prefix }])),
@@ -1791,6 +1830,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     // ((close-out A, §5) a palette rule exempting ways or forms reads its parts' writers by the plan parts' blocks)
     ...(paletteRules.some((x) => x.read.exempt.includes('ways') || x.read.exempt.includes('forms')) ? { paletteBlocks: Object.fromEntries(V.parts.filter((p) => p.block).map((p) => [p.id, p.block])) } : {}),
     anchors: Object.fromEntries([...env.anchors.entries()].map(([k, v]) => [k, [v[0], env.S.groundAt(v[0], v[1]) + 1, v[1]]])),
+    // ((6d RV, §9.3) a revision plan's classes and parent: the artifact's revisionOf, dirty and historySha)
+    ...(revRec ? { revision: revRec } : {}),
   } };
 }
 

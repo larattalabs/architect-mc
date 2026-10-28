@@ -88,17 +88,19 @@ public final class RealisedRecords {
 		}
 		Path world = r.world();
 		String region = r.rec().id;
-		String stage = t[1];
+		// (6d RV, RP §4) a revision's tile: its layer is its rid, its stage the name its IR gives it (t[1] is the journal's rv<rid>:<stage>)
+		int layer = r.rid();
+		String stage = dev.larattalabs.architect.region.Revisions.plainStage(t[1]);
 		String set = t[2];
 		String key = t[3];
-		byte[] chain = Realised.chain(r.ir(), stage, set, key, w -> w[0].equals(stage) && w[1].equals(set) ? orig.sha() : Realised.shaAt(world, region, 0, w[0],
+		byte[] chain = Realised.chain(r.ir(), stage, set, key, w -> w[0].equals(stage) && w[1].equals(set) ? orig.sha() : Realised.shaAt(world, region, layer, w[0],
 			w[1], key));
 		byte[] wr = ts.writers;
-		Realised.Tile rec0 = new Realised.Tile(0, stage, set, key, site == null ? "" : site, site == null ? Realised.NO_ENTRY : 0, HexFormat.of().parseHex(orig
+		Realised.Tile rec0 = new Realised.Tile(layer, stage, set, key, site == null ? "" : site, site == null ? Realised.NO_ENTRY : 0, HexFormat.of().parseHex(orig
 			.sha()), chain, d.codes(), d.extras(), wr == null ? new byte[0] : wr);
 		Realised.Tile rec = rec0;
 		// an earlier attempt of this tile whose entry stands (a crash after its commit, before its item was placed): kept in the record
-		Realised.Tile was = Realised.read(world, region, 0, stage, set, key);
+		Realised.Tile was = Realised.read(world, region, layer, stage, set, key);
 		if (was != null && !was.noEntry()) {
 			List<String> standing = new ArrayList<>();
 			for (String s : was.sites()) {
@@ -126,13 +128,17 @@ public final class RealisedRecords {
 	 * gone: written before a commit that never happened; the tile reads as unfinished).
 	 */
 	public static String status(RegionsImpl.Live l, Realised.Tile rec) {
+		// (6d RV) a revision's record: its journal stage rv<rid>:<stage> and its own batch
+		String jstage = rec.layer() > 0 ? dev.larattalabs.architect.region.Revisions.stageName(rec.layer(), rec.stage()) : rec.stage();
 		if (rec.noEntry()) {
-			QBatch b = l.rec().batchId == null ? null : Batches.get(l.rec().batchId);
+			var rv = rec.layer() > 0 ? dev.larattalabs.architect.region.Revisions.rev(l.rec(), rec.layer()) : null;
+			String bid = rec.layer() > 0 ? (rv == null ? null : rv.batchId) : l.rec().batchId;
+			QBatch b = bid == null ? null : Batches.get(bid);
 			if (b == null) {
 				return "committed";
 			}
 			for (QItem i : b.items) {
-				if ("tile".equals(i.itemKind) && i.spec != null && rec.stage().equals(i.spec.get("stage").getAsString()) && rec.set().equals(i.spec.get("set")
+				if ("tile".equals(i.itemKind) && i.spec != null && jstage.equals(i.spec.get("stage").getAsString()) && rec.set().equals(i.spec.get("set")
 					.getAsString()) && rec.key().equals(i.spec.get("tile").getAsString())) {
 					return i.status == QItem.Status.PLACED ? "committed" : "pending";
 				}
@@ -140,7 +146,7 @@ public final class RealisedRecords {
 			return "committed";
 		}
 		String worst = "committed";
-		String tile = String.join("|", l.rec().id, rec.stage(), rec.set(), rec.key());
+		String tile = String.join("|", l.rec().id, jstage, rec.set(), rec.key());
 		for (String s : rec.sites()) {
 			JournalStore.Meta m = ownedBy(s, tile) ? mainEntry(s) : null; // a reused id: this record's entry never was
 			String st = m == null ? "stale" : switch (m.status()) {
@@ -188,12 +194,13 @@ public final class RealisedRecords {
 	public static void itemDone(RegionsImpl.Live l, QBatch b, QItem i) {
 		Path world = l.world();
 		String region = l.rec().id;
+		int layer = l.rid(); // (6d RV) a revision's records are its layer's, under its IR's stage names
 		if ("tile".equals(i.itemKind) && i.spec != null) {
 			String stage = i.spec.get("stage").getAsString();
 			String set = i.spec.get("set").getAsString();
 			String key = i.spec.get("tile").getAsString();
 			if (i.status == QItem.Status.FAILED) {
-				Realised.discard(world, region, 0, stage, set, key);
+				Realised.discard(world, region, layer, dev.larattalabs.architect.region.Revisions.plainStage(stage), set, key);
 			} else if (i.status == QItem.Status.PLACED && auditDir != null) {
 				check(l, b, i, stage, set, key);
 			}
@@ -208,12 +215,12 @@ public final class RealisedRecords {
 				o.addProperty("reason", i.reason);
 			}
 			o.addProperty("at", System.currentTimeMillis());
-			Realised.putSite(world, region, 0, "lots", i.key.substring(4), o);
+			Realised.putSite(world, region, layer, "lots", i.key.substring(4), o);
 			return;
 		}
 		if ("road".equals(i.itemKind)) {
 			String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
-			JsonObject sites = Realised.sites(world, region, 0);
+			JsonObject sites = Realised.sites(world, region, layer);
 			JsonObject was = sites != null && sites.has("roads") && sites.getAsJsonObject("roads").has(id) ? sites.getAsJsonObject("roads").getAsJsonObject(id)
 				: null;
 			JsonObject o = was != null ? was.deepCopy() : Realised.road(i.siteId == null ? "" : i.siteId, -1, List.of(), "placed");
@@ -225,7 +232,7 @@ public final class RealisedRecords {
 				o.addProperty("reason", i.reason);
 			}
 			o.addProperty("at", System.currentTimeMillis());
-			Realised.putSite(world, region, 0, "roads", id, o);
+			Realised.putSite(world, region, layer, "roads", id, o);
 		}
 	}
 
@@ -239,7 +246,7 @@ public final class RealisedRecords {
 		String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
 		JsonObject o = Realised.road("", 0, List.of(), "placing");
 		o.add("heldBy", held.deepCopy());
-		Realised.putSite(l.world(), region, 0, "roads", id, o);
+		Realised.putSite(l.world(), region, dev.larattalabs.architect.region.Revisions.layerOf(i.stage), "roads", id, o); // (6d RV) a revision's at its layer
 	}
 
 	/** A region road's job began (Batches): its site, its planned cells and the spans a partial road skipped. */
@@ -250,7 +257,7 @@ public final class RealisedRecords {
 			return;
 		}
 		String id = i.key.startsWith("road:") ? i.key.substring(5) : i.key;
-		Realised.putSite(l.world(), region, 0, "roads", id, Realised.road(siteId, c.cells(), c.spans(), "placing"));
+		Realised.putSite(l.world(), region, dev.larattalabs.architect.region.Revisions.layerOf(i.stage), "roads", id, Realised.road(siteId, c.cells(), c.spans(), "placing"));
 	}
 
 	// ------------------------------------------------------------------ verify: the record against the journal and the world
