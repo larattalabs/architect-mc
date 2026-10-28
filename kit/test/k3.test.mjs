@@ -20,6 +20,8 @@ import { shapeOf, doorOf } from '../lib/connectors/style.mjs';
 import { resolveRoles } from '../lib/region/plan.mjs';
 import { themeOffenders } from '../lib/lint/theme.mjs';
 import { towerDesign, gatehouseDesign, frameOf } from '../../tools/lib/gate7ak3-designs.mjs';
+import { standInDesign, standInPassage } from '../lib/wallLotDesigns.mjs';
+import { PALETTES } from '../lib/kit.mjs';
 
 const fx = (dir, name) => ({ name, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, name), 'utf8')) });
 const checkOf = (f, r, o = {}) => { const s = svOf(f); return checkRegion({ ir: r.res.ir, survey: s.bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, meta: r.res.meta, volumes: (r.volumes ?? []).map((v) => v.decoded ?? v), ...o }); };
@@ -278,6 +280,29 @@ test('a wall naming no lot is K1\'s (no lots, no passage, no lane); 3 checks of 
     const rs = [await run(fx(d, name)), await run(fx(d, name)), await run(fx(d, name))];
     assert.ok(rs.every((x) => x.artifactSha && x.artifactSha === rs[0].artifactSha), `${name}: one artifact sha`);
     assert.ok(rs.every((x) => JSON.stringify(x.check.parts) === JSON.stringify(rs[0].check.parts)), `${name}: one answer set`);
+  }
+});
+
+test('the sim\'s stand-in (wallLotDesigns.mjs standInDesign): binds on every K3 lot (outer faces closed, passage open) given a tower\'s outer faces; outerDoor opens one', async () => {
+  const r = await run(fx('k3', 'k3_castle_flat.json'));
+  const lots = r.artifact.lots.filter((q) => q.onWall);
+  assert.ok(lots.some((l) => l.onWall.passage) && lots.some((l) => !l.onWall.passage));
+  for (const p of [PALETTES.rustic, palette({ bible: 'dark' })]) {
+    for (const l of lots) {
+      const F = frameOf(l);
+      // what the sim knows: the type, the box (maxSize) and, for a gatehouse, the reserved cells (onWall.passage.lotCells)
+      // (a tower also gets its outer faces, ext["architect:wallLot"].outerFaces; a gatehouse needs none)
+      const spec = { type: l.onWall.passage ? 'gatehouse' : 'tower', size: [F.W, 40, F.D], passage: l.onWall.passage ? standInPassage(F.W, F.D, F.passage) : null, ...(l.onWall.passage ? {} : { outerFaces: l.onWall.outerFaces.lotCells }) };
+      const closed = (bp) => F.outer.filter(([u, y, v]) => /air$|door$|fence_gate$|trapdoor$/.test(bp.nameAt(u, y + 1, v) ?? 'minecraft:air'));
+      const bp = standInDesign(`si_${l.id}`, spec, p);
+      assert.deepEqual([bp.size.x, bp.size.z], [F.W, F.D], `${l.id}: the box`);
+      assert.deepEqual(closed(bp), [], `${l.id}: outer faces closed`);
+      for (const [u, y, v] of F.passage) assert.equal(bp.nameAt(u, y + 1, v) ?? 'minecraft:air', 'minecraft:air', `${l.id}: passage ${u},${y},${v} open`);
+      for (const [u, , v] of F.passage) assert.ok(!/air$|fence|slab|stairs/.test(bp.nameAt(u, 0, v) ?? 'minecraft:air'), `${l.id}: passage floor ${u},${v}`);
+      assert.ok(closed(standInDesign(`si_${l.id}_bad`, { ...spec, outerDoor: true }, p)).length > 0, `${l.id}: outerDoor opens an outer face`);
+      // the limitation: a corner tower without its outer faces gets the front's middle door, which is outer on every corner tower
+      if (!l.onWall.passage && l.onWall.at === 'corner') assert.ok(closed(standInDesign(`si_${l.id}_blind`, { ...spec, outerFaces: undefined }, p)).length > 0, `${l.id}: blind corner tower`);
+    }
   }
 });
 

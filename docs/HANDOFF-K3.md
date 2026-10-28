@@ -28,6 +28,28 @@ K3 changes what Steward designs and binds, and adds a `realiseApproved` refusal.
 4. **Villagers through the gatehouse**: realised, every lot inside reaches the gatehouse's front port through its passage and back.
 5. **Removal**: `Regions.remove` restores the claim. The lots and their designs are removed with the region, as lots.
 
+**The sim stand-in (an RC against `ARCHITECT_SIDECAR_BACKEND=sim`).** The sim builds a real wall-lot design, not the kit example, for a
+request with:
+- type `tower` or `gatehouse` and a maxSize (the lot's exact box in its frame, front to the south);
+- one of these signs: the brief line above (in notes or context), a gatehouse's `reserved`, `ext["architect:wallLot"].outerFaces`,
+  or the `sim:outerdoor` token.
+
+What it builds (`kit/lib/wallLotDesigns.mjs` `standInDesign`, the gate's stub designs) in the request's palette or bible roles:
+- The footprint is exactly the box (reserved.size when it fits maxSize). The height is the stub's: a tower is 2 x its smaller side + 3,
+  so about 23 for a 9 x 9 under the 40 cap.
+- **A gatehouse:** the passage open on the reserved columns over a standable floor, and its side-room doors on the back face. That is
+  safe for any outer-face set.
+- **A tower:** one door on the front face, at the middlemost cell off the outer faces. **Pass a tower's
+  `onWall.outerFaces.lotCells` unchanged as `ext["architect:wallLot"].outerFaces`.** Without it the door is the front's middle. That is
+  right for a run or via tower, but castle_city's corner towers have that cell outer, and their inner front cells mirror each other
+  (u 1..3 or 5..7), so no blind door is safe and the bind refuses them. The ext ends up in the entry's blueprint JSON `ext`.
+
+**The token `sim:outerdoor`** goes in the DesignRequest notes (Steward's brief). It is matched anywhere in the notes as a whole token
+(`sim:outerdoors` does not count), or as `"outerdoor"` in `ext["architect:sim"]`. In round 1 the door goes in an outer face (a tower's
+back face, a gatehouse's front face beside the passage), so the bind refuses it `ARTIFACT_STALE`. A **versionOf** of that entry (the
+repair: the refusal text as the change) always comes back with the door fixed, at the same size. It ignores the token even when its
+notes still carry it, so the repair request can pass the notes through unchanged.
+
 **What Steward might need to change:**
 - **Lots outside the zone's rect (S-K3-4).** A zone's lots in its answer and in the artifact can now stand outside its rect. `onWall`
   says why.
