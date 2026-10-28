@@ -28,7 +28,7 @@ the deviations, with reasons). D3's as-built wins over GJ's facts about D3. Bran
       - run `20261028-185215-change` at fcbff955: **gj-town 10/0**
       - the bug run 1 found: a block across the opening turns the walk's dirt_path to dirt (vanilla), and the re-check then stayed stale
         forever; now the opening is checked first and dirt for dirt_path is the walk (GateJoin.sameKind)
-- [ ] gate-verifier (it re-runs items 6, 7, 9: `gj-ingame` and `gj-steward`'s refusals), then push and "ready to merge"
+- [x] gate-verifier at 5a9a86c5 (run `20261028-185647-change`): PASS, gj-ingame 19/0, gj-steward 17/0; ready to merge
 
 ## Resume
 
