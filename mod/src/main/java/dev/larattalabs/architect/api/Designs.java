@@ -33,6 +33,12 @@ public interface Designs {
 
 	void cancel(String designId);
 
+	/**
+	 * A design the helper reports. Since NEXT (7a K3), ordering: a design reads as DONE only once its entry's new version is
+	 * installed and loaded on the server, the same moment {@link SiteEvents#DESIGN_DONE} fires (a listener of DESIGN_DONE already
+	 * sees DONE here). Until then a design the helper has finished reads as its last non-final status (as this game last saw it;
+	 * RENDERING when it saw none). FAILED and CANCELLED are reported as soon as they are final.
+	 */
 	Optional<Design> get(String designId);
 
 	/** Designs requested with {@code owner} (null: all designs the helper reports), newest first. */
@@ -174,6 +180,35 @@ public interface Designs {
 	 */
 	default CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Designs.groupByKey needs Architect API 1.10.0");
+	}
+
+	/**
+	 * The design requested with this operation key by this owner (null: the player), in any state ({@link DesignRequest#opKey}), from
+	 * the helper's persisted record (also once it is out of the recent list, and after a restart: a keyed design is kept at least 30
+	 * days after it is final). Empty means the helper never received it. Fails {@link ArchitectRefused}
+	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper is not connected (never "empty" then); a helper without
+	 * {@code "design.opKeys"} fails it too. Ordering as {@link #get}: DONE only once the entry's new version is installed and loaded
+	 * on the server, when {@link SiteEvents#DESIGN_DONE} fires (a DONE record this game had not reported yet is installed and
+	 * reported first, then answered). Since NEXT.
+	 */
+	default CompletableFuture<Optional<Design>> designByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Designs.designByKey needs Architect API NEXT");
+	}
+
+	/**
+	 * Cancels a design and answers what happened ({@link CancelOutcome}; a helper with {@code "design.opKeys"}).
+	 * {@link CancelOutcome.Kind#CANCELLED} completes only once the helper has confirmed the design is final and will spend nothing
+	 * more: a running designer turn has actually stopped (its process is gone) and its internal calls have ended; a cost a turn
+	 * reports after the cancel is never added, so the outcome's design carries the final cost. A design already cancelled answers
+	 * CANCELLED again (a retry is safe). {@link CancelOutcome.Kind#ALREADY_FINAL} answers the finished design (DONE or FAILED) with
+	 * its cost; {@link CancelOutcome.Kind#UNKNOWN}: no such design. A confirmed cancel still fires {@link SiteEvents#DESIGN_DONE}
+	 * with status CANCELLED. Fails exceptionally while the helper can't be reached ({@link ArchitectRefused}
+	 * {@link Reason#SIDECAR_UNAVAILABLE}), or when the turn has not stopped within the helper's wait (15 s; the design stays
+	 * cancelled: ask again). Ordering as {@link #get}: a DONE design only once installed and loaded on the server. The old
+	 * {@link #cancel} is unchanged. Since NEXT.
+	 */
+	default CompletableFuture<CancelOutcome> cancelDesign(String designId) {
+		throw new UnsupportedOperationException("Designs.cancelDesign needs Architect API NEXT");
 	}
 
 	/**

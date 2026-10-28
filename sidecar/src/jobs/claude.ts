@@ -175,7 +175,8 @@ export class ClaudeJobDriver implements JobDriver {
       }
     } finally {
       q.abort.signal.removeEventListener('abort', close);
-      if (q.abort.signal.aborted) void this.host.reap(entry!);
+      // (7a K3) awaited: the job's run ends only once an aborted query's CLI process tree is gone (a confirmed cancel waits for it)
+      if (q.abort.signal.aborted) await this.host.reap(entry!);
     }
   }
 }

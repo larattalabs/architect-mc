@@ -169,6 +169,9 @@ public interface ArchitectApi {
 	 * if its design leaves the wall's outer faces open (air, a door, a fence gate or a trapdoor there) or the passage floor is not
 	 * standable; the realise drops the entry's blocks on a gatehouse's passage (IRR's rule) and the lot's site never owns those cells.
 	 * No new record, method or reason.
+	 * Since NEXT (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
+	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
+	 * of {@link Designs#get}.
 	 */
 	Set<String> features();
 }

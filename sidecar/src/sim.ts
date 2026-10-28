@@ -445,6 +445,11 @@ export class SimDesigner implements Designer {
     r.wake?.();
   }
 
+  /** (7a K3) Resolves once the run of design `id` has ended (a cancelled run ends at its next step; nothing is charged after). */
+  async turnStopped(id: string): Promise<void> {
+    while (this.runs.has(id)) await new Promise((res) => setTimeout(res, 10));
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.limitTimer) clearTimeout(this.limitTimer);

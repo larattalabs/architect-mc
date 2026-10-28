@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.walls.lots', 'region.revise', 'plan.revision'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.walls.lots', 'region.revise', 'plan.revision', 'design.opKeys'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -340,6 +340,7 @@ export const DesignRequest = DesignRequestBase.extend({
     .describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it as blobs'),
   palette: PaletteSpec.optional().describe('(Style unification U1, feature palette.roles) materials only: the design builds with this palette (a preset, inputs, or a Style\'s roles inline `{ bible: { id, version, roles } }`) and its default palette is it. Never bible set mode: no components, no restraint. Excludes `bible`'),
   reserved: Reserved.optional().describe("(6c IRR, S-IRR-2) the lot's cells the design must leave as given (an irrigated farm's water and its edges): the brief names them, the checker refuses a design writing one (kit build.mjs --reserved)"),
+  opKey: OpKey.optional().describe("(7a K3, feature design.opKeys) the caller's operation key, scoped by (owner, \"design\", opKey): the same key and body answers the first design (adopted, in any state; never a second job, never VERSION_REFUSED busy); another body is refused op_key_conflict. The body is the request as sent without opKey and without versionOf's siteNow, siteEdits and baseVersion"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
@@ -1063,6 +1064,14 @@ const designRequestMsg = { ...envelope('design.request') };
 export const DesignRequestMsgV1 = z.object({ ...designRequestMsg, request: DesignRequestV1 });
 export const DesignRequestMsg = z.object({ ...designRequestMsg, request: DesignRequest });
 export const DesignCancelMsg = z.object({ ...envelope('design.cancel'), designId: Id });
+/**
+ * (7a K3, feature design.opKeys) A cancel that answers its outcome: `cancelled` once the design is final and its running turn and
+ * internal jobs have stopped (an already cancelled design answers `cancelled` again, after the same wait), `already_final` for a done
+ * or failed one, `unknown` for no such design; with the design record (its final cost) except for `unknown`.
+ */
+export const DesignCancelConfirmMsg = z.object({ ...envelope('design.cancelConfirm'), designId: Id });
+/** (7a K3, feature design.opKeys) The design a caller requested with an operation key (any state); absent = never received. */
+export const DesignByKeyMsg = z.object({ ...envelope('design.byKey'), owner: Owner.optional(), opKey: OpKey });
 export const AuthSetMsg = z.object({
   ...envelope('auth.set'),
   apiKey: z.string().trim().min(1).max(500).nullable().optional().describe('a string sets the key, null clears it, absent keeps it'),
@@ -1366,6 +1375,8 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BibleCancelMsg,
   BibleByKeyMsg,
   GroupByKeyMsg,
+  DesignByKeyMsg,
+  DesignCancelConfirmMsg,
   ReskinRequestMsg,
   MassingRedirectMsg,
   MassingListMsg,

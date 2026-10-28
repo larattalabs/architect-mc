@@ -67,11 +67,33 @@ notes still carry it, so the repair request can pass the notes through unchanged
   - the inner lanes, edges `route_wl_<lot>`.
 - **Zone geometry** (street, lot positions) moves for every zone whose wall names lots, because the zone is laid out without them.
 
-## The exact API delta (all additive; no record, method, constructor or enum value changed; api-compat clean)
+## RC note for Steward: request identity, confirmed cancel, DONE ordering (feature `design.opKeys`)
+
+All additive and binary compatible; check `ArchitectApi.features().contains("design.opKeys")` before using any of it (an older helper
+refuses a keyed request rather than dropping the key).
+
+1. **`DesignRequest.opKey`** (`withOpKey(key)`, `[A-Za-z0-9_.:-]{1,128}`), scoped by (owner, "design", key) like `GroupRequest.opKey`.
+   Sending the same key and body again completes with the first design's id, in any state (also a finished one), and starts no job;
+   a keyed `versionOf` retry is adopted, never `VERSION_REFUSED busy`. Another body fails `ArchitectRefused OP_KEY_CONFLICT`. The body
+   ignores the versionOf site blobs (the mod re-uploads them on every send; the first design's site files win). A keyed design is
+   kept at least 30 days after it is final.
+2. **`Designs.designByKey(owner, key)`** -> `CompletableFuture<Optional<Design>>`: the design in any state from the helper's persisted
+   record; empty = never received; fails `SIDECAR_UNAVAILABLE` while not connected.
+3. **`Designs.cancelDesign(id)`** -> `CompletableFuture<CancelOutcome>` (`kind` CANCELLED / ALREADY_FINAL / UNKNOWN, `design`).
+   CANCELLED only once the running turn's process is gone and the design's internal calls ended; its `design().cost()` is final. A
+   repeat answers CANCELLED again. ALREADY_FINAL carries the DONE or FAILED design and its cost. It fails exceptionally while the
+   helper is unreachable, or if the turn has not stopped within 15 s (the design stays cancelled; ask again). DESIGN_DONE with status
+   CANCELLED still fires. `cancel(id)` is unchanged.
+4. **Ordering:** `get`, `designByKey` and the cancel outcome report DONE only once the entry's new version is installed and loaded on
+   the server, the moment DESIGN_DONE fires (a DESIGN_DONE listener already sees DONE). Before that a finished design reads as its last
+   non-final status (RENDERING if the game saw none). FAILED and CANCELLED are reported when final.
+
+## The exact API delta (all additive; no existing record, method, constructor or enum value removed or changed; api-compat clean)
 
 | Surface | Delta |
 |---|---|
 | Feature | `wallLots` from the helper's `region.walls.lots` (sidecar `FEATURES`, `ApiRules`, `ArchitectApi` javadoc "Since NEXT (7a K3)"). |
+| Feature `design.opKeys` (added for the RC) | `DesignRequest.opKey` (a new last component; the 1.41.0 canonical constructor kept) and `withOpKey`; `Designs.designByKey`, `Designs.cancelDesign` (defaults that throw); the new record `CancelOutcome` with enum `Kind`; wire `design.request.opKey`, `design.byKey`, `design.cancelConfirm`. |
 | plan/0 `connector.wall` | New strict member `lots: [{lot: id, at?: corner \| gate \| run, near?: endpoint}]`, at most 16, `lot` required. It is the only addition to the schema, terse because the compact plan/0 has a 96,000 bound: 95,975 now, 228 more than main's 95,747. |
 | Lenient params (R17) | Read when `lots` is absent: `corner_lots` and `towers` (corners first, then runs); `gate_lot`, `gateLots`, `gate` (a lot id) and `gates` (a list of lot ids, which also sets `gates.min` to its length); `joins` and `anchors` by the lot's type, else its id stem. Each mapped key leaves the "params.X not read" notes. |
 | Plan behaviour | A ring wall (`wall.around` or `wall.edge` on a zone) withholds its named lots from the zone's street or free layout and sites them on its line. The band raises `ring.min` to ceil(depth / 2) + 2: noted, with a `move` deviation only past `ring.max`. A lot that fits nowhere goes back to its zone: the plan compiles once more and keeps K1's `join` deviation, noting why. A `wall.line` keeps its `via` lots (K1's joined lots) and adds their `onWall`. A `wall.along` sites none. A wall naming no lot is K1's, byte for byte. |

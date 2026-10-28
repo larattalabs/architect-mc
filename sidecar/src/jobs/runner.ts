@@ -25,6 +25,7 @@ import { ClientError } from '../sidecar.js';
 import type { JobWork, PendingCall } from '../store.js';
 import { truncate } from '../util/text.js';
 import { isFinalJob, JobBook } from './book.js';
+import { isFinalDesign } from '../designs.js';
 import { costFromResult, CostMeter } from './cost.js';
 import type { DriverTool, JobDriver, ResumeAnswer, ToolAnswer } from './driver.js';
 import { validateJson } from './schema.js';
@@ -197,10 +198,35 @@ export class JobRunner {
     // (6c 0a) sim only: what each of this job's steps costs (simCosts: a critic call)
     if (opts.simStepUsd !== undefined) w.simStepUsd = opts.simStepUsd;
     this.sc.store.markDirty();
+    // (7a K3) a design's job (tag "design <id> ...") never starts once that design is final (a cancel raced its creation)
+    const of = /^design (\S+) /.exec(spec.tag ?? '')?.[1];
+    const od = of ? this.sc.designs.get(of) : undefined;
+    if (od && isFinalDesign(od)) {
+      this.book.update(j.id, { status: 'cancelled', step: `cancelled: design ${od.id} is ${od.status}` });
+      this.log.info(`job ${j.id} (${spec.tag}) not started: design ${od.id} is ${od.status}`);
+      return j;
+    }
     this.log.info(`job ${j.id} (${spec.kind}, ${spec.owner ?? 'sidecar'}${spec.tag ? `, ${spec.tag}` : ''}${images.length ? `, ${images.length} image${images.length === 1 ? '' : 's'}` : ''}) started by the sidecar`);
     this.enqueue(j.id, spec.kind);
     this.kick();
     return j;
+  }
+
+  /**
+   * (7a K3) Cancel the internal jobs whose tag starts with `prefix` ("design <id> ") and resolve once none of them runs any more (their
+   * runs have ended, the aborted query's CLI process reaped).
+   */
+  async stopTagged(prefix: string): Promise<void> {
+    const tagged = (id: string) => String(this.book.get(id)?.spec.tag ?? '').startsWith(prefix);
+    for (const j of this.book.list()) {
+      if (isFinalJob(j) || !tagged(j.id)) continue;
+      try {
+        this.cancel(j.id);
+      } catch {
+        /* already ending */
+      }
+    }
+    await Promise.all([...this.running.values()].filter((r) => tagged(r.id)).map((r) => r.done.catch(() => undefined)));
   }
 
   /** (5a) Resolves when the job is final (done, failed or cancelled). */

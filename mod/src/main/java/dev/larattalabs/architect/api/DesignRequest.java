@@ -42,6 +42,14 @@ import org.jspecify.annotations.Nullable;
  *     roof?, accent?}}) or a Style's roles inline ({@code {bible: {id, version, roles}}}, {@link #withStyle}). Never bible set mode
  *     (no shared components, no restraint): {@code bible} excludes it (both set: refused). The entry records it as its
  *     {@code palette}; with roles inline, also {@code {id, version}} as its {@code bible} pin. Null = none (the designer picks)
+ * @param opKey (since NEXT, 7a K3, a helper with {@code "design.opKeys"}) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}),
+ *     scoped by (owner, kind "design", opKey); a null owner means the player. Sending again with the same key and the same body
+ *     answers the first design's id and starts no new job, in any state (for a {@code versionOf}, never
+ *     {@link Reason#VERSION_REFUSED} {@code busy}); with a different body the future fails {@link ArchitectRefused}
+ *     {@link Reason#OP_KEY_CONFLICT}. The body is the request as sent without the key and without the versionOf site files (the
+ *     mod uploads them again on a retry; the first design's files win). The key stays bound to its design after it finishes; a
+ *     keyed design is kept at least 30 days after it is final. See {@link Designs#designByKey}. A helper without
+ *     {@code design.opKeys} refuses a keyed request (it would drop the key). Null = none
  *
  * <p>Binary compatibility (Steward's U1 review): every earlier canonical constructor stays as a secondary one (the 14-argument
  * 1.1.0 one Steward calls among them); a later change to this record keeps them all and adds its own.
@@ -50,7 +58,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
 	@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
 	@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
-	@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette) {
+	@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette, @Nullable String opKey) {
 	/** The most characters of a context (text, or JSON as text). */
 	public static final int MAX_CONTEXT = 4000;
 
@@ -109,6 +117,25 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** The most reserved cells a request carries. */
 	public static final int MAX_RESERVED = Limits.RESERVED_CELLS_MAX;
 
+	/** The 1.41.0 constructor (no opKey). Kept for binary compatibility. */
+	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
+		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
+		@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
+		@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette) {
+		this(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile, bibleVersion, massing,
+			fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, null);
+	}
+
+	/**
+	 * A copy with this operation key (null = none; checked when sent: {@code [A-Za-z0-9_.:-]{1,128}}). Needs a helper with
+	 * {@code "design.opKeys"}. Since NEXT.
+	 */
+	public DesignRequest withOpKey(@Nullable String key) {
+		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, key);
+	}
+
 	/** The 1.37.0 constructor (no palette). Kept for binary compatibility. */
 	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
 		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
@@ -125,7 +152,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest withPalette(@Nullable JsonElement p) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, p == null || p.isJsonNull() ? null : p);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, p == null || p.isJsonNull() ? null : p, opKey);
 	}
 
 	/**
@@ -162,7 +189,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy whose design leaves {@code r}'s cells of the lot as given (null = none). Since 1.37.0. */
 	public DesignRequest withReserved(@Nullable Reserved r) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r, palette);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, r, palette, opKey);
 	}
 
 	/** The 1.6.0 constructor (no versionOf). */
@@ -180,7 +207,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 */
 	public DesignRequest versionOf(String entryId, @Nullable String siteId) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId, reserved, palette);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId, reserved, palette, opKey);
 	}
 
 	/** The 1.3.0 constructor (no critique). */
@@ -210,19 +237,19 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with an open type's profile. Since 1.2.0. */
 	public DesignRequest withProfile(List<String> rules) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, rules,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 
 	/** A copy designed with a style bible (null version = its latest). Since 1.2.0. */
 	public DesignRequest withBible(@Nullable String bibleId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bibleId, group, profile,
-			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette);
+			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 
 	/** A copy that is (true) or is not (false) a massing job. Since 1.3.0. */
 	public DesignRequest massing(boolean on) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite, reserved, palette);
+			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 
 	/** A copy that is the detail pass of the massing's latest version. Since 1.3.0. */
@@ -233,7 +260,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy that is the detail pass of one massing version (null = its latest). Since 1.3.0. */
 	public DesignRequest fromMassing(@Nullable String massingId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite, reserved, palette);
+			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -244,12 +271,12 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive} (null = none). Since 1.3.0. */
 	public DesignRequest withContext(@Nullable JsonElement ctx) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite, reserved, palette);
+			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 
 	/** A copy critiqued as {@code spec} (null or OFF = none). Since 1.6.0. */
 	public DesignRequest critique(@Nullable CritiqueSpec spec) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite, reserved, palette);
+			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite, reserved, palette, opKey);
 	}
 }

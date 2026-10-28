@@ -305,6 +305,7 @@ public final class Wire4b {
 		JsonArray items = new JsonArray();
 		for (GroupRequest.Item it : g.items()) {
 			JsonObject r = DesignsImpl.wire(it.request(), 2);
+			r.remove("opKey"); // 7a K3: a design key is for design.request only (a group has its own GroupRequest.opKey)
 			// 5a: the item's critique wins over the group's: its own, else its request's; OFF is sent to turn the group's off
 			r.remove("critique");
 			var ic = it.critique() != null ? it.critique() : it.request().critique();
