@@ -29,6 +29,10 @@ the deviations, with reasons). D3's as-built wins over GJ's facts about D3. Bran
       - the bug run 1 found: a block across the opening turns the walk's dirt_path to dirt (vanilla), and the re-check then stayed stale
         forever; now the opening is checked first and dirt for dirt_path is the walk (GateJoin.sameKind)
 - [x] gate-verifier at 5a9a86c5 (run `20261028-185647-change`): PASS, gj-ingame 19/0, gj-steward 17/0; ready to merge
+- [x] brought up to date 2026-11-01: origin/main b10194af (K3, FB, v0.48.0) merged at e8db524d, the lists the union, no GJ code changed;
+      a K3 gatehouse-only wall has a `passage` node and no `gate` node, so it still answers `NO_JOIN [wall]`. Kit 991/0, sidecar 804 (the
+      3 load timeouts pass alone), gradle build, api-compat clean, run `20261101-185639-change`: gj-unit 4/0, gj-ingame 19/0, gj-town
+      10/0, gj-steward 17/0. Ready to merge; Steward's RC first (below); stamps `NEXT` for the coordinator
 
 ## Resume
 
