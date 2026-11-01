@@ -35,7 +35,7 @@ the deviations, with reasons). D3's as-built wins over GJ's facts about D3. Bran
       10/0, gj-steward 17/0. Ready to merge; Steward's RC first (below); stamps `NEXT` for the coordinator
 
 - [x] Steward's RC, 2026-11-01: `checkBeside` beside the real walled town refused `NO_JOIN [wall] ... no walk from its inner cell reaches a
-      street end or side`. Cause and fix: the contract's as-built row 13. Kit 998 (`gj.test` 18/18), sidecar 804, gradle build, step-inputs
+      street end or side`. Cause and fix: the contract's as-built row 13. Kit 995 + 1 skipped (`gj.test` 18/18), sidecar 804, gradle build, step-inputs
       clean, run `20261101-201402-change`: gj-unit 4/0, gj-ingame 19/0, gj-town 10/0, gj-steward 17/0, the new gj-shortrun 18/0 (Steward's
       plain wall, and a gate opening on the street end). Steward's RC to re-run
 
