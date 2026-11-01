@@ -34,6 +34,11 @@ the deviations, with reasons). D3's as-built wins over GJ's facts about D3. Bran
       3 load timeouts pass alone), gradle build, api-compat clean, run `20261101-185639-change`: gj-unit 4/0, gj-ingame 19/0, gj-town
       10/0, gj-steward 17/0. Ready to merge; Steward's RC first (below); stamps `NEXT` for the coordinator
 
+- [x] Steward's RC, 2026-11-01: `checkBeside` beside the real walled town refused `NO_JOIN [wall] ... no walk from its inner cell reaches a
+      street end or side`. Cause and fix: the contract's as-built row 13. Kit 998 (`gj.test` 18/18), sidecar 804, gradle build, step-inputs
+      clean, run `20261101-201402-change`: gj-unit 4/0, gj-ingame 19/0, gj-town 10/0, gj-steward 17/0, the new gj-shortrun 18/0 (Steward's
+      plain wall, and a gate opening on the street end). Steward's RC to re-run
+
 ## Resume
 
 ```sh
@@ -43,6 +48,8 @@ node tools/gate-run.mjs change --only gj-unit,gj-ingame,gj-town,gj-steward --por
   --run-dir ../architect-mc-GJ-run --out ../architect-mc-GJ-gate-runs --lock ../architect-mc-GJ-run.lock --plan
 # then the same without --plan, detached; ONE until-loop on the run's summary.json
 ```
+
+`gj-shortrun` joins the `--only` list above.
 
 The in-game fixtures (all built by the driver on `G6B Flat Base`, each in its own world):
 - `ingame` (d3_walled, gated): D3's 8-lot town at (60000, 20000), a C38 ring (`wall.around {feature: {region}}`, ring [4, 12], height 5,

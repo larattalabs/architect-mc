@@ -176,6 +176,16 @@ test('item 12 (the short run): an in-line gate joins at every gap, down to openi
   }
 });
 
+test('item 12 (the only way in): a town whose wall dropped every candidate (no street side, as Steward\'s lined street): its in-line end still joins', () => {
+  const t = synthWalled({ u0: 76, u1: 82, bodies: [[73, 47, 75, 49]] }); // (a body past the other end drops it too)
+  const de = [{ x: 104, z: 48, at: [104, 65, 48], facing: [-1, 0] }];
+  const J = chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R: t.R, beside: t.beside, claim: [96, 0, 135, 95], districtEnds: de, route: routePass });
+  assert.equal(J.count, 1, 'the end taken back is the only candidate');
+  assert.deepEqual([J.cand.kind, J.cand.node, J.cand.run], ['end', 'street_end', 2]);
+  // without a gate that is D3's own refusal, as before
+  assert.throws(() => chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R: { ...t.R, gates: [] }, beside: t.beside, claim: [96, 0, 135, 95], districtEnds: de, route: routePass }), /NO_JOIN: \[route\] no street end or side of region rg9 offers a junction/);
+});
+
 test('item 12 (a run that can\'t take a join): a body across the in-line run, a street too far below the gate, are named', () => {
   const de = [{ x: 104, z: 48, at: [104, 65, 48], facing: [-1, 0] }];
   const reachOf = (t) => chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R: t.R, beside: t.beside, claim: [96, 0, 135, 95], districtEnds: de, route: routePass });
