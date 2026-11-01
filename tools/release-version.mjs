@@ -25,6 +25,8 @@
 // their ARVX sha (the IR's volumes[].sha, not the blob sha they are stored under: without them crossings_demo_flat drops its
 // tunnels), and with --node set to the Node major the golden records (the IR's `node`), so any Node re-cuts it alike. The re-cut must differ from the committed IR in kitVersion (and programSha) only; its blobs byte for byte, its tile
 // shas (1 = 4 workers) and cells equal the golden header's. Anything else fails, and every file the run wrote is put back.
+// Not a tracked golden: the GR parity fixture (kit/test/fixtures/gr/land.json, also read by the mod's DistrictLandGrTest) pins its
+// IRs' kitVersion and node (kit/test/gr-parity.mjs PIN), so a release leaves it unchanged; the kit test gr-parity.test.mjs guards it.
 // Exit 0 ok, 1 a mismatch or a refused re-cut, 2 usage.
 import fs from 'node:fs';
 import os from 'node:os';
