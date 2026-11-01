@@ -218,9 +218,11 @@ const FACE_NAMES = ['west (x0)', 'bottom (y0)', 'north (z0)', 'east (x1)', 'top 
  *     where both record one (`parts.<name>.roof`), and (6c 0a, C6) the entrance column (anchors.entrance: x on a
  *     north/south front, z on an east/west one) is within 1 of the massing's where both have an entrance
  * Boxes and anchors are template coordinates, so both templates are compared from their minimum corners.
+ * (Since NEXT, 7a K3) `opts.cap` {x, y, z}: the size cap replaces the massing's size + 2 (a wall lot's detail fills its exact box, the
+ * request's maxSize, whatever its massing's size): the error fires only over the cap. The other rules are unchanged.
  * @returns {{ ok: boolean, errors: string[], issues: string[], compared: { parts: number, roofs: number, entrance: boolean } }}
  */
-export function checkConformance(detail, massing) {
+export function checkConformance(detail, massing, opts = {}) {
   const errors = [];
   const issues = [];
   const compared = { parts: 0, roofs: 0, entrance: false };
@@ -230,7 +232,8 @@ export function checkConformance(detail, massing) {
   const ms = massing.size ?? {};
   for (const a of ['x', 'y', 'z']) {
     if (!Number.isInteger(ds[a]) || !Number.isInteger(ms[a])) { errors.push(`size: ${a} missing in ${!Number.isInteger(ds[a]) ? 'the design' : 'the massing'}`); continue; }
-    if (ds[a] > ms[a] + 2) errors.push(`size: ${a} is ${ds[a]}, over the massing's ${ms[a]} + 2 (the approved massing caps the size)`);
+    const cap = opts.cap && Number.isInteger(opts.cap[a]) ? opts.cap[a] : undefined;
+    if (cap !== undefined ? ds[a] > cap : ds[a] > ms[a] + 2) errors.push(cap !== undefined ? `size: ${a} is ${ds[a]}, over the cap ${cap} (the lot's box)` : `size: ${a} is ${ds[a]}, over the massing's ${ms[a]} + 2 (the approved massing caps the size)`);
     else if (ds[a] < ms[a] - 2) issues.push(`size: ${a} is ${ds[a]}, more than 2 under the massing's ${ms[a]}`);
   }
   // (6c 0a, C6) the front and the entrance column: what Sites.fitToLot turns and centres by

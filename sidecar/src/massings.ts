@@ -12,6 +12,10 @@
 //   - the detail pass (`request.fromMassing`): its check adds `--massing <the version's blueprint.json>` (the kit's
 //     conformance check: size-cap errors fail the round, other issues are warnings on the design) and `--max` is
 //     min(massing size + 2, request.maxSize) per axis
+//   - (since NEXT, 7a K3) a wall lot (a request carrying ext["architect:wallLot"], the sign Steward sends on every lot on a wall's
+//     line; its maxSize is the lot's exact box): its massing must fill the box's footprint (size x and z equal maxSize x and z, or
+//     the round fails and the repair round fixes it), and its detail pass's cap is the box itself (`--max` maxSize and the kit's
+//     conformance `--massing-cap` maxSize in place of massing size + 2): the detail must close the wall at the box's faces
 //   - lifecycle: `massing.delete` removes a massing (every version) at once; garbage collection (at start and hourly)
 //     removes a group's massings 7 days after the group is final, a stand-alone one 7 days after its detail design
 //     finished, or 30 days after it was made (its latest version) if it was never detailed. A massing in use (a job
@@ -125,7 +129,10 @@ export class Massings {
     if (r.massing) return { limits: { maxSize: r.maxSize, type: r.type, profile: ['massing'] }, extra: [] };
     const m = this.sourceOf(d);
     if (!m) return { limits: base, extra: [] };
-    return { limits: { ...base, maxSize: detailMax(m.size, r.maxSize) }, extra: ['--massing', path.join(m.dir, `${m.id}.blueprint.json`)] };
+    // (7a K3) a wall lot's detail fills its exact box: the box is the cap, for --max and for the kit's conformance size error
+    const exact = isWallLotRequest(r);
+    const cap = exact && this.sc.kitHas('--massing-cap') ? ['--massing-cap', `${r.maxSize.x},${r.maxSize.y},${r.maxSize.z}`] : [];
+    return { limits: { ...base, maxSize: detailMax(m.size, r.maxSize, exact) }, extra: ['--massing', path.join(m.dir, `${m.id}.blueprint.json`), ...cap] };
   }
 
   /**
@@ -144,7 +151,7 @@ export class Massings {
     if (sc.massing !== true) return 'the blueprint is not a massing (`massing: true` is missing): build it with kit/lib/massing.mjs';
     const parts = sc.parts && typeof sc.parts === 'object' ? Object.keys(sc.parts) : [];
     if (parts.length < 2) return `a massing needs at least 2 named masses (it has ${parts.length})`;
-    return undefined;
+    return wallLotMassingProblem(d.request, sc.size);
   }
 
   // ---- install --------------------------------------------------------------------------------------
@@ -317,8 +324,32 @@ export class Massings {
   }
 }
 
-/** The hard size cap of a detail pass: min(massing size + 2, request.maxSize) per axis. */
-export function detailMax(size: { x: number; y: number; z: number }, max: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+/** (7a K3) The request ext key Steward sends on every wall lot's request: {outerFaces: onWall.outerFaces.lotCells}. */
+export const WALL_LOT_EXT = 'architect:wallLot';
+
+/**
+ * (Since NEXT, 7a K3) Is this an exact-box wall lot: a request carrying ext["architect:wallLot"] (an object) with a maxSize (the lot's
+ * box). The ext is the contract; the sim's other wall-lot signs (the brief line, a gatehouse's reserved passage) are not used here.
+ */
+export function isWallLotRequest(req: { ext?: Record<string, unknown> | undefined; maxSize?: unknown }): boolean {
+  const wl = req.ext?.[WALL_LOT_EXT];
+  return !!req.maxSize && !!wl && typeof wl === 'object' && !Array.isArray(wl);
+}
+
+/** (Since NEXT, 7a K3) A wall lot's massing must fill its box's footprint: the problem when its size x or z differs, else undefined. */
+export function wallLotMassingProblem(req: { ext?: Record<string, unknown> | undefined; maxSize: { x: number; y: number; z: number } }, size: { x?: unknown; z?: unknown } | undefined): string | undefined {
+  if (!isWallLotRequest(req)) return undefined;
+  const m = req.maxSize;
+  if (size?.x === m.x && size?.z === m.z) return undefined;
+  return `a wall lot's massing must fill its box's footprint exactly: x ${m.x} by z ${m.z} (it is ${String(size?.x)} by ${String(size?.z)}). It stands on a wall's line and its faces close the wall: make the template exactly x ${m.x}, z ${m.z} (y up to ${m.y}), its masses reaching the box's faces`;
+}
+
+/**
+ * The hard size cap of a detail pass: min(massing size + 2, request.maxSize) per axis; (since NEXT, 7a K3) `exact` (a wall lot):
+ * request.maxSize, the lot's box.
+ */
+export function detailMax(size: { x: number; y: number; z: number }, max: { x: number; y: number; z: number }, exact = false): { x: number; y: number; z: number } {
+  if (exact) return { x: max.x, y: max.y, z: max.z };
   return { x: Math.min(size.x + DETAIL_SIZE_SLACK, max.x), y: Math.min(size.y + DETAIL_SIZE_SLACK, max.y), z: Math.min(size.z + DETAIL_SIZE_SLACK, max.z) };
 }
 

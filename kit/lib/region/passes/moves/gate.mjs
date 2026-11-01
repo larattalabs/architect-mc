@@ -10,6 +10,9 @@ export const COST_GATE = 600;
 /** The longest gate move (cells): the approach clearances on both sides plus the wall's depth. */
 const MAX_MOVE = 16;
 const DIRS4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+/** (7a K3) A passage move's `arg`: PASSAGE_ARG + the passage's index (a gate move's arg is its depth, at most MAX_MOVE). */
+export const PASSAGE_ARG = 200;
+const FACING4 = { east: [1, 0], south: [0, 1], west: [-1, 0], north: [0, -1] };
 
 /**
  * The pass-level state from `intent.walls` ([{id, max, cells: [[x, z, axis]], open: [[x, z, y?]], opened}]: `axis` 1 a run along x,
@@ -33,7 +36,18 @@ export function gateInit(env, intent) {
   });
   const mask = new Uint8Array(n);
   for (let k = 0; k < n; k++) if (wid[k] >= 0) mask[k] = 1;
-  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0, inside: Array.isArray(w.inside) ? w.inside : null, open: (w.open ?? []).length })), wid, axis, open, openY, mask, gates: [] };
+  // ((7a K3, §4) the walls' passages (a gatehouse's, through its box): each port cell, its entering heading and the other port; only when a
+  // wall has one, so every other pass is K1a's byte for byte)
+  const passages = [];
+  walls.forEach((w, wi) => {
+    for (const q of w.passages ?? []) {
+      const f = FACING4[q.facing];
+      const kf = at(q.front[0], q.front[2]), kb = at(q.back[0], q.back[2]);
+      if (!f || kf < 0 || kb < 0) continue;
+      passages.push({ wall: wi, lot: q.lot, front: q.front, back: q.back, kf, kb, facing: f, n: Math.abs(q.front[0] - q.back[0]) + Math.abs(q.front[2] - q.back[2]) });
+    }
+  });
+  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0, inside: Array.isArray(w.inside) ? w.inside : null, open: (w.open ?? []).length + (w.passages?.length ?? 0) })), wid, axis, open, openY, mask, gates: [], ...(passages.length ? { passages, portAt: new Map(passages.flatMap((p, i) => [[p.kf, i], [p.kb, i]])) } : {}) };
 }
 
 /**
@@ -63,6 +77,15 @@ export function gateActive(state) {
 export function gateExpand(state, S) {
   const { h } = S;
   if (h & 1) return; // cardinal headings only
+  // ((7a K3, §4) the passage move: from a port cell, heading into the box at the port's floor, to the other port (an open gate, its
+  // cells' cost; it writes nothing in the box: a `passage` segment)
+  if (state.passages && state.portAt.has(S.k)) {
+    const pi = state.portAt.get(S.k), p = state.passages[pi];
+    const fromFront = S.k === p.kf, port = fromFront ? p.front : p.back, to = fromFront ? p.kb : p.kf;
+    const hd = fromFront ? [-p.facing[0], -p.facing[1]] : p.facing;
+    const di = DIRS4[h >> 1][0], dj = DIRS4[h >> 1][1];
+    if (di === hd[0] && dj === hd[1] && S.y === port[1] - 1 && S.inS(to) && S.free(to) && S.dOf(S.y, to) >= 0) S.relax(to, h, 3, S.y * 16, 10 * p.n, PASSAGE_ARG + pi);
+  }
   const hc = h >> 1, di = DIRS4[hc][0], dj = DIRS4[hc][1];
   // the wall's run is perpendicular to the heading: heading along x crosses a run along z (axis 2), and the reverse
   const want = di !== 0 ? 2 : 1;
@@ -118,6 +141,8 @@ export function gateExpand(state, S) {
 export function gateCells(state, m) {
   const out = [];
   for (let t = 1; t <= m.n; t++) out.push([m.x0 + m.dx * t, m.y0, m.z0 + m.dz * t]);
+  // ((7a K3) a passage move: its segment is the passage's (kind passage, its lot), its cells the box's centre line at the floor)
+  if (state.passages && m.arg >= PASSAGE_ARG) { const p = state.passages[m.arg - PASSAGE_ARG]; return { cells: out, data: { kind: 'passage', lot: p.lot, wall: state.walls[p.wall].id } }; }
   return { cells: out, data: { wall: null } };
 }
 
@@ -128,8 +153,11 @@ export function gateCells(state, m) {
 export function gateCommit(state, env, edgeOut, moves, lat) {
   const { W, r, minX, minZ } = env;
   const gates = [];
+  const passed = [];
   for (const mv of moves) {
     if (mv.code !== 5) continue;
+    // ((7a K3) a passage move: recorded, nothing opened)
+    if (state.passages && mv.arg >= PASSAGE_ARG) { const p = state.passages[mv.arg - PASSAGE_ARG]; passed.push({ wall: state.walls[p.wall].id, lot: p.lot }); continue; }
     const di = mv.dx, dj = mv.dz, li = -dj, lj = di;
     let wall = -1, isNew = false, mid = null;
     const cells = [];
@@ -150,4 +178,5 @@ export function gateCommit(state, env, edgeOut, moves, lat) {
     gates.push({ wall: state.walls[wall].id, at: mid, heading: [di, dj], width: lat.hi - lat.lo + 1, depth: mv.arg, new: isNew, cells: cells.map((ak) => [minX + (ak % W) * r, minZ + Math.floor(ak / W) * r]) });
   }
   edgeOut.gates = gates;
+  if (passed.length) edgeOut.passages = passed;
 }

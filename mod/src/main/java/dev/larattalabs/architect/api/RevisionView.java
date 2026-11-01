@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  * pre-revision state again once the revision ends); {@code stages}: its journal stages ({@code rv<rid>:<stage>}); {@code lotsAdded},
  * {@code lotsRefilled}; {@code cells} written; {@code artifact}: the plan artifact it was realised from, if any; {@code survivalAllowed};
  * {@code waiting}: what it waits for, or why it stopped; {@code sites}: every site it wrote (its tile cell sites, roads and lots, in
- * write order), each also carrying ext {@code architect_mc:revision {region, rid}}, so one revision is one history entry. Since NEXT.
+ * write order), each also carrying ext {@code architect_mc:revision {region, rid}}, so one revision is one history entry. Since 1.43.0.
  */
 public record RevisionView(int rid, int position, int parentRid, String planId, String irSha, String state, long createdAt, List<String> stages,
 	List<String> lotsAdded, List<String> lotsRefilled, long cells, @Nullable String artifact, boolean survivalAllowed, @Nullable String waiting,

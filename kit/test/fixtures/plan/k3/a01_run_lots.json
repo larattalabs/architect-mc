@@ -1,0 +1,216 @@
+{
+ "about": "(7a K3, \u00a73) run lots: k3_castle_flat with two watch towers on the runs (at: run, front facing in) besides its corner towers and gatehouse",
+ "terrain": {},
+ "covers": [
+  "connector.wall",
+  "wall.around"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "k3_a01",
+  "zones": [
+   {
+    "id": "castle",
+    "kind": "standard",
+    "required": true,
+    "program": {
+     "lots": [
+      {
+       "id": "gatehouse_1",
+       "type": "gatehouse",
+       "size": [
+        13,
+        11
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "gatehouse_1",
+        "steward_mc:role": "gate"
+       }
+      },
+      {
+       "id": "tower_1",
+       "type": "tower",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "tower_1",
+        "steward_mc:role": "defence"
+       }
+      },
+      {
+       "id": "tower_2",
+       "type": "tower",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "tower_2",
+        "steward_mc:role": "defence"
+       }
+      },
+      {
+       "id": "tower_3",
+       "type": "tower",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "tower_3",
+        "steward_mc:role": "defence"
+       }
+      },
+      {
+       "id": "tower_4",
+       "type": "tower",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "tower_4",
+        "steward_mc:role": "defence"
+       }
+      },
+      {
+       "id": "h1",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h1",
+        "steward_mc:role": "home"
+       }
+      },
+      {
+       "id": "h2",
+       "type": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h2",
+        "steward_mc:role": "home"
+       }
+      },
+      {
+       "id": "h3",
+       "type": "smithy",
+       "size": [
+        9,
+        9
+       ],
+       "ext": {
+        "steward_mc:settlement": "s1",
+        "steward_mc:lot": "h3",
+        "steward_mc:role": "workshop"
+       }
+      },
+      {
+       "id": "watch_1",
+       "type": "watchtower",
+       "size": [
+        7,
+        7
+       ]
+      },
+      {
+       "id": "watch_2",
+       "type": "watchtower",
+       "size": [
+        7,
+        7
+       ]
+      }
+     ],
+     "layout": "street",
+     "orientation": "ew"
+    },
+    "tolerance": {
+     "rotate": {
+      "allowed": false
+     }
+    },
+    "where": {
+     "near": {
+      "anchor": "claim_center",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "curtain_wall",
+    "kind": "wall",
+    "required": true,
+    "where": {
+     "around": {
+      "feature": {
+       "part": "castle"
+      }
+     }
+    },
+    "height": 8,
+    "walk": true,
+    "lots": [
+     {
+      "lot": "tower_1",
+      "at": "corner"
+     },
+     {
+      "lot": "tower_2",
+      "at": "corner"
+     },
+     {
+      "lot": "tower_3",
+      "at": "corner"
+     },
+     {
+      "lot": "tower_4",
+      "at": "corner"
+     },
+     {
+      "lot": "gatehouse_1",
+      "at": "gate",
+      "near": {
+       "anchor": "claim_e"
+      }
+     },
+     {
+      "lot": "watch_1",
+      "at": "run"
+     },
+     {
+      "lot": "watch_2",
+      "at": "run"
+     }
+    ]
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "required": true,
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "castle"
+    }
+   }
+  ]
+ }
+}

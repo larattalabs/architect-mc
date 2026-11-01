@@ -22,7 +22,8 @@
 // massing; the design must build one, lib/massing.mjs).
 // --massing <massing.blueprint.json> (phase 4c): the massing this design details; adds massing conformance (errors: the
 // size cap, at most the massing's size + 2; warnings `massing: ...`: part names, boxes within 1, size, roof forms) and,
-// with --json, `conformance: { ok, errors[], issues[] }`.
+// with --json, `conformance: { ok, errors[], issues[] }`. --massing-cap x,y,z (since NEXT, 7a K3): the conformance size cap in place of
+// the massing's size + 2 (a wall lot's detail fills its exact box, the request's maxSize; the sidecar passes it for those).
 // --restraint <bible.json|name> (phase 5a): checks the metrics against the bible's restraint (lib/bible.mjs restraintOf):
 // warnings `restraint: ...` when accentShare, windowsMin or detailNoise break it. (6c VOC-b) The same bible's style sets the rarity budget
 // (lib/vocab/budget.mjs styleOf): `metrics.rarity` (and `metrics.drift`) always, measured at the defaults when the bible carries no
@@ -46,7 +47,7 @@ import { mirrorAxisOf, mirrorBlueprint, mirrorSidecar } from './lib/mirror.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DESIGNS = path.join(HERE, 'designs');
 export const DEFAULT_OUT = path.join(HERE, 'out');
-const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json>] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--reserved <json|file> [--leave-reserved]] [--mirror] [--json]';
+const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json> [--massing-cap x,y,z]] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--reserved <json|file> [--leave-reserved]] [--mirror] [--json]';
 
 /** A request the design cannot build (bad palette or values): exit 2, but not the design's fault. */
 export class UsageError extends Error {}
@@ -101,14 +102,14 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
 }
 
 /** Build + check one design. */
-export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, restraint, style, dir, mirror, reserved, leave = false } = {}) {
+export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, massingCap, restraint, style, dir, mirror, reserved, leave = false } = {}) {
   const bp = await loadDesign(id, { palette, values, dir, mirror });
   // ((6c IRR) --leave-reserved: the reserved cells are dropped before the write (the sim's stand-in honours them so))
   if (reserved && leave) leaveReserved(bp, reserved);
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
   if (mirror && massing) massing = mirrorSidecar(massing, mirrorAxisOf(bp.front));
   const written = writeBlueprint(bp, out);
-  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}), ...(reserved ? { reserved } : {}) });
+  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(massing !== undefined && massingCap ? { massingCap } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}), ...(reserved ? { reserved } : {}) });
   // (C35) said where a caller reads it: the check's warnings
   if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
@@ -136,6 +137,8 @@ function parseArgs(argv) {
       o.profile = v === 'massing' ? 'massing' : parseProfile(v).list;
     } else if (a === '--massing') {
       o.massing = readMassingArg(val());
+    } else if (a === '--massing-cap') {
+      o.massingCap = parseMax(val());
     } else if (a === '--bible') {
       if (o.palette !== undefined) throw new Error('--bible and --palette exclude each other');
       o.palette = { bible: readBibleArg(val()) };
@@ -187,7 +190,7 @@ async function main() {
   if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
-    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, restraint: o.restraint, style: o.style, mirror: o.mirror, reserved: o.reserved, leave: o.leave });
+    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, massingCap: o.massingCap, restraint: o.restraint, style: o.style, mirror: o.mirror, reserved: o.reserved, leave: o.leave });
   } catch (e) {
     Object.assign(console, saved);
     if (e instanceof UsageError) return fail2(e.message);

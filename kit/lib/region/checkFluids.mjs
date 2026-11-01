@@ -475,3 +475,79 @@ export function fluidRules({ ir, vw, meta, vols, want, findings, metrics, findin
     if (want.has('M20') && bad.length) findings.push(finding('M20', lavaBodies[0].irPart, 'fluids', bad.length, bad, `${bad.length} flammable block(s) within the fire reach of exposed lava (${FIRE_REACH.side} sideways, ${FIRE_REACH.below} below to ${FIRE_REACH.above} above)`));
   }
 }
+
+/** (7a FB) M16's numbers: a barrier thinner than `thick` is a finding; a walk or lot cell counts within `reach` steps of the body's water
+ * (6-connected: the cells within 2 of its shell, §1's "within 2 of its shell", so a far house behind an open plaza is no finding of a
+ * body's); a finding names at most `sample` walk or lot cells and `sample` barrier cells. */
+export const FLOOD = Object.freeze({ thick: 2, reach: 3, sample: 16 });
+
+/**
+ * (7a FB, docs/CONTRACT.md "Phase 7a slice FB" §1) M16, flood behaviour (a warning): for each plan body with surface `level`, every walk
+ * cell (`walk`: feet cells, flat [x, y, z, ...]) or lot box cell at a y below `level`, within FLOOD.reach steps of a water cell of the
+ * body, whose shortest such path through non-fluid cells at or under the surface crosses fewer than FLOOD.thick fluid-stopping cells.
+ * A fluid-stopping cell (P.fs: a block, a door, a pane, bars, a grate, a fence) counts 1; air and anything water flows through (a torch,
+ * grass, a carpet) 0; a fluid cell (natural water, another body, a bubble column, lava) is never crossed. A walk cell that is itself
+ * fluid-stopping (a doorway the player stands in) counts its own block, as the water would meet it. Lot box cells are reached, never
+ * crossed (their interior is declared, not known). The water cells are the body's own (its cells, a lift's bubble set); a cell of any
+ * body's sets is no target. A sunk body (H §2.5) passes when nothing walkable lies under its surface within 2 of its shell: the search
+ * finds nothing. Pure over `vw` (vworld.mjs's get, inClaim, lotAt). Returns {found: [{body, irPart, level, walk, lot, lots, cells,
+ * barrier, barrierCount}], metrics}.
+ */
+export function floodRule({ vw, bodies, walk = [] }) {
+  const P = vw.pal;
+  const own = new Set();
+  for (const b of bodies) for (const s of [b.cells, b.shell, b.lining ?? [], b.grate ?? [], b.spill ?? [], b.bubble ?? []]) for (const c of s) own.add(k3(c[0], c[1], c[2]));
+  const walkSet = new Set();
+  for (let i = 0; i < walk.length; i += 3) walkSet.add(k3(walk[i], walk[i + 1], walk[i + 2]));
+  const found = [], per = [];
+  for (const b of bodies) {
+    const level = b.level;
+    if (!Number.isFinite(level)) continue;
+    // a search by steps over states (cell, crossed): each state once, at its fewest steps; `via` the barrier cell a state crossed
+    const seen = new Set();
+    let front = [];
+    for (const c of [...b.cells, ...(b.bubble ?? [])]) { const k = `${k3(c[0], c[1], c[2])}/0`; if (!seen.has(k)) { seen.add(k); front.push({ c, d: 0, via: null }); } }
+    const hits = new Map(); // cell key -> {cell, kind, d, barrier}
+    let visited = 0;
+    for (let step = 1; step <= FLOOD.reach && front.length; step++) {
+      const nextFront = [];
+      for (const { c: [x, y, z], d, via } of front) {
+        for (const [dx, dy, dz] of D6) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (ny > level || !vw.inClaim(nx, nz)) continue;
+          const idx = vw.get(nx, ny, nz);
+          if (P.fluid[idx]) continue;
+          const nd = d + (!P.air[idx] && P.fs[idx] ? 1 : 0);
+          if (nd >= FLOOD.thick) continue;
+          const nk = k3(nx, ny, nz);
+          if (seen.has(`${nk}/${nd}`) || (nd === 1 && seen.has(`${nk}/0`))) continue;
+          seen.add(`${nk}/${nd}`);
+          visited++;
+          const bar = nd > d ? [nx, ny, nz] : via;
+          const lot = vw.lotAt(nx, ny, nz);
+          const kind = ny < level && !own.has(nk) ? (lot ? `lot ${lot.id}` : walkSet.has(nk) ? 'walk' : null) : null;
+          if (kind) { const h = hits.get(nk); if (!h || nd < h.d) hits.set(nk, { cell: [nx, ny, nz], kind, d: nd, barrier: bar }); }
+          if (!lot) nextFront.push({ c: [nx, ny, nz], d: nd, via: bar }); // a lot box is reached, never crossed
+        }
+      }
+      front = nextFront;
+    }
+    const list = [...hits.values()].sort((a, c) => a.cell[1] - c.cell[1] || a.cell[0] - c.cell[0] || a.cell[2] - c.cell[2]);
+    const nWalk = list.filter((h) => h.kind === 'walk').length;
+    const lots = [...new Set(list.filter((h) => h.kind !== 'walk').map((h) => h.kind.slice(4)))];
+    const barrier = [];
+    const seenBar = new Set();
+    for (const h of list) if (h.barrier) { const kk = k3(...h.barrier); if (!seenBar.has(kk)) { seenBar.add(kk); barrier.push(h.barrier); } }
+    const open = list.filter((h) => h.d === 0).length;
+    per.push({ id: b.id, level, walk: nWalk, lot: list.length - nWalk, ...(lots.length ? { lots } : {}), open, barrier: barrier.length, visited });
+    if (list.length) found.push({ body: b.id, irPart: b.irPart, level, walk: nWalk, lot: list.length - nWalk, lots, open, cells: list.slice(0, FLOOD.sample).map((h) => h.cell), barrier: barrier.slice(0, FLOOD.sample), barrierCount: barrier.length });
+  }
+  return { found, metrics: { thick: FLOOD.thick, reach: FLOOD.reach, bodies: per, cells: found.reduce((a, f) => a + f.walk + f.lot, 0), findings: found.length } };
+}
+
+/** (7a FB) M16's message for one body's record. */
+export function floodMessage(f) {
+  const n = f.walk + f.lot;
+  const what = [f.walk ? `${f.walk} walk` : null, f.lot ? `${f.lot} lot (${f.lots.join(', ')})` : null].filter(Boolean).join(', ');
+  return `body ${f.body}: ${n} cell(s) below its surface (y ${f.level}) within ${FLOOD.reach} of its water behind a barrier thinner than ${FLOOD.thick} (${what}${f.open ? `; ${f.open} with no barrier` : ''}); barrier cell(s): ${f.barrierCount ? f.barrier.map((c) => c.join(' ')).join('; ') : 'none (open to the water)'}`;
+}

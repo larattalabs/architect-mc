@@ -115,16 +115,16 @@ test('item 6: the sealed wall (S-K1-1): no gate; a road that must cross refuses 
   // the recorded closed walls that name a gate (a gates number, gate, gate_lot, gateLots) are not sealed
 });
 
-test('item 6: the unread keys (S-K1-3) are each listed by name; a named lot beside the wall is a join deviation (S-K1-2)', async () => {
+test('item 6: the unread keys (S-K1-3) are each listed by name; (7a K3) a named lot of the wall\'s zone stands on its line (S-K1-2\'s join retired)', async () => {
   const fx = readJ('k1a', 'unread_keys.json');
   const r = await run(fx);
   const w = part(r, 'w');
   assert.equal(w.class, fx.expect.w);
   for (const n of fx.expect.notes) assert.ok(w.notes.includes(n), `notes: ${JSON.stringify(w.notes)} has ${n}`);
-  const j = w.deviations.find((d) => d.what === 'join');
-  assert.equal(j.kind, 'join');
-  assert.equal(j.lot, 'h1');
-  assert.ok(j.value > 0 && Array.isArray(j.box) && j.box.length === 6);
+  assert.ok(!w.notes.includes('params.towers not read'), 'towers is read (K3)');
+  assert.ok(!(w.deviations ?? []).some((d) => d.what === 'join'), 'no join deviation: h1 stands on the line');
+  assert.deepEqual(r.res.meta.walls[0].lots.map((q) => [q.lot, q.at]), [['h1', 'corner']]);
+  // (a lot the wall can't site keeps K1's join deviation: kit/test/k3.test.mjs, k3/r01_back_to_zone)
 });
 
 test('item 6: a gate named by its crossing styles the gate that road opened (a double door)', async () => {
@@ -138,18 +138,16 @@ test('item 6: a gate named by its crossing styles the gate that road opened (a d
   assert.equal(r.res.meta.walls[0].gates.length, 1, 'no auto gate besides it');
 });
 
-test('item 6: castle_city\'s gate_lot answers adjusted with a join deviation (S-K1-2)', async () => {
+test('item 6: castle_city\'s gate_lot and corner_lots (7a K3: read, the lots on its line; before K3 a join deviation, S-K1-2)', async () => {
   const f = readJ('asks', 'castle_city.json');
   const r = await checkPlanLocal(f.answer.plan, { survey: SV.asks.bytes, claim: SV.asks.claim, anchors: stewardAnchors(SV.asks.claim) });
   const w = part(r, 'curtain_wall');
-  assert.equal(w.class, 'adjusted');
-  const j = w.deviations.find((d) => d.kind === 'join' && d.lot === 'gatehouse_1');
-  assert.ok(j && j.what === 'join' && j.value > 0 && j.key === 'gate_lot', JSON.stringify(w.deviations));
-  // ((7a K2) wall_walk is read now: walk: true, the walk laid round the ring)
-  for (const k of ['corner_lots', 'gate_lot']) assert.ok(w.notes.includes(`params.${k} not read`), JSON.stringify(w.notes));
-  assert.ok(!w.notes.includes('params.wall_walk not read'), JSON.stringify(w.notes));
+  assert.equal(w.class, 'fits', JSON.stringify(w.deviations));
+  assert.ok(!(w.deviations ?? []).some((d) => d.what === 'join'), JSON.stringify(w.deviations));
+  // ((7a K2) wall_walk is read now: walk: true, the walk laid round the ring; (7a K3) corner_lots and gate_lot too)
+  for (const k of ['corner_lots', 'gate_lot', 'wall_walk']) assert.ok(!w.notes.includes(`params.${k} not read`), JSON.stringify(w.notes));
   assert.ok(!w.notes.some((n) => /^sealed/.test(n)), 'a gate_lot names a gate: not sealed');
-  assert.ok(w.geometry.gates.length >= 1, 'gates.min 1');
+  assert.ok(w.geometry.gates.length >= 1, 'gates.min 1: the gatehouse\'s passage');
 });
 
 // §9's wall and gate rows (Steward's review wins where it differs: a missed join is a deviation, so castle_city and walled_town

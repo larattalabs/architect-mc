@@ -1,0 +1,84 @@
+{
+ "about": "(7a K3, \u00a710) desert_jungle_wall's shape on S7's flat claim: a dividing wall.line from claim_n to claim_s via the town's gatehouse lot (the street north-south, so the line meets the lot's sides) (K1's joined lot: the wall meets its box), its passage across the line (onWall at: via), and a road from claim_w to claim_e that crosses the wall through the gatehouse's passage",
+ "on": "s7",
+ "covers": [
+  "connector.wall",
+  "wall.line"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "k3_line",
+  "zones": [
+   {
+    "id": "town",
+    "program": {
+     "template": "flat_village",
+     "params": {
+      "lots": [
+       {
+        "id": "gatehouse_1",
+        "type": "gatehouse",
+        "size": [
+         13,
+         11
+        ]
+       },
+       {
+        "id": "h1",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h2",
+        "type": "cottage",
+        "size": [
+         9,
+         9
+        ]
+       },
+       {
+        "id": "h3",
+        "type": "house",
+        "size": [
+         9,
+         9
+        ]
+       }
+      ],
+      "orientation": "ns"
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "great_wall",
+    "kind": "wall",
+    "from": {
+     "anchor": "claim_n"
+    },
+    "to": {
+     "anchor": "claim_s"
+    },
+    "via": [
+     {
+      "part": "gatehouse_1"
+     }
+    ]
+   },
+   {
+    "id": "cross",
+    "kind": "road",
+    "from": {
+     "anchor": "claim_w"
+    },
+    "to": {
+     "anchor": "claim_e"
+    }
+   }
+  ]
+ }
+}

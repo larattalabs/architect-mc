@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { simCostsLabel, VERSION } from './config.js';
-import { OpKeys } from './opkeys.js';
+import { designKeyBody, OpKeys } from './opkeys.js';
 import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
@@ -49,9 +49,13 @@ export interface ScratchMassing {
  * a crash right after the client heard "ok" cannot roll it back (a cancelled job running and spending again, an accepted
  * request forgotten and its id handed out twice). Everything else (blob chunks, pauses, reads, estimates) stays debounced.
  */
+/** (7a K3) How long design.cancelConfirm waits for a stopped turn (the reap takes at most ~8 s), under the mod's 20 s ack. */
+export const CANCEL_CONFIRM_MS = 15_000;
+
 const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessage['type']>([
   'design.request',
   'design.cancel',
+  'design.cancelConfirm',
   'job.run',
   'job.cancel',
   'job.tool.result',
@@ -98,6 +102,11 @@ export interface Designer {
   run(id: string): Promise<RunOutcome>;
   /** the design is already marked final (cancelled, or a group's budget stopped it): stop its turn */
   cancel(id: string): void;
+  /**
+   * (7a K3) Resolves once no turn of this design is running: a turn stopped by `cancel` has ended and its CLI process tree is gone.
+   * A final design starts no new turn, so nothing more is spent after this.
+   */
+  turnStopped?(id: string): Promise<void>;
   /** credentials or the login opt-in changed (auth.set) */
   authChanged(): void;
   /** the shared usage limit changed (a job hit one): re-arm the wake-up */
@@ -478,12 +487,28 @@ export class Sidecar {
         }
         return {};
       case 'design.request': {
-        const d = this.requestDesign(msg.request);
-        return { designId: d.id, ...(d.massing ? { massingId: d.massing.id, version: d.massing.version } : {}), ...(d.request.fromMassing ? { massing: { id: d.request.fromMassing, version: d.request.massingVersion } } : {}) };
+        const ack = (d: Design, adopted: boolean) => ({ designId: d.id, ...(d.massing ? { massingId: d.massing.id, version: d.massing.version } : {}), ...(d.request.fromMassing ? { massing: { id: d.request.fromMassing, version: d.request.massingVersion } } : {}), ...(msg.request.opKey ? { adopted } : {}) });
+        // (7a K3, design.opKeys) the same key and body: the first design, adopted in any state (before every refusal: auth, a
+        // versionOf's busy); another body: op_key_conflict
+        const key = msg.request.opKey;
+        const prior = key ? this.opKeys.check('design', msg.request.owner, key, designKeyBody(msg.request as Record<string, unknown>)) : undefined;
+        const pd = prior ? this.designs.get(prior) : undefined;
+        if (pd) {
+          this.log.info(`design ${pd.id}: adopted by opKey ${key} (${pd.status})`);
+          return ack(pd, true);
+        }
+        return ack(this.requestDesign(msg.request), false);
       }
       case 'design.cancel':
         this.cancelDesign(msg.designId);
         return { designId: msg.designId };
+      case 'design.cancelConfirm':
+        return this.cancelDesignConfirmed(msg.designId);
+      case 'design.byKey': {
+        const e = this.opKeys.get('design', msg.owner, msg.opKey);
+        const d = e ? this.designs.get(e.id) : undefined;
+        return d ? { design: structuredClone(d) } : {};
+      }
       case 'auth.set':
         this.setAuthSettings(msg.apiKey, msg.useClaudeLogin);
         return {};
@@ -785,6 +810,8 @@ export class Sidecar {
       massing = { id: this.massings.reserveId(req), version: 1 };
     }
     const d = this.designs.create(req, massing);
+    // (7a K3) the key goes into the same flushed write that holds the new design, before the ack
+    if (request.opKey) this.opKeys.record('design', request.owner, request.opKey, designKeyBody(request as Record<string, unknown>), d.id);
     const ahead = this.designs.active().filter((x) => x.id !== d.id).length;
     this.log.info(`design ${d.id} requested: ${describeRequest(req)}${ahead ? ` (${ahead} ahead in the queue)` : ''}`);
     this.scheduler.enqueue(d.id);
@@ -806,7 +833,7 @@ export class Sidecar {
     }
     const open = this.massings.openJob(m.id);
     if (open) throw new ClientError(`massing ${m.id} already has a job running (design ${open.id})`);
-    const { redirect: _r, ...base } = m.request;
+    const { redirect: _r, opKey: _k, ...base } = m.request;
     const req: DesignRequest = { ...base, redirect: { fromVersion: m.version, notes }, ...(opts.model ? { model: opts.model } : {}), ...(opts.budgetUsd !== undefined ? { budgetUsd: opts.budgetUsd } : {}) };
     const d = this.designs.create(req, { id: m.id, version: this.massings.nextVersion(m.id) });
     this.log.info(`massing ${m.id} redirected (v${m.version} -> v${d.massing!.version}, design ${d.id}): ${notes.split('\n')[0]}`);
@@ -822,6 +849,38 @@ export class Sidecar {
     if (d.kind === 'region') this.regionDesigns.cancelled(d);
     this.log.info(`design ${id} cancelled`);
     return d;
+  }
+
+  /**
+   * (7a K3, design.cancelConfirm) Cancel and answer the outcome. `cancelled` only once the design is final and nothing more can be
+   * spent on it: its running designer turn has ended and its CLI process is gone (Designer.turnStopped), and its internal jobs (the
+   * critic, a polish's critic and scoping calls, a region pick's tries) are cancelled and their runs have ended. A cost a turn
+   * reports after the cancel is never recorded (a final design never changes), so the record's cost is the final cost. An already
+   * cancelled design answers `cancelled` again after the same wait (a retry); `already_final` for done or failed; `unknown`.
+   */
+  async cancelDesignConfirmed(id: string): Promise<Record<string, unknown>> {
+    const d0 = this.designs.get(id);
+    if (!d0) return { designId: id, outcome: 'unknown' };
+    if (d0.status === 'done' || d0.status === 'failed') return { designId: id, outcome: 'already_final', design: structuredClone(d0) };
+    if (!isFinalDesign(d0)) this.cancelDesign(id);
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new ClientError(`design ${id} is cancelled, but its turn had not stopped after ${CANCEL_CONFIRM_MS / 1000} s: ask again`)), CANCEL_CONFIRM_MS);
+      timer.unref?.();
+    });
+    try {
+      await Promise.race([this.designQuiet(id), late]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    const d = this.designs.get(id)!;
+    this.log.info(`design ${id}: cancel confirmed (its turn and jobs stopped; cost $${(d.cost?.usd ?? 0).toFixed(4)})`);
+    return { designId: id, outcome: d.status === 'cancelled' ? 'cancelled' : 'already_final', design: structuredClone(d) };
+  }
+
+  /** (7a K3) Resolves once nothing runs for a final design: no designer turn, no internal job (tag "design <id> ..."). */
+  async designQuiet(id: string): Promise<void> {
+    await Promise.all([this.designer?.turnStopped?.(id) ?? Promise.resolve(), this.jobs.stopTagged(`design ${id} `)]);
   }
 
   /**

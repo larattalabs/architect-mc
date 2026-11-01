@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 14,
- "api": "1.42.0",
- "kitVersion": "0.43.0",
+ "catalogueVersion": 15,
+ "api": "1.43.0",
+ "kitVersion": "0.44.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -374,7 +374,7 @@
   },
   {
    "id": "connector.rock_stair",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -420,7 +420,7 @@
   },
   {
    "id": "connector.lift",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -456,7 +456,7 @@
   },
   {
    "id": "connector.stairs_around",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -1122,35 +1122,35 @@
   },
   {
    "id": "revision.keep",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "6d RV: in a revision plan (revision.parentArtifact), a part equal to the parent's built part (same id, same canonical JSON) answers fits with standing: true and cost 0."
   },
   {
    "id": "revision.add",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "6d RV: in a revision plan, a new part (or one the parent didn't build) is checked against the standing region: its lots plus 1, roads, paths, bodies and held columns are hard."
   },
   {
    "id": "revision.refill",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "6d RV: in a revision plan, a zone equal to the parent's but for lots with refill: true (each removed or pad) answers fits; the lots are built again (an irrigated lot is refused, S-RV-14)."
   },
   {
    "id": "revision.grow",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "6d GR: in a revision plan, a zone whose program.lots only gains lots (every standing lot spec equal) grows: the added lots go on its streets' free frontage nearest the square, then on one straight extension from a free street end; the zone answers fits with standing: true and grown: [ids] (unplaced lots listed NO_ROOM). A districts zone grows through Regions.planRevision."
   },
   {
    "id": "revision.change",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.43.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "RV2"

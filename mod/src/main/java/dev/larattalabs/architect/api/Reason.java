@@ -92,7 +92,7 @@ package dev.larattalabs.architect.api;
  * counts plus each bound lot's entry). The message names the rule, the family, the share, the measured share, the cells and the worst
  * lot with its entry; {@link ArchitectRefused#detail()} is the rule id. Nothing was written: bind another entry to the lot (or drop
  * {@code required}). {@link Regions#checkPalette} answers the same measure before any realise.</li>
- * <li>{@code NO_ROOM} (6d GR, since NEXT): {@link Regions#planRevision} of a growth ({@code params.grow}) that places no lot: the message
+ * <li>{@code NO_ROOM} (6d GR, since 1.43.0): {@link Regions#planRevision} of a growth ({@code params.grow}) that places no lot: the message
  * starts {@code NO_ROOM: [<kind>]} with kind {@code frontage}, {@code street}, {@code claim}, {@code held}, {@code body} or {@code layout};
  * nothing was planned. A growth that places some lots answers a plan and lists the rest in its IR's {@code revision.grow.unplaced}.
  * Read it as full (Steward: like {@code REGION_LIMIT}, propose a district).</li>

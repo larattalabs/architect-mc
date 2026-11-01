@@ -29,7 +29,7 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 	}
 
 	/**
-	 * The 1.38.0 constructor: no revisions (since NEXT, 6d RV: {@code position}, the head's place in the revision chain, 0 when unrevised;
+	 * The 1.38.0 constructor: no revisions (since 1.43.0, 6d RV: {@code position}, the head's place in the revision chain, 0 when unrevised;
 	 * {@code busy}, {@code revising <rid>} or {@code undoing <opId>} while a revision writes or an undo runs, else null; {@code revisions},
 	 * every revision but candidates, oldest first).
 	 */

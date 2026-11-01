@@ -201,7 +201,9 @@ type-geometry rules.
 `checkConformance(detailSidecar, massingSidecar)`): the detail's size is at most the massing's + 2 on every axis (an
 **error**, the cap binds; with `--max` the request's limit applies too). Warnings, prefixed `massing:`: a massing part
 missing from the detail, a part box more than 1 off on any face, the size more than 2 under, a roof form that differs
-where both record one. `--json` adds `conformance: { ok, errors[], issues[] }`.
+where both record one. `--json` adds `conformance: { ok, errors[], issues[] }`. (Since NEXT, 7a K3) `--massing-cap x,y,z`
+(lib: `checkConformance(d, m, { cap })`) replaces the massing's size + 2 as the size error's cap: a wall lot's detail fills its
+exact box (the request's maxSize) whatever its massing's size, so the sidecar passes the box for those.
 
 **Examples.** `massings/<id>_massing.mjs` are massings of the four examples (same part names, boxes within 1, the
 examples record their roofs); `node kit/tools/massings.mjs` builds and renders them into `massings/<id>_massing/` (not

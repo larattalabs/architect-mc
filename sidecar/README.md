@@ -102,7 +102,7 @@ The connection is `ws://127.0.0.1:<port>`, with one JSON object per text frame:
   - `type` is one of the contract's 11 types.
   - `style` is any text up to 40 characters.
   - `features` holds up to 6 `[a-z_]` words. Known ones get a guide line in the brief; others pass through.
-  - `maxSize` x/z is 7 to 96 and y is 6 to 64.
+  - `maxSize` x/z is 3 to 96 (7 to 96 before NEXT, 7a K3: a wall lot is designed in its exact box) and y is 6 to 64.
   - `plot` is `{ dx, dz, height?, front?, minX?, y?, minZ?, dimension? }`.
 - `Design.status` moves `queued → designing → checking → rendering → done`, or ends at `failed` or
   `cancelled`. Final states never change. When a design is `done`, its files are already in

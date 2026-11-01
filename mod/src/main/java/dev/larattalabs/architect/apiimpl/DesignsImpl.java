@@ -49,6 +49,8 @@ final class DesignsImpl implements Designs {
 
 	private final Map<String, Meta> meta = new LinkedHashMap<>();
 	private final Set<String> handled = new LinkedHashSet<>();
+	/** (7a K3) The DONE ordering of the readers (seeded from {@link #handled} at load). */
+	final DoneOrder order = new DoneOrder();
 	/** (5a) the critique rounds reported by DESIGN_CRITIQUED ({@code designId@createdAt#n}), persisted with the rest. */
 	private final Set<String> critiqued = new LinkedHashSet<>();
 	/** (5a) report critiques of library entries waiting for their design ({@link #critique}). */
@@ -79,6 +81,7 @@ final class DesignsImpl implements Designs {
 			}
 			if (o.has("done") && o.get("done").isJsonArray()) {
 				o.getAsJsonArray("done").forEach(x -> handled.add(x.getAsString()));
+				order.seed(handled);
 			}
 			if (o.has("critiqued") && o.get("critiqued").isJsonArray()) {
 				o.getAsJsonArray("critiqued").forEach(x -> critiqued.add(x.getAsString()));
@@ -214,6 +217,10 @@ final class DesignsImpl implements Designs {
 			if (r.palette() != null) {
 				o.add("palette", r.palette().deepCopy());
 			}
+			// (7a K3) the operation key (only when set; refusalOpKey first holds a helper without design.opKeys)
+			if (r.opKey() != null) {
+				o.addProperty("opKey", r.opKey());
+			}
 		}
 		return o;
 	}
@@ -257,7 +264,27 @@ final class DesignsImpl implements Designs {
 		String why = refusal4c(r, b.protocol(), b.sidecarFeatures());
 		why = why != null ? why : refusalReserved(r, b.protocol(), b.sidecarFeatures());
 		why = why != null ? why : refusalPalette(r, b.protocol(), b.sidecarFeatures());
+		why = why != null ? why : refusalOpKey(r, b.protocol(), b.sidecarFeatures());
 		return why != null ? why : refusal5a(r.critique(), b.protocol(), b.sidecarFeatures());
+	}
+
+	/**
+	 * (7a K3) Why an opKey can't be sent (null: it can, or there is none): a malformed key, or a helper without {@code design.opKeys},
+	 * which would drop the key (a retry would then start a second design). Pure.
+	 */
+	static @Nullable String refusalOpKey(DesignRequest r, int protocol, java.util.Set<String> features) {
+		if (r.opKey() == null) {
+			return null;
+		}
+		try {
+			Wire0a.opKey(r.opKey());
+		} catch (IllegalArgumentException e) {
+			return e.getMessage();
+		}
+		if (protocol < 2 || !features.contains("design.opKeys")) {
+			return "a design request with an opKey needs a helper with design.opKeys (7a K3); this one does not have it";
+		}
+		return null;
 	}
 
 	/** (6c IRR) Why reserved cells can't be sent (null: they can, or there are none): a helper before IRR would ignore them. Pure. */
@@ -330,6 +357,12 @@ final class DesignsImpl implements Designs {
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why)));
 		}
+		if (r.opKey() != null) {
+			// (7a K3) a keyed request goes through ask(): an op_key_conflict ack fails it ArchitectRefused OP_KEY_CONFLICT
+			JsonObject m = msg("design.request");
+			m.add("request", wire(r, b.protocol()));
+			return ask("design.opKeys", "design operation keys", m).thenApply(res -> keyedAck(r, res));
+		}
 		CompletableFuture<String> out = b.designRequest(wire(r, b.protocol())).thenApply(id -> {
 			synchronized (this) {
 				meta.put(id, new Meta(r.owner(), r.ext().deepCopy()));
@@ -339,6 +372,21 @@ final class DesignsImpl implements Designs {
 		});
 		// completes at the ack: the link's ack timeout and a dropped link already fail it; this is the backstop
 		return ApiImpl.onServerFuture(out.orTimeout(ApiTimeouts.DESIGN_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+	}
+
+	/** (7a K3) A keyed design.request's ack: the design id (a new or an adopted design), its owner and ext kept. */
+	private String keyedAck(DesignRequest r, JsonObject res) {
+		String id = res.has("designId") ? res.get("designId").getAsString() : null;
+		if (id == null) {
+			throw new IllegalStateException("the helper sent no designId");
+		}
+		synchronized (this) {
+			meta.putIfAbsent(id, new Meta(r.owner(), r.ext().deepCopy()));
+		}
+		save();
+		boolean adopted = res.has("adopted") && res.get("adopted").getAsBoolean();
+		Architect.LOGGER.info("API: design {} {} (opKey {})", id, adopted ? "adopted" : "requested", r.opKey());
+		return id;
 	}
 
 	/**
@@ -353,6 +401,9 @@ final class DesignsImpl implements Designs {
 		}
 		ClientBridge b0 = ApiImpl.bridge();
 		String why = unavailable4b(b0, "versionOf", "versionOf designs");
+		if (why == null && r.opKey() != null) {
+			why = refusalOpKey(r, b0.protocol(), b0.sidecarFeatures());
+		}
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
 		}
@@ -410,10 +461,11 @@ final class DesignsImpl implements Designs {
 				throw new IllegalStateException("the helper sent no designId");
 			}
 			synchronized (this) {
-				meta.put(id, new Meta(r.owner(), r.ext().deepCopy()));
+				meta.putIfAbsent(id, new Meta(r.owner(), r.ext().deepCopy()));
 			}
 			save();
-			Architect.LOGGER.info("API: design {} requested: the next version of {}{}", id, entryId, r.versionOfSite() == null ? "" : " (site " + r
+			Architect.LOGGER.info("API: design {} {}: the next version of {}{}", id, res.has("adopted") && res.get("adopted").getAsBoolean()
+				? "adopted by opKey " + r.opKey() : "requested", entryId, r.versionOfSite() == null ? "" : " (site " + r
 				.versionOfSite() + ")");
 			return id;
 		});
@@ -471,10 +523,18 @@ final class DesignsImpl implements Designs {
 		}
 		List<Design> out = new ArrayList<>();
 		for (JsonObject raw : b.designs()) {
-			out.add(view(raw));
+			out.add(readView(raw));
 		}
 		out.sort((x, y) -> Long.compare(y.createdAt(), x.createdAt()));
 		return out;
+	}
+
+	/**
+	 * (7a K3) What a reader is answered: the record, except a DONE one whose DESIGN_DONE has not fired yet (its entry not yet installed
+	 * and loaded on the server), which reads as its last non-final record ({@link DoneOrder}).
+	 */
+	Design readView(JsonObject raw) {
+		return view(order.read(raw));
 	}
 
 	synchronized Design view(JsonObject raw) {
@@ -519,6 +579,10 @@ final class DesignsImpl implements Designs {
 	void changed(MinecraftServer server, JsonObject raw) {
 		load();
 		Design d = view(raw);
+		// (7a K3) a stale non-final record after this design was reported done: no event
+		if (!d.status().isFinal() && !order.pending(raw)) {
+			return;
+		}
 		ApiEvents.designUpdated(d);
 		fireCritiqued(d);
 		if (d.kind() == Design.Kind.REGION) {
@@ -534,18 +598,19 @@ final class DesignsImpl implements Designs {
 				return;
 			}
 		}
-		if (d.status() == Design.Status.DONE && d.entryId().isPresent()) {
-			Meta m;
-			synchronized (this) {
-				m = meta.get(d.id());
+		order.finish(raw, () -> {
+			if (d.status() == Design.Status.DONE && d.entryId().isPresent()) {
+				Meta m;
+				synchronized (this) {
+					m = meta.get(d.id());
+				}
+				if (m != null && m.ext().size() > 0) {
+					LibraryImpl.mergeExt(d.entryId().get(), m.ext());
+				}
+				Blueprints.reload(server);
 			}
-			if (m != null && m.ext().size() > 0) {
-				LibraryImpl.mergeExt(d.entryId().get(), m.ext());
-			}
-			Blueprints.reload(server);
-		}
-		save();
-		ApiEvents.designDone(d);
+			save();
+		}, () -> ApiEvents.designDone(d));
 		applyPolish(server, raw, d);
 	}
 
@@ -751,6 +816,7 @@ final class DesignsImpl implements Designs {
 				case "copies", "smallEffort", "versionOf" -> "6c slice 0b";
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				case "palette.roles", "bible.save" -> "Style unification U1";
+				case "design.opKeys" -> "7a K3";
 				case "bible.check" -> "Style unification U3";
 				case "bible.parts" -> "Style unification U5";
 				default -> "4b";
@@ -841,6 +907,61 @@ final class DesignsImpl implements Designs {
 			JsonObject g = groups.merge(res.getAsJsonObject("group"));
 			return Optional.of(withCritiques(Wire4b.group(g != null ? g : res.getAsJsonObject("group"))));
 		});
+	}
+
+	@Override
+	public CompletableFuture<Optional<Design>> designByKey(@Nullable String owner, String opKey) {
+		JsonObject m = msg("design.byKey");
+		try {
+			m.addProperty("opKey", java.util.Objects.requireNonNull(Wire0a.opKey(opKey), "opKey"));
+		} catch (RuntimeException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		load();
+		return askLookup("design.opKeys", m).thenApply(res -> res.has("design") && res.get("design").isJsonObject()
+			? Optional.of(settled(res.getAsJsonObject("design"))) : Optional.<Design>empty());
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.CancelOutcome> cancelDesign(String designId) {
+		JsonObject m = msg("design.cancelConfirm");
+		m.addProperty("designId", java.util.Objects.requireNonNull(designId, "designId"));
+		load();
+		return askLookup("design.opKeys", m).thenApply(res -> outcome(res, this::settled));
+	}
+
+	/** (7a K3) A design.cancelConfirm ack as a {@link dev.larattalabs.architect.api.CancelOutcome} (server thread). */
+	static dev.larattalabs.architect.api.CancelOutcome outcome(JsonObject res, java.util.function.Function<JsonObject, Design> settle) {
+		String o = str(res, "outcome");
+		var kind = switch (o == null ? "" : o) {
+			case "cancelled" -> dev.larattalabs.architect.api.CancelOutcome.Kind.CANCELLED;
+			case "already_final" -> dev.larattalabs.architect.api.CancelOutcome.Kind.ALREADY_FINAL;
+			case "unknown" -> dev.larattalabs.architect.api.CancelOutcome.Kind.UNKNOWN;
+			default -> throw new IllegalStateException("the helper sent no cancel outcome (" + o + ")");
+		};
+		JsonObject d = res.get("design") instanceof JsonObject j ? j : null;
+		if (kind != dev.larattalabs.architect.api.CancelOutcome.Kind.UNKNOWN && d == null) {
+			throw new IllegalStateException("the helper sent no design with outcome " + o);
+		}
+		return new dev.larattalabs.architect.api.CancelOutcome(kind, d == null ? Optional.empty() : Optional.of(settle.apply(d)));
+	}
+
+	/**
+	 * (7a K3) A record from a lookup ack (server thread), ordered as {@link #get}: a DONE record this game has not reported is put
+	 * through {@link #changed} first (its ext merged, the library reloaded, DESIGN_DONE fired), as a reconnect's snapshot would; a
+	 * DONE whose DESIGN_DONE is still pending (no server) reads as its last non-final record.
+	 */
+	Design settled(JsonObject raw) {
+		if ("done".equals(str(raw, "status")) && !order.installed(raw)) {
+			MinecraftServer s = ApiImpl.server();
+			if (s != null && s.isSameThread()) {
+				changed(s, raw.deepCopy());
+			}
+		}
+		return readView(raw);
 	}
 
 	/**

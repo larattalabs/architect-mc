@@ -173,6 +173,23 @@ export class ClaudeDesigner implements Designer {
     if (cur?.turn) this.abortTurn(cur.turn, 'cancel');
   }
 
+  /**
+   * (7a K3) Resolves once no turn of design `id` runs: the current turn (aborted if the design is final and it is still going) has
+   * left its stream loop, and its CLI process tree is reaped. A final design starts no new turn (runDesign checks `cancelled` before
+   * each), so after this nothing more is spent on it.
+   */
+  async turnStopped(id: string): Promise<void> {
+    for (;;) {
+      const cur = this.runs.get(id);
+      const turn = cur?.turn;
+      if (!cur || !turn) return;
+      if (!turn.abort.signal.aborted && this.cancelled(id)) this.abortTurn(turn, 'cancel');
+      // the run loop clears cur.turn right after runTurn returns; the run may also end
+      while (this.runs.get(id) === cur && cur.turn === turn) await sleep(20);
+      await this.reap(turn);
+    }
+  }
+
   /** May a design turn start now (auth checked and fine, no usage limit, not stopping)? */
   canRun(): boolean {
     return this.canStart();

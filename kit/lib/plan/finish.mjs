@@ -147,14 +147,16 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     const style = pc.styles?.[a.part] ?? null;
     const pending = !!style?.pending;
     let lo = 0, hi = 0;
+    // ((7a K3) a wall's geometry.lots names its lots on the line ({lot, at, box}): they are its zone's lots (listed by the zone), not more)
     for (const l of a.geometry.lots) {
+      if (typeof l.id !== 'string') continue;
       const entry = pc.lotEntries?.[l.id] ?? null;
       const prov = pending || !entry;
       const [x0, y0, z0, x1, y1, z1] = l.box;
       const cols = (x1 - x0 + 1) * (z1 - z0 + 1);
       const band = [cols * PROVISIONAL_BAND[0], cols * PROVISIONAL_BAND[1]];
       const m = pc.lotMeta?.[l.id] ?? {};
-      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}) });
+      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}), ...(pc.wallLots?.[l.id] ? pc.wallLots[l.id] : {}) });
       if (prov) { lo += band[0]; hi += band[1]; }
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };

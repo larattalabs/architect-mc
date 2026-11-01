@@ -142,7 +142,9 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   if (Array.isArray(meta?.walls) && meta.walls.length) out.walls = meta.walls.map((w) => ({ id: w.id, part: w.part, line: w.line.map((q) => [...q]), closed: !!w.closed, gates: (w.gates ?? []).map((g) => ({ id: g.id, at: [...g.at], width: g.width, door: g.door, auto: !!g.auto })),
     // ((7a K2, §7) a walk: its width, its runs between accesses and the accesses; an along wall: its spine (the window used))
     ...(w.walk ? { walk: { width: w.walk.width, runs: Math.max(0, ...(w.walk.accesses.length > 1 ? [w.closed ? w.walk.accesses.length : w.walk.accesses.length - 1] : [0])), accesses: w.walk.accesses.map((a) => ({ kind: a.kind, at: [...a.at], foot: [...a.foot] })) } } : {}),
-    ...(w.along ? { spine: w.along.spine.map((q) => [...q]) } : {}) }));
+    ...(w.along ? { spine: w.along.spine.map((q) => [...q]) } : {}),
+    // ((7a K3, §8) the lots on its line: {lot, at, box, passage?: {width, height, front, back}})
+    ...(w.lots?.length ? { lots: w.lots.map((q) => ({ lot: q.lot, at: q.at, box: [...q.box], ...(q.passage ? { passage: { width: q.passage.width, height: q.passage.h, front: [...q.passage.front], back: [...q.passage.back] } } : {}) })) } : {}) }));
   // (6c T3) the plan's bridges (span: deck cells; piers: each pier's centre column [x, z]; landings: the near and far landing cells) and
   // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
   if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));

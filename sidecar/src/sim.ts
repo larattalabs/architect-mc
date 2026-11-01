@@ -46,7 +46,8 @@ export const SIM_EXT = 'architect:sim';
 
 /**
  * (6c 0a) The sim faults a request asks for: `sim:<name>` tokens in its notes, and the names in ext["architect:sim"] (a
- * string or an array of strings, with or without the `sim:` prefix). Known names: usage_limit (one usage limit), fail (the
+ * string or an array of strings, with or without the `sim:` prefix). Known names: usage_limit (one usage limit), outerdoor ((7a K3) a
+ * wall-lot stand-in's round 1 puts its door in an outer face; a versionOf ignores it), fail (the
  * design fails), repair (one repair round).
  */
 export function simFaults(req: { notes?: string | undefined; ext?: Record<string, unknown> | undefined }): Set<string> {
@@ -109,6 +110,99 @@ export default function build({ palette: p = PALETTES.rustic, roof = 'gable' } =
 }
 `;
 }
+// ---- (7a K3) the stand-in for a wall lot ---------------------------------------------------------------------
+
+/** (7a K3) The brief line Steward adds for a lot on a wall's line ("keep the faces outside the wall closed at ground level (doors face in)"). */
+export const SIM_WALL_LOT_BRIEF = /doors face in/i;
+
+/** (7a K3) What the sim's wall-lot stand-in builds (kit/lib/wallLotDesigns.mjs standInDesign). */
+export interface SimWallLotSpec {
+  type: 'tower' | 'gatehouse';
+  /** [W, H (the cap), D]: the lot's box in its frame (front to the south) */
+  size: [number, number, number];
+  /** a gatehouse's passage cells [u, y, v] in the frame (standInPassage of the reserved cells) */
+  passage: Array<[number, number, number]> | null;
+  /** sim:outerdoor: the door in an outer face (round 1 only; a versionOf rebuilds it with the door fixed) */
+  outerDoor: boolean;
+  /** the lot's onWall.outerFaces.lotCells (flat runs [u, v, y0, y1, ...]) when the request carries them (ext["architect:wallLot"]) */
+  outerFaces?: number[];
+}
+
+/** (7a K3) The request ext key that carries a wall lot's outer faces to the sim: {outerFaces: onWall.outerFaces.lotCells}. */
+export const SIM_WALL_LOT_EXT = 'architect:wallLot';
+
+/**
+ * (7a K3) Is this request a wall lot's design, and the stand-in's spec: type tower or gatehouse with a maxSize (the lot's exact box), and
+ * one of the signs Steward sends for a lot with onWall: the brief line (notes or context), a gatehouse's reserved passage, the lot's outer
+ * faces in ext["architect:wallLot"].outerFaces (onWall.outerFaces.lotCells: a tower's door goes off them; a corner tower needs them), or
+ * the sim:outerdoor token. Every other tower or gatehouse request keeps the kit example (fitted to its maxSize) as before.
+ */
+export function simWallLot(req: { type: string; maxSize?: Size3 | undefined; notes?: string | undefined; context?: unknown; reserved?: { size: [number, number]; cells: Array<[number, number, number]> } | undefined; ext?: Record<string, unknown> | undefined }): SimWallLotSpec | undefined {
+  if ((req.type !== 'tower' && req.type !== 'gatehouse') || !req.maxSize) return undefined;
+  const ctx = typeof req.context === 'string' ? req.context : req.context ? JSON.stringify(req.context) : '';
+  const faults = simFaults(req);
+  const wl = req.ext?.[SIM_WALL_LOT_EXT] as { outerFaces?: unknown } | undefined;
+  const of = wl && Array.isArray(wl.outerFaces) && wl.outerFaces.length % 4 === 0 && wl.outerFaces.every((n) => Number.isInteger(n)) ? (wl.outerFaces as number[]) : undefined;
+  const sign = SIM_WALL_LOT_BRIEF.test(req.notes ?? '') || SIM_WALL_LOT_BRIEF.test(ctx) || (req.type === 'gatehouse' && !!req.reserved) || faults.has('outerdoor') || !!of;
+  if (!sign) return undefined;
+  const m = req.maxSize;
+  // the reserved object's frame is the lot's (front to the south); it wins when it fits the max size
+  const rs = req.reserved?.size;
+  const [W, D] = rs && rs[0] <= m.x && rs[1] <= m.z ? rs : [m.x, m.z];
+  return { type: req.type, size: [W, m.y, D], passage: req.type === 'gatehouse' ? simStandInPassage(W, D, req.reserved?.cells ?? []) : null, outerDoor: faults.has('outerdoor'), ...(of ? { outerFaces: of } : {}) };
+}
+
+/** (Since NEXT, 7a K3) What the wall-lot stand-in builds for a spec (its size, front and anchors), built once with the kit's own module. */
+export async function simWallLotBuilt(kitDir: string, id: string, spec: SimWallLotSpec): Promise<Built> {
+  const mod = (await import(pathToFileURL(path.join(kitDir, 'lib', 'wallLotDesigns.mjs')).href)) as { standInDesign: (id: string, spec: SimWallLotSpec) => Built };
+  const b = mod.standInDesign(id, { ...spec, outerDoor: false });
+  return { size: { x: b.size.x, y: b.size.y, z: b.size.z }, ...(b.front ? { front: b.front } : {}), ...(b.anchors ? { anchors: b.anchors } : {}) };
+}
+
+/** kit/lib/wallLotDesigns.mjs standInPassage, mirrored (the sidecar records the passage in the design source). */
+function simStandInPassage(W: number, D: number, reserved: Array<[number, number, number]>): Array<[number, number, number]> {
+  const at = new Set(reserved.map(([u, y, v]) => `${u},${y},${v}`));
+  const us = [...new Set(reserved.map(([u]) => u))].filter((u) => u > 0 && u < W - 1).sort((a, b) => a - b);
+  let cols = us.filter((u) => Array.from({ length: D }, (_, v) => v).every((v) => at.has(`${u},0,${v}`)));
+  if (!cols.length) cols = us;
+  if (!cols.length) {
+    const c = (W - 3) >> 1;
+    cols = [c, c + 1, c + 2];
+  }
+  const out: Array<[number, number, number]> = [];
+  for (const u of cols) for (let v = 0; v < D; v++) for (let y = 0; y < 3; y++) out.push([u, y, v]);
+  return out;
+}
+
+/** The marker line of a wall-lot stand-in's source (a versionOf of one rebuilds it from this, the door fixed). */
+const STAND_IN_LINE = /^export const standIn = (\{.*\});$/m;
+
+/** (7a K3) The wall-lot stand-in's design source (it builds with the request's palette or bible: its roles). */
+export function simWallLotDesign(id: string, spec: SimWallLotSpec): string {
+  return `// The sim's stand-in for a wall lot (7a K3): kit/lib/wallLotDesigns.mjs standInDesign, filling the lot's box.
+import { PALETTES } from '../lib/kit.mjs';
+import { standInDesign } from '../lib/wallLotDesigns.mjs';
+
+export const id = '${id}';
+export const standIn = ${JSON.stringify(spec)};
+
+export default function build({ palette: p = PALETTES.rustic } = {}) {
+  return standInDesign(id, standIn, p);
+}
+`;
+}
+
+/** (7a K3) The spec of a wall-lot stand-in's source, else undefined (any other design). */
+export function simWallLotOf(source: string): SimWallLotSpec | undefined {
+  const m = STAND_IN_LINE.exec(source);
+  if (!m) return undefined;
+  try {
+    return JSON.parse(m[1]!) as SimWallLotSpec;
+  } catch {
+    return undefined;
+  }
+}
+
 /** (0b, C8) a SMALL detail pass's notional cost under simCosts: the SMALL seed's midpoint ($0.6-1.5) */
 export const SIM_SMALL_DETAIL_USD = 1.05;
 
@@ -358,6 +452,11 @@ export class SimDesigner implements Designer {
     r.wake?.();
   }
 
+  /** (7a K3) Resolves once the run of design `id` has ended (a cancelled run ends at its next step; nothing is charged after). */
+  async turnStopped(id: string): Promise<void> {
+    while (this.runs.has(id)) await new Promise((res) => setTimeout(res, 10));
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.limitTimer) clearTimeout(this.limitTimer);
@@ -532,6 +631,9 @@ export class SimDesigner implements Designer {
     this.check(id, r);
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
     const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
+    const wallLot = d.massing || req.versionOf ? undefined : simWallLot(req);
+    // (since NEXT, 7a K3) a wall lot's massing takes its box: the stand-in massing of the wall-lot stand-in the detail pass builds
+    const wallLotMassing = d.massing && !req.redirect ? simWallLot(req) : undefined;
     let source: string;
     let what: string;
     let note = '';
@@ -543,6 +645,13 @@ export class SimDesigner implements Designer {
         source = withDesignId(r2.source, bp);
         what = `massing ${prev.id} v${prev.version} redirected (${r2.change})`;
         note = r2.change;
+      } else if (wallLotMassing) {
+        // (since NEXT, 7a K3) a wall lot: one box the size of the wall-lot stand-in (exactly the lot's footprint), so the detail pass
+        // (the stand-in again) conforms and fills the box
+        const built = await simWallLotBuilt(cfg.kitDir, bp, wallLotMassing);
+        source = standInMassing(bp, req.type, built);
+        what = `a wall-lot stand-in massing ${built.size.x}x${built.size.y}x${built.size.z} (the lot's box)`;
+        note = 'a wall-lot stand-in massing (the lot\'s box)';
       } else {
         const ex = simMassingSource(cfg.kitDir, req.type);
         const exSize = ex ? await massingSize(ex) : undefined;
@@ -562,10 +671,20 @@ export class SimDesigner implements Designer {
     } else if (req.versionOf) {
       // (0b, C13) the head changed as a sim redirect changes a massing (an int param's default up by one, else gable -> hip)
       const base = fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8');
-      const r2 = simRedirect(base);
-      source = r2.source;
-      what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${r2.change})`;
-      note = r2.change;
+      const wall = simWallLotOf(base);
+      if (wall) {
+        // (7a K3) a wall-lot stand-in's repair: rebuilt the same size with the door where it belongs (sim:outerdoor never fires on a
+        // versionOf, even when its notes still carry the token)
+        source = simWallLotDesign(bp, { ...wall, outerDoor: false });
+        const change = wall.outerDoor ? 'the door moved off the outer face' : 'rebuilt (the wall-lot stand-in)';
+        what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${change})`;
+        note = change;
+      } else {
+        const r2 = simRedirect(base);
+        source = r2.source;
+        what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${r2.change})`;
+        note = r2.change;
+      }
       // sim:frontchange: round 1 turns the front (the frame guard refuses it), a repair round puts it back
       if (faults.has('frontchange')) {
         const turned = source.replace(/front:\s*'(north|south|east|west)'/, (_m, f: string) => `front: '${f === 'east' ? 'west' : 'east'}'`);
@@ -582,6 +701,12 @@ export class SimDesigner implements Designer {
         sc.designCost(id, cost);
         note = `${note}; the turned front was repaired (round 2)`;
       }
+    } else if (wallLot) {
+      // (7a K3) a lot on a wall's line: a tower or gatehouse filling the lot's box, safe for any outer faces (sim:outerdoor: round 1's
+      // door in an outer face, so the bind refuses it ARTIFACT_STALE; Steward's versionOf repair fixes it)
+      source = simWallLotDesign(bp, wallLot);
+      what = `a wall-lot stand-in ${req.type} ${wallLot.size[0]}x${wallLot.size[2]} (sim, kit/lib/wallLotDesigns.mjs)${wallLot.outerDoor ? ' with its door in an outer face (sim:outerdoor)' : ''}`;
+      note = wallLot.outerDoor ? 'the door is in an outer face (sim:outerdoor)' : 'a wall-lot stand-in';
     } else if (req.effort === 'small' && fitsSmall(req.maxSize)) {
       // (0b) a SMALL item on an S lot: a shed composed from kit/lib/smalls.mjs, as the SMALL brief asks (the massing is 0a's fitted
       // stand-in)
@@ -603,7 +728,7 @@ export class SimDesigner implements Designer {
     // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const smallSrc = !d.massing && !req.versionOf && req.effort === 'small' && fitsSmall(req.maxSize);
+    const smallSrc = !d.massing && !req.versionOf && !wallLot && req.effort === 'small' && fitsSmall(req.maxSize);
     const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     // ((6c IRR) the sim's stand-in honours a lot's reserved cells: the kit drops the copied example's blocks there before the check)
     const leave = req.reserved && plan.extra.includes('--reserved') ? ['--leave-reserved'] : [];

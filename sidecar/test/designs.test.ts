@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkDesign, DesignBook, designBaseId, freeLibraryId, installDesign, minimalEnv, parseBuildJson, refreshKit, renderPreviews, slugify, withDesignId } from '../src/designs.js';
-import { DesignRequest, DesignRequestV1, parseClientMessage } from '../src/protocol.js';
+import { DesignRequest, DesignRequestV1, GroupItemInput, MAX_SIZE_MIN_XZ, parseClientMessage } from '../src/protocol.js';
 import { prepareScratch } from '../src/scratch.js';
 import { Store } from '../src/store.js';
 import type { Outbound } from '../src/protocol.js';
@@ -83,12 +83,26 @@ describe('the request schema', () => {
     expect(DesignRequest.safeParse(request({ type: 'Castle!' })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ type: 'lair', profile: ['door', 'passage:3x3', 'tall:2.5', 'min_interior_volume:80'] })).success).toBe(true);
     expect(DesignRequest.safeParse(request({ type: 'lair', profile: ['flying'] })).success).toBe(false);
-    expect(DesignRequest.safeParse(request({ maxSize: { x: 6, y: 20, z: 20 } })).success).toBe(false);
+    expect(DesignRequest.safeParse(request({ maxSize: { x: 2, y: 20, z: 20 } })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ maxSize: { x: 97, y: 20, z: 20 } })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ features: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ features: ['porch', 'porch'] })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ style: 'x'.repeat(41) })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ plot: { dx: 20, dz: 16, height: 24, front: 'east' } })).success).toBe(true);
+  });
+
+  it('(7a K3, since NEXT) x/z down to 3: a wall lot\'s exact box (5 x 3, 3 x 3) parses in protocol 1, protocol 2 and a group item; under 3 is refused', () => {
+    expect(MAX_SIZE_MIN_XZ).toBe(3);
+    for (const maxSize of [{ x: 5, y: 40, z: 3 }, { x: 3, y: 40, z: 5 }, { x: 3, y: 6, z: 3 }, { x: 6, y: 20, z: 6 }]) {
+      expect(DesignRequest.safeParse(request({ type: 'gatehouse', maxSize })).success, JSON.stringify(maxSize)).toBe(true);
+      expect(DesignRequestV1.safeParse(request({ type: 'tower', maxSize })).success, JSON.stringify(maxSize)).toBe(true);
+      expect(GroupItemInput.safeParse(request({ type: 'tower', itemKey: 'tower_1', maxSize })).success, JSON.stringify(maxSize)).toBe(true);
+    }
+    for (const maxSize of [{ x: 2, y: 40, z: 5 }, { x: 5, y: 40, z: 2 }, { x: 0, y: 40, z: 3 }, { x: 5, y: 5, z: 3 }]) {
+      expect(DesignRequest.safeParse(request({ type: 'gatehouse', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
+      expect(DesignRequestV1.safeParse(request({ type: 'tower', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
+      expect(GroupItemInput.safeParse(request({ type: 'tower', itemKey: 'tower_1', maxSize })).success, JSON.stringify(maxSize)).toBe(false);
+    }
   });
 
   it('never echoes values in a parse error (an auth.set carries a key)', () => {

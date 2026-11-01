@@ -74,7 +74,7 @@ public final class StillOurs {
 	 * frosted ice, or as air (it froze, thawed, flowed, or a bucket took it); one written as a lava source in any lava state or as air.
 	 * Nothing else changes: a player's block in a pond is not the entry's.
 	 * <p>
-	 * (7a LF §4, Since NEXT) A cell written as a bubble column is still the entry's as any bubble column (either drag: vanilla turns the
+	 * (7a LF §4, Since 1.43.0) A cell written as a bubble column is still the entry's as any bubble column (either drag: vanilla turns the
 	 * column over its base), as a water source, or as air; and a cell written as a water source is still the entry's as a bubble column
 	 * (water over soul sand or magma becomes one). A player's block in a shaft cell is not the entry's.
 	 */

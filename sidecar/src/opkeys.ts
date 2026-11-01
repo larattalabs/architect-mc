@@ -1,5 +1,5 @@
-// (6c 0a, C9; docs/CONTRACT.md "Phase 6c slice 0a" §6) Caller operation keys: a bible.request or design.group may carry an
-// `opKey` ([A-Za-z0-9_.:-]{1,128}), scoped by (owner, kind, opKey); a null owner is the player. The same key with the same
+// (6c 0a, C9; docs/CONTRACT.md "Phase 6c slice 0a" §6) Caller operation keys: a bible.request or design.group (since NEXT, 7a
+// K3, feature design.opKeys: also a design.request) may carry an `opKey` ([A-Za-z0-9_.:-]{1,128}), scoped by (owner, kind, opKey); a null owner is the player. The same key with the same
 // body returns the first operation (adopted: true) and starts no new work, in any state; another body is refused with
 // "op_key_conflict: ...". Bodies compare by the sha256 of the request's canonical JSON (sorted keys) without opKey.
 //
@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { ClientError } from './errors.js';
 import type { Store } from './store.js';
 
-export type OpKind = 'bible' | 'group';
+export type OpKind = 'bible' | 'group' | 'design';
 export interface OpKeyEntry {
   id: string;
   hash: string;
@@ -40,6 +40,19 @@ export function bodyHash(req: Record<string, unknown>): string {
   return crypto.createHash('sha256').update(canonicalJson(rest)).digest('hex');
 }
 
+/**
+ * (K3) A design request's body for its key: the request as sent, without the versionOf site blobs (`siteNow`, `siteEdits`: the
+ * mod uploads them again on every send, under new ids) and without `baseVersion` (the sidecar's). The first design's site files win.
+ */
+export function designKeyBody(req: Record<string, unknown>): Record<string, unknown> {
+  const v = req.versionOf;
+  if (!v || typeof v !== 'object') return req;
+  const { siteNow: _n, siteEdits: _e, baseVersion: _b, ...keep } = v as Record<string, unknown>;
+  return { ...req, versionOf: keep };
+}
+
+const KIND_NOUN: Record<OpKind, string> = { bible: 'bible request', group: 'group', design: 'design request' };
+
 const slot = (kind: OpKind, owner: string | undefined, key: string) => `${kind}|${owner ?? ''}|${key}`;
 
 export class OpKeys {
@@ -64,7 +77,7 @@ export class OpKeys {
   check(kind: OpKind, owner: string | undefined, key: string, req: Record<string, unknown>): string | undefined {
     const e = this.get(kind, owner, key);
     if (!e) return undefined;
-    if (e.hash !== bodyHash(req)) throw new ClientError(`${OP_KEY_CONFLICT}: opKey "${key}" (${kind}${owner ? `, ${owner}` : ''}) was used for another ${kind === 'bible' ? 'bible request' : 'group'} (${e.id})`);
+    if (e.hash !== bodyHash(req)) throw new ClientError(`${OP_KEY_CONFLICT}: opKey "${key}" (${kind}${owner ? `, ${owner}` : ''}) was used for another ${KIND_NOUN[kind]} (${e.id})`);
     return e.id;
   }
 
