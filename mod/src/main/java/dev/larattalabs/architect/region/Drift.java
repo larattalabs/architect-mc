@@ -52,15 +52,20 @@ final class Drift {
 		// (6c D3, §2.3) a reach plan: every reach column against the reach survey it was planned on, with the same bars
 		if (p.ir().json().get("reach") instanceof com.google.gson.JsonObject reach) {
 			Columns rs = reachSurvey(level, p.planId());
+			// ((7a GJ, §4) a gate join's leg in a wall region's claim: its columns against that region's survey, kept with the plan)
+			Columns ra = reach.has("gate") ? reachSurvey(level, p.planId(), ".reach-around-survey.bin") : null;
 			if (rs != null) {
 				BesideReach.colsOf(reach.getAsJsonArray("runs")).forEach((x, z) -> {
-					int i = x - rs.minX, j = z - rs.minZ;
-					if (i < 0 || j < 0 || i >= rs.width || j >= rs.depth) {
+					for (Columns s : ra == null ? List.of(rs) : List.of(rs, ra)) {
+						int i = x - s.minX, j = z - s.minZ;
+						if (i < 0 || j < 0 || i >= s.width || j >= s.depth) {
+							continue;
+						}
+						int k = s.index(i, j);
+						if (!s.missing(k)) {
+							cols.add(new int[] {x, z, s.height[k], 0});
+						}
 						return;
-					}
-					int k = rs.index(i, j);
-					if (!rs.missing(k)) {
-						cols.add(new int[] {x, z, rs.height[k], 0});
 					}
 				});
 			}
@@ -70,8 +75,13 @@ final class Drift {
 
 	/** (6c D3) A reach plan's town-claim survey as kept with the plan, or null. */
 	static @org.jspecify.annotations.Nullable Columns reachSurvey(ServerLevel level, String planId) {
+		return reachSurvey(level, planId, ".reach-survey.bin");
+	}
+
+	/** (7a GJ) One of a reach plan's kept surveys by its file suffix, or null. */
+	static @org.jspecify.annotations.Nullable Columns reachSurvey(ServerLevel level, String planId, String suffix) {
 		try {
-			Path f = RegionStore.plan(level.getServer().getWorldPath(LevelResource.ROOT), planId).resolveSibling(planId + ".reach-survey.bin");
+			Path f = RegionStore.plan(level.getServer().getWorldPath(LevelResource.ROOT), planId).resolveSibling(planId + suffix);
 			byte[] a = RegionStore.read(f);
 			return a == null ? null : Columns.decode(a);
 		} catch (IOException | RuntimeException e) {

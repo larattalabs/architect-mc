@@ -185,6 +185,14 @@ public interface ArchitectApi {
 	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
 	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
 	 * method or reason.
+	 * Since NEXT (7a GJ), a GJ helper ({@code region.plan.gateJoin}) adds {@code "gateJoins"}: where a district's join (a {@code beside}
+	 * plan, {@code checkBeside}, plan/0's {@code endpoint.region}) would answer {@code NO_JOIN [wall]}, it crosses one standing gate of the
+	 * town's wall or of a wall region round the town (open or a wooden door; a fence gate is skipped for a villager join), never writing
+	 * it: two runs and a traverse. The district's {@code join_external} gains {@code via} ("region:gate"), {@code junction {kind: gate,
+	 * gate, at, then}} and {@code crossing {type: gate, lands}}; {@code architect_mc:land}'s join part gains {@code via}; the IR's
+	 * {@code reach.gate}. The realise re-check refuses {@code ARTIFACT_STALE} naming the gate when it no longer stands as planned; removing
+	 * the wall region first sets the district's {@code dangling} (with {@code gateRemoved}). {@link BesideJoin} is unchanged (its kind is the
+	 * junction the join ends at). No new record, method or reason.
 	 */
 	Set<String> features();
 }

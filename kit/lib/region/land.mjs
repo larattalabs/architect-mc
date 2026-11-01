@@ -110,7 +110,9 @@ export function districtLand(ir, standingClaim = null, { standingRemoved = null,
     const jd = (ir.graph?.edges ?? []).find((e) => e.id === 'route_join');
     const from = jd ? String(jd.from).split('.')[0] : '';
     const district = ids.find((id) => from.startsWith(`${id}_`)) ?? null;
-    push('join', 'join', join, { district, junction: ext?.junction?.kind ?? (ext ? 'end' : null) });
+    // ((7a GJ, §5) through a gate: the junction it ends at (the gate junction's `then`) and the gate it crosses (`via`))
+    const jk = ext?.junction?.kind === 'gate' ? ext.junction.then?.kind ?? null : ext?.junction?.kind;
+    push('join', 'join', join, { district, junction: jk ?? (ext ? 'end' : null), ...(ext?.via ? { via: ext.via } : {}) });
   }
   // ---- the routes between districts (route_d_<a>__<b>_<n>)
   const routes = new Map();

@@ -206,7 +206,7 @@ public final class PlanRetention {
 			}
 			RegionStore.writeJson(p.resolve(planId + ".discarded.json"), tomb);
 			// ((6c D3) a reach plan's reach inputs, RegionsImpl.saveReach's two files)
-			for (String suffix : List.of(".json", ".survey.bin", ".key.json", ".used.json", ".reach.json", ".reach-survey.bin")) {
+			for (String suffix : List.of(".json", ".survey.bin", ".key.json", ".used.json", ".reach.json", ".reach-survey.bin", ".reach-around-survey.bin")) {
 				Files.deleteIfExists(p.resolve(planId + suffix));
 			}
 			Files.deleteIfExists(RegionStore.prepare(w, planId));

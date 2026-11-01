@@ -536,6 +536,14 @@ export async function planRegion(o) {
     const BR = RM.reachFor(besideReach, reachM.standing);
     ir.reach = { standing: reachM.standing, runs: reachM.runs, rect: reachM.rect, cells: reachM.cells, hold: reachM.hold, contact: reachM.contact, ...(reachM.lamps ? { lamps: reachM.lamps } : {}),
       heldSha: sha256Hex(canonicalJson(BR.held)), surveySha: sha256Hex(encodeColumns(BR.survey)), standingSha: sha256Hex(canonicalJson(BR.standing)) };
+    // ((7a GJ, §3, §4) a gate join: the gate it crosses, the gates it read and the inputs of the wall regions round the town)
+    if (reachM.gate) {
+      const { aroundOf, gatesOf } = await import('./gateJoin.mjs');
+      const around = aroundOf(besideReach, reachM.standing);
+      ir.reach.gate = reachM.gate;
+      ir.reach.gatesSha = sha256Hex(canonicalJson(gatesOf(BR, around)));
+      if (around.length) ir.reach.around = around.map((a) => ({ standing: a.standing.id, heldSha: sha256Hex(canonicalJson(a.held)), surveySha: sha256Hex(encodeColumns(a.survey)), standingSha: sha256Hex(canonicalJson(a.standing)) }));
+    }
   }
   // (6c RS) a survival plan (the world's mode): free marks and the target groups (a creative plan's IR is unchanged)
   if (o.survival) markSurvival(ir, r, ctx.__id);
@@ -550,7 +558,9 @@ export async function planRegion(o) {
   const tBudget = performance.now();
   // ((6c D3) a reach plan's budget reads the reach frame's survey: the claim's columns are the plan survey's own)
   const reachIn = reachM ? RM.reachFor(besideReach, reachM.standing) : null;
-  const evalSurvey = reachM ? RM.unionColumns(survey, reachIn.survey, [claim.minX, claim.minZ, claim.maxX, claim.maxZ], reachIn.standing.claim) : survey;
+  // ((7a GJ, §4) a gate join's leg may run in a wall region's claim round the town: its survey too)
+  const reachExtras = reachM?.gate ? (await import('./gateJoin.mjs')).aroundOf(besideReach, reachM.standing).map((a) => ({ cols: a.survey, rect: [...a.standing.claim] })) : [];
+  const evalSurvey = reachM ? RM.unionColumns(survey, reachIn.survey, [claim.minX, claim.minZ, claim.maxX, claim.maxZ], reachIn.standing.claim, reachExtras) : survey;
   let cells = 0, removed = 0, added = 0, evaluated = 0, cellLo = Infinity, cellHi = -Infinity;
   const perStage = {};
   const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey

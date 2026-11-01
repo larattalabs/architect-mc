@@ -206,3 +206,84 @@ export function besideStanding(id, standingClaim, ir) {
     ...(walls.size ? { walls: keyRuns(walls) } : {}), // (only a walled region carries it: an unwalled region's standing data is unchanged)
   };
 }
+
+// ------------------------------------------------------------------ (7a GJ) a standing region's gates, from its IR
+
+/** (7a GJ) A port facing's unit step [dx, dz]. */
+export const FACING_STEP = Object.freeze({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] });
+
+/** (7a GJ, §2) A gate's door from the block at its walk's feet: `door` (a door: `doorBlock` names it), `fence_gate`, else `none`. */
+export function gateDoorOf(state) {
+  const id = String(state ?? '').replace(/\[.*$/, '');
+  if (/_door$/.test(id)) return 'door';
+  if (/_fence_gate$/.test(id)) return 'fence_gate';
+  return 'none';
+}
+
+/** (7a GJ, §2) Whether villagers open a door block (every wooden door; never an iron door). */
+export const villagerOpens = (block) => !/(^|:)iron_door$/.test(String(block ?? '').replace(/\[.*$/, ''));
+
+/**
+ * (7a GJ, §2, §3) A standing region's gates, read from its IR (the plan meta's `walls[].gates` never reaches the mod): each graph node of
+ * kind `gate` (K1a's emission: `at` [x, y + 1, z] the middle of its run, its port's outward `facing` and `width`) and the opening columns
+ * of its wall's part `w_<ref>`: a column whose write at the walk's feet (`at.y`) is air, a door or a fence gate and that has a block
+ * written above it (the lintel), 4-connected to `at`'s column. `outer` and `inner` are the walk cells just past the wall's depth on the
+ * gate's axis, on `at`'s line. `h` is the opening's clear height (its lowest column), `y` the walk's floor. Sorted by gate id. The mod's
+ * BesideReach.gates is the same rule (parity: kit/test/gj.test.mjs and GateJoinTest).
+ * `[{region, wall, id, at, y, h, width, facing: [dx, dz], door, doorBlock, cells: [[x, z]], outer: [x, z], inner: [x, z]}]`
+ */
+export function besideGates(id, ir) {
+  const out = [];
+  for (const n of ir.graph?.nodes ?? []) {
+    if (n.kind !== 'gate' || !Array.isArray(n.at)) continue;
+    const port = (n.ports ?? [])[0];
+    const f = FACING_STEP[port?.facing];
+    if (!f) continue;
+    const part = (ir.parts ?? []).find((p) => p.id === `w_${n.ref}`.slice(0, 48));
+    if (!part) continue;
+    const Y = n.at[1];
+    // per column: the block at Y (undefined: none written there), whether a solid block is written above Y, and the clear run from Y
+    const col = new Map();
+    for (const op of part.ops ?? []) {
+      if (op.op !== 'columns' || !Array.isArray(op.cols)) continue;
+      for (let i = 0; i + 4 < op.cols.length; i += 5) {
+        const x = op.cols[i], z = op.cols[i + 1], y0 = op.cols[i + 2], y1 = op.cols[i + 3], m = op.materials?.[op.cols[i + 4]] ?? null;
+        const k = `${x},${z}`;
+        let c = col.get(k);
+        if (!c) { c = { at: undefined, above: false, ys: new Map() }; col.set(k, c); }
+        for (let y = y0; y <= y1; y++) c.ys.set(y, m);
+        if (y0 <= Y && y1 >= Y) c.at = m;
+        if (y1 > Y && m !== null && gateDoorOf(m) === 'none') c.above = true;
+      }
+    }
+    const opening = (k) => { const c = col.get(k); return !!c && c.above && (c.at === null || (c.at !== undefined && gateDoorOf(c.at) !== 'none')); };
+    const k0 = `${n.at[0]},${n.at[2]}`;
+    if (!opening(k0)) continue;
+    const w = Math.max(1, port.width ?? 1);
+    const seen = new Set([k0]), q = [k0];
+    for (let h = 0; h < q.length; h++) {
+      const [x, z] = q[h].split(',').map(Number);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz, k = `${nx},${nz}`;
+        if (seen.has(k) || Math.abs(nx - n.at[0]) > w + 8 || Math.abs(nz - n.at[2]) > w + 8 || !opening(k)) continue;
+        seen.add(k); q.push(k);
+      }
+    }
+    const cells = [...seen].map((k) => k.split(',').map(Number)).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    // along the normal on at's line: the deepest and shallowest opening cells
+    const dot = ([x, z]) => x * f[0] + z * f[1];
+    const line = cells.filter(([x, z]) => (f[0] ? z === n.at[2] : x === n.at[0]));
+    const dMax = Math.max(...line.map(dot)), dMin = Math.min(...line.map(dot));
+    const onLine = (d) => line.find((c) => dot(c) === d);
+    const o = onLine(dMax), i0 = onLine(dMin);
+    // the door: the first door or fence gate block at the feet of any opening column
+    let doorBlock = null;
+    for (const [x, z] of cells) { const s = col.get(`${x},${z}`).at; if (s && gateDoorOf(s) !== 'none') { doorBlock = String(s).replace(/\[.*$/, ''); break; } }
+    // the clear height: the shortest run of air, door or fence gate from Y up over the opening's columns
+    let h = Infinity;
+    for (const [x, z] of cells) { const c = col.get(`${x},${z}`); let t = 0; while (c.ys.has(Y + t) && (c.ys.get(Y + t) === null || gateDoorOf(c.ys.get(Y + t)) !== 'none')) t++; h = Math.min(h, t); }
+    out.push({ region: id, wall: n.ref, id: String(n.id).replace(/^gate:/, ''), at: [...n.at], y: Y - 1, h, width: w, facing: [...f], door: gateDoorOf(doorBlock), doorBlock, cells,
+      outer: [o[0] + f[0], o[1] + f[1]], inner: [i0[0] - f[0], i0[1] - f[1]] });
+  }
+  return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}

@@ -56,6 +56,11 @@ final class BesideVerdicts {
 		BesideJoin join = null;
 		if (ext != null) {
 			JsonObject jx = ext.get("junction") instanceof JsonObject j ? j : null;
+			// (7a GJ, §9: BesideJoin gains nothing) through a gate: the join's junction is the gate junction's `then` (an end or a side); the
+			// gate is in the IR and the land (`via`)
+			if (jx != null && "gate".equals(BesideReach.str(jx, "kind")) && jx.get("then") instanceof JsonObject th) {
+				jx = th;
+			}
 			String kind = jx == null ? "end" : String.valueOf(BesideReach.str(jx, "kind"));
 			String step = ir.has("reach") ? "reach" : "seam";
 			String to = String.valueOf(BesideReach.str(ext, "to"));
