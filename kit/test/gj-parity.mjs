@@ -11,12 +11,14 @@ import { planBesideWalled, walledTown } from './gj-helpers.mjs';
 
 export const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'gj', 'parity.json');
 
-/** The rings of the fixture: [name, gate parts]. */
+/** The rings of the fixture: [name, gate parts, band (absent: walledTown's; null: the plain default wall)]. */
 export const RINGS = [
   ['open', []],
   ['door', [{ id: 'gd', kind: 'gate', wall: 'ring', door: 'door', at: { anchor: 'e' } }]],
   ['fence', [{ id: 'gf', kind: 'gate', wall: 'ring', door: 'fence_gate', width: 3, at: { anchor: 'e' } }]],
   ['narrow', [{ id: 'g1', kind: 'gate', wall: 'ring', width: 1, at: { anchor: 'e' } }]],
+  ['default', [], null],
+  ['tight', [], [2, 2]],
 ];
 
 /** An IR trimmed to what besideGates reads: its gate nodes and its wall parts. */
@@ -26,14 +28,20 @@ export const trimWall = (ir) => ({ graph: { nodes: (ir.graph?.nodes ?? []).filte
 export async function build() {
   const walls = [];
   let open = null;
-  for (const [name, gates] of RINGS) {
-    const W = await walledTown({ gates });
+  const built = new Map();
+  for (const [name, gates, ring] of RINGS) {
+    const W = await walledTown({ gates, ...(ring === undefined ? {} : { ring }) });
+    built.set(name, W);
     if (name === 'open') open = W;
     const ir = trimWall(W.ringIr);
     walls.push({ name, id: 'rgW', ir, gates: besideGates('rgW', ir) });
   }
-  const q = await planBesideWalled({ W: open });
-  const districts = [{ name: 'gate', ir: q.ir, townClaim: open.A, land: districtLand(q.ir, open.A), landRemoved: districtLand(q.ir, open.A, { standingRemoved: 1234567 }) }];
+  const districts = [];
+  // (a short run to the street end, by a band and by the plain wall; a gate opening on it, no leg in)
+  for (const [name, W] of [['gate', open], ['short', built.get('default')], ['opens', built.get('tight')]]) {
+    const q = await planBesideWalled({ W });
+    districts.push({ name, ir: q.ir, townClaim: W.A, land: districtLand(q.ir, W.A), landRemoved: districtLand(q.ir, W.A, { standingRemoved: 1234567 }) });
+  }
   return { walls, districts };
 }
 
@@ -44,8 +52,8 @@ export const ENDPOINT = path.join(path.dirname(fileURLToPath(import.meta.url)), 
  * road from it to the town by endpoint.region, which reaches its street through the C38 ring's gate; the reach inputs the mod sends
  * (the town's and the wall region's, flat terrain: the held columns carry the ring).
  */
-export async function endpointFixture() {
-  const W = await walledTown();
+export async function endpointFixture({ ring } = {}) {
+  const W = await walledTown(ring === undefined ? {} : { ring });
   const terrain = { W: 101, D: 81, x0: 112, z0: 13, y: 64 };
   const C = [terrain.x0, terrain.z0, terrain.x0 + terrain.W - 1, terrain.z0 + terrain.D - 1];
   const { survey: _t, ...town } = W.besideReach.rg1, { survey: _w, ...wall } = W.besideReach.rgW;

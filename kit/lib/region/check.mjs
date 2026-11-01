@@ -1062,9 +1062,11 @@ export function routeRules({ ir, vw, route, want, findings, metrics, partStage, 
     if (!e.ok) { per.push({ id: e.id, ok: false, failed: e.failed }); continue; }
     const a = e.path[0], b = e.path[e.path.length - 1];
     const fa = [a[0], a[1] + 1, a[2]], fb = [b[0], b[1] + 1, b[2]];
-    const player = nodeReached(reach(fa, 'player'), fb) && nodeReached(reach(fb, 'player'), fa);
+    // ((7a GJ) an edge of one cell, a gate opening on its junction: its ends are one cell, nothing written to walk)
+    const one = e.path.length === 1;
+    const player = one || (nodeReached(reach(fa, 'player'), fb) && nodeReached(reach(fb, 'player'), fa));
     const villagerEdge = (e.movers ?? []).includes('villager');
-    const villager = villagerEdge ? nodeReached(reach(fa, 'villager'), fb) && nodeReached(reach(fb, 'villager'), fa) : null;
+    const villager = villagerEdge ? one || (nodeReached(reach(fa, 'villager'), fb) && nodeReached(reach(fb, 'villager'), fa)) : null;
     const ladders = (e.segments ?? []).filter((g) => g.kind === 'ladder').length;
     if (!player) unP.push(e);
     if (villagerEdge && !villager) unV.push(e);

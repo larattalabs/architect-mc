@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 /**
  * (7a GJ, §2, §5, §11 item 1) The mod's halves equal the kit's on the parity fixture (kit/test/fixtures/gj/parity.json, the kit's own
  * answers: kit/test/gj.test.mjs): {@link GateJoin#gates} equals besideGates on every wall (a C38 ring with an open gate, a double door,
- * a fence gate and a 1-wide gate), and {@link DistrictLand#of} equals districtLand on a district joined through a gate (its join's
- * junction the gate's `then`, its `via` the gate).
+ * a fence gate, a 1-wide gate, Steward's plain default wall and a tight one), and {@link DistrictLand#of} equals districtLand on a district joined through a gate (its join's
+ * junction the gate's `then`, its `via` the gate), by a leg in, a short run, and none.
  */
 class GateJoinTest {
 	static final Path FIXTURE = Path.of("../kit/test/fixtures/gj/parity.json");

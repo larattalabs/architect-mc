@@ -768,7 +768,8 @@ export function routePass(survey, volumes, intent) {
       withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
     }
     // ((6c D3) the `to` end's `lead`: the goal's arriving heading (against its facing, cardinal) and its straight cells)
-    const lead = isInt(e.to?.lead) && e.to.lead > 0 && Array.isArray(e.to.facing) ? Math.min(TURN_COOLDOWN, e.to.lead) : 0;
+    // ((7a GJ) an edge of one cell, a gate opening on its junction, has nothing to run straight)
+    const lead = isInt(e.to?.lead) && e.to.lead > 0 && Array.isArray(e.to.facing) && ends[0].k !== ends[1].k ? Math.min(TURN_COOLDOWN, e.to.lead) : 0;
     const sgn = (v) => (v > 0 ? 1 : v < 0 ? -1 : 0);
     const goalH = lead ? DIRS.findIndex((d) => d[0] === -sgn(e.to.facing[0]) && d[1] === -sgn(e.to.facing[1])) : -1;
     // (7a foundation) the edge's profile: its costs over COST, its stairs and ladders ANDed with the pass's, its ladder limit
@@ -1045,6 +1046,7 @@ export function lampSpots(edge, { every = 4 } = {}) {
  */
 export function edgeColumns(edge) {
   const { path, segments, landings, width } = edge;
+  if (!segments.length) return { cols: [], bySeg: [] }; // ((7a GJ) an edge of one cell, a gate opening on its junction: nothing to write)
   const owner = new Int32Array(path.length).fill(0);
   segments.forEach((g, si) => { for (let i = g.from + (si ? 1 : 0); i <= g.to; i++) owner[i] = si; });
   const m = new Map();

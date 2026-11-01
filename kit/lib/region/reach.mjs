@@ -6,7 +6,7 @@
 import { FLAG_MISSING, FLAG_WATER, asColumns, makeColumns } from './pack.mjs';
 import { sampleIndex, surveyApi } from './survey.mjs';
 import { isStreetId, keyRuns, runKeys } from './beside.mjs';
-import { gateStep } from './gateJoin.mjs';
+import { gateStep, gatesOf } from './gateJoin.mjs';
 
 /** At most this many dry routes in the reach step (§2.2). */
 export const REACH_DRY_MAX = 48;
@@ -351,10 +351,13 @@ export function chooseReach({ planCols, R, beside, claim, yRange = [-64, 319], d
   const frame = [claimR, town];
   const K = reachClasses(R);
   const { candidates, dropped } = reachCandidates({ reach: R, K, api, net, frame, districtEnds, unsafe });
-  if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
   // ((7a GJ) the third step: through a standing gate of the town's wall or of a wall region round it (§2); none: NO_JOIN [wall] with the
-  // gates tried)
-  if (wallEncloses(K, frame, districtEnds.map((q) => [q.x, q.z]), candidates)) return gateStep({ planCols, R, around, beside, claimR, town, yRange, districtEnds, candidates, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe, route, why });
+  // gates tried. (RC, default ring) a wall may have dropped every candidate: its street ends are then the ones it encloses)
+  const starts = districtEnds.map((q) => [q.x, q.z]);
+  const enclosed = candidates.length ? wallEncloses(K, frame, starts, candidates)
+    : net.ends.length > 0 && gatesOf(R, around).length > 0 && wallEncloses(K, frame, starts, net.ends.map((q) => ({ at: [q.end[0], 0, q.end[1]] })));
+  if (enclosed) return gateStep({ planCols, R, around, beside, claimR, town, yRange, districtEnds, candidates, net, dropped, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe, route, why });
+  if (!candidates.length) throw new Error(`NO_JOIN: [route] no street end or side of region ${beside.id} offers a junction (${Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join('; ') || 'none'}; ${why})`);
   const hardKeys = reachHardKeys(K, claimR, town, { unsafe });
   // a pair whose junction no 4-connected walk from its district end reaches (over the frame, around the hard columns and rects, every
   // candidate's contact columns open) can't route: skipped before any dry route (a superset of what the route pass reaches)

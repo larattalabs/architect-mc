@@ -17,15 +17,15 @@ export const GJ_EAST = [112, 30, 201, 81];
 const colsOf = (cells) => new Set([...cells.values()].map((c) => `${c.x},${c.z}`));
 
 /**
- * A walled town: `ring` the C38 wall plan's connectors after the wall (gate parts: [{id, kind: 'gate', ...}]); `wallOpts` the wall's
- * own members (gates, height). Returns {town, A, C, ringIr, world, besideReach (the map), townOnly (the town's inputs alone)}.
+ * A walled town: `gates` the C38 wall plan's connectors after the wall (gate parts: [{id, kind: 'gate', ...}]); `wallOpts` the wall's
+ * own members (gates, height); `ring` its band, null for the plain default wall Steward builds (no ring, height or gates). Returns {town, A, C, ringIr, world, besideReach (the map), townOnly (the town's inputs alone)}.
  */
-export async function walledTown({ gates = [], wallOpts = {}, anchors = { e: [100, 65, 53] } } = {}) {
+export async function walledTown({ gates = [], wallOpts = {}, anchors = { e: [100, 65, 53] }, ring = [4, 12] } = {}) {
   const town = await d3Town();
   const A = town.claim, C = [A[0] - 24, A[1] - 24, A[2] + 24, A[3] + 24];
   const tCells = realiseAll(town.p.ir, town.world);
   const w1 = afterWorld(town.world, tCells);
-  const plan = { schemaVersion: 'plan/0', connectors: [{ id: 'ring', kind: 'wall', where: { around: { feature: { region: 'rg1' }, ring: [4, 12] } }, height: 5, ...wallOpts }, ...gates] };
+  const plan = { schemaVersion: 'plan/0', connectors: [{ id: 'ring', kind: 'wall', where: { around: { feature: { region: 'rg1' }, ...(ring ? { ring } : {}) } }, ...(ring ? { height: 5 } : {}), ...wallOpts }, ...gates] };
   const r = await checkPlanLocal(plan, { survey: encodeColumns(columnsOf(w1, C[0], C[1], C[2] - C[0] + 1, C[3] - C[1] + 1)), claim: { minX: C[0], minZ: C[1], maxX: C[2], maxZ: C[3], minY: -64, maxY: 319 }, anchors, standing: [besideData('rg1', A, town.p.ir, C)] });
   const ringIr = r.res.ir;
   const rCells = realiseAll(ringIr, w1);

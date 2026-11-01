@@ -679,7 +679,7 @@ function reachStep({ r, ctx, claim, beside, ds, ends, endNode, base, keepOut, rk
   // ((7a GJ, §1, §3) through a gate: two legs, to its outer cell and on from its inner cell; the traverse between is never written)
   // ((§3) a narrow gate's legs end one cell further out each side: J.gate.legs)
   const [lo, li] = J.gate?.legs ?? [J.gate?.outer, J.gate?.inner];
-  const G = J.gate ? { out: { name: `${name}_go`, at: [lo[0], J.gate.y + 1, lo[1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: [li[0], J.gate.y + 1, li[1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } : null;
+  const G = J.gate ? { out: { name: `${name}_go`, at: [lo[0], J.gate.y + 1, lo[1]], facing: [...J.gate.facing] }, in: { name: `${name}_gi`, at: J.gate.opensOnJunction ? [...J.cand.at] : [li[0], J.gate.y + 1, li[1]], facing: [-J.gate.facing[0], -J.gate.facing[1]] } } : null;
   return { ...J, G, join: { a, b, q: { node: J.cand.node ?? null, port: J.cand.port ?? null, road: J.cand.road }, dry: J.best.dry } };
 }
 

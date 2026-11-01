@@ -23,6 +23,9 @@
 //     steward                           item 5: checkBeside then the real plan under steward.<b>.vplan / .vrealise (ext steward_mc:district,
 //                                       steward_mc:build), a stale re-check (the gate walled up) then .vrealise2, realiseByKey after a
 //                                       restart; v7a_gj_endpoint through checkPlan then realiseApproved
+//     shortrun                          item 12 (Steward's RC): Steward's plain default wall, its gate in line with a street end nearer than
+//                                       D3's lead, and a ring whose gate opens on the street end: checkBeside, the plan (a straight leg in of 3
+//                                       cells, of 1), realise, the gate unchanged, villagers both ways, the district removed: 0 changed cells
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7a-gj/<step>.json in the main checkout (GATE7AGJ_OUT overrides), all.log, REPORT.md, spend.json.
@@ -58,6 +61,8 @@ const ONE = (id, extra = {}) => ({ spec: { districts: [{ id, size: [48, 48], lot
 const STEWARD = (b, d = 'east') => ({ 'steward_mc:district': d, 'steward_mc:build': b });
 
 const steps = {};
+/** Item 12's walls: Steward's plain default wall (no ring, height or gates), and one whose gate opens on the street end. */
+const SHORT_RUNS = [['plain', null, 3], ['tight', [2, 2], 1]];
 async function run(name) {
   for (const k of Object.keys(results)) delete results[k];
   const t0 = Date.now();
@@ -220,9 +225,9 @@ async function town(X, Z) {
 }
 
 /** A C38 wall round a standing region through plan/0 (checkPlan of wall.around {feature: {region}}, then realiseApproved). */
-async function wallRound(townId, A, { gates = null, extra = [], anchors = {} } = {}) {
+async function wallRound(townId, A, { gates = null, extra = [], anchors = {}, ring = [4, 12] } = {}) {
   const C = [A[0] - 24, A[1] - 24, A[2] + 24, A[3] + 24];
-  const plan = { schemaVersion: 'plan/0', connectors: [{ id: 'ring', kind: 'wall', where: { around: { feature: { region: townId }, ring: [4, 12] } }, height: 5, ...(gates !== null ? { gates } : {}) }, ...extra] };
+  const plan = { schemaVersion: 'plan/0', connectors: [{ id: 'ring', kind: 'wall', where: { around: { feature: { region: townId }, ...(ring ? { ring } : {}) } }, ...(ring ? { height: 5 } : {}), ...(gates !== null ? { gates } : {}) }, ...extra] };
   const ck = await call('dev.region.checkPlan', { plan, claim: C, anchors: { stone: [Math.floor((A[0] + A[2]) / 2), 65, Math.floor((A[1] + A[3]) / 2)], ...anchors }, owner: OWNER }, 900_000);
   const part = ck.check?.parts?.find((x) => x.part === 'ring') ?? null;
   let region = null;
@@ -591,7 +596,7 @@ steps.steward = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'apicompat', 'ingame', 'town', 'refusals', 'steward']) {
+  for (const s of ['unit', 'apicompat', 'ingame', 'town', 'refusals', 'steward', 'shortrun']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -603,6 +608,56 @@ steps.report = async () => {
   spendZero();
   fs.writeFileSync(path.join(OUT, 'REPORT.md'), `# Gate 7a-GJ (a district joins a walled town through a standing gate)\n\nSpend: $0.00 (cap $0).\n\n| step | result | |\n|---|---|---|\n${rows.join('\n')}\n`);
   return { lines: rows.length };
+};
+
+// ------------------------------------------------------------------ item 12 (Steward's RC): a gate in line with a street end, a short run
+
+steps.shortrun = async () => {
+  await ensure();
+  const out = {};
+  await L.fresh('G6B GJ Short', FLAT);
+  await L.setRules('exact');
+  await cmd('/op @s');
+  let X = 60000;
+  const Z = 20000;
+  for (const [name, ring, cells] of SHORT_RUNS) {
+    await tp(X + 80, 40, Z + 80);
+    await kill();
+    const T = await town(X, Z);
+    const A = T.A;
+    const w = await wallRound(T.region, A, { ring });
+    check(!!w.region, `item 12 (${name}): the wall round ${T.region} realised through checkPlan and realiseApproved`);
+    const B = [A[2] + 1, A[1] + 30, A[2] + 90, A[3] - 30];
+    const before = await dump(T.all, `short-${name}-before`);
+    const p = await besidePlan(T.region, B, ONE('east'));
+    if (p.plan.refused) throw new Error(`item 12 (${name}): the district's plan was refused: ${p.plan.refused}`);
+    const ir = p.files.ir, d = p.files.meta.districts, g = ir.reach?.gate, leg = p.files.meta.route.edges.find((e) => e.id === 'join_in');
+    const at = g.at, zs = (leg?.path ?? []).map((q) => q[2]);
+    out[name] = { join: d.join, gate: g, leg: leg?.path ?? null, verdict: p.verdict };
+    check(d.join?.via === `${w.region}:${g.id}` && d.join?.junction?.kind === 'end', `item 12 (${name}): through gate ${g.id} to the street end (${json(d.join?.junction)})`);
+    check(leg?.path?.length === cells && zs.every((z) => z === at[2]), `item 12 (${name}): the leg in is straight, ${cells} cell(s) (${json(leg?.path)})`);
+    check(p.parity, `item 12 (${name}): checkBeside's verdict equals Regions.plan's`);
+    check((p.files.report?.metrics?.M28?.gate ?? -1) === 0 && !(p.files.report?.findings ?? []).some((f) => f.rule === 'M28:beside'), `item 12 (${name}): M28:beside clean`);
+    const gb = gateBox(g), gh0 = await hash(gb);
+    await kill();
+    const rb = await L.realise(p.plan.planId, { lots: {} });
+    const sb = await L.waitRegion(rb, 3_600_000);
+    check(sb.view.state === 'PLACED', `item 12 (${name}): Regions.realise's re-check accepts it: ${rb} PLACED`);
+    check((await hash(gb)) === gh0, `item 12 (${name}): the gate's cells unchanged`);
+    await tp(Math.floor((A[0] + B[2]) / 2), 0, Math.floor((A[1] + A[3]) / 2));
+    await kill();
+    out[name].nav = await villagers(ir, T.ir.anchors.bell ?? T.ir.anchors.entrance);
+    check(Object.keys(out[name].nav).length >= 1 && Object.values(out[name].nav).every((v) => v[0] && v[1]), `item 12 (${name}): vanilla villagers from every district lot to the bell and back, through the gate: ${json(out[name].nav)}`);
+    await kill();
+    await undo(rb);
+    await L.settle(3000);
+    const after = await dump(T.all, `short-${name}-after`);
+    const diff = diffCols(before, after, [w.C, [B[0] - 8, B[1] - 8, B[2] + 8, B[3] + 8]]);
+    check(diff.cells === 0, `item 12 (${name}): the district removed: 0 changed cells over the wall's claim and its own (+8) (${diff.cells}; ${json(diff.sample)})`);
+    X += 1000;
+  }
+  await leaveWorld();
+  return out;
 };
 
 const name = process.argv[2];

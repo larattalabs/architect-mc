@@ -6,6 +6,7 @@
 //   2   byte identity: a walled town's reach inputs without gates read as D3's; D3's own suites keep its pinned set (d3-unit)
 //   10  KC: a fountain inside the ring on the cheapest inner run: kept clear, M25:clear 0
 //   11  determinism: the IR sha over 3 plans
+//   12  (Steward's RC) the default ring: a gate in line with a street end, nearer than D3's lead: a short leg in, or none
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,7 +37,7 @@ test('item 1 (parity): besideGates over the fixture\'s walls equals its recorded
     assert.deepEqual(districtLand(d.ir, d.townClaim, { standingRemoved: 1234567 }), d.landRemoved, d.name);
     const j = d.land.parts.find((p) => p.kind === 'join');
     assert.equal(j.via, 'rgW:ring_g1');
-    assert.equal(j.junction, 'side', 'the land names the junction it ends at (the gate junction\'s then)');
+    assert.equal(j.junction, 'end', 'the land names the junction it ends at (the gate junction\'s then)');
   }
 });
 
@@ -134,6 +135,59 @@ test('item 1 (a narrow gate): a 1-wide gate is crossed at its width (noted), the
   assert.equal(qd.ir.reach.gate.narrowed, 2);
 });
 
+test('item 12 (the default ring): Steward\'s plain wall (no ring, height or gates): its gate 2 cells past the street end, in line: joined over the short run', async () => {
+  const W = await walledTown({ ring: null });
+  const [g] = W.besideReach.rgW.gates;
+  assert.deepEqual(g.inner, [77, 53], 'the wall nearer the street end than D3\'s lead, so D3 drops the end');
+  const q = await planBesideWalled({ W });
+  assert.equal(q.meta.districts.join.via, 'rgW:ring_g1');
+  assert.deepEqual(q.meta.districts.join.junction, { kind: 'end', at: [75, 65, 53] });
+  const legIn = q.meta.route.edges.find((e) => e.id === 'join_in');
+  assert.deepEqual(legIn.path.map((c) => [c[0], c[2]]), [[77, 53], [76, 53], [75, 53]], 'straight in, the 3 cells');
+  // the contact stops at the gate: 3 rows, 3 wide, no gate or wall column
+  assert.equal(runKeys(q.ir.reach.contact).size, 9);
+  assert.equal([...runKeys(q.ir.reach.contact)].filter((k) => runKeys(q.ir.reach.gate.cells).has(k)).length, 0);
+  const rep = check(W, q);
+  assert.deepEqual(errors(rep).map((f) => f.message), []);
+  for (const e of rep.metrics.route.edges.filter((x) => x.id.startsWith('join'))) assert.ok(e.player && e.villager, `${e.id}: both movers`);
+  assert.equal(rep.metrics.M28.gate, 0);
+});
+
+test('item 12 (the short run): an in-line gate joins at every gap, down to opening on the street end; the leg in never turns', async () => {
+  for (const [ring, inner, cells] of [[[2, 2], 75, 1], [[3, 3], 76, 2], [[4, 4], 77, 3], [[5, 5], 78, 4]]) {
+    const W = await walledTown({ ring });
+    assert.equal(W.besideReach.rgW.gates[0].inner[0], inner);
+    const q = await planBesideWalled({ W });
+    const legIn = q.meta.route.edges.find((e) => e.id === 'join_in');
+    assert.deepEqual(legIn.path.map((c) => c[2]), Array(cells).fill(53), `ring ${ring}: straight`);
+    assert.equal(legIn.path.length, cells, `ring ${ring}`);
+    const rep = check(W, q);
+    assert.deepEqual(errors(rep).map((f) => f.message), [], `ring ${ring}`);
+    for (const e of rep.metrics.route.edges.filter((x) => x.id.startsWith('join'))) assert.ok(e.player && e.villager, `ring ${ring}, ${e.id}: both movers`);
+    assert.equal(rep.metrics.M28.gate, 0);
+  }
+  const reachOf = (t) => chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R: t.R, beside: t.beside, claim: [96, 0, 135, 95], districtEnds: [{ x: 104, z: 48, at: [104, 65, 48], facing: [-1, 0] }], route: routePass });
+  // (seen from the other side of the rule: the wall against the street's own end cell, and a narrow gate's legs stopping a cell further in)
+  for (const [u1, run, width] of [[85, -1, 3], [84, 0, 3], [83, 0, 1], [83, 1, 3], [82, 1, 1], [82, 2, 3]]) {
+    const J = reachOf(synthWalled({ u1, width }));
+    assert.equal(J.cand.kind, 'end', `u1 ${u1}`);
+    assert.equal(J.cand.run, run, `u1 ${u1}`);
+    assert.equal(J.gate.opensOnJunction ?? false, run <= 0, `u1 ${u1}`);
+  }
+});
+
+test('item 12 (a run that can\'t take a join): a body across the in-line run, a street too far below the gate, are named', () => {
+  const de = [{ x: 104, z: 48, at: [104, 65, 48], facing: [-1, 0] }];
+  const reachOf = (t) => chooseReach({ planCols: columnsOf(flat, 96, 0, 40, 96), R: t.R, beside: t.beside, claim: [96, 0, 135, 95], districtEnds: de, route: routePass });
+  // ((a street with no side run, so the end was the only way in)
+  const lamp = synthWalled({ u0: 76, u1: 83, bodies: [[84, 47, 84, 49]] });
+  assert.throws(() => reachOf(lamp), /NO_JOIN: \[wall\] .*ring_g1 its inner run to street end street_end, 2 cell\(s\), is blocked: a town body's/);
+  const low = synthWalled({ u0: 76, u1: 84, g: (i) => (i <= 84 ? 60 : 64) });
+  assert.throws(() => reachOf(low), /NO_JOIN: \[wall\] .*ring_g1 it opens on street end street_end with no room for a step \(the street at 60, its walk at 64\)/);
+  const rise = synthWalled({ u0: 76, u1: 83, g: (i) => (i <= 83 ? 63 : 64) });
+  assert.throws(() => reachOf(rise), /NO_JOIN: \[wall\] .*ring_g1 its 2-cell run to street end street_end is too short for the grade \(the street at 63, its walk at 64\)/);
+});
+
 test('item 2 (byte identity): an unwalled town\'s reach plan reads the same with gates in its inputs or a wall region beside them', async () => {
   // D3's own pinned set is d3-unit's (districts-d3*.test.mjs, the goldens); here: the third step never runs off [wall], so inputs that carry
   // gates, or a map with a wall region, give a D3 plan the same IR
@@ -223,6 +277,21 @@ test('item 5 (plan/0): v7a_gj_endpoint\'s endpoint.region reaches the walled tow
   assert.equal(ext.via, 'rgW:ring_g1');
   assert.equal(ext.junction.kind, 'gate');
   assert.equal([...runKeys(r.res.ir.reach.runs)].filter((k) => runKeys(g.cells).has(k)).length, 0, 'no gate cell written');
+});
+
+test('item 12 (plan/0): endpoint.region through the default ring\'s gate: the short run, and a gate opening on the street end', async () => {
+  const { run } = await import('./plan-p0-shared.mjs');
+  const { endpointFixture } = await import('./gj-parity.mjs');
+  for (const [ring, cells] of [[null, 3], [[2, 2], 1]]) {
+    const f = { ...JSON.parse(JSON.stringify(await endpointFixture({ ring }))), name: 'v7a_gj_endpoint_short' };
+    const r = await run(f);
+    assert.equal(r.check.overall, 'READY', `ring ${ring}`);
+    const g = r.res.ir.reach.gate, leg = r.res.meta.route.edges.find((e) => /_g$/.test(e.id));
+    assert.equal(g.id, 'ring_g1');
+    assert.equal(leg.path.length, cells, `ring ${ring}`);
+    assert.equal([...runKeys(r.res.ir.reach.runs)].filter((k) => runKeys(g.cells).has(k)).length, 0, 'no gate cell written');
+    assert.ok(r.res.ir.graph.edges.some((e) => e.segments?.[0]?.kind === 'gate'), 'the traverse in the graph');
+  }
 });
 
 test('item 1 (ties): two gates of equal total cost: the one nearest the district, then the gate id', () => {

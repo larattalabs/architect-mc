@@ -6,7 +6,7 @@
 import { FLAG_MISSING } from './pack.mjs';
 import { surveyApi } from './survey.mjs';
 import { keyRuns, villagerOpens } from './beside.mjs';
-import { LEAD, REACH_DRY_MAX, REACH_EXPANDED, hardRects, inRect, reachClasses, unionColumns } from './reach.mjs';
+import { LEAD, REACH_DRY_MAX, REACH_EXPANDED, contactProblem, hardRects, inRect, reachClasses, unionColumns } from './reach.mjs';
 
 /** (§3) The join's width; a narrower gate is crossed at its own width (noted), the legs stay this wide outside its depth. */
 export const GATE_JOIN_WIDTH = 3;
@@ -65,13 +65,43 @@ export function gateProblem(g) {
   return null;
 }
 
+/** Where a leg stops inside the wall: the inner cell, or one further in on a gate narrower than the join (§3). */
+const legEndIn = (g) => (g.width < GATE_JOIN_WIDTH ? [g.inner[0] - g.facing[0], g.inner[1] - g.facing[1]] : g.inner);
+
+/**
+ * (RC, default ring) D3's end candidate asks for clear land LEAD cells past the street end, so a wall nearer than that drops it, gate or
+ * no gate. A gate of `gates` square on a dropped end's line takes it back: the contact stops at the gate. Each `{...an end candidate, gate:
+ * "<region>:<id>", run}` is offered to that gate only; `run` is the cells the leg in walks past the junction: 0 or less, none (the gate
+ * opens on the junction: no leg, nothing written; -1, its inner cell is the street's own end). Contact rows are D3's rule (§3.4), so a
+ * lamp or lot in them refuses: `blocked` maps the gate's key to why.
+ */
+export function inLineEnds({ gates, net, candidates, K, api, frame, unsafe = {} }) {
+  const out = [], blocked = new Map();
+  const dropped = net.ends.filter((q) => !candidates.some((c) => c.kind === 'end' && c.node === q.node));
+  for (const g of gates) for (const q of dropped) {
+    const [dx, dz] = q.dir, [ix, iz] = legEndIn(g);
+    if (g.facing[0] !== dx || g.facing[1] !== dz || (ix - q.end[0]) * dz !== (iz - q.end[1]) * dx) continue;
+    const run = (ix - q.end[0]) * dx + (iz - q.end[1]) * dz;
+    if (run < -1 || run >= LEAD) continue;
+    const key = `${g.region}:${g.id}`, keys = [];
+    for (let t = 0; t <= run; t++) for (let v = -1; v <= 1; v++) keys.push(`${q.end[0] + dx * t - dz * v},${q.end[1] + dz * t + dx * v}`);
+    const p = keys.map((k) => contactProblem(K, api, frame, k, { unsafe })).find((w) => w);
+    if (p) { blocked.set(key, `its inner run to street end ${q.node}, ${run + 1} cell(s), is blocked: ${p}`); continue; }
+    const surface = api.groundAt(q.at[0], q.at[2]);
+    if (run <= 0 && Math.abs(surface - g.y) > 1) { blocked.set(key, `it opens on street end ${q.node} with no room for a step (the street at ${surface}, its walk at ${g.y})`); continue; }
+    const at = run < 0 ? [q.at[0], surface + 1, q.at[2]] : [q.end[0], surface + 1, q.end[1]];
+    out.push({ kind: 'end', road: q.road, node: q.node, port: q.port, at, facing: [dx, dz], contact: keys, hold: keys.filter((k) => K.terrain.has(k)), junction: { kind: 'end', at: [...at] }, gate: key, run });
+  }
+  return { ends: out, blocked };
+}
+
 /**
  * (§2-§4) The third step. `D` is chooseReach's state where it found every candidate enclosed: {planCols, R, around, beside, claimR, town,
- * yRange, districtEnds, candidates, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe, route, why}. Returns chooseReach's shape
+ * yRange, districtEnds, candidates, net, dropped, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe, route, why}. Returns chooseReach's shape
  * with `gate` (the gate crossed and both legs) or throws `NO_JOIN: [wall] ...` listing every gate tried and why it failed.
  */
 export function gateStep(D) {
-  const { planCols, R, around, beside, claimR, town, yRange, districtEnds, candidates, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe = {}, route, why } = D;
+  const { planCols, R, around, beside, claimR, town, yRange, districtEnds, candidates: standing, net, dropped = {}, baseHard, clearTrees, keepOut, maxGrade, volumes, unsafe = {}, route, why } = D;
   const gates = gatesOf(R, around);
   const tried = [];
   const refuse = () => {
@@ -88,6 +118,11 @@ export function gateStep(D) {
   const api = { ...surveyApi(U, { minX: U.minX, minZ: U.minZ, maxX: U.minX + W - 1, maxZ: U.minZ + Dp - 1, minY: yRange[0], maxY: yRange[1] }), missingAt: missing };
   const K = mergedClasses(reachClasses(R), around);
   const inF = (x, z) => F.some((q) => inRect(q, x, z));
+  // ((RC, default ring) the street ends D3 dropped for a wall nearer than its lead, where a gate is square on their line)
+  const inLine = inLineEnds({ gates, net, candidates: standing, K, api, frame: [claimR, town], unsafe });
+  const candidates = [...standing, ...inLine.ends];
+  const runContact = new Set(inLine.ends.flatMap((c) => c.contact));
+  const noJunction = Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join(', ');
   // the hard columns: every held, footprint and body column of the standing claims outside the district's (the gates' cells are held)
   const hardKeys = new Set();
   const add = (k) => { const i = k.indexOf(','); const x = Number(k.slice(0, i)), z = Number(k.slice(i + 1)); if (!inRect(claimR, x, z) && F.slice(1).some((q) => inRect(q, x, z))) hardKeys.add(k); };
@@ -97,7 +132,7 @@ export function gateStep(D) {
   // ---- the flood (a superset of the route pass: a centre cell within 1 of a hard one carries no 3-wide footprint)
   const blocked = new Uint8Array(W * Dp);
   for (let j = 0; j < Dp; j++) for (let i = 0; i < W; i++) { const x = U.minX + i, z = U.minZ + j; if (!inF(x, z) || missing(x, z)) blocked[i + j * W] = 1; }
-  for (const k of hardKeys) { const [x, z] = k.split(',').map(Number); const i = x - U.minX, j = z - U.minZ; if (i >= 0 && j >= 0 && i < W && j < Dp) blocked[i + j * W] = 1; }
+  for (const k of hardKeys) { if (runContact.has(k)) continue; const [x, z] = k.split(',').map(Number); const i = x - U.minX, j = z - U.minZ; if (i >= 0 && j >= 0 && i < W && j < Dp) blocked[i + j * W] = 1; }
   for (const q of baseHard) for (let z = Math.max(q[1], U.minZ); z <= Math.min(q[3], U.minZ + Dp - 1); z++) for (let x = Math.max(q[0], U.minX); x <= Math.min(q[2], U.minX + W - 1); x++) blocked[(x - U.minX) + (z - U.minZ) * W] = 1;
   const wide = new Uint8Array(W * Dp);
   for (let j = 0; j < Dp; j++) for (let i = 0; i < W; i++) {
@@ -131,15 +166,19 @@ export function gateStep(D) {
   // ---- each gate: classified, its two cells checked, its legs' pairs (§2)
   const narrowOf = (g) => g.width < GATE_JOIN_WIDTH;
   const endOut = (g) => (narrowOf(g) ? [g.outer[0] + g.facing[0], g.outer[1] + g.facing[1]] : g.outer);
-  const endIn = (g) => (narrowOf(g) ? [g.inner[0] - g.facing[0], g.inner[1] - g.facing[1]] : g.inner);
+  const endIn = legEndIn;
   const cheb = (p, q) => Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]));
   const viable = [];
+  const inLineOf = (g) => inLine.ends.filter((c) => c.gate === `${g.region}:${g.id}`);
   for (const g of gates) {
+    const gk = `${g.region}:${g.id}`, mine = inLineOf(g);
     const p = gateProblem(g);
     if (p) { tried.push({ region: g.region, id: g.id, why: p }); continue; }
     const cellWhy = (c, name) => {
       const [x, z] = c, k = `${x},${z}`;
       if (!inF(x, z) || missing(x, z)) return `its ${name} cell (${x}, ${z}) is outside the surveyed frame`;
+      // (a cell of an in-line run is D3's contact column, passed by its own rule; a street end the gate opens on is the street's)
+      if (mine.some((c) => c.contact.includes(k) || (c.run < 0 && x === legEndIn(g)[0] && z === legEndIn(g)[1]))) return null;
       if (K.held.has(k) || K.lot.has(k) || K.keep.has(k) || K.body.has(k)) return `its ${name} cell (${x}, ${z}) is held`;
       if (Math.abs(api.groundAt(x, z) - g.y) > 1) return `its ${name} cell (${x}, ${z}) is not within 1 of the gate's walk (${api.groundAt(x, z)} vs ${g.y})`;
       return null;
@@ -148,8 +187,8 @@ export function gateStep(D) {
     if (cw) { tried.push({ region: g.region, id: g.id, why: cw }); continue; }
     const ends = districtEnds.map((q, qi) => ({ q, qi })).filter(({ qi }) => at(seenEnds[qi], endOut(g)[0], endOut(g)[1]));
     const sIn = flood(endIn(g)[0], endIn(g)[1]);
-    const cands = candidates.map((c, ci) => ({ c, ci })).filter(({ c }) => at(sIn, c.at[0], c.at[2]));
-    if (!ends.length || !cands.length) { tried.push({ region: g.region, id: g.id, why: !ends.length ? 'no walk from a district end reaches its outer cell' : 'no walk from its inner cell reaches a street end or side' }); continue; }
+    const cands = candidates.map((c, ci) => ({ c, ci })).filter(({ c }) => (!c.gate || c.gate === gk) && at(sIn, c.at[0], c.at[2]));
+    if (!ends.length || !cands.length) { tried.push({ region: g.region, id: g.id, why: !ends.length ? 'no walk from a district end reaches its outer cell' : inLine.blocked.get(gk) ?? `no walk from its inner cell reaches a street end or side${noJunction ? ` (none offered: ${noJunction})` : ''}` }); continue; }
     const b1 = Math.min(...ends.map(({ q }) => 10 * cheb([q.x, q.z], endOut(g)))), b2 = Math.min(...cands.map(({ c }) => 10 * cheb(endIn(g), [c.at[0], c.at[2]])));
     viable.push({ g, ends, cands, b1, b2, bound: b1 + b2 });
   }
@@ -161,7 +200,7 @@ export function gateStep(D) {
   // (§3) a gate narrower than the join: the legs stop one cell further out each side, and the cell each side of the traverse is walked
   // at the gate's width on its own ground (checked within 1 of the walk, never written: the join narrowed there)
   const legOut = (g) => (g.width < GATE_JOIN_WIDTH ? [g.outer[0] + g.facing[0], g.outer[1] + g.facing[1]] : g.outer);
-  const legIn = (g) => (g.width < GATE_JOIN_WIDTH ? [g.inner[0] - g.facing[0], g.inner[1] - g.facing[1]] : g.inner);
+  const legIn = legEndIn;
   const feetOut = (g) => [legOut(g)[0], g.y + 1, legOut(g)[1]], feetIn = (g) => [legIn(g)[0], g.y + 1, legIn(g)[1]];
   const dryRoute = (from, to, hard, frame) => {
     dry++;
@@ -176,7 +215,7 @@ export function gateStep(D) {
   for (const v of viable) {
     // (a gate whose bound ties the best is still costed: equal totals go to the gate nearest the district, then its id)
     if (best && v.bound > best.cost) break;
-    const g = v.g, fOut = [g.facing[0], g.facing[1]], fIn = [-g.facing[0], -g.facing[1]];
+    const g = v.g, fOut = [g.facing[0], g.facing[1]], fIn = [-g.facing[0], -g.facing[1]], mine = inLineOf(g);
     // the leg out: the cheapest district end to the outer cell (arriving square on, heading in)
     let l1 = null;
     for (const { q, qi } of [...v.ends].sort((p, q2) => cheb([p.q.x, p.q.z], endOut(g)) - cheb([q2.q.x, q2.q.z], endOut(g)) || p.qi - q2.qi)) {
@@ -192,11 +231,18 @@ export function gateStep(D) {
     for (const { c, ci } of [...v.cands].sort((p, q) => cheb(endIn(g), [p.c.at[0], p.c.at[2]]) - cheb(endIn(g), [q.c.at[0], q.c.at[2]]) || p.ci - q.ci)) {
       if (l2 && 10 * cheb(endIn(g), [c.at[0], c.at[2]]) >= l2.cost) break;
       if (best && l1.cost + 10 * cheb(endIn(g), [c.at[0], c.at[2]]) > best.cost) break;
+      // ((RC, default ring) the gate opens on the junction: no leg in, nothing to route)
+      if (c.run <= 0) { l2 = { cost: 0, length: 0, cand: c, ci }; break; }
       if (dry >= REACH_DRY_MAX) { cut = true; break; }
       const e = dryRoute({ at: feetIn(g), facing: fIn }, { at: c.at, facing: c.facing, lead: LEAD }, hardRects(hardKeys, c), [claimR, town]);
       if (e.ok && (!l2 || e.cost < l2.cost || (e.cost === l2.cost && ci < l2.ci))) l2 = { cost: e.cost, length: e.length, cand: c, ci };
     }
-    if (!l2) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from its inner cell to a street end or side' }); if (cut) break; continue; }
+    if (!l2) {
+      const c = mine.find((x) => x.run > 0), rise = c ? c.at[1] - 1 - g.y : 0;
+      tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : rise ? `its ${c.run + 1}-cell run to street end ${c.node} is too short for the grade (the street at ${c.at[1] - 1}, its walk at ${g.y})` : 'no route from its inner cell to a street end or side' });
+      if (cut) break;
+      continue;
+    }
     const cost = l1.cost + l2.cost;
     const key = (b) => [b.b1, b.g.region, b.g.id];
     const before = (a, b) => { const p = key(a), q = key(b); return p[0] - q[0] || (p[1] < q[1] ? -1 : p[1] > q[1] ? 1 : 0) || (p[2] < q[2] ? -1 : p[2] > q[2] ? 1 : 0); };
@@ -212,6 +258,7 @@ export function gateStep(D) {
   const gate = {
     region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}),
     cells: keyRuns(g.cells.map(([x, z]) => `${x},${z}`)), outer: [...g.outer], inner: [...g.inner], ...(narrowed ? { narrowed, legs: [endOut(g), endIn(g)] } : {}),
+    ...(cand.run <= 0 ? { opensOnJunction: true } : {}), // (the leg in's edge is the one cell: its node at the junction, nothing written)
     costs: { out: { cost: best.l1.cost, length: best.l1.length }, in: { cost: best.l2.cost, length: best.l2.length } },
   };
   const contact = new Set(cand.contact);
