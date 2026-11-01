@@ -25968,6 +25968,7 @@ is a reserved box and is skipped with "not standing as built"). The kit's third 
 | verifier | gate-verifier at 5a9a86c5: run `20261028-185647-change` | PASS: gj-ingame 19/0 (items 3, 4, 6, 7, 9), gj-steward 17/0 (items 5, 8, 9); `kit/test/gj.test.mjs` 13/13, step-inputs clean; diff reviewed, no defects (one cosmetic note: a district already dangling from its town's removal has `since` rewritten when its wall region goes too) |
 
 | 12 (step `gj-shortrun`), Steward's RC | run `20261101-201402-change` at 4ffa86b4 | PASS, 18 ok / 0 FAIL; gj-unit 4/0, gj-ingame 19/0, gj-town 10/0, gj-steward 17/0 |
+| verifier, Steward's RC fix | gate-verifier at ced5e77c: that run reviewed (no in-game re-run: the join's write set did not grow), `kit/test/gj.test.mjs` 18/18, full kit 996/0 | PASS, no defects |
 
 The first in-game round found one mod bug (the stale re-check after vanilla turned the walk's dirt path to dirt) and two fixture
 problems in `gj_town_wall` (the fountain's anchor on the street end, then the ring [4, 8] too tight round an off-axis fountain), all fixed.
