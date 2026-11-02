@@ -220,11 +220,12 @@ steps.rules = async () => {
  * An inchworm of three downward sticky pistons A, B, C over a grid (the only way sticky pistons reel anything in by more than one cell):
  * A's retract pulls the head block 1; B's retract pulls A up 1; A re-extends to the block; C's retract pulls B up 1; and so on. F = floorY.
  * Closed: A at F+4 (head in the slot, F+3), B at F+6 (head F+5), C at F+8 (head F+7), all extended, each powered from the plane d=2.
- * The grid: `glue` puts a slime row in the middle row. Rows above lintelY+4 (= F+7) leave the contract's envelope: C's base stands at F+8.
+ * The grid: `glue` makes the middle column slime. Rows above lintelY+4 (= F+7) leave the contract's envelope: C's base stands at F+8.
  */
 async function liftRig(x, z, F, { glue }) {
   await fill([x - 1, F, z], [x + 1, F + 2, z], 'minecraft:iron_bars');
-  if (glue) await fill([x - 1, F + 1, z], [x + 1, F + 1, z], 'minecraft:slime_block');
+  if (glue) await sb(x, F - 1, z, 'minecraft:obsidian'); // (else the slime lifts the floor cell under it: measured, 2026-11-01)
+  if (glue) await fill([x, F, z], [x, F + 2, z], 'minecraft:slime_block'); // (a slime only grabs when it is the one moved: the head must touch slime)
   const P = 'minecraft:sticky_piston';
   // written retracted and clear of the grid, then extended by power, so that nothing is pushed
   for (const y of [F + 4, F + 6, F + 8]) await sb(x, y, z, `${P}[facing=down]`);
@@ -256,18 +257,19 @@ async function raise(rig) {
   return ticks;
 }
 /**
- * Lowering, the raise reversed with a block left behind on the way: a sticky piston that is pulsed for 1 tick less than its stroke lets go of its block (it
- * "spits" it), so A's strokes down leave the grid where they pushed it.
+ * Lowering. A sticky piston pulsed for less than its stroke lets go of its block (it "spits" it), so A's strokes down leave the grid where
+ * they pushed it; C then B push the retracted A down after it; A's last stroke stays extended (closed rests powered).
  */
 async function lower(rig) {
   const { F } = rig;
   let ticks = 0;
   const pulse = async (y) => { await setPower(rig, y, true); await step(1); await setPower(rig, y, false); await step(ACT); ticks += 1 + ACT; };
-  const hold = async (y, on) => { await setPower(rig, y, on); await step(ACT); ticks += ACT; };
-  await pulse(F + 6); // A spits the grid down 1, A at F+6 retracted
-  await hold(F + 7, true); // B extends, pushing A down to F+5
-  await hold(F + 8, true); // C holds B... (see the sequence's data)
-  await pulse(F + 5);
+  const hold = async (y) => { await setPower(rig, y, true); await step(ACT); ticks += ACT; };
+  await pulse(F + 6); // A at F+6 spits the grid down 1
+  await hold(F + 8); // C pushes B and A down 1
+  await pulse(F + 5); // A at F+5 spits the grid down 1
+  await hold(F + 6); // B pushes A down 1
+  await hold(F + 4); // A at F+4: the last stroke, held
   return ticks;
 }
 
@@ -297,9 +299,47 @@ steps.extender = async () => {
   return out;
 };
 
+/** Outside the contract, recorded: a slime column down the middle of the grid glues it into one body that one chain of sticky pistons can reel in. */
+steps.outside = async () => {
+  await ensure();
+  const X = 7200, Z = 7000, out = { cycles: [] };
+  const g = await world(X, Z), F = g + 1;
+  await tp(X + 12, F + 4, Z + 14);
+  const rig = await liftRig(X, Z, F, { glue: true });
+  const box = () => snap(X - 1, F, Z, X + 1, F + 9, Z + 1);
+  await freeze();
+  await step(3);
+  const closed0 = await box();
+  let raised0 = null, bad = 0;
+  out.raiseTicks = out.lowerTicks = 0;
+  for (let c = 1; c <= 20; c++) {
+    const rt = await raise(rig);
+    await step(4);
+    const up = await box();
+    raised0 ??= up;
+    const lt = await lower(rig);
+    await step(4);
+    const down = await box();
+    const it = await items(X, F + 2, Z, 12);
+    const rowsOf = (st) => Object.entries(st).filter(([k, v]) => /iron_bars|slime/.test(v) && Number(k.split(',')[2]) === Z).map(([k]) => Number(k.split(',')[1]) - F);
+    const ok = Math.min(...rowsOf(up)) === 3 && Math.max(...rowsOf(up)) === 5 && rowsOf(up).length === 9 && Math.max(...rowsOf(down)) === 2 && rowsOf(down).length === 9 && json(up) === json(raised0) && json(down) === json(closed0) && !Object.values({ ...up, ...down }).some((v) => /moving_piston/.test(v)) && !it.stacks;
+    out.raiseTicks = rt; out.lowerTicks = lt;
+    out.cycles.push({ c, ok, items: it.stacks });
+    if (!ok) { bad++; out.firstBad ??= { c, up, down, closed0, raised0, items: it.items }; break; }
+  }
+  await unfreeze();
+  out.raised = raised0;
+  out.closed = closed0;
+  log(`  OUTSIDE THE CONTRACT slime column, 3 pistons, C at F+8: ${out.cycles.length} cycles, ${bad} bad; raise ${out.raiseTicks} ticks, lower ${out.lowerTicks}`);
+  log(`  rec  ${json(out.firstBad ?? { closed: closed0, raised: raised0 }).slice(0, 1500)}`);
+  await L.leaveWorld();
+  return out;
+};
+
 steps.probe = async () => {
   await steps.rules();
   await steps.extender();
+  await steps.outside();
 };
 
 // ------------------------------------------------------------------ housekeeping
