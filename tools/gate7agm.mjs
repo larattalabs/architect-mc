@@ -346,9 +346,7 @@ steps.outside = async () => {
 };
 
 steps.probe = async () => {
-  await steps.rules();
-  await steps.extender();
-  await steps.outside();
+  return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
 
 // ------------------------------------------------------------------ housekeeping
