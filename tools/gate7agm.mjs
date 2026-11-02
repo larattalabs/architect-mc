@@ -300,13 +300,12 @@ steps.extender = async () => {
 };
 
 /** Outside the contract, recorded: a slime column down the middle of the grid glues it into one body that one chain of sticky pistons can reel in. */
-steps.outside = async () => {
-  await ensure();
-  const X = 7200, Z = 7000, out = { cycles: [] };
-  const g = await world(X, Z), F = g + 1;
-  await tp(X + 12, F + 4, Z + 14);
+async function outsideRun(X, Z, F, { walled }) {
+  const out = { walled, cycles: [] };
+  // walled: the gatehouse round the slot: the lintel beam (row 3) on both faces and the wall on the front face, rows 3-8
+  if (walled) { await fill([X - 1, F + 3, Z - 1], [X + 1, F + 8, Z - 1], 'minecraft:stone'); await fill([X - 1, F + 3, Z + 1], [X + 1, F + 3, Z + 1], 'minecraft:stone'); }
   const rig = await liftRig(X, Z, F, { glue: true });
-  const box = () => snap(X - 1, F, Z, X + 1, F + 9, Z + 1);
+  const box = () => snap(X - 1, F, Z - 1, X + 1, F + 9, Z + 1);
   await freeze();
   await step(3);
   const closed0 = await box();
@@ -330,10 +329,19 @@ steps.outside = async () => {
   await unfreeze();
   out.raised = raised0;
   out.closed = closed0;
-  log(`  OUTSIDE THE CONTRACT slime column, 3 pistons, C at F+8: ${out.cycles.length} cycles, ${bad} bad; raise ${out.raiseTicks} ticks, lower ${out.lowerTicks}`);
+  log(`  OUTSIDE THE CONTRACT slime column, 3 pistons, C at F+8, ${walled ? 'walled' : 'open air'}: ${out.cycles.length} cycles, ${bad} bad; raise ${out.raiseTicks} ticks, lower ${out.lowerTicks}`);
   log(`  rec  ${json(out.firstBad ?? { closed: closed0, raised: raised0 }).slice(0, 1500)}`);
-  await L.leaveWorld();
   return out;
+}
+steps.outside = async () => {
+  await ensure();
+  const X = 7200, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X + 12, F + 4, Z + 14);
+  const open = await outsideRun(X, Z, F, { walled: false });
+  const walled = await outsideRun(X + 20, Z, F, { walled: true });
+  await L.leaveWorld();
+  return { open, walled };
 };
 
 steps.probe = async () => {
