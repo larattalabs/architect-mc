@@ -94,6 +94,7 @@ async function ground(X, Z) {
 }
 /** A clean probe world, the rules exact, the bot near the site. */
 async function world(X, Z) {
+  await L.leaveWorld(); // (before ensureBase: an unstamped base is moved aside, and the start may have it open)
   await L.ensureBase(FLAT);
   await L.fresh(WORLD, FLAT);
   await L.setRules('exact');
