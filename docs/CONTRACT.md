@@ -25903,7 +25903,6 @@ The resume notes, Steward's RC note, the exact API, the frozen interface, the tw
   restore was written this session is not "unfinished".
 - **Gate (RV-c/RV-d):** `rv-undo`, `rv-plan0`, `rv-undo-crash` in chain `6drv`. Steward's RC note and the run ids: HANDOFF-RV.md.
 
-<<<<<<< HEAD
 ## Phase 6d slice GR, lanes GR-a and GR-b as built (branch `slice/GR` off `slice/RV`, 2026-10-26, DEV MODE)
 
 Placeholders: every version `NEXT`; the coordinator numbers them at merge. The RC note, the exact API delta, the `gr_beside` fixture with
@@ -25973,7 +25972,7 @@ is a reserved box and is skipped with "not standing as built"). The kit's third 
 
 The first in-game round found one mod bug (the stale re-check after vanilla turned the walk's dirt path to dirt) and two fixture
 problems in `gj_town_wall` (the fountain's anchor on the street end, then the ring [4, 8] too tight round an off-axis fountain), all fixed.
-=======
+
 ## Slice GM, gate mechanisms
 
 Status: **FROZEN 2026-11-01** (Noah's decisions and Steward's notes folded in; S-GM-1 answered; K3 and GJ released in v0.48.0 and v0.49.0, so the `K3:C:` references below now live on main at shifted lines). Updated 2026-10-27 to Noah's GM decisions (PLAN "GM decisions (Noah, 2026-10-27)") and Steward's contract notes. Written 2026-10-27 against main 6b876fa1 and `origin/slice/K3` (K3 is not on main yet:
@@ -26283,4 +26282,3 @@ which is a reserved follow-up through versionOf/revision.)
 - **N-GM-2. Storms.** A daylight sensor reads darker in rain and thunder. Should a daytime storm close the gate (the sensor's natural
   behaviour; no extra logic), or should the sensor read sky light so a storm leaves it open? Default: the natural behaviour is
   accepted only if the probe shows no dusk flicker; otherwise a threshold is used.
->>>>>>> origin/docs/gm-contract
