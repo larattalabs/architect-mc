@@ -1377,3 +1377,15 @@ Steward's notes from the section above apply: the envelope is merged into the lo
   IRR's count is unchanged. A one-line fix plus a re-check of IRR's fixtures.
 - **The compact plan/0 is at 95,975 of 96,000** after K3's `connector.wall.lots` (no description, to fit). The next schema addition needs
   the bound raised (Steward's call, S-FL-8's line) or a trim.
+
+## v0.49.0: GJ gate join (2026-11-01)
+
+API 1.44.0, mod 0.49.0, kit 0.45.0, catalogue 15 (kept). A district joins a walled town through a standing gate (`region.plan.gateJoin`,
+feature `gateJoins`). Steward RC PASS on its real walled town, after a fix: D3's lead needs 3 clear cells past a street end, a default wall
+stands closer, so the end is taken back as a short in-line run when a gate sits in line with it.
+
+- **RC limits (Steward):** the restart ran in the wall-first order only; the wall went through `dev.region.remove`, because Steward's undo
+  takes the latest build; the restarted district carried no Steward tags, because Steward's sweeps take up a region no build holds.
+- **K3 passage gates (queued):** a K3 gatehouse-only wall has a `passage` node and no `gate` node, so it still answers `NO_JOIN [wall]`.
+  Read `passage:<lot>` nodes and `onWall.passage` (front/back ports as the outer/inner cells) in `besideGates` and `GateJoin.gates`, and let
+  the re-check accept the gatehouse lot's site as the holder. See the contract's as-built "K3 follow-up".

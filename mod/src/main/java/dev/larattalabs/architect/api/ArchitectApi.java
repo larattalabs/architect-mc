@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.43.0";
+	String VERSION = "1.44.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -185,7 +185,7 @@ public interface ArchitectApi {
 	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
 	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
 	 * method or reason.
-	 * Since NEXT (7a GJ), a GJ helper ({@code region.plan.gateJoin}) adds {@code "gateJoins"}: where a district's join (a {@code beside}
+	 * Since 1.44.0 (7a GJ), a GJ helper ({@code region.plan.gateJoin}) adds {@code "gateJoins"}: where a district's join (a {@code beside}
 	 * plan, {@code checkBeside}, plan/0's {@code endpoint.region}) would answer {@code NO_JOIN [wall]}, it crosses one standing gate of the
 	 * town's wall or of a wall region round the town (open or a wooden door; a fence gate is skipped for a villager join), never writing
 	 * it: two runs and a traverse. The district's {@code join_external} gains {@code via} ("region:gate"), {@code junction {kind: gate,

@@ -127,8 +127,9 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
   assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id).filter((id) => !/^revision\./.test(id)), ['connector.rail', 'connector.branch_walk', 'connector.span_bridge']);
   // (released in v0.43.0 at API 1.40.0, catalogue-v0430.json: a later release's golden.api moves on, the stamp stays; the 7a slices'
-  // flips in `changed` too: CL's and K2's released in v0.44.0 at API 1.41.0)
-  for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.40.0' || (flipped.has(e.id) && e.sinceApi === '1.41.0'), `${e.id}: ${e.sinceApi}`);
+  // flips and RV's revision.* entries in `changed` too: each keeps the stamp of its own release, whichever that was, so a later release does not move this item;
+  // tools/catalogue-since-check.mjs holds every stamp at or below the API)
+  for (const e of changed) assert.ok(e.sinceApi === 'NEXT' || e.sinceApi === golden.api || e.sinceApi === '1.40.0' || ((flipped.has(e.id) || /^revision\./.test(e.id)) && /^\d+\.\d+\.\d+$/.test(e.sinceApi)), `${e.id}: ${e.sinceApi}`);
   // every reserved 7a kind still has its extension fixture; span_bridge left e15
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)));
   assert.ok(!ext.has('connector.span_bridge'));
