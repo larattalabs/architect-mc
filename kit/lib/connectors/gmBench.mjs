@@ -13,36 +13,45 @@ export function benchCells() {
   const B = (x, z, lint = {}) => put(x, 0, z, `${W}stone`, { t: 'block', ...lint });
   const rep = (x, z, f, delay, lint = {}) => put(x, 0, z, `${W}repeater[facing=${{ n: 'north', s: 'south', e: 'east', w: 'west' }[f]},delay=${delay}]`, { t: 'rep', f, ...lint });
   const torch = (x, z, facing, mount, lint = {}) => put(x, 0, z, `${W}redstone_wall_torch[facing=${facing}]`, { t: 'torch', mount, ...lint });
-  // the detectors: lever on block M, trapdoor beside M, observer watching the trapdoor, out east
-  B(-2, -1); put(-2, 0, -2, `${W}lever[face=wall,facing=north,powered=false]`, { t: 'lever', mount: [-2, 0, -1] });
-  put(-1, 0, -1, `${W}iron_trapdoor[facing=north,half=bottom]`, { t: 'trap' }); put(0, 0, -1, `${W}observer[facing=west]`, { t: 'obs', f: 'w', label: 'P', stop: true });
-  B(-2, 2); put(-2, 0, 3, `${W}lever[face=wall,facing=south,powered=false]`, { t: 'lever', mount: [-2, 0, 2] });
-  put(-1, 0, 2, `${W}iron_trapdoor[facing=north,half=bottom]`, { t: 'trap' }); put(0, 0, 2, `${W}observer[facing=west]`, { t: 'obs', f: 'w', label: 'P', stop: true });
-  w(1, -1); w(1, 0); w(1, 1); w(1, 2);
-  rep(2, 0, 'w', 3);
-  for (let x = 3; x <= 28; x++) { if (x === 15) rep(x, 0, 'w', 1); else w(x, 0, { expect: ['P'] }); }
-  rep(29, 0, 'w', 1);
-  B(30, 0, { name: 'BC', expect: ['P', 'Q'] });
-  torch(31, 0, 'east', [30, 0, 0], { label: 'nC', stop: true });
-  rep(32, 0, 'w', 1, { expect: ['nC'] });
-  rep(33, 0, 'n', 1, { name: 'RG', label: 'G', stop: true });
-  w(33, -1, { name: 'D', expect: ['S', 'nG', 'nQ'] });
-  put(33, 0, -2, `${W}comparator[facing=north,mode=subtract]`, { t: 'cmp', f: 'n' });
-  for (let z = -8; z <= -3; z++) w(33, z, { expect: ['S'] });
-  rep(33, -9, 'n', 1, {}); put(33, 0, -10, `${W}daylight_detector[inverted=true]`, { t: 'sensor', label: 'S' });
-  put(34, 0, -8, `${W}observer[facing=west]`, { t: 'obs', f: 'w', label: 'Q', stop: true });
-  w(35, -8, { expect: ['Q'] }); rep(36, -8, 'w', 4);
-  for (let z = -12; z <= -1; z++) w(37, z, { expect: ['Q'] });
-  for (let x = 30; x <= 36; x++) w(x, -12, { expect: ['Q'] });
-  for (let z = -11; z <= -2; z++) w(30, z, { expect: ['Q'] });
-  rep(30, -1, 'n', 1);
-  torch(34, -1, 'west', [35, 0, -1], { label: 'nG', stop: true });
-  torch(34, -2, 'west', [35, 0, -2], { label: 'nQ', stop: true });
-  B(35, -1, { name: 'B1', expect: ['G', 'Q'] }); B(35, -2, { name: 'B2', expect: ['Q'] });
-  rep(36, -1, 'e', 1); rep(36, -2, 'e', 1);
-  // G: out of R_G south, to B1, and the bench's output lane (z 6, west)
-  w(33, 1, { expect: ['G'] }); w(34, 1, { expect: ['G'] }); w(35, 1, { expect: ['G'] }); rep(35, 0, 's', 1); // (a repeater: B1 is strongly powered by Q', and a dust beside it would read that)
-  for (let z = 2; z <= 6; z++) w(33, z, { expect: ['G'] });
-  for (let x = -3; x <= 32; x++) { if (x === 19 || x === 5) rep(x, 6, 'e', 1); else w(x, 6, { expect: ['G'] }); }
+  // the detectors (east end): a lever on block M, a trapdoor beside M, an observer watching the trapdoor, its output west
+  B(46, -1); put(46, 0, -2, `${W}lever[face=wall,facing=north,powered=false]`, { t: 'lever', mount: [46, 0, -1] });
+  put(45, 0, -1, `${W}iron_trapdoor[facing=north,half=bottom]`, { t: 'trap' }); put(44, 0, -1, `${W}observer[facing=east]`, { t: 'obs', f: 'e', label: 'P', stop: true });
+  B(46, 2); put(46, 0, 3, `${W}lever[face=wall,facing=south,powered=false]`, { t: 'lever', mount: [46, 0, 2] });
+  put(45, 0, 2, `${W}iron_trapdoor[facing=north,half=bottom]`, { t: 'trap' }); put(44, 0, 2, `${W}observer[facing=east]`, { t: 'obs', f: 'e', label: 'P', stop: true });
+  for (let z = -1; z <= 2; z++) w(43, z, { expect: ['P'] });
+  rep(42, 0, 'e', 3);
+  for (let x = 35; x <= 41; x++) w(x, 0, { expect: ['P'] });
+  rep(34, 0, 'e', 1);
+  // the core
+  B(33, 0, { name: 'BC', expect: ['P', 'Q'] });
+  torch(32, 0, 'west', [33, 0, 0], { label: 'nC', stop: true });
+  rep(31, 0, 'e', 1, { expect: ['nC'] });
+  rep(30, 0, 'n', 1, { name: 'RG', label: 'G', stop: true });
+  w(30, -1, { name: 'D', expect: ['S', 'nG', 'nQ'] });
+  put(30, 0, -2, `${W}comparator[facing=north,mode=subtract]`, { t: 'cmp', f: 'n' });
+  w(31, -2, { name: 'notQ to the CMP side', expect: ['nQ'] });
+  torch(32, -2, 'west', [33, 0, -2], { label: 'nQ', stop: true });
+  B(33, -2, { name: 'B2', expect: ['Q'] });
+  rep(34, -2, 'e', 1); rep(33, -1, 'n', 1); // Q' into B2, and B2 into BC
+  torch(29, -1, 'east', [28, 0, -1], { label: 'nG', stop: true });
+  B(28, -1, { name: 'B1', expect: ['G', 'Q'] });
+  rep(27, -1, 'w', 1); // Q' into B1
+  w(30, 1, { expect: ['G'] }); w(29, 1, { expect: ['G'] }); w(28, 1, { expect: ['G'] }); rep(28, 0, 's', 1); // G into B1
+  // S and Q: the inverted sensor, RS, the S column into CMP's back; OS watches it
+  put(30, 0, -10, `${W}daylight_detector[inverted=true]`, { t: 'sensor', label: 'S' });
+  rep(30, -9, 'n', 1);
+  for (let z = -8; z <= -3; z++) w(30, z, { expect: ['S'] });
+  put(31, 0, -6, `${W}observer[facing=west]`, { t: 'obs', f: 'w', label: 'Q', stop: true });
+  w(32, -6, { expect: ['Q'] }); rep(33, -6, 'w', 4);
+  w(34, -6, { expect: ['Q'] });
+  for (let z = -12; z <= -2; z++) w(35, z, { expect: ['Q'] });
+  for (let x = 25; x <= 34; x++) w(x, -12, { expect: ['Q'] });
+  for (let z = -11; z <= -1; z++) w(25, z, { expect: ['Q'] });
+  w(26, -1, { expect: ['Q'] });
+  // G out: south from (30,1) to z 6, then west to x -3 (repeaters every 8)
+  for (let z = 2; z <= 6; z++) w(30, z, { expect: ['G'] });
+  for (let x = -3; x <= 29; x++) { if ([27, 19, 11, 3].includes(x)) rep(x, 6, 'e', 1); else w(x, 6, { expect: ['G'] }); }
   return out;
 }
+/** The bench's levers (local) and R_G's cell. */
+export const BENCH = Object.freeze({ leverA: [46, 0, -2], leverB: [46, 0, 3], rg: [30, 0, 0], sensor: [30, 0, -10] });

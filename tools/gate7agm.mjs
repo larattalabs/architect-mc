@@ -579,15 +579,16 @@ async function dayRig(X, F, Z, kind) {
   // the gate: a stone gatehouse, the leaves' feed (slideCells) and the G line in d = 2, row 5 (u -2..4) entering from the east wall
   const cells = [...GMC.slideCells(kind, {}).values()];
   for (let u = -2; u <= 5; u++) cells.push([u, 2, 4, `${W_}stone`]);
-  for (let u = -2; u <= 5; u++) cells.push([u, 2, 5, u === 0 ? `${W_}repeater[facing=east,delay=1]` : `${W_}redstone_wire`]);
+  for (let u = -2; u <= 5; u++) cells.push([u, 2, 5, u === 0 || u === 4 ? `${W_}repeater[facing=east,delay=1]` : `${W_}redstone_wire`]);
   await gatehouse(X, F, Z, `${W_}stone`, cells);
   // the bench: floor at F+4 east of the box, components at F+5; local (x, z) -> world (X+9+x, Z-4+z)
   const BX = X + 9, BY = F + 5, BZ = Z - 4;
-  await fill([X + 6, F + 4, Z - 18], [X + 50, F + 4, Z + 4], `${W_}stone`);
-  await fill([X + 6, F + 5, Z - 18], [X + 50, F + 9, Z + 4], `${W_}air`);
+  await fill([X + 6, F + 4, Z - 18], [X + 58, F + 4, Z + 4], `${W_}stone`);
+  await fill([X + 6, F + 5, Z - 18], [X + 58, F + 9, Z + 4], `${W_}air`);
   const rank = (st) => (/lever|daylight/.test(st) ? 4 : /observer/.test(st) ? 3 : /wire|repeater|comparator|torch/.test(st) ? 2 : /trapdoor/.test(st) ? 1 : 0);
   for (const c of [...GMB.benchCells()].sort((a, b) => rank(a.state) - rank(b.state))) await sb(BX + c.x, BY + c.y, BZ + c.z, c.state);
-  return { lever: { A: [BX - 2, BY, BZ - 2], B: [BX - 2, BY, BZ + 3] }, rg: [BX + 33, BY, BZ], leaf: kind === 'slide' ? 'stone_bricks' : 'iron_bars' };
+  const at = ([x, y, z]) => [BX + x, BY + y, BZ + z];
+  return { lever: { A: at(GMB.BENCH.leverA), B: at(GMB.BENCH.leverB) }, rg: at(GMB.BENCH.rg), leaf: kind === 'slide' ? 'stone_bricks' : 'iron_bars' };
 }
 async function gateState(X, F, Z, leaf, rg) {
   const box = await gateBox(X, F, Z);
@@ -659,9 +660,9 @@ steps.daydebug = async () => {
   await L.gameWait(3000, { real: L.settle, label: 'settle' });
   const BX = X + 9, BY = F + 5, BZ = Z - 4;
   const dumpB = async (tag) => {
-    const b = await snap(BX - 3, BY, BZ - 12, BX + 37, BY, BZ + 6);
+    const b = await snap(BX - 3, BY, BZ - 12, BX + 47, BY, BZ + 6);
     const lines = [];
-    for (let z = -12; z <= 6; z++) { let l = `${String(z).padStart(3)} `; for (let x = -3; x <= 37; x++) l += abbr(b[`${BX + x},${BY},${BZ + z}`]).padEnd(3); lines.push(l); }
+    for (let z = -12; z <= 6; z++) { let l = `${String(z).padStart(3)} `; for (let x = 20; x <= 47; x++) l += abbr(b[`${BX + x},${BY},${BZ + z}`]).padEnd(3); lines.push(l); }
     log(`${tag}\n${lines.join('\n')}`);
     const lane = await snap(X - 3, F + 5, Z + 2, X + 9, F + 5, Z + 2);
     log(`  box G line: ${Object.entries(lane).map(([k, v]) => `${Number(k.split(',')[0]) - X}:${abbr(v)}`).join(' ')}`);
