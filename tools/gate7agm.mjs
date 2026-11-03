@@ -12,6 +12,9 @@
 //                                       end of the winch room, recorded cell by cell; the bar is a whole grid raised and lowered
 //     outside   (recorded, never judged) designs outside the contract, measured so the coordinator and Noah can decide: the slime-row grid
 //     probe                              rules + extender + outside
+//     fit       (gm-fit, step 1b)       gateLayout in real gatehouse boxes (GM_FIT_BOXES, default 13x7x10,13x11x11,17x15x12; GM_FIT_KINDS):
+//                                       the 13 §2a steps, 20 lever cycles, the latch windows' tick traces and slack (§14 item 3), a
+//                                       natural dusk and dawn and a daytime storm (one edge each, no flicker), no item dropped
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7a-gm/<step>.json in the main checkout (GATE7AGM_OUT overrides), all.log, REPORT.md.
@@ -784,7 +787,8 @@ async function gmBox(X, F, Z, { half, depth, roof, kind }) {
   await fill([X - half, F - 1, Z], [X + half, F + roof, Z + depth - 1], M.structure);
   await fill([X - 1, F, Z - 2], [X + 1, F + 2, Z + depth + 1], `${W_}air`);
   if (roof - 1 >= 4) await fill([X - half + 1, F + 4, Z + 1], [X + half - 1, F + roof - 1, Z + depth - 2], `${W_}air`);
-  const rank = (st) => (/lever|daylight/.test(st) ? 5 : /observer/.test(st) ? 4 : /wire|repeater|comparator|torch/.test(st) ? 3 : /bars|fence/.test(st) ? 2 : /piston/.test(st) ? 1 : 0);
+  // (observers go in with the structure: one is the floor of the S repeater; a pulse while building only sets G to the day's S)
+  const rank = (st) => (/lever|daylight/.test(st) ? 5 : /wire|repeater|comparator|torch/.test(st) ? 3 : /bars|fence/.test(st) ? 2 : /piston/.test(st) ? 1 : 0);
   const cells = GMC.layoutCells(lay).sort((a, b) => rank(a[3]) - rank(b[3]));
   for (const c of cells) { const [x, y, z, st] = GMC.toWorld(c, X, F, Z); await sb(x, y, z, st); }
   return lay;
@@ -833,6 +837,24 @@ async function fitWatch(X, F, Z, leaf, n, every = 10) {
   return { seq, edges: [...seq].filter((c, i) => i > 0 && c !== seq[i - 1]).length, mixed: !(last.G ? last.closed : last.open) };
 }
 
+steps.fitdebug = async () => {
+  await ensure();
+  const X = 9600, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X + 12, F + 14, Z - 10);
+  await cmd('/time set 6000');
+  await gmBox(X, F, Z, { half: 6, depth: 7, roof: 10, kind: 'portcullis' });
+  await L.gameWait(3000, { real: L.settle, label: 'settle' });
+  const cellsW = { sensor: [-4, 1, 10], raw9: [-4, 1, 9], RS: [-4, 2, 8], S3: [-4, 3, 8], S4: [-4, 4, 8], OS: [-4, 2, 7], RQ: [-4, 3, 6], QA: [-4, 4, 6], rB2: [-4, 1, 7], CMP: [-3, 4, 7], RG: [-1, 4, 7], T1: [-2, 4, 6], T2: [-3, 2, 7], T5: [-1, 2, 7] };
+  const dump = async (tag) => { const o = {}; for (const [n2, [u, d, r]] of Object.entries(cellsW)) o[n2] = (await stateAt(X + u, F + r, Z + d)).replace(/minecraft:/, ''); log(`${tag}: ${json(o)}`); return o; };
+  const out = { day: await dump('day') };
+  await cmd('/time set 14000'); await L.gameWait(3000, { real: L.settle, label: 'night' });
+  out.night = await dump('night');
+  await cmd('/time set 18000'); await L.gameWait(3000, { real: L.settle, label: 'midnight' });
+  out.midnight = await dump('midnight');
+  await L.leaveWorld();
+  return out;
+};
 const FIT_BOXES = (process.env.GM_FIT_BOXES ?? '13x7x10,13x11x11,17x15x12').split(',').map((b) => b.split('x').map(Number));
 steps.fit = async () => {
   await ensure();
@@ -887,8 +909,8 @@ steps.fit = async () => {
     rec.trace.dawnOverride = await fitTrace(X, F, Z, leaf, () => cmd('/time set 1000'), 60);
     for (const [k2, tr] of Object.entries(rec.trace)) log(`  ${name} trace ${k2}: a ${tr.a} end slack ${tr.endSlack} u ${tr.u0}..${tr.u1} v ${tr.v0}..${tr.v1}\n    G      ${tr.G}\n    locked ${tr.locked}\n    D      ${tr.D}`);
     // natural dusk and dawn (time runs), then a daytime storm and its clearing: G edges and leaf moves
-    await cmd('/time set 11800'); await L.gameWait(1000, { real: L.settle, label: 'pre-dusk' });
-    rec.dusk = await fitWatch(X, F, Z, leaf, 150, 10);
+    await cmd('/time set 12400'); await L.gameWait(1000, { real: L.settle, label: 'pre-dusk' });
+    rec.dusk = await fitWatch(X, F, Z, leaf, 200, 10);
     await cmd('/time set 22600'); await L.gameWait(1000, { real: L.settle, label: 'pre-dawn' });
     rec.dawn = await fitWatch(X, F, Z, leaf, 150, 10);
     await cmd('/time set 6000'); await L.gameWait(2000, { real: L.settle, label: 'noon' });
@@ -904,7 +926,7 @@ steps.fit = async () => {
     check(rec.steps.every((s2) => s2.ok), `${name}: §2a ${rec.steps.filter((s2) => s2.ok).length}/${rec.steps.length} steps`);
     check(bad === 0, `${name}: 20 lever cycles through the logic, ${bad} with a misplaced leaf${rec.firstBad ? ` (${json(rec.firstBad)})` : ''}`);
     check(traceOk, `${name}: latch windows with at least 1 tick of slack: ${Object.entries(rec.trace).map(([k2, t]) => `${k2} a=${t.a} end=${t.endSlack}`).join(', ')}`);
-    check(rec.dusk.edges <= 1 && rec.dawn.edges <= 1 && !rec.dusk.mixed && !rec.dawn.mixed, `${name}: natural dusk ${rec.dusk.edges} edge(s), dawn ${rec.dawn.edges} (no flicker)`);
+    check(rec.dusk.edges === 1 && rec.dawn.edges === 1 && !rec.dusk.mixed && !rec.dawn.mixed, `${name}: natural dusk ${rec.dusk.edges} edge, dawn ${rec.dawn.edges} (one each: closes at dusk, opens at dawn, no flicker)`);
     check(rec.storm.edges <= 1 && rec.clear.edges <= 1 && !rec.storm.mixed && !rec.clear.mixed, `${name}: daytime storm ${rec.storm.edges} edge(s) (${rec.storm.seq.slice(-1) === 'C' ? 'closes' : 'stays open'}), clearing ${rec.clear.edges} (no flicker)`);
     check(!rec.items, `${name}: no item dropped (${json(rec.items)})`);
     await L.leaveWorld();

@@ -224,20 +224,19 @@ export function gateLayout(kind, { depth = 7, roof = 10, mats } = {}) {
   block(-2, 4, 7, { name: 'DB', expect: ['S', 'nG', 'nQ'] });
   rep(-1, 4, 7, 'w', 2, { name: 'RG', label: 'G', stop: true });
   block(0, 4, 7, { name: 'GB' });
-  torchUp(-2, 4, 6, { name: 'T1', label: 'nG', stop: true }); block(-2, 4, 5, { name: 'B1' });
-  dust(-3, 3, 7, { name: 'nQ', expect: ['nQ'] }); torch(-3, 2, 7, 'n', { name: 'T2', label: 'nQ', stop: true }); block(-3, 1, 7, { name: 'B2' });
-  rep(-1, 3, 7, 'n', 1, { name: 'RL' }); torch(-1, 2, 7, 'n', { name: 'T5', label: 'nC', stop: true }); block(-1, 1, 7, { name: 'BC' });
+  torch(-2, 4, 6, 's', { name: 'T1', label: 'nG', stop: true }); block(-2, 5, 6, { name: 'B1', expect: ['G', 'QA'] }); // T1 under DB, hung on B1
+  dust(-3, 3, 7, { name: 'nQ', expect: ['nQ'] }); torch(-3, 2, 7, 'n', { name: 'T2', label: 'nQ', stop: true }); block(-3, 1, 7, { name: 'B2', expect: ['QA'] });
+  rep(-1, 3, 7, 'n', 1, { name: 'RL' }); torch(-1, 2, 7, 'n', { name: 'T5', label: 'nC', stop: true }); block(-1, 1, 7, { name: 'BC', expect: ['QA', 'Pp'] });
   rep(-2, 1, 7, 'w', 1, { name: 'rBC' });
   rep(0, 1, 7, 'e', 1, { name: 'rP' });
   air(-3, 2, 8); air(-1, 2, 8); // over the wall torches
-  rep(-1, 4, 5, 'e', 1, { name: 'rG' });
-  rep(-3, 4, 5, 'w', 2, { name: 'rQd' });
-  // the G line, r 4, d 3, and its cuts to the feed entries; G from GB down to it
-  air(-3, 3, 5); air(3, 3, 5);
-  for (let u = -3; u <= 3; u++) dust(u, 3, 4, { expect: ['G'] });
+  rep(-1, 5, 6, 'e', 1, { name: 'rG' });
+  rep(-3, 5, 6, 'w', 2, { name: 'rQd' });
+  // the G line, r 5, d 3 (floors in row 4, inside the logic block), touching both feed entries; G from GB down to it
+  for (let u = -3; u <= 3; u++) dust(u, 3, 5, { expect: ['G'] });
   dust(-3, 2, 5, { expect: ['G'] }); dust(3, 2, 5, { expect: ['G'] });
-  for (const [u, d, r] of [[0, 4, 6], [1, 4, 6], [2, 4, 5]]) dust(u, d, r, { expect: ['G'] });
-  air(2, 4, 6); air(2, 3, 5);
+  for (const [u, d, r] of [[0, 4, 6], [0, 5, 6]]) dust(u, d, r, { expect: ['G'] });
+  air(0, 3, 6);
   // S: the sensor's run (a staircase along d for a higher roof), raw dust on the block RS reads, RS, S dust on SB
   let sd = 1;
   for (let r = 10; r < roof; r++) { air(-4, sd, r); sd++; block(-4, sd, r - 1); dust(-4, sd, r, { name: 'raw' }); }
@@ -251,18 +250,20 @@ export function gateLayout(kind, { depth = 7, roof = 10, mats } = {}) {
   obs(-4, 2, 7, 'u', { name: 'OS', label: 'Q', stop: true });
   block(-4, 2, 6, { name: 'QB' });
   rep(-4, 3, 6, 'n', 4, { name: 'RQ', label: 'QA', stop: true });
-  for (const [u, d, r] of [[-4, 4, 6], [-5, 4, 6], [-5, 3, 7], [-5, 2, 7], [-5, 1, 7]]) dust(u, d, r, { name: 'QA', expect: ['QA'] });
+  for (const [u, d, r] of [[-4, 4, 6], [-4, 5, 6], [-5, 4, 6], [-5, 3, 7], [-5, 2, 7], [-5, 1, 7]]) dust(u, d, r, { name: 'QA', expect: ['QA'] });
   air(-5, 4, 7);
   rep(-4, 1, 7, 'w', 1, { name: 'rB2' });
   // P: the detectors' output blocks, RPa and RPb (delay 3), P' to rP's input
   block(-1, 1, 5, { name: 'PAB' }); block(1, depth - 2, 5, { name: 'PBB' });
   rep(0, 1, 5, 'w', 3, { name: 'RPa', label: 'Pp', stop: true });
   rep(2, depth - 2, 5, 'w', 3, { name: 'RPb', label: 'Pp', stop: true });
-  const P = [[1, 1, 5], [1, 2, 5], [2, 2, 6], [2, 1, 7], [1, 1, 7], [3, 1, 7]];
-  for (let d = 1; d <= depth - 2; d++) P.push([4, d, 6]);
-  P.push([3, depth - 2, 5]);
+  // P': RPa's output climbs (1,1,5) -> (2,1,6) -> (2,2,6) -> (2,3,7) -> (1,3,7); RPb's along the east column (4,d,6) -> (3,3,7); RP'
+  // (delay 1) at (1,2,7) powers the block (1,1,7) that rP reads
+  const P = [[1, 1, 5], [2, 1, 6], [2, 2, 6], [2, 3, 7], [1, 3, 7], [3, 3, 7], [3, depth - 2, 5]];
+  for (let d = 3; d <= depth - 2; d++) P.push([4, d, 6]);
   for (const [u, d, r] of P) dust(u, d, r, { name: 'Pp', expect: ['Pp'] });
-  air(1, 2, 6); air(2, 2, 7); air(4, 1, 7); air(3, depth - 2, 6);
+  air(1, 1, 6); air(2, 2, 7); air(4, 3, 7); air(3, depth - 2, 6);
+  rep(1, 2, 7, 's', 1, { name: 'RPp' }); block(1, 1, 7, { name: 'PB2' });
   block(3, 2, 6);
   // floors under every dust, repeater and comparator; then the rest of the logic block as the structure block
   for (const c of [...cells.values()]) if (['dust', 'rep', 'cmp'].includes(c.lint.t)) { const kk = k(c.u, c.d, c.r - 1); if (!cells.has(kk)) block(c.u, c.d, c.r - 1); }
@@ -291,3 +292,18 @@ export async function lintLayout(lay, { half = 6, outside = 'solid' } = {}) {
   for (const c of lay.cells.values()) if (Math.abs(c.u) <= 1 && c.r <= 2) allowed.add(`${c.u},${c.d},${c.r}`); // the passage's own cells (leaves, lanes)
   return [...lint(m, { solid }).problems, ...hiddenProblems(layoutCells(lay), { half, depth: lay.depth, roof: lay.roof }, allowed)];
 }
+
+/**
+ * (§14 item 3) The latch's static timing in game ticks, from the delays a layout declares (repeater delays in redstone ticks). Times are
+ * relative to the Q' pulse: B2 = 2 rB2, B1 = 2 rQd, BC = B2 + 2 rBC; the unlock starts when T5 (2) and RL go off; data is valid on the
+ * T1 path when T1 (2) is off and on the CMP path when T2 (2) and the comparator (2) have answered. The rule: 1 <= a <= 2 RG - 1.
+ */
+export function latchTiming({ rB2 = 1, rQd = 2, rBC = 1, RL = 1, RG = 2 } = {}) {
+  const b2 = 2 * rB2, b1 = 2 * rQd, bc = b2 + 2 * rBC;
+  const unlock = bc + 2 + 2 * RL;
+  const aT1 = unlock - (b1 + 2), aCMP = unlock - (b2 + 4);
+  const max = 2 * RG - 1;
+  return { b1MinusB2: b1 - b2, aT1, aCMP, max, ok: [aT1, aCMP].every((a) => a >= 1 && a <= max) };
+}
+/** The delays gateLayout declares (and the bench's, before §14). */
+export const LAYOUT_DELAYS = Object.freeze({ rB2: 1, rQd: 2, rBC: 1, RL: 1, RG: 2 });
