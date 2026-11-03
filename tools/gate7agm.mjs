@@ -696,8 +696,9 @@ steps.detectors = async () => {
   await tp(X, F + 4, Z + 12);
   const cells = [...GMC.slideCells('portcullis', {}).values()];
   for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); cells.push([u, 2, 5, u === 0 || u === 4 ? `${W_}repeater[facing=east,delay=1]` : `${W_}redstone_wire`]); }
-  cells.push(...GMC.detectorCells(3));
+  cells.push(...GMC.detectorCells(3), [-1, 1, 5, `${W_}air`], [1, 1, 5, `${W_}air`]); // (the pulses' cells: stone there would carry them into the bus beside)
   await gatehouse(X, F, Z, `${W_}stone`, cells);
+  const leaf0 = leaves(await gateBox(X, F, Z), X, F, Z, 'iron_bars');
   await L.gameWait(2000, { real: L.settle, label: 'settle' });
   const rest = await gateBox(X, F, Z);
   const res = {};
@@ -718,6 +719,8 @@ steps.detectors = async () => {
   const end = await gateBox(X, F, Z);
   const diff = Object.keys({ ...rest, ...end }).filter((k2) => rest[k2] !== end[k2] && !/lever|trapdoor|observer/.test(`${rest[k2]}${end[k2]}`));
   out.detectors = res; out.diff = diff;
+  const leaf1 = leaves(end, X, F, Z, 'iron_bars');
+  check(leaf0[-1] === 2 && leaf0[1] === 2 && leaf1[-1] === 2 && leaf1[1] === 2, `detectors: the leaves stay open through the build and the 40 flips (${json({ leaf0, leaf1 })})`);
   check(diff.length === 0, `detectors: after 40 flips (levers back off) nothing but the levers, trapdoors and observers changed in the box (${json(diff.slice(0, 5))})`);
   await L.leaveWorld();
   return out;
@@ -735,7 +738,7 @@ steps.settled = async () => {
   for (const kind of ['portcullis', 'slide']) {
     const lay = [...GMC.slideCells(kind, {}).values(), ...GMC.detectorCells(3)];
     const keys = lay.map(([u, d, r]) => `${u},${d},${r}`);
-    const cells = [...lay];
+    const cells = [...lay, [-1, 1, 5, `${W_}air`], [1, 1, 5, `${W_}air`]];
     for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); if (u !== -3 && u !== 3 && u !== 0) cells.push([u, 2, 5, `${W_}redstone_wire`]); }
     cells.push([0, 2, 5, `${W_}stone`], [0, 2, 6, `${W_}lever[face=floor,facing=north,powered=false]`]);
     await gatehouse(X, F, Z, `${W_}stone`, cells);
