@@ -654,24 +654,29 @@ steps.daydebug = async () => {
   await ensure();
   const X = 7800, Z = 7000;
   const g = await world(X, Z), F = g + 1;
-  await tp(X + 20, F + 12, Z + 14);
+  await tp(X + 30, F + 12, Z + 4);
   await cmd('/time set 6000');
   const rig = await dayRig(X, F, Z, 'portcullis');
   await L.gameWait(3000, { real: L.settle, label: 'settle' });
   const BX = X + 9, BY = F + 5, BZ = Z - 4;
-  const dumpB = async (tag) => {
-    const b = await snap(BX - 3, BY, BZ - 12, BX + 47, BY, BZ + 6);
-    const lines = [];
-    for (let z = -12; z <= 6; z++) { let l = `${String(z).padStart(3)} `; for (let x = 20; x <= 47; x++) l += abbr(b[`${BX + x},${BY},${BZ + z}`]).padEnd(3); lines.push(l); }
-    log(`${tag}\n${lines.join('\n')}`);
-    const lane = await snap(X - 3, F + 5, Z + 2, X + 9, F + 5, Z + 2);
-    log(`  box G line: ${Object.entries(lane).map(([k, v]) => `${Number(k.split(',')[0]) - X}:${abbr(v)}`).join(' ')}`);
+  const cellsW = { sens: [30, -10], RS: [30, -9], S: [30, -7], Q: [32, -6], Qp: [34, -6], B2rep: [34, -2], T2: [32, -2], CMP: [30, -2], D: [30, -1], BCrep: [33, -1], T5: [32, 0], RL: [31, 0], RG: [30, 0], T1: [29, -1], B1rep: [27, -1], Grep: [28, 0] };
+  const trace = async (tag, n) => {
+    await freeze();
+    const rows = [];
+    for (let t = 0; t <= n; t++) {
+      const b = await snap(BX + 25, BY, BZ - 12, BX + 36, BY, BZ + 1);
+      rows.push(`${String(t).padStart(3)} ` + Object.entries(cellsW).map(([k2, [x, z]]) => { const v = b[`${BX + x},${BY},${BZ + z}`] ?? ''; const m = /power=(\d+)/.exec(v); return `${k2}=${m ? m[1] : /powered=true|lit=true/.test(v) ? 1 : 0}`; }).join(' '));
+      await step(1);
+    }
+    await unfreeze();
+    log(`${tag}\n${rows.join('\n')}`);
   };
-  await dumpB('rest');
+  await cmd('/time set 14000'); await L.gameWait(3000, { real: L.settle, label: 'dusk' });
   await flip(rig.lever.A); await L.gameWait(1500, { real: L.settle, label: 'flip' });
-  await dumpB('after A');
-  await cmd('/time set 13500'); await L.gameWait(3000, { real: L.settle, label: 'dusk' });
-  await dumpB('dusk');
+  log(`night with override open: ${json(await gateState(X, F, Z, rig.leaf, rig.rg))}`);
+  await cmd('/time set 1000');
+  await trace('dawn trace', 45);
+  log(`after: ${json(await gateState(X, F, Z, rig.leaf, rig.rg))}`);
   await L.leaveWorld();
 };
 
