@@ -367,7 +367,7 @@ void CW;
 /**
  * (§7 item 1) The settled rest state of a gateLayout, by a pure evaluator: torches lit unless their mount is powered, repeaters and
  * comparators from their inputs (the latch RG held at its rest: unpowered for `rest: open`), dust power by distance from its sources,
- * dust shapes from its links (a single link extends to the opposite side; none: a cross). By day, levers off, the sensor at 0. Returns
+ * dust shapes from its links (a single link extends to the opposite side; none: a dot). By day, levers off, the sensor at 0. Returns
  * a Map 'u,d,r' -> state for every redstone part (blocks, leaves and pistons keep gateLayout's states). gm-unit runs it twice (a fixed
  * point) and compares it with gm-fit's dump of a freshly built box.
  */
@@ -448,7 +448,8 @@ export async function settleLayout(lay, { rest = 'open' } = {}) {
       const p = P(k2);
       const shape = {};
       for (const h of ['n', 's', 'e', 'w']) {
-        if (!di.point.includes(h)) { shape[F[h]] = 'none'; continue; }
+        // (a dust with no link stays the dot it was placed as on 26.3 (gm-fit's dump): it powers only the block under it)
+        if (!di.links.length || !di.point.includes(h)) { shape[F[h]] = 'none'; continue; }
         const n = add(p, h), up = add(n, 'u');
         shape[F[h]] = di.links.includes(h) && m.get(K2(up))?.t === 'dust' && di.wires.includes(K2(up)) ? 'up' : 'side';
       }
