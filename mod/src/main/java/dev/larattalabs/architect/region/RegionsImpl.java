@@ -1714,6 +1714,15 @@ public final class RegionsImpl implements Regions {
 				QItem li = lotItem(level, rec, ir, lot, entry, after, r);
 				if (li != null) {
 					items.add(li);
+					// (7a GM-a) a gatehouse's gate mechanism, written after its lot (the region's cells; the report on the region's ext)
+					QItem mi = mechanismItem(level, rec, ir, lot, li);
+					if (mi != null) {
+						items.add(mi);
+						if (!(rec.ext.get(GateMech.EXT_REPORT) instanceof JsonObject)) {
+							rec.ext.add(GateMech.EXT_REPORT, new JsonObject());
+						}
+						rec.ext.getAsJsonObject(GateMech.EXT_REPORT).add(lot.id(), mi.ext.get(GateMech.EXT_REPORT).deepCopy());
+					}
 					ls.state = li.status == QItem.Status.FAILED ? "failed:" + li.reason : "queued";
 					Blueprint bp = Blueprints.get(li.blueprint);
 					if (bp != null) {
@@ -2042,6 +2051,16 @@ public final class RegionsImpl implements Regions {
 			only.add(dev.larattalabs.architect.site.LotMask.EXT_PASSAGE, pass);
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_PASSAGE_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(only)));
 		}
+		// (7a GM-a, §5, §15) a gatehouse's gate mechanism: the sensor's rung picked from the bound design (GateMech), the cells it writes
+		// masked from the design (LotMask's third key), how many of the entry's blocks the mask drops, and the report (rung or levers-only)
+		GateMech.Plan gm = mechanismPlan(ir, lot.id(), bpId, f);
+		if (gm != null) {
+			ext.add(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM, gm.maskExt());
+			JsonObject only = new JsonObject();
+			only.add(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM, gm.maskExt());
+			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(only)));
+			ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
+		}
 		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, actorUuid, rec.survival(),
 			dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -2050,6 +2069,50 @@ public final class RegionsImpl implements Regions {
 		if (!f.fits()) {
 			q.fail(Reason.LOT_TOO_SMALL.name(), "The lot is too small for " + bpId + ": " + f.why());
 		}
+		return q;
+	}
+
+	/**
+	 * (7a GM-a) A lot's gate mechanism as bound to {@code bpId} fitted by {@code f} (GateMech's bind rule), or null: no mechanism in the
+	 * IR, or the entry unknown.
+	 */
+	static GateMech.@Nullable Plan mechanismPlan(Ir ir, String lotId, String bpId, LotFitting.Fit f) {
+		JsonObject w = GateMech.writeOf(ir, lotId);
+		if (w == null) {
+			return null;
+		}
+		var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
+		return GateMech.plan(w, grid == null ? null : grid.ghost(f.turns()), grid == null ? null : grid.states(), f.ox(), f.oy(), f.oz());
+	}
+
+	/**
+	 * (7a GM-a, §7) A gatehouse lot's mechanism item: a cell site of kind {@code architect:mechanism} (BOX, LAYER) after the lot's item,
+	 * its cells (GateMech's plan) journaled as this region's and written with no update (Sites.CELL_FLAGS: the settled rest state), so the
+	 * region's undo restores them. Null when the lot has none or its item failed.
+	 */
+	static @Nullable QItem mechanismItem(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, QItem lotItem) {
+		if (lotItem.status == QItem.Status.FAILED || !(lotItem.ext.get(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM) instanceof JsonObject)) {
+			return null;
+		}
+		String bpId = lotItem.blueprint;
+		Blueprint bp = Blueprints.get(bpId);
+		if (bp == null) {
+			return null;
+		}
+		int[] b = lot.box();
+		LotFitting.Fit f = LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), lot.front(), true, 0, true);
+		GateMech.Plan gm = mechanismPlan(ir, lot.id(), bpId, f);
+		if (gm == null || gm.positions().length == 0) {
+			return null;
+		}
+		List<dev.larattalabs.architect.api.CellWrite> cells = new ArrayList<>(gm.positions().length);
+		for (int i = 0; i < gm.positions().length; i++) {
+			cells.add(dev.larattalabs.architect.api.CellWrite.of(BlockPos.of(gm.positions()[i]), gm.states()[i]));
+		}
+		QItem q = dev.larattalabs.architect.site.RegionQueue.holdItem(level, rec.id, "mech:" + lot.id(), lot.stage(), List.of(lotItem.key), cells, rec.owner,
+			"architect:mechanism", dev.larattalabs.architect.api.Policy.BOX);
+		q.ext.addProperty("architect_mc:lot", lot.id());
+		q.ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
 		return q;
 	}
 

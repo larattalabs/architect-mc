@@ -17,6 +17,7 @@
 // Pure over its inputs and deterministic (ties by perimeter position, then lot order). A wall naming no lot never reaches this module.
 import { zoneLots } from '../plan/schema.mjs';
 import { OB } from './line.mjs';
+import { GM_KINDS, gmKindOf, gmBoxFits, gmMatsOf, mechanismPlan, gmRecord } from './gmGate.mjs';
 
 /**
  * The lot seen with its front to the south, as a design sees it (IRR's lotFrame, kit/lib/fluids/irrigate.mjs, repeated here: importing the
@@ -93,13 +94,16 @@ function atByType(id, spec) {
 export function wallLotsOf(part, specOf, form) {
   const out = [], read = [], seen = new Set();
   let gatesMin = null;
-  const add = (lot, at, k, near) => {
+  const add = (lot, at, k, near, gm = null) => {
     if (typeof lot !== 'string' || seen.has(lot) || out.length >= WALL_LOTS_MAX) return;
     seen.add(lot);
-    out.push({ lot, at: form === 'line' && at === 'corner' ? 'run' : at, ...(near ? { near } : {}), key: k });
+    out.push({ lot, at: form === 'line' && at === 'corner' ? 'run' : at, ...(near ? { near } : {}), key: k, ...(gm ?? {}) });
   };
+  // ((7a GM, §5) a gate lot's mechanism: `mech` and `rest` on a lots entry; the lenient params.mechanism / params.gate_mech of the wall
+  // give every gate lot the kind when `lots` is absent. Only a gate lot's mechanism is built: siteWallLots reads it)
+  const gmOf = (q) => (GM_KINDS.includes(q?.mech) ? { mech: q.mech, explicit: true, ...(q.rest === 'open' || q.rest === 'closed' ? { rest: q.rest } : {}) } : null);
   if (Array.isArray(part?.lots)) {
-    for (const q of part.lots) add(q?.lot, AT.includes(q?.at) ? q.at : atByType(q?.lot, specOf(q?.lot)), 'lots', q?.near ?? null);
+    for (const q of part.lots) add(q?.lot, AT.includes(q?.at) ? q.at : atByType(q?.lot, specOf(q?.lot)), 'lots', q?.near ?? null, gmOf(q));
     return { named: out, read, gatesMin };
   }
   const P = part?.params && typeof part.params === 'object' && !Array.isArray(part.params) ? part.params : {};
@@ -121,6 +125,12 @@ export function wallLotsOf(part, specOf, form) {
       else add(id, 'gate', k);
     }
     if (k === 'gates') gatesMin = ids.length;
+  }
+  for (const k of ['mechanism', 'gate_mech']) {
+    const kind = P[k] === undefined ? null : gmKindOf(P[k]);
+    if (!kind) continue;
+    read.push(k);
+    for (const q of out) if (q.at === 'gate' && !q.mech) q.mech = kind;
   }
   return { named: out, read, gatesMin };
 }
@@ -316,7 +326,7 @@ export function siteWallLots(K, W, named) {
     }
     K.mark(zid ?? W.id, K.addedSince(cp));
     boxes.push(box);
-    const rec = { lot: q.lot, at: q.at, key: q.key, kind, box: [box.minX, lot.floorY, box.minZ, box.maxX, lot.box.maxY, box.maxZ], front, floorY: lot.floorY, entrance: r.meta.lots[q.lot].entrance, size: [sx, sz], ...extra };
+    const rec = { lot: q.lot, at: q.at, key: q.key, ...(q.mech ? { mech: q.mech, mechExplicit: !!q.explicit, ...(q.rest ? { rest: q.rest } : {}) } : {}), kind, box: [box.minX, lot.floorY, box.minZ, box.maxX, lot.box.maxY, box.maxZ], front, floorY: lot.floorY, entrance: r.meta.lots[q.lot].entrance, size: [sx, sz], ...extra };
     out.sited.push(rec);
     return null;
   };
@@ -466,7 +476,12 @@ function finishLot(K, W, rec) {
     const [fx, fz] = VEC[pf];
     const along = fx === 0; // the front faces north or south: the passage runs along z
     const w = along ? x1 - x0 + 1 : z1 - z0 + 1;
-    const pw = passageWidth(K, w);
+    // ((7a GM, §14) a mechanism takes the box 13 along the wall, 7 through it, 10 high: else the plain passage, deviation mechanism)
+    const depth = along ? z1 - z0 + 1 : x1 - x0 + 1;
+    const gmFit = rec.mech ? gmBoxFits({ along: w, depth, height: rec.box[4] - fy + 1 }) : null;
+    if (gmFit && !gmFit.ok) rec.gmShort = gmFit.need;
+    // (K3's pwOf caps at 3 when the lot has its mechanism, §1)
+    const pw = gmFit?.ok ? PASSAGE_MIN : passageWidth(K, w);
     const lo = -((pw - 1) >> 1), hi = pw >> 1;
     // (the cell in front of the middle of the front edge: r.lot's entrance rule, so a gate lot's front port is its entrance)
     const e = along ? [x0 + ((x1 - x0) >> 1), fy, fz < 0 ? z0 - 1 : z1 + 1] : [fx < 0 ? x0 - 1 : x1 + 1, fy, z0 + ((z1 - z0) >> 1)];
@@ -481,6 +496,24 @@ function finishLot(K, W, rec) {
     const F = lotFrame(lot);
     const lotCells = flatRuns(cells.map(([x, y, z]) => { const [u, yy, v] = F.toFrame(x, y, z); return [u, yy, v]; }));
     passage = { width: pw, height: PASSAGE_HEIGHT, cells: flatRuns(cells), lotCells, floor, front, back, lintelY: fy + PASSAGE_HEIGHT, facing: pf };
+    if (gmFit?.ok) {
+      // ((7a GM, §5, §15) the mechanism: its record on the passage; its envelope merged into the passage's lotCells (the lot's reserved
+      // entry, which Steward forwards as it is), the passage's own `cells` (the mask, the open lanes) unchanged; the write data the realise
+      // reads on the IR's lot (its rung picked at bind)
+      const plan = mechanismPlan(rec.mech, { depth, mats: gmMatsOf(K.ctx?.roles ?? {}) });
+      const at = { cx: along ? e[0] : fx < 0 ? x0 : x1, cz: along ? (fz < 0 ? z0 : z1) : e[2], fy, facing: pf };
+      const { record, write } = gmRecord(plan, plan.rest, at, (x, y, z) => F.toFrame(x, y, z));
+      if (rec.rest && rec.rest !== plan.rest) rec.gmRestNote = `${rec.lot}: rest ${rec.rest} is written as ${plan.rest} (${plan.dayDriven ? 'a day-driven gate: the levers override it' : 'the swing rests closed'})`;
+      passage.mechanism = record;
+      const mine = new Set();
+      const both = [];
+      for (const runs of [lotCells, record.lotCells]) for (let i = 0; i + 3 < runs.length; i += 4) for (let y = runs[i + 2]; y <= runs[i + 3]; y++) {
+        const kk = `${runs[i]},${y},${runs[i + 1]}`;
+        if (!mine.has(kk)) { mine.add(kk); both.push([runs[i], y, runs[i + 1]]); }
+      }
+      passage.lotCells = flatRuns(both);
+      rec.gmWrite = write;
+    }
     rec.ports = [{ name: 'front', at: front, facing: pf }, { name: 'back', at: back, facing: { north: 'south', south: 'north', east: 'west', west: 'east' }[pf] }];
   }
   const faces = [];
@@ -495,7 +528,7 @@ function finishLot(K, W, rec) {
     outerFaces: { cells: flatRuns(faces), lotCells: flatRuns(faces.map(([x, y, z]) => F.toFrame(x, y, z))) },
     ...(passage ? { passage } : {}),
   };
-  if (lot) { lot.onWall = rec.onWall; if (rec.ports) lot.ports = rec.ports; }
+  if (lot) { lot.onWall = rec.onWall; if (rec.ports) lot.ports = rec.ports; if (rec.gmWrite) lot.mechanismWrite = rec.gmWrite; }
 }
 
 /**

@@ -51,7 +51,9 @@ function irGraph(ir, meta, vw) {
     const a = ports.get(e.from), b = ports.get(e.to);
     const v = vg && a && b && nodeReached(vg, a) && nodeReached(vg, b);
     // (6c D1) an external edge: `to` is another region's port (<region>:<node>.<port>; 7a types it)
-    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'], ...(e.external ? { external: true } : {}), ...(e.crossing ? { crossing: { ...e.crossing } } : {}) };
+    // ((7a GM, §5) a mechanism gate's passage: its rest state, closesAtNight and the toggle; a gate resting closed is the player's)
+    const gm = e.mechanism ? { state: e.state, ...(e.closesAtNight ? { closesAtNight: true } : {}), mechanism: { ...e.mechanism } } : {};
+    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v && e.state !== 'closed' ? ['player', 'villager'] : ['player'], ...(e.external ? { external: true } : {}), ...(e.crossing ? { crossing: { ...e.crossing } } : {}), ...gm };
   });
   return { derived: false, nodes, edges };
 }
@@ -144,7 +146,7 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
     ...(w.walk ? { walk: { width: w.walk.width, runs: Math.max(0, ...(w.walk.accesses.length > 1 ? [w.closed ? w.walk.accesses.length : w.walk.accesses.length - 1] : [0])), accesses: w.walk.accesses.map((a) => ({ kind: a.kind, at: [...a.at], foot: [...a.foot] })) } } : {}),
     ...(w.along ? { spine: w.along.spine.map((q) => [...q]) } : {}),
     // ((7a K3, §8) the lots on its line: {lot, at, box, passage?: {width, height, front, back}})
-    ...(w.lots?.length ? { lots: w.lots.map((q) => ({ lot: q.lot, at: q.at, box: [...q.box], ...(q.passage ? { passage: { width: q.passage.width, height: q.passage.h, front: [...q.passage.front], back: [...q.passage.back] } } : {}) })) } : {}) }));
+    ...(w.lots?.length ? { lots: w.lots.map((q) => ({ lot: q.lot, at: q.at, box: [...q.box], ...(q.passage ? { passage: { width: q.passage.width, height: q.passage.h, front: [...q.passage.front], back: [...q.passage.back], ...(q.passage.mechanism ? { mechanism: { ...q.passage.mechanism } } : {}) } } : {}) })) } : {}) }));
   // (6c T3) the plan's bridges (span: deck cells; piers: each pier's centre column [x, z]; landings: the near and far landing cells) and
   // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
   if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));

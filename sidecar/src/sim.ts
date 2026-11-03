@@ -126,7 +126,12 @@ export interface SimWallLotSpec {
   outerDoor: boolean;
   /** the lot's onWall.outerFaces.lotCells (flat runs [u, v, y0, y1, ...]) when the request carries them (ext["architect:wallLot"]) */
   outerFaces?: number[];
+  /** (7a GM) a mechanism gatehouse (the GM brief's roof line in the notes or context): the deck at row 10, the gate's lowest sensor rung */
+  roof?: number;
 }
+
+/** (7a GM) The gatehouse brief's roof line (CONTRACT GM §15 item 6): a mechanism gatehouse, its roof kept low enough to sense the sky. */
+export const SIM_GM_BRIEF = /so the gate can sense the sky/i;
 
 /** (7a K3) The request ext key that carries a wall lot's outer faces to the sim: {outerFaces: onWall.outerFaces.lotCells}. */
 export const SIM_WALL_LOT_EXT = 'architect:wallLot';
@@ -149,7 +154,8 @@ export function simWallLot(req: { type: string; maxSize?: Size3 | undefined; not
   // the reserved object's frame is the lot's (front to the south); it wins when it fits the max size
   const rs = req.reserved?.size;
   const [W, D] = rs && rs[0] <= m.x && rs[1] <= m.z ? rs : [m.x, m.z];
-  return { type: req.type, size: [W, m.y, D], passage: req.type === 'gatehouse' ? simStandInPassage(W, D, req.reserved?.cells ?? []) : null, outerDoor: faults.has('outerdoor'), ...(of ? { outerFaces: of } : {}) };
+  const gm = req.type === 'gatehouse' && (SIM_GM_BRIEF.test(req.notes ?? '') || SIM_GM_BRIEF.test(ctx));
+  return { type: req.type, size: [W, m.y, D], passage: req.type === 'gatehouse' ? simStandInPassage(W, D, req.reserved?.cells ?? []) : null, outerDoor: faults.has('outerdoor'), ...(of ? { outerFaces: of } : {}), ...(gm ? { roof: 10 } : {}) };
 }
 
 /** (Since NEXT, 7a K3) What the wall-lot stand-in builds for a spec (its size, front and anchors), built once with the kit's own module. */

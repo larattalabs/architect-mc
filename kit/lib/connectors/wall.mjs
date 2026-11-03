@@ -30,7 +30,8 @@ import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWa
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
 import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
-import { LOT_KEYS, lotBand, siteWallLots, viaLots, wallLotsOf } from './wallLots.mjs';
+import { LOT_KEYS, lotBand, siteWallLots, viaLots, wallLotsOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
+import { gmBoxFits } from './gmGate.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -1002,10 +1003,24 @@ export function finishGates(K) {
     const tol = K.tolOf(p.part, 'move');
     const mv = W.devs.find((d) => d.what === 'move');
     const j = K.judge(mv ? [{ what: 'move', value: mv.value, ...tol }] : []);
-    const deviations = [...j.deviations, ...W.joins.map(({ note, ...d }) => { void note; return d; })];
-    const notes = mergeNotes([...W.notes, ...W.joins.map((d) => d.note)]);
-    const klass = j.klass === 'refused' ? 'refused' : deviations.length ? 'adjusted' : 'fits';
-    W.answer = { class: klass, deviations, notes, ...(j.klass === 'refused' ? { reasons: [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }] } : {}), ...(W.joined.length || W.lots?.length ? { provisional: true } : {}) };
+    // ((7a GM, §9) a gate lot whose box is under 13 x 7 x 10 keeps the plain passage: deviation mechanism (the short side named); an
+    // explicit mech on a required wall is refused NO_ROOM instead)
+    const gmShort = (W.lots ?? []).filter((q) => q.gmShort);
+    const gmDevs = gmShort.map((q) => ({ what: 'mechanism', kind: q.mech, lot: q.lot, need: Object.values(q.gmShort)[0], side: Object.keys(q.gmShort)[0] }));
+    const gmNotes = [...gmShort.map((q) => `${q.lot}: its box is too ${Object.keys(q.gmShort)[0] === 'along' ? 'narrow along the wall' : Object.keys(q.gmShort)[0] === 'depth' ? 'shallow' : 'low'} for a ${q.mech} (needs ${Object.values(q.gmShort)[0]}; the gate box minimum is 13 x 7 x 10): a plain passage`), ...(W.lots ?? []).filter((q) => q.gmRestNote).map((q) => q.gmRestNote)];
+    // (read from the lot's planned size, not its siting: a refused wall's lots go back to their zone (K3 §2) and the compile reruns
+    // without them on the line, so the refusal must not depend on where they stood)
+    const gmRefuse = p.part?.required === true ? (W.st?.named ?? []).filter((q) => q.mech && q.explicit && q.at === 'gate').map((q) => {
+      const sz = K.lotSpec?.(q.lot)?.size;
+      const f = Array.isArray(sz) ? gmBoxFits({ along: sz[0], depth: sz[1], height: WALL_LOT_HEIGHT }) : { ok: true };
+      return f.ok ? null : { lot: q.lot, mech: q.mech, gmShort: f.need };
+    }).filter(Boolean) : [];
+    const deviations = [...j.deviations, ...W.joins.map(({ note, ...d }) => { void note; return d; }), ...gmDevs];
+    const notes = mergeNotes([...W.notes, ...W.joins.map((d) => d.note), ...gmNotes]);
+    const klass = j.klass === 'refused' || gmRefuse.length ? 'refused' : deviations.length ? 'adjusted' : 'fits';
+    const reasons = j.klass === 'refused' ? [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }]
+      : gmRefuse.map((q) => ({ code: 'NO_ROOM', message: `${q.lot}: its box has no room for the ${q.mech} (needs ${Object.values(q.gmShort)[0]} ${Object.keys(q.gmShort)[0] === 'along' ? 'along the wall' : Object.keys(q.gmShort)[0] === 'depth' ? 'through the wall' : 'high'}; the gate box minimum is 13 x 7 x 10)`, evidence: { kind: 'mechanism', lot: q.lot, need: Object.values(q.gmShort)[0], side: Object.keys(q.gmShort)[0] } }));
+    W.answer = { class: klass, deviations, notes, ...(reasons.length ? { reasons } : {}), ...(W.joined.length || W.lots?.length ? { provisional: true } : {}) };
     K.ans(p, W.answer);
   }
 }
@@ -1337,7 +1352,11 @@ function emitWall(K, W) {
     const id = `passage:${q.lot}`.slice(0, 64);
     const back = { north: 'south', south: 'north', east: 'west', west: 'east' }[ps.facing];
     r.graphNode({ id, kind: 'passage', ref: q.lot, at: [...ps.front], ports: [{ name: 'front', at: [...ps.front], facing: ps.facing, width: ps.width }, { name: 'back', at: [...ps.back], facing: back, width: ps.width }] });
-    r.graphEdge({ id: `pg_${q.lot}`.slice(0, 64), from: `${id}.front`, to: `${id}.back`, type: 'passage', width: ps.width, path: `w_${W.id}`.slice(0, 48), stage: K.stageOf('links'), movers: ['player', 'villager'], crossing: { type: 'passage', wall: W.id, lot: q.lot } });
+    // ((7a GM, §5, §6) a mechanism gate: its rest state, a day-driven gate's closesAtNight, the toggle; villagers pass an open one (a
+    // day-driven gate counts as open for them), a gate resting closed is the player's)
+    const gm = ps.mechanism;
+    const gmEdge = gm ? { state: gm.rest, ...(gm.dayDriven ? { closesAtNight: true } : {}), mechanism: { kind: gm.kind, toggle: 'player' } } : {};
+    r.graphEdge({ id: `pg_${q.lot}`.slice(0, 64), from: `${id}.front`, to: `${id}.back`, type: 'passage', width: ps.width, path: `w_${W.id}`.slice(0, 48), stage: K.stageOf('links'), movers: gm && gm.rest === 'closed' ? ['player'] : ['player', 'villager'], crossing: { type: 'passage', wall: W.id, lot: q.lot }, ...gmEdge });
   }
   // ((7a K2, §3) the walk's accesses (kind access) and its runs between them (type wall_walk, player only)
   if (walkOut) {
@@ -1392,14 +1411,14 @@ function emitWall(K, W) {
   // ((7a K3, §6, §8) the lots on the line: the answer's geometry and siteplan's walls[].lots ({lot, at, box, passage?}); the meta's (for
   // the checker: each box, its floor, its passage's cells as a gate of kind passage, its outer faces) and the record's
   if (W.lots?.length) {
-    const pass = (q) => (q.onWall?.passage ? { width: q.onWall.passage.width, height: q.onWall.passage.height, front: q.onWall.passage.front, back: q.onWall.passage.back } : null);
+    const pass = (q) => (q.onWall?.passage ? { width: q.onWall.passage.width, height: q.onWall.passage.height, front: q.onWall.passage.front, back: q.onWall.passage.back, ...(q.onWall.passage.mechanism ? { mechanism: { kind: q.onWall.passage.mechanism.kind, rest: q.onWall.passage.mechanism.rest, who: 'player' } } : {}) } : null);
     geometry.wallLots = W.lots.map((q) => ({ lot: q.lot, at: q.at, box: q.box, front: q.front, ...(pass(q) ? { passage: pass(q) } : {}) }));
     record.lots = geometry.wallLots.map((q) => ({ lot: q.lot, at: q.at, box: q.box }));
     meta.lots = W.lots.map((q) => {
       const ps = q.onWall?.passage;
       const cells = [];
       if (ps) for (let i = 0; i < ps.cells.length; i += 4) if (ps.cells[i + 2] === q.floorY) cells.push([ps.cells[i], ps.cells[i + 1]]);
-      return { lot: q.lot, at: q.at, box: q.box, floorY: q.floorY, front: q.front, ...(ps ? { passage: { cells, y: q.floorY - 1, h: ps.height, width: ps.width, front: ps.front, back: ps.back } } : {}) };
+      return { lot: q.lot, at: q.at, box: q.box, floorY: q.floorY, front: q.front, ...(ps ? { passage: { cells, y: q.floorY - 1, h: ps.height, width: ps.width, front: ps.front, back: ps.back, ...(ps.mechanism ? { mechanism: { kind: ps.mechanism.kind, rest: ps.mechanism.rest, dayDriven: ps.mechanism.dayDriven } } : {}) } } : {}) };
     });
     // (a passage is a gate of the wall's to the checker: blocked in the closure's closed test, open across)
     for (const q of meta.lots) if (q.passage) {
