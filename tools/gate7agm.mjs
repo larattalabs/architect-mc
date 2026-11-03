@@ -921,16 +921,21 @@ steps.fit = async () => {
     for (const [k2, tr] of Object.entries(rec.trace)) log(`  ${name} trace ${k2}: a ${tr.a} end slack ${tr.endSlack} u ${tr.u0}..${tr.u1} v ${tr.v0}..${tr.v1}\n    G      ${tr.G}\n    locked ${tr.locked}\n    D      ${tr.D}`);
     // natural dusk and dawn (time runs), then a daytime storm and its clearing: G edges and leaf moves
     // (from clear day through dusk, and from deep night through dawn: the sensor's switch falls inside either window)
+    // (the 'exact' rules stop the clock and the weather: they run for these watches only)
+    await cmd('/gamerule advance_time true');
     await cmd('/time set 11000'); await L.gameWait(2000, { real: L.settle, label: 'pre-dusk' });
     rec.dusk = await fitWatch(X, F, Z, leaf, 360, 10);
     await cmd('/time set 21000'); await L.gameWait(2000, { real: L.settle, label: 'pre-dawn' });
     rec.dawn = await fitWatch(X, F, Z, leaf, 360, 10);
+    await cmd('/gamerule advance_time false');
     await cmd('/time set 6000'); await L.gameWait(2000, { real: L.settle, label: 'noon' });
     const pre = await st();
+    await cmd('/gamerule advance_weather true');
     await cmd('/weather thunder 2400');
     rec.storm = await fitWatch(X, F, Z, leaf, 80, 10);
     await cmd('/weather clear');
     rec.clear = await fitWatch(X, F, Z, leaf, 80, 10);
+    await cmd('/gamerule advance_weather false');
     rec.storm.startOpen = pre.open;
     rec.items = (await items(X, F + 2, Z + 1, 12)).stacks;
     out[name] = rec;
