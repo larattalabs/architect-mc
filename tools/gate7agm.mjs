@@ -359,8 +359,23 @@ async function gatehouse(X, F, Z, wall, cells) {
   for (const c of [...cells].sort((a, b) => rank(a[3]) - rank(b[3]))) { const [x, y, z, st] = GMC.toWorld(c, X, F, Z); await sb(x, y, z, st); }
 }
 const gateBox = (X, F, Z) => snap(X - 5, F - 1, Z, X + 5, F + 8, Z + 2);
+const ABBR = [[/^redstone_wire.*power=(\d+).*/, (m) => `w${m[1]}`], [/^sticky_piston\[extended=true.*/, () => 'P+'], [/^sticky_piston.*/, () => 'P-'], [/^piston_head.*/, () => 'hd'], [/^moving_piston.*/, () => 'MV'],
+  [/^iron_bars.*/, () => '##'], [/^spruce_fence.*/, () => 'ff'], [/^stone_bricks/, () => 'sb'], [/^polished_andesite/, () => 'pa'], [/^stone$/, () => '..'], [/^observer.*powered=true.*/, () => 'O!'], [/^observer.*/, () => 'Ob'],
+  [/^repeater.*powered=true.*/, () => 'R!'], [/^repeater.*/, () => 'Rp'], [/^comparator.*powered=true.*/, () => 'C!'], [/^comparator.*/, () => 'Cp'], [/^redstone_(wall_)?torch.*lit=true.*/, () => 'T!'], [/^redstone_(wall_)?torch.*/, () => 'To'],
+  [/^lever.*powered=true.*/, () => 'L!'], [/^lever.*/, () => 'Lv'], [/^iron_trapdoor.*open=true.*/, () => 't!'], [/^iron_trapdoor.*/, () => 'tr'], [/^daylight.*/, () => 'DS'], [/.*slab.*/, () => 'sl']];
+const abbr = (v) => { if (!v) return '  '; for (const [re, f] of ABBR) { const m = re.exec(v); if (m) return f(m); } return v.slice(0, 2); };
+/** The box drawn plane by plane (rows top down, u -5..5). */
+function draw(box, X, F, Z, planes = [1, 2]) {
+  const lines = [];
+  for (const d of planes) {
+    lines.push(`d=${d}`);
+    for (let r = 8; r >= -1; r--) { let l = `${String(r).padStart(2)} `; for (let u = -5; u <= 5; u++) l += abbr(box[`${X + u},${F + r},${Z + d}`]) + ' '; lines.push(l); }
+  }
+  return lines.join('\n');
+}
 /** The leaf columns: for each side the u where its three blocks stand (or 'mixed'). */
 function leaves(box, X, F, Z, leaf) {
+  leaf = leaf.replace('minecraft:', '');
   const o = {};
   for (const s of [-1, 1]) {
     const at = [];
@@ -403,7 +418,7 @@ steps.grate = async () => {
       const it = await items(x0, F + 2, Z + 1, 10);
       const ok = lc[-1] === 1 && lc[1] === 1 && lo[-1] === 2 && lo[1] === 2 && json(open) === json(rest) && !it.stacks;
       rec.cycles.push({ c, closed: lc, open: lo, items: it.stacks, same: json(open) === json(rest) });
-      if (!ok) { bad++; rec.firstBad = { c, lc, lo, closed, open, rest }; break; }
+      if (!ok) { bad++; rec.firstBad = { c, lc, lo, closed, open, rest }; log(`rest\n${draw(rest, x0, F, Z)}\nclosed\n${draw(closed, x0, F, Z)}\nopen\n${draw(open, x0, F, Z)}`); break; }
     }
     rec.bad = bad;
     out[name] = rec;
