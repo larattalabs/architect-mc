@@ -616,12 +616,12 @@ steps.daycycle = async () => {
     await flipW('A'); await note('day, lever A again -> open', 'open');
     await flipW('B'); await note('day, lever B (inside) -> closed', 'closed');
     await flipW('A'); await note('day, lever A -> open (either lever toggles)', 'open');
-    await timeW(13500); await note('dusk, no override -> closed', 'closed');
-    await timeW(23500); await note('dawn -> open', 'open');
+    await timeW(14000); await note('dusk, no override -> closed', 'closed');
+    await timeW(1000); await note('dawn -> open', 'open');
     await flipW('B'); await note('day, lever B -> override closed', 'closed');
-    await timeW(13500); await note('dusk with a closed override -> closed (the sensor takes over)', 'closed');
+    await timeW(14000); await note('dusk with a closed override -> closed (the sensor takes over)', 'closed');
     await flipW('A'); await note('night, lever A -> override open', 'open');
-    await timeW(23500); await note('dawn with an open override -> open (override cleared)', 'open');
+    await timeW(1000); await note('dawn with an open override -> open (override cleared)', 'open');
     await flipW('A'); await note('day after the reset, lever A -> closed (a fresh override)', 'closed');
     await flipW('B'); await note('day, lever B -> open', 'open');
     // 20 lever cycles through the logic, the levers alternating, with the leaves checked each time
