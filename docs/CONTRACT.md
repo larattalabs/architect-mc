@@ -26291,6 +26291,27 @@ A slime-glued grid ran 20 clean cycles in open air but jammed on cycle 1 against
    substitute.
 5. **Gallery (§10 item 8):** the toggle strip shows the leaves sliding into the jambs, not a grid rising.
 
+### 13. Changes after the §12 probe (coordinator, 2026-11-03; binding, they win over the sections above)
+
+The §12 probe passed on 26.3, wired (slice/GM e8f566e2, run 20261103-043804-7agm): split grate and slide 20 cycles in three role sets
+(3 ticks to settle each way), levers at both ends, the §2a day cycle in all 13 steps, swing 20 cycles (a villager presses the plate),
+the drawbridge 20 cycles with the moat restored exactly, and the rest states as fixed points. It also showed the geometry below.
+
+1. **Feed in the lining.** A 3-high piston stack is fed from the lining in plane `d = 2`: 6 cells a side, rows floorY..floorY+3, as wire
+   and cut cells. They join the mechanism envelope.
+2. **Levers hang from the lintel** over a lane (outside u = -1 in the front plane, inside u = 1 in the back plane), with the detector (an
+   iron trapdoor at row floorY+3 in `d = 1`, an observer above it). The lintel cells are trigger cells; §4's "lever on the jamb" is replaced.
+3. **The day-cycle logic sits above the passage, behind the gate plane** (planes `d = 2..4`, rows lintelY+1..lintelY+4), with the sensor's
+   wire run from the roof. The gate needs fewer rows than that: it uses rows up to lintelY+2 only.
+4. **Box minimum for a mechanism: 11 x 5 x 9** (was 11 x 3 x 9). Depth 5 keeps the feed and the logic out of sight from both faces. The
+   recorded gatehouse is 13 x 11, 11 high, so it fits. A shallower box is not refused: as §4 says, the wall is `adjusted`, the passage stays
+   plain and the deviation is `what: mechanism`. Brief lines are unchanged.
+5. **Timing margins.** The dawn-after-override case passed only at lock delay 2 and latch delay 2. Before GM-a builds on it, the circuit
+   gets at least 1 tick of slack on every race, proven in a real 11 x 5 x 9 gatehouse and in the recorded 13 x 11 one. The proof covers
+   the roof sensor, a daytime storm (N-GM-2: it may close the gate, but must not flicker), and the 13 steps of §2a.
+6. **The drawbridge deck is at most 2 wide.** A middle row of trapdoors has nothing beside it to power it. Each cell takes a sleeper and
+   two repeaters a side, and the deck sits above the water. Two cells is enough for a player and a villager.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
