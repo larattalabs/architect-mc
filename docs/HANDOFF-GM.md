@@ -1,5 +1,9 @@
 # GM handoff
 
+## Step 1b (CONTRACT GM §13, main fec8cd70 merged): not done, stopped to report
+
+The fit of the §2a logic into the hidden volume has not converged. Details are in "Step 1b fit analysis" at the end; the coordinator has the options.
+
 ## State (2026-11-02): step 1 (`gm-probe` under CONTRACT GM §12) has a result; step 2 (GM-a) is not started
 
 Main 6066411e is merged in. The probe (`node tools/gate7agm.mjs probe`, chain step `gm-probe`) runs the §12 item 4 set on the 26.3 server.
@@ -60,3 +64,43 @@ By hand: `GATE_HOST=server GATE6B_CLIENT_SCRIPT=tools/run-headless-server.mjs GA
 
 `kit/lib/connectors/gmLint.mjs` is a static cross-talk check that was used to lay out the bench. It is approximate: it believes torches
 feed comparator sides, which they do not.
+
+## Step 1b fit analysis (2026-11-03)
+
+**Hidden volume.** In an 11 x 5 x 9 box the faces are d = 0 and d = 4 and the side faces u = +-5, so nothing may sit there. What is
+left above the lintel is u -4..4, d 1..3, rows 4..7: 108 cells. §13 says planes d = 2..4, but d = 4 is the inner face in a box 5 deep, so I
+used d = 1..3. Already taken there:
+- the feed entries and cut cells;
+- the detectors (two trapdoors and two observers, plus their outputs);
+- the G line to both entries.
+
+**Hard rules learned while packing (26.3):**
+- Dust next to a strongly powered block reads it. Every block strongly powered by a repeater, comparator or observer must stay off the
+  G line, the P line and the entries. Feeding the latch blocks by weak power (dust pointing in) avoids this.
+- A comparator's side reads only dust, diodes and redstone blocks. Torches need a dust cell between.
+- A repeater lock needs the lock diode along the latch's side axis. With R_G on the d axis, its input and output take d = 1 and d = 3
+  and the lock comes along u, so the latch fills all three planes at one u.
+- An observer's pulse into a block beside the bus reaches the bus.
+- A trapdoor beside any powered block flips, so the detectors' trapdoors need unpowered neighbours.
+
+**Slack rule for the D latch** (what §13 item 5 asks for), derived and checked against the dawn trace:
+- The data-valid interval and the unlock interval have the same length L (both come from Q').
+- Let a = unlock start minus data-valid start. The latch is safe with 1 tick of slack each side only when 1 <= a <= 2·dRG - 1, where dRG
+  is the latch repeater's delay in game ticks/2 (dRG = 2 gives a in [1, 3]).
+- Bench values:
+  - T1 path: a = 2. Safe.
+  - T2/CMP path: a = 4 (B2 -> BC repeater 2, RL 4, minus the comparator's 2). One tick outside the rule, so the dusk case has a 0-slack race
+    at the window's end. It passed by tick order.
+  - The fix is RL delay 1 with B1 fed 2 ticks after B2. Then both a = 2.
+
+**The two candidate latches, against the volume:**
+- D latch (repeater lock): about 14 parts plus wire.
+- Torch RS latch with four subtract comparators: about 16 parts.
+
+Each hand attempt in d 1..3 x rows 4..7 ran into the same walls:
+- the G line has to leave the latch and reach both entries;
+- T5 must not see BC strongly powered next to an entry;
+- B1 needs both G and Q' while staying weak;
+- the P node, the S/Q column and the latch compete for the centre columns.
+
+I have no layout that passes `gmLint` and the constraints above. A fit may exist, but finding it is a search, not a tweak.
