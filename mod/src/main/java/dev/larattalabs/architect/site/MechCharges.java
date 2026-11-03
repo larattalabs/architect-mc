@@ -190,8 +190,11 @@ public final class MechCharges {
 	 */
 	static Map<String, Integer> tally(ServerLevel level, RegionsImpl.Live l, String lot, Infra inf, @Nullable Map<String, Integer> cap) {
 		LongLinkedOpenHashSet cells = new LongLinkedOpenHashSet();
-		for (BlockPos p : InfraSpec.cellsOf(inf.spec()).pos()) {
-			cells.add(p.asLong());
+		JsonObject e = entry(l, lot);
+		if (e != null && e.get("cells") instanceof JsonArray a) {
+			for (int k = 0; k + 2 < a.size(); k += 3) {
+				cells.add(BlockPos.asLong(a.get(k).getAsInt(), a.get(k + 1).getAsInt(), a.get(k + 2).getAsInt()));
+			}
 		}
 		for (long p : closedCells(l, lot)) {
 			cells.add(p);
@@ -235,7 +238,9 @@ public final class MechCharges {
 		JsonObject o = new JsonObject();
 		JsonObject e = entry(l, lot);
 		if (e != null) {
-			o.add("record", e.deepCopy());
+			JsonObject r = e.deepCopy();
+			r.remove("cells");
+			o.add("record", r);
 		}
 		QBatch b = l.rec().batchId == null ? null : Batches.get(l.rec().batchId);
 		QItem i = b == null ? null : b.item("mech:" + lot);
@@ -255,7 +260,7 @@ public final class MechCharges {
 		ServerLevel level = l.level(srv);
 		if (inf != null && level != null) {
 			o.addProperty("site", inf.id());
-			o.addProperty("cells", InfraSpec.cellsOf(inf.spec()).pos().size());
+			o.addProperty("cells", e != null && e.get("cells") instanceof JsonArray a ? a.size() / 3 : 0);
 			o.add("built", json(tally(level, l, lot, inf, null)));
 		}
 		return o;

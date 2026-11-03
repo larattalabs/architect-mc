@@ -2121,6 +2121,13 @@ public final class RegionsImpl implements Regions {
 			}
 			JsonObject one = new JsonObject();
 			one.add("bill", gm.billJson());
+			JsonArray at = new JsonArray(); // its written cells, flat [x, y, z, ...]: what stands of it is read there (the site record keeps a count)
+			for (long pp : gm.positions()) {
+				at.add(BlockPos.getX(pp));
+				at.add(BlockPos.getY(pp));
+				at.add(BlockPos.getZ(pp));
+			}
+			one.add("cells", at);
 			rec.survival.getAsJsonObject(dev.larattalabs.architect.site.MechCharges.KEY).add(lot.id(), one);
 		}
 		return q;
