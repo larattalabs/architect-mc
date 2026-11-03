@@ -53,8 +53,11 @@ public final class RegionQueue {
 		com.google.gson.JsonObject ext = new com.google.gson.JsonObject();
 		ext.addProperty(RegionItems.EXT_REGION, region);
 		var first = cells.get(0).pos();
+		// ((7a GM-a2) a gate mechanism is queued with the world's survival toggle as it stands, so a survival region's INSTANT cells item is
+		// never failed as "switched on after it was queued" (MUST 3): it is the region's own write, held and charged by MechCharges)
+		boolean mech = "architect:mechanism".equals(kind);
 		QItem q = new QItem(key, stage, after, "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0, false, ext, null, false,
-			false);
+			mech && dev.larattalabs.architect.survival.SurvivalWorld.on());
 		q.itemKind = "cells";
 		q.spec = InfraSpec.cells(new dev.larattalabs.architect.api.CellsRequest(level, kind, policy, cells,
 			false, dev.larattalabs.architect.api.OverlapPolicy.LAYER, dev.larattalabs.architect.api.Mode.INSTANT, owner, new com.google.gson.JsonObject(), null,

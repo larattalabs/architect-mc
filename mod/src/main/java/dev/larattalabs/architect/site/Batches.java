@@ -1023,6 +1023,9 @@ public final class Batches {
 		if (RegionItems.isRegion(b) && RegionTargets.stageWait(server, b, i)) {
 			return; // (6c RS, §6.3) a survival region's item waits for the earlier targets it stands on to be built
 		}
+		if (RegionItems.isRegion(b) && MechCharges.hold(server, b, i)) {
+			return; // (7a GM-a2) a survival region's gate mechanism waits for its lot built and its whole bill, then is charged
+		}
 		if ("delta".equals(i.itemKind)) {
 			tryStartDelta(server, b, i);
 			return;

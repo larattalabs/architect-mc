@@ -480,6 +480,11 @@ public final class PlanChecks {
 				if (grid != null) {
 					add.accept("lot:" + e.getKey(), dev.larattalabs.architect.site.Builder.templateBom(grid));
 					lots++;
+					// (7a GM-a2) its gate mechanism, bound with it: exact now
+					Map<String, Integer> mb = mechanismBill(p.ir(), e.getKey(), bpId);
+					if (!mb.isEmpty()) {
+						add.accept("mech:" + e.getKey(), mb);
+					}
 				}
 			}
 			for (Ir.Road road : p.ir().roads()) {
@@ -1412,7 +1417,7 @@ public final class PlanChecks {
 		int x0 = cl.get("minX").getAsInt(), z0 = cl.get("minZ").getAsInt(), x1 = cl.get("maxX").getAsInt(), z1 = cl.get("maxZ").getAsInt();
 		int res = inputs.has("surveyRes") ? inputs.get("surveyRes").getAsInt() : 1;
 		// (3) provisional lots: an entry past its fit box or the top of its cost range refuses now, before the survey
-		String lotWhy = lotProblem(body, r.lotEntries());
+		String lotWhy = lotProblem(body, r.lotEntries(), p.ir());
 		// (7a K3, §5) every lot on a wall with a bound entry (the artifact's own and the request's): its outer faces closed, its passage
 		// floor standable; refused the same way, before anything is queued
 		if (lotWhy == null) {
@@ -1737,6 +1742,15 @@ public final class PlanChecks {
 	 * the top of its recorded range (the template's blocks). Null when every bound entry holds.
 	 */
 	static @Nullable String lotProblem(JsonObject body, Map<String, String> entries) {
+		return lotProblem(body, entries, null);
+	}
+
+	/**
+	 * {@link #lotProblem(JsonObject, Map)} with the plan's IR: (7a GM-a2, §16 item 1) a gatehouse lot's range holds its gate mechanism
+	 * (the kit adds {@code mechanism.cost.cells} to it), so the count compared is what the lot writes: the entry's blocks less those its
+	 * passage and mechanism drop, plus the mechanism's non-air cells as bound to it.
+	 */
+	static @Nullable String lotProblem(JsonObject body, Map<String, String> entries, @Nullable Ir ir) {
 		if (!(body.get("lots") instanceof JsonArray la)) {
 			return entries.isEmpty() ? null : "the artifact has no lots";
 		}
@@ -1766,7 +1780,7 @@ public final class PlanChecks {
 			long top = l.getAsJsonArray("costRange").get(1).getAsLong();
 			// ((6c IRR, §5) an entry's blocks on the lot's irrigation cells are dropped at the realise: not counted, so this is the count placed)
 			// ((7a K3, §5) and on a gatehouse's passage, likewise)
-			long cells = cells(id) - irrigationDropped(l, bp, id) - WallLotCheck.passageDropped(l, bp, id);
+			long cells = cells(id) - irrigationDropped(l, bp, id) - WallLotCheck.passageDropped(l, bp, id) + mechanismDelta(ir, e.getKey(), l, bp, id);
 			if (cells > top) {
 				return "lot " + e.getKey() + ": entry " + e.getValue() + " is " + cells + " cells, past the top of its approved cost range (" + top + "): approve again";
 			}
@@ -1787,6 +1801,44 @@ public final class PlanChecks {
 			.getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4).getAsInt(), b.get(5).getAsInt()), lot.get("front") instanceof JsonElement fr
 				&& fr.isJsonPrimitive() ? fr.getAsString() : "south", true, 0, true);
 		return RegionsImpl.dropped(id, f, dev.larattalabs.architect.site.LotMask.of(maskExt(c)));
+	}
+
+	/**
+	 * (7a GM-a2) A gatehouse lot's mechanism as bound to an entry, in its range's count: its non-air cells less the entry's blocks it drops
+	 * (0 with no mechanism or no IR).
+	 */
+	static long mechanismDelta(@Nullable Ir ir, String lotId, JsonObject lot, dev.larattalabs.architect.placement.Blueprint bp, String id) {
+		if (ir == null || GateMech.writeOf(ir, lotId) == null || !(lot.get("box") instanceof JsonArray b) || b.size() < 6) {
+			return 0;
+		}
+		var f = dev.larattalabs.architect.batch.LotFitting.fit(bp, new dev.larattalabs.architect.placement.Anchors.Bounds(b.get(0).getAsInt(), b.get(1)
+			.getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4).getAsInt(), b.get(5).getAsInt()), lot.get("front") instanceof JsonElement fr
+				&& fr.isJsonPrimitive() ? fr.getAsString() : "south", true, 0, true);
+		GateMech.Plan gm = RegionsImpl.mechanismPlan(ir, lotId, id, f);
+		if (gm == null) {
+			return 0;
+		}
+		long written = java.util.Arrays.stream(gm.states()).filter(st -> !st.isAir()).count();
+		JsonObject only = new JsonObject();
+		only.add(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM, gm.maskExt());
+		return written - RegionsImpl.dropped(id, f, dev.larattalabs.architect.site.LotMask.of(only));
+	}
+
+	/**
+	 * (7a GM-a2, §16 item 1) A survival check's bill of a bound gatehouse lot's gate mechanism: exact, since the entry (so the rung and the
+	 * roof fill) is known now; a provisional lot's is its range ({@code mechanism.cost}), exact at bind. Empty with none.
+	 */
+	static Map<String, Integer> mechanismBill(Ir ir, String lotId, String bpId) {
+		var bp = Blueprints.get(bpId);
+		Ir.Lot lot = ir.lots().stream().filter(q -> q.id().equals(lotId)).findFirst().orElse(null);
+		if (bp == null || lot == null || GateMech.writeOf(ir, lotId) == null) {
+			return Map.of();
+		}
+		int[] b = lot.box();
+		var f = dev.larattalabs.architect.batch.LotFitting.fit(bp, new dev.larattalabs.architect.placement.Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]),
+			lot.front(), true, 0, true);
+		GateMech.Plan gm = RegionsImpl.mechanismPlan(ir, lotId, bpId, f);
+		return gm == null ? Map.of() : gm.bill();
 	}
 
 	private static JsonObject maskExt(JsonArray runs) {

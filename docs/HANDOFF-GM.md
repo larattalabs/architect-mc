@@ -1,5 +1,39 @@
 # GM handoff
 
+## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): slice tier PASS, verifier PASS, ready to merge
+
+**State (2026-11-03):** built and gated (DEV MODE). No API type, method or reason added; additive members only (`mechanism.cost`, the
+report's `bom`/`fill`, `survival.mech`, outstanding `<region>:mech:<lot>`, the audit's `mechStanding`, DevBridge `dev.gm.state`).
+- Slice tier `20261103-212703-slice` (ports 8896-8903, 4 shards): 105 PASS, 13 FAIL, among them gm-unit 426/0, gm-ingame 104/0,
+  gm-survival 42/0, unit-mod 997/0, unit-kit 1020/0, unit-sidecar 804, apijars 6/0, lint-structure 205/0, k3-survival 8/0,
+  d3-survival 5/0. The 13: seven byte-identity checks lacked GM-a2's four GM fixture movers (now named once in tools/lib/f7a-norm.mjs,
+  read by FL, K3, GM and the rest), and six were harness or flaky (scenarios forced headless, a gradle collision, 4e-crash run without
+  4e-orders, a sunflower in d2, the route scenario).
+- Reruns `20261103-231554-slice` (11 PASS) and `20261103-233658-slice` (4e-orders, 4e-crash PASS). `6cf1-scenario-forms` still fails
+  (melt and exactness), and fails the same way on origin/main 05611639 (`20261103-234342-slice`): pre-existing, not GM-a2's.
+- Verifier (re-ran gm-survival and gm-ingame with undo, ports 8904/8905): `20261103-231617-7agma-surv` 42/0, `20261103-232502-7agma`
+  gm-ingame 41/0; PASS on every item; the journal-head fallback was not reached in game (`gateByHead` 0: the GW path keeps the record).
+- Evidence copied to the main checkout's `artifacts/gate7a-gm/` (`run-20261103-212703-slice`, `run-20261103-231554-slice`,
+  `run-20261103-233658-slice`, `base-20261103-234342-slice`, `verify-20261103-231617-7agma-surv`, `verify-20261103-232502-7agma`).
+
+**Decisions (recorded in CONTRACT GM "Slice GM-a2 as built"):**
+- **Survival (option (a)).** Check: `mechanism.cost {cells, bom {min, max}, rare}` and the gatehouse lot's `costRange` widened by
+  `cost.cells` (realiseApproved's `lotProblem` counts the bound mechanism the same way). Bind: `GateMech.Plan.bill`, the report's `bom`.
+- **The INSTANT problem: held, then charged at once, then written at once** (`site/MechCharges.java`, the RS fluids charge's model). The
+  `mech:<lot>` item waits for its lot's construction site to be built, then for its whole bill in the stockpile (SITE_BUSY, naming what it
+  lacks); then `Stockpiles.charge`, `survival.mech.<lot> {bill, cells, charged, chargedAt}` saved, then the no-update write. Outstanding
+  (`<region>:mech:<lot>`), the audit's `mechStanding` and the refund at the group removal's rule 7 (keyed, once) follow.
+- **Roof fill, read as "holes only".** A rung cell at or above the bound roof that the design left empty and that has a design block beside
+  it across the passage gets the structure block (`mechanismWrite.fill`). Cells above a flat roof stay empty (no bumps). Levers-only fills
+  nothing. The fill is billed.
+- **Crash:** `SiteJournal.isGateMechanism` falls back to the journal head's recorded kind when the record is gone (`GATE_BY_HEAD`,
+  `dev.gm.state`). The group removal skips a member with no record at all, so "exact restore with the record wholly gone" is not reachable
+  there; the in-game crash item runs the real GW path.
+
+**Gate items added:** `gm-survival` (chain `7agma-surv`; in `7agma` and the slice tier), gm-ingame `p13x7rv` (a design that leaves every
+reserved cell empty: the fill), gm-undo `close-logic`, `close-landed`, `open-logic`, `open-first`, `open-landed` and `crash`
+(`GM_UNDO_ONLY`, `GM_SURVIVAL_ONLY` narrow them). Ports used: 8896-8903.
+
 ## Step 1b (CONTRACT GM §14, main 900db05e merged): PASS (chain 7agm = gm-probe + gm-fit at 2a6e8f14)
 
 `gmCircuit.gateLayout(kind, {depth, roof})` lays out the whole sliding gate: leaves and feed (slideCells), the lever detectors

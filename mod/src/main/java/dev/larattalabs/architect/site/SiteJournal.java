@@ -924,8 +924,32 @@ public final class SiteJournal {
 		if (inf == null) {
 			inf = Infras.pending(siteId);
 		}
-		return inf != null && inf.kind().equals(Infra.CELLS + "architect:mechanism");
+		if (inf != null) {
+			return inf.kind().equals(MechCharges.KIND);
+		}
+		// ((7a GM-a2, the verifier's note) no record (a crash recovery lost it, or a removal settled it): the journal decides, from the record
+		// its entries were written with (the head's meta), so the restore is still no-update, no-drop and heads first)
+		boolean byHead = false;
+		try {
+			JournalStore s = store();
+			for (JournalStore.Meta m : entries(siteId)) {
+				JournalNbt.Head h = s.head(m.id());
+				if (h.meta() != null && h.meta().get("kind") instanceof com.google.gson.JsonPrimitive k && MechCharges.KIND.equals(k.getAsString())) {
+					byHead = true;
+					break;
+				}
+			}
+		} catch (IOException | Sites.SiteException | RuntimeException e) {
+			byHead = false;
+		}
+		if (byHead) {
+			GATE_BY_HEAD.incrementAndGet();
+		}
+		return byHead;
 	}
+
+	/** (7a GM-a2) How many restores found a gate mechanism by its journal head, with no record (DevBridge {@code dev.gm.state}). */
+	public static final java.util.concurrent.atomic.AtomicInteger GATE_BY_HEAD = new java.util.concurrent.atomic.AtomicInteger();
 
 	/** (7a GM-a) A gate mechanism cell's restore rank by what stands there now: a piston head or moving piston 0, a piston base 1, else 2. */
 	private static int gateRank(ServerLevel level, long pos) {

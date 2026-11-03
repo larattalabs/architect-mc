@@ -38,6 +38,8 @@ export const EXCEPT = Object.freeze({
   // ((7a foundation) the catalogue's three changes move these by name (e15 is FL's too: it differs either way))
   'asks/mining_town.json': F7A_MOVED['asks/mining_town.json'],
   'asks/castle_city.json': F7A_MOVED['asks/castle_city.json'], // ((7a K2) its walk)
+  // ((7a GM-a2) the GM fixtures' mechanism bill and roof fill)
+  ...Object.fromEntries(Object.entries(F7A_MOVED).filter(([k]) => k.startsWith('gm/'))),
   'k1a/unread_keys.json': '7a K2: the fixture swaps params.wall_walk (read now) for wall_height (its third unread key); planned from each tree\'s own copy, it differs',
 });
 

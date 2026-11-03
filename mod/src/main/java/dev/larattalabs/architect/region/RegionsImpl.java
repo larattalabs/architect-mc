@@ -2113,6 +2113,23 @@ public final class RegionsImpl implements Regions {
 			"architect:mechanism", dev.larattalabs.architect.api.Policy.BOX);
 		q.ext.addProperty("architect_mc:lot", lot.id());
 		q.ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
+		if (rec.survival()) {
+			// (7a GM-a2, §16 item 1) a survival region's mechanism: its exact bill at bind, held until the lot is built and the bill is in its
+			// owner's stockpile, then charged and written at once (site.MechCharges)
+			if (!(rec.survival.get(dev.larattalabs.architect.site.MechCharges.KEY) instanceof JsonObject)) {
+				rec.survival.add(dev.larattalabs.architect.site.MechCharges.KEY, new JsonObject());
+			}
+			JsonObject one = new JsonObject();
+			one.add("bill", gm.billJson());
+			JsonArray at = new JsonArray(); // its written cells, flat [x, y, z, ...]: what stands of it is read there (the site record keeps a count)
+			for (long pp : gm.positions()) {
+				at.add(BlockPos.getX(pp));
+				at.add(BlockPos.getY(pp));
+				at.add(BlockPos.getZ(pp));
+			}
+			one.add("cells", at);
+			rec.survival.getAsJsonObject(dev.larattalabs.architect.site.MechCharges.KEY).add(lot.id(), one);
+		}
 		return q;
 	}
 

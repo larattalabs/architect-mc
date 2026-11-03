@@ -977,6 +977,12 @@ public final class Groups {
 				continue;
 			}
 			Infra inf = Infras.get(id);
+			// (7a GM-a2) a survival region's gate mechanism: what of its charge stands, credited once its restore is written
+			Credit mc = inf == null ? null : MechCharges.refund(level, inf);
+			if (mc != null) {
+				r.decCredit.put(id, mc);
+				continue;
+			}
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
 			if (pile != null) {
 				var dropped = RegionTargets.dropPlayerBlocks(level, inf); // (6c RS §9) a player's block in a region target drops at its cell first

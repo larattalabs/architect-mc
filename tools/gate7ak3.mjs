@@ -144,7 +144,10 @@ steps.unit = async () => {
 steps.unchanged = async () => {
   const { K3_MOVED } = await import('./lib/k3-norm.mjs');
   const K = await import('./lib/gate7a-kit.mjs');
-  const u = await K.unchanged(root, { check, log, base: 'K3', except: K3_MOVED, mergedIf: 'kit/lib/connectors/wallLots.mjs' });
+  // ((7a GM-a2) and the GM fixtures' mechanism bill and roof fill: tools/lib/f7a-norm.mjs)
+  const { F7A_MOVED } = await import('./lib/f7a-norm.mjs');
+  const gm = Object.fromEntries(Object.entries(F7A_MOVED).filter(([k]) => k.startsWith('gm/')));
+  const u = await K.unchanged(root, { check, log, base: 'K3', except: { ...K3_MOVED, ...gm }, mergedIf: 'kit/lib/connectors/wallLots.mjs' });
   fs.writeFileSync(path.join(OUT, 'k3-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   return { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
 };

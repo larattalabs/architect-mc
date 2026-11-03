@@ -91,4 +91,35 @@ class GateMechTest {
 		assertArrayEquals(new int[] {0, 11, 2}, q.sensor());
 		assertEquals(11, q.roof());
 	}
+
+	/**
+	 * (7a GM-a2, §16 item 3) The roof fill: a roof at row 10 binds rung 10; of the other rungs' cells at or above row 10, the one in the
+	 * roof course (the design's roof beside it across the passage) gets the structure block, the ones above the flat roof (nothing beside
+	 * them) stay empty; the bill counts the fill. A levers-only gate fills nothing.
+	 */
+	@Test
+	void roofFill() {
+		JsonObject w = write();
+		w.addProperty("fill", 0);
+		GateMech.Plan q = GateMech.planOver(w, flatRoof(10));
+		var at = new java.util.HashMap<Long, String>();
+		for (int i = 0; i < q.positions().length; i++) {
+			at.put(q.positions()[i], q.states()[i].toString());
+		}
+		assertEquals(10, q.roof());
+		assertEquals(1, q.filled(), "one hole in the roof course");
+		assertTrue(at.get(BlockPos.asLong(0, 10, 2)).contains("stone_bricks"), "rung 11's dust cell, in the roof at row 10, is filled");
+		assertNull(at.get(BlockPos.asLong(0, 11, 2)), "rung 11's sensor cell above the flat roof: no bump");
+		assertNull(at.get(BlockPos.asLong(0, 12, 3)), "rung 12's sensor cell above the flat roof: no bump");
+		assertEquals(1, q.report("portcullis").get("fill").getAsInt());
+		// the bill: the base's stone bricks and dust, the sensor, the fill
+		assertEquals(2, q.bill().get("minecraft:stone_bricks"), "a base block and the fill");
+		assertEquals(1, q.bill().get("minecraft:daylight_detector"));
+		assertEquals(1, q.bill().get("minecraft:redstone"));
+		assertEquals(q.bill().get("minecraft:stone_bricks"), q.report("portcullis").getAsJsonObject("bom").get("minecraft:stone_bricks").getAsInt());
+		GateMech.Plan lv = GateMech.planOver(w, flatRoof(13));
+		assertTrue(lv.leversOnly());
+		assertEquals(0, lv.filled(), "levers-only: no roof row bound, nothing filled");
+		assertNull(lv.bill().get("minecraft:daylight_detector"), "levers-only: no sensor billed");
+	}
 }
