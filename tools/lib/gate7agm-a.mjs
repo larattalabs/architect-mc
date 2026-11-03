@@ -123,6 +123,8 @@ export async function registerGmA(steps, h) {
     out.ids = await writeDesigns(lots, { tag, roof, bible });
     out.entries = { ...fx.lotEntries, ...out.ids };
     out.pre = await G.snap(ctx, box, `gm-${tag}-pre`);
+    out.beforeDump = path.join(OUT, `gm-${tag}-before.arwd.gz`);
+    await call('dev.region.dump', { box, file: out.beforeDump }, 1_800_000);
     await killMobs();
     out.region = await G.realise(ctx, sha, out.entries);
     out.st = await waitPlaced(out.region);
@@ -168,7 +170,7 @@ export async function registerGmA(steps, h) {
   }
 
   /** Vanilla villager paths and the kit's player walk through the passage, inside to outside (the back port to beyond the front port). */
-  async function crossings(gl, box, s, tag) {
+  async function crossings(gl, box, s, tag, beforeDump) {
     const ps = gl.onWall.passage;
     const out = {};
     const v = await call('dev.nav.villager', { from: ps.back, to: ps.front, range: 128 }, 120_000);
@@ -180,8 +182,10 @@ export async function registerGmA(steps, h) {
     const f = path.join(OUT, `gm-${tag}-walk.arwd.gz`);
     await call('dev.region.dump', { box, file: f }, 1_800_000);
     const d = await decodeArwd(fs.readFileSync(f));
+    const d0 = await decodeArwd(fs.readFileSync(beforeDump));
     const claim = { minX: s.W.claim[0], minZ: s.W.claim[1], maxX: s.W.claim[2], maxZ: s.W.claim[3], minY: box[1], maxY: box[4] };
-    const world = dumpWorld(d, d, claim);
+    // (the pristine dump as the base: the written columns are walked from their lowest written cell, as the realised check does)
+    const world = dumpWorld(d0, d, claim);
     for (const mover of ['player', 'villager']) {
       const g = walkGraph(world, [ps.back], { mover });
       out[`kit_${mover}`] = nodeReached(g, ps.front);
@@ -284,9 +288,9 @@ export async function registerGmA(steps, h) {
       check(rec.trace.close.ok && rec.trace.open.ok, `${tag}: the outside lever (a real use) closes and opens the gate (lever to settled leaves: ${rec.trace.close.ticks} and ${rec.trace.open.ticks} ticks, recorded)`);
       // closed: the passage blocks the villager (vanilla and the kit's) and the player; open: both pass
       await flipW(g.levers[0]);
-      rec.closed = await crossings(c.gl, c.box, c.s, `${tag}-closed`);
+      rec.closed = await crossings(c.gl, c.box, c.s, `${tag}-closed`, c.beforeDump);
       await flipW(g.levers[0]);
-      rec.open = await crossings(c.gl, c.box, c.s, `${tag}-open`);
+      rec.open = await crossings(c.gl, c.box, c.s, `${tag}-open`, c.beforeDump);
       check(!rec.closed.villager[0] && !rec.closed.villager[1] && !rec.closed.kit_player && !rec.closed.kit_villager, `${tag}: closed, the passage blocks vanilla's villager both ways and the kit's player and villager walks (${json(rec.closed)})`);
       check(rec.open.villager[0] && rec.open.villager[1] && rec.open.kit_player && rec.open.kit_villager, `${tag}: open, vanilla's villager and the kit's walks pass both ways (${json(rec.open)})`);
       rec.cycles = await cycles(c.m, 20);
@@ -301,13 +305,17 @@ export async function registerGmA(steps, h) {
         await timeW(6000);
         check(n.open, `${tag}: levers-only, dusk leaves the gate open (no sensor; ${n.filled}/${n.of})`);
       }
-      rec.items = (await items(...c.gl.onWall.passage.front, 24)).stacks ?? null;
-      check(!rec.items || !rec.items.length, `${tag}: no item dropped (${json(rec.items)})`);
+      const it0 = await items(...c.gl.onWall.passage.front, 24);
+      rec.items = { stacks: it0.stacks ?? 0, items: it0.items ?? null };
+      check(!rec.items.stacks, `${tag}: no item dropped while it ran (${json(rec.items)})`);
       // removal of the realised castle (open), E-flat 0
+      await cmd('/kill @e[type=minecraft:item]');
       const rm = await G.remove(ctx, c.region);
       const d = await G.diff(ctx, c.box, c.pre);
-      rec.eflat = { removed: rm.removed, mismatches: d.mismatches, list: d.list.slice(0, 12) };
+      const it1 = await items(...c.gl.onWall.passage.front, 24);
+      rec.eflat = { removed: rm.removed, mismatches: d.mismatches, list: d.list.slice(0, 12), items: { stacks: it1.stacks ?? 0, items: it1.items ?? null } };
       check(rm.removed && d.mismatches === 0, `${tag}: Regions.remove (the gate open): E-flat ${d.mismatches} over the claim`, d.list.slice(0, 8));
+      check(!rec.eflat.items.stacks, `${tag}: the removal dropped no item (${json(rec.eflat.items)})`);
       await L.leaveWorld();
     }
     // the [11, 13] gatehouse: the plain passage, deviation mechanism
@@ -387,13 +395,15 @@ export async function registerGmA(steps, h) {
         rec.gate2 = await readGate(c.m);
         await unfreeze();
       }
+      await cmd('/kill @e[type=minecraft:item]');
       const rm = await G.remove(ctx, c.region);
       const d = await G.diff(ctx, c.box, c.pre);
       rec.eflat = { removed: rm.removed, mismatches: d.mismatches, list: d.list.slice(0, 16), classes: d.classes };
-      rec.items = (await items(...c.gl.onWall.passage.front, 24)).stacks ?? null;
+      const it1 = await items(...c.gl.onWall.passage.front, 24);
+      rec.items = { stacks: it1.stacks ?? 0, items: it1.items ?? null };
       out[mode] = rec;
       check(rm.removed && d.mismatches === 0, `item 4 (${mode}${mode === 'midmove' ? `, removed ${rec.movingAt + 1} ticks into a toggle (moving ${rec.gate2?.moving})` : ''}): Regions.remove E-flat ${d.mismatches} over the claim`, d.list.slice(0, 8));
-      check(!rec.items || !rec.items.length, `item 4 (${mode}): no item dropped by the removal (${json(rec.items)})`);
+      check(!rec.items.stacks, `item 4 (${mode}): no item dropped by the removal (${json(rec.items)})`);
       await L.leaveWorld();
     }
     spendZero();
