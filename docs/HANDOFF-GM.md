@@ -1,6 +1,6 @@
 # GM handoff
 
-## Step 1b (CONTRACT GM §14, main 900db05e merged): layout found, lint clean, in-game run below
+## Step 1b (CONTRACT GM §14, main 900db05e merged): PASS (chain 7agm = gm-probe + gm-fit at 2a6e8f14)
 
 `gmCircuit.gateLayout(kind, {depth, roof})` lays out the whole sliding gate: leaves and feed (slideCells), the lever detectors
 (detectorCells), the §2a logic in the logic block (u in [-5, 5], d = 1..depth-2, rows 4..8), the roof sensor and its run, and every
@@ -39,18 +39,19 @@ of RS. With that, all 13 steps, 20 lever cycles, a = 2 with end slack 2 on both 
 - The sensor sits at a fixed roof cell, (-4, 1 + (R - 10), R). Its run climbs one plane per row, so a roof more than depth - 3 rows above
   row 10 has no run: such a gate is levers-only with deviation `mechanism.sensor` (§2a "No sky cell"), unless a later slice adds a spiral run.
 
-## Step 1b evidence (gm-fit; slice/GM f52c09b7, run 20261103-062444-change)
+## Step 1b evidence (chain 7agm at slice/GM 2a6e8f14, run 20261103-071935-7agm: PASS, gm-probe and gm-fit, 74 checks)
+
+The evidence is copied to the main checkout's `artifacts/gate7a-gm/run-20261103-071935-7agm/` (local only, not committed).
 
 All six boxes, 13x7x10, 13x11x11 and 17x15x12, each with portcullis and slide:
 - the 13 §2a steps;
 - 20 lever cycles through the logic with the leaves checked after each flip, the levers alternating. These are the "20 grate and slide
   cycles" per box, with the portcullis as the grate and the slide as the slide;
-- a daytime storm closes the gate once, and the clearing opens it once, with no flicker. A storm's onset is a sensor edge (a Q
-  pulse), so it also clears an override, as a dusk would;
-- no item dropped.
-
-The natural dusk and dawn watch failed in that run only because its window began after the sensor's switch. The window now runs from clear
-day and deep night, and sample 0 is recorded; the chain re-run is below.
+- the clock running through a natural dusk and a natural dawn: one edge each, so it closes at dusk and opens at dawn with no flicker;
+- a daytime storm, with the weather running: it closes the gate once, and the clearing opens it once, with no flicker. A storm's onset is a
+  sensor edge (a Q pulse), so it also clears an override, as a dusk would;
+- no item dropped;
+- `settleLayout`'s pure rest state equal to the built one: 56, 61 and 66 redstone parts, 0 differ.
 
 **The latch windows, traced tick by tick** (a = unlock start minus data-valid start; end slack = data change + 4 minus relock; the bar is >= 1 each):
 - **dusk with a closed override** (D rises through CMP, the CMP path): a = 2, end slack 2.
