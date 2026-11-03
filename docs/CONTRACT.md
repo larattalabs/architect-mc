@@ -26326,6 +26326,28 @@ minimum grows to fit a comfortable layout rather than a searched one.
    Dusk takes lock delay 1, with B1 fed 2 ticks after B2, so both paths sit at a = 2. The proof is as in §13 item 5, in a 13 x 7 x 10 box
    and in 13 x 11 and 17 x 15 ones.
 
+### 15. The roof sensor's run (coordinator, 2026-11-03; binding, it wins over §2a and §4 where they disagree)
+
+Step 1b passed in 13 x 7 x 10, 13 x 11 x 11 and 17 x 15 x 12 (slice/GM 2a6e8f14, run 20261103-071935-7agm, HANDOFF-GM "Step 1b"). Its
+layout puts the inverted sensor at `(-4, 1 + (R - 10), R)` for a roof at row R and climbs to it one plane per row. The envelope is reserved
+and forwarded before the design exists, so the design's roof row is not known when the cells are reserved. Option (b) of HANDOFF-GM:
+
+1. **The staircase is reserved.** The envelope holds every rung of the run for roof rows 10 to `depth + 7` (about `2 (depth - 2)`
+   cells; gmCircuit's `gateLayout` names them). One brief line asks the design to leave them empty or solid and to put no redstone,
+   light source or opening on them. Steward forwards them with the rest of the envelope, unchanged.
+2. **At bind** the realise reads the bound design's roof row R over the sensor column. When `10 <= R <= depth + 7` and the sensor cell
+   is sky-exposed, it writes the run up to that rung and the structure block on the unused rungs below the roof. Rungs above the roof
+   stay as the design left them.
+3. **Otherwise** the gate is levers-only, with deviation `what: mechanism.sensor` (§2a "No sky cell"). The realise then writes **no
+   sensor block at all**: an inverted sensor indoors reads 15 and its first edge would latch the gate closed. The S input is left
+   unpowered, so the latch keeps the lever state.
+4. **Recorded, no number changed:** the logic stays off u = +-6 (the 13-wide box's side faces); the G line runs at row 5; the inside
+   detector's trapdoor is at `(1, D - 2, 3)`, one plane in from §13's trigger cell, and joins the envelope. A gate lot puts `size[0]` along
+   the wall (K3, unchanged by GM), so a lot sent as [11, 13] gets the plain passage with deviation `mechanism`; GM-a's gm-ingame
+   carries that case as a fixture.
+5. **N-GM-2 is answered by the probe:** a daytime storm closes the gate once and the clearing reopens it once, with no flicker, in every
+   box. The natural sensor behaviour stands; no threshold is used.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
@@ -26338,6 +26360,4 @@ which is a reserved follow-up through versionOf/revision.)
 (The four earlier questions on portcullis form, default state, drawbridge form and K1 gates are answered by Noah's 2026-10-27 decisions and removed.)
 
 - **N-GM-1. Gallery approval.** The `gm-look` gallery (§10 item 8) is yours to approve before the RC.
-- **N-GM-2. Storms.** A daylight sensor reads darker in rain and thunder. Should a daytime storm close the gate (the sensor's natural
-  behaviour; no extra logic), or should the sensor read sky light so a storm leaves it open? Default: the natural behaviour is
-  accepted only if the probe shows no dusk flicker; otherwise a threshold is used.
+- (N-GM-2, storms, is answered in §15 item 5: the natural behaviour stands.)
