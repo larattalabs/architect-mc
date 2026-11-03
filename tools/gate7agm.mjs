@@ -774,6 +774,144 @@ steps.settled = async () => {
   return { kinds: Object.keys(out) };
 };
 
+// ------------------------------------------------------------------ step 1b (CONTRACT GM §14): the gate and its logic in real gatehouses
+
+/** A gatehouse box `half` x depth x roof (floor row -1, roof at row `roof`), its passage open, the hall above the logic block open, then
+ * gateLayout's cells written in §7 item 2's order (structure, pistons, leaves, wire and diodes, triggers last). */
+async function gmBox(X, F, Z, { half, depth, roof, kind }) {
+  const lay = GMC.gateLayout(kind, { depth, roof });
+  const M = gmMatsOf({});
+  await fill([X - half, F - 1, Z], [X + half, F + roof, Z + depth - 1], M.structure);
+  await fill([X - 1, F, Z - 2], [X + 1, F + 2, Z + depth + 1], `${W_}air`);
+  if (roof - 1 >= 4) await fill([X - half + 1, F + 4, Z + 1], [X + half - 1, F + roof - 1, Z + depth - 2], `${W_}air`);
+  const rank = (st) => (/lever|daylight/.test(st) ? 5 : /observer/.test(st) ? 4 : /wire|repeater|comparator|torch/.test(st) ? 3 : /bars|fence/.test(st) ? 2 : /piston/.test(st) ? 1 : 0);
+  const cells = GMC.layoutCells(lay).sort((a, b) => rank(a[3]) - rank(b[3]));
+  for (const c of cells) { const [x, y, z, st] = GMC.toWorld(c, X, F, Z); await sb(x, y, z, st); }
+  return lay;
+}
+/** The gate's state: the leaves (open 2 / closed 1 per side), G (RG powered), and the logic's cells for a trace. */
+async function fitState(X, F, Z, leaf) {
+  const box = await snap(X - 5, F - 1, Z, X + 5, F + 8, Z + 2);
+  const l = leaves(box, X, F, Z, leaf);
+  const at = (u, d, r) => box[`${X + u},${F + r},${Z + d}`] ?? (d <= 2 ? 'air' : null);
+  const lc = await snap(X - 5, F + 5, Z + 1, X, F + 7, Z + 4);
+  const L2 = (u, d, r) => lc[`${X + u},${F + r},${Z + d}`] ?? 'air';
+  const rg = L2(-1, 4, 7);
+  return { closed: l[-1] === 1 && l[1] === 1, open: l[-1] === 2 && l[1] === 2, leaves: l, G: /powered=true/.test(rg), locked: /locked=true/.test(rg),
+    T1: /lit=true/.test(L2(-2, 4, 6)), CMP: /powered=true/.test(L2(-3, 4, 7)), T5: /lit=true/.test(L2(-1, 2, 7)), T2: /lit=true/.test(L2(-3, 2, 7)), at };
+}
+/** A tick trace of one latch window: per tick RG's lock and output, D = T1 or CMP; the slack of §14 item 3 (start a = u0 - v0, end
+ * (v1 + 4) - u1, RG's delay being 4 game ticks). `act` starts the window (a lever flip, a time jump). */
+async function fitTrace(X, F, Z, leaf, act, n = 50) {
+  await freeze();
+  const rows = [];
+  rows.push(await fitState(X, F, Z, leaf));
+  await act();
+  for (let t = 1; t <= n; t++) { await step(1); rows.push(await fitState(X, F, Z, leaf)); }
+  await unfreeze();
+  const D = rows.map((r) => r.T1 || r.CMP);
+  const u0 = rows.findIndex((r) => !r.locked);
+  const u1 = u0 < 0 ? -1 : rows.findIndex((r, i) => i > u0 && r.locked);
+  let v0 = u0; while (v0 > 0 && D[v0 - 1] === D[u0]) v0--;
+  const v0c = v0 === 0 && D.slice(0, u0 + 1).every((x) => x === D[u0]) ? null : v0; // D constant since before the window
+  const v1 = u0 < 0 ? -1 : D.findIndex((x, i) => i > u0 && x !== D[u0]);
+  const a = u0 < 0 ? null : v0c === null ? null : u0 - v0c;
+  const endSlack = u0 < 0 || u1 < 0 ? null : v1 < 0 ? null : v1 + 4 - u1;
+  const line = (k2) => rows.map((r) => (r[k2] ? 1 : 0)).join('');
+  return { u0, u1, v0: v0c, v1, a, endSlack, G: line('G'), locked: line('locked'), D: D.map((x) => (x ? 1 : 0)).join(''), T1: line('T1'), CMP: line('CMP'), T5: line('T5'), T2: line('T2'),
+    ok: u0 >= 0 && (a === null || a >= 1) && (endSlack === null || endSlack >= 1), first: { G: rows[0].G }, last: { G: rows[n].G, closed: rows[n].closed, open: rows[n].open } };
+}
+/** Count G's edges and the leaves' moves while time runs, sampled every `every` ticks for `n` samples. */
+async function fitWatch(X, F, Z, leaf, n, every = 10) {
+  await freeze();
+  const g = [];
+  let last = null;
+  for (let i = 0; i < n; i++) { await step(every); last = await fitState(X, F, Z, leaf); g.push(last.G ? 'C' : 'o'); }
+  await unfreeze();
+  const seq = g.join('');
+  // (the leaves move in 3 ticks: a sample may catch them moving, so only the last sample's leaves must match G)
+  return { seq, edges: [...seq].filter((c, i) => i > 0 && c !== seq[i - 1]).length, mixed: !(last.G ? last.closed : last.open) };
+}
+
+const FIT_BOXES = (process.env.GM_FIT_BOXES ?? '13x7x10,13x11x11,17x15x12').split(',').map((b) => b.split('x').map(Number));
+steps.fit = async () => {
+  await ensure();
+  const out = {};
+  let bx = 0;
+  for (const [W2, D2, R2] of FIT_BOXES) for (const kind of (process.env.GM_FIT_KINDS ?? 'portcullis,slide').split(',')) {
+    const name = `${W2}x${D2}x${R2} ${kind}`;
+    const X = 9000 + 60 * bx++, Z = 7000;
+    const g = await world(X, Z), F = g + 1;
+    await tp(X + 12, F + 14, Z - 10);
+    await cmd('/time set 6000'); await cmd('/weather clear');
+    const half = (W2 - 1) / 2;
+    await gmBox(X, F, Z, { half, depth: D2, roof: R2, kind });
+    await L.gameWait(3000, { real: L.settle, label: 'gm fit settles' });
+    const leaf = kind === 'slide' ? 'stone_bricks' : 'iron_bars';
+    const lever = { A: [X - 1, F + 2, Z], B: [X + 1, F + 2, Z + D2 - 1] };
+    const st = () => fitState(X, F, Z, leaf);
+    const rec = { box: [W2, D2, R2], kind, steps: [] };
+    const note = async (what, want) => { const s2 = await st(); const ok = want === 'closed' ? s2.closed && s2.G : s2.open && !s2.G; rec.steps.push({ what, want, ok, leaves: s2.leaves, G: s2.G }); log(`  ${name} ${what}: ${ok ? 'ok' : 'WRONG'} (leaves ${json(s2.leaves)}, G ${s2.G})`); return ok; };
+    const flipW = async (lv) => { await flip(lever[lv]); await L.gameWait(1500, { real: L.settle, label: 'gm flip' }); };
+    const timeW = async (t) => { await cmd(`/time set ${t}`); await L.gameWait(3000, { real: L.settle, label: 'gm sensor ticks' }); };
+    await note('rest at day', 'open');
+    await flipW('A'); await note('day, lever A (outside) -> override closed', 'closed');
+    await flipW('A'); await note('day, lever A again -> open', 'open');
+    await flipW('B'); await note('day, lever B (inside) -> closed', 'closed');
+    await flipW('A'); await note('day, lever A -> open (either lever toggles)', 'open');
+    await timeW(14000); await note('dusk, no override -> closed', 'closed');
+    await timeW(1000); await note('dawn -> open', 'open');
+    await flipW('B'); await note('day, lever B -> override closed', 'closed');
+    await timeW(14000); await note('dusk with a closed override -> closed (the sensor takes over)', 'closed');
+    await flipW('A'); await note('night, lever A -> override open', 'open');
+    await timeW(1000); await note('dawn with an open override -> open (override cleared)', 'open');
+    await flipW('A'); await note('day after the reset, lever A -> closed (a fresh override)', 'closed');
+    await flipW('B'); await note('day, lever B -> open', 'open');
+    let bad = 0;
+    for (let c = 1; c <= 20; c++) {
+      await flipW(c % 2 ? 'A' : 'B'); const a2 = await st();
+      await flipW(c % 2 ? 'B' : 'A'); const b2 = await st();
+      if (!(a2.closed && b2.open)) { bad++; rec.firstBad ??= { c, a2: a2.leaves, b2: b2.leaves }; }
+    }
+    rec.cycles = { n: 20, bad };
+    // tick traces of the latch windows (§14 item 3)
+    rec.trace = {};
+    rec.trace.lever = await fitTrace(X, F, Z, leaf, () => flip(lever.A));
+    await flipW('A');
+    await cmd('/time set 11500'); await L.gameWait(2000, { real: L.settle, label: 'before dusk' });
+    rec.trace.dusk = await fitTrace(X, F, Z, leaf, () => cmd('/time set 14000'), 60);
+    rec.trace.dawn = await fitTrace(X, F, Z, leaf, () => cmd('/time set 1000'), 60);
+    await flipW('B'); // a closed override by day
+    rec.trace.duskOverride = await fitTrace(X, F, Z, leaf, () => cmd('/time set 14000'), 60);
+    await flipW('A'); // an open override at night
+    rec.trace.dawnOverride = await fitTrace(X, F, Z, leaf, () => cmd('/time set 1000'), 60);
+    for (const [k2, tr] of Object.entries(rec.trace)) log(`  ${name} trace ${k2}: a ${tr.a} end slack ${tr.endSlack} u ${tr.u0}..${tr.u1} v ${tr.v0}..${tr.v1}\n    G      ${tr.G}\n    locked ${tr.locked}\n    D      ${tr.D}`);
+    // natural dusk and dawn (time runs), then a daytime storm and its clearing: G edges and leaf moves
+    await cmd('/time set 11800'); await L.gameWait(1000, { real: L.settle, label: 'pre-dusk' });
+    rec.dusk = await fitWatch(X, F, Z, leaf, 150, 10);
+    await cmd('/time set 22600'); await L.gameWait(1000, { real: L.settle, label: 'pre-dawn' });
+    rec.dawn = await fitWatch(X, F, Z, leaf, 150, 10);
+    await cmd('/time set 6000'); await L.gameWait(2000, { real: L.settle, label: 'noon' });
+    const pre = await st();
+    await cmd('/weather thunder 2400');
+    rec.storm = await fitWatch(X, F, Z, leaf, 80, 10);
+    await cmd('/weather clear');
+    rec.clear = await fitWatch(X, F, Z, leaf, 80, 10);
+    rec.storm.startOpen = pre.open;
+    rec.items = (await items(X, F + 2, Z + 1, 12)).stacks;
+    out[name] = rec;
+    const traceOk = Object.values(rec.trace).every((t) => t.ok);
+    check(rec.steps.every((s2) => s2.ok), `${name}: §2a ${rec.steps.filter((s2) => s2.ok).length}/${rec.steps.length} steps`);
+    check(bad === 0, `${name}: 20 lever cycles through the logic, ${bad} with a misplaced leaf${rec.firstBad ? ` (${json(rec.firstBad)})` : ''}`);
+    check(traceOk, `${name}: latch windows with at least 1 tick of slack: ${Object.entries(rec.trace).map(([k2, t]) => `${k2} a=${t.a} end=${t.endSlack}`).join(', ')}`);
+    check(rec.dusk.edges <= 1 && rec.dawn.edges <= 1 && !rec.dusk.mixed && !rec.dawn.mixed, `${name}: natural dusk ${rec.dusk.edges} edge(s), dawn ${rec.dawn.edges} (no flicker)`);
+    check(rec.storm.edges <= 1 && rec.clear.edges <= 1 && !rec.storm.mixed && !rec.clear.mixed, `${name}: daytime storm ${rec.storm.edges} edge(s) (${rec.storm.seq.slice(-1) === 'C' ? 'closes' : 'stays open'}), clearing ${rec.clear.edges} (no flicker)`);
+    check(!rec.items, `${name}: no item dropped (${json(rec.items)})`);
+    await L.leaveWorld();
+  }
+  return out;
+};
+
 steps.probe = async () => ({ rules: await steps.rules(), grate: await steps.grate(), detectors: await steps.detectors(), daycycle: await steps.daycycle(), swing: await steps.swing(), drawbridge: await steps.drawbridge() });
 
 // ------------------------------------------------------------------ housekeeping

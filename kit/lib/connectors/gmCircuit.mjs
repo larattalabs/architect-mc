@@ -162,3 +162,132 @@ export function settle(kind, rest = kind === 'swing' ? 'closed' : 'open') {
  *   detectors: an observer pulse of 2 ticks, 2 ticks after the flip
  */
 export const TIMING = Object.freeze({ slide: { close: 3, open: 3 }, portcullis: { close: 3, open: 3 }, benchLeverToLeaves: { close: 34, open: 34 }, swingButton: 20, drawbridgeCell: (i) => 2 * (i + 2), detectorPulse: { delay: 2, length: 2 } });
+
+// ------------------------------------------------------------------ step 1b: the gate and the day-cycle logic in a gatehouse box
+
+/**
+ * (§14) The whole sliding gate of a gatehouse box: the leaves and their feed (slideCells), the lever detectors (detectorCells), the
+ * §2a day-cycle logic in the logic block (u in [-5, 5], d = 1..depth-2, rows lintelY+1..lintelY+5 = 4..8), the roof sensor and its wire
+ * run, every unused logic-block cell written as the structure block. Local frame as above; `roof` is the roof's row (the box's height
+ * from floorY: the minimum box 13 x 7 x 10 has its roof at row 10, the sensor in it).
+ *
+ * The logic is the bench's D latch (gmBench) with §14 item 3's timing, laid out in three dimensions:
+ *   r 7  the chain SB -> CMP (subtract, back SB) -> DB -> RG (latch, delay 2) -> GB along d = 4; nQ (dust) on CMP's north side from T2
+ *        on B2; RL (lock, delay 1) on RG's north side from T5 on BC; B2 -> rBC (delay 1) -> BC on the front row (the bench's B2 -> BC)
+ *   r 6  T1 standing under DB, so D is a block (DB) powered by CMP or by T1
+ *   r 5  B1 under T1, fed by rG (delay 1, reads the block under GB's G dust) and rQd (delay 2, Q' + 4)
+ *   S    sensor (inverted) -> raw dust -> RS (delay 1, the clean S) -> S dust on SB; OS watches RS -> QB -> RQ (delay 4) -> Q' dust
+ *   Q'   -> rB2 (delay 1) -> B2 = Q' + 2; -> rQd (delay 2) -> B1 = Q' + 4 = B2 + 2; BC = B2 + 2 (the rule: a = 2 on both paths)
+ *   P    each detector's observer powers a block read by its own RP (delay 3); both feed P' -> rP (delay 1) -> BC
+ *   G    GB -> dust under it (rG's input) and east, down to the line at row 4 along d = 3, which reaches both feed entries (3s,2,5)
+ *        through the cut cells (+-3,3,5)
+ * Each cell: {u, d, r, state, lint} (lint: gmLint's cell form in the frame x = u, y = r, z = d).
+ */
+export function gateLayout(kind, { depth = 7, roof = 10, mats } = {}) {
+  if (depth < 7) throw new Error(`gateLayout: depth ${depth} under 7 (CONTRACT GM §14 item 1)`);
+  if (roof < 10) throw new Error(`gateLayout: roof row ${roof} under 10 (CONTRACT GM §14 item 1)`);
+  if (roof - 10 > depth - 3) throw new Error(`gateLayout: the sensor run climbs one row per plane; roof ${roof} needs depth ${roof - 7}`);
+  const M = gmMats(mats);
+  const S = M.structure;
+  const cells = new Map();
+  const F = { n: 'north', s: 'south', e: 'east', w: 'west', u: 'up', d: 'down' };
+  const OPPF = { n: 's', s: 'n', e: 'w', w: 'e' };
+  const put = (u, d, r, state, lint) => cells.set(k(u, d, r), { u, d, r, state, lint });
+  const block = (u, d, r, o = {}) => put(u, d, r, S, { t: 'block', ...o });
+  const air = (u, d, r) => put(u, d, r, `${W}air`, { t: 'air' });
+  const dust = (u, d, r, o = {}) => put(u, d, r, `${W}redstone_wire`, { t: 'dust', ...o });
+  const rep = (u, d, r, f, delay, o = {}) => put(u, d, r, `${W}repeater[facing=${F[f]},delay=${delay}]`, { t: 'rep', f, delay, ...o });
+  const cmp = (u, d, r, f, o = {}) => put(u, d, r, `${W}comparator[facing=${F[f]},mode=subtract]`, { t: 'cmp', f, ...o });
+  const torch = (u, d, r, m, o = {}) => { const v = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[m];
+    put(u, d, r, `${W}redstone_wall_torch[facing=${F[OPPF[m]]},lit=true]`, { t: 'torch', mount: [u + v[0], r, d + v[1]], ...o }); };
+  const torchUp = (u, d, r, o = {}) => put(u, d, r, `${W}redstone_torch[lit=true]`, { t: 'torch', mount: [u, r - 1, d], ...o });
+  const obs = (u, d, r, f, o = {}) => put(u, d, r, `${W}observer[facing=${F[f]},powered=false]`, { t: 'obs', f, ...o });
+  // the gate: leaves, feed, detectors
+  for (const [u, d, r, s] of slideCells(kind, M).values()) {
+    let l;
+    if (/redstone_wire/.test(s)) l = { t: 'dust' };
+    else if (/air$/.test(s)) l = { t: 'air' };
+    else if (/sticky_piston/.test(s)) l = { t: 'piston', f: u < 0 ? 'e' : 'w', expect: ['G'] };
+    else l = { t: 'block' };
+    put(u, d, r, s, l);
+  }
+  for (const [u, d, r, s] of detectorCells(depth)) {
+    const side = u < 0 ? 'A' : 'B';
+    if (/lever/.test(s)) put(u, d, r, s, { t: 'lever', mount: [u, 3, d], label: `L${side}`, stop: true });
+    else if (/trapdoor/.test(s)) put(u, d, r, s, { t: 'trap', expect: [`L${side}`] });
+    else put(u, d, r, s, { t: 'obs', f: 'd', label: `P${side}`, stop: true });
+  }
+  block(-1, 0, 3); block(1, depth - 1, 3); // the levers' lintel mounts
+  // the chain, r 7
+  block(-4, 4, 7, { name: 'SB', expect: ['S'] });
+  cmp(-3, 4, 7, 'w', { name: 'CMP' });
+  block(-2, 4, 7, { name: 'DB', expect: ['S', 'nG', 'nQ'] });
+  rep(-1, 4, 7, 'w', 2, { name: 'RG', label: 'G', stop: true });
+  block(0, 4, 7, { name: 'GB' });
+  torchUp(-2, 4, 6, { name: 'T1', label: 'nG', stop: true }); block(-2, 4, 5, { name: 'B1' });
+  dust(-3, 3, 7, { name: 'nQ', expect: ['nQ'] }); torch(-3, 2, 7, 'n', { name: 'T2', label: 'nQ', stop: true }); block(-3, 1, 7, { name: 'B2' });
+  rep(-1, 3, 7, 'n', 1, { name: 'RL' }); torch(-1, 2, 7, 'n', { name: 'T5', label: 'nC', stop: true }); block(-1, 1, 7, { name: 'BC' });
+  rep(-2, 1, 7, 'w', 1, { name: 'rBC' });
+  rep(0, 1, 7, 'e', 1, { name: 'rP' });
+  air(-3, 2, 8); air(-1, 2, 8); // over the wall torches
+  rep(-1, 4, 5, 'e', 1, { name: 'rG' });
+  rep(-3, 4, 5, 'w', 2, { name: 'rQd' });
+  // the G line, r 4, d 3, and its cuts to the feed entries; G from GB down to it
+  air(-3, 3, 5); air(3, 3, 5);
+  for (let u = -3; u <= 3; u++) dust(u, 3, 4, { expect: ['G'] });
+  dust(-3, 2, 5, { expect: ['G'] }); dust(3, 2, 5, { expect: ['G'] });
+  for (const [u, d, r] of [[0, 4, 6], [1, 4, 6], [2, 4, 5]]) dust(u, d, r, { expect: ['G'] });
+  air(2, 4, 6); air(2, 3, 5);
+  // S: the sensor's run (a staircase along d for a higher roof), raw dust on the block RS reads, RS, S dust on SB
+  let sd = 1;
+  for (let r = 10; r < roof; r++) { air(-4, sd, r); sd++; block(-4, sd, r - 1); dust(-4, sd, r, { name: 'raw' }); }
+  put(-4, sd, roof, `${W}daylight_detector[inverted=true,power=0]`, { t: 'sensor', label: 'raw' });
+  dust(-4, 1, 9, { name: 'raw' }); block(-4, 1, 8);
+  if (roof > 10) air(-4, 1, 10);
+  rep(-4, 2, 8, 'n', 1, { name: 'RS', label: 'S', stop: true });
+  dust(-4, 3, 8, { name: 'S', expect: ['S'] }); dust(-4, 4, 8, { name: 'S', expect: ['S'] });
+  block(-3, 3, 8); block(-5, 3, 8);
+  // Q: OS under RS, QB, RQ, Q' to rQd (the block under (-4,4,6)) and to rB2
+  obs(-4, 2, 7, 'u', { name: 'OS', label: 'Q', stop: true });
+  block(-4, 2, 6, { name: 'QB' });
+  rep(-4, 3, 6, 'n', 4, { name: 'RQ', label: 'QA', stop: true });
+  for (const [u, d, r] of [[-4, 4, 6], [-5, 4, 6], [-5, 3, 7], [-5, 2, 7], [-5, 1, 7]]) dust(u, d, r, { name: 'QA', expect: ['QA'] });
+  air(-5, 4, 7);
+  rep(-4, 1, 7, 'w', 1, { name: 'rB2' });
+  // P: the detectors' output blocks, RPa and RPb (delay 3), P' to rP's input
+  block(-1, 1, 5, { name: 'PAB' }); block(1, depth - 2, 5, { name: 'PBB' });
+  rep(0, 1, 5, 'w', 3, { name: 'RPa', label: 'Pp', stop: true });
+  rep(2, depth - 2, 5, 'w', 3, { name: 'RPb', label: 'Pp', stop: true });
+  const P = [[1, 1, 5], [1, 2, 5], [2, 2, 6], [2, 1, 7], [1, 1, 7], [3, 1, 7]];
+  for (let d = 1; d <= depth - 2; d++) P.push([4, d, 6]);
+  P.push([3, depth - 2, 5]);
+  for (const [u, d, r] of P) dust(u, d, r, { name: 'Pp', expect: ['Pp'] });
+  air(1, 2, 6); air(2, 2, 7); air(4, 1, 7); air(3, depth - 2, 6);
+  block(3, 2, 6);
+  // floors under every dust, repeater and comparator; then the rest of the logic block as the structure block
+  for (const c of [...cells.values()]) if (['dust', 'rep', 'cmp'].includes(c.lint.t)) { const kk = k(c.u, c.d, c.r - 1); if (!cells.has(kk)) block(c.u, c.d, c.r - 1); }
+  for (let u = -LOGIC_HALF; u <= LOGIC_HALF; u++) for (let d = 1; d <= depth - 2; d++) for (let r = 4; r <= 8; r++) if (!cells.has(k(u, d, r))) block(u, d, r);
+  return { cells, depth, roof, sensor: [-4, sd, roof] };
+}
+/** The logic block's half width in u (§14 item 2 gives u in [-6, 6]; the layout keeps off the 13-wide box's side faces at +-6). */
+export const LOGIC_HALF = 5;
+/** gateLayout's cells as [u, d, r, state] (the form slideCells and settle use). */
+export const layoutCells = (lay) => [...lay.cells.values()].map((c) => [c.u, c.d, c.r, c.state]);
+
+/**
+ * The static checks of a gate layout in a box `half` (u in [-half, half]) x depth x roof (gmLint): the influence check with every cell
+ * outside the layout `outside` ('solid': the design's walls; 'air': an open hall), and the hidden check (nothing but plain blocks on a
+ * face). Returns the problems.
+ */
+export async function lintLayout(lay, { half = 6, outside = 'solid' } = {}) {
+  const { lint, hiddenProblems } = await import('./gmLint.mjs');
+  const m = new Map();
+  for (const c of lay.cells.values()) m.set(`${c.u},${c.r},${c.d}`, c.lint);
+  const inBox = (u, r, d) => Math.abs(u) <= half && d >= 0 && d < lay.depth && r >= -1 && r <= lay.roof;
+  const passage = (u, r) => Math.abs(u) <= 1 && r >= 0 && r <= 2;
+  const solid = (key) => { const [u, r, d] = key.split(',').map(Number); if (!inBox(u, r, d) || passage(u, r)) return false;
+    if (outside === 'solid') return true; return d === 0 || d === lay.depth - 1 || Math.abs(u) === half || r <= 3 || r >= lay.roof; };
+  const allowed = new Set([`-1,0,2`, `1,${lay.depth - 1},2`, `-1,1,3`, `1,${lay.depth - 2},3`, lay.sensor.join(',')]);
+  for (const c of lay.cells.values()) if (Math.abs(c.u) <= 1 && c.r <= 2) allowed.add(`${c.u},${c.d},${c.r}`); // the passage's own cells (leaves, lanes)
+  return [...lint(m, { solid }).problems, ...hiddenProblems(layoutCells(lay), { half, depth: lay.depth, roof: lay.roof }, allowed)];
+}
