@@ -39,10 +39,10 @@ public final class LotMask {
 
 	/**
 	 * (7a GM-a, CONTRACT GM §5) The site ext key holding a gatehouse lot's gate mechanism cells as bound (the base and the picked sensor
-	 * rung: {@code {cells: [flat runs]}}): Architect's region writes them, the design never does. Since NEXT.
+	 * rung: {@code {cells: [flat runs]}}): Architect's region writes them, the design never does. Since 1.45.0.
 	 */
 	public static final String EXT_MECHANISM = "architect_mc:mechanism";
-	/** (7a GM-a) The site ext key reporting how many of the entry's non-air blocks the mechanism mask dropped. Since NEXT. */
+	/** (7a GM-a) The site ext key reporting how many of the entry's non-air blocks the mechanism mask dropped. Since 1.45.0. */
 	public static final String EXT_MECHANISM_DROPPED = "architect_mc:mechanismDropped";
 
 	/**

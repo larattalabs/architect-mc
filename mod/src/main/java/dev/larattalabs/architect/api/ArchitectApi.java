@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.44.0";
+	String VERSION = "1.45.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -185,7 +185,7 @@ public interface ArchitectApi {
 	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
 	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
 	 * method or reason.
-	 * Since NEXT (7a GM), a GM helper ({@code region.walls.mechanisms}) adds {@code "gateMechanisms"}: a gate lot on a wall's line
+	 * Since 1.45.0 (7a GM), a GM helper ({@code region.walls.mechanisms}) adds {@code "gateMechanisms"}: a gate lot on a wall's line
 	 * ({@code connector.wall.lots[]}) may name {@code mech} ({@code portcullis}, the split sliding grate and the default; {@code slide};
 	 * {@code swing}) and {@code rest}. In a box at least 13 along the wall, 7 through it and 10 high its passage gets the mechanism: the
 	 * artifact's {@code lots[].onWall.passage.mechanism {kind, rest, width, dayDriven, cells, lotCells, triggers, states, rungs, brief}},
