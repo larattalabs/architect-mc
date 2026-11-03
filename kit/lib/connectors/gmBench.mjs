@@ -45,8 +45,8 @@ export function benchCells() {
   w(32, -6, { expect: ['Q'] }); rep(33, -6, 'w', 4);
   w(34, -6, { expect: ['Q'] });
   for (let z = -12; z <= -2; z++) w(35, z, { expect: ['Q'] });
-  for (let x = 25; x <= 34; x++) w(x, -12, { expect: ['Q'] });
-  for (let z = -11; z <= -1; z++) w(25, z, { expect: ['Q'] });
+  for (let x = 25; x <= 34; x++) { if (x === 30) rep(x, -12, 'e', 1); else w(x, -12, { expect: ['Q'] }); } // (repeaters: the loop is ~30 cells)
+  for (let z = -11; z <= -1; z++) { if (z === -6) rep(25, z, 'n', 1); else w(25, z, { expect: ['Q'] }); }
   w(26, -1, { expect: ['Q'] });
   // G out: south from (30,1) to z 6, then west to x -3 (repeaters every 8)
   for (let z = 2; z <= 6; z++) w(30, z, { expect: ['G'] });
