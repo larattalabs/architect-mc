@@ -649,6 +649,31 @@ steps.daycycle = async () => {
   return out;
 };
 
+steps.daydebug = async () => {
+  await ensure();
+  const X = 7800, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X + 20, F + 12, Z + 14);
+  await cmd('/time set 6000');
+  const rig = await dayRig(X, F, Z, 'portcullis');
+  await L.gameWait(3000, { real: L.settle, label: 'settle' });
+  const BX = X + 9, BY = F + 5, BZ = Z - 4;
+  const dumpB = async (tag) => {
+    const b = await snap(BX - 3, BY, BZ - 12, BX + 37, BY, BZ + 6);
+    const lines = [];
+    for (let z = -12; z <= 6; z++) { let l = `${String(z).padStart(3)} `; for (let x = -3; x <= 37; x++) l += abbr(b[`${BX + x},${BY},${BZ + z}`]).padEnd(3); lines.push(l); }
+    log(`${tag}\n${lines.join('\n')}`);
+    const lane = await snap(X - 3, F + 5, Z + 2, X + 9, F + 5, Z + 2);
+    log(`  box G line: ${Object.entries(lane).map(([k, v]) => `${Number(k.split(',')[0]) - X}:${abbr(v)}`).join(' ')}`);
+  };
+  await dumpB('rest');
+  await flip(rig.lever.A); await L.gameWait(1500, { real: L.settle, label: 'flip' });
+  await dumpB('after A');
+  await cmd('/time set 13500'); await L.gameWait(3000, { real: L.settle, label: 'dusk' });
+  await dumpB('dusk');
+  await L.leaveWorld();
+};
+
 steps.probe = async () => {
   return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
