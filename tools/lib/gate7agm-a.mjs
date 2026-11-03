@@ -378,12 +378,30 @@ export async function registerGmA(steps, h) {
     await ensure();
     await L.leaveWorld().catch(() => null);
     const out = {};
-    for (const mode of ['open', 'closed', 'midmove']) {
+    for (const mode of ['open', 'closed', 'midmove', 'lane']) {
       const c = await castle('gm_castle_13x7', { tag: `undo-${mode}`, roof: 10 });
       if (!c.region) { check(false, `undo ${mode}: no region`); await L.leaveWorld(); continue; }
       const g = gateCells(c.m);
       const rec = { mode };
       if (mode === 'closed') { await flipW(g.levers[0]); rec.gate = await readGate(c.m); }
+      if (mode === 'lane') {
+        // (§7 items 7-8) a player's block in a lane (placed by a real use on the lane's floor), then the gate closed: the leaf shoves it
+        // and the mullion along the plane d = 1, inside u in [-4, 4]; the removal restores the envelope (the box comes back exactly)
+        const lane = g.lanes.find((q) => q[1] === c.gl.onWall.floorY);
+        await call('dev.pt.uses', { ops: [{ item: 'minecraft:cobblestone', at: lane, on: [lane[0], lane[1] - 1, lane[2]], face: 'up' }] }, 30_000);
+        rec.placed = await stateAt(...lane);
+        await flipW(g.levers[0]);
+        rec.gate = await readGate(c.m);
+        const env = new Set(runsOf(c.m.cells).map((q) => q.join(',')));
+        const bb = envBox(c.m);
+        const out = [];
+        for (let x = bb[0] - 1; x <= bb[3] + 1; x++) for (let z = bb[2] - 1; z <= bb[5] + 1; z++) {
+          const k = `${x},${lane[1]},${z}`;
+          if (!env.has(k) && /cobblestone/.test(await stateAt(x, lane[1], z))) out.push(k);
+        }
+        rec.leaked = out;
+        check(/cobblestone/.test(rec.placed) && out.length === 0, `item 4 (lane): a player's cobblestone in a lane, the gate closed: nothing shoved out of the envelope (${json(rec.gate)}, outside: ${out.length})`);
+      }
       if (mode === 'midmove') {
         // the lever flipped under /tick freeze, stepped to the first tick a leaf moves, then removed with the clock running
         await freeze();
