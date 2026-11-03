@@ -745,7 +745,8 @@ steps.settled = async () => {
     const closed = local(await gateBox(X, F, Z), keys);
     await flip([X, F + 6, Z + 2]); await L.gameWait(2000, { real: L.settle, label: 'open again' });
     const again = local(await gateBox(X, F, Z), keys);
-    out[kind] = { open, closed };
+    out[kind] = { open, closed, again };
+    log(`  ${kind} open vs again: ${json(Object.keys(open).filter((k2) => open[k2] !== again[k2]).map((k2) => [k2, open[k2], again[k2]]))}`);
     check(json(open) === json(again), `${kind}: the open rest state is a fixed point (open, closed, open again: identical)`);
   }
   {
