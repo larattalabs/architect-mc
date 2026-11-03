@@ -210,3 +210,57 @@ test('item 7: KC (a fountain off the ring\'s corner, K3\'s fixture with a mechan
   const r = await run(f);
   assert.ok(r.artifact.lots.find((l) => l.id === 'gatehouse_1')?.onWall?.passage?.mechanism, 'KC: the gatehouse keeps its mechanism');
 });
+
+// ------------------------------------------------------------------ (7a GM-a2, §16 items 1 and 3)
+
+test('GM-a2: the mechanism\'s provisional bill (cost) bounds every case at bind: levers-only, each rung, each rung with any roof fill; the swing exact', async () => {
+  const { gmCost } = await import('../lib/connectors/gmGate.mjs');
+  const { bomOf } = await import('../lib/connectors/bom.mjs');
+  for (const kind of ['portcullis', 'slide', 'swing']) for (const depth of [7, 11]) {
+    const p = mechanismPlan(kind, { depth });
+    const c = gmCost(p);
+    const within = (cells, what) => {
+      const b = bomOf(cells.map((x) => x[3]));
+      for (const [i, n] of Object.entries(b)) assert.ok(n >= (c.bom.min[i] ?? 0) && n <= (c.bom.max[i] ?? -1), `${kind} ${depth} ${what}: ${i} ${n} in [${c.bom.min[i] ?? 0}, ${c.bom.max[i]}]`);
+      for (const i of Object.keys(c.bom.min)) assert.ok((b[i] ?? 0) >= c.bom.min[i], `${kind} ${depth} ${what}: ${i} at least ${c.bom.min[i]}`);
+      const n = cells.filter((x) => !/air$/.test(x[3])).length;
+      assert.ok(n >= c.cells[0] && n <= c.cells[1], `${kind} ${depth} ${what}: ${n} cells in ${c.cells}`);
+    };
+    within(p.base, 'levers-only');
+    for (const g of p.rungs) {
+      const left = p.rungKeys.length - g.cells.length;
+      for (const k of [0, 1, left]) within([...p.base, ...g.cells, ...Array.from({ length: k }, () => [0, 0, 0, p.structure])], `rung ${g.roof} + ${k} filled`);
+    }
+    if (kind === 'swing') assert.deepEqual(c.bom.min, c.bom.max, 'swing: one case, exact');
+    else {
+      assert.equal(c.rare['minecraft:slime_ball'], 6, `${kind}: 6 sticky pistons, 6 slime balls (§8)`);
+      assert.ok(c.rare['minecraft:quartz'] >= 3, `${kind}: quartz for the sensor named`);
+      assert.ok(!c.bom.min['minecraft:daylight_detector'] && c.bom.max['minecraft:daylight_detector'] === 1, `${kind}: the sensor only when a rung is bound`);
+    }
+  }
+});
+
+test('GM-a2: the artifact and IR carry the cost and the fill; the gatehouse lot\'s provisional range holds the mechanism; S-THEME judges the fill', async () => {
+  for (const [n, depth] of [['gm_castle_13x7', 7], ['gm_castle_slide', 7]]) {
+    const r = await runOf(n);
+    const l = r.artifact.lots.find((q) => q.id === 'gatehouse_1');
+    const m = l.onWall.passage.mechanism;
+    assert.ok(m.cost && m.cost.cells[0] > 0 && m.cost.cells[1] >= m.cost.cells[0], `${n}: mechanism.cost.cells`);
+    if (l.provisional) {
+      const [x0, , z0, x1, , z1] = l.box;
+      const cols = (x1 - x0 + 1) * (z1 - z0 + 1);
+      const { PROVISIONAL_BAND } = await import('../lib/plan/compile.mjs');
+      assert.deepEqual(l.costRange, [cols * PROVISIONAL_BAND[0] + m.cost.cells[0], cols * PROVISIONAL_BAND[1] + m.cost.cells[1]], `${n}: the lot's range holds the mechanism`);
+    }
+    const il = irOf(r).lots.find((q) => q.id === 'gatehouse_1');
+    const w = il.mechanismWrite;
+    assert.ok(Number.isInteger(w.fill) && /stone_bricks|bricks|planks|stone/.test(w.palette[w.fill]), `${n}: the fill is the structure block (${w.palette[w.fill]})`);
+    const ir = JSON.parse(JSON.stringify(irOf(r)));
+    const w2 = ir.lots.find((q) => q.id === 'gatehouse_1').mechanismWrite;
+    w2.fill = w2.palette.push('minecraft:crimson_hyphae') - 1; // only the fill names it
+    const { vw } = buildVirtual({ ir: irOf(r), survey: svOf(fx(n)).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null });
+    const bad = themeOffenders(ir, vw).offenders.filter((o) => /^gm_/.test(o.part) && o.block === 'minecraft:crimson_hyphae');
+    assert.ok(bad.length >= 1, `${n}: an untraced fill block is an S-THEME offender`);
+    void depth;
+  }
+});

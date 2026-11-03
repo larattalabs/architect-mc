@@ -77,7 +77,7 @@ export async function registerGmA(steps, h) {
     return { Blueprint: kit.Blueprint, palette: kit.palette, variant: kit.variant, shapeOf: style.shapeOf, doorOf: style.doorOf };
   }
   /** The stub designs of the castle's wall lots, the gatehouse's deck at `roof` (CONTRACT GM §15), in a bible's roles: {lot: entry}. */
-  async function writeDesigns(lots, { tag, roof, bible = null }) {
+  async function writeDesigns(lots, { tag, roof, bible = null, honour = false }) {
     const K = await kitK();
     const { resolveRoles } = await imp('lib/region/plan.mjs');
     const { writeBlueprint } = await imp('lib/write.mjs');
@@ -85,7 +85,7 @@ export async function registerGmA(steps, h) {
     const ids = {};
     for (const l of lots.filter((q) => q.onWall)) {
       const id = `gm_${tag}_${l.id}`.replace(/[^a-z0-9_]/g, '_').slice(0, 60);
-      const bp = l.onWall.passage ? D.gatehouseDesign(K, id, l, roles, { roof }) : D.towerDesign(K, id, l, roles, { roof: !bible });
+      const bp = l.onWall.passage ? D.gatehouseDesign(K, id, l, roles, { roof, honourReserved: honour }) : D.towerDesign(K, id, l, roles, { roof: !bible });
       const dir = path.join(L.LIBRARY, id);
       fs.rmSync(dir, { recursive: true, force: true });
       writeBlueprint(bp, dir);
@@ -104,7 +104,7 @@ export async function registerGmA(steps, h) {
   const waitPlaced = (region) => L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await killMobs(); });
 
   /** A castle fixture checked and realised with the stub designs: {s, ck, sha, lots, gl, m, region, st, pre, box}. */
-  async function castle(name, { tag, roof, creative = true, realise = true, bible = null } = {}) {
+  async function castle(name, { tag, roof, creative = true, realise = true, bible = null, honour = false } = {}) {
     const fx = G.fixture(ctx, `gm/${name}`);
     const s = await G.site(ctx, `gm ${tag}`, fx, { creative });
     await G.designs(ctx);
@@ -120,7 +120,7 @@ export async function registerGmA(steps, h) {
     box[4] = Math.max(box[4], s.W.maxY + 48);
     const out = { fx, s, ck, sha, lots, gl, m, box };
     if (!realise || !sha) return out;
-    out.ids = await writeDesigns(lots, { tag, roof, bible });
+    out.ids = await writeDesigns(lots, { tag, roof, bible, honour });
     out.entries = { ...fx.lotEntries, ...out.ids };
     out.pre = await G.snap(ctx, box, `gm-${tag}-pre`);
     out.beforeDump = path.join(OUT, `gm-${tag}-before.arwd.gz`);
@@ -244,12 +244,37 @@ export async function registerGmA(steps, h) {
     return ext['architect_mc:gateMechanism']?.gatehouse_1 ?? null;
   }
 
+  /**
+   * (7a GM-a2, §16 item 3) The roof over the staircase: every rung cell at or above the bound roof row, read from the world. A hole is an
+   * air cell with a block beside it across the passage (the roof course it breaks); a bump is a block there with nothing beside it.
+   */
+  async function roofCells(c, roofY) {
+    const cells = runsOf(c.m.rungs ?? []).filter((q) => q[1] >= roofY);
+    const sensors = new Set((c.m.triggers.find((t) => t.kind === 'daylight')?.rungs ?? []).map((q) => q.join(',')));
+    const f = c.gl.onWall.passage.facing;
+    const [ax, az] = f === 'north' || f === 'south' ? [1, 0] : [0, 1];
+    const air = (st) => /^(minecraft:)?(cave_)?air$/.test(st);
+    const out = { cells: cells.length, holes: [], bumps: [], filledLike: 0 };
+    for (const q of cells) {
+      const k = q.join(',');
+      const here = await stateAt(...q);
+      const a = await stateAt(q[0] + ax, q[1], q[2] + az), b = await stateAt(q[0] - ax, q[1], q[2] - az);
+      const beside = !air(a) || !air(b);
+      if (air(here) && beside && q[1] === roofY && !sensors.has(k)) out.holes.push(k);
+      if (!air(here) && !beside && !/daylight/.test(here)) out.bumps.push(k);
+      if (!air(here) && beside) out.filledLike++;
+    }
+    return out;
+  }
+
   const GM_CASES = [
     // [fixture, tag, stub roof row, kind, expect]
     ['gm_castle_17x15', 'p17x15', 12, 'portcullis', { rung: 12 }],
     ['gm_castle_13x7', 'p13x7', 10, 'portcullis', { rung: 10 }],
     ['gm_castle_13x7', 'p13x7hi', 16, 'portcullis', { leversOnly: true }],
     ['gm_castle_slide', 'slide', 11, 'slide', { rung: 11 }],
+    // (7a GM-a2, §16 item 3) a design that leaves every reserved cell empty, as its brief asks: its deck has holes where the rungs cross it
+    ['gm_castle_13x7', 'p13x7rv', 10, 'portcullis', { rung: 10, honour: true }],
   ];
 
   steps.ingame = async () => {
@@ -261,7 +286,7 @@ export async function registerGmA(steps, h) {
       if (only && !only.has(tag)) continue;
       const rec = {};
       out[tag] = rec;
-      const c = await castle(name, { tag, roof });
+      const c = await castle(name, { tag, roof, honour: !!want.honour });
       const w = (c.ck.check?.parts ?? []).find((a) => a.part === 'curtain_wall');
       rec.check = { overall: c.ck.check?.overall, wall: w?.class, mechanism: w?.geometry?.wallLots?.find((q) => q.lot === 'gatehouse_1')?.passage?.mechanism ?? null };
       check(c.ck.check?.overall === 'READY' && !!c.m && c.m.kind === kind, `${tag}: ${name} checks READY through Regions.checkPlan, the gatehouse's passage carries its ${kind} (${json(rec.check)})`);
@@ -278,7 +303,11 @@ export async function registerGmA(steps, h) {
       } else {
         const r0 = c.gl.onWall.floorY + want.rung;
         check(rec.report?.roof === r0 && sensors.length === 1 && sensors[0][1] === r0, `${tag}: the sensor at its rung (roof row ${want.rung}, y ${r0}), one sensor block (${json(rec.report)}, ${json(sensors)})`);
+        // (GM-a2, §16 item 3) the roof fill: no one-cell hole in the roof course over the staircase, no block standing alone above it
+        rec.roof = await roofCells(c, r0);
+        check(rec.roof.holes.length === 0 && rec.roof.bumps.length === 0 && (!want.honour || (rec.report?.fill ?? 0) >= 1), `${tag}: the roof over the staircase (§16 item 3): ${rec.roof.holes.length} holes, ${rec.roof.bumps.length} bumps over ${rec.roof.cells} rung cells at or above row ${want.rung}; the realise filled ${rec.report?.fill ?? 0}${want.honour ? ' (the design left the reserved cells empty)' : ''}`, rec.roof);
       }
+      if (want.leversOnly) check(!rec.report?.fill, `${tag}: levers-only fills nothing (${rec.report?.fill ?? 0})`);
       rec.still = await still(c.m, tag);
       check(rec.still.mismatches === 0, `${tag}: no block in the mechanism's box moves in the 40 ticks after a day realise (${rec.still.mismatches} differ)`, rec.still.list);
       const g0 = await readGate(c.m);
@@ -378,7 +407,10 @@ export async function registerGmA(steps, h) {
     await ensure();
     await L.leaveWorld().catch(() => null);
     const out = {};
-    for (const mode of ['open', 'closed', 'midmove', 'lane']) {
+    // (GM-a2, §16 item 4) mid-move at several phases of the piston cycle, each found by what the world shows, closing and opening; a
+    // crash-recovery removal (the server halted after a member's restore, the removal resumed on the restart)
+    const modes = process.env.GM_UNDO_ONLY ? process.env.GM_UNDO_ONLY.split(',') : ['open', 'closed', 'midmove', 'lane', 'close-logic', 'close-landed', 'open-logic', 'open-first', 'open-landed', 'crash'];
+    for (const mode of modes) {
       const c = await castle('gm_castle_13x7', { tag: `undo-${mode}`, roof: 10 });
       if (!c.region) { check(false, `undo ${mode}: no region`); await L.leaveWorld(); continue; }
       const g = gateCells(c.m);
@@ -402,6 +434,70 @@ export async function registerGmA(steps, h) {
         rec.leaked = out;
         check(/cobblestone/.test(rec.placed) && out.length === 0, `item 4 (lane): a player's cobblestone in a lane, the gate closed: nothing shoved out of the envelope (${json(rec.gate)}, outside: ${out.length})`);
       }
+      const phase = /^(close|open)-(logic|first|landed)$/.exec(mode);
+      if (phase) {
+        // the phase by what the world shows, tick by tick under /tick freeze: `logic` the lever flipped and the circuit propagating with
+        // no leaf moving yet (the first tick after the flip, the observer pulse and repeaters scheduled); `first` the first tick a moving
+        // piston stands in the lanes or recess; `landed` the first tick the leaves are all in place and nothing moves
+        const [, dir, at] = phase;
+        if (dir === 'open') { await flipW(g.levers[0]); rec.before = await readGate(c.m); }
+        await freeze();
+        await flip(g.levers[0]);
+        let t = 0, gs = null, seen = false;
+        for (t = 1; t <= 60; t++) {
+          await step(1);
+          gs = await readGate(c.m);
+          const done = dir === 'close' ? gs.closed : gs.open;
+          if (at === 'logic') { seen = !gs.moving && !done && (dir === 'close' ? gs.filled === 0 : gs.filled === gs.of); break; }
+          if (at === 'first' && gs.moving) { seen = true; break; }
+          if (at === 'landed' && done && !gs.moving) { seen = true; break; }
+        }
+        rec.phaseAt = t; rec.gate = gs; rec.seen = seen;
+        // removed with the world held at that tick: the removal is issued, then the clock runs (its first tick is the next game tick)
+        const rmP = G.remove(ctx, c.region);
+        await L.settle(300);
+        await unfreeze();
+        const rm = await rmP;
+        const d = await G.diff(ctx, c.box, c.pre);
+        const it1 = await items(...c.gl.onWall.passage.front, 24);
+        rec.eflat = { removed: rm.removed, mismatches: d.mismatches, list: d.list.slice(0, 16), classes: d.classes };
+        rec.items = { stacks: it1.stacks ?? 0, items: it1.items ?? null };
+        out[mode] = rec;
+        check(seen, `item 4 (${mode}): the phase was observed (${dir === 'open' ? 'opening' : 'closing'}, ${at}) at tick ${t} after the lever (${json(gs)})`);
+        check(rm.removed && d.mismatches === 0, `item 4 (${mode}, removed at tick ${t} of the toggle): Regions.remove E-flat ${d.mismatches} over the claim`, d.list.slice(0, 8));
+        check(!rec.items.stacks, `item 4 (${mode}): no item dropped by the removal (${json(rec.items)})`);
+        await L.leaveWorld();
+        continue;
+      }
+      if (mode === 'crash') {
+        // a crash-recovery removal: GW halts the server after the first member's restore is written and the next member's job saved (no
+        // save since the removal began, so those writes are lost); on the restart the settle finds them standing and the removal, still
+        // queued, writes them again. The gate mechanism is the last placed, so the first member restored.
+        await flipW(g.levers[0]); // closed: its leaves out in the lanes
+        const by0 = (await call('dev.gm.state', {}, 30_000)).gateByHead ?? 0;
+        await cmd('/kill @e[type=minecraft:item]');
+        await call('dev.journal.killAt', { point: 'GW' }, 10_000);
+        call('dev.region.remove', { region: c.region, requester: G.OWNER }, 600_000).catch(() => null);
+        let down = false;
+        for (let i = 0; i < 180 && !down; i++) { await L.sleep(2000); const st = await call('dev.state', {}, 10_000).catch(() => null); down = !!st && st.inWorld === false; }
+        rec.halted = down;
+        check(down, 'item 4 (crash): the kill point GW halted the server mid-removal');
+        if (!down) { await L.leaveWorld().catch(() => null); continue; }
+        await L.openWorld(c.s.world);
+        await cmd('/kill @e[type=minecraft:item]').catch(() => null);
+        for (let i = 0; i < 900; i++) { const st = await call('dev.region.state', { region: c.region }, 60_000).catch(() => null); const v = st?.view?.state; if (!v || ['REMOVED', 'PARTIAL', 'FAILED'].includes(v)) { rec.after = v ?? 'gone'; break; } await L.sleep(1000); }
+        await L.settle(3000);
+        const d = await G.diff(ctx, c.box, c.pre);
+        const it1 = await items(...c.gl.onWall.passage.front, 24);
+        rec.gateByHead = ((await call('dev.gm.state', {}, 30_000)).gateByHead ?? 0) - by0;
+        rec.eflat = { mismatches: d.mismatches, list: d.list.slice(0, 16), classes: d.classes };
+        rec.items = { stacks: it1.stacks ?? 0, items: it1.items ?? null };
+        out[mode] = rec;
+        check(['REMOVED', 'gone'].includes(rec.after) && d.mismatches === 0, `item 4 (crash): the resumed removal ends ${rec.after}, E-flat ${d.mismatches} over the claim (restores by the journal head with no record: ${rec.gateByHead})`, d.list.slice(0, 8));
+        check(!rec.items.stacks, `item 4 (crash): no item dropped by the resumed removal (${json(rec.items)})`);
+        await L.leaveWorld();
+        continue;
+      }
       if (mode === 'midmove') {
         // the lever flipped under /tick freeze, stepped to the first tick a leaf moves, then removed with the clock running
         await freeze();
@@ -422,6 +518,115 @@ export async function registerGmA(steps, h) {
       out[mode] = rec;
       check(rm.removed && d.mismatches === 0, `item 4 (${mode}${mode === 'midmove' ? `, removed ${rec.movingAt + 1} ticks into a toggle (moving ${rec.gate2?.moving})` : ''}): Regions.remove E-flat ${d.mismatches} over the claim`, d.list.slice(0, 8));
       check(!rec.items.stacks, `item 4 (${mode}): no item dropped by the removal (${json(rec.items)})`);
+      await L.leaveWorld();
+    }
+    spendZero();
+    return out;
+  };
+
+  // ------------------------------------------------------------------ gm-survival (GM-a2, §10 item 6 under §16 item 1; the verifier re-runs it)
+
+  const SURV_CASES = [
+    // [fixture, tag, stub roof row, kind, expect]: a slide with its sensor (the design leaves the reserved cells empty: the roof fill is
+    // billed), the portcullis roofed above depth + 7 (levers-only: no sensor billed), a swing (one exact case)
+    ['gm_castle_slide', 'sv-slide', 11, 'slide', { rung: 11, honour: true }],
+    ['gm_castle_13x7', 'sv-levers', 16, 'portcullis', { leversOnly: true }],
+    ['gm_castle_swing', 'sv-swing', 9, 'swing', {}],
+  ];
+  const within = (b, cost) => Object.entries(b).every(([i, n]) => n >= (cost.bom.min[i] ?? 0) && n <= (cost.bom.max[i] ?? -1)) && Object.entries(cost.bom.min).every(([i, n]) => (b[i] ?? 0) >= n);
+
+  steps.survival = async () => {
+    await ensure();
+    await L.leaveWorld().catch(() => null);
+    const out = {};
+    const only = process.env.GM_SURVIVAL_ONLY ? new Set(process.env.GM_SURVIVAL_ONLY.split(',')) : null;
+    for (const [name, tag, roof, kind, want] of SURV_CASES) {
+      if (only && !only.has(tag)) continue;
+      const rec = {};
+      out[tag] = rec;
+      // the stub designs from a creative check (the artifact's lots), then the INSTANT twin, then the survival world
+      const c0 = await castle(name, { tag: `${tag}-d`, roof, realise: false });
+      const ids = await writeDesigns(c0.lots, { tag, roof, honour: !!want.honour });
+      await L.leaveWorld();
+      const fx = G.fixture(ctx, `gm/${name}`);
+      const entries = { ...fx.lotEntries, ...ids };
+      const T = await G.twin(ctx, `gm-${tag}`, fx, entries);
+      const c = await castle(name, { tag, roof, creative: false, realise: false });
+      const m = c.m;
+      const gl = c.gl;
+      rec.check = { overall: c.ck.check?.overall, survival: c.ck.check?.survival, cost: m?.cost ?? null, costRange: gl?.costRange ?? null, provisional: gl?.provisional ?? null };
+      check(c.ck.check?.survival === true && c.ck.check?.overall === 'READY' && m?.kind === kind && !!m?.cost?.bom, `${tag}: ${name} checks READY in survival; the gatehouse's ${kind} carries its provisional bill (mechanism.cost: ${json(m?.cost?.cells)} cells${m?.cost?.rare ? `, rare ${json(m.cost.rare)}` : ''})`);
+      if (gl?.provisional) check(Array.isArray(gl.costRange) && gl.costRange[0] >= m.cost.cells[0] && gl.costRange[1] >= m.cost.cells[1], `${tag}: the gatehouse lot's provisional range holds the mechanism (${json(gl.costRange)} over ${json(m.cost.cells)})`);
+      if (kind === 'slide') check(m.cost.rare?.['minecraft:slime_ball'] === 6, `${tag}: the bill names the slime (6 sticky pistons: ${json(m.cost.rare)})`);
+      if (!c.sha) { await L.leaveWorld(); continue; }
+      c.pre = await G.snap(ctx, c.box, `gm-${tag}-pre`);
+      const crates = await G.pile(ctx, c.s, 8);
+      await killMobs();
+      const cons = new G.Conservation(ctx, c.box);
+      await cons.start();
+      const region = await G.realise(ctx, c.sha, entries);
+      // phase A: feed everything but the mechanism's bill; the mechanism waits for the lot built, then for its bill (nothing of it written)
+      const lvl = gateCells(m).levers.length ? gateCells(m).levers : [m.triggers.find((t) => t.kind === 'lever').at];
+      const mechView = async () => (await call('dev.gm.state', { region, lot: 'gatehouse_1' }, 30_000)).mechanism ?? {};
+      const seen = { lot: false, stock: false, written: false, item: [] };
+      let bill = null;
+      const end = Date.now() + 5_400_000;
+      while (Date.now() < end) {
+        const st = await G.regionState(ctx, region);
+        if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await killMobs();
+        const v = await mechView();
+        bill ??= v.record?.bill ?? null;
+        const it = v.item ?? {};
+        if (it.status === 'WAITING' && /to be built/.test(it.message ?? '')) seen.lot = true;
+        if (it.status === 'WAITING' && /in the stockpile/.test(it.message ?? '')) { seen.stock = true; rec.stockWait = it.message; }
+        if (it.status !== 'PLACED' && it.status !== 'PLACING') for (const q of lvl) if (/lever/.test(await stateAt(...q))) seen.written = true;
+        if (seen.item.at(-1) !== `${it.status}:${(it.message ?? '').slice(0, 40)}`) seen.item.push(`${it.status}:${(it.message ?? '').slice(0, 40)}`);
+        if (seen.stock || ['PLACED', 'FAILED', 'PARTIAL'].includes(st.view.state)) break;
+        const ps = await G.pileState(ctx);
+        const need = {};
+        for (const [i, n] of Object.entries(ps.outstanding ?? {})) {
+          const lack = n - (ps.stock?.[i] ?? 0) - (bill?.[i] ?? 0);
+          if (lack > 0) need[i] = lack;
+        }
+        if (Object.keys(need).length) await cons.insert(`stockpile:${G.OWNER}`, need);
+        await L.sleep(3000);
+      }
+      rec.hold = { ...seen, bill };
+      check(seen.lot && seen.stock && !seen.written, `${tag}: the mechanism is held (§16 item 1): it waits for the gatehouse to be built, then for its whole bill (${(rec.stockWait ?? '').slice(0, 160)}), nothing of it written meanwhile`, seen);
+      // phase B: the rest fed; the bill charged at once, the mechanism written
+      const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
+      const st = f.last.st;
+      rec.state = st.view.state;
+      check(st.view.state === 'PLACED', `${tag}: fed and built in survival: ${st.view.state} (${f.waves} waves)`);
+      const v = await mechView();
+      const rep = await report(region);
+      rec.mech = { record: v.record, built: v.built, cells: v.cells, report: rep };
+      const charged = v.record?.charged ?? null;
+      check(!!charged && G.same(charged, v.record?.bill) && G.same(charged, rep?.bom), `${tag}: charged = the bill at bind (the region's report bom) item for item: ${json(G.minus(charged, rep?.bom))}`);
+      check(!!charged && G.same(charged, v.built), `${tag}: the built mechanism (its cells read from the world) = what was charged, item for item (${json(G.minus(v.built, charged))})`);
+      check(!!charged && within(charged, m.cost), `${tag}: the exact bill lies in the check's provisional range (mechanism.cost.bom min..max)`);
+      if (want.leversOnly) check(rep?.deviation === 'mechanism.sensor' && !charged?.['minecraft:daylight_detector'], `${tag}: levers-only: no sensor billed or written (${json(rep)})`);
+      if (want.rung) check(rep?.roof === c.gl.onWall.floorY + want.rung && charged?.['minecraft:daylight_detector'] === 1 && (!want.honour || (rep?.fill ?? 0) >= 1), `${tag}: the sensor at row ${want.rung} billed; the roof fill billed (${rep?.fill ?? 0} cells)`);
+      const p1 = await cons.point('built');
+      rec.consBuilt = p1;
+      check(G.exact(p1), `${tag}: conservation exact after the build (the mechanism's charge standing): ${json(p1.diff)}`);
+      const d = await G.twinDiff(ctx, T.box, T.file, crates);
+      rec.twin = d;
+      check(d.mismatches === 0, `${tag}: the survival build equals its INSTANT twin cell for cell (the crates aside): ${d.mismatches} differ`, d.list);
+      // removal with the gate closed (the leaves out in the lanes): the refund is the charge, exactly; E-flat 0; nothing dropped
+      if (kind !== 'swing') { await flipW(lvl[0]); rec.closed = await readGate(m); }
+      await cmd('/kill @e[type=minecraft:item]');
+      const rm = await G.remove(ctx, region);
+      const e = await G.diff(ctx, c.box, c.pre);
+      const ef = e.list.filter((q) => !crates.some((k) => k.join(',') === q.pos));
+      const sv = (await G.rsState(ctx, region).catch(() => ({}))).record?.mech?.gatehouse_1 ?? null;
+      const p2 = await cons.point('removed');
+      const it1 = await items(...c.gl.onWall.passage.front, 24);
+      rec.removal = { removed: rm.removed, eflat: ef.length, list: ef.slice(0, 8), refund: sv?.refund ?? null, cons: p2, items: { stacks: it1.stacks ?? 0, items: it1.items ?? null } };
+      check(rm.removed && ef.length === 0, `${tag}: Regions.remove${kind !== 'swing' ? ' (closed)' : ''}: E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
+      check(sv ? G.same(sv.refund, charged) : G.exact(p2), `${tag}: the removal refunds the mechanism's charge exactly (${sv ? json(G.minus(sv.refund, charged)) : 'the record gone: conservation decides'})`);
+      check(G.exact(p2), `${tag}: conservation exact after the removal (every item back in the stockpile): ${json(p2.diff)}`);
+      check(!rec.removal.items.stacks, `${tag}: no item dropped (${json(rec.removal.items)})`);
       await L.leaveWorld();
     }
     spendZero();
@@ -514,7 +719,7 @@ export async function registerGmA(steps, h) {
 
   steps.areport = async () => {
     const rows = ['| step | result | head |', '|---|---|---|'];
-    for (const s of ['unit', 'unchanged', 'ingame', 'undo', 'look']) {
+    for (const s of ['unit', 'unchanged', 'ingame', 'undo', 'survival', 'look']) {
       const f = path.join(OUT, `${s}.json`);
       if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
       const j = JSON.parse(fs.readFileSync(f, 'utf8'));

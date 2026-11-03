@@ -207,8 +207,8 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
  * over the passage at row 5 with a hall over it (windows), the crenellated top at row 10, a ladder up from the east room. Its front
  * face is closed but for the passage (rows 1..3), and its sides' outer halves too.
  */
-export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDoor = false, badFloor = false, palette = null, roof = null } = {}) {
-  const { W, D, outer, passage } = frameOf(lot);
+export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDoor = false, badFloor = false, palette = null, roof = null, honourReserved = false } = {}) {
+  const { W, D, outer, passage, reserved } = frameOf(lot);
   // ((7a GM) `roof`: the deck's row over the passage floor (the gate's sensor rung, CONTRACT GM §15); default the K3 stub's 9)
   const topY = roof === null ? 10 : roof + 1;
   const H = topY + 3;
@@ -272,6 +272,9 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
     const r = [[1, p0 - 2], [p1 + 2, W - 2]].filter(([a, b]) => b >= a).pop();
     if (r && !(lot.onWall?.passage?.mechanism && Math.abs(r[1] - ((p0 + p1) >> 1)) <= 5)) { bp.air(r[1], topY, 1); bp.ladder(r[1], 1, topY, topY, 'south'); }
   }, { roof: 'flat' });
+  // ((7a GM-a2) `honourReserved`: the design leaves every reserved cell of a mechanism's envelope empty, as the brief asks (the staircase
+  // too), so its deck has a hole wherever a rung crosses it: the realise's roof fill closes them, CONTRACT GM §16 item 3)
+  if (honourReserved && reserved) bp.part('reserved', () => { for (const [u, y, v] of reserved) bp.air(u, y + 1, v); });
   bp.spot('entrance', (W - 1) >> 1, D - 1, 180, { y: 1 });
   bp.spot('spawn', (W - 1) >> 1, D - 2, 180, { y: 1 });
   return bp;

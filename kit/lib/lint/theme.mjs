@@ -49,7 +49,9 @@ export function themeOffenders(ir, vw) {
     const w = l.mechanismWrite;
     if (!w?.palette) continue;
     const used = new Map();
-    for (const flat of [w.base ?? [], ...(w.rungs ?? []).map((g) => g.cells ?? [])]) for (let i = 0; i + 3 < flat.length; i += 4) {
+    // ((7a GM-a2, §16 item 3) and the roof fill's block, judged as one cell at the first rung's sensor)
+    const fill = Number.isInteger(w.fill) && w.rungs?.[0]?.sensor ? [...w.rungs[0].sensor, w.fill] : [];
+    for (const flat of [w.base ?? [], ...(w.rungs ?? []).map((g) => g.cells ?? []), fill]) for (let i = 0; i + 3 < flat.length; i += 4) {
       const b = nameOf(w.palette[flat[i + 3]]);
       cells++;
       if (!memo.has(b)) memo.set(b, traceRole(b, roles, { lightFixture: light }));

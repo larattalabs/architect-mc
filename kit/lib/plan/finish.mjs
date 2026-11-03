@@ -154,7 +154,10 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       const prov = pending || !entry;
       const [x0, y0, z0, x1, y1, z1] = l.box;
       const cols = (x1 - x0 + 1) * (z1 - z0 + 1);
-      const band = [cols * PROVISIONAL_BAND[0], cols * PROVISIONAL_BAND[1]];
+      // ((7a GM-a2, §16 item 1) a gatehouse's gate mechanism is billed inside its lot's range: the realise writes it with the lot, its rung
+      // (and so its exact bill) picked at bind; `mechanism.cost.cells` is its [lo, hi], realiseApproved counts the bound mechanism the same way)
+      const mc = pc.wallLots?.[l.id]?.onWall?.passage?.mechanism?.cost?.cells;
+      const band = [cols * PROVISIONAL_BAND[0] + (mc?.[0] ?? 0), cols * PROVISIONAL_BAND[1] + (mc?.[1] ?? 0)];
       const m = pc.lotMeta?.[l.id] ?? {};
       lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}), ...(pc.wallLots?.[l.id] ? pc.wallLots[l.id] : {}) });
       if (prov) { lo += band[0]; hi += band[1]; }

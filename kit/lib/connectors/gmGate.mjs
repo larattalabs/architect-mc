@@ -13,6 +13,7 @@
 //   GM_KINDS, gmKindOf(v)                    the kinds; the lenient reading of params.mechanism / params.gate_mech on a wall
 import { gateLayout, settleLayout, swingCells, gmToWorld, gmBoxFits, GM_BOX_MIN } from './gmCircuit.mjs';
 import { shapeOf } from './style.mjs';
+import { bomOf } from './bom.mjs';
 
 const W = 'minecraft:';
 export const GM_KINDS = Object.freeze(['portcullis', 'slide', 'swing']);
@@ -116,7 +117,7 @@ export function mechanismPlan(kind, { depth, mats } = {}) {
     const m = new Map(cells.map(([u, d, r, s]) => [k3(u, d, r), s]));
     const at = (u, d, r) => m.get(k3(u, d, r));
     const fixed = cells.map(([u, d, r, s]) => [u, d, r, connected(s, at, u, d, r)]).sort((a, b) => gmRank(a[3]) - gmRank(b[3]));
-    return { kind, rest: 'closed', dayDriven: false, depth, base: fixed, rungs: [], levers: [], envelope: cells.map(([u, d, r]) => [u, d, r]),
+    return { kind, rest: 'closed', dayDriven: false, depth, structure: M.structure, base: fixed, rungs: [], levers: [], envelope: cells.map(([u, d, r]) => [u, d, r]),
       states: { closed: [[-1, 1, 0], [-1, 1, 1], [1, 1, 0], [1, 1, 1]], open: [[-1, 1, 0], [-1, 1, 1], [1, 1, 0], [1, 1, 1]] },
       triggers: [{ kind: 'button', at: [0, 0, 1], side: 'front', who: 'player' }, { kind: 'lever', at: [0, 2, 1], side: 'back', who: 'player' }, { kind: 'plate', at: [-1, 2, 0], side: 'back', who: 'anyone' }] };
   }
@@ -147,10 +148,43 @@ export function mechanismPlan(kind, { depth, mats } = {}) {
     return { roof: p.R, sensor: p.sensor, cells: cells.sort(order) };
   });
   const lane = (u) => [0, 1, 2].map((r) => [u, 1, r]);
-  return { kind, rest: 'open', dayDriven: true, depth, base: baseCells, rungs, levers: [], envelope: [...all].map((key) => key.split(',').map(Number)),
+  return { kind, rest: 'open', dayDriven: true, depth, structure: M.structure, base: baseCells, rungs, levers: [], envelope: [...all].map((key) => key.split(',').map(Number)),
     rungKeys: rungKeys.map((key) => key.split(',').map(Number)),
     states: { open: [...lane(-2), ...lane(2)], closed: [...lane(-1), ...lane(1), ...lane(-2), ...lane(2)] },
     triggers: [{ kind: 'lever', at: [-1, 0, 2], side: 'front', who: 'player' }, { kind: 'lever', at: [1, depth - 1, 2], side: 'back', who: 'player' }, { kind: 'daylight', at: per[0].sensor, rungs: per.map((p) => p.sensor), side: 'roof', who: 'sky' }] };
+}
+
+/**
+ * (7a GM-a2, §16 item 1) The mechanism's provisional bill: what the realise can write once the rung is picked at bind (exact then), as a
+ * range over every case. `cells` [lo, hi]: its non-air cells; `bom` {min, max}: per item, the least and the most any case takes (C26's
+ * rules, kit/lib/connectors/bom.mjs, the same as the mod's SurvivalItems); `rare`: §8's raw items for planning. The cases: levers-only (the base), each rung R with no roof
+ * fill, each rung R with every unwritten rung cell at or above R filled with the structure block (§16 item 3's upper bound). A swing has
+ * one case. Pure.
+ */
+export function gmCost(plan) {
+  const nonAir = (cells) => cells.filter((c) => !/(^|:)(cave_|void_)?air$/.test(base(c[3]))).length;
+  const cases = [plan.base];
+  for (const g of plan.rungs ?? []) {
+    cases.push([...plan.base, ...g.cells]);
+    const left = (plan.rungKeys?.length ?? 0) - g.cells.length;
+    cases.push([...plan.base, ...g.cells, ...Array.from({ length: Math.max(0, left) }, () => [0, 0, 0, plan.structure])]);
+  }
+  const boms = cases.map((c) => bomOf(c.map((x) => x[3])));
+  const items = [...new Set(boms.flatMap((b) => Object.keys(b)))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const min = {}, max = {};
+  for (const i of items) {
+    const v = boms.map((b) => b[i] ?? 0);
+    if (Math.min(...v) > 0) min[i] = Math.min(...v);
+    max[i] = Math.max(...v);
+  }
+  const n = cases.map(nonAir);
+  // (§8 "Rare items": the raw items the crafted parts need, at most, so a stockpile can plan: a slime ball per sticky piston, nether quartz
+  // per comparator and observer and 3 per daylight sensor)
+  const rare = {};
+  if (max['minecraft:sticky_piston']) rare['minecraft:slime_ball'] = max['minecraft:sticky_piston'];
+  const q = (max['minecraft:comparator'] ?? 0) + (max['minecraft:observer'] ?? 0) + 3 * (max['minecraft:daylight_detector'] ?? 0);
+  if (q) rare['minecraft:quartz'] = q;
+  return { cells: [Math.min(...n), Math.max(...n)], bom: { min, max }, ...(Object.keys(rare).length ? { rare } : {}) };
 }
 
 /**
@@ -181,9 +215,11 @@ export function flatRunsOf(cells) {
 /**
  * The passage's mechanism (§5): the artifact record and the IR's write data, in the world. `at`: gmToWorld's placement (the passage's centre
  * column on the front face row, floorY, the passage's facing); `toFrame(x, y, z)` -> [u, y, v] the lot frame. Returns {record, write}:
- *   record {kind, rest, width: 3, dayDriven, cells, lotCells, triggers: [{kind, at, side, who}], states: {open, closed}, brief}
+ *   record {kind, rest, width: 3, dayDriven, cells, lotCells, triggers: [{kind, at, side, who}], states: {open, closed}, brief, cost}
+ *          (cost: gmCost's provisional range, exact at bind: §16 item 1)
  *   write  {palette: [state], base: [x, y, z, i, ...], rungs: [{roof, sensor: [x, y, z], beside: [x, y, z, x, y, z] (the roof cells
- *          either side of the sensor across the passage: the bind rule), cells: [x, y, z, i, ...]}]}  (realise order)
+ *          either side of the sensor across the passage: the bind rule), cells: [x, y, z, i, ...]}], fill: i (the roof fill's
+ *          palette index, §16 item 3; the sliding kinds only)}  (realise order)
  */
 export function gmRecord(plan, rest, at, toFrame) {
   const W3 = (c) => gmToWorld(c, at);
@@ -192,6 +228,9 @@ export function gmRecord(plan, rest, at, toFrame) {
   const idx = (s) => { let i = pi.get(s); if (i === undefined) { i = pal.length; pal.push(s); pi.set(s, i); } return i; };
   const flat = (cells) => cells.flatMap((c) => { const [x, y, z, s] = W3(c); return [x, y, z, idx(s)]; });
   const write = { palette: pal, base: flat(plan.base), rungs: plan.rungs.map((g) => ({ roof: g.roof, sensor: W3([...g.sensor, null]).slice(0, 3), beside: [-1, 1].flatMap((du) => W3([g.sensor[0] + du, g.sensor[1], g.sensor[2], null]).slice(0, 3)), cells: flat(g.cells) })) };
+  // ((7a GM-a2, §16 item 3) the roof fill's block: the structure role's, which the realise writes on a rung cell at or above the bound
+  // roof that the design left empty with the design's roof beside it across the passage)
+  if (plan.rungs.length) write.fill = idx(plan.structure);
   const tw = (c) => W3([...c, null]).slice(0, 3);
   const triggers = plan.triggers.map((t) => ({ kind: t.kind, at: tw(t.at), ...(t.rungs ? { rungs: t.rungs.map(tw) } : {}), side: t.side, who: t.who }));
   const record = {
@@ -200,6 +239,7 @@ export function gmRecord(plan, rest, at, toFrame) {
     triggers, states: { open: flatRunsOf(plan.states.open.map(tw)), closed: flatRunsOf(plan.states.closed.map(tw)) },
     ...(plan.rungKeys ? { rungs: flatRunsOf(plan.rungKeys.map(tw)) } : {}),
     brief: gmBrief(plan.kind, plan.depth),
+    cost: gmCost(plan),
   };
   return { record, write };
 }

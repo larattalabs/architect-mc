@@ -19,6 +19,19 @@ public final class SliceRsDev {
 	}
 
 	public static void init() {
+		DevBridge.register("dev.gm.state", 30_000, "{region?, lot?} - (7a GM-a2) gate mechanisms: gateByHead (restores that found a gate mechanism by "
+			+ "its journal head, with no record); with region and lot, its survival record, site, cells and what stands of it (built, uncapped)", (req,
+				mc) -> ServerTasks.callOnServer(s -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("gateByHead", dev.larattalabs.architect.site.SiteJournal.GATE_BY_HEAD.get());
+					if (req.get("region") != null && req.get("lot") != null) {
+						JsonObject v = dev.larattalabs.architect.site.MechCharges.view(s, req.get("region").getAsString(), req.get("lot").getAsString());
+						if (v != null) {
+							o.add("mechanism", v);
+						}
+					}
+					return o;
+				}));
 		DevBridge.register("dev.rs.state", 60_000, "{region} - (6c RS) a survival region's build (built, done, percent, outstanding, parts with their "
 			+ "targets), its record's survival member, every target's runs (cells, built, held, runs, maxRunStacks, capStacks, currentRun, reserving), "
 			+ "the world's mode, the free-drop and rescan counters", (req, mc) -> {

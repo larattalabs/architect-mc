@@ -46,9 +46,20 @@ public final class GateMech {
 	 * @param roof the sensor's roof row (world y), or null (levers-only)
 	 * @param sensor the sensor's cell {@code [x, y, z]}, or null
 	 */
-	public record Plan(long[] positions, BlockState[] states, @Nullable Integer roof, int @Nullable [] sensor) {
+	public record Plan(long[] positions, BlockState[] states, @Nullable Integer roof, int @Nullable [] sensor, int filled, java.util.SortedMap<String, Integer> bill) {
+		public Plan(long[] positions, BlockState[] states, @Nullable Integer roof, int @Nullable [] sensor) {
+			this(positions, states, roof, sensor, 0, billOf(states));
+		}
+
 		public boolean leversOnly() {
 			return sensor == null;
+		}
+
+		/** (7a GM-a2) The bill's report value {@code {item: n}}, items in code-point order. */
+		public JsonObject billJson() {
+			JsonObject o = new JsonObject();
+			bill.forEach(o::addProperty);
+			return o;
 		}
 
 		/** The report: {@code {roof, sensor}} or {@code {deviation: mechanism.sensor}}. */
@@ -58,6 +69,11 @@ public final class GateMech {
 				o.addProperty("kind", kind);
 			}
 			o.addProperty("cells", positions.length);
+			// ((7a GM-a2, §16 items 1 and 3) the exact bill at bind, and the roof cells it fills)
+			o.add("bom", billJson());
+			if (filled > 0) {
+				o.addProperty("fill", filled);
+			}
 			if (sensor != null) {
 				o.addProperty("roof", roof);
 				JsonArray a = new JsonArray();
@@ -84,6 +100,14 @@ public final class GateMech {
 			o.add("cells", flat);
 			return o;
 		}
+	}
+
+	/**
+	 * (7a GM-a2, §16 item 1) What written states cost in survival (C26's rules, {@code Cells.cost}: a piston head and a moving piston nothing,
+	 * a wall torch its standing item, air nothing), summed per item.
+	 */
+	public static java.util.SortedMap<String, Integer> billOf(BlockState[] states) {
+		return dev.larattalabs.architect.site.MechCharges.billOf(states);
 	}
 
 	/** The IR lot's write data, or null (no mechanism). */
@@ -184,6 +208,7 @@ public final class GateMech {
 			sensor = new int[] {s.get(0).getAsInt(), s.get(1).getAsInt(), s.get(2).getAsInt()};
 			roof = sensor[1];
 		}
+		int filled = rung >= 0 ? fill(write, d, pal, roof, out) : 0;
 		long[] pos = new long[out.size()];
 		BlockState[] st = new BlockState[out.size()];
 		int i = 0;
@@ -191,7 +216,44 @@ public final class GateMech {
 			pos[i] = en.getKey();
 			st[i++] = en.getValue();
 		}
-		return new Plan(pos, st, roof, sensor);
+		return new Plan(pos, st, roof, sensor, filled, billOf(st));
+	}
+
+	/**
+	 * (7a GM-a2, CONTRACT GM §16 item 3, as built) The roof fill: every rung cell the picked rung does not write, at or above the bound roof
+	 * row, that the design left empty and that has a design block beside it across the passage (the roof course it is a hole in, the bind
+	 * rule's {@code beside} test) gets the structure block ({@code fill}, the palette's), after the rest. A cell with nothing of the design
+	 * beside it (above a flat roof, open sky) stays as the design left it: the fill closes holes, it never adds a bump. Returns how many.
+	 */
+	static int fill(JsonObject write, Design d, List<BlockState> pal, int roof, java.util.Map<Long, BlockState> out) {
+		if (!(write.get("fill") instanceof JsonPrimitive fp) || !(write.get("rungs") instanceof JsonArray rungs) || rungs.isEmpty()) {
+			return 0;
+		}
+		int fi = fp.getAsInt();
+		BlockState fs = fi >= 0 && fi < pal.size() ? pal.get(fi) : null;
+		if (fs == null || !(rungs.get(0) instanceof JsonObject g0) || !(g0.get("beside") instanceof JsonArray b) || b.size() != 6) {
+			return 0;
+		}
+		// the across-passage step from the beside cells (sensor - du, sensor + du)
+		int dx = (b.get(3).getAsInt() - b.get(0).getAsInt()) / 2, dy = (b.get(4).getAsInt() - b.get(1).getAsInt()) / 2, dz = (b.get(5).getAsInt() - b.get(2)
+			.getAsInt()) / 2;
+		java.util.TreeSet<Long> cand = new java.util.TreeSet<>();
+		for (JsonElement ge : rungs) {
+			if (ge instanceof JsonObject g && g.get("cells") instanceof JsonArray flat) {
+				for (int i = 0; i + 3 < flat.size(); i += 4) {
+					int x = flat.get(i).getAsInt(), y = flat.get(i + 1).getAsInt(), z = flat.get(i + 2).getAsInt();
+					long p = BlockPos.asLong(x, y, z);
+					if (y >= roof && !out.containsKey(p) && !d.solid().contains(p) && (d.solid().contains(BlockPos.asLong(x + dx, y + dy, z + dz)) || d.solid()
+						.contains(BlockPos.asLong(x - dx, y - dy, z - dz)))) {
+						cand.add(p);
+					}
+				}
+			}
+		}
+		for (long p : cand) {
+			out.put(p, fs);
+		}
+		return cand.size();
 	}
 
 	private static List<BlockState> palette(JsonObject write) {

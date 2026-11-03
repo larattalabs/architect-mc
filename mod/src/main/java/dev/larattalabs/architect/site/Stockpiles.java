@@ -732,6 +732,8 @@ public final class Stockpiles {
 		}
 		// (6c RS) a survival region's bodies' pending charge (lava buckets, grates' iron bars) is needed too
 		dev.larattalabs.architect.region.RegionFluids.pendingCharges(p.owner).values().forEach(m -> m.forEach((k, v) -> out.merge(k, v, Integer::sum)));
+		// (7a GM-a2) and its gate mechanisms' bills not yet charged
+		MechCharges.pendingCharges(p.owner).values().forEach(m -> m.forEach((k, v) -> out.merge(k, v, Integer::sum)));
 		return out;
 	}
 
@@ -1340,6 +1342,11 @@ public final class Stockpiles {
 			byT.put(id, new TreeMap<>(m));
 			m.forEach((k, v) -> total.merge(k, v, Integer::sum));
 		});
+		// (7a GM-a2) a survival region's gate mechanism's bill: its own outstanding ({region}:mech:{lot}), until it is charged
+		MechCharges.pendingCharges(p.owner).forEach((id, m) -> {
+			byT.put(id, new TreeMap<>(m));
+			m.forEach((k, v) -> total.merge(k, v, Integer::sum));
+		});
 		// C25 per target (Y2's SiteWaits, fed by this stockpile's supply)
 		Map<String, dev.larattalabs.architect.api.SiteWait> waits = new LinkedHashMap<>();
 		for (String id : byT.keySet()) {
@@ -1615,6 +1622,14 @@ public final class Stockpiles {
 			JsonObject fo = new JsonObject();
 			fluids.forEach(fo::addProperty);
 			o.add("fluidStanding", fo);
+		}
+		// (7a GM-a2) a survival region's charged gate mechanisms as they stand
+		Map<String, Integer> mech = MechCharges.standing(srv, owner);
+		if (!mech.isEmpty()) {
+			mech.forEach((k, v) -> paid.merge(k, v, Integer::sum));
+			JsonObject mo = new JsonObject();
+			mech.forEach(mo::addProperty);
+			o.add("mechStanding", mo);
 		}
 		o.add("paidStanding", Builder.counts(paid));
 		o.add("paidByTarget", byTarget);
