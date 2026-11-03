@@ -26312,6 +26312,20 @@ the drawbridge 20 cycles with the moat restored exactly, and the rest states as 
 6. **The drawbridge deck is at most 2 wide.** A middle row of trapdoors has nothing beside it to power it. Each cell takes a sleeper and
    two repeaters a side, and the deck sits above the water. Two cells is enough for a player and a villager.
 
+### 14. Room for the logic (coordinator, 2026-11-03; binding, it wins over §13 items 3 and 4)
+
+Step 1b (slice/GM c1d50b4c, HANDOFF-GM "Step 1b fit analysis") found no hidden layout for the gate and the day-cycle logic in 11 x 5 x 9.
+In a box 5 deep, `d = 4` is the inner face, so §13's planes `d = 2..4` were wrong; the hidden volume above the lintel is only 108 cells,
+and the feed, detectors and gate line already use much of it. Steward's mechanism-sized gatehouses are 13 x 11 and 17 x 15, so the
+minimum grows to fit a comfortable layout rather than a searched one.
+
+1. **Box minimum for a mechanism: 13 x 7 x 10.** A smaller box gets the plain passage and the deviation `what: mechanism`, as in §4.
+2. **The logic block** is u in [-6, 6], `d = 1..depth-2`, rows lintelY+1..lintelY+5, less the feed, the detectors and the gate line.
+   That is hidden from both faces in any box at or above the minimum. It joins the reserved envelope; its exact cells are gmCircuit's.
+3. **Timing:** use the step 1b rule. With latch delay 2, the gap `a` between unlock start and data-valid start is 1 to 3 on every path.
+   Dusk takes lock delay 1, with B1 fed 2 ticks after B2, so both paths sit at a = 2. The proof is as in §13 item 5, in a 13 x 7 x 10 box
+   and in 13 x 11 and 17 x 15 ones.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
