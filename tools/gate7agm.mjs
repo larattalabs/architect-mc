@@ -740,7 +740,9 @@ steps.settled = async () => {
     cells.push([0, 2, 5, `${W_}stone`], [0, 2, 6, `${W_}lever[face=floor,facing=north,powered=false]`]);
     await gatehouse(X, F, Z, `${W_}stone`, cells);
     await L.gameWait(2000, { real: L.settle, label: 'settle' });
-    const open = local(await gateBox(X, F, Z), keys);
+    const b0 = await gateBox(X, F, Z);
+    log(`  ${kind} built:\n${draw(b0, X, F, Z, [0, 1, 2])}`);
+    const open = local(b0, keys);
     await flip([X, F + 6, Z + 2]); await L.gameWait(2000, { real: L.settle, label: 'closed' });
     const closed = local(await gateBox(X, F, Z), keys);
     await flip([X, F + 6, Z + 2]); await L.gameWait(2000, { real: L.settle, label: 'open again' });
