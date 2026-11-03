@@ -185,6 +185,15 @@ public interface ArchitectApi {
 	 * massing whose footprint is exactly the box (x and z; else the round fails and is repaired) and a detail pass capped by the box
 	 * (not the massing's size + 2), so the detail can fill the box and close the wall. Other requests are unchanged. No new record,
 	 * method or reason.
+	 * Since NEXT (7a GM), a GM helper ({@code region.walls.mechanisms}) adds {@code "gateMechanisms"}: a gate lot on a wall's line
+	 * ({@code connector.wall.lots[]}) may name {@code mech} ({@code portcullis}, the split sliding grate and the default; {@code slide};
+	 * {@code swing}) and {@code rest}. In a box at least 13 along the wall, 7 through it and 10 high its passage gets the mechanism: the
+	 * artifact's {@code lots[].onWall.passage.mechanism {kind, rest, width, dayDriven, cells, lotCells, triggers, states, rungs, brief}},
+	 * its envelope merged into {@code onWall.passage.lotCells} (the lot's reserved cells), the graph's {@code pg_<lot>} {@code state},
+	 * {@code closesAtNight} and {@code mechanism}; a smaller box keeps the plain passage with the deviation {@code mechanism}, refused
+	 * {@code NO_ROOM} on a required wall. {@link Regions#realiseApproved} picks the daylight sensor's rung from the bound design (no
+	 * sky-exposed rung: levers only, the lot site's {@code architect_mc:gateMechanism} deviation {@code mechanism.sensor}) and writes the
+	 * mechanism as the region's cells after the lot (the design's blocks there dropped). No new record, method or reason.
 	 * Since 1.44.0 (7a GJ), a GJ helper ({@code region.plan.gateJoin}) adds {@code "gateJoins"}: where a district's join (a {@code beside}
 	 * plan, {@code checkBeside}, plan/0's {@code endpoint.region}) would answer {@code NO_JOIN [wall]}, it crosses one standing gate of the
 	 * town's wall or of a wall region round the town (open or a wooden door; a fence gate is skipped for a villager join), never writing

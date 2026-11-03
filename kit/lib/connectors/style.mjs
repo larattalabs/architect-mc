@@ -118,7 +118,14 @@ export const UNTHEMED_OK = Object.freeze(new Set(['minecraft:air', 'minecraft:ca
   'minecraft:iron_bars', 'minecraft:iron_door', 'minecraft:iron_trapdoor',
   // (7a LF) a lift's column: the bubble column is its water (a source the column carries a rider in), soul sand the only block that makes
   // an up column and magma the only one that makes a down column (vanilla 26.3's BubbleColumnBlock): no role can stand in for them
-  'minecraft:bubble_column', 'minecraft:soul_sand', 'minecraft:magma_block']));
+  'minecraft:bubble_column', 'minecraft:soul_sand', 'minecraft:magma_block',
+  // (7a GM, CONTRACT GM §3, gm-probe's set) a gate mechanism's functional parts, none of which a role can stand in for: the lever (the
+  // only toggle a mob cannot flip, its colour fixed); the sticky piston, its head and the moving piston (the drive and its own parts:
+  // the realise writes a head only with an extended base, a moving piston never, but live dumps read them); dust and the repeater (the
+  // bus and its delays); the daylight sensor and the observer (dawn and dusk, the lever detectors' edges); the redstone torch, its wall
+  // torch and the comparator (the latch of §2a: gateLayout's T1, T2, T5 hang on blocks as wall torches)
+  'minecraft:lever', 'minecraft:piston', 'minecraft:sticky_piston', 'minecraft:piston_head', 'minecraft:moving_piston', 'minecraft:redstone_wire',
+  'minecraft:repeater', 'minecraft:daylight_detector', 'minecraft:observer', 'minecraft:redstone_torch', 'minecraft:redstone_wall_torch', 'minecraft:comparator']));
 const SHAPES = Object.freeze(['slab', 'stairs', 'wall', 'fence', 'fence_gate', 'door', 'trapdoor', 'pressure_plate', 'button']);
 /**
  * The role a block traces to (Noah: "everything should be themed"): the role whose block, or one of whose shape variants (slab,

@@ -154,8 +154,43 @@ public final class WallLotCheck {
 			if (r.why() != null) {
 				return r.why();
 			}
+			String env = envelopeProblem(idp.getAsString(), w.wall(), l, box);
+			if (env != null) {
+				return env;
+			}
 		}
 		return null;
+	}
+
+	/**
+	 * (7a GM-a, CONTRACT GM §9) A gatehouse lot's gate mechanism at bind: its envelope ({@code onWall.passage.mechanism.cells}) must lie
+	 * in the lot's box, which must be at least 13 along the wall (the passage's facing across). The refusal names the lot, the wall and up
+	 * to {@link #LISTED} cells; null when it holds or the lot has no mechanism. Pure.
+	 */
+	static @Nullable String envelopeProblem(String lotId, String wall, JsonObject lot, Anchors.Bounds box) {
+		if (!(lot.get("onWall") instanceof JsonObject w) || !(w.get("passage") instanceof JsonObject p) || !(p.get("mechanism") instanceof JsonObject m)
+			|| !(m.get("cells") instanceof JsonArray c)) {
+			return null;
+		}
+		String facing = p.get("facing") instanceof JsonPrimitive fp && fp.isString() ? fp.getAsString() : "south";
+		int along = facing.equals("north") || facing.equals("south") ? box.maxX() - box.minX() + 1 : box.maxZ() - box.minZ() + 1;
+		if (along < 13) {
+			return "lot " + lotId + " on wall " + wall + ": the mechanism envelope needs a box 13 along the wall (this one is " + along + ")";
+		}
+		int[] runs = LotMask.flatRuns(c);
+		List<String> out = new ArrayList<>();
+		int n = 0;
+		for (int i = 0; i + 3 < runs.length; i += 4) {
+			for (int y = runs[i + 2]; y <= runs[i + 3]; y++) {
+				if (runs[i] < box.minX() || runs[i] > box.maxX() || runs[i + 1] < box.minZ() || runs[i + 1] > box.maxZ() || y < box.minY() || y > box.maxY()) {
+					if (n++ < LISTED) {
+						out.add(runs[i] + "," + y + "," + runs[i + 1]);
+					}
+				}
+			}
+		}
+		return n == 0 ? null : "lot " + lotId + " on wall " + wall + ": the mechanism envelope leaves the box at " + String.join(" ", out) + (n > LISTED ? " ..." : "")
+			+ " (" + n + " cells)";
 	}
 
 	/** An artifact lot's box ({@code [minX, minY, minZ, maxX, maxY, maxZ]}, or the IR's object form), or null. */

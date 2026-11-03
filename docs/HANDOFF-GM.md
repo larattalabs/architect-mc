@@ -65,35 +65,37 @@ locked 1111111111111111111111111111111111100000000111111111111111111
 D      0000000000000000000000000000000001111111100000000000000000000
 ```
 
-## Decision needed before GM-a: the sensor and the design's roof
+## GM-a (CONTRACT GM §10 items 1-4, 6-8 under §12-§15; main 283b7bd4 merged): IN PROGRESS
 
-`gateLayout` puts the sensor in the roof at (-4, 1 + (R - 10), R) and climbs to it one plane per row. Two things follow that the contract
-does not settle:
-- **A new bound.** A day-driven gate needs R <= 10 + depth - 3: 14 in the minimum box, 22 in a 15-deep one. §14 has no such bound.
-- **The run depends on the design's roof row.** The envelope is reserved and forwarded to Steward before the design exists, so §2a/§4's
-  "the design gives a sky-exposed cell" and "the run is reserved" cannot both hold for a roof above row 10. §9's height check cannot run at
-  plan time either: K3's sited lots are 40 high, so the real check is the bound design's roof, at bind.
+§15 settled the sensor question (option (b) plus item 6's roof cap). The design GM-a builds, so a restart can resume:
 
-Options:
-- **(a) A fixed sensor cell at the minimum roof**, (-4, 1, 10). If it is not sky-exposed at bind, the gate is levers-only with deviation
-  `mechanism.sensor`. No extra cells, but most taller gatehouses lose the day cycle. The realise must then write no sensor at all: an
-  inverted sensor indoors reads 15, and its first S edge would latch the gate closed.
-- **(b) Reserve the staircase** for roof rows 10..10 + (depth - 3), about 2 (depth - 2) cells, and pick the sky-exposed rung at bind. This
-  needs a brief rule so that the design keeps those roof cells.
-- **(c) A plan or brief member that fixes the roof row.**
+**Kit (plan time)** `kit/lib/connectors/gmGate.mjs`, wired in `wallLots.mjs` finishLot and `wall.mjs`:
+- opt-in only: `mech` (and `rest`) on a `connector.wall.lots[]` entry, or the lenient `params.mechanism` / `params.gate_mech` on a wall
+  without `lots` (every gate lot). Every recorded plan is unchanged (no recorded wall names one).
+- box check `gmBoxFits` (13 along x 7 through x 10 high): short -> the plain K3 passage, deviation `{what: mechanism, kind, lot, need,
+  side}`; an explicit `mech` on a `required` wall is refused `NO_ROOM {kind: mechanism, lot, need, side}`. pw is 3 when it fits.
+- `mechanismPlan(kind, {depth, mats})`: gateLayout for every roof row R in 10..depth+7, each settled (settleLayout; leaves' connections
+  settled assuming the design's cells solid). **base** = the cells equal in every R; **rungs[R]** = R's run (dust, blocks, cut air, the
+  inverted sensor) plus the structure block on every unused rung cell below R; rung cells at or above R are not written (the design's).
+  Levers-only = base alone (no sensor, no run). Write order = §7 item 2 (`gmRank`; observers with the structure).
+- `gmMatsOf(roles)`: structure = first full conductive block of structure, trim, foundation, then the other roles; the slide leaf the first
+  movable one; bars = the rail role's fence, else its wall, else iron_bars; button and plate the first role with that shape.
+- the record `onWall.passage.mechanism {kind, rest, width 3, dayDriven, cells, lotCells, triggers, states, rungs, brief}` (artifact and IR);
+  **the envelope's lotCells are unioned into `onWall.passage.lotCells`**, which is what Steward's `PPlan.reserved` forwards (zero Steward
+  change); `passage.cells` (the mask, the open lanes, vworld) is unchanged. The IR lot carries `mechanismWrite {palette, base, rungs:
+  [{roof, sensor, cells}]}` (world, flat `x, y, z, paletteIndex`).
+- graph `pg_<lot>`: `state`, `closesAtNight` (day-driven), `mechanism {kind, toggle: player}`, movers `[player]` when resting closed;
+  answer `geometry.wallLots[].passage.mechanism {kind, rest, who}`; siteplan walls[].lots[].passage.mechanism and the edge's members.
+- brief lines (`gmBrief`, five for the sliding kinds): §4's two word for word, §5's jamb line, §15 item 1's staircase, §15 item 6's roof cap.
 
-Recommendation: (b). It keeps the day cycle for every gatehouse up to the bound. The cost is one brief line and a short diagonal of
-reserved cells, which Steward forwards unchanged like the rest of the envelope.
+**Java (bind)**: realiseApproved's lot item reads `mechanismWrite`, picks the rung from the bound design (rule below), writes one region
+cells item after the lot (`mech:<lot>`, LAYER, journaled as the region's), masks the written cells from the design (LotMask key
+`architect_mc:mechanism`), and reports the sensor rung or the deviation `mechanism.sensor` on the lot site's ext.
 
-## GM-a: not started
-
-The groundwork in `gmCircuit.mjs`:
-- `mechanismCells(kind, {depth, height, rest})`: the cells per kind, gm frame;
-- `gmToWorld(cell, {cx, fy, cz, facing})`: a turn, never a mirror, with the states turned;
-- `GM_BOX_MIN` / `gmBoxFits`: 13 x 7 x 10, naming the short side;
-- `settleLayout`: the pure rest state, a fixed point.
-
-Unit tests cover all four. None is exercised by a realise yet. gm-fit compares `settleLayout` with the built rest state (the result is below).
+**The bind rule (§15 item 2):** for R = 10..depth+7, the candidate sensor cell is (-4, R-9, R) in the gm frame. R is the design's roof
+row over the sensor column when the design (fitted as the realise fits it) has a block at (-5, R-9, R) or (-3, R-9, R) (the roof beside
+the sensor) and nothing in the sensor's column above R inside the box; the lowest such R wins. The world above the box is the plan's
+(K3's pad keeps 40 clear over the floor), so it is not read. No R: levers-only, no sensor block, deviation `mechanism.sensor`.
 
 ## K3's orientation of a gatehouse lot (Steward's question, answered from the code)
 

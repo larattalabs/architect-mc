@@ -145,6 +145,7 @@ export function detectorCells(depth = 3) {
 }
 
 import { SETTLED } from './gmSettled.mjs';
+import { lint, DIRS as LINT_DIRS, OPP as LINT_OPP } from './gmLint.mjs';
 /** The settled rest state of a kind (§7 item 1): every dependent property as the probe read it back (dust shapes and power, pistons, doors). */
 export function settle(kind, rest = kind === 'swing' ? 'closed' : 'open') {
   const s = SETTLED[kind]?.[rest];
@@ -371,8 +372,8 @@ void CW;
  * a Map 'u,d,r' -> state for every redstone part (blocks, leaves and pistons keep gateLayout's states). gm-unit runs it twice (a fixed
  * point) and compares it with gm-fit's dump of a freshly built box.
  */
-export async function settleLayout(lay, { rest = 'open' } = {}) {
-  const { lint, DIRS: LD, OPP: LO } = await import('./gmLint.mjs');
+export function settleLayout(lay, { rest = 'open' } = {}) {
+  const LD = LINT_DIRS, LO = LINT_OPP;
   const m = new Map();
   for (const c of lay.cells.values()) m.set(`${c.u},${c.r},${c.d}`, c.lint);
   const solid = () => true; // the design's cells around: walls (the dust links only see the layout's own dust)

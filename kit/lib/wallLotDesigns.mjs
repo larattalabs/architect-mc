@@ -47,7 +47,11 @@ const runsToCells = (runs) => {
 /** The lot's frame: [W, D] and the outer faces' and passage's cells in it ([u, y (from the floor), v]). */
 export function frameOf(lot) {
   const ow = lot.onWall ?? {};
-  return { W: ow.frame?.[0], D: ow.frame?.[1], outer: runsToCells(ow.outerFaces?.lotCells), passage: runsToCells(ow.passage?.lotCells) };
+  // ((7a GM) a mechanism's envelope is merged into passage.lotCells (the lot's reserved cells): the passage itself is the lanes, the
+  // columns reserved at the feet row on every row front to back, rows 0..2 (standInPassage's rule))
+  const all = runsToCells(ow.passage?.lotCells);
+  const passage = ow.passage?.mechanism && ow.frame ? standInPassage(ow.frame[0], ow.frame[1], all) : all;
+  return { W: ow.frame?.[0], D: ow.frame?.[1], outer: runsToCells(ow.outerFaces?.lotCells), passage, ...(ow.passage?.mechanism ? { reserved: all } : {}) };
 }
 
 /** The first of `roles` (role names) whose block has variant `shape` (shapeOf), else null. */
@@ -203,9 +207,10 @@ export function towerDesign(K, id, lot, roles, { roof = false, outerDoor = false
  * over the passage at row 5 with a hall over it (windows), the crenellated top at row 10, a ladder up from the east room. Its front
  * face is closed but for the passage (rows 1..3), and its sides' outer halves too.
  */
-export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDoor = false, badFloor = false, palette = null } = {}) {
+export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDoor = false, badFloor = false, palette = null, roof = null } = {}) {
   const { W, D, outer, passage } = frameOf(lot);
-  const topY = 10;
+  // ((7a GM) `roof`: the deck's row over the passage floor (the gate's sensor rung, CONTRACT GM §15); default the K3 stub's 9)
+  const topY = roof === null ? 10 : roof + 1;
   const H = topY + 3;
   const { bp, B } = start(K, id, 'gatehouse', W, H, D, roles, [1, 1, 1, W - 2, topY - 1, D - 2], palette);
   const pass = new Set(passage.map(([u, , v]) => `${u},${v}`));
@@ -248,7 +253,10 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
       lamp(bp, B, b, 1, D - 2);
     }
     const r = rooms[rooms.length - 1];
-    if (r) {
+    // ((7a GM) no ladder through the gate's logic block: u within 5 of the passage's centre, 1 to D - 2 in from the front; a 13-wide
+    // gatehouse has no room for one there)
+    const pc = (p0 + p1) >> 1;
+    if (r && !(lot.onWall?.passage?.mechanism && Math.abs(r[1] - pc) <= 5)) {
       const lx = r[1];
       bp.ladder(lx, 1, 1, topY, 'south');
       bp.air(lx, 5, 1);
@@ -262,7 +270,7 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
   bp.part('top', () => {
     crenelTop(bp, B, W, D, topY);
     const r = [[1, p0 - 2], [p1 + 2, W - 2]].filter(([a, b]) => b >= a).pop();
-    if (r) { bp.air(r[1], topY, 1); bp.ladder(r[1], 1, topY, topY, 'south'); }
+    if (r && !(lot.onWall?.passage?.mechanism && Math.abs(r[1] - ((p0 + p1) >> 1)) <= 5)) { bp.air(r[1], topY, 1); bp.ladder(r[1], 1, topY, topY, 'south'); }
   }, { roof: 'flat' });
   bp.spot('entrance', (W - 1) >> 1, D - 1, 180, { y: 1 });
   bp.spot('spawn', (W - 1) >> 1, D - 2, 180, { y: 1 });

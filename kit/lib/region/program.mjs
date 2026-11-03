@@ -728,7 +728,7 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing, junction, via }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false, crossing, junction, via, state, closesAtNight, mechanism }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     // (7a K1) a rope bridge's edge (with its crossing: {type: rope_bridge, over: gap|water, depth}); (6c T3) a bridge's and a tunnel's
     // ((7a foundation) and a 7a connector's: its kind (P0: "7a's edge `type` is the connector `kind`"), with its crossing)
@@ -752,6 +752,10 @@ export class Region {
     if (segments !== undefined) e.segments = segments.map((g) => ({ ...g }));
     if (external) e.external = true;
     if (crossing !== undefined) e.crossing = { ...crossing };
+    // ((7a GM, §5) a mechanism gate's passage: its rest state, closesAtNight, {kind, toggle}; only when set)
+    if (state !== undefined) e.state = state;
+    if (closesAtNight) e.closesAtNight = true;
+    if (mechanism !== undefined) e.mechanism = { ...mechanism };
     // ((6c D3) a reach join's junction: {kind: end|side, at, side?, u?})
     if (junction !== undefined) e.junction = JSON.parse(JSON.stringify(junction));
     // ((7a GJ, §5) a gate join's edges: the gate crossed, `<region>:<gate id>`)

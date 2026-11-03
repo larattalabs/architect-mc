@@ -40,13 +40,22 @@ public final class RegionQueue {
 	 */
 	public static QItem holdItem(ServerLevel level, String region, String key, String stage, List<dev.larattalabs.architect.api.CellWrite> cells,
 		@org.jspecify.annotations.Nullable String owner) {
+		return holdItem(level, region, key, stage, List.of(), cells, owner, "architect:hold");
+	}
+
+	/**
+	 * (7a GM-a) A region cell site of kind {@code kind} (CELL, LAYER, no condition) after {@code after}: its cells written as given and
+	 * journaled as this region's (a gatehouse's gate mechanism, {@code architect:mechanism}).
+	 */
+	public static QItem holdItem(ServerLevel level, String region, String key, String stage, List<String> after, List<dev.larattalabs.architect.api.CellWrite> cells,
+		@org.jspecify.annotations.Nullable String owner, String kind) {
 		com.google.gson.JsonObject ext = new com.google.gson.JsonObject();
 		ext.addProperty(RegionItems.EXT_REGION, region);
 		var first = cells.get(0).pos();
-		QItem q = new QItem(key, stage, List.of(), "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0, false, ext, null, false,
+		QItem q = new QItem(key, stage, after, "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0, false, ext, null, false,
 			false);
 		q.itemKind = "cells";
-		q.spec = InfraSpec.cells(new dev.larattalabs.architect.api.CellsRequest(level, "architect:hold", dev.larattalabs.architect.api.Policy.CELL, cells,
+		q.spec = InfraSpec.cells(new dev.larattalabs.architect.api.CellsRequest(level, kind, dev.larattalabs.architect.api.Policy.CELL, cells,
 			false, dev.larattalabs.architect.api.OverlapPolicy.LAYER, dev.larattalabs.architect.api.Mode.INSTANT, owner, new com.google.gson.JsonObject(), null,
 			false));
 		q.layer = true;

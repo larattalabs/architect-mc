@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>(7a K3, CONTRACT K3 §5) A gatehouse lot on a wall carries its passage the same way, under {@link #EXT_PASSAGE}: the mask is the
  * union of both keys, so every consumer above honours the passage too. Only the irrigation key drains fluids at removal
- * ({@code Sites.drainIrrigation}).
+ * ({@code Sites.drainIrrigation}). (7a GM-a) A gatehouse's gate mechanism is a third key, {@link #EXT_MECHANISM}, in the same union.
  */
 public final class LotMask {
 	private LotMask() {
@@ -37,13 +37,24 @@ public final class LotMask {
 	/** (7a K3) The site ext key reporting how many of the entry's non-air blocks the passage mask dropped. */
 	public static final String EXT_PASSAGE_DROPPED = "architect_mc:passageDropped";
 
-	/** The mask's cells (packed positions): the union of {@link #EXT} and {@link #EXT_PASSAGE}; null when {@code ext} has neither. */
+	/**
+	 * (7a GM-a, CONTRACT GM §5) The site ext key holding a gatehouse lot's gate mechanism cells as bound (the base and the picked sensor
+	 * rung: {@code {cells: [flat runs]}}): Architect's region writes them, the design never does. Since NEXT.
+	 */
+	public static final String EXT_MECHANISM = "architect_mc:mechanism";
+	/** (7a GM-a) The site ext key reporting how many of the entry's non-air blocks the mechanism mask dropped. Since NEXT. */
+	public static final String EXT_MECHANISM_DROPPED = "architect_mc:mechanismDropped";
+
+	/**
+	 * The mask's cells (packed positions): the union of {@link #EXT}, {@link #EXT_PASSAGE} and {@link #EXT_MECHANISM}; null when
+	 * {@code ext} has none.
+	 */
 	public static @Nullable LongOpenHashSet cells(@Nullable JsonObject ext) {
 		if (ext == null) {
 			return null;
 		}
 		LongOpenHashSet out = new LongOpenHashSet();
-		for (String key : new String[] {EXT, EXT_PASSAGE}) {
+		for (String key : new String[] {EXT, EXT_PASSAGE, EXT_MECHANISM}) {
 			if (ext.get(key) instanceof JsonObject m && m.get("cells") instanceof JsonArray a) {
 				addRuns(a, out);
 			}

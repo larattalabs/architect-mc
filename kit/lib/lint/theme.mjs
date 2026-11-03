@@ -43,5 +43,23 @@ export function themeOffenders(ir, vw) {
     if (o.sample.length < 3) o.sample.push([x, y, z]);
     by.set(k, o);
   });
+  // ((7a GM, §3) a gatehouse's gate mechanism: written by the realise inside the lot's box (vworld counts it the lot's), so its write data
+  // is judged here: the base and every rung, as part `gm_<lot>`)
+  for (const l of ir.lots ?? []) {
+    const w = l.mechanismWrite;
+    if (!w?.palette) continue;
+    const used = new Map();
+    for (const flat of [w.base ?? [], ...(w.rungs ?? []).map((g) => g.cells ?? [])]) for (let i = 0; i + 3 < flat.length; i += 4) {
+      const b = nameOf(w.palette[flat[i + 3]]);
+      cells++;
+      if (!memo.has(b)) memo.set(b, traceRole(b, roles, { lightFixture: light }));
+      if (memo.get(b)) continue;
+      const k = `gm_${l.id}|${b}`;
+      const o = used.get(k) ?? by.get(k) ?? { part: `gm_${l.id}`, block: b, count: 0, sample: [] };
+      o.count++;
+      if (o.sample.length < 3) o.sample.push([flat[i], flat[i + 1], flat[i + 2]]);
+      used.set(k, o); by.set(k, o);
+    }
+  }
   return { offenders: [...by.values()].sort((a, b) => a.part.localeCompare(b.part) || a.block.localeCompare(b.block)), cells };
 }
