@@ -65,7 +65,19 @@ locked 1111111111111111111111111111111111100000000111111111111111111
 D      0000000000000000000000000000000001111111100000000000000000000
 ```
 
-## GM-a (CONTRACT GM §10 items 1-4, 6-8 under §12-§15; main 283b7bd4 merged): IN PROGRESS
+## GM-a (CONTRACT GM §10 items 1-4, 7-8 under §12-§15; main 283b7bd4 merged): slice tier PASS, item 6 (survival) open
+
+**State (2026-11-03):** built and gated; see CONTRACT GM "Slice GM-a as built". Slice run `20261103-093331-slice` (ports 8896/8897),
+14/14 PASS at e22d9e98, evidence in the main checkout's `artifacts/gate7a-gm/run-20261103-093331-slice/`. Gallery (private):
+https://claude.ai/artifact/JpzbuVYu4argcBroMW6WzU (N-GM-1). **Not built:** gm-survival (§10 item 6) and the survival bill: the bill
+depends on the bind-time rung and a region cells site has no construction mode (CONTRACT as built, "Open for the coordinator").
+
+Running it: `node tools/gate-run.mjs 7agma --host server --ports 8896:8897 --run-dir ../architect-mc-GM-run --lock
+../architect-mc-GM-run.lock` (gm-unit, gm-ingame with undo); `7agma-look` (client) for the gallery; `GM_INGAME_ONLY=p13x7,...` narrows
+gm-ingame. Fixtures `kit/test/fixtures/plan/gm/`; the driver `tools/lib/gate7agm-a.mjs`.
+
+Findings on the way (fixed): the mechanism item must be BOX (CELL kept lever-flipped cells as "changed since"); its restore must not
+deliver updates (the dust, repeaters and torches popped and dropped); a site being removed is found among the pending sites.
 
 §15 settled the sensor question (option (b) plus item 6's roof cap). The design GM-a builds, so a restart can resume:
 
