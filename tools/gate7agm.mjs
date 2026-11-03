@@ -421,6 +421,13 @@ steps.grate = async () => {
       if (!ok) { bad++; rec.firstBad = { c, lc, lo, closed, open, rest }; log(`rest\n${draw(rest, x0, F, Z)}\nclosed\n${draw(closed, x0, F, Z)}\nopen\n${draw(open, x0, F, Z)}`); break; }
     }
     rec.bad = bad;
+    // timing: ticks from the bus lever to the leaves settled closed, and open
+    await freeze();
+    await flip(lev); let tc = null; for (let t = 1; t <= 20 && tc === null; t++) { await step(1); const lc = leaves(await gateBox(x0, F, Z), x0, F, Z, leaf); if (lc[-1] === 1 && lc[1] === 1) tc = t; }
+    await flip(lev); let to = null; for (let t = 1; t <= 20 && to === null; t++) { await step(1); const lo = leaves(await gateBox(x0, F, Z), x0, F, Z, leaf); if (lo[-1] === 2 && lo[1] === 2) to = t; }
+    await unfreeze();
+    rec.ticks = { close: tc, open: to };
+    log(`  grate ${name}: G on the bus to the leaves closed ${tc} ticks, open ${to} ticks`);
     out[name] = rec;
     check(bad === 0 && rec.cycles.length === 20, `grate ${name}: ${rec.cycles.length} lever cycles, ${bad} bad (rest leaves ${json(rec.restLeaves)}${rec.firstBad ? `; first bad ${json({ c: rec.firstBad.c, closed: rec.firstBad.lc, open: rec.firstBad.lo })}` : ''})`);
   }
@@ -680,9 +687,44 @@ steps.daydebug = async () => {
   await L.leaveWorld();
 };
 
-steps.probe = async () => {
-  return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
+/** The lever detectors at a real gate: one observer pulse per flip, 20 flips a lever, and nothing else in the box moves. */
+steps.detectors = async () => {
+  await ensure();
+  const out = {};
+  const X = 7900, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X, F + 4, Z + 12);
+  const cells = [...GMC.slideCells('portcullis', {}).values()];
+  for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); cells.push([u, 2, 5, u === 0 || u === 4 ? `${W_}repeater[facing=east,delay=1]` : `${W_}redstone_wire`]); }
+  cells.push(...GMC.detectorCells(3));
+  await gatehouse(X, F, Z, `${W_}stone`, cells);
+  await L.gameWait(2000, { real: L.settle, label: 'settle' });
+  const rest = await gateBox(X, F, Z);
+  const res = {};
+  for (const [name, lever, obs] of [['outside', [X - 1, F + 2, Z], [X - 1, F + 4, Z + 1]], ['inside', [X + 1, F + 2, Z + 2], [X + 1, F + 4, Z + 1]]]) {
+    const pulses = [];
+    await freeze();
+    for (let c = 1; c <= 20; c++) {
+      await flip(lever);
+      const on = [];
+      for (let t = 1; t <= 8; t++) { await step(1); if (/powered=true/.test(await stateAt(...obs))) on.push(t); }
+      pulses.push(on);
+    }
+    await unfreeze();
+    res[name] = pulses;
+    check(pulses.every((p2) => p2.length === 2 && p2[1] === p2[0] + 1), `detector ${name}: 20 flips, each one observer pulse of 2 ticks (${json(pulses.slice(0, 3))}...)`);
+  }
+  await L.gameWait(1000, { real: L.settle, label: 'after' });
+  const end = await gateBox(X, F, Z);
+  const diff = Object.keys({ ...rest, ...end }).filter((k2) => rest[k2] !== end[k2] && !/lever|trapdoor|observer/.test(`${rest[k2]}${end[k2]}`));
+  out.detectors = res; out.diff = diff;
+  check(diff.length === 0, `detectors: after 40 flips (levers back off) nothing but the levers, trapdoors and observers changed in the box (${json(diff.slice(0, 5))})`);
+  await L.leaveWorld();
+  return out;
 };
+
+// gm-probe under §12 item 4: the lifting extender row is removed (steps extender and outside stay, as the record of why)
+steps.probe = async () => ({ rules: await steps.rules(), grate: await steps.grate(), detectors: await steps.detectors(), daycycle: await steps.daycycle(), swing: await steps.swing(), drawbridge: await steps.drawbridge() });
 
 // ------------------------------------------------------------------ housekeeping
 

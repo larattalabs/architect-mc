@@ -124,3 +124,22 @@ export function drawbridgeCells(n, mats) {
 }
 /** The ripple's designed ticks: cell i flips 2 * (i + 2) game ticks after the lever (repeater ticks only; the lever and dust add none). */
 export const drawbridgeTicks = (i) => 2 * (i + 2);
+
+/**
+ * The lever detectors (§2a "levers at both passage ends"; §12): each lever hangs from the lintel over a lane at its end of the passage, its
+ * mount (the lintel cell) strongly powered when on; the iron trapdoor in the plane d = 1 above that lane (row 3) touches the mount and flips
+ * with it; an observer above the trapdoor (row 4, facing down) gives one pulse per flip, out of its top (row 5). Outside: the lane u = -1
+ * (mount (-1,0,3)); inside: the lane u = 1 at the last plane (mount (1,D-1,3)), its trapdoor (1,D-2,3) when D > 3, else (1,1,3).
+ * Mobs cannot flip levers.
+ */
+export function detectorCells(depth = 3) {
+  const inner = depth - 1;
+  return [
+    [-1, 0, 2, `${W}lever[face=ceiling,facing=south,powered=false]`],
+    [-1, 1, 3, `${W}iron_trapdoor[facing=south,half=top,open=false,powered=false,waterlogged=false]`],
+    [-1, 1, 4, `${W}observer[facing=down,powered=false]`],
+    [1, inner, 2, `${W}lever[face=ceiling,facing=north,powered=false]`],
+    [1, depth > 3 ? inner - 1 : 1, 3, `${W}iron_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]`],
+    [1, depth > 3 ? inner - 1 : 1, 4, `${W}observer[facing=down,powered=false]`],
+  ];
+}
