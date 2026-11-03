@@ -15,6 +15,19 @@
 //     fit       (gm-fit, step 1b)       gateLayout in real gatehouse boxes (GM_FIT_BOXES, default 13x7x10,13x11x11,17x15x12; GM_FIT_KINDS):
 //                                       the 13 §2a steps, 20 lever cycles, the latch windows' tick traces and slack (§14 item 3), a
 //                                       natural dusk and dawn and a daytime storm (one edge each, no flicker), no item dropped
+//     unit      (gm-unit, GM-a)         item 1 offline: kit/test/gm-a.test.mjs and gm.test.mjs, K3's wall tests, the structure lint, the Java
+//                                       (GateMechTest, ApiGMTest, PlanChecksK3Test, ApiK3Test, LotMaskTest), api-compat
+//     unchanged (gm-unit)               item 2: every committed plan fixture as on the merge base (no recorded wall names a mechanism)
+//     ingame    (gm-ingame)             item 3 (headless): the castle with a 17x15 portcullis gatehouse (the sensor at roof 12), a 13x7 one
+//                                       (roof 10), a 13x7 one roofed at 16 (levers-only, mechanism.sensor), a slide (13x11), the [11, 13]
+//                                       plain passage (deviation mechanism) and a swing: realiseApproved, the rung or no sensor, 40 ticks
+//                                       still, real lever uses (traced), closed blocks the villager and the player, open passes them,
+//                                       20 cycles, the day cycle, no item dropped, removal E-flat 0; the swing's button, lever and plate
+//     undo      (gm-ingame, item 4)     Regions.remove open, closed and mid-move (2 ticks into a toggle): E-flat 0 each (the verifier
+//                                       re-runs it)
+//     look      (gm-look, client)       item 8: the gallery per kind and bible (open, closed, the passage inside, the lever, the toggle
+//                                       strip, dusk and the sensor)
+//     areport                           REPORT-GM-a.md over the GM-a step JSONs
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7a-gm/<step>.json in the main checkout (GATE7AGM_OUT overrides), all.log, REPORT.md.
@@ -964,6 +977,13 @@ steps.start = async () => {
 };
 steps.stop = async () => { try { await connect(10_000); } catch { /* by PID below */ } await L.stopClient(); };
 steps.base = async () => { await ensure(); await L.ensureBase(FLAT); };
+
+// ------------------------------------------------------------------ GM-a (CONTRACT GM §10 items 1-4, 7-8): tools/lib/gate7agm-a.mjs
+
+{
+  const { registerGmA } = await import('./lib/gate7agm-a.mjs');
+  await registerGmA(steps, { L, call, check, cmd, log, root, OUT, json, stateAt, freeze, unfreeze, step, items });
+}
 
 const name = process.argv[2];
 if (!steps[name]) { console.error(`steps: ${Object.keys(steps).join(' ')}`); process.exit(2); }
