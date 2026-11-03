@@ -274,7 +274,7 @@ export function gatehouseDesign(K, id, lot, roles, { openPassage = true, outerDo
   }, { roof: 'flat' });
   // ((7a GM-a2) `honourReserved`: the design leaves every reserved cell of a mechanism's envelope empty, as the brief asks (the staircase
   // too), so its deck has a hole wherever a rung crosses it: the realise's roof fill closes them, CONTRACT GM §16 item 3)
-  if (honourReserved && reserved) bp.part('reserved', () => { for (const [u, y, v] of reserved) bp.air(u, y + 1, v); });
+  if (honourReserved && reserved) bp.part('reserved', () => { for (const [u, y, v] of reserved) if (y + 1 < H && u >= 0 && u < W && v >= 0 && v < D) bp.air(u, y + 1, v); });
   bp.spot('entrance', (W - 1) >> 1, D - 1, 180, { y: 1 });
   bp.spot('spawn', (W - 1) >> 1, D - 2, 180, { y: 1 });
   return bp;
