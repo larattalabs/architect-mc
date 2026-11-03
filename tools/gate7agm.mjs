@@ -345,6 +345,75 @@ steps.outside = async () => {
   return { open, walled };
 };
 
+// ------------------------------------------------------------------ §12: the sliding gates, wired
+
+const GMC = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'connectors', 'gmCircuit.mjs')).href);
+const W_ = 'minecraft:';
+
+/** A gatehouse box of `wall` (u -5..5, d 0..2, rows -1..8), its passage cleared (u -1..1, rows 0..2), then `cells` written in order. */
+async function gatehouse(X, F, Z, wall, cells) {
+  await fill([X - 5, F - 1, Z], [X + 5, F + 8, Z + 2], wall);
+  await fill([X - 1, F, Z - 1], [X + 1, F + 2, Z + 3], `${W_}air`);
+  // the write order of §7 item 2: structure, pistons, the rest, then wire and triggers
+  const rank = (s) => (/wire|repeater|comparator|observer|torch|lever|button|plate|daylight/.test(s) ? 3 : /piston/.test(s) ? 1 : /air/.test(s) ? 0 : /bars|fence/.test(s) ? 2 : 0);
+  for (const c of [...cells].sort((a, b) => rank(a[3]) - rank(b[3]))) { const [x, y, z, st] = GMC.toWorld(c, X, F, Z); await sb(x, y, z, st); }
+}
+const gateBox = (X, F, Z) => snap(X - 5, F - 1, Z, X + 5, F + 8, Z + 2);
+/** The leaf columns: for each side the u where its three blocks stand (or 'mixed'). */
+function leaves(box, X, F, Z, leaf) {
+  const o = {};
+  for (const s of [-1, 1]) {
+    const at = [];
+    for (let r = 0; r <= 2; r++) {
+      const us = [s, 2 * s].filter((u) => (box[`${X + u},${F + r},${Z + 1}`] ?? '').startsWith(leaf));
+      at.push(us.length === 1 ? Math.abs(us[0]) : 'x');
+    }
+    o[s] = at.every((v) => v === at[0]) ? at[0] : `mixed ${at}`;
+  }
+  return o;
+}
+const flip = (at) => call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at, on: at, face: 'up' }] }, 30_000);
+
+/** E2: the split grate's mechanism and its G feed in a stone gatehouse, G from a test lever on the bus (the logic comes next). */
+steps.grate = async () => {
+  await ensure();
+  const out = {};
+  const X = 7300, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X, F + 4, Z + 12);
+  for (const [name, kind, wall, mats, ox] of [['stone bars', 'portcullis', `${W_}stone`, {}, 0], ['stone slide', 'slide', `${W_}stone`, {}, 20], ['fortress fence', 'portcullis', `${W_}stone_bricks`, { structure: `${W_}polished_andesite`, bar: `${W_}spruce_fence` }, 40]]) {
+    const x0 = X + ox;
+    const cells = [...GMC.slideCells(kind, mats).values()];
+    // the test driver: a bus row 5 in d = 2 from u -3..3, on blocks, a lever on top of its middle block
+    for (let u = -2; u <= 2; u++) { cells.push([u, 2, 4, gmMatsOf(mats).structure]); if (u) cells.push([u, 2, 5, `${W_}redstone_wire`]); }
+    cells.push([0, 2, 5, gmMatsOf(mats).structure], [0, 2, 6, `${W_}lever[face=floor,facing=north,powered=false]`]);
+    await gatehouse(x0, F, Z, wall, cells);
+    await L.gameWait(2000, { real: L.settle, label: 'gm grate settles' });
+    const leaf = kind === 'slide' ? gmMatsOf(mats).structure : gmMatsOf(mats).bar;
+    const rest = await gateBox(x0, F, Z);
+    const lev = [x0, F + 6, Z + 2];
+    const rec = { cycles: [], restLeaves: leaves(rest, x0, F, Z, leaf) };
+    let bad = 0;
+    for (let c = 1; c <= 20; c++) {
+      await flip(lev); await L.gameWait(1000, { real: L.settle, label: 'gm close' });
+      const closed = await gateBox(x0, F, Z);
+      await flip(lev); await L.gameWait(1000, { real: L.settle, label: 'gm open' });
+      const open = await gateBox(x0, F, Z);
+      const lc = leaves(closed, x0, F, Z, leaf), lo = leaves(open, x0, F, Z, leaf);
+      const it = await items(x0, F + 2, Z + 1, 10);
+      const ok = lc[-1] === 1 && lc[1] === 1 && lo[-1] === 2 && lo[1] === 2 && json(open) === json(rest) && !it.stacks;
+      rec.cycles.push({ c, closed: lc, open: lo, items: it.stacks, same: json(open) === json(rest) });
+      if (!ok) { bad++; rec.firstBad = { c, lc, lo, closed, open, rest }; break; }
+    }
+    rec.bad = bad;
+    out[name] = rec;
+    check(bad === 0 && rec.cycles.length === 20, `grate ${name}: ${rec.cycles.length} lever cycles, ${bad} bad (rest leaves ${json(rec.restLeaves)}${rec.firstBad ? `; first bad ${json({ c: rec.firstBad.c, closed: rec.firstBad.lc, open: rec.firstBad.lo })}` : ''})`);
+  }
+  await L.leaveWorld();
+  return out;
+};
+const gmMatsOf = (m) => GMC.gmMats(m);
+
 steps.probe = async () => {
   return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
