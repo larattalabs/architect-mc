@@ -493,9 +493,10 @@ steps.swing = async () => {
   }
   runs.plate = [];
   for (let c = 1; c <= 20; c++) {
-    await cmd(`/tp @s ${X - 1 + 0.5} ${F} ${Z + 2 + 0.5}`); await L.gameWait(500, { real: L.settle, label: 'gm on the plate' });
+    // (the bot player does not run its own physics, so a plate never sees it: a villager steps on, as a villager inside the wall would)
+    await cmd(`/summon minecraft:villager ${X - 1 + 0.5} ${F + 0.2} ${Z + 2 + 0.5} {NoAI:1b,Silent:1b,Tags:["gmp"]}`); await L.gameWait(500, { real: L.settle, label: 'gm on the plate' });
     const on = await doors();
-    await cmd(`/tp @s ${X - 1 + 0.5} ${F} ${Z + 5 + 0.5}`); await L.gameWait(1500, { real: L.settle, label: 'gm off the plate' });
+    await cmd('/tp @e[tag=gmp] ~ ~ ~4'); await L.gameWait(100, { real: L.settle, label: 'gm off' }); await cmd('/kill @e[tag=gmp]'); await L.gameWait(1500, { real: L.settle, label: 'gm off the plate' });
     const off = await doors();
     runs.plate.push({ on, off, ok: on[0] === 'open' && json(off) === '["shut","shut"]' });
   }
