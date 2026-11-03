@@ -12,7 +12,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261023-114540-release unit-mod"
+   "verified": "20261103-093331-slice unit-mod"
   },
   "umt": {
    "classes": [
@@ -1278,9 +1278,104 @@
     "dark",
     "nope",
     "rustic",
-    "tools/lib/**"
+    "tools",
+    "tools/apitest.mjs",
+    "tools/bench6c0b.mjs",
+    "tools/builtin-parts.mjs",
+    "tools/devcli.mjs",
+    "tools/eval.mjs",
+    "tools/gate-impact.mjs",
+    "tools/gate-lint.mjs",
+    "tools/gate-run.mjs",
+    "tools/gate3.mjs",
+    "tools/gate4d.mjs",
+    "tools/gate4e-sizecap.mjs",
+    "tools/gate4e.mjs",
+    "tools/gate5b-sizecap.mjs",
+    "tools/gate5b.mjs",
+    "tools/gate6a.mjs",
+    "tools/gate6c0a.mjs",
+    "tools/gate6c0b.mjs",
+    "tools/gate6c0c.mjs",
+    "tools/gate6c37.mjs",
+    "tools/gate6c38.mjs",
+    "tools/gate6ccoa.mjs",
+    "tools/gate6ccu.mjs",
+    "tools/gate6cd.mjs",
+    "tools/gate6cd3.mjs",
+    "tools/gate6cf1.mjs",
+    "tools/gate6cf2.mjs",
+    "tools/gate6cf3.mjs",
+    "tools/gate6cfl.mjs",
+    "tools/gate6ch.mjs",
+    "tools/gate6cha.mjs",
+    "tools/gate6chb.mjs",
+    "tools/gate6chy.mjs",
+    "tools/gate6chya.mjs",
+    "tools/gate6cirr.mjs",
+    "tools/gate6ckc.mjs",
+    "tools/gate6cmp.mjs",
+    "tools/gate6cp0.mjs",
+    "tools/gate6cpt.mjs",
+    "tools/gate6cpt2.mjs",
+    "tools/gate6crp.mjs",
+    "tools/gate6crs.mjs",
+    "tools/gate6crsb.mjs",
+    "tools/gate6cs2.mjs",
+    "tools/gate6cs3.mjs",
+    "tools/gate6csch.mjs",
+    "tools/gate6ct1.mjs",
+    "tools/gate6ct2.mjs",
+    "tools/gate6ct3b.mjs",
+    "tools/gate6cv.mjs",
+    "tools/gate6cvoc.mjs",
+    "tools/gate6cw.mjs",
+    "tools/gate6cx.mjs",
+    "tools/gate6cy.mjs",
+    "tools/gate6cy2.mjs",
+    "tools/gate6dgr.mjs",
+    "tools/gate6drv.mjs",
+    "tools/gate7acl.mjs",
+    "tools/gate7acw.mjs",
+    "tools/gate7af.mjs",
+    "tools/gate7afb.mjs",
+    "tools/gate7agj.mjs",
+    "tools/gate7agm.mjs",
+    "tools/gate7ak1.mjs",
+    "tools/gate7ak1b.mjs",
+    "tools/gate7ak2.mjs",
+    "tools/gate7ak3.mjs",
+    "tools/gate7alf.mjs",
+    "tools/gate7ark.mjs",
+    "tools/gate7asa.mjs",
+    "tools/gatej3.mjs",
+    "tools/gatesafety.mjs",
+    "tools/gateu1.mjs",
+    "tools/gateu2.mjs",
+    "tools/gateu3.mjs",
+    "tools/gateu5.mjs",
+    "tools/gateui2b.mjs",
+    "tools/gen-equivalents.mjs",
+    "tools/harvest-stamps.mjs",
+    "tools/lib/**",
+    "tools/lint.mjs",
+    "tools/nightly-install.mjs",
+    "tools/nightly.mjs",
+    "tools/p3-mode.mjs",
+    "tools/p3-mutants.mjs",
+    "tools/p3-probe.mjs",
+    "tools/p4c-ui.mjs",
+    "tools/p5a-ui.mjs",
+    "tools/partsab.mjs",
+    "tools/readme-images.mjs",
+    "tools/readme-survival.mjs",
+    "tools/shoot.mjs",
+    "tools/split-proof.mjs",
+    "tools/sprint-proof.mjs",
+    "tools/step-cache.mjs",
+    "tools/step-inputs.mjs"
    ],
-   "verified": "20261023-114540-release unit-kit"
+   "verified": "20261103-093331-slice unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -1306,7 +1401,7 @@
     "pnpm-workspace.yaml",
     "tools/eval.mjs"
    ],
-   "verified": "20261023-114540-release unit-sidecar"
+   "verified": "20261103-093331-slice unit-sidecar"
   },
   "sim-jobs": {
    "classes": [
@@ -1546,7 +1641,7 @@
     "kit/lint/**",
     "kit/test/**"
    ],
-   "verified": "20261023-114540-release apijars"
+   "verified": "20261103-093331-slice apijars"
   },
   "0a-stub": {
    "classes": [
@@ -50087,7 +50182,8 @@
     "tools/gate7ak3.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/kit-reuse.mjs"
-   ]
+   ],
+   "verified": "20261103-093331-slice k3-unit"
   },
   "k3-ingame": {
    "classes": [
@@ -50477,7 +50573,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261103-093331-slice k3-ingame"
   },
   "k3-survival": {
    "classes": [
@@ -50867,7 +50964,8 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
-   ]
+   ],
+   "verified": "20261103-093331-slice k3-survival"
   },
   "k3-look": {
    "classes": [
@@ -56947,10 +57045,11 @@
     "kit/vocab/tiers.json"
    ],
    "data": [
+    "kit/lib/connectors/**",
     "scenarios/goldens/route_demo/**",
     "scenarios/goldens/s7/**"
    ],
-   "verified": "20261023-114540-release water-lint"
+   "verified": "20261103-093331-slice water-lint"
   },
   "p3-lint": {
    "classes": [
@@ -56962,7 +57061,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261023-114540-release p3-lint"
+   "verified": "20261103-093331-slice p3-lint"
   },
   "p3-lint-long": {
    "classes": [
@@ -83457,7 +83556,7 @@
     "kit/voxel_classes.json",
     "scenarios/bibles/**"
    ],
-   "verified": "20261023-114540-release lint-structure"
+   "verified": "20261103-093331-slice lint-structure"
   },
   "lint-look": {
    "classes": [],
@@ -83630,7 +83729,7 @@
     "kit/vocab/**",
     "kit/voxel_classes.json"
    ],
-   "verified": "20261023-114540-release lint-look"
+   "verified": "20261103-093331-slice lint-look"
   },
   "lint-mutations": {
    "classes": [],
