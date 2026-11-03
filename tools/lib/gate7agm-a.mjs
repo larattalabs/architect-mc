@@ -616,15 +616,18 @@ export async function registerGmA(steps, h) {
       // removal with the gate closed (the leaves out in the lanes): the refund is the charge, exactly; E-flat 0; nothing dropped
       if (kind !== 'swing') { await flipW(lvl[0]); rec.closed = await readGate(m); }
       await cmd('/kill @e[type=minecraft:item]');
-      const rm = await G.remove(ctx, region);
+      // the refund is booked on the record at the removal's rule 7 (before the undo): read while the removal runs, before the record goes
+      const rmP = G.remove(ctx, region);
+      let sv = null;
+      for (let k = 0; k < 600 && !sv?.refund; k++) { sv = (await mechView().catch(() => ({}))).record ?? sv; if (!sv?.refund) await L.sleep(100); }
+      const rm = await rmP;
       const e = await G.diff(ctx, c.box, c.pre);
       const ef = e.list.filter((q) => !crates.some((k) => k.join(',') === q.pos));
-      const sv = (await G.rsState(ctx, region).catch(() => ({}))).record?.mech?.gatehouse_1 ?? null;
       const p2 = await cons.point('removed');
       const it1 = await items(...c.gl.onWall.passage.front, 24);
       rec.removal = { removed: rm.removed, eflat: ef.length, list: ef.slice(0, 8), refund: sv?.refund ?? null, cons: p2, items: { stacks: it1.stacks ?? 0, items: it1.items ?? null } };
       check(rm.removed && ef.length === 0, `${tag}: Regions.remove${kind !== 'swing' ? ' (closed)' : ''}: E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
-      check(sv ? G.same(sv.refund, charged) : G.exact(p2), `${tag}: the removal refunds the mechanism's charge exactly (${sv ? json(G.minus(sv.refund, charged)) : 'the record gone: conservation decides'})`);
+      check(!!sv?.refund && G.same(sv.refund, charged), `${tag}: the removal's refund (booked before the undo) = the charge, item for item (${sv?.refund ? json(G.minus(sv.refund, charged)) : 'not read'})`);
       check(G.exact(p2), `${tag}: conservation exact after the removal (every item back in the stockpile): ${json(p2.diff)}`);
       check(!rec.removal.items.stacks, `${tag}: no item dropped (${json(rec.removal.items)})`);
       await L.leaveWorld();
