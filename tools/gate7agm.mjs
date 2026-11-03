@@ -724,6 +724,50 @@ steps.detectors = async () => {
 };
 
 // gm-probe under §12 item 4: the lifting extender row is removed (steps extender and outside stay, as the record of why)
+/** The settled states the probe saw, per kind and rest, in the local frame: written to <OUT>/gmSettled.json (copied into the kit by hand). */
+steps.settled = async () => {
+  await ensure();
+  const X = 8000, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X, F + 4, Z + 12);
+  const out = {};
+  const local = (box, keys) => Object.fromEntries(keys.map((k2) => { const [u, d, r] = k2.split(',').map(Number); return [k2, `minecraft:${box[`${X + u},${F + r},${Z + d}`] ?? 'air'}`]; }));
+  for (const kind of ['portcullis', 'slide']) {
+    const lay = [...GMC.slideCells(kind, {}).values(), ...GMC.detectorCells(3)];
+    const keys = lay.map(([u, d, r]) => `${u},${d},${r}`);
+    const cells = [...lay];
+    for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); if (u !== -3 && u !== 3) cells.push([u, 2, 5, `${W_}redstone_wire`]); }
+    cells.push([0, 2, 5, `${W_}stone`], [0, 2, 6, `${W_}lever[face=floor,facing=north,powered=false]`]);
+    await gatehouse(X, F, Z, `${W_}stone`, cells);
+    await L.gameWait(2000, { real: L.settle, label: 'settle' });
+    const open = local(await gateBox(X, F, Z), keys);
+    await flip([X, F + 6, Z + 2]); await L.gameWait(2000, { real: L.settle, label: 'closed' });
+    const closed = local(await gateBox(X, F, Z), keys);
+    await flip([X, F + 6, Z + 2]); await L.gameWait(2000, { real: L.settle, label: 'open again' });
+    const again = local(await gateBox(X, F, Z), keys);
+    out[kind] = { open, closed };
+    check(json(open) === json(again), `${kind}: the open rest state is a fixed point (open, closed, open again: identical)`);
+  }
+  {
+    const lay = [...GMC.swingCells({}).values()];
+    const keys = lay.map(([u, d, r]) => `${u},${d},${r}`);
+    await gatehouse(X + 20, F, Z, `${W_}stone`, lay);
+    await L.gameWait(2000, { real: L.settle, label: 'settle' });
+    const X2 = X + 20;
+    const loc = (box) => Object.fromEntries(keys.map((k2) => { const [u, d, r] = k2.split(',').map(Number); return [k2, `minecraft:${box[`${X2 + u},${F + r},${Z + d}`] ?? 'air'}`]; }));
+    const closed = loc(await gateBox(X2, F, Z));
+    await flip([X2, F + 1, Z + 2]); await L.gameWait(1000, { real: L.settle, label: 'open' });
+    const open = loc(await gateBox(X2, F, Z));
+    await flip([X2, F + 1, Z + 2]); await L.gameWait(1000, { real: L.settle, label: 'closed again' });
+    const again = loc(await gateBox(X2, F, Z));
+    out.swing = { closed, open };
+    check(json(closed) === json(again), 'swing: the closed rest state is a fixed point');
+  }
+  fs.writeFileSync(path.join(OUT, 'gmSettled.json'), JSON.stringify(out, null, 1));
+  await L.leaveWorld();
+  return { kinds: Object.keys(out) };
+};
+
 steps.probe = async () => ({ rules: await steps.rules(), grate: await steps.grate(), detectors: await steps.detectors(), daycycle: await steps.daycycle(), swing: await steps.swing(), drawbridge: await steps.drawbridge() });
 
 // ------------------------------------------------------------------ housekeeping
