@@ -1,6 +1,20 @@
 # GM handoff
 
-## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): in progress
+## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): slice tier PASS, verifier PASS, ready to merge
+
+**State (2026-11-03):** built and gated (DEV MODE). No API type, method or reason added; additive members only (`mechanism.cost`, the
+report's `bom`/`fill`, `survival.mech`, outstanding `<region>:mech:<lot>`, the audit's `mechStanding`, DevBridge `dev.gm.state`).
+- Slice tier `20261103-212703-slice` (ports 8896-8903, 4 shards): 105 PASS, 13 FAIL, among them gm-unit 426/0, gm-ingame 104/0,
+  gm-survival 42/0, unit-mod 997/0, unit-kit 1020/0, unit-sidecar 804, apijars 6/0, lint-structure 205/0, k3-survival 8/0,
+  d3-survival 5/0. The 13: seven byte-identity checks lacked GM-a2's four GM fixture movers (now named once in tools/lib/f7a-norm.mjs,
+  read by FL, K3, GM and the rest), and six were harness or flaky (scenarios forced headless, a gradle collision, 4e-crash run without
+  4e-orders, a sunflower in d2, the route scenario).
+- Reruns `20261103-231554-slice` (11 PASS) and `20261103-233658-slice` (4e-orders, 4e-crash PASS). `6cf1-scenario-forms` still fails
+  (melt and exactness), and fails the same way on origin/main 05611639 (`20261103-234342-slice`): pre-existing, not GM-a2's.
+- Verifier (re-ran gm-survival and gm-ingame with undo, ports 8904/8905): `20261103-231617-7agma-surv` 42/0, `20261103-232502-7agma`
+  gm-ingame 41/0; PASS on every item; the journal-head fallback was not reached in game (`gateByHead` 0: the GW path keeps the record).
+- Evidence copied to the main checkout's `artifacts/gate7a-gm/` (`run-20261103-212703-slice`, `run-20261103-231554-slice`,
+  `run-20261103-233658-slice`, `base-20261103-234342-slice`, `verify-20261103-231617-7agma-surv`, `verify-20261103-232502-7agma`).
 
 **Decisions (recorded in CONTRACT GM "Slice GM-a2 as built"):**
 - **Survival (option (a)).** Check: `mechanism.cost {cells, bom {min, max}, rare}` and the gatehouse lot's `costRange` widened by
