@@ -26267,6 +26267,30 @@ swing in K3 gatehouses: the above less the drawbridge, about 4 d; probe first), 
 drawbridge over H's moat: T3a's bridge with a trapdoor deck, the flip of `connector.drawbridge`, about 1 d; needs a T3a bridge over water
 to hold on the H/HY main).
 
+### 12. Changes after `gm-probe` (Noah, 2026-11-02; binding, they win over the sections above)
+
+`gm-probe` on 26.3 (slice/GM 399eaf16, run 20261102-011252-7agm; HANDOFF-GM) passed all 12 vanilla rules of §1 and **failed the lifting
+extender**. A sticky piston pulls back only one block, so separate bars do not rise as a grid. The 3-piston inchworm left one column at rows
+[0, 1, 2, 5] and needed row floorY+8. A puller between bars can only come from the side, and a full 3-wide plane under a lintel has none.
+A slime-glued grid ran 20 clean cycles in open air but jammed on cycle 1 against stone faces. Per §1 the slice stopped, and Noah chose the
+**split sliding grate**.
+
+1. **The portcullis is the split sliding grate.** `portcullis` means what §1 and §2 called `form: "split"`. Two leaf columns of bars,
+   3 high, slide 1 cell into the jamb recesses beside a fixed mullion, driven by sticky pistons like `slide`. Open, the passage is two
+   1-wide, 3-high lanes; closed, three full-height columns. The bars, rest state, triggers, day cycle (§2a) and override are unchanged.
+   The lifting grid is not built: no `form` member, no extender, no lintel slot. "A lifting portcullis" stays an idea for later, with no
+   reserved surface.
+2. **Envelope and box: unchanged for Steward.** The recess u in [-4, 4] already covers the split grate. The box minimum stays 11 x 3 x 9,
+   and the brief lines stay word for word. The cells above the lintel become the bus and the sensor's wire run, not a winch room. If the
+   probe shows the split grate and day cycle need fewer rows, the minimum may only drop, never grow, and Steward is told.
+3. **Stock sizes (pw = 3):** `portcullis` takes 6 sticky pistons (3 a side), 6 bar blocks and 3 mullion blocks, the same as `slide` with
+   bars for leaves. §7 item 7's lifting-column case is gone; every line moves in the plane `d = 1`, sideways.
+4. **`gm-probe` (§10 item 0), the new bar:** 20 open/close cycles of the split grate with no misplaced leaf, with timing recorded; the §2a day
+   cycle (sensor edges both ways, lever override from either end, reset on the next transition); 20 cycles each of `slide`, `swing` and the
+   drawbridge ripple; the §1 rules as run. The extender row is removed. A failure still stops the slice and is reported, with no silent
+   substitute.
+5. **Gallery (§10 item 8):** the toggle strip shows the leaves sliding into the jambs, not a grid rising.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the

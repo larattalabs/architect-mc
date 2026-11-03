@@ -1389,3 +1389,11 @@ stands closer, so the end is taken back as a short in-line run when a gate sits 
 - **K3 passage gates (queued):** a K3 gatehouse-only wall has a `passage` node and no `gate` node, so it still answers `NO_JOIN [wall]`.
   Read `passage:<lot>` nodes and `onWall.passage` (front/back ports as the outer/inner cells) in `besideGates` and `GateJoin.gates`, and let
   the re-check accept the gatehouse lot's site as the holder. See the contract's as-built "K3 follow-up".
+
+## GM: the split sliding grate (Noah, 2026-11-02)
+
+`gm-probe` failed the lifting extender (slice/GM 399eaf16; a sticky piston pulls back one block, and a full 3-wide plane under a lintel has
+no side for pullers; a slime grid jammed against walls). Noah chose the split sliding grate. CONTRACT GM §12: the portcullis is the split
+grate, Steward's box and brief lines are unchanged, and the probe's new bar covers the split grate, the day cycle, slide, swing and the
+drawbridge. Also offered: a slime-glued grid and under-floor drivers. Neither was chosen.
+
