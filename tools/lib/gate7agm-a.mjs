@@ -64,7 +64,11 @@ export async function registerGmA(steps, h) {
 
   steps.unchanged = async () => {
     const K = await import('./gate7a-kit.mjs');
-    const u = await K.unchanged(root, { check, log, base: 'GM', except: {}, mergedIf: 'kit/lib/connectors/gmGate.mjs' });
+    // ((GM-a2, §16 items 1 and 3) the GM fixtures' mechanism gains its provisional bill (cost), the gatehouse lot's range holds it, the IR
+    // write data names the roof fill's block: their answers, IR and artifact move, as named; every other fixture byte-identical)
+    const why = 'GM-a2: mechanism.cost, the lot costRange widened by it, mechanismWrite.fill';
+    const except = Object.fromEntries(['gm_castle_13x7', 'gm_castle_17x15', 'gm_castle_slide', 'gm_castle_swing'].map((n) => [`gm/${n}.json`, why]));
+    const u = await K.unchanged(root, { check, log, base: 'GM', except, mergedIf: 'mod/src/main/java/dev/larattalabs/architect/site/MechCharges.java' });
     fs.writeFileSync(path.join(OUT, 'gm-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
     return { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ };
   };
@@ -143,7 +147,10 @@ export async function registerGmA(steps, h) {
     const st = [];
     for (const c of g.lanes) st.push(await stateAt(...c));
     const filled = st.filter((s) => s !== 'air' && !/^(minecraft:)?air$/.test(s)).length;
-    return { open: filled === 0, closed: filled === g.lanes.length, filled, of: g.lanes.length, moving: st.some((s) => /moving_piston|piston_head/.test(s)) };
+    // ((GM-a2) `any`: the recess too: an opening's leaves are pulled into it, so its moving pistons stand there, not in the lanes)
+    let any = st.some((s) => /moving_piston/.test(s));
+    if (!any) for (const c of g.recess) if (/moving_piston/.test(await stateAt(...c))) { any = true; break; }
+    return { open: filled === 0, closed: filled === g.lanes.length, filled, of: g.lanes.length, moving: st.some((s) => /moving_piston|piston_head/.test(s)), any };
   }
   /** A box's states (the envelope's bounding box) for the no-move check. */
   function envBox(m) {
@@ -449,7 +456,7 @@ export async function registerGmA(steps, h) {
           gs = await readGate(c.m);
           const done = dir === 'close' ? gs.closed : gs.open;
           if (at === 'logic') { seen = !gs.moving && !done && (dir === 'close' ? gs.filled === 0 : gs.filled === gs.of); break; }
-          if (at === 'first' && gs.moving) { seen = true; break; }
+          if (at === 'first' && gs.any) { seen = true; break; }
           if (at === 'landed' && done && !gs.moving) { seen = true; break; }
         }
         rec.phaseAt = t; rec.gate = gs; rec.seen = seen;

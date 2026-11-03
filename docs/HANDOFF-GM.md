@@ -1,5 +1,25 @@
 # GM handoff
 
+## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): in progress
+
+**Decisions (recorded in CONTRACT GM "Slice GM-a2 as built"):**
+- **Survival (option (a)).** Check: `mechanism.cost {cells, bom {min, max}, rare}` and the gatehouse lot's `costRange` widened by
+  `cost.cells` (realiseApproved's `lotProblem` counts the bound mechanism the same way). Bind: `GateMech.Plan.bill`, the report's `bom`.
+- **The INSTANT problem: held, then charged at once, then written at once** (`site/MechCharges.java`, the RS fluids charge's model). The
+  `mech:<lot>` item waits for its lot's construction site to be built, then for its whole bill in the stockpile (SITE_BUSY, naming what it
+  lacks); then `Stockpiles.charge`, `survival.mech.<lot> {bill, cells, charged, chargedAt}` saved, then the no-update write. Outstanding
+  (`<region>:mech:<lot>`), the audit's `mechStanding` and the refund at the group removal's rule 7 (keyed, once) follow.
+- **Roof fill, read as "holes only".** A rung cell at or above the bound roof that the design left empty and that has a design block beside
+  it across the passage gets the structure block (`mechanismWrite.fill`). Cells above a flat roof stay empty (no bumps). Levers-only fills
+  nothing. The fill is billed.
+- **Crash:** `SiteJournal.isGateMechanism` falls back to the journal head's recorded kind when the record is gone (`GATE_BY_HEAD`,
+  `dev.gm.state`). The group removal skips a member with no record at all, so "exact restore with the record wholly gone" is not reachable
+  there; the in-game crash item runs the real GW path.
+
+**Gate items added:** `gm-survival` (chain `7agma-surv`; in `7agma` and the slice tier), gm-ingame `p13x7rv` (a design that leaves every
+reserved cell empty: the fill), gm-undo `close-logic`, `close-landed`, `open-logic`, `open-first`, `open-landed` and `crash`
+(`GM_UNDO_ONLY`, `GM_SURVIVAL_ONLY` narrow them). Ports used: 8896-8903.
+
 ## Step 1b (CONTRACT GM §14, main 900db05e merged): PASS (chain 7agm = gm-probe + gm-fit at 2a6e8f14)
 
 `gmCircuit.gateLayout(kind, {depth, roof})` lays out the whole sliding gate: leaves and feed (slideCells), the lever detectors
