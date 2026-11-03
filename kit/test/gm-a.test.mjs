@@ -195,3 +195,18 @@ test('determinism: 3 checks of each GM fixture give one artifact sha', async () 
     assert.ok(a.artifactSha && a.artifactSha === b.artifactSha && b.artifactSha === c.artifactSha, n);
   }
 });
+
+test('item 7: KC (a fountain off the ring\'s corner, K3\'s fixture with a mechanism gatehouse) M25:clear 0; M2:wall closure with the mechanism passage a gate: 0 leaks, every node across', async () => {
+  const { checkRegion } = await import('../lib/region/check.mjs');
+  const f = JSON.parse(fs.readFileSync(path.join(FIX, 'k3', 'k01_castle_fountain.json'), 'utf8'));
+  f.plan.connectors.find((c) => c.kind === 'wall').lots.find((q) => q.lot === 'gatehouse_1').mech = 'portcullis';
+  for (const fxx of [f, fx('gm_castle_13x7'), fx('gm_castle_17x15')]) {
+    const r = await run(fxx);
+    const rep = checkRegion({ ir: r.res.ir, survey: svOf(fxx).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null, meta: r.res.meta });
+    assert.deepEqual(rep.findings.filter((x) => x.rule === 'M25:clear').map((x) => x.message), [], fxx.plan.planId);
+    const m = rep.metrics.walls.curtain_wall;
+    for (const mv of ['player', 'villager']) assert.deepEqual([m.closure[mv].leaks, m.closure[mv].across], [0, m.closure[mv].nodes], `${fxx.plan.planId}: closure ${mv}`);
+  }
+  const r = await run(f);
+  assert.ok(r.artifact.lots.find((l) => l.id === 'gatehouse_1')?.onWall?.passage?.mechanism, 'KC: the gatehouse keeps its mechanism');
+});

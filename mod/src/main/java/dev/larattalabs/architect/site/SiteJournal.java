@@ -871,7 +871,11 @@ public final class SiteJournal {
 						ring = merged;
 					}
 				} else {
-					int flags = m.kind().equals(WorldJournal.LEAVES) ? Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE : m.policy() == Policy.BOX ? Sites.FLAGS
+					// ((7a GM-a, CONTRACT GM §7 item 6) a gate mechanism's cells come back with no update and no drop: a cleared dust, lever
+					// or torch never fires a piston or pops a neighbour mid-restore)
+					boolean gate = isGateMechanism(siteId);
+					int flags = gate ? Sites.CELL_FLAGS | Block.UPDATE_SUPPRESS_DROPS
+						: m.kind().equals(WorldJournal.LEAVES) ? Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE : m.policy() == Policy.BOX ? Sites.FLAGS
 						: Sites.CELL_FLAGS;
 					boolean guard = m.kind().equals(WorldJournal.LEAVES);
 					written.forEach((p, v) -> {
@@ -906,7 +910,30 @@ public final class SiteJournal {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + siteId + " can't be read (" + e.getMessage() + ")");
 		}
 		cells.sort(Comparator.comparingInt(c -> Journal.y(c.pos())));
+		if (isGateMechanism(siteId)) {
+			// ((7a GM-a, §7 item 6) piston heads and moving pistons first, then the bases, then the rest (lowest first within each))
+			cells.sort(Comparator.comparingInt((CellWrite c) -> gateRank(level, c.pos())).thenComparingInt(c -> Journal.y(c.pos())));
+		}
 		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes, pts);
+	}
+
+	/** (7a GM-a) Whether a site is a region's gate mechanism (the cells site of kind {@code architect:mechanism}). */
+	static boolean isGateMechanism(String siteId) {
+		Infra inf = Infras.get(siteId);
+		return inf != null && inf.kind().equals(Infra.CELLS + "architect:mechanism");
+	}
+
+	/** (7a GM-a) A gate mechanism cell's restore rank by what stands there now: a piston head or moving piston 0, a piston base 1, else 2. */
+	private static int gateRank(ServerLevel level, long pos) {
+		BlockPos p = BlockPos.of(pos);
+		if (!level.isLoaded(p)) {
+			return 2;
+		}
+		net.minecraft.world.level.block.state.BlockState s = level.getBlockState(p);
+		if (s.is(net.minecraft.world.level.block.Blocks.PISTON_HEAD) || s.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON)) {
+			return 0;
+		}
+		return s.is(net.minecraft.world.level.block.Blocks.PISTON) || s.is(net.minecraft.world.level.block.Blocks.STICKY_PISTON) ? 1 : 2;
 	}
 
 	/** The dimension of a site's entries (its first entry's). */
