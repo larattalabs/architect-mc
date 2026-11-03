@@ -26347,6 +26347,10 @@ and forwarded before the design exists, so the design's roof row is not known wh
    carries that case as a fixture.
 5. **N-GM-2 is answered by the probe:** a daytime storm closes the gate once and the clearing reopens it once, with no flicker, in every
    box. The natural sensor behaviour stands; no threshold is used.
+6. **The brief asks for a low enough roof (Steward, 2026-11-03).** An onWall box is exact and as high as the wall box (40 in Steward's
+   e2e), so a design could roof the gate above `depth + 7` without knowing why that matters. The gatehouse brief adds one line: keep the
+   roof over the gate's logic block (u -6..6, d 1..depth-2) at or below row `depth + 7` so the gate can sense the sky; towers elsewhere on
+   the lot may rise higher. The box height is not capped. A design that ignores the line gets the item 3 fallback.
 
 ### Open questions for Steward
 
