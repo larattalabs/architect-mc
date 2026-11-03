@@ -25,7 +25,7 @@ export function benchCells() {
   // the core
   B(33, 0, { name: 'BC', expect: ['P', 'Q'] });
   torch(32, 0, 'west', [33, 0, 0], { label: 'nC', stop: true });
-  rep(31, 0, 'e', 1, { expect: ['nC'] });
+  rep(31, 0, 'e', 2, { expect: ['nC'] }); // (RL: the window opens 2 ticks after T1 is off, see gm-probe's dawn trace)
   rep(30, 0, 'n', 2, { name: 'RG', label: 'G', stop: true });
   w(30, -1, { name: 'D', expect: ['S', 'nG', 'nQ'] });
   put(30, 0, -2, `${W}comparator[facing=north,mode=subtract]`, { t: 'cmp', f: 'n' });
