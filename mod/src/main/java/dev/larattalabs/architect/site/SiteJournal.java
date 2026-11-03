@@ -919,7 +919,11 @@ public final class SiteJournal {
 
 	/** (7a GM-a) Whether a site is a region's gate mechanism (the cells site of kind {@code architect:mechanism}). */
 	static boolean isGateMechanism(String siteId) {
+		// (a site being removed is pending: Infras.markPending before its restore is gathered)
 		Infra inf = Infras.get(siteId);
+		if (inf == null) {
+			inf = Infras.pending(siteId);
+		}
 		return inf != null && inf.kind().equals(Infra.CELLS + "architect:mechanism");
 	}
 
