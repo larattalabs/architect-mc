@@ -66,8 +66,8 @@ export async function registerGmA(steps, h) {
     const K = await import('./gate7a-kit.mjs');
     // ((GM-a2, §16 items 1 and 3) the GM fixtures' mechanism gains its provisional bill (cost), the gatehouse lot's range holds it, the IR
     // write data names the roof fill's block: their answers, IR and artifact move, as named; every other fixture byte-identical)
-    const why = 'GM-a2: mechanism.cost, the lot costRange widened by it, mechanismWrite.fill';
-    const except = Object.fromEntries(['gm_castle_13x7', 'gm_castle_17x15', 'gm_castle_slide', 'gm_castle_swing'].map((n) => [`gm/${n}.json`, why]));
+    const { F7A_MOVED } = await import('./f7a-norm.mjs');
+    const except = Object.fromEntries(Object.entries(F7A_MOVED).filter(([k]) => k.startsWith('gm/')));
     const u = await K.unchanged(root, { check, log, base: 'GM', except, mergedIf: 'mod/src/main/java/dev/larattalabs/architect/site/MechCharges.java' });
     fs.writeFileSync(path.join(OUT, 'gm-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
     return { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ };

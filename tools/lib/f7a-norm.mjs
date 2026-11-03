@@ -7,6 +7,12 @@ export const F7A_MOVED = Object.freeze({
   'extension/e15_every_reserved_a.json': '7a foundation: c_rail until CR, c_branch_walk until 7b (S-7a-4, S-7a-5); c_span_bridge left the fixture (a supported alias, R25); (7a K2) c_wall_along left it (wall.along supported)',
   // ((7a K2) the slices' own movers, each slice its line: K2 reads castle_city's params.wall_walk (its walk round the ring))
   'asks/castle_city.json': '7a K2: curtain_wall\'s params.wall_walk read as walk: true (its notes, geometry and IR; still adjusted)',
+  // ((7a GM-a2, CONTRACT GM §16 items 1 and 3) the GM fixtures' mechanism carries its provisional bill (cost), the gatehouse lot's range holds it,
+  // the IR write data names the roof fill's block)
+  'gm/gm_castle_13x7.json': '7a GM-a2: mechanism.cost, the lot costRange widened by it, mechanismWrite.fill',
+  'gm/gm_castle_17x15.json': '7a GM-a2: mechanism.cost, the lot costRange widened by it, mechanismWrite.fill',
+  'gm/gm_castle_slide.json': '7a GM-a2: mechanism.cost, the lot costRange widened by it, mechanismWrite.fill',
+  'gm/gm_castle_swing.json': '7a GM-a2: mechanism.cost, the lot costRange widened by it',
 });
 
 /** The recorded parts (ask/part) whose answer the foundation moves only by its `until` (connector.rail: 7a -> CR). */
