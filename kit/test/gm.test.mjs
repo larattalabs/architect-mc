@@ -79,3 +79,26 @@ test('gate layouts own every support cell: no dust or diode stands on a cell the
     }
   }
 });
+
+test('settleLayout: the rest state is a fixed point (settled twice: identical), the latch held open, the torches as the logic needs', async () => {
+  const { settleLayout } = await import('../lib/connectors/gmCircuit.mjs');
+  for (const kind of ['portcullis', 'slide']) {
+    const lay = gateLayout(kind, { depth: 7, roof: 10 });
+    const a = await settleLayout(lay), b = await settleLayout(lay);
+    assert.deepEqual([...a], [...b]);
+    assert.match(a.get('-1,4,7'), /repeater\[delay=2,facing=west,locked=true,powered=false\]/); // RG: locked, open
+    assert.match(a.get('-1,3,7'), /powered=true/); // RL on: T5 lit, no pulse
+    for (const t of ['-2,4,6', '-3,2,7', '-1,2,7']) assert.match(a.get(t), /lit=true/); // T1, T2, T5
+    assert.match(a.get('-3,3,7'), /power=15/); // nQ
+  }
+});
+
+test('gmToWorld turns, never mirrors; gmBoxFits names the short side', async () => {
+  const { gmToWorld, gmBoxFits } = await import('../lib/connectors/gmCircuit.mjs');
+  const c = [1, 2, 3, 'minecraft:repeater[facing=east,delay=1]'];
+  assert.deepEqual(gmToWorld(c, { cx: 0, fy: 0, cz: 0, facing: 'north' }), [1, 3, 2, 'minecraft:repeater[facing=east,delay=1]']);
+  assert.deepEqual(gmToWorld(c, { cx: 0, fy: 0, cz: 0, facing: 'south' }), [-1, 3, -2, 'minecraft:repeater[facing=west,delay=1]']);
+  assert.deepEqual(gmToWorld(c, { cx: 0, fy: 0, cz: 0, facing: 'east' }), [-2, 3, 1, 'minecraft:repeater[facing=south,delay=1]']);
+  assert.deepEqual(gmBoxFits({ along: 11, depth: 13, height: 12 }), { ok: false, need: { along: 13 } });
+  assert.deepEqual(gmBoxFits({ along: 17, depth: 15, height: 10 }), { ok: true });
+});

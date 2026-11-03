@@ -829,7 +829,8 @@ async function fitTrace(X, F, Z, leaf, act, n = 50) {
 async function fitWatch(X, F, Z, leaf, n, every = 10) {
   await freeze();
   const g = [];
-  let last = null;
+  let last = await fitState(X, F, Z, leaf);
+  g.push(last.G ? 'C' : 'o');
   for (let i = 0; i < n; i++) { await step(every); last = await fitState(X, F, Z, leaf); g.push(last.G ? 'C' : 'o'); }
   await unfreeze();
   const seq = g.join('');
@@ -873,6 +874,16 @@ steps.fit = async () => {
     const lever = { A: [X - 1, F + 2, Z], B: [X + 1, F + 2, Z + D2 - 1] };
     const st = () => fitState(X, F, Z, leaf);
     const rec = { box: [W2, D2, R2], kind, steps: [] };
+    // the rest state as built and settled by day: every redstone part, compared with gmCircuit.settleLayout (§7 item 1)
+    {
+      const lay = GMC.gateLayout(kind, { depth: D2, roof: R2 });
+      const pure = await GMC.settleLayout(lay);
+      const dumpBox = await snap(X - half, F - 1, Z, X + half, F + R2, Z + D2 - 1);
+      const diff = [];
+      for (const [k2, want] of pure) { const [u, d, r] = k2.split(',').map(Number); const got = `minecraft:${dumpBox[`${X + u},${F + r},${Z + d}`] ?? 'air'}`; if (got !== want) diff.push([k2, want.replace('minecraft:', ''), got.replace('minecraft:', '')]); }
+      rec.settled = { compared: pure.size, diff };
+      log(`  ${name} settleLayout vs the built rest state: ${diff.length} of ${pure.size} differ ${json(diff.slice(0, 6))}`);
+    }
     const note = async (what, want) => { const s2 = await st(); const ok = want === 'closed' ? s2.closed && s2.G : s2.open && !s2.G; rec.steps.push({ what, want, ok, leaves: s2.leaves, G: s2.G }); log(`  ${name} ${what}: ${ok ? 'ok' : 'WRONG'} (leaves ${json(s2.leaves)}, G ${s2.G})`); return ok; };
     const flipW = async (lv) => { await flip(lever[lv]); await L.gameWait(1500, { real: L.settle, label: 'gm flip' }); };
     const timeW = async (t) => { await cmd(`/time set ${t}`); await L.gameWait(3000, { real: L.settle, label: 'gm sensor ticks' }); };
@@ -909,10 +920,11 @@ steps.fit = async () => {
     rec.trace.dawnOverride = await fitTrace(X, F, Z, leaf, () => cmd('/time set 1000'), 60);
     for (const [k2, tr] of Object.entries(rec.trace)) log(`  ${name} trace ${k2}: a ${tr.a} end slack ${tr.endSlack} u ${tr.u0}..${tr.u1} v ${tr.v0}..${tr.v1}\n    G      ${tr.G}\n    locked ${tr.locked}\n    D      ${tr.D}`);
     // natural dusk and dawn (time runs), then a daytime storm and its clearing: G edges and leaf moves
-    await cmd('/time set 12400'); await L.gameWait(1000, { real: L.settle, label: 'pre-dusk' });
-    rec.dusk = await fitWatch(X, F, Z, leaf, 200, 10);
-    await cmd('/time set 22600'); await L.gameWait(1000, { real: L.settle, label: 'pre-dawn' });
-    rec.dawn = await fitWatch(X, F, Z, leaf, 150, 10);
+    // (from clear day through dusk, and from deep night through dawn: the sensor's switch falls inside either window)
+    await cmd('/time set 11000'); await L.gameWait(2000, { real: L.settle, label: 'pre-dusk' });
+    rec.dusk = await fitWatch(X, F, Z, leaf, 360, 10);
+    await cmd('/time set 21000'); await L.gameWait(2000, { real: L.settle, label: 'pre-dawn' });
+    rec.dawn = await fitWatch(X, F, Z, leaf, 360, 10);
     await cmd('/time set 6000'); await L.gameWait(2000, { real: L.settle, label: 'noon' });
     const pre = await st();
     await cmd('/weather thunder 2400');
@@ -926,9 +938,10 @@ steps.fit = async () => {
     check(rec.steps.every((s2) => s2.ok), `${name}: §2a ${rec.steps.filter((s2) => s2.ok).length}/${rec.steps.length} steps`);
     check(bad === 0, `${name}: 20 lever cycles through the logic, ${bad} with a misplaced leaf${rec.firstBad ? ` (${json(rec.firstBad)})` : ''}`);
     check(traceOk, `${name}: latch windows with at least 1 tick of slack: ${Object.entries(rec.trace).map(([k2, t]) => `${k2} a=${t.a} end=${t.endSlack}`).join(', ')}`);
-    check(rec.dusk.edges === 1 && rec.dawn.edges === 1 && !rec.dusk.mixed && !rec.dawn.mixed, `${name}: natural dusk ${rec.dusk.edges} edge, dawn ${rec.dawn.edges} (one each: closes at dusk, opens at dawn, no flicker)`);
+    check(rec.dusk.seq[0] === 'o' && rec.dusk.edges === 1 && rec.dawn.seq[0] === 'C' && rec.dawn.edges === 1 && !rec.dusk.mixed && !rec.dawn.mixed, `${name}: natural dusk ${rec.dusk.edges} edge, dawn ${rec.dawn.edges} (one each: closes at dusk, opens at dawn, no flicker)`);
     check(rec.storm.edges <= 1 && rec.clear.edges <= 1 && !rec.storm.mixed && !rec.clear.mixed, `${name}: daytime storm ${rec.storm.edges} edge(s) (${rec.storm.seq.slice(-1) === 'C' ? 'closes' : 'stays open'}), clearing ${rec.clear.edges} (no flicker)`);
     check(!rec.items, `${name}: no item dropped (${json(rec.items)})`);
+    check(rec.settled.diff.length === 0, `${name}: the pure settled rest state equals the built one (${rec.settled.compared} redstone parts, ${rec.settled.diff.length} differ)`);
     await L.leaveWorld();
   }
   return out;

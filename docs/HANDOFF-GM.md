@@ -1,8 +1,53 @@
 # GM handoff
 
-## Step 1b (CONTRACT GM §13, main fec8cd70 merged): not done, stopped to report
+## Step 1b (CONTRACT GM §14, main 900db05e merged): layout found, lint clean, in-game run below
 
-The fit of the §2a logic into the hidden volume has not converged. Details are in "Step 1b fit analysis" at the end; the coordinator has the options.
+`gmCircuit.gateLayout(kind, {depth, roof})` lays out the whole sliding gate: leaves and feed (slideCells), the lever detectors
+(detectorCells), the §2a logic in the logic block (u in [-5, 5], d = 1..depth-2, rows 4..8), the roof sensor and its run, and every
+unused logic-block cell as the structure block. `lintLayout` checks it (gmLint, below); `gm-fit` (tools/gate7agm.mjs fit) builds it in
+real gatehouse boxes and runs the step 1b set. The evidence is the run named in "Step 1b evidence".
+
+**The layout (local frame, roof at row R):**
+- r 7: the chain SB -> CMP (subtract, back SB) -> DB -> RG (latch, delay 2) -> GB along d = 4, u -4..0. nQ dust on CMP's north side from
+  T2 on B2 (-3,1,7). RL (lock, delay 1) on RG's north side from T5 on BC (-1,1,7). rBC (delay 1) reads B2 into BC: the bench's B2 -> BC.
+- D is a block (DB), powered by CMP beside it or by T1, a wall torch under it hung on B1 (-2,5,6).
+- B1 is fed by rG (delay 1, from G dust under GB) and rQd (delay 2, from Q').
+- S: the inverted sensor in the roof at (-4, 1 + (R - 10), R), a staircase along d down to raw dust at (-4,1,9) on the block RS reads.
+  RS (delay 1) gives the clean S, which runs as dust onto SB's top. OS (under RS, facing up) -> QB -> RQ (delay 4) -> Q' dust.
+- Q' -> rB2 (delay 1): B2 = Q' + 2. Q' -> rQd (delay 2): B1 = Q' + 4. BC = B2 + 2. So a = 2 on both paths (latchTiming).
+- P: each detector observer powers a block read by its own RP (delay 3). P' climbs to RP' (delay 1), into the block rP (delay 1)
+  reads into BC. Inside detector: an east column (4, d, 6) for any depth.
+- G: GB -> dust under it and south of it -> the G line at row 5 along d = 3 (u -3..3), which touches both feed entries (+-3,2,5).
+
+**What forced this shape (each is a gmLint rule or test now):**
+- every dust or diode stands on a layout cell. A row-4 G line needed row-3 floors, which are the design's lintel course, so the line is at row 5;
+- the cell over a torch is air;
+- a strongly powered block has no foreign dust beside it, above it or below it;
+- a comparator side reads only dust or a diode;
+- observer outputs are blocks read by repeaters (RPa, RPb), so a pulse never sits beside a bus;
+- the hall around the logic block may be solid or open (both are linted).
+
+**How it was found:** by a small router (dust paths with their floor and cut cells, the full gmLint as the oracle) over hand-placed parts,
+in a scratchpad, then hand-finished. The router is not committed (no new tooling); the result is the data in gateLayout.
+
+**First in-game findings (13x7x10, portcullis), now fixed:** the write order must put observers in with the structure, because OS is the floor
+of RS. With that, all 13 steps, 20 lever cycles, a = 2 with end slack 2 on both override windows, a storm closing once and reopening once.
+
+**Contract notes (no number changed):**
+- The logic stays off u = +-6. These are the 13-wide box's side faces, though §14 item 2 names them.
+- The inside detector's trapdoor is at (1, D-2, 3), a lintel cell one plane in from §13's trigger cell (1, D-1, 3); GM-a's envelope must name it.
+- The sensor sits at a fixed roof cell, (-4, 1 + (R - 10), R). Its run climbs one plane per row, so a roof more than depth - 3 rows above
+  row 10 has no run: such a gate is levers-only with deviation `mechanism.sensor` (§2a "No sky cell"), unless a later slice adds a spiral run.
+
+## K3's orientation of a gatehouse lot (Steward's question, answered from the code)
+
+- **A gate lot** (`wallLots.mjs` siteWallLots, "gates") always puts `size[0]` along the wall. `nearestLotRun(W, pt, w)` takes the first
+  number as the run along the ring, and `runBox(..., d)` the second as the depth through it. Nothing swaps them to the longer side.
+  - The recorded `redstone_gate` `gatehouse_1` is `[13, 11]`, 13 along the wall, so it gets the mechanism.
+  - A gatehouse sent as `[11, 13]` has 11 along the wall and comes out plain, with deviation `mechanism`.
+- **A joined (via) lot** (`viaLots`, K1's lots on a `wall.line`) keeps the lot's own placement. Its passage runs across the line
+  (`passFacing`), so a via gatehouse can have its short side along the wall too.
+- Steward's e2e 17x15 runs its 17 side along, so it is fine. GM-a's gm-ingame gets an `[11, 13]` fixture to show the plain passage.
 
 ## State (2026-11-02): step 1 (`gm-probe` under CONTRACT GM §12) has a result; step 2 (GM-a) is not started
 
@@ -62,45 +107,6 @@ whether step 2 waits on Noah.
 By hand: `GATE_HOST=server GATE6B_CLIENT_SCRIPT=tools/run-headless-server.mjs GATE7AGM_OUT=<dir> node tools/gate7agm.mjs start`, then
 `... <step>`, then `stop`. Steps: rules, grate, detectors, daycycle, swing, drawbridge, settled, probe (the set), daydebug.
 
-`kit/lib/connectors/gmLint.mjs` is a static cross-talk check that was used to lay out the bench. It is approximate: it believes torches
-feed comparator sides, which they do not.
+`kit/lib/connectors/gmLint.mjs` is the static check (rules named in its header; unit tests in kit/test/gm.test.mjs). It no longer believes
+torches feed comparator sides.
 
-## Step 1b fit analysis (2026-11-03)
-
-**Hidden volume.** In an 11 x 5 x 9 box the faces are d = 0 and d = 4 and the side faces u = +-5, so nothing may sit there. What is
-left above the lintel is u -4..4, d 1..3, rows 4..7: 108 cells. §13 says planes d = 2..4, but d = 4 is the inner face in a box 5 deep, so I
-used d = 1..3. Already taken there:
-- the feed entries and cut cells;
-- the detectors (two trapdoors and two observers, plus their outputs);
-- the G line to both entries.
-
-**Hard rules learned while packing (26.3):**
-- Dust next to a strongly powered block reads it. Every block strongly powered by a repeater, comparator or observer must stay off the
-  G line, the P line and the entries. Feeding the latch blocks by weak power (dust pointing in) avoids this.
-- A comparator's side reads only dust, diodes and redstone blocks. Torches need a dust cell between.
-- A repeater lock needs the lock diode along the latch's side axis. With R_G on the d axis, its input and output take d = 1 and d = 3
-  and the lock comes along u, so the latch fills all three planes at one u.
-- An observer's pulse into a block beside the bus reaches the bus.
-- A trapdoor beside any powered block flips, so the detectors' trapdoors need unpowered neighbours.
-
-**Slack rule for the D latch** (what §13 item 5 asks for), derived and checked against the dawn trace:
-- The data-valid interval and the unlock interval have the same length L (both come from Q').
-- Let a = unlock start minus data-valid start. The latch is safe with 1 tick of slack each side only when 1 <= a <= 2·dRG - 1, where dRG
-  is the latch repeater's delay in game ticks/2 (dRG = 2 gives a in [1, 3]).
-- Bench values:
-  - T1 path: a = 2. Safe.
-  - T2/CMP path: a = 4 (B2 -> BC repeater 2, RL 4, minus the comparator's 2). One tick outside the rule, so the dusk case has a 0-slack race
-    at the window's end. It passed by tick order.
-  - The fix is RL delay 1 with B1 fed 2 ticks after B2. Then both a = 2.
-
-**The two candidate latches, against the volume:**
-- D latch (repeater lock): about 14 parts plus wire.
-- Torch RS latch with four subtract comparators: about 16 parts.
-
-Each hand attempt in d 1..3 x rows 4..7 ran into the same walls:
-- the G line has to leave the latch and reach both entries;
-- T5 must not see BC strongly powered next to an entry;
-- B1 needs both G and Q' while staying weak;
-- the P node, the S/Q column and the latch compete for the centre columns.
-
-I have no layout that passes `gmLint` and the constraints above. A fit may exist, but finding it is a search, not a tweak.

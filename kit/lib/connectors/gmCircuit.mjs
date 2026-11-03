@@ -307,3 +307,156 @@ export function latchTiming({ rB2 = 1, rQd = 2, rBC = 1, RL = 1, RG = 2 } = {}) 
 }
 /** The delays gateLayout declares (and the bench's, before §14). */
 export const LAYOUT_DELAYS = Object.freeze({ rB2: 1, rQd: 2, rBC: 1, RL: 1, RG: 2 });
+
+// ------------------------------------------------------------------ GM-a: the mechanism in a gatehouse lot
+
+/** (§14 item 1) The least gatehouse box for a mechanism: along the wall, through it, and floorY to the roof underside. */
+export const GM_BOX_MIN = Object.freeze({ along: 13, depth: 7, height: 10 });
+/** Whether a gatehouse box takes a mechanism; `need` names the first short side (for the deviation and NO_ROOM's `need`). */
+export function gmBoxFits({ along, depth, height }) {
+  if (along < GM_BOX_MIN.along) return { ok: false, need: { along: GM_BOX_MIN.along } };
+  if (depth < GM_BOX_MIN.depth) return { ok: false, need: { depth: GM_BOX_MIN.depth } };
+  if (height < GM_BOX_MIN.height) return { ok: false, need: { height: GM_BOX_MIN.height } };
+  return { ok: true };
+}
+
+/**
+ * The cells a mechanism writes, in gmCircuit's local frame (u across, d in from the front face, r up from floorY), with the states the
+ * realise writes: `portcullis` and `slide` are gateLayout's cells (the box `depth` deep, its roof at row `height`), `swing` is
+ * swingCells. `rest` is §2's default. Returns {cells: [[u, d, r, state]...], kind, rest, dayDriven, triggers, sensor}.
+ */
+export function mechanismCells(kind, { depth, height, mats, rest } = {}) {
+  if (kind === 'swing') {
+    const cells = [...swingCells(mats).values()];
+    return { kind, rest: rest ?? 'closed', dayDriven: false, cells, sensor: null,
+      triggers: [{ kind: 'button', at: [0, 0, 1], side: 'front', who: 'player' }, { kind: 'lever', at: [0, 2, 1], side: 'back', who: 'player' }, { kind: 'plate', at: [-1, 2, 0], side: 'back', who: 'anyone' }] };
+  }
+  if (kind !== 'portcullis' && kind !== 'slide') throw new Error(`mechanismCells: unknown kind ${kind}`);
+  const lay = gateLayout(kind, { depth, roof: height, mats });
+  return { kind, rest: rest ?? 'open', dayDriven: true, cells: layoutCells(lay), sensor: lay.sensor,
+    triggers: [{ kind: 'lever', at: [-1, 0, 2], side: 'front', who: 'player' }, { kind: 'lever', at: [1, depth - 1, 2], side: 'back', who: 'player' }, { kind: 'daylight', at: lay.sensor, side: 'roof', who: 'sky' }] };
+}
+
+const CW = { north: 'east', east: 'south', south: 'west', west: 'north' };
+const OUT = { north: 0, east: 1, south: 2, west: 3 };
+/**
+ * A local cell placed in the world for a passage whose front (outer) face is `facing` (the passage's `facing`, out of the wall): (cx, cz)
+ * is the passage's centre column on the front face row, fy its floorY. The local frame is the probe's turned (never mirrored): d runs in
+ * from the front, u to the right of an observer facing out (u+ = east when the front faces north). States turn with it.
+ */
+export function gmToWorld([u, d, r, s], { cx, fy, cz, facing }) {
+  const k = OUT[facing];
+  if (k === undefined) throw new Error(`gmToWorld: facing ${facing}`);
+  const inv = { north: [0, 1], east: [-1, 0], south: [0, -1], west: [1, 0] }[facing];
+  const ux = { north: [1, 0], east: [0, 1], south: [-1, 0], west: [0, -1] }[facing];
+  return [cx + u * ux[0] + d * inv[0], fy + r, cz + u * ux[1] + d * inv[1], turnStateLocal(s, k)];
+}
+const DIRS4 = ['north', 'east', 'south', 'west'];
+function turnStateLocal(s, k) {
+  if (!k || typeof s !== 'string' || !s.includes('[')) return s;
+  const i = s.indexOf('[');
+  const props = Object.fromEntries(s.slice(i + 1, -1).split(',').map((kv) => kv.split('=')));
+  const out = { ...props };
+  const t = (dir) => { const j = DIRS4.indexOf(dir); return j < 0 ? dir : DIRS4[(j + k) % 4]; };
+  if (props.facing) out.facing = t(props.facing);
+  if (DIRS4.every((x) => x in props)) for (const x of DIRS4) out[t(x)] = props[x];
+  return `${s.slice(0, i)}[${Object.entries(out).map(([a, b]) => `${a}=${b}`).join(',')}]`;
+}
+void CW;
+
+/**
+ * (§7 item 1) The settled rest state of a gateLayout, by a pure evaluator: torches lit unless their mount is powered, repeaters and
+ * comparators from their inputs (the latch RG held at its rest: unpowered for `rest: open`), dust power by distance from its sources,
+ * dust shapes from its links (a single link extends to the opposite side; none: a cross). By day, levers off, the sensor at 0. Returns
+ * a Map 'u,d,r' -> state for every redstone part (blocks, leaves and pistons keep gateLayout's states). gm-unit runs it twice (a fixed
+ * point) and compares it with gm-fit's dump of a freshly built box.
+ */
+export async function settleLayout(lay, { rest = 'open' } = {}) {
+  const { lint, DIRS: LD, OPP: LO } = await import('./gmLint.mjs');
+  const m = new Map();
+  for (const c of lay.cells.values()) m.set(`${c.u},${c.r},${c.d}`, c.lint);
+  const solid = () => true; // the design's cells around: walls (the dust links only see the layout's own dust)
+  const inside = (key) => m.has(key);
+  const L2 = lint(m, { solid: (key) => !inside(key) && solid(key) });
+  const P = (k2) => k2.split(',').map(Number);
+  const add = (p, d) => [p[0] + LD[d][0], p[1] + LD[d][1], p[2] + LD[d][2]];
+  const K2 = (p) => p.join(',');
+  const at = (p) => m.get(K2(p)) ?? { t: 'block', implicit: true };
+  const lit = new Map(), pow = new Map(), on = new Map(), locked = new Map();
+  for (const [k2, c] of m) { if (c.t === 'torch') lit.set(k2, true); if (c.t === 'dust') pow.set(k2, 0); if (c.t === 'rep' || c.t === 'cmp') on.set(k2, false); }
+  const rgKey = [...m].find(([, c]) => c.name === 'RG')?.[0];
+  // power into a cell from its neighbours: strong (diode/observer outputs, a torch below, a lever mount), weak (dust on top or pointing in)
+  const strongInto = (bk) => { const p = P(bk);
+    for (const d of Object.keys(LD)) { const n = add(p, d), nk = K2(n), c = m.get(nk); if (!c) continue;
+      if ((c.t === 'rep' || c.t === 'cmp') && K2(add(n, LO[c.f])) === bk && on.get(nk)) return true;
+      if (c.t === 'torch' && d === 'd' && lit.get(nk) && K2(c.mount) !== bk) return true; }
+    return false; };
+  const weakInto = (bk) => { const p = P(bk);
+    for (const d of Object.keys(LD)) { const n = add(p, d), nk = K2(n), c = m.get(nk); if (!c || c.t !== 'dust' || !pow.get(nk)) continue;
+      if (d === 'u') return true; if (L2.dustInfo.get(nk).point.includes(LO[d])) return true; }
+    return false; };
+  const blockOn = (bk) => strongInto(bk) || weakInto(bk);
+  const signalAt = (srcKey, intoKey) => { // the signal a neighbour cell gives the cell intoKey (for a diode's input)
+    const c = m.get(srcKey);
+    if (!c) return 0;
+    if (c.t === 'dust') return pow.get(srcKey) ?? 0;
+    if (c.t === 'block') return blockOn(srcKey) ? 15 : 0;
+    if (c.t === 'torch') return lit.get(srcKey) && K2(c.mount) !== intoKey ? 15 : 0;
+    if (c.t === 'rep' || c.t === 'cmp') return K2(add(P(srcKey), LO[c.f])) === intoKey && on.get(srcKey) ? 15 : 0;
+    return 0; };
+  for (let it = 0; it < 200; it++) {
+    let changed = false;
+    const set = (map, k2, v) => { if (map.get(k2) !== v) { map.set(k2, v); changed = true; } };
+    for (const [k2, c] of m) {
+      if (c.t === 'torch') set(lit, k2, !blockOn(K2(c.mount)));
+      if (c.t === 'rep') {
+        const back = K2(add(P(k2), c.f));
+        const sides = Object.keys(LD).filter((d) => d !== c.f && d !== LO[c.f] && d !== 'u' && d !== 'd');
+        set(locked, k2, sides.some((d) => { const n = add(P(k2), d), nk = K2(n), s = m.get(nk); return s && (s.t === 'rep' || s.t === 'cmp') && K2(add(n, LO[s.f])) === k2 && on.get(nk); }));
+        if (k2 === rgKey) set(on, k2, rest === 'closed');
+        else set(on, k2, signalAt(back, k2) > 0);
+      }
+      if (c.t === 'cmp') {
+        const back = signalAt(K2(add(P(k2), c.f)), k2);
+        const sides = Object.keys(LD).filter((d) => d !== c.f && d !== LO[c.f] && d !== 'u' && d !== 'd');
+        const side = Math.max(0, ...sides.map((d) => { const nk = K2(add(P(k2), d)), s = m.get(nk); return s && (s.t === 'dust' || s.t === 'rep' || s.t === 'cmp') ? signalAt(nk, k2) : 0; }));
+        set(on, k2, back - side > 0);
+      }
+    }
+    for (const [k2, c] of m) {
+      if (c.t !== 'dust') continue;
+      const p = P(k2);
+      let best = 0;
+      for (const d of Object.keys(LD)) {
+        const n = add(p, d), nk = K2(n), s = m.get(nk);
+        if (!s) continue;
+        if (s.t === 'block' && strongInto(nk)) best = 15;
+        if (s.t === 'torch' && lit.get(nk) && !(d === 'u' && P(K2(s.mount))[1] < n[1])) best = 15;
+        if ((s.t === 'rep' || s.t === 'cmp') && K2(add(n, LO[s.f])) === k2 && on.get(nk)) best = 15;
+      }
+      for (const w of L2.dustInfo.get(k2).wires) best = Math.max(best, (pow.get(w) ?? 0) - 1);
+      set(pow, k2, best);
+    }
+    if (!changed) break;
+  }
+  const out = new Map();
+  const F = { n: 'north', s: 'south', e: 'east', w: 'west' };
+  for (const c of lay.cells.values()) {
+    const k2 = `${c.u},${c.r},${c.d}`, l = c.lint, key = `${c.u},${c.d},${c.r}`;
+    if (l.t === 'dust') {
+      const di = L2.dustInfo.get(k2);
+      const p = P(k2);
+      const shape = {};
+      for (const h of ['n', 's', 'e', 'w']) {
+        if (!di.point.includes(h)) { shape[F[h]] = 'none'; continue; }
+        const n = add(p, h), up = add(n, 'u');
+        shape[F[h]] = di.links.includes(h) && m.get(K2(up))?.t === 'dust' && di.wires.includes(K2(up)) ? 'up' : 'side';
+      }
+      out.set(key, `minecraft:redstone_wire[east=${shape.east},north=${shape.north},power=${pow.get(k2)},south=${shape.south},west=${shape.west}]`);
+    } else if (l.t === 'rep') out.set(key, `minecraft:repeater[delay=${l.delay},facing=${F[l.f]},locked=${!!locked.get(k2)},powered=${on.get(k2)}]`);
+    else if (l.t === 'cmp') out.set(key, `minecraft:comparator[facing=${F[l.f]},mode=subtract,powered=${on.get(k2)}]`);
+    else if (l.t === 'torch') out.set(key, c.state.replace(/lit=\w+/, `lit=${lit.get(k2)}`));
+    else if (l.t === 'sensor') out.set(key, c.state);
+  }
+  return out;
+}
