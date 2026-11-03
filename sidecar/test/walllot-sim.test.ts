@@ -76,6 +76,10 @@ describe('the wall-lot stand-in: which requests take it, the token', () => {
     expect(simWallLot({ type: 'tower', maxSize: m, context: `site: ${BRIEF}` })).toBeDefined();
     const g = simWallLot({ type: 'gatehouse', maxSize: { x: 11, y: 40, z: 9 }, reserved: passageReserved(11, 9, [4, 5, 6]) })!;
     expect([g.size, [...new Set(g.passage!.map(([u]) => u))]]).toEqual([[11, 40, 9], [4, 5, 6]]);
+    expect(g.roof).toBeUndefined();
+    // (7a GM) the GM brief's roof line: a mechanism gatehouse, its deck at row 10 (the gate's lowest sensor rung)
+    const gm = simWallLot({ type: 'gatehouse', maxSize: { x: 13, y: 40, z: 9 }, reserved: passageReserved(13, 9, [5, 6, 7]), notes: 'keep the roof over the gate\'s logic block at or below row 16 above the passage floor so the gate can sense the sky' })!;
+    expect(gm.roof).toBe(10);
     // the token alone is a sign; matched anywhere in the notes as a whole token
     expect(simWallLot({ type: 'tower', maxSize: m, notes: 'sim:outerdoor' })).toMatchObject({ outerDoor: true });
     expect(simWallLot({ type: 'tower', maxSize: m, notes: `${BRIEF}. Also sim:outerdoor, please` })).toMatchObject({ outerDoor: true });

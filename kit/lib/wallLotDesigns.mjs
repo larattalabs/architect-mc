@@ -308,7 +308,8 @@ export function standInDesign(id, spec, palette = PALETTES.rustic, K = KIT) {
   // role; the rail its wood's fence
   const roles = resolveRoles({ structure: p.stone, ...(p.fence ? { rail: p.fence } : {}), ...(p.roles ?? rolesOfPalette(p)) });
   const lot = { onWall: { frame: [W, D], outerFaces: { lotCells: Array.isArray(spec.outerFaces) ? spec.outerFaces : [] }, ...(spec.type === 'gatehouse' ? { passage: { lotCells: toRuns(spec.passage ?? standInPassage(W, D)) } } : {}) } };
-  if (spec.type === 'gatehouse') return gatehouseDesign(K, id, lot, roles, { outerDoor: !!spec.outerDoor, palette: p });
+  // ((7a GM) a mechanism gatehouse (spec.roof, from the GM brief): the deck at that row, the gate's sensor rung)
+  if (spec.type === 'gatehouse') return gatehouseDesign(K, id, lot, roles, { outerDoor: !!spec.outerDoor, palette: p, ...(Number.isInteger(spec.roof) ? { roof: spec.roof } : {}) });
   // a tower: its door on the front face (the frame's front row, which faces in), or (sim:outerdoor) the back face
   const bp = towerDesign(K, id, lot, roles, { maxH: H, palette: p, ...(spec.outerDoor ? { doorAt: [(W - 1) >> 1, 0] } : {}) });
   return bp;

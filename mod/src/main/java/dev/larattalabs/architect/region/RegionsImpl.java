@@ -2086,7 +2086,7 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/**
-	 * (7a GM-a, §7) A gatehouse lot's mechanism item: a cell site of kind {@code architect:mechanism} (CELL, LAYER) after the lot's item,
+	 * (7a GM-a, §7) A gatehouse lot's mechanism item: a cell site of kind {@code architect:mechanism} (BOX, LAYER) after the lot's item,
 	 * its cells (GateMech's plan) journaled as this region's and written with no update (Sites.CELL_FLAGS: the settled rest state), so the
 	 * region's undo restores them. Null when the lot has none or its item failed.
 	 */
@@ -2110,7 +2110,7 @@ public final class RegionsImpl implements Regions {
 			cells.add(dev.larattalabs.architect.api.CellWrite.of(BlockPos.of(gm.positions()[i]), gm.states()[i]));
 		}
 		QItem q = dev.larattalabs.architect.site.RegionQueue.holdItem(level, rec.id, "mech:" + lot.id(), lot.stage(), List.of(lotItem.key), cells, rec.owner,
-			"architect:mechanism");
+			"architect:mechanism", dev.larattalabs.architect.api.Policy.BOX);
 		q.ext.addProperty("architect_mc:lot", lot.id());
 		q.ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
 		return q;

@@ -25,6 +25,7 @@ export async function registerGmA(steps, h) {
   const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
   const runsOf = (flat) => { const out = []; for (let i = 0; i + 3 < (flat ?? []).length; i += 4) for (let y = flat[i + 2]; y <= flat[i + 3]; y++) out.push([flat[i], y, flat[i + 1]]); return out; };
   const spendZero = () => fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [], note: 'slice GM is $0: sim and stub only, no Claude call' }, null, 2)}\n`);
+  const ensure = async () => { if (!L.state.dev) await L.connect(); };
   const flip = (at) => call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at, on: at, face: 'up' }] }, 30_000);
 
   // ------------------------------------------------------------------ gm-unit (offline)
@@ -248,6 +249,7 @@ export async function registerGmA(steps, h) {
   ];
 
   steps.ingame = async () => {
+    await ensure();
     await L.leaveWorld().catch(() => null);
     const out = {};
     const only = process.env.GM_INGAME_ONLY ? new Set(process.env.GM_INGAME_ONLY.split(',')) : null;
@@ -365,6 +367,7 @@ export async function registerGmA(steps, h) {
   // ------------------------------------------------------------------ undo (item 4; the verifier re-runs it)
 
   steps.undo = async () => {
+    await ensure();
     await L.leaveWorld().catch(() => null);
     const out = {};
     for (const mode of ['open', 'closed', 'midmove']) {
@@ -418,6 +421,7 @@ export async function registerGmA(steps, h) {
   }
 
   steps.look = async () => {
+    await ensure();
     await L.leaveWorld().catch(() => null);
     const out = { shots: [], runs: {} };
     for (const b of LOOK_BIBLES) if (b) installBible(b);
