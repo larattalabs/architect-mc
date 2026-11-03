@@ -26352,6 +26352,17 @@ and forwarded before the design exists, so the design's roof row is not known wh
    roof over the gate's logic block (u -6..6, d 1..depth-2) at or below row `depth + 7` so the gate can sense the sky; towers elsewhere on
    the lot may rise higher. The box height is not capped. A design that ignores the line gets the item 3 fallback.
 
+### 16. GM-a's RC and the GM-a2 follow-up (Noah and coordinator, 2026-11-03; binding)
+
+1. **Noah: GM-a goes to Steward's RC without survival (§10 item 6).** Survival is the follow-up slice GM-a2, billed inside the
+   gatehouse lot's provisional cost range and made exact at bind, when the sensor rung (or none) is known (slice/GM "as built" option (a)).
+2. **Noah approved the gm-look gallery (N-GM-1)** on 2026-11-03.
+3. **Roof holes (coordinator):** in GM-a2 the realise fills the staircase rungs at or above the chosen roof row that the design left empty
+   with the structure block, so honouring the reservation never leaves one-cell holes in a roof. This wins over §15 item 2's "as the
+   design left them".
+4. GM-a2 also takes the verifier's minor notes: a crash-recovery removal that loses the mechanism site, and mid-move removal at more
+   than one phase of the piston cycle.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
@@ -26363,5 +26374,5 @@ which is a reserved follow-up through versionOf/revision.)
 
 (The four earlier questions on portcullis form, default state, drawbridge form and K1 gates are answered by Noah's 2026-10-27 decisions and removed.)
 
-- **N-GM-1. Gallery approval.** The `gm-look` gallery (§10 item 8) is yours to approve before the RC.
+- (N-GM-1, the gallery, was approved by Noah on 2026-11-03; §16 item 2.)
 - (N-GM-2, storms, is answered in §15 item 5: the natural behaviour stands.)
