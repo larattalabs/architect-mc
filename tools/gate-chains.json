@@ -345,6 +345,7 @@
     "7alf": ["lf-unit", "lf-probe", "lf-ingame", "lf-survival", "lf-natural"],
     "7agm": ["gm-probe", "gm-fit"],
     "7agma": ["gm-unit", "gm-ingame", "gm-survival"],
+    "7agma-surv": ["gm-survival"],
     "7agma-look": ["gm-look"],
     "7agj": ["gj-unit", "gj-ingame", "gj-town", "gj-steward", "gj-shortrun"],
     "7alf-look": ["lf-look"],
