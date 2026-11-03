@@ -736,7 +736,7 @@ steps.settled = async () => {
     const lay = [...GMC.slideCells(kind, {}).values(), ...GMC.detectorCells(3)];
     const keys = lay.map(([u, d, r]) => `${u},${d},${r}`);
     const cells = [...lay];
-    for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); if (u !== -3 && u !== 3) cells.push([u, 2, 5, `${W_}redstone_wire`]); }
+    for (let u = -2; u <= 5; u++) { cells.push([u, 2, 4, `${W_}stone`]); if (u !== -3 && u !== 3 && u !== 0) cells.push([u, 2, 5, `${W_}redstone_wire`]); }
     cells.push([0, 2, 5, `${W_}stone`], [0, 2, 6, `${W_}lever[face=floor,facing=north,powered=false]`]);
     await gatehouse(X, F, Z, `${W_}stone`, cells);
     await L.gameWait(2000, { real: L.settle, label: 'settle' });
