@@ -99,3 +99,28 @@ export function swingCells(mats) {
   put(-1, 2, 0, `${M.plate.replace(/\[.*$/, '')}[powered=false]`);
   return c;
 }
+
+/**
+ * The drawbridge deck (GM-c, §2: lowered at rest, power raises, a ripple of one redstone tick a cell). Local frame: x along the crossing
+ * (cell i = 0..n-1 over the water), z across, y up from the deck row (the deck's trapdoors, half top, flush with the banks). The deck is
+ * `width` 2 (z 0 and 1); a middle row of a wider deck has nothing beside it to power it (its neighbours are trapdoors, the walk above and the
+ * water below), so the deck is at most 2 wide. Each deck trapdoor is powered by a repeater beside it (z -1 or 2, delay a_i) fed by a second
+ * one (z -2 or 3, delay b_i) from a bus (z -3 or 4) that both levers drive at once: cell i flips a_i + b_i = i + 2 redstone ticks after the
+ * lever. Repeaters and the bus sit on sleepers one row down (in the water).
+ */
+export function drawbridgeCells(n, mats) {
+  const M = gmMats(mats);
+  if (n > 7) throw new Error('drawbridge: the ripple covers 7 cells (repeater delays 1..4 twice)');
+  const c = [];
+  for (let i = 0; i < n; i++) {
+    const tot = i + 2, b = Math.min(4, tot - 1), a = tot - b;
+    for (const [z, zf, zb, zbus, fac] of [[0, -1, -2, -3, 'north'], [1, 2, 3, 4, 'south']]) {
+      c.push([i, 0, z, `${W}iron_trapdoor[facing=${fac === 'north' ? 'south' : 'north'},half=top,open=false,powered=false,waterlogged=false]`]);
+      c.push([i, -1, zf, M.structure], [i, -1, zb, M.structure], [i, -1, zbus, M.structure]);
+      c.push([i, 0, zf, `${W}repeater[facing=${fac},delay=${a}]`], [i, 0, zb, `${W}repeater[facing=${fac},delay=${b}]`], [i, 0, zbus, `${W}redstone_wire`]);
+    }
+  }
+  return c;
+}
+/** The ripple's designed ticks: cell i flips 2 * (i + 2) game ticks after the lever (repeater ticks only; the lever and dust add none). */
+export const drawbridgeTicks = (i) => 2 * (i + 2);

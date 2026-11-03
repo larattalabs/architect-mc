@@ -509,6 +509,67 @@ steps.swing = async () => {
   return out;
 };
 
+/** The drawbridge deck over a moat 5 wide and 3 deep: two levers (the near bank, the gatehouse end), 20 raise/lower cycles, the ripple timed. */
+steps.drawbridge = async () => {
+  await ensure();
+  const out = {};
+  const X = 7500, Z = 7000;
+  const g = await world(X, Z), y = g; // the deck row: the banks' top block row
+  await tp(X + 2, g + 8, Z + 12);
+  // the moat: water y g-3..g-1 over x X..X+4, z Z-8..Z+9; the bank row above it (y g) air over the moat
+  await fill([X, g - 4, Z - 8], [X + 4, g - 4, Z + 9], `${W_}stone`);
+  await fill([X, g - 3, Z - 8], [X + 4, g - 1, Z + 9], `${W_}water`);
+  await fill([X, g, Z - 8], [X + 4, g + 3, Z + 9], `${W_}air`);
+  for (const [i, dy, z, st] of GMC.drawbridgeCells(5, {})) await sb(X + i, y + dy, Z + z, st);
+  // the bank buses: x X-2 (near) and X+6 (far) at y+1 on the ground, joined to both side buses; a lever on each
+  for (const bx of [X - 2, X + 6]) {
+    for (let z = -3; z <= 4; z++) await sb(bx, y + 1, Z + z, `${W_}redstone_wire`);
+    for (const z of [-3, 4]) await sb(bx === X - 2 ? X - 1 : X + 5, y + 1, Z + z, `${W_}redstone_wire`);
+  }
+  await sb(X - 3, y + 1, Z, `${W_}lever[face=floor,facing=east,powered=false]`);
+  await sb(X + 7, y + 1, Z, `${W_}lever[face=floor,facing=west,powered=false]`);
+  await L.gameWait(2000, { real: L.settle, label: 'gm drawbridge settles' });
+  const deck = async () => { const b = await snap(X, y, Z, X + 4, y, Z + 1); return Object.values(b).filter((v) => v.startsWith('iron_trapdoor')).map((v) => (/open=true/.test(v) ? 1 : 0)); };
+  const rest = await snap(X - 3, y - 4, Z - 8, X + 7, y + 2, Z + 9);
+  // the ripple, ticked: each cell's first open tick after the near lever
+  await freeze();
+  await flip([X - 3, y + 1, Z]);
+  const firstOpen = {};
+  for (let t = 1; t <= 20; t++) {
+    await step(1);
+    const b = await snap(X, y, Z, X + 4, y, Z + 1);
+    for (const [kk, v] of Object.entries(b)) if (/open=true/.test(v) && firstOpen[kk] === undefined) firstOpen[kk] = t;
+  }
+  await flip([X - 3, y + 1, Z]);
+  const firstShut = {};
+  for (let t = 1; t <= 20; t++) {
+    await step(1);
+    const b = await snap(X, y, Z, X + 4, y, Z + 1);
+    for (const [kk, v] of Object.entries(b)) if (/open=false/.test(v) && firstShut[kk] === undefined) firstShut[kk] = t;
+  }
+  await unfreeze();
+  out.raiseTicks = firstOpen; out.lowerTicks = firstShut;
+  const byCell = (m) => [0, 1, 2, 3, 4].map((i) => [m[`${X + i},${y},${Z}`], m[`${X + i},${y},${Z + 1}`]]);
+  log(`  drawbridge ripple: raise ticks per cell ${json(byCell(firstOpen))}; lower ${json(byCell(firstShut))}`);
+  check(byCell(firstOpen).every(([a2, b2], i) => a2 === GMC.drawbridgeTicks(i) && b2 === a2), `drawbridge: the ripple raises cell i at 2(i+2) ticks, both rows (${json(byCell(firstOpen))})`);
+  // 20 cycles, the two levers alternating
+  const cyc = [];
+  for (let c = 1; c <= 20; c++) {
+    const lev = c % 2 ? [X - 3, y + 1, Z] : [X + 7, y + 1, Z];
+    await flip(lev); await L.gameWait(1500, { real: L.settle, label: 'gm raised' });
+    const up = await deck();
+    await flip(lev); await L.gameWait(1500, { real: L.settle, label: 'gm lowered' });
+    const down = await deck();
+    cyc.push({ c, ok: up.length === 10 && up.every((v) => v === 1) && down.every((v) => v === 0) });
+  }
+  const end = await snap(X - 3, y - 4, Z - 8, X + 7, y + 2, Z + 9);
+  out.cycles = cyc;
+  check(cyc.every((r) => r.ok), `drawbridge: ${cyc.filter((r) => r.ok).length}/20 lever cycles (near and far lever alternately) raise all 10 trapdoors and lower them`);
+  check(json(end) === json(rest), `drawbridge: the moat box after the cycles equals its rest state (water included)`);
+  await L.leaveWorld();
+  return out;
+};
+
 steps.probe = async () => {
   return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
