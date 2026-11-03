@@ -39,6 +39,61 @@ of RS. With that, all 13 steps, 20 lever cycles, a = 2 with end slack 2 on both 
 - The sensor sits at a fixed roof cell, (-4, 1 + (R - 10), R). Its run climbs one plane per row, so a roof more than depth - 3 rows above
   row 10 has no run: such a gate is levers-only with deviation `mechanism.sensor` (§2a "No sky cell"), unless a later slice adds a spiral run.
 
+## Step 1b evidence (gm-fit; slice/GM f52c09b7, run 20261103-062444-change)
+
+All six boxes, 13x7x10, 13x11x11 and 17x15x12, each with portcullis and slide:
+- the 13 §2a steps;
+- 20 lever cycles through the logic with the leaves checked after each flip, the levers alternating. These are the "20 grate and slide
+  cycles" per box, with the portcullis as the grate and the slide as the slide;
+- a daytime storm closes the gate once, and the clearing opens it once, with no flicker. A storm's onset is a sensor edge (a Q
+  pulse), so it also clears an override, as a dusk would;
+- no item dropped.
+
+The natural dusk and dawn watch failed in that run only because its window began after the sensor's switch. The window now runs from clear
+day and deep night, and sample 0 is recorded; the chain re-run is below.
+
+**The latch windows, traced tick by tick** (a = unlock start minus data-valid start; end slack = data change + 4 minus relock; the bar is >= 1 each):
+- **dusk with a closed override** (D rises through CMP, the CMP path): a = 2, end slack 2.
+- **dawn with an open override** (D falls through T1, the T1 path): a = 2, end slack 2.
+- **plain dusk, plain dawn and the lever window**: D is constant through the unlock, so there is no data race. End slack 2, 4 and 6.
+
+One window (13x7x10 portcullis, dusk with a closed override; one character per game tick from the time jump):
+```
+G      1111111111111111111111111111111111111111111111111111111111111
+locked 1111111111111111111111111111111111100000000111111111111111111
+D      0000000000000000000000000000000001111111100000000000000000000
+```
+
+## Decision needed before GM-a: the sensor and the design's roof
+
+`gateLayout` puts the sensor in the roof at (-4, 1 + (R - 10), R) and climbs to it one plane per row. Two things follow that the contract
+does not settle:
+- **A new bound.** A day-driven gate needs R <= 10 + depth - 3: 14 in the minimum box, 22 in a 15-deep one. §14 has no such bound.
+- **The run depends on the design's roof row.** The envelope is reserved and forwarded to Steward before the design exists, so §2a/§4's
+  "the design gives a sky-exposed cell" and "the run is reserved" cannot both hold for a roof above row 10. §9's height check cannot run at
+  plan time either: K3's sited lots are 40 high, so the real check is the bound design's roof, at bind.
+
+Options:
+- **(a) A fixed sensor cell at the minimum roof**, (-4, 1, 10). If it is not sky-exposed at bind, the gate is levers-only with deviation
+  `mechanism.sensor`. No extra cells, but most taller gatehouses lose the day cycle. The realise must then write no sensor at all: an
+  inverted sensor indoors reads 15, and its first S edge would latch the gate closed.
+- **(b) Reserve the staircase** for roof rows 10..10 + (depth - 3), about 2 (depth - 2) cells, and pick the sky-exposed rung at bind. This
+  needs a brief rule so that the design keeps those roof cells.
+- **(c) A plan or brief member that fixes the roof row.**
+
+Recommendation: (b). It keeps the day cycle for every gatehouse up to the bound. The cost is one brief line and a short diagonal of
+reserved cells, which Steward forwards unchanged like the rest of the envelope.
+
+## GM-a: not started
+
+The groundwork in `gmCircuit.mjs`:
+- `mechanismCells(kind, {depth, height, rest})`: the cells per kind, gm frame;
+- `gmToWorld(cell, {cx, fy, cz, facing})`: a turn, never a mirror, with the states turned;
+- `GM_BOX_MIN` / `gmBoxFits`: 13 x 7 x 10, naming the short side;
+- `settleLayout`: the pure rest state, a fixed point.
+
+Unit tests cover all four. None is exercised by a realise yet. gm-fit compares `settleLayout` with the built rest state (the result is below).
+
 ## K3's orientation of a gatehouse lot (Steward's question, answered from the code)
 
 - **A gate lot** (`wallLots.mjs` siteWallLots, "gates") always puts `size[0]` along the wall. `nearestLotRun(W, pt, w)` takes the first
