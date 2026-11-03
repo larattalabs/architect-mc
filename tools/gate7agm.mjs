@@ -570,6 +570,85 @@ steps.drawbridge = async () => {
   return out;
 };
 
+/**
+ * The §2a day cycle, wired: the logic bench (kit/lib/connectors/gmBench.mjs: lever detectors, the inverted daylight sensor, the D latch)
+ * drives a real gate in a stone gatehouse through its G line. Levers are flipped with the fake player's useItemOn; time with /time set.
+ */
+const GMB = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'connectors', 'gmBench.mjs')).href);
+async function dayRig(X, F, Z, kind) {
+  // the gate: a stone gatehouse, the leaves' feed (slideCells) and the G line in d = 2, row 5 (u -2..4) entering from the east wall
+  const cells = [...GMC.slideCells(kind, {}).values()];
+  for (let u = -2; u <= 5; u++) cells.push([u, 2, 4, `${W_}stone`]);
+  for (let u = -2; u <= 5; u++) cells.push([u, 2, 5, u === 0 ? `${W_}repeater[facing=east,delay=1]` : `${W_}redstone_wire`]);
+  await gatehouse(X, F, Z, `${W_}stone`, cells);
+  // the bench: floor at F+4 east of the box, components at F+5; local (x, z) -> world (X+9+x, Z-4+z)
+  const BX = X + 9, BY = F + 5, BZ = Z - 4;
+  await fill([X + 6, F + 4, Z - 18], [X + 50, F + 4, Z + 4], `${W_}stone`);
+  await fill([X + 6, F + 5, Z - 18], [X + 50, F + 9, Z + 4], `${W_}air`);
+  const rank = (st) => (/lever|daylight/.test(st) ? 4 : /observer/.test(st) ? 3 : /wire|repeater|comparator|torch/.test(st) ? 2 : /trapdoor/.test(st) ? 1 : 0);
+  for (const c of [...GMB.benchCells()].sort((a, b) => rank(a.state) - rank(b.state))) await sb(BX + c.x, BY + c.y, BZ + c.z, c.state);
+  return { lever: { A: [BX - 2, BY, BZ - 2], B: [BX - 2, BY, BZ + 3] }, rg: [BX + 33, BY, BZ], leaf: kind === 'slide' ? 'stone_bricks' : 'iron_bars' };
+}
+async function gateState(X, F, Z, leaf, rg) {
+  const box = await gateBox(X, F, Z);
+  const l = leaves(box, X, F, Z, leaf);
+  const g = /powered=true/.test(await stateAt(...rg));
+  return { closed: l[-1] === 1 && l[1] === 1, open: l[-1] === 2 && l[1] === 2, leaves: l, G: g };
+}
+steps.daycycle = async () => {
+  await ensure();
+  const out = {};
+  for (const [kind, X] of [['portcullis', 7600], ['slide', 7700]]) {
+    const Z = 7000;
+    const g = await world(X, Z), F = g + 1;
+    await tp(X + 20, F + 12, Z + 14);
+    await cmd('/time set 6000');
+    const rig = await dayRig(X, F, Z, kind);
+    await L.gameWait(3000, { real: L.settle, label: 'gm day rig settles' });
+    const st = () => gateState(X, F, Z, rig.leaf, rig.rg);
+    const rec = { kind, steps: [] };
+    const note = async (what, want) => { const s2 = await st(); const ok = want === 'closed' ? s2.closed && s2.G : s2.open && !s2.G; rec.steps.push({ what, want, ok, ...s2 }); log(`  ${kind} ${what}: ${ok ? 'ok' : 'WRONG'} want ${want} got ${json(s2)}`); return ok; };
+    const flipW = async (lv) => { await flip(rig.lever[lv]); await L.gameWait(1500, { real: L.settle, label: 'gm flip' }); };
+    const timeW = async (t) => { await cmd(`/time set ${t}`); await L.gameWait(3000, { real: L.settle, label: 'gm sensor ticks' }); };
+    await note('rest at day', 'open');
+    await flipW('A'); await note('day, lever A (outside) -> override closed', 'closed');
+    await flipW('A'); await note('day, lever A again -> open', 'open');
+    await flipW('B'); await note('day, lever B (inside) -> closed', 'closed');
+    await flipW('A'); await note('day, lever A -> open (either lever toggles)', 'open');
+    await timeW(13500); await note('dusk, no override -> closed', 'closed');
+    await timeW(23500); await note('dawn -> open', 'open');
+    await flipW('B'); await note('day, lever B -> override closed', 'closed');
+    await timeW(13500); await note('dusk with a closed override -> closed (the sensor takes over)', 'closed');
+    await flipW('A'); await note('night, lever A -> override open', 'open');
+    await timeW(23500); await note('dawn with an open override -> open (override cleared)', 'open');
+    await flipW('A'); await note('day after the reset, lever A -> closed (a fresh override)', 'closed');
+    await flipW('B'); await note('day, lever B -> open', 'open');
+    // 20 lever cycles through the logic, the levers alternating, with the leaves checked each time
+    let bad = 0;
+    for (let c = 1; c <= 20; c++) {
+      await flipW(c % 2 ? 'A' : 'B'); const a2 = await st();
+      await flipW(c % 2 ? 'B' : 'A'); const b2 = await st();
+      if (!(a2.closed && b2.open)) { bad++; rec.firstBad ??= { c, a2, b2 }; }
+    }
+    rec.cycles = { n: 20, bad };
+    // timing: ticks from a lever flip until the leaves stand closed, and open again
+    await freeze();
+    await flip(rig.lever.A); let tc = null;
+    for (let t = 1; t <= 40 && tc === null; t++) { await step(1); if ((await st()).closed) tc = t; }
+    await flip(rig.lever.A); let to = null;
+    for (let t = 1; t <= 40 && to === null; t++) { await step(1); if ((await st()).open) to = t; }
+    await unfreeze();
+    rec.ticks = { close: tc, open: to };
+    rec.items = (await items(X, F + 2, Z + 1, 10)).stacks;
+    out[kind] = rec;
+    check(rec.steps.every((s2) => s2.ok), `${kind} day cycle (§2a): ${rec.steps.filter((s2) => s2.ok).length}/${rec.steps.length} steps (sensor edges both ways, either lever overrides, the override cleared at the next transition)`);
+    check(bad === 0, `${kind}: 20 lever cycles through the logic, ${bad} with a misplaced leaf${rec.firstBad ? ` (${json(rec.firstBad)})` : ''}`);
+    check(tc !== null && to !== null && !rec.items, `${kind}: a flip closes in ${tc} ticks and opens in ${to} ticks (lever to settled leaves), ${rec.items} items`);
+    await L.leaveWorld();
+  }
+  return out;
+};
+
 steps.probe = async () => {
   return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
