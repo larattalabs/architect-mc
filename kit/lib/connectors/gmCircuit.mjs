@@ -143,3 +143,22 @@ export function detectorCells(depth = 3) {
     [1, depth > 3 ? inner - 1 : 1, 4, `${W}observer[facing=down,powered=false]`],
   ];
 }
+
+import { SETTLED } from './gmSettled.mjs';
+/** The settled rest state of a kind (§7 item 1): every dependent property as the probe read it back (dust shapes and power, pistons, doors). */
+export function settle(kind, rest = kind === 'swing' ? 'closed' : 'open') {
+  const s = SETTLED[kind]?.[rest];
+  if (!s) throw new Error(`gmCircuit.settle: no settled state for ${kind}/${rest}`);
+  return Object.entries(s).map(([k2, st]) => [...k2.split(',').map(Number), st]);
+}
+
+/**
+ * The ticks gm-probe recorded on 26.3 (game ticks; §10 item 0 "timing recorded").
+ *   slide/portcullis: G at the leaves' feed to the leaves settled, closed 3 and open 3 (stone and fortress roles alike)
+ *   the §2a logic bench (lever flip to settled leaves, through ~45 cells of bus): 34 and 34; the logic alone adds the detector (2), P'
+ *   (6), the lock (8) and R_G (4)
+ *   swing: the button holds 20 ticks (stone); the plate and lever open within 2
+ *   drawbridge: cell i flips 2 (i + 2) ticks after a lever, raising and lowering
+ *   detectors: an observer pulse of 2 ticks, 2 ticks after the flip
+ */
+export const TIMING = Object.freeze({ slide: { close: 3, open: 3 }, portcullis: { close: 3, open: 3 }, benchLeverToLeaves: { close: 34, open: 34 }, swingButton: 20, drawbridgeCell: (i) => 2 * (i + 2), detectorPulse: { delay: 2, length: 2 } });
