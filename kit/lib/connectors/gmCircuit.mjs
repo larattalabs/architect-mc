@@ -76,3 +76,26 @@ export function slideCells(kind, mats) {
 export function toWorld([u, d, r, s], X, F, Z) {
   return [X + u, F + r, Z + d, s];
 }
+
+/**
+ * The swing gate (§2, rest closed, power opens): two iron doors (rows 0-1) at u = -1 and 1 in the plane d = 1, a transom of bars above
+ * them, the mullion between. Every trigger powers the mullion's middle block (0,1,1), which both doors' upper halves touch: the button on
+ * its front face (d = 0, outside, a player), the lever on its back face (d = 2, inside, holds it open); the plate on the floor of the left
+ * lane behind the door (-1,2,0) powers the left door's lower half (anyone inside).
+ */
+export function swingCells(mats) {
+  const M = gmMats(mats);
+  const c = new Map();
+  const put = (u, d, r, s) => c.set(k(u, d, r), [u, d, r, s]);
+  for (let r = 0; r <= 2; r++) put(0, 1, r, M.structure);
+  for (const [u, hinge] of [[-1, 'left'], [1, 'right']]) {
+    put(u, 1, 0, `${W}iron_door[facing=south,half=lower,hinge=${hinge},open=false,powered=false]`);
+    put(u, 1, 1, `${W}iron_door[facing=south,half=upper,hinge=${hinge},open=false,powered=false]`);
+    put(u, 1, 2, M.bar);
+  }
+  const btn = M.button.replace(/\[.*$/, '');
+  put(0, 0, 1, `${btn}[face=wall,facing=north,powered=false]`);
+  put(0, 2, 1, `${W}lever[face=wall,facing=south,powered=false]`);
+  put(-1, 2, 0, `${M.plate.replace(/\[.*$/, '')}[powered=false]`);
+  return c;
+}

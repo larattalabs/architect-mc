@@ -429,6 +429,85 @@ steps.grate = async () => {
 };
 const gmMatsOf = (m) => GMC.gmMats(m);
 
+/**
+ * E3: the §2a logic in open air (layout first, compaction after): two levers each read through an iron trapdoor by an observer (a pulse
+ * per flip, P); the daylight sensor (inverted: power at night) cleaned by a repeater and read by an observer (a pulse per transition, Q);
+ * a torch RS-NOR latch holds G; four subtract comparators steer the pulses: SET = (P - G) or (Q - notS), RESET = (P - notG) or (Q - S).
+ */
+async function logicRig(x, y, z) {
+  const P = (dx, dy, dz, st) => sb(x + dx, y + dy, z + dz, st.startsWith('minecraft:') ? st : `minecraft:${st}`);
+  await fill([x - 2, y - 1, z - 4], [x + 14, y - 1, z + 12], 'minecraft:stone');
+  await fill([x - 2, y, z - 4], [x + 14, y + 4, z + 12], 'minecraft:air');
+  // the levers, trapdoors, observers: P at x+3
+  await P(0, 0, 0, 'stone'); await P(1, 0, 0, 'iron_trapdoor[facing=north,half=bottom]'); await P(0, 0, 4, 'stone'); await P(1, 0, 4, 'iron_trapdoor[facing=north,half=bottom]');
+  // P bus x+3, z 0..4, and its two arms
+  for (const dz of [0, 1, 2, 3, 4]) await P(3, 0, dz, 'redstone_wire');
+  // comparators: C1 (set by P) at (5,0,1) back (4,0,1); C2 (reset by P) at (5,0,3) back (4,0,3)
+  await P(4, 0, 1, 'redstone_wire'); await P(4, 0, 3, 'redstone_wire');
+  await P(5, 0, 1, 'comparator[facing=west,mode=subtract]'); await P(5, 0, 3, 'comparator[facing=west,mode=subtract]');
+  // Q: the sensor at (0,0,8) (inverted), cleaned by RS, observer OS watches the S dust (3,0,8) -> Q at (3,0,9)? (OS at (3,0,9) facing north, out (3,0,10))
+  await P(1, 0, 8, 'redstone_wire'); await P(2, 0, 8, 'repeater[facing=west]'); await P(3, 0, 8, 'redstone_wire');
+  // S runs east at z+8: (4..6,0,8); notS = torch on block (7,0,8) -> wall torch at (8,0,8) facing east
+  for (const dx of [4, 5, 6]) await P(dx, 0, 8, 'redstone_wire');
+  await P(7, 0, 8, 'stone');
+  // Q bus z+10: (3,0,10) .. ; comparators C3 (set by Q) at (5,0,10)? back (4,0,10), side notS; C4 (reset by Q) at (5,0,12) back (4,0,12) side S
+  await P(3, 0, 10, 'redstone_wire'); await P(3, 0, 11, 'redstone_wire'); await P(3, 0, 12, 'redstone_wire'); await P(4, 0, 10, 'redstone_wire'); await P(4, 0, 12, 'redstone_wire');
+  await P(5, 0, 10, 'comparator[facing=west,mode=subtract]'); await P(5, 0, 12, 'comparator[facing=west,mode=subtract]');
+  // C4's side S: (5,0,11) dust fed from S? S is at z+8. Bring S down x=6: (6,0,9) .. no: use (5,0,11) dust from (5,0,9)?? keep simple: S branch (6,0,8)->(6,0,9)->(6,0,10)?
+  // notS for C3's side at (5,0,9): torch output... the notS torch at (8,0,8) feeds dust (8,0,9) -> (8..5?)
+  // latch: block A at (9,0,2) [RESET in], torch Ta on A at (10,0,2) facing east = G; block B at (9,0,6) [SET in], torch Tb at (10,0,6) = notG
+  await P(9, 0, 2, 'stone'); await P(9, 0, 6, 'stone');
+  return { x, y, z };
+}
+
+/** The swing gate in a stone gatehouse: 20 cycles each of the button (outside), the lever (inside) and the plate (the bot stands on it). */
+steps.swing = async () => {
+  await ensure();
+  const out = {};
+  const X = 7400, Z = 7000;
+  const g = await world(X, Z), F = g + 1;
+  await tp(X, F + 4, Z + 12);
+  await gatehouse(X, F, Z, `${W_}stone`, [...GMC.swingCells({}).values()]);
+  await L.gameWait(2000, { real: L.settle, label: 'gm swing settles' });
+  const doors = async () => { const b = await gateBox(X, F, Z); return [-1, 1].map((u) => /open=true/.test(b[`${X + u},${F},${Z + 1}`] ?? '') ? 'open' : /open=false/.test(b[`${X + u},${F},${Z + 1}`] ?? '') ? 'shut' : 'GONE'); };
+  const rest = await gateBox(X, F, Z);
+  out.rest = await doors();
+  const runs = {};
+  // the button: pressed, open within 2 ticks... recorded; open at +10, shut at +30
+  runs.button = [];
+  for (let c = 1; c <= 20; c++) {
+    await flip([X, F + 1, Z]);
+    await L.gameWait(500, { real: L.settle, label: 'gm button held' });
+    const mid = await doors();
+    await L.gameWait(1500, { real: L.settle, label: 'gm button released' });
+    const after = await doors();
+    runs.button.push({ mid, after, ok: json(mid) === '["open","open"]' && json(after) === '["shut","shut"]' });
+  }
+  runs.lever = [];
+  for (let c = 1; c <= 20; c++) {
+    await flip([X, F + 1, Z + 2]); await L.gameWait(300, { real: L.settle, label: 'gm lever on' });
+    const on = await doors();
+    await flip([X, F + 1, Z + 2]); await L.gameWait(300, { real: L.settle, label: 'gm lever off' });
+    const off = await doors();
+    runs.lever.push({ on, off, ok: json(on) === '["open","open"]' && json(off) === '["shut","shut"]' });
+  }
+  runs.plate = [];
+  for (let c = 1; c <= 20; c++) {
+    await cmd(`/tp @s ${X - 1 + 0.5} ${F} ${Z + 2 + 0.5}`); await L.gameWait(500, { real: L.settle, label: 'gm on the plate' });
+    const on = await doors();
+    await cmd(`/tp @s ${X - 1 + 0.5} ${F} ${Z + 5 + 0.5}`); await L.gameWait(1500, { real: L.settle, label: 'gm off the plate' });
+    const off = await doors();
+    runs.plate.push({ on, off, ok: on[0] === 'open' && json(off) === '["shut","shut"]' });
+  }
+  const end = await gateBox(X, F, Z);
+  out.runs = runs;
+  out.items = (await items(X, F + 1, Z + 1, 8)).stacks;
+  for (const [k2, v] of Object.entries(runs)) check(v.length === 20 && v.every((r) => r.ok), `swing ${k2}: ${v.filter((r) => r.ok).length}/20 cycles open then shut (${json(v.find((r) => !r.ok) ?? 'all ok')})`);
+  check(json(end) === json(rest) && !out.items, `swing: the box after 60 cycles equals its rest state (${json(end) === json(rest)}), ${out.items} items`);
+  await L.leaveWorld();
+  return out;
+};
+
 steps.probe = async () => {
   return { rules: await steps.rules(), extender: await steps.extender(), outside: await steps.outside() };
 };
