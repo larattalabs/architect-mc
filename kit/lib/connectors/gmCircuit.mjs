@@ -462,3 +462,105 @@ export function settleLayout(lay, { rest = 'open' } = {}) {
   }
   return out;
 }
+
+// ------------------------------------------------------------------ GM-c: the drawbridge over a span (CONTRACT GM §2, §13 item 6)
+
+/** The drawbridge's limits: at most 7 trapdoor cells (the ripple's repeater delays 1..4 twice), 2 fixed apron cells at each end. */
+export const DRAWBRIDGE = Object.freeze({ deckMax: 7, apron: 2, width: 2, half: 3 });
+/** A span of n deck cells holds n - 4 trapdoor cells (the aprons take 2 at each end). */
+export const drawbridgeSpan = (w) => w + 2 * DRAWBRIDGE.apron;
+
+const LF = { e: 'east', w: 'west', s: 'south', n: 'north' };
+/**
+ * (GM-c) The drawbridge a bridge span carries (§2's drawbridge row, §13 item 6; the probe's ripple, `drawbridgeCells`, with its bank
+ * buses moved onto fixed aprons). Local frame: i along the crossing (east), 0 the near landing and n + 1 the far one, deck cells 1..n;
+ * z across (south): the walk is z 0 and 1, the side lanes z -3..-1 (north) and 2..4 (south); y up from the deck row. `w` trapdoor
+ * cells (1..7), n = w + 4.
+ *   aprons  i 1, 2, n - 1, n: the bridge's deck block 8 wide (path); on the outer apron cell (i 1 and n) a lever at z -3 on the floor,
+ *           the cross bus over the walk (dust z -2..2, a repeater at z 3 restoring the strength, dust at z 4); on the inner one (i 2,
+ *           n - 1) dust at z -3 and 4, stepping down onto the side buses
+ *   deck    i 3..n - 2, cell j = i - 3: iron trapdoors (half top, closed) on the walk (path); each side a sleeper row one under the deck
+ *           (the structure block, z +-1..+-3), on it a repeater of delay a_j beside the trapdoor, one of delay b_j behind it and the
+ *           bus dust, a_j + b_j = j + 2 (cell j flips 2 (j + 2) game ticks after a lever); over each side lane a cap (the bar: the rail
+ *           role's fence, else its wall, else iron bars) so no one walks along the repeaters
+ * Returns {n, w, path, mech, clear, triggers, deck}: path and mech [[i, y, z, state]] (states in the local frame, east = +i, south = +z;
+ * the dust's shapes settled by gmLint's links at rest: levers off, power 0), clear [[i, y, z]] the walk's head room the path clears,
+ * triggers [{kind: lever, at, side: near | far, who: player}], deck [[i, z]] the trapdoors. Pure.
+ */
+export function drawbridgeLayout(w, mats = {}) {
+  if (!Number.isInteger(w) || w < 1 || w > DRAWBRIDGE.deckMax) throw new Error(`drawbridgeLayout: ${w} trapdoor cells (1..${DRAWBRIDGE.deckMax})`);
+  const M = { ...gmMats(mats), deck: mats.deck ?? `${W}stone_bricks` };
+  const n = drawbridgeSpan(w);
+  const path = new Map(), mech = new Map();
+  const put = (m, i, y, z, s, t, f) => m.set(`${i},${y},${z}`, { i, y, z, s, t, f });
+  // the aprons: 8 wide, the deck block
+  for (const i of [1, 2, n - 1, n]) for (let z = -3; z <= 4; z++) put(path, i, 0, z, M.deck, 'block');
+  // the deck: trapdoors on the walk; each side's sleepers, repeaters, bus and caps
+  const deck = [];
+  for (let j = 0; j < w; j++) {
+    const i = 3 + j, tot = j + 2, b = Math.min(4, tot - 1), a = tot - b;
+    for (const [z, zf, zb, zbus, f] of [[0, -1, -2, -3, 'n'], [1, 2, 3, 4, 's']]) {
+      put(path, i, 0, z, `${W}iron_trapdoor[facing=${LF[f === 'n' ? 's' : 'n']},half=top,open=false,powered=false,waterlogged=false]`, 'trap');
+      deck.push([i, z]);
+      for (const zz of [zf, zb, zbus]) { put(mech, i, -1, zz, M.structure, 'block'); put(mech, i, 1, zz, M.bar, 'cap'); }
+      put(mech, i, 0, zf, `${W}repeater[delay=${a},facing=${LF[f]},locked=false,powered=false]`, 'rep', f);
+      put(mech, i, 0, zb, `${W}repeater[delay=${b},facing=${LF[f]},locked=false,powered=false]`, 'rep', f);
+      put(mech, i, 0, zbus, `${W}redstone_wire`, 'dust');
+    }
+  }
+  // the bank buses on the aprons, and the levers
+  const triggers = [];
+  for (const [io, ii, side] of [[1, 2, 'near'], [n, n - 1, 'far']]) {
+    put(mech, io, 1, -3, `${W}lever[face=floor,facing=east,powered=false]`, 'lever');
+    triggers.push({ kind: 'lever', at: [io, 1, -3], side, who: 'player' });
+    for (let z = -2; z <= 4; z++) if (z !== 3) put(mech, io, 1, z, `${W}redstone_wire`, 'dust');
+    put(mech, io, 1, 3, `${W}repeater[delay=1,facing=north,locked=false,powered=false]`, 'rep', 'n');
+    put(mech, ii, 1, -3, `${W}redstone_wire`, 'dust');
+    put(mech, ii, 1, 4, `${W}redstone_wire`, 'dust');
+  }
+  // the dust's shapes and the caps' connections at rest, by gmLint's links (lint frame: x = i, y, z)
+  const cells = new Map();
+  for (const m of [path, mech]) for (const [key, c] of m) {
+    const t = c.t === 'cap' ? 'fence' : c.t;
+    cells.set(key, { t, ...(c.t === 'rep' ? { f: c.f } : {}), ...(c.t === 'lever' ? { mount: [c.i, c.y - 1, c.z] } : {}) });
+  }
+  const L2 = lint(cells, {});
+  const out = (m) => [...m.values()].map((c) => {
+    let s = c.s;
+    if (c.t === 'dust') {
+      const di = L2.dustInfo.get(`${c.i},${c.y},${c.z}`);
+      const shape = {};
+      for (const h of ['n', 's', 'e', 'w']) {
+        if (!di.links.length || !di.point.includes(h)) { shape[h] = 'none'; continue; }
+        const nb = LINT_DIRS[h], up = `${c.i + nb[0]},${c.y + 1},${c.z + nb[2]}`;
+        shape[h] = di.links.includes(h) && cells.get(up)?.t === 'dust' && di.wires.includes(up) ? 'up' : 'side';
+      }
+      s = `${W}redstone_wire[east=${shape.e},north=${shape.n},power=0,south=${shape.s},west=${shape.w}]`;
+    } else if (c.t === 'cap') {
+      const nb = (di, dz) => cells.get(`${c.i + di},${c.y},${c.z + dz}`)?.t;
+      const j = (t) => t === 'fence' || t === 'block';
+      const e = j(nb(1, 0)), wv = j(nb(-1, 0)), so = j(nb(0, 1)), no = j(nb(0, -1));
+      const name = s.replace(/\[.*$/, '');
+      if (/_wall$/.test(name)) { const v = (x) => (x ? 'low' : 'none'); s = `${name}[east=${v(e)},north=${v(no)},south=${v(so)},up=${!((e && wv && !so && !no) || (so && no && !e && !wv))},waterlogged=false,west=${v(wv)}]`; }
+      else s = `${name}[east=${e},north=${no},south=${so},waterlogged=false,west=${wv}]`;
+    }
+    return [c.i, c.y, c.z, s];
+  });
+  const taken = new Set([...mech.keys()]);
+  const clear = [];
+  for (let i = 1; i <= n; i++) for (const z of [0, 1]) for (const y of [1, 2]) if (!taken.has(`${i},${y},${z}`)) clear.push([i, y, z]);
+  return { n, w, path: out(path), mech: out(mech), clear, triggers, deck, problems: L2.problems };
+}
+
+/** A local drawbridge state turned to the world: local east is the crossing's heading `dir` ([dx, dz]), local south its right. */
+export function drawbridgeState(s, dir) {
+  if (typeof s !== 'string' || !s.includes('[')) return s;
+  const name = { '1,0': 'east', '-1,0': 'west', '0,1': 'south', '0,-1': 'north' };
+  const [dx, dz] = dir, map = { east: name[`${dx},${dz}`], south: name[`${-dz},${dx}`], west: name[`${-dx},${-dz}`], north: name[`${dz},${-dx}`] };
+  const i = s.indexOf('[');
+  const props = Object.fromEntries(s.slice(i + 1, -1).split(',').map((kv) => kv.split('=')));
+  const o = { ...props };
+  if (props.facing && map[props.facing]) o.facing = map[props.facing];
+  if (['east', 'west', 'north', 'south'].every((x) => x in props)) for (const x of ['east', 'west', 'north', 'south']) o[map[x]] = props[x];
+  return `${s.slice(0, i)}[${Object.keys(o).sort().map((k2) => `${k2}=${o[k2]}`).join(',')}]`;
+}

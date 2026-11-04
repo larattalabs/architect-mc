@@ -1,5 +1,5 @@
 {
- "catalogueVersion": 15,
+ "catalogueVersion": 16,
  "api": "1.48.0",
  "kitVersion": "0.50.0",
  "schemaVersion": "plan/0",
@@ -236,11 +236,27 @@
   },
   {
    "id": "connector.drawbridge",
-   "sinceApi": "1.33.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "mechanism",
-   "note": "A moving bridge (redstone, a lifting deck): a connector.bridge whose params name a mechanism or movable answers this block (R18, S-T3-7)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "span": [
+     1,
+     7
+    ],
+    "width": [
+     2,
+     2
+    ],
+    "deck": [
+     "trapdoor"
+    ],
+    "mechanism": [
+     "redstone",
+     "piston"
+    ]
+   },
+   "note": "GM-c: a moving bridge, the flipping iron-trapdoor deck (a beam 2 wide over a gap of at most 7, its trapdoors rippling up one redstone tick a cell); lowered at rest, a lever on each bank raises it. Written as kind drawbridge, or as a connector.bridge whose params name a mechanism (redstone or piston: both the trapdoor deck) or movable: true (R18, S-T3-7)."
   },
   {
    "id": "connector.wall",
