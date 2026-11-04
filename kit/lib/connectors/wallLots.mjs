@@ -221,6 +221,26 @@ export function lotBand(named, specOf) {
   return deep ? Math.ceil(deep / 2) + 2 : null;
 }
 
+/**
+ * (WL) How far out of its zone's rect a ring with these lots on it reaches: the band (lotBand), then the outer part of the deepest lot's
+ * box straddling the line (corners centred on the band's corner square, gate and run boxes on its middle), its apron 1, and never less
+ * than the wall's own courses. A zone placed this far in from the claim's margin leaves its wall's ring and the lots on it inside the
+ * claim. Null when no lot has a size.
+ */
+export function lotReach(named, specOf, t) {
+  const band = lotBand(named, specOf);
+  if (band === null) return null;
+  const c = (t - 1) >> 1;
+  let out = 0;
+  for (const q of named) {
+    const s = specOf(q.lot)?.size;
+    if (!s) continue;
+    const d = q.at === 'corner' ? Math.max(s[0], s[1]) : s[1];
+    out = Math.max(out, d - 1 - ((d - 1) >> 1));
+  }
+  return Math.max(band + c + out + 1, band + t);
+}
+
 // ------------------------------------------------------------------ §3: siting on a ring
 
 /** A box's world rect for a straight run a..b of side `side` (positions), `d` deep across the line (its band in the middle). */

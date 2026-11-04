@@ -30,7 +30,7 @@ import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWa
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
 import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
-import { LOT_KEYS, gateHints, lotBand, siteWallLots, viaLots, wallLotsOf, wallZoneOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
+import { LOT_KEYS, gateHints, lotBand, lotReach, siteWallLots, viaLots, wallLotsOf, wallZoneOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
 import { gmBoxFits } from './gmGate.mjs';
 import { zoneLots } from '../plan/schema.mjs';
 
@@ -480,6 +480,9 @@ export function planWalls(K) {
       const held = zid ? K.withheld?.get(zid) : null;
       st.siting = st.named.filter((q) => held?.has(q.lot));
       st.sitedIds = new Set(st.siting.map((q) => q.lot));
+      // ((WL) the ring's zone, its lots and how far out of the zone it reaches with them: a refused ring is compiled once more with its
+      // zone placed that far in from the claim's margin (compile.mjs runCheck), before its lots go back to the zone)
+      if (zid && st.siting.length) (K.ringSiting ??= new Map()).set(p.id, { zone: zid, lots: st.siting.map((q) => q.lot), reach: lotReach(st.siting, K.lotSpec, st.thickness) });
     }
     // ((7a K2, §1) a walk needs thickness >= walk.width + 1 (the outer course is the parapet): a given thickness too thin is refused
     // NO_ROOM {why: walk}, the thicker wall its wouldFit (re-checked alone)
@@ -1008,7 +1011,13 @@ export function finishGates(K) {
     // explicit mech on a required wall is refused NO_ROOM instead)
     const gmShort = (W.lots ?? []).filter((q) => q.gmShort);
     const gmDevs = gmShort.map((q) => ({ what: 'mechanism', kind: q.mech, lot: q.lot, need: Object.values(q.gmShort)[0], side: Object.keys(q.gmShort)[0] }));
-    const gmNotes = [...gmShort.map((q) => `${q.lot}: its box is too ${Object.keys(q.gmShort)[0] === 'along' ? 'narrow along the wall' : Object.keys(q.gmShort)[0] === 'depth' ? 'shallow' : 'low'} for a ${q.mech} (needs ${Object.values(q.gmShort)[0]}; the gate box minimum is 13 x 7 x 10): a plain passage`), ...(W.lots ?? []).filter((q) => q.gmRestNote).map((q) => q.gmRestNote)];
+    // ((WL) a named gate lot with a mechanism that stands on no line of this wall (it went back to its zone: the ring with it was refused,
+    // or no gate run held it): no mechanism is built or billed, so the wall says so: deviation mechanism {why: off_wall}, noted, never a
+    // silent plain gate)
+    const onLineIds = new Set((W.lots ?? []).map((q) => q.lot));
+    const gmOff = (W.st?.named ?? []).filter((q) => q.at === 'gate' && q.mech && !onLineIds.has(q.lot));
+    gmDevs.push(...gmOff.map((q) => ({ what: 'mechanism', kind: q.mech, lot: q.lot, why: 'off_wall' })));
+    const gmNotes = [...gmOff.map((q) => `${q.lot}: not on the wall's line (${K.back?.get(q.lot) ?? 'its zone placed it beside the wall'}), so no ${q.mech} is built or billed; the wall's gates are plain`), ...gmShort.map((q) => `${q.lot}: its box is too ${Object.keys(q.gmShort)[0] === 'along' ? 'narrow along the wall' : Object.keys(q.gmShort)[0] === 'depth' ? 'shallow' : 'low'} for a ${q.mech} (needs ${Object.values(q.gmShort)[0]}; the gate box minimum is 13 x 7 x 10): a plain passage`), ...(W.lots ?? []).filter((q) => q.gmRestNote).map((q) => q.gmRestNote)];
     // (read from the lot's planned size, not its siting: a refused wall's lots go back to their zone (K3 §2) and the compile reruns
     // without them on the line, so the refusal must not depend on where they stood)
     const gmRefuse = p.part?.required === true ? (W.st?.named ?? []).filter((q) => q.mech && q.explicit && q.at === 'gate').map((q) => {

@@ -363,8 +363,10 @@ export function sketchPoint(env, s) {
  * its margin) for the valid ones, each scored (an integer): 4096 x move + 8 x sketch deviation + 4 x roughness + water share + the
  * distance from the aim. Returns them best first (ties: scan order), at most `limit`.
  */
-function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMove = Infinity, area = null } = {}) {
+function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMove = Infinity, area = null, inset = 0 } = {}) {
   const c = grow(env.claim, -MARGIN);
+  // ((WL) `inset`: the rect keeps that many more cells in from the claim's margin (its wall's ring and the lots on it); the lattice stays c's)
+  const cIn = inset ? grow(c, -inset) : c;
   area ??= loc.areaFor ? loc.areaFor(w, d, maxMove) : null;
   const A = area ? { minX: Math.max(c.minX, area.minX), minZ: Math.max(c.minZ, area.minZ), maxX: Math.min(c.maxX, area.maxX), maxZ: Math.min(c.maxZ, area.maxZ) } : c;
   const step = Math.max(1, Math.ceil(Math.max(env.claim.maxX - env.claim.minX + 1, env.claim.maxZ - env.claim.minZ + 1) / 256));
@@ -374,7 +376,7 @@ function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMo
   const up = (v, o) => o + Math.ceil((v - o) / step) * step;
   for (let x0 = up(A.minX, c.minX); x0 + w - 1 <= A.maxX; x0 += step) for (let z0 = up(A.minZ, c.minZ); z0 + d - 1 <= A.maxZ; z0 += step) {
     const a = rectOf(x0, z0, w, d);
-    if (!inside(a, c)) continue;
+    if (!inside(a, cIn)) continue;
     if (!loc.valid(a)) continue;
     if (obstacles.some((o) => meets(a, o))) continue;
     const st = rectStats(env, a);
@@ -460,7 +462,7 @@ function sizeDev(asked, w, d) {
  * Resolve a zone: its rect, and (village zones) the street layout evaluated in it. Returns an answer draft `{klass, rect, layout,
  * deviations, reasons, wouldFit, unplaced}`. `obstacles`: rects the zone must keep `ZONE_GAP` from (the overlap pass).
  */
-export function resolveZone(env, z, geomOf, { obstacles = [], keep = null } = {}) {
+export function resolveZone(env, z, geomOf, { obstacles = [], keep = null, inset = 0 } = {}) {
   const zone = z.part;
   const program = zone.program;
   // N-P0-1: a whole-claim template
@@ -499,7 +501,7 @@ export function resolveZone(env, z, geomOf, { obstacles = [], keep = null } = {}
       const orient = asked && tRot.allowed && t.w !== t.d ? [[t.w, t.d, false], [t.d, t.w, true]] : [[t.w, t.d, false]];
       for (const [w, d, rot] of orient) {
         if (w > env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN || d > env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN) continue;
-        const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove, limit: EVAL_K * 4 });
+        const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove, limit: EVAL_K * 4, inset });
         let evals = 0;
         for (const c of cands) {
           if (evals++ >= EVAL_K) break;
@@ -919,17 +921,31 @@ export function isCoursePart(p) {
  */
 export function runCheck(ctx, P, opts) {
   let back = new Map();
-  for (let round = 0; ; round++) {
-    const out = runCheckOnce(ctx, P, opts, back);
-    const more = out.k3Back;
+  // ((WL) a ring wall refused with its lots on it (its zone placed too near the claim's margin for the ring's band, e.g. moved off
+  // protection): compiled once more with that zone placed the ring's reach in from the margin (`reach`); if the wall still finds no
+  // ring, or the zone no place, the reach is given up (`gaveUp`) and its lots go back to the zone as before. A plan whose rings fit
+  // compiles as before)
+  const reach = new Map(), gaveUp = new Map();
+  for (let round = 0, backRounds = 0; ; round++) {
+    const out = runCheckOnce(ctx, P, opts, back, { reach, gaveUp });
+    const more = out.k3Back, ring = out.k3Ring;
     delete out.k3Back;
-    if (!more || round >= 2 || [...more.keys()].every((k) => back.has(k))) return out;
-    back = new Map([...back, ...more]);
+    delete out.k3Ring;
+    const hold = new Set();
+    let changed = false;
+    for (const [z, v] of ring ?? []) {
+      if (reach.has(z)) { gaveUp.set(z, reach.get(z)); reach.delete(z); changed = true; }
+      else if (!gaveUp.has(z) && v.class === 'refused' && v.reach) { reach.set(z, { reach: v.reach, wall: v.wall, why: v.why }); for (const l of v.lots) hold.add(l); changed = true; }
+    }
+    const add = more ? [...more].filter(([k]) => !hold.has(k) && !back.has(k)) : [];
+    const backMore = add.length > 0 && backRounds < 2;
+    if (!backMore && !(changed && round < 4)) return out;
+    if (backMore) { back = new Map([...back, ...add]); backRounds++; }
     if (!ctx.__regionAgain) Object.defineProperty(ctx, '__regionAgain', { value: true, enumerable: false });
   }
 }
 
-function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = new Map()) {
+function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = new Map(), { reach = new Map(), gaveUp = new Map() } = {}) {
   // (6d RV, §9) a revision of a realised plan (revision.parentArtifact and the mod's revision input): the standing region is hard to every
   // added part (its footprint, bodies, held columns and beside regions' reach, as a D1 standing region's footprint is)
   const REV = revisionInput(ctx, P.plan);
@@ -1128,7 +1144,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
     if (p.family === 'zone') {
       // ((6c FL, KC §5) a street zone whose locator names an H body keeps clear of its footprint: never cached, so the cache stays exact)
-      const bodyDep = whereParts(p.part.where).some((id) => keep.some((r) => r.part === id));
+      // ((WL) a zone whose ring with lots on it found no ring: placed the ring's reach in from the claim's margin (runCheck), never cached)
+      const inset = reach.get(p.id)?.reach ?? 0;
+      const bodyDep = whereParts(p.part.where).some((id) => keep.some((r) => r.part === id)) || inset > 0;
       // ((7a K3) a zone with withheld wall lots: laid out, keyed and cached without them)
       const ph = heldPart(p);
       const key = cacheKey(env, ph, geom);
@@ -1138,10 +1156,10 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         z = rehydrateZone(env, ph, hit);
         if (z) z.cached = true;
       }
-      if (!z) z = resolveZone(env, ph, geomOf, { keep: bodyDep ? keep : null });
+      if (!z) z = resolveZone(env, ph, geomOf, { keep: bodyDep ? keep : null, inset });
       // the overlap pass: a zone meeting one placed before it is placed again around them (never cached)
       if ((z.klass === 'fits' || z.klass === 'adjusted') && zonesAccepted.some((o) => meets(grow(z.rect, ZONE_GAP), o.rect))) {
-        const again = resolveZone(env, ph, geomOf, { obstacles: zonesAccepted.map((o) => o.rect), keep: bodyDep ? keep : null });
+        const again = resolveZone(env, ph, geomOf, { obstacles: zonesAccepted.map((o) => o.rect), keep: bodyDep ? keep : null, inset });
         z = again;
         if (z.klass === 'fits' || z.klass === 'adjusted') {
           z.deviations = [...(z.deviations ?? [])];
@@ -1152,6 +1170,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
           z.reasons[0] = { ...z.reasons[0], code: 'OVERLAP', evidence: { ...(z.reasons[0].evidence ?? {}), zones: zonesAccepted.map((o) => o.id) } };
         }
       } else if ((z.klass === 'fits' || z.klass === 'adjusted') && !z.cached && !bodyDep) env.cacheOut[key] = cacheEntry(z);
+      if (inset && (z.klass === 'fits' || z.klass === 'adjusted')) z.notes = [...(z.notes ?? []), `placed ${inset} in from the claim's margin: its wall's ring and the lots on it need the room`];
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes, cached: z.cached || undefined, provisional: undefined });
@@ -1806,8 +1825,28 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   if (withheld.size) {
     const onLine = new Map();
     for (const W of K?.walls ?? []) if (okClass(W.id)) for (const q of W.lots ?? []) onLine.set(q.lot, W.id);
-    for (const [zid, ids] of withheld) for (const id of ids) if (!onLine.has(id)) backOut.set(id, K?.back?.get(id) ?? `its wall ${okClass(zid) ? 'placed no line for it' : 'did not fit'}`);
+    // ((WL) the wall's own answer names why: a ring refused with its lots on it (its reason), else a zone that did not fit)
+    const ringOf = new Map([...(K?.ringSiting ?? [])].map(([wid, v]) => [v.zone, wid]));
+    const whyOf = (zid) => {
+      const wid = ringOf.get(zid), a = wid ? answers.get(wid) : null, g = reach.get(zid);
+      // (a zone placed its ring's reach in from the claim's margin that found no place: the ring's first refusal, then that)
+      if (!okClass(zid) && g) return `its wall ${g.wall} found no ring with the lots on it (refused${g.why ? `: ${g.why}` : ''}), and its zone ${zid} found no place ${g.reach} in from the claim's margin (the room the ring needs)`;
+      if (!okClass(zid)) return `its zone ${zid} did not fit`;
+      if (a && !okClass(wid)) return `its wall ${wid} found no ring with the lots on it (${a.class}${a.reasons?.[0]?.message ? `: ${a.reasons[0].message}` : ''})${g ? `, not even with its zone placed ${g.reach} in from the claim's margin` : ''}`;
+      return `its wall ${wid ?? ''} placed no line for it`.replace('  ', ' ');
+    };
+    for (const [zid, ids] of withheld) for (const id of ids) if (!onLine.has(id)) backOut.set(id, K?.back?.get(id) ?? whyOf(zid));
   }
+  // ---- (WL) the rings with lots on them that found no ring (refused) or whose zone did not fit: runCheck tries the zone again placed
+  // their reach in from the claim's margin, then gives the reach up
+  const ringOut = new Map();
+  for (const [wid, v] of K?.ringSiting ?? []) {
+    const a = answers.get(wid);
+    if (!a || okClass(wid)) continue;
+    ringOut.set(v.zone, { wall: wid, class: a.class, reach: v.reach, lots: v.lots, why: a.reasons?.[0]?.message ?? null });
+  }
+  // (a zone given a reach that found no place: its wall never reached its siting (blocked), so the zone is named here)
+  for (const [zid, g] of reach) if (!ringOut.has(zid) && !okClass(zid)) ringOut.set(zid, { wall: g.wall, class: answers.get(zid)?.class ?? null, reach: g.reach, lots: [...(withheld.get(zid) ?? [])], why: g.why });
   // ---- 6. geometry into the answers (zones: rect, lots, street ends; forms: bounds)
   for (const p of V.parts) {
     const a = answers.get(p.id);
@@ -1865,7 +1904,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     r.meta.revision = { format: 'revision/1', naming: 'plan', rid: REV.rid ?? 0, position: REV.position ?? 0, base: REV.base ?? null, parent: { rid: REV.parentRid ?? 0, irSha: REV.parentIrSha ?? null },
       lots: { add: r.lots.map((l) => l.id), refill: revRec.refill }, roads: { add: r.roads.map((x) => x.id) }, graph: { nodes: r.graph.nodes.map((n) => n.id), edges: r.graph.edges.map((e) => e.id) }, seed: ctx.seed };
   }
-  return { ...(backOut.size ? { k3Back: backOut } : {}), region: r, record: {
+  return { ...(backOut.size ? { k3Back: backOut } : {}), ...(ringOut.size ? { k3Ring: ringOut } : {}), region: r, record: {
     ...record, malformed: null, answers: V.parts.map((p) => answers.get(p.id)).filter(Boolean), order: V.order, partOf, notes, hit,
     zones: Object.fromEntries([...zoneEmit.entries()].map(([id, e]) => [id, { prefix: e.prefix }])),
     lotZone: Object.fromEntries(lotZone), lotMeta: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, { role: l.lot?.role ?? null, label: l.lot?.label ?? null, ext: l.lot?.ext ?? null }]))), lotEntries: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]))),
