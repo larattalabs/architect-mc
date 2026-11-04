@@ -30,8 +30,9 @@ import { askWet, noteWet, underwaterBlock, underwaterOk, wetKind, wetRuns, wetWa
 import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
 import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
-import { LOT_KEYS, lotBand, siteWallLots, viaLots, wallLotsOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
+import { LOT_KEYS, gateHints, lotBand, siteWallLots, viaLots, wallLotsOf, wallZoneOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
 import { gmBoxFits } from './gmGate.mjs';
+import { zoneLots } from '../plan/schema.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -1015,9 +1016,12 @@ export function finishGates(K) {
       const f = Array.isArray(sz) ? gmBoxFits({ along: sz[0], depth: sz[1], height: WALL_LOT_HEIGHT }) : { ok: true };
       return f.ok ? null : { lot: q.lot, mech: q.mech, gmShort: f.need };
     }).filter(Boolean) : [];
+    // ((GC) plan-check hints: a gatehouse of the zone the wall rings that no wall names, a named gate lot too small for a mechanism: notes
+    // only, the wall answers adjusted so Steward's repair round reads them)
+    const gcHints = W.st.sealed ? [] : gateHintsOf(K, W);
     const deviations = [...j.deviations, ...W.joins.map(({ note, ...d }) => { void note; return d; }), ...gmDevs];
-    const notes = mergeNotes([...W.notes, ...W.joins.map((d) => d.note), ...gmNotes]);
-    const klass = j.klass === 'refused' || gmRefuse.length ? 'refused' : deviations.length ? 'adjusted' : 'fits';
+    const notes = mergeNotes([...gcHints, ...W.notes, ...W.joins.map((d) => d.note), ...gmNotes]);
+    const klass = j.klass === 'refused' || gmRefuse.length ? 'refused' : deviations.length || gcHints.length ? 'adjusted' : 'fits';
     const reasons = j.klass === 'refused' ? [{ code: 'TOLERANCE', message: W.form === 'along' ? `a run of the wall stood ${mv.value} outside its distance, past its ceiling ${tol.ceiling}` : `the wall stepped ${mv.value} off its edge, past its ceiling ${tol.ceiling}`, evidence: { move: mv.value } }]
       : gmRefuse.map((q) => ({ code: 'NO_ROOM', message: `${q.lot}: its box has no room for the ${q.mech} (needs ${Object.values(q.gmShort)[0]} ${Object.keys(q.gmShort)[0] === 'along' ? 'along the wall' : Object.keys(q.gmShort)[0] === 'depth' ? 'through the wall' : 'high'}; the gate box minimum is 13 x 7 x 10)`, evidence: { kind: 'mechanism', lot: q.lot, need: Object.values(q.gmShort)[0], side: Object.keys(q.gmShort)[0] } }));
     W.answer = { class: klass, deviations, notes, ...(reasons.length ? { reasons } : {}), ...(W.joined.length || W.lots?.length ? { provisional: true } : {}) };
@@ -1039,6 +1043,18 @@ function crossStep(K, W, a, b) {
     worst = Math.max(worst, Math.max(...ys) - Math.min(...ys));
   }
   return worst;
+}
+
+/** (GC) The gate hints for one wall (wallLots.gateHints): the zone's unnamed gatehouses go on the first wall that rings the zone. */
+function gateHintsOf(K, W) {
+  const walls = K.k1Parts.filter((q) => q.kind === 'wall' && q.part && q.part.where);
+  const formOf = (q) => (q.part.where?.around ? 'around' : q.part.where?.inside ? 'edge' : q.part.where?.along ? 'along' : 'line');
+  const namedAnywhere = new Set();
+  for (const q of walls) for (const n of wallLotsOf(q.part, K.lotSpec, formOf(q)).named) namedAnywhere.add(n.lot);
+  const zid = W.st.form === 'around' || W.st.form === 'edge' ? wallZoneOf(W.p.part, K.V) : null;
+  const first = !!zid && walls.find((q) => (formOf(q) === 'around' || formOf(q) === 'edge') && wallZoneOf(q.part, K.V) === zid)?.id === W.id;
+  const zoneLotIds = zid ? zoneLots(K.V.byId.get(zid).part).map((l) => l.id) : null;
+  return gateHints({ zoneLotIds, namedAnywhere, named: W.st.named ?? [], specOf: K.lotSpec, first });
 }
 
 /** At most 16 notes (partAnswer): the 16th says how many more there were. */

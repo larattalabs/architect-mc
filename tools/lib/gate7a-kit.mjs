@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { normIrJson } from './fl-norm.mjs';
+import { GC_MOVED } from './f7a-norm.mjs';
 import { inSlice } from './gate-part.mjs';
 import { syncBaseTree } from './base-tree.mjs';
 import * as CP from './corpus-plan.mjs';
@@ -48,7 +49,7 @@ export async function unchanged(root, { check, log = console.log, base: baseName
     out.fixtures[name] = { existsOld, same, ...(ex ? { excepted: ex } : {}), ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}) };
     if (!existsOld) { log(`note ${name}: new on this branch`); continue; }
     // a mover that already landed on main (the foundation, through CW) is identical against the base: either way is fine
-    if (!ex && landed[name]) { check(true, `${name}: named mover already on main (${landed[name]}): ${same ? 'identical against the base' : 'differs, as named'}`); if (!same) out.fixtures[name].excepted = landed[name]; continue; }
+    if (!ex && (landed[name] ?? GC_MOVED[name])) { const lw = landed[name] ?? GC_MOVED[name]; check(true, `${name}: named mover already on main (${lw}): ${same ? 'identical against the base' : 'differs, as named'}`); if (!same) out.fixtures[name].excepted = lw; continue; }
     if (ex) { check(!same || exMerged, `${name}: excepted by name (${ex}): ${same ? (exMerged ? `identical: the base already has it (${mergedIf} on the base; the exception merged)` : 'UNCHANGED (the exception did not move)') : 'differs, as named'}`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);
   }

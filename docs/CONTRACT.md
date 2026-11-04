@@ -26363,6 +26363,28 @@ and forwarded before the design exists, so the design's roof row is not known wh
 4. GM-a2 also takes the verifier's minor notes: a crash-recovery removal that loses the mechanism site, and mid-move removal at more
    than one phase of the piston cycle.
 
+### 17. GM-b, the K1 swing gate (coordinator, 2026-11-04; binding, wins over §4's K1 bullet; Steward reviews in GM-b's RC)
+
+§4 said only that K1a's wooden double door "becomes the iron swing door pair and the button". The GM-b builder stopped on four gaps
+(slice/GMb 77ec723d, HANDOFF-GM "GM-b: blocked on questions"). The answers:
+
+1. **Opt-in, not automatic.** `connector.gate` gains `mech: "none" | "swing"` (default `"none"`), stamped NEXT, in plan/0 and the
+   catalogue limits, as GM-a's gatehouse mechanism is opt-in. No recorded plan moves. A plan writer asks for it on a player gate; the
+   gatehouse coverage work (PLAN "The remaining gate batch") is unaffected.
+2. **Villagers: fall back, don't refuse (Steward's review).** A `mech: "swing"` gate on a villager edge (a street or road crossing the
+   villager graph uses) is answered `adjusted` back to the wooden door, with a note naming the gate and the edge and deviation `what:
+   mechanism`, the same fallback as item 3. The plan writer cannot see the villager routes, which the check works out, and a refused part
+   on a `required` wall could block the whole wall. `MOVER` stays only for a `rest: closed` swing on a route the plan itself names as a
+   villager route. The swing's movers are `[player]`.
+3. **Geometry.** The swing is exactly 3 wide, 3 high and 3 deep (`swingCells`). A `mech: "swing"` gate is answered `adjusted` to width 3
+   and height at least 3 when its run allows (`width + 2`, as today); the wall must be at least 3 thick, with the swing in the 3 planes
+   centred on the wall's middle and any extra depth left as the wall's own passage. Where it cannot fit, the gate keeps the wooden door
+   with deviation `what: mechanism`, as §4 does for a small gatehouse.
+4. **Realise and survival:** as the builder proposed. A region cells item `mech:<gate>` (`architect:mechanism`, BOX, LAYER) after the
+   wall part, written and restored with no updates and no drops; billed through MechCharges the GM-a2 way (held until the wall part is
+   built, charged once, written at once, refunded at group removal), exact at plan time since a swing has no rung. The IR carries it on
+   the wall's gate (`meta.walls[].gates[].mechanismWrite`).
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
