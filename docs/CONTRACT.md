@@ -26413,6 +26413,32 @@ its zone is adjusted: moved or shrunk by protection, a re-check, or anything els
 Deviations and notes appear in the check answer (`answers[]`), not on the artifact's `parts[]` (unchanged; an artifact field would be an
 API change).
 
+### 19. Wall-level swing opt-in (slice WS, 2026-11-04; Noah: "No, opt-in only"; binding, amends §17)
+
+By default nothing changes: the gates a wall cuts on its own (auto gates: `gates.min`, the routes' crossings) stay plain, and only a
+named `connector.gate` with `mech: "swing"` gets a swing (§17). A wall can opt every gate in:
+
+1. **Member.** `connector.wall.gateMech: "none" | "swing"` (default `none`; catalogue `connector.wall`: `limits.gateMech`, schemaVersion 2,
+   sinceApi NEXT). It is a first-class member beside `gates`, `lamps` and `walk`, named for what it sets (the wall's gates' mechanism) and
+   spelled like the gate's own `mech`. It is not `params.gate_mech`/`params.mechanism`, which K3 already reads as a gate lot's (gatehouse)
+   mechanism, and `lots[].mech` stays the lot's. `none` and an absent member plan byte for byte as on main.
+2. **Which gates.** With `swing`, every gate of the wall that has no mech decision of its own: the auto gates (gates.min, a route's or a
+   network street's crossing, an along wall's), and a named gate (at, crossing) with no `mech` member. A gate's explicit `mech: "none"`
+   wins: it stays plain (a styling gate's `mech: "none"` keeps the auto gates it styles plain); an explicit `mech: "swing"` is §17's as
+   before. A gatehouse lot's passage (K3/GM) is not a K1 gate and keeps its own `mech`.
+3. **Per gate, §17 unchanged.** Each opted-in gate is decided on its own: 3 wide, at least 3 high, in a wall at least 3 thick (an at gate
+   at a 3-wide run within the move tolerance; an explicit width or height is adjusted as §17 item 3); else the wooden door with deviation
+   `{what: mechanism, kind: swing, gate, why: thickness | width | villager, ...}` and a note naming the gate and, for a villager, the
+   edge. An auto gate's deviation and notes are on the wall's answer (it has no part), a named gate's on its own; the wall's note
+   `gateMech swing: N auto gate(s) are swings[, M kept the wooden door]` says the totals. **MOVER** stays only for a gate part that itself
+   names `mech: "swing"` on a route whose written movers name villager; a gate only the wall asked for takes the wooden door (why
+   villager, the edge) and the wall is not refused for it (as a styling gate's autos in §17).
+4. **IR, bill.** Each swing is its own entry of `gateMechanisms` (gate id `<wall>_g<n>` for an auto gate), so its own `mech:<gate>`
+   region item in realise, and in survival its own bill, held and charged through MechCharges and refunded at removal, as §17 item 4.
+   No Java type, method or reason is new.
+5. **WL (§18).** The opt-in is read in every compile of the wall, so the auto gates are decided on the ring where it ends up: re-sited
+   (item 1 of §18) or back at the zone (item 2). A wall that finds no ring has no gates.
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
@@ -26494,3 +26520,14 @@ compatible; the version numbers are the coordinator's).
 | The first wait's subject | A gate mechanism's building wait (the stage wait on the lot or the wall's tiles, `RegionTargets.waitFor`) says `"<words>'s <kind> waits for <part> to be built"`: the lot's or gate's plan label or id words, then the kind (`portcullis`, `sliding gate`, `swing gate`, else `gate mechanism`), e.g. "Main gatehouse's portcullis waits for Main gatehouse to be built". Before: "Main gatehouse waits for Main gatehouse to be built" (the waiter was the lot). The kind is read from the item's `architect_mc:gateMechanism.kind`. A K1 gate's wait while the wall's tiles are put down (before it can be built round) is a plain wait with no `waitsFor`, now with the same subject in its message. |
 | Unchanged | When the bill is met the bill is charged, recorded and written at once as before; `waitsFor` and the marker go then. Other items' waits are byte for byte as before (`RegionWaitTags.say`). |
 | Tests | `MechWaitSayTest` (mod): the first wait's sentence for a portcullis, a swing gate, a lot with no label, the bill sentence with one, two and three items, and the once-only move mark. In game (headless, ports 8896-8899): `gm-survival` and `gm-b-survival` assert the ITEM_WAITING events (`/apitest events`) of the mechanism item: exactly one bill-wait event over many polls, SITE_BUSY, `waitsFor.kind` bill, a say with the mechanism as subject and each missing item by its name and count, and the first wait's sentence. |
+
+### Slice WS as built (branch `slice/WS`; versions NEXT; recorded 2026-11-04; DEV MODE)
+
+Builds §19. Kit only; the Java reads `gateMechanisms` per entry already (GateMechTest `manySwingsOnOneWall`).
+
+| Area | As built |
+|---|---|
+| Member | `connector.wall.gateMech: none \| swing` (schema, catalogue `connector.wall` `limits.gateMech`, schemaVersion 2, sinceApi NEXT, a note; golden re-cut for that entry only). |
+| Where decided | `finishGates` (kit/lib/connectors/wall.mjs): named at gates in `placeAtGate` and named crossing gates in the crossing branch read `part.mech ?? the wall's gateMech`; every other gate of the wall (the auto gates, after gates.min) in one pass after gates.min with `swingDecide(..., {soft: true})` (a written villager route is a villager fallback, never MOVER). `mechDecided` marks a gate whose own `mech: "none"` (or its styling gate's) keeps it plain. |
+| Answer | An auto gate's `mechanism` deviations and notes are on the wall's answer (class adjusted); the wall's geometry and the siteplan carry `mechanism` per gate as for a named one. |
+| Unchanged | No committed plan names `gateMech`: byte-identical against the base (the gm and k1/k2/k3 fixtures, `ws.test.mjs` "the default"). |
