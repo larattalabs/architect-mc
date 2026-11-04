@@ -3,8 +3,8 @@
  "version": 0,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/route_demo/",
  "fromRun": "20261013-032659",
- "irSha": "ab69adf6a05fe19950fa3a6e27befd1529ba14133a4471cdb3491d46aed2e02a",
- "kitVersion": "0.49.0",
+ "irSha": "f257f974c86527956ba4f652fb06fddbb31a91a0b318a1d6a264b5eb02dd7e69",
+ "kitVersion": "0.49.1",
  "cells": 11817,
  "tiles": {
   "ground|terrain|56,-14": "ad3ae975e5cecb148867ef74757bd2dffd10cc6b9a149698edd2e3e333c219b1",
