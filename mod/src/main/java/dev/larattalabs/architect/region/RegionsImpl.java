@@ -1730,6 +1730,21 @@ public final class RegionsImpl implements Regions {
 					}
 				}
 			}
+			// (GM-b, CONTRACT GM §17 item 4) the stage's K1 swing gates: a region cells item each (mech:<gate>) after the tiles that write the
+			// wall round it (in survival: after they are built), the report on the region's ext
+			for (JsonObject gw : GateMech.gateWrites(ir)) {
+				if (!st.equals(str(gw, "stage", ""))) {
+					continue;
+				}
+				QItem gi = gateMechanismItem(level, rec, gw, st, terrainKeys, pathKeys, roadKeys);
+				if (gi != null) {
+					items.add(gi);
+					if (!(rec.ext.get(GateMech.EXT_REPORT) instanceof JsonObject)) {
+						rec.ext.add(GateMech.EXT_REPORT, new JsonObject());
+					}
+					rec.ext.getAsJsonObject(GateMech.EXT_REPORT).add(str(gw, "gate"), gi.ext.get(GateMech.EXT_REPORT).deepCopy());
+				}
+			}
 			tilesOfStage.put(st, terrainKeys);
 		}
 		// the writer, the next tile (its tickets taken while the last one's P7 commits) and two freezes ahead fit together
@@ -2129,6 +2144,63 @@ public final class RegionsImpl implements Regions {
 			}
 			one.add("cells", at);
 			rec.survival.getAsJsonObject(dev.larattalabs.architect.site.MechCharges.KEY).add(lot.id(), one);
+		}
+		return q;
+	}
+
+	/**
+	 * (GM-b, CONTRACT GM §17 item 4) A K1 swing gate's mechanism item: a region cell site of kind {@code architect:mechanism} (BOX, LAYER),
+	 * keyed {@code mech:<gate>}, after the stage's tiles (and 4e roads) round its cells, its cells (the IR's {@code gateMechanisms[]} base, exact
+	 * at plan time: a swing has no rung) journaled as this region's and written with no update. Its ext names the gate
+	 * ({@link dev.larattalabs.architect.site.MechCharges#EXT_GATE}) and its columns ({@code architect_mc:roi}: a survival region's stage wait).
+	 * In survival its bill is held and charged as a gatehouse's (MechCharges). Null when it writes nothing.
+	 */
+	static @Nullable QItem gateMechanismItem(ServerLevel level, RegionRec rec, JsonObject gw, String stage, List<String> terrainKeys, List<String> pathKeys,
+		List<String> roadKeys) {
+		String gate = str(gw, "gate", "");
+		GateMech.Plan gm = GateMech.plan(gw, null, null, 0, 0, 0);
+		if (gate.isEmpty() || gm.positions().length == 0) {
+			return null;
+		}
+		int x0 = Integer.MAX_VALUE, y0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, y1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+		List<dev.larattalabs.architect.api.CellWrite> cells = new ArrayList<>(gm.positions().length);
+		for (int i = 0; i < gm.positions().length; i++) {
+			BlockPos bp = BlockPos.of(gm.positions()[i]);
+			cells.add(dev.larattalabs.architect.api.CellWrite.of(bp, gm.states()[i]));
+			x0 = Math.min(x0, bp.getX());
+			y0 = Math.min(y0, bp.getY());
+			z0 = Math.min(z0, bp.getZ());
+			x1 = Math.max(x1, bp.getX());
+			y1 = Math.max(y1, bp.getY());
+			z1 = Math.max(z1, bp.getZ());
+		}
+		List<String> after = deps(stage, terrainKeys, pathKeys, grow(new int[] {x0, y0, z0, x1, y1, z1}, 1));
+		after.addAll(roadKeys);
+		QItem q = dev.larattalabs.architect.site.RegionQueue.holdItem(level, rec.id, "mech:" + gate, stage, after, cells, rec.owner, "architect:mechanism",
+			dev.larattalabs.architect.api.Policy.BOX);
+		q.ext.addProperty(dev.larattalabs.architect.site.MechCharges.EXT_GATE, gate);
+		JsonArray roi = new JsonArray();
+		roi.add(x0 - 1);
+		roi.add(z0 - 1);
+		roi.add(x1 + 1);
+		roi.add(z1 + 1);
+		q.ext.add(dev.larattalabs.architect.site.MechCharges.EXT_ROI, roi);
+		q.ext.add(GateMech.EXT_REPORT, GateMech.gateReport(gw, gm));
+		if (rec.survival()) {
+			if (!(rec.survival.get(dev.larattalabs.architect.site.MechCharges.KEY) instanceof JsonObject)) {
+				rec.survival.add(dev.larattalabs.architect.site.MechCharges.KEY, new JsonObject());
+			}
+			JsonObject one = new JsonObject();
+			one.add("bill", gm.billJson());
+			JsonArray at = new JsonArray();
+			for (long pp : gm.positions()) {
+				at.add(BlockPos.getX(pp));
+				at.add(BlockPos.getY(pp));
+				at.add(BlockPos.getZ(pp));
+			}
+			one.add("cells", at);
+			one.addProperty("gate", true);
+			rec.survival.getAsJsonObject(dev.larattalabs.architect.site.MechCharges.KEY).add(gate, one);
 		}
 		return q;
 	}

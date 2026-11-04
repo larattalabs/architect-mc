@@ -1,0 +1,205 @@
+{
+  "about": "(WL) Steward's castle_town re-check (artifact bab6956c, survival, kit 0.48.0): the stockpile's 2 crates at the claim centre are protected, so the castle zone moves to the claim's north-east and its ring with the five named lots (band 10) leaves the claim on its n side. The zone is placed again the ring's reach in from the claim's margin and the lots stand on the line; with the zone's size held hard at 10 there is no such place and the lots go back to the zone with join deviations and deviation mechanism {why: off_wall}",
+  "covers": [
+    "connector.wall",
+    "wall.around"
+  ],
+  "terrain": {
+    "W": 193,
+    "D": 193,
+    "x0": 20605,
+    "z0": 44905,
+    "y": 64
+  },
+  "anchors": {
+    "claim_center": [
+      20701,
+      65,
+      45001
+    ],
+    "claim_e": [
+      20795,
+      65,
+      45001
+    ],
+    "claim_n": [
+      20701,
+      65,
+      44907
+    ],
+    "claim_s": [
+      20701,
+      65,
+      45095
+    ],
+    "claim_w": [
+      20607,
+      65,
+      45001
+    ],
+    "player": [
+      20701,
+      65,
+      45001
+    ],
+    "stone": [
+      20701,
+      65,
+      45001
+    ]
+  },
+  "protected": [
+    {
+      "id": "stockpile",
+      "rect": [
+        20699,
+        45001,
+        20700,
+        45001
+      ]
+    }
+  ],
+  "expect": {
+    "part": "curtain_wall",
+    "lots": 5
+  },
+  "plan": {
+    "connectors": [
+      {
+        "id": "curtain_wall",
+        "kind": "wall",
+        "label": "Curtain wall",
+        "notes": "Closed curtain wall with a wall walk linking the four corner towers; the gatehouse is the only entrance.",
+        "params": {
+          "corner_lots": [
+            "tower_1",
+            "tower_2",
+            "tower_3",
+            "tower_4"
+          ],
+          "gate_lot": "gatehouse_1",
+          "height": 8,
+          "mechanism": "portcullis",
+          "wall_walk": true
+        },
+        "required": true,
+        "where": {
+          "around": {
+            "closed": true,
+            "feature": {
+              "part": "castle"
+            }
+          }
+        }
+      }
+    ],
+    "planId": "castle_town",
+    "schemaVersion": "plan/0",
+    "style": {
+      "pending": "castle_town"
+    },
+    "zones": [
+      {
+        "id": "castle",
+        "kind": "standard",
+        "label": "Castle Town",
+        "notes": "Packed densely inside the curtain wall around a central courtyard square.",
+        "program": {
+          "layout": "street",
+          "lots": [
+            {
+              "brief": "Tallest building, the castle's heart with a great hall, throne room and battlements.",
+              "id": "keep_1",
+              "label": "Great keep",
+              "landmark": true,
+              "placement": "central",
+              "role": "great_keep",
+              "size": [
+                23,
+                19
+              ],
+              "type": "tower"
+            },
+            {
+              "brief": "Barbican with portcullis and murder holes; the only way in through the curtain wall.",
+              "id": "gatehouse_1",
+              "label": "Main gatehouse",
+              "landmark": true,
+              "role": "main_gatehouse",
+              "size": [
+                17,
+                15
+              ],
+              "type": "gatehouse"
+            },
+            {
+              "brief": "Round tower at a corner of the curtain wall.",
+              "id": "tower_1",
+              "label": "Corner wall tower",
+              "placement": "edge",
+              "role": "corner_tower",
+              "size": [
+                13,
+                11
+              ],
+              "type": "tower"
+            },
+            {
+              "brief": "Round tower at a corner of the curtain wall.",
+              "id": "tower_2",
+              "label": "Corner wall tower",
+              "placement": "edge",
+              "role": "corner_tower",
+              "size": [
+                13,
+                11
+              ],
+              "type": "tower"
+            },
+            {
+              "brief": "Round tower at a corner of the curtain wall.",
+              "id": "tower_3",
+              "label": "Corner wall tower",
+              "placement": "edge",
+              "role": "corner_tower",
+              "size": [
+                13,
+                11
+              ],
+              "type": "tower"
+            },
+            {
+              "brief": "Round tower at a corner of the curtain wall.",
+              "id": "tower_4",
+              "label": "Corner wall tower",
+              "placement": "edge",
+              "role": "corner_tower",
+              "size": [
+                13,
+                11
+              ],
+              "type": "tower"
+            }
+          ],
+          "orientation": "ew",
+          "shared": "square"
+        },
+        "purpose": "home_base",
+        "required": true,
+        "size": {
+          "preset": "XL"
+        },
+        "tolerance": {
+          "rotate": {
+            "allowed": false
+          }
+        },
+        "where": {
+          "inside": {
+            "claim": true
+          }
+        }
+      }
+    ]
+  }
+}

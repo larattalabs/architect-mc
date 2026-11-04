@@ -122,4 +122,27 @@ class GateMechTest {
 		assertEquals(0, lv.filled(), "levers-only: no roof row bound, nothing filled");
 		assertNull(lv.bill().get("minecraft:daylight_detector"), "levers-only: no sensor billed");
 	}
+
+	/**
+	 * (GM-b, CONTRACT GM §17 item 4) A K1 swing gate's write (the IR's gateMechanisms[]): read from the IR, its base written whole (no rung,
+	 * no design read), the bill exact (an iron door per pair of halves), the report with no sensor deviation.
+	 */
+	@Test
+	void k1SwingGate() {
+		String gw = "{\"gate\":\"east_gate\",\"wall\":\"curtain\",\"kind\":\"swing\",\"stage\":\"links\",\"palette\":[\"minecraft:stone_bricks\","
+			+ "\"minecraft:iron_door[facing=west,half=lower,hinge=left,open=false,powered=false]\",\"minecraft:iron_door[facing=west,half=upper,hinge=left,open=false,powered=false]\","
+			+ "\"minecraft:lever[face=wall,facing=west,powered=false]\"],\"base\":[1,65,1,0, 1,66,1,0, 1,65,0,1, 1,66,0,2, 0,66,1,3]}";
+		JsonObject ir = JsonParser.parseString("{\"gateMechanisms\":[" + gw + "],\"lots\":[]}").getAsJsonObject();
+		java.util.List<JsonObject> ws = GateMech.gateWrites(new Ir(ir, "x", "0", "s", new int[] {0, 0, 0, 0}, java.util.List.of(), java.util.Map.of(), java.util.Map.of(),
+			java.util.List.of(), java.util.List.of(), java.util.Map.of(), new long[] {0, 0, 0}, 1, java.util.List.of(), java.util.List.of()));
+		assertEquals(1, ws.size());
+		GateMech.Plan p = GateMech.plan(ws.get(0), null, null, 0, 0, 0);
+		assertEquals(5, p.positions().length);
+		assertEquals(java.util.Map.of("minecraft:stone_bricks", 2, "minecraft:iron_door", 1, "minecraft:lever", 1), p.bill());
+		JsonObject r = GateMech.gateReport(ws.get(0), p);
+		assertEquals("swing", r.get("kind").getAsString());
+		assertEquals("curtain", r.get("wall").getAsString());
+		assertEquals(5, r.get("cells").getAsInt());
+		assertTrue(!r.has("deviation") && !r.has("sensor"));
+	}
 }

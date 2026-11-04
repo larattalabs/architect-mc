@@ -985,6 +985,14 @@ steps.base = async () => { await ensure(); await L.ensureBase(FLAT); };
   await registerGmA(steps, { L, call, check, cmd, log, root, OUT, json, stateAt, freeze, unfreeze, step, items });
 }
 
+// ------------------------------------------------------------------ GM-b (CONTRACT GM §17, the K1 swing gate): tools/lib/gate7agm-b.mjs
+//     bunit (gm-b-unit), bingame + bundo (gm-b-ingame), bsurvival (gm-b-survival), blook (gm-b-look, client)
+
+{
+  const { registerGmB } = await import('./lib/gate7agm-b.mjs');
+  await registerGmB(steps, { L, call, check, cmd, log, root, OUT, json, stateAt, freeze, unfreeze, step, items });
+}
+
 const name = process.argv[2];
 if (!steps[name]) { console.error(`steps: ${Object.keys(steps).join(' ')}`); process.exit(2); }
 await run(name);

@@ -45,6 +45,10 @@ public final class MechCharges {
 
 	/** The survival record's member. */
 	public static final String KEY = "mech";
+	/** (GM-b) A K1 swing gate's mechanism item and site: the gate's id (a gatehouse's names its lot, {@code architect_mc:lot}). */
+	public static final String EXT_GATE = "architect_mc:gate";
+	/** (GM-b) A K1 swing gate's mechanism item: its columns [x0, z0, x1, z1] (RegionTargets' stage wait reads them). */
+	public static final String EXT_ROI = "architect_mc:roi";
 	/** A region gate mechanism's cell site kind. */
 	public static final String KIND = Infra.CELLS + "architect:mechanism";
 
@@ -103,7 +107,18 @@ public final class MechCharges {
 		}
 		QItem li = b.item("lot:" + lot);
 		Site site = li == null || li.siteId == null ? null : Sites.get(li.siteId);
-		if (li == null || li.status != QItem.Status.PLACED || site == null || site.placing() || site.building()) {
+		if (li == null && i.ext.has(EXT_GATE)) {
+			// ((GM-b) a K1 swing gate: no lot; the stage wait (RegionTargets, the item's roi) has held it until the wall's tiles round it are
+			// built; here, until they are all put down)
+			for (String k : i.after) {
+				QItem a = b.item(k);
+				if (a != null && a.status != QItem.Status.PLACED) {
+					Batches.waitFor(b, i, Reason.SITE_BUSY, "the gate mechanism of gate " + lot + " waits for " + k
+						+ " to be built: a survival region writes a gate's swing once, after the wall it stands in");
+					return true;
+				}
+			}
+		} else if (li == null || li.status != QItem.Status.PLACED || site == null || site.placing() || site.building()) {
 			String target = li != null && li.siteId != null ? li.siteId : "lot:" + lot;
 			RegionTargets.waitFor(b, i, target, "lot " + lot, Batches::waitFor, "the gate mechanism of lot " + lot + " waits for its gatehouse (" + target
 				+ ") to be built: a survival region writes a gate's circuit once, after the building it stands in");
@@ -115,7 +130,7 @@ public final class MechCharges {
 		Map<String, Integer> bill = items(e.get("bill"));
 		String owner = l.rec().owner;
 		if (!Stockpiles.charge(srv, owner, bill)) {
-			Batches.waitFor(b, i, Reason.SITE_BUSY, "the gate mechanism of lot " + lot + " waits for " + Stockpiles.chargeShort(owner, bill)
+			Batches.waitFor(b, i, Reason.SITE_BUSY, "the gate mechanism of " + (li == null ? "gate " : "lot ") + lot + " waits for " + Stockpiles.chargeShort(owner, bill)
 				+ " in the stockpile of " + (owner == null ? "the player" : owner) + " (its whole bill is charged at once, then it is written in one go)");
 			return true;
 		}
@@ -176,12 +191,19 @@ public final class MechCharges {
 	static @Nullable Infra siteOf(RegionsImpl.Live l, String lot) {
 		String group = l.rec().groupId;
 		for (Infra inf : Infras.all()) {
-			if (KIND.equals(inf.kind()) && Objects.equals(group, inf.group()) && inf.ext().get("architect_mc:lot") instanceof JsonPrimitive p && lot.equals(p
-				.getAsString())) {
+			if (KIND.equals(inf.kind()) && Objects.equals(group, inf.group()) && lot.equals(idOf(inf))) {
 				return inf;
 			}
 		}
 		return null;
+	}
+
+	/** A mechanism site's lot (a gatehouse's) or gate (GM-b, a K1 swing gate's) id, or null. */
+	static @Nullable String idOf(Infra inf) {
+		if (inf.ext().get("architect_mc:lot") instanceof JsonPrimitive p) {
+			return p.getAsString();
+		}
+		return inf.ext().get(EXT_GATE) instanceof JsonPrimitive g ? g.getAsString() : null;
 	}
 
 	/**
@@ -290,10 +312,10 @@ public final class MechCharges {
 	 * capped at the charge, credited under its key once its restore is written; null when it is not one, or nothing was charged.
 	 */
 	static Groups.@Nullable Credit refund(ServerLevel level, Infra inf) {
-		if (!KIND.equals(inf.kind()) || !(inf.ext().get("architect_mc:lot") instanceof JsonPrimitive lp)) {
+		String lot = KIND.equals(inf.kind()) ? idOf(inf) : null;
+		if (lot == null) {
 			return null;
 		}
-		String lot = lp.getAsString();
 		RegionsImpl.Live l = null;
 		for (RegionsImpl.Live x : RegionsImpl.all()) {
 			if (Objects.equals(x.rec().groupId, inf.group())) {

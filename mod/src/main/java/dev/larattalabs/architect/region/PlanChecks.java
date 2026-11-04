@@ -487,6 +487,13 @@ public final class PlanChecks {
 					}
 				}
 			}
+			// (GM-b, CONTRACT GM §17 item 4) each K1 swing gate's mechanism: exact at plan time (no rung)
+			for (JsonObject gw : GateMech.gateWrites(p.ir())) {
+				Map<String, Integer> gb = GateMech.plan(gw, null, null, 0, 0, 0).bill();
+				if (!gb.isEmpty()) {
+					add.accept("mech:" + gw.get("gate").getAsString(), gb);
+				}
+			}
 			for (Ir.Road road : p.ir().roads()) {
 				List<net.minecraft.core.BlockPos> pts = new ArrayList<>();
 				road.points().forEach(pt -> pts.add(new net.minecraft.core.BlockPos(pt[0], pt[1], pt[2])));

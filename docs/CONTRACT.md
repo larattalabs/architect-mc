@@ -26385,6 +26385,29 @@ and forwarded before the design exists, so the design's roof row is not known wh
    built, charged once, written at once, refunded at group removal), exact at plan time since a swing has no rung. The IR carries it on
    the wall's gate (`meta.walls[].gates[].mechanismWrite`).
 
+### 18. Wall lots when the wall's zone is adjusted (slice WL, 2026-11-04; Steward's report on 0.52.0 / kit 0.48.0; binding, amends K3 §2)
+
+A ring wall (`wall.around`, `wall.edge`) keeps its named lots (`lots[]`, or the lenient `corner_lots`, `gate_lot` and the rest) when
+its zone is adjusted: moved or shrunk by protection, a re-check, or anything else.
+
+1. **Re-site first.** If the ring with its lots on it (K3's band) finds no ring around the zone where the zone was placed, the plan is
+   compiled once more. This time the zone is placed the ring's **reach** in from the claim's margin: the band (or the ring's own
+   `ring[0]` when larger), plus the outer part of the deepest lot's box, plus its apron. The zone answers with the note "placed N in
+   from the claim's margin: its wall's ring and the lots on it need the room", and its own deviations (size, move) as usual. A plan
+   whose rings fit compiles exactly as before.
+2. **Only then back to the zone, said explicitly.** If there is no such place for the zone, or the ring is still refused, the reach is
+   dropped and the lots go back to the zone as K3 §2 says. Each lot gets K1's join deviation, and its note names the real cause: the
+   ring's refusal and the reach that was tried. The note no longer says "its wall placed no line".
+3. **Mechanism outcome.** A named gate lot with a mechanism (`lots[].mech` or the lenient `params.mechanism` / `gate_mech`) that
+   stands on no line of its wall gets the deviation `{what: mechanism, kind, lot, why: off_wall}` on the wall. A note also says that
+   no mechanism is built or billed and that the wall's gates are plain. The wall is not refused for it: refusals stay keyed to the
+   planned size (GM-a "as built").
+4. **K1 gates (GM-b).** A `connector.gate` on the wall (with `mech: swing` or not) is placed on the adjusted ring, re-sited or not, under
+   §17's rules. If the wall finds no ring at all, the gate is `blocked` and both parts appear in the artifact's `dropped`.
+
+Deviations and notes appear in the check answer (`answers[]`), not on the artifact's `parts[]` (unchanged; an artifact field would be an
+API change).
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the
@@ -26436,3 +26459,19 @@ no type, method or reason.
 | Gate | `gm-survival` (new, chain `7agma-surv`, in `7agma` and the slice tier), gm-ingame `p13x7rv` (a design honouring the reservation: the roof fill), gm-undo phases `close-logic`, `close-landed`, `open-logic`, `open-first`, `open-landed` beside GM-a's `midmove`, and `crash`. Evidence: HANDOFF-GM "GM-a2". |
 | Gate run (DEV MODE, $0) | Slice tier `20261103-212703-slice` plus its reruns: every step PASS but `6cf1-scenario-forms`, which fails the same on origin/main 05611639 (pre-existing). gm-unit 426/0, gm-ingame 104/0 (roof: `p13x7rv` filled 2, 0 holes, 0 bumps; undo: open, closed, midmove, lane, the five phases, crash: E-flat 0, no drop each), **gm-survival 42/0** (slide with sensor and fill, levers-only, swing: held, charge = bind bill = built = within the range, conservation exact, twin 0, closed removal refund = charge, E-flat 0). Gate-verifier: PASS (re-ran gm-survival and gm-ingame). |
 
+
+### Slice GM-b as built (branch `slice/GMb`, main 02e17af9 merged; versions NEXT; recorded 2026-11-04; DEV MODE)
+
+Builds §17. The API gains no Java type, method or reason; the plan/0 member, the catalogue limit and one IR member are new, so Steward RCs.
+
+| Area | As built |
+|---|---|
+| Plan member (§17 item 1) | `connector.gate.mech: "none" \| "swing"` (default none). Catalogue `connector.gate`: `limits.mech: [none, swing]`, schemaVersion 2, sinceApi NEXT, a note; the golden re-cut for that entry only (K2's and the foundation's catalogue tests leave connector.gate to GM-b's). No recorded plan names it: every committed fixture plans byte for byte as on main (`unchanged`). |
+| Where it goes (§17 item 3) | **at** gate: placed at a 3-wide run (a run of 5 with its jambs) within the move tolerance; an explicit `width` other than 3 and a `height` under 3 are answered `adjusted` (deviations `width`, `height`); a `door` named is noted as not read. **crossing** gate: the route fixes its width; not 3 is the wooden door, deviation `mechanism` (why `width`). A **styling** gate decides each auto gate on its own. The swing stands in the 3 planes centred on the wall's middle (d 0 the plane `floor((t - 3) / 2)` in from the outer face; the thickness limit [1, 3] makes it the whole wall), the button outside, the plate and lever inside. A gate higher than 3 is sealed over the transom in the door plane, the arch's middle cell over the mullion is filled, and the walk's row under the door plane is a sill of the structure block: a path block under the mullion turned to dirt at the first door update and the walk's cell site dropped it as a player's block in survival (found in game). |
+| Fallbacks (§17 items 2, 3) | Wall under 3 thick (why `thickness`), no 3-wide run near an at gate's endpoint (why `width`), a crossing not 3 wide (why `width`), a villager crossing (why `villager`, with the `edge`): `adjusted` back to the wooden door, deviation `{what: mechanism, kind: swing, gate, why, need?, thickness?, width?, edge?}`, a note naming the gate and the edge. A swing fallen back to the door covers the whole opening (3 wide: a double door and a single), not the middle 2. A villager crossing is a routed edge through the gate whose movers (inferred or written) include villager, or a network street's gate (kind `network`). |
+| MOVER | Only when a route through the gate has written `movers` naming villager (the plan names it a villager route): the gate part `refused MOVER {gate, crossing, movers, kind: swing}`. A crossing gate then stays the route's plain opening (as R17's fence gate); an at gate keeps its opening with no door (the routes need it) and drops its part. A styling gate never refuses (the plan named no gate): such an auto gate takes the wooden door with deviation `mechanism`. |
+| IR and write data (§17 item 4) | The meta's `walls[].gates[]` carries `mechanism` (the record) and `mechanismWrite {palette, base, stage}`. **The mod reads the IR, not the meta**, so the write also rides a new top-level IR member `gateMechanisms: [{gate, wall, kind, stage, palette, base}]`, only in a plan with a swing (a known member of format 1 and 2, `MEMBERS_FORMAT2`; the evaluator ignores it). The wall's own ops write none of the swing's cells. |
+| Record and answer | The gate part's `geometry.mechanism {kind: swing, rest: closed, width 3, height, dayDriven: false, who: player, movers: [player], cells, triggers [button front, lever back, plate back (anyone)], states, cost}`; `cost` is gmCost's one case (min = max, exact at plan time). The gate's `cost.bom` holds the swing. The wall's geometry and record name `mech: swing` per gate; siteplan `walls[].gates[].mechanism {kind, rest, who}` (schema widened within format 1). |
+| Themed | The swing's blocks come from `gmMatsOf(roles)` (structure, the rail role's fence for the transom, the role's button and plate); `themeOffenders` judges the IR's `gateMechanisms` as part `gm_<gate>`. The transom's connections are settled toward the mullion and jambs, not the open lanes. |
+| Realise (Java) | Per stage, after its tiles and roads, one region cells item `mech:<gate>` (kind `architect:mechanism`, BOX, LAYER) after the stage's tiles round its cells (and the 4e roads), written with no update; ext `architect_mc:gate` and `architect_mc:roi` (its columns). The region's `architect_mc:gateMechanism.<gate>` report `{kind, wall, cells, bom}`. Restored by the GM-a path (SiteJournal's kind test: no update, no drop). |
+| Survival | `survival.mech.<gate> {bill, cells, gate: true}` at realise; MechCharges holds the item until the wall's tiles round it are built (RegionTargets' stage wait reads the item's roi) and put down, then until its whole bill is in the stockpile; charged at once, written at once; the refund at the group removal's rule 7 (`siteOf`/`refund` read a gate's ext). The survival check adds `mech:<gate>` to `cost.bom`/`bomParts` (exact). |

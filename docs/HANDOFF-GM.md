@@ -1,5 +1,41 @@
 # GM handoff
 
+## GM-b (the K1 swing gate, CONTRACT GM §17; main 02e17af9 merged): slice tier PASS, verifier PASS, ready for RC (2026-11-04)
+
+**Results (DEV MODE, $0):**
+- Slice tier `20261104-025339-slice` at e9b7ca74 (ports 8896-8903, 4 shards): 118 PASS, 6 FAIL, 5 ERROR. Among the PASSes: gm-b-unit, gm-b-ingame 31/0,
+  gm-b-survival 13/0, gm-unit 426/0, gm-ingame 104/0, gm-survival 42/0, unit-mod 998/0, unit-kit 1030/0, apijars, k1a-*, k2-* (survival
+  included), lint-structure 205/0, lint-look, lint-mutations.
+- Rerun `20261104-050219-slice` of the nine not passing (ports 8896-8899): 8 PASS (unit-sidecar 804, sim-jobs, 6cf2-scenario-scatter,
+  irr-ingame-smoke, 6c-scenario-s3, 4d-all, 6a-resume, 6b-nudges: load and client-start timeouts while three slice runs shared the machine).
+- Still failing, not GM-b's: `6cf1-scenario-forms` (melt and exactness; fails the same on main, GM-a2's base run), `6ct2-scenario-route`
+  (E-normal unclassified; failed the same in GM-a2's slice run 20261103-212703; route_demo names no gate), `rs-unit` item 2 (the committed
+  fixtures/plan/rs/asks-*.md tables differ from main's own generated table; this head's table equals main's).
+- Byte identity: 419 of 419 committed plan fixtures identical to main 02e17af9 (`gmb-unchanged/gm-unchanged.json`); api-compat clean
+  (0.47.0, 0.45.0 apitest jars; 0.47.0 surface).
+- Gate-verifier: PASS on every item; re-ran gm-b-ingame (undo closed, open, mid-move: E-flat 0, no drop) and gm-b-survival (charge = plan bill
+  = report = built, refund = charge, conservation exact, twin 0) in `20261104-025918-7agmb` (ports 8904/8905).
+- Gallery: gm-b-look `20261104-025345-7agmb-look`, published as the "K1 swing" tab of the GM gallery (private):
+  https://claude.ai/artifact/JpzbuVYu4argcBroMW6WzU (for Noah's approval).
+- Evidence copied to the main checkout's `artifacts/gate7a-gm/` (`gmb-run-*`, `verify-20261104-025918-7agmb`, `gmb-unchanged`).
+
+The four questions are answered by §17; the build is recorded in CONTRACT GM "Slice GM-b as built". Resume notes:
+- **Kit:** `kit/lib/connectors/wall.mjs` (placeAtGate's swing placement, `swingDecide`/`gateCrossers`/`swingFallback`/`toWoodenDoor`,
+  the at-gate villager re-check after routing in finishGates, emitWall's swing block and the full-width fallback door),
+  `kit/lib/connectors/gmGate.mjs` (`k1SwingPlan`, `k1SwingRecord`, `K1_SWING`), the IR member in `kit/lib/region/plan.mjs`
+  (`gateMechanisms`, also in `realise.mjs` MEMBERS_FORMAT2), `theme.mjs`, `siteplan.mjs`, `plan.json` (member, catalogue, golden).
+  Tests `kit/test/gm-b.test.mjs`; fixtures `kit/test/fixtures/plan/gm/gmb_k1_{swing,villager,thin}.json`.
+- **Java:** `RegionsImpl.gateMechanismItem` (per stage), `GateMech.gateWrites`/`gateReport`, `PlanChecks.survivalBills` (mech:<gate>),
+  `MechCharges` (`EXT_GATE`, `EXT_ROI`, `idOf`, the gate branch of `hold`), `RegionTargets.roi` (mech items). Test `GateMechTest.k1SwingGate`.
+- **Gate:** chain `7agmb` (gm-b-unit, gm-b-ingame = `bingame` + `bundo`, gm-b-survival = `bsurvival`), `7agmb-look` (`blook`); driver
+  `tools/lib/gate7agm-b.mjs`. `GMB_INGAME_ONLY=swing,villager,thin`, `GMB_UNDO_ONLY=closed,open,midmove` narrow them.
+  `node tools/gate-run.mjs 7agmb --host server --ports A:B,C:D --shards 2 --run-dir ../architect-mc-GMb-run --lock ../architect-mc-GMb-run.lock`.
+- **Found in game:** rs_shed does not fit a 7x7 lot (the fixtures use three 9x9 huts); a survival IR is format 2 and refused the unknown
+  member until it was added to MEMBERS_FORMAT2; a path under the mullion turned to dirt and was dropped as a player block at removal in
+  survival (the sill); the plate opens only the door beside it (iron doors do not open as a pair), as GM-a's swing.
+- **Ports:** OC's slice run (2026-11-04 01:11) holds a slot naming all of 8896-8905; GM-b's runs used 8896/8897, 8898-8901 and 8904/8905
+  only while they were free.
+
 ## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): slice tier PASS, verifier PASS, ready to merge
 
 **State (2026-11-03):** built and gated (DEV MODE). No API type, method or reason added; additive members only (`mechanism.cost`, the

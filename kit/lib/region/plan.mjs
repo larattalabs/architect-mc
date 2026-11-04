@@ -520,6 +520,10 @@ export async function planRegion(o) {
   }
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
   if (r.utility.length) ir.utility = r.utility;
+  // ((GM-b, CONTRACT GM §17 item 4) the K1 swing gates' write data (meta walls[].gates[].mechanismWrite), which the realise's mech:<gate>
+  // region cells item writes: a member only a plan with a swing has (every other IR unchanged)
+  const gmw = (r.meta.walls ?? []).flatMap((w) => (w.gates ?? []).filter((g) => g.mechanismWrite).map((g) => ({ gate: g.id, wall: w.id, kind: g.mechanism.kind, ...g.mechanismWrite })));
+  if (gmw.length) ir.gateMechanisms = gmw;
   // (6c V) the settlement graph (SETTLEMENTS §8.1's shape; a format-1 member the evaluator ignores) and the honoured keep-out
   if (r.graph.nodes.length) ir.graph = { nodes: r.graph.nodes, edges: r.graph.edges };
   if (keepOutRead) ir.keepOut = keepOut.map((k) => [...k]);
