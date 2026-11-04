@@ -543,6 +543,25 @@ export async function registerGmA(steps, h) {
   ];
   const within = (b, cost) => Object.entries(b).every(([i, n]) => n >= (cost.bom.min[i] ?? 0) && n <= (cost.bom.max[i] ?? -1)) && Object.entries(cost.bom.min).every(([i, n]) => (b[i] ?? 0) >= n);
 
+  // (slice WE) the apitest event log: ITEM_WAITING of the mechanism item, its reason, waitsFor and message
+  const evApi = async (args) => { const r = await L.cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('[') || m.startsWith('{')); return line ? JSON.parse(line) : null; };
+  const mechWaits = async (region, key) => ((await evApi('events 0')) ?? []).filter((e) => e.event === 'ITEM_WAITING' && (e.key ?? e.itemKey) === key && (e.ext?.['architect_mc:region'] ?? region) === region);
+  const SAY_SUBJECT = /^[A-Z][^]*'s (portcullis|sliding gate|swing gate) waits for /;
+  const checkMechWaits = async (tag, region, key, stockWait) => {
+    await L.sleep(8000); // many polls (every 20 s of re-checks, 3 s here) of the bill wait: it must not fire again
+    const ev = await mechWaits(region, key);
+    const bill = ev.filter((e) => e.ext?.['architect_mc:waitsFor']?.kind === 'bill');
+    const lot = ev.filter((e) => e.ext?.['architect_mc:waitsFor']?.kind !== 'bill' && e.ext?.['architect_mc:waitsFor']?.say);
+    const w = bill[0]?.ext?.['architect_mc:waitsFor'];
+    check(bill.length === 1 && bill[0].reason === 'SITE_BUSY' && SAY_SUBJECT.test(w?.say ?? '') && / in the stockpile$/.test(w?.say ?? '') && Object.keys(w?.missing ?? {}).length > 0 && (bill[0].message ?? '').startsWith(w.say),
+      `${tag}: the move to the bill wait fires ITEM_WAITING once (SITE_BUSY, waitsFor.kind bill, ${bill.length} event(s) over the polls), saying ${json(w?.say)}, missing ${json(w?.missing)}`, { ev: ev.length });
+    const missingText = Object.entries(w?.missing ?? {}).every(([i, n]) => (w?.say ?? '').includes(`${n} \u00d7 `));
+    check(missingText && !/_|minecraft:/.test(w?.say ?? ''), `${tag}: the say names each missing item by its player-facing name with its count (no ids)`);
+    check(lot.every((e) => SAY_SUBJECT.test(e.ext['architect_mc:waitsFor'].say) && / to be built$/.test(e.ext['architect_mc:waitsFor'].say) && !/_/.test(e.ext['architect_mc:waitsFor'].say)),
+      `${tag}: the first wait says the mechanism and what it waits for (${lot.length} event(s): ${json(lot[0]?.ext?.['architect_mc:waitsFor']?.say ?? null)})`);
+    return { events: ev.length, bill: bill.length, lot: lot.length, say: w?.say ?? null, lotSay: lot[0]?.ext?.['architect_mc:waitsFor']?.say ?? null };
+  };
+
   steps.survival = async () => {
     await ensure();
     await L.leaveWorld().catch(() => null);
@@ -572,6 +591,7 @@ export async function registerGmA(steps, h) {
       await killMobs();
       const cons = new G.Conservation(ctx, c.box);
       await cons.start();
+      await evApi('events clear').catch(() => null);
       const region = await G.realise(ctx, c.sha, entries);
       // phase A: feed everything but the mechanism's bill; the mechanism waits for the lot built, then for its bill (nothing of it written)
       const lvl = gateCells(m).levers.length ? gateCells(m).levers : [m.triggers.find((t) => t.kind === 'lever').at];
@@ -600,6 +620,7 @@ export async function registerGmA(steps, h) {
         await L.sleep(3000);
       }
       rec.hold = { ...seen, bill };
+      rec.waits = await checkMechWaits(`${tag}`, region, 'mech:gatehouse_1');
       check(seen.lot && seen.stock && !seen.written, `${tag}: the mechanism is held (§16 item 1): it waits for the gatehouse to be built, then for its whole bill (${(rec.stockWait ?? '').slice(0, 160)}), nothing of it written meanwhile`, seen);
       // phase B: the rest fed; the bill charged at once, the mechanism written
       const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });

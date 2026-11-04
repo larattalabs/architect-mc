@@ -285,7 +285,17 @@ public final class RegionWaitTags {
 		return null;
 	}
 
-	private static String capital(String s) {
+	/** The sentence of a wait whose waiter has its own subject (WE: "Main gatehouse's portcullis waits for ..."). */
+	public static String sayWith(RegionsImpl.@Nullable Live l, String subject, @Nullable String part) {
+		return sayWithOf(l == null ? null : l.ir(), l == null ? null : artifactBody(l), subject, part);
+	}
+
+	/** {@link #sayWith} over a region's IR and its artifact's body. Testable. */
+	static String sayWithOf(@Nullable Ir ir, @Nullable JsonObject body, String subject, @Nullable String part) {
+		return capital(subject) + " waits for " + wordsOf(ir, body, part) + " to be built";
+	}
+
+	static String capital(String s) {
 		return s.isEmpty() ? s : s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
 	}
 
