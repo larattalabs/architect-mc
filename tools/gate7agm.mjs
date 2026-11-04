@@ -993,6 +993,13 @@ steps.base = async () => { await ensure(); await L.ensureBase(FLAT); };
   await registerGmB(steps, { L, call, check, cmd, log, root, OUT, json, stateAt, freeze, unfreeze, step, items });
 }
 
+// ------------------------------------------------------------------ GM-c (CONTRACT GM §2 drawbridge, §10 item 5): tools/lib/gate7agm-c.mjs
+
+{
+  const { registerGmC } = await import('./lib/gate7agm-c.mjs');
+  await registerGmC(steps, { L, call, check, cmd, log, root, OUT, json, stateAt, freeze, unfreeze, step, items, snap, sb, fill, world, use });
+}
+
 const name = process.argv[2];
 if (!steps[name]) { console.error(`steps: ${Object.keys(steps).join(' ')}`); process.exit(2); }
 await run(name);
