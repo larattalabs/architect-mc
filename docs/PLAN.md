@@ -1425,3 +1425,4 @@ unlimited wait on OCCUPIED and PLAYER_IN_BOX: no time limit, no automatic push-o
 runner's in-game steps, the gm/k3/gj drivers, megaA, scenarios, the nightly) clears animals from the box and moves the dev player out
 before it waits, and again on any OCCUPIED or PLAYER_IN_BOX answer, so no run can stall on it. Steward's e2e does the same (gj-rc fixed its
 animal watch after a restart); both sides use one shared rule (slice OC).
+**Built (slice OC):** `tools/lib/clearBox.mjs`, wired into `run6b` (realise, waitRegion, a run-wide watcher re-armed on restart) and gate6a; docs/GATES.md "Harnesses clear the box". No product code changed.

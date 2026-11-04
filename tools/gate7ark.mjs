@@ -270,7 +270,7 @@ async function demoRun(tag, claim, { kind, standMs = 60_000 }) {
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await L.realise(p.planId, {});
   let falling = 0;
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => { falling = Math.max(falling, await fallingNow()); if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3 * 3_600_000, async () => { falling = Math.max(falling, await fallingNow()); });
   out.realise = { state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   check(st.view.state === 'PLACED', `${tag}: realised (${st.view.state}, ${out.realise.cells} cells)`);
   for (let t = 0; t < standMs; t += 10_000) { await L.gameWait(10_000, { real: sleep, label: `rk ${tag} stand, 200 ticks` }); falling = Math.max(falling, await fallingNow()); }
@@ -378,7 +378,7 @@ async function ridgeRun(tag) {
   const region = await G.realise(ctx, sha);
   check(!!region, `item 7 (${tag}): with neither change, realiseApproved realises the approved artifact (${region})`);
   let falling = 0;
-  const st = await L.waitRegion(region, 3_600_000, async (x) => { falling = Math.max(falling, await fallingNow()); if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000, async () => { falling = Math.max(falling, await fallingNow()); });
   check(st.view.state === 'PLACED', `item 4 (${tag}): realised from its approved artifact (${st.view.state})`);
   for (let t = 0; t < 60_000; t += 10_000) { await L.gameWait(10_000, { real: sleep, label: `rk ${tag} stand, 200 ticks` }); falling = Math.max(falling, await fallingNow()); }
   out.falling = falling;

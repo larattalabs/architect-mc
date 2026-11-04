@@ -165,7 +165,7 @@ export async function paletteInGame(ctx, { OWNER }) {
   const bad = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha, lotEntries: { hall: 'vocc_oak_cabin' } }, 300_000);
   check(bad.reason === 'PALETTE', `item 5: realiseApproved with the hall bound to the oak cabin refuses PALETTE (${(bad.refused ?? bad.region ?? '').slice(0, 160)})`);
   const good = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha, lotEntries: { hall: 'vocc_copper_cabin' } }, 300_000);
-  const st = good.region ? await L.waitRegion(good.region, 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); }) : null;
+  const st = good.region ? await L.waitRegion(good.region, 3_600_000) : null;
   check(st?.view?.state === 'PLACED', `item 5: with the copper cabin: ${good.region ?? good.refused} ${st?.view?.state ?? ''}`);
   if (good.region) await L.call('dev.region.remove', { region: good.region, requester: OWNER }, 3_600_000);
   return out;

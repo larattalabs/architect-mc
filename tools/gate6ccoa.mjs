@@ -164,7 +164,7 @@ async function groundAt(pdir, x, z) {
   const c = decodeColumns(fs.readFileSync(path.join(pdir, 'survey.bin')));
   return c.ground[Math.floor((x - c.minX) / c.resolution) + Math.floor((z - c.minZ) / c.resolution) * c.width];
 }
-const waitPlaced = (region) => L.waitRegion(region, 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+const waitPlaced = (region) => L.waitRegion(region, 3_600_000);
 const art = (sha) => call('dev.coa.artifact', { sha });
 
 async function creativeWorld(tag) {

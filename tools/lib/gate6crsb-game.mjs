@@ -56,7 +56,7 @@ export async function twin(ctx, G, tag, fx, entries = {}) {
   const ck = await G.check(ctx, `${tag}-twin`, s);
   if (!ck.check?.artifactSha) throw new Error(`twin ${tag}: no artifact (${ck.check?.overall})`);
   const region = await G.realise(ctx, ck.check.artifactSha, entries);
-  const st = await ctx.L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.view?.waiting?.reason)) await ctx.L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await ctx.L.waitRegion(region, 3_600_000);
   const box = G.boxOf(s.W);
   const file = await G.snap(ctx, box, `rsb-${tag}-twin`);
   return { file, box, view: st.view, region, check: ck };
@@ -151,7 +151,7 @@ export async function feed(ctx, G, region, { cons = null, fraction = 1, until = 
   while (Date.now() < end) {
     st = await G.regionState(ctx, region);
     rs = await G.rsState(ctx, region);
-    if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await L.cmd('/kill @e[type=!minecraft:player]');
+    await L.boxClear.onState(st, st?.view?.id); // (slice OC) the shared rule: tools/lib/clearBox.mjs
     polls++;
     if (poll) await poll(st, rs);
     if (until(st, rs)) break;

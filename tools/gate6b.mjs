@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import {
   CAP_USD, GAME_DIR, LIBRARY, bar, SIDECAR_DATA, SIDECAR_PORT as SIDECAR_PORT_6B, MAIN, OUT, RUN, SAVES, call, check, clientPids, cmd, connect, copyWorld, fails, fresh, leaveWorld, log, logAuth,
   openWorld, plan, prepare, realise, refuseKeys, results, root, setRules, settle, sleep, spendAdd, spendGuard, spendRead, startClient, state,
-  stopClient, tp, waitRegion, write,
+  stopClient, tp, waitRegion, write, boxClear,
 } from './lib/run6b.mjs';
 import { findSite, SCENARIO_DIR, readScenario } from './find-site.mjs';
 import * as L6 from './lib/run6b.mjs';
@@ -120,8 +120,43 @@ steps.smoke = async () => {
   await settle(5000);
   const h2 = await call('dev.region.hash', { box }, 3_600_000);
   check(rm.removed && h2.sha256 === h0.sha256, `smoke: the group undo is exact (${rm.restored} cells, ${rm.seconds?.toFixed(1)} s)`, rm);
+  // (slice OC, docs/GATES.md "Harnesses clear the box") occupied lots wait forever, so the harness clears the box: animals stand in three
+  // lots and the player in a fourth before the realise (the realise's own pre-clear is paused: they "walked in" after it), a villager
+  // waits at the claim's corner (never removed). The realise waits for the watcher / waitRegion to clear them: it must place within 10
+  // minutes (it takes seconds) where it used to wait forever, and the clear is logged ("box-clear:") and counted.
+  const p3 = await plan('crater_works', claim, { surveyLoad: 'generated:64' });
+  const lots3 = readPlanJson(p3.planId, 'ir.json').lots;
+  const mid = (b) => [Math.floor((b.minX + b.maxX) / 2) + 0.5, b.minY + 2, Math.floor((b.minZ + b.maxZ) / 2) + 0.5];
+  const before = { o: boxClear.stats.byReason.OCCUPIED ?? 0, p: boxClear.stats.byReason.PLAYER_IN_BOX ?? 0 };
+  let rOc;
+  let stOc;
+  let vil;
+  let done;
+  const tOc = Date.now();
+  try {
+    rOc = await boxClear.pause(async () => {
+      for (const [i, kind] of ['pig', 'cow', 'sheep'].entries()) if (lots3[i]) await cmd(`/summon minecraft:${kind} ${mid(lots3[i].box).join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
+      // the dev bot plays as a spectator, and Occupancy.scan skips spectators: it stands in the lot as a creative player for this check
+      if (lots3[3]) { const m = mid(lots3[3].box); await cmd('/gamemode creative @s'); await cmd(`/tp @s ${m.join(' ')}`); }
+      await cmd(`/summon minecraft:villager ${claim[0] + 1.5} ${lots3[0] ? lots3[0].box.minY + 2 : 70} ${claim[1] + 1.5} {NoAI:1b,Invulnerable:1b,PersistenceRequired:1b,Tags:["oc_exempt"]}`);
+      return realise(p3.planId, { lotEntries: LOT_ENTRIES, fitLots: true });
+    });
+    stOc = await waitRegion(rOc, 600_000);
+    vil = await cmd('/data get entity @e[type=minecraft:villager,tag=oc_exempt,limit=1] Pos');
+    done = { o: (boxClear.stats.byReason.OCCUPIED ?? 0) - before.o, p: (boxClear.stats.byReason.PLAYER_IN_BOX ?? 0) - before.p };
+    check(stOc.view.state === 'PLACED', `box-clear: lots with animals and the player in them place (${stOc.view.state}, ${Math.round((Date.now() - tOc) / 1000)} s; ${done.o} OCCUPIED and ${done.p} PLAYER_IN_BOX answers cleared)`, done);
+    check(done.o >= 1 && (!lots3[3] || done.p >= 1), `box-clear: both waits happened and were cleared (OCCUPIED ${done.o}, PLAYER_IN_BOX ${done.p})`, { events: boxClear.stats.events });
+    check(/\[/.test(JSON.stringify(vil?.messages ?? '')) && !/No entity/i.test(JSON.stringify(vil?.messages ?? '')), 'box-clear: the villager in the claim was not removed', vil);
+
+  } finally {
+    await cmd('/kill @e[type=minecraft:villager,tag=oc_exempt]');
+    await cmd('/gamemode spectator @s');
+  }
+
+  await call('dev.region.remove', { region: rOc }, 3_600_000);
+  await settle(3000);
   await leaveWorld();
-  return { plan: { planId: p2.planId, irSha: p2.irSha, budget: p2.budget, report: p2.report?.errors }, prepare: pr.stats, state: st.view, remove: rm };
+  return { plan: { planId: p2.planId, irSha: p2.irSha, budget: p2.budget, report: p2.report?.errors }, prepare: pr.stats, state: st.view, remove: rm, boxClear: { ...done, stats: boxClear.stats } };
 };
 
 // ------------------------------------------------------------------ helpers for the gate items

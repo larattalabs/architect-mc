@@ -312,7 +312,7 @@ steps.ingame = async () => {
   await call('dev.region.dump', { box, file: before, light: true }, 1_800_000);
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await G.realise(ctx, sha, entries);
-  const st = await L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000);
   check(st.view.state === 'PLACED', `item 4: realiseApproved with the stub designs bound (${Object.keys(entries).length} lots): ${st.view.state}`);
   await L.settle(5000);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);
@@ -448,7 +448,7 @@ steps.look = async () => {
     const ids = await writeDesigns(lots, { bible });
     const entries = { ...fx.lotEntries, ...ids };
     const region = await G.realise(ctx, ck.check.artifactSha, entries);
-    const st = await L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
+    const st = await L.waitRegion(region, 3_600_000);
     out.runs[tag] = { state: st.view.state };
     const gh = w.geometry.wallLots.find((q) => q.passage), t2 = w.geometry.wallLots.find((q) => q.lot === 'tower_2');
     const ring = w.geometry.ring;

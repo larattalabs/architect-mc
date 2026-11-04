@@ -202,7 +202,7 @@ export async function realiseApproved(ctx, sha, { kill = true } = {}) {
   const { L } = ctx;
   const rr = await L.call('dev.region.realiseApproved', { sha }, 300_000);
   if (rr.refused) return { refused: rr.refused };
-  const st = await L.waitRegion(rr.region, 3_600_000, async (s) => { if (kill && (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED)) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3_600_000);
   return { ...(await regionOf(ctx, rr.region)), st };
 }
 

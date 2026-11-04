@@ -230,7 +230,7 @@ async function fixtureRun(tag, name, { villager = false } = {}) {
   const pre = await G.snap(ctx, box, `sa-${tag}-pre`);
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await G.realise(ctx, ck.check.artifactSha);
-  const st = await L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000);
   check(st.view.state === 'PLACED', `item 3 (${tag}): realised from its approved artifact (${st.view.state})`);
   await L.settle(5000);
   await call('dev.region.dump', { box, file: after, light: true }, 1_800_000);

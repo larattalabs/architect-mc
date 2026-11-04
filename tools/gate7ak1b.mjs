@@ -301,7 +301,7 @@ async function linksRun(tag, claim, { flat, golden }) {
   const snap = await call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await L.realise(p.planId, {});
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3 * 3_600_000);
   out.realise = { state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   check(st.view.state === 'PLACED', `${tag}: realised (${st.view.state}, ${out.realise.cells} cells)`);
   await L.settle(5000);

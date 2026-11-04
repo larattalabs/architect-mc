@@ -11,6 +11,7 @@ import { baseCurrent as baseCurrentIn, baseRecipe, baseSpec, gateHost, hostBaseN
 export { baseSpec, hostBaseName };
 import { createHash } from 'node:crypto';
 import { gameWait as sprintWait } from './sprint.mjs';
+import { createClearer, createWatcher } from './clearBox.mjs';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -53,6 +54,7 @@ export async function connect(timeoutMs = 600_000) {
     try {
       const token = fs.readFileSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), 'utf8').trim();
       state.dev = await DevClient.connect({ port: PORT, token, timeoutMs: 20_000 });
+      boxWatch.start(); // (slice OC) idempotent; a restart's new client is picked up by the next tick
       return state.dev;
     } catch (e) {
       last = e;
@@ -62,6 +64,25 @@ export async function connect(timeoutMs = 600_000) {
   throw new Error(`no DevBridge on ${PORT}: ${last}`);
 }
 export const call = (type, payload = {}, timeoutMs) => state.dev.call(type, payload, timeoutMs ? { timeoutMs } : {});
+
+// ---- (slice OC, docs/GATES.md "Harnesses clear the box") a lot realise waits forever on OCCUPIED and PLAYER_IN_BOX, so the harness
+// clears the box: `boxClear` is the one clearer (exempt / pause / stats), `boxWatch` the run-wide watcher started on connect. waitRegion
+// and realise use the same clearer. ARCHITECT_BOX_WATCH=0 turns the watcher and the clears off (never in a gate).
+export const boxClear = createClearer({
+  cmd: (c) => state.dev.call('dev.command', { cmd: c }, { timeoutMs: 120_000 }),
+  settle: (ms) => state.dev.call('dev.wait', { ms }, { timeoutMs: ms + 20_000 }),
+  log: (m) => log(`  ${m}`),
+  spawnOff: true, // the gate worlds are the harness's own
+});
+// fixtures the drivers tag (a gm armor stand and plate villager, the h/hy/irr stand villagers, hy-c's push stand): never cleared
+boxClear.exempt({ tags: ['gmf', 'gmp', 'ha_stand', 'hyb_stand', 'irr_farmer', 'hyc_push', 'oc_exempt'] });
+if (process.env.ARCHITECT_BOX_WATCH === '0') boxClear.pause();
+export const boxWatch = createWatcher({
+  list: async () => (await state.dev.call('dev.region.list', {}, { timeoutMs: 60_000 })).regions,
+  clearer: boxClear,
+  log: (m) => log(`  ${m}`),
+  identity: () => state.dev,
+});
 
 export function clientPids() {
   try {
@@ -355,6 +376,8 @@ export async function prepare(planId) {
 export async function realise(planId, opts = {}) {
   const r = await call('dev.region.realise', { planId, ...opts }, 300_000);
   if (r.refused) throw new Error(`realise refused: ${JSON.stringify(r.refused)}`);
+  // (slice OC) before anything waits on it: its claim cleared of mobs and drops, the player out of it
+  try { const st0 = await call('dev.region.state', { region: r.region }, 60_000); await boxClear.preClear(st0.view?.claim, `before ${r.region}`); } catch (e) { log(`  box-clear: pre-clear skipped (${e.message})`); }
   return r.region;
 }
 /**
@@ -376,6 +399,7 @@ export async function waitRegion(region, timeoutMs = 3 * 3_600_000, onPoll = nul
     const line = `  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}`;
     const done = ['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || (st.batchStatus && st.batchStatus !== 'RUNNING');
     if (done || line !== last || Date.now() - lastAt >= 60_000) { log(line); last = line; lastAt = Date.now(); }
+    if (!done) await boxClear.onState(st, region).catch((e) => log(`  box-clear: ${e.message}`));
     if (onPoll) await onPoll(st);
     if (done) return st;
     await sleep(Math.min(pollDelayMs(Date.now() - t0), Math.max(1_000, end - Date.now())));

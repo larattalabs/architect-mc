@@ -146,7 +146,7 @@ export async function realise(ctx, sha, entries = {}) {
 
 /** Kills mobs that wait in a body's box or a lot (scenarios' rule). */
 async function shoo(ctx, st) {
-  if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await ctx.L.cmd('/kill @e[type=!minecraft:player]');
+  await ctx.L.boxClear.onState(st, st?.view?.id); // (slice OC) the shared rule: tools/lib/clearBox.mjs
 }
 
 /**

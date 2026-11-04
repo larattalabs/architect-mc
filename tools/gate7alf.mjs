@@ -354,7 +354,7 @@ async function demoRun(tag, claim, { kind, params = {}, standMs = 60_000 }) {
   for (const b of bodies) fluidBefore.set(b.id, await fluidsIn(boxAround([...b.cells, ...b.shell, ...b.watch], 2)));
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await L.realise(p.planId, {});
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED || s.waiting?.PLAYER_IN_BOX) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3 * 3_600_000);
   out.realise = { state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   const fst = await call('dev.fluid.state', { region }, 60_000).catch(() => null);
   out.fluids = fst;
@@ -430,7 +430,7 @@ async function cliffRun(tag) {
   for (const b of bodies) fluidBefore.set(b.id, await fluidsIn(boxAround([...b.cells, ...b.shell, ...b.watch], 2)));
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await G.realise(ctx, ck.check.artifactSha);
-  const st = await L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000);
   const fst = await call('dev.fluid.state', { region }, 60_000).catch(() => null);
   const bodyRows = Object.values(fst?.bodies ?? {});
   check(st.view.state === 'PLACED' && bodyRows.length >= 1 && bodyRows.every((b) => b.state === 'settled'), `item 4 (${tag}): realiseApproved: PLACED only once the lift's body settled (${st.view.state}; ${bodyRows.map((b) => `${b.state}${b.settledAt != null ? ` in ${b.settledAt} ticks` : ''}`).join(', ')})`);
@@ -676,7 +676,7 @@ steps.look = async () => {
     const p = await L.plan('lifts_demo', FLAT_CLAIM, { params: { variant: 'flat' }, surveyLoad: 'bounded:256', check: true, owner: OWNER, ...(bible ? { bible } : {}) });
     const meta = JSON.parse(fs.readFileSync(path.join(sideDir(p.planId), 'meta.json'), 'utf8'));
     const region = await L.realise(p.planId, {});
-    const st = await L.waitRegion(region, 3_600_000, async (s) => { if (s.waiting?.PLAYER_IN_BOX || s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+    const st = await L.waitRegion(region, 3_600_000);
     const recs = meta.lifts ?? [];
     check(st.view.state === 'PLACED' && recs.length === 2, `look (${tag}): lifts_demo flat realised with its two lifts (${st.view.state}; recorded, not judged: Noah's call, N-LF-1)`);
     out.bibles[tag] = { planId: p.planId, state: st.view.state, lifts: recs.map((q) => ({ id: q.id, rise: q.rise, down: q.down, shell: q.shell, cap: q.cap, door: q.door, rail: q.rail, light: q.light, foot: q.foot, top: q.top })) };

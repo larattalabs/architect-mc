@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { fromOwnTime as ownTick, ownPctOk, describePct as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 import { gameWait as sprintWait } from './lib/sprint.mjs';
+import { createClearer, createWatcher } from './lib/clearBox.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -61,6 +62,7 @@ async function connect(timeoutMs = 600_000) {
     try {
       const token = fs.readFileSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), 'utf8').trim();
       dev = await DevClient.connect({ port: PORT, token, timeoutMs: 20_000 });
+      boxWatch.start(); // (slice OC) the run-wide watcher; a restart's new client is picked up by the next tick
       return dev;
     } catch (e) {
       last = e;
@@ -70,6 +72,9 @@ async function connect(timeoutMs = 600_000) {
   throw new Error(`no DevBridge on ${PORT}: ${last}`);
 }
 const call = (type, payload = {}, timeoutMs) => dev.call(type, payload, timeoutMs ? { timeoutMs } : {});
+// (slice OC, docs/GATES.md "Harnesses clear the box") the shared clearer and the run-wide watcher; this driver has its own client, not run6b's
+const boxClear = createClearer({ cmd: (c) => dev.call('dev.command', { cmd: c }, { timeoutMs: 120_000 }), settle: (ms) => dev.call('dev.wait', { ms }, { timeoutMs: ms + 20_000 }), log: (m) => log(`  ${m}`) });
+const boxWatch = createWatcher({ list: async () => (await dev.call('dev.region.list', {}, { timeoutMs: 60_000 })).regions, clearer: boxClear, log: (m) => log(`  ${m}`), identity: () => dev });
 
 function clientPids() {
   try {
@@ -254,6 +259,7 @@ async function realise(planId, opts = {}) {
   const r = await call('dev.region.realise', { planId, lotEntries: LOT_ENTRIES, fitLots: true, ...opts }, 300_000);
   if (r.refused) throw new Error(`realise refused: ${r.refused}`);
   log(`  realise ${planId} -> ${r.region}`);
+  try { const st0 = await call('dev.region.state', { region: r.region }, 60_000); await boxClear.preClear(st0.view?.claim, `before ${r.region}`); } catch (e) { log(`  box-clear: pre-clear skipped (${e.message})`); }
   return r.region;
 }
 const regionState = (region) => call('dev.region.state', { region }, 60_000);
@@ -275,6 +281,7 @@ async function waitRegion(region, timeoutMs = 3 * 3_600_000, onPoll = null) {
     const line = `  ${region} ${v.state}: ${v.stages.map((s) => `${s.name} ${s.tilesDone}/${s.tilesTotal}`).join(', ')}; cells ${v.cellsWritten}; items ${JSON.stringify(st.items)}; waiting ${JSON.stringify(st.waiting)}`;
     const done = ['PLACED', 'PARTIAL', 'FAILED'].includes(v.state) || (st.batchStatus && st.batchStatus !== 'RUNNING');
     if (done || line !== last || Date.now() - lastAt >= 60_000) { log(line); last = line; lastAt = Date.now(); }
+    if (!done) await boxClear.onState(st, region).catch((e) => log(`  box-clear: ${e.message}`));
     if (onPoll) await onPoll(st);
     if (done) return st;
     await sleep(Math.min(Math.min(5_000, 1_000 + 1_000 * Math.floor((Date.now() - t0) / 10_000)), Math.max(1_000, end - Date.now())));
@@ -413,7 +420,7 @@ async function megaRun(name, opts = {}) {
   const st = await waitRegion(region, 4 * 3_600_000, async (s) => {
     // (6c W) a lot waiting OCCUPIED holds a mob in its box (4e's rule: it would be buried). W reads frozen water as water, so
     // mega6's plan moved a lot onto a resting polar bear; the gate clears the mobs, as megaA's undo already does
-    if (s.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
+    out.mobsCleared = boxClear.stats.byReason.OCCUPIED ?? 0; // (slice OC) the shared watcher and waitRegion clear the box
     const running = s.view.stages.find((x) => x.tilesDone < x.tilesTotal || x.state === 'PLACING');
     const name2 = running?.name ?? 'done';
     if (name2 !== lastStage) {
@@ -620,7 +627,8 @@ async function walkB({ fast, name, file, label }) {
   // (6c close-out B) a lot waiting OCCUPIED holds a mob in its box (megaA's rule, docs/GATES.md "Mobs in scenario lots"): in one
   // v0.41.0 release run lot_129 waited on a polar bear through every lap of lots-3, then NOT_LOADED for good once the walk moved on
   const clearMobs = async (s) => {
-    if (s?.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
+    out.mobsCleared = boxClear.stats.byReason.OCCUPIED ?? 0; // (slice OC)
+    await boxClear.onState(s, s?.view?.id);
   };
   const visit = async (x, z) => {
     await cmd(`/tp @s ${x} 200 ${z}`);
@@ -1373,7 +1381,7 @@ steps.staged = async () => {
 steps.eval = async () => {
   if (!dev) await connect();
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  const helpers = { call, cmd, api, result, plan, prepare, realise, regionState, waitRegion, fresh, openWorld, leaveWorld, tp, sleep, ctx, saveCtx, log, prepared, smallRun, finishRegion, SMALL, MEGA, settle, fs, path, SAVES };
+  const helpers = { boxClear, boxWatch, call, cmd, api, result, plan, prepare, realise, regionState, waitRegion, fresh, openWorld, leaveWorld, tp, sleep, ctx, saveCtx, log, prepared, smallRun, finishRegion, SMALL, MEGA, settle, fs, path, SAVES };
   const f = new AsyncFunction(...Object.keys(helpers), process.argv[3]);
   const v = await f(...Object.values(helpers));
   console.log(JSON.stringify(v, null, 1));

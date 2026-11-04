@@ -275,7 +275,7 @@ async function realise(ctx, sha, lotEntries) {
   const { L } = ctx;
   const rr = await L.call('dev.region.realiseApproved', { sha, ...(lotEntries ? { lotEntries } : {}) }, 300_000);
   if (rr.refused) return { refused: rr.refused, reason: rr.reason };
-  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3 * 3_600_000);
   return { region: rr.region, state: st.view.state, record: st.record ?? null, items: st.items ?? null };
 }
 

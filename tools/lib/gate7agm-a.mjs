@@ -104,8 +104,9 @@ export async function registerGmA(steps, h) {
     const find = (o) => (o && typeof o === 'object' ? (Array.isArray(o.lots) && o.lots.some((l) => l?.onWall)) ? o.lots : Object.values(o).map(find).find(Boolean) : null);
     return find(a) ?? [];
   }
+  // (slice OC) the fixture tidy stays as it was; the waits are cleared by the shared watcher (tools/lib/clearBox.mjs)
   const killMobs = () => cmd('/kill @e[type=!minecraft:player]');
-  const waitPlaced = (region) => L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await killMobs(); });
+  const waitPlaced = (region) => L.waitRegion(region, 3_600_000);
 
   /** A castle fixture checked and realised with the stub designs: {s, ck, sha, lots, gl, m, region, st, pre, box}. */
   async function castle(name, { tag, roof, creative = true, realise = true, bible = null, honour = false } = {}) {
@@ -580,7 +581,7 @@ export async function registerGmA(steps, h) {
       const end = Date.now() + 5_400_000;
       while (Date.now() < end) {
         const st = await G.regionState(ctx, region);
-        if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await killMobs();
+        await L.boxClear.onState(st, region); // (slice OC)
         const v = await mechView();
         bill ??= v.record?.bill ?? null;
         const it = v.item ?? {};

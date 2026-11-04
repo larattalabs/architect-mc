@@ -176,7 +176,7 @@ export function demoBox(bodies) {
 export async function realiseWait(ctx, planId, opts = {}) {
   const L = ctx.L;
   const region = await L.realise(planId, opts);
-  const st = await L.waitRegion(region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED') await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000);
   return { region, st, view: st.view, fluids: st.view.ext?.['architect_mc:fluids'] ?? null };
 }
 
