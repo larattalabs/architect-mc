@@ -69,7 +69,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.49.1';
+export const EVAL_KIT_VERSION = '0.50.0';
 
 /**
  * (6c D3) An IR's `reach` columns (row runs [x0, z, x1, z]) as a lookup: z -> sorted [x0, x1, ...] pairs; null without a reach.

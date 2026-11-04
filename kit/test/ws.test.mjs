@@ -42,7 +42,7 @@ test('plan/0: connector.wall gateMech none | swing validates, another kind does 
   const e = planCatalogue().entries.find((x) => x.id === 'connector.wall');
   assert.deepEqual(e.limits.gateMech, ['none', 'swing']);
   assert.equal(e.schemaVersion, 2);
-  assert.equal(e.sinceApi, 'NEXT');
+  assert.match(e.sinceApi, /^(NEXT|\d+\.\d+\.\d+)$/, e.sinceApi); // NEXT until release-version stamps it
 });
 
 test('a wall with gateMech swing and 2 auto gates (the road\'s crossing, one gates.min gate) gets 2 swings, each its own mech item', async () => {
