@@ -1225,7 +1225,8 @@ current box-snapshot backend; 4e swaps the backend for the journal underneath wi
   player to come near); `LOAD_BOUNDED(n)` adds short-lived tickets for at most n chunks at a time.
 - **Persistence:** the queue survives relogs and restarts (`<world>/architect-queue.json`).
 - **Events:** `BATCH_PROGRESS` (at most 1/s), `ITEM_PLACED` / `ITEM_FAILED` (with the reason) / `ITEM_WAITING` (with the reason),
-  and `BATCH_DONE`.
+  and `BATCH_DONE`. ITEM_WAITING fires when an item starts waiting or its reason changes, and (slice WE) once when a survival gate
+  mechanism moves from its building wait to its bill wait (both `SITE_BUSY`): see "Slice WE as built".
 
 ## Site groups and undo (R1 minimum)
 
@@ -26364,6 +26365,8 @@ and forwarded before the design exists, so the design's roof row is not known wh
    design left them".
 4. GM-a2 also takes the verifier's minor notes: a crash-recovery removal that loses the mechanism site, and mid-move removal at more
    than one phase of the piston cycle.
+5. **Steward's ask on 0.53.0 (slice WE):** the mechanism's move from its lot wait to its bill wait is announced (ITEM_WAITING with a
+   `waitsFor.say` naming the missing items) and its first wait names the mechanism as its subject; see "Slice WE as built".
 
 ### 17. GM-b, the K1 swing gate (coordinator, 2026-11-04; binding, wins over §4's K1 bullet; Steward reviews in GM-b's RC)
 
@@ -26477,3 +26480,17 @@ Builds §17. The API gains no Java type, method or reason; the plan/0 member, th
 | Themed | The swing's blocks come from `gmMatsOf(roles)` (structure, the rail role's fence for the transom, the role's button and plate); `themeOffenders` judges the IR's `gateMechanisms` as part `gm_<gate>`. The transom's connections are settled toward the mullion and jambs, not the open lanes. |
 | Realise (Java) | Per stage, after its tiles and roads, one region cells item `mech:<gate>` (kind `architect:mechanism`, BOX, LAYER) after the stage's tiles round its cells (and the 4e roads), written with no update; ext `architect_mc:gate` and `architect_mc:roi` (its columns). The region's `architect_mc:gateMechanism.<gate>` report `{kind, wall, cells, bom}`. Restored by the GM-a path (SiteJournal's kind test: no update, no drop). |
 | Survival | `survival.mech.<gate> {bill, cells, gate: true}` at realise; MechCharges holds the item until the wall's tiles round it are built (RegionTargets' stage wait reads the item's roi) and put down, then until its whole bill is in the stockpile; charged at once, written at once; the refund at the group removal's rule 7 (`siteOf`/`refund` read a gate's ext). The survival check adds `mech:<gate>` to `cost.bom`/`bomParts` (exact). |
+
+### Slice WE as built (branch `slice/WE`, main 4ace9f68; versions NEXT; recorded 2026-11-04; DEV MODE)
+
+Steward's ask on 0.53.0, for GM-a's gate mechanisms (§16 item 1: `mech:<lot>`, a portcullis, slide or swing in a gatehouse) and GM-b's K1
+swing gates (§17: `mech:<gate>` on a wall). **No API member changes, no new Reason, no plan or kit change** (the API stays binary
+compatible; the version numbers are the coordinator's).
+
+| Area | As built |
+|---|---|
+| The reason code | **`SITE_BUSY` stays; ITEM_WAITING fires on a changed `waitsFor` kind.** The vocabulary is fixed (`Reason` is an API enum, the stage waits are "no new Reason", S-RS-1, and a wait on the stockpile is what SITE_BUSY already means for the region's fluids bill), so a new reason would be an API change for a wait that Steward already matches by `architect_mc:waitsFor`. The move from the lot or wall wait to the bill wait keeps the reason, so `Batches.waitFor` would not announce it; MechCharges announces it itself, once (`Batches.waitFor(..., announce)`). The mark is the item's ext `architect_mc:billWait` (set at the move, removed when the bill is charged): the stage wait clears `waitsFor` on every poll, so the wait's own ext cannot tell a move from a poll. A queue saved and reloaded in the bill wait does not announce again. |
+| The bill wait's event | ITEM_WAITING, reason `SITE_BUSY`, ext `architect_mc:waitsFor {target: "stockpile:<id>", kind: "bill", missing: {<item id>: <count>}, say}`; the item's message starts with `say` (then the parenthesis naming the owner's stockpile and the charge-at-once rule). `missing` is the stockpile's shortfall after the feed's reservations (`Stockpiles.chargeShort`), by item id; `say` is `"<Subject> waits for <n> × <item name>, ... and <n> × <item name> in the stockpile"`: the names are the player-facing ones (`Builder.itemName`, "comparator", "observer") and the counts are the stockpile's own "N × name" form, since item names have no plural form (a sentence Steward voices says "3 × observer"; Steward may word the plural itself from `missing`). Polls of the same wait update `waitsFor.missing` and `say` and the message, and fire nothing. The existing `waitsFor` members (`target`, `part`, `waiter`) are not set on a bill wait: `kind` is the new member, absent on a stage wait. |
+| The first wait's subject | A gate mechanism's building wait (the stage wait on the lot or the wall's tiles, `RegionTargets.waitFor`) says `"<words>'s <kind> waits for <part> to be built"`: the lot's or gate's plan label or id words, then the kind (`portcullis`, `sliding gate`, `swing gate`, else `gate mechanism`), e.g. "Main gatehouse's portcullis waits for Main gatehouse to be built". Before: "Main gatehouse waits for Main gatehouse to be built" (the waiter was the lot). The kind is read from the item's `architect_mc:gateMechanism.kind`. A K1 gate's wait while the wall's tiles are put down (before it can be built round) is a plain wait with no `waitsFor`, now with the same subject in its message. |
+| Unchanged | When the bill is met the bill is charged, recorded and written at once as before; `waitsFor` and the marker go then. Other items' waits are byte for byte as before (`RegionWaitTags.say`). |
+| Tests | `MechWaitSayTest` (mod): the first wait's sentence for a portcullis, a swing gate, a lot with no label, the bill sentence with one, two and three items, and the once-only move mark. In game (headless, ports 8896-8899): `gm-survival` and `gm-b-survival` assert the ITEM_WAITING events (`/apitest events`) of the mechanism item: exactly one bill-wait event over many polls, SITE_BUSY, `waitsFor.kind` bill, a say with the mechanism as subject and each missing item by its name and count, and the first wait's sentence. |

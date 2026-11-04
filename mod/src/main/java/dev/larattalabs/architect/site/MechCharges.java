@@ -7,6 +7,7 @@ import com.google.gson.JsonPrimitive;
 import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
+import dev.larattalabs.architect.region.GateMech;
 import dev.larattalabs.architect.region.RegionsImpl;
 import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
 import java.util.List;
@@ -57,6 +58,58 @@ public final class MechCharges {
 			return null;
 		}
 		return m.get(lot) instanceof JsonObject e ? e : null;
+	}
+
+	/** (WE) The marker on a mechanism item that has announced its move to the bill wait (ITEM_WAITING, once per move); cleared when charged. */
+	public static final String EXT_BILL_WAIT = "architect_mc:billWait";
+
+	/** (WE) A mechanism kind's words: the portcullis, the sliding gate, the swing gate. */
+	static String kindWords(@Nullable String kind) {
+		return kind == null ? "gate mechanism" : switch (kind) {
+			case "portcullis" -> "portcullis";
+			case "slide" -> "sliding gate";
+			case "swing" -> "swing gate";
+			default -> "gate mechanism";
+		};
+	}
+
+	/**
+	 * (WE) The subject a mechanism item's waits say: "<the lot's or gate's words>'s <kind>" ("Main gatehouse's portcullis"), or null when
+	 * {@code i} is no gate mechanism. The words come from the plan's labels as a stage wait's do.
+	 */
+	static @Nullable String subjectOf(RegionsImpl.@Nullable Live l, QItem i) {
+		if (!"cells".equals(i.itemKind) || i.key == null || !i.key.startsWith("mech:")) {
+			return null;
+		}
+		String id = i.key.substring(5);
+		String kind = i.ext.get(GateMech.EXT_REPORT) instanceof JsonObject r && r.get("kind") instanceof JsonPrimitive k ? k.getAsString() : null;
+		return subject(RegionWaitTags.words(l, id), kind);
+	}
+
+	/** (WE) Whether {@code i} has just moved to the bill wait (true once, then false until the bill is charged); marks it. */
+	static boolean billWaitMoved(QItem i) {
+		if (i.ext.has(EXT_BILL_WAIT)) {
+			return false;
+		}
+		i.ext.addProperty(EXT_BILL_WAIT, true);
+		return true;
+	}
+
+	/** {@code "<words>'s <kind>"}. */
+	static String subject(String words, @Nullable String kind) {
+		return words + "'s " + kindWords(kind);
+	}
+
+	/**
+	 * (WE) What a bill wait says: "Main gatehouse's portcullis waits for 1 x comparator and 3 x observer in the stockpile". The items are
+	 * the stockpile's own "N x name" (Builder's wording: an item name has no plural form), in code-point order.
+	 */
+	static String billSay(String subject, Map<String, Integer> missing, java.util.function.Function<String, String> namer) {
+		List<String> parts = new java.util.ArrayList<>();
+		new TreeMap<>(missing).forEach((k, v) -> parts.add(v + " \u00d7 " + namer.apply(k)));
+		String what = parts.isEmpty() ? "its bill" : parts.size() == 1 ? parts.get(0) : String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts
+			.get(parts.size() - 1);
+		return RegionWaitTags.capital(subject) + " waits for " + what + " in the stockpile";
 	}
 
 	static Map<String, Integer> items(@Nullable JsonElement o) {
@@ -113,27 +166,39 @@ public final class MechCharges {
 			for (String k : i.after) {
 				QItem a = b.item(k);
 				if (a != null && a.status != QItem.Status.PLACED) {
-					Batches.waitFor(b, i, Reason.SITE_BUSY, "the gate mechanism of gate " + lot + " waits for " + k
-						+ " to be built: a survival region writes a gate's swing once, after the wall it stands in");
+					Batches.waitFor(b, i, Reason.SITE_BUSY, RegionWaitTags.capital(subjectOf(l, i)) + " waits for the wall round it (" + k
+						+ ") to be put down: a survival region writes a gate's swing once, after the wall it stands in");
 					return true;
 				}
 			}
 		} else if (li == null || li.status != QItem.Status.PLACED || site == null || site.placing() || site.building()) {
 			String target = li != null && li.siteId != null ? li.siteId : "lot:" + lot;
-			RegionTargets.waitFor(b, i, target, "lot " + lot, Batches::waitFor, "the gate mechanism of lot " + lot + " waits for its gatehouse (" + target
-				+ ") to be built: a survival region writes a gate's circuit once, after the building it stands in");
+			RegionTargets.waitFor(b, i, target, "lot " + lot, Batches::waitFor, "a survival region writes a gate's circuit once, after the building it stands in");
 			return true;
-		}
-		if (i.ext.has(RegionTargets.EXT_WAITS_FOR)) {
-			i.ext.remove(RegionTargets.EXT_WAITS_FOR);
 		}
 		Map<String, Integer> bill = items(e.get("bill"));
 		String owner = l.rec().owner;
 		if (!Stockpiles.charge(srv, owner, bill)) {
-			Batches.waitFor(b, i, Reason.SITE_BUSY, "the gate mechanism of " + (li == null ? "gate " : "lot ") + lot + " waits for " + Stockpiles.chargeShort(owner, bill)
-				+ " in the stockpile of " + (owner == null ? "the player" : owner) + " (its whole bill is charged at once, then it is written in one go)");
+			// (WE, Steward's ask on 0.53.0) The move from the lot or wall wait to this one keeps the reason (SITE_BUSY), so Batches.waitFor would
+			// not announce it. It is announced here, once per move: ITEM_WAITING again, with waitsFor {kind: bill, missing, say} naming what the
+			// stockpile lacks. The marker (the stage wait clears waitsFor on every poll, so it cannot tell a move from a poll) is not cleared
+			// until the bill is charged.
+			Map<String, Integer> miss = Stockpiles.chargeShort(owner, bill);
+			String say = billSay(subjectOf(l, i), miss, Builder::itemName);
+			Stockpiles.Pile pile = Stockpiles.get(owner);
+			JsonObject w = new JsonObject();
+			w.addProperty("target", pile == null ? "stockpile" : Stockpiles.PREFIX + pile.id());
+			w.addProperty("kind", "bill");
+			w.add("missing", json(miss));
+			w.addProperty("say", say);
+			i.ext.add(RegionTargets.EXT_WAITS_FOR, w);
+			boolean moved = billWaitMoved(i);
+			Batches.waitFor(b, i, Reason.SITE_BUSY, say + " (the stockpile of " + (owner == null ? "the player" : owner)
+				+ "; its whole bill is charged at once, then it is written in one go)", moved);
 			return true;
 		}
+		i.ext.remove(RegionTargets.EXT_WAITS_FOR);
+		i.ext.remove(EXT_BILL_WAIT);
 		e.add("charged", json(bill));
 		ServerLevel level = Sites.levelOf(srv, i.dimension);
 		e.addProperty("chargedAt", level == null ? 0L : level.getGameTime());

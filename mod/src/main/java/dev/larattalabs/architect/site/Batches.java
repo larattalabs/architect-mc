@@ -1175,8 +1175,16 @@ public final class Batches {
 	}
 
 	static void waitFor(QBatch b, QItem i, Reason why, String msg) {
+		waitFor(b, i, why, msg, false);
+	}
+
+	/**
+	 * {@link #waitFor} that can also announce a wait that keeps its reason (WE: a mechanism's move from its lot's wait to its bill's, both
+	 * SITE_BUSY): {@code announce} fires ITEM_WAITING though the reason is the same. The caller says when (once per move, never per poll).
+	 */
+	static void waitFor(QBatch b, QItem i, Reason why, String msg, boolean announce) {
 		boolean first = i.status != QItem.Status.WAITING;
-		boolean changed = first || !why.name().equals(i.reason);
+		boolean changed = first || announce || !why.name().equals(i.reason);
 		if (dev.larattalabs.architect.batch.WaitLimit.count(b, i, first, RegionItems.uncounted(b, why), RECHECK)) {
 			fail(b, i, Reason.TIMED_OUT, "waited " + i.waited / 20 + " s for: " + msg);
 			return;

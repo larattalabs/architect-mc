@@ -1586,7 +1586,10 @@ public final class RegionTargets {
 		String region = RegionItems.regionOf(b);
 		var l = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
 		String waiter = RegionWaitTags.waiterOf(b, i);
-		String say = RegionWaitTags.say(l, waiter, part == null ? target : part);
+		// (WE) a gate mechanism says its own subject: "Main gatehouse's portcullis", not the lot it stands in
+		String subject = MechCharges.subjectOf(l, i);
+		String say = subject == null ? RegionWaitTags.say(l, waiter, part == null ? target : part) : RegionWaitTags.sayWith(l, subject, part == null ? target
+			: part);
 		JsonObject w = new JsonObject();
 		w.addProperty("target", target);
 		if (part != null) {
