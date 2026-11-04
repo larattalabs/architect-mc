@@ -177,7 +177,8 @@
     "kit/test/vocab-rules.test.mjs",
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
-    "kit/test/wl.test.mjs"
+    "kit/test/wl.test.mjs",
+    "kit/test/ws.test.mjs"
    ],
    "closure": [
     "kit/bibles/rustic/components.mjs",
@@ -567,6 +568,7 @@
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
     "kit/test/wl.test.mjs",
+    "kit/test/ws.test.mjs",
     "kit/tools/BlockDump.java",
     "kit/tools/VocabDump.java",
     "kit/tools/blocks.template.mjs",
@@ -1260,6 +1262,7 @@
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
     "kit/test/wl.test.mjs",
+    "kit/test/ws.test.mjs",
     "kit/tools/components.mjs",
     "kit/tools/preset-builds.mjs",
     "kit/tools/slices.mjs",

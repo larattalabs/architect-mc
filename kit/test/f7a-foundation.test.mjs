@@ -115,6 +115,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const flipped = new Set([...K7.KINDS_7A.map((k) => `connector.${k}`), 'wall.along'].filter((id) => golden.entries.find((e) => e.id === id)?.state === 'supported'));
   // ((GM-b, CONTRACT GM §17 item 1) connector.gate's mech limit, schemaVersion and note are GM-b's: gm-b.test.mjs)
   flipped.add('connector.gate');
+  // ((WS, CONTRACT GM §19) connector.wall's gateMech limit and schemaVersion 2 are WS's: ws.test.mjs)
+  flipped.add('connector.wall');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);

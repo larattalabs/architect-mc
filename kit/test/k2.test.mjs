@@ -62,7 +62,8 @@ test('item 11: the catalogue: wall.along reserved -> supported, nothing else of 
   // (K2's own: every change to a wall id; the foundation's three and what main changed since catalogue-pre7a (v0.42.0's close-out A)
   // are theirs)
   // ((GM-b, CONTRACT GM §17 item 1) connector.gate's mech limit and schemaVersion 2 are GM-b's: gm-b.test.mjs)
-  const mine = (xs) => xs.filter((x) => /^(wall\.|connector\.wall$)/.test(typeof x === 'string' ? x : x.id));
+  // ((WS, CONTRACT GM §19) connector.wall's gateMech limit and schemaVersion 2 are WS's: ws.test.mjs)
+  const mine = (xs) => xs.filter((x) => /^wall\./.test(typeof x === 'string' ? x : x.id));
   assert.deepEqual(mine(d.reservedToSupported), ['wall.along']);
   assert.deepEqual(mine(d.schemaVersionBumps), [{ id: 'wall.along', from: 0, to: 1 }]);
   // ((6d RV) the revision.* entries RV adds are rv-a.test.mjs's)

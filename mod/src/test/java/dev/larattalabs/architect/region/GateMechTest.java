@@ -145,4 +145,22 @@ class GateMechTest {
 		assertEquals(5, r.get("cells").getAsInt());
 		assertTrue(!r.has("deviation") && !r.has("sensor"));
 	}
+
+	/**
+	 * (WS, CONTRACT GM §19) A wall that opts every gate in has N swings in one IR: each entry is its own write (its own gate id, so its
+	 * own mech:<gate> item and bill), none read through the others.
+	 */
+	@Test
+	void manySwingsOnOneWall() {
+		String pal = "\"palette\":[\"minecraft:stone_bricks\",\"minecraft:lever[face=wall,facing=west,powered=false]\"]";
+		String g1 = "{\"gate\":\"curtain_g1\",\"wall\":\"curtain\",\"kind\":\"swing\",\"stage\":\"links\"," + pal + ",\"base\":[1,65,1,0, 1,66,1,1]}";
+		String g2 = "{\"gate\":\"curtain_g2\",\"wall\":\"curtain\",\"kind\":\"swing\",\"stage\":\"links\"," + pal + ",\"base\":[9,65,9,0, 9,66,9,1, 9,67,9,0]}";
+		JsonObject ir = JsonParser.parseString("{\"gateMechanisms\":[" + g1 + "," + g2 + "],\"lots\":[]}").getAsJsonObject();
+		java.util.List<JsonObject> ws = GateMech.gateWrites(new Ir(ir, "x", "0", "s", new int[] {0, 0, 0, 0}, java.util.List.of(), java.util.Map.of(), java.util.Map.of(),
+			java.util.List.of(), java.util.List.of(), java.util.Map.of(), new long[] {0, 0, 0}, 1, java.util.List.of(), java.util.List.of()));
+		assertEquals(2, ws.size());
+		assertEquals(java.util.Map.of("minecraft:stone_bricks", 1, "minecraft:lever", 1), GateMech.plan(ws.get(0), null, null, 0, 0, 0).bill());
+		assertEquals(java.util.Map.of("minecraft:stone_bricks", 2, "minecraft:lever", 1), GateMech.plan(ws.get(1), null, null, 0, 0, 0).bill());
+		assertEquals("curtain_g2", ws.get(1).get("gate").getAsString());
+	}
 }

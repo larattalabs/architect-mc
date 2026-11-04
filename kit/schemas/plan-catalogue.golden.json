@@ -244,8 +244,8 @@
   },
   {
    "id": "connector.wall",
-   "sinceApi": "1.34.0",
-   "schemaVersion": 1,
+   "sinceApi": "NEXT",
+   "schemaVersion": 2,
    "state": "supported",
    "limits": {
     "height": [
@@ -263,9 +263,13 @@
     "waterDepth": [
      0,
      8
+    ],
+    "gateMech": [
+     "none",
+     "swing"
     ]
    },
-   "note": "A course crosses under a water gate (HY, wall.water_gate): the wall on a lintel over a still reach, an iron grate in the water under it; it counts against gates.max, and a sealed wall refuses it."
+   "note": "A course crosses under a water gate (HY, wall.water_gate): the wall on a lintel over a still reach, an iron grate in the water under it; it counts against gates.max, and a sealed wall refuses it. WS: gateMech swing gives every gate of the wall, the auto gates included, the iron swing gate (a gate's own mech none stays plain); each gate falls back to the wooden door (deviation mechanism) where the swing does not fit or a villager crosses."
   },
   {
    "id": "connector.gate",
