@@ -1653,6 +1653,10 @@ public final class RegionTargets {
 			}
 			return null;
 		}
+		// ((GM-b) a K1 swing gate's mechanism item: its columns, so it waits for the wall's tiles round it to be built)
+		if (i.key.startsWith("mech:") && i.ext.get(MechCharges.EXT_ROI) instanceof com.google.gson.JsonArray a && a.size() == 4) {
+			return new int[] {a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt(), a.get(3).getAsInt()};
+		}
 		if (i.key.startsWith("road:")) {
 			for (var road : l.ir().roads()) {
 				if (i.key.equals("road:" + road.id())) {

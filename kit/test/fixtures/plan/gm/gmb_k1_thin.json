@@ -1,0 +1,94 @@
+{
+ "about": "(GM-b, \u00a717 item 3) as gmb_k1_swing in a wall 2 thick (the default): the swing falls back to the wooden door, adjusted, deviation mechanism (why thickness)",
+ "terrain": {},
+ "lotEntries": {
+  "h1": "rs_hut",
+  "h2": "rs_hut",
+  "h3": "rs_hut"
+ },
+ "covers": [
+  "connector.wall",
+  "connector.gate"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "gmb_k1_thin",
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "required": true,
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h3",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      }
+     ]
+    },
+    "where": {
+     "near": {
+      "anchor": "claim_center",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "curtain",
+    "kind": "wall",
+    "required": true,
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      }
+     }
+    },
+    "height": 6
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "required": true,
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "town"
+    },
+    "width": 3,
+    "movers": [
+     "player"
+    ]
+   },
+   {
+    "id": "east_gate",
+    "kind": "gate",
+    "crossing": "in",
+    "mech": "swing"
+   }
+  ]
+ }
+}
