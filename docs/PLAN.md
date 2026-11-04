@@ -1337,6 +1337,9 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 - SA spiral stairs (gallery https://claude.ai/artifact/R6FS7zxuvCLBX9ei1Vwq13): approved.
 - RK rock stairs (gallery https://claude.ai/artifact/APuLywy7CL3FY976oPMt6B): approved, with the parapet copings and the plateau end fixed before merge.
 - LF lifts (gallery https://claude.ai/artifact/DSfY1N32us1YRUa3vLJNTL): approved (2026-10-27).
+- GR street extension and new lot placement (N-GR-1, N-GR-2; gallery https://claude.ai/artifact/JAfWetdckqZnmPgE2HHu8T): approved (2026-11-04).
+- K3 castle wall lots (N-K3-1; gallery https://claude.ai/artifact/X1tdDP5xUzEGyXefe58Ywo, the 10-26 run): approved (2026-11-04).
+- GM split sliding grate (N-GM-1; gallery https://claude.ai/artifact/JpzbuVYu4argcBroMW6WzU): approved (2026-11-03).
 
 ## GM contract notes (Steward, 2026-10-27), to fold into the GM contract before it builds
 - The mechanism envelope is merged into the lot's existing `DesignRequest.Reserved` entry in the artifact (Steward option a: zero Steward change). For the design, the envelope cells are hard "never write", like the existing set; only Architect's region writes the mechanism blocks.
