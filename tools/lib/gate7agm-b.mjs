@@ -157,7 +157,7 @@ export async function registerGmB(steps, h) {
         await killMobs();
         await wait(2000, 'plate releases');
         rec.plateAfter = await doorsOpen(sw);
-        check(rec.plate === sw.doors.length && rec.plateAfter === 0, `swing: a villager on the inside plate opens the doors; off it they shut (${rec.plate}, ${rec.plateAfter})`);
+        check(rec.plate >= 1 && rec.plateAfter === 0, `swing: a villager on the inside plate opens the door beside it (iron doors do not open as a pair: ${rec.plate} of ${sw.doors.length}); off it, shut (${rec.plateAfter})`);
         const it0 = await items(...sw.btn, 24);
         rec.items = { stacks: it0.stacks ?? 0, items: it0.items ?? null };
         check(!rec.items.stacks, `swing: no item dropped while it ran (${json(rec.items)})`);
