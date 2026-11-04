@@ -63,5 +63,21 @@ export function themeOffenders(ir, vw) {
       used.set(k, o); by.set(k, o);
     }
   }
+  // ((GM-b, §17) a K1 swing gate's cells: written by the region's mech:<gate> item, judged as part `gm_<gate>`)
+  for (const g of ir.gateMechanisms ?? []) {
+    if (!g?.palette) continue;
+    const flat = g.base ?? [];
+    for (let i = 0; i + 3 < flat.length; i += 4) {
+      const b = nameOf(g.palette[flat[i + 3]]);
+      cells++;
+      if (!memo.has(b)) memo.set(b, traceRole(b, roles, { lightFixture: light }));
+      if (memo.get(b)) continue;
+      const k = `gm_${g.gate}|${b}`;
+      const o = by.get(k) ?? { part: `gm_${g.gate}`, block: b, count: 0, sample: [] };
+      o.count++;
+      if (o.sample.length < 3) o.sample.push([flat[i], flat[i + 1], flat[i + 2]]);
+      by.set(k, o);
+    }
+  }
   return { offenders: [...by.values()].sort((a, b) => a.part.localeCompare(b.part) || a.block.localeCompare(b.block)), cells };
 }

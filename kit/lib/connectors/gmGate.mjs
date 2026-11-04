@@ -245,3 +245,54 @@ export function gmRecord(plan, rest, at, toFrame) {
 }
 
 export { gmBoxFits, GM_BOX_MIN };
+
+// ------------------------------------------------------------------ (GM-b) the K1 swing gate (CONTRACT GM §17)
+
+/** (GM-b, §17 item 3) The swing's size: exactly 3 wide, 3 high (2 door rows and the transom) and 3 deep. */
+export const K1_SWING = Object.freeze({ width: 3, height: 3, depth: 3 });
+
+/**
+ * (GM-b, §17 item 3) A K1 wall gate's swing, in gmCircuit's local frame (u across the opening, d in from the wall's outer face, r up from
+ * the gate's floor row): swingCells (two iron doors, the mullion, the transom; the button outside on d 0, the lever and plate inside on
+ * d 2), plus the structure block over the transom in the door plane on every row of a gate `height` over 3 (the opening above the
+ * transom sealed), the sill under the door plane (the walk's row), and over the mullion on the arch's middle row (`arch`: K1's arch frame leaves the cell over a 3-wide gate's middle
+ * column open). Everything else of the opening (the lanes in front of and behind the doors) is the wall's. Pure.
+ */
+export function k1SwingPlan(mats, { height = K1_SWING.height, arch = false } = {}) {
+  const p = mechanismPlan('swing', { depth: K1_SWING.depth, mats });
+  // (the sill: the walk's cells under the door plane, the structure block. A path or grass block under a full block turns to dirt on the
+  // first update (a door's swing gives one), which the walk's own cell site would then count as a player's block; the sill is the swing's)
+  const extra = [-1, 0, 1].map((u) => [u, 1, -1, p.structure]);
+  for (let r = K1_SWING.height; r < height; r++) for (const u of [-1, 0, 1]) extra.push([u, 1, r, p.structure]);
+  if (arch) extra.push([0, 1, Math.max(height, K1_SWING.height), p.structure]);
+  // (the transom's connections as the server settles them: toward the mullion and the jambs, not toward the open lanes in front of and
+  // behind it, which are the opening's air in a K1 wall)
+  const all = [...extra, ...p.base];
+  const m = new Map(all.map(([u, d, r, st]) => [k3(u, d, r), st]));
+  const at = (u, d, r) => m.get(k3(u, d, r)) ?? ((d === 0 || d === 2) && Math.abs(u) <= 1 && r >= 0 && r < Math.max(height, K1_SWING.height) ? 'minecraft:air' : undefined);
+  const base = all.map(([u, d, r, st]) => [u, d, r, connected(st, at, u, d, r)]).sort((a, b) => gmRank(a[3]) - gmRank(b[3]));
+  return { ...p, height, base, envelope: [...extra.map(([u, d, r]) => [u, d, r]), ...p.envelope] };
+}
+
+/**
+ * (GM-b, §17 items 3 and 4) The K1 swing gate's record and write data in the world. `at`: gmToWorld's placement (the opening's middle
+ * column on the wall's outer face, the gate's first clear row, the outward facing). Returns {record, write}:
+ *   record {kind: swing, rest: closed, width: 3, height, dayDriven: false, who: player, movers: [player], cells, triggers, states, cost}
+ *          (cells: the written cells as flat runs [x, z, y0, y1]; cost: gmCost's, one case, exact at plan time)
+ *   write  {palette: [state], base: [x, y, z, i, ...]}  (realise order; the region's mech:<gate> cells item, GateMech's base)
+ */
+export function k1SwingRecord(plan, at) {
+  const W3 = (c) => gmToWorld(c, at);
+  const pal = [], pi = new Map();
+  const idx = (s) => { let i = pi.get(s); if (i === undefined) { i = pal.length; pal.push(s); pi.set(s, i); } return i; };
+  const base = plan.base.flatMap((c) => { const [x, y, z, s] = W3(c); return [x, y, z, idx(s)]; });
+  const tw = (c) => W3([...c, null]).slice(0, 3);
+  const record = {
+    kind: 'swing', rest: 'closed', width: K1_SWING.width, height: plan.height, dayDriven: false, who: 'player', movers: ['player'],
+    cells: flatRunsOf(plan.envelope.map(tw)),
+    triggers: plan.triggers.map((t) => ({ kind: t.kind, at: tw(t.at), side: t.side, who: t.who })),
+    states: { open: flatRunsOf(plan.states.open.map(tw)), closed: flatRunsOf(plan.states.closed.map(tw)) },
+    cost: gmCost(plan),
+  };
+  return { record, write: { palette: pal, base } };
+}
