@@ -17,7 +17,7 @@
 // Pure over its inputs and deterministic (ties by perimeter position, then lot order). A wall naming no lot never reaches this module.
 import { zoneLots } from '../plan/schema.mjs';
 import { OB } from './line.mjs';
-import { GM_KINDS, gmKindOf, gmBoxFits, gmMatsOf, mechanismPlan, gmRecord } from './gmGate.mjs';
+import { GM_KINDS, GM_BOX_MIN, gmKindOf, gmBoxFits, gmMatsOf, mechanismPlan, gmRecord } from './gmGate.mjs';
 
 /**
  * The lot seen with its front to the south, as a design sees it (IRR's lotFrame, kit/lib/fluids/irrigate.mjs, repeated here: importing the
@@ -82,6 +82,34 @@ function atByType(id, spec) {
   if (/^gatehouse(_|$)/.test(id)) return 'gate';
   if (/^(watch)?tower(_|$)/.test(id)) return 'corner';
   return 'run';
+}
+
+/** (GC) Whether a lot is a gatehouse by its type, else by its id's stem (the same reading as atByType). */
+export function isGatehouseLot(id, spec) {
+  return atByType(id, spec) === 'gate';
+}
+
+/** (GC) The note for a named gate lot whose planned size is under the gate mechanism's box, else null: `size` is [along, depth]. */
+export function gateSizeHint(id, size) {
+  if (!Array.isArray(size) || size.length < 2) return null;
+  const [a, d] = size;
+  if (!Number.isInteger(a) || !Number.isInteger(d) || gmBoxFits({ along: a, depth: d, height: WALL_LOT_HEIGHT }).ok) return null;
+  const swap = gmBoxFits({ along: d, depth: a, height: WALL_LOT_HEIGHT }).ok ? ` (written ${d} x ${a} it would fit: swap the order)` : '';
+  return `${id} is ${a} x ${d}: a gate mechanism needs ${GM_BOX_MIN.along} along the wall x ${GM_BOX_MIN.depth} deep${swap}`;
+}
+
+/**
+ * (GC) Plan-check hints for a wall's gatehouses, notes only (the wall answers adjusted; the plan is never changed):
+ *   - a gatehouse-typed lot of the zone the wall rings or bounds that no wall names: "<id> is not on the wall: name it in lots (at: gate)";
+ *   - a named gate lot (no mechanism written) whose planned size is under the mechanism's box: gateSizeHint.
+ * `zoneLotIds`: the wall's zone's lot ids in program order (null for a wall of no zone); `namedAnywhere`: every lot any wall names;
+ * `named`: this wall's named lots; `specOf`: lotSpecOf. Deterministic: zone program order, then the wall's reading order.
+ */
+export function gateHints({ zoneLotIds, namedAnywhere, named, specOf, first }) {
+  const out = [];
+  if (first) for (const id of zoneLotIds ?? []) if (typeof id === 'string' && !namedAnywhere.has(id) && isGatehouseLot(id, specOf(id))) out.push(`${id} is not on the wall: name it in lots (at: gate)`);
+  for (const q of named) if (q.at === 'gate' && !q.mech) { const h = gateSizeHint(q.lot, specOf(q.lot)?.size); if (h) out.push(h); }
+  return out;
 }
 
 /**
