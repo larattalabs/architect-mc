@@ -59,7 +59,7 @@ async function realiseStubbed(ctx, sha, fill = STUBS) {
   const { L } = ctx;
   const rr = await L.call('dev.region.realiseApproved', { sha, fill: [...fill] }, 300_000);
   if (rr.refused) return { refused: rr.refused };
-  const st = await L.waitRegion(rr.region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3_600_000);
   return { region: rr.region, st, view: st.view };
 }
 

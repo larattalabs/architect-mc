@@ -267,7 +267,7 @@ async function realiseAndRead(tag, { planDir, claim, box, start, standMs = 120_0
   out.snap = await call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
   let falling = 0;
   const region = await start();
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => { falling = Math.max(falling, await fallingNow()); if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3 * 3_600_000, async () => { falling = Math.max(falling, await fallingNow()); });
   out.realise = { region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   check(st.view.state === 'PLACED', `${tag}: realised (${st.view.state}, ${out.realise.cells} cells)`);
   // the stand: the band and the bore's surroundings stay put (falling blocks counted every 10 s)

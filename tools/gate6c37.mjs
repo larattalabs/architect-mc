@@ -108,7 +108,7 @@ steps.ingame = async () => {
   const h0 = await call('dev.region.hash', { box }, 3_600_000);
   const rr = await call('dev.region.realiseApproved', { sha: ew.artifactSha }, 300_000);
   check(!!rr.region, `realiseApproved queued region ${rr.region ?? rr.refused}`);
-  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3 * 3_600_000);
   const h1 = await call('dev.region.hash', { box }, 3_600_000);
   check(st.view.state === 'PLACED' && h1.sha256 !== h0.sha256, `the forced-ew plan realised (${st.view.state}); the world changed`);
   await cmd('/kill @e[type=!minecraft:player]');

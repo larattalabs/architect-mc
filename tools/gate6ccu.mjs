@@ -195,7 +195,7 @@ async function realiseDemo(params = {}) {
   const snapF = path.join(OUT, `cu-${p.planId}.snap.gz`);
   await call('dev.region.hash', { box, mode: 'snap', file: snapF }, 3_600_000);
   const region = await L.realise(p.planId);
-  const st = await L.waitRegion(region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED') await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3_600_000);
   return { region, planId: p.planId, ir, box, snapF, state: st.view.state, cellsWritten: st.view.cellsWritten };
 }
 async function removeRegion(region) {

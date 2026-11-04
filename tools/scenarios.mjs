@@ -524,10 +524,13 @@ async function runScenario(id) {
   await L.call('dev.placement.stats', { reset: true });
   t0 = Date.now();
   const region = await L.realise(p2.planId, { lots: sc.lotEntries });
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => {
-    if (s.waiting?.OCCUPIED) { mobs.occupiedClears++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits OCCUPIED (${JSON.stringify(s.waiting)}): clearing the mobs`); await clearAll(); }
-    if (s.waiting?.PLAYER_IN_BOX) { mobs.playerMoves++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits PLAYER_IN_BOX: moving the player 32 blocks up`); await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1] + 32, (claim[1] + claim[3]) / 2); }
-  });
+  // (slice OC) L.waitRegion and the run-wide watcher clear the box (tools/lib/clearBox.mjs: OCCUPIED kills the mobs and drops in the claim,
+  // PLAYER_IN_BOX moves the player out); the counts are the clearer's, from before this realise
+  const bc0 = { o: L.boxClear.stats.byReason.OCCUPIED ?? 0, p: L.boxClear.stats.playerMoves, events: L.boxClear.stats.events.length };
+  const st = await L.waitRegion(region, 3 * 3_600_000);
+  mobs.occupiedClears = (L.boxClear.stats.byReason.OCCUPIED ?? 0) - bc0.o;
+  mobs.playerMoves = L.boxClear.stats.playerMoves - bc0.p;
+  mobs.waits.push(...L.boxClear.stats.events.slice(bc0.events, bc0.events + 20));
   if (mobs?.occupiedClears) L.log(`  mobs cleared ${mobs.occupiedClears}x while placing`);
   T('realise', t0);
   const mspt = await L.call('dev.mspt.trace', { stop: true });

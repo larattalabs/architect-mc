@@ -118,7 +118,7 @@ async function checkPlan(plan, claim, extra = {}) {
   return r.check;
 }
 async function waitPlaced(region) {
-  return L.waitRegion(region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  return L.waitRegion(region, 3 * 3_600_000);
 }
 /**
  * The realised world against the check's virtual world over every written cell outside the lot boxes (realised without entries: the lots

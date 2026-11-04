@@ -149,7 +149,7 @@ export async function realiseIrr(ctx, tag, fx, { entries = {}, rules = 'exact', 
   const rr = await L.call('dev.region.realiseApproved', { sha: out.sha, ...(Object.keys(entries).length ? { lotEntries: entries } : {}) }, 300_000);
   out.realiseCall = rr;
   if (rr.refused || !rr.region) { out.refused = rr.refused ?? rr; return out; }
-  await L.waitRegion(rr.region, 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  await L.waitRegion(rr.region, 3_600_000);
   out.r = await core.regionOf(ctx, rr.region);
   // (development: IRR_PROBE="x,y,z;..." logs the journal stack and the block at those cells after the realise)
   for (const q of (process.env.IRR_PROBE ?? '').split(';').filter(Boolean)) {

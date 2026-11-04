@@ -270,7 +270,7 @@ async function realiseRun(ctx, tag, { claim, plan, bible = null, rarityWant = un
   await L.call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
   const rr = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
   if (rr.refused) { check(false, `${tag}: realiseApproved refused (${j(rr.refused)})`); return out; }
-  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3 * 3_600_000);
   out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, irSha: st.view.irSha, items: st.items ?? null };
   // (a plan whose lots have no library entry ends PARTIAL: every tile and road placed, the lots left as their pads)
   const noEntries = (art.body.lots ?? []).length > 0 && (art.body.lots ?? []).every((l) => !l.entry);
@@ -448,7 +448,7 @@ const natural = [{
     await L.call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
     const rr = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
     if (rr.refused) { check(false, `item 9: realiseApproved refused (${j(rr.refused)})`); return out; }
-    const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+    const st = await L.waitRegion(rr.region, 3 * 3_600_000);
     check(st.view.state === 'PLACED', `item 9: realiseApproved ${st.view.state} (${st.view.cellsWritten} cells; the copper hall in lot c1)`);
     // the written non-common cells (the virtual world) for the 6-cell rule
     const V = await ctx.imp('lib/region/vworld.mjs');

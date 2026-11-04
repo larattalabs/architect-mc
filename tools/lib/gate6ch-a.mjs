@@ -283,7 +283,7 @@ async function realiseRun(ctx, tag, { claim, plan, anchors, rules = 'default', b
   out.before = new Set(fb.fluids.map(([x, y, z]) => `${x},${y},${z}`));
   const rr = await L.call('dev.region.realiseApproved', { sha: c.check.artifactSha }, 300_000);
   if (rr.refused) { check(false, `${tag}: realiseApproved refused (${j(rr.refused)})`); return out; }
-  const st = await L.waitRegion(rr.region, 3 * 3_600_000, async (s) => { if (s.view?.waiting?.reason === 'OCCUPIED' || s.waiting?.OCCUPIED) await L.cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3 * 3_600_000);
   out.realise = { region: rr.region, state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten, planId: st.view.planId, fluids: st.view.ext?.['architect_mc:fluids'] ?? null };
   check(st.view.state === 'PLACED', `${tag}: realised from the approved artifact and settled (${st.view.state}, ${out.realise.cells} cells written; fluids ${j(out.realise.fluids)})`);
   await L.settle(5000);

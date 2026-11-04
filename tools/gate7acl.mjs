@@ -253,7 +253,7 @@ async function demoRun(tag, claim, { flat }) {
   const snap = await call('dev.region.hash', { box, mode: 'snap', file: snapF }, 4 * 3_600_000);
   await cmd('/kill @e[type=!minecraft:player]');
   const region = await L.realise(p.planId, {});
-  const st = await L.waitRegion(region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(region, 3 * 3_600_000);
   out.realise = { state: st.view.state, cells: st.record?.cellsWritten ?? st.view.cellsWritten };
   check(st.view.state === 'PLACED', `${tag}: realised (${st.view.state}, ${out.realise.cells} cells)`);
   await L.settle(5000);
@@ -350,7 +350,7 @@ async function stewardRound(tag, fx, { site = null, flat = true } = {}) {
   await cmd('/kill @e[type=!minecraft:player]');
   const rr = await call('dev.region.realiseApproved', { sha: ck.check.artifactSha }, 300_000);
   if (!rr.region) { check(false, `item 4 (${tag}): realiseApproved refused (${json(rr.refused ?? rr)})`); return out; }
-  const st = await L.waitRegion(rr.region, 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
+  const st = await L.waitRegion(rr.region, 3_600_000);
   out.state = st.view.state;
   check(st.view.state === 'PLACED', `item 4 (${tag}): realiseApproved from the approved artifact: ${st.view.state}`);
   await L.settle(5000);
