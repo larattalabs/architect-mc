@@ -1,0 +1,502 @@
+{
+ "prompt": "A sprawling capital city of two hundred buildings.",
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "sprawling_capital",
+  "style": {
+   "pending": "sprawling_capital"
+  },
+  "zones": [
+   {
+    "id": "capital",
+    "kind": "standard",
+    "required": true,
+    "label": "The Sprawling Capital",
+    "purpose": "market",
+    "style": {
+     "pending": "sprawling_capital"
+    },
+    "where": {
+     "inside": {
+      "claim": true
+     }
+    },
+    "size": {
+     "preset": "XL"
+    },
+    "tolerance": {
+     "count": {
+      "max": 10,
+      "hard": false
+     }
+    },
+    "program": {
+     "layout": "grid",
+     "shared": "square",
+     "orientation": "auto",
+     "lots": [
+      {
+       "id": "palace_1",
+       "type": "palace",
+       "role": "palace",
+       "label": "royal palace",
+       "size": [
+        23,
+        19
+       ],
+       "landmark": true,
+       "placement": "central",
+       "villager": "none",
+       "brief": "Seat of government at the heart; towers, throne hall, courtyard"
+      },
+      {
+       "id": "chapel_1",
+       "type": "chapel",
+       "role": "cathedral",
+       "label": "grand cathedral",
+       "size": [
+        23,
+        19
+       ],
+       "landmark": true,
+       "placement": "high_ground",
+       "villager": "none",
+       "brief": "Tall spire, visible across the city"
+      },
+      {
+       "id": "gatehouse_1",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "city gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      },
+      {
+       "id": "gatehouse_2",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "city gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      },
+      {
+       "id": "shop_1",
+       "type": "shop",
+       "role": "market_hall",
+       "label": "market hall",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "central",
+       "villager": "trading_hall",
+       "brief": "Covered trade hall around the central square"
+      },
+      {
+       "id": "shop_2",
+       "type": "shop",
+       "role": "market_hall",
+       "label": "market hall",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "central",
+       "villager": "trading_hall",
+       "brief": "Covered trade hall around the central square"
+      },
+      {
+       "id": "house_1",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_2",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_3",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_4",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_5",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_6",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_7",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "house_8",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_1",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_2",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_3",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_4",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_5",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "cottage_6",
+       "type": "cottage",
+       "role": "cottage",
+       "label": "cottage",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling"
+      },
+      {
+       "id": "guild_hall_1",
+       "type": "guild_hall",
+       "role": "guild_hall",
+       "label": "merchant guild hall",
+       "size": [
+        17,
+        15
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "guild_hall_2",
+       "type": "guild_hall",
+       "role": "guild_hall",
+       "label": "craft guild hall",
+       "size": [
+        17,
+        15
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "guild_hall_3",
+       "type": "guild_hall",
+       "role": "guild_hall",
+       "label": "scholar guild hall",
+       "size": [
+        17,
+        15
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "tavern_1",
+       "type": "tavern",
+       "role": "tavern",
+       "label": "tavern",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "tavern_2",
+       "type": "tavern",
+       "role": "tavern",
+       "label": "tavern",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "tavern_3",
+       "type": "tavern",
+       "role": "tavern",
+       "label": "tavern",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "smithy_1",
+       "type": "smithy",
+       "role": "smithy",
+       "label": "smithy",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "smithy_2",
+       "type": "smithy",
+       "role": "smithy",
+       "label": "smithy",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job"
+      },
+      {
+       "id": "barracks_1",
+       "type": "barracks",
+       "role": "barracks",
+       "label": "city guard barracks",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      },
+      {
+       "id": "barracks_2",
+       "type": "barracks",
+       "role": "barracks",
+       "label": "city guard barracks",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      },
+      {
+       "id": "tower_1",
+       "type": "tower",
+       "role": "watchtower",
+       "label": "watchtower",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "high_ground",
+       "villager": "none"
+      },
+      {
+       "id": "tower_2",
+       "type": "tower",
+       "role": "watchtower",
+       "label": "watchtower",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "high_ground",
+       "villager": "none"
+      },
+      {
+       "id": "tower_3",
+       "type": "tower",
+       "role": "watchtower",
+       "label": "watchtower",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "high_ground",
+       "villager": "none"
+      },
+      {
+       "id": "barn_1",
+       "type": "barn",
+       "role": "granary",
+       "label": "granary and barn",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      },
+      {
+       "id": "barn_2",
+       "type": "barn",
+       "role": "granary",
+       "label": "granary and barn",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none"
+      }
+     ]
+    },
+    "notes": "Dense grid city; the claim will likely hold fewer than the 35 lots asked, the rest are reported unplaced."
+   }
+  ],
+  "connectors": [
+   {
+    "id": "city_wall",
+    "kind": "wall",
+    "required": true,
+    "label": "city wall",
+    "where": {
+     "inside": {
+      "part": "capital"
+     }
+    },
+    "height": 8,
+    "thickness": 3,
+    "walk": true,
+    "lots": [
+     {
+      "lot": "gatehouse_1",
+      "at": "gate",
+      "mech": "portcullis"
+     },
+     {
+      "lot": "gatehouse_2",
+      "at": "gate",
+      "mech": "portcullis"
+     },
+     {
+      "lot": "tower_1",
+      "at": "corner"
+     },
+     {
+      "lot": "tower_2",
+      "at": "corner"
+     },
+     {
+      "lot": "tower_3",
+      "at": "run"
+     }
+    ],
+    "notes": "Defensive wall on the city's edge with a walkable top, two gatehouses and three watchtowers."
+   }
+  ],
+  "forms": [
+   {
+    "id": "city_relief",
+    "kind": "relief",
+    "required": false,
+    "around": [
+     "capital"
+    ],
+    "radius": 12,
+    "notes": "Blend the land into the city pad."
+   }
+  ],
+  "rules": []
+ }
+}

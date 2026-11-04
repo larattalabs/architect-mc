@@ -275,7 +275,34 @@ export function resolveFreeZone(env, p, geomOf, o0) {
       const wf = o.noWouldFit ? null : recheck(env, p, geomOf, o, { program: { ...program, layout: 'ring' } });
       return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `the spiral is too steep for a ground road (${failsSeen.find((f) => f.why === 'grade').message})`, evidence: { why: 'grade', layout } }], ...(wf ? { wouldFit: [wf] } : {}) };
     }
-    return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)`, evidence: { layout, tried: tries } }] };
+    // (GH) a free layout stays strict (never read as street); its NO_ROOM carries the street layout as a wouldFit when street would place
+    // the zone (re-checked: the street path for a plain zone, the free path for an outline zone), as C37 does for a forced orientation
+    let alt = null;
+    if (!o.noWouldFit && FREE_LAYOUTS.includes(asked) && !around) {
+      const frag = { program: { ...program, layout: 'street' } };
+      if (draw) {
+        const q = recheck(env, p, geomOf, o, frag);
+        if (q) alt = { entry: q, placed: specs.length, total: specs.length };
+      } else if (o.streetAlt) {
+        // street's answer; the lots it cannot place are dropped from the fragment and the rest re-checked (at most 3 rounds), so the
+        // fragment applied is a zone that fits or is adjusted with no count refusal
+        // (the zone as written: K3 withholds wall lots from `zone`, the street answer withholds them again; the fragment keeps them)
+        const full = o.origPart ?? zone;
+        let keep = full.program.lots;
+        let q = null;
+        for (let round = 0; round < 3 && keep.length; round++) {
+          q = o.streetAlt({ ...p, part: { ...full, program: { ...full.program, layout: 'street', lots: keep } } });
+          if (!q || !q.unplaced.length) break;
+          keep = keep.filter((l) => !q.unplaced.includes(l.id));
+        }
+        if (q && q.ok && !q.unplaced.length && keep.length) {
+          const frag = { program: { ...full.program, layout: 'street', ...(keep.length < full.program.lots.length ? { lots: keep } : {}) } };
+          const dropped = full.program.lots.filter((l) => !keep.includes(l)).map((l) => l.id);
+          alt = { entry: { part: zone.id, fragment: frag, geometry: { rect: rectArr(q.rect) }, cost: q.cost }, placed: keep.length, total: full.program.lots.length, dropped };
+        }
+      }
+    }
+    return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)${alt ? `; layout 'street' places ${alt.placed === alt.total ? alt.placed : `${alt.placed} of ${alt.total} (drops ${alt.dropped.join(', ')})`}` : ''}`, evidence: { layout, tried: tries, ...(alt ? { alt: 'street', altLots: alt.placed, ...(alt.dropped?.length ? { altDropped: alt.dropped } : {}) } : {}) } }], ...(alt ? { wouldFit: [alt.entry] } : {}) };
   }
   return fin(best.L, null, { loc, sketchAt: sk ? { value: best.sketch } : null, move: best.move });
 }

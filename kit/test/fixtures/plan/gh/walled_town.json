@@ -1,0 +1,327 @@
+{
+ "prompt": "A walled market town with a gatehouse on each road.",
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "marketwall",
+  "style": {
+   "pending": "marketwall"
+  },
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "required": true,
+    "label": "Market town",
+    "purpose": "market",
+    "style": {
+     "pending": "marketwall"
+    },
+    "where": {
+     "near": {
+      "anchor": "stone",
+      "within": 16
+     }
+    },
+    "size": {
+     "preset": "L"
+    },
+    "program": {
+     "layout": "grid",
+     "shared": "square",
+     "lots": [
+      {
+       "id": "gatehouse_1",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "north road gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none",
+       "brief": "Arched passage, portcullis, guard room above."
+      },
+      {
+       "id": "gatehouse_2",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "east road gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none",
+       "brief": "Arched passage, portcullis, guard room above."
+      },
+      {
+       "id": "gatehouse_3",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "south road gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none",
+       "brief": "Arched passage, portcullis, guard room above."
+      },
+      {
+       "id": "gatehouse_4",
+       "type": "gatehouse",
+       "role": "gatehouse",
+       "label": "west road gatehouse",
+       "size": [
+        17,
+        15
+       ],
+       "placement": "edge",
+       "villager": "none",
+       "brief": "Arched passage, portcullis, guard room above."
+      },
+      {
+       "id": "market_hall",
+       "type": "shop",
+       "role": "market_hall",
+       "label": "market hall",
+       "size": [
+        17,
+        15
+       ],
+       "landmark": true,
+       "placement": "central",
+       "villager": "trading_hall",
+       "brief": "Covered trading hall facing the market square, the heart of the town."
+      },
+      {
+       "id": "stall_1",
+       "type": "shop",
+       "role": "stall",
+       "label": "merchant stall",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "central",
+       "villager": "job",
+       "brief": "Open-fronted stall around the square."
+      },
+      {
+       "id": "stall_2",
+       "type": "shop",
+       "role": "stall",
+       "label": "merchant stall",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "central",
+       "villager": "job",
+       "brief": "Open-fronted stall around the square."
+      },
+      {
+       "id": "stall_3",
+       "type": "shop",
+       "role": "stall",
+       "label": "merchant stall",
+       "size": [
+        9,
+        9
+       ],
+       "placement": "central",
+       "villager": "job",
+       "brief": "Open-fronted stall around the square."
+      },
+      {
+       "id": "inn_1",
+       "type": "tavern",
+       "role": "inn",
+       "label": "tavern and inn",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "none",
+       "brief": "Lodging for travelling traders, near the main road."
+      },
+      {
+       "id": "townhouse_1",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling",
+       "brief": "Home with shopfront below."
+      },
+      {
+       "id": "townhouse_2",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling",
+       "brief": "Home with shopfront below."
+      },
+      {
+       "id": "townhouse_3",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling",
+       "brief": "Home with shopfront below."
+      },
+      {
+       "id": "townhouse_4",
+       "type": "house",
+       "role": "townhouse",
+       "label": "townhouse",
+       "size": [
+        9,
+        9
+       ],
+       "villager": "dwelling",
+       "brief": "Home with shopfront below."
+      },
+      {
+       "id": "smithy_1",
+       "type": "smithy",
+       "role": "smithy",
+       "label": "smithy",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "job",
+       "brief": "Tools and horseshoes for market goers."
+      },
+      {
+       "id": "chapel_1",
+       "type": "chapel",
+       "role": "chapel",
+       "label": "chapel",
+       "size": [
+        13,
+        11
+       ],
+       "villager": "none",
+       "brief": "Small town chapel off the square."
+      }
+     ]
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "town_wall",
+    "kind": "wall",
+    "required": true,
+    "label": "Town wall",
+    "style": {
+     "pending": "marketwall"
+    },
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      },
+      "ring": [
+       4,
+       10
+      ],
+      "closed": true
+     }
+    },
+    "height": 8,
+    "thickness": 2,
+    "crenels": true,
+    "corners": "tower",
+    "walk": true,
+    "lamps": "gates",
+    "lots": [
+     {
+      "lot": "gatehouse_1",
+      "at": "gate",
+      "mech": "portcullis"
+     },
+     {
+      "lot": "gatehouse_2",
+      "at": "gate",
+      "mech": "portcullis"
+     },
+     {
+      "lot": "gatehouse_3",
+      "at": "gate",
+      "mech": "portcullis"
+     },
+     {
+      "lot": "gatehouse_4",
+      "at": "gate",
+      "mech": "portcullis"
+     }
+    ],
+    "notes": "Stone brick wall with a wall walk; the four gatehouses are its ways through."
+   },
+   {
+    "id": "road_n",
+    "kind": "road",
+    "required": true,
+    "label": "North road",
+    "from": {
+     "anchor": "claim_n"
+    },
+    "to": {
+     "part": "gatehouse_1"
+    }
+   },
+   {
+    "id": "road_e",
+    "kind": "road",
+    "required": true,
+    "label": "East road",
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "gatehouse_2"
+    }
+   },
+   {
+    "id": "road_s",
+    "kind": "road",
+    "required": true,
+    "label": "South road",
+    "from": {
+     "anchor": "claim_s"
+    },
+    "to": {
+     "part": "gatehouse_3"
+    }
+   },
+   {
+    "id": "road_w",
+    "kind": "road",
+    "required": true,
+    "label": "West road",
+    "from": {
+     "anchor": "claim_w"
+    },
+    "to": {
+     "part": "gatehouse_4"
+    }
+   }
+  ],
+  "notes": "Four roads assumed; the land was not surveyed."
+ }
+}

@@ -973,6 +973,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const lotZone = V.lotZone;
   // ((7a K3, §2) the lots each zone's ring walls site on their lines: the zone is laid out without them (none: every plan as before)
   const withheld = withheldOf(V, new Set(k3Back.keys()));
+  // (GH) every wall lot as the first pass withholds it (none sent back): what a street zone would hold if the zone were street, as written
+  const withheldAll = withheldOf(V, new Set());
   const heldPart = (p) => (withheld.has(p.id) ? { ...p, part: withhold(p.part, withheld.get(p.id)) } : p);
   const geomOf = (id) => {
     if (geom.has(id)) return geom.get(id);
@@ -1136,7 +1138,18 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
       // H footprint (KC §5), never cached
       const ignoreBody = p.part.ext?.['architect_mc:unsafe']?.zoneIgnoresBody === true;
-      const z = resolveFreeZone(env, heldPart(p), geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
+      const z = resolveFreeZone(env, heldPart(p), geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null,
+        // (GH) the street path on the zone as the street branch below would run it (overlap pass included): what a free NO_ROOM's wouldFit offers
+        origPart: p.part,
+        streetAlt: (q0) => {
+          const q = withheldAll.has(q0.id) ? { ...q0, part: withhold(q0.part, withheldAll.get(q0.id)) } : q0;
+          const bd = whereParts(q.part.where).some((id) => keep.some((r) => r.part === id));
+          let sz = resolveZone(env, q, geomOf, { keep: bd ? keep : null });
+          const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
+          if (ok(sz) && zonesAccepted.some((a) => meets(grow(sz.rect, ZONE_GAP), a.rect))) sz = resolveZone(env, q, geomOf, { obstacles: zonesAccepted.map((a) => a.rect), keep: bd ? keep : null });
+          // the street answer's real count is the lots less its unplaced (L.lots holds the street's slots, not the placed lots)
+          return sz.layout && (ok(sz) || sz.klass === 'refused') ? { rect: sz.rect, ok: ok(sz), unplaced: (sz.unplaced ?? sz.layout.unplaced ?? []).map((u) => u.id), cost: layoutCost(sz.layout) } : null;
+        } });
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
