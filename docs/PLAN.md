@@ -1397,3 +1397,28 @@ no side for pullers; a slime grid jammed against walls). Noah chose the split sl
 grate, Steward's box and brief lines are unchanged, and the probe's new bar covers the split grate, the day cycle, slide, swing and the
 drawbridge. Also offered: a slime-glued grid and under-floor drivers. Neither was chosen.
 
+
+## v0.50.0 and v0.51.0: GM-a and GM-a2 (2026-11-03/04)
+
+- v0.50.0 (main 05611639, API 1.45.0, kit 0.46.0): GM-a, the split sliding grate realised (CONTRACT GM §15, §16). Steward RC PASS on
+  slice/GM 7013e041; Steward main 01e3b59 pins 0.50.0.
+- v0.51.0 (main 7b823ff7, API 1.46.0, kit 0.47.0): GM-a2, survival for the mechanism (Noah's option (a): a provisional range at check,
+  exact at bind; held, charged once, written at once; exact refund), the roof-hole fill, and the crash and mid-move undo cases. API
+  additions only, so no RC. Steward turns `mech` on in its plan writer from 0.51.0.
+
+## The remaining gate batch (Noah, 2026-11-04)
+
+- **GM-b**, K1 wall gates get the iron swing door pair; **GM-c**, the flipping iron-trapdoor drawbridge (Steward un-reserves
+  `connector.drawbridge` in GM-c's RC).
+- **Gatehouse coverage** (Noah: "add that gatehouse coverage piece to rest of gate work"): Steward's plan writer names a gatehouse as a
+  wall's gate in only 3 of 8 recorded walls, so most towns get no mechanism. The fix is mostly on Steward's side (the plan writer), with
+  any Architect help (for example K3 offering a gatehouse lot on every gate) in this batch. Checking it needs a paid Steward plan-writer
+  run: its expected cost goes to Noah before any spend.
+
+## Occupied lots wait forever; harnesses clear the box (Noah, 2026-11-04; closes the ask queued after v0.48.0)
+
+Noah: "buildings should wait forever I reckon, though let's make sure that doesn't screw up our testing". A lot realise keeps its
+unlimited wait on OCCUPIED and PLAYER_IN_BOX: no time limit, no automatic push-out. Instead every harness that realises lots (the gate
+runner's in-game steps, the gm/k3/gj drivers, megaA, scenarios, the nightly) clears animals from the box and moves the dev player out
+before it waits, and again on any OCCUPIED or PLAYER_IN_BOX answer, so no run can stall on it. Steward's e2e does the same (gj-rc fixed its
+animal watch after a restart); both sides use one shared rule (slice OC).
