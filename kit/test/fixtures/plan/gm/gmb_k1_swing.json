@@ -1,0 +1,95 @@
+{
+ "about": "(GM-b, CONTRACT GM \u00a717) a town in a wall 3 thick, a player-only road (movers [player]) through a crossing gate with mech swing: the iron swing gate (3 wide, 3 high, in the wall's 3 planes)",
+ "terrain": {},
+ "lotEntries": {
+  "h1": "rs_hut",
+  "h2": "rs_hut",
+  "h3": "rs_shed"
+ },
+ "covers": [
+  "connector.wall",
+  "connector.gate"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "gmb_k1_swing",
+  "zones": [
+   {
+    "id": "town",
+    "kind": "standard",
+    "required": true,
+    "program": {
+     "lots": [
+      {
+       "id": "h1",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h2",
+       "type": "house",
+       "size": [
+        9,
+        9
+       ]
+      },
+      {
+       "id": "h3",
+       "type": "shed",
+       "size": [
+        7,
+        7
+       ]
+      }
+     ]
+    },
+    "where": {
+     "near": {
+      "anchor": "claim_center",
+      "within": 16
+     }
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "curtain",
+    "kind": "wall",
+    "required": true,
+    "where": {
+     "around": {
+      "feature": {
+       "part": "town"
+      }
+     }
+    },
+    "height": 6,
+    "thickness": 3
+   },
+   {
+    "id": "in",
+    "kind": "road",
+    "required": true,
+    "from": {
+     "anchor": "claim_e"
+    },
+    "to": {
+     "part": "town"
+    },
+    "width": 3,
+    "movers": [
+     "player"
+    ]
+   },
+   {
+    "id": "east_gate",
+    "kind": "gate",
+    "crossing": "in",
+    "mech": "swing"
+   }
+  ]
+ }
+}

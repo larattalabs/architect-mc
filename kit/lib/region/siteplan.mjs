@@ -141,7 +141,7 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   // (6c T1) the plan-time passes the program ran, with their wall time and the plan's peak memory after each (the plan meta)
   if (meta?.passes?.length) out.passes = meta.passes.map((p) => ({ name: p.name, ms: p.ms, heapMb: p.heapMb }));
   // (7a K1) the plan's walls and their gates (the plan meta's walls: K1a's emission)
-  if (Array.isArray(meta?.walls) && meta.walls.length) out.walls = meta.walls.map((w) => ({ id: w.id, part: w.part, line: w.line.map((q) => [...q]), closed: !!w.closed, gates: (w.gates ?? []).map((g) => ({ id: g.id, at: [...g.at], width: g.width, door: g.door, auto: !!g.auto })),
+  if (Array.isArray(meta?.walls) && meta.walls.length) out.walls = meta.walls.map((w) => ({ id: w.id, part: w.part, line: w.line.map((q) => [...q]), closed: !!w.closed, gates: (w.gates ?? []).map((g) => ({ id: g.id, at: [...g.at], width: g.width, door: g.door, auto: !!g.auto, ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, who: g.mechanism.who } } : {}) })),
     // ((7a K2, §7) a walk: its width, its runs between accesses and the accesses; an along wall: its spine (the window used))
     ...(w.walk ? { walk: { width: w.walk.width, runs: Math.max(0, ...(w.walk.accesses.length > 1 ? [w.closed ? w.walk.accesses.length : w.walk.accesses.length - 1] : [0])), accesses: w.walk.accesses.map((a) => ({ kind: a.kind, at: [...a.at], foot: [...a.foot] })) } } : {}),
     ...(w.along ? { spine: w.along.spine.map((q) => [...q]) } : {}),

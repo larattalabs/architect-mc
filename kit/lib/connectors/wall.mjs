@@ -31,7 +31,8 @@ import { waterGates } from '../fluids/gate.mjs';
 import { keptColumns } from '../fluids/keep.mjs';
 import { emitWalk, walkLevels, walkOf } from './wallWalk.mjs';
 import { LOT_KEYS, lotBand, siteWallLots, viaLots, wallLotsOf, WALL_LOT_HEIGHT } from './wallLots.mjs';
-import { gmBoxFits } from './gmGate.mjs';
+import { gmBoxFits, gmMatsOf, k1SwingPlan, k1SwingRecord, K1_SWING } from './gmGate.mjs';
+import { gmToWorld } from './gmCircuit.mjs';
 
 /** The kinds this module compiles. */
 export const WALL_KINDS = Object.freeze(['wall', 'gate']);
@@ -824,18 +825,91 @@ function placeAtGate(K, g) {
   if (W.st.sealed) { K.ans(g, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `wall ${W.id} is sealed (gates 0)`, evidence: { wall: W.id } }], notes: gateNotes(g) }); return; }
   const n = K.endpointNode(at, g.part.to ?? null, g, 'at');
   if (n.error) { K.ans(g, { class: 'refused', reasons: [n.error.legacy ?? n.error], notes: gateNotes(g) }); return; } // ((close-out A) a gate answers as before
-  const door = g.part.door ?? WALL_DEFAULTS.door;
-  const width = g.part.width ?? (door === 'door' ? 2 : WALL_DEFAULTS.gateWidth);
-  const run = nearestRun(W, [n.at[0], n.at[2]], width);
+  let door = g.part.door ?? WALL_DEFAULTS.door;
+  let width = g.part.width ?? (door === 'door' ? 2 : WALL_DEFAULTS.gateWidth);
+  let height = g.part.height ?? WALL_DEFAULTS.gateHeight;
   const tol = K.tolOf(g.part, 'move');
+  // ((GM-b, CONTRACT GM §17 item 3) mech swing: 3 wide (a run of width + 2 = 5), at least 3 high, in a wall at least 3 thick; else the
+  // wooden door, deviation mechanism. Villager crossings are known after routing: finishGates)
+  const sw = { devs: [], notes: [], mech: null };
+  let run = null;
+  if (g.part.mech === 'swing') {
+    const r3 = W.st.thickness >= K1_SWING.depth ? nearestRun(W, [n.at[0], n.at[2]], K1_SWING.width) : null;
+    if (r3 && r3.d <= tol.ceiling) {
+      run = r3;
+      sw.mech = 'swing';
+      if (width !== K1_SWING.width && g.part.width !== undefined) sw.devs.push({ what: 'width', value: K1_SWING.width, from: width });
+      if (height < K1_SWING.height) { sw.devs.push({ what: 'height', value: K1_SWING.height, from: height }); height = K1_SWING.height; }
+      if (door !== 'none') sw.notes.push(`door ${door} not read: the swing's iron doors are the gate's door`);
+      width = K1_SWING.width;
+      door = 'none';
+    } else {
+      const f = swingFallback(g.id, W, W.st.thickness < K1_SWING.depth ? 'thickness' : 'width', { near: true });
+      sw.devs.push(f.dev); sw.notes.push(f.note);
+      door = 'door';
+      width = g.part.width ?? 2;
+    }
+  }
+  run ??= nearestRun(W, [n.at[0], n.at[2]], width);
   if (!run || run.d > tol.ceiling) { K.ans(g, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: run ? `the nearest straight run of wall ${W.id} with room for a ${width}-wide gate is ${run.d} from its endpoint (at most ${tol.ceiling})` : `wall ${W.id} has no straight run with room for a ${width}-wide gate and its jambs`, evidence: { wall: W.id, width, ...(run ? { move: run.d, ceiling: tol.ceiling } : {}) } }], notes: gateNotes(g) }); return; }
   const mid = W.positions[(run.a + run.b) >> 1];
-  const gate = makeGate(W, { a: run.a, b: run.b, y: K.env.S.groundAt(mid.x, mid.z), h: g.part.height ?? WALL_DEFAULTS.gateHeight, auto: false, kind: 'at', part: g.id, door, frame: g.part.frame ?? WALL_DEFAULTS.frame });
+  const gate = makeGate(W, { a: run.a, b: run.b, y: K.env.S.groundAt(mid.x, mid.z), h: height, auto: false, kind: 'at', part: g.id, door, frame: g.part.frame ?? WALL_DEFAULTS.frame });
+  if (sw.mech) gate.mech = sw.mech;
+  if (g.part.mech === 'swing' && !sw.mech) gate.swingFallback = true;
   W.gates.push(gate);
   W.opened++;
   const j = K.judge([{ what: 'move', value: run.d, ...tol }]);
   K.gates.set(g.id, gate);
-  K.ans(g, { class: j.klass, deviations: j.deviations, notes: gateNotes(g) });
+  const deviations = [...j.deviations, ...sw.devs];
+  K.ans(g, { class: j.klass === 'refused' ? 'refused' : deviations.length ? 'adjusted' : j.klass, deviations, notes: [...gateNotes(g), ...sw.notes] });
+}
+
+// ------------------------------------------------------------------ (GM-b, CONTRACT GM §17) the K1 swing gate
+
+/** The deviation and note of a swing that falls back to the wooden door (§17 items 2 and 3): {dev, note}. */
+function swingFallback(id, W, why, { width = null, crossing = null, edge = null, near = false } = {}) {
+  const dev = { what: 'mechanism', kind: 'swing', gate: id, why, ...(why === 'thickness' ? { need: K1_SWING.depth, thickness: W.st.thickness } : why === 'width' ? { need: K1_SWING.width, ...(width !== null ? { width } : {}) } : {}), ...(edge ? { edge } : {}) };
+  const note = why === 'thickness' ? `gate ${id}: wall ${W.id} is ${W.st.thickness} thick and the swing needs ${K1_SWING.depth}: the wooden door`
+    : why === 'villager' ? `gate ${id}: ${edge} crosses it on a villager edge (villagers open wooden doors, not iron ones): the wooden door`
+      : near ? `gate ${id}: wall ${W.id} has no straight run near its endpoint with room for the swing's ${K1_SWING.width}-wide opening and its jambs: the wooden door`
+        : `gate ${id}: ${crossing ? `${crossing}'s route opened it` : 'it is'} ${width} wide and the swing is ${K1_SWING.width}: the wooden door`;
+  return { dev, note };
+}
+
+/**
+ * The routes through a gate (§17 item 2): {villager, explicit, edges}. `villager`: a routed edge through it moves villagers (inferred, S-T2-1,
+ * or written), or a network's street or road crosses there (laid before the walls: a village's own walk); `explicit`: the connectors whose
+ * written movers name villager (a route the plan itself names as a villager route); `edges`: the crossing connectors' ids.
+ */
+function gateCrossers(K, gate) {
+  const xs = (K.routed ?? []).filter((x) => (x.edge?.id && (gate.edges ?? []).includes(x.edge.id)) || (gate.conn && x.conn?.id === gate.conn));
+  const movers = xs.flatMap((x) => x.meta?.movers ?? []);
+  const written = (x) => x.conn?.part?.movers ?? x.conn?.movers ?? null;
+  const explicit = [...new Set(xs.filter((x) => Array.isArray(written(x)) && written(x).includes('villager')).map((x) => x.conn.id))];
+  const edges = [...new Set(xs.map((x) => x.conn?.id).filter(Boolean))];
+  return { villager: movers.includes('villager') || gate.kind === 'network', explicit, edges };
+}
+
+/**
+ * After routing (§17 items 2 and 3): a gate asked for a swing, by the villagers crossing it and (`geometry`) its width and the wall's
+ * thickness. Returns {refuse} (MOVER: a written villager route), {fallback: {dev, note}} (the wooden door) or {swing: true, devs, notes}.
+ */
+function swingDecide(K, W, gate, part, { geometry = true } = {}) {
+  const c = gateCrossers(K, gate);
+  if (c.explicit.length) return { refuse: { code: 'MOVER', message: `a swing gate on ${c.explicit.join(', ')}, a route the plan names as a villager route (the swing rests closed and villagers cannot open iron doors)`, evidence: { gate: gate.id, crossing: c.explicit, movers: ['player', 'villager'], kind: 'swing' } } };
+  if (c.villager) return { fallback: swingFallback(gate.id, W, 'villager', { edge: c.edges[0] ?? (gate.kind === 'network' ? 'a network street' : 'a route') }) };
+  if (!geometry) return { swing: true, devs: [], notes: [] };
+  if (W.st.thickness < K1_SWING.depth) return { fallback: swingFallback(gate.id, W, 'thickness') };
+  if (gate.width !== K1_SWING.width) return { fallback: swingFallback(gate.id, W, 'width', { width: gate.width, crossing: gate.conn }) };
+  const h = part?.height ?? gate.h;
+  return { swing: true, h: Math.max(K1_SWING.height, h), devs: h < K1_SWING.height ? [{ what: 'height', value: K1_SWING.height, from: h }] : [], notes: part?.door && part.door !== 'none' ? [`door ${part.door} not read: the swing's iron doors are the gate's door`] : [] };
+}
+
+/** The wooden door a swing falls back to: a gate's door, the opening's whole width (§17: "back to the wooden door"). */
+function toWoodenDoor(gate) {
+  gate.mech = null;
+  gate.door = 'door';
+  gate.swingFallback = true;
 }
 
 // ------------------------------------------------------------------ routing: the walls as the gate move's input
@@ -942,8 +1016,13 @@ export function finishGates(K) {
       // R17: a fence gate is player-only: a crossing used by a villager edge refuses it
       const movers = K.routed.filter((x) => x.conn.id === g.part.crossing).flatMap((x) => x.meta?.movers ?? []);
       if (door === 'fence_gate' && movers.includes('villager')) { K.ans(g, { class: 'refused', reasons: [{ code: 'MOVER', message: `a fence gate on ${g.part.crossing}, a villager edge (villagers open wooden doors, not fence gates)`, evidence: { crossing: g.part.crossing, movers: [...new Set(movers)] } }], notes: gateNotes(g) }); continue; }
+      // ((GM-b, §17) a swing: MOVER on a written villager route; the wooden door on an inferred one or where it does not fit)
+      const sd = g.part.mech === 'swing' ? swingDecide(K, W, { ...gate, id: g.id }, g.part) : null;
+      if (sd?.refuse) { K.ans(g, { class: 'refused', reasons: [sd.refuse], notes: gateNotes(g) }); continue; }
       Object.assign(gate, { part: g.id, id: g.id, auto: false, kind: 'crossing', door, frame: g.part.frame ?? WALL_DEFAULTS.frame, conn: g.part.crossing, ...(g.part.height ? { h: g.part.height } : {}) });
       K.gates.set(g.id, gate);
+      if (sd?.fallback) { toWoodenDoor(gate); K.ans(g, { class: 'adjusted', deviations: [sd.fallback.dev], notes: [...gateNotes(g), sd.fallback.note] }); continue; }
+      if (sd?.swing) { Object.assign(gate, { mech: 'swing', door: 'none', h: sd.h }); K.ans(g, { class: sd.devs.length ? 'adjusted' : 'fits', ...(sd.devs.length ? { deviations: sd.devs } : {}), notes: [...gateNotes(g), ...sd.notes] }); continue; }
       K.ans(g, { class: 'fits', notes: gateNotes(g) });
       continue;
     }
@@ -951,7 +1030,26 @@ export function finishGates(K) {
     const autos = W.gates.filter((q) => q.auto);
     for (const q of autos) Object.assign(q, { door: g.part.door ?? q.door, frame: g.part.frame ?? q.frame, ...(g.part.height ? { h: g.part.height } : {}), styledBy: g.id });
     K.gates.set(g.id, null);
-    K.ans(g, { class: 'fits', notes: [...gateNotes(g), `styles wall ${W.id}'s ${autos.length} auto gate(s)`] });
+    // ((GM-b, §17) a styling gate asking for a swing: each auto gate decided on its own (a villager crossing, a written one included,
+    // the width and the thickness: the wooden door with deviation mechanism; the plan named none of them, so none refuses))
+    const sDevs = [], sNotes = [];
+    if (g.part.mech === 'swing') for (const q of autos) {
+      const sd = swingDecide(K, W, q, g.part);
+      if (sd.swing) { Object.assign(q, { mech: 'swing', door: 'none', h: sd.h }); sDevs.push(...sd.devs.map((d) => ({ ...d, gate: q.id }))); sNotes.push(...sd.notes); continue; }
+      const f = sd.fallback ?? swingFallback(q.id, W, 'villager', { edge: gateCrossers(K, q).explicit[0] });
+      toWoodenDoor(q);
+      sDevs.push(f.dev); sNotes.push(f.note);
+    }
+    K.ans(g, { class: sDevs.length ? 'adjusted' : 'fits', ...(sDevs.length ? { deviations: sDevs } : {}), notes: [...gateNotes(g), `styles wall ${W.id}'s ${autos.length} auto gate(s)`, ...sNotes] });
+  }
+  // ((GM-b, §17 item 2) an at gate's swing: its geometry was decided at placement; now the routes through it are known, a villager crossing
+  // falls back to the wooden door (a written villager route refuses MOVER: the opening stays, the routes need it, with no door)
+  for (const W of K.walls) for (const gate of W.gates) {
+    if (gate.kind !== 'at' || gate.mech !== 'swing' || !gate.part) continue;
+    const sd = swingDecide(K, W, gate, null, { geometry: false });
+    const a = K.answers.get(gate.part);
+    if (sd.refuse) { gate.mech = null; gate.door = 'none'; const { deviations, ...rest } = a; void deviations; K.answers.set(gate.part, { ...rest, class: 'refused', reasons: [sd.refuse] }); gate.part = null; continue; }
+    if (sd.fallback) { toWoodenDoor(gate); K.answers.set(gate.part, { ...a, class: a.class === 'refused' ? a.class : 'adjusted', deviations: [...(a.deviations ?? []), sd.fallback.dev], notes: mergeNotes([...(a.notes ?? []), sd.fallback.note]) }); }
   }
   // gates.min on a closed wall: first where a zone's street end faces the ring, then evenly along it (ties by position)
   for (const W of K.walls) {
@@ -1109,7 +1207,7 @@ export function emitWalls(K) {
       K.answers.get(W.id).geometry = out.geometry;
       // ((7a K2) the walk's notes (its dead ends, an access it had no room for))
       if (out.notes?.length) K.answers.get(W.id).notes = mergeNotes([...(K.answers.get(W.id).notes ?? []), ...out.notes]);
-      for (const g of W.gates) if (g.part && K.answers.get(g.part)) K.answers.get(g.part).geometry = { wall: W.id, at: g.at, width: g.width, height: g.h, door: g.door, frame: g.frame, cells: g.cells.length };
+      for (const g of W.gates) if (g.part && K.answers.get(g.part)) K.answers.get(g.part).geometry = { wall: W.id, at: g.at, width: g.width, height: g.h, door: g.door, frame: g.frame, cells: g.cells.length, ...(g.mechanism ? { mechanism: g.mechanism } : {}) };
     } catch (e) {
       K.rollback(cp);
       metaWalls.length && (K.r.meta.walls = [...metaWalls]);
@@ -1298,16 +1396,20 @@ function emitWall(K, W) {
   for (const g of W.gates) {
     const outRow = W.cells.filter((c) => opening.get(key(c.x, c.z)) === g && c.depth === t - 1).sort((a, b) => a.pos - b.pos);
     const fo = facingOut(W, outRow[0] ?? W.cells.find((c) => opening.get(key(c.x, c.z)) === g));
-    if (g.door === 'door') {
+    if (g.mech === 'swing') {
+      // ((GM-b, §17) the swing: its own cells (below), written by the region's mech:<gate> item)
+    } else if (g.door === 'door') {
       const dm = doorOf(frame);
-      const k0 = Math.floor((outRow.length - Math.min(2, outRow.length)) / 2);
-      const use = outRow.slice(k0, k0 + Math.min(2, outRow.length));
+      // ((GM-b, §17) a swing fallen back to the wooden door covers the whole opening: a 3-wide one a double door and a single)
+      const nd = g.swingFallback ? outRow.length : Math.min(2, outRow.length);
+      const k0 = Math.floor((outRow.length - nd) / 2);
+      const use = outRow.slice(k0, k0 + nd);
       use.forEach((c, i) => {
-        const hinge = use.length === 1 || i === 0 ? 'left' : 'right';
+        const hinge = use.length === 1 || i % 2 === 0 ? 'left' : 'right';
         put(c.x, g.y + 1, c.z, `${dm}[facing=${fo},half=lower,hinge=${hinge},open=false,powered=false]`);
         put(c.x, g.y + 2, c.z, `${dm}[facing=${fo},half=upper,hinge=${hinge},open=false,powered=false]`);
       });
-      if (outRow.length > 2) W.notes.push(`gate ${g.id}: ${g.width} wide, its double door covers the middle 2`);
+      if (outRow.length > 2 && !g.swingFallback) W.notes.push(`gate ${g.id}: ${g.width} wide, its double door covers the middle 2`);
     } else if (g.door === 'fence_gate') {
       const fg = shapeOf(roles.rail, 'fence_gate') ?? 'minecraft:oak_fence_gate';
       const fx = fo === 'north' || fo === 'south' ? fo : fo;
@@ -1338,6 +1440,24 @@ function emitWall(K, W) {
     walkOut = emitWalk({ K, W, top: T, S2: WK.S2, put, landing, get: (x, y, z) => ops.get(`${x},${y},${z}`), has: (c) => capCells.has(key(c.x, c.z)), roles, cr, body, opening, walkSet, stubs: new Set(stubCells(W).map(([x, z]) => key(x, z))), lampFoot, fixture });
     if (walkOut.refuse) throw Object.assign(new Error(walkOut.refuse.message), { reason: walkOut.refuse });
     for (const q of walkOut.lamps) lampCells.push(q);
+  }
+  // ---- ((GM-b, CONTRACT GM §17 items 3 and 4) each swing gate: the swing in the 3 planes centred on the wall's middle, its front plane
+  // toward the outer face; its cells are the region's mech:<gate> item's (meta walls[].gates[].mechanismWrite, the IR's gateMechanisms),
+  // so the wall writes none of them
+  const swingMats = W.gates.some((g) => g.mech === 'swing') ? gmMatsOf(roles) : null;
+  for (const g of W.gates) {
+    if (g.mech !== 'swing') continue;
+    const front = t - 1 - Math.floor((t - K1_SWING.depth) / 2);
+    const c = W.cells.find((q) => q.pos === ((g.a + g.b) >> 1) && q.depth === front);
+    const at = { cx: c.x, fy: g.y + 1, cz: c.z, facing: facingOut(W, c) };
+    const plan = k1SwingPlan(swingMats, { height: g.h, arch: g.frame === 'arch' });
+    const { record, write } = k1SwingRecord(plan, at);
+    // (the swing's lanes are the opening's columns: a frame that does not land on them is a bug, not a plan)
+    const cols = new Set(g.cells.map(([x, z]) => key(x, z)));
+    for (const q of plan.envelope) { const [x, , z] = gmToWorld([...q, null], at); if (!cols.has(key(x, z))) throw new Error(`gate ${g.id}: the swing's cell ${x},${z} is outside its opening`); }
+    for (let i = 0; i < write.base.length; i += 4) ops.delete(`${write.base[i]},${write.base[i + 1]},${write.base[i + 2]}`);
+    g.mechanism = record;
+    g.mechanismWrite = { ...write, stage: K.stageOf('links') };
   }
   // ---- the graph: a node per gate (kind gate, its wall the ref; §8's additive wire shape)
   for (const g of W.gates) {
@@ -1389,12 +1509,14 @@ function emitWall(K, W) {
     const mine = new Set(g.cells.map(([x, z]) => key(x, z)));
     const list = [];
     for (const [k, s] of ops) { const [x, , z] = k.split(','); if (s && mine.has(`${x},${z}`)) list.push(s.replace(/#walk$/, '')); }
+    // ((GM-b) a swing's own cells, written by the region: the gate's bill)
+    if (g.mechanismWrite) for (let i = 3; i < g.mechanismWrite.base.length; i += 4) list.push(g.mechanismWrite.palette[g.mechanismWrite.base[i]]);
     gateBom.set(g.id, bomOf(list));
   }
   const line = [];
   W.positions.forEach((q, i) => { if (i === 0 || i === n - 1 || q.axis === 3) line.push([q.x, q.z]); });
   // ((7a K2) a gate's landing: its cells (x, y, z: the floor or stair block), its flight steps)
-  const gatesOut = W.gates.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, frame: g.frame, auto: g.auto, kind: g.kind, y: g.y, h: g.h, cells: g.cells, ...(g.conn ? { crossing: g.conn } : {}), ...(g.landing?.ok ? { landing: { steps: g.landing.cells.filter((c) => c.kind === 'stair').length, cells: g.landing.cells.map((c) => [c.x, c.y, c.z]) } } : {}) }));
+  const gatesOut = W.gates.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, frame: g.frame, auto: g.auto, kind: g.kind, y: g.y, h: g.h, cells: g.cells, ...(g.conn ? { crossing: g.conn } : {}), ...(g.landing?.ok ? { landing: { steps: g.landing.cells.filter((c) => c.kind === 'stair').length, cells: g.landing.cells.map((c) => [c.x, c.y, c.z]) } } : {}), ...(g.mechanism ? { mechanism: g.mechanism, mechanismWrite: g.mechanismWrite } : {}) }));
   const meta = {
     id: W.id, part: W.id, form: W.form, closed: W.closed, sealed: st.sealed, height: st.height, thickness: t, crenels: st.crenels, line,
     inside: W.closed && W.I ? arr(W.I) : null, joined: W.joined, ends: W.ends,
@@ -1406,8 +1528,8 @@ function emitWall(K, W) {
   if (wgOut.length) meta.waterGates = wgOut;
   // ((7a K3) a cut position has no cells: its top is no top)
   const Tc = W.cutPos?.size ? T.filter((_, i) => !W.cutPos.has(i)) : T;
-  const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
-  const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
+  const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map(({ cells, mechanismWrite, mechanism, ...g }) => { void cells; void mechanismWrite; return { ...g, ...(mechanism ? { mech: mechanism.kind } : {}) }; }) };
+  const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...Tc), Math.max(...Tc)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind, ...(g.mechanism ? { mech: g.mechanism.kind } : {}) })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };
   // ((7a K3, §6, §8) the lots on the line: the answer's geometry and siteplan's walls[].lots ({lot, at, box, passage?}); the meta's (for
   // the checker: each box, its floor, its passage's cells as a gate of kind passage, its outer faces) and the record's
   if (W.lots?.length) {

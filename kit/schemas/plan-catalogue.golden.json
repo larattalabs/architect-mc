@@ -269,8 +269,8 @@
   },
   {
    "id": "connector.gate",
-   "sinceApi": "1.32.0",
-   "schemaVersion": 1,
+   "sinceApi": "NEXT",
+   "schemaVersion": 2,
    "state": "supported",
    "limits": {
     "width": [
@@ -285,8 +285,13 @@
      "none",
      "door",
      "fence_gate"
+    ],
+    "mech": [
+     "none",
+     "swing"
     ]
-   }
+   },
+   "note": "GM-b: mech swing is the iron swing gate (two iron doors, a mullion, a transom; a button outside, a plate and a lever inside; closed at rest, player-only): 3 wide, at least 3 high, in a wall 3 thick; on a villager crossing, or where it does not fit, the wooden door (adjusted, deviation mechanism)."
   },
   {
    "id": "connector.ladder",

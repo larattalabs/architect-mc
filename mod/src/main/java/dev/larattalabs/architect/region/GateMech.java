@@ -122,6 +122,34 @@ public final class GateMech {
 		return null;
 	}
 
+	/**
+	 * (GM-b, CONTRACT GM §17 item 4) The IR's K1 swing gates' write data ({@code gateMechanisms: [{gate, wall, kind, stage, palette, base}]},
+	 * the kit's {@code k1SwingRecord}), each with a base; empty when the plan has none.
+	 */
+	public static List<JsonObject> gateWrites(Ir ir) {
+		List<JsonObject> out = new ArrayList<>();
+		if (ir.json().get("gateMechanisms") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonObject o && o.get("gate") instanceof JsonPrimitive && o.get("base") instanceof JsonArray) {
+					out.add(o);
+				}
+			}
+		}
+		return out;
+	}
+
+	/** (GM-b) A K1 swing gate's report: {@code {kind, wall, cells, bom}} (no rung, no sensor: a swing is not day-driven). */
+	public static JsonObject gateReport(JsonObject write, Plan gm) {
+		JsonObject o = new JsonObject();
+		o.addProperty("kind", write.get("kind") instanceof JsonPrimitive k ? k.getAsString() : "swing");
+		if (write.get("wall") instanceof JsonPrimitive w) {
+			o.addProperty("wall", w.getAsString());
+		}
+		o.addProperty("cells", gm.positions().length);
+		o.add("bom", gm.billJson());
+		return o;
+	}
+
 	/** The IR lot's mechanism kind ({@code onWall.passage.mechanism.kind}), or null. */
 	public static @Nullable String kindOf(Ir ir, String lotId) {
 		if (ir.json().get("lots") instanceof JsonArray lots) {
