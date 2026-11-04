@@ -60,7 +60,9 @@ test('GH: a zone that fits is unchanged (no wouldFit, no street hint)', async ()
   assert.equal(p.wouldFit, undefined);
 });
 
-test("GH: Steward's recorded grid towns (metropolis, walled_town) refused NO_ROOM name the street layout; applying it is the street answer", async () => {
+test("GH: Steward's recorded grid towns (metropolis, walled_town): the street wouldFit is one step, exactly what the street answer places", async () => {
+  // Steward's numbers on main 6b14fc18 with only layout rewritten to street: metropolis 13 of 35, walled_town 12 of 15
+  const want = { metropolis: { zone: 'capital', placed: 13 }, walled_town: { zone: 'town', placed: 12, dropped: ['townhouse_4', 'smithy_1', 'chapel_1'] } };
   for (const n of ['metropolis', 'walled_town']) {
     const plan = fixture(n);
     const r = await check(plan);
@@ -68,18 +70,31 @@ test("GH: Steward's recorded grid towns (metropolis, walled_town) refused NO_ROO
     assert.equal(z.class, 'refused');
     assert.equal(z.reasons[0].code, 'NO_ROOM');
     assert.match(z.reasons[0].message, /no grid layout fits/);
-    assert.match(z.reasons[0].message, /layout 'street' places \d+( of \d+)?$/);
     assert.equal(z.wouldFit.length, 1);
     const w = z.wouldFit[0];
     assert.equal(w.fragment.program.layout, 'street');
     assert.deepEqual(Object.keys(w.fragment), ['program']);
-    if (n !== 'walled_town') continue; // (applying and re-running a full town costs about 15 s: once is enough)
+    const total = plan.zones[0].program.lots.length;
+    const kept = w.fragment.program.lots.map((l) => l.id);
+    const dropped = plan.zones[0].program.lots.map((l) => l.id).filter((id) => !kept.includes(id));
+    assert.equal(kept.length, want[n].placed);
+    assert.deepEqual(z.reasons[0].evidence.altDropped, dropped);
+    if (want[n].dropped) assert.deepEqual(dropped, want[n].dropped);
+    assert.ok(z.reasons[0].message.endsWith(`; layout 'street' places ${kept.length} of ${total} (drops ${dropped.join(', ')})`), z.reasons[0].message);
     const fixed = fixture(n);
     fixed.zones[0].program = w.fragment.program;
-    const s = part(await check(fixed));
-    assert.deepEqual(s.geometry.rect, w.geometry.rect);
-    assert.ok(!(s.reasons ?? []).some((q) => q.code === 'NO_ROOM' && /grid/.test(q.message)));
-    const again = await check(fixture(n));
-    assert.deepEqual(again.check.parts[0], z, 'deterministic');
+    const s = await check(fixed);
+    const sp = s.check.parts[0];
+    assert.equal(s.check.overall, 'READY');
+    assert.ok(sp.class === 'fits' || sp.class === 'adjusted');
+    assert.deepEqual(sp.geometry.rect, w.geometry.rect);
+    assert.deepEqual(sp.geometry.lots.map((l) => l.id).sort(), [...kept].sort(), 'exactly the lots the wouldFit claims');
+    assert.ok(!(sp.deviations ?? []).some((d) => d.what === 'count'));
+    // the unmodified street rewrite (Steward's run) places the same lots as the wouldFit keeps
+    const sw = fixture(n);
+    sw.zones[0].program.layout = 'street';
+    const sr = (await check(sw)).check.parts[0];
+    assert.equal(sr.geometry.lots.length, want[n].placed);
+    assert.deepEqual((await check(fixture(n))).check.parts[0], z, 'deterministic');
   }
 });
