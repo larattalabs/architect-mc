@@ -90,7 +90,7 @@ test('PLAYER_IN_BOX moves the player out and kills nothing', async () => {
   assert.equal(await r.clearer.onState({ view: { id: 'r2', claim, waiting: { reason: 'PLAYER_IN_BOX' } } }), 'PLAYER_IN_BOX');
   assert.deepEqual(r.cmds, ['/data get entity @p Pos', '/tp @p 88 90 230']);
   assert.equal(r.clearer.stats.playerMoves, 1);
-  assert.match(r.logs[0], /moved the player from 104,230 to 88,230/);
+  assert.match(r.logs[0], /moved the player from 104,90,230 to 88,90,230/);
 });
 
 test('an answer repeated within the gap is acted on once; later again (the answer is repeated until it clears)', async () => {

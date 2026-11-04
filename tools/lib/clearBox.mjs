@@ -127,7 +127,7 @@ export function createClearer({ cmd, log = () => {}, settle = async () => {}, mi
     if (!t) return false;
     await cmd(`/tp @p ${t.x} ${t.y == null ? '~' : t.y} ${t.z}`);
     stats.playerMoves++;
-    log(`box-clear: ${why}: moved the player ${pos ? `from ${Math.round(pos.x)},${Math.round(pos.z)} ` : ''}to ${Math.round(t.x)},${Math.round(t.z)}, outside the box ${fmt(box)}`);
+    log(`box-clear: ${why}: moved the player ${pos ? `from ${Math.round(pos.x)},${Math.round(pos.y ?? 0)},${Math.round(pos.z)} ` : ''}to ${Math.round(t.x)},${t.y == null ? '~' : Math.round(t.y)},${Math.round(t.z)}, outside the box ${fmt(box)}`);
     return true;
   }
 
