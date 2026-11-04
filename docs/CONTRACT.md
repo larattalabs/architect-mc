@@ -26371,9 +26371,11 @@ and forwarded before the design exists, so the design's roof row is not known wh
 1. **Opt-in, not automatic.** `connector.gate` gains `mech: "none" | "swing"` (default `"none"`), stamped NEXT, in plan/0 and the
    catalogue limits, as GM-a's gatehouse mechanism is opt-in. No recorded plan moves. A plan writer asks for it on a player gate; the
    gatehouse coverage work (PLAN "The remaining gate batch") is unaffected.
-2. **Villagers: refuse.** A `mech: "swing"` gate on a villager edge (a street or road crossing the villager graph uses) is refused
-   `MOVER`, naming the gate and the edge, as a fence gate on a villager edge is today. The swing's movers are `[player]`. A villager
-   crossing keeps the wooden door, so no village loses its passage silently.
+2. **Villagers: fall back, don't refuse (Steward's review).** A `mech: "swing"` gate on a villager edge (a street or road crossing the
+   villager graph uses) is answered `adjusted` back to the wooden door, with a note naming the gate and the edge and deviation `what:
+   mechanism`, the same fallback as item 3. The plan writer cannot see the villager routes, which the check works out, and a refused part
+   on a `required` wall could block the whole wall. `MOVER` stays only for a `rest: closed` swing on a route the plan itself names as a
+   villager route. The swing's movers are `[player]`.
 3. **Geometry.** The swing is exactly 3 wide, 3 high and 3 deep (`swingCells`). A `mech: "swing"` gate is answered `adjusted` to width 3
    and height at least 3 when its run allows (`width + 2`, as today); the wall must be at least 3 thick, with the swing in the 3 planes
    centred on the wall's middle and any extra depth left as the wall's own passage. Where it cannot fit, the gate keeps the wooden door
