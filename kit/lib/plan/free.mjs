@@ -275,7 +275,20 @@ export function resolveFreeZone(env, p, geomOf, o0) {
       const wf = o.noWouldFit ? null : recheck(env, p, geomOf, o, { program: { ...program, layout: 'ring' } });
       return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `the spiral is too steep for a ground road (${failsSeen.find((f) => f.why === 'grade').message})`, evidence: { why: 'grade', layout } }], ...(wf ? { wouldFit: [wf] } : {}) };
     }
-    return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)`, evidence: { layout, tried: tries } }] };
+    // (GH) a free layout stays strict (never read as street); its NO_ROOM carries the street layout as a wouldFit when street would place
+    // the zone (re-checked: the street path for a plain zone, the free path for an outline zone), as C37 does for a forced orientation
+    let alt = null;
+    if (!o.noWouldFit && FREE_LAYOUTS.includes(asked) && !around) {
+      const frag = { program: { ...program, layout: 'street' } };
+      if (draw) {
+        const q = recheck(env, p, geomOf, o, frag);
+        if (q) alt = { entry: q, placed: specs.length, total: specs.length };
+      } else if (o.streetAlt) {
+        const q = o.streetAlt({ ...p, part: { ...zone, ...frag } });
+        if (q) alt = { entry: { part: zone.id, fragment: frag, geometry: { rect: rectArr(q.rect) }, cost: q.cost }, placed: q.placed, total: specs.length };
+      }
+    }
+    return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no ${layout} layout fits the zone here (water, slope, keep-out, the zones before it or the claim)${alt ? `; layout 'street' places ${alt.placed === alt.total ? alt.placed : `${alt.placed} of ${alt.total}`}` : ''}`, evidence: { layout, tried: tries, ...(alt ? { alt: 'street', altLots: alt.placed } : {}) } }], ...(alt ? { wouldFit: [alt.entry] } : {}) };
   }
   return fin(best.L, null, { loc, sketchAt: sk ? { value: best.sketch } : null, move: best.move });
 }

@@ -11747,6 +11747,8 @@ gave ew, 13x14 gave ns).
 
 Fixtures (`kit/test/orientation-c37.test.mjs`, on the asks claim): 4 cottages of 13x14 give ns under auto and ew with `"ew"`, 9x9 give ew under auto and ns with `"ns"` (both program forms); `"auto"` equals omitted (geometry); a 30x90 zone with rotate off and `"ew"` is refused NO_ROOM with `wouldFit` ns, a 90x30 zone with `"ns"` the converse, the fragment applied fits; `layoutStreet` strict and throwing on a bad value; the Regions program takes the param, its auto/omitted IR and seed equal, its roads run along x for ew and z for ns.
 
+**GH: a free layout's NO_ROOM carries a street wouldFit (Noah, 2026-11-04: strict, add a hint).** A zone with `layout: grid` (or ring, spiral, organic) stays strict, like a forced `orientation`: it is never read as street. When it is refused `NO_ROOM` ("no grid layout fits the zone here") and the street path would place at least one of its lots in the zone (the street answer the zone would get with `layout: "street"`, overlap pass included; for an outline zone the free path's street), `wouldFit` holds one entry `{part, fragment: {program: {...program, layout: "street"}}, geometry: {rect}, cost}`, re-checked, the message ends `; layout 'street' places N` (`N of M` when only some), and `evidence` gains `alt: "street"` and `altLots`. When street places no lot, there is no `wouldFit` and the answer is unchanged. Zones that fit are untouched. No schema change: no API version change. Test: `kit/test/gh.test.mjs`.
+
 **C37b: `Library.Entry.cells()`.** Steward pre-checks each design against its lot before `realiseApproved`, which compares an entry's non-air cell count with the top of the lot's approved `costRange`.
 
 | Item | As built |

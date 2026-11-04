@@ -1120,7 +1120,16 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
       // H footprint (KC §5), never cached
       const ignoreBody = p.part.ext?.['architect_mc:unsafe']?.zoneIgnoresBody === true;
-      const z = resolveFreeZone(env, heldPart(p), geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null });
+      const z = resolveFreeZone(env, heldPart(p), geomOf, { taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted.filter((q) => !(ignoreBody && hTaken.has(q)))], keep, tolOf, judge, locatorOf, sketchPoint, rng: ctx.rng ? ctx.rng(`fl:${p.id}`) : null,
+        // (GH) the street path on the zone as the street branch below would run it (overlap pass included): what a free NO_ROOM's wouldFit offers
+        streetAlt: (q) => {
+          const bd = whereParts(q.part.where).some((id) => keep.some((r) => r.part === id));
+          let sz = resolveZone(env, q, geomOf, { keep: bd ? keep : null });
+          const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
+          if (ok(sz) && zonesAccepted.some((a) => meets(grow(sz.rect, ZONE_GAP), a.rect))) sz = resolveZone(env, q, geomOf, { obstacles: zonesAccepted.map((a) => a.rect), keep: bd ? keep : null });
+          const some = ok(sz) || (sz.klass === 'refused' && sz.reasons?.[0]?.evidence?.what === 'count' && sz.layout?.lots?.length > 0);
+          return some && sz.layout?.lots?.length > 0 ? { rect: sz.rect, placed: sz.layout.lots.length, cost: layoutCost(sz.layout) } : null;
+        } });
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
