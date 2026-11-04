@@ -26385,6 +26385,29 @@ and forwarded before the design exists, so the design's roof row is not known wh
    built, charged once, written at once, refunded at group removal), exact at plan time since a swing has no rung. The IR carries it on
    the wall's gate (`meta.walls[].gates[].mechanismWrite`).
 
+### 18. Wall lots when the wall's zone is adjusted (slice WL, 2026-11-04; Steward's report on 0.52.0 / kit 0.48.0; binding, amends K3 §2)
+
+A ring wall (`wall.around`, `wall.edge`) keeps its named lots (`lots[]`, or the lenient `corner_lots`, `gate_lot` and the rest) when
+its zone is adjusted: moved or shrunk by protection, a re-check, or anything else.
+
+1. **Re-site first.** If the ring with its lots on it (K3's band) finds no ring around the zone where the zone was placed, the plan is
+   compiled once more. This time the zone is placed the ring's **reach** in from the claim's margin: the band (or the ring's own
+   `ring[0]` when larger), plus the outer part of the deepest lot's box, plus its apron. The zone answers with the note "placed N in
+   from the claim's margin: its wall's ring and the lots on it need the room", and its own deviations (size, move) as usual. A plan
+   whose rings fit compiles exactly as before.
+2. **Only then back to the zone, said explicitly.** If there is no such place for the zone, or the ring is still refused, the reach is
+   dropped and the lots go back to the zone as K3 §2 says. Each lot gets K1's join deviation, and its note names the real cause: the
+   ring's refusal and the reach that was tried. The note no longer says "its wall placed no line".
+3. **Mechanism outcome.** A named gate lot with a mechanism (`lots[].mech` or the lenient `params.mechanism` / `gate_mech`) that
+   stands on no line of its wall gets the deviation `{what: mechanism, kind, lot, why: off_wall}` on the wall. A note also says that
+   no mechanism is built or billed and that the wall's gates are plain. The wall is not refused for it: refusals stay keyed to the
+   planned size (GM-a "as built").
+4. **K1 gates (GM-b).** A `connector.gate` on the wall (with `mech: swing` or not) is placed on the adjusted ring, re-sited or not, under
+   §17's rules. If the wall finds no ring at all, the gate is `blocked` and both parts appear in the artifact's `dropped`.
+
+Deviations and notes appear in the check answer (`answers[]`), not on the artifact's `parts[]` (unchanged; an artifact field would be an
+API change).
+
 ### Open questions for Steward
 
 (Answered and removed: S-GM-1, the brief lines: Steward passes them word for word, and in GM's RC moves the lot's brief ahead of the

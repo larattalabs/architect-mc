@@ -222,14 +222,15 @@ export function lotBand(named, specOf) {
 }
 
 /**
- * (WL) How far out of its zone's rect a ring with these lots on it reaches: the band (lotBand), then the outer part of the deepest lot's
+ * (WL) How far out of its zone's rect a ring with these lots on it reaches: the band (lotBand, or the ring's own min when larger), then the outer part of the deepest lot's
  * box straddling the line (corners centred on the band's corner square, gate and run boxes on its middle), its apron 1, and never less
  * than the wall's own courses. A zone placed this far in from the claim's margin leaves its wall's ring and the lots on it inside the
  * claim. Null when no lot has a size.
  */
-export function lotReach(named, specOf, t) {
-  const band = lotBand(named, specOf);
-  if (band === null) return null;
+export function lotReach(named, specOf, t, ringMin = 0) {
+  const b0 = lotBand(named, specOf);
+  if (b0 === null) return null;
+  const band = Math.max(b0, ringMin);
   const c = (t - 1) >> 1;
   let out = 0;
   for (const q of named) {

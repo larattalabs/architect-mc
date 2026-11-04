@@ -24,6 +24,9 @@ test('lotReach: the band, the deepest lot\'s outer half, its apron', () => {
   assert.equal(lotReach(named, sp, 2), 10 + 0 + 7 + 1);
   assert.equal(lotReach([{ lot: 't', at: 'corner' }], sp, 2), 9 + 6 + 1);
   assert.equal(lotReach([{ lot: 'x', at: 'gate' }], sp, 2), null);
+  // a ring whose own min is past the band reaches from there; thickness 3 centres the band (c 1)
+  assert.equal(lotReach(named, sp, 2, 20), 20 + 0 + 7 + 1);
+  assert.equal(lotReach(named, sp, 3), 10 + 1 + 7 + 1);
 });
 
 for (const survival of [true, false]) {
@@ -77,4 +80,38 @@ test('the re-check is deterministic: 3 checks of each case give one answer set a
     assert.ok(rs.every((x) => x.artifactSha && x.artifactSha === rs[0].artifactSha), 'one artifact sha');
     assert.ok(rs.every((x) => JSON.stringify(x.check.parts) === JSON.stringify(rs[0].check.parts)), 'one answer set');
   }
+});
+
+// ((GM-b, CONTRACT GM §17) a K1 swing gate on the same wall, 3 thick: placed again on the adjusted ring with its swing, re-sited or not;
+// a wall that finds no ring at all leaves the gate blocked (the artifact's dropped), never a silent wooden door)
+const swing = (f, edit = () => {}) => {
+  const g = JSON.parse(JSON.stringify(f));
+  g.plan.connectors[0].thickness = 3;
+  g.plan.connectors.push({ id: 'east_gate', kind: 'gate', at: { anchor: 'claim_e' }, mech: 'swing' });
+  edit(g);
+  return g;
+};
+
+test('GM-b: a swing gate on the wall whose zone the re-check moved keeps its swing (re-sited and cannot-re-site)', async () => {
+  for (const [name, f] of [['re-sited', swing(fx())], ['back to the zone', swing(hard(fx()))]]) {
+    const r = await run(f, { survival: true });
+    assert.equal(r.check.overall, 'READY', name);
+    const g = part(r, 'east_gate'), w = part(r, 'curtain_wall');
+    assert.equal(g.class, 'fits', `${name}: ${JSON.stringify(g.deviations)}`);
+    assert.equal(g.geometry.wall, 'curtain_wall');
+    assert.equal(g.geometry.mechanism?.kind, 'swing', name);
+    assert.ok(w.geometry.gates.some((q) => q.id === 'east_gate'), `${name}: on the ring`);
+    assert.deepEqual((r.res.ir.gateMechanisms ?? []).map((q) => q.gate), ['east_gate'], name);
+    if (name === 're-sited') assert.equal(wallLots(r).length, 5);
+    else assert.ok(w.deviations.some((d) => d.what === 'mechanism' && d.lot === 'gatehouse_1' && d.why === 'off_wall'));
+  }
+});
+
+test('GM-b: a wall that finds no ring at all: the swing gate is blocked by it, both in the artifact\'s dropped', async () => {
+  const f = swing(fx(), (g) => { g.plan.connectors[0].where.around.ring = [60, 61]; g.plan.connectors[0].required = false; });
+  const r = await run(f, { survival: true });
+  assert.equal(part(r, 'curtain_wall').class, 'refused');
+  assert.equal(part(r, 'east_gate').class, 'blocked');
+  assert.deepEqual(r.artifact.dropped.map((d) => [d.part, d.class]).sort(), [['curtain_wall', 'refused'], ['east_gate', 'blocked']]);
+  assert.equal(r.res.ir.gateMechanisms, undefined);
 });

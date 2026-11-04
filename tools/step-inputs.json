@@ -175,7 +175,8 @@
     "kit/test/voc-farfluid.test.mjs",
     "kit/test/vocab-rules.test.mjs",
     "kit/test/vocab.test.mjs",
-    "kit/test/vocc.test.mjs"
+    "kit/test/vocc.test.mjs",
+    "kit/test/wl.test.mjs"
    ],
    "closure": [
     "kit/bibles/rustic/components.mjs",
@@ -563,6 +564,7 @@
     "kit/test/vocab-rules.test.mjs",
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
+    "kit/test/wl.test.mjs",
     "kit/tools/BlockDump.java",
     "kit/tools/VocabDump.java",
     "kit/tools/blocks.template.mjs",
@@ -714,10 +716,6 @@
    ],
    "dynamic": [
     {
-     "from": "kit/tools/gen-vocab.mjs",
-     "expr": "`data:text/javascript"
-    },
-    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -744,6 +742,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "kit/tools/gen-vocab.mjs",
+     "expr": "`data:text/javascript"
     },
     {
      "from": "tools/lib/step-coverage.mjs",
@@ -1254,6 +1256,7 @@
     "kit/test/vocab-rules.test.mjs",
     "kit/test/vocab.test.mjs",
     "kit/test/vocc.test.mjs",
+    "kit/test/wl.test.mjs",
     "kit/tools/components.mjs",
     "kit/tools/preset-builds.mjs",
     "kit/tools/slices.mjs",

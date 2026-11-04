@@ -483,7 +483,7 @@ export function planWalls(K) {
       st.sitedIds = new Set(st.siting.map((q) => q.lot));
       // ((WL) the ring's zone, its lots and how far out of the zone it reaches with them: a refused ring is compiled once more with its
       // zone placed that far in from the claim's margin (compile.mjs runCheck), before its lots go back to the zone)
-      if (zid && st.siting.length) (K.ringSiting ??= new Map()).set(p.id, { zone: zid, lots: st.siting.map((q) => q.lot), reach: lotReach(st.siting, K.lotSpec, st.thickness) });
+      if (zid && st.siting.length) (K.ringSiting ??= new Map()).set(p.id, { zone: zid, lots: st.siting.map((q) => q.lot), reach: lotReach(st.siting, K.lotSpec, st.thickness, Array.isArray(p.part.where?.around?.ring) ? p.part.where.around.ring[0] : st.form === 'around' ? WALL_DEFAULTS.ring[0] : 0) });
     }
     // ((7a K2, §1) a walk needs thickness >= walk.width + 1 (the outer course is the parapet): a given thickness too thin is refused
     // NO_ROOM {why: walk}, the thicker wall its wouldFit (re-checked alone)
