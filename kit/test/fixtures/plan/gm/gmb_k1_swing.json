@@ -4,7 +4,7 @@
  "lotEntries": {
   "h1": "rs_hut",
   "h2": "rs_hut",
-  "h3": "rs_shed"
+  "h3": "rs_hut"
  },
  "covers": [
   "connector.wall",
@@ -38,10 +38,10 @@
       },
       {
        "id": "h3",
-       "type": "shed",
+       "type": "house",
        "size": [
-        7,
-        7
+        9,
+        9
        ]
       }
      ]
