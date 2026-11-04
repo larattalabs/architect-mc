@@ -9,7 +9,6 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { testConcurrencyArgs } from './cpu-budget.mjs';
 import { kitReuse } from './kit-reuse.mjs';
-import { mobSelector } from './clearBox.mjs';
 
 /**
  * Registers the GM-a steps on `steps`. `h`: the driver's helpers {L, call, check, cmd, log, root, OUT, json, snap, stateAt, freeze,
@@ -105,8 +104,8 @@ export async function registerGmA(steps, h) {
     const find = (o) => (o && typeof o === 'object' ? (Array.isArray(o.lots) && o.lots.some((l) => l?.onWall)) ? o.lots : Object.values(o).map(find).find(Boolean) : null);
     return find(a) ?? [];
   }
-  // (slice OC) everything but the player and the villagers (the MOVER walks); the waits are cleared by the shared watcher (tools/lib/clearBox.mjs)
-  const killMobs = () => cmd(`/kill ${mobSelector(null)}`);
+  // (slice OC) the fixture tidy stays as it was; the waits are cleared by the shared watcher (tools/lib/clearBox.mjs)
+  const killMobs = () => cmd('/kill @e[type=!minecraft:player]');
   const waitPlaced = (region) => L.waitRegion(region, 3_600_000);
 
   /** A castle fixture checked and realised with the stub designs: {s, ck, sha, lots, gl, m, region, st, pre, box}. */

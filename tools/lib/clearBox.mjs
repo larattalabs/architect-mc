@@ -16,6 +16,8 @@ export const DEFAULT_EXEMPT_TYPES = Object.freeze(['minecraft:villager']);
 export const KILL_MARGIN = 2;
 export const PLAYER_MARGIN = 12;
 const WORLD_Y = [-64, 320];
+/** The longest walk out of a claim; farther than this the player goes up instead (playerTarget). */
+export const MAX_WALK = 40;
 
 const withNs = (t) => (String(t).includes(':') ? String(t) : `minecraft:${t}`);
 
@@ -69,12 +71,17 @@ export function playerTarget(box, pos = null, margin = PLAYER_MARGIN) {
   if (!pos) return { x: (box.x0 + box.x1) / 2, z: box.z1 + 1 + margin, y: null }; // unknown position: past the south edge, as Steward's herder does
   const inside = pos.x >= big.x0 - margin / 2 && pos.x <= big.x1 + 1 + margin / 2 && pos.z >= big.z0 - margin / 2 && pos.z <= big.z1 + 1 + margin / 2;
   if (!inside) return null;
+  // above the claim's own height range nothing of it is in the way
+  if (pos.y != null && box.y1 < WORLD_Y[1] - 20 && pos.y > box.y1 + 4) return null;
   const d = [
     { x: big.x0 - margin, z: pos.z, away: pos.x - big.x0 },
     { x: big.x1 + 1 + margin, z: pos.z, away: big.x1 + 1 - pos.x },
     { x: pos.x, z: big.z0 - margin, away: pos.z - big.z0 },
     { x: pos.x, z: big.z1 + 1 + margin, away: big.z1 + 1 - pos.z },
   ].sort((a, b) => a.away - b.away)[0];
+  // a big claim (a mega region, a scenario) has its edge far away: the way out would unload the ground of the lots still to place. Then the
+  // player goes straight up past the claim's top instead (same x and z, so the same chunks stay loaded).
+  if (d.away + margin > MAX_WALK && pos.y != null && box.y1 < WORLD_Y[1] - 20) return { x: pos.x, z: pos.z, y: box.y1 + 8 };
   return { x: d.x, z: d.z, y: pos.y ?? null };
 }
 
@@ -96,7 +103,7 @@ export function parsePos(text) {
  * The clearer. `cmd(string)` runs a server command and answers {messages?}; `log(string)` logs. Everything it did is in `stats`.
  * `exempt` (types, tags) and `pause()` let a step that tests an entity, or a wait itself, keep the clearer off it.
  */
-export function createClearer({ cmd, log = () => {}, settle = async () => {}, minGapMs = 3_000, now = () => Date.now() }) {
+export function createClearer({ cmd, log = () => {}, settle = async () => {}, minGapMs = 3_000, now = () => Date.now(), spawnOff = false }) {
   const stats = { clears: 0, playerMoves: 0, killedCmds: 0, byReason: {}, events: [] };
   const state = { paused: 0, types: new Set(), tags: new Set(), last: new Map() };
   const ex = () => ({ types: [...state.types], tags: [...state.tags] });
@@ -147,6 +154,8 @@ export function createClearer({ cmd, log = () => {}, settle = async () => {}, mi
     async preClear(claim, why = 'before the realise') {
       if (state.paused) return false;
       const box = normalizeBox(claim);
+      // natural spawning off, only in the worlds a harness owns (its caller says so with spawnOff): a polar bear that spawned onto a lot stalled a run
+      if (spawnOff) await cmd('/gamerule spawn_mobs false');
       await clearMobs(box && expandBox(box, KILL_MARGIN), why);
       if (box) await movePlayer(box, why);
       return true;

@@ -2532,7 +2532,11 @@ the mod. So every harness that realises lots clears the box itself, and no run c
 - **What it clears.** Mobs and drops are **killed**, not moved: `/kill` of every entity in the claim's box (plus 2 blocks) except the
   player, villagers and whatever a step exempts; then dropped items and experience orbs in the same box (a drop in a lot holds it up
   too). The player (the dev bot) is **moved** just outside the claim plus 12 blocks, along the shortest way out and at its own height,
-  so the ground it stands on stays loaded. An unreadable claim moves the player 48 blocks up instead. Everything is logged
+  so the ground it stands on stays loaded; when that walk would pass 40 blocks (a mega region or a scenario claim) it goes straight up
+  to 8 blocks over the claim's top instead (same x and z, same chunks). An unreadable claim moves the player 48 blocks up. Spectators
+  are skipped by `Occupancy.scan` (the dev bot plays as one), so `PLAYER_IN_BOX` only happens for a creative or survival player.
+  Unlike Steward's list (pig, cow, sheep, ...), the kill is everything but the exempt, which also takes the polar bear that stalled
+  megaB; a realise's pre-clear also sets `spawn_mobs false` (the gate worlds are the harness's own). Everything is logged
   (`box-clear: <region> waits OCCUPIED: killed mobs and drops in the box [...]`) and counted in `boxClear.stats` (`byReason`,
   `playerMoves`, `events`).
 - **When.** (1) Before the wait: `run6b.realise()` (and gate6a's own) clears the new region's claim before it returns. (2) On every
@@ -2542,7 +2546,8 @@ the mod. So every harness that realises lots clears the box itself, and no run c
   tick, so it is **re-armed after any client or server restart** with no driver code (the log says "watcher re-armed on the new
   client"). A repeated answer is acted on at most once per 3 s per region.
 - **Exemptions.** Villagers are never removed (gm-ingame's MOVER walks). A step that tests another entity wraps itself in
-  `L.boxClear.exempt({ types: ['iron_golem'], tags: ['mover'] }, async () => {...})`. A step that tests the wait itself (a mob
+  `L.boxClear.exempt({ types: ['iron_golem'], tags: ['mover'] }, async () => {...})`; run6b already exempts the tags the drivers' own
+  fixtures carry (`gmf`, `gmp`, `ha_stand`, `hyb_stand`, `irr_farmer`, `hyc_push`). A step that tests the wait itself (a mob
   that must hold a lot up) wraps itself in `L.boxClear.pause(async () => {...})`; `ARCHITECT_BOX_WATCH=0` pauses it for a whole
   run and is never used in a gate. gate4d (own client, batches) tests the waits on purpose and keeps its own manual clears.
 - **Drivers.** Every `run6b` driver gets all of this through `realise`/`waitRegion`/the watcher; gate6a (megaA, megaB, own client) and
@@ -2550,4 +2555,5 @@ the mod. So every harness that realises lots clears the box itself, and no run c
   scenarios were removed; the plain between-step clears stay (they tidy a fixture, they are not the stall guard).
 - **The check.** Step `6b-smoke` (smoke in `tools/gate6b.mjs`) now also realises a plan with a pig, cow and sheep in three lots, the
   player in a fourth and a villager at the claim corner, with the pre-clear paused: it must end `PLACED` within 10 minutes, both
-  waits must have been answered and cleared, and the villager must still be there.
+  waits must have been answered and cleared, and the villager must still be there (the bot is made creative for this check: spectators
+  never block).

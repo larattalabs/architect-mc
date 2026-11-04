@@ -130,8 +130,9 @@ steps.smoke = async () => {
   const before = { o: boxClear.stats.byReason.OCCUPIED ?? 0, p: boxClear.stats.byReason.PLAYER_IN_BOX ?? 0 };
   const rOc = await boxClear.pause(async () => {
     for (const [i, kind] of ['pig', 'cow', 'sheep'].entries()) if (lots3[i]) await cmd(`/summon minecraft:${kind} ${mid(lots3[i].box).join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
-    if (lots3[3]) { const m = mid(lots3[3].box); await cmd(`/tp @s ${m.join(' ')}`); }
-    await cmd(`/summon minecraft:villager ${claim[0] + 1.5} ${lots3[0] ? lots3[0].box.minY + 2 : 70} ${claim[1] + 1.5} {NoAI:1b,PersistenceRequired:1b,Tags:["oc_exempt"]}`);
+    // the dev bot plays as a spectator, and Occupancy.scan skips spectators: it stands in the lot as a creative player for this check
+    if (lots3[3]) { const m = mid(lots3[3].box); await cmd('/gamemode creative @s'); await cmd(`/tp @s ${m.join(' ')}`); }
+    await cmd(`/summon minecraft:villager ${claim[0] + 1.5} ${lots3[0] ? lots3[0].box.minY + 2 : 70} ${claim[1] + 1.5} {NoAI:1b,Invulnerable:1b,PersistenceRequired:1b,Tags:["oc_exempt"]}`);
     return realise(p3.planId, { lotEntries: LOT_ENTRIES, fitLots: true });
   });
   const tOc = Date.now();
@@ -142,6 +143,7 @@ steps.smoke = async () => {
   check(done.o >= 1 && (!lots3[3] || done.p >= 1), `box-clear: both waits happened and were cleared (OCCUPIED ${done.o}, PLAYER_IN_BOX ${done.p})`, { events: boxClear.stats.events });
   check(/\[/.test(JSON.stringify(vil?.messages ?? '')) && !/No entity/i.test(JSON.stringify(vil?.messages ?? '')), 'box-clear: the villager in the claim was not removed', vil);
   await cmd('/kill @e[type=minecraft:villager,tag=oc_exempt]');
+  await cmd('/gamemode spectator @s');
   await call('dev.region.remove', { region: rOc }, 3_600_000);
   await settle(3000);
   await leaveWorld();

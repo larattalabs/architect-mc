@@ -49,6 +49,13 @@ test('the player moves to just past the nearest edge, at its own height; a clear
   assert.deepEqual(playerTarget(box, null), { x: 131.5, z: 276, y: null }); // unknown position: past the south edge
 });
 
+test('a big claim sends the player straight up, not hundreds of blocks away; above the claim nothing moves', () => {
+  const big = normalizeBox({ minX: 0, minY: -27, minZ: 0, maxX: 399, maxY: 167, maxZ: 399 });
+  assert.deepEqual(playerTarget(big, { x: 200, y: 90, z: 200 }), { x: 200, z: 200, y: 175 });
+  assert.deepEqual(playerTarget(big, { x: 3, y: 90, z: 200 }), { x: -12, z: 200, y: 90 }); // near an edge: walks out
+  assert.equal(playerTarget(big, { x: 200, y: 180, z: 200 }), null);
+});
+
 test('only OCCUPIED and PLAYER_IN_BOX answers count, in the three shapes the drivers see', () => {
   assert.equal(waitReason({ view: { waiting: { reason: 'OCCUPIED' } } }), 'OCCUPIED');
   assert.equal(waitReason({ waiting: { reason: 'PLAYER_IN_BOX' } }), 'PLAYER_IN_BOX');
@@ -118,6 +125,15 @@ test('preClear empties the claim and moves the player out before the realise', a
   await r.clearer.preClear(claim, 'before r5');
   assert.ok(r.cmds[0].startsWith('/kill @e[type=!minecraft:player'));
   assert.ok(r.cmds.some((c) => c.startsWith('/tp @p ')));
+});
+
+test('spawnOff turns natural spawning off on a pre-clear, only when the caller owns the world', async () => {
+  const cmds = [];
+  const mk = (spawnOff) => createClearer({ cmd: async (c) => { cmds.push(c); return { messages: [] }; }, spawnOff });
+  await mk(false).preClear(claim);
+  assert.ok(!cmds.some((c) => c.includes('gamerule')));
+  await mk(true).preClear(claim);
+  assert.ok(cmds.includes('/gamerule spawn_mobs false'));
 });
 
 test('an unreadable claim on PLAYER_IN_BOX still moves the player (48 up)', async () => {

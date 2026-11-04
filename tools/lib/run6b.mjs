@@ -72,7 +72,10 @@ export const boxClear = createClearer({
   cmd: (c) => state.dev.call('dev.command', { cmd: c }, { timeoutMs: 120_000 }),
   settle: (ms) => state.dev.call('dev.wait', { ms }, { timeoutMs: ms + 20_000 }),
   log: (m) => log(`  ${m}`),
+  spawnOff: true, // the gate worlds are the harness's own
 });
+// fixtures the drivers tag (a gm armor stand and plate villager, the h/hy/irr stand villagers, hy-c's push stand): never cleared
+boxClear.exempt({ tags: ['gmf', 'gmp', 'ha_stand', 'hyb_stand', 'irr_farmer', 'hyc_push', 'oc_exempt'] });
 if (process.env.ARCHITECT_BOX_WATCH === '0') boxClear.pause();
 export const boxWatch = createWatcher({
   list: async () => (await state.dev.call('dev.region.list', {}, { timeoutMs: 60_000 })).regions,
