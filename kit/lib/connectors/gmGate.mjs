@@ -255,12 +255,14 @@ export const K1_SWING = Object.freeze({ width: 3, height: 3, depth: 3 });
  * (GM-b, §17 item 3) A K1 wall gate's swing, in gmCircuit's local frame (u across the opening, d in from the wall's outer face, r up from
  * the gate's floor row): swingCells (two iron doors, the mullion, the transom; the button outside on d 0, the lever and plate inside on
  * d 2), plus the structure block over the transom in the door plane on every row of a gate `height` over 3 (the opening above the
- * transom sealed), and over the mullion on the arch's middle row (`arch`: K1's arch frame leaves the cell over a 3-wide gate's middle
+ * transom sealed), the sill under the door plane (the walk's row), and over the mullion on the arch's middle row (`arch`: K1's arch frame leaves the cell over a 3-wide gate's middle
  * column open). Everything else of the opening (the lanes in front of and behind the doors) is the wall's. Pure.
  */
 export function k1SwingPlan(mats, { height = K1_SWING.height, arch = false } = {}) {
   const p = mechanismPlan('swing', { depth: K1_SWING.depth, mats });
-  const extra = [];
+  // (the sill: the walk's cells under the door plane, the structure block. A path or grass block under a full block turns to dirt on the
+  // first update (a door's swing gives one), which the walk's own cell site would then count as a player's block; the sill is the swing's)
+  const extra = [-1, 0, 1].map((u) => [u, 1, -1, p.structure]);
   for (let r = K1_SWING.height; r < height; r++) for (const u of [-1, 0, 1]) extra.push([u, 1, r, p.structure]);
   if (arch) extra.push([0, 1, Math.max(height, K1_SWING.height), p.structure]);
   // (the transom's connections as the server settles them: toward the mullion and the jambs, not toward the open lanes in front of and

@@ -50,7 +50,8 @@ test('k1SwingPlan: the doors in the middle plane, the button outside on the mull
   assert.match(at(0, 0, 1), /button/);
   assert.match(at(0, 2, 1), /lever/);
   assert.match(at(-1, 2, 0), /pressure_plate/);
-  for (const c of p.base) assert.ok(Math.abs(c[0]) <= 1 && c[1] >= 0 && c[1] <= 2 && c[2] >= 0 && c[2] <= 2, `${c}: in the 3 x 3 x 3`);
+  for (const c of p.base) assert.ok(Math.abs(c[0]) <= 1 && c[1] >= 0 && c[1] <= 2 && c[2] >= -1 && c[2] <= 2, `${c}: in the 3 x 3 x 3 and its sill`);
+  for (const u of [-1, 0, 1]) assert.equal(at(u, 1, -1), gmMatsOf({}).structure, `${u}: the sill under the door plane`);
   const tall = k1SwingPlan(gmMatsOf({}), { height: 5, arch: true });
   const ta = (u, d, r) => tall.base.find((c) => c[0] === u && c[1] === d && c[2] === r)?.[3] ?? null;
   for (const r of [3, 4]) for (const u of [-1, 0, 1]) assert.equal(ta(u, 1, r), gmMatsOf({}).structure, `${u},1,${r}: sealed over the transom`);
@@ -105,7 +106,7 @@ test('gmb_k1_swing: READY, the gate fits with its swing; the IR\'s gateMechanism
   const meta = r.res.meta.walls[0].gates.find((q) => q.id === 'east_gate');
   const cols = new Set(meta.cells.map(([x, z]) => `${x},${z}`));
   const mine = new Set();
-  for (let i = 0; i < gw[0].base.length; i += 4) { const [x, y, z] = gw[0].base.slice(i, i + 3); assert.ok(cols.has(`${x},${z}`), `${x},${z}: in the opening`); assert.ok(y > meta.y, `${x},${y},${z}: over the walk`); mine.add(`${x},${y},${z}`); }
+  for (let i = 0; i < gw[0].base.length; i += 4) { const [x, y, z] = gw[0].base.slice(i, i + 3); assert.ok(cols.has(`${x},${z}`), `${x},${z}: in the opening`); assert.ok(y >= meta.y, `${x},${y},${z}: the sill or over the walk`); mine.add(`${x},${y},${z}`); }
   for (const op of wallPart.ops) if (op.cols) for (let i = 0; i < op.cols.length; i += 5) for (let y = op.cols[i + 2]; y <= op.cols[i + 3]; y++) assert.ok(!mine.has(`${op.cols[i]},${y},${op.cols[i + 1]}`), `the wall writes no swing cell (${op.cols[i]},${y},${op.cols[i + 1]})`);
   assert.deepEqual(meta.mechanismWrite.base, gw[0].base);
   // the gate's bill holds the swing: 2 iron doors, a lever, the button and the plate
