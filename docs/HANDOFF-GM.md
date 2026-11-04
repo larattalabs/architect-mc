@@ -1,5 +1,31 @@
 # GM handoff
 
+## GM-b (K1 wall gates, CONTRACT GM §4): blocked on questions, nothing built (2026-11-03)
+
+Branch `slice/GMb` from main 99d8d4b7. The whole GM-b spec is one bullet of §4: "K1a's wooden double door becomes the iron swing door
+pair and the button; a run needs `width + 2` as today. A K1 gate in a wall of thickness under 3 keeps its wooden door." The four
+questions below change the plan/0 schema, the villager graph or what Steward's plans get, so they need an answer before any code.
+No ports were used, no daemon or client was started and no run worktree was made.
+
+1. **Automatic or opt-in.** Read literally, every `door: "door"` gate in a wall at least 3 thick converts. GM-a was opt-in only, and
+   `connector.gate` has no mechanism member (its catalogue limit `doors` is `none | door | fence_gate`). Opt-in needs a new member
+   (`mech: "swing"` on the gate, or `door: "iron"`): a plan/0 schema, catalogue-limits and Steward question. Fact: no committed fixture
+   has a wall 3 or more thick (default thickness 2, a walk's default 2), so "automatic" moves no recorded plan, and also reaches none of
+   them (as with gatehouse coverage, PLAN "The remaining gate batch").
+2. **Villagers.** K1 gates are street and road crossings villagers walk; a wooden door passes them. §6: a villager route through a
+   `rest: closed` swing answers `MOVER` (GM-a gives no MOVER today, as built). Automatic conversion makes a walled village's thick-wall
+   gate either a refusal or a silent loss of villager passage. Pick one: (a) refuse `MOVER` (as a fence gate on a villager edge,
+   wall.mjs R17); (b) keep the wooden door on a villager crossing, with a deviation; (c) accept player-only, the gate's movers `[player]`.
+3. **Geometry.** `swingCells` is exactly 3 wide (two doors and a mullion), 3 high (2 door rows and a transom) and 3 deep (button d 0,
+   doors d 1, plate and lever d 2). A K1 door gate defaults to width 2 (wall.mjs:828; widths 1-5, heights 2-6). Proposal: the swing only
+   when the gate is 3 wide and at least 3 high in a wall exactly 3 thick (else the wooden door, deviation `mechanism`), or a width cap at 3
+   as K3's `pwOf`; a 2-wide gate could take two doors with no mullion. Which?
+4. **Realise and survival (a proposal, no question unless the coordinator objects).** A K1 wall is a region infra part (InfraJob,
+   `Policy.CELL`), and GM-a found CELL counts a flipped lever as "changed since". So the swing gets its own region cells item
+   `mech:<gate>` (`architect:mechanism`, BOX, LAYER) after the wall part, written with no update, restored no-update/no-drop, billed by
+   MechCharges (held until the wall part is built, charged at once, written at once, refund at group removal). A swing has one case and no
+   bind-time rung, so its bill is exact at plan time. The IR carries it on the wall's gate (`meta.walls[].gates[].mechanismWrite`), not a lot.
+
 ## GM-a2 (CONTRACT GM §16 items 1, 3, 4; main 05611639 merged): slice tier PASS, verifier PASS, ready to merge
 
 **State (2026-11-03):** built and gated (DEV MODE). No API type, method or reason added; additive members only (`mechanism.cost`, the
