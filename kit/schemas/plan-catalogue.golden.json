@@ -1,7 +1,7 @@
 {
  "catalogueVersion": 15,
- "api": "1.46.0",
- "kitVersion": "0.48.0",
+ "api": "1.47.0",
+ "kitVersion": "0.49.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -269,7 +269,7 @@
   },
   {
    "id": "connector.gate",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.47.0",
    "schemaVersion": 2,
    "state": "supported",
    "limits": {

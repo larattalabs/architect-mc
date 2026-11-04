@@ -1340,6 +1340,7 @@ The plan is in docs/NEXT-FEATURES.md. At most 3 gate lanes at once.
 - GR street extension and new lot placement (N-GR-1, N-GR-2; gallery https://claude.ai/artifact/JAfWetdckqZnmPgE2HHu8T): approved (2026-11-04).
 - K3 castle wall lots (N-K3-1; gallery https://claude.ai/artifact/X1tdDP5xUzEGyXefe58Ywo, the 10-26 run): approved (2026-11-04).
 - GM split sliding grate (N-GM-1; gallery https://claude.ai/artifact/JpzbuVYu4argcBroMW6WzU): approved (2026-11-03).
+- GM-b K1 swing gate (the "K1 swing" tab of the same gallery): approved (2026-11-04).
 
 ## GM contract notes (Steward, 2026-10-27), to fold into the GM contract before it builds
 - The mechanism envelope is merged into the lot's existing `DesignRequest.Reserved` entry in the artifact (Steward option a: zero Steward change). For the design, the envelope cells are hard "never write", like the existing set; only Architect's region writes the mechanism blocks.
@@ -1426,3 +1427,12 @@ runner's in-game steps, the gm/k3/gj drivers, megaA, scenarios, the nightly) cle
 before it waits, and again on any OCCUPIED or PLAYER_IN_BOX answer, so no run can stall on it. Steward's e2e does the same (gj-rc fixed its
 animal watch after a restart); both sides use one shared rule (slice OC).
 **Built (slice OC):** `tools/lib/clearBox.mjs`, wired into `run6b` (realise, waitRegion, a run-wide watcher re-armed on restart) and gate6a; docs/GATES.md "Harnesses clear the box". No product code changed.
+
+## v0.52.0 and v0.53.0: GC, GM-b and WL (2026-11-04)
+- v0.52.0 (GC): plan-check notes for a gatehouse that is not on its wall or is the wrong size. Steward's coverage run on 0.52.0 (Noah's cap $1.50; spent $0.60, 8 walled asks, claude-sonnet-5-5) named 11 of 11 gatehouses on their wall (4 before); GC notes 1 -> 0.
+- OC (tools only, no version bump): the harnesses clear occupied lots with one re-arming watcher per run (see GATES.md).
+- v0.53.0: GM-b K1 swing gate (§17, API 1.47.0) and WL (§18): a refused ring with lots re-sites its zone in from the claim margin, else the lots go back with the real cause and a `mechanism {why: off_wall}` deviation. Steward RC on slice/WL 9d1aa412: PASS (steward-mc ARCHITECT-ASKS "7a WL + GM-b RC").
+- Next: v0.53.1 = GH (Noah, 2026-11-04: grid stays strict; a free layout's NO_ROOM carries a one-step street wouldFit that drops the lots street can't place).
+- Queued, Steward's ask: announce a mechanism's bill wait (ITEM_WAITING with a waitsFor.say naming the missing items on MechCharges.hold), and give the first wait sentence a proper subject ("Main gatehouse waits for Main gatehouse to be built").
+- Open for Noah: should the auto gates a wall cuts also get a swing (today only named gates with `mech: swing`)?
+- Later idea: try a smaller grid (fewer blocks or lots per block) before refusing NO_ROOM.
