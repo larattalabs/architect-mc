@@ -128,22 +128,31 @@ steps.smoke = async () => {
   const lots3 = readPlanJson(p3.planId, 'ir.json').lots;
   const mid = (b) => [Math.floor((b.minX + b.maxX) / 2) + 0.5, b.minY + 2, Math.floor((b.minZ + b.maxZ) / 2) + 0.5];
   const before = { o: boxClear.stats.byReason.OCCUPIED ?? 0, p: boxClear.stats.byReason.PLAYER_IN_BOX ?? 0 };
-  const rOc = await boxClear.pause(async () => {
-    for (const [i, kind] of ['pig', 'cow', 'sheep'].entries()) if (lots3[i]) await cmd(`/summon minecraft:${kind} ${mid(lots3[i].box).join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
-    // the dev bot plays as a spectator, and Occupancy.scan skips spectators: it stands in the lot as a creative player for this check
-    if (lots3[3]) { const m = mid(lots3[3].box); await cmd('/gamemode creative @s'); await cmd(`/tp @s ${m.join(' ')}`); }
-    await cmd(`/summon minecraft:villager ${claim[0] + 1.5} ${lots3[0] ? lots3[0].box.minY + 2 : 70} ${claim[1] + 1.5} {NoAI:1b,Invulnerable:1b,PersistenceRequired:1b,Tags:["oc_exempt"]}`);
-    return realise(p3.planId, { lotEntries: LOT_ENTRIES, fitLots: true });
-  });
+  let rOc;
+  let stOc;
+  let vil;
+  let done;
   const tOc = Date.now();
-  const stOc = await waitRegion(rOc, 600_000);
-  const vil = await cmd('/data get entity @e[type=minecraft:villager,tag=oc_exempt,limit=1] Pos');
-  const done = { o: (boxClear.stats.byReason.OCCUPIED ?? 0) - before.o, p: (boxClear.stats.byReason.PLAYER_IN_BOX ?? 0) - before.p };
-  check(stOc.view.state === 'PLACED', `box-clear: lots with animals and the player in them place (${stOc.view.state}, ${Math.round((Date.now() - tOc) / 1000)} s; ${done.o} OCCUPIED and ${done.p} PLAYER_IN_BOX answers cleared)`, done);
-  check(done.o >= 1 && (!lots3[3] || done.p >= 1), `box-clear: both waits happened and were cleared (OCCUPIED ${done.o}, PLAYER_IN_BOX ${done.p})`, { events: boxClear.stats.events });
-  check(/\[/.test(JSON.stringify(vil?.messages ?? '')) && !/No entity/i.test(JSON.stringify(vil?.messages ?? '')), 'box-clear: the villager in the claim was not removed', vil);
-  await cmd('/kill @e[type=minecraft:villager,tag=oc_exempt]');
-  await cmd('/gamemode spectator @s');
+  try {
+    rOc = await boxClear.pause(async () => {
+      for (const [i, kind] of ['pig', 'cow', 'sheep'].entries()) if (lots3[i]) await cmd(`/summon minecraft:${kind} ${mid(lots3[i].box).join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
+      // the dev bot plays as a spectator, and Occupancy.scan skips spectators: it stands in the lot as a creative player for this check
+      if (lots3[3]) { const m = mid(lots3[3].box); await cmd('/gamemode creative @s'); await cmd(`/tp @s ${m.join(' ')}`); }
+      await cmd(`/summon minecraft:villager ${claim[0] + 1.5} ${lots3[0] ? lots3[0].box.minY + 2 : 70} ${claim[1] + 1.5} {NoAI:1b,Invulnerable:1b,PersistenceRequired:1b,Tags:["oc_exempt"]}`);
+      return realise(p3.planId, { lotEntries: LOT_ENTRIES, fitLots: true });
+    });
+    stOc = await waitRegion(rOc, 600_000);
+    vil = await cmd('/data get entity @e[type=minecraft:villager,tag=oc_exempt,limit=1] Pos');
+    done = { o: (boxClear.stats.byReason.OCCUPIED ?? 0) - before.o, p: (boxClear.stats.byReason.PLAYER_IN_BOX ?? 0) - before.p };
+    check(stOc.view.state === 'PLACED', `box-clear: lots with animals and the player in them place (${stOc.view.state}, ${Math.round((Date.now() - tOc) / 1000)} s; ${done.o} OCCUPIED and ${done.p} PLAYER_IN_BOX answers cleared)`, done);
+    check(done.o >= 1 && (!lots3[3] || done.p >= 1), `box-clear: both waits happened and were cleared (OCCUPIED ${done.o}, PLAYER_IN_BOX ${done.p})`, { events: boxClear.stats.events });
+    check(/\[/.test(JSON.stringify(vil?.messages ?? '')) && !/No entity/i.test(JSON.stringify(vil?.messages ?? '')), 'box-clear: the villager in the claim was not removed', vil);
+
+  } finally {
+    await cmd('/kill @e[type=minecraft:villager,tag=oc_exempt]');
+    await cmd('/gamemode spectator @s');
+  }
+
   await call('dev.region.remove', { region: rOc }, 3_600_000);
   await settle(3000);
   await leaveWorld();

@@ -2539,7 +2539,7 @@ the mod. So every harness that realises lots clears the box itself, and no run c
   megaB; a realise's pre-clear also sets `spawn_mobs false` (the gate worlds are the harness's own). Everything is logged
   (`box-clear: <region> waits OCCUPIED: killed mobs and drops in the box [...]`) and counted in `boxClear.stats` (`byReason`,
   `playerMoves`, `events`).
-- **When.** (1) Before the wait: `run6b.realise()` (and gate6a's own) clears the new region's claim before it returns. (2) On every
+- **When.** (1) Before the wait: `run6b.realise()` (and gate6a's own) clears the new region's claim before it returns (mobs and drops; the player is moved only when it is not a spectator, since spectators block nothing). (2) On every
   answer: `waitRegion` clears on each `OCCUPIED` or `PLAYER_IN_BOX` poll. (3) The safety net: one run-wide **watcher**
   (`createWatcher`, started by `connect()`) lists the regions every 6 s and clears any that waits, so drivers that wait some other
   way (`G.regionState` loops, megaB's walk, the gm drivers' mechanism waits) are covered too. It reads the live connection on every

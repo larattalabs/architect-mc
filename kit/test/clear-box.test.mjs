@@ -65,10 +65,10 @@ test('only OCCUPIED and PLAYER_IN_BOX answers count, in the three shapes the dri
   assert.deepEqual(parsePos('Steward has the following entity data: [12.5d, 70.0d, -3.25d]'), { x: 12.5, y: 70, z: -3.25 });
 });
 
-function rig(pos = null) {
+function rig(pos = null, mode = 1) {
   const cmds = [];
   const logs = [];
-  const cmd = async (c) => { cmds.push(c); return c.startsWith('/data get') ? { messages: pos ? [`[${pos.x}d, ${pos.y}d, ${pos.z}d]`] : [] } : { messages: [] }; };
+  const cmd = async (c) => { cmds.push(c); if (c.includes('playerGameType')) return { messages: [`Player has the following entity data: ${mode}`] }; return c.startsWith('/data get') ? { messages: pos ? [`[${pos.x}d, ${pos.y}d, ${pos.z}d]`] : [] } : { messages: [] }; };
   let t = 0;
   const clearer = createClearer({ cmd, log: (m) => logs.push(m), now: () => t, minGapMs: 3000 });
   return { cmds, logs, clearer, tick: (ms) => { t += ms; } };
@@ -134,6 +134,15 @@ test('spawnOff turns natural spawning off on a pre-clear, only when the caller o
   assert.ok(!cmds.some((c) => c.includes('gamerule')));
   await mk(true).preClear(claim);
   assert.ok(cmds.includes('/gamerule spawn_mobs false'));
+});
+
+test('a pre-clear leaves a spectator where it is; the PLAYER_IN_BOX answer still moves it; a player the target finds clear goes up', async () => {
+  const sp = rig({ x: 130, y: 100, z: 230 }, 3);
+  await sp.clearer.preClear(claim);
+  assert.ok(!sp.cmds.some((c) => c.startsWith('/tp')), 'a spectator is not moved');
+  const st = rig({ x: 500, y: 70, z: 500 }); // reads as clear, yet the mod says PLAYER_IN_BOX
+  await st.clearer.onState({ view: { id: 'r7', claim, waiting: { reason: 'PLAYER_IN_BOX' } } });
+  assert.ok(st.cmds.includes('/tp @p ~ ~48 ~'));
 });
 
 test('an unreadable claim on PLAYER_IN_BOX still moves the player (48 up)', async () => {

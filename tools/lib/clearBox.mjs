@@ -131,6 +131,10 @@ export function createClearer({ cmd, log = () => {}, settle = async () => {}, mi
     return true;
   }
 
+  async function isSpectator() {
+    try { return /\b3\b/.test(JSON.stringify((await cmd('/data get entity @p playerGameType'))?.messages ?? '').replace(/[^\s]*entity data:/, '')); } catch { return false; }
+  }
+
   const api = {
     stats,
     /** Leave these types (`minecraft:` optional) and tags alone while `fn` runs (or until the returned function is called). */
@@ -157,7 +161,8 @@ export function createClearer({ cmd, log = () => {}, settle = async () => {}, mi
       // natural spawning off, only in the worlds a harness owns (its caller says so with spawnOff): a polar bear that spawned onto a lot stalled a run
       if (spawnOff) await cmd('/gamerule spawn_mobs false');
       await clearMobs(box && expandBox(box, KILL_MARGIN), why);
-      if (box) await movePlayer(box, why);
+      // a spectator blocks nothing (Occupancy.scan skips it): left where the driver put it
+      if (box && !(await isSpectator())) await movePlayer(box, why);
       return true;
     },
     /** On a waiting answer (a dev.region.state answer or a RegionView; `region` names it in the log). Returns the reason it acted on. */
@@ -175,11 +180,10 @@ export function createClearer({ cmd, log = () => {}, settle = async () => {}, mi
       if (reason === 'OCCUPIED') await clearMobs(box && expandBox(box, KILL_MARGIN), why);
       else {
         // PLAYER_IN_BOX; the bot moves out, and an unreadable claim means the player goes up and a mob clear is the old fallback
-        if (box) await movePlayer(box, why);
-        else {
+        if (box && (await movePlayer(box, why))) { /* out */ } else {
           await cmd('/tp @p ~ ~48 ~');
           stats.playerMoves++;
-          log(`box-clear: ${why}: no claim in the answer: moved the player 48 blocks up`);
+          log(`box-clear: ${why}: no way out found (${box ? 'the player reads as clear of the claim' : 'no claim in the answer'}): moved the player 48 blocks up`);
         }
       }
       return reason;
