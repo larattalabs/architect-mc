@@ -57,7 +57,7 @@ test('the special-move table: gate, rope, then bridge (7) and tunnel (8), each o
   assert.equal(onceOf({ once: 'bridge' }), 'bridge');
   assert.equal(onceOf({ once: 'tunnel', spanOnce: true }), 'tunnel');
   assert.equal(onceOf({ spans: ['rope', 'bridge', 'tunnel'] }), null);
-  assert.deepEqual([...T3_KINDS], ['bridge', 'tunnel']);
+  assert.deepEqual([...T3_KINDS], ['bridge', 'drawbridge', 'tunnel']); // ((GM-c) the drawbridge is a bridge with a trapdoor deck)
   assert.deepEqual([...FALLBACK_KINDS], ['street', 'road', 'path']);
 });
 
@@ -100,9 +100,9 @@ test('the validator: a moving bridge answers connector.drawbridge (R18, S-T3-7),
   const p = (r, id) => r.parts.find((x) => x.id === id);
   // redstone_gate's recorded drawbridge
   const dr = v([{ id: 'drawbridge', kind: 'bridge', required: true, from: { part: 'town', port: 'h1' }, to: { anchor: 'claim_s' }, params: { mechanism: 'redstone', movable: true } }]);
-  assert.equal(p(dr, 'drawbridge').verdict, 'unsupported');
+  // ((GM-c) connector.drawbridge is supported: the moving bridge compiles, answered as connector.drawbridge (gm-c.test.mjs))
+  assert.equal(p(dr, 'drawbridge').verdict, 'compile');
   assert.equal(p(dr, 'drawbridge').block, 'connector.drawbridge');
-  assert.equal(p(dr, 'drawbridge').reason.until, 'mechanism');
   assert.equal(p(v([{ id: 'b', kind: 'bridge', from: { anchor: 'claim_n' }, to: { anchor: 'claim_s' }, params: { movable: true } }]), 'b').block, 'connector.drawbridge');
   // a plain bridge, every member, compiles; params are never malformed
   const full = v([{ id: 'b', kind: 'bridge', from: { anchor: 'claim_n' }, to: { anchor: 'claim_s' }, form: 'arch', span: { min: 4, max: 24 }, width: 3, clearance: 2, approach: 12, params: { material: 'stone', width: 'wide' } }]);

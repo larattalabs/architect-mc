@@ -23,7 +23,8 @@ import { BRIDGE, deckChoice, emitRouteBridges } from './bridgeGeom.mjs';
 import { footprintOf, inferMovers, VILLAGER } from '../region/passes/route.mjs';
 import { zoneLots } from '../plan/schema.mjs';
 import { canonicalJson } from '../region/pack.mjs';
-import { BRIDGE_KINDS, FALLBACK_KINDS, T3_UNSAFE_EXT } from './t3kinds.mjs';
+import { BRIDGE_KINDS, FALLBACK_KINDS, T3_UNSAFE_EXT, isDrawbridge } from './t3kinds.mjs';
+import { DRAWBRIDGE_DECK } from './bridgeGeom.mjs';
 
 const lotKind = (l) => { const v = l?.ext?.['architect_mc:village']; return v?.villager ?? v?.type ?? v?.role ?? null; };
 /** An endpoint's lot kind (S-T2-1's inference; K1b's reading in rope.mjs, repeated here so no import cycle forms). */
@@ -55,9 +56,27 @@ export function readBridgeParams(part) {
   return { read, notes };
 }
 
+/**
+ * (GM-c, §5) A drawbridge's params, read leniently: mechanism (redstone or piston: both the trapdoor deck; any other value is noted and
+ * read as the trapdoor deck) and movable are read; every other key is listed by name (material as K1's: the style is the bible's).
+ */
+export function readDrawbridgeParams(part) {
+  const P = part?.params && typeof part.params === 'object' && !Array.isArray(part.params) ? part.params : {};
+  const read = {}, notes = [];
+  for (const key of Object.keys(P).sort()) {
+    const v = P[key];
+    if (key === 'mechanism') { read.mechanism = v; if (!['redstone', 'piston'].includes(v)) notes.push(`params.mechanism ${JSON.stringify(v)} read as the trapdoor deck (redstone or piston)`); continue; }
+    if (key === 'movable') { read.movable = v; continue; }
+    notes.push(`params.${key} not read${key === 'material' ? ' (style is the bible\'s)' : ''}`);
+  }
+  return { read, notes };
+}
+
 /** Before routing: an answer that stops the part, or null to route it. */
 export function bridgeResolve(K, p) {
   const st = stateOf(K), part = p.part;
+  // ((GM-c) a drawbridge: the trapdoor deck, a level beam 2 wide over a gap its 1..7 trapdoor cells span)
+  if (isDrawbridge(part)) return drawbridgeResolve(K, p);
   const pr = readBridgeParams(part);
   const notes = [...pr.notes];
   const movers = inferMovers(kindOf(K, part.from), kindOf(K, part.to), part.movers?.filter((m) => m === 'player' || m === VILLAGER));
@@ -75,10 +94,32 @@ export function bridgeResolve(K, p) {
   return null;
 }
 
+/**
+ * (GM-c, §2's drawbridge row, §5, §13 item 6) A drawbridge before routing: width 2 (a written width other than 2 is answered adjusted with a
+ * deviation width), form beam (another form noted), level, the trapdoor deck; movers as a bridge's (lowered at rest: villagers cross).
+ */
+function drawbridgeResolve(K, p) {
+  const st = stateOf(K), part = p.part;
+  const pr = readDrawbridgeParams(part);
+  const notes = [...pr.notes];
+  const movers = inferMovers(kindOf(K, part.from), kindOf(K, part.to), part.movers?.filter((m) => m === 'player' || m === VILLAGER));
+  const deviations = [];
+  if (part.width !== undefined && part.width !== DRAWBRIDGE_DECK.width) deviations.push({ what: 'width', kind: 'width', value: DRAWBRIDGE_DECK.width, asked: part.width });
+  if (part.form !== undefined && part.form !== 'beam') notes.push(`form ${part.form} not read: a drawbridge is a level beam with a trapdoor deck`);
+  if (part.clearance !== undefined) notes.push('clearance not read: the trapdoor deck sits one row over the water (§13 item 6)');
+  if (part.span !== undefined) notes.push(`span not read: a drawbridge spans ${DRAWBRIDGE_DECK.spanMin}..${DRAWBRIDGE_DECK.spanMax} deck cells (1..${DRAWBRIDGE_DECK.trapMax} trapdoor cells and 2 apron cells at each end)`);
+  const unsafe = part.ext?.[T3_UNSAFE_EXT] ?? {};
+  const o = { movers, villager: movers.includes(VILLAGER), width: DRAWBRIDGE_DECK.width, form: 'beam', clearance: 1, notes, approach: part.approach ?? BRIDGE.approach, span: { min: DRAWBRIDGE_DECK.spanMin, max: DRAWBRIDGE_DECK.spanMax }, unsafe, clearanceGiven: false, drawbridge: { mechanism: pr.read.mechanism ?? null, deviations } };
+  st.parts.set(p.id, o);
+  if (sameEnd(part.from, part.to) && !(part.via ?? []).length) return { class: 'refused', notes, reasons: [{ code: 'NO_GAP', message: 'both ends are one place: nothing to span (R18)', evidence: { from: part.from, to: part.to } }] };
+  return null;
+}
+
 /** A bridge leg's route options. */
 export function bridgeLeg(K, p) {
   const o = stateOf(K).parts.get(p.id);
   if (!o) return {};
+  if (o.drawbridge) return { width: o.width, movers: o.movers, spans: ['bridge'], once: 'bridge', approach: o.approach, t3: { bridge: { form: 'beam', deck: 'trapdoor', clearance: o.clearance, width: o.width, span: { ...o.span }, ...(Object.keys(o.unsafe).length ? { _unsafe: { ...o.unsafe } } : {}) } } };
   return { width: o.width, movers: o.movers, spans: ['bridge'], once: 'bridge', approach: o.approach,
     t3: { bridge: { form: o.form, clearance: o.clearance, width: o.width, ...(o.span ? { span: { ...o.span } } : {}), ...(Object.keys(o.unsafe).length ? { _unsafe: { ...o.unsafe } } : {}) } } };
 }
@@ -134,12 +175,14 @@ export function bridgeFailAnswer(K, l, m) {
   if (why.code === 'NO_GAP' || why.code === 'WATER' || (why.code === 'SPAN' && o?.form === 'arch')) st.would.push({ id: l.conn.id, code: why.code, leg: l.k, evidence: why.evidence });
   // ((6c H-b) the wet fallback's second plan found its crossing only over water it did not read: incomplete VOLUME)
   if (why.code === 'WATER' && why.evidence?.kind === 'unread') return { class: 'incomplete', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [{ code: 'VOLUME', message: `leg ${l.k + 1}: the water under the crossing's wet piers was not read: prepare (or check with load: "generate"), then check again`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } }] };
-  const reason = { code: why.code, message: `leg ${l.k + 1}: ${MESSAGES[why.code] ?? why.code}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
+  // ((GM-c GMc-1) a drawbridge's SPAN names its own limits: deck cells, trapdoors plus the aprons)
+  const text = why.code === 'SPAN' && o?.drawbridge ? `the only spans that cross the gap are outside ${o.span.min}..${o.span.max} deck cells (a drawbridge: ${DRAWBRIDGE_DECK.trapMin}..${DRAWBRIDGE_DECK.trapMax} trapdoor cells and ${DRAWBRIDGE_DECK.apron} apron cells at each end)` : MESSAGES[why.code] ?? why.code;
+  const reason = { code: why.code, message: `leg ${l.k + 1}: ${text}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
   return { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [reason] };
 }
 
 /** A span's crossing (S-T3-1, S-T3-8): {type: bridge, form, over, depth, clearance, span, lands?}. */
-const crossingOf = (g, lands) => ({ type: 'bridge', form: g.form, over: g.over, depth: g.depth, clearance: g.over === 'water' ? g.clearance : 0, span: g.n, ...(lands ? { lands } : {}) });
+const crossingOf = (g, lands) => ({ type: 'bridge', form: g.form, over: g.over, depth: g.depth, clearance: g.over === 'water' ? g.clearance : 0, span: g.n, ...(g.deck ? { deck: g.deck, movable: true } : {}), ...(lands ? { lands } : {}) });
 
 /** After routing: a routed connector's bridge answer fields (merged after K1b's), or null when it took no bridge and asked for none. */
 export function bridgeAnswer(K, p, legs) {
@@ -159,6 +202,14 @@ export function bridgeAnswer(K, p, legs) {
   if (p.kind === 'auto' && !bridges.length) return null;
   if (!bridges.length && !BRIDGE_KINDS.includes(p.kind)) return null;
   const out = { geometry: { bridges } };
+  // ((GM-c) a drawbridge's own deviations (a written width other than 2: adjusted))
+  const dd = o?.drawbridge?.deviations ?? [];
+  if (dd.length) {
+    out.deviations = dd.map((d) => ({ ...d }));
+    const a = K.answers.get(p.id);
+    if (!a || a.class === 'fits' || a.class === undefined) out.class = 'adjusted';
+    notes.push(`width ${dd[0].asked} read as 2: a drawbridge's trapdoor deck is 2 wide (§13 item 6)`);
+  }
   // ((6c H-b) a crossing on wet piers says so)
   const wetN = bridges.reduce((t, b) => t + (b.wet?.cells ?? 0), 0);
   if (wetN) notes.push(`wet piers: ${wetN} cell(s) stand in natural water (the wet fallback: no dry crossing fit)`);
@@ -205,6 +256,9 @@ export function emitBridges(K) {
       const lands = (e, si) => landsAt(K, e, si);
       const recs = emitRouteBridges(K.r, { only: [x.meta.id], stage, part: `links_b${idx}`, prefix: `bridge_b${idx}_`, style, lands, ...(o?.unsafe && Object.keys(o.unsafe).length ? { _unsafe: o.unsafe } : {}) });
       K.mark(p.id, K.addedSince(cp));
+      // ((GM-c) a drawbridge span's mechanism: the region's mech:<gate> item keyed by the connector's id (the IR's gateMechanisms))
+      const mechs = recs.filter((q) => q.mechanism);
+      mechs.forEach((q, k) => { const m = K.r.meta.bridges.find((b) => b.id === q.id); m.gate = mechs.length > 1 ? `${p.id}_${k + 1}` : p.id; q.gate = m.gate; });
       // the answer's crossings gain `lands`; the graph edge: a bridge connector's is typed bridge with its crossing (§8), an auto or a
       // fallback street's carries the crossing on its bridged segments
       const a = K.answers.get(p.id);
@@ -214,6 +268,7 @@ export function emitBridges(K) {
         const cr = crossingOf(g, rec.lands);
         const ab = (a?.geometry?.bridges ?? []).find((b) => b.from[0] === rec.from[0] && b.from[2] === rec.from[2] && b.n === rec.n);
         if (ab) ab.crossing = cr;
+        if (ab && rec.mechanism) { ab.deck = 'trapdoor'; ab.trapdoors = rec.trapdoors; ab.mechanism = { gate: rec.gate, ...rec.mechanism }; }
         if (ge && BRIDGE_KINDS.includes(p.kind)) { ge.type = 'bridge'; ge.crossing = cr; }
         else if (ge?.segments?.[rec.seg]) ge.segments[rec.seg].crossing = cr;
       }

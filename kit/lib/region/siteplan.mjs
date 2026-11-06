@@ -148,8 +148,9 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
     // ((7a K3, §8) the lots on its line: {lot, at, box, passage?: {width, height, front, back}})
     ...(w.lots?.length ? { lots: w.lots.map((q) => ({ lot: q.lot, at: q.at, box: [...q.box], ...(q.passage ? { passage: { width: q.passage.width, height: q.passage.h, front: [...q.passage.front], back: [...q.passage.back], ...(q.passage.mechanism ? { mechanism: { ...q.passage.mechanism } } : {}) } } : {}) })) } : {}) }));
   // (6c T3) the plan's bridges (span: deck cells; piers: each pier's centre column [x, z]; landings: the near and far landing cells) and
-  // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8)
-  if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]] }));
+  // tunnels (portals: the first and last bore cells' floor; length: floor cells; carved: cells cleared), from the plan meta (§8); ((GM-c,
+  // §5) a drawbridge's row adds deck: trapdoor and movable: true)
+  if (Array.isArray(meta?.bridges) && meta.bridges.length) out.bridges = meta.bridges.map((b) => ({ id: b.id, part: b.part, form: b.form, span: b.n, piers: (b.piers ?? []).map((q) => [q.x, q.z]), landings: [[...b.from], [...b.to]], ...(b.deck === 'trapdoor' ? { deck: 'trapdoor', movable: true } : {}) }));
   // (7a foundation, §5) the 7a connectors' rows, from the plan meta each slice's emission records (absent: none)
   if (Array.isArray(meta?.climbs) && meta.climbs.length) out.climbs = meta.climbs.map((c) => ({ id: c.id, part: c.part, kind: c.kind, flights: c.flights ?? 0, hairpins: c.hairpins ?? 0, ladders: (c.ladders ?? []).map((l) => ({ at: [...l.at], rungs: l.rungs, landings: l.landings ?? 0 })) }));
   if (Array.isArray(meta?.rockStairs) && meta.rockStairs.length) out.rockStairs = meta.rockStairs.map((c) => ({ id: c.id, part: c.part, steps: c.steps, landings: c.landings ?? 0, carved: c.carved ?? 0, lined: c.lined ?? 0 }));

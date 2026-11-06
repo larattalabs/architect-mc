@@ -1,0 +1,116 @@
+{
+  "about": "(7a GM-c, CONTRACT GM \u00a72's drawbridge row, \u00a75, \u00a710 item 5) redstone_gate's shape on flat land, its gatehouse left out (the drawbridge lands on the berm between the moat and the wall): a walled town, a moat 5 wide and 3 deep round it, and a drawbridge (kind drawbridge, params {mechanism: redstone, movable: true}) from a bank anchor outside the moat to a berm anchor inside it: the trapdoor deck, lowered at rest, a lever on each bank",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "connector.drawbridge"
+  ],
+  "anchors": {
+    "bank_e": [
+      1170,
+      65,
+      2080
+    ],
+    "berm_e": [
+      1149,
+      65,
+      2080
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "gm_drawbridge",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              6,
+              16
+            ]
+          }
+        },
+        "width": 5,
+        "depth": 3
+      },
+      {
+        "id": "drawbridge",
+        "kind": "drawbridge",
+        "required": true,
+        "label": "redstone drawbridge",
+        "from": {
+          "anchor": "bank_e"
+        },
+        "to": {
+          "anchor": "berm_e"
+        },
+        "params": {
+          "mechanism": "redstone",
+          "movable": true
+        }
+      }
+    ]
+  },
+  "expect": {
+    "part": "drawbridge",
+    "class": "fits",
+    "deck": "trapdoor"
+  }
+}

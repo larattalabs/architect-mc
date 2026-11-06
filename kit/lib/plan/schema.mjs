@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import { validateSpec } from '../specschema.mjs';
 import { canonicalJson } from '../region/pack.mjs';
+import { isDrawbridge } from '../connectors/t3kinds.mjs';
 
 export const PLAN_SCHEMA = JSON.parse(fs.readFileSync(new URL('../../schemas/plan.json', import.meta.url), 'utf8'));
 export const SCHEMA_VERSION = 'plan/0';
@@ -206,7 +207,8 @@ function nestedUnsupported(family, part) {
     return whereCheck(part.where, '$.where') ?? sketchCheck(part.sketch, '$.sketch');
   }
   if (family === 'connector') {
-    // (6c T3, R18, S-T3-7) a bridge whose params name a mechanism or movable is a moving bridge: connector.drawbridge (reserved)
+    // (6c T3, R18, S-T3-7) a bridge whose params name a mechanism or movable is a moving bridge: connector.drawbridge (supported since
+    // GM-c: the block answers only while a catalogue holds it reserved)
     if (part.kind === 'bridge' && part.params && typeof part.params === 'object' && !Array.isArray(part.params) && ((part.params.mechanism !== undefined && part.params.mechanism !== null && part.params.mechanism !== false) || part.params.movable === true)) {
       const r0 = reserved('connector.drawbridge', part.params.mechanism !== undefined ? '$.params.mechanism' : '$.params.movable');
       if (r0) return r0;
@@ -473,6 +475,8 @@ export function validatePlan(plan, { anchors = [] } = {}) {
       if (al && (al.side === 'toward_anchor' || al.side === 'away_from_anchor') && !al.anchor) { partMalformed(p, 'SCHEMA', '$.where.along', `along with side ${al.side} names its anchor (R4a)`); continue; }
       const ke = kindError(p.family, p.kind, p.part);
       if (ke) { partMalformed(p, 'SCHEMA', ke.path, ke.message); continue; }
+      // ((GM-c, R18, S-T3-7) a bridge whose params name a mechanism or movable: answered as connector.drawbridge, the entry it is)
+      if (p.family === 'connector' && p.kind === 'bridge' && isDrawbridge(p.part) && entryOf('connector.drawbridge')?.state === 'supported') p.block = 'connector.drawbridge';
       const nu = nestedUnsupported(p.family, p.part);
       if (nu) { p.verdict = 'unsupported'; p.block = nu.block; p.reason = reason('UNSUPPORTED', `${p.path}${nu.path.slice(1)}`, `${nu.block} is not supported yet${nu.until ? ` (until ${nu.until})` : ''}`, { block: nu.block, until: nu.until }); }
     } else {

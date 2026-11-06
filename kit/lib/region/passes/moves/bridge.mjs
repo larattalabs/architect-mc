@@ -96,9 +96,23 @@ export function bridgeActive(state, edge) {
     nMin: Math.max(BRIDGE.spanMin, isInt(sp.min) ? sp.min : BRIDGE.spanMin), nMax: Math.min(BRIDGE.spanMax, isInt(sp.max) ? sp.max : BRIDGE.spanMax),
     startK: kOf(edge.from), goalK: kOf(edge.to), reached: diagnose ? new Int32Array(state.W * state.D) : null, _unsafe: o._unsafe ?? null,
     wet: o.wet && isInt(o.wet.waterDepth) ? { waterDepth: o.wet.waterDepth } : null,
+    // ((GM-c) a drawbridge's trapdoor deck: level, no piers, its own frame: checkBridge's deck mode)
+    deck: o.deck === 'trapdoor' ? 'trapdoor' : null,
+    // ((GM-c GMc-1) the far search: off until route.mjs's near search (the approach squares) finds no route; on, the legs are walks of
+    // any length and a span may stand anywhere on the way)
+    far: false,
   };
   state.memo = new Map();
   return true;
+}
+
+/**
+ * (GM-c GMc-1) The far search: route.mjs turns it on for a bridge edge (`once: 'bridge'`) whose near search (the two squares of
+ * `approach` round its ends) found no route, and off again before each near attempt. On, the span may land anywhere the search reaches
+ * and the legs to its landings are ordinary walk runs of any length; `fail` then names the span's check without the approach.
+ */
+export function bridgeFar(state, on) {
+  if (state?.cur?.once) state.cur.far = !!on;
 }
 
 /** Whether an edge's goal needs the flag bit set (a bridge edge: exactly one span). */
@@ -114,7 +128,7 @@ function spanCheck(state, i, j, y, hf, n, yf) {
   let r = state.memo.get(key);
   if (r) return r;
   const di = DIRS[hf][0], dj = DIRS[hf][1];
-  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax }, ...(c.wet ? { wet: { ...c.wet, ...state.wetLand, ...(c._unsafe?.flowingPier ? { unsafeFlowing: true } : {}) } } : {}) });
+  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax }, ...(c.deck ? { deck: c.deck } : {}), ...(c.wet ? { wet: { ...c.wet, ...state.wetLand, ...(c._unsafe?.flowingPier ? { unsafeFlowing: true } : {}) } } : {}) });
   state.memo.set(key, r);
   return r;
 }
@@ -127,7 +141,7 @@ export function bridgeExpand(state, S) {
   const { i, j, k, h, y, f, inS, builtY } = S;
   if (c.once && f === 1) return; // spanned: walk on to the goal
   if (c.diagnose && y + 32768 + 1 > c.reached[k]) c.reached[k] = y + 32768 + 1; // (the near cells the search reached at their highest y, for `fail`)
-  if (c.once && cheb(W, k, c.startK) > c.approach) return;
+  if (c.once && !c.far && cheb(W, k, c.startK) > c.approach) return;
   for (const hf of cardinalNear(h)) {
     const di = DIRS[hf][0], dj = DIRS[hf][1];
     const i1 = i + di, j1 = j + dj;
@@ -142,11 +156,11 @@ export function bridgeExpand(state, S) {
       if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
       const k2 = ci + cj * W;
       if (!inS(k2) || water[k2]) continue;
-      if (c.once && cheb(W, k2, c.goalK) > c.approach) continue;
+      if (c.once && !c.far && cheb(W, k2, c.goalK) > c.approach) continue;
       // the far landing: an earlier edge's built cell at its y; else the ground there, or level with the near landing within its fill
       const ys = builtY[k2] !== NONE ? [builtY[k2]] : y !== G[k2] && y > G[k2] && y - G[k2] <= c.maxFill ? [G[k2], y] : [G[k2]];
       for (const yf of ys) {
-        if (Math.abs(yf - y) > maxRiseOf(n)) continue;
+        if (Math.abs(yf - y) > maxRiseOf(n) || (c.deck && yf !== y)) continue;
         const r = spanCheck(state, i, j, y, hf, n, yf);
         if (!r.ok) continue;
         S.relax(k2, hf, 2, yf * FP, BRIDGE.cost + BRIDGE.costPer * n + BRIDGE.costPier * r.piers.length + (c.wet ? BRIDGE.costWet * wetCells(r) : 0), n, c.once ? 1 : f);
@@ -180,9 +194,9 @@ export function bridgeCells(state, m) {
   for (let t = 1; t <= n; t++) cells.push([m.x0 + sx * t, deckY(r.ys[t]), m.z0 + sz * t]);
   cells.push([m.x1, m.y1, m.z1]);
   const c = state.cur;
-  const check = { ok: true, form: r.form, ys: r.ys, lowest: r.lowest, piers: r.piers, springing: r.springing, intrados: r.intrados, wetTop: r.wetTop, ground: r.ground, over: r.over, depth: r.depth, under: r.under };
+  const check = { ok: true, form: r.form, ...(r.deck ? { deck: r.deck, trapdoors: r.trapdoors } : {}), ys: r.ys, lowest: r.lowest, piers: r.piers, springing: r.springing, intrados: r.intrados, wetTop: r.wetTop, ground: r.ground, over: r.over, depth: r.depth, under: r.under };
   const wet = wetCells(r);
-  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check, ...(wet ? { wet: { cells: wet, waterDepth: c.wet.waterDepth } } : {}) } };
+  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, ...(r.deck ? { deck: r.deck } : {}), width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check, ...(wet ? { wet: { cells: wet, waterDepth: c.wet.waterDepth } } : {}) } };
 }
 
 /** After an edge routes: its spans, for the links stage and the answer (`edgeOut.bridges`). */
@@ -208,8 +222,43 @@ const rankOf = (r) => (r.ok ? ORDER.length : ORDER.indexOf(r.code));
  * cross); UNREACHABLE when one passes. Sets `edgeOut.failed = 'BRIDGE'`, `edgeOut.bridge = {code, evidence, until?}`.
  */
 export function bridgeFail(state, edgeOut, inS) {
+  const why = whyOf(state, inS);
+  if (!why) return false;
+  edgeOut.failed = 'BRIDGE';
+  edgeOut.bridge = why;
+  edgeOut.note = `no bridge: ${why.code}`;
+  return true;
+}
+
+/**
+ * (GM-c GMc-1) Whether a bridge edge whose near search found no route is worth the far search over `corridor` (route.mjs): the near
+ * diagnosis is NO_GAP (no span within the approach crosses a gap) or SPAN for a span longer than the edge's longest (the near squares
+ * only reach a gap with a span that long: its ends lie far from it), and the corridor holds a gap column (water, or a drop of 2 from
+ * a 4-neighbour). Any other near answer (TOO_STEEP, HEADROOM, ANCHOR, WATER: a span that lands near failed its check) and a dry, level
+ * corridor keep the near answer, so the far search spends no node on them.
+ */
+export function bridgeFarWorth(state, corridor, inS) {
   const c = state?.cur;
-  if (!c || !c.diagnose) return false;
+  if (!c?.once || c.far) return false;
+  const why = whyOf(state, inS);
+  if (!why || !(why.code === 'NO_GAP' || (why.code === 'SPAN' && why.evidence?.span > c.nMax))) return false;
+  const { W, D, top, water } = state;
+  for (let k = 0; k < W * D; k++) {
+    if (corridor && !corridor[k]) continue;
+    if (water[k]) return true;
+    const i = k % W, j = (k - i) / W;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const i2 = i + di, j2 = j + dj;
+      if (i2 >= 0 && j2 >= 0 && i2 < W && j2 < D && top[i2 + j2 * W] >= top[k] + BRIDGE.narrowDrop) return true;
+    }
+  }
+  return false;
+}
+
+/** bridgeFail's why ({code, evidence, until?}), or null when the edge does not diagnose. */
+function whyOf(state, inS) {
+  const c = state?.cur;
+  if (!c || !c.diagnose) return null;
   const { W, D, minX, minZ, G, water } = state;
   const gi = c.goalK % W, gj = (c.goalK - gi) / W;
   let best = null, gaps = 0, tried = 0;
@@ -226,7 +275,7 @@ export function bridgeFail(state, edgeOut, inS) {
         const ci = i + di * (n + 1), cj = j + dj * (n + 1);
         if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
         const k2 = ci + cj * W;
-        if (!inS(k2) || water[k2] || (c.once && cheb(W, k2, c.goalK) > c.approach)) continue;
+        if (!inS(k2) || water[k2] || (c.once && !c.far && cheb(W, k2, c.goalK) > c.approach)) continue;
         tried++;
         let res = null;
         if (n > BRIDGE.spanMax) {
@@ -248,16 +297,16 @@ export function bridgeFail(state, edgeOut, inS) {
         gaps++;
         const code = res.ok ? 'UNREACHABLE' : res.code;
         // ((H-b) a span over water the plan read names the leg's WATER before one over water it did not: a dry search never has one)
-        const key = [res.evidence?.kind === 'unread' ? 1 : 0, n > BRIDGE.spanMax ? 1 : 0, Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
+        // ((GM-c GMc-1) the far search names the shortest span first, then the nearest the goal: its candidates are every crossing on the
+        // way, and the narrowest is the gap the route crosses; the near search keeps the nearest the goal first)
+        const dGoal = Math.max(Math.abs(ci - gi), Math.abs(cj - gj));
+        const key = [res.evidence?.kind === 'unread' ? 1 : 0, n > BRIDGE.spanMax ? 1 : 0, ...(c.far ? [n, dGoal] : [dGoal, n]), minX + i, minZ + j, hf];
         if (!best || cmpKey(key, best.key) < 0) best = { key, code, until: res.until, evidence: { ...(res.evidence ?? {}), span: n, rise: res.yf - res.y, from: [minX + i, res.y, minZ + j], to: [minX + ci, res.yf, minZ + cj] } };
       }
     }
   }
   const why = !gaps
-    ? { code: 'NO_GAP', evidence: { tried, approach: c.once ? c.approach : null, message: `no span${c.once ? ` within ${c.approach} of both ends` : ''} crosses a gap (ground more than ${BRIDGE.gapDepth} below the banks, a narrow drop of ${BRIDGE.narrowDrop}, or water)` } }
+    ? { code: 'NO_GAP', evidence: { tried, approach: c.once ? c.approach : null, ...(c.far ? { far: true } : {}), message: `no span${c.once ? (c.far ? ' on the way between the ends' : ` within ${c.approach} of both ends`) : ''} crosses a gap (ground more than ${BRIDGE.gapDepth} below the banks, a narrow drop of ${BRIDGE.narrowDrop}, or water)` } }
     : { code: best.code, evidence: best.evidence, ...(best.until ? { until: best.until } : {}) };
-  edgeOut.failed = 'BRIDGE';
-  edgeOut.bridge = why;
-  edgeOut.note = `no bridge: ${why.code}`;
-  return true;
+  return why;
 }

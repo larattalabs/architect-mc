@@ -34,11 +34,13 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
     const [x0, y0, z0] = from, [dx, dz] = dir, [rx, rz] = rightOf(dir);
     const want2 = [...profile(n, y0, rise, sagFor(form, n)), 2 * (y0 + rise)];
     const yHi = Math.max(y0, y0 + rise) + 4, yLo = Math.min(y0, y0 + rise) - 6;
+    // ((GM-c) a trapdoor deck: a closed top-half trapdoor is the walk's floor though a trapdoor is passable: the floor is read first)
+    const trap = m.deck === 'trapdoor';
     const surface = (x, z) => {
       for (let y = yHi; y >= yLo; y--) {
         const b = vw.get(x, y, z);
-        if (P.air[b] || P.passable[b]) continue;
-        if (!(P.floor[b] || P.half[b])) return null;
+        if ((P.air[b] || P.passable[b]) && !(trap && P.trapFloor[b])) continue;
+        if (!(P.floor[b] || P.half[b] || (trap && P.trapFloor[b]))) return null;
         if (!P.passable[vw.get(x, y + 1, z)] || !P.passable[vw.get(x, y + 2, z)]) return null;
         return y2Of(y, P.half[b]);
       }
@@ -71,7 +73,7 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
     // supports: a beam's piers (at most pierEvery deck cells apart, the landings counted), each solid, no gravity block, from the deck
     // down to 2 under the pre-region ground, at most pierDepth tall
     const badSup = [];
-    if (form === 'beam') {
+    if (form === 'beam' && !trap) {
       const idx = [0, ...(m.piers ?? []).map((q) => q.i).sort((a, b) => a - b), n + 1];
       for (let t = 1; t < idx.length; t++) if (idx[t] - idx[t - 1] > BRIDGE.pierEvery) badSup.push({ why: 'spacing', from: idx[t - 1], to: idx[t] });
       if ((m.piers ?? []).length < piersFor(n)) badSup.push({ why: 'count', have: (m.piers ?? []).length, need: piersFor(n) });
@@ -156,8 +158,12 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
       for (let v = lo; v <= hi; v++) { const f = feet(x + rx * v, z + rz * v); if (f === null || !P.passable[vw.get(x + rx * v, f, z + rz * v)] || !P.passable[vw.get(x + rx * v, f + 1, z + rz * v)]) clear = false; }
       if (clear) row.headroom++;
     }
-    if (row.railed < n) push('M8', m, n - row.railed, [from], `bridge ${pid}: ${n - row.railed} of ${n} deck cell(s) without a rail on both edges`);
+    // ((GM-c) a trapdoor deck's side lanes are its circuit, capped by the mechanism's bars (the region's mech item, not the plan's
+    // cells): M8 is not judged on it)
+    if (trap) row.rails = 'mechanism';
+    if (row.railed < n && !trap) push('M8', m, n - row.railed, [from], `bridge ${pid}: ${n - row.railed} of ${n} deck cell(s) without a rail on both edges`);
     if (row.headroom < n) push('M6', m, n - row.headroom, [from], `bridge ${pid}: ${n - row.headroom} of ${n} deck cell(s) without 2 clear over the walk`);
+    if (trap) row.deck = 'trapdoor';
     row.ok = spanOk && !row.missing && !row.wrong && row.maxStep <= 1 && !badSup.length && !row.wet && (!row.under || row.under.have >= row.under.need);
     out.push(row);
   }

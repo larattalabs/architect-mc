@@ -15,7 +15,7 @@ import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
 import { gateActive, gateCells, gateCommit, gateExpand, gateInit, gatePrune } from './moves/gate.mjs';
 import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeFail, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
 // (6c T3) the bridge row (T3a's file) and the tunnel row (T3b's file): each file owns its row's hooks, this table only lists them
-import { bridgeActive, bridgeCells, bridgeCommit, bridgeExpand, bridgeFail, bridgeInit, bridgeNeedsFlag } from './moves/bridge.mjs';
+import { bridgeActive, bridgeCells, bridgeCommit, bridgeExpand, bridgeFail, bridgeFar, bridgeFarWorth, bridgeInit, bridgeNeedsFlag } from './moves/bridge.mjs';
 import { tunnelActive, tunnelBlocks, tunnelCells, tunnelCommit, tunnelExpand, tunnelFail, tunnelInit, tunnelNeedsFlag, tunnelPrune } from './moves/tunnel.mjs';
 // (7a foundation) rows 9 lift (LF's file), 10 catwalk (CW's), 11 rock_stair (RK's), and the edge profiles over the built-in moves (CL's)
 import { liftActive, liftBlocks, liftCells, liftCommit, liftExpand, liftFail, liftInit, liftNeedsFlag } from './moves/lift.mjs';
@@ -34,6 +34,8 @@ export const TURN_COOLDOWN = 3;
 /** The coarse grid's cell (in survey cells) and the fine search's corridor half-width (in cells). */
 export const COARSE = 4;
 export const CORRIDOR = 16;
+/** (GM-c GMc-1) The far search's tube: the coarse corridor's path dilated by this many cells (CORRIDOR's 16 cost a bridge edge 800k nodes). */
+export const FAR_TUBE = 4;
 /**
  * (7a CL) A climb edge's (a stair, switchback or ladder profile) tree cells within its ends' box grown by CORRIDOR are passable at
  * this extra cost a cell, not obstacles: the search still goes round a tree when that is cheap, and the realise fells only the trees
@@ -99,7 +101,7 @@ const isInt = Number.isInteger;
 export const SPECIAL_MOVES = Object.freeze([
   Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit, prune: gatePrune }),
   Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit, fail: ropeFail }),
-  Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, crossesWater: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail }),
+  Object.freeze({ name: 'bridge', code: 7, segment: 'bridge', flag: true, crossesWater: true, init: bridgeInit, active: bridgeActive, needsFlag: bridgeNeedsFlag, blocks: () => null, expand: bridgeExpand, cells: bridgeCells, commit: bridgeCommit, fail: bridgeFail, far: bridgeFar, farWorth: bridgeFarWorth }),
   Object.freeze({ name: 'tunnel', code: 8, segment: 'tunnel', flag: true, init: tunnelInit, active: tunnelActive, needsFlag: tunnelNeedsFlag, blocks: tunnelBlocks, expand: tunnelExpand, cells: tunnelCells, commit: tunnelCommit, fail: tunnelFail, prune: tunnelPrune }),
   // (7a foundation) rows 9-11 (docs/CONTRACT.md "Phase 7a foundation" §3.2), each in its slice's file; the foundation's inits return null
   Object.freeze({ name: 'lift', code: 9, segment: 'lift', flag: true, init: liftInit, active: liftActive, needsFlag: liftNeedsFlag, blocks: liftBlocks, expand: liftExpand, cells: liftCells, commit: liftCommit, fail: liftFail }),
@@ -761,11 +763,17 @@ export function routePass(survey, volumes, intent) {
     }
     // (7a K1b) a rope_bridge edge (`spanOnce`) walks at most `approach` cells at each end: it searches the two squares of that radius
     // round its ends only (its span's landings lie in them; the deck between needs no search cell); (6c T3) so does any `once` edge
+    // ((GM-c GMc-1) a row with `far` (the bridge) is searched again in a tube round the coarse corridor's path (FAR_TUBE) when that
+    // near search finds no route and the row finds it worth it (`farWorth`: the near answer is NO_GAP or a span too long, and a gap lies
+    // in the corridor): the span stands on the gap the way crosses, the legs to its landings are walks of any length; only after the
+    // near search, so an edge that routes near, or fails near for another reason, is as before)
+    let farRow = null;
     if (!withinM && onceOf(e)) {
       const A = isInt(e.approach) && e.approach >= 0 && e.approach <= 32 ? e.approach : 16;
       const seed = new Uint8Array(n);
       for (const en of ends) seed[en.k] = 1;
       withinM = dilate(seed, W, D, Math.floor((A + r - 1) / r));
+      farRow = sp.find((x) => x.m.far && x.m.name === onceOf(e)) ?? null;
     }
     // ((6c D3) the `to` end's `lead`: the goal's arriving heading (against its facing, cardinal) and its straight cells)
     // ((7a GJ) an edge of one cell, a gate opening on its junction, has nothing to run straight)
@@ -890,9 +898,16 @@ export function routePass(survey, volumes, intent) {
         if (attempt) { const sb = keepEnds(dilate(selfBlock, W, D, Rt)); cmask = Uint8Array.from(cmask); for (let k = 0; k < n; k++) cmask[k] |= sb[k]; }
       }
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
-      for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
+      let farOk = null;
+      for (const [radius, name] of withinM ? [[-1, 'within'], ...(farRow ? [[FAR_TUBE, 'far']] : [])] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
+        if (farRow) farRow.m.far(farRow.st, false);
         const corridor = radius < 0 ? withinM : radius ? corridorOf(env, cmask, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
+        if (farRow && radius >= 0) {
+          farOk ??= farRow.m.farWorth(farRow.st, corridorOf(env, cmask, si, sj, ti, tj, maxGrade, CORRIDOR), (k) => k >= 0 && !b.blockedW[k]);
+          if (!farOk) continue;
+          farRow.m.far(farRow.st, true);
+        }
         edgeOut.search = name;
         res = search(env, { ...sctx, ...b, corridor, maxExpand: cap - spent });
         edgeOut.expanded += res?.expanded ?? 0;

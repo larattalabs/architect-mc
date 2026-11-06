@@ -1,0 +1,87 @@
+{
+  "about": "(7a GM-c, GMc-1) Steward's RC repro: a hamlet at claim_center, a moat round it (connector.channel, ring [6, 16], 5 wide, 3 deep) and a drawbridge from the claim's east anchor to the hamlet, approach 32, with no bank or berm anchor: the ends lie about 90 and 6 cells from the moat, so the near search (the approach squares) finds no span; the far search places the trapdoor deck on the moat the way crosses and walks the rest",
+  "on": "flat",
+  "volume": {},
+  "covers": [
+    "connector.drawbridge"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "hamlet",
+        "where": {
+          "near": {
+            "anchor": "claim_center",
+            "within": 8
+          }
+        },
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "moat",
+        "kind": "channel",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "hamlet"
+            },
+            "ring": [
+              6,
+              16
+            ]
+          }
+        },
+        "width": 5,
+        "depth": 3
+      },
+      {
+        "id": "drawbridge",
+        "kind": "drawbridge",
+        "required": true,
+        "label": "redstone drawbridge",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "hamlet"
+        },
+        "approach": 32,
+        "params": {
+          "mechanism": "redstone",
+          "movable": true
+        }
+      }
+    ],
+    "planId": "gm_drawbridge_far"
+  },
+  "expect": {
+    "part": "drawbridge",
+    "class": "fits",
+    "deck": "trapdoor"
+  }
+}

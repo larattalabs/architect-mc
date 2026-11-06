@@ -523,6 +523,8 @@ export async function planRegion(o) {
   // ((GM-b, CONTRACT GM §17 item 4) the K1 swing gates' write data (meta walls[].gates[].mechanismWrite), which the realise's mech:<gate>
   // region cells item writes: a member only a plan with a swing has (every other IR unchanged)
   const gmw = (r.meta.walls ?? []).flatMap((w) => (w.gates ?? []).filter((g) => g.mechanismWrite).map((g) => ({ gate: g.id, wall: w.id, kind: g.mechanism.kind, ...g.mechanismWrite })));
+  // ((GM-c) each drawbridge's circuit: its own entry, keyed by the connector (no wall); the path part writes its aprons and trapdoors)
+  for (const b of r.meta.bridges ?? []) if (b.mechanismWrite && b.gate) gmw.push({ gate: b.gate, kind: 'drawbridge', bridge: b.id, ...b.mechanismWrite });
   if (gmw.length) ir.gateMechanisms = gmw;
   // (6c V) the settlement graph (SETTLEMENTS §8.1's shape; a format-1 member the evaluator ignores) and the honoured keep-out
   if (r.graph.nodes.length) ir.graph = { nodes: r.graph.nodes, edges: r.graph.edges };
