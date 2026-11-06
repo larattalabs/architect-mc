@@ -332,16 +332,17 @@ export async function registerGmC(steps, h) {
     const charged = v.record?.charged ?? null;
     check(!!charged && G.same(charged, planBill) && G.same(charged, rep?.bom), `${tag}: charged once = the plan's bill = the region's report, item for item (${json(G.minus(charged, planBill))})`);
     check(!!charged && G.same(charged, v.built), `${tag}: the built circuit (read from the world) = what was charged (${json(G.minus(v.built, charged))})`);
-    // (conservation is judged on the drawbridge's own items, its path part's bill and its circuit's; the walled town and moat without a
-    // drawbridge lose dirt and cobblestone under the same measure (gm-c-survctl on h/v45b_moat_road), recorded here, not GM-c's)
+    // ((XL) conservation is judged on every item of the region; the drawbridge's own items, its path part's bill and its circuit's, are
+    // named too. GM-c scoped it to those items: the crossing's route lost 2 dirt where the bridge's deck (links) wrote over the landing's
+    // paid walk (routes); RegionTargets.retake gives such a cell's items back)
     const mine = new Set([...Object.keys(c.a?.cost?.bom ?? {}), ...Object.keys(planBill ?? {})]);
     const own = (p) => Object.fromEntries(Object.entries(p.diff).filter(([k]) => mine.has(k)));
     out.consBuilt = await cons.point('built');
     const aud = await cons.parts();
     out.paidTrapdoors = aud.paidStanding?.['minecraft:iron_trapdoor'] ?? 0;
     check(out.paidTrapdoors === trapN, `${tag}: the audit's paid standing iron trapdoors after the build = the deck's ${trapN} (${out.paidTrapdoors})`);
-    out.consBuiltOther = Object.fromEntries(Object.entries(out.consBuilt.diff).filter(([k]) => !mine.has(k)));
-    check(out.consBuilt.identity && !Object.keys(own(out.consBuilt)).length, `${tag}: conservation exact after the build on the drawbridge's items (${[...mine].length}): ${json(own(out.consBuilt))}; the rest recorded (the town and moat's, as the control): ${json(out.consBuiltOther)}`);
+    out.retaken = aud.retaken ?? null;
+    check(G.exact(out.consBuilt), `${tag}: conservation exact after the build, every item of the region (the drawbridge's ${[...mine].length}: ${json(own(out.consBuilt))}): ${json(out.consBuilt.diff)} (given back as later stages wrote over paid cells ${json(out.retaken)})`);
     const tw = await G.twinDiff(ctx, T.box, T.file, crates);
     out.twin = tw;
     check(tw.mismatches === 0, `${tag}: the survival build equals its INSTANT twin cell for cell (the crates aside): ${tw.mismatches} differ`, tw.list);
@@ -361,8 +362,7 @@ export async function registerGmC(steps, h) {
     check(out.raisedDeck === d.deck.length, `${tag}: raised before the removal (${out.raisedDeck} of ${d.deck.length} open)`);
     check(rm.removed && ef.length === 0, `${tag}: Regions.remove (raised): E-flat ${ef.length} (the crates aside)`, ef.slice(0, 8));
     check(!!sv?.refund && G.same(sv.refund, charged), `${tag}: the removal's refund = the charge, item for item (${sv?.refund ? json(G.minus(sv.refund, charged)) : 'not read'})`);
-    out.consRemovedOther = Object.fromEntries(Object.entries(p2.diff).filter(([k]) => !mine.has(k)));
-    check(p2.identity && !Object.keys(own(p2)).length, `${tag}: conservation exact after the removal on the drawbridge's items (the path part's refund with its trapdoors open included): ${json(own(p2))}; the rest recorded: ${json(out.consRemovedOther)}`);
+    check(G.exact(p2), `${tag}: conservation exact after the removal, every item of the region (the path part's refund with its trapdoors open included; the drawbridge's: ${json(own(p2))}): ${json(p2.diff)}`);
     check(!out.removal.items, `${tag}: no item dropped (${out.removal.items})`);
     await L.leaveWorld();
     spendZero();
@@ -370,7 +370,7 @@ export async function registerGmC(steps, h) {
   };
 
   /**
-   * (recorded, not a gate item) The survival control: h/v45b_moat_road (the same walled town and moat, a road crossing it on T3's fallback
+   * ((XL) judged: conservation exact on every item, built and removed, and E-flat 0) The survival control: h/v45b_moat_road (the same walled town and moat, a road crossing it on T3's fallback
    * bridge, no drawbridge) built and removed in survival with the same conservation measure, so a conservation finding in csurvival can
    * be told apart from the drawbridge's.
    */
@@ -384,7 +384,7 @@ export async function registerGmC(steps, h) {
     const out = { overall: c.ck.check?.overall };
     if (!c.sha) { await L.leaveWorld(); return out; }
     c.pre = await G.snap(ctx, c.box, 'gmc-ctl-pre');
-    await G.pile(ctx, c.s, 8);
+    const crates = await G.pile(ctx, c.s, 8);
     await killMobs();
     const cons = new G.Conservation(ctx, c.box);
     await cons.start();
@@ -392,10 +392,21 @@ export async function registerGmC(steps, h) {
     const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
     out.state = f.last.st.view.state;
     out.built = await cons.point('built');
-    await G.remove(ctx, region);
+    const aud = await cons.parts();
+    out.retaken = aud.retaken ?? null;
+    await cmd('/kill @e[type=minecraft:item]');
+    const rm = await G.remove(ctx, region);
     out.removed = await cons.point('removed');
+    const e = await G.diff(ctx, c.box, c.pre);
+    const ef = e.list.filter((q) => !crates.some((k2) => k2.join(',') === q.pos));
+    out.eflat = ef.length;
     log(`  csurvctl: ${json(out)}`);
-    check(out.state === 'PLACED', `control: ${name} built in survival (${out.state}); conservation built ${json(out.built.diff)}, removed ${json(out.removed.diff)} (recorded)`);
+    check(out.state === 'PLACED', `control: ${name} built in survival (${out.state})`);
+    // ((XL) judged: the whole region's items, every one, not scoped to a part; a later stage's write over an earlier stage's paid cell
+    // gives that cell's items back (RegionTargets.retake), so a crossing's route and deck conserve)
+    check(G.exact(out.built), `control: ${name}: conservation exact after the build, every item of the region: ${json(out.built.diff)} (identity ${out.built.identity}; given back as later stages wrote over paid cells ${json(out.retaken)})`);
+    check(rm.removed && G.exact(out.removed), `control: ${name}: Regions.remove, conservation exact after the removal, every item: ${json(out.removed.diff)} (identity ${out.removed.identity})`);
+    check(ef.length === 0, `control: ${name}: E-flat ${ef.length} after the removal (the crates aside)`, ef.slice(0, 8));
     await L.leaveWorld();
     return out;
   };
