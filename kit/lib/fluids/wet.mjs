@@ -153,6 +153,8 @@ export function holdFluidVolumes(K) {
 /** A leg that still fails because a pier is needed in water: route it once more with wet piers (§8.1, §8.4). */
 export function wetBridgeFallback(K, l, m, why) {
   if (!l?.conn || !K?.r || !WET_LEG_KINDS.includes(l.conn.kind)) return null;
+  // ((GM-c) a drawbridge stands on no pier: its trapdoor deck never takes the wet fallback)
+  if (l.k1?.t3?.bridge?.deck === 'trapdoor') return null;
   // only a failure on water: the bridge row's WATER (a pier needed in water), or every route crossing water after T3's fallback
   if (why === 'BRIDGE' && m?.bridge?.code !== 'WATER') return null;
   if (why === 'ROUTE_WATER' && !l.fallback && l.conn.kind !== 'bridge') return null;

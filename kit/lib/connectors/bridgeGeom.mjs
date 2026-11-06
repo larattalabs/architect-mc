@@ -41,6 +41,8 @@ import { voxelClassOf, isGravity } from '../blocks.mjs';
 import { bomOf } from './bom.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 import { profile, sagOf, deckY, isSlab, rightOf, latOn, SITE_SOLID } from './ropeGeom.mjs';
+import { drawbridgeLayout, drawbridgeState } from './gmCircuit.mjs';
+import { flatRunsOf, gmCost, gmMatsOf, gmRank } from './gmGate.mjs';
 import { WET, askWet, fluidVolumes, noteWet, underwaterBlock, underwaterOk, wetColumn, wetKind, wetRuns } from '../fluids/wet.mjs';
 
 /** The limits (catalogue 6: `connector.bridge`), costs in T2's units (a straight walk cell is 10). */
@@ -122,6 +124,8 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   if (!gap) return fail('NO_GAP', { from: [x0, y0, z0], to: [x0 + dx * (n + 1), y0 + rise, z0 + dz * (n + 1)], depthNeeded: n <= BRIDGE.narrowMax ? BRIDGE.narrowDrop : BRIDGE.gapDepth + 1 });
   if (n < sMin || n > sMax) return fail('SPAN', { min: sMin, max: sMax });
   if (form === 'arch' && (n < BRIDGE.archMin || n > BRIDGE.archMax)) return fail('SPAN', { min: BRIDGE.archMin, max: BRIDGE.archMax, archSpan: [BRIDGE.archMin, BRIDGE.archMax] });
+  // (GM-c) the drawbridge's trapdoor deck: its own checks after the gap and the span
+  if (opts.deck === 'trapdoor') return checkTrapdoorDeck(land, a, dir, n, rise, width, { fail, col, gap, lo, hi, solidAt: (x, y, z) => (land.written && land.written(x, y, z)) || SITE_SOLID.includes(land.classAt(x, y, z)), fillMax: opts.fillMax ?? 4 });
   if (Math.abs(rise) > maxRiseOf(n)) return fail('TOO_STEEP', { rise, max: maxRiseOf(n) });
   const ys = profile(n, y0, rise, sagFor(form, n));
   const lowest = [0];
@@ -293,6 +297,60 @@ export function checkBridge(land, a, dir, n, rise, width, opts = {}) {
   return { ok: true, form, ys, lowest, piers, springing, intrados, wetTop, ground, over: wet.length ? 'water' : 'gap', depth, under, gap };
 }
 
+/**
+ * (GM-c, CONTRACT GM §2's drawbridge row, §13 item 6) The drawbridge's frame on a span (gmCircuit.mjs drawbridgeLayout): 2 apron cells at
+ * each end (deck indices 1, 2, n - 1, n) and w = n - 4 trapdoor cells between them; across, the walk (2 wide) and 3 side lanes each side.
+ */
+export const DRAWBRIDGE_DECK = Object.freeze({ apron: 2, trapMin: 1, trapMax: 7, side: 3, width: 2, spanMin: 5, spanMax: 11 });
+
+/**
+ * (GM-c) A trapdoor deck's checks (after the gap and the span; `checkBridge` with `deck: 'trapdoor'`). The deck is level (rise 0: TOO_STEEP
+ * otherwise) and 2 wide, n = w + 4 with w trapdoor cells 1..7 (SPAN otherwise). Its deck row is the landings' row y0 (the walk on it at
+ * y0 + 1), written over the whole frame (the walk and 3 side lanes each side): HEADROOM where the land (its top, a plan water body's shell
+ * included, or a water surface) reaches the deck row under an apron, or the row under it (the sleepers' row) under a trapdoor cell, or a
+ * column is blocked; so nothing is written into water or the land and the raised deck leaves the water open. ANCHOR: the landings' walk
+ * columns 2 deep in solid ground (within the walk's fill). WATER {kind: apron}: an apron column over open water (a water column with no
+ * solid top over its surface: a plan body's shell, its coping, is not open water), so the trapdoors span the whole of it. No piers.
+ */
+function checkTrapdoorDeck(land, a, dir, n, rise, width, { fail, col, gap, lo, hi, solidAt, fillMax }) {
+  const D = DRAWBRIDGE_DECK, [x0, y0, z0] = a;
+  if (width !== D.width) return fail('SPAN', { deck: 'trapdoor', width, need: D.width });
+  if (rise !== 0) return fail('TOO_STEEP', { deck: 'trapdoor', rise, max: 0 });
+  const w = n - 2 * D.apron;
+  if (w < D.trapMin || w > D.trapMax) return fail('SPAN', { deck: 'trapdoor', min: D.spanMin, max: D.spanMax, trapdoors: w });
+  const apronAt = (i) => i <= D.apron || i > n - D.apron;
+  const hits = [], open = [];
+  for (let i = 1; i <= n; i++) for (let v = lo - D.side; v <= hi + D.side; v++) {
+    const [x, z] = col(i, v);
+    if (land.blocked(x, z)) { hits.push({ at: [x, z], why: 'keep-out' }); continue; }
+    const top = Math.max(land.topAt(x, z), land.groundAt(x, z)), ap = apronAt(i), limit = ap ? y0 : y0 - 1;
+    if (top >= limit) hits.push({ at: [x, limit, z], why: ap ? 'apron' : 'sleeper', top });
+    if (ap && land.waterAt(x, z) && land.topAt(x, z) <= land.groundAt(x, z)) open.push([x, z]);
+  }
+  if (hits.length) return fail('HEADROOM', { deck: 'trapdoor', cells: hits.length, sample: hits.slice(0, 8) });
+  const bad = [];
+  for (const [i] of [[0], [n + 1]]) for (let v = lo; v <= hi; v++) {
+    const [x, z] = col(i, v), t = Math.min(y0 - 1, land.groundAt(x, z));
+    if (land.waterAt(x, z)) { bad.push({ at: [x, t, z], class: 'WATER', end: i ? 'far' : 'near' }); continue; }
+    if (y0 - 1 - t > fillMax) { bad.push({ at: [x, t + 1, z], class: 'AIR', end: i ? 'far' : 'near', fill: y0 - 1 - t }); continue; }
+    for (const y of [t, t - 1]) if (!solidAt(x, y, z)) bad.push({ at: [x, y, z], class: land.classAt(x, y, z), end: i ? 'far' : 'near' });
+  }
+  if (bad.length) return fail('ANCHOR', { deck: 'trapdoor', columns: bad.length, found: bad.slice(0, 12) });
+  if (open.length) return fail('WATER', { deck: 'trapdoor', kind: 'apron', columns: open.length, sample: open.slice(0, 8), message: `the drawbridge's aprons (${D.apron} cells at each end) stand over open water: its ${w} trapdoor cell(s) do not span all of it` });
+  const ys = profile(n, y0, 0, 0), lowest = [0];
+  for (let i = 1; i <= n; i++) lowest.push(y0);
+  let wet = 0, depth = 0, have = Infinity;
+  for (let i = 1; i <= n; i++) {
+    const [x, z] = col(i, 0), g = land.groundAt(x, z);
+    depth = Math.max(depth, y0 - g);
+    if (land.waterAt(x, z)) { wet++; if (!apronAt(i)) have = Math.min(have, y0 - g - 1); }
+  }
+  const ground = {};
+  for (const [i] of [[0], [n + 1]]) for (let v = lo - 1; v <= hi + 1; v++) { const [x, z] = col(i, v); ground[`${x},${z}`] = land.groundAt(x, z); }
+  void x0; void z0;
+  return { ok: true, form: 'beam', deck: 'trapdoor', trapdoors: w, ys, lowest, piers: [], springing: null, intrados: null, wetTop: {}, ground, over: wet ? 'water' : 'gap', depth, under: wet ? { need: 1, have: have === Infinity ? 1 : have } : null, gap };
+}
+
 /** A survey-backed land (ropeGeom.mjs surveyLand's shape), for the primitive and the tests. */
 export { surveyLand } from './ropeGeom.mjs';
 
@@ -396,6 +454,8 @@ export function bridgeSpan(r, a, b, opts = {}) {
     c = checkBridge(land, [a[0], a[1], a[2]], dir, n, rise, width, { form: opts.form ?? 'auto', clearance: opts.clearance ?? BRIDGE.clearance, ...(u.every ? { every: u.every } : {}), ...(u.depth ? { depth: u.depth } : {}), ...wetO });
   }
   if (!c.ok && !(u.pierInWater && c.code === 'WATER')) throw new Error(`${c.code}: ${what}: ${JSON.stringify(c.evidence).slice(0, 300)}`);
+  // ((GM-c) the drawbridge's trapdoor deck: its own writes)
+  if (c.deck === 'trapdoor') return trapdoorSpan(r, a, b, c, { what, dir, n, opts });
   const role = (name) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : null);
   const firstRole = (...names) => names.map(role).find((x) => x) ?? null;
   const cb = r.ctx?.connectors?.bridge ?? {};
@@ -493,6 +553,82 @@ export function bridgeSpan(r, a, b, opts = {}) {
     // (H-b) the wet piers: their columns (bed - 3 .. surface + 1, as the wet record), the cells written in water, the volume read
     ...(wetRec ? { wet: { record: wetRec.id, cells: wetCols.reduce((t, q) => t + q.wet, 0), columns: wetCols.map((q) => [q.x, q.z, q.bed, q.surface]), volume: wetRec.volume } } : {}),
   };
+  (r.meta.bridges ??= []).push(rec);
+  return rec;
+}
+
+/**
+ * (GM-c, CONTRACT GM §2's drawbridge row, §7, §8, §13 item 6) A drawbridge span's writes (bridgeSpan with a passing trapdoor check `c`):
+ * gmCircuit's drawbridgeLayout turned to the span (local east the heading, local south its right, the walk on the route's side). The path
+ * part writes the aprons (the deck block, 8 wide) and the trapdoors (iron, half top, closed, not waterlogged: the deck sits over the
+ * water, §13 item 6) with the walk's head room; the circuit (sleepers, repeaters, the bus, the caps and the two levers) is the region's
+ * mech:<gate> item (the record's `mechanismWrite`, the IR's `gateMechanisms`), written at rest (levers off, power 0, the deck lowered)
+ * with no update, so the path part writes none of its cells. The bill is what is written: the path part's cells plus the mechanism's.
+ * The record carries `deck: trapdoor`, `trapdoors`, `mechanism` {kind: drawbridge, rest: lowered, ...} and `mechanismWrite`.
+ */
+function trapdoorSpan(r, a, b, c, { what, dir, n, opts }) {
+  const role = (name) => (Object.prototype.hasOwnProperty.call(r.roles, name) ? name : null);
+  const cb = r.ctx?.connectors?.bridge ?? {};
+  const chain = [opts.deck, cb.deck, 'path', 'floor', 'structure', 'minecraft:stone_bricks'].filter((x) => typeof x === 'string');
+  const resolved = chain.map((x) => (role(x) ? r.material(x, `${what} deck`) : /^minecraft:/.test(x) ? r.material(x, `${what} deck`) : null)).filter(Boolean);
+  const dc = deckChoice(resolved) ?? { block: 'minecraft:stone_bricks', slab: 'minecraft:stone_brick_slab' };
+  const w = n - 2 * DRAWBRIDGE_DECK.apron;
+  const mats = { ...gmMatsOf(r.ctx?.roles ?? {}), deck: dc.block };
+  const L = drawbridgeLayout(w, mats);
+  if (L.problems?.length) throw new Error(`${what}: the drawbridge's circuit does not settle: ${JSON.stringify(L.problems).slice(0, 200)}`);
+  const [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo, hi } = latOn(DRAWBRIDGE_DECK.width, dir);
+  const W3 = (i, y, z) => [a[0] + dx * i + rx * (z + lo), a[1] + y, a[2] + dz * i + rz * (z + lo)];
+  const part = opts.part ?? 'links';
+  const id = opts.id ?? `${part}_bridge_${(r.meta.bridges?.length ?? 0) + 1}`;
+  const p = r.parts.find((q) => q.id === part) ?? r.part(part, { stage: opts.stage, set: 'path' });
+  (r.meta.parts[p.id] ??= {}).kind ??= 'path';
+  const clr = [];
+  for (const [i, y, z] of L.clear) { const [x, yy, zz] = W3(i, y, z); clr.push(x, zz, yy, yy, 0); }
+  if (clr.length) p.columns({ abs: 0 }, { abs: 0 }, clr, [null]);
+  const mats2 = [], mi = new Map();
+  const idx = (st) => { let k = mi.get(st); if (k === undefined) { k = mats2.length; mats2.push(st); mi.set(st, k); } return k; };
+  const walkCols = [], solidCols = [], cells = [], states = [], deck = [];
+  for (const [i, y, z, st] of L.path) {
+    const [x, yy, zz] = W3(i, y, z), s2 = drawbridgeState(st, dir);
+    (z === 0 || z === 1 ? walkCols : solidCols).push(x, zz, yy, yy, idx(s2));
+    if (z === 0 || z === 1) cells.push([x, yy, zz]);
+    if (/iron_trapdoor/.test(s2)) deck.push([x, yy, zz]);
+    states.push(s2);
+  }
+  p.columns({ abs: 0 }, { abs: 0 }, solidCols, mats2);
+  p.columns({ abs: 0 }, { abs: 0 }, walkCols, mats2, { walk: true });
+  // the circuit: the region's mech:<gate> item (realise order: structure, the caps, wire and diodes, the levers last)
+  const mech = L.mech.map(([i, y, z, st]) => [...W3(i, y, z), drawbridgeState(st, dir)]).sort((q, t) => gmRank(q[3]) - gmRank(t[3]) || q[1] - t[1] || q[0] - t[0] || q[2] - t[2]);
+  const pal = [], pi = new Map();
+  const pidx = (st) => { let k = pi.get(st); if (k === undefined) { k = pal.length; pal.push(st); pi.set(st, k); } return k; };
+  const base = mech.flatMap(([x, y, z, st]) => [x, y, z, pidx(st)]);
+  const cost = gmCost({ base: mech });
+  const pathBom = bomOf(states);
+  const bom = { ...pathBom };
+  for (const [item, k] of Object.entries(cost.bom.max)) bom[item] = (bom[item] ?? 0) + k;
+  const all = [...cells, ...mech.map((q) => q.slice(0, 3)), ...L.path.map(([i, y, z]) => W3(i, y, z))];
+  const xs = all.map((q) => q[0]), ys = all.map((q) => q[1]), zs = all.map((q) => q[2]);
+  const box = { minX: Math.min(...xs), minY: Math.min(...ys), minZ: Math.min(...zs), maxX: Math.max(...xs), maxY: Math.max(...ys) + 1, maxZ: Math.max(...zs) };
+  const mechanism = {
+    kind: 'drawbridge', rest: 'lowered', width: DRAWBRIDGE_DECK.width, trapdoors: w, dayDriven: false, who: 'player', movers: opts.movers ? [...opts.movers] : ['player', 'villager'],
+    cells: flatRunsOf(mech.map((q) => q.slice(0, 3))),
+    triggers: L.triggers.map((t) => ({ kind: t.kind, at: W3(...t.at), side: t.side, who: t.who })),
+    states: { lowered: flatRunsOf(deck), raised: flatRunsOf(deck) },
+    cost,
+  };
+  const rec = {
+    id, kind: 'bridge', deck: 'trapdoor', trapdoors: w, part: p.id, box, stage: p.stage, form: 'beam', width: DRAWBRIDGE_DECK.width, n, rise: 0, from: [a[0], a[1], a[2]], to: [b[0], b[1], b[2]], dir, lo, hi,
+    deckBlock: dc.block, slab: null, rail: null, pier: null, arch: null, light: null, lampEvery: 0, y2: c.ys,
+    clearance: 1, over: c.over, depth: c.depth, under: c.under ?? null, springing: null, intrados: null,
+    anchors: [[0, a[1]], [n + 1, b[1]]].flatMap(([i, ya]) => [lo, hi].map((v) => {
+      const x = a[0] + dx * i + rx * v, z = a[2] + dz * i + rz * v, gr = c.ground?.[`${x},${z}`];
+      return { x, z, landing: ya, top: gr === undefined ? ya - 1 : Math.min(ya - 1, gr) };
+    })),
+    cells, piers: [], pierCols: [], body: [], posts: [], lamps: [], bom,
+    mechanism, mechanismWrite: { palette: pal, base, stage: p.stage },
+    ...(opts.edge ? { edge: opts.edge } : {}), ...(opts.lands ? { lands: opts.lands } : {}), ...(opts.movers ? { movers: [...opts.movers] } : {}),
+  };
+  void hi;
   (r.meta.bridges ??= []).push(rec);
   return rec;
 }

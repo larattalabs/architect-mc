@@ -206,7 +206,8 @@ function nestedUnsupported(family, part) {
     return whereCheck(part.where, '$.where') ?? sketchCheck(part.sketch, '$.sketch');
   }
   if (family === 'connector') {
-    // (6c T3, R18, S-T3-7) a bridge whose params name a mechanism or movable is a moving bridge: connector.drawbridge (reserved)
+    // (6c T3, R18, S-T3-7) a bridge whose params name a mechanism or movable is a moving bridge: connector.drawbridge (supported since
+    // GM-c: the block answers only while a catalogue holds it reserved)
     if (part.kind === 'bridge' && part.params && typeof part.params === 'object' && !Array.isArray(part.params) && ((part.params.mechanism !== undefined && part.params.mechanism !== null && part.params.mechanism !== false) || part.params.movable === true)) {
       const r0 = reserved('connector.drawbridge', part.params.mechanism !== undefined ? '$.params.mechanism' : '$.params.movable');
       if (r0) return r0;

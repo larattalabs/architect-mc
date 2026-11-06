@@ -117,6 +117,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   flipped.add('connector.gate');
   // ((WS, CONTRACT GM §19) connector.wall's gateMech limit and schemaVersion 2 are WS's: ws.test.mjs)
   flipped.add('connector.wall');
+  // ((GM-c, CONTRACT GM §5) connector.drawbridge's flip (reserved -> supported, schemaVersion 1, the limits) is GM-c's: gm-c.test.mjs)
+  flipped.add('connector.drawbridge');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);

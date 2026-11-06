@@ -163,4 +163,28 @@ class GateMechTest {
 		assertEquals(java.util.Map.of("minecraft:stone_bricks", 2, "minecraft:lever", 1), GateMech.plan(ws.get(1), null, null, 0, 0, 0).bill());
 		assertEquals("curtain_g2", ws.get(1).get("gate").getAsString());
 	}
+
+	/**
+	 * (GM-c, CONTRACT GM §2's drawbridge row, §8) A drawbridge's circuit (the IR's gateMechanisms[] entry keyed by its connector, no wall):
+	 * read as a swing's, its base written whole, the bill what is written (wire as redstone dust, the repeaters, the levers, the sleepers and
+	 * the caps), the report naming the kind and no wall.
+	 */
+	@Test
+	void drawbridgeCircuit() {
+		String gw = "{\"gate\":\"drawbridge\",\"kind\":\"drawbridge\",\"bridge\":\"bridge_b0\",\"stage\":\"links\",\"palette\":[\"minecraft:stone_bricks\","
+			+ "\"minecraft:iron_bars[east=true,north=false,south=true,waterlogged=false,west=false]\",\"minecraft:repeater[delay=1,facing=north,locked=false,powered=false]\","
+			+ "\"minecraft:redstone_wire[east=side,north=none,power=0,south=side,west=none]\",\"minecraft:lever[face=floor,facing=east,powered=false]\"],"
+			+ "\"base\":[3,64,1,0, 3,64,2,0, 3,66,1,1, 3,65,1,2, 3,65,2,3, 1,66,2,4]}";
+		JsonObject ir = JsonParser.parseString("{\"gateMechanisms\":[" + gw + "],\"lots\":[]}").getAsJsonObject();
+		java.util.List<JsonObject> ws = GateMech.gateWrites(new Ir(ir, "x", "0", "s", new int[] {0, 0, 0, 0}, java.util.List.of(), java.util.Map.of(), java.util.Map.of(),
+			java.util.List.of(), java.util.List.of(), java.util.Map.of(), new long[] {0, 0, 0}, 1, java.util.List.of(), java.util.List.of()));
+		assertEquals(1, ws.size());
+		GateMech.Plan p = GateMech.plan(ws.get(0), null, null, 0, 0, 0);
+		assertEquals(6, p.positions().length);
+		assertEquals(java.util.Map.of("minecraft:stone_bricks", 2, "minecraft:iron_bars", 1, "minecraft:repeater", 1, "minecraft:redstone", 1, "minecraft:lever", 1), p.bill());
+		JsonObject r = GateMech.gateReport(ws.get(0), p);
+		assertEquals("drawbridge", r.get("kind").getAsString());
+		assertTrue(!r.has("wall") && !r.has("deviation"));
+		assertEquals(6, r.get("cells").getAsInt());
+	}
 }

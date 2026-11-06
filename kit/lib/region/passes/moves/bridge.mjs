@@ -96,6 +96,8 @@ export function bridgeActive(state, edge) {
     nMin: Math.max(BRIDGE.spanMin, isInt(sp.min) ? sp.min : BRIDGE.spanMin), nMax: Math.min(BRIDGE.spanMax, isInt(sp.max) ? sp.max : BRIDGE.spanMax),
     startK: kOf(edge.from), goalK: kOf(edge.to), reached: diagnose ? new Int32Array(state.W * state.D) : null, _unsafe: o._unsafe ?? null,
     wet: o.wet && isInt(o.wet.waterDepth) ? { waterDepth: o.wet.waterDepth } : null,
+    // ((GM-c) a drawbridge's trapdoor deck: level, no piers, its own frame: checkBridge's deck mode)
+    deck: o.deck === 'trapdoor' ? 'trapdoor' : null,
   };
   state.memo = new Map();
   return true;
@@ -114,7 +116,7 @@ function spanCheck(state, i, j, y, hf, n, yf) {
   let r = state.memo.get(key);
   if (r) return r;
   const di = DIRS[hf][0], dj = DIRS[hf][1];
-  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax }, ...(c.wet ? { wet: { ...c.wet, ...state.wetLand, ...(c._unsafe?.flowingPier ? { unsafeFlowing: true } : {}) } } : {}) });
+  r = checkBridge(state.land, [state.minX + i, y, state.minZ + j], [di, dj], n, yf - y, c.width, { form: c.form, clearance: c.clearance, span: { min: c.nMin, max: c.nMax }, ...(c.deck ? { deck: c.deck } : {}), ...(c.wet ? { wet: { ...c.wet, ...state.wetLand, ...(c._unsafe?.flowingPier ? { unsafeFlowing: true } : {}) } } : {}) });
   state.memo.set(key, r);
   return r;
 }
@@ -146,7 +148,7 @@ export function bridgeExpand(state, S) {
       // the far landing: an earlier edge's built cell at its y; else the ground there, or level with the near landing within its fill
       const ys = builtY[k2] !== NONE ? [builtY[k2]] : y !== G[k2] && y > G[k2] && y - G[k2] <= c.maxFill ? [G[k2], y] : [G[k2]];
       for (const yf of ys) {
-        if (Math.abs(yf - y) > maxRiseOf(n)) continue;
+        if (Math.abs(yf - y) > maxRiseOf(n) || (c.deck && yf !== y)) continue;
         const r = spanCheck(state, i, j, y, hf, n, yf);
         if (!r.ok) continue;
         S.relax(k2, hf, 2, yf * FP, BRIDGE.cost + BRIDGE.costPer * n + BRIDGE.costPier * r.piers.length + (c.wet ? BRIDGE.costWet * wetCells(r) : 0), n, c.once ? 1 : f);
@@ -180,9 +182,9 @@ export function bridgeCells(state, m) {
   for (let t = 1; t <= n; t++) cells.push([m.x0 + sx * t, deckY(r.ys[t]), m.z0 + sz * t]);
   cells.push([m.x1, m.y1, m.z1]);
   const c = state.cur;
-  const check = { ok: true, form: r.form, ys: r.ys, lowest: r.lowest, piers: r.piers, springing: r.springing, intrados: r.intrados, wetTop: r.wetTop, ground: r.ground, over: r.over, depth: r.depth, under: r.under };
+  const check = { ok: true, form: r.form, ...(r.deck ? { deck: r.deck, trapdoors: r.trapdoors } : {}), ys: r.ys, lowest: r.lowest, piers: r.piers, springing: r.springing, intrados: r.intrados, wetTop: r.wetTop, ground: r.ground, over: r.over, depth: r.depth, under: r.under };
   const wet = wetCells(r);
-  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check, ...(wet ? { wet: { cells: wet, waterDepth: c.wet.waterDepth } } : {}) } };
+  return { cells, data: { n, rise: m.y1 - m.y0, dir: [sx, sz], form: r.form, ...(r.deck ? { deck: r.deck } : {}), width: c.width, clearance: c.clearance, piers: r.piers.length, over: r.over, depth: r.depth, check, ...(wet ? { wet: { cells: wet, waterDepth: c.wet.waterDepth } } : {}) } };
 }
 
 /** After an edge routes: its spans, for the links stage and the answer (`edgeOut.bridges`). */

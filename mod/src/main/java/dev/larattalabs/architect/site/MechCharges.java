@@ -63,12 +63,13 @@ public final class MechCharges {
 	/** (WE) The marker on a mechanism item that has announced its move to the bill wait (ITEM_WAITING, once per move); cleared when charged. */
 	public static final String EXT_BILL_WAIT = "architect_mc:billWait";
 
-	/** (WE) A mechanism kind's words: the portcullis, the sliding gate, the swing gate. */
+	/** (WE) A mechanism kind's words: the portcullis, the sliding gate, the swing gate (GM-c: the drawbridge). */
 	static String kindWords(@Nullable String kind) {
 		return kind == null ? "gate mechanism" : switch (kind) {
 			case "portcullis" -> "portcullis";
 			case "slide" -> "sliding gate";
 			case "swing" -> "swing gate";
+			case "drawbridge" -> "drawbridge"; // (GM-c) a drawbridge's circuit (its trapdoor deck's ripple and levers)
 			default -> "gate mechanism";
 		};
 	}
