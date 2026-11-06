@@ -112,8 +112,8 @@ export async function registerGmC(steps, h) {
   const FXN = 'valid/v7a_gm_drawbridge';
 
   /** The fixture checked (and realised): {fx, s, ck, sha, a (the drawbridge's answer), b (its span), m (its mechanism), box, region?, pre?}. */
-  async function moat(tag, { creative = true, realise = true } = {}) {
-    const fx = G.fixture(ctx, FXN);
+  async function moat(tag, { creative = true, realise = true, name = FXN } = {}) {
+    const fx = G.fixture(ctx, name);
     const s = await G.site(ctx, `gmc ${tag}`, fx, { creative });
     await G.designs(ctx);
     await cmd('/time set 6000');
@@ -337,6 +337,36 @@ export async function registerGmC(steps, h) {
     check(!out.removal.items, `${tag}: no item dropped (${out.removal.items})`);
     await L.leaveWorld();
     spendZero();
+    return out;
+  };
+
+  /**
+   * (recorded, not a gate item) The survival control: h/v45b_moat_road (the same walled town and moat, a road crossing it on T3's fallback
+   * bridge, no drawbridge) built and removed in survival with the same conservation measure, so a conservation finding in csurvival can
+   * be told apart from the drawbridge's.
+   */
+  steps.csurvctl = async () => {
+    await ensure();
+    await L.leaveWorld().catch(() => null);
+    const name = 'h/v45b_moat_road';
+    const fx = G.fixture(ctx, name);
+    const c = await moat('ctl', { creative: false, realise: false, name });
+    const out = { overall: c.ck.check?.overall };
+    if (!c.sha) { await L.leaveWorld(); return out; }
+    c.pre = await G.snap(ctx, c.box, 'gmc-ctl-pre');
+    await G.pile(ctx, c.s, 8);
+    await killMobs();
+    const cons = new G.Conservation(ctx, c.box);
+    await cons.start();
+    const region = await G.realise(ctx, c.sha, fx.lotEntries);
+    const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
+    out.state = f.last.st.view.state;
+    out.built = await cons.point('built');
+    await G.remove(ctx, region);
+    out.removed = await cons.point('removed');
+    log(`  csurvctl: ${json(out)}`);
+    check(out.state === 'PLACED', `control: v45b built in survival (${out.state}); conservation built ${json(out.built.diff)}, removed ${json(out.removed.diff)} (recorded)`);
+    await L.leaveWorld();
     return out;
   };
 }
