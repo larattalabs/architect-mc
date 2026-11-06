@@ -261,6 +261,13 @@ export async function registerGmC(steps, h) {
     out.check = { overall: c.ck.check?.overall, survival: c.ck.check?.survival, planBill, cost: c.m?.cost ?? null, partBom: c.a?.cost?.bom ?? null, survivalBom: c.ck.check?.cost?.bom ?? null };
     check(c.ck.check?.survival === true && c.ck.check?.overall === 'READY' && c.m?.kind === 'drawbridge' && !!planBill, `${tag}: READY in survival; the plan's bill names the drawbridge's circuit (cost.bomParts mech:drawbridge ${json(planBill)})`);
     check(!!planBill && G.same(planBill, c.m.cost.bom.max) && G.same(c.m.cost.bom.min, c.m.cost.bom.max), `${tag}: the plan bill = the circuit's mechanism.cost (exact: min = max) (${json(G.minus(planBill, c.m?.cost?.bom?.max))})`);
+    // the path part's bill too (the aprons and trapdoors, charged through the construction queue): iron trapdoors are the drawbridge's only
+    const trapN = 2 * (c.b?.trapdoors ?? -1);
+    out.check.trapdoors = { survivalBom: c.ck.check?.cost?.bom?.['minecraft:iron_trapdoor'] ?? null, partBom: c.a?.cost?.bom?.['minecraft:iron_trapdoor'] ?? null, want: trapN };
+    check(out.check.trapdoors.survivalBom === trapN && out.check.trapdoors.partBom === trapN, `${tag}: the survival check's cost.bom and the part's cost.bom name the deck's ${trapN} iron trapdoors (${json(out.check.trapdoors)})`);
+    const pathBill = G.minus(c.a?.cost?.bom ?? {}, c.m?.cost?.bom?.max ?? {});
+    out.check.pathBill = pathBill;
+    check(Object.values(pathBill).every((n) => n > 0) && pathBill['minecraft:iron_trapdoor'] === trapN, `${tag}: the part's cost.bom = the path part's bill (aprons and trapdoors: ${json(pathBill)}) + the circuit's mechanism.cost`);
     if (!c.sha) { await L.leaveWorld(); return out; }
     c.pre = await G.snap(ctx, c.box, `gmc-${tag}-pre`);
     const crates = await G.pile(ctx, c.s, 8);
@@ -317,6 +324,9 @@ export async function registerGmC(steps, h) {
     const mine = new Set([...Object.keys(c.a?.cost?.bom ?? {}), ...Object.keys(planBill ?? {})]);
     const own = (p) => Object.fromEntries(Object.entries(p.diff).filter(([k]) => mine.has(k)));
     out.consBuilt = await cons.point('built');
+    const aud = await cons.parts();
+    out.paidTrapdoors = aud.paidStanding?.['minecraft:iron_trapdoor'] ?? 0;
+    check(out.paidTrapdoors === trapN, `${tag}: the audit's paid standing iron trapdoors after the build = the deck's ${trapN} (${out.paidTrapdoors})`);
     out.consBuiltOther = Object.fromEntries(Object.entries(out.consBuilt.diff).filter(([k]) => !mine.has(k)));
     check(out.consBuilt.identity && !Object.keys(own(out.consBuilt)).length, `${tag}: conservation exact after the build on the drawbridge's items (${[...mine].length}): ${json(own(out.consBuilt))}; the rest recorded (the town and moat's, as the control): ${json(out.consBuiltOther)}`);
     const tw = await G.twinDiff(ctx, T.box, T.file, crates);
