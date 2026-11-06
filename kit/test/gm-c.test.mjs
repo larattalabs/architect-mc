@@ -20,7 +20,7 @@ import { checkBridge, DRAWBRIDGE_DECK } from '../lib/connectors/bridgeGeom.mjs';
 import { drawbridgeLayout, drawbridgeState } from '../lib/connectors/gmCircuit.mjs';
 import { gmCost } from '../lib/connectors/gmGate.mjs';
 import { bomOf } from '../lib/connectors/bom.mjs';
-import { lint } from '../lib/connectors/gmLint.mjs';
+import { lint, settleSignals } from '../lib/connectors/gmLint.mjs';
 import { rightOf, latOn } from '../lib/connectors/ropeGeom.mjs';
 import { isDrawbridge } from '../lib/connectors/t3kinds.mjs';
 
@@ -90,7 +90,9 @@ test('v7a_gm_drawbridge: READY; the trapdoor deck in the path part, the circuit 
   for (let i = 0; i + 3 < gw.base.length; i += 4) states.push(gw.palette[gw.base[i + 3]]);
   assert.equal(states.filter((s) => /lever/.test(s)).length, 2);
   assert.ok(states.every((s) => !/powered=true|power=[1-9]/.test(s)), 'written at rest: levers off, power 0');
-  assert.equal(states.filter((s) => /repeater/.test(s)).length, 4 * b.trapdoors + 2);
+  // (LV) the far lever's two chains (a repeater a trapdoor cell each side), the near lever's run on the outer row (5) and the far apron's (1)
+  assert.equal(states.filter((s) => /repeater/.test(s)).length, 2 * b.trapdoors + 6);
+  assert.equal(states.filter((s) => /comparator/.test(s) && /mode=subtract/.test(s)).length, 2);
   // the levers come last (§7 item 2's order)
   assert.ok(states.slice(-2).every((s) => /lever/.test(s)));
   const { vw } = buildVirtual({ ir, survey: svOf(FX).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null });
@@ -107,7 +109,8 @@ test('v7a_gm_drawbridge: READY; the trapdoor deck in the path part, the circuit 
   assert.deepEqual(mc.cells[0], mc.cells[1]);
   assert.deepEqual(a.cost.bom['minecraft:iron_trapdoor'], 2 * b.trapdoors);
   assert.deepEqual(a.cost.bom['minecraft:lever'], 2);
-  assert.deepEqual(a.cost.bom['minecraft:repeater'], 4 * b.trapdoors + 2);
+  assert.deepEqual(a.cost.bom['minecraft:repeater'], 2 * b.trapdoors + 6);
+  assert.deepEqual(a.cost.bom['minecraft:comparator'], 2);
   assert.deepEqual(m.cost, mc);
   const pathStates = [];
   for (const p of ir.parts.filter((q) => q.id === rec.part)) void p;
@@ -192,31 +195,40 @@ test('a written width other than 2 is answered adjusted (deviation width); the b
   assert.deepEqual({ ...b, cached: undefined }, { ...d, cached: undefined });
 });
 
-test('the circuit: each lever alone reaches every repeater and trapdoor of the deck, in every heading (gmLint; levers ORed), and settles clean', () => {
+test('the circuit (LV, two-way levers): each lever reaches every trapdoor (gmLint), and in every heading the deck is raised exactly when one lever is on (settleSignals: each lever flips it in both states of the other)', () => {
   for (const w of [1, 3, 5, 7]) for (const dir of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const L = drawbridgeLayout(w, {});
     assert.deepEqual(L.problems, [], `w ${w}`);
     const [dx, dz] = dir, [rx, rz] = rightOf(dir), { lo } = latOn(2, dir);
     const W3 = (i, y, z) => [dx * i + rx * (z + lo), y, dz * i + rz * (z + lo)];
     const F = { north: 'n', south: 's', east: 'e', west: 'w' };
-    const cells = new Map();
-    const levers = [];
-    for (const [i, y, z, s0] of [...L.path, ...L.mech]) {
-      const s = drawbridgeState(s0, dir), p = W3(i, y, z), k = p.join(',');
-      const fac = /facing=(\w+)/.exec(s)?.[1];
-      if (/lever/.test(s)) { const label = levers.length ? 'far' : 'near'; levers.push(k); cells.set(k, { t: 'lever', mount: [p[0], p[1] - 1, p[2]], label }); }
-      else if (/repeater/.test(s)) cells.set(k, { t: 'rep', f: F[fac] });
-      else if (/redstone_wire/.test(s)) cells.set(k, { t: 'dust' });
-      else if (/trapdoor/.test(s)) cells.set(k, { t: 'trap' });
-      else if (/bars|fence|_wall/.test(s)) cells.set(k, { t: 'nc-bar' });
-      else cells.set(k, { t: 'block' });
-    }
-    const out = lint(cells, {});
+    const cellsOf = (near, far) => {
+      const cells = new Map();
+      for (const [i, y, z, s0] of [...L.path, ...L.mech]) {
+        const s = drawbridgeState(s0, dir), p = W3(i, y, z), k = p.join(',');
+        const fac = /facing=(\w+)/.exec(s)?.[1], trig = L.triggers.find((t) => t.at.join() === `${i},${y},${z}`);
+        if (/lever/.test(s)) cells.set(k, { t: 'lever', mount: [p[0], p[1] - 1, p[2]], label: trig.side, on: trig.side === 'near' ? near : far });
+        else if (/repeater/.test(s)) cells.set(k, { t: 'rep', f: F[fac] });
+        else if (/comparator/.test(s)) cells.set(k, { t: 'cmp', f: F[fac] });
+        else if (/redstone_wire/.test(s)) cells.set(k, { t: 'dust' });
+        else if (/trapdoor/.test(s)) cells.set(k, { t: 'trap' });
+        else if (/bars|fence|_wall/.test(s)) cells.set(k, { t: 'fence' });
+        else cells.set(k, { t: 'block' });
+      }
+      return cells;
+    };
+    const c0 = cellsOf(false, false);
+    const out = lint(c0, {});
     assert.deepEqual(out.problems, [], `w ${w} ${dir}`);
-    // (the deck's repeaters, row 0; each apron's cross-bus repeater is its own lever's)
-    for (const [k, c] of cells) if (c.t === 'trap' || (c.t === 'rep' && k.split(',')[1] === '0')) assert.deepEqual([...(out.nets.get(k) ?? [])].sort(), ['far', 'near'], `w ${w} ${dir}: ${c.t} ${k}`);
-    // nothing of the circuit reaches the walk's aprons' neighbours outside the frame (no trapdoor at an apron)
-    assert.equal([...cells.values()].filter((c) => c.t === 'trap').length, 2 * w);
+    const traps = [...c0].filter(([, c]) => c.t === 'trap').map(([k]) => k);
+    assert.equal(traps.length, 2 * w);
+    for (const k of traps) assert.deepEqual([...(out.nets.get(k) ?? [])].sort(), ['far', 'near'], `w ${w} ${dir}: trap ${k}`);
+    // every lever state: the deck's 2w trapdoors powered (raised) exactly when near XOR far; the circuit settles
+    for (const near of [false, true]) for (const far of [false, true]) {
+      const r = settleSignals(cellsOf(near, far));
+      assert.ok(r.stable, `w ${w} ${dir} near ${near} far ${far}: settles`);
+      assert.equal(traps.filter((k) => r.powered(k)).length, near !== far ? 2 * w : 0, `w ${w} ${dir} near ${near} far ${far}`);
+    }
   }
 });
 

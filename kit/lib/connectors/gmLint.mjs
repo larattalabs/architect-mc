@@ -216,3 +216,95 @@ export function hiddenProblems(cells, box, allowed = new Set()) {
   }
   return out;
 }
+
+/**
+ * (LV) The steady state of a small circuit with its levers set: the signal levels lint's reach cannot give (a comparator in subtract mode,
+ * dust decay), so a unit can check a circuit's output in every lever state (the drawbridge's two-way levers). Same cells and the same 26.3
+ * rules as `lint` (its dust links and points), plus `on` on a lever and `t: 'fence'` (a non-conductor that holds nothing). Levels by fixed-point
+ * iteration: dust = the best of its sources (a strongly powered block beside it, a lever, a lit torch, a diode facing into it) and its wires
+ * less 1; a repeater 15 when its back gives a signal (no locking: a circuit that locks one is out of scope); a comparator (subtract)
+ * rear - max(sides), its sides reading dust and diodes facing in only; a torch lit unless its mount is powered. A block's level: the strong
+ * power into it (a diode facing in, a lever on it, a lit torch under it) or dust on it or pointing into it. Returns {level(key), powered(key)
+ * (an actuator's input: any neighbour's signal into it), stable (false: it did not settle, e.g. a clock), problems (lint's)}.
+ */
+export function settleSignals(cells, { iters = 400 } = {}) {
+  const L = lint(cells, {});
+  const at = (k) => cells.get(k) ?? { t: 'air' };
+  const val = new Map();
+  for (const [k, c] of cells) {
+    if (c.t === 'dust' || c.t === 'rep' || c.t === 'cmp') val.set(k, 0);
+    if (c.t === 'torch') val.set(k, 15);
+  }
+  const front = (k, c) => key(add(parse(k), OPP[c.f]));
+  const back = (k, c) => key(add(parse(k), c.f));
+  const isDiode = (c) => c.t === 'rep' || c.t === 'cmp';
+  const strongInto = (bk) => {
+    let best = 0;
+    for (const d of ALL) {
+      const nk = key(add(parse(bk), d)), c = cells.get(nk);
+      if (!c) continue;
+      if (isDiode(c) && front(nk, c) === bk) best = Math.max(best, val.get(nk));
+      if (c.t === 'torch' && d === 'd' && val.get(nk) && key(c.mount) !== bk) best = 15;
+      if (c.t === 'lever' && c.on && key(c.mount) === bk) best = 15;
+    }
+    return best;
+  };
+  const weakInto = (bk) => {
+    let best = 0;
+    for (const d of ALL) {
+      const nk = key(add(parse(bk), d)), c = cells.get(nk);
+      if (c?.t !== 'dust' || !val.get(nk)) continue;
+      if (d === 'u' || L.dustInfo.get(nk).point.includes(OPP[d])) best = Math.max(best, val.get(nk));
+    }
+    return best;
+  };
+  const blockLevel = (k) => Math.max(strongInto(k), weakInto(k));
+  // the signal the cell srcK gives into its neighbour intoK
+  const signal = (srcK, intoK) => {
+    const c = cells.get(srcK);
+    if (!c) return 0;
+    const d = ALL.find((x) => key(add(parse(srcK), x)) === intoK);
+    if (c.t === 'block') return blockLevel(srcK);
+    if (c.t === 'dust') return d === 'd' || L.dustInfo.get(srcK).point.includes(d) ? val.get(srcK) : 0;
+    if (isDiode(c)) return front(srcK, c) === intoK ? val.get(srcK) : 0;
+    if (c.t === 'torch') return val.get(srcK) && key(c.mount) !== intoK && !(d === 'd' && dirTo(parse(srcK), c.mount) === 'd') ? 15 : 0;
+    if (c.t === 'lever') return c.on ? 15 : 0;
+    return 0;
+  };
+  const input = (k) => { const b = at(k); return b.t === 'dust' ? val.get(k) : 0; };
+  let stable = false;
+  for (let it = 0; it < iters && !stable; it++) {
+    const next = new Map();
+    for (const [k, c] of cells) {
+      if (c.t === 'torch') next.set(k, blockLevel(key(c.mount)) > 0 ? 0 : 15);
+      else if (c.t === 'rep') { const b = back(k, c); next.set(k, Math.max(input(b), signal(b, k)) > 0 ? 15 : 0); }
+      else if (c.t === 'cmp') {
+        const b = back(k, c), rear = Math.max(input(b), signal(b, k));
+        let side = 0;
+        for (const h of H) {
+          if (h === c.f || h === OPP[c.f]) continue;
+          const nk = key(add(parse(k), h)), s = cells.get(nk);
+          if (s?.t === 'dust') side = Math.max(side, val.get(nk));
+          if (s && isDiode(s) && front(nk, s) === k) side = Math.max(side, val.get(nk));
+        }
+        next.set(k, Math.max(0, rear - side));
+      } else if (c.t === 'dust') {
+        let best = 0;
+        for (const d of ALL) {
+          const nk = key(add(parse(k), d)), s = cells.get(nk);
+          if (!s) continue;
+          if (s.t === 'block') best = Math.max(best, strongInto(nk));
+          else if (s.t === 'lever' && s.on) best = 15;
+          else if (s.t === 'torch' && val.get(nk) && key(s.mount) !== k && !(d === 'u' && dirTo(parse(nk), s.mount) === 'd')) best = 15;
+          else if (isDiode(s) && front(nk, s) === k) best = Math.max(best, val.get(nk));
+        }
+        for (const w of L.dustInfo.get(k).wires) best = Math.max(best, (val.get(w) ?? 0) - 1);
+        next.set(k, best);
+      }
+    }
+    stable = true;
+    for (const [k, v] of next) if (val.get(k) !== v) { val.set(k, v); stable = false; }
+  }
+  const powered = (k) => ALL.some((d) => signal(key(add(parse(k), d)), k) > 0);
+  return { level: (k) => (cells.get(k)?.t === 'block' ? blockLevel(k) : val.get(k) ?? 0), powered, stable, problems: L.problems };
+}
