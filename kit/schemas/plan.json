@@ -658,7 +658,7 @@
 
     "connector.bridge": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(T3) A bridge: a route from from to to over exactly one built span (a gap or water), walking at most approach (default 16) at each end. form: beam (deck on piers, bridge.beam), arch (span 4..24, bridge.arch), auto (default: arch where it fits). width default 2 villager, 1 player-only. clearance: clear cells over water (default 2; R20). No write in water or ice, except H's wet fallback: a crossing that fails only on water is searched again with piers in natural water sources up to waterDepth (default 8; never flowing water, lava or a bubble column); past that it refuses WATER {kind: deep | flowing | lava}. R18.",
+      "description": "(T3) A bridge: a route from from to to over exactly one built span (a gap or water), first within approach (default 16) of both ends, else where the way crosses the gap. form: beam (deck on piers, bridge.beam), arch (span 4..24, bridge.arch), auto (default: arch where it fits). width default 2 villager, 1 player-only. clearance: clear cells over water (default 2; R20). No write in water or ice, except H's wet fallback: a crossing that fails only on water is searched again with piers in natural water sources up to waterDepth (default 8; never flowing water, lava or a bubble column); past that it refuses WATER {kind: deep | flowing | lava}. R18.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["bridge", "drawbridge"] },

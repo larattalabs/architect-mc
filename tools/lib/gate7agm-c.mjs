@@ -377,7 +377,8 @@ export async function registerGmC(steps, h) {
   steps.csurvctl = async () => {
     await ensure();
     await L.leaveWorld().catch(() => null);
-    const name = 'h/v45b_moat_road';
+    // ((GMc-1) GATE_GMC_CTL: another control, e.g. gm/gmc_ctl_far, v7a_gm_drawbridge_far's hamlet and moat without the drawbridge)
+    const name = process.env.GATE_GMC_CTL || 'h/v45b_moat_road';
     const fx = G.fixture(ctx, name);
     const c = await moat('ctl', { creative: false, realise: false, name });
     const out = { overall: c.ck.check?.overall };
@@ -394,7 +395,7 @@ export async function registerGmC(steps, h) {
     await G.remove(ctx, region);
     out.removed = await cons.point('removed');
     log(`  csurvctl: ${json(out)}`);
-    check(out.state === 'PLACED', `control: v45b built in survival (${out.state}); conservation built ${json(out.built.diff)}, removed ${json(out.removed.diff)} (recorded)`);
+    check(out.state === 'PLACED', `control: ${name} built in survival (${out.state}); conservation built ${json(out.built.diff)}, removed ${json(out.removed.diff)} (recorded)`);
     await L.leaveWorld();
     return out;
   };
