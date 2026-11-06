@@ -40,6 +40,7 @@ export class Palette {
     this.top = [];
     this.vpass = []; this.bubble = []; // (6c V) the villager mover: passable for a villager; bubble columns
     this.half = []; // (7a K1b) a bottom slab: a floor at half height (the movers stand on it, its surface y + 0.5)
+    this.trapFloor = []; // (GM-c) a closed top-half trapdoor: the kit's walks stand on it (the drawbridge's lowered deck); not P.floor
     this.fs = []; this.flammable = []; // (6c H) fluid-stopping (M25's shell and flow) and flammable (M20)
     this.of(AIR);
   }
@@ -84,6 +85,7 @@ export class Palette {
     this.vpass.push(vp);
     this.bubble.push(st.name === 'minecraft:bubble_column');
     this.half.push(!air && known && BLOCKS[st.name].family === 'slab' && (st.props.type ?? 'bottom') === 'bottom');
+    this.trapFloor.push(!air && known && BLOCKS[st.name].family === 'trapdoor' && st.props.half === 'top' && st.props.open !== 'true');
     // (6c H) a block the table doesn't know stops fluids (it is solid as far as the rules know) and burns (conservative for M20)
     this.fs.push(!air && (known ? isFluidStopping(st.name) : true));
     this.flammable.push(!air && (known ? isFlammable(st.name) : true));

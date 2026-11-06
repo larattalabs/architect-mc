@@ -39,8 +39,8 @@ export function bridgeRules({ ir, vw, bridges, want, findings, metrics, finding 
     const surface = (x, z) => {
       for (let y = yHi; y >= yLo; y--) {
         const b = vw.get(x, y, z);
-        if ((P.air[b] || P.passable[b]) && !(trap && P.floor[b] && !P.air[b])) continue;
-        if (!(P.floor[b] || P.half[b])) return null;
+        if ((P.air[b] || P.passable[b]) && !(trap && P.trapFloor[b])) continue;
+        if (!(P.floor[b] || P.half[b] || (trap && P.trapFloor[b]))) return null;
         if (!P.passable[vw.get(x, y + 1, z)] || !P.passable[vw.get(x, y + 2, z)]) return null;
         return y2Of(y, P.half[b]);
       }

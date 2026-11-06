@@ -171,7 +171,7 @@ const asksPlan = (name) => JSON.parse(fs.readFileSync(asksFirstPath(`${name}.jso
 const A = asksSurvey();
 const asks = (plan) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
 
-test('§9: end_city_ruins\' dwelling bridges are a self-loop (NO_GAP); redstone_gate\'s drawbridge is unsupported {connector.drawbridge}', async () => {
+test('§9: end_city_ruins\' dwelling bridges are a self-loop (NO_GAP); redstone_gate\'s drawbridge (GM-c: connector.drawbridge supported) is blocked DEPENDENCY', async () => {
   const ec = await asks(asksPlan('end_city_ruins'));
   const d = part(ec, 'dwelling_bridges');
   assert.equal(d.class, 'refused');
@@ -179,9 +179,11 @@ test('§9: end_city_ruins\' dwelling bridges are a self-loop (NO_GAP); redstone_
   assert.match(d.reasons[0].message, /one place/);
   const rg = await asks(asksPlan('redstone_gate'));
   const db = part(rg, 'drawbridge');
-  assert.equal(db.class, 'unsupported');
+  // ((GM-c) supported since GM-c: it ends on gatehouse_1, which the fortress zone cannot place on the asks claim)
+  assert.equal(db.class, 'blocked');
   assert.equal(db.block, 'connector.drawbridge');
-  assert.equal(db.reasons[0].until, 'mechanism');
+  assert.equal(db.reasons[0].code, 'DEPENDENCY');
+  assert.equal(db.reasons[0].evidence.lot, 'gatehouse_1');
 });
 
 test('§9: the gap tables (committed before and after); no recorded part changes class but the bridge and tunnel parts', async () => {

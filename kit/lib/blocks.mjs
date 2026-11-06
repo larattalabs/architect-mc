@@ -2681,8 +2681,7 @@ export function isFloor(state) {
   const c = collisionOf(state);
   if (c === 'none' || c === 'low' || c === 'thin') return false;
   const i = T[state.name];
-  // ((GM-c) a closed top-half trapdoor is a floor (its top is the cell's top: the drawbridge's lowered deck); any other trapdoor is not)
-  if (i?.family === 'trapdoor') return state.props?.half === 'top' && state.props?.open !== 'true';
+  if (i?.family === 'trapdoor') return false;
   return topOf(state) >= 0.8125;
 }
 

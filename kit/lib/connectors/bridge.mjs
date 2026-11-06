@@ -200,6 +200,14 @@ export function bridgeAnswer(K, p, legs) {
   if (p.kind === 'auto' && !bridges.length) return null;
   if (!bridges.length && !BRIDGE_KINDS.includes(p.kind)) return null;
   const out = { geometry: { bridges } };
+  // ((GM-c) a drawbridge's own deviations (a written width other than 2: adjusted))
+  const dd = o?.drawbridge?.deviations ?? [];
+  if (dd.length) {
+    out.deviations = dd.map((d) => ({ ...d }));
+    const a = K.answers.get(p.id);
+    if (!a || a.class === 'fits' || a.class === undefined) out.class = 'adjusted';
+    notes.push(`width ${dd[0].asked} read as 2: a drawbridge's trapdoor deck is 2 wide (§13 item 6)`);
+  }
   // ((6c H-b) a crossing on wet piers says so)
   const wetN = bridges.reduce((t, b) => t + (b.wet?.cells ?? 0), 0);
   if (wetN) notes.push(`wet piers: ${wetN} cell(s) stand in natural water (the wet fallback: no dry crossing fit)`);

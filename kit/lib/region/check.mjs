@@ -115,6 +115,7 @@ export function walkGraph(vw, starts, { mover = 'player', reach = false } = {}) 
     if (!V && P.climb[a]) return true;
     const f = vw.get(x, y - 1, z);
     if (P.floor[f] && !(V && (P.bubble[f] || P.barrier[f]))) return true; // a villager can't stand on a 1.5-tall fence, wall or gate
+    if (P.trapFloor[f]) return true; // ((GM-c) on a closed top-half trapdoor: the drawbridge's lowered deck; raised, it is open and holds no one)
     if (P.half[f]) return true; // (7a K1b) on a bottom slab: its surface is half a block lower
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };

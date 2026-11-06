@@ -232,7 +232,9 @@ test('item 10, §13: Steward\'s recorded waterfall and moat; the asks\' gap tabl
   assert.equal(moat.class, 'fits');
   assert.equal(moat.geometry.width, 5);
   assert.equal(moat.geometry.depth, 3);
-  assert.equal(part(rg, 'drawbridge').class, 'unsupported');
+  // ((GM-c) connector.drawbridge is supported: the recorded drawbridge ends on gatehouse_1, which its zone cannot place, so it answers
+  // blocked DEPENDENCY, not fits or NO_GAP (a deviation from GM §10 item 2, recorded in "Slice GM-c as built")
+  assert.deepEqual([part(rg, 'drawbridge').class, part(rg, 'drawbridge').reasons[0].code], ['blocked', 'DEPENDENCY']);
   const before = fs.readFileSync(path.join(FIX, 'h', 'asks-gap-before.txt'), 'utf8'), after = fs.readFileSync(path.join(FIX, 'h', 'asks-gap-after-ha.txt'), 'utf8');
   const gapOf = (t, id) => Number((new RegExp(`^  ${id.replace('.', '\\.')}\\s+(\\d+)$`, 'm').exec(t) ?? [0, 0])[1]);
   // (before: v0.36.0's table, origin/main; asks-gap-hcore.txt records h/core round 1's, where both answered UNREACHABLE until Ha)
