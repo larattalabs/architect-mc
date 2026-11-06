@@ -465,24 +465,30 @@ export function settleLayout(lay, { rest = 'open' } = {}) {
 
 // ------------------------------------------------------------------ GM-c: the drawbridge over a span (CONTRACT GM §2, §13 item 6)
 
-/** The drawbridge's limits: at most 7 trapdoor cells (the ripple's repeater delays 1..4 twice), 2 fixed apron cells at each end. */
+/** The drawbridge's limits: at most 7 trapdoor cells (catalogue `span [1, 7]`), 2 fixed apron cells at each end. */
 export const DRAWBRIDGE = Object.freeze({ deckMax: 7, apron: 2, width: 2, half: 3 });
 /** A span of n deck cells holds n - 4 trapdoor cells (the aprons take 2 at each end). */
 export const drawbridgeSpan = (w) => w + 2 * DRAWBRIDGE.apron;
 
 const LF = { e: 'east', w: 'west', s: 'south', n: 'north' };
 /**
- * (GM-c) The drawbridge a bridge span carries (§2's drawbridge row, §13 item 6; the probe's ripple, `drawbridgeCells`, with its bank
- * buses moved onto fixed aprons). Local frame: i along the crossing (east), 0 the near landing and n + 1 the far one, deck cells 1..n;
- * z across (south): the walk is z 0 and 1, the side lanes z -3..-1 (north) and 2..4 (south); y up from the deck row. `w` trapdoor
- * cells (1..7), n = w + 4.
- *   aprons  i 1, 2, n - 1, n: the bridge's deck block 8 wide (path); on the outer apron cell (i 1 and n) a lever at z -3 on the floor,
- *           the cross bus over the walk (dust z -2..2, a repeater at z 3 restoring the strength, dust at z 4); on the inner one (i 2,
- *           n - 1) dust at z -3 and 4, stepping down onto the side buses
- *   deck    i 3..n - 2, cell j = i - 3: iron trapdoors (half top, closed) on the walk (path); each side a sleeper row one under the deck
- *           (the structure block, z +-1..+-3), on it a repeater of delay a_j beside the trapdoor, one of delay b_j behind it and the
- *           bus dust, a_j + b_j = j + 2 (cell j flips 2 (j + 2) game ticks after a lever); over each side lane a cap (the bar: the rail
- *           role's fence, else its wall, else iron bars) so no one walks along the repeaters
+ * (GM-c, LV) The drawbridge a bridge span carries (§2's drawbridge row, §13 item 6), with two-way levers (LV, Noah 2026-11-06): each lever
+ * flips the deck whatever the other's state, so the deck is raised exactly when one lever is on (near XOR far). Local frame: i along the
+ * crossing (east), 0 the near landing and n + 1 the far one, deck cells 1..n; z across (south): the walk is z 0 and 1, the side lanes
+ * z -3..-1 (north) and 2..4 (south); y up from the deck row. `w` trapdoor cells (1..7), n = w + 4.
+ *   deck    i 3..n - 2: iron trapdoors (half top, closed) on the walk (path). Each side, beside the walk (z -1 and 2), a structure block in
+ *           the deck row with the drive dust on it (y 1): the dust powers the block and the block the trapdoor (all cells at once, no
+ *           ripple). One lane out (z -3 north, z 3 south) a structure block with the far lever's chain on it: a repeater (y 1, delay 1)
+ *           facing east, carrying the far lever's signal R to the near apron. Over every y 1 part a bar (y 2: the rail role's fence, else
+ *           its wall, else iron bars) so no one walks the lanes. z -2 and 4 stay empty.
+ *   near    (i 1, 2; the near lever's apron) the lever at (1, -3); the north chain ends in a block at (2, -3) (R, strongly powered), the
+ *           comparator C1 at (2, -2) (subtract, rear R, side the lever's dust at (1, -2)) gives R and not L; the lever's signal runs
+ *           south on the outer row (repeaters at z -1..3, over the walk) to dust at (1, 4) and (2, 4), the rear of the comparator C2 at
+ *           (2, 3) (subtract, side R from the south chain's last repeater) giving L and not R. Both feed the inner row's dust z -1..2
+ *           (the X line, over the walk), which runs into both drives (and powers cell 3's trapdoors through the apron blocks under it).
+ *   far     (i n - 1, n) the lever at (n - 1, -3), directly behind the north chain's first repeater; its dust runs the outer row z -3..3
+ *           to a repeater at (n - 1, 3) behind the south chain's first.
+ * The aprons themselves (i 1, 2, n - 1, n) are the bridge's deck block 8 wide (path).
  * Returns {n, w, path, mech, clear, triggers, deck}: path and mech [[i, y, z, state]] (states in the local frame, east = +i, south = +z;
  * the dust's shapes settled by gmLint's links at rest: levers off, power 0), clear [[i, y, z]] the walk's head room the path clears,
  * triggers [{kind: lever, at, side: near | far, who: player}], deck [[i, z]] the trapdoors. Pure.
@@ -493,36 +499,42 @@ export function drawbridgeLayout(w, mats = {}) {
   const n = drawbridgeSpan(w);
   const path = new Map(), mech = new Map();
   const put = (m, i, y, z, s, t, f) => m.set(`${i},${y},${z}`, { i, y, z, s, t, f });
+  const rep = (f) => `${W}repeater[delay=1,facing=${LF[f]},locked=false,powered=false]`;
+  const cmp = (f) => `${W}comparator[facing=${LF[f]},mode=subtract,powered=false]`;
+  const dust = `${W}redstone_wire`;
   // the aprons: 8 wide, the deck block
   for (const i of [1, 2, n - 1, n]) for (let z = -3; z <= 4; z++) put(path, i, 0, z, M.deck, 'block');
-  // the deck: trapdoors on the walk; each side's sleepers, repeaters, bus and caps
+  // the deck: trapdoors on the walk; each side the drive (dust on a block beside the walk) and the far lever's chain, barred over
   const deck = [];
-  for (let j = 0; j < w; j++) {
-    const i = 3 + j, tot = j + 2, b = Math.min(4, tot - 1), a = tot - b;
-    for (const [z, zf, zb, zbus, f] of [[0, -1, -2, -3, 'n'], [1, 2, 3, 4, 's']]) {
+  for (let i = 3; i <= n - 2; i++) {
+    for (const [z, zd, zc, f] of [[0, -1, -3, 'n'], [1, 2, 3, 's']]) {
       put(path, i, 0, z, `${W}iron_trapdoor[facing=${LF[f === 'n' ? 's' : 'n']},half=top,open=false,powered=false,waterlogged=false]`, 'trap');
       deck.push([i, z]);
-      for (const zz of [zf, zb, zbus]) { put(mech, i, -1, zz, M.structure, 'block'); put(mech, i, 1, zz, M.bar, 'cap'); }
-      put(mech, i, 0, zf, `${W}repeater[delay=${a},facing=${LF[f]},locked=false,powered=false]`, 'rep', f);
-      put(mech, i, 0, zb, `${W}repeater[delay=${b},facing=${LF[f]},locked=false,powered=false]`, 'rep', f);
-      put(mech, i, 0, zbus, `${W}redstone_wire`, 'dust');
+      put(mech, i, 0, zd, M.structure, 'block'); put(mech, i, 1, zd, dust, 'dust'); put(mech, i, 2, zd, M.bar, 'cap');
+      put(mech, i, 0, zc, M.structure, 'block'); put(mech, i, 1, zc, rep('e'), 'rep', 'e'); put(mech, i, 2, zc, M.bar, 'cap');
     }
   }
-  // the bank buses on the aprons, and the levers
+  // the near apron: the XOR (C1 = R - L, C2 = L - R) into the inner row's X line; the lever's signal south on the outer row
   const triggers = [];
-  for (const [io, ii, side] of [[1, 2, 'near'], [n, n - 1, 'far']]) {
-    put(mech, io, 1, -3, `${W}lever[face=floor,facing=east,powered=false]`, 'lever');
-    triggers.push({ kind: 'lever', at: [io, 1, -3], side, who: 'player' });
-    for (let z = -2; z <= 4; z++) if (z !== 3) put(mech, io, 1, z, `${W}redstone_wire`, 'dust');
-    put(mech, io, 1, 3, `${W}repeater[delay=1,facing=north,locked=false,powered=false]`, 'rep', 'n');
-    put(mech, ii, 1, -3, `${W}redstone_wire`, 'dust');
-    put(mech, ii, 1, 4, `${W}redstone_wire`, 'dust');
-  }
+  put(mech, 1, 1, -3, `${W}lever[face=floor,facing=east,powered=false]`, 'lever');
+  triggers.push({ kind: 'lever', at: [1, 1, -3], side: 'near', who: 'player' });
+  put(mech, 2, 1, -3, M.structure, 'block');
+  put(mech, 1, 1, -2, dust, 'dust');
+  put(mech, 2, 1, -2, cmp('n'), 'cmp', 'n');
+  for (const z of [-1, 0, 1, 2, 3]) put(mech, 1, 1, z, rep('n'), 'rep', 'n');
+  for (const z of [-1, 0, 1, 2]) put(mech, 2, 1, z, dust, 'dust');
+  put(mech, 2, 1, 3, cmp('s'), 'cmp', 's');
+  put(mech, 1, 1, 4, dust, 'dust'); put(mech, 2, 1, 4, dust, 'dust');
+  // the far apron: the lever behind the north chain's first repeater, its dust along the outer row to the south chain's
+  put(mech, n - 1, 1, -3, `${W}lever[face=floor,facing=east,powered=false]`, 'lever');
+  triggers.push({ kind: 'lever', at: [n - 1, 1, -3], side: 'far', who: 'player' });
+  for (let z = -3; z <= 3; z++) put(mech, n, 1, z, dust, 'dust');
+  put(mech, n - 1, 1, 3, rep('e'), 'rep', 'e');
   // the dust's shapes and the caps' connections at rest, by gmLint's links (lint frame: x = i, y, z)
   const cells = new Map();
   for (const m of [path, mech]) for (const [key, c] of m) {
     const t = c.t === 'cap' ? 'fence' : c.t;
-    cells.set(key, { t, ...(c.t === 'rep' ? { f: c.f } : {}), ...(c.t === 'lever' ? { mount: [c.i, c.y - 1, c.z] } : {}) });
+    cells.set(key, { t, ...(c.t === 'rep' || c.t === 'cmp' ? { f: c.f } : {}), ...(c.t === 'lever' ? { mount: [c.i, c.y - 1, c.z] } : {}) });
   }
   const L2 = lint(cells, {});
   const out = (m) => [...m.values()].map((c) => {
