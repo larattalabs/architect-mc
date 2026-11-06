@@ -35,7 +35,7 @@ public final class StockpileDev {
 		op("dev.stockpile.dissolve", "dissolve", "{owner, toPlayer?: false} - (6c Y1) Sites.dissolveStockpile (to the player, else dropped at a crate) "
 			+ "-> out, ledgerAtEnd");
 		op("dev.stockpile.audit", "audit", "{owner, min?: [x,y,z], max?: [x,y,z]} - (6c Y1) the conservation parts per item: stock, paidStanding "
-			+ "(and per target), legacyCrateStock, entities and containers in the box, the player's inventory, gameTime");
+			+ "(and per target), retaken (XL: given back as a later target wrote over a paid cell), legacyCrateStock, entities and containers in the box, the player's inventory, gameTime");
 		op("dev.stockpile.pause", "pause", "{site, paused?: true} - (6c Y1; C29: Sites.pause's path) pause or resume a construction site or road (as the crate screen's Pause)");
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
 		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session");

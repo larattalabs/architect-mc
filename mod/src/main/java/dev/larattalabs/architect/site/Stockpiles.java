@@ -1563,6 +1563,7 @@ public final class Stockpiles {
 			o.addProperty("identity", p.ledger.identityHolds());
 		}
 		Map<String, Integer> paid = new TreeMap<>();
+		Map<String, Integer> retaken = new TreeMap<>();
 		Map<String, Integer> crateStock = new TreeMap<>();
 		java.util.Set<BlockPos> crates = new java.util.HashSet<>();
 		JsonObject byTarget = new JsonObject();
@@ -1610,6 +1611,10 @@ public final class Stockpiles {
 			}
 			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
 			byTarget.add(i.id(), Builder.counts(one));
+			Map<String, Integer> back = RegionTargets.RETAKEN.get(i.id()); // (XL) given back when a later target wrote over its paid cells
+			if (back != null) {
+				back.forEach((k, v) -> retaken.merge(k, v, Integer::sum));
+			}
 			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), false);
 			if (be != null && crates.add(be.getBlockPos())) {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
@@ -1633,6 +1638,7 @@ public final class Stockpiles {
 		}
 		o.add("paidStanding", Builder.counts(paid));
 		o.add("paidByTarget", byTarget);
+		o.add("retaken", Builder.counts(retaken)); // (XL, dev) items given back this session as later targets wrote over paid cells
 		o.add("legacyCrateStock", Builder.counts(crateStock));
 		Map<String, Integer> ents = new TreeMap<>();
 		Map<String, Integer> cont = new TreeMap<>();
