@@ -1,8 +1,8 @@
 // (GM-c) The drawbridge's steps of tools/gate7agm.mjs (docs/CONTRACT.md "Slice GM" §2's drawbridge row, §5, §7 item 9, §8, §9, §10 item 5,
 // §13 item 6): cprobe (the walk probe: the probe's deck over a moat 5 wide and 3 deep, lowered and raised, judged by vanilla's villager
 // navigation and the kit's player and villager walks); cunit (gm-c-unit: kit/test/gm-c.test.mjs with GM-a's, GM-b's and T3a's tests, the
-// Java GateMechTest and MechWaitSayTest); cingame (gm-c-ingame: v7a_gm_drawbridge_far (GMc-1: claim_e to the hamlet) realised in creative, 10 lever toggles by real use from
-// both banks, the walks lowered and raised, Regions.remove raised and lowered: E-flat 0 with the moat's water); csurvival (gm-c-survival:
+// Java GateMechTest and MechWaitSayTest); cingame (gm-c-ingame: v7a_gm_drawbridge_far (GMc-1: claim_e to the hamlet) realised in creative, 16 lever toggles by real use from
+// both banks (LV: two-way levers, the deck raised exactly when one lever is on), the walks lowered and raised, Regions.remove raised and lowered: E-flat 0 with the moat's water); csurvival (gm-c-survival:
 // the circuit held for the deck built and its whole bill, charged once = the plan's bill, the INSTANT twin, the removal raised).
 // $0: no Claude call.
 import fs from 'node:fs';
@@ -210,22 +210,35 @@ export async function registerGmC(steps, h) {
         check(rec.lowered.villager[0] && rec.lowered.villager[1], `lowered: the kit's villager walk crosses the deck both ways (${json(rec.lowered)})`);
         check(rec.lowered.ends.villager[0] && rec.lowered.ends.villager[1], `lowered: the kit's villager walk goes end to end, claim_e to the hamlet, both ways (${json(rec.lowered.ends)})`);
         check(rec.lowered.vanilla[0] && rec.lowered.vanilla[1], `lowered: vanilla's villager navigation crosses both ways (${json(rec.lowered.vanilla)})`);
-        // 10 toggles by real use: 5 from the near bank's lever, 5 from the far one's (each on, then off)
+        // (LV) two-way levers: 16 toggles by real use mixing both levers in every order (near on, far on, near off, far off; then far on,
+        // near on, far off, near off), then 4 near alone and 4 far alone; every flip changes the deck: raised (all open) exactly when one
+        // lever is on (near XOR far), else lowered (none open)
+        const seq = ['near', 'far', 'near', 'far', 'far', 'near', 'far', 'near', 'near', 'near', 'near', 'near', 'far', 'far', 'far', 'far'];
+        const on = { near: false, far: false };
         let bad = 0;
         const cyc = [];
-        for (let i = 0; i < 10; i++) {
-          const lv = i < 5 ? d.near : d.far;
-          await use(lv); await wait(1500, 'raise');
-          const up = await opened(d);
-          await use(lv); await wait(1500, 'lower');
-          const down = await opened(d);
-          cyc.push([i < 5 ? 'near' : 'far', up, down]);
-          if (up !== d.deck.length || down !== 0) bad++;
+        for (const [k, side] of seq.entries()) {
+          await use(side === 'near' ? d.near : d.far);
+          on[side] = !on[side];
+          await wait(2000, `${side} ${on[side] ? 'on' : 'off'}`);
+          const n = await opened(d), want = on.near !== on.far ? d.deck.length : 0;
+          const lv = [/powered=true/.test(await stateAt(...d.near)), /powered=true/.test(await stateAt(...d.far))];
+          cyc.push([k + 1, side, lv.map(Number).join(''), n]);
+          if (n !== want || lv[0] !== on.near || lv[1] !== on.far) bad++;
+          // the walks in two of the states: both levers on (lowered: the kit's villager walk crosses, end to end) and the far one alone (raised)
+          if (k === 1) {
+            rec.bothOn = await crossings(c, d, 'both-on');
+            check(rec.bothOn.villager[0] && rec.bothOn.villager[1] && rec.bothOn.ends.villager[0] && rec.bothOn.ends.villager[1], `both levers on (lowered): the kit's villager walk crosses the deck and goes end to end, both ways (${json({ deck: rec.bothOn.villager, ends: rec.bothOn.ends.villager })})`);
+          }
+          if (k === 2) {
+            rec.farOnly = await crossings(c, d, 'far-only');
+            check(!rec.farOnly.villager[0] && !rec.farOnly.villager[1] && !rec.farOnly.ends.villager[0] && !rec.farOnly.ends.villager[1], `the far lever alone on (raised): the kit's villager walk crosses 0 ways, deck and end to end (${json({ deck: rec.farOnly.villager, ends: rec.farOnly.ends.villager })})`);
+          }
         }
-        rec.toggles = { n: 10, bad, cycles: cyc };
-        check(bad === 0, `10 toggles by real use (5 near lever, 5 far): every trapdoor raised, then lowered (${bad} wrong: ${json(cyc)})`);
+        rec.toggles = { n: seq.length, bad, cycles: cyc };
+        check(bad === 0 && on.near === false && on.far === false, `${seq.length} toggles by real use, both levers in every order and each alone: every flip changes the deck, raised (${d.deck.length} open) exactly when one lever is on, else lowered (0) (${bad} wrong: ${json(cyc)})`);
         // raised (the near lever on): 0 walks cross
-        await use(d.near); await wait(1500, 'raise');
+        await use(d.near); await wait(2000, 'raise');
         rec.raisedDeck = await opened(d);
         rec.raisedWalks = await crossings(c, d, 'raised');
         check(rec.raisedDeck === d.deck.length && !rec.raisedWalks.villager[0] && !rec.raisedWalks.villager[1], `raised: the kit's villager walk crosses 0 ways (${json(rec.raisedWalks)})`);
@@ -239,18 +252,20 @@ export async function registerGmC(steps, h) {
       }
       await L.leaveWorld();
     }
-    // ---- lowered: realise, one toggle there and back, remove lowered
+    // ---- lowered: realise, both levers on (the deck lowered with the circuit powered), remove lowered
     {
       const rec = (out.lowered = {});
       const c = await moat('b');
       check(c.st?.view?.state === 'PLACED', `(lowered) realiseApproved: ${c.st?.view?.state}`);
       if (c.region) {
         const d = deckOf(c);
-        await use(d.far); await wait(1500, 'raise');
-        await use(d.far); await wait(1500, 'lower');
+        await use(d.far); await wait(2000, 'raise');
+        rec.farOn = await opened(d);
+        await use(d.near); await wait(2000, 'lower');
         rec.deck = await opened(d);
-        check(rec.deck === 0, `(lowered) after a toggle there and back the deck is lowered (${rec.deck} open)`);
-        rec.eflat = await removeCheck(c, 'remove lowered', d.near);
+        rec.levers = [await stateAt(...d.near), await stateAt(...d.far)];
+        check(rec.farOn === d.deck.length && rec.deck === 0 && rec.levers.every((x) => /powered=true/.test(x)), `(lowered) the far lever raises the deck (${rec.farOn} open), the near one lowers it again (${rec.deck} open), both levers on`);
+        rec.eflat = await removeCheck(c, 'remove lowered (both levers on)', d.near);
       }
       await L.leaveWorld();
     }
