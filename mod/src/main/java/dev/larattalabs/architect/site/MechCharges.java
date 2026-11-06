@@ -75,7 +75,8 @@ public final class MechCharges {
 	}
 
 	/**
-	 * (WE) The subject a mechanism item's waits say: "<the lot's or gate's words>'s <kind>" ("Main gatehouse's portcullis"), or null when
+	 * (WE) The subject a mechanism item's waits say: "<the lot's or gate's words>'s <kind>" ("Main gatehouse's portcullis"; GM-c: the words
+	 * alone when they end in the kind's, "Redstone drawbridge"), or null when
 	 * {@code i} is no gate mechanism. The words come from the plan's labels as a stage wait's do.
 	 */
 	static @Nullable String subjectOf(RegionsImpl.@Nullable Live l, QItem i) {
@@ -96,9 +97,19 @@ public final class MechCharges {
 		return true;
 	}
 
-	/** {@code "<words>'s <kind>"}. */
+	/**
+	 * {@code "<words>'s <kind>"}; (GM-c GMc-2) just {@code words} when they already end in the kind's words as whole words, case aside
+	 * ("Redstone drawbridge waits for ...", not "Redstone drawbridge's drawbridge waits for ...").
+	 */
 	static String subject(String words, @Nullable String kind) {
-		return words + "'s " + kindWords(kind);
+		String kw = kindWords(kind);
+		return endsInWords(words, kw) ? words : words + "'s " + kw;
+	}
+
+	/** (GM-c GMc-2) Whether {@code words} ends in {@code tail} as whole words (case-insensitive; a letter or digit before it is no boundary). */
+	static boolean endsInWords(String words, String tail) {
+		int at = words.length() - tail.length();
+		return at >= 0 && words.regionMatches(true, at, tail, 0, tail.length()) && (at == 0 || !Character.isLetterOrDigit(words.charAt(at - 1)));
 	}
 
 	/**

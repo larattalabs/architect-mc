@@ -175,7 +175,9 @@ export function bridgeFailAnswer(K, l, m) {
   if (why.code === 'NO_GAP' || why.code === 'WATER' || (why.code === 'SPAN' && o?.form === 'arch')) st.would.push({ id: l.conn.id, code: why.code, leg: l.k, evidence: why.evidence });
   // ((6c H-b) the wet fallback's second plan found its crossing only over water it did not read: incomplete VOLUME)
   if (why.code === 'WATER' && why.evidence?.kind === 'unread') return { class: 'incomplete', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [{ code: 'VOLUME', message: `leg ${l.k + 1}: the water under the crossing's wet piers was not read: prepare (or check with load: "generate"), then check again`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } }] };
-  const reason = { code: why.code, message: `leg ${l.k + 1}: ${MESSAGES[why.code] ?? why.code}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
+  // ((GM-c GMc-1) a drawbridge's SPAN names its own limits: deck cells, trapdoors plus the aprons)
+  const text = why.code === 'SPAN' && o?.drawbridge ? `the only spans that cross the gap are outside ${o.span.min}..${o.span.max} deck cells (a drawbridge: ${DRAWBRIDGE_DECK.trapMin}..${DRAWBRIDGE_DECK.trapMax} trapdoor cells and ${DRAWBRIDGE_DECK.apron} apron cells at each end)` : MESSAGES[why.code] ?? why.code;
+  const reason = { code: why.code, message: `leg ${l.k + 1}: ${text}`, ...(why.until ? { until: why.until } : {}), evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) } };
   return { class: 'refused', ...(o?.notes?.length ? { notes: o.notes } : {}), reasons: [reason] };
 }
 

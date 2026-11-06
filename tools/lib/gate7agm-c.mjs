@@ -1,7 +1,7 @@
 // (GM-c) The drawbridge's steps of tools/gate7agm.mjs (docs/CONTRACT.md "Slice GM" §2's drawbridge row, §5, §7 item 9, §8, §9, §10 item 5,
 // §13 item 6): cprobe (the walk probe: the probe's deck over a moat 5 wide and 3 deep, lowered and raised, judged by vanilla's villager
 // navigation and the kit's player and villager walks); cunit (gm-c-unit: kit/test/gm-c.test.mjs with GM-a's, GM-b's and T3a's tests, the
-// Java GateMechTest and MechWaitSayTest); cingame (gm-c-ingame: v7a_gm_drawbridge realised in creative, 10 lever toggles by real use from
+// Java GateMechTest and MechWaitSayTest); cingame (gm-c-ingame: v7a_gm_drawbridge_far (GMc-1: claim_e to the hamlet) realised in creative, 10 lever toggles by real use from
 // both banks, the walks lowered and raised, Regions.remove raised and lowered: E-flat 0 with the moat's water); csurvival (gm-c-survival:
 // the circuit held for the deck built and its whole bill, charged once = the plan's bill, the INSTANT twin, the removal raised).
 // $0: no Claude call.
@@ -109,7 +109,9 @@ export async function registerGmC(steps, h) {
   const runsOf = (flat) => { const out = []; for (let i = 0; i + 3 < (flat ?? []).length; i += 4) for (let y = flat[i + 2]; y <= flat[i + 3]; y++) out.push([flat[i], y, flat[i + 1]]); return out; };
   const killMobs = () => cmd('/kill @e[type=!minecraft:player]');
   const waitPlaced = (region) => L.waitRegion(region, 3_600_000, async (x) => { if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(x?.waiting?.reason)) await killMobs(); });
-  const FXN = 'valid/v7a_gm_drawbridge';
+  // ((GMc-1) Steward's RC shape: claim_e to the hamlet across the moat, the ends far from it; GM-c's first fixture was
+  // valid/v7a_gm_drawbridge, bank to berm)
+  const FXN = 'valid/v7a_gm_drawbridge_far';
 
   /** The fixture checked (and realised): {fx, s, ck, sha, a (the drawbridge's answer), b (its span), m (its mechanism), box, region?, pre?}. */
   async function moat(tag, { creative = true, realise = true, name = FXN } = {}) {
@@ -153,6 +155,15 @@ export async function registerGmC(steps, h) {
     const vw = dumpWorld(dd, dd, { minX: box[0], minY: box[1], minZ: box[2], maxX: box[3], maxY: box[4], maxZ: box[5] });
     const out = { vanilla: [v1, v2] };
     for (const mover of ['villager', 'player']) out[mover] = [nodeReached(walkGraph(vw, [d.from], { mover }), d.to), nodeReached(walkGraph(vw, [d.to], { mover }), d.from)];
+    // ((GMc-1) end to end: the kit's villager walk from the leg's start (claim_e) to its end (the hamlet), the walked legs and the deck)
+    const leg = c.a.geometry.legs[0].path, e0 = [leg[0][0], leg[0][1] + 1, leg[0][2]], e1 = [leg.at(-1)[0], leg.at(-1)[1] + 1, leg.at(-1)[2]];
+    const ex = leg.map((q) => q[0]), ez = leg.map((q) => q[2]), ey = leg.map((q) => q[1]);
+    const ebox = [Math.min(...ex) - 6, Math.min(...ey) - 6, Math.min(...ez) - 6, Math.max(...ex) + 6, Math.max(...ey) + 6, Math.max(...ez) + 6];
+    const fe = path.join(OUT, `gmc-${tag}-ends.arwd.gz`);
+    await call('dev.region.dump', { box: ebox, file: fe }, 600_000);
+    const de = await decodeArwd(fs.readFileSync(fe));
+    const vwe = dumpWorld(de, de, { minX: ebox[0], minY: ebox[1], minZ: ebox[2], maxX: ebox[3], maxY: ebox[4], maxZ: ebox[5] });
+    out.ends = { from: e0, to: e1, villager: [nodeReached(walkGraph(vwe, [e0], { mover: 'villager' }), e1), nodeReached(walkGraph(vwe, [e1], { mover: 'villager' }), e0)] };
     return out;
   }
   async function removeCheck(c, tag, at) {
@@ -176,7 +187,7 @@ export async function registerGmC(steps, h) {
       const rec = (out.raised = {});
       const c = await moat('a');
       rec.check = { overall: c.ck.check?.overall, class: c.a?.class, block: c.a?.block, n: c.b?.n, trapdoors: c.b?.trapdoors, crossing: c.b?.crossing ?? null };
-      check(c.ck.check?.overall === 'READY' && c.a?.class === 'fits' && c.a?.block === 'connector.drawbridge' && c.m?.kind === 'drawbridge' && c.b?.crossing?.deck === 'trapdoor', `v7a_gm_drawbridge checks READY in game, the drawbridge fits (block connector.drawbridge, the trapdoor deck: ${json(rec.check)})`);
+      check(c.ck.check?.overall === 'READY' && c.a?.class === 'fits' && c.a?.block === 'connector.drawbridge' && c.m?.kind === 'drawbridge' && c.b?.crossing?.deck === 'trapdoor', `${FXN} checks READY in game, the drawbridge fits (block connector.drawbridge, the trapdoor deck: ${json(rec.check)})`);
       check(c.st?.view?.state === 'PLACED', `realiseApproved: ${c.st?.view?.state}`);
       if (c.region) {
         const d = deckOf(c);
@@ -197,6 +208,7 @@ export async function registerGmC(steps, h) {
         check(dd.mismatches === 0, `nothing round the deck changes in the 40 ticks after the realise (${dd.mismatches})`, dd.list.slice(0, 6));
         rec.lowered = await crossings(c, d, 'lowered');
         check(rec.lowered.villager[0] && rec.lowered.villager[1], `lowered: the kit's villager walk crosses the deck both ways (${json(rec.lowered)})`);
+        check(rec.lowered.ends.villager[0] && rec.lowered.ends.villager[1], `lowered: the kit's villager walk goes end to end, claim_e to the hamlet, both ways (${json(rec.lowered.ends)})`);
         check(rec.lowered.vanilla[0] && rec.lowered.vanilla[1], `lowered: vanilla's villager navigation crosses both ways (${json(rec.lowered.vanilla)})`);
         // 10 toggles by real use: 5 from the near bank's lever, 5 from the far one's (each on, then off)
         let bad = 0;
@@ -217,6 +229,7 @@ export async function registerGmC(steps, h) {
         rec.raisedDeck = await opened(d);
         rec.raisedWalks = await crossings(c, d, 'raised');
         check(rec.raisedDeck === d.deck.length && !rec.raisedWalks.villager[0] && !rec.raisedWalks.villager[1], `raised: the kit's villager walk crosses 0 ways (${json(rec.raisedWalks)})`);
+        check(!rec.raisedWalks.ends.villager[0] && !rec.raisedWalks.ends.villager[1], `raised: the kit's villager walk goes end to end 0 ways (${json(rec.raisedWalks.ends)})`);
         // (recorded, not judged: vanilla's navigator takes a trapdoor, open or closed, as floor; the player swims H's moat)
         rec.notes = { vanillaRaised: rec.raisedWalks.vanilla, playerRaised: rec.raisedWalks.player };
         const it0 = await items(...d.near, 24);
@@ -306,7 +319,7 @@ export async function registerGmC(steps, h) {
     const billEv = ev.filter((e) => e.ext?.['architect_mc:waitsFor']?.kind === 'bill');
     out.waits = { events: ev.length, bill: billEv.length, say: billEv[0]?.ext?.['architect_mc:waitsFor']?.say ?? null };
     check(seen.stock && !seen.written, `${tag}: the circuit is held: it waits for its whole bill (${(out.stockWait ?? '').slice(0, 160)}), nothing of it written meanwhile`, seen);
-    check(billEv.length === 1 && /drawbridge waits for .* in the stockpile$/.test(out.waits.say ?? ''), `${tag}: the move to the bill wait is announced once, naming the drawbridge (${json(out.waits)})`);
+    check(billEv.length === 1 && /drawbridge waits for .* in the stockpile$/.test(out.waits.say ?? '') && !/drawbridge's drawbridge/i.test(out.waits.say ?? ''), `${tag}: the move to the bill wait is announced once, naming the drawbridge once (GMc-2) (${json(out.waits)})`);
     check(!!bill && G.same(bill, planBill), `${tag}: the held bill = the plan's (${json(G.minus(bill, planBill))})`);
     // phase B: fed; charged at once, then written
     const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });

@@ -43,9 +43,19 @@ class MechWaitSayTest {
 		assertEquals("North gate's swing gate waits for Main gatehouse to be built", RegionWaitTags.sayWithOf(ir, body, MechCharges.subject("North gate", "swing"),
 			"main_gate"));
 		assertEquals("Main gatehouse's sliding gate", MechCharges.subject("Main gatehouse", "slide"));
-		// (GM-c) a drawbridge's circuit: its connector's words, then the kind
-		assertEquals("Redstone drawbridge's drawbridge waits for the drawbridge to be built", RegionWaitTags.sayWithOf(null, null, MechCharges.subject(
+		// (GM-c) a drawbridge's circuit: its connector's words, then the kind; (GMc-2) words already ending in the kind's are not doubled
+		assertEquals("Redstone drawbridge waits for the drawbridge to be built", RegionWaitTags.sayWithOf(null, null, MechCharges.subject(
 			"Redstone drawbridge", "drawbridge"), "the drawbridge"));
+		assertEquals("Redstone drawbridge", MechCharges.subject("Redstone drawbridge", "drawbridge"));
+		assertEquals("Drawbridge", MechCharges.subject("Drawbridge", "drawbridge"));
+		assertEquals("East Drawbridge", MechCharges.subject("East Drawbridge", "drawbridge"));
+		assertEquals("Moat bridge's drawbridge", MechCharges.subject("Moat bridge", "drawbridge"));
+		assertEquals("Underdrawbridge's drawbridge", MechCharges.subject("Underdrawbridge", "drawbridge"), "a word boundary, not a suffix");
+		assertEquals("Main portcullis", MechCharges.subject("Main portcullis", "portcullis"));
+		assertEquals("North swing gate", MechCharges.subject("North swing gate", "swing"));
+		// the other kinds keep their wording: "gate" is not "swing gate"
+		assertEquals("North gate's swing gate", MechCharges.subject("North gate", "swing"));
+		assertEquals("Main gatehouse's portcullis", MechCharges.subject("Main gatehouse", "portcullis"));
 		assertEquals("Main gatehouse's gate mechanism", MechCharges.subject("Main gatehouse", null));
 		// no plan label: the id with spaces
 		assertEquals("Gate 2's portcullis waits for gate 2 to be built", RegionWaitTags.sayWithOf(null, null, "gate 2's portcullis", "gate_2"));
@@ -61,8 +71,8 @@ class MechWaitSayTest {
 			subject, Map.of("minecraft:piston", 2, "minecraft:redstone_dust", 1, "minecraft:slime_ball", 6), names));
 		assertEquals("Main gatehouse's portcullis waits for 4 × iron bars in the stockpile", MechCharges.billSay(subject, Map.of("minecraft:iron_bars", 4),
 			names));
-		// (GM-c) the drawbridge's bill wait names the drawbridge like the other kinds
-		assertEquals("Redstone drawbridge's drawbridge waits for 2 × lever and 14 × repeater in the stockpile", MechCharges.billSay(MechCharges.subject(
+		// (GM-c) the drawbridge's bill wait names the drawbridge like the other kinds, (GMc-2) its noun once
+		assertEquals("Redstone drawbridge waits for 2 × lever and 14 × repeater in the stockpile", MechCharges.billSay(MechCharges.subject(
 			"Redstone drawbridge", "drawbridge"), Map.of("minecraft:repeater", 14, "minecraft:lever", 2), names));
 	}
 

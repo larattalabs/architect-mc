@@ -229,3 +229,81 @@ test('determinism: 3 checks of v7a_gm_drawbridge give identical answers, IR and 
   }
   void bomOf;
 });
+
+// ---- (GMc-1) far ends: Steward's RC shape (a claim_* anchor to a part across a moat, no bank or berm anchor)
+const farFx = (name) => JSON.parse(fs.readFileSync(path.join(FIX, 'valid', name), 'utf8'));
+const farRun = (name, mut = null) => { const f = farFx(name); if (mut) mut(f.plan.connectors.at(-1), f); return run(f); };
+const moatOf = (r) => part(r, 'moat').geometry;
+/** A span lies on the moat's east side: its landings either side of the water columns (around's east edge + ring .. + width - 1), close to them. */
+const onMoat = (b, mo) => {
+  const [x0, x1] = [Math.min(b.from[0], b.to[0]), Math.max(b.from[0], b.to[0])];
+  const w0 = mo.around[2] + mo.ring, w1 = w0 + mo.width - 1;
+  return b.from[2] === b.to[2] && x0 < w0 && x1 > w1 && x0 >= w0 - 6 && x1 <= w1 + 6;
+};
+
+test('GMc-1: v7a_gm_drawbridge_far (claim_e to the hamlet across the moat, approach 32): fits; the trapdoor deck on the moat, the legs walk', async () => {
+  const r = await farRun('v7a_gm_drawbridge_far.json');
+  assert.equal(r.check.overall, 'READY');
+  const a = part(r, 'drawbridge');
+  assert.equal(a.class, 'fits', JSON.stringify(a.reasons));
+  assert.equal(a.block, 'connector.drawbridge');
+  const [b] = a.geometry.bridges;
+  assert.equal(a.geometry.bridges.length, 1);
+  assert.deepEqual([b.form, b.rise, b.width, b.deck, b.piers, b.crossing.over], ['beam', 0, 2, 'trapdoor', 0, 'water']);
+  assert.ok(b.trapdoors >= 1 && b.trapdoors <= 7 && b.n === b.trapdoors + 4);
+  assert.ok(onMoat(b, moatOf(r)), `${JSON.stringify(b.from)} -> ${JSON.stringify(b.to)} on ${JSON.stringify(moatOf(r))}`);
+  // the leg starts at claim_e, about 90 cells from the moat: far past the approach (32), walked on foot
+  const [leg] = a.geometry.legs;
+  const legFrom = leg.path[0];
+  assert.ok(Math.abs(legFrom[0] - b.from[0]) > 32 + b.n, `${JSON.stringify(legFrom)} ${JSON.stringify(b.from)}`);
+  assert.ok(leg.length > 2 * 32, `${leg.length}`);
+  // the bill holds the walk's leg too, and the circuit's mechanism stays exact
+  assert.equal(a.cost.bom['minecraft:iron_trapdoor'], 2 * b.trapdoors);
+  assert.deepEqual(b.mechanism.cost.bom.min, b.mechanism.cost.bom.max);
+});
+
+test('GMc-1: approach 16 (the default) and the plain beam twin (v7a_gm_bridge_far) fit the same way', async () => {
+  const r16 = await farRun('v7a_gm_drawbridge_far.json', (c) => { delete c.approach; });
+  const a16 = part(r16, 'drawbridge');
+  assert.equal(a16.class, 'fits', JSON.stringify(a16.reasons));
+  assert.equal(a16.geometry.bridges[0].deck, 'trapdoor');
+  const rb = await farRun('v7a_gm_bridge_far.json');
+  assert.equal(rb.check.overall, 'READY');
+  const ab = part(rb, 'moat_bridge');
+  assert.equal(ab.class, 'fits', JSON.stringify(ab.reasons));
+  assert.equal(ab.block, 'connector.bridge');
+  const [b] = ab.geometry.bridges;
+  assert.equal(ab.geometry.bridges.length, 1);
+  assert.deepEqual([b.form, b.crossing.over, b.deck], ['beam', 'water', undefined]);
+  assert.ok(onMoat(b, moatOf(rb)), `${JSON.stringify(b.from)} -> ${JSON.stringify(b.to)}`);
+});
+
+test('GMc-1: a moat too wide for the trapdoor deck (6 wide) answers SPAN for the crossing (12 > 11), not for the ends\' distance', async () => {
+  const r = await farRun('v7a_gm_drawbridge_far.json', (c, f) => { f.plan.connectors.find((q) => q.id === 'moat').width = 6; });
+  const a = part(r, 'drawbridge');
+  assert.equal(a.class, 'refused');
+  const [why] = a.reasons;
+  assert.equal(why.code, 'SPAN', JSON.stringify(why));
+  assert.deepEqual([why.evidence.min, why.evidence.max], [5, 11]);
+  assert.ok(why.evidence.span > 11 && why.evidence.span <= 13, JSON.stringify(why.evidence));
+  assert.match(why.message, /a drawbridge: 1\.\.7 trapdoor cells/);
+  // its landing stands by the moat, not at claim_e
+  assert.ok(Math.abs(why.evidence.from[0] - moatOf(r).rect[2]) <= 8, JSON.stringify(why.evidence));
+});
+
+test('GMc-1: no moat (nothing to span on the way) still answers NO_GAP, with a path wouldFit, for both kinds', async () => {
+  for (const [name, id] of [['v7a_gm_drawbridge_far.json', 'drawbridge'], ['v7a_gm_bridge_far.json', 'moat_bridge']]) {
+    const r = await farRun(name, (c, f) => { f.plan.connectors = f.plan.connectors.filter((q) => q.id !== 'moat'); });
+    const a = part(r, id);
+    assert.equal(a.class, 'refused', name);
+    assert.equal(a.reasons[0].code, 'NO_GAP', JSON.stringify(a.reasons));
+    assert.equal(a.wouldFit?.[0]?.fragment?.kind, 'path', name);
+  }
+});
+
+test('GMc-1: the far search only after the near one: v7a_gm_drawbridge (bank to berm, 21 apart) keeps its near span', async () => {
+  const r = await r0();
+  const [b] = part(r, 'drawbridge').geometry.bridges;
+  assert.deepEqual([b.n, b.trapdoors], [11, 7]);
+  assert.deepEqual([b.from[0] <= 1170 && b.from[0] >= 1149, b.to[0] <= 1170 && b.to[0] >= 1149], [true, true]);
+});
