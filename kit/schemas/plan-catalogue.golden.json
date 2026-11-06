@@ -256,7 +256,7 @@
      "piston"
     ]
    },
-   "note": "GM-c: a moving bridge, the flipping iron-trapdoor deck (a beam 2 wide over a gap of at most 7, its trapdoors rippling up one redstone tick a cell); lowered at rest, a lever on each bank raises it. Written as kind drawbridge, or as a connector.bridge whose params name a mechanism (redstone or piston: both the trapdoor deck) or movable: true (R18, S-T3-7)."
+   "note": "GM-c: the flipping iron-trapdoor deck, a level beam 2 wide over 1..7 trapdoor cells; lowered at rest, a lever on each bank raises it. Kind drawbridge, or a bridge whose params name mechanism or movable (R18)."
   },
   {
    "id": "connector.wall",
