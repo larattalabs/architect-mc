@@ -27,6 +27,10 @@
 //                                       re-runs it)
 //     look      (gm-look, client)       item 8: the gallery per kind and bible (open, closed, the passage inside, the lever, the toggle
 //                                       strip, dusk and the sensor)
+//     cprobe    (gm-c-probe)            GM-c's walk probe (tools/lib/gate7agm-c.mjs)
+//     cunit     (gm-c-unit)             GM-c offline: kit/test/gm-c.test.mjs with GM-a's, GM-b's and T3a's tests; GateMechTest, MechWaitSayTest
+//     cingame   (gm-c-ingame)           GM-c §10 item 5: the drawbridge realised, 10 toggles, the walks lowered and raised, removal raised/lowered
+//     csurvival (gm-c-survival)         GM-c survival: the circuit held and charged once, the twin, the removal raised refunding the charge
 //     areport                           REPORT-GM-a.md over the GM-a step JSONs
 //     report                            REPORT.md over the step JSONs
 //
