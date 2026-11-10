@@ -23,6 +23,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { listen } from './wsserver.mjs';
+import { ensurePinnedDeps } from './pinned-deps.mjs';
 import zlib from 'node:zlib';
 import { decode as decodeNbt, plain as plainNbt } from '../../kit/lib/nbt.mjs';
 
@@ -120,6 +121,7 @@ export async function runHost(opts) {
     JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   const t0 = Date.now();
   log(`gradlew headlessLaunch (apitest ${opts.apitest ? 'on' : 'off'})`);
+  ensurePinnedDeps({ home: gradleEnv.GRADLE_USER_HOME, modDir, slot: root, env: gradleEnv, log });
   const g = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', 'headlessLaunch'], { cwd: modDir, env: gradleEnv, stdio: 'inherit' });
   if (g.status !== 0) throw new Error(`gradlew headlessLaunch failed (${g.status})`);
   const launch = JSON.parse(fs.readFileSync(launchFile, 'utf8'));

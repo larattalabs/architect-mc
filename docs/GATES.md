@@ -283,6 +283,15 @@ It sends no notification of any kind; the coordinator reads the summary. It neve
 - its gate run takes a slot like any run and waits in the queue;
 - SIGTERM to the nightly stops only its own runner.
 
+**Pinned dev.larattalabs dependencies, and setup aborts.** Every slot builds `--offline` with its own `.gradle-home`, cloned from main
+only when the slot has none. Before each such build (`tools/lib/pinned-deps.mjs`, called from the frozen-source build, the build
+artifact, the server host and the nomod server) the runner checks that the `lab_ui_version` pinned in `mod/gradle.properties` is in
+that home's cache and, when it is not, does ONE online resolve with that home (`GITHUB_ACTOR`/`GITHUB_TOKEN`, else `gh auth token`).
+A bump of `lab_ui_version` is therefore resolved per slot automatically; a failed resolve aborts with the slot, the version and the
+command to run by hand. Another pinned dev.larattalabs dependency is one row in `PINS`. A run that aborts in setup runs no step: the
+nightly's `SUMMARY.md` and `nightly.log` then start with `SETUP ABORT: <reason>`, and `summary.json` and `artifacts/nightly/latest.json`
+carry `setupAbort: true` (with `setupAbortReason`), so it cannot be read as a test failure. No notification is sent.
+
 ### UI gallery (nightly only)
 
 After the full run, the nightly runs the named chain `ui-gallery` (one client step, `tools/gateui2b.mjs gallery`, built on the UI-2b

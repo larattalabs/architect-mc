@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensurePinnedDeps } from './pinned-deps.mjs';
 import { matcher, treeAt } from './step-inputs.mjs';
 import { helpers, JACOCO, skeletons } from './jacoco.mjs';
 
@@ -138,6 +139,7 @@ export function ensureBuild({ src, main, commit, conf, java, build = true, log =
     const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(wt, '.gradle-home') };
     // nothing that changes what is compiled from outside the commit (a forced lab-ui checkout) and nothing of the gate's tracing
     for (const k of Object.keys(env)) if (/^(JAVA_TOOL_OPTIONS|NODE_OPTIONS|GATE_TRACE_|LAB_UI_DIR|ORG_GRADLE_PROJECT_)/.test(k) || /^(ANTHROPIC_|CLAUDE)/.test(k)) delete env[k];
+    ensurePinnedDeps({ home: env.GRADLE_USER_HOME, modDir: path.join(wt, 'mod'), slot: wt, env, log });
     const r = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', ...b.tasks], { cwd: path.join(wt, 'mod'), env, encoding: 'utf8', timeout: b.timeoutMin * 60_000, maxBuffer: 64 << 20 });
     const logFile = path.join(dir, `${hash}.log`);
     fs.writeFileSync(logFile, `${r.stdout ?? ''}${r.stderr ?? ''}`);

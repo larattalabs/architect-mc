@@ -342,10 +342,12 @@ const counts = {};
 for (const s of allSteps) counts[s.status] = (counts[s.status] ?? 0) + 1;
 const last = runs[runs.length - 1].sm;
 const sm = first.sm;
+// a runner that aborted in setup ran no step (every step SKIPPED, summary.error "setup: ..."): not a test failure
+const setupAbort = sm?.state === 'aborted' && /^setup:/.test(sm.error ?? '') ? String(sm.error).replace(/^setup:\s*/, '').split('\n')[0].slice(0, 300) : null;
 Object.assign(summary, {
   state: last?.state === 'done' && (sm?.state === 'done' || sm?.yielded) ? 'done' : sm?.state ?? 'aborted', endedAt: stamp(), wallMin: Math.round((Date.now() - t0) / 600) / 100,
   exitCode: runs.map((r) => r.code), run, runs: runs.map((r) => r.run), verdict: runs.some((r) => !r.sm) ? null : allSteps.length && allSteps.every((x) => x.status === 'PASS') ? 'PASS' : 'FAIL',
-  counts, steps: allSteps.length, slotWaitMin: Math.round(runs.reduce((a, r) => a + (r.sm?.slot?.waitedSeconds ?? 0), 0) / 6) / 10,
+  setupAbort: !!setupAbort, ...(setupAbort ? { setupAbortReason: setupAbort } : {}), counts, steps: allSteps.length, slotWaitMin: Math.round(runs.reduce((a, r) => a + (r.sm?.slot?.waitedSeconds ?? 0), 0) / 6) / 10,
   notPassing: allSteps.filter((s) => s.status !== 'PASS').map((s) => ({ id: s.id, status: s.status, failLines: (s.failLines ?? s.tail ?? []).slice(0, 3), log: s.log ? path.join(s.run, s.log) : null })),
   recorded: allSteps.filter((s) => s.cache?.recorded).length, inputsMisses: runs.flatMap((r) => r.sm?.inputsMisses ?? []),
   // the judged benches this nightly ran (a release reuses their PASSes: docs/GATES.md "Benches out of the release path")
@@ -418,7 +420,9 @@ if (!flag('--plan')) {
   log(`nightly: ui gallery ${summary.uiGallery.state}: ${summary.uiGallery.shots} shot(s), ${summary.uiGallery.failed ?? 0} failed${summary.uiGallery.error ? `, ${summary.uiGallery.error}` : ''}`);
 }
 
+if (setupAbort) log(`SETUP ABORT: ${setupAbort}`);
 const md = [
+  ...(setupAbort ? [`SETUP ABORT: ${setupAbort}. No step ran; this is not a test failure (the runner's setup failed: see ${path.join(run ?? '-', 'SUMMARY.md')} and gate-run.out).`, ''] : []),
   `# Nightly ${date}: ${summary.verdict ?? summary.state}`,
   '',
   `origin/main ${String(summary.head).slice(0, 9)}; \`release --full --no-cache\`, ${summary.steps} steps in ${summary.wallMin} min${summary.slotWaitMin ? ` (${summary.slotWaitMin} min waiting for a slot)` : ''}; run \`${run ?? '-'}\`.`,
@@ -440,6 +444,6 @@ const md = [
   '',
 ];
 fs.writeFileSync(path.join(DAY, 'SUMMARY.md'), md.join('\n'));
-if (summary.state === 'done') fs.writeFileSync(path.join(NIGHTLY, 'latest.json'), `${JSON.stringify({ date, state: 'done', startedAt: summary.startedAt, endedAt: summary.endedAt, head: summary.head, run, verdict: summary.verdict }, null, 1)}\n`);
+if (summary.state === 'done' || setupAbort) fs.writeFileSync(path.join(NIGHTLY, 'latest.json'), `${JSON.stringify({ date, state: summary.state, startedAt: summary.startedAt, endedAt: summary.endedAt, head: summary.head, run, verdict: summary.verdict, setupAbort: !!setupAbort, ...(setupAbort ? { setupAbortReason: setupAbort } : {}) }, null, 1)}\n`);
 log(`nightly: ${summary.verdict ?? summary.state}, ${summary.wallMin} min, ${mm.misses.length} impact-map miss(es); ${path.join(DAY, 'SUMMARY.md')}`);
 process.exit(0);

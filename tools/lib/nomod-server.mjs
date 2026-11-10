@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { ensurePinnedDeps } from './pinned-deps.mjs';
 
 /**
  * The checkout's mod/build/headless-launch*.json; when it has none, `gradlew headlessLaunch` builds it there (apitest off), as the
@@ -19,6 +20,7 @@ export function launchFile(root, { log = () => {} } = {}) {
   const env = { ...process.env, ARCHITECT_HEADLESS: '1', ARCHITECT_APITEST: '0', JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
     GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
   for (const k of Object.keys(env)) if (/^(ANTHROPIC_|CLAUDE)/.test(k)) delete env[k];
+  ensurePinnedDeps({ home: env.GRADLE_USER_HOME, modDir, slot: root, env, log });
   const g = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', 'headlessLaunch'], { cwd: modDir, env, stdio: 'inherit' });
   lf = find();
   if (g.status !== 0 || !lf) throw new Error(`no ${modDir}/build/headless-launch*.json: gradlew headlessLaunch exited ${g.status}`);

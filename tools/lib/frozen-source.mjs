@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { ensurePinnedDeps } from './pinned-deps.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const real = (p) => fs.realpathSync(p);
@@ -57,6 +58,7 @@ export function buildFrozenClasses({ dir, tasks = ['classes', 'testClasses', ':d
   const e = { ...env, JAVA_HOME: env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(dir, '.gradle-home') };
   // nothing that changes what is compiled from outside the commit, as the build artifact's build (tools/lib/build-artifact.mjs)
   for (const k of Object.keys(e)) if (/^(JAVA_TOOL_OPTIONS|NODE_OPTIONS|GATE_TRACE_|LAB_UI_DIR|ORG_GRADLE_PROJECT_)/.test(k) || /^(ANTHROPIC_|CLAUDE)/.test(k)) delete e[k];
+  ensurePinnedDeps({ home: e.GRADLE_USER_HOME, modDir: mod, slot: dir, env, log });
   log(`setup: building the frozen source's mod classes (./gradlew --offline ${tasks.join(' ')}) in ${mod}`);
   const t0 = Date.now();
   const r = spawnSync('./gradlew', ['--offline', '--no-daemon', '-q', ...tasks], { cwd: mod, env: e, encoding: 'utf8', timeout: timeoutMin * 60_000, maxBuffer: 64 << 20 });
