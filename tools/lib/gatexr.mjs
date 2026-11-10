@@ -12,6 +12,8 @@ import path from 'node:path';
 /** The scan's fixtures: survival-capable plans with 4e roads (streets) and lots, and the crossings XL measured. */
 export const XR_SCAN = ['rs/rs02_walled', 'rs/survival_village', 'rs/rs03_water', 'valid/v30_walled_village', 'valid/v7a_k3_castle', 'valid/v18_districts',
   'valid/v16_near_build_road_to_door', 'h/v45b_moat_road'];
+/** The scan's kit programs (planned over rs/survival_village's flat claim): `program` or `program:<n lots>`. */
+export const XR_SCAN_PROGS = ['flat_village:4', 'xr_demo'];
 /** The judged fixtures (chosen from the scan: docs/CONTRACT.md "Slice XR" §3). */
 export const XR_SURV = ['h/v45b_moat_road'];
 
@@ -48,20 +50,39 @@ export async function registerXr(steps, h) {
   const { L, call, check, log, OUT, json, G, ctx, moat, killMobs } = h;
   const ensure = async () => { if (!L.state.dev) await L.connect(); };
 
-  /** One fixture: built in survival (fed whole), overwrites read, removed: the evidence. */
+  /**
+   * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
+   * overwrites read, removed: the evidence.
+   */
   async function one(name, { midRemove = false } = {}) {
-    const fx = G.fixture(ctx, name);
-    const entries = entriesOf(fx);
+    const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
+    const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
+    let entries = entriesOf(fx);
     const tag = `xr-${name.replace(/[^a-z0-9]+/gi, '-')}`.slice(0, 40);
-    const c = await moat(tag, { creative: false, realise: false, name });
+    const c = await moat(tag, { creative: false, realise: false, name: prog ? 'rs/survival_village' : name });
     const out = { name, overall: c.ck.check?.overall, survival: c.ck.check?.survival, entries: Object.keys(entries).length };
-    if (!c.sha) return out;
+    let planId = null;
+    if (prog) {
+      const n = Number(prog[1] ?? 0);
+      const params = n ? { lots: Array.from({ length: n }, (_, k) => ({ id: `h${k + 1}`, type: 'house', size: [9, 9] })) } : {};
+      const p = await call('dev.region.plan', { program: prog[0], params, claim: c.s.W.claim, owner: G.OWNER, surveyLoad: 'generated:64', check: false }, 900_000);
+      out.overall = p.refused ? `refused: ${JSON.stringify(p.refused).slice(0, 200)}` : 'PLANNED';
+      planId = p.planId ?? null;
+      entries = Object.fromEntries((p.lots ?? []).map((l) => [l.id ?? l, 'rs_hut']));
+      out.entries = Object.keys(entries).length;
+      if (!planId) return out;
+    } else if (!c.sha) return out;
     c.pre = await G.snap(ctx, c.box, `${tag}-pre`);
     const crates = await G.pile(ctx, c.s, 8);
     await killMobs();
     const cons = new G.Conservation(ctx, c.box);
     await cons.start();
-    const region = await G.realise(ctx, c.sha, entries);
+    let region;
+    if (planId) {
+      const rr = await call('dev.region.realise', { planId, ...(Object.keys(entries).length ? { lots: entries } : {}) }, 300_000);
+      if (!rr.region) throw new Error(`realise refused: ${JSON.stringify(rr.refused ?? rr).slice(0, 300)}`);
+      region = rr.region;
+    } else region = await G.realise(ctx, c.sha, entries);
     out.region = region;
     if (midRemove) {
       // fed until the first retake (or the build), then removed mid-build: the refund of what stands, nothing given back twice
@@ -102,7 +123,9 @@ export async function registerXr(steps, h) {
   steps.xscan = async () => {
     await ensure();
     await L.leaveWorld().catch(() => null);
-    const names = (process.env.GATE_XR_FX || XR_SCAN.join(',')).split(',').filter(Boolean);
+    const fxs = process.env.GATE_XR_FX === 'none' ? [] : (process.env.GATE_XR_FX || XR_SCAN.join(',')).split(',').filter(Boolean);
+    const progs = process.env.GATE_XR_PROGS === 'none' ? [] : (process.env.GATE_XR_PROGS || XR_SCAN_PROGS.join(',')).split(',').filter(Boolean).map((p) => `prog:${p}`);
+    const names = [...fxs, ...progs];
     const out = {};
     for (const n of names) {
       try {

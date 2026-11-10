@@ -1100,7 +1100,7 @@ public final class RegionTargets {
 			pl.started = run;
 		}
 		Cells before = null;
-		List<Infra> sibs = null; // (XL) the region's other targets, read once this tick when a write replaces a block
+		List<RegionOverwrites.Live> sibs = null; // (XL, XR) the region's other writers, read once this tick when a write replaces a block
 		int budget = SurvivalWorld.blocksPerTick();
 		int placed = 0;
 		boolean starved = false;
@@ -1156,12 +1156,13 @@ public final class RegionTargets {
 			}
 			r.blockedSince.remove(q);
 			purse.pay(r.cost.get(q));
-			// (a soil cell over a soil cell stays the sibling's built cell: soilSame, one block)
-			if (!now.isAir() && !(Builder.Run.soil(now) && Builder.Run.soil(r.target[q]))) {
+			// (XL, XR) the block this write takes up goes back when another writer of the region (a target, a construction road, a lot)
+			// owns it and paid for it; a soil cell over a soil cell too (XR: the later writer owns it, the earlier one is shadowed)
+			if (!now.isAir()) {
 				if (sibs == null) {
-					sibs = siblings(t);
+					sibs = RegionOverwrites.lives(srv, t.group(), t.id());
 				}
-				retake(srv, t, sibs, p, now, purse);
+				RegionOverwrites.retake(sibs, p, now, purse::giveBack, RoadBuilder.dropAt(t), t.id());
 			}
 			write(level, r, q, p);
 			budget--;
@@ -1223,62 +1224,13 @@ public final class RegionTargets {
 		return false;
 	}
 
-	/** (XL) The other construction targets of {@code t}'s region, in its dimension. */
-	static List<Infra> siblings(Infra t) {
-		List<Infra> out = new ArrayList<>();
-		String region = regionOf(t);
-		if (region == null) {
-			return out;
-		}
-		for (Infra o : Infras.all()) {
-			if (o != t && is(o) && o.construction() != null && region.equals(regionOf(o)) && o.dimension().equals(t.dimension())) {
-				out.add(o);
-			}
-		}
-		return out;
-	}
-
-	/** (XL) Dev: per region target, the items given back when a later target of its region wrote over its paid cells, this session. */
-	static final Map<String, Map<String, Integer>> RETAKEN = new ConcurrentHashMap<>();
-
 	/**
-	 * (XL, crossing survival conservation) A target writing over a cell that another target of its region built and paid for: a later
-	 * stage's write over an earlier stage's paid block (a bridge's deck and abutment, links, over its route's landing step and walk,
-	 * routes; a relief's or a rope bridge's later cut over a paid fill). The stage waits (§6.3) put the later tile down only once the
-	 * earlier target is BUILT, so the block stands, its tile's before; the write takes it up and its items go back to the stockpile as
-	 * a swap's old block does ({@link Builder.Purse#giveBack}: credited, any overflow dropped). Without it the earlier target's charge
-	 * for the block was neither standing nor refunded at removal: lost (GM-c's controls: 2 dirt and 1 stone brick stairs on a beam,
-	 * 3 dirt and 9 cobblestone on v45b's road bridge). Charge = what stands + what was given back = the removal's refund + this.
-	 * A held cell of the sibling (free) gives nothing back. Returns the items given back (empty when none).
+	 * (XL, XR) Dev: per region writer (a target, a construction road, a lot), the items given back when a later writer of its region took
+	 * up its paid cells ({@link RegionOverwrites#retake}), this server session. A later stage's write over an earlier stage's paid block (a
+	 * bridge's deck over its route's landing, GM-c's controls: 2 dirt and 1 stone brick stairs on a beam, 3 dirt and 9 cobblestone on v45b)
+	 * was otherwise neither standing nor refunded at removal: lost.
 	 */
-	static Map<String, Integer> retake(MinecraftServer srv, Infra t, List<Infra> sibs, BlockPos p, BlockState now, Builder.Purse purse) {
-		for (Infra o : sibs) {
-			if (!o.box().contains(p.getX(), p.getY(), p.getZ())) {
-				continue;
-			}
-			Builder.Run ro = RoadBuilder.run(srv, o);
-			Plan po = ro == null ? null : planOf(srv, o);
-			if (ro == null || po == null) {
-				continue;
-			}
-			int qo = ro.queuePos(p);
-			if (qo < 0 || po.held.get(qo) || !ro.matches(now, qo)) {
-				continue;
-			}
-			Map<String, Integer> items = new TreeMap<>();
-			ro.refundCost(now, qo).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
-			if (items.isEmpty()) {
-				return items;
-			}
-			if (Builder.TRACE_REFUNDS) {
-				Architect.LOGGER.info("refund-trace retake {} over {} {} {}", t.id(), o.id(), p.toShortString(), now);
-			}
-			purse.giveBack(items, RoadBuilder.dropAt(t));
-			items.forEach((k, v) -> RETAKEN.computeIfAbsent(o.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
-			return items;
-		}
-		return Map.of();
-	}
+	static final Map<String, Map<String, Integer>> RETAKEN = new ConcurrentHashMap<>();
 
 	/**
 	 * (§9, item 9) At a survival region's removal, before its refunds are counted: a target cell holding a player's block (neither the
