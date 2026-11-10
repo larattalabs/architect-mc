@@ -53,7 +53,7 @@ export async function registerXr(steps, h) {
    * One fixture (or a kit program `prog:<program>[:<lots>]`, planned over rs/survival_village's flat claim): built in survival (fed whole),
    * overwrites read, removed: the evidence.
    */
-  async function one(name, { midRemove = false } = {}) {
+  async function one(name, { midRemove = false, stopWhen = (back) => Object.keys(back).length > 0 } = {}) {
     const prog = name.startsWith('prog:') ? name.slice(5).split(':') : null;
     const fx = G.fixture(ctx, prog ? 'rs/survival_village' : name);
     let entries = entriesOf(fx);
@@ -85,14 +85,22 @@ export async function registerXr(steps, h) {
     out.region = region;
     if (midRemove) {
       // fed until the first retake (or the build), then removed mid-build: the refund of what stands, nothing given back twice
-      let back = {}, f = null;
+      // one feed wave at a time, the audit read before each: the removal starts as soon as `stopWhen` holds, before the next wave
+      let back = {}, st = null;
       const end = Date.now() + 3_600_000;
       while (Date.now() < end) {
-        f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 12_000 });
         back = (await cons.parts()).retaken ?? {};
-        if (Object.keys(back).length || f.last?.st?.view?.state === 'PLACED') break;
+        st = await G.regionState(ctx, region);
+        if (stopWhen(back) || st?.view?.state === 'PLACED') break;
+        if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await killMobs();
+        const ps = await G.pileState(ctx);
+        const need = {};
+        for (const [it, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[it] ?? 0); if (lack > 0) need[it] = lack; }
+        if (Object.keys(need).length) await cons.insert(`stockpile:${G.OWNER}`, need);
+        await L.sleep(1500);
       }
-      out.mid = { retaken: back, state: f?.last?.st?.view?.state };
+      const rs = await G.rsState(ctx, region);
+      out.mid = { retaken: back, state: st?.view?.state, built: rs.build?.built ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
       const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
       out.state = f.last.st.view.state;
@@ -159,15 +167,19 @@ export async function registerXr(steps, h) {
       check(r.eflat === 0, `${n}: E-flat ${r.eflat} after the removal (the crates aside)`, r.eflatList);
       check(!r.items, `${n}: no item dropped (${r.items})`);
     }
-    const mid = process.env.GATE_XR_MID ?? names[0];
-    if (mid) {
-      const r = await one(mid, { midRemove: true });
-      out.mid = { ...r, owRows: r.owRows?.slice(0, 40) };
-      check(Object.keys(r.mid?.retaken ?? {}).length > 0, `mid-build (${mid}): removed after a retake (retaken ${json(r.mid?.retaken)}, ${r.mid?.state})`);
-      check(G.exact(r.built), `mid-build (${mid}): conservation exact before the removal: ${json(r.built.diff)}`);
-      check(r.removedOk && G.exact(r.removed), `mid-build (${mid}): Regions.remove mid-build, conservation exact: ${json(r.removed.diff)}`);
-      check(r.eflat === 0, `mid-build (${mid}): E-flat ${r.eflat}`, r.eflatList);
-      check(!r.items, `mid-build (${mid}): no item dropped (${r.items})`);
+    // mid-build removals on xr_demo: after its first take-up (a target over a target, the street stage), and after its lots were put
+    // down (their placement's take-ups credited, the pavement's 81 + 47 + 3 stone bricks back), the lots starved, not built
+    const mid = process.env.GATE_XR_MID ?? 'prog:xr_demo';
+    const mids = [['first take-up', (b) => Object.keys(b).length > 0], ['lots put down', (b) => (b['minecraft:stone_bricks'] ?? 0) >= 131]];
+    out.mids = {};
+    if (mid !== 'none') for (const [label, stopWhen] of mids) {
+      const r = await one(mid, { midRemove: true, stopWhen });
+      out.mids[label] = { ...r, owRows: r.owRows?.slice(0, 40) };
+      check(stopWhen(r.mid?.retaken ?? {}) && r.mid?.state !== 'PLACED', `mid-build (${mid}, ${label}): removed with retaken ${json(r.mid?.retaken)}, not built (${r.mid?.state}; ${json(r.mid?.parts)})`);
+      check(G.exact(r.built), `mid-build (${mid}, ${label}): conservation exact before the removal: ${json(r.built.diff)}`);
+      check(r.removedOk && G.exact(r.removed), `mid-build (${mid}, ${label}): Regions.remove mid-build, conservation exact: ${json(r.removed.diff)}`);
+      check(r.eflat === 0, `mid-build (${mid}, ${label}): E-flat ${r.eflat}`, r.eflatList);
+      check(!r.items, `mid-build (${mid}, ${label}): no item dropped (${r.items})`);
     }
     return out;
   };

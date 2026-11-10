@@ -81,16 +81,23 @@ public final class RegionOverwrites {
 	// ------------------------------------------------------------------ the region's writers, live
 
 	/** (XR) A region writer this tick: its id, put-down order, run, a lot's free cells, and a target's before (what it found). */
-	record Live(String id, long order, Builder.Run run, @Nullable BitSet free, @Nullable Cells found) {
+	record Live(String id, long order, Builder.Run run, @Nullable BitSet free, java.util.function.@Nullable Supplier<@Nullable Cells> foundOf) {
 		Live(String id, long order, Builder.Run run, @Nullable BitSet free) {
-			this(id, order, run, free, null);
+			this(id, order, run, free, (java.util.function.Supplier<Cells>) null);
+		}
+
+		/** A writer whose before is known now (tests). */
+		Live(String id, long order, Builder.Run run, @Nullable BitSet free, @Nullable Cells found) {
+			this(id, order, run, free, found == null ? null : () -> found);
 		}
 
 		boolean paid(int q) {
 			return !run.cost.get(q).isEmpty() && (free == null || !free.get(q));
 		}
 
+		/** Whether this writer writes queue cell {@code q} (a target's journal before there, read when first needed, is another block). */
 		boolean writes(int q) {
+			Cells found = foundOf == null ? null : foundOf.get();
 			int k = run.queue[q];
 			return found == null || k < 0 || k >= found.size() || !found.states[k].is(run.target[q].getBlock());
 		}
@@ -98,6 +105,14 @@ public final class RegionOverwrites {
 		Claim claim(int q, BlockState st) {
 			return new Claim(id, order, paid(q), run.matches(st, q), writes(q));
 		}
+	}
+
+	/** A target's journal before over its box (what it found at its put-down; cached in its plan), read when first asked. */
+	private static java.util.function.Supplier<@Nullable Cells> foundOf(MinecraftServer srv, Infra i) {
+		return () -> {
+			RegionTargets.Plan pl = RegionTargets.planOf(srv, i);
+			return pl == null ? null : RegionTargets.beforeOf(i, pl);
+		};
 	}
 
 	/** (XR) Whether a group is a region's (its record carries the region): only a region's writers give back or shadow each other. */
@@ -117,9 +132,8 @@ public final class RegionOverwrites {
 				continue;
 			}
 			Builder.Run r = RoadBuilder.run(srv, i);
-			RegionTargets.Plan pl = r == null || !RegionTargets.is(i) ? null : RegionTargets.planOf(srv, i);
 			if (r != null) {
-				out.add(new Live(i.id(), i.placedAt(), r, null, pl == null ? null : RegionTargets.beforeOf(i, pl)));
+				out.add(new Live(i.id(), i.placedAt(), r, null, RegionTargets.is(i) ? foundOf(srv, i) : null));
 			}
 		}
 		for (Site s : Sites.all()) {
@@ -184,6 +198,51 @@ public final class RegionOverwrites {
 		return items;
 	}
 
+	/**
+	 * (XR) A put-down's take-ups (a lot's placement and clear, a road's cuts), credited to the owner's stockpile once under {@code key} (the
+	 * writer's placement): a job resumed after a stop runs its put-down again, and the journal's befores it reads give the same cells, so
+	 * they are never credited twice. {@code cells}: position to the block taken up. Returns the items given back (empty when none, or
+	 * when the key was credited already).
+	 */
+	static Map<String, Integer> retakeOnce(MinecraftServer srv, List<Live> ls, @Nullable String owner, String dimension, Map<Long, BlockState> cells,
+		BlockPos dropAt, String by, String key) {
+		Stockpiles.Pile pile = Stockpiles.get(owner);
+		if (pile == null || !pile.dimension.equals(dimension) || ls.isEmpty()) {
+			return Map.of();
+		}
+		Map<String, Integer> all = new TreeMap<>();
+		Map<String, Map<String, Integer>> byOwner = new TreeMap<>();
+		for (var e : cells.entrySet()) {
+			BlockPos p = BlockPos.of(e.getKey());
+			BlockState was = e.getValue();
+			if (was.isAir()) {
+				continue;
+			}
+			List<Live> who = new ArrayList<>();
+			List<Integer> qs = new ArrayList<>();
+			int t = taken(claims(ls, p, was, who, qs));
+			if (t < 0) {
+				continue;
+			}
+			who.get(t).run().refundCost(was, qs.get(t)).forEach(c -> {
+				all.merge(c.item(), c.count(), Integer::sum);
+				byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(), Integer::sum);
+			});
+		}
+		if (all.isEmpty()) {
+			return all;
+		}
+		if (Stockpiles.credit(srv, pile, key, all, dropAt).already()) {
+			return Map.of();
+		}
+		if (Builder.TRACE_REFUNDS) {
+			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", by, key, all);
+		}
+		byOwner.forEach((o, items) -> items.forEach((k, v) -> RegionTargets.RETAKEN.computeIfAbsent(o, x -> new java.util.concurrent.ConcurrentHashMap<>())
+			.merge(k, v, Integer::sum)));
+		return all;
+	}
+
 	/** (XR) {@link #retake} into the owner's stockpile ({@code owner}'s, in its dimension): a put-down's take-up (a road's cut, a lot's clear). */
 	static Map<String, Integer> retakeToPile(MinecraftServer srv, List<Live> ls, @Nullable String owner, String dimension, BlockPos p, BlockState was,
 		BlockPos dropAt, String by) {
@@ -209,8 +268,7 @@ public final class RegionOverwrites {
 		Live self = null;
 		for (Infra i : Infras.all()) {
 			if (i.id().equals(id)) {
-				RegionTargets.Plan pl = RegionTargets.is(i) ? RegionTargets.planOf(srv, i) : null;
-				self = new Live(id, order, r, null, pl == null ? null : RegionTargets.beforeOf(i, pl));
+				self = new Live(id, order, r, null, RegionTargets.is(i) ? foundOf(srv, i) : null);
 			}
 		}
 		if (self == null) {
@@ -258,13 +316,15 @@ public final class RegionOverwrites {
 			queued.add(BlockPos.asLong(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]));
 		}
 		BlockPos at = new BlockPos((box.minX() + box.maxX()) / 2, box.maxY() + 1, (box.minZ() + box.maxZ()) / 2);
+		Map<Long, BlockState> up = new HashMap<>();
 		for (var e : entry(m).entrySet()) {
 			BlockState was = e.getValue()[0], after = e.getValue()[1];
 			if (was.isAir() || !queued.contains(e.getKey()) && after != null && was.is(after.getBlock())) {
 				continue;
 			}
-			retakeToPile(srv, ls, owner, dimension, BlockPos.of(e.getKey()), was, at, siteId);
+			up.put(e.getKey(), was);
 		}
+		retakeOnce(srv, ls, owner, dimension, up, at, siteId, "xr-lot:" + siteId + "@" + m.id());
 	}
 
 	/** A writer's kind. */

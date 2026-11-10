@@ -159,13 +159,15 @@ public final class RoadBuilder {
 		// paid for takes that block up now: its items go back to the owner's stockpile (a queued cell's block goes back when it is written)
 		List<RegionOverwrites.Live> sibs = fromPile ? RegionOverwrites.lives(srv, road.group(), road.id()) : List.of();
 		if (!sibs.isEmpty()) {
+			Map<Long, BlockState> cuts = new HashMap<>();
 			for (int k = 0; k < target.size() && k < before.size(); k++) {
 				if (target.states[k].isAir() && !before.states[k].isAir()) {
 					int[] o = Construction.offsets(k, dx, dz);
-					RegionOverwrites.retakeToPile(srv, sibs, road.owner(), road.dimension(), new BlockPos(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]),
-						before.states[k], dropAt(road), road.id());
+					cuts.put(BlockPos.asLong(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[k]);
 				}
 			}
+			// once per placement (a convert run again after a stop credits nothing more)
+			RegionOverwrites.retakeOnce(srv, sibs, road.owner(), road.dimension(), cuts, dropAt(road), road.id(), "xr-road:" + road.id() + "@" + main.id());
 		}
 		// every queued cell back to its before (no drops, no neighbour shape updates); cut cells stay cleared
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
