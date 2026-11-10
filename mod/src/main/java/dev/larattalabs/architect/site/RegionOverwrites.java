@@ -273,10 +273,18 @@ public final class RegionOverwrites {
 	}
 
 	/** One writer of a region: its run, its free cells (a lot's finishes placed free), its main entry's cells and layer. */
-	record Writer(String id, Kind kind, long layer, Builder.Run run, @Nullable BitSet free, Map<Long, BlockState[]> entry) {
+	record Writer(String id, Kind kind, long layer, Builder.@Nullable Run run, @Nullable BitSet free, Map<Long, BlockState[]> entry) {
 		/** Whether queue cell {@code q} was paid for (a held target cell, a free road path or a lot's free finish cost nothing). */
 		boolean paid(int q) {
-			return !run.cost.get(q).isEmpty() && (free == null || !free.get(q));
+			return run != null && !run.cost.get(q).isEmpty() && (free == null || !free.get(q));
+		}
+
+		int queuePos(BlockPos p) {
+			return run == null ? -1 : run.queuePos(p);
+		}
+
+		int size() {
+			return run == null ? 0 : run.size();
 		}
 	}
 
