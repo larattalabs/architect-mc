@@ -26590,3 +26590,48 @@ for the surface; Steward's RC areas if wanted: bridge/drawbridge, survival (the 
 | Fixtures (byte identity against 9aa02602, `gate7a-kit unchanged`) | **427 of 429 identical**; the two that move are the drawbridge-bearing `valid/v7a_gm_drawbridge` and `valid/v7a_gm_drawbridge_far` (same answer class, READY; the IR's `gateMechanisms` and the bill change). `asks/redstone_gate` is unchanged (still `blocked DEPENDENCY` before routing). |
 | Gate (DEV MODE, $0) | Run `artifacts/gate-runs/20261106-084655-change` at 38e60f0f, `--only gm-c-unit,gm-c-ingame,gm-c-survival`, 3 of 3 PASS. **gm-c-unit**: kit gm-c 13/0 (the circuit test: gmLint reach from each lever to all 2w trapdoors and settleSignals in all four lever states, w 1/3/5/7 in 4 headings: raised exactly when one lever is on, settled), with GM-a, GM-b, T3a; GateMechTest and MechWaitSayTest. **gm-c-ingame 20/0** on v7a_gm_drawbridge_far (n 11, 7 trapdoor cells): the region's report `{kind: drawbridge, cells 109}`; at rest 0 of 14 open; 0 changes in 40 ticks; lowered: kit villager and player walks and vanilla's navigation cross both ways, the kit's villager walk end to end both ways; **16 toggles by real use**, near, far, near, far (14, 0, 14, 0), far, near, far, near (14, 0, 14, 0), near x4, far x4: 0 wrong, both levers' states read back each time; with **both levers on** (lowered) the kit's villager walk crosses the deck and goes end to end both ways; with **the far lever alone** (raised) it crosses 0 ways, deck and end to end; raised by the near lever: 0 ways (vanilla [true, true] and the kit's player recorded, as GM-c); `Regions.remove` raised, and lowered **with both levers on**: E-flat 0 each, the moat's water included, no item dropped. **gm-c-survival 18/0**: the plan's `mech:drawbridge` bill = the circuit's exact cost; held for its whole bill, announced once ("Redstone drawbridge waits for 2 × redstone comparator, 2 × lever, 28 × oak fence, 28 × redstone dust, 20 × redstone repeater and 29 × stone bricks in the stockpile"); charged once = plan = report = the built circuit; twin 0 differ; removal raised (14 of 14 open): E-flat 0, refund = charge, conservation exact on the drawbridge's 8 items (the region's 2 dirt recorded, as GM-c's open finding, which XL works on). Also: kit units 1092 tests, 1091 pass, 0 fail; lint-structure 68/0, lint-look 13/0, water-lint 135/0; the mod build (`gradlew build --offline`, its tests including p3-lint's); `step-inputs check` 311 steps; unit-sidecar 803/1 (run `20261106-085913-change`), the one failure `eval.e2e` "compare of two runs says no regression" (load timing, as GM-c recorded; re-run alone 4/4; LV touches no sidecar code). |
 | Gate-verifier | PASS (review, re-ran removal and survival at ce41bd6a, run `20261106-090355-change`): gm-c-ingame 20/0 (16 toggles, 0 wrong; both-on lowered passes, far-only raised blocks; removal raised and lowered with both levers on E-flat 0), gm-c-survival 18/0 (bill = plan = report = built, twin 0, refund = charge), gm-c units 13/0; csurvival's code and its conservation scoping unchanged from GM-c. Noted, not blocking: the region's 2 dirt (GM-c's open finding, XL's), undo exercised by removal only as in GM-c, the ripple dropped (documented above). |
+
+## Slice NM, two naming fixes for Steward (branch `slice/NM` off main 2d9c5b15 / v0.56.0; versions NEXT; DEV MODE)
+
+Steward asked for both (steward-mc `docs/ARCHITECT-ASKS.md`, WE + WS RC wording note; GR's `NO_ROOM [street]` hole). Wording and one additive answer detail only: no new
+kind, no change to a `kind` value, no plan/0 schema byte (it stays at 95,975 of 96,000), no API member, no catalogue entry, so **no NEXT stamp is needed**.
+
+### 1. An unnamed gate reads as an ordinal of its wall
+
+| | |
+|---|---|
+| What | A gate a wall cuts on its own (`<wall>_g<k>`, no plan part of that id) is named "<the wall's words>'s first gate" (second, third, ... tenth, then "11th") in every sentence that named it from its id. Named gates and named gatehouses keep their names. |
+| Order | The ordinal is `k`, the gate's place in its wall's gate order as the kit cuts them (`makeGate` numbers `W.gates.length + 1`; named gates count, so a wall whose first gate is named has its first unnamed gate "second"). Deterministic: no new state, the same id gives the same words in the kit and in Java. |
+| The wall's words | Java: the wall's plan label as a stage wait says it ("Curtain wall"), else "the wall". Kit notes: "wall <id>" (the kit's notes already say "wall curtain"). A gate id whose wall is no plan part (and no IR `gateMechanisms` entry names it) keeps its old words; a plan part named like the id keeps its own label. |
+| Java | `RegionWaitTags.autoGateWords` (also reached from `wordsOf`); `MechCharges.subjectOf` says "<wall>'s first swing gate" for a swing (the kind's words in the noun, never "...gate's swing gate"). Every mechanism wait goes through `subjectOf`: the stage wait (waits for the wall round it, `waitsFor.say`), the move to the bill wait (ITEM_WAITING, `waitsFor.say` and `message`), and `RegionTargets`' wait. |
+| Kit | `gateSays(W, id)` in `connectors/wall.mjs`: the swing fallback notes (thickness, villager, near, width), the gate-placement notes (even place, landing, no walk) and the double-door note. Deviation records (`{what: 'mechanism', gate: 'curtain_g1', ...}`) and graph ids keep the id: they are data. |
+
+Changed sentences (old -> new; the wall `curtain`, its plan label "Curtain wall" in Java; `curtain_g1` the road's crossing, a swing):
+
+| Where | Old | New |
+|---|---|---|
+| Stage wait (WE, Java) | Curtain g1's swing gate waits for the wall round it (...) | Curtain wall's first swing gate waits for the wall round it (...) |
+| Bill wait (ITEM_WAITING `say`, `message`) | Curtain g1's swing gate waits for 2 x iron door in the stockpile | Curtain wall's first swing gate waits for 2 x iron door in the stockpile |
+| Lot/part wait with the gate as waiter | Curtain g1 waits for ... to be built | Curtain wall's first gate waits for ... to be built |
+| Kit note, villager edge | gate curtain_g1: in crosses it on a villager edge (...): the wooden door | wall curtain's first gate: in crosses it on a villager edge (...): the wooden door |
+| Kit note, thin wall | gate curtain_g2: wall curtain is 2 thick and the swing needs 3: the wooden door | wall curtain's second gate: wall curtain is 2 thick and the swing needs 3: the wooden door |
+| Kit notes, near / width | gate curtain_g1: wall curtain has no straight run near ... / ... it is 3 wide and the swing is 3 ... | wall curtain's first gate: (same tail) |
+| Kit notes, placement | gate curtain_g1: N positions from its even place ... / the ground steps N across the wall there ... / ... a double door covers the middle 2 | wall curtain's first gate: (same tail) |
+
+Without a plan label Java says "The wall's first swing gate waits for ...". Unchanged: "North gate's swing gate waits for ..." (a named gate), "Main gatehouse's portcullis waits for ...".
+
+### 2. A growth's `NO_ROOM [street]` names what stopped the street
+
+| | |
+|---|---|
+| What | A growth (GR §2, §4) whose street extension ran out answers `NO_ROOM [street]`. It now also says what stopped the run: `blockedBy: "wall"` with `wall: <the wall's id>`, `"slope"` (the street's grade rule fails: cut/fill 3, steps of 1) or `"reach"` (the claim's margin, or a town's claim for a district). |
+| Where it is read | `streetStop` (grow.mjs) walks the end's straight run as `tryExtension` does (5 wide, graded, dry) and names the first column that stops it: a standing wall's column first (wall part `w_<id>`), then the claim or town edge, then the grade; any other class (a lot, a road, held ground, water) leaves the detail out. |
+| Answer shape | Additive, only where `kind` is `street`: the `unplaced[]` entries of `revision.grow.unplaced` (the IR) and of the zone's plan/0 answer gain `blockedBy` and `wall?`; the refusal's `evidence` (`{kind, lots}`) gains the same; the thrown/shown sentence gains a clause: `NO_ROOM: [street] no lot of the growth fits the region (the street is stopped by wall curtain): house_1 (street), ...`; the zone's note reads `unplaced house_5 (NO_ROOM street, the street is stopped by the slope (too steep))`. Every other answer, every other kind, and a `street` answer where another class stopped it keep their exact shape. |
+| Sentences | "the street is stopped by wall <id>", "the street is stopped by the slope (too steep)", "the street is stopped by the edge of the claim". |
+| Not touched | plan/0's compact schema; `kind` values; the `held` answer (a wall hard against a street's end is still `held`, as before). |
+
+### Acceptance and gate steps
+
+1. Unit tests: kit `ws.test.mjs` (a wall with 3 auto gates: first, second, third in the notes, no id; `gateSays` ordinals, a named gate, a plan-named `curtain_g2`, another wall's id), kit `gr-a.test.mjs` (reach, slope, wall with its id, the thrown sentence and `e.blocker`, a `held` and a clean growth unchanged in shape), Java `MechWaitSayTest` (ordinals, named gates, a labelled and an unlabelled wall, the swing subject, a plan part named like the id).
+2. Byte identity: every committed plan fixture except the ones that carry the changed kit notes plans byte-identically to main (answers, overall, IR, first plan).
+3. In game: `gm-b-survival` (the step that already holds a mechanism for its bill) gains a second, short pass on `gm/nm_auto_swing` (gmb_k1_swing without its named gate: the wall cuts `curtain_g1`): its bill wait and its first wait say "...'s first swing gate waits for ..." and carry no id.

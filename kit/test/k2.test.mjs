@@ -181,12 +181,13 @@ test('item 1: wall.along on S3\'s pinned river (the shore: the land side), gates
   // face to the bank; the kit's player and villager through each gate both ways, from beyond the flight's top to the shore outside
   const { buildVirtual } = await import('../lib/region/vworld.mjs');
   const { walkGraph, nodeReached } = await import('../lib/region/check.mjs');
+  const { gateSays } = await import('../lib/connectors/wall.mjs');
   const { vw } = buildVirtual({ ir: r.res.ir, survey: svOf(fx).bytes, blobs: (sha) => r.res.blobs.get(sha) ?? null });
   const gAt = (x, z) => cols.ground[(x - cols.minX) + (z - cols.minZ) * cols.width];
   const cellAt = new Map(m.cells.map((c) => [`${c[0]},${c[1]}`, c]));
   for (const g of m.gates) {
     assert.ok(g.landing && g.landing.steps > 0, `${g.id}: a landing with its flight`);
-    assert.ok(w.notes.some((n) => n.startsWith(`gate ${g.id}:`) && /a landing levels it/.test(n)), `${g.id}: noted`);
+    assert.ok(w.notes.some((n) => n.startsWith(`${gateSays({ id: 'river_wall', gates: [] }, g.id)}:`) && /a landing levels it/.test(n)), `${g.id}: noted`);
     const fl = g.landing.cells.filter((c) => c[1] !== g.y);
     const top = fl.reduce((a, c) => (c[1] > a[1] ? c : a), fl[0]), low = fl.reduce((a, c) => (c[1] < a[1] ? c : a), fl[0]);
     const xs = fl.map((c) => c[0]), zs = fl.map((c) => c[2]);
