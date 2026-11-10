@@ -26048,6 +26048,7 @@ merge-base identity) and `pg-ingame` (items 3, 4, 5, 7; driver `tools/gate7agj.m
 | 1, 2, 3, 5 (kit), 6 (step `pg-unit`) | the same run | PASS 434/0: pg.test + gj.test 24/0, K3/GM-a/D3 parity 29/0, Java GateJoinTest/DistrictLandTest/ApiGJTest/ApiPGTest/ApiRulesTest; **item 6: 429 of 429 committed plan fixtures byte-identical** against 2d9c5b15 |
 | 1, 3, 4, 5, 7 (step `pg-ingame`) | the same run | PASS 25/0: unbuilt gatehouse NO_JOIN [wall] naming it, parity, removed E-flat 0; built: joins `via rgN:gatehouse_1`, front port -> back port, re-check holds (PLACED, passage hash unchanged), villagers 4/4 both ways; the portcullis lowered by its front lever still joins (checkBeside fits via the passage); the district removed E-flat 0 over the town's and district's claims (+8), then the town E-flat 0 (plain and portcullis) |
 | regressions | the same run | gj-ingame 19/0, k3-ingame 19/0 |
+| verifier (item 7 re-run, diff reviewed) | gate-verifier at 4b42b6d6: run `20261110-212405-change` | PASS: pg-ingame 25/0 (item 7 E-flat 0 plain and portcullis, then the town 0); no defects (minor, per rule 6: a player's block in a mechanism envelope cell is not flagged by the re-check) |
 
 ## Slice GM, gate mechanisms
 
