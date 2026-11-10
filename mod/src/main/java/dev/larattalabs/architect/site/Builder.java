@@ -1890,7 +1890,17 @@ public final class Builder {
 		int dz = b.maxZ() - b.minZ() + 1;
 		// phase 4e "Survival layering": cells another site covers belong to it; a paid cell of this site whose intact block the
 		// covering site displaced (its before there is this site's block) is refunded (rule 3b), nothing else there
-		Map<Long, dev.larattalabs.architect.journal.Journal.Value> cover = SiteJournal.coverBefores(s.id());
+		Map<Long, String> coverBy = new HashMap<>();
+		Map<Long, dev.larattalabs.architect.journal.Journal.Value> cover = SiteJournal.coverBefores(s.id(), coverBy);
+		// (XR) a survival region's lot: a cell another writer of the region (a target, a road, a lot) covers is that writer's to refund
+		// when it owns what stands; this lot refunds it only when it still owns it (it matches and no later writer does). A block of this
+		// lot that writer took up went back to the stockpile as it was taken up (RegionOverwrites.retake): never again here
+		java.util.Set<String> writers = new HashSet<>();
+		for (RegionOverwrites.Live l : RegionOverwrites.lives(srv, s.group(), s.id())) {
+			writers.add(l.id());
+		}
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet shadow = writers.isEmpty() || r == null ? null : RegionOverwrites.shadowedCells(srv, level, s.group(), s.id(),
+			s.placedAt(), r, true);
 		for (int y = b.minY(); y <= b.maxY(); y++) {
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
@@ -1900,6 +1910,14 @@ public final class Builder {
 					}
 					if (!cover.isEmpty()) {
 						var over = cover.get(m.asLong());
+						if (over != null && writers.contains(coverBy.get(m.asLong()))) {
+							int qi = r == null ? -1 : r.queuePos(m);
+							BlockState now = level.getBlockState(m);
+							if (qi >= 0 && !free.get(qi) && r.matches(now, qi) && (shadow == null || !shadow.contains(m.asLong()))) {
+								tally.add(Refunds.Outcome.REFUND, r.refundCost(now, qi));
+							}
+							continue;
+						}
 						if (over != null) {
 							int qi = r == null ? -1 : r.queuePos(m);
 							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
@@ -2273,12 +2291,17 @@ public final class Builder {
 	 * cells still holding their old paid block (at the old block's cost; it is refunded at the swap). Rescans the site first.
 	 */
 	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r) {
+		return paidStanding(level, s, r, null);
+	}
+
+	/** {@link #paidStanding}, less the cells in {@code skip} (XR: a survival region lot's cells a later writer of the region owns). */
+	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
 		r.rescan(level, false, true); // never loads a chunk (a far target's cells keep their last known state)
 		r.newlyCount = 0;
 		BitSet free = s.construction().free();
 		Map<String, Integer> out = new TreeMap<>();
 		for (int i = 0; i < r.size(); i++) {
-			if (free.get(i)) {
+			if (free.get(i) || skip != null && skip.contains(r.pos(i).asLong())) {
 				continue;
 			}
 			if (r.built.get(i)) {

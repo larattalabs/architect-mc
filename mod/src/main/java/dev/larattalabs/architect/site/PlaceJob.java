@@ -500,6 +500,11 @@ final class PlaceJob implements Placement.Job {
 			commit = null;
 			dev.larattalabs.architect.journal.WorldJournal.kill("K4");
 			if (convert != null) {
+				// (XR) a survival region's lot: the blocks its placement took up (a queued cell about to be cleared and rebuilt, a cell it
+				// wrote over or cleared) that another writer of the region owns and paid for go back to the owner's stockpile now
+				if (record != null) {
+					RegionOverwrites.lotTakeUp(server, level, siteId, record.group(), record.owner(), Sites.dimensionId(level), convert, snapBox);
+				}
 				Builder.placeCrate(level, new Builder.ConvertPlan(siteId, convert, dev.larattalabs.architect.journal.WorldJournal.empty(snapBox), snapBox,
 					newCrate, sharedGroup));
 				newCrate = false;

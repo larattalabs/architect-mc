@@ -425,4 +425,8 @@ export async function registerGmC(steps, h) {
     await L.leaveWorld();
     return out;
   };
+
+  // (XR) survival writers over paid cells: xscan (xr-scan, recorded) and xsurv (xr-survival, judged): tools/lib/gatexr.mjs
+  const { registerXr } = await import('./gatexr.mjs');
+  await registerXr(steps, { L, call, check, log, OUT, json, G, ctx, moat, killMobs, imp });
 }

@@ -26721,3 +26721,95 @@ Without a plan label Java says "The wall's first swing gate waits for ...". Unch
 | Byte identity (`K.unchanged`, base main 2d9c5b15, 429 fixtures) | **426 of 429 identical** (answers, overall, IR, first plan). The three that move are `k2/k2_look_bank`, `k2/k2_shore_routes` and `valid/v7a_k2_along_shore`: notes only (the gate-landing note names an unnamed gate by its place), IR hashes identical; named in `tools/lib/f7a-norm.mjs` `GC_MOVED` so every steps' `unchanged` accepts them. The new fixture `gm/nm_auto_swing` is new on the branch. |
 | Gate (DEV MODE, $0, ports 8900/8901) | Run `20261110-195014-change` at a0311ad2, `--only gm-b-unit,gr-unit,gm-b-survival`, 3 of 3 PASS: gm-b-unit 2 ok, gr-unit 5 ok, gm-b-survival 21 ok (the new `sv-nm` pass: the unnamed `curtain_g1` swing is READY in survival; its bill wait and its first wait both read "The wall's first swing gate waits for ...", ITEM_WAITING once, no id). `step-inputs check`: 311 steps, closure inside its recorded set. |
 | Open | A wall hard against a street's end still answers `held` (now with `blockedBy wall`), not `street`; Steward's e2e that expects exactly `NO_ROOM [street]` for the walled town is unaffected only if its end really was `street`: the kit's walled-town case answers `held`. |
+
+## Slice XR, survival writers over paid cells (branch `slice/XR` off main 2d9c5b15, v0.56.0; 2026-11-10; DEV MODE, survival accounting strict)
+
+XL left two cases untested: (a) a road or a lot (not a bridge) writing over a cell an earlier writer already paid for; (b) three or more
+writers on one cell. XR lists every path where one writer of a survival region takes up another's paid block, measures which ones a
+region reaches, and makes them conserve. Mod and gate only; no API member, no Reason, no catalogue entry, so no Steward RC by the API
+rule (Steward's RC areas if wanted: survival, undo, road, lot). No Steward-visible answer changes: plan, check, IR and answers are the
+kit's and are untouched (the one kit file added is a gate fixture program, `kit/regions/xr_demo.mjs`, not in the catalogue).
+
+### 1. The writers and every take-up
+
+A survival region has these writers, all fed from the owner's stockpile, all members of the region's group:
+- **T**, a tile's target (`RegionTargets`, a cell site per part group): built later by the feed loop (`stepFed`), writing a cell over the
+  block standing only when that block is its journal before (what it found at its put-down) or free (air, fluid, plant).
+- **F**, a tile's free pass (`InfraJob`, the tile's CELL entry): written at once at the tile's put-down, no bill.
+- **R**, a 4e road as a construction road (`RoadBuilder`): the instant road is written, then every queued cell goes back to its before and
+  is built by the feed loop (`step`, the `planned` rule as T's); its cuts stay cleared at put-down (`convert`). 4e only ever changes a
+  natural block (`RoadTerrain`: a built block is BUILT, never cut, filled or cleared), so R reaches a paid cell only when that cell's block
+  is a natural kind (paid stone, dirt, gravel...).
+- **L**, a lot as a construction site (`Builder`, from `PlaceJob`): the instant placement is written and committed, then every queued
+  cell is cleared to air (`Builder.clear`) and built by the feed loop; cells the placement wrote as air stay air.
+- (Not cell writers here: a gate mechanism's circuit, charged as one bill (GM-a2's MechCharges), and the fluids stage's bodies.)
+
+The stage waits (§6.3 of RS, `RegionTargets.stageWait`) decide what can stand when a writer is put down: a tile waits for every earlier
+stage's target and construction road within one tile (a path tile also for its stage's terrain targets); a lot or a road for those under
+its box + 8; nothing waits for a lot except a fluids tile. So a later stage's writer finds an earlier stage's T or R built; it may find an L
+of an earlier stage still building.
+
+| Writer over victim | When it takes the block up | Before XR |
+|---|---|---|
+| T over T | the feed write (`stepFed`) | XL: given back (`retake`), first matching sibling target. Gaps: an A-B-A chain (C writes A's block back over B) and a later target that matches by block in another state are counted (audit) and refunded (removal) by two targets; soil over soil skipped, both counted |
+| T over R | the feed write | lost (`retake` looked at targets only) |
+| T over L | the feed write | the lot's removal refunded the displaced block (4e layering rule 3b, `coverCell`); the audit never counted it after the write |
+| F over T, R | the tile's put-down write | lost |
+| F over L | the put-down write | rule 3b at the lot's removal, as T over L |
+| R over T, R, L (queued cell) | the feed write (`planned`) | lost |
+| R over T, R, L (a cut) | `convert`: the instant road's clear stays | lost |
+| L over T, R, L (queued cell) | `PlaceJob` after the commit: `Builder.clear` empties it, the lot rebuilds it (the same block too) | lost |
+| L over T, R, L (a cell the placement changed, not queued) | the placement's write | lost |
+
+### 2. The rule: one owner per cell
+
+- **The owner** of the block standing at a cell is the latest writer (put-down order, `placedAt`, then id) whose run matches it and that
+  writes the cell (a road's and a lot's queued cells always do; a target's when its journal before there was another block); when none
+  writes it, the latest that matches. A writer that matches without writing (the same block in another state) owns nothing; an earlier
+  writer whose block a later one wrote again (A-B-A) owns nothing.
+- **Take-up:** whenever a writer takes up a block (writes over it, cuts it, clears it to rebuild it), and the block's owner paid for its
+  cell, the owner's items for it go back to the stockpile then (`Purse.giveBack` / `Stockpiles.giveBack`: credited, overflow dropped),
+  once. A held or free cell gives nothing. Soil over soil is no longer skipped: the later writer owns it.
+- **Counting:** the audit's paid standing and the removal's refund count a writer's cell only when it owns it (`shadowedCells`: cells
+  another writer of the region owns are skipped). A lot's cell covered by another writer of its region is refunded by the lot only when
+  it owns it; rule 3b stays for every other cover (non-region sites, a free pass of another group).
+- Charge = given back + paid standing, item for item, at every point; the removal refunds the paid standing (tallied before the undo, as
+  before); the undo writes the befores back (free).
+- **Scope:** only a region's group (its record carries `architect_mc:region`); a creative region has no runs. Nothing outside a region
+  changes (4e layering, a lone road, a site).
+
+### 3. Gate ($0, ports 8902/8903, `--run-dir ../architect-mc-XR-run`)
+
+1. `mod unit` (in the mod build): `RegionOverwritesTest`, real `Builder.Run`s on one cell: two writers, three (each block back once, the
+   last stands), A-B-A and A-B-A-D (never given back twice; the broken variant without the owner rule is caught), the same block in
+   another state, an overwrite by air, soil over soil, held cells, the owner rule's ties; and every chain of up to 4 writers over 9 blocks,
+   paid or held, targets and lots, from air or dirt: conserved.
+2. `xr-scan` (recorded): `dev.rs.overwrites` (new, dev) lists, per region, every paid queue cell of a writer that a later writer's
+   journal entry changed (victim, writer, kinds, what it found, what it planned), per kind pair, and the cells three or more writers
+   changed; run over existing survival fixtures with roads and lots and over `xr_demo`, a gate program that reaches each row a region
+   can reach.
+3. `xr-survival` (judged; the verifier re-runs it): `xr_demo` and `h/v45b_moat_road` built in survival: conservation exact on every item
+   after the build and after `Regions.remove`, the audit's `retaken` = the items of the overwritten paid cells `dev.rs.overwrites` lists,
+   E-flat 0, no item dropped; `xr_demo` again removed mid-build after its first take-up: conservation exact, E-flat 0.
+4. Regressions: `gm-c-survival`, `gm-c-survctl` and every survival step whose inputs XR touches (`step-inputs`).
+
+### Slice XR as built (survival writers over paid cells)
+
+Branch `slice/XR` off main 2d9c5b15 (v0.56.0); versions NEXT (nothing stamped: no API, schema or catalogue member); recorded 2026-11-10;
+DEV MODE, survival accounting strict; $0; ports 8902/8903, run dir `../architect-mc-XR-run`. Builds §1-§3 above.
+
+| Area | As built |
+|---|---|
+| The seam (`site/RegionOverwrites`, new) | `Claim(id, order, paid, matches, writes)`, `owner` (the latest matching claim that writes the cell, else the latest matching), `taken` (the owner when paid), `shadowed`. `Live` (a writer this tick: its run, a lot's free bits, a target's journal before read lazily). `lives(group, self)` (a region group's targets, construction roads and lots; empty outside a region's group), `retake` (give back now, through the purse), `retakeOnce` (a put-down's take-ups credited once under `xr-lot:<site>@<entry>` / `xr-road:<road>@<entry>`: a job resumed after a stop credits nothing again), `lotTakeUp`, `shadowedCells`. |
+| T over T, R, L (`RegionTargets.stepFed`) | XL's `siblings`/`retake` replaced by `RegionOverwrites.retake` over every writer of the region; the soil-over-soil skip is gone (the later writer owns the cell). |
+| R over T, R, L (`RoadBuilder.step`, `convert`) | A region road's feed write gives back what it takes up; `convert`'s cuts over an owned paid block are credited once per placement. 4e only changes natural blocks (`RoadTerrain`), so R reaches a paid cell only when it is a natural kind: xr_demo's paid stone (7). |
+| L over T, R, L (`PlaceJob`) | After the lot's commit, before `Builder.clear`: every queued cell's before and every cell the placement changed, when another writer owns it and paid, credited once per placement. |
+| F over T, R, L (`InfraJob` WRITE) | A survival region tile's free pass gives back an owned paid block it writes over (not one it writes the same block on). |
+| Counting (`Stockpiles.audit`, `Groups` removal, `Builder.prepareDeconstruct`) | Paid standing and the removal's refund skip a writer's cells another writer owns (`shadowedCells`); a lot's cell covered by a region writer is refunded only when the lot owns it (rule 3b stays for other covers). The audit's `retaken` sums lots' too. `RETAKEN` cleared at server stop (a target id is reused by the next world). |
+| Dev | `dev.rs.overwrites {region}`: every paid queue cell of a region writer (target, road, lot) that a later writer's entry changed (a free pass too; a lot's rebuilt cells), per kind pair, and the cells three or more writers changed. |
+| Fixture | `kit/regions/xr_demo.mjs` (not in the catalogue, fixed blocks as rp_demo): a paid pavement, a 4e road over it and over paid stone, three writers on three cells (cobblestone, then planks / stone bricks (A-B-A) / air), a stair rewritten in another state, a lot on an ordinary pad (its free top over the pavement) and a lot with no pad fill (its foundation and approach over the pavement). |
+| Before / after (xr_demo, conservation only) | On main 2d9c5b15 (XR's gate over main's mod, run `20261110-201203-change`): built and removed both **{stone_bricks -127, stone -7, stone_brick_stairs +1}**: the free pass's 81 and the lot's 47 pavement bricks lost, the road's 7 stone lost, the A-B-A cell's brick counted twice (+1, so -128 + 1) and the restated stair counted twice (+1). On XR: `{}` built and removed. |
+| Steward-visible | None. Plans, checks, IRs and answers are the kit's (untouched but for the new gate program). `retaken` on every scanned fixture is `{}` but v45b's, which equals XL's (`{cobblestone 9, dirt 3}`): no committed fixture has a soil-over-soil, A-B-A, lot, road or free-pass take-up, so no removal refund a caller reads changes. A region built before XR and removed after it: a cell a target or free pass took from a lot is no longer refunded by rule 3b (it was given back only if XR's code wrote it). |
+| Gate ($0, ports 8902/8903) | At 7ab0ff62, run `20261110-201741-change` (`--no-turbo`, 30 steps, 2h19m): **29 PASS, 1 FAIL**. **xr-survival 24/0**: xr_demo reaches FREE/LOT/ROAD/TARGET over TARGET (81/47/7/6 cells) and 50 cells changed by 3+ writers; conservation exact built and removed; retaken `{stone_bricks 131, stone 7, cobblestone 3}` = the rows' items; E-flat 0, no drop; v45b retaken `{cobblestone 9, dirt 3}` = rows, exact; mid-build removals after the first take-up and after the lots' put-down (lots starved, not built): exact, E-flat 0, no drop. **xr-scan 7/0** (rs02, survival_village, rs03, v18, v45b, flat_village x4, xr_demo: every one exact; only v45b and xr_demo take anything up). Regressions: gm-c-survival 18/0, gm-c-survctl 4/0, rs-ingame 38/0, rs-survival-smoke 40/0, rs-toggle 6/0, rs-crash 3/0, rsb-ingame 37/0, rsb-crash 9/0, y-unit 1/0, y-ingame-smoke 78/0, c29-unit 1/0, c29-ingame-smoke 51/0, x-resume 35/0, pt2 10/0, cu 10/0, cw 5/0, rk 5/0, lf 6/0, cl 4/0, sa 5/0, gm 51/0, gm-b 16/0, k3 8/0, voc-smoke 8/0, k2 7/0, d3 5/0, gr 12/0. **rs-unit 392/2**: the two failures are `fixtures/plan/rs/asks-creative.md` / `asks-survival.md` "is this table": the committed tables are stale on main itself (this head's generated table equals the merge base's byte for byte, the check before them passes); not XR's. Offline: mod tests 1012 (0 failed, 1 skipped; RegionOverwritesTest 9/0, its exhaustive chains over 4 writers included); kit 1092/1092; `step-inputs check` 313 steps. |
+| Open | (1) `Sites.undoStage` on a survival region's group (no Regions path does it: revisions refuse a cell over a paid block, survival_paid) would write a taken-up block back for free and its earlier writer would own it again; not reachable through Regions, recorded. (2) A free-pass or feed take-up is credited unkeyed as XL's (a world that loses the write while the stockpile keeps the credit is the save skew XL had); the put-down take-ups (lot, road cuts) are keyed. (3) The stale asks tables in rs-unit (main's). |
+| Gate-verifier | PASS (review of the diff; re-ran at 30c16d2c, run `20261110-223828-change`, 4 of 4): xr-survival 24/0, gm-c-survival 18/0, gm-c-survctl 4/0, rs-survival-smoke 40/0. Non-blocking notes: `shadowedCells` is O(cells x writers) per audit or removal (not per tick); the feed and free-pass take-ups are unkeyed as XL's (open item 2); rs-unit's stale tables not re-verified by it. |

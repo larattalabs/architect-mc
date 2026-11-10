@@ -155,6 +155,20 @@ public final class RoadBuilder {
 		cells.sort(Comparator.<int[]>comparingInt(c -> c[1]).thenComparingInt(c -> c[4]).thenComparingInt(c -> c[3]).thenComparingInt(c -> c[2]));
 		int[] queue = cells.stream().mapToInt(c -> c[0]).toArray();
 		Construction.Crate crate = fromPile ? null : ensureCrate(level, g, road);
+		// (XR) a region's road: a cut (the instant road cleared it, and it stays cleared) over a block another writer of the region owns and
+		// paid for takes that block up now: its items go back to the owner's stockpile (a queued cell's block goes back when it is written)
+		List<RegionOverwrites.Live> sibs = fromPile ? RegionOverwrites.lives(srv, road.group(), road.id()) : List.of();
+		if (!sibs.isEmpty()) {
+			Map<Long, BlockState> cuts = new HashMap<>();
+			for (int k = 0; k < target.size() && k < before.size(); k++) {
+				if (target.states[k].isAir() && !before.states[k].isAir()) {
+					int[] o = Construction.offsets(k, dx, dz);
+					cuts.put(BlockPos.asLong(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[k]);
+				}
+			}
+			// once per placement (a convert run again after a stop credits nothing more)
+			RegionOverwrites.retakeOnce(srv, sibs, road.owner(), road.dimension(), cuts, dropAt(road), road.id(), "xr-road:" + road.id() + "@" + main.id());
+		}
 		// every queued cell back to its before (no drops, no neighbour shape updates); cut cells stay cleared
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		int[] topDown = queue.clone();
@@ -409,6 +423,7 @@ public final class RoadBuilder {
 		Builder.Purse purse = fed != null ? fed : Builder.ledgerPurse(level, crate);
 		BlockState[] before = BEFORE.get(road.id());
 		boolean regionRoad = RegionItems.inRegion(road.id());
+		List<RegionOverwrites.Live> sibs = null; // (XR) the region's other writers, read once this tick when a write replaces a block
 		boolean starved = false;
 		int budget = SurvivalWorld.blocksPerTick();
 		int placed = 0;
@@ -444,6 +459,14 @@ public final class RoadBuilder {
 			}
 			r.blockedSince.remove(i);
 			purse.pay(r.cost.get(i));
+			if (regionRoad && !now.isAir()) {
+				// (XR) a region's road writing over a block another writer of the region (a target, a road, a lot) owns and paid for: its
+				// items go back as it is taken up (as a target's write, XL)
+				if (sibs == null) {
+					sibs = RegionOverwrites.lives(srv, road.group(), road.id());
+				}
+				RegionOverwrites.retake(sibs, p, now, purse::giveBack, dropAt(road), road.id());
+			}
 			if (regionRoad) {
 				RegionTargets.write(level, r, i, p); // (6c RS, §6.1) a region's road writes as its tiles do: a dirt path under a post stays one
 			} else {

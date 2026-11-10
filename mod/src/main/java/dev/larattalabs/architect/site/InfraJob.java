@@ -58,6 +58,8 @@ final class InfraJob implements Placement.Job {
 	final @Nullable String itemKey;
 	Infra record;
 	int phase = CAPTURE;
+	/** (XR) A survival region tile's free pass: the region's writers, read once when it starts writing (null: not read yet). */
+	java.util.@org.jspecify.annotations.Nullable List<RegionOverwrites.Live> xrLives;
 	int cursor;
 	@Nullable String entry;
 	boolean beforeRecord = true;
@@ -586,6 +588,19 @@ final class InfraJob implements Placement.Job {
 							cursor++;
 							n++;
 							continue;
+						}
+						if (tile != null) {
+							// (XR) a survival region tile's free pass writing over a block another writer of the region (a target, a
+							// construction road, a lot) owns and paid for: its items go back to the owner's stockpile as it is taken up
+							if (xrLives == null) {
+								xrLives = RegionOverwrites.lives(server, record.group(), record.id());
+							}
+							if (!xrLives.isEmpty()) {
+								BlockState was = level.getBlockState(m);
+								if (!was.isAir() && !was.is(WorldJournal.state(v).getBlock())) {
+									RegionOverwrites.retakeToPile(server, xrLives, record.owner(), record.dimension(), m.immutable(), was, m.above().immutable(), record.id());
+								}
+							}
 						}
 						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
 						if (rb != null) {
