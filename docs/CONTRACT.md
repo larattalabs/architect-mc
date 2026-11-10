@@ -26594,7 +26594,7 @@ for the surface; Steward's RC areas if wanted: bridge/drawbridge, survival (the 
 ## Slice NM, two naming fixes for Steward (branch `slice/NM` off main 2d9c5b15 / v0.56.0; versions NEXT; DEV MODE)
 
 Steward asked for both (steward-mc `docs/ARCHITECT-ASKS.md`, WE + WS RC wording note; GR's `NO_ROOM [street]` hole). Wording and one additive answer detail only: no new
-kind, no change to a `kind` value, no plan/0 schema byte (it stays at 95,975 of 96,000), no API member, no catalogue entry, so **no NEXT stamp is needed**.
+kind, no change to a `kind` value, no plan/0 schema byte (it stays at 95,975 of 96,000), no API member, no catalogue entry. The one doc line (`Reason.NO_ROOM`'s javadoc) is stamped NEXT.
 
 ### 1. An unnamed gate reads as an ordinal of its wall
 
@@ -26624,11 +26624,11 @@ Without a plan label Java says "The wall's first swing gate waits for ...". Unch
 
 | | |
 |---|---|
-| What | A growth (GR §2, §4) whose street extension ran out answers `NO_ROOM [street]`. It now also says what stopped the run: `blockedBy: "wall"` with `wall: <the wall's id>`, `"slope"` (the street's grade rule fails: cut/fill 3, steps of 1) or `"reach"` (the claim's margin, or a town's claim for a district). |
-| Where it is read | `streetStop` (grow.mjs) walks the end's straight run as `tryExtension` does (5 wide, graded, dry) and names the first column that stops it: a standing wall's column first (wall part `w_<id>`), then the claim or town edge, then the grade; any other class (a lot, a road, held ground, water) leaves the detail out. |
-| Answer shape | Additive, only where `kind` is `street`: the `unplaced[]` entries of `revision.grow.unplaced` (the IR) and of the zone's plan/0 answer gain `blockedBy` and `wall?`; the refusal's `evidence` (`{kind, lots}`) gains the same; the thrown/shown sentence gains a clause: `NO_ROOM: [street] no lot of the growth fits the region (the street is stopped by wall curtain): house_1 (street), ...`; the zone's note reads `unplaced house_5 (NO_ROOM street, the street is stopped by the slope (too steep))`. Every other answer, every other kind, and a `street` answer where another class stopped it keep their exact shape. |
+| What | A growth (GR §2, §4) whose street extension ran out answers `NO_ROOM [street]` (or `[held]` when a wall stands against the street's end). It now also says what stopped the run: `blockedBy: "wall"` with `wall: <the wall's id>`, `"slope"` (the street's grade rule fails: cut/fill 3, steps of 1) or `"reach"` (the claim's margin, or a town's claim for a district). |
+| Where it is read | `streetStop` (grow.mjs) walks the end's straight run as `tryExtension` does (5 wide, graded, dry) and names the first column that stops it: a standing wall's column first (wall part `w_<id>`), then the claim or town edge, then the grade; any other class (a lot, a road, held ground, water) leaves the detail out. An end that is not extendable (a route joins it or runs on past it, as at a walled town's gate) is read through that route's own road and path cells, to what lies beyond: the wall. |
+| Answer shape | Additive, only where `kind` is `street` or `held` and a stop was named: the `unplaced[]` entries of `revision.grow.unplaced` (the IR) and of the zone's plan/0 answer gain `blockedBy` and `wall?`; the refusal's `evidence` (`{kind, lots}`) gains the same; the thrown/shown sentence gains a clause: `NO_ROOM: [street] no lot of the growth fits the region (the street is stopped by wall curtain): house_1 (street), ...`; the zone's note reads `unplaced house_5 (NO_ROOM street, the street is stopped by the slope (too steep))`. Every other answer, every other kind, and a `street` answer where another class stopped it keep their exact shape. |
 | Sentences | "the street is stopped by wall <id>", "the street is stopped by the slope (too steep)", "the street is stopped by the edge of the claim". |
-| Not touched | plan/0's compact schema; `kind` values; the `held` answer (a wall hard against a street's end is still `held`, as before). |
+| Not touched | plan/0's compact schema; every `kind` value (a wall hard against a street's end, as in the walled town the kit builds from `valid/v30_walled_village`, still answers `held`; it now says `blockedBy wall`). |
 
 ### Acceptance and gate steps
 
