@@ -7,7 +7,7 @@
 // The standing data comes from ctx.besideReach (the check's `besideReach`). Pure.
 import { keyRuns, runKeys } from './beside.mjs';
 import { reachClasses } from './reach.mjs';
-import { mergedClasses } from './gateJoin.mjs';
+import { mergedClasses, passagePorts } from './gateJoin.mjs';
 
 const k2 = (x, z) => `${x},${z}`;
 
@@ -26,6 +26,8 @@ export function besideRules({ ir, vw, besideReach, around = [], findings, findin
   const K = besideReach ? mergedClasses(reachClasses(besideReach), around) : null;
   // ((7a GJ, §3) the gate a join crosses: none of its cells is written (the traverse is the wall's)
   const gateCols = runKeys(ir.reach?.gate?.cells ?? []);
+  // ((PG) a passage's port strips are not its gatehouse's apron: the legs end there)
+  const ports = ir.reach?.gate?.kind === 'passage' ? passagePorts([{ ...ir.reach.gate, cells: [] }]) : new Set();
   const town = besideReach?.standing?.id ?? ir.reach?.standing ?? ir.beside?.id ?? '?';
   // the written cells outside the claim, per column, with their writer parts
   const outside = new Map();
@@ -48,7 +50,7 @@ export function besideRules({ ir, vw, besideReach, around = [], findings, findin
       const [x, z] = k.split(',').map(Number);
       const y = outside.get(k)?.y ?? 0;
       if (K.held.has(k) && !(K.terrain.has(k) && hold.has(k))) { m.held++; bad.held.push([x, y, z]); }
-      if (K.lot.has(k) || K.keep.has(k)) { m.footprint++; bad.footprint.push([x, y, z]); }
+      if ((K.lot.has(k) && !ports.has(k)) || K.keep.has(k)) { m.footprint++; bad.footprint.push([x, y, z]); }
       if (K.body.has(k)) { m.bodies++; bad.body.push([x, y, z]); }
     }
     // a contact column the town's terrain holds: every one must be held (reach.hold)

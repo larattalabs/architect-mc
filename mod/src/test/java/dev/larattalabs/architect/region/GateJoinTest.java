@@ -49,6 +49,22 @@ class GateJoinTest {
 		}
 	}
 
+	/** (PG) The passage fixture (kit/test/fixtures/gj/pg-parity.json; kit/test/pg.test.mjs): gates and the standing's walls equal the kit's. */
+	@Test
+	void passageGatesEqualTheKits() throws Exception {
+		JsonArray ws = JsonParser.parseString(Files.readString(Path.of("../kit/test/fixtures/gj/pg-parity.json"))).getAsJsonObject().getAsJsonArray("walls");
+		assertEquals(4, ws.size());
+		for (JsonElement e : ws) {
+			JsonObject w = e.getAsJsonObject();
+			String name = w.get("name").getAsString();
+			JsonObject ir = w.getAsJsonObject("ir");
+			JsonArray got = GateJoin.gates(w.get("id").getAsString(), ir);
+			assertEquals(w.getAsJsonArray("gates"), got, name);
+			assertTrue(got.asList().stream().anyMatch(g -> GateJoin.isPassage(g.getAsJsonObject())), name);
+			assertEquals(w.get("standingWalls"), BesideReach.standing("rg1", new int[] {0, 0, 159, 159}, ir).get("walls"), name);
+		}
+	}
+
 	@Test
 	void doorKinds() {
 		assertEquals("door", GateJoin.doorOf("minecraft:oak_door[facing=east,half=lower]"));
