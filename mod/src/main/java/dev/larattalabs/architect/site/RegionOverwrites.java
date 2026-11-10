@@ -269,7 +269,7 @@ public final class RegionOverwrites {
 
 	/** A writer's kind. */
 	enum Kind {
-		TARGET, ROAD, LOT
+		TARGET, ROAD, LOT, FREE
 	}
 
 	/** One writer of a region: its run, its free cells (a lot's finishes placed free), its main entry's cells and layer. */
@@ -292,6 +292,16 @@ public final class RegionOverwrites {
 			JournalStore.Meta m = SiteJournal.main(i.id());
 			if (r != null && m != null) {
 				out.add(new Writer(i.id(), k, m.layer(), r, null, entry(m)));
+			}
+		}
+		// a tile's free pass: a cell site of the group written at its put-down (no construction, nothing paid)
+		for (Infra i : Infras.all()) {
+			if (!groupId.equals(i.group()) || i.construction() != null || i.placing() || i.road()) {
+				continue;
+			}
+			JournalStore.Meta m = SiteJournal.main(i.id());
+			if (m != null) {
+				out.add(new Writer(i.id(), Kind.FREE, m.layer(), null, null, entry(m)));
 			}
 		}
 		for (Site s : Sites.all()) {
@@ -353,7 +363,7 @@ public final class RegionOverwrites {
 		}
 		for (int vi = 0; vi < ws.size(); vi++) {
 			Writer v = ws.get(vi);
-			for (int q = 0; q < v.run().size(); q++) {
+			for (int q = 0; q < v.size(); q++) {
 				if (!v.paid(q)) {
 					continue;
 				}
@@ -362,10 +372,11 @@ public final class RegionOverwrites {
 				for (int wi = vi + 1; wi < ws.size(); wi++) {
 					Writer w = ws.get(wi);
 					BlockState[] ba = w.entry().get(pk);
-					if (ba == null || ba[1] == null || ba[0].is(ba[1].getBlock())) {
+					int wq = w.queuePos(p);
+					// a lot clears and rebuilds every queued cell, its own block or not
+					if (ba == null || ba[1] == null || ba[0].is(ba[1].getBlock()) && !(w.kind() == Kind.LOT && wq >= 0)) {
 						continue;
 					}
-					int wq = w.run().queuePos(p);
 					JsonObject r = new JsonObject();
 					r.add("pos", pos(p));
 					r.addProperty("victim", v.id());
@@ -405,7 +416,7 @@ public final class RegionOverwrites {
 			x.addProperty("id", w.id());
 			x.addProperty("kind", w.kind().name());
 			x.addProperty("layer", w.layer());
-			x.addProperty("cells", w.run().size());
+			x.addProperty("cells", w.size());
 			wj.add(x);
 		}
 		o.add("writers", wj);

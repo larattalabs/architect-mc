@@ -15,7 +15,7 @@ export const XR_SCAN = ['rs/rs02_walled', 'rs/survival_village', 'rs/rs03_water'
 /** The scan's kit programs (planned over rs/survival_village's flat claim): `program` or `program:<n lots>`. */
 export const XR_SCAN_PROGS = ['flat_village:4', 'xr_demo'];
 /** The judged fixtures (chosen from the scan: docs/CONTRACT.md "Slice XR" §3). */
-export const XR_SURV = ['h/v45b_moat_road'];
+export const XR_SURV = ['prog:xr_demo', 'h/v45b_moat_road'];
 
 /** The lot entries a fixture binds (its lotEntries, else every lot an rs_hut, a farm, a smithy or a barn an rs_shed), as RS's entriesOf. */
 export function entriesOf(fx) {
