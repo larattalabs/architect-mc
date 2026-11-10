@@ -91,7 +91,8 @@ export async function registerXr(steps, h) {
       while (Date.now() < end) {
         back = (await cons.parts()).retaken ?? {};
         st = await G.regionState(ctx, region);
-        if (stopWhen(back) || st?.view?.state === 'PLACED') break;
+        // (a survival region is PLACED once every item is put down; built when every target, road and lot is: rs.build.done)
+        if (stopWhen(back) || (await G.rsState(ctx, region)).build?.done) break;
         if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await killMobs();
         const ps = await G.pileState(ctx);
         const need = {};
@@ -100,7 +101,7 @@ export async function registerXr(steps, h) {
         await L.sleep(1500);
       }
       const rs = await G.rsState(ctx, region);
-      out.mid = { retaken: back, state: st?.view?.state, built: rs.build?.built ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
+      out.mid = { retaken: back, state: st?.view?.state, done: rs.build?.done ?? null, parts: (rs.build?.parts ?? []).map((p) => [p.part, p.state]) };
     } else {
       const f = await G.feed(ctx, region, { cons, fraction: 1, timeoutMs: 3_600_000 });
       out.state = f.last.st.view.state;
@@ -108,7 +109,8 @@ export async function registerXr(steps, h) {
     out.built = await cons.point(midRemove ? 'mid-build' : 'built');
     const aud = await cons.parts();
     out.retaken = aud.retaken ?? {};
-    const ow = await call('dev.rs.overwrites', { region }, 120_000);
+    // (a build without the dev op, e.g. the base for a before/after: no rows)
+    const ow = await call('dev.rs.overwrites', { region }, 120_000).catch((e) => ({ error: String(e?.message ?? e) }));
     out.overwrites = { counts: ow.counts ?? {}, multi: ow.cellsChangedBy3OrMore ?? 0, rows: (ow.rows ?? []).length, writers: (ow.writers ?? []).map((w) => `${w.kind}:${w.id}`) };
     fs.writeFileSync(path.join(OUT, `${tag}-overwrites.json`), `${JSON.stringify(ow, null, 1)}\n`);
     out.owRows = ow.rows ?? [];
@@ -175,7 +177,7 @@ export async function registerXr(steps, h) {
     if (mid !== 'none') for (const [label, stopWhen] of mids) {
       const r = await one(mid, { midRemove: true, stopWhen });
       out.mids[label] = { ...r, owRows: r.owRows?.slice(0, 40) };
-      check(stopWhen(r.mid?.retaken ?? {}) && r.mid?.state !== 'PLACED', `mid-build (${mid}, ${label}): removed with retaken ${json(r.mid?.retaken)}, not built (${r.mid?.state}; ${json(r.mid?.parts)})`);
+      check(stopWhen(r.mid?.retaken ?? {}) && r.mid?.done === false, `mid-build (${mid}, ${label}): removed with retaken ${json(r.mid?.retaken)}, not built (${r.mid?.state}, done ${r.mid?.done}; ${json(r.mid?.parts)})`);
       check(G.exact(r.built), `mid-build (${mid}, ${label}): conservation exact before the removal: ${json(r.built.diff)}`);
       check(r.removedOk && G.exact(r.removed), `mid-build (${mid}, ${label}): Regions.remove mid-build, conservation exact: ${json(r.removed.diff)}`);
       check(r.eflat === 0, `mid-build (${mid}, ${label}): E-flat ${r.eflat}`, r.eflatList);
