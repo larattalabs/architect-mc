@@ -26032,6 +26032,23 @@ routes find no pair. This holds for any K3 wall (towers too), mixed with a K1 ga
 merge-base identity) and `pg-ingame` (items 3, 4, 5, 7; driver `tools/gate7agj.mjs passage`, headless, $0); regressions `gj-ingame`,
 `k3-ingame`. Steward RC areas: gate join, wall, gatehouse, district.
 
+### Slice PG as built (branch `slice/PG` off main 2d9c5b15, 2026-11-10, DEV MODE, $0, ports 8896/8897; versions NEXT)
+
+| Area | As built |
+|---|---|
+| The before | On main a gatehouse-only walled town answers `NO_JOIN [route] ... (0 tried ...)`, not `[wall]` (the enclosure flood walked through the K3 box). |
+| Kit | `beside.mjs`: `besideStanding`'s `walls` gains every `onWall` lot's box; `passageGate` (in `besideGates`). `gateJoin.mjs`: `passagePorts` (the port strips, free of their own apron), `passageFronts` (the front's terrain-only contact columns, out LEAD), `passageLaneEnds` (the back port on the town's lane: an end candidate, `run` 0, `lane`); `gateProblem` skips a mechanism resting closed; `gateMeta` and `reach.gate` carry `kind`, `lot`, `mechanism`. `checkBeside.mjs`: M28's footprint rule spares a passage's port strips. |
+| Mod | `GateJoin.passageGate` (the kit's, field for field), `lotNotBuilt` (lot `placed`, site neither placing nor building), `standsCheck(level, gates, region)` and `recheck` skip the mechanism's envelope and refuse an unbuilt gatehouse; `BesideReach.standing` walls the wall lots' boxes. Feature `passageJoins` (`ApiRules`, `ArchitectApi` javadoc, sidecar `region.plan.passageJoin`). No record, method, enum or reason. |
+| Found in game | The split grate (portcullis) writes a **centre post** in the passage's middle lane at the gate plane (its two 1-wide lanes either side), and its back lever stands in a passage column: so `volatile` is the mechanism's whole envelope (`mechanism.cells`), not only its states. The removal of a town tombstones its artifact: the gate checks the plan again before the second realise. |
+| Deviations | `door` is always `none` (rule 2). The leg in is GJ's one-cell `join_in` when the back port is the K3 lane's end (every recorded K3 gatehouse); otherwise GJ's leg in. On sloped ground a pad slope longer than LEAD past the front port is not contact and refuses "no route ... to its outer cell" (not seen; flat fixtures only). |
+
+| item | where | result |
+|---|---|---|
+| offline | run `20261110-205807-change` at 2f3ca48d | unit-mod 1005/0, unit-kit 1098/0, unit-sidecar 804/0; api-compat clean against the 0.47.0 and 0.45.0 apitest jars; step-inputs check clean; lint-structure 205/0, lint-look 14/0, water-lint 135/0, p3-lint 16/0 (run `20261110-193139-change` at 457ebb2a; later commits touch no linted file's output) |
+| 1, 2, 3, 5 (kit), 6 (step `pg-unit`) | the same run | PASS 434/0: pg.test + gj.test 24/0, K3/GM-a/D3 parity 29/0, Java GateJoinTest/DistrictLandTest/ApiGJTest/ApiPGTest/ApiRulesTest; **item 6: 429 of 429 committed plan fixtures byte-identical** against 2d9c5b15 |
+| 1, 3, 4, 5, 7 (step `pg-ingame`) | the same run | PASS 25/0: unbuilt gatehouse NO_JOIN [wall] naming it, parity, removed E-flat 0; built: joins `via rgN:gatehouse_1`, front port -> back port, re-check holds (PLACED, passage hash unchanged), villagers 4/4 both ways; the portcullis lowered by its front lever still joins (checkBeside fits via the passage); the district removed E-flat 0 over the town's and district's claims (+8), then the town E-flat 0 (plain and portcullis) |
+| regressions | the same run | gj-ingame 19/0, k3-ingame 19/0 |
+
 ## Slice GM, gate mechanisms
 
 Status: **FROZEN 2026-11-01** (Noah's decisions and Steward's notes folded in; S-GM-1 answered; K3 and GJ released in v0.48.0 and v0.49.0, so the `K3:C:` references below now live on main at shifted lines). Updated 2026-10-27 to Noah's GM decisions (PLAN "GM decisions (Noah, 2026-10-27)") and Steward's contract notes. Written 2026-10-27 against main 6b876fa1 and `origin/slice/K3` (K3 is not on main yet:
