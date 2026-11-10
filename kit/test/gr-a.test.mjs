@@ -402,10 +402,40 @@ test('NM: a growth whose extension runs out names what stopped it: the reach (th
   assert.match(none.err.message, /^NO_ROOM: \[street\] no lot of the growth fits the region \(the street is stopped by wall curtain\): /);
   assert.deepEqual(none.err.blocker, { blockedBy: 'wall', wall: 'curtain' });
   assert.match((await nmGrow(S, { lots: 2, size: [48, 48] })).err.message, /\(the street is stopped by the edge of the claim\): /);
-  // a lot answer that is not a street one keeps its shape exactly (a wall hard against the end: kind held, no detail)
+  // a wall hard against the end answers `held` (as before) and now says which wall
   const held = (await nmGrow(S, { wallAt: 78, lots: 8 })).plan;
-  assert.deepEqual(held.unplaced.map((u) => Object.keys(u).join()), held.unplaced.map(() => 'id,reason,kind'));
-  assert.equal(held.unplaced[0].kind, 'held');
+  assert.ok(held.unplaced.length > 0 && held.unplaced.every((u) => u.kind === 'held' && u.blockedBy === 'wall' && u.wall === 'curtain'), JSON.stringify(held.unplaced));
+  // a held answer no wall, claim edge or slope explains keeps its exact shape (and its sentence has no clause)
+  const allHeld = { ...S.standing, held: { ...S.standing.held, runs: [[0, 0, 111, 0], ...Array.from({ length: 112 }, (_, z) => [0, z, 111, z])] } };
+  const plain = growPlan({ eff: S.eff, standing: S.standing, survey: surveyApi(S.survey, { minX: 0, minZ: 0, maxX: 111, maxZ: 111, minY: -64, maxY: 319 }), grow: { lots: LOTS2 }, rid: 1 });
+  assert.deepEqual(plain.unplaced, []);
+  await assert.rejects(async () => growPlan({ eff: S.eff, standing: allHeld, survey: surveyApi(S.survey, { minX: 0, minZ: 0, maxX: 111, maxZ: 111, minY: -64, maxY: 319 }), grow: { lots: LOTS2 }, rid: 1 }),
+    (e) => /^NO_ROOM: \[held\] no lot of the growth fits the region: /.test(e.message) && !('blocker' in e));
   // a growth that places every lot has no unplaced and no detail anywhere
   assert.deepEqual((await nmGrow(S, { lots: 8 })).plan.unplaced, []);
+});
+
+test('NM: Steward\'s walled town (v30_walled_village as a growing zone): the frontage inside the wall is full, the extension meets the wall, and each unplaced lot names it', async () => {
+  const fs = await import('node:fs');
+  const { flatSurvey } = await import('./plan-helpers.mjs');
+  const fx = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v30_walled_village.json'), 'utf8'));
+  // (the zone as P0_TOWN states it: `program.lots`, so it can grow)
+  fx.plan.zones[0] = { id: 'town', program: { lots: fx.plan.zones[0].program.params.lots }, where: { near: { anchor: 'claim_center', within: 8 } } };
+  const sv = flatSurvey({ W: 160, D: 160, x0: 0, z0: 0 });
+  const parent = await p0(fx.plan, sv.bytes, sv.claim);
+  assert.equal(parent.check.overall, 'READY');
+  const eff = mergeEffective(parent.res.ir);
+  assert.ok(eff.parts.some((q) => q.id === 'w_town_wall'));
+  const built = parent.check.parts.filter((a) => a.class === 'fits' || a.class === 'adjusted').map((a) => a.part);
+  const standing = revisionStanding({ id: 'rg7', claim: [0, 0, 159, 159], effective: eff, lots: Object.fromEntries(parent.res.ir.lots.map((l) => [l.id, { state: 'placed' }])) });
+  const rv = { rid: 1, position: 1, region: 'rg7', parentRid: 0, parentArtifact: parent.artifactSha, parentIrSha: parent.res.irSha, base: { irSha: parent.res.irSha },
+    parent: { plan: fx.plan, built, geometry: Object.fromEntries(parent.check.parts.filter((a) => a.geometry?.rect).map((a) => [a.part, a.geometry.rect])) }, standing, effective: eff, history: {}, heldSha: 'held' };
+  const plan = JSON.parse(JSON.stringify(fx.plan));
+  for (let i = 0; i < 6; i++) plan.zones[0].program.lots.push({ id: `n${i + 1}`, type: 'house', size: [9, 9] });
+  plan.revision = { n: 1, parentArtifact: parent.artifactSha };
+  const g = await p0(plan, sv.bytes, sv.claim, rv);
+  const a = g.check.parts.find((q) => q.part === 'town');
+  assert.equal(a.class, 'fits', JSON.stringify(a));
+  assert.ok(a.unplaced.length > 0 && a.unplaced.every((u) => u.code === 'NO_ROOM' && u.blockedBy === 'wall' && u.wall === 'town_wall'), JSON.stringify(a.unplaced));
+  assert.ok(a.notes.some((n) => /the street is stopped by wall town_wall/.test(n)), JSON.stringify(a.notes));
 });

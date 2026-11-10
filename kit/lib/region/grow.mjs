@@ -188,6 +188,9 @@ const vergeOk = (p, dv) => (p && Math.abs(dv) === 2 && p.kind === 'lot' ? null :
  */
 export function streetStop(O, survey, e) {
   const { run, dir } = e;
+  // (an end that is not extendable (a route joins it, or runs on past it) goes on as that route: the scan passes the route's own road and
+  // path cells to what lies beyond (a town wall, the claim's edge), and never reads the grade there)
+  const through = !e.ok;
   const o = run.o, c = run.c;
   const y0 = Number.isInteger(e.at[1]) ? e.at[1] : survey.heightAt(...toWorld(o, e.u, c));
   let lo = y0, hi = y0;
@@ -200,11 +203,12 @@ export function streetStop(O, survey, e) {
       const w = O.wallAt(x, z);
       const p = vergeOk(O.problem(x, z), dv);
       if (w) walls.add(w);
-      else if (p) { if (p.kind === 'claim' || p.kind === 'town') reach = true; else other = true; } else if (survey.waterAt(x, z)) other = true;
+      else if (p) { if (p.kind === 'claim' || p.kind === 'town') reach = true; else if (!(through && (p.kind === 'road' || p.kind === 'path'))) other = true; } else if (survey.waterAt(x, z)) other = true;
     }
     if (walls.size) return { blockedBy: 'wall', wall: [...walls].sort()[0] };
     if (reach) return { blockedBy: 'reach' };
     if (other) return null;
+    if (through) continue;
     const [x, z] = toWorld(o, u, c);
     const gr = survey.heightAt(x, z);
     const nlo = Math.max(gr - 3, lo - 1), nhi = Math.min(gr + 3, hi + 1);
@@ -377,7 +381,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     if (!cands.length) {
       const ws = new Set(ends.map((e) => e.why));
       const k = ws.has('held') ? 'held' : ws.has('room') ? 'claim' : ws.has('layout') && ends.every((e) => e.why === 'layout') ? 'layout' : 'street';
-      if (k === 'street') for (const e of ends) { blocker = streetStop(O, survey, e); if (blocker) break; }
+      if (k === 'street' || k === 'held') for (const e of ends) { blocker = streetStop(O, survey, e); if (blocker) break; }
       for (const s of left) extTally(s.id, k);
       return left;
     }
@@ -564,11 +568,11 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     for (const [k, c] of [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1))) { const kk = kinds[k]; if (kk && c > n) { n = c; kind = kk; } }
     if (extWhy.has(s.id) && ['boundary', 'street', 'claim', 'layout'].includes(kinds[extWhy.get(s.id)])) kind = kinds[extWhy.get(s.id)];
     // (NM) a `street` answer names what stopped the street (an additive detail; absent when another class did)
-    return { id: s.id, reason: 'NO_ROOM', kind, ...(kind === 'street' && blocker ? blocker : {}) };
+    return { id: s.id, reason: 'NO_ROOM', kind, ...((kind === 'street' || kind === 'held') && blocker ? blocker : {}) };
   });
   if (!placed.length) {
     const k = unplaced.every((u) => u.kind === unplaced[0]?.kind) ? unplaced[0]?.kind ?? 'frontage' : 'frontage';
-    throw Object.assign(new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}${k === 'street' && blocker ? ` (${stopSays(blocker)})` : ''}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}; street ends ${ends.map((e) => `${e.node} ${e.ok ? 'extendable' : e.why}`).join(', ') || 'none'}`), k === 'street' && blocker ? { blocker } : {});
+    throw Object.assign(new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}${(k === 'street' || k === 'held') && blocker ? ` (${stopSays(blocker)})` : ''}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}; street ends ${ends.map((e) => `${e.node} ${e.ok ? 'extendable' : e.why}`).join(', ') || 'none'}`), (k === 'street' || k === 'held') && blocker ? { blocker } : {});
   }
   return { format: GROW_FORMAT, district, prefix, lots: placed, extension, unplaced, ends: ends.map((e) => ({ node: e.node, ok: e.ok, ...(e.why ? { why: e.why } : {}) })) };
 }

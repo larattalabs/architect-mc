@@ -184,7 +184,7 @@ public final class RegionWaitTags {
 	private static final java.util.regex.Pattern AUTO_GATE = java.util.regex.Pattern.compile("^(.+)_g(\\d+)$");
 
 	/**
-	 * (NM) An unnamed gate a wall cut on its own ({@code <wall>_g<k>}: no plan part of that id; its wall a plan part, or named by the IR's
+	 * (NM) An unnamed gate a wall cut on its own ({@code <wall>_g<k>}: no plan part of that id; its wall a plan connector of kind wall, or named by the IR's
 	 * {@code gateMechanisms[]}) says "<the wall's words>'s <ordinal> <noun>" ("The wall's first gate", "Curtain's second swing gate"). The
 	 * ordinal is {@code k}: the gate's place in its wall's gate order, as the kit cuts them (named gates count, so a wall whose first gate is
 	 * named has its first unnamed gate "second"). Null when {@code id} is no such gate (named gates and gatehouses keep their own words).
@@ -196,7 +196,8 @@ public final class RegionWaitTags {
 		}
 		String wall = m.group(1);
 		JsonObject plan = body != null && body.get("plan") instanceof JsonObject p ? p : null;
-		boolean isWall = plan != null && partOf(plan, wall) != null && partOf(plan, id) == null;
+		JsonObject wp = plan == null ? null : partOf(plan, wall);
+		boolean isWall = wp != null && "wall".equals(str(wp, "kind")) && partOf(plan, id) == null;
 		if (!isWall && ir != null && ir.json().get("gateMechanisms") instanceof JsonArray a) {
 			for (JsonElement e : a) {
 				if (e instanceof JsonObject o && id.equals(str(o, "gate")) && wall.equals(str(o, "wall"))) {

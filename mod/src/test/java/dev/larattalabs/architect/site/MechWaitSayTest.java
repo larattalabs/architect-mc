@@ -89,6 +89,8 @@ class MechWaitSayTest {
 		assertEquals("North gate", RegionWaitTags.wordsOf(ir, body, "north_gate"));
 		assertEquals("North gate's swing gate", MechCharges.subject(RegionWaitTags.wordsOf(ir, body, "north_gate"), "swing"));
 		assertEquals("curtain g1", RegionWaitTags.wordsOf(null, null, "curtain_g1"));
+		// a stem that is a plan part but no wall (a gate's growth road, a lot) is no wall's gate
+		assertEquals("north gate g1", RegionWaitTags.wordsOf(ir, body, "north_gate_g1"));
 		assertEquals("other g1", RegionWaitTags.wordsOf(ir, body, "other_g1"));
 		// a plan part named like an auto gate keeps its own label
 		JsonObject named = JsonParser.parseString("{\"plan\":{\"connectors\":[{\"id\":\"curtain\",\"kind\":\"wall\"},{\"id\":\"curtain_g1\",\"kind\":\"gate\",\"label\":\"Postern\"}]}}")
