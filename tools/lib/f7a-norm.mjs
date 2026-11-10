@@ -8,6 +8,11 @@
  * Steward's redstone_gate (its curtain_wall rings the fortress, whose gatehouse_1 the wall does not name).
  */
 export const GC_MOVED = Object.freeze({
+  // (NM) an unnamed gate's notes say its place in the wall's gate order, "wall <id>'s first gate: a landing levels it ..." (was "gate <id>: ...";
+  // notes only: the IR and the plan are unchanged)
+  'k2/k2_look_bank.json': 'NM: the wall\'s gate-landing notes name an unnamed gate by its place on the wall (notes only; the IR is identical)',
+  'k2/k2_shore_routes.json': 'NM: the wall\'s gate-landing notes name an unnamed gate by its place on the wall (notes only; the IR is identical)',
+  'valid/v7a_k2_along_shore.json': 'NM: the wall\'s gate-landing notes name an unnamed gate by its place on the wall (notes only; the IR is identical)',
   'asks/redstone_gate.json': 'GC: curtain_wall answers adjusted with the note "gatehouse_1 is not on the wall: name it in lots (at: gate)" (notes and class only; the IR is identical)',
 });
 
