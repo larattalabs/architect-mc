@@ -194,6 +194,13 @@ public interface ArchitectApi {
 	 * {@code NO_ROOM} on a required wall. {@link Regions#realiseApproved} picks the daylight sensor's rung from the bound design (no
 	 * sky-exposed rung: levers only, the lot site's {@code architect_mc:gateMechanism} deviation {@code mechanism.sensor}) and writes the
 	 * mechanism as the region's cells after the lot (the design's blocks there dropped). No new record, method or reason.
+	 * Since NEXT (slice PG), a PG helper ({@code region.plan.passageJoin}) adds {@code "passageJoins"}: a K3 gatehouse's passage is a
+	 * gate of the join through a walled town ({@code "gateJoins"}): the district's join crosses it front port to back port, never writing
+	 * it, and opens on the town's own lane at the back port (no leg in). The IR's {@code reach.gate} gains {@code kind: passage},
+	 * {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, moving}}; {@code via} is "region:lot". A gatehouse not built is
+	 * skipped "not standing as built"; a mechanism resting closed (swing) is skipped as player-only; a wall's lot boxes now count as its
+	 * wall, so a walled town with wall lots answers {@code NO_JOIN [wall]} (listing its gates), no longer {@code NO_JOIN [route]}. No new
+	 * record, method or reason.
 	 * Since 1.44.0 (7a GJ), a GJ helper ({@code region.plan.gateJoin}) adds {@code "gateJoins"}: where a district's join (a {@code beside}
 	 * plan, {@code checkBeside}, plan/0's {@code endpoint.region}) would answer {@code NO_JOIN [wall]}, it crosses one standing gate of the
 	 * town's wall or of a wall region round the town (open or a wooden door; a fence gate is skipped for a villager join), never writing

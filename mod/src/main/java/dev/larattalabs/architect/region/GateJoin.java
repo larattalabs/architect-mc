@@ -219,9 +219,129 @@ public final class GateJoin {
 			r.add("inner", BesideReach.arr(new int[] {i0[0] - f[0], i0[1] - f[1]}));
 			out.put(gid, r);
 		}
+		// ((PG) a K3 gatehouse's passage: a graph node of kind passage and its lot's onWall.passage)
+		for (JsonElement ne : nodes) {
+			JsonObject n = ne.getAsJsonObject();
+			if ("passage".equals(BesideReach.str(n, "kind"))) {
+				JsonObject r = passageGate(id, n, ir);
+				if (r != null) {
+					out.put(r.get("id").getAsString(), r);
+				}
+			}
+		}
 		JsonArray a = new JsonArray();
 		out.values().forEach(a::add);
 		return a;
+	}
+
+	/**
+	 * (PG, docs/CONTRACT.md "Slice PG" rule 2) A K3 gatehouse's passage as a gate: the kit's {@code passageGate}, field for field (the
+	 * besideGates record plus {@code kind: passage}, {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, moving}}). Null
+	 * when its lot or passage is missing.
+	 */
+	static @Nullable JsonObject passageGate(String id, JsonObject n, JsonObject ir) {
+		String ref = BesideReach.str(n, "ref");
+		JsonObject lot = null;
+		if (ref != null && ir.get("lots") instanceof JsonArray lots) {
+			for (JsonElement le : lots) {
+				if (ref.equals(BesideReach.str(le.getAsJsonObject(), "id"))) {
+					lot = le.getAsJsonObject();
+					break;
+				}
+			}
+		}
+		if (lot == null || !(lot.get("onWall") instanceof JsonObject w) || !(w.get("passage") instanceof JsonObject p)) {
+			return null;
+		}
+		int[] f = FACING.get(BesideReach.str(p, "facing"));
+		if (f == null || !(p.get("front") instanceof JsonArray fr) || !(p.get("back") instanceof JsonArray bk) || !(p.get("cells") instanceof JsonArray pc)
+			|| !(p.get("floor") instanceof JsonArray fl) || fl.size() < 3) {
+			return null;
+		}
+		java.util.LinkedHashSet<Long> seen = new java.util.LinkedHashSet<>();
+		List<int[]> cells = new ArrayList<>();
+		for (int i = 0; i + 3 < pc.size(); i += 4) {
+			int x = pc.get(i).getAsInt(), z = pc.get(i + 1).getAsInt();
+			if (seen.add(key(x, z))) {
+				cells.add(new int[] {x, z});
+			}
+		}
+		if (cells.isEmpty()) {
+			return null;
+		}
+		cells.sort((a, b) -> a[0] != b[0] ? Integer.compare(a[0], b[0]) : Integer.compare(a[1], b[1]));
+		int y = fl.get(2).getAsInt();
+		int fx = fr.get(0).getAsInt(), fz = fr.get(2).getAsInt(), bx = bk.get(0).getAsInt(), bz = bk.get(2).getAsInt();
+		String lotId = BesideReach.str(lot, "id");
+		JsonObject r = new JsonObject();
+		r.addProperty("region", id);
+		r.addProperty("wall", BesideReach.str(w, "wall"));
+		r.addProperty("id", lotId);
+		r.add("at", BesideReach.arr(new int[] {(fx + bx) >> 1, y + 1, (fz + bz) >> 1}));
+		r.addProperty("y", y);
+		r.addProperty("h", p.get("height").getAsInt());
+		r.addProperty("width", p.get("width").getAsInt());
+		r.add("facing", BesideReach.arr(f));
+		r.addProperty("door", "none");
+		r.add("doorBlock", com.google.gson.JsonNull.INSTANCE);
+		JsonArray ca = new JsonArray();
+		cells.forEach(c -> ca.add(BesideReach.arr(c)));
+		r.add("cells", ca);
+		r.add("outer", BesideReach.arr(new int[] {fx, fz}));
+		r.add("inner", BesideReach.arr(new int[] {bx, bz}));
+		r.addProperty("kind", "passage");
+		r.addProperty("lot", lotId);
+		if (p.get("mechanism") instanceof JsonObject m) {
+			JsonObject mo = new JsonObject();
+			mo.add("kind", m.get("kind"));
+			mo.add("rest", m.get("rest"));
+			JsonArray moving = new JsonArray();
+			if (m.get("states") instanceof JsonObject st) {
+				for (String k : new String[] {"closed", "open"}) {
+					if (st.get(k) instanceof JsonArray q) {
+						q.forEach(moving::add);
+					}
+				}
+			}
+			mo.add("moving", moving);
+			r.add("mechanism", mo);
+		}
+		return r;
+	}
+
+	/** (PG) Whether a gate record is a K3 passage. */
+	static boolean isPassage(JsonObject g) {
+		return "passage".equals(BesideReach.str(g, "kind"));
+	}
+
+	/** (PG, rule 6) A passage mechanism's moving cells (packed positions; empty for none): they may stand open or closed. */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet moving(JsonObject g) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		if (g.get("mechanism") instanceof JsonObject m && m.get("moving") instanceof JsonArray a) {
+			for (int i = 0; i + 3 < a.size(); i += 4) {
+				for (int y = a.get(i + 2).getAsInt(); y <= a.get(i + 3).getAsInt(); y++) {
+					out.add(BlockPos.asLong(a.get(i).getAsInt(), y, a.get(i + 1).getAsInt()));
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (PG, rule 4) Why a passage gate's gatehouse lot is not standing as built, or null: its lot of {@code region} is {@code placed} and its
+	 * site neither placing nor building (MechCharges' test). Server thread.
+	 */
+	static @Nullable String lotNotBuilt(RegionsImpl.@Nullable Live region, JsonObject g) {
+		String lot = BesideReach.str(g, "lot");
+		RegionRec.Lot ls = region == null || lot == null ? null : region.rec().lots.get(lot);
+		if (ls == null || !"placed".equals(ls.state)) {
+			return "gatehouse lot " + lot + " is not built (" + (ls == null ? "no lot" : ls.state) + ": a reserved box)";
+		}
+		dev.larattalabs.architect.site.Site site = ls.siteId == null ? null : dev.larattalabs.architect.site.Sites.get(ls.siteId);
+		if (site == null || site.placing() || site.building()) {
+			return "gatehouse lot " + lot + " is not built (" + (site == null ? "no site" : site.placing() ? "placing" : "building") + ")";
+		}
+		return null;
 	}
 
 	/**
@@ -247,11 +367,20 @@ public final class GateJoin {
 	 * skips it ("not standing as built").
 	 */
 	public static void standsCheck(ServerLevel level, JsonArray gates) {
+		standsCheck(level, gates, null);
+	}
+
+	/**
+	 * {@link #standsCheck(ServerLevel, JsonArray)} with the gates' region: (PG, rule 4) a passage stands only when its gatehouse lot is built
+	 * ({@link #lotNotBuilt}); (rule 6) its mechanism's moving cells are not judged (they may stand open or closed).
+	 */
+	public static void standsCheck(ServerLevel level, JsonArray gates, RegionsImpl.@Nullable Live region) {
 		for (JsonElement ge : gates) {
 			JsonObject g = ge.getAsJsonObject();
 			int y = g.get("y").getAsInt(), h = g.get("h").getAsInt();
-			String why = null;
-			for (JsonElement ce : g.getAsJsonArray("cells")) {
+			String why = isPassage(g) ? lotNotBuilt(region, g) : null;
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = moving(g);
+			for (JsonElement ce : why != null ? new JsonArray() : g.getAsJsonArray("cells")) {
 				JsonArray c = ce.getAsJsonArray();
 				int x = c.get(0).getAsInt(), z = c.get(1).getAsInt();
 				if (level.getBlockState(new BlockPos(x, y, z)).isAir()) {
@@ -259,6 +388,9 @@ public final class GateJoin {
 					break;
 				}
 				for (int yy = y + 1; yy <= y + h && why == null; yy++) {
+					if (mv.contains(BlockPos.asLong(x, yy, z))) {
+						continue;
+					}
 					BlockState s = level.getBlockState(new BlockPos(x, yy, z));
 					if (!openingBlock(s)) {
 						why = "its opening at " + x + ", " + yy + ", " + z + " holds " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.getBlock());
@@ -360,6 +492,14 @@ public final class GateJoin {
 		if (busy != null) {
 			return new String[] {"ARTIFACT_STALE", name + ": region " + region + " is " + busy + "; re-plan"};
 		}
+		// ((PG, rule 5) a passage: its gatehouse lot still built; its mechanism's moving cells volatile, as a door's open)
+		if (isPassage(gate)) {
+			String nb = lotNotBuilt(w, gate);
+			if (nb != null) {
+				return new String[] {"ARTIFACT_STALE", name + ": " + nb + "; re-plan"};
+			}
+		}
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = moving(gate);
 		BesideReach.Cols cols = BesideReach.colsOf(gate.getAsJsonArray("cells"));
 		int y = gate.get("y").getAsInt(), h = gate.get("h").getAsInt();
 		Map<Long, Top> top;
@@ -372,6 +512,9 @@ public final class GateJoin {
 		// the opening first (a player's block in it names the gate as not clear), then the holder and the blocks the wall wrote
 		cols.forEach((x, z) -> {
 			for (int yy = y + 1; yy <= y + h && bad[0] == null; yy++) {
+				if (mv.contains(BlockPos.asLong(x, yy, z))) {
+					continue;
+				}
 				BlockState now = level.getBlockState(new BlockPos(x, yy, z));
 				if (!openingBlock(now)) {
 					bad[0] = name + " is not clear at " + x + ", " + yy + ", " + z + " (" + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(now.getBlock())
@@ -381,6 +524,9 @@ public final class GateJoin {
 		});
 		cols.forEach((x, z) -> {
 			for (int yy = y; yy <= y + h && bad[0] == null; yy++) {
+				if (mv.contains(BlockPos.asLong(x, yy, z))) {
+					continue;
+				}
 				BlockState now = level.getBlockState(new BlockPos(x, yy, z));
 				Top t = top.get(BlockPos.asLong(x, yy, z));
 				if (t == null) {

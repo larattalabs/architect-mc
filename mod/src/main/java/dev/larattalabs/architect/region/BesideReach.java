@@ -310,6 +310,19 @@ public final class BesideReach {
 		JsonArray la = new JsonArray();
 		ls.forEach(q -> la.add(arr(q)));
 		o.add("lights", la);
+		// ((PG) a K3 lot on a wall's line (a tower, a gatehouse: onWall) stands in the line's cut, so its box is the wall's there)
+		if (ir.get("lots") instanceof JsonArray irLots) {
+			for (JsonElement le : irLots) {
+				JsonObject l = le.getAsJsonObject();
+				if (l.get("onWall") instanceof JsonObject && l.get("box") instanceof JsonObject b) {
+					for (int z = b.get("minZ").getAsInt(); z <= b.get("maxZ").getAsInt(); z++) {
+						for (int x = b.get("minX").getAsInt(); x <= b.get("maxX").getAsInt(); x++) {
+							walls.add(x, z);
+						}
+					}
+				}
+			}
+		}
 		if (!walls.isEmpty()) {
 			o.add("walls", walls.runs()); // (only a walled region carries it, as the kit's)
 		}

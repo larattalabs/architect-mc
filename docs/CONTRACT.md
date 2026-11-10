@@ -25976,6 +25976,61 @@ is a reserved box and is skipped with "not standing as built"). The kit's third 
 The first in-game round found one mod bug (the stale re-check after vanilla turned the walk's dirt path to dirt) and two fixture
 problems in `gj_town_wall` (the fountain's anchor on the street end, then the ring [4, 8] too tight round an off-axis fountain), all fixed.
 
+## Slice PG: passage gates in the gate join (2026-11-10, DEV MODE; binding; builds GJ's "K3 follow-up (passage gates)")
+
+**What.** A district joins a walled town through a K3 gatehouse's passage, as GJ joins through a K1 gate. **Why.** Since v0.52.0 Steward's
+plan writer names a gatehouse as the wall's gate on every walled town (11 of 11), and a gatehouse-only wall has a `passage:<lot>` node and no
+`gate` node, so those towns could not take a district. **Found while building (the real "before").** On main the answer is not `NO_JOIN
+[wall]` but **`NO_JOIN [route] ... (0 tried ...)`**: D3's enclosure flood stops only at `walls` (the `w_` part columns) and other owners'
+held columns, and K3 cuts the wall at each wall lot's box, so the flood walks through the box, the town reads as unwalled, and D3's own
+routes find no pair. This holds for any K3 wall (towers too), mixed with a K1 gate or not.
+
+**Rules (kit `kit/lib/region/beside.mjs`, `gateJoin.mjs`; mod `GateJoin`, `BesideReach`):**
+1. **The wall line includes its lots.** `besideStanding`'s `walls` (and the mod's `BesideReach.standing`) adds the box columns of every IR lot
+   with `onWall` (towers and gatehouses). Only IRs with wall lots change (their standing data and sha); no K3 town joined before.
+2. **A passage is a gate.** `besideGates` / `GateJoin.gates` also read each graph node of kind `passage`: `id` and `lot` the lot's id,
+   `kind: passage`, `wall` its `onWall.wall`, `cells` the columns of `onWall.passage.cells`, `y` its floor row, `h` its height, `width` its
+   width, `facing` its front's (outward), `outer` the front port's cell, `inner` the back port's, `at` the centre line's middle at the walk's
+   feet. **`door: none`**: the realise drops any entry block in the passage (K3 §5, IRR's mask), so no door can stand there. A K1 gate's
+   record is unchanged.
+3. **The ports.** The port strips (each port cell and the cells beside it across the passage's width) are not hard for the gatehouse's own
+   apron (lots + 1). The front strip out to LEAD cells, where only the town's terrain holds it (K3's pad), is a **contact column**: the leg out
+   may write it and the join holds it, as D3 holds a junction's contact. A back port that is the end of the town's own lane (K3 §4: a road
+   with a junction node at the port) **is the junction**: an end candidate offered to that passage only, `run` 0, so there is no leg in and
+   nothing is written inside (GJ §13's one-cell `join_in`, `opensOnJunction`); the lane walks on to the street. Without such a lane, GJ's
+   leg in as for a K1 gate.
+4. **Standing as built (mod, plan time).** A passage stands when its lot is `placed` and its site is neither placing nor building (MechCharges'
+   test), and its opening is clear as for a K1 gate. An unbuilt gatehouse (a reserved box) is `stands: false`, "gatehouse lot <id> is not
+   built", and the kit skips it as "not standing as built (...)"; the only gate unbuilt answers `NO_JOIN [wall]` naming it.
+5. **The re-check.** `GateJoin.recheck` takes the passage's region (the town) as the holder: its lot sites and its `mech:<lot>` cells
+   journal under the region's group, so GJ's group rule is the gatehouse lot's site. It also refuses ARTIFACT_STALE when the lot is no
+   longer built (removed alone, 6d RV).
+6. **Mechanisms (GM §6, GJ's open-gate rule).** `rest: open` (the portcullis and slide, day-driven) is an open gate; `rest: closed` (swing's
+   iron doors) is skipped like a fence gate: "a swing mechanism closed at rest (player-only: a villager join skips it)". The record carries
+   `mechanism {kind, rest, moving}` (`moving` the flat runs of the mechanism's `states.open` and `states.closed`). Because GM §6 counts a
+   day-driven gate as open whatever the hour, the moving cells may stand in either state: the mod's plan-time check and the re-check skip
+   them (as a door's `open` is volatile). A join never writes a mechanism cell (they are passage cells).
+7. **The IR.** `reach.gate` (and the meta's `join.gate`) gains `kind`, `lot` and `mechanism` for a passage only; the junction, `via`
+   ("<region>:<lot>"), `join_gate` and the land are GJ's.
+8. **API.** Feature `passageJoins` (sidecar `region.plan.passageJoin`, `ApiRules`, `ArchitectApi` javadoc Since NEXT). No record, method,
+   enum value or reason.
+
+**Acceptance.**
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | A gatehouse-only walled town (kit fixture) | the district joins through the passage: `via rg:<lot>`, the walk front port -> back port (`join` ends at the front port, `join_gate` the traverse, `join_in` the one cell at the back port), no `NO_JOIN [wall]`; no error finding, M28 gate 0 and held 0 |
+| 2 | Mixed wall (K1 gate + gatehouse) | GJ's order (cheapest sum, then nearest the district, then id); the same answer twice; with the gatehouse not standing, the K1 gate |
+| 3 | Unbuilt gatehouse | skipped "not standing as built (gatehouse lot ... is not built)"; the only gate: `NO_JOIN [wall]` with that reason (kit, and in game before the lot is built) |
+| 4 | Re-check after the gatehouse is built in game | the town realised with a stub gatehouse; checkBeside equals Regions.plan through the passage; realise passes the re-check (the lot site holds the passage) and PLACES; the passage's cells unchanged (hash); villagers from every district lot to the bell and back (vanilla nav) |
+| 5 | A gatehouse with a mechanism | portcullis `rest: open`: joins (the record names it), also with its grate lowered by a lever in game; swing (`rest: closed`): skipped and named; mixed swing + K1 gate: the K1 gate |
+| 6 | Byte identity | every committed plan fixture plans byte-identical against the merge base (`tools/lib/gate7a-kit.mjs unchanged`); GJ's parity fixture and suites unchanged |
+| 7 | Removal (verifier re-runs) | the joined district removed: 0 changed cells over the town's claim and the district's (+8), the wall and gatehouse as built (E-flat 0) |
+
+**Gate steps:** `pg-unit` (kit `kit/test/pg.test.mjs` with `gj.test.mjs` and `k3.test.mjs`, the Java `GateJoinTest`, `ApiPGTest`, the
+merge-base identity) and `pg-ingame` (items 3, 4, 5, 7; driver `tools/gate7agj.mjs passage`, headless, $0); regressions `gj-ingame`,
+`k3-ingame`. Steward RC areas: gate join, wall, gatehouse, district.
+
 ## Slice GM, gate mechanisms
 
 Status: **FROZEN 2026-11-01** (Noah's decisions and Steward's notes folded in; S-GM-1 answered; K3 and GJ released in v0.48.0 and v0.49.0, so the `K3:C:` references below now live on main at shifted lines). Updated 2026-10-27 to Noah's GM decisions (PLAN "GM decisions (Noah, 2026-10-27)") and Steward's contract notes. Written 2026-10-27 against main 6b876fa1 and `origin/slice/K3` (K3 is not on main yet:

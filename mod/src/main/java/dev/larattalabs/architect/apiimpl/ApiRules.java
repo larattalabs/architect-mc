@@ -103,6 +103,7 @@ public final class ApiRules {
 					case "region.spirals" -> "spiralStairs"; // 7a SA: plan/0's connector.stairs_around (a spiral round a spire, spike, tree or mushroom)
 					case "region.walls.lots" -> "wallLots"; // 7a K3: towers and gatehouses as lots on a wall's line
 					case "region.walls.mechanisms" -> "gateMechanisms"; // 7a GM: a gatehouse lot's gate mechanism (mech on wall.lots[]; since 1.45.0)
+					case "region.plan.passageJoin" -> "passageJoins"; // PG: a district's join through a K3 gatehouse's passage (since NEXT)
 					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
 					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since 1.43.0)
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent

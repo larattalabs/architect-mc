@@ -784,7 +784,7 @@ public final class RegionsImpl implements Regions {
 		JsonObject std = BesideReach.standing(st.rec().id, standing, Revisions.effective(st));
 		// ((7a GJ, §2) its walls' gates as the world holds them now; only when it has any: never in `standing`, whose sha a reach IR records)
 		JsonArray gates = GateJoin.gates(st.rec().id, Revisions.effective(st));
-		GateJoin.standsCheck(level, gates);
+		GateJoin.standsCheck(level, gates, st);
 		return RegionSurvey.sample(level, standing[0], standing[1], standing[2], standing[3], 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
 			byte[] bytes = cols.encode();
 			return BlobPut.put(link, bytes, "survey").thenAccept(blobId -> {
