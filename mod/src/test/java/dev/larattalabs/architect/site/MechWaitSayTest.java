@@ -10,6 +10,7 @@ import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.region.Ir;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -59,6 +60,40 @@ class MechWaitSayTest {
 		assertEquals("Main gatehouse's gate mechanism", MechCharges.subject("Main gatehouse", null));
 		// no plan label: the id with spaces
 		assertEquals("Gate 2's portcullis waits for gate 2 to be built", RegionWaitTags.sayWithOf(null, null, "gate 2's portcullis", "gate_2"));
+	}
+
+	private static final String WALL_BODY = """
+		{"plan":{"schemaVersion":"plan/0","planId":"p","zones":[],
+		  "connectors":[{"id":"curtain","kind":"wall","label":"Curtain wall"},{"id":"bare","kind":"wall"},{"id":"north_gate","kind":"gate","label":"North gate"}]}}
+		""";
+
+	/** (NM) A wall's own unnamed gates say their place in the wall's gate order; named gates and gatehouses keep their names. */
+	@Test
+	void anAutoGateIsNamedFromItsWall() {
+		Ir ir = Ir.of(JsonParser.parseString(IR).getAsJsonObject());
+		JsonObject body = JsonParser.parseString(WALL_BODY).getAsJsonObject();
+		// a wall with 3 auto gates: first, second, third
+		assertEquals("Curtain wall's first gate", RegionWaitTags.capital(RegionWaitTags.wordsOf(ir, body, "curtain_g1")));
+		assertEquals("Curtain wall's second gate", RegionWaitTags.capital(RegionWaitTags.wordsOf(ir, body, "curtain_g2")));
+		assertEquals("Curtain wall's third gate", RegionWaitTags.capital(RegionWaitTags.wordsOf(ir, body, "curtain_g3")));
+		assertEquals("Curtain wall's 11th gate", RegionWaitTags.wordsOf(ir, body, "curtain_g11"));
+		// the mechanism subject (the swing's kind words in the noun, never "...gate's swing gate")
+		String swing = RegionWaitTags.autoGateWords(ir, body, "curtain_g1", "swing gate");
+		assertEquals("Curtain wall's first swing gate", RegionWaitTags.capital(Objects.requireNonNull(swing)));
+		assertEquals("Curtain wall's first swing gate waits for 2 \u00d7 iron door in the stockpile", MechCharges.billSay(swing, Map.of(
+			"minecraft:iron_door", 2), id -> id.replace("minecraft:", "").replace('_', ' ')));
+		assertEquals("Curtain wall's second swing gate waits for the wall to be built", RegionWaitTags.sayWithOf(ir, body, "curtain wall's second swing gate", "the wall"));
+		// a wall without a label reads "the wall"
+		assertEquals("the wall's first gate", RegionWaitTags.wordsOf(ir, body, "bare_g1"));
+		// named gates keep their names; a gate id whose wall is no plan part keeps its words
+		assertEquals("North gate", RegionWaitTags.wordsOf(ir, body, "north_gate"));
+		assertEquals("North gate's swing gate", MechCharges.subject(RegionWaitTags.wordsOf(ir, body, "north_gate"), "swing"));
+		assertEquals("curtain g1", RegionWaitTags.wordsOf(null, null, "curtain_g1"));
+		assertEquals("other g1", RegionWaitTags.wordsOf(ir, body, "other_g1"));
+		// a plan part named like an auto gate keeps its own label
+		JsonObject named = JsonParser.parseString("{\"plan\":{\"connectors\":[{\"id\":\"curtain\",\"kind\":\"wall\"},{\"id\":\"curtain_g1\",\"kind\":\"gate\",\"label\":\"Postern\"}]}}")
+			.getAsJsonObject();
+		assertEquals("Postern", RegionWaitTags.wordsOf(ir, named, "curtain_g1"));
 	}
 
 	@Test

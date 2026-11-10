@@ -366,3 +366,46 @@ test('item 10 (kit): a second boundary growth continues from the first one\'s ne
   const eff2 = mergeEffective(q.ir, [{ rid: 1, position: 1, ir: r1.ir }, { rid: 2, position: 2, ir: r2.ir }]);
   assert.deepEqual(graphCut(eff2, { from: 'quay_s0' }), []);
 });
+
+// ---- NM: a `street` answer names what stopped the street (an additive detail: blockedBy wall | slope | reach, wall <id>)
+const nmGrow = async (S, { world, wallAt = null, lots = 8, size = [9, 9], grow = {} } = {}) => {
+  const t = world ? await d3Town({ world }) : S.t;
+  const ir = t.p.ir;
+  const RI = reachInputs({ ir, world: t.world, claim: t.claim });
+  const eff = mergeEffective(ir);
+  // (a walled town: a standing wall part `w_curtain`, two columns thick, across the street's way out)
+  if (wallAt !== null) {
+    const cols = [];
+    for (let z = 0; z <= 111; z++) for (let x = wallAt; x < wallAt + 2; x++) cols.push(x, z, 64, 70, 1);
+    eff.parts = [...eff.parts, { id: 'w_curtain', stage: 'links', set: 'terrain', ops: [{ op: 'columns', cols }] }];
+  }
+  const st = revisionStanding({ id: 'rg1', claim: t.claim, effective: eff, held: RI.besideReach.held });
+  const c = { minX: 0, minZ: 0, maxX: 111, maxZ: 111, minY: -64, maxY: 319 };
+  const specs = Array.from({ length: lots }, (_, i) => ({ id: `house_${i + 1}`, type: 'house', size }));
+  try { return { plan: growPlan({ eff, standing: st, survey: surveyApi(RI.besideReach.survey, c), grow: { lots: specs, prefer: 'extend', extend: 'street_e_end', ...grow }, rid: 1 }) }; } catch (e) { return { err: e }; }
+};
+
+test('NM: a growth whose extension runs out names what stopped it: the reach (the claim edge), the slope, the wall (with its id); each lot answers it; other answers keep their shape', async () => {
+  const S = await town();
+  // the claim's edge: a flat claim, more lots than the extension carries
+  const reach = (await nmGrow(S, { lots: 14 })).plan;
+  assert.ok(reach.unplaced.length > 0 && reach.unplaced.every((u) => u.kind === 'street' && u.blockedBy === 'reach' && !('wall' in u)), JSON.stringify(reach.unplaced));
+  // a cliff 8 high (cut/fill 3, steps of 1)
+  const slope = (await nmGrow(S, { world: (x) => (x >= 96 ? { g: 72, h: 72, f: 72, flags: 0 } : { g: 64, h: 64, f: 64, flags: 0 }), lots: 14 })).plan;
+  assert.ok(slope.unplaced.length > 0 && slope.unplaced.every((u) => u.kind === 'street' && u.blockedBy === 'slope'), JSON.stringify(slope.unplaced));
+  // the walled supplied town: the frontage is full inside the wall and the extension stops at it
+  const wall = (await nmGrow(S, { wallAt: 84, lots: 10, grow: { extend: 'auto', prefer: 'frontage' } })).plan;
+  assert.ok(wall.lots.length > 0 && wall.unplaced.length > 0);
+  assert.ok(wall.unplaced.every((u) => u.kind === 'street' && u.blockedBy === 'wall' && u.wall === 'curtain'), JSON.stringify(wall.unplaced));
+  // nothing placed: the thrown NO_ROOM [street] carries the stop in its sentence and as e.blocker
+  const none = await nmGrow(S, { wallAt: 84, lots: 2, size: [40, 40] });
+  assert.match(none.err.message, /^NO_ROOM: \[street\] no lot of the growth fits the region \(the street is stopped by wall curtain\): /);
+  assert.deepEqual(none.err.blocker, { blockedBy: 'wall', wall: 'curtain' });
+  assert.match((await nmGrow(S, { lots: 2, size: [48, 48] })).err.message, /\(the street is stopped by the edge of the claim\): /);
+  // a lot answer that is not a street one keeps its shape exactly (a wall hard against the end: kind held, no detail)
+  const held = (await nmGrow(S, { wallAt: 78, lots: 8 })).plan;
+  assert.deepEqual(held.unplaced.map((u) => Object.keys(u).join()), held.unplaced.map(() => 'id,reason,kind'));
+  assert.equal(held.unplaced[0].kind, 'held');
+  // a growth that places every lot has no unplaced and no detail anywhere
+  assert.deepEqual((await nmGrow(S, { lots: 8 })).plan.unplaced, []);
+});

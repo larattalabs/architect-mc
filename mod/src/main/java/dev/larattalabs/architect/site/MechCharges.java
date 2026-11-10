@@ -85,7 +85,9 @@ public final class MechCharges {
 		}
 		String id = i.key.substring(5);
 		String kind = i.ext.get(GateMech.EXT_REPORT) instanceof JsonObject r && r.get("kind") instanceof JsonPrimitive k ? k.getAsString() : null;
-		return subject(RegionWaitTags.words(l, id), kind);
+		// (NM) a wall's own unnamed gate: "<wall>'s first swing gate", not "<wall id's words>'s swing gate"
+		String auto = RegionWaitTags.autoGateWordsOf(l, id, "swing".equals(kind) ? "swing gate" : "gate");
+		return auto != null ? auto : subject(RegionWaitTags.words(l, id), kind);
 	}
 
 	/** (WE) Whether {@code i} has just moved to the bill wait (true once, then false until the bill is charged); marks it. */

@@ -12,7 +12,7 @@
 // Every coordinate is an integer cell; scores are integers; candidate scans run x then z; ties by scan order. No clock but
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
 import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
-import { growPlan, emitGrowth, growObstacles } from '../region/grow.mjs';
+import { growPlan, emitGrowth, growObstacles, stopSays } from '../region/grow.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from '../region/village.mjs';
@@ -1283,16 +1283,16 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       emitGrowth(r, plan, { rid: REV.rid ?? 0, eff: REV.effective, stages: { ground: stageOf('ground'), street: stageOf('street'), lots: stageOf('lots'), props: stageOf('props') } });
       mark(p.id, addedSince(r, c0));
       const grown = plan.lots.map((l) => l.spec.id);
-      ans(p, { class: 'fits', notes: [`standing; grown by ${grown.join(', ')} (revision.grow)${plan.unplaced.length ? `; unplaced ${plan.unplaced.map((u) => `${u.id} (NO_ROOM ${u.kind})`).join(', ')}` : ''}`] });
+      ans(p, { class: 'fits', notes: [`standing; grown by ${grown.join(', ')} (revision.grow)${plan.unplaced.length ? `; unplaced ${plan.unplaced.map((u) => `${u.id} (NO_ROOM ${u.kind}${u.blockedBy ? `, ${stopSays(u)}` : ''})`).join(', ')}` : ''}`] });
       const a = answers.get(p.id);
       a.standing = true;
       a.grown = grown;
-      if (plan.unplaced.length) a.unplaced = plan.unplaced.map((u) => ({ id: u.id, code: 'NO_ROOM', kind: u.kind }));
+      if (plan.unplaced.length) a.unplaced = plan.unplaced.map((u) => ({ id: u.id, code: 'NO_ROOM', kind: u.kind, ...(u.blockedBy ? { blockedBy: u.blockedBy, ...(u.wall ? { wall: u.wall } : {}) } : {}) }));
       growGeom.set(p.id, { rect: Array.isArray(g0) && g0.length === 4 ? g0 : null, lots: r.lots.filter((l) => grown.includes(l.id)).map((l) => ({ id: l.id, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], entrance: r.meta.lots[l.id]?.entrance, front: l.front, size: [l.box.maxX - l.box.minX + 1, l.box.maxZ - l.box.minZ + 1] })) });
     } catch (e) {
       const m = /^NO_ROOM: \[([a-z_]+)\] /.exec(e.message);
       answers.delete(p.id);
-      ans(p, { class: 'refused', reasons: [{ code: m ? 'NO_ROOM' : 'OVERLAP', message: e.message.slice(0, 400), evidence: { kind: m?.[1] ?? null, lots } }] });
+      ans(p, { class: 'refused', reasons: [{ code: m ? 'NO_ROOM' : 'OVERLAP', message: e.message.slice(0, 400), evidence: { kind: m?.[1] ?? null, lots, ...(e.blocker ? { blockedBy: e.blocker.blockedBy, ...(e.blocker.wall ? { wall: e.blocker.wall } : {}) } : {}) } }] });
     }
   }
   const zoneEmit = new Map(); // zone id -> {L, lots, prefix}

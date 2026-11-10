@@ -130,7 +130,7 @@ test('§17 per gate: a villager edge keeps the wooden door (deviation mechanism,
   assert.equal(w.class, 'adjusted');
   const dev = w.deviations.filter((d) => d.what === 'mechanism');
   assert.deepEqual(dev, [{ what: 'mechanism', kind: 'swing', gate: 'curtain_g1', why: 'villager', edge: 'in' }]);
-  assert.ok(w.notes.some((n) => /villager edge/.test(n) && /curtain_g1/.test(n) && /\bin\b/.test(n)), JSON.stringify(w.notes));
+  assert.ok(w.notes.some((n) => /villager edge/.test(n) && /wall curtain's first gate/.test(n) && !/curtain_g1/.test(n) && /\bin\b/.test(n)), JSON.stringify(w.notes));
   const gs = gatesOf(r);
   assert.equal(gs.find((g) => g.id === 'curtain_g1').door, 'door');
   assert.equal(gs.find((g) => g.id === 'curtain_g2').mechanism.kind, 'swing');
@@ -155,6 +155,10 @@ test('§17 per gate: a wall 2 thick keeps the wooden door on every gate (deviati
   assert.deepEqual(w.deviations.filter((d) => d.what === 'mechanism').map((d) => [d.gate, d.why, d.need, d.thickness]), [['curtain_g1', 'thickness', 3, 2], ['curtain_g2', 'thickness', 3, 2], ['curtain_g3', 'thickness', 3, 2]]);
   assert.ok(gatesOf(r).every((g) => g.door === 'door' && !g.mechanism));
   assert.equal(r.res.ir.gateMechanisms, undefined);
+  // (NM) a wall with 3 auto gates: each note names its gate by its place in the wall's gate order, not its id; the deviations keep the id (data)
+  const thick = w.notes.filter((n) => /thick and the swing needs/.test(n)).map((n) => n.split(':')[0]);
+  assert.deepEqual(thick, ["wall curtain's first gate", "wall curtain's second gate", "wall curtain's third gate"], JSON.stringify(w.notes));
+  assert.ok(!w.notes.some((n) => /curtain_g\d/.test(n)), JSON.stringify(w.notes));
 });
 
 test('the default: a wall that does not name gateMech (or names none) plans as before: its auto gates stay plain, byte for byte', async () => {
@@ -222,4 +226,15 @@ test('an at gate with no mech of its own in a thin wall: the wooden door, deviat
   assert.ok(g.deviations.some((d) => d.what === 'mechanism' && d.why === 'thickness'));
   assert.equal(g.geometry.door, 'door');
   assert.equal(r.res.ir.gateMechanisms, undefined);
+});
+
+test('(NM) gateSays: an unnamed gate reads as an ordinal of its wall (its place in the wall\'s gate order), a named gate keeps its id', async () => {
+  const { gateSays } = await import('../lib/connectors/wall.mjs');
+  const W = { id: 'curtain', gates: [{ id: 'curtain_g1' }, { id: 'north_gate', part: 'north_gate' }, { id: 'curtain_g3' }] };
+  assert.equal(gateSays(W, 'curtain_g1'), "wall curtain's first gate");
+  assert.equal(gateSays(W, 'curtain_g3'), "wall curtain's third gate");
+  assert.equal(gateSays(W, 'curtain_g11'), "wall curtain's 11th gate");
+  assert.equal(gateSays(W, 'north_gate'), 'gate north_gate');
+  assert.equal(gateSays({ ...W, gates: [{ id: 'curtain_g2', part: 'curtain_g2' }] }, 'curtain_g2'), 'gate curtain_g2', 'a gate the plan named that way keeps its name');
+  assert.equal(gateSays(W, 'other_g1'), 'gate other_g1', "another wall's id is not this wall's gate");
 });
