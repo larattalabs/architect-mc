@@ -7,8 +7,11 @@
 //   cap2    (props)   over the same three: spruce planks, stone bricks again (A-B-A), and air (a cut): three writers on one cell
 //   stair   (ground)  a stone-brick stair facing east at gy+1 on (cx+8, cz+3); (props) the same stair facing north: the same block in
 //                     another state, a later target built by matching
-//   h1      (lots)    a 9x9 lot over the pavement's north rows (x cx-4..cx+4, z cz-9..cz-1, floor gy+1): its own foundation row (gy) and
-//                     its approach path are written over the paid pavement (a lot over a paid target cell)
+//   rock    (ground)  paid natural stone on the road's line: under its surface (x cx+15..cx+16) and a bump at gy+1 (x cx-16) it cuts
+//   h1      (lots)    a 9x9 lot over the pavement's north rows (x cx-2..cx+6, z cz-9..cz-1, floor gy+1) on an ordinary pad: the pad's
+//                     top (a free natural write) over the paid pavement: a tile's free pass over a paid cell
+//   h2      (lots)    a 9x9 lot (x cx-14..cx-6) with no pad fill and the pavement's block as its foundation: its placement writes its
+//                     foundation row (gy) and its approach over the paid pavement: a lot over a paid target cell
 // Deterministic: no randomness.
 import { region, COND } from '../lib/region/program.mjs';
 
@@ -39,7 +42,15 @@ export default function xrDemo(ctx) {
   cap2.fill(at(cx + 11, gy, cz + 3), 'minecraft:stone_bricks', { cond: COND.ALWAYS_OURS });
   cap2.fill(at(cx + 12, gy, cz + 3), null, { cond: COND.ALWAYS_OURS });
   cap2.fill(at(cx + 8, gy + 1, cz + 3), 'minecraft:stone_brick_stairs[facing=north]', { cond: COND.ALWAYS_OURS });
+  // paid natural stone where the road runs: its surface over it (x cx+15..cx+16) and a bump one over the ground it cuts (x cx-16)
+  const rock = r.part('rock', { stage: 'ground' });
+  rock.fill({ kind: 'box', min: [cx + 15, { abs: gy }, cz - 1], max: [cx + 16, { abs: gy }, cz + 1] }, 'minecraft:stone', { cond: COND.ALWAYS_OURS });
+  rock.fill(at(cx - 16, gy + 1, cz), 'minecraft:stone', { cond: COND.ALWAYS_OURS });
   const lots = r.part('lots', { stage: 'lots' });
-  lots.lot('h1', { at: [cx - 4, cz - 9], size: [9, 9], floor: gy + 1, front: 'south', pad: { maxCut: 2, maxFill: 2, edge: 'wall' } });
+  // h1: an ordinary pad (its top, a free natural write, over the paid pavement: the free pass over a paid cell)
+  lots.lot('h1', { at: [cx - 2, cz - 9], size: [9, 9], floor: gy + 1, front: 'south', pad: { maxCut: 2, maxFill: 2, edge: 'wall' } });
+  // h2: no pad fill, its foundation the pavement's own block (written over itself: nothing), so the lot's placement writes its
+  // foundation row and approach over the paid pavement (a lot over a paid target cell)
+  lots.lot('h2', { at: [cx - 14, cz - 9], size: [9, 9], floor: gy + 1, front: 'south', foundation: 'minecraft:stone_bricks', pad: { fill: 'none' } });
   return r;
 }
