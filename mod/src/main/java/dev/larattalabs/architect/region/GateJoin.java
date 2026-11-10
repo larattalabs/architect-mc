@@ -236,7 +236,7 @@ public final class GateJoin {
 
 	/**
 	 * (PG, docs/CONTRACT.md "Slice PG" rule 2) A K3 gatehouse's passage as a gate: the kit's {@code passageGate}, field for field (the
-	 * besideGates record plus {@code kind: passage}, {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, volatile}}: its states' cells and its triggers'). Null
+	 * besideGates record plus {@code kind: passage}, {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, volatile}}: its envelope's cells). Null
 	 * when its lot or passage is missing.
 	 */
 	static @Nullable JsonObject passageGate(String id, JsonObject n, JsonObject ir) {
@@ -296,21 +296,8 @@ public final class GateJoin {
 			mo.add("kind", m.get("kind"));
 			mo.add("rest", m.get("rest"));
 			JsonArray volatileCells = new JsonArray();
-			if (m.get("states") instanceof JsonObject st) {
-				for (String k : new String[] {"closed", "open"}) {
-					if (st.get(k) instanceof JsonArray q) {
-						q.forEach(volatileCells::add);
-					}
-				}
-			}
-			if (m.get("triggers") instanceof JsonArray ts) {
-				for (JsonElement te : ts) {
-					if (te.getAsJsonObject().get("at") instanceof JsonArray at && at.size() >= 3) {
-						for (int k : new int[] {0, 2, 1, 1}) {
-							volatileCells.add(at.get(k).getAsInt());
-						}
-					}
-				}
+			if (m.get("cells") instanceof JsonArray env) {
+				env.forEach(volatileCells::add);
 			}
 			mo.add("volatile", volatileCells);
 			r.add("mechanism", mo);
@@ -323,7 +310,7 @@ public final class GateJoin {
 		return "passage".equals(BesideReach.str(g, "kind"));
 	}
 
-	/** (PG, rule 6) A passage mechanism's volatile cells (its states' and triggers'; packed positions; empty for none): any state. */
+	/** (PG, rule 6) A passage mechanism's volatile cells (its envelope; packed positions; empty for none): any state. */
 	static it.unimi.dsi.fastutil.longs.LongOpenHashSet volatileOf(JsonObject g) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		if (g.get("mechanism") instanceof JsonObject m && m.get("volatile") instanceof JsonArray a) {
@@ -381,7 +368,7 @@ public final class GateJoin {
 
 	/**
 	 * {@link #standsCheck(ServerLevel, JsonArray)} with the gates' region: (PG, rule 4) a passage stands only when its gatehouse lot is built
-	 * ({@link #lotNotBuilt}); (rule 6) its mechanism's volatile cells are not judged (moving and trigger cells, in any state).
+	 * ({@link #lotNotBuilt}); (rule 6) its mechanism's envelope cells are not judged (the region's, in any state).
 	 */
 	public static void standsCheck(ServerLevel level, JsonArray gates, RegionsImpl.@Nullable Live region) {
 		for (JsonElement ge : gates) {
@@ -501,7 +488,7 @@ public final class GateJoin {
 		if (busy != null) {
 			return new String[] {"ARTIFACT_STALE", name + ": region " + region + " is " + busy + "; re-plan"};
 		}
-		// ((PG, rule 5) a passage: its gatehouse lot still built; its mechanism's moving and trigger cells volatile, as a door's open)
+		// ((PG, rule 5) a passage: its gatehouse lot still built; its mechanism's envelope cells volatile, as a door's open)
 		if (isPassage(gate)) {
 			String nb = lotNotBuilt(w, gate);
 			if (nb != null) {

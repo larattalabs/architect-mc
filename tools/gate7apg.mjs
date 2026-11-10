@@ -327,7 +327,7 @@ steps.passage = async () => {
       for (let i = 0; i + 3 < moving.length; i += 4) for (let y = moving[i + 2]; y <= moving[i + 3]; y++) { const b = mb.palette[mb.cells[mb.at(moving[i], y, moving[i + 1])]]; if (b && !/air/.test(b)) solid.push([moving[i], y, moving[i + 1]]); }
       const v = await checkBeside({ program: 'districts', params: ONE('east'), claim: B, beside: TR, check: true });
       o.closed = { lever: lever.at, solidMoving: solid.length, fits: v.fits, via: (v.land?.parts ?? []).find((q) => q.kind === 'join')?.via ?? null, message: v.message ?? null };
-      check(v.fits && o.closed.via === `${TR}:gatehouse_1`, `item 5: the portcullis lowered by its front lever (${solid.length} volatile cells solid: grate leaves and levers): checkBeside still joins through the passage, GJ's open-gate rule for a day-driven gate (${json(o.closed)})`);
+      check(v.fits && o.closed.via === `${TR}:gatehouse_1`, `item 5: the portcullis lowered by its front lever (${solid.length} envelope cells solid: the leaves, the centre post, the levers): checkBeside still joins through the passage, GJ's open-gate rule for a day-driven gate (${json(o.closed)})`);
       await call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at: lever.at, on: lever.at, face: 'up' }] }, 30_000);
       await L.settle(3000);
     }
