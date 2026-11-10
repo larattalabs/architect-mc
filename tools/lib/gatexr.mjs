@@ -10,8 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** The scan's fixtures: survival-capable plans with 4e roads (streets) and lots, and the crossings XL measured. */
-export const XR_SCAN = ['rs/rs02_walled', 'rs/survival_village', 'rs/rs03_water', 'valid/v30_walled_village', 'valid/v7a_k3_castle', 'valid/v18_districts',
-  'valid/v16_near_build_road_to_door', 'h/v45b_moat_road'];
+export const XR_SCAN = ['rs/rs02_walled', 'rs/survival_village', 'rs/rs03_water', 'valid/v18_districts', 'h/v45b_moat_road'];
 /** The scan's kit programs (planned over rs/survival_village's flat claim): `program` or `program:<n lots>`. */
 export const XR_SCAN_PROGS = ['flat_village:4', 'xr_demo'];
 /** The judged fixtures (chosen from the scan: docs/CONTRACT.md "Slice XR" §3). */
