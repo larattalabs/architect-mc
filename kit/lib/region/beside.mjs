@@ -298,8 +298,9 @@ export function besideGates(id, ir) {
  * (PG, docs/CONTRACT.md "Slice PG") A K3 gatehouse's passage as a gate (besideGates' record, plus `kind: passage` and `lot`): the id is
  * the lot's, the cells `passage.cells`' columns, `y` its floor row, `h` its height, `width` its width, `facing` its front's (outward),
  * `outer` the front port's cell and `inner` the back port's, `at` the centre line's middle cell at the walk's feet. `door` is `none`
- * (the realise drops any entry block in the passage: K3 §5, IRR's mask). A gate mechanism (GM) adds `mechanism {kind, rest, moving}`:
- * `moving` the flat column runs of its states' cells (open and closed), which may stand in either state. Null when the lot or its
+ * (the realise drops any entry block in the passage: K3 §5, IRR's mask). A gate mechanism (GM) adds `mechanism {kind, rest, volatile}`:
+ * `volatile` the flat column runs of its states' cells (open and closed) and its triggers' cells (a lever on a jamb stands in a
+ * passage column), which may stand in any state. Null when the lot or its
  * passage is missing. The mod's GateJoin.gates is the same rule.
  */
 export function passageGate(id, n, ir) {
@@ -315,7 +316,8 @@ export function passageGate(id, n, ir) {
   const y = p.floor[2];
   const at = [(p.front[0] + p.back[0]) >> 1, y + 1, (p.front[2] + p.back[2]) >> 1];
   const m = p.mechanism;
-  const mechanism = m ? { kind: m.kind, rest: m.rest, moving: [...(m.states?.closed ?? []), ...(m.states?.open ?? [])] } : null;
+  const trig = (m?.triggers ?? []).filter((t) => Array.isArray(t.at)).flatMap((t) => [t.at[0], t.at[2], t.at[1], t.at[1]]);
+  const mechanism = m ? { kind: m.kind, rest: m.rest, volatile: [...(m.states?.closed ?? []), ...(m.states?.open ?? []), ...trig] } : null;
   return { region: id, wall: lot.onWall.wall, id: lot.id, at, y, h: p.height, width: p.width, facing: [...f], door: 'none', doorBlock: null, cells,
     outer: [p.front[0], p.front[2]], inner: [p.back[0], p.back[2]], kind: 'passage', lot: lot.id, ...(mechanism ? { mechanism } : {}) };
 }

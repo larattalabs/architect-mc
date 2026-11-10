@@ -236,7 +236,7 @@ public final class GateJoin {
 
 	/**
 	 * (PG, docs/CONTRACT.md "Slice PG" rule 2) A K3 gatehouse's passage as a gate: the kit's {@code passageGate}, field for field (the
-	 * besideGates record plus {@code kind: passage}, {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, moving}}). Null
+	 * besideGates record plus {@code kind: passage}, {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, volatile}}: its states' cells and its triggers'). Null
 	 * when its lot or passage is missing.
 	 */
 	static @Nullable JsonObject passageGate(String id, JsonObject n, JsonObject ir) {
@@ -295,15 +295,24 @@ public final class GateJoin {
 			JsonObject mo = new JsonObject();
 			mo.add("kind", m.get("kind"));
 			mo.add("rest", m.get("rest"));
-			JsonArray moving = new JsonArray();
+			JsonArray volatileCells = new JsonArray();
 			if (m.get("states") instanceof JsonObject st) {
 				for (String k : new String[] {"closed", "open"}) {
 					if (st.get(k) instanceof JsonArray q) {
-						q.forEach(moving::add);
+						q.forEach(volatileCells::add);
 					}
 				}
 			}
-			mo.add("moving", moving);
+			if (m.get("triggers") instanceof JsonArray ts) {
+				for (JsonElement te : ts) {
+					if (te.getAsJsonObject().get("at") instanceof JsonArray at && at.size() >= 3) {
+						for (int k : new int[] {0, 2, 1, 1}) {
+							volatileCells.add(at.get(k).getAsInt());
+						}
+					}
+				}
+			}
+			mo.add("volatile", volatileCells);
 			r.add("mechanism", mo);
 		}
 		return r;
@@ -314,10 +323,10 @@ public final class GateJoin {
 		return "passage".equals(BesideReach.str(g, "kind"));
 	}
 
-	/** (PG, rule 6) A passage mechanism's moving cells (packed positions; empty for none): they may stand open or closed. */
-	static it.unimi.dsi.fastutil.longs.LongOpenHashSet moving(JsonObject g) {
+	/** (PG, rule 6) A passage mechanism's volatile cells (its states' and triggers'; packed positions; empty for none): any state. */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet volatileOf(JsonObject g) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
-		if (g.get("mechanism") instanceof JsonObject m && m.get("moving") instanceof JsonArray a) {
+		if (g.get("mechanism") instanceof JsonObject m && m.get("volatile") instanceof JsonArray a) {
 			for (int i = 0; i + 3 < a.size(); i += 4) {
 				for (int y = a.get(i + 2).getAsInt(); y <= a.get(i + 3).getAsInt(); y++) {
 					out.add(BlockPos.asLong(a.get(i).getAsInt(), y, a.get(i + 1).getAsInt()));
@@ -372,14 +381,14 @@ public final class GateJoin {
 
 	/**
 	 * {@link #standsCheck(ServerLevel, JsonArray)} with the gates' region: (PG, rule 4) a passage stands only when its gatehouse lot is built
-	 * ({@link #lotNotBuilt}); (rule 6) its mechanism's moving cells are not judged (they may stand open or closed).
+	 * ({@link #lotNotBuilt}); (rule 6) its mechanism's volatile cells are not judged (moving and trigger cells, in any state).
 	 */
 	public static void standsCheck(ServerLevel level, JsonArray gates, RegionsImpl.@Nullable Live region) {
 		for (JsonElement ge : gates) {
 			JsonObject g = ge.getAsJsonObject();
 			int y = g.get("y").getAsInt(), h = g.get("h").getAsInt();
 			String why = isPassage(g) ? lotNotBuilt(region, g) : null;
-			it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = moving(g);
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = volatileOf(g);
 			for (JsonElement ce : why != null ? new JsonArray() : g.getAsJsonArray("cells")) {
 				JsonArray c = ce.getAsJsonArray();
 				int x = c.get(0).getAsInt(), z = c.get(1).getAsInt();
@@ -492,14 +501,14 @@ public final class GateJoin {
 		if (busy != null) {
 			return new String[] {"ARTIFACT_STALE", name + ": region " + region + " is " + busy + "; re-plan"};
 		}
-		// ((PG, rule 5) a passage: its gatehouse lot still built; its mechanism's moving cells volatile, as a door's open)
+		// ((PG, rule 5) a passage: its gatehouse lot still built; its mechanism's moving and trigger cells volatile, as a door's open)
 		if (isPassage(gate)) {
 			String nb = lotNotBuilt(w, gate);
 			if (nb != null) {
 				return new String[] {"ARTIFACT_STALE", name + ": " + nb + "; re-plan"};
 			}
 		}
-		it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = moving(gate);
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet mv = volatileOf(gate);
 		BesideReach.Cols cols = BesideReach.colsOf(gate.getAsJsonArray("cells"));
 		int y = gate.get("y").getAsInt(), h = gate.get("h").getAsInt();
 		Map<Long, Top> top;

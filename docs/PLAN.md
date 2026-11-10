@@ -1390,7 +1390,7 @@ stands closer, so the end is taken back as a short in-line run when a gate sits 
 
 - **RC limits (Steward):** the restart ran in the wall-first order only; the wall went through `dev.region.remove`, because Steward's undo
   takes the latest build; the restarted district carried no Steward tags, because Steward's sweeps take up a region no build holds.
-- **K3 passage gates (queued):** a K3 gatehouse-only wall has a `passage` node and no `gate` node, so it still answers `NO_JOIN [wall]`.
+- **K3 passage gates (built in slice PG, CONTRACT "Slice PG"; was queued):** a K3 gatehouse-only wall has a `passage` node and no `gate` node, so it still answers `NO_JOIN [wall]`.
   Read `passage:<lot>` nodes and `onWall.passage` (front/back ports as the outer/inner cells) in `besideGates` and `GateJoin.gates`, and let
   the re-check accept the gatehouse lot's site as the holder. See the contract's as-built "K3 follow-up".
 

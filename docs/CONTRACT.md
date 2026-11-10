@@ -26007,9 +26007,9 @@ routes find no pair. This holds for any K3 wall (towers too), mixed with a K1 ga
    longer built (removed alone, 6d RV).
 6. **Mechanisms (GM §6, GJ's open-gate rule).** `rest: open` (the portcullis and slide, day-driven) is an open gate; `rest: closed` (swing's
    iron doors) is skipped like a fence gate: "a swing mechanism closed at rest (player-only: a villager join skips it)". The record carries
-   `mechanism {kind, rest, moving}` (`moving` the flat runs of the mechanism's `states.open` and `states.closed`). Because GM §6 counts a
-   day-driven gate as open whatever the hour, the moving cells may stand in either state: the mod's plan-time check and the re-check skip
-   them (as a door's `open` is volatile). A join never writes a mechanism cell (they are passage cells).
+   `mechanism {kind, rest, volatile}` (`volatile` the flat runs of the mechanism's `states.open`, `states.closed` and its triggers' cells:
+   a lever on a jamb stands in a passage column). Because GM §6 counts a day-driven gate as open whatever the hour, these cells may stand
+   in any state: the mod's plan-time check and the re-check skip them (as a door's `open` is volatile). A join never writes a mechanism cell (they are passage cells).
 7. **The IR.** `reach.gate` (and the meta's `join.gate`) gains `kind`, `lot` and `mechanism` for a passage only; the junction, `via`
    ("<region>:<lot>"), `join_gate` and the land are GJ's.
 8. **API.** Feature `passageJoins` (sidecar `region.plan.passageJoin`, `ApiRules`, `ArchitectApi` javadoc Since NEXT). No record, method,

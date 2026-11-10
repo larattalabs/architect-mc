@@ -266,12 +266,13 @@ steps.passage = async () => {
     const anchors = { stone: [X + 80, g0 + 1, Z + 80], east: [A[2] - 6, g0 + 1, Z + 80] };
     const all = [A[0] - 40, -64, A[1] - 40, A[2] + 120, 160, A[3] + 40];
     const B = [A[2] + 1, A[1] + 30, A[2] + 90, A[3] - 30];
-    const ck = await call('dev.region.checkPlan', { plan: pgTownPlan(mech), claim: A, anchors, owner: OWNER }, 900_000);
+    let ck = await call('dev.region.checkPlan', { plan: pgTownPlan(mech), claim: A, anchors, owner: OWNER }, 900_000);
     const wallPart = (ck.check?.parts ?? []).find((a) => a.part === 'town_wall');
     o.check = { overall: ck.check?.overall, parts: (ck.check?.parts ?? []).map((a) => [a.part, a.class]), wallLots: wallPart?.geometry?.wallLots?.map((q) => [q.lot, q.passage?.mechanism?.kind ?? null]) };
     check(ck.check?.overall === 'READY' && wallPart?.class === 'fits' && (wallPart?.geometry?.wallLots ?? []).length === 1, `pg_town (${name}): READY, its wall fits with one gatehouse lot and no K1 gate (${json(o.check)})`);
     if (!ck.check?.artifactSha) continue;
-    const sha = ck.check.artifactSha, tir = checkIr(ck.check.checkId);
+    let sha = ck.check.artifactSha;
+    const tir = checkIr(ck.check.checkId);
     const lot = (await pgArtifactLots(sha)).find((l) => l.id === 'gatehouse_1');
     if (mech) check(lot?.onWall?.passage?.mechanism?.kind === mech, `item 5 (${name}): the gatehouse's passage carries the ${mech} (${json(lot?.onWall?.passage?.mechanism?.rest)})`);
     const world0 = await dump(all, `pg-${name}-world0`);
@@ -295,6 +296,11 @@ steps.passage = async () => {
         const d0 = diffCols(world0, w1, [[all[0], all[2], all[3], all[5]]]);
         check(d0.cells === 0, `item 3: the unbuilt town removed: E-flat 0 (${d0.cells}; ${json(d0.sample)})`);
       }
+      // (the removal tombstones the artifact: the same plan checked again)
+      ck = await call('dev.region.checkPlan', { plan: pgTownPlan(mech), claim: A, anchors, owner: OWNER }, 900_000);
+      check(!!ck.check?.artifactSha, `pg_town (${name}) checked again after the removal (${ck.check?.overall})`);
+      if (!ck.check?.artifactSha) continue;
+      sha = ck.check.artifactSha;
     }
     // ---- item 4: the town realised with the stub gatehouse built; the district joins through its passage
     const gid = await pgGatehouse(lot, name);
@@ -313,7 +319,7 @@ steps.passage = async () => {
       const lever = lot.onWall.passage.mechanism.triggers.find((t) => t.kind === 'lever' && t.side === 'front');
       await call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at: lever.at, on: lever.at, face: 'up' }] }, 30_000);
       await L.settle(3000);
-      const moving = gs[0]?.mechanism?.moving ?? [];
+      const moving = gs[0]?.mechanism?.volatile ?? [];
       const solid = [];
       const mvx = [], mvz = [], mvy = [];
       for (let i = 0; i + 3 < moving.length; i += 4) { mvx.push(moving[i]); mvz.push(moving[i + 1]); mvy.push(moving[i + 2], moving[i + 3]); }
@@ -321,7 +327,7 @@ steps.passage = async () => {
       for (let i = 0; i + 3 < moving.length; i += 4) for (let y = moving[i + 2]; y <= moving[i + 3]; y++) { const b = mb.palette[mb.cells[mb.at(moving[i], y, moving[i + 1])]]; if (b && !/air/.test(b)) solid.push([moving[i], y, moving[i + 1]]); }
       const v = await checkBeside({ program: 'districts', params: ONE('east'), claim: B, beside: TR, check: true });
       o.closed = { lever: lever.at, solidMoving: solid.length, fits: v.fits, via: (v.land?.parts ?? []).find((q) => q.kind === 'join')?.via ?? null, message: v.message ?? null };
-      check(v.fits && o.closed.via === `${TR}:gatehouse_1`, `item 5: the portcullis lowered by its front lever (${solid.length} moving cells solid): checkBeside still joins through the passage, GJ's open-gate rule for a day-driven gate (${json(o.closed)})`);
+      check(v.fits && o.closed.via === `${TR}:gatehouse_1`, `item 5: the portcullis lowered by its front lever (${solid.length} volatile cells solid: grate leaves and levers): checkBeside still joins through the passage, GJ's open-gate rule for a day-driven gate (${json(o.closed)})`);
       await call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at: lever.at, on: lever.at, face: 'up' }] }, 30_000);
       await L.settle(3000);
     }

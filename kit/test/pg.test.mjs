@@ -122,7 +122,7 @@ test('item 5: a gate mechanism: a portcullis (rest open, day-driven) is an open 
   const pg = P.R.gates[0];
   assert.deepEqual([pg.mechanism?.kind, pg.mechanism?.rest], ['portcullis', 'open']);
   const m = P.ir.lots.find((l) => l.id === 'gatehouse_1').onWall.passage.mechanism;
-  assert.deepEqual(pg.mechanism.moving, [...m.states.closed, ...m.states.open]);
+  assert.deepEqual(pg.mechanism.volatile, [...m.states.closed, ...m.states.open, ...m.triggers.flatMap((t) => [t.at[0], t.at[2], t.at[1], t.at[1]])]);
   assert.equal(gateProblem(pg), null);
   const q = await planDistrict(P);
   assert.equal(q.meta.districts.join.via, 'rg1:gatehouse_1');

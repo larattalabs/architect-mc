@@ -27,7 +27,7 @@ export function aroundOf(besideReach, townId) {
 /** (§3) The gate a join crosses, as the IR's `reach.gate` and the plan meta record it (the traverse: never written, never held). */
 export function gateMeta(g) {
   return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed, legs: g.legs.map((q) => [...q]) } : {}),
-    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, moving: [...g.mechanism.moving] } } : {}) };
+    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, volatile: [...g.mechanism.volatile] } } : {}) };
 }
 
 /** Every gate of the town's walls and of the wall regions round it, each with its region (sorted by region, then gate id). */
@@ -325,7 +325,7 @@ export function gateStep(D) {
   const gate = {
     region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}),
     cells: keyRuns(g.cells.map(([x, z]) => `${x},${z}`)), outer: [...g.outer], inner: [...g.inner], ...(narrowed ? { narrowed, legs: [endOut(g), endIn(g)] } : {}),
-    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, moving: [...g.mechanism.moving] } } : {}),
+    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, volatile: [...g.mechanism.volatile] } } : {}),
     ...(cand.run <= 0 ? { opensOnJunction: true } : {}), // (the leg in's edge is the one cell: its node at the junction, nothing written)
     costs: { out: { cost: best.l1.cost, length: best.l1.length }, in: { cost: best.l2.cost, length: best.l2.length } },
   };
