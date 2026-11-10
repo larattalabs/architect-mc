@@ -1395,6 +1395,7 @@ public final class RegionTargets {
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
 			RESCAN.clear();
 			PLANS.clear();
+			RETAKEN.clear(); // (XR) the audit's retaken is this world's session: a target id is reused by the next world
 		});
 	}
 
