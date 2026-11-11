@@ -197,6 +197,7 @@ public final class RegionsImpl implements Regions {
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
 			RegionHash.tick(s);
+			LandCheck.tick(s); // (6d LC) land checks take their next sections
 			generatedDuringRealise(s);
 			actionsTick(s);
 			Brushes.tick(s);
@@ -434,6 +435,16 @@ public final class RegionsImpl implements Regions {
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
 		return Revisions.undo(regionId, toPosition, actor); // (6d RV, §4.4)
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.LandReport> landCheck(String regionId, @Nullable String part) {
+		MinecraftServer s = server;
+		if (s == null) {
+			return CompletableFuture.failedFuture(refusal(Reason.WORLD_STOPPED, "no world"));
+		}
+		// (6d LC) read-only, sliced over ticks; started on the server thread
+		return s.isSameThread() ? LandCheck.start(s, regionId, part) : CompletableFuture.supplyAsync(() -> LandCheck.start(s, regionId, part), s).thenCompose(f -> f);
 	}
 
 	@Override

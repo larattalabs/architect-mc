@@ -334,6 +334,20 @@ public final class RegionDev {
 					return dev.larattalabs.architect.site.RealisedRecords.dev(l, l.level(s), layer, tile, cells, verify, world);
 				});
 			});
+		DevBridge.register("dev.region.landCheck", 900_000, "{region, part?} - (6d LC) Regions.landCheck: the region's land part by part and lot by lot "
+			+ "(reads only) -> {region, position, parts: [{part, cells, changed, removed, playerPlaced, volatileChanged, kinds, sample}], lots: [{lot, "
+			+ "siteId, state, standing, changed, playerPlaced}], cellsChecked, unloaded, ms, worldDir} or {refused}", (req, mc) -> {
+				String region = req.get("region").getAsString();
+				String part = req.has("part") && !req.get("part").isJsonNull() ? req.get("part").getAsString() : null;
+				return ServerTasks.callOnServer(s -> dev.larattalabs.architect.api.ArchitectApi.get().regions().landCheck(region, part).handle((r, e) -> {
+					JsonObject o = e != null ? new JsonObject() : dev.larattalabs.architect.region.LandCheck.json(r);
+					if (e != null) {
+						o.addProperty("refused", reason(e));
+					}
+					o.addProperty("worldDir", s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().normalize().toString());
+					return o;
+				})).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.region.realised.audit", 10_000, "{on?: true, dir?} - (RP) arm the realised audit: each region tile, right after its "
 			+ "commit, re-read from the world against its intent per code, and each region's whole record at its batch's end, as JSON lines "
 			+ "in dir (default <world>/../rp-audit); on: false disarms -> {dir}", (req, mc) -> ServerTasks.callOnServer(s -> {
