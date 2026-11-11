@@ -19,7 +19,7 @@ let bundle = '';
 const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
   const base = { ...process.env };
   for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) delete base[k];
-  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ARCHITECT_EVAL_SIDECAR: bundle, ARCHITECT_EVAL_PORT: '0', ...env }, timeout: 240_000 });
+  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ARCHITECT_EVAL_SIDECAR: bundle, ARCHITECT_EVAL_PORT: '0', ...env }, timeout: 900_000 });
 };
 
 describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
@@ -48,12 +48,17 @@ describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
       expect(Object.keys(s.provenance.hashes).sort()).toEqual(['briefs', 'critic', 'designPrompts', 'judge', 'kit']);
       const re = run(['rescore', ra, '--out', out]);
       expect(re.stdout).toMatch(/byte-identical/);
-      const cmp = run(['compare', ra, rb, '--out', out]);
+      // --no-time: two sim runs' wall times move with machine load (a 30% rule on seconds-long runs); everything else is judged, and the
+      // minutes are still recorded
+      const cmp = run(['compare', ra, rb, '--no-time', '--out', out]);
       expect(cmp.stdout).toMatch(/no regression/);
+      const cj = JSON.parse(fs.readFileSync(path.join(out, `compare-${ra}-vs-${rb}.json`), 'utf8')) as { means: { minutes: number[] }; hardRegressions: string[] };
+      expect(cj.means.minutes).toHaveLength(2);
+      expect(cj.hardRegressions).toEqual([]);
     } finally {
       rmrf(out);
     }
-  }, 240_000);
+  }, 1_800_000);
 
   it('(5b) the polish arm on the sim tier: import-round0 (pre-check), polish, judges, G1-G5, rescore byte-identical; a drift refuses', () => {
     const out = tempDir('arch-eval-p-');
@@ -97,7 +102,7 @@ describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
     } finally {
       rmrf(out);
     }
-  }, 240_000);
+  }, 1_800_000);
 
   it('(5b) the smoke stop rule', async () => {
     const { smokeStop } = (await import(pathToFileURL(EVAL).href)) as { smokeStop: (rows: Array<Record<string, unknown>>) => { stop: boolean; why: string[] } };

@@ -488,9 +488,26 @@ public final class Groups {
 
 	/** {@link #undoStage} with a covered policy (phase 4e). */
 	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force, Sites.Covered covered) {
+		return undoStage(server, groupId, stage, force, covered, false);
+	}
+
+	/**
+	 * (PX, XR guard) {@link #undoStage} for a caller that owns the stage: a region's revision undoing its own additive stage
+	 * ({@code ownStage}; a revision's cells never sit over a block the region paid for, TileCheck survival_paid). Everyone else
+	 * (the API, the command) is refused on a survival region's group, see {@link #undoStageRefusal}.
+	 */
+	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force, Sites.Covered covered,
+		boolean ownStage) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
+		}
+		String guard = undoStageRefusal(g, stage, ownStage, id -> {
+			var l = dev.larattalabs.architect.region.RegionsImpl.live(id);
+			return l != null && l.rec().survival();
+		});
+		if (guard != null) {
+			return CompletableFuture.failedFuture(new IllegalStateException(guard));
 		}
 		int i = g.stageIndex(stage);
 		if (i < 0) {
@@ -527,6 +544,24 @@ public final class Groups {
 		Placement.save(server, false);
 		Architect.LOGGER.info("Undoing stage {} of group {} ({} site(s)){}", stage, groupId, sites.size(), force ? " (forced)" : "");
 		return f;
+	}
+
+	/**
+	 * (PX) The refusal for undoing one stage of a survival region's group, or null. A later writer of the region that took up an earlier
+	 * writer's paid block gave its items back to the stockpile (XR); undoing the later stage writes the block back for free and the
+	 * earlier writer owns it again, so the items would exist twice. No Regions path does it; this refuses it for a direct caller.
+	 * {@code survivalRegion} says whether a region id is a survival region's.
+	 */
+	static @Nullable String undoStageRefusal(SiteGroupRec g, String stage, boolean ownStage, java.util.function.Predicate<String> survivalRegion) {
+		if (ownStage || !g.ext().has(RegionItems.EXT_REGION)) {
+			return null;
+		}
+		String region = g.ext().get(RegionItems.EXT_REGION).getAsString();
+		if (!survivalRegion.test(region)) {
+			return null;
+		}
+		return "stage " + stage + " of group " + g.id() + " belongs to survival region " + region + ": a stage of a survival region is not undone on its own"
+			+ " (a block a later writer took up would come back for free); remove the region, or undo a revision of it";
 	}
 
 	/**

@@ -1376,7 +1376,7 @@ Steward's notes from the section above apply: the envelope is merged into the lo
   - `passage` is its own segment kind and graph edge type.
 - **A wall lot bound or re-versioned after its realise** (a delta, `versionOf`) is not bind-checked again. The contract scopes the check
   to `realiseApproved`, so a later design can open the wall. Fold it into the 6d revision work (RV), whose bind path sees it.
-- **IRR's `RegionsImpl.dropped()` counts the template's air cells**, though its javadoc says non-air. Found by K3's Java work.
+- **IRR's `RegionsImpl.dropped()` counts the template's air cells**, though its javadoc says non-air. Found by K3's Java work. **Done in PX (2026-11-11).**
   `irrigationDropped` and the provisional cost range's subtraction are therefore inflated. K3's passage count uses non-air blocks;
   IRR's count is unchanged. A one-line fix plus a re-check of IRR's fixtures.
 - **The compact plan/0 is at 95,975 of 96,000** after K3's `connector.wall.lots` (no description, to fit). The next schema addition needs
@@ -1451,6 +1451,43 @@ From the folded and dropped branches and the v0.57.0 batch (PG, XR, NS). Nothing
 - **Re-check the umt-long DRIFT seed 804021437** that the branch found (not diagnosed: model gap or journal bug): `Place[kind=SITE, x=15, z=30, w=7, d=8, h=5, group=1]`, then `Place[kind=ROAD, x=15, z=36, w=7, d=2, h=3, group=2]`, then `finish` removes r2 and s1, which gave an unexplained violation in `UmtLongDriftTest`. Repro in `mod/`: `./gradlew --offline umtLong -Dumt.from=804021437 -Dumt.seeds=1`. The road-terrain fix on fix/nightly-infra (2026-10-25) may have closed it. If it still fails, pin it in `UmtFindingsTest` or fix the model; if it passes, record that.
 
 **Follow-ups from the v0.57.0 batch:**
-- **PG:** on sloped ground, a K3 pad slope longer than LEAD past the front port refuses the join. Untested, because the fixtures are flat. Add a sloped fixture.
-- **XR:** a direct `Sites.undoStage` on a survival region's group would hand back a taken-up block for free. No Regions path does this; guard it in `Sites.undoStage` (refuse, or settle the bill) and test it.
+- **PG:** on sloped ground, a K3 pad slope longer than LEAD past the front port refuses the join. Untested, because the fixtures are flat. Add a sloped fixture. **Done in PX** (see "Slice PX" below).
+- **XR:** a direct `Sites.undoStage` on a survival region's group would hand back a taken-up block for free. No Regions path does this; guard it in `Sites.undoStage` (refuse, or settle the bill) and test it. **Done in PX** (refused; see below).
 - **Nightly skip file:** a one-night skip file `artifacts/nightly/skip-<UTC date>` exists since 4b844fea; described in docs/GATES.md "The nightly".
+
+## Slice PX, queued follow-up fixes (builder, 2026-11-11; branch `slice/PX` off main 24db8a72, v0.58.0; DEV MODE; $0)
+
+Five small items from "Queued (coordinator, 2026-11-11)". No API member, no Reason, no schema, no catalogue entry, no version.
+
+1. **XR guard (done).** `Groups.undoStage` now refuses, with an `IllegalStateException`, one stage of a survival region's group
+   ("stage S of group G belongs to survival region R: a stage of a survival region is not undone on its own (a block a later writer took
+   up would come back for free); remove the region, or undo a revision of it"). It is the same refusal channel as the stage-order rule
+   (`StageRules.undoRefusal`), so `Sites.undoStage` (both overloads) and `/architect ... undostage` get it. The one in-tree caller that
+   undoes a stage of a region's group, a region revision undoing its own additive stage (`Revisions`), passes `ownStage = true` and is
+   untouched: a revision's cells never sit over a block the region paid for (TileCheck `survival_paid`), so it hands nothing back for free.
+   Refused over settling the bill: a settle would have to run XR's owner rule per cell over a removal that may be half done. Unit test
+   `GroupsUndoStageGuardTest`. Not guarded: a creative region and a group that is no region's (nothing is paid there).
+2. **PG slope (done, behaviour unchanged).** `kit/test/pg.test.mjs` "PX: sloped ground": a ground step of 9 at the town's east edge (x >= 156,
+   rising or falling) still joins through the gatehouse; a step of 10 refuses `NO_JOIN: [wall] every street end and side of region rg1 is
+   enclosed by a wall ...; the gates tried: rg1:gatehouse_1 no route from a district end to its outer cell (no street end of it lies inside
+   this claim)`, and the town itself still plans READY. `passageTown` and `planDistrict` take a ground function (flat by default, so the
+   parity fixture is unchanged). Does the refusal look right? The refusal itself, yes: past LEAD the pad is the town's, not contact, and
+   the leg out may not write it (PG §3). The wording is misleading: it blames wall enclosure ("enclosed by a wall"), when the cause is the
+   unreachable front strip, so a user cannot tell a sloped pad from a walled-in town. Follow-up (not done): name the pad slope in the
+   `no route ... to its outer cell` reason. Also: a continuous ramp of 1 per block failed earlier, at the district's own placement
+   (`NO_ROOM ... no_candidate`), so a step is the clean fixture.
+3. **IRR dropped count (done).** `RegionsImpl.dropped()` is gone; `irrigationDropped` and the cost range's subtraction (`PlanChecks`
+   `irrigationDropped`, and `mechanismDelta`, which also used it) count through `droppedBlocks` (non-air, as K3's passage and GM's
+   mechanism counts already did). Unit test `DroppedCountTest` (air cells on the mask are not counted; fails with the old counting). No
+   committed fixture's expected value moves: IRR's field entry has no air cells on its masked cells (the gate's `expectedDropped` already
+   counted non-air and matched).
+4. **Sidecar timing flakes (done).** `groups.test.ts` round-robin (`groupDone` 60 s to 15 min, the other wait 30 s to 10 min), `slice0a.test.ts`
+   (both C7 tests and C9: every `until` 30 s / 60 s to 10 / 15 min), test timeouts to 30 min. A wait ends the moment its condition does, so a
+   wide limit costs nothing; the order assertion is untouched (tickets are submitted synchronously, the order does not depend on timing).
+   `eval.e2e.test.ts` compare runs with a new `tools/eval.mjs compare --no-time`: the minutes are still recorded (the test checks them),
+   only the +30% mean-time rule is skipped, since two sim runs of a few seconds each swing with load; the spawn and test timeouts are wider
+   (15 / 30 min). The real eval's `compare` still judges time by default. Proof: `npm run check` 809/809 with the machine at load average ~50 (other
+   sessions' gates); on a first try at the old limits the C7 `until` timed out under 24 added busy loops. Other sidecar tests (bundle.e2e,
+   simcosts, styles-u5, massing, versionof ...) also fail on their 30-60 s limits under that kind of load; not touched here.
+5. This section; CONTRACT notes under "Slice XR as built" and "Phase 6c slice IRR as built".
+

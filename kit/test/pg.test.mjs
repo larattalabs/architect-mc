@@ -20,10 +20,10 @@ const B = [160, 50, 249, 109];
 const world = worldOf({ flat: 64 });
 
 /** A districts region east of the town, beside it, with reach inputs `R`. */
-export function planDistrict(T, R = T.R, seed = '1') {
+export function planDistrict(T, R = T.R, seed = '1', ground = world) {
   const claim = { minX: B[0], minZ: B[1], maxX: B[2], maxZ: B[3], minY: -64, maxY: 319 };
   return planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec: { districts: [{ id: 'east', size: [48, 48], lots: 4 }] } },
-    survey: columnsOf(world, B[0], B[1], B[2] - B[0] + 1, B[3] - B[1] + 1), claim, seed, beside: besideData('rg1', A, T.ir, B), besideReach: R });
+    survey: columnsOf(ground, B[0], B[1], B[2] - B[0] + 1, B[3] - B[1] + 1), claim, seed, beside: besideData('rg1', A, T.ir, B), besideReach: R });
 }
 
 const checkOf = (T, q, R = T.R) => checkRegion({ ir: q.ir, survey: encodeColumns(columnsOf(world, B[0], B[1], B[2] - B[0] + 1, B[3] - B[1] + 1)), blobs: (s) => q.blobs.get(s) ?? null, meta: q.meta, besideReach: R, prefix: false });
@@ -134,6 +134,28 @@ test('item 5: a gate mechanism: a portcullis (rest open, day-driven) is an open 
   await assert.rejects(planDistrict(S), /NO_JOIN: \[wall\] .*rg1:gatehouse_1 a swing mechanism closed at rest/);
   const SK = await passageTown({ mech: 'swing', k1: 'north' });
   assert.equal((await planDistrict(SK)).meta.districts.join.via, 'rg1:tg');
+});
+
+// (PX) Sloped ground. The K3 pad grades the town's side of the front port; where it is longer than LEAD (3) past the port, the columns
+// beyond LEAD are held by the town's terrain but are not contact, so the leg out may not write them and the join refuses. Pinned as
+// it is (the refusal and its wording; a ground step of 9 still joins, 10 refuses, rising or falling), not as a promise it is right.
+const stepWorld = (d) => (x) => { const g = 64 + (x >= 156 ? d : 0); return { g, h: g, f: g, flags: 0 }; };
+
+test('PX: sloped ground, a K3 pad slope no longer than LEAD past the front port joins; a longer one refuses "no route ... to its outer cell"', async () => {
+  for (const d of [9, -9]) {
+    const g = stepWorld(d), T = await passageTown({ ground: g });
+    assert.equal(T.check.overall, 'READY', `step ${d}: the town`);
+    const q = await planDistrict(T, T.R, '1', g);
+    assert.equal(q.meta.districts.join.via, 'rg1:gatehouse_1', `step ${d}`);
+  }
+  for (const d of [10, -10]) {
+    const g = stepWorld(d), T = await passageTown({ ground: g });
+    assert.equal(T.check.overall, 'READY', `step ${d}: the town still plans`);
+    await assert.rejects(planDistrict(T, T.R, '1', g), (e) => {
+      assert.match(e.message, /^NO_JOIN: \[wall\] every street end and side of region rg1 is enclosed by a wall \(its own, or another owner's held columns\); the gates tried: rg1:gatehouse_1 no route from a district end to its outer cell \(no street end of it lies inside this claim\)/, `step ${d}`);
+      return true;
+    });
+  }
 });
 
 test('parity: the fixture (kit/test/fixtures/gj/pg-parity.json, the mod\'s GateJoinTest) is the kit\'s own answer: besideGates and the standing\'s walls', async () => {
