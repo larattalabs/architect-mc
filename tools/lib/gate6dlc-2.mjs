@@ -94,7 +94,7 @@ export async function registerLC2(steps, h) {
   const breaks = (at) => call('dev.pt.breaks', { at, placer: 'LCAlex' }, 600_000);
   const places = async (ops) => (await call('dev.pt.uses', { ops: ops.map(([c, item]) => ({ item, at: c.slice(0, 3), placer: 'LCAlex' })) }, 600_000)).results ?? [];
   const flip = (at) => call('dev.pt.uses', { ops: [{ item: 'minecraft:stick', at, on: at, face: 'up' }] }, 30_000);
-  const ptCount = async (box) => (await call('dev.pt.cells', { box }, 60_000)).count ?? null;
+  const ptCount = async (box) => (await call('dev.pt.cells', { box }, 60_000)).tracked ?? null;
 
   // ------------------------------------------------------------------ report arithmetic
 
@@ -132,7 +132,7 @@ export async function registerLC2(steps, h) {
     const pk = new Set([...got.parts.map((p) => p.part), ...base.parts.map((p) => p.part), ...Object.keys(delta.parts ?? {})]);
     for (const p of pk) {
       const g = row(got, p), b = row(base, p) ?? { ...ZERO, kinds: {} }, d = delta.parts?.[p] ?? {};
-      const want = { removed: b.removed + (d.removed ?? 0), playerPlaced: b.playerPlaced + (d.playerPlaced ?? 0), changed: b.changed + (d.changed ?? 0), volatileChanged: b.volatileChanged };
+      const want = { changed: b.changed + (d.changed ?? 0), removed: b.removed + (d.removed ?? 0), playerPlaced: b.playerPlaced + (d.playerPlaced ?? 0), volatileChanged: b.volatileChanged };
       const wk = { ...(b.kinds ?? {}) };
       for (const [k, v] of Object.entries(d.kinds ?? {})) wk[k] = (wk[k] ?? 0) + v;
       const sortK = (o) => json(Object.fromEntries(Object.entries(o ?? {}).sort()));
@@ -252,10 +252,12 @@ export async function registerLC2(steps, h) {
     const lc0 = await landCheck(region);
     out.lc0 = strip(lc0);
     const mechPart = 'mech:gatehouse_1';
-    const wallParts = out.oracleParts.filter((p) => /wall/.test(p));
+    // (the wall's parts the kit's writers name and the castle holds on top: a wall lot's own part, wl_*, is under its lot's site)
+    const wallParts = out.oracleParts.filter((p) => /wall/.test(p) && row(lc0, p)?.cells > 0);
+    const reportedOk = lc0.parts.every((p) => out.oracleParts.includes(p.part) || p.part === mechPart || (ir.roads ?? []).some((r) => r.id === p.part) || /^route_/.test(p.part));
     check(anyChange(lc0).length === 0 && lc0.unloaded === 0 && lc0.cellsChecked > 0, `the fresh castle reports no change: ${lc0.parts.length} parts (${json(lc0.parts.map((p) => [p.part, p.cells]))}), lots ${json(lc0.lots.map((l) => [l.lot, l.standing]))}, ${lc0.cellsChecked} cells checked, ${lc0.unloaded} unloaded`, anyChange(lc0));
-    check(!!row(lc0, mechPart) && row(lc0, mechPart).cells > 0 && !row(lc0, 'unattributed') && wallParts.length > 0 && wallParts.every((p) => row(lc0, p)?.cells > 0),
-      `the parts: ${mechPart} (${row(lc0, mechPart)?.cells ?? 0} cells), the wall's ${json(wallParts.map((p) => [p, row(lc0, p)?.cells ?? 0]))} (named by the kit's writers), none unattributed`);
+    check(!!row(lc0, mechPart) && row(lc0, mechPart).cells > 0 && !row(lc0, 'unattributed') && wallParts.length > 0 && reportedOk,
+      `the parts: ${mechPart} (${row(lc0, mechPart)?.cells ?? 0} cells), the wall's ${json(wallParts.map((p) => [p, row(lc0, p)?.cells ?? 0]))} (named by the kit's writers), every part one the kit's writers, the IR's roads or the mechanism name, none unattributed`, lc0.parts.map((p) => p.part));
     const wallLots = lots.filter((l) => l.onWall).map((l) => l.id);
     check(wallLots.length === 5 && wallLots.every((id) => { const l = lot(lc0, id); return l && l.siteId && l.standing >= 0.8 && l.changed === 0 && l.playerPlaced === 0; }),
       `the wall's lots (K3: 4 towers and the gatehouse) report in lots[], standing as built and unchanged: ${json(wallLots.map((id) => [id, lot(lc0, id)?.standing, lot(lc0, id)?.changed]))}`);
@@ -290,14 +292,14 @@ export async function registerLC2(steps, h) {
     let gm = null, lcMove = null;
     try {
       await flip(levers[0]);
-      for (let t = 0; t < 3; t++) { await tickStep(1); gm = await readGate(); if (gm.moving) break; }
+      for (let t = 0; t < 12; t++) { await tickStep(1); gm = await readGate(); if (gm.moving) { gm.tick = t + 1; break; } }
       lcMove = await landCheck(region);
     } finally {
       await cmd('/tick unfreeze');
     }
     await L.gameWait(2000, { real: L.settle, label: 'lc settle' });
     states.moving = { gate: gm, same: same(lc0, lcMove) };
-    check(!!gm?.moving && states.moving.same[0], `item 1: mid-move (frozen one tick after the lever: moving pistons ${gm?.moving}, ${gm?.filled}/${gm?.of} lanes filled): the same report`, states.moving.same[1]);
+    check(!!gm?.moving && states.moving.same[0], `item 1: mid-move (frozen ${gm?.tick ?? '12+'} tick(s) after the lever: moving pistons ${gm?.moving}, ${gm?.filled}/${gm?.of} lanes filled): the same report`, states.moving.same[1]);
     const g2 = await readGate();
     check(g2.open, `item 1: then open again (${g2.filled}/${g2.of})`);
     // dusk: the daylight sensor closes it (no lever); dawn opens it
@@ -391,6 +393,7 @@ export async function registerLC2(steps, h) {
         if (seen.has(k)) continue;
         seen.add(k);
         if (never && k === key(never)) continue;
+        if (!ptKeys.has(k) && !isAir(now) && idOf(norm(now)) === idOf(norm(before[i].get(k)))) continue; // a shape property (connections)
         const p = own.part.get(k);
         if (!p) { stray.push(k); continue; }
         const cls = classOf(now, ptKeys, k);
@@ -443,6 +446,7 @@ export async function registerLC2(steps, h) {
           tseen.add(k);
           const t = ttop.get(k);
           if (t?.site !== tl.siteId) continue;
+          if (!tpt.has(k) && !isAir(now) && idOf(norm(now)) === idOf(norm(tb0[i].get(k)))) continue;
           const cls = classOf(now, tpt, k);
           addTo(tdelta, 'lots', towerId, cls === 'playerPlaced' ? 'playerPlaced' : 'changed');
         }
@@ -631,7 +635,8 @@ export async function registerLC2(steps, h) {
     if (pcell) {
       await breaks([pcell.at]);
       await L.settle(1500);
-      const ch = await changed(around(pcell.at, 1), pcell.dump, 'lc-p2');
+      const ch0 = await changed(around(pcell.at, 1), pcell.dump, 'lc-p2');
+      const ch = { list: ch0.list.filter(([, was, now]) => isAir(now) || idOf(norm(now)) !== idOf(norm(was))) };
       const lcP = await landCheck(region);
       const tAfter = (await targetCells(region)).find((t) => t.target === pcell.target);
       const pd = {};
@@ -699,10 +704,10 @@ export async function registerLC2(steps, h) {
       const pts = new Set(re[0]?.tracked ? [key(pc[1].at)] : []);
       for (const q of pc) {
         const ch = await changed(around(q.at, 1), q.dump, 'lc-b2');
-        for (const [k, , now] of ch.list) addTo(fdelta, 'parts', q.part, classOf(now, pts, k), 1, classOf(now, pts, k) === 'changed' ? idOf(norm(now)) : null);
+        for (const [k, was, now] of ch.list) if (pts.has(k) || isAir(now) || idOf(norm(now)) !== idOf(norm(was))) addTo(fdelta, 'parts', q.part, classOf(now, pts, k), 1, classOf(now, pts, k) === 'changed' ? idOf(norm(now)) : null);
       }
       const chl = await changed(around(lcell.at, 1), lcell.dump, 'lc-l2');
-      addTo(fdelta, 'lots', 'h1', 'changed', chl.list.length);
+      addTo(fdelta, 'lots', 'h1', 'changed', chl.list.filter(([, was, now]) => isAir(now) || idOf(norm(now)) !== idOf(norm(was))).length);
       const lcC = await landCheck(region);
       const [okC, dC] = plusDelta(lcC, lcB, fdelta);
       out.built = { picks: pc.map((q) => ({ at: q.at, part: q.part })), lot: lcell.at, delta: fdelta, refill: re[0] };

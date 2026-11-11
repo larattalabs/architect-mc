@@ -164,6 +164,16 @@ class LandCheckTest {
 		assertEquals(LandCheck.Cls.SAME, cls(Blocks.AIR.defaultBlockState(), false, Blocks.PISTON_HEAD.defaultBlockState(), true), "a head retracted");
 		assertEquals(LandCheck.Cls.REMOVED, cls(Blocks.AIR.defaultBlockState(), false, piston, true), "a piston mined is removed");
 		assertEquals(LandCheck.Cls.CHANGED, cls(Blocks.STONE.defaultBlockState(), false, rep, true));
+		// (LCi) a moving or trigger cell: its state never judged (a leaf gone from the lane, a lever pulled), a player's block there the player's
+		BlockState air = Blocks.AIR.defaultBlockState();
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(Blocks.IRON_BARS.defaultBlockState(), () -> null, false, val(air), true, true), "a leaf in the lane");
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(air, () -> null, false, val(Blocks.IRON_BARS.defaultBlockState()), true, true), "a lane opened");
+		assertEquals(LandCheck.Cls.PLAYER, LandCheck.classifyCell(Blocks.COBBLESTONE.defaultBlockState(), () -> null, true, val(air), true, true),
+			"a player's block in an open lane is the player's");
+		BlockState lever = Blocks.LEVER.defaultBlockState();
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(lever.setValue(BlockStateProperties.POWERED, true), () -> null, true, val(lever), true, true),
+			"a player's lever as written, only powered: the same");
+		assertEquals(LandCheck.Cls.REMOVED, LandCheck.classifyCell(air, () -> null, false, val(piston), true, false), "outside them as classify");
 		JsonObject ir = JsonParser.parseString("{\"lots\":[{\"onWall\":{\"passage\":{\"mechanism\":{\"states\":{\"open\":[10,20,64,66],\"closed\":[11,20,64,64]},"
 			+ "\"triggers\":[{\"at\":[12,65,21],\"rungs\":[[12,70,21]]}]}}}}]}").getAsJsonObject();
 		LongOpenHashSet v = LandCheck.mechVolatile(ir);
