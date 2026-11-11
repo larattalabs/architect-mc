@@ -1378,6 +1378,11 @@ public final class SiteJournal {
 	 * it.
 	 */
 	static Map<Long, Value> coverBefores(String siteId) {
+		return coverBefores(siteId, null);
+	}
+
+	/** {@link #coverBefores}; {@code by} (XR), when given, gets the covering entry's site per cell. */
+	static Map<Long, Value> coverBefores(String siteId, @Nullable Map<Long, String> by) {
 		Map<Long, Value> out = new HashMap<>();
 		Map<Long, Long> layerAt = new HashMap<>();
 		JournalStore s = WorldJournal.storeOrNull();
@@ -1411,6 +1416,9 @@ public final class SiteJournal {
 						if (l == null || their.layer(j) < l) {
 							layerAt.put(p, their.layer(j));
 							out.put(p, their.before(j));
+							if (by != null) {
+								by.put(p, om.site());
+							}
 						}
 					}
 				}

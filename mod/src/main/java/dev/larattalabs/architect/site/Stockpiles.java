@@ -1582,9 +1582,14 @@ public final class Stockpiles {
 			if (r == null) {
 				continue;
 			}
-			Map<String, Integer> one = Builder.paidStanding(level, s, r);
+			// (XR) less the cells a later writer of its survival region owns (that writer counts them)
+			Map<String, Integer> one = Builder.paidStanding(level, s, r, RegionOverwrites.shadowedCells(srv, level, s.group(), s.id(), s.placedAt(), r, false));
 			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
 			byTarget.add(s.id(), Builder.counts(one));
+			Map<String, Integer> back = RegionTargets.RETAKEN.get(s.id()); // (XR) a lot's paid cells a later writer of its region took up
+			if (back != null) {
+				back.forEach((k, v) -> retaken.merge(k, v, Integer::sum));
+			}
 			CrateBlockEntity be = Builder.crate(level, s, false);
 			if (be != null && crates.add(be.getBlockPos())) {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
@@ -1606,7 +1611,11 @@ public final class Stockpiles {
 			}
 			r.rescan(level, false, true); // never loads a chunk
 			Map<String, Integer> one = new TreeMap<>();
+			var shadow = RegionOverwrites.shadowedCells(srv, level, i.group(), i.id(), i.placedAt(), r, false); // (XR) a later writer's
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+				if (shadow.contains(r.pos(q).asLong())) {
+					continue;
+				}
 				r.cost.get(q).forEach(x -> one.merge(x.item(), x.count(), Integer::sum));
 			}
 			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));

@@ -25976,6 +25976,80 @@ is a reserved box and is skipped with "not standing as built"). The kit's third 
 The first in-game round found one mod bug (the stale re-check after vanilla turned the walk's dirt path to dirt) and two fixture
 problems in `gj_town_wall` (the fountain's anchor on the street end, then the ring [4, 8] too tight round an off-axis fountain), all fixed.
 
+## Slice PG: passage gates in the gate join (2026-11-10, DEV MODE; binding; builds GJ's "K3 follow-up (passage gates)")
+
+**What.** A district joins a walled town through a K3 gatehouse's passage, as GJ joins through a K1 gate. **Why.** Since v0.52.0 Steward's
+plan writer names a gatehouse as the wall's gate on every walled town (11 of 11), and a gatehouse-only wall has a `passage:<lot>` node and no
+`gate` node, so those towns could not take a district. **Found while building (the real "before").** On main the answer is not `NO_JOIN
+[wall]` but **`NO_JOIN [route] ... (0 tried ...)`**: D3's enclosure flood stops only at `walls` (the `w_` part columns) and other owners'
+held columns, and K3 cuts the wall at each wall lot's box, so the flood walks through the box, the town reads as unwalled, and D3's own
+routes find no pair. This holds for any K3 wall (towers too), mixed with a K1 gate or not.
+
+**Rules (kit `kit/lib/region/beside.mjs`, `gateJoin.mjs`; mod `GateJoin`, `BesideReach`):**
+1. **The wall line includes its lots.** `besideStanding`'s `walls` (and the mod's `BesideReach.standing`) adds the box columns of every IR lot
+   with `onWall` (towers and gatehouses). Only IRs with wall lots change (their standing data and sha); no K3 town joined before.
+2. **A passage is a gate.** `besideGates` / `GateJoin.gates` also read each graph node of kind `passage`: `id` and `lot` the lot's id,
+   `kind: passage`, `wall` its `onWall.wall`, `cells` the columns of `onWall.passage.cells`, `y` its floor row, `h` its height, `width` its
+   width, `facing` its front's (outward), `outer` the front port's cell, `inner` the back port's, `at` the centre line's middle at the walk's
+   feet. **`door: none`**: the realise drops any entry block in the passage (K3 §5, IRR's mask), so no door can stand there. A K1 gate's
+   record is unchanged.
+3. **The ports.** The port strips (each port cell and the cells beside it across the passage's width) are not hard for the gatehouse's own
+   apron (lots + 1). The front strip out to LEAD cells, where only the town's terrain holds it (K3's pad), is a **contact column**: the leg out
+   may write it and the join holds it, as D3 holds a junction's contact. A back port that is the end of the town's own lane (K3 §4: a road
+   with a junction node at the port) **is the junction**: an end candidate offered to that passage only, `run` 0, so there is no leg in and
+   nothing is written inside (GJ §13's one-cell `join_in`, `opensOnJunction`); the lane walks on to the street. Without such a lane, GJ's
+   leg in as for a K1 gate.
+4. **Standing as built (mod, plan time).** A passage stands when its lot is `placed` and its site is neither placing nor building (MechCharges'
+   test), and its opening is clear as for a K1 gate. An unbuilt gatehouse (a reserved box) is `stands: false`, "gatehouse lot <id> is not
+   built", and the kit skips it as "not standing as built (...)"; the only gate unbuilt answers `NO_JOIN [wall]` naming it.
+5. **The re-check.** `GateJoin.recheck` takes the passage's region (the town) as the holder: its lot sites and its `mech:<lot>` cells
+   journal under the region's group, so GJ's group rule is the gatehouse lot's site. It also refuses ARTIFACT_STALE when the lot is no
+   longer built (removed alone, 6d RV).
+6. **Mechanisms (GM §6, GJ's open-gate rule).** `rest: open` (the portcullis and slide, day-driven) is an open gate; `rest: closed` (swing's
+   iron doors) is skipped like a fence gate: "a swing mechanism closed at rest (player-only: a villager join skips it)". The record carries
+   `mechanism {kind, rest, volatile}` (`volatile` the flat runs of the mechanism's envelope, `mechanism.cells`: the grate's leaves in
+   either state, the split grate's centre post between its two 1-wide lanes, the levers on the jambs). The region writes them, and
+   because GM §6 counts a day-driven gate as open whatever the hour they may stand in any state: the mod's plan-time check and the
+   re-check skip them (as a door's `open` is volatile). A join never writes a mechanism cell (they are passage cells).
+7. **The IR.** `reach.gate` (and the meta's `join.gate`) gains `kind`, `lot` and `mechanism` for a passage only; the junction, `via`
+   ("<region>:<lot>"), `join_gate` and the land are GJ's.
+8. **API.** Feature `passageJoins` (sidecar `region.plan.passageJoin`, `ApiRules`, `ArchitectApi` javadoc Since NEXT). No record, method,
+   enum value or reason.
+
+**Acceptance.**
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | A gatehouse-only walled town (kit fixture) | the district joins through the passage: `via rg:<lot>`, the walk front port -> back port (`join` ends at the front port, `join_gate` the traverse, `join_in` the one cell at the back port), no `NO_JOIN [wall]`; no error finding, M28 gate 0 and held 0 |
+| 2 | Mixed wall (K1 gate + gatehouse) | GJ's order (cheapest sum, then nearest the district, then id); the same answer twice; with the gatehouse not standing, the K1 gate |
+| 3 | Unbuilt gatehouse | skipped "not standing as built (gatehouse lot ... is not built)"; the only gate: `NO_JOIN [wall]` with that reason (kit, and in game before the lot is built) |
+| 4 | Re-check after the gatehouse is built in game | the town realised with a stub gatehouse; checkBeside equals Regions.plan through the passage; realise passes the re-check (the lot site holds the passage) and PLACES; the passage's cells unchanged (hash); villagers from every district lot to the bell and back (vanilla nav) |
+| 5 | A gatehouse with a mechanism | portcullis `rest: open`: joins (the record names it), also with its grate lowered by a lever in game; swing (`rest: closed`): skipped and named; mixed swing + K1 gate: the K1 gate |
+| 6 | Byte identity | every committed plan fixture plans byte-identical against the merge base (`tools/lib/gate7a-kit.mjs unchanged`); GJ's parity fixture and suites unchanged |
+| 7 | Removal (verifier re-runs) | the joined district removed: 0 changed cells over the town's claim and the district's (+8), the wall and gatehouse as built (E-flat 0) |
+
+**Gate steps:** `pg-unit` (kit `kit/test/pg.test.mjs` with `gj.test.mjs` and `k3.test.mjs`, the Java `GateJoinTest`, `ApiPGTest`, the
+merge-base identity) and `pg-ingame` (items 3, 4, 5, 7; driver `tools/gate7agj.mjs passage`, headless, $0); regressions `gj-ingame`,
+`k3-ingame`. Steward RC areas: gate join, wall, gatehouse, district.
+
+### Slice PG as built (branch `slice/PG` off main 2d9c5b15, 2026-11-10, DEV MODE, $0, ports 8896/8897; versions NEXT)
+
+| Area | As built |
+|---|---|
+| The before | On main a gatehouse-only walled town answers `NO_JOIN [route] ... (0 tried ...)`, not `[wall]` (the enclosure flood walked through the K3 box). |
+| Kit | `beside.mjs`: `besideStanding`'s `walls` gains every `onWall` lot's box; `passageGate` (in `besideGates`). `gateJoin.mjs`: `passagePorts` (the port strips, free of their own apron), `passageFronts` (the front's terrain-only contact columns, out LEAD), `passageLaneEnds` (the back port on the town's lane: an end candidate, `run` 0, `lane`); `gateProblem` skips a mechanism resting closed; `gateMeta` and `reach.gate` carry `kind`, `lot`, `mechanism`. `checkBeside.mjs`: M28's footprint rule spares a passage's port strips. |
+| Mod | `GateJoin.passageGate` (the kit's, field for field), `lotNotBuilt` (lot `placed`, site neither placing nor building), `standsCheck(level, gates, region)` and `recheck` skip the mechanism's envelope and refuse an unbuilt gatehouse; `BesideReach.standing` walls the wall lots' boxes. Feature `passageJoins` (`ApiRules`, `ArchitectApi` javadoc, sidecar `region.plan.passageJoin`). No record, method, enum or reason. |
+| Found in game | The split grate (portcullis) writes a **centre post** in the passage's middle lane at the gate plane (its two 1-wide lanes either side), and its back lever stands in a passage column: so `volatile` is the mechanism's whole envelope (`mechanism.cells`), not only its states. The removal of a town tombstones its artifact: the gate checks the plan again before the second realise. |
+| Deviations | `door` is always `none` (rule 2). The leg in is GJ's one-cell `join_in` when the back port is the K3 lane's end (every recorded K3 gatehouse); otherwise GJ's leg in. On sloped ground a pad slope longer than LEAD past the front port is not contact and refuses "no route ... to its outer cell" (not seen; flat fixtures only). |
+
+| item | where | result |
+|---|---|---|
+| offline | run `20261110-205807-change` at 2f3ca48d | unit-mod 1005/0, unit-kit 1098/0, unit-sidecar 804/0; api-compat clean against the 0.47.0 and 0.45.0 apitest jars; step-inputs check clean; lint-structure 205/0, lint-look 14/0, water-lint 135/0, p3-lint 16/0 (run `20261110-193139-change` at 457ebb2a; later commits touch no linted file's output) |
+| 1, 2, 3, 5 (kit), 6 (step `pg-unit`) | the same run | PASS 434/0: pg.test + gj.test 24/0, K3/GM-a/D3 parity 29/0, Java GateJoinTest/DistrictLandTest/ApiGJTest/ApiPGTest/ApiRulesTest; **item 6: 429 of 429 committed plan fixtures byte-identical** against 2d9c5b15 |
+| 1, 3, 4, 5, 7 (step `pg-ingame`) | the same run | PASS 25/0: unbuilt gatehouse NO_JOIN [wall] naming it, parity, removed E-flat 0; built: joins `via rgN:gatehouse_1`, front port -> back port, re-check holds (PLACED, passage hash unchanged), villagers 4/4 both ways; the portcullis lowered by its front lever still joins (checkBeside fits via the passage); the district removed E-flat 0 over the town's and district's claims (+8), then the town E-flat 0 (plain and portcullis) |
+| regressions | the same run | gj-ingame 19/0, k3-ingame 19/0 |
+| verifier (item 7 re-run, diff reviewed) | gate-verifier at 4b42b6d6: run `20261110-212405-change` | PASS: pg-ingame 25/0 (item 7 E-flat 0 plain and portcullis, then the town 0); no defects (minor, per rule 6: a player's block in a mechanism envelope cell is not flagged by the re-check) |
+
 ## Slice GM, gate mechanisms
 
 Status: **FROZEN 2026-11-01** (Noah's decisions and Steward's notes folded in; S-GM-1 answered; K3 and GJ released in v0.48.0 and v0.49.0, so the `K3:C:` references below now live on main at shifted lines). Updated 2026-10-27 to Noah's GM decisions (PLAN "GM decisions (Noah, 2026-10-27)") and Steward's contract notes. Written 2026-10-27 against main 6b876fa1 and `origin/slice/K3` (K3 is not on main yet:
@@ -26590,3 +26664,152 @@ for the surface; Steward's RC areas if wanted: bridge/drawbridge, survival (the 
 | Fixtures (byte identity against 9aa02602, `gate7a-kit unchanged`) | **427 of 429 identical**; the two that move are the drawbridge-bearing `valid/v7a_gm_drawbridge` and `valid/v7a_gm_drawbridge_far` (same answer class, READY; the IR's `gateMechanisms` and the bill change). `asks/redstone_gate` is unchanged (still `blocked DEPENDENCY` before routing). |
 | Gate (DEV MODE, $0) | Run `artifacts/gate-runs/20261106-084655-change` at 38e60f0f, `--only gm-c-unit,gm-c-ingame,gm-c-survival`, 3 of 3 PASS. **gm-c-unit**: kit gm-c 13/0 (the circuit test: gmLint reach from each lever to all 2w trapdoors and settleSignals in all four lever states, w 1/3/5/7 in 4 headings: raised exactly when one lever is on, settled), with GM-a, GM-b, T3a; GateMechTest and MechWaitSayTest. **gm-c-ingame 20/0** on v7a_gm_drawbridge_far (n 11, 7 trapdoor cells): the region's report `{kind: drawbridge, cells 109}`; at rest 0 of 14 open; 0 changes in 40 ticks; lowered: kit villager and player walks and vanilla's navigation cross both ways, the kit's villager walk end to end both ways; **16 toggles by real use**, near, far, near, far (14, 0, 14, 0), far, near, far, near (14, 0, 14, 0), near x4, far x4: 0 wrong, both levers' states read back each time; with **both levers on** (lowered) the kit's villager walk crosses the deck and goes end to end both ways; with **the far lever alone** (raised) it crosses 0 ways, deck and end to end; raised by the near lever: 0 ways (vanilla [true, true] and the kit's player recorded, as GM-c); `Regions.remove` raised, and lowered **with both levers on**: E-flat 0 each, the moat's water included, no item dropped. **gm-c-survival 18/0**: the plan's `mech:drawbridge` bill = the circuit's exact cost; held for its whole bill, announced once ("Redstone drawbridge waits for 2 × redstone comparator, 2 × lever, 28 × oak fence, 28 × redstone dust, 20 × redstone repeater and 29 × stone bricks in the stockpile"); charged once = plan = report = the built circuit; twin 0 differ; removal raised (14 of 14 open): E-flat 0, refund = charge, conservation exact on the drawbridge's 8 items (the region's 2 dirt recorded, as GM-c's open finding, which XL works on). Also: kit units 1092 tests, 1091 pass, 0 fail; lint-structure 68/0, lint-look 13/0, water-lint 135/0; the mod build (`gradlew build --offline`, its tests including p3-lint's); `step-inputs check` 311 steps; unit-sidecar 803/1 (run `20261106-085913-change`), the one failure `eval.e2e` "compare of two runs says no regression" (load timing, as GM-c recorded; re-run alone 4/4; LV touches no sidecar code). |
 | Gate-verifier | PASS (review, re-ran removal and survival at ce41bd6a, run `20261106-090355-change`): gm-c-ingame 20/0 (16 toggles, 0 wrong; both-on lowered passes, far-only raised blocks; removal raised and lowered with both levers on E-flat 0), gm-c-survival 18/0 (bill = plan = report = built, twin 0, refund = charge), gm-c units 13/0; csurvival's code and its conservation scoping unchanged from GM-c. Noted, not blocking: the region's 2 dirt (GM-c's open finding, XL's), undo exercised by removal only as in GM-c, the ripple dropped (documented above). |
+
+## Slice NM, two naming fixes for Steward (branch `slice/NM` off main 2d9c5b15 / v0.56.0; versions NEXT; DEV MODE)
+
+Steward asked for both (steward-mc `docs/ARCHITECT-ASKS.md`, WE + WS RC wording note; GR's `NO_ROOM [street]` hole). Wording and one additive answer detail only: no new
+kind, no change to a `kind` value, no plan/0 schema byte (it stays at 95,975 of 96,000), no API member, no catalogue entry. The one doc line (`Reason.NO_ROOM`'s javadoc) is stamped NEXT.
+
+### 1. An unnamed gate reads as an ordinal of its wall
+
+| | |
+|---|---|
+| What | A gate a wall cuts on its own (`<wall>_g<k>`, no plan part of that id) is named "<the wall's words>'s first gate" (second, third, ... tenth, then "11th") in every sentence that named it from its id. Named gates and named gatehouses keep their names. |
+| Order | The ordinal is `k`, the gate's place in its wall's gate order as the kit cuts them (`makeGate` numbers `W.gates.length + 1`; named gates count, so a wall whose first gate is named has its first unnamed gate "second"). Deterministic: no new state, the same id gives the same words in the kit and in Java. |
+| The wall's words | Java: the wall's plan label as a stage wait says it ("Curtain wall"), else "the wall". Kit notes: "wall <id>" (the kit's notes already say "wall curtain"). A gate id whose wall is no plan part (and no IR `gateMechanisms` entry names it) keeps its old words; a plan part named like the id keeps its own label. |
+| Java | `RegionWaitTags.autoGateWords` (also reached from `wordsOf`); `MechCharges.subjectOf` says "<wall>'s first swing gate" for a swing (the kind's words in the noun, never "...gate's swing gate"). Every mechanism wait goes through `subjectOf`: the stage wait (waits for the wall round it, `waitsFor.say`), the move to the bill wait (ITEM_WAITING, `waitsFor.say` and `message`), and `RegionTargets`' wait. |
+| Kit | `gateSays(W, id)` in `connectors/wall.mjs`: the swing fallback notes (thickness, villager, near, width), the gate-placement notes (even place, landing, no walk) and the double-door note. Deviation records (`{what: 'mechanism', gate: 'curtain_g1', ...}`) and graph ids keep the id: they are data. |
+
+Changed sentences (old -> new; the wall `curtain`, its plan label "Curtain wall" in Java; `curtain_g1` the road's crossing, a swing):
+
+| Where | Old | New |
+|---|---|---|
+| Stage wait (WE, Java) | Curtain g1's swing gate waits for the wall round it (...) | Curtain wall's first swing gate waits for the wall round it (...) |
+| Bill wait (ITEM_WAITING `say`, `message`) | Curtain g1's swing gate waits for 2 x iron door in the stockpile | Curtain wall's first swing gate waits for 2 x iron door in the stockpile |
+| Lot/part wait with the gate as waiter | Curtain g1 waits for ... to be built | Curtain wall's first gate waits for ... to be built |
+| Kit note, villager edge | gate curtain_g1: in crosses it on a villager edge (...): the wooden door | wall curtain's first gate: in crosses it on a villager edge (...): the wooden door |
+| Kit note, thin wall | gate curtain_g2: wall curtain is 2 thick and the swing needs 3: the wooden door | wall curtain's second gate: wall curtain is 2 thick and the swing needs 3: the wooden door |
+| Kit notes, near / width | gate curtain_g1: wall curtain has no straight run near ... / ... it is 3 wide and the swing is 3 ... | wall curtain's first gate: (same tail) |
+| Kit notes, placement | gate curtain_g1: N positions from its even place ... / the ground steps N across the wall there ... / ... a double door covers the middle 2 | wall curtain's first gate: (same tail) |
+
+Without a plan label Java says "The wall's first swing gate waits for ...". Unchanged: "North gate's swing gate waits for ..." (a named gate), "Main gatehouse's portcullis waits for ...".
+
+### 2. A growth's `NO_ROOM [street]` names what stopped the street
+
+| | |
+|---|---|
+| What | A growth (GR §2, §4) whose street extension ran out answers `NO_ROOM [street]` (or `[held]` when a wall stands against the street's end). It now also says what stopped the run: `blockedBy: "wall"` with `wall: <the wall's id>`, `"slope"` (the street's grade rule fails: cut/fill 3, steps of 1) or `"reach"` (the claim's margin, or a town's claim for a district). |
+| Where it is read | `streetStop` (grow.mjs) walks the end's straight run as `tryExtension` does (5 wide, graded, dry) and names the first column that stops it: a standing wall's column first (wall part `w_<id>`), then the claim or town edge, then the grade; any other class (a lot, a road, held ground, water) leaves the detail out. An end that is not extendable (a route joins it or runs on past it, as at a walled town's gate) is read through that route's own road and path cells, to what lies beyond: the wall. |
+| Answer shape | Additive, only where `kind` is `street` or `held` and a stop was named: the `unplaced[]` entries of `revision.grow.unplaced` (the IR) and of the zone's plan/0 answer gain `blockedBy` and `wall?`; the refusal's `evidence` (`{kind, lots}`) gains the same; the thrown/shown sentence gains a clause: `NO_ROOM: [street] no lot of the growth fits the region (the street is stopped by wall curtain): house_1 (street), ...`; the zone's note reads `unplaced house_5 (NO_ROOM street, the street is stopped by the slope (too steep))`. Every other answer, every other kind, and a `street` answer where another class stopped it keep their exact shape. |
+| Sentences | "the street is stopped by wall <id>", "the street is stopped by the slope (too steep)", "the street is stopped by the edge of the claim". |
+| Not touched | plan/0's compact schema; every `kind` value (a wall hard against a street's end, as in the walled town the kit builds from `valid/v30_walled_village`, still answers `held`; it now says `blockedBy wall`). |
+
+### Acceptance and gate steps
+
+1. Unit tests: kit `ws.test.mjs` (a wall with 3 auto gates: first, second, third in the notes, no id; `gateSays` ordinals, a named gate, a plan-named `curtain_g2`, another wall's id), kit `gr-a.test.mjs` (reach, slope, wall with its id, the thrown sentence and `e.blocker`, a `held` and a clean growth unchanged in shape), Java `MechWaitSayTest` (ordinals, named gates, a labelled and an unlabelled wall, the swing subject, a plan part named like the id).
+2. Byte identity: every committed plan fixture except the ones that carry the changed kit notes plans byte-identically to main (answers, overall, IR, first plan).
+3. In game: `gm-b-survival` (the step that already holds a mechanism for its bill) gains a second, short pass on `gm/nm_auto_swing` (gmb_k1_swing without its named gate: the wall cuts `curtain_g1`): its bill wait and its first wait say "...'s first swing gate waits for ..." and carry no id.
+
+### Slice NM as built (branch `slice/NM` off main 2d9c5b15; versions NEXT; recorded 2026-11-10; DEV MODE)
+
+| Area | As built |
+|---|---|
+| Auto-gate words | `RegionWaitTags.autoGateWords` (`<wall>_g<k>`, wall = a plan connector of kind wall or an IR `gateMechanisms` wall; ordinal = k, the gate's place in the wall's gate order, named gates counted) reached from `wordsOf` and `MechCharges.subjectOf` ("<wall>'s first swing gate"); kit `gateSays` in the wall's notes. Old -> new sentences are in the §1 table. Steward's e2e checks that match "Curtain g1's swing gate waits for ..." now read "The wall's first swing gate waits for ..." (no plan label) or "<label>'s first swing gate waits for ..." (labelled wall). |
+| Growth blocker | `streetStop` (grow.mjs), `wallAt` in `growObstacles`; `blockedBy` and `wall` on `unplaced[]`, the refusal's `evidence` and the thrown sentence, for `street` and `held` answers whose street run a wall, the slope or the claim edge stopped. `Reason.NO_ROOM` javadoc stamped NEXT. plan/0 schema untouched. |
+| Kit tests | Full suite 1095 pass, 0 fail. New: ws (3 auto gates in order, `gateSays`), gr-a (reach, slope, wall, thrown sentence, `held` with and without a cause, and the walled town built from `valid/v30_walled_village` as a growing zone: every unplaced lot `blockedBy wall`, `wall town_wall`), k2 follows the wording. |
+| Java | Full `./gradlew test --offline`: 1004 tests, 1 skipped, 0 failures; `MechWaitSayTest` gains ordinals, named gates, labelled and unlabelled wall, the swing subject, a non-wall stem. |
+| Byte identity (`K.unchanged`, base main 2d9c5b15, 429 fixtures) | **426 of 429 identical** (answers, overall, IR, first plan). The three that move are `k2/k2_look_bank`, `k2/k2_shore_routes` and `valid/v7a_k2_along_shore`: notes only (the gate-landing note names an unnamed gate by its place), IR hashes identical; named in `tools/lib/f7a-norm.mjs` `GC_MOVED` so every steps' `unchanged` accepts them. The new fixture `gm/nm_auto_swing` is new on the branch. |
+| Gate (DEV MODE, $0, ports 8900/8901) | Run `20261110-195014-change` at a0311ad2, `--only gm-b-unit,gr-unit,gm-b-survival`, 3 of 3 PASS: gm-b-unit 2 ok, gr-unit 5 ok, gm-b-survival 21 ok (the new `sv-nm` pass: the unnamed `curtain_g1` swing is READY in survival; its bill wait and its first wait both read "The wall's first swing gate waits for ...", ITEM_WAITING once, no id). `step-inputs check`: 311 steps, closure inside its recorded set. |
+| Open | A wall hard against a street's end still answers `held` (now with `blockedBy wall`), not `street`; Steward's e2e that expects exactly `NO_ROOM [street]` for the walled town is unaffected only if its end really was `street`: the kit's walled-town case answers `held`. |
+
+## Slice XR, survival writers over paid cells (branch `slice/XR` off main 2d9c5b15, v0.56.0; 2026-11-10; DEV MODE, survival accounting strict)
+
+XL left two cases untested: (a) a road or a lot (not a bridge) writing over a cell an earlier writer already paid for; (b) three or more
+writers on one cell. XR lists every path where one writer of a survival region takes up another's paid block, measures which ones a
+region reaches, and makes them conserve. Mod and gate only; no API member, no Reason, no catalogue entry, so no Steward RC by the API
+rule (Steward's RC areas if wanted: survival, undo, road, lot). No Steward-visible answer changes: plan, check, IR and answers are the
+kit's and are untouched (the one kit file added is a gate fixture program, `kit/regions/xr_demo.mjs`, not in the catalogue).
+
+### 1. The writers and every take-up
+
+A survival region has these writers, all fed from the owner's stockpile, all members of the region's group:
+- **T**, a tile's target (`RegionTargets`, a cell site per part group): built later by the feed loop (`stepFed`), writing a cell over the
+  block standing only when that block is its journal before (what it found at its put-down) or free (air, fluid, plant).
+- **F**, a tile's free pass (`InfraJob`, the tile's CELL entry): written at once at the tile's put-down, no bill.
+- **R**, a 4e road as a construction road (`RoadBuilder`): the instant road is written, then every queued cell goes back to its before and
+  is built by the feed loop (`step`, the `planned` rule as T's); its cuts stay cleared at put-down (`convert`). 4e only ever changes a
+  natural block (`RoadTerrain`: a built block is BUILT, never cut, filled or cleared), so R reaches a paid cell only when that cell's block
+  is a natural kind (paid stone, dirt, gravel...).
+- **L**, a lot as a construction site (`Builder`, from `PlaceJob`): the instant placement is written and committed, then every queued
+  cell is cleared to air (`Builder.clear`) and built by the feed loop; cells the placement wrote as air stay air.
+- (Not cell writers here: a gate mechanism's circuit, charged as one bill (GM-a2's MechCharges), and the fluids stage's bodies.)
+
+The stage waits (§6.3 of RS, `RegionTargets.stageWait`) decide what can stand when a writer is put down: a tile waits for every earlier
+stage's target and construction road within one tile (a path tile also for its stage's terrain targets); a lot or a road for those under
+its box + 8; nothing waits for a lot except a fluids tile. So a later stage's writer finds an earlier stage's T or R built; it may find an L
+of an earlier stage still building.
+
+| Writer over victim | When it takes the block up | Before XR |
+|---|---|---|
+| T over T | the feed write (`stepFed`) | XL: given back (`retake`), first matching sibling target. Gaps: an A-B-A chain (C writes A's block back over B) and a later target that matches by block in another state are counted (audit) and refunded (removal) by two targets; soil over soil skipped, both counted |
+| T over R | the feed write | lost (`retake` looked at targets only) |
+| T over L | the feed write | the lot's removal refunded the displaced block (4e layering rule 3b, `coverCell`); the audit never counted it after the write |
+| F over T, R | the tile's put-down write | lost |
+| F over L | the put-down write | rule 3b at the lot's removal, as T over L |
+| R over T, R, L (queued cell) | the feed write (`planned`) | lost |
+| R over T, R, L (a cut) | `convert`: the instant road's clear stays | lost |
+| L over T, R, L (queued cell) | `PlaceJob` after the commit: `Builder.clear` empties it, the lot rebuilds it (the same block too) | lost |
+| L over T, R, L (a cell the placement changed, not queued) | the placement's write | lost |
+
+### 2. The rule: one owner per cell
+
+- **The owner** of the block standing at a cell is the latest writer (put-down order, `placedAt`, then id) whose run matches it and that
+  writes the cell (a road's and a lot's queued cells always do; a target's when its journal before there was another block); when none
+  writes it, the latest that matches. A writer that matches without writing (the same block in another state) owns nothing; an earlier
+  writer whose block a later one wrote again (A-B-A) owns nothing.
+- **Take-up:** whenever a writer takes up a block (writes over it, cuts it, clears it to rebuild it), and the block's owner paid for its
+  cell, the owner's items for it go back to the stockpile then (`Purse.giveBack` / `Stockpiles.giveBack`: credited, overflow dropped),
+  once. A held or free cell gives nothing. Soil over soil is no longer skipped: the later writer owns it.
+- **Counting:** the audit's paid standing and the removal's refund count a writer's cell only when it owns it (`shadowedCells`: cells
+  another writer of the region owns are skipped). A lot's cell covered by another writer of its region is refunded by the lot only when
+  it owns it; rule 3b stays for every other cover (non-region sites, a free pass of another group).
+- Charge = given back + paid standing, item for item, at every point; the removal refunds the paid standing (tallied before the undo, as
+  before); the undo writes the befores back (free).
+- **Scope:** only a region's group (its record carries `architect_mc:region`); a creative region has no runs. Nothing outside a region
+  changes (4e layering, a lone road, a site).
+
+### 3. Gate ($0, ports 8902/8903, `--run-dir ../architect-mc-XR-run`)
+
+1. `mod unit` (in the mod build): `RegionOverwritesTest`, real `Builder.Run`s on one cell: two writers, three (each block back once, the
+   last stands), A-B-A and A-B-A-D (never given back twice; the broken variant without the owner rule is caught), the same block in
+   another state, an overwrite by air, soil over soil, held cells, the owner rule's ties; and every chain of up to 4 writers over 9 blocks,
+   paid or held, targets and lots, from air or dirt: conserved.
+2. `xr-scan` (recorded): `dev.rs.overwrites` (new, dev) lists, per region, every paid queue cell of a writer that a later writer's
+   journal entry changed (victim, writer, kinds, what it found, what it planned), per kind pair, and the cells three or more writers
+   changed; run over existing survival fixtures with roads and lots and over `xr_demo`, a gate program that reaches each row a region
+   can reach.
+3. `xr-survival` (judged; the verifier re-runs it): `xr_demo` and `h/v45b_moat_road` built in survival: conservation exact on every item
+   after the build and after `Regions.remove`, the audit's `retaken` = the items of the overwritten paid cells `dev.rs.overwrites` lists,
+   E-flat 0, no item dropped; `xr_demo` again removed mid-build after its first take-up: conservation exact, E-flat 0.
+4. Regressions: `gm-c-survival`, `gm-c-survctl` and every survival step whose inputs XR touches (`step-inputs`).
+
+### Slice XR as built (survival writers over paid cells)
+
+Branch `slice/XR` off main 2d9c5b15 (v0.56.0); versions NEXT (nothing stamped: no API, schema or catalogue member); recorded 2026-11-10;
+DEV MODE, survival accounting strict; $0; ports 8902/8903, run dir `../architect-mc-XR-run`. Builds §1-§3 above.
+
+| Area | As built |
+|---|---|
+| The seam (`site/RegionOverwrites`, new) | `Claim(id, order, paid, matches, writes)`, `owner` (the latest matching claim that writes the cell, else the latest matching), `taken` (the owner when paid), `shadowed`. `Live` (a writer this tick: its run, a lot's free bits, a target's journal before read lazily). `lives(group, self)` (a region group's targets, construction roads and lots; empty outside a region's group), `retake` (give back now, through the purse), `retakeOnce` (a put-down's take-ups credited once under `xr-lot:<site>@<entry>` / `xr-road:<road>@<entry>`: a job resumed after a stop credits nothing again), `lotTakeUp`, `shadowedCells`. |
+| T over T, R, L (`RegionTargets.stepFed`) | XL's `siblings`/`retake` replaced by `RegionOverwrites.retake` over every writer of the region; the soil-over-soil skip is gone (the later writer owns the cell). |
+| R over T, R, L (`RoadBuilder.step`, `convert`) | A region road's feed write gives back what it takes up; `convert`'s cuts over an owned paid block are credited once per placement. 4e only changes natural blocks (`RoadTerrain`), so R reaches a paid cell only when it is a natural kind: xr_demo's paid stone (7). |
+| L over T, R, L (`PlaceJob`) | After the lot's commit, before `Builder.clear`: every queued cell's before and every cell the placement changed, when another writer owns it and paid, credited once per placement. |
+| F over T, R, L (`InfraJob` WRITE) | A survival region tile's free pass gives back an owned paid block it writes over (not one it writes the same block on). |
+| Counting (`Stockpiles.audit`, `Groups` removal, `Builder.prepareDeconstruct`) | Paid standing and the removal's refund skip a writer's cells another writer owns (`shadowedCells`); a lot's cell covered by a region writer is refunded only when the lot owns it (rule 3b stays for other covers). The audit's `retaken` sums lots' too. `RETAKEN` cleared at server stop (a target id is reused by the next world). |
+| Dev | `dev.rs.overwrites {region}`: every paid queue cell of a region writer (target, road, lot) that a later writer's entry changed (a free pass too; a lot's rebuilt cells), per kind pair, and the cells three or more writers changed. |
+| Fixture | `kit/regions/xr_demo.mjs` (not in the catalogue, fixed blocks as rp_demo): a paid pavement, a 4e road over it and over paid stone, three writers on three cells (cobblestone, then planks / stone bricks (A-B-A) / air), a stair rewritten in another state, a lot on an ordinary pad (its free top over the pavement) and a lot with no pad fill (its foundation and approach over the pavement). |
+| Before / after (xr_demo, conservation only) | On main 2d9c5b15 (XR's gate over main's mod, run `20261110-201203-change`): built and removed both **{stone_bricks -127, stone -7, stone_brick_stairs +1}**: the free pass's 81 and the lot's 47 pavement bricks lost, the road's 7 stone lost, the A-B-A cell's brick counted twice (+1, so -128 + 1) and the restated stair counted twice (+1). On XR: `{}` built and removed. |
+| Steward-visible | None. Plans, checks, IRs and answers are the kit's (untouched but for the new gate program). `retaken` on every scanned fixture is `{}` but v45b's, which equals XL's (`{cobblestone 9, dirt 3}`): no committed fixture has a soil-over-soil, A-B-A, lot, road or free-pass take-up, so no removal refund a caller reads changes. A region built before XR and removed after it: a cell a target or free pass took from a lot is no longer refunded by rule 3b (it was given back only if XR's code wrote it). |
+| Gate ($0, ports 8902/8903) | At 7ab0ff62, run `20261110-201741-change` (`--no-turbo`, 30 steps, 2h19m): **29 PASS, 1 FAIL**. **xr-survival 24/0**: xr_demo reaches FREE/LOT/ROAD/TARGET over TARGET (81/47/7/6 cells) and 50 cells changed by 3+ writers; conservation exact built and removed; retaken `{stone_bricks 131, stone 7, cobblestone 3}` = the rows' items; E-flat 0, no drop; v45b retaken `{cobblestone 9, dirt 3}` = rows, exact; mid-build removals after the first take-up and after the lots' put-down (lots starved, not built): exact, E-flat 0, no drop. **xr-scan 7/0** (rs02, survival_village, rs03, v18, v45b, flat_village x4, xr_demo: every one exact; only v45b and xr_demo take anything up). Regressions: gm-c-survival 18/0, gm-c-survctl 4/0, rs-ingame 38/0, rs-survival-smoke 40/0, rs-toggle 6/0, rs-crash 3/0, rsb-ingame 37/0, rsb-crash 9/0, y-unit 1/0, y-ingame-smoke 78/0, c29-unit 1/0, c29-ingame-smoke 51/0, x-resume 35/0, pt2 10/0, cu 10/0, cw 5/0, rk 5/0, lf 6/0, cl 4/0, sa 5/0, gm 51/0, gm-b 16/0, k3 8/0, voc-smoke 8/0, k2 7/0, d3 5/0, gr 12/0. **rs-unit 392/2**: the two failures are `fixtures/plan/rs/asks-creative.md` / `asks-survival.md` "is this table": the committed tables are stale on main itself (this head's generated table equals the merge base's byte for byte, the check before them passes); not XR's. Offline: mod tests 1012 (0 failed, 1 skipped; RegionOverwritesTest 9/0, its exhaustive chains over 4 writers included); kit 1092/1092; `step-inputs check` 313 steps. |
+| Open | (1) `Sites.undoStage` on a survival region's group (no Regions path does it: revisions refuse a cell over a paid block, survival_paid) would write a taken-up block back for free and its earlier writer would own it again; not reachable through Regions, recorded. (2) A free-pass or feed take-up is credited unkeyed as XL's (a world that loses the write while the stockpile keeps the credit is the save skew XL had); the put-down take-ups (lot, road cuts) are keyed. (3) The stale asks tables in rs-unit (main's). |
+| Gate-verifier | PASS (review of the diff; re-ran at 30c16d2c, run `20261110-223828-change`, 4 of 4): xr-survival 24/0, gm-c-survival 18/0, gm-c-survctl 4/0, rs-survival-smoke 40/0. Non-blocking notes: `shadowedCells` is O(cells x writers) per audit or removal (not per tick); the feed and free-pass take-ups are unkeyed as XL's (open item 2); rs-unit's stale tables not re-verified by it. |

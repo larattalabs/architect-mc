@@ -179,6 +179,8 @@ export function besideStanding(id, standingClaim, ir) {
   // as another owner's wall answers it)
   const walls = new Set();
   for (const p of ir.parts ?? []) if (/^w_/.test(p.id)) for (const op of p.ops ?? []) opCols(op, walls);
+  // ((PG) a K3 lot on a wall's line (a tower, a gatehouse: `onWall`) stands in the line's cut, so its box is the wall's there)
+  for (const l of ir.lots ?? []) if (l.onWall && l.box) for (let z = l.box.minZ; z <= l.box.maxZ; z++) for (let x = l.box.minX; x <= l.box.maxX; x++) walls.add(`${x},${z}`);
   for (const r of ir.roads ?? []) {
     if (!r.lanterns) continue;
     // RoadPlan's lanterns (light.mjs roadLights, the model the light cover uses): the first `first` out, then every `every`, beside the
@@ -285,5 +287,36 @@ export function besideGates(id, ir) {
     out.push({ region: id, wall: n.ref, id: String(n.id).replace(/^gate:/, ''), at: [...n.at], y: Y - 1, h, width: w, facing: [...f], door: gateDoorOf(doorBlock), doorBlock, cells,
       outer: [o[0] + f[0], o[1] + f[1]], inner: [i0[0] - f[0], i0[1] - f[1]] });
   }
+  // ((PG) a K3 gatehouse's passage: a graph node of kind `passage` (`passage:<lot>`) and its lot's onWall.passage)
+  for (const n of ir.graph?.nodes ?? []) {
+    if (n.kind === 'passage') { const g = passageGate(id, n, ir); if (g) out.push(g); }
+  }
   return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * (PG, docs/CONTRACT.md "Slice PG") A K3 gatehouse's passage as a gate (besideGates' record, plus `kind: passage` and `lot`): the id is
+ * the lot's, the cells `passage.cells`' columns, `y` its floor row, `h` its height, `width` its width, `facing` its front's (outward),
+ * `outer` the front port's cell and `inner` the back port's, `at` the centre line's middle cell at the walk's feet. `door` is `none`
+ * (the realise drops any entry block in the passage: K3 §5, IRR's mask). A gate mechanism (GM) adds `mechanism {kind, rest, volatile}`:
+ * `volatile` the flat column runs of its envelope (`mechanism.cells`: the grate's leaves in either state, the split grate's centre post,
+ * the levers on the jambs, the logic), which the region writes and which may stand in any state. Null when the lot or its
+ * passage is missing. The mod's GateJoin.gates is the same rule.
+ */
+export function passageGate(id, n, ir) {
+  const lot = (ir.lots ?? []).find((l) => l.id === n.ref);
+  const p = lot?.onWall?.passage;
+  const f = FACING_STEP[p?.facing];
+  if (!p || !f || !Array.isArray(p.front) || !Array.isArray(p.back) || !Array.isArray(p.cells) || !Array.isArray(p.floor) || p.floor.length < 3) return null;
+  const seen = new Set();
+  const cells = [];
+  for (let i = 0; i + 3 < p.cells.length; i += 4) { const k = `${p.cells[i]},${p.cells[i + 1]}`; if (!seen.has(k)) { seen.add(k); cells.push([p.cells[i], p.cells[i + 1]]); } }
+  if (!cells.length) return null;
+  cells.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const y = p.floor[2];
+  const at = [(p.front[0] + p.back[0]) >> 1, y + 1, (p.front[2] + p.back[2]) >> 1];
+  const m = p.mechanism;
+  const mechanism = m ? { kind: m.kind, rest: m.rest, volatile: [...(m.cells ?? [])] } : null;
+  return { region: id, wall: lot.onWall.wall, id: lot.id, at, y, h: p.height, width: p.width, facing: [...f], door: 'none', doorBlock: null, cells,
+    outer: [p.front[0], p.front[2]], inner: [p.back[0], p.back[2]], kind: 'passage', lot: lot.id, ...(mechanism ? { mechanism } : {}) };
 }

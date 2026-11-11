@@ -26,7 +26,8 @@ export function aroundOf(besideReach, townId) {
 
 /** (§3) The gate a join crosses, as the IR's `reach.gate` and the plan meta record it (the traverse: never written, never held). */
 export function gateMeta(g) {
-  return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed, legs: g.legs.map((q) => [...q]) } : {}) };
+  return { region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}), cells: g.cells.map((q) => [...q]), outer: [...g.outer], inner: [...g.inner], ...(g.narrowed ? { narrowed: g.narrowed, legs: g.legs.map((q) => [...q]) } : {}),
+    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, volatile: [...g.mechanism.volatile] } } : {}) };
 }
 
 /** Every gate of the town's walls and of the wall regions round it, each with its region (sorted by region, then gate id). */
@@ -59,10 +60,65 @@ export function mergedClasses(K, around) {
  */
 export function gateProblem(g) {
   if (g.stands === false) return `not standing as built (${g.why ?? 'its opening is not clear'})`;
+  // ((PG; GM §6) a gate mechanism resting closed (swing's iron doors, or a `rest: closed` grate) is player-only, as a fence gate; resting
+  // open it is an open gate, a day-driven one included: GM §6's planner can't know the time of day)
+  if (g.mechanism?.rest === 'closed') return `a ${g.mechanism.kind} mechanism closed at rest (player-only: a villager join skips it)`;
   if (g.door === 'fence_gate') return 'fence gate (player-only: a villager join skips it)';
   if (g.door === 'door' && !villagerOpens(g.doorBlock)) return `${g.doorBlock} (villagers open wooden doors only)`;
   if (!(g.h >= GATE_MIN_HEIGHT)) return `too low (${g.h} clear)`;
   return null;
+}
+
+/**
+ * (PG) The "x,z" keys of every passage gate's port strips: each port cell and the cells beside it across the passage's width (the K3
+ * box's apron there, which a lot + 1 ring would otherwise make hard). Empty without a passage, so a K1 gate's join is unchanged.
+ */
+export function passagePorts(gates) {
+  const out = new Set();
+  for (const g of gates) {
+    if (g.kind !== 'passage') continue;
+    const half = Math.max(1, g.width >> 1), [fx, fz] = g.facing;
+    for (const [px, pz] of [g.outer, g.inner]) for (let v = -half; v <= half; v++) out.add(`${px - fz * v},${pz + fx * v}`);
+  }
+  return out;
+}
+
+/**
+ * (PG) Each passage's front contact columns (gate key -> keys): its front strip (the port's width) from the port out LEAD cells, where
+ * the town's terrain alone holds it (the K3 lot's pad, K3 §3) and no footprint or body, outside every lot + 1 but the passage's own port
+ * strip. The leg out may write them, holding them as D3 holds a junction's contact columns. Only passages with any are keyed.
+ */
+export function passageFronts(gates, K, portFree) {
+  const out = new Map();
+  for (const g of gates) {
+    if (g.kind !== 'passage') continue;
+    const half = Math.max(1, g.width >> 1), [fx, fz] = g.facing, keys = [];
+    for (let t = 0; t <= LEAD; t++) for (let v = -half; v <= half; v++) {
+      const k = `${g.outer[0] + fx * t - fz * v},${g.outer[1] + fz * t + fx * v}`;
+      if (K.held.has(k) && K.terrain.has(k) && !K.keep.has(k) && !K.body.has(k) && (!K.lot.has(k) || portFree.has(k))) keys.push(k);
+    }
+    if (keys.length) out.set(`${g.region}:${g.id}`, keys);
+  }
+  return out;
+}
+
+/**
+ * (PG) A passage whose back port is the end of the town's own lane (K3 §4: a lane from the back port to the zone's street, a road of the
+ * town's footprint with a graph node at the port) opens on that junction: an end candidate at the back port, offered to that passage
+ * only, `run` 0 (no leg in, nothing written: GJ §13's one-cell join_in), `lane` its road. The lane carries the walk on to the street.
+ */
+export function passageLaneEnds(gates, K, beside) {
+  const out = [];
+  for (const g of gates) {
+    if (g.kind !== 'passage') continue;
+    const [ix, iz] = g.inner, k = `${ix},${iz}`;
+    const road = (K.keep.get(k) ?? []).find((q) => q.kind === 'road');
+    const node = (beside.graph?.nodes ?? []).find((n) => Array.isArray(n.at) && n.at[0] === ix && n.at[2] === iz && n.kind === 'junction');
+    if (!road || !node) continue;
+    const at = [ix, g.y + 1, iz];
+    out.push({ kind: 'end', road: road.id, node: node.id, port: node.ports?.[0]?.name ?? 'route', at, facing: [-g.facing[0], -g.facing[1]], contact: [], hold: [], junction: { kind: 'end', at: [...at] }, gate: `${g.region}:${g.id}`, run: 0, lane: road.id });
+  }
+  return out;
 }
 
 /** Where a leg stops inside the wall: the inner cell, or one further in on a gate narrower than the join (§3). */
@@ -120,13 +176,20 @@ export function gateStep(D) {
   const inF = (x, z) => F.some((q) => inRect(q, x, z));
   // ((RC, default ring) the street ends D3 dropped for a wall nearer than its lead, where a gate is square on their line)
   const inLine = inLineEnds({ gates, net, candidates: standing, K, api, frame: [claimR, town], unsafe });
-  const candidates = [...standing, ...inLine.ends];
-  const runContact = new Set(inLine.ends.flatMap((c) => c.contact));
+  // ((PG) a passage: its port strips are free of its own apron; its front's lead, where only the town's terrain holds it (the K3 pad), is
+  // a contact column the join holds; a back port on the town's own lane (K3 §4's inner lane) is the junction: the lane walks on)
+  const portFree = passagePorts(gates);
+  const fronts = passageFronts(gates, K, portFree);
+  const laneEnds = passageLaneEnds(gates, K, beside);
+  const candidates = [...standing, ...inLine.ends, ...laneEnds];
+  const runContact = new Set([...inLine.ends.flatMap((c) => c.contact), ...[...fronts.values()].flat()]);
   const noJunction = Object.entries(dropped).map(([k, v]) => `${v} ${k}`).join(', ');
   // the hard columns: every held, footprint and body column of the standing claims outside the district's (the gates' cells are held)
   const hardKeys = new Set();
   const add = (k) => { const i = k.indexOf(','); const x = Number(k.slice(0, i)), z = Number(k.slice(i + 1)); if (!inRect(claimR, x, z) && F.slice(1).some((q) => inRect(q, x, z))) hardKeys.add(k); };
-  for (const s of [K.lot, K.body, K.held]) for (const k of s) add(k);
+  // ((PG) a passage's port strips are not its own apron's: the legs end there, as at a K1 gate's outer and inner cells)
+  for (const k of K.lot) if (!portFree.has(k)) add(k);
+  for (const s of [K.body, K.held]) for (const k of s) add(k);
   for (const k of K.keep.keys()) add(k);
   for (const g of gates) for (const [x, z] of g.cells) add(`${x},${z}`);
   // ---- the flood (a superset of the route pass: a centre cell within 1 of a hard one carries no 3-wide footprint)
@@ -169,7 +232,7 @@ export function gateStep(D) {
   const endIn = legEndIn;
   const cheb = (p, q) => Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]));
   const viable = [];
-  const inLineOf = (g) => inLine.ends.filter((c) => c.gate === `${g.region}:${g.id}`);
+  const inLineOf = (g) => [...inLine.ends, ...laneEnds].filter((c) => c.gate === `${g.region}:${g.id}`);
   for (const g of gates) {
     const gk = `${g.region}:${g.id}`, mine = inLineOf(g);
     const p = gateProblem(g);
@@ -179,7 +242,9 @@ export function gateStep(D) {
       if (!inF(x, z) || missing(x, z)) return `its ${name} cell (${x}, ${z}) is outside the surveyed frame`;
       // (a cell of an in-line run is D3's contact column, passed by its own rule; a street end the gate opens on is the street's)
       if (mine.some((c) => c.contact.includes(k) || (c.run < 0 && x === legEndIn(g)[0] && z === legEndIn(g)[1]))) return null;
-      if (K.held.has(k) || K.lot.has(k) || K.keep.has(k) || K.body.has(k)) return `its ${name} cell (${x}, ${z}) is held`;
+      // ((PG) a passage's front port held by the town's terrain alone is a contact column; its back port on the town's lane, the junction)
+      if ((fronts.get(gk) ?? []).includes(k) || mine.some((c) => c.lane)) return null;
+      if (K.held.has(k) || (K.lot.has(k) && !portFree.has(k)) || K.keep.has(k) || K.body.has(k)) return `its ${name} cell (${x}, ${z}) is held`;
       if (Math.abs(api.groundAt(x, z) - g.y) > 1) return `its ${name} cell (${x}, ${z}) is not within 1 of the gate's walk (${api.groundAt(x, z)} vs ${g.y})`;
       return null;
     };
@@ -221,7 +286,7 @@ export function gateStep(D) {
     for (const { q, qi } of [...v.ends].sort((p, q2) => cheb([p.q.x, p.q.z], endOut(g)) - cheb([q2.q.x, q2.q.z], endOut(g)) || p.qi - q2.qi)) {
       if (l1 && 10 * cheb([q.x, q.z], endOut(g)) >= l1.cost) break;
       if (dry >= REACH_DRY_MAX) { cut = true; break; }
-      const e = dryRoute({ at: q.at, facing: q.facing }, { at: feetOut(g), facing: fOut, lead: LEAD }, hardNone, F);
+      const e = dryRoute({ at: q.at, facing: q.facing }, { at: feetOut(g), facing: fOut, lead: LEAD }, fronts.has(`${g.region}:${g.id}`) ? hardRects(hardKeys, { contact: fronts.get(`${g.region}:${g.id}`) }) : hardNone, F);
       if (e.ok && (!l1 || e.cost < l1.cost)) l1 = { cost: e.cost, length: e.length, end: q, qi };
     }
     if (!l1) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from a district end to its outer cell' }); if (cut) break; continue; }
@@ -253,11 +318,14 @@ export function gateStep(D) {
     if (cut && !tried.some((t) => !/budget/.test(t.why))) throw new Error(`NO_JOIN: [budget] ${REACH_DRY_MAX} dry routes through the gates of region ${beside.id} found none (${gates.length} gate(s); ${why})`);
     refuse();
   }
-  const g = best.g, cand = best.l2.cand;
+  const g = best.g, front = fronts.get(`${g.region}:${g.id}`) ?? [];
+  // ((PG) a passage's front contact columns join the candidate's: the join holds them, the re-check reads them as D3's contact)
+  const cand = front.length ? { ...best.l2.cand, contact: [...best.l2.cand.contact, ...front], hold: [...best.l2.cand.hold, ...front.filter((k) => K.held.has(k))] } : best.l2.cand;
   const narrowed = g.width < GATE_JOIN_WIDTH ? g.width : null;
   const gate = {
     region: g.region, wall: g.wall, id: g.id, at: [...g.at], y: g.y, h: g.h, width: g.width, facing: [...g.facing], door: g.door, ...(g.doorBlock ? { doorBlock: g.doorBlock } : {}),
     cells: keyRuns(g.cells.map(([x, z]) => `${x},${z}`)), outer: [...g.outer], inner: [...g.inner], ...(narrowed ? { narrowed, legs: [endOut(g), endIn(g)] } : {}),
+    ...(g.kind ? { kind: g.kind, lot: g.lot } : {}), ...(g.mechanism ? { mechanism: { kind: g.mechanism.kind, rest: g.mechanism.rest, volatile: [...g.mechanism.volatile] } } : {}),
     ...(cand.run <= 0 ? { opensOnJunction: true } : {}), // (the leg in's edge is the one cell: its node at the junction, nothing written)
     costs: { out: { cost: best.l1.cost, length: best.l1.length }, in: { cost: best.l2.cost, length: best.l2.length } },
   };

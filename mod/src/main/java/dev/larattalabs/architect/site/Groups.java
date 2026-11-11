@@ -986,6 +986,15 @@ public final class Groups {
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
 			if (pile != null) {
 				var dropped = RegionTargets.dropPlayerBlocks(level, inf); // (6c RS §9) a player's block in a region target drops at its cell first
+				// (XR) a cell a later writer of the region owns (it matches what stands there) is that writer's refund, not this one's
+				Builder.Run ir = RoadBuilder.run(level.getServer(), inf);
+				if (ir != null) {
+					var shadow = RegionOverwrites.shadowedCells(level.getServer(), level, inf.group(), inf.id(), inf.placedAt(), ir, true);
+					if (!shadow.isEmpty()) {
+						dropped = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(dropped);
+						dropped.addAll(shadow);
+					}
+				}
 				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written
 				r.decCredit.put(id, new Credit(pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(RoadBuilder.refundOf(level, inf, dropped)), RoadBuilder.dropAt(inf)
 					.asLong()));

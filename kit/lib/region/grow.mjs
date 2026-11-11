@@ -122,8 +122,16 @@ export function growObstacles(eff, st, { margin = STREET_RULES.claimMargin } = {
     if (written.has(k2(x, z))) return { kind: 'written' };
     return null;
   };
+  // (NM) the standing walls' columns (a wall part is `w_<wall id>`, columns ops): what stopped a street reads as `wall <id>`
+  const wallCols = new Map();
+  for (const p of eff.parts ?? []) {
+    const m = /^w_([a-z][a-z0-9_]*)$/.exec(p.id ?? '');
+    if (!m) continue;
+    for (const op of p.ops ?? []) if (op.op === 'columns' && Array.isArray(op.cols)) for (let i = 0; i + 4 < op.cols.length; i += 5) { const k = k2(op.cols[i], op.cols[i + 1]); if (!wallCols.has(k)) wallCols.set(k, m[1]); }
+  }
+  const wallAt = (x, z) => wallCols.get(k2(x, z)) ?? null;
   const nearLamp = (x, z) => lampList.some(([lx, lz]) => Math.max(Math.abs(lx - x), Math.abs(lz - z)) < LAMP_GAP);
-  return { K, problem, written, town, lamps: lampList, nearLamp };
+  return { K, problem, written, town, lamps: lampList, nearLamp, wallAt };
 }
 
 /**
@@ -171,6 +179,49 @@ export function extendableEnds(eff, st, runs, O = growObstacles(eff, st)) {
  * those cells (they are the lot's apron, never written). Any other problem stands.
  */
 const vergeOk = (p, dv) => (p && Math.abs(dv) === 2 && p.kind === 'lot' ? null : p);
+
+/**
+ * (NM) What stops a street end's straight run, read as tryExtension reads it (5 wide, the street's grade from the end's y, dry): `{blockedBy:
+ * 'wall', wall: <id>}` (a standing wall's column; the smallest id when several meet), `{blockedBy: 'reach'}` (the claim's margin, or a town's
+ * claim for a district), `{blockedBy: 'slope'}` (the grade rule fails: cut/fill 3, steps of 1), or null (another class stopped it: a lot, a road, a
+ * held column, water; or nothing did within 512). Pure.
+ */
+export function streetStop(O, survey, e) {
+  const { run, dir } = e;
+  // (an end that is not extendable (a route joins it, or runs on past it) goes on as that route: the scan passes the route's own road and
+  // path cells to what lies beyond (a town wall, the claim's edge), and never reads the grade there)
+  const through = !e.ok;
+  const o = run.o, c = run.c;
+  const y0 = Number.isInteger(e.at[1]) ? e.at[1] : survey.heightAt(...toWorld(o, e.u, c));
+  let lo = y0, hi = y0;
+  const uS = e.u + dir;
+  for (let u = uS; Math.abs(u - uS) <= 512; u += dir) {
+    const walls = new Set();
+    let reach = false, other = false;
+    for (let dv = -2; dv <= 2; dv++) {
+      const [x, z] = toWorld(o, u, c + dv);
+      const w = O.wallAt(x, z);
+      const p = vergeOk(O.problem(x, z), dv);
+      if (w) walls.add(w);
+      else if (p) { if (p.kind === 'claim' || p.kind === 'town') reach = true; else if (!(through && (p.kind === 'road' || p.kind === 'path'))) other = true; } else if (survey.waterAt(x, z)) other = true;
+    }
+    if (walls.size) return { blockedBy: 'wall', wall: [...walls].sort()[0] };
+    if (reach) return { blockedBy: 'reach' };
+    if (other) return null;
+    if (through) continue;
+    const [x, z] = toWorld(o, u, c);
+    const gr = survey.heightAt(x, z);
+    const nlo = Math.max(gr - 3, lo - 1), nhi = Math.min(gr + 3, hi + 1);
+    if (nlo > nhi) return { blockedBy: 'slope' };
+    lo = nlo; hi = nhi;
+  }
+  return null;
+}
+
+/** (NM) What a street's stop says: "the street is stopped by wall curtain", "... by the slope (too steep)", "... by the edge of the claim". */
+export function stopSays(b) {
+  return `the street is stopped by ${b.blockedBy === 'wall' ? `wall ${b.wall}` : b.blockedBy === 'slope' ? 'the slope (too steep)' : 'the edge of the claim'}`;
+}
 
 /** A lot spec as the growth reads it (V's LotSpec): `{id, type, size: [along, deep], villager?, landmark?, placement?, role?, brief?, ext?}`. */
 function specOf(s, i) {
@@ -315,6 +366,8 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   // ---- §4 the extension: one end, a straight run, lots on both sides as V's
   let extension = null;
   const followD = isDistricts && district ? (eff.params?.spec?.districts ?? eff.params?.districts ?? []).find((d) => d.id === district && d.follow) : null;
+  // (NM) what stopped the street: the end the extension tried (or, with none to try, the first end with a stop), for a `street` answer
+  let blocker = null;
   const extend = (left) => {
     if (extendWhat === 'none' || !left.length) return left;
     if (followD) return extendBoundary(left);
@@ -322,12 +375,13 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     if (extendWhat !== 'auto') {
       const e = ends.find((q) => q.node === extendWhat);
       if (!e) throw new Error(`NOT_ALLOWED: [call] grow.extend '${extendWhat}' is not a street end of ${district ? `district ${district}` : 'the region'}`);
-      if (!e.ok) { for (const s of left) extTally(s.id, e.why === 'room' ? 'claim' : e.why === 'layout' ? 'layout' : e.why === 'held' ? 'held' : 'street'); return left; }
+      if (!e.ok) { blocker = streetStop(O, survey, e); for (const s of left) extTally(s.id, e.why === 'room' ? 'claim' : e.why === 'layout' ? 'layout' : e.why === 'held' ? 'held' : 'street'); return left; }
       cands = [e];
     }
     if (!cands.length) {
       const ws = new Set(ends.map((e) => e.why));
       const k = ws.has('held') ? 'held' : ws.has('room') ? 'claim' : ws.has('layout') && ends.every((e) => e.why === 'layout') ? 'layout' : 'street';
+      if (k === 'street' || k === 'held') for (const e of ends) { blocker = streetStop(O, survey, e); if (blocker) break; }
       for (const s of left) extTally(s.id, k);
       return left;
     }
@@ -338,6 +392,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
       const dist = pl ? Math.abs(e.u - toLocal(e.run.o, pl.at[0], pl.at[2])[0]) : 0;
       if (!best || t.lots.length > best.t.lots.length || (t.lots.length === best.t.lots.length && dist < best.dist)) best = { e, t, dist };
     }
+    if (!best.t.why || best.t.why === 'street') blocker = best.t.stop ?? streetStop(O, survey, best.e);
     if (!best.t.lots.length) { for (const s of left) extTally(s.id, best.t.why ?? 'street'); return left; }
     for (const l of best.t.lots) takeLot(l);
     extension = best.t.ext;
@@ -364,7 +419,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
       if (Math.abs(u - uS) > 512) break;
     }
     const len = Math.abs(uMax - e.u);
-    if (len < END_ROOM) return { lots: [], why: 'street' };
+    if (len < END_ROOM) return { lots: [], why: 'street', stop: streetStop(O, survey, e) };
     // lots, sides alternating outward from the old end (V's tryStreet), each fronting the new verge
     const half = Math.floor(STREET_RULES.streetWidth / 2);
     const lots = [];
@@ -512,11 +567,12 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
     let kind = 'frontage', n = 0;
     for (const [k, c] of [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1))) { const kk = kinds[k]; if (kk && c > n) { n = c; kind = kk; } }
     if (extWhy.has(s.id) && ['boundary', 'street', 'claim', 'layout'].includes(kinds[extWhy.get(s.id)])) kind = kinds[extWhy.get(s.id)];
-    return { id: s.id, reason: 'NO_ROOM', kind };
+    // (NM) a `street` answer names what stopped the street (an additive detail; absent when another class did)
+    return { id: s.id, reason: 'NO_ROOM', kind, ...((kind === 'street' || kind === 'held') && blocker ? blocker : {}) };
   });
   if (!placed.length) {
     const k = unplaced.every((u) => u.kind === unplaced[0]?.kind) ? unplaced[0]?.kind ?? 'frontage' : 'frontage';
-    throw new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}; street ends ${ends.map((e) => `${e.node} ${e.ok ? 'extendable' : e.why}`).join(', ') || 'none'}`);
+    throw Object.assign(new Error(`NO_ROOM: [${k}] no lot of the growth fits ${district ? `district ${district}` : 'the region'}${(k === 'street' || k === 'held') && blocker ? ` (${stopSays(blocker)})` : ''}: ${unplaced.map((u) => `${u.id} (${u.kind})`).join(', ')}; street ends ${ends.map((e) => `${e.node} ${e.ok ? 'extendable' : e.why}`).join(', ') || 'none'}`), (k === 'street' || k === 'held') && blocker ? { blocker } : {});
   }
   return { format: GROW_FORMAT, district, prefix, lots: placed, extension, unplaced, ends: ends.map((e) => ({ node: e.node, ok: e.ok, ...(e.why ? { why: e.why } : {}) })) };
 }

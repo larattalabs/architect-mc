@@ -772,9 +772,9 @@ function alongMinGates(K, W, { early = false } = {}) {
     W.opened++;
     added++;
     const step = crossStep(K, W, pick.a, pick.b);
-    if (far) W.notes.push(`gate ${g.id}: ${pick.d} positions from its even place (none nearer has a level run or a landing)`);
-    if (step > 1 && g.landing.ok) W.notes.push(`gate ${g.id}: the ground steps ${step} across the wall there: a landing levels it (${g.landing.cells.filter((c) => c.kind === 'stair').length} flight step(s))`);
-    if (step > 1 && !g.landing.ok) W.notes.push(`gate ${g.id}: the ground steps ${step} across the wall there and no landing fits (${g.landing.why}): no walk through it`);
+    if (far) W.notes.push(`${gateSays(W, g.id)}: ${pick.d} positions from its even place (none nearer has a level run or a landing)`);
+    if (step > 1 && g.landing.ok) W.notes.push(`${gateSays(W, g.id)}: the ground steps ${step} across the wall there: a landing levels it (${g.landing.cells.filter((c) => c.kind === 'stair').length} flight step(s))`);
+    if (step > 1 && !g.landing.ok) W.notes.push(`${gateSays(W, g.id)}: the ground steps ${step} across the wall there and no landing fits (${g.landing.why}): no walk through it`);
   }
   if (added < want) W.notes.push(`gates.min ${W.st.gatesMin}: room for ${W.gates.length}`);
 }
@@ -875,13 +875,28 @@ function placeAtGate(K, g) {
 
 // ------------------------------------------------------------------ (GM-b, CONTRACT GM §17) the K1 swing gate
 
+const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+/**
+ * (NM) How a note names a gate: a named gate (or a gatehouse) by its id, "gate main_gate"; a gate the wall cut on its own (`<wall>_g<k>`,
+ * no part of its own) by its place in the wall's gate order, "wall curtain's first gate". `k` is the order the kit cuts the wall's
+ * gates in (named gates count, so a wall whose first gate is named has its first unnamed gate "second").
+ */
+export function gateSays(W, id) {
+  const m = new RegExp(`^${W.id.replace(/[^a-z0-9_]/gi, '\\$&')}_g(\\d+)$`).exec(id);
+  const g = m ? W.gates?.find((q) => q.id === id) : null;
+  if (!m || (g && g.part)) return `gate ${id}`;
+  const k = Number(m[1]);
+  return `wall ${W.id}'s ${ORDINALS[k - 1] ?? `${k}th`} gate`;
+}
+
 /** The deviation and note of a swing that falls back to the wooden door (§17 items 2 and 3): {dev, note}. */
 function swingFallback(id, W, why, { width = null, crossing = null, edge = null, near = false } = {}) {
   const dev = { what: 'mechanism', kind: 'swing', gate: id, why, ...(why === 'thickness' ? { need: K1_SWING.depth, thickness: W.st.thickness } : why === 'width' ? { need: K1_SWING.width, ...(width !== null ? { width } : {}) } : {}), ...(edge ? { edge } : {}) };
-  const note = why === 'thickness' ? `gate ${id}: wall ${W.id} is ${W.st.thickness} thick and the swing needs ${K1_SWING.depth}: the wooden door`
-    : why === 'villager' ? `gate ${id}: ${edge} crosses it on a villager edge (villagers open wooden doors, not iron ones): the wooden door`
-      : near ? `gate ${id}: wall ${W.id} has no straight run near its endpoint with room for the swing's ${K1_SWING.width}-wide opening and its jambs: the wooden door`
-        : `gate ${id}: ${crossing ? `${crossing}'s route opened it` : 'it is'} ${width} wide and the swing is ${K1_SWING.width}: the wooden door`;
+  const gs = gateSays(W, id);
+  const note = why === 'thickness' ? `${gs}: wall ${W.id} is ${W.st.thickness} thick and the swing needs ${K1_SWING.depth}: the wooden door`
+    : why === 'villager' ? `${gs}: ${edge} crosses it on a villager edge (villagers open wooden doors, not iron ones): the wooden door`
+      : near ? `${gs}: wall ${W.id} has no straight run near its endpoint with room for the swing's ${K1_SWING.width}-wide opening and its jambs: the wooden door`
+        : `${gs}: ${crossing ? `${crossing}'s route opened it` : 'it is'} ${width} wide and the swing is ${K1_SWING.width}: the wooden door`;
   return { dev, note };
 }
 
@@ -1459,7 +1474,7 @@ function emitWall(K, W) {
         put(c.x, g.y + 1, c.z, `${dm}[facing=${fo},half=lower,hinge=${hinge},open=false,powered=false]`);
         put(c.x, g.y + 2, c.z, `${dm}[facing=${fo},half=upper,hinge=${hinge},open=false,powered=false]`);
       });
-      if (outRow.length > 2 && !g.swingFallback) W.notes.push(`gate ${g.id}: ${g.width} wide, its double door covers the middle 2`);
+      if (outRow.length > 2 && !g.swingFallback) W.notes.push(`${gateSays(W, g.id)}: ${g.width} wide, its double door covers the middle 2`);
     } else if (g.door === 'fence_gate') {
       const fg = shapeOf(roles.rail, 'fence_gate') ?? 'minecraft:oak_fence_gate';
       const fx = fo === 'north' || fo === 'south' ? fo : fo;

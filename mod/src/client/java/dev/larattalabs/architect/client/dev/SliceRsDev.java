@@ -98,6 +98,20 @@ public final class SliceRsDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.rs.overwrites", 120_000, "{region} - (XR) every paid queue cell of a survival region's writer (target, construction "
+			+ "road, lot) that a later writer's journal entry changed: victim, writer, kinds, found, planned, queued, now; counts per kind pair",
+			(req, mc) -> {
+				String region = req.get("region").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					var l = RegionsImpl.live(region);
+					if (l == null) {
+						JsonObject o = new JsonObject();
+						o.addProperty("missing", true);
+						return o;
+					}
+					return dev.larattalabs.architect.site.RegionOverwrites.json(s, l.rec().groupId, l.level(s));
+				});
+			});
 		DevBridge.register("dev.rs.freeWrite", 30_000, "{at: [x,y,z] | cells: [[x,y,z]]} - (6c RS, N-RS-2) whether each cell is a survival region's "
 			+ "free write still standing (a break there drops nothing)", (req, mc) -> {
 				JsonArray cells = req.has("cells") ? req.getAsJsonArray("cells") : new JsonArray();

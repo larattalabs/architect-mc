@@ -144,6 +144,11 @@ public final class RegionWaitTags {
 		return wordsOf(l == null ? null : l.ir(), l == null ? null : artifactBody(l), part);
 	}
 
+	/** (NM) {@link #autoGateWords} for a live region. */
+	static @Nullable String autoGateWordsOf(RegionsImpl.@Nullable Live l, String id, String noun) {
+		return autoGateWords(l == null ? null : l.ir(), l == null ? null : artifactBody(l), id, noun);
+	}
+
 	/** {@link #words} over a region's IR and its artifact's body (either null: ids only). Testable. */
 	static String wordsOf(@Nullable Ir ir, @Nullable JsonObject body, @Nullable String part) {
 		if (part == null || part.isBlank()) {
@@ -154,6 +159,12 @@ public final class RegionWaitTags {
 		JsonObject plan = body != null && body.get("plan") instanceof JsonObject p ? p : null;
 		String label = plan == null ? null : labelOf(plan, id, 0);
 		JsonObject zone = plan == null ? null : partOf(plan, id);
+		if (label == null && zone == null && !road) {
+			String auto = autoGateWords(ir, body, id, "gate"); // (NM) a wall's own unnamed gate: "<wall>'s first gate"
+			if (auto != null) {
+				return auto;
+			}
+		}
 		if (label != null && zone != null && isZone(plan, zone) && namesTheSettlement(label)) {
 			return isDistricts(zone) ? "the district" : "the town"; // (Steward's RC finding 3) "Marketwall" is the town
 		}
@@ -167,6 +178,39 @@ public final class RegionWaitTags {
 			return "the road"; // (Steward's RC finding 3) never a road's raw id
 		}
 		return label != null ? label : id.replace('_', ' ');
+	}
+
+	private static final String[] ORDINALS = {"first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"};
+	private static final java.util.regex.Pattern AUTO_GATE = java.util.regex.Pattern.compile("^(.+)_g(\\d+)$");
+
+	/**
+	 * (NM) An unnamed gate a wall cut on its own ({@code <wall>_g<k>}: no plan part of that id; its wall a plan connector of kind wall, or named by the IR's
+	 * {@code gateMechanisms[]}) says "<the wall's words>'s <ordinal> <noun>" ("The wall's first gate", "Curtain's second swing gate"). The
+	 * ordinal is {@code k}: the gate's place in its wall's gate order, as the kit cuts them (named gates count, so a wall whose first gate is
+	 * named has its first unnamed gate "second"). Null when {@code id} is no such gate (named gates and gatehouses keep their own words).
+	 */
+	static @Nullable String autoGateWords(@Nullable Ir ir, @Nullable JsonObject body, String id, String noun) {
+		java.util.regex.Matcher m = AUTO_GATE.matcher(id);
+		if (!m.matches()) {
+			return null;
+		}
+		String wall = m.group(1);
+		JsonObject plan = body != null && body.get("plan") instanceof JsonObject p ? p : null;
+		JsonObject wp = plan == null ? null : partOf(plan, wall);
+		boolean isWall = wp != null && "wall".equals(str(wp, "kind")) && partOf(plan, id) == null;
+		if (!isWall && ir != null && ir.json().get("gateMechanisms") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonObject o && id.equals(str(o, "gate")) && wall.equals(str(o, "wall"))) {
+					isWall = true;
+				}
+			}
+		}
+		if (!isWall) {
+			return null;
+		}
+		int k = Integer.parseInt(m.group(2));
+		String ord = k >= 1 && k <= ORDINALS.length ? ORDINALS[k - 1] : k + "th";
+		return wordsOf(ir, body, wall) + "'s " + ord + " " + noun;
 	}
 
 	/**

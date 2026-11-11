@@ -95,7 +95,10 @@ package dev.larattalabs.architect.api;
  * <li>{@code NO_ROOM} (6d GR, since 1.43.0): {@link Regions#planRevision} of a growth ({@code params.grow}) that places no lot: the message
  * starts {@code NO_ROOM: [<kind>]} with kind {@code frontage}, {@code street}, {@code claim}, {@code held}, {@code body} or {@code layout};
  * nothing was planned. A growth that places some lots answers a plan and lists the rest in its IR's {@code revision.grow.unplaced}.
- * Read it as full (Steward: like {@code REGION_LIMIT}, propose a district).</li>
+ * Read it as full (Steward: like {@code REGION_LIMIT}, propose a district). Since 1.50.0, a {@code street} (or {@code held}) answer
+ * that the street's own run explains also says what stopped it: {@code blockedBy} {@code wall} (with {@code wall}, the wall's id),
+ * {@code slope} or {@code reach} (the claim's edge), in the message ("the street is stopped by wall curtain"), in the refusal's evidence
+ * and on each {@code unplaced} entry; every other answer keeps its shape.</li>
  * </ul>
  * New values are only ever appended.
  */

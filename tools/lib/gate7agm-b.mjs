@@ -243,17 +243,19 @@ export async function registerGmB(steps, h) {
   const evApi = async (args) => { const r = await L.cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('[') || m.startsWith('{')); return line ? JSON.parse(line) : null; };
   const mechWaits = async (region, key) => ((await evApi('events 0')) ?? []).filter((e) => e.event === 'ITEM_WAITING' && (e.key ?? e.itemKey) === key && (e.ext?.['architect_mc:region'] ?? region) === region);
   const SAY_SUBJECT = /^[A-Z][^]*'s (portcullis|sliding gate|swing gate) waits for /;
-  const checkMechWaits = async (tag, region, key, stockWait) => {
+  // (NM) an unnamed gate the wall cut on its own: "<the wall>'s first swing gate waits for ...", never its id
+  const SAY_AUTO = /^[A-Z][^]*'s first swing gate waits for /;
+  const checkMechWaits = async (tag, region, key, stockWait, SAY = SAY_SUBJECT) => {
     await L.sleep(8000); // many polls (every 20 s of re-checks, 3 s here) of the bill wait: it must not fire again
     const ev = await mechWaits(region, key);
     const bill = ev.filter((e) => e.ext?.['architect_mc:waitsFor']?.kind === 'bill');
     const lot = ev.filter((e) => e.ext?.['architect_mc:waitsFor']?.kind !== 'bill' && e.ext?.['architect_mc:waitsFor']?.say);
     const w = bill[0]?.ext?.['architect_mc:waitsFor'];
-    check(bill.length === 1 && bill[0].reason === 'SITE_BUSY' && SAY_SUBJECT.test(w?.say ?? '') && / in the stockpile$/.test(w?.say ?? '') && Object.keys(w?.missing ?? {}).length > 0 && (bill[0].message ?? '').startsWith(w.say),
+    check(bill.length === 1 && bill[0].reason === 'SITE_BUSY' && SAY.test(w?.say ?? '') && / in the stockpile$/.test(w?.say ?? '') && Object.keys(w?.missing ?? {}).length > 0 && (bill[0].message ?? '').startsWith(w.say),
       `${tag}: the move to the bill wait fires ITEM_WAITING once (SITE_BUSY, waitsFor.kind bill, ${bill.length} event(s) over the polls), saying ${json(w?.say)}, missing ${json(w?.missing)}`, { ev: ev.length });
     const missingText = Object.entries(w?.missing ?? {}).every(([i, n]) => (w?.say ?? '').includes(`${n} \u00d7 `));
     check(missingText && !/_|minecraft:/.test(w?.say ?? ''), `${tag}: the say names each missing item by its player-facing name with its count (no ids)`);
-    check(lot.every((e) => SAY_SUBJECT.test(e.ext['architect_mc:waitsFor'].say) && / to be built$/.test(e.ext['architect_mc:waitsFor'].say) && !/_/.test(e.ext['architect_mc:waitsFor'].say)),
+    check(lot.every((e) => SAY.test(e.ext['architect_mc:waitsFor'].say) && / to be built$/.test(e.ext['architect_mc:waitsFor'].say) && !/_/.test(e.ext['architect_mc:waitsFor'].say)),
       `${tag}: the first wait says the mechanism and what it waits for (${lot.length} event(s): ${json(lot[0]?.ext?.['architect_mc:waitsFor']?.say ?? null)})`);
     return { events: ev.length, bill: bill.length, lot: lot.length, say: w?.say ?? null, lotSay: lot[0]?.ext?.['architect_mc:waitsFor']?.say ?? null };
   };
@@ -341,9 +343,50 @@ export async function registerGmB(steps, h) {
     check(G.exact(p2), `${tag}: conservation exact after the removal: ${json(p2.diff)}`);
     check(!out.removal.items.stacks, `${tag}: no item dropped (${json(out.removal.items)})`);
     await L.leaveWorld();
+    out.auto = await autoGateWaits();
     spendZero();
     return out;
   };
+
+  /**
+   * (NM) The same swing as an unnamed gate (nm_auto_swing: the wall cuts curtain_g1 for the road's crossing): everything is fed but its bill, and
+   * its two waits say "<the wall>'s first swing gate", never "curtain g1" (the first wait for the wall, the move to the bill wait for its items).
+   */
+  async function autoGateWaits() {
+    const tag = 'sv-nm';
+    const name = 'nm_auto_swing';
+    const fx = G.fixture(ctx, `gm/${name}`);
+    const c = await town(name, { tag, creative: false, realise: false });
+    check(c.ck.check?.survival === true && c.ck.check?.overall === 'READY' && !!(c.ck.check?.cost?.bomParts ?? {})['mech:curtain_g1'], `${tag}: READY in survival; the unnamed gate curtain_g1 has its swing bill (${json(Object.keys(c.ck.check?.cost?.bomParts ?? {}))})`);
+    if (!c.sha) { await L.leaveWorld(); return null; }
+    await G.pile(ctx, c.s, 8);
+    await killMobs();
+    const cons = new G.Conservation(ctx, c.box);
+    await cons.start();
+    await evApi('events clear').catch(() => null);
+    const region = await G.realise(ctx, c.sha, fx.lotEntries);
+    const mechView = async () => (await call('dev.gm.state', { region, lot: 'curtain_g1' }, 30_000)).mechanism ?? {};
+    let bill = null, stockWait = null;
+    const end = Date.now() + 5_400_000;
+    while (Date.now() < end) {
+      const st = await G.regionState(ctx, region);
+      if (['OCCUPIED', 'PLAYER_IN_BOX'].includes(st?.view?.waiting?.reason)) await killMobs();
+      const v = await mechView();
+      bill ??= v.record?.bill ?? null;
+      const it = v.item ?? {};
+      if (it.status === 'WAITING' && /in the stockpile/.test(it.message ?? '')) { stockWait = it.message; break; }
+      if (['PLACED', 'FAILED', 'PARTIAL'].includes(st.view.state)) break;
+      const ps = await G.pileState(ctx);
+      const need = {};
+      for (const [i, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[i] ?? 0) - (bill?.[i] ?? 0); if (lack > 0) need[i] = lack; }
+      if (Object.keys(need).length) await cons.insert(`stockpile:${G.OWNER}`, need);
+      await L.sleep(3000);
+    }
+    check(!!stockWait && SAY_AUTO.test(stockWait) && !/curtain|_g\d/i.test(stockWait), `${tag}: the unnamed gate's bill wait names it by its wall's gate order (${json(stockWait)})`);
+    const waits = await checkMechWaits(tag, region, 'mech:curtain_g1', null, SAY_AUTO);
+    await L.leaveWorld();
+    return { stockWait, waits };
+  }
 
   // ------------------------------------------------------------------ gm-b-look (client; Noah's gallery)
 
