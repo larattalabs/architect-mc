@@ -6,8 +6,8 @@
 //     base                             the flat base world
 //     unit      (fs-unit)              items 1 and 7 offline: the sidecar's follow.test (the follow job on the cabin and tavern sources: byte
 //                                      identity with an independent rebuild, every refusal, opKey replay and conflict, followAll's frozen set,
-//                                      the already-followed no-op, a kill mid-followAll and its resume) with 0b's copy and versionOf units and
-//                                      5b's versions units; WireFSTest and Wire0bTest; api-compat against the 0.47.0 and 0.45.0 apitest jars
+//                                      the already-followed no-op, a kill mid-followAll and its resume) with 0b's copy and versionOf units (and
+//                                      5b's versions units in unit-sidecar); WireFSTest and Wire0bTest; api-compat against the 0.47.0 and 0.45.0 apitest jars
 //                                      and the 0.47.0 and 0.57.0 mod surfaces
 //     ingame    (fs-ingame)            items 2-6 in game (headless) on a flat world: a group with an archetype and 2 copies plus a VARIANT
 //                                      (followers); the copies as lots of a plan/0 town through checkPlan and realiseApproved; the source's
@@ -198,20 +198,20 @@ async function javaTests(patterns, minTests) {
   }
   return { code: g.status, tests, failures, names, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').slice(-12), ok: g.status === 0 && tests >= minTests && failures === 0 };
 }
-/** The archived apitest jars and mod surfaces (RV's jars; the 0.57.0 surface: GATE6DFS_SURFACE, default the buildcache's main build). */
+/** The archived apitest jars and mod surfaces (RV's jars; the 0.57.0 surface: GATE6DFS_SURFACE, default artifacts/gate6d-fs/jars, main 4b844fea's build). */
 function apiJars() {
   const A = process.env.GATE6DFS_JARS ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts', 'gate6d-rv', 'jars');
-  const s57 = process.env.GATE6DFS_SURFACE ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc-buildcache', 'mod', 'build', 'libs', 'architect_mc-0.57.0+nosidecar.jar');
+  const s57 = process.env.GATE6DFS_SURFACE ?? path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', 'architect-mc', 'artifacts', 'gate6d-fs', 'jars', 'architect_mc-0.57.0.jar');
   return { jars: [path.join(A, 'architect_apitest-0.47.0.jar'), path.join(A, 'architect_apitest-0.45.0.jar')], surfaces: [path.join(A, 'architect_mc-0.47.0.jar'), s57] };
 }
 
 steps.unit = async () => {
   const out = {};
-  const s = sh('cd sidecar && npx vitest run test/follow.test.ts test/copies.test.ts test/versionof.test.ts test/versions.test.ts');
+  const s = sh('cd sidecar && npx vitest run test/follow.test.ts test/copies.test.ts test/versionof.test.ts');
   fs.writeFileSync(path.join(OUT, 'unit-sidecar.log'), s.out);
   const tests = /Tests\s+([^\n]+)/.exec(s.out)?.[1] ?? '?';
   out.sidecar = { code: s.code, tests };
-  check(s.code === 0 && /\d+ passed/.test(tests) && !/failed/.test(tests), `item 1 (sidecar, real kit): follow.test (cabin and tavern: byte identity with an independent rebuild; frame, check, bar, fit, bible_gone, source_gone, head_moved; opKey replay and conflict; the frozen set and version; already followed; NOT_ALLOWED not_copy and until_7b; a kill and its resume), with 0b's copies and versionOf and 5b's versions units: ${tests}`);
+  check(s.code === 0 && /\d+ passed/.test(tests) && !/failed/.test(tests), `item 1 (sidecar, real kit): follow.test (cabin and tavern: byte identity with an independent rebuild; frame, check, bar, fit, bible_gone, source_gone, head_moved; opKey replay and conflict; the frozen set and version; already followed; NOT_ALLOWED not_copy and until_7b; a kill and its resume), with 0b's copies and versionOf units (5b's versions units run in unit-sidecar): ${tests}`);
   const java = await javaTests(['*WireFSTest*', '*Wire0bTest*'], 4);
   out.java = java;
   check(java.ok, `item 7 (Java): WireFSTest (followers, the results wire, followSource, the defaults that throw) and Wire0bTest: ${java.tests} tests, ${java.failures} failures (${java.names.join('; ')})`, java.tail);
