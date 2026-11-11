@@ -27095,6 +27095,8 @@ are symbolic (⟨API⟩+n): the coordinator numbers them at merge, and slices st
 | Player plot marking is new | `client/placement/PlotMarker`, `PlotHud` exist (plain box plots) | ST adds a fit picker to it |
 | S4-S6 fixtures to be found | Pinned in `scenarios/s4_ravine_town.json` (score 103), `s5_treehouses.json` (64), `s6_cave_city.json` (34: 73% meadow, weak); no program, no golden. Calibration sites exist: `scenarios/sites/cliff_face.json`, `rift_site.json`, `tunnel_hill.json`, `grove.json` | S6 needs a sculpted cavern (6b `cavern`, F3 `forms/cave.mjs`) plus whatever the volume finds |
 | Kit checker takes a site | No: `checkStructure(sidecar, structure, opts)` has `max`, `reserved` (IRR: cells the design must leave), `profile`, `restraint`, `massing` | `reserved` is the precedent for `site_keep`; the composite grid is new |
+| Steward's designer brief has no site input | `sidecar/src/claude/brief.ts` already has a `## Context` section (4c: the site, purpose, neighbour lots, from the caller) and `## Neighbours` renders passed as images (4b) | DS's "Site" section follows the Context precedent; the empty-site renders use the Neighbours image channel (the same channel P4 switches off) |
+| 6d growth and land change know site lots | RV/GR add lots, parts and street extensions to a standing region; LC (`Regions.landCheck`) reports drift per part and lot against the realised provenance | **Out of 7b:** adding a site lot by revision (a later 6d row, after SL). LC reports a cut keep cell or host trunk inside a site lot's box like any changed lot cell; no site-specific LC wording in 7b |
 | F3 exports branch skeletons | `meta.forms[]` records generator, params, seed, bounds and op range; the skeleton stays internal (S-7a-4) | LP derives branch capsules from the form's ops or exports them (its own row) |
 | Reason `UNSUPPORTED` | Not in `Reason`, and it would collide with the plan answer class `unsupported` | Named `SITE_UNSUPPORTED` |
 
@@ -27173,7 +27175,7 @@ or `check.mjs`, so 7b's first lanes start the moment one frees).
 | 3 | **PL** placement | TerrainFit KEEP, Approach PORT/NONE, `fitToSite`, `PlaceRequest.site`, the four Reasons, live support scan, `SiteBinding` | 2 | 7bF (SV's examples for its in-game steps, or hand-built nbt) | units; in game: each example placed by `fitToSite` (KEEP leaves every absent cell); keep cells under BOX exact in both removal orders (region first, house first: E-flat 0, stack at most 8); a player-cut keep cell restored on Remove; `KEEP_LOST`, `SITE_MISMATCH`, `SITE_DRIFTED` provoked once each; `on_pad` placement byte-identical | **yes** (undo, journal) | **yes**, with SO |
 | 4 | **AF** affordances | The detectors of §6 (deterministic, plan time), stable ids, scores; `Survey.site` with a proposed frame; `affordances[]` in plan.json for region programs | 1.75 | 7bF | kit units over the six fixtures and S4-S6 surveys (stable ids on re-analysis; expected kinds found); `Survey.site` in game on the cliff fixture | no | no |
 | 5 | **SC** checker with a site | Composite grid; `site_keep` (error), `fit:<mode>`, `site_breach`, `ports_met`, `cut_volume`, `floors_reachable` from the port, M21, building-scale M15; broken variant per rule | 1.5 | SV | kit units: each example clean; each broken variant caught by its rule | no | no |
-| 6 | **SO** support order | BuildOrder by support distance (BFS from site-solid and keep-critical anchors, ties by y, then today's rules); gravity blocks after their support; cosmetic scaffolding as an `architect:scaffold` CELL entry in the site's undo group (no items, no refund), default per N-7b-5; the crate at the first port's landing | 2 | PL | units: golden order equality for every `on_pad` kit example; survival in game: the **three survival gate houses** (§5) | **yes** (survival accounting) | **yes**, with PL |
+| 6 | **SO** support order | BuildOrder by support distance (BFS from site-solid and keep-critical anchors, ties by y, then today's rules); gravity blocks after their support; cosmetic scaffolding as an `architect:scaffold` CELL entry in the site's undo group (no items, no refund), default per N-7b-5; the crate at the first port's landing | 2 | PL, SV | units: golden order equality for every `on_pad` kit example; survival in game: the **three survival gate houses** (§5) | **yes** (survival accounting) | **yes**, with PL |
 | 7 | **DS** designer site inputs | Scratch `site/` (ARVX, `site.json`, four empty-site renders), BRIEF "Site" section in words from the analysis, PLAYBOOK "Building into a site", `DesignRequest.site`; site variants (program re-run on another `Site`, $0, checker gate, `Derivation` SITE); paid adaptation = `versionOf` + `site`; estimates kinds `site` and `adapted`; the sim's site-aware stub | 1.5 | SV, SC (AF for the words) | sidecar check; sim end to end: a site-aware design and a site variant installed, the BRIEF diffed against a plain one | no | no (in the PL/SO RC jar for Steward to try) |
 | 8 | **ST** standalone player path | `PlotMarker` fit picker (`on_pad` default), "sample site" step via `Survey.site`, the frame confirmed on the ghost, the request carries `SiteSpec`, the "opens onto a drop" warning | 1.75 | PL, AF, DS | in game (sim designer): mark the cliff plot, pick `attach_to_cliff`, design (sim), place, Remove exact; a glance gallery of the picker | no | no |
 | 9 | **SL** site lots | `r.siteLot(id, {affordance, fit, max, ports, brief})`: frame, volume, reserved (no region op writes inside but its host); host-tree exemption; freeze before lots, general form; `LotSpec.site`, `$.lots[].site`; `layout.elevated` supported | 1.5 | AF, PL | kit units; one Steward-shaped plan per new answer through `checkPlan` then `realiseApproved` in game; the recorded asks re-planned: byte-identical except by name (`treetop_village` and others that waited on `layout.elevated`) | no | **yes**, with LP |
@@ -27187,15 +27189,15 @@ or `check.mjs`, so 7b's first lanes start the moment one frees).
 |---|---|---|
 | 0 | 7bF alone (one owner, frozen before anything branches) | 0.75 d |
 | 1 | SV, PL, AF (kit / Java placement / kit + Survey: no shared files but 7bF's) | 2 d |
-| 2 | SC, SO, then DS when SC merges (DS can start on SC's interface) | 2 d |
-| 3 | ST, SL, LP after SL (LP takes ST's lane when ST merges) | 2.5 d |
+| 2 | SC and SO; DS after SC (SC 1.5 + DS 1.5 in series) | 3 d |
+| 3 | ST and SL; LP after SL (SL 1.5 + LP 2 in series) | 3.5 d |
 | 4 | SB | 2 d |
 | 5 | PA (paid, one lane for its in-game parts) | 1.5 d + Noah's gallery |
 
-Totals: about 19.25 work days, about 11 elapsed. Releases: one after wave 2 (PL, SO, DS; one RC), one after wave 3 (SL, LP, ST; one
+Totals: about 20.25 work days, about 13 elapsed (about 12 if DS starts on SC's frozen interface a day early). Releases: one after wave 2 (PL, SO, DS; one RC), one after wave 3 (SL, LP, ST; one
 RC), one after SB. Two Steward RCs in all.
 
-### 4. Spend plan (est $52 + $7 reserve; budget $60; hard cap $90)
+### 4. Spend plan (est $51 + $7 reserve = $58; budget $60; hard cap $90)
 
 Unit costs used (measured): STANDARD M design $2.2-3.6 (0b bench, DETAIL ~80% of a design); SMALL $0.62-1.11 (U4); bible $1.04-1.08
 (0b); built-in parts jobs $0.25-0.72; image tokens about $0.03-0.15 per call (§16.5, est.). Site-aware design is estimated at 1.3-2x
@@ -27208,10 +27210,10 @@ built-in Style with its own parts.
 | P1 | Calibration | 3 site-aware designs on **non-scenario** sites (`cliff_face` attach_to_cliff, `rift_site` span, the overhang fixture suspend), STANDARD | $12 | $15 | Measures the site multiplier and rounds. Prompt or playbook fixes happen here only, never against S5/S6 (AGENTS: don't tune against eval briefs) |
 | P2 | S5 treehouses | 2 archetypes (`wrap_trunk` dwelling, `suspend` canopy hut) + 1 landmark; the rest site variants ($0) | $13 | $17 | Gallery run; "images on" arm of P4 |
 | P3 | S6 cave city | 2 `carve_into` archetypes + 1 landmark; the rest site variants | $13 | $17 | Gallery run |
-| P4 | Images A/B (§16.5 use 2: the site renders, kit-made; no GPT Image refs needed, those are 7c's use 3) | S5's 2 archetypes again from the same seed with the site renders **off** | $8 | $10 | Noah picks blind (sides randomised, pick recorded before labels) |
+| P4 | Images A/B (§16.5 use 2: the site renders, kit-made) | S5's 2 archetypes again from the same seed with the site renders **off** | $8 | $10 | Noah picks blind (sides randomised, pick recorded before labels). 6b's contract (§11, ~5991) promised the first ask for GPT Image 2.5 references with this contract: N-7b-7 |
 | P5 | S4 stretch | site variants of P1's cliff and span designs ($0) + 1 ravine landmark | $5 | $7 | Runs only if the ledger reads at most $50 after P4 |
 | R | Reserve | repair re-runs; paid adaptations (`versionOf` + `site`) to measure `adapted` (2 runs) | $7 | $7 | Only within the $60 |
-| | **Total** | | **$52 (+$7)** | | |
+| | **Total** | | **$51 (+$7 = $58)** | | |
 
 **Rules (the driver, `tools/gate7bpa.mjs`, enforces them):**
 - One phase ledger, `artifacts/7b/spend.json`, summed over items (each item also writes `artifacts/7b/<item>/spend.json`), costs from
@@ -27275,12 +27277,20 @@ byte-identical (measured; the BuildOrder golden and TerrainFit CLEAR included).
 **For Noah:**
 - **N-7b-1. Scope trims.** Out of 7b: the nav slice; standalone single connectors (`Sites.placeConnector`); `form.hidden_room` and
   `rule.suspended` (to 7c). Default: yes.
-- **N-7b-2. Spend.** $52 estimated plus $7 reserve, all in one late batch after every $0 slice merges; stop and ask past $60, never past
+- **N-7b-2. Spend.** $51 estimated plus $7 reserve, all in one late batch after every $0 slice merges; stop and ask past $60, never past
   $90. The estimates are re-stated from P1's measured multiplier before P2 starts. Default: yes.
 - **N-7b-3. Phase gate.** S5, S6 and the three survival fits gate; S4 is a stretch, S3 v2 a gallery item; your gallery approval gates
   only the phase close. Default: yes.
 - **N-7b-4. Images A/B arm.** Site renders on (default) vs off, on S5's two archetypes; you pick blind. Default: yes.
 - **N-7b-5. Scaffolding look.** Vanilla scaffolding columns under unsupported prefixes, on by default for non-pad fits under
   construction, off for `on_pad` (byte-identical today). Default: yes.
-- **N-7b-6. Pin badge** (SETTLEMENTS N6, never answered): site-bound entries show a pin badge in the Library and place elsewhere only
+- **N-7b-6. Pin badge** (SETTLEMENTS N6, not recorded as answered): site-bound entries show a pin badge in the Library and place elsewhere only
   as "site variant here". Default: yes.
+- **N-7b-7. Reference images.** 6b's contract (§11) and your 2026-10-08 decision say Architect asks you for GPT Image 2.5 references
+  per scenario when a phase is ready. 7b's A/B is the site renders (kit-made); style references are §16.5's use 3. Default: **defer
+  use 3 to 7c** (its planning and bible jobs are where style references act), so nothing is asked of you in 7b; or, if you'd rather,
+  supply 2-3 references for S5 now and P4 adds a third arm on one archetype (about $4 more, within the reserve).
+
+### Changes from Steward's review (pending)
+
+None yet.
