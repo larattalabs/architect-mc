@@ -1643,7 +1643,12 @@ function runProcess(sh, step, logFile) {
   return new Promise((resolve) => {
     const fd = fs.openSync(logFile, 'a');
     const slow = step.effTimeoutMin < step.timeoutMin
-      ? kitReaderSlowPath({ step, hasReport: !!runShared.kitJunit, unitKit: summary.steps.find((x) => x.id === 'unit-kit')?.status ?? null, drvDir: DRV }) : null;
+      ? kitReaderSlowPath({ step, hasReport: !!runShared.kitJunit, unitKit: summary.steps.find((x) => x.id === 'unit-kit')?.status ?? null, drvDir: DRV })
+        // ((speed audit A) the same for a Java-test reader (junit-reuse.mjs, waitFor unit-mod) when no unit-mod XML was handed on: unit-mod
+        // CACHED, failed or not in the run, so its gradle runs here, as before)
+        ?? ((step.waitFor ?? []).includes('unit-mod') && !runShared.unitModJunit
+          ? `no unit-mod JUnit XML in this run (unit-mod ${summary.steps.find((x) => x.id === 'unit-mod')?.status ?? 'not in the run'}): its Java tests run in this step` : null)
+      : null;
     if (slow) {
       log(`  ${step.id}: ${slow}: its configured timeout ${step.timeoutMin} min, not the history's ${step.effTimeoutMin}`, sh);
       step.effTimeoutMin = step.timeoutMin;

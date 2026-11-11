@@ -7,7 +7,7 @@
 // - unit-mod ran in this run and passed (the env is set), and the dir is still there;
 // - this checkout's HEAD tree is the tree unit-mod ran, with no tracked file modified (a dirty checkout runs its own tests);
 // - every pattern matches at least one XML file by the drivers' own rule (the file name contains the pattern without its `*`s), and
-//   every matched file has tests > 0, failures = 0 and errors = 0;
+//   every matched file has tests > 0, not all of them skipped, failures = 0 and errors = 0;
 // - no system property that changes what the tests do is set for this process (-Dumt.*, -Dledger.*, -Darvx.write, -Dmirror.write,
 //   -Dc6.evidence in GRADLE_OPTS / JAVA_TOOL_OPTIONS / JAVA_OPTS: gradle's test task passes umt.*, ledger.* and those three to the
 //   test JVM, and unit-mod itself runs with none).
@@ -63,6 +63,7 @@ export function javaReuse(root, patterns, { log = console.log } = {}) {
   const files = [...picked.values()];
   for (const r of files) {
     if (r.tests === 0) return no(`${r.name} has no tests in unit-mod's XML`);
+    if (r.skipped >= r.tests) return no(`${r.name}: every test was skipped in unit-mod (nothing ran)`);
     if (r.failures > 0 || r.errors > 0) return no(`${r.name} failed in unit-mod`);
   }
   const tests = files.reduce((a, r) => a + r.tests, 0);
