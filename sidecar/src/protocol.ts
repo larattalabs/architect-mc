@@ -1213,13 +1213,21 @@ export const EntryVersionsMsg = z.object({ ...envelope('entry.versions'), entryI
 export const EntryDeltaMsg = z.object({ ...envelope('entry.delta'), entryId: EntryId, from: z.number().int().min(1), to: z.number().int().min(1) });
 export const EntryRevertMsg = z.object({ ...envelope('entry.revert'), entryId: EntryId, toVersion: z.number().int().min(1) });
 /**
+ * (6d FS-b, S-FS-6) A standing region lot that holds a copy at its current version, as the mod sends it with the follow: the lot's box as
+ * template-local blocks of that version (`[minX, minY, minZ, maxX, maxY, maxZ]`, unrotated, already turned back through the site's
+ * rotation and origin by the mod) and that version's frame origin (null: unframed). The helper tests a re-made follower's box against it
+ * before it installs the version: plain containment, no rotation or alignment arithmetic. Not part of the opKey body (world state).
+ */
+export const FollowLot = z.object({ siteId: z.string().max(64), lotId: z.string().max(64), box: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int(), z.number().int(), z.number().int()]), origin: z.tuple([z.number().int(), z.number().int(), z.number().int()]).nullable() });
+export type FollowLot = z.infer<typeof FollowLot>;
+/**
  * (6d FS, feature `entry.follow`) A copy follows its source: its recipe re-run on the source's version `toSourceVersion` (0 = the head),
  * installed as the copy's next version when it passes (no Claude call, $0). One persisted operation; the ack carries `{followId, status,
  * results}` and the results come as `follow.upsert` while it runs. `opKey` keys the result (the same key and body: the same operation).
  */
-export const EntryFollowMsg = z.object({ ...envelope('entry.follow'), entryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional() });
+export const EntryFollowMsg = z.object({ ...envelope('entry.follow'), entryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional(), lots: z.array(FollowLot).max(512).optional() });
 /** (6d FS) Every COPY of the source that is behind, frozen at the start, followed one by one (as entry.follow). */
-export const EntryFollowAllMsg = z.object({ ...envelope('entry.followAll'), sourceEntryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional() });
+export const EntryFollowAllMsg = z.object({ ...envelope('entry.followAll'), sourceEntryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional(), lots: z.record(EntryId, z.array(FollowLot).max(512)).optional() });
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 

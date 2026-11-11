@@ -211,10 +211,10 @@ steps.unit = async () => {
   fs.writeFileSync(path.join(OUT, 'unit-sidecar.log'), s.out);
   const tests = /Tests\s+([^\n]+)/.exec(s.out)?.[1] ?? '?';
   out.sidecar = { code: s.code, tests };
-  check(s.code === 0 && /\d+ passed/.test(tests) && !/failed/.test(tests), `item 1 (sidecar, real kit): follow.test (cabin and tavern: byte identity with an independent rebuild; frame, check, bar, fit, bible_gone, source_gone, head_moved; opKey replay and conflict; the frozen set and version; already followed; NOT_ALLOWED not_copy and until_7b; a kill and its resume), with 0b's copies and versionOf units (5b's versions units run in unit-sidecar): ${tests}`);
-  const java = await javaTests(['*WireFSTest*', '*Wire0bTest*'], 4);
+  check(s.code === 0 && /\d+ passed/.test(tests) && !/failed/.test(tests), `item 1 (sidecar, real kit): follow.test (cabin and tavern: byte identity with an independent rebuild; frame, check, bar, fit, bible_gone, source_gone, head_moved; FS-b: a copy grown past its standing lot refused lot_too_small with nothing installed, the other copy followed; opKey replay and conflict; the frozen set and version; already followed; NOT_ALLOWED not_copy and until_7b; a kill and its resume), with 0b's copies and versionOf units (5b's versions units run in unit-sidecar): ${tests}`);
+  const java = await javaTests(['*WireFSTest*', '*Wire0bTest*', '*LotFrameTest*'], 6);
   out.java = java;
-  check(java.ok, `item 7 (Java): WireFSTest (followers, the results wire, followSource, the defaults that throw) and Wire0bTest: ${java.tests} tests, ${java.failures} failures (${java.names.join('; ')})`, java.tail);
+  check(java.ok, `item 7 (Java): WireFSTest (followers, the results wire, followSource, the defaults that throw), LotFrameTest (FS-b: the lot's local box agrees with alignedMin for every turn) and Wire0bTest: ${java.tests} tests, ${java.failures} failures (${java.names.join('; ')})`, java.tail);
   const J = apiJars();
   out.apicompat = [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ...J.surfaces.map((j) => ['tools/api-compat.mjs', '--surface', j])].map((args) => {
     const ac = fs.existsSync(args.at(-1)) ? sh(`node ${args.map((a) => `'${a}'`).join(' ')}`) : { code: -1, out: `missing ${args.at(-1)}` };
@@ -312,6 +312,10 @@ steps.ingame = async () => {
     const ev = await api(`eversions ${c}`);
     check(ev.version === 2 && /follow/i.test(String((ev.versions ?? []).at(-1)?.by)), `${c}: head 2 by follow (${json((ev.versions ?? []).map((v) => [v.version, v.by]))})`);
   }
+  // FS-b (S-FS-6): the mod sent each copy's standing lot with the follow, frozen into the helper's saved operation (both lots are 17 x 17: both followed)
+  const fop = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'follows', `key-${KEY}.json`), 'utf8'));
+  const sent = Object.fromEntries(fop.members.map((m) => [m.entryId, (m.lots ?? []).map((l) => [l.siteId, l.lotId])]));
+  check(copies.every((c, i) => json(sent[c]) === json([[lotOf[c], `h${i + 1}`]])), `FS-b: the mod sent each copy's standing lot with the follow (${json(sent)}); a lot too small for the follower is pinned in the sidecar and mod units`, fop);
   const one = await result(await api(`follow fsc ${copies[0]} 2 -`));
   check(one.followed === false && one.alreadyFollowed === true && one.refused === null, `already followed is a no-op (${json(one)})`);
   const vr = await result(await api(`follow fsd ${vId} 0 -`));

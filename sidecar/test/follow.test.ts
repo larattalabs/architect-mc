@@ -13,7 +13,8 @@ import { DesignRequest, GroupRequest, type Outbound } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
-import type { FollowOp } from '../src/follows.js';
+import { lotsTooSmall, type FollowOp } from '../src/follows.js';
+import type { FollowLot } from '../src/protocol.js';
 import { request, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 const KIT = path.join(SIDECAR_ROOT, '..', 'kit');
@@ -193,6 +194,36 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     expect(h.sc.follows.followers(arch).find((f) => f.entryId === site)).toMatchObject({ kind: 'site', behind: false });
   }, 300_000);
 
+  it('FS-b (S-FS-6): a copy grown past its standing lot is refused up front, nothing installed; the other copy of followAll still follows', async () => {
+    h = await harness();
+    const { arch, copies } = await family(h);
+    const [tight, roomy] = copies as [string, string];
+    expect(await versionOf(h, arch)).toBe(2);
+    // the standing lots the mod would send: a box exactly the head's, and one with room to grow (both at the head's frame origin)
+    const lotOf = (c: string, room: number, lotId: string): FollowLot => {
+      const t = top(h!, c) as { size: { x: number; y: number; z: number }; frame?: { origin?: [number, number, number] } };
+      return { siteId: `site_${lotId}`, lotId, box: [-room, 0, -room, t.size.x - 1 + room, t.size.y + 20, t.size.z - 1 + room], origin: t.frame?.origin ?? null };
+    };
+    const headBytes = nbt(h, tight);
+    const op = await run(h, h.sc.follows.followAll(arch, 0, 'fs.lots', { [tight]: [lotOf(tight, 0, 'lot_a'), lotOf(tight, 6, 'lot_roomy')], [roomy]: [lotOf(roomy, 6, 'lot_b')] }));
+    const rt = op.members.find((m) => m.entryId === tight)!.result!;
+    expect(rt, rt.message).toMatchObject({ followed: false, refused: 'lot_too_small', alreadyFollowed: false, newVersion: 1, fromVersion: 1 });
+    expect(rt.message).toMatch(/lot lot_a \(site site_lot_a\)/);
+    expect(rt.message).not.toMatch(/lot_roomy/);
+    // nothing installed for it: head, bytes, version list; the other copy followed
+    expect(h.sc.versions.head(tight)).toBe(1);
+    expect(nbt(h, tight).equals(headBytes)).toBe(true);
+    expect((top(h, tight).versions as unknown[]).length).toBe(1);
+    expect(op.members.find((m) => m.entryId === roomy)!.result, op.members.find((m) => m.entryId === roomy)!.result?.message).toMatchObject({ followed: true, newVersion: 2, refused: null });
+    // the lots are frozen into the saved operation (a restart tests the same set), and are not part of the opKey body: the same key with other lots is a replay
+    expect(h.sc.follows.get(op.id)!.members.find((m) => m.entryId === tight)!.lots!.map((l) => l.lotId)).toEqual(['lot_a', 'lot_roomy']);
+    expect(h.sc.follows.followAll(arch, 0, 'fs.lots', {}).id).toBe(op.id);
+    // the refused copy is still behind, and follows once nothing holds it too tightly (no lots: as before FS-b)
+    expect(h.sc.follows.followers(arch).find((f) => f.entryId === tight)!.behind).toBe(true);
+    const again = await run(h, h.sc.follows.follow(tight, 0, undefined, [lotOf(tight, 6, 'lot_c')]));
+    expect(again.members[0]!.result, again.members[0]!.result?.message).toMatchObject({ followed: true, newVersion: 2 });
+  }, 300_000);
+
   it('the tavern source: a copy re-made from v2 equals an independent rebuild of its recipe', async () => {
     h = await harness();
     const { arch, copies } = await family(h, 'tavern');
@@ -314,4 +345,19 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     }
     expect(done.members.find((m) => m.entryId === first)!.result!.message).toMatch(/resumed/);
   }, 300_000);
+});
+
+describe('6d FS-b: lotsTooSmall (the containment the helper tests, in the standing version\'s template-local blocks)', () => {
+  const lot = (box: FollowLot['box'], origin: FollowLot['origin']): FollowLot => ({ siteId: 's', lotId: 'l', box, origin });
+  it('fits: its box [oa - ob, oa - ob + size) inside the lot box on x and z', () => {
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], null)], { x: 9, z: 7 }, {})).toEqual([]);
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], null)], { x: 10, z: 7 }, {})).toHaveLength(1);
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], null)], { x: 9, z: 8 }, {})).toHaveLength(1);
+    // the origin moved by the new version (ob = 1 where oa = 0): it starts one block west of where the head did
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], [0, 0, 0])], { x: 9, z: 7 }, { frame: { origin: [1, 0, 0] } })).toHaveLength(1);
+    expect(lotsTooSmall([lot([-1, 0, 0, 8, 9, 6], [0, 0, 0])], { x: 9, z: 7 }, { frame: { origin: [1, 0, 0] } })).toEqual([]);
+    // an unframed side borrows the framed side's origin (no shift)
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], [2, 0, 3])], { x: 9, z: 7 }, {})).toEqual([]);
+    expect(lotsTooSmall([lot([0, 0, 0, 8, 9, 6], null)], { x: 9, z: 7 }, { frame: { origin: [2, 0, 3] } })).toEqual([]);
+  });
 });

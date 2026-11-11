@@ -645,9 +645,9 @@ export class Sidecar {
       }
       // ---- 6d FS (no Claude): the ack carries the operation; its results follow as follow.upsert
       case 'entry.follow':
-        return followView(this.follows.follow(msg.entryId, msg.toSourceVersion, msg.opKey));
+        return followView(this.follows.follow(msg.entryId, msg.toSourceVersion, msg.opKey, msg.lots));
       case 'entry.followAll':
-        return followView(this.follows.followAll(msg.sourceEntryId, msg.toSourceVersion, msg.opKey));
+        return followView(this.follows.followAll(msg.sourceEntryId, msg.toSourceVersion, msg.opKey, msg.lots));
       case 'entry.pins':
         this.versions.setPins(msg.pins);
         return { entries: Object.keys(msg.pins).length };

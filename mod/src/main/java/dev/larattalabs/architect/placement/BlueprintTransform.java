@@ -105,6 +105,16 @@ public final class BlueprintTransform {
 		};
 	}
 
+	/** The inverse of {@link #rotateBlock}: a rotated-local block (rx, rz) back to template-local (it is affine, so cells outside the box map too). */
+	public static int[] unrotateBlock(int rx, int rz, int sx, int sz, int turns) {
+		return switch (Math.floorMod(turns, 4)) {
+			case 1 -> new int[] {rz, sz - 1 - rx};
+			case 2 -> new int[] {sx - 1 - rx, sz - 1 - rz};
+			case 3 -> new int[] {sx - 1 - rz, rx};
+			default -> new int[] {rx, rz};
+		};
+	}
+
 	/** Yaw after {@code turns} clockwise quarter turns, normalised to (-180, 180] (north stays 180). */
 	public static float rotateYaw(float yaw, int turns) {
 		double y = ((yaw + 90.0 * Math.floorMod(turns, 4)) % 360.0 + 360.0) % 360.0;

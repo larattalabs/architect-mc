@@ -229,7 +229,7 @@ public final class TemplateDelta {
 		return new int[][] {oa, ob};
 	}
 
-	static boolean framed(@Nullable JsonObject json) {
+	public static boolean framed(@Nullable JsonObject json) {
 		return json != null && json.get("frame") instanceof JsonObject f && f.get("origin") instanceof com.google.gson.JsonArray a && a.size() == 3;
 	}
 
