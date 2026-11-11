@@ -22874,6 +22874,10 @@ for FS's files.
 - Item 2 differs from the table: 0b's `copyCap` is at most 3 placements per design, so one archetype has at most **2 copies** through
   the API. The gate uses the archetype, 2 copies and a VARIANT: `followers` lists 3, `behind` true for the 2 copies; items 3-6 use the 2
   copies and their 2 lots.
+- A real `bar` refusal, seen in game: the copies' recipes are seeded by the group id, and a copy whose param lever is exactly the value
+  the source's new version moved to (the sim raises `width` 9 -> 10; a copy with `param: width 10`) no longer differs from the new source
+  by it, so with one lever left it is refused `bar` and stays. Correct by §3; the gate makes the family again under a new group (at most 4
+  times) when a copy's param collides with the sim's change, so items 3-6 are deterministic.
 - Item 4's player block is placed on a cell the delta changes: a probe `applyDelta` and its revert on the first lot find those cells (the
   probe's revert is checked cell for cell too).
 - Item 7 under DEV MODE: the unit suites (0b's copies and versionOf units, 5b's versions units) and api-compat (0.47.0 and 0.45.0

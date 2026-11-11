@@ -238,16 +238,39 @@ steps.ingame = async () => {
   const fsApi = await api('apifs');
   check(fsApi.followSource === true, `the API names followSource (${json(fsApi)})`);
   // ---- the family: an archetype and 2 copies (0b's cap: 3 placements per design), plus a VARIANT of the archetype
-  const g = { name: 'G6D FS Copies', bible: 'oak', owner: 'apitest:fs', items: [{ type: 'cabin', style: 'rustic', size: [24, 20, 24], itemKey: 'house', count: 3 }] };
-  const gid = await result(await api(`group fs1 ${b64(g)}`));
-  const fin = await until(async () => {
-    const x = await api(`groupget ${gid}`);
-    return ['DONE', 'FAILED', 'CANCELLED'].includes(x?.status) ? x : null;
-  }, 'the group', 900_000);
-  const by = (k) => fin.items.find((i) => i.itemKey === k);
-  const arch = by('house')?.entryId;
-  const copies = [by('house#2')?.entryId, by('house#3')?.entryId];
-  check(fin.status === 'DONE' && arch && copies.every(Boolean) && ['house#2', 'house#3'].every((k) => by(k)?.kind === 'COPY'), `the group ${gid}: ${arch} and the copies ${copies.join(', ')}`, fin.items?.map((i) => [i.itemKey, i.kind, i.status, i.entryId]));
+  // (the sim's versionOf raises the first int param's default by one, as simRedirect does; a copy whose recipe's param is exactly that
+  // value would no longer differ from the new source by it, and its follow is refused `bar`, correctly: the copies' recipes are seeded by
+  // the group id, so a family whose copy collides is made again under a new group, at most 4 times)
+  const simChange = (src) => {
+    const params = /export\s+const\s+params\s*=\s*\{([\s\S]*?)\n\};/.exec(src)?.[1] ?? '';
+    for (const m of params.matchAll(/(\w+)\s*:\s*\{([^}]*type:\s*'int'[^}]*)\}/g)) {
+      const max = /max:\s*(-?\d+)/.exec(m[2]), def = /default:\s*(-?\d+)/.exec(m[2]);
+      if (max && def && Number(def[1]) < Number(max[1])) return { name: m[1], value: Number(def[1]) + 1 };
+    }
+    return null;
+  };
+  const readJson = (id) => JSON.parse(fs.readFileSync(path.join(L.LIBRARY, id, `${id}.blueprint.json`), 'utf8'));
+  let fin, arch, copies, gid, by;
+  out.families = [];
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const g = { name: `G6D FS Copies ${attempt}`, bible: 'oak', owner: 'apitest:fs', items: [{ type: 'cabin', style: 'rustic', size: [24, 20, 24], itemKey: 'house', count: 3 }] };
+    gid = await result(await api(`group fs1${attempt} ${b64(g)}`));
+    fin = await until(async () => {
+      const x = await api(`groupget ${gid}`);
+      return ['DONE', 'FAILED', 'CANCELLED'].includes(x?.status) ? x : null;
+    }, 'the group', 900_000);
+    by = (k) => fin.items.find((i) => i.itemKey === k);
+    arch = by('house')?.entryId;
+    copies = [by('house#2')?.entryId, by('house#3')?.entryId];
+    if (fin.status !== 'DONE' || !arch || !copies.every(Boolean)) break;
+    const change = simChange(fs.readFileSync(path.join(L.LIBRARY, arch, `${arch}.mjs`), 'utf8'));
+    const params = copies.map((c) => readJson(c).derivation?.recipe?.param ?? null);
+    const collides = params.some((p) => p && change && p.name === change.name && p.value === change.value);
+    out.families.push({ gid, arch, copies, change, params, collides });
+    log(`  family ${attempt}: ${arch}, copies ${copies.join(', ')}; the sim's change ${json(change)}; the copies' params ${json(params)}${collides ? ': collides, again' : ''}`);
+    if (!collides) break;
+  }
+  check(fin.status === 'DONE' && arch && copies.every(Boolean) && ['house#2', 'house#3'].every((k) => by(k)?.kind === 'COPY') && !out.families.at(-1)?.collides, `the group ${gid}: ${arch} and the copies ${copies.join(', ')} (${out.families.length} famil${out.families.length === 1 ? 'y' : 'ies'} made)`, fin.items?.map((i) => [i.itemKey, i.kind, i.status, i.entryId]));
   const variant = await result(await api(`variant ${arch} birch`));
   const vId = variant?.id;
   check(!!vId && !variant.error, `a VARIANT of ${arch}: ${vId}`, variant);
