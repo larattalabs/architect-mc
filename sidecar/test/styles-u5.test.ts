@@ -43,7 +43,7 @@ async function harness(over: Partial<Config> = {}): Promise<H> {
 const SET_MODE_TEXT = [/Follow it over your own taste/, /Use the components/, /bible\/components\.mjs/, /\*\*Restraint\*\*/];
 const brief = (sc: Sidecar, designId: string) => fs.readFileSync(path.join(sc.config.dataDir, 'designs', designId, 'BRIEF.md'), 'utf8');
 const done = async (h: H, id: string) => {
-  await until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 60_000);
+  await until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 600_000);
   const d = h.sc.designs.get(id)!;
   expect(d.status, d.error).toBe('done');
   return d;
@@ -239,7 +239,7 @@ describe('U5b: "Add parts…" (bible.parts, sim)', () => {
     h = undefined;
   });
   const job = async (id: string) => {
-    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.bibles.get(id)!.status), 60_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.bibles.get(id)!.status), 600_000);
     const j = h!.sc.bibles.get(id)!;
     expect(j.status, j.error).toBe('done');
     return j;

@@ -175,4 +175,17 @@ class UmtFindingsTest {
 			new UmtOps.Crash("K6", null, 0, false))), UmtOps.Gen.ALL));
 		assertTrue(r.violations().stream().noneMatch(v -> v.startsWith("[UC]")) && r.violations().isEmpty(), r.report());
 	}
+	/**
+	 * (QF; umt-long DRIFT seed 804021437, found on chore/speed-audit-a, still failing on v0.59.0) F9's other half: a road laid over a site's
+	 * edge (its surface cells over the site's blocks), removed first, then the site; the removal is killed in its commit, and at the next
+	 * start the road's evidence reads the site's restored ground as its own after, recovers it, and its re-removal writes back what its
+	 * before holds, the site's blocks, for the cells the road wrote solid (F9 had named only the air head room). A model gap, not a new
+	 * production finding: the same behaviour as F9, nothing in the journal changes.
+	 */
+	@Test
+	void f9_aRoadsSolidCellsOverASiteAreWrittenBackToo() throws Exception {
+		UmtRunner.Result r = UmtRunner.run(new UmtOps.Scenario(24924664554L, List.of(new UmtOps.Place(UmtOps.Kind.SITE, 15, 30, 7, 8, 5, 1188928858412683301L, 1,
+			null), new UmtOps.Place(UmtOps.Kind.ROAD, 15, 36, 7, 2, 3, -7124522863759448606L, 2, null)), UmtOps.Gen.DRIFT));
+		assertTrue(r.violations().stream().allMatch(UmtRunner::known), r.report());
+	}
 }

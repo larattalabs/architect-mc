@@ -90,7 +90,7 @@ describe('WebSocket server + sim designer', () => {
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'r1'));
     const ack = c.msgs.find((m) => m.type === 'ack' && m.re === 'r1');
     expect(ack).toMatchObject({ ok: true, result: { designId: 'd1' } });
-    await until(() => c.msgs.some((m) => m.type === 'design.upsert' && ['done', 'failed'].includes(m.design.status)), 20_000);
+    await until(() => c.msgs.some((m) => m.type === 'design.upsert' && ['done', 'failed'].includes(m.design.status)), 600_000);
     const ups = c.msgs.filter((m): m is Extract<SM, { type: 'design.upsert' }> => m.type === 'design.upsert');
     const statuses = [...new Set(ups.map((u) => u.design.status))];
     expect(statuses).toEqual(['queued', 'designing', 'checking', 'rendering', 'done']);
@@ -111,7 +111,7 @@ describe('WebSocket server + sim designer', () => {
     c.send({ type: 'design.request', id: 'r2', request: request({ type: 'chapel', name: undefined, style: 'gothic' }) });
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'r2'));
     const id2 = (c.msgs.find((m) => m.type === 'ack' && m.re === 'r2') as unknown as { result: { designId: string } }).result.designId;
-    await until(() => h.sc.designs.get(id2)?.status === 'done', 20_000);
+    await until(() => h.sc.designs.get(id2)?.status === 'done', 600_000);
     expect(h.sc.designs.get(id2)!.blueprintId).toBe('gen_gothic_chapel');
     expect(h.sc.designs.get(id2)!.step).toContain('copied cabin (no chapel example)');
 

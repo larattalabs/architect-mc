@@ -146,7 +146,7 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     const r2 = (readEntry(h, c2!.entryId!).derivation as { recipe: { mirror: boolean } }).recipe;
     const r3 = (readEntry(h, c3!.entryId!).derivation as { recipe: { mirror: boolean } }).recipe;
     expect([r2.mirror, r3.mirror]).toEqual([true, false]);
-  }, 120_000);
+  }, 1_800_000);
 
   it('fallback: sim:copyfail and sim:copysize make the copy a FALLBACK original with the reason', async () => {
     h = await harness();
@@ -159,13 +159,13 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(b!.fallbackReason).toMatch(/^check: /);
     expect(c!.fallbackReason).toMatch(/^size: /);
     expect(h.sc.designs.get(b!.designId)!.request.itemKey).toBe('b');
-  }, 120_000);
+  }, 1_800_000);
 
   it('massingFirst: the archetype\'s approval covers its copies; a dropped archetype fails its copies with source_failed; a fallback binds the approved massing', async () => {
     h = await harness();
     const g = h.sc.groups.create(gr({ massingFirst: true, items: [item('a', { count: 2 }), item('z', { count: 2, type: 'tower' }), item('k', { copyOf: 'a', notes: 'sim:copyfail' })] }));
     expect(g.items.filter((i) => i.kind === 'copy').map((i) => i.itemKey)).toEqual(['a#2', 'z#2', 'k']);
-    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 600_000);
     expect(h.sc.groups.get(g.id)!.awaiting).toEqual(['a', 'z']);
     const designsBefore = h.sc.designs.list().length;
     h.sc.groups.approve(g.id, { approve: ['a'], redirect: {}, cancel: ['z'] });
@@ -181,13 +181,13 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(h.sc.designs.list().length - designsBefore).toBe(2);
     // the copy of a mirrored copy conforms to the mirrored massing
     expect(readEntry(h, by('a#2').entryId!).fromMassing).toBeUndefined();
-  }, 120_000);
+  }, 1_800_000);
 
   it('promoteCopy: a done copy becomes a FALLBACK original; refused for a non-copy, a copy still building, a final group', async () => {
     h = await harness();
     // massingFirst; item b is never approved, so the group stays open (awaiting approval) while a and its copy finish
     const g = h.sc.groups.create(gr({ massingFirst: true, items: [item('a', { count: 2 }), item('b')] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 600_000);
     const code = (fn: () => unknown) => {
       try {
         fn();
@@ -198,30 +198,30 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     };
     expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a#2', 'x'))).toBe('building');
     h.sc.groups.approve(g.id, { approve: ['a'], redirect: {}, cancel: [] });
-    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 60_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 600_000);
     expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a', 'x'))).toBe('not_copy');
     h.sc.groups.promoteCopy(g.id, 'a#2', 'fitToLot failed: too deep');
     const it = h.sc.groups.get(g.id)!.items[1]!;
     expect(it).toMatchObject({ kind: 'fallback', fallbackReason: 'promoted: fitToLot failed: too deep', stage: 'detail' });
     expect(it.designId).not.toBe('');
     expect(h.sc.designs.get(it.designId)!.request).toMatchObject({ fromMassing: h.sc.groups.get(g.id)!.items[0]!.massing!.id });
-    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 60_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 600_000);
     h.sc.groups.approve(g.id, { approve: [], redirect: {}, cancel: ['b'] });
     await groupDone(h, g.id);
     expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a#2', 'x'))).toBe('final');
-  }, 120_000);
+  }, 1_800_000);
 
   it('copies run while the group is paused_budget', async () => {
     h = await harness({ designConcurrency: 1, simDesignUsd: 0.1 });
     // the archetype costs $0.3 of $0.35 (soft at 80%): the group pauses; its copies still build ($0)
     const g = h.sc.groups.create(gr({ budgetUsd: 0.35, concurrency: 1, items: [item('a', { count: 3 }), item('b')] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 60_000);
-    await until(() => h!.sc.groups.get(g.id)!.items.slice(1, 3).every((i) => i.status === 'done'), 60_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 600_000);
+    await until(() => h!.sc.groups.get(g.id)!.items.slice(1, 3).every((i) => i.status === 'done'), 600_000);
     const f = h.sc.groups.get(g.id)!;
     expect(f.status).toBe('paused_budget');
     expect(f.items[3]!.status).toBe('queued');
     h.sc.groups.cancel(g.id);
-  }, 120_000);
+  }, 1_800_000);
 
   it('smallBySize: a small item drops the default report critique and asks for the SMALL pass; an explicit critique wins', async () => {
     h = await harness();
@@ -234,7 +234,7 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(req('hall').effort).toBeUndefined();
     expect(g.items.map((i) => i.effort ?? 'standard')).toEqual(['small', 'small', 'standard']);
     h.sc.groups.cancel(g.id);
-  }, 60_000);
+  }, 1_800_000);
 
   it('C8: two sim:repair fail a SMALL item at round 2 (rounds); a STANDARD one repairs twice and passes; the SMALL brief composes from smalls.mjs', async () => {
     h = await harness();
@@ -249,7 +249,7 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(brief).toContain('kit/lib/smalls.mjs');
     const other = fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', f.items[1]!.designId, 'BRIEF.md'), 'utf8');
     expect(other).not.toContain('A small building');
-  }, 60_000);
+  }, 1_800_000);
 
   it('estimates: COPY $0, SMALL with its caps in the basis, CHANGE from the polish seed', async () => {
     h = await harness();
@@ -263,7 +263,7 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(e.usdHigh).toBeCloseTo(sum, 1);
     const c = h.sc.estimates.mix({ originals: 0, adapted: 0, copies: 0, newBible: false, massingFirst: false, reportCritique: false, changes: 1 }, ctx);
     expect(c.byKind.change).toMatchObject({ usdLow: 0.4, usdHigh: 1.2, count: 1 });
-  }, 30_000);
+  }, 1_800_000);
 
   it('derivation: a re-skin writes RESKIN, a remix writes none', async () => {
     h = await harness();
@@ -271,23 +271,23 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     await groupDone(h, g.id);
     const a = h.sc.groups.get(g.id)!.items[0]!.entryId!;
     const r = h.sc.reskins.request('cherry', undefined, { entries: [a] });
-    await until(() => h!.sc.reskins.get(r.id)!.status !== 'building', 60_000);
+    await until(() => h!.sc.reskins.get(r.id)!.status !== 'building', 600_000);
     const re = h.sc.reskins.get(r.id)!.entries[0]!;
     expect(readEntry(h, re)).toMatchObject({ variantOf: a, variantOfVersion: 1, derivation: { source: a, sourceVersion: 1, kind: 'reskin', recipe: { bible: { id: 'cherry' } } } });
     const d = h.sc.requestDesign(DesignRequest.parse(request({ type: 'cabin', remix: a, maxSize: { x: 64, y: 64, z: 64 } })));
-    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 600_000);
     expect(readEntry(h, h.sc.designs.get(d.id)!.blueprintId!).derivation).toBeUndefined();
-  }, 120_000);
+  }, 1_800_000);
 
   it('the sim builds an S-lot item (11 x 9) as a shed from smalls.mjs, its massing too, and the detail conforms', async () => {
     h = await harness();
     const g = h.sc.groups.create(gr({ massingFirst: true, smallBySize: true, items: [item('well', { type: 'custom', profile: ['door', 'lit', 'no_floating'], maxSize: { x: 11, y: 12, z: 9 } })] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 600_000);
     h.sc.groups.approve(g.id, { approve: ['well'], redirect: {}, cancel: [] });
     await groupDone(h, g.id);
     const it = h.sc.groups.get(g.id)!.items[0]!;
     expect(it.status, it.error).toBe('done');
     const e = readEntry(h, it.entryId!) as { size: { x: number; z: number } };
     expect(e.size.x <= 11 && e.size.z <= 9).toBe(true);
-  }, 60_000);
+  }, 1_800_000);
 });

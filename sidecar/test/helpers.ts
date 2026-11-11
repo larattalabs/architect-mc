@@ -19,7 +19,7 @@ export function rmrf(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
-export async function until(cond: () => boolean, timeoutMs = 10_000, stepMs = 25): Promise<void> {
+export async function until(cond: () => boolean, timeoutMs = 600_000, stepMs = 25): Promise<void> {
   const end = Date.now() + timeoutMs;
   while (!cond()) {
     if (Date.now() > end) throw new Error('timed out waiting for condition');

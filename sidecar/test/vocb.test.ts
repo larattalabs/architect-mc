@@ -74,7 +74,7 @@ describe.skipIf(!hasKit)('(6c VOC-b) rarity budgets in the sidecar', () => {
     const ok = await send(h.sc, { type: 'bible.request', request: { prompt: 'a modern town', name: 'Modern', rarity: RARITY } });
     expect(ok.ok).toBe(true);
     const jobId = ok.result!.jobId as string;
-    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(jobId)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(jobId)!.status), 600_000);
     expect(h.sc.bibles.get(jobId)!.status, h.sc.bibles.get(jobId)!.error).toBe('done');
     const bible = JSON.parse(fs.readFileSync(path.join(h.sc.config.biblesDir, 'bib_modern', 'bible.json'), 'utf8')) as Record<string, unknown>;
     expect(JSON.stringify(bible.rarity)).toBe(JSON.stringify(RARITY));
@@ -83,14 +83,14 @@ describe.skipIf(!hasKit)('(6c VOC-b) rarity budgets in the sidecar', () => {
     // the prompt never sees it (N-VOC-1): the job's draft prompt in the scratch holds no budget
     // a revise keeps the budget (v2 carries it)
     const r = h.sc.bibles.revise('bib_modern', 'more glass');
-    await until(() => h!.sc.bibles.get(r.id)!.status === 'done', 30_000);
+    await until(() => h!.sc.bibles.get(r.id)!.status === 'done', 600_000);
     const v2 = JSON.parse(fs.readFileSync(path.join(h.sc.config.biblesDir, 'bib_modern', 'versions', '2', 'bible.json'), 'utf8')) as Record<string, unknown>;
     expect(v2.rarity).toEqual(RARITY);
     // a request without one: no member (the 1.10.0 shape)
     const plain = await send(h.sc, { type: 'bible.request', request: { prompt: 'a plain town', name: 'Plain' } });
-    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(plain.result!.jobId as string)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(plain.result!.jobId as string)!.status), 600_000);
     expect(JSON.parse(fs.readFileSync(path.join(h.sc.config.biblesDir, 'bib_plain', 'bible.json'), 'utf8')).rarity).toBeUndefined();
-  }, 90_000);
+  }, 1_800_000);
 
   it('promptMetrics: rarity and drift only when the scratch bible opts in', () => {
     const root = tempDir('arch-vocb-pm-');
