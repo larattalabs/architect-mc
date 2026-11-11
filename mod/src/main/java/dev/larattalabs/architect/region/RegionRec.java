@@ -59,6 +59,12 @@ public final class RegionRec {
 	 * cells per part, what its bodies' writes took from the stockpile); null for a creative region. Written by the mod only.
 	 */
 	public @Nullable JsonObject survival;
+	/**
+	 * (6d AD) An adopted region's record ({@link RegionAdopt}): {@code phase} ({@code adopting} while §2.3's steps run: the region reads
+	 * PREPARING; then {@code placed}), the layout, zone and geometry, and {@code old}: each adopted site's membership before (its group, batch,
+	 * item key and stage), which un-adopt reads. Null for any other region. Written by the mod only.
+	 */
+	public @Nullable JsonObject adopt;
 
 	/** (6c RS) Whether the region realises in survival. */
 	public boolean survival() {
@@ -264,6 +270,9 @@ public final class RegionRec {
 		if (beside != null) {
 			o.addProperty("beside", beside);
 		}
+		if (adopt != null) {
+			o.add("adopt", adopt.deepCopy());
+		}
 		if (brush != null) {
 			o.add("brush", brush.deepCopy());
 		}
@@ -357,6 +366,7 @@ public final class RegionRec {
 		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;
 		r.beside = o.has("beside") && o.get("beside").isJsonPrimitive() ? o.get("beside").getAsString() : null;
 		r.survival = o.get("survival") instanceof JsonObject sv ? sv.deepCopy() : null;
+		r.adopt = o.get("adopt") instanceof JsonObject ad ? ad.deepCopy() : null;
 		if (o.get("revisions") instanceof JsonObject rv) {
 			r.nextRid = rv.get("nextRid").getAsInt();
 			r.headRid = rv.get("headRid").getAsInt();

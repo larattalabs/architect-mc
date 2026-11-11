@@ -195,6 +195,7 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SliceCoaDev.init(); // 6c close-out A: dev.coa.* (keyed pins, discardPlan, plan files, the clock, the sweeps)
 		dev.larattalabs.architect.devserver.gen.StockpileDev.init();
 		dev.larattalabs.architect.devserver.gen.SliceRvDev.init(); // (6d RV) dev.rv.*
+		dev.larattalabs.architect.devserver.gen.SliceAdDev.init(); // (6d AD) dev.ad.*
 		ServerSidecar.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
 			server = s;

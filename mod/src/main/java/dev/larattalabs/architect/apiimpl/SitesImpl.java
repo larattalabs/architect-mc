@@ -212,6 +212,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<RemoveResult> remove(String siteId, RemoveOptions o) {
+		String busy = adoptBusySite(siteId);
+		if (busy != null) {
+			return CompletableFuture.completedFuture(refused(busy)); // (6d AD) SITE_BUSY while an adoption moves it
+		}
 		if (Sites.get(siteId) == null && dev.larattalabs.architect.site.Infras.get(siteId) != null) {
 			return onServer(() -> removeInfra(siteId, o)).thenCompose(f -> f);
 		}
@@ -333,6 +337,9 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<RemoveResult> removeGroup(String groupId, RemoveOptions o) {
+		if (Sites.adoptBusy(groupId) != null) {
+			return CompletableFuture.completedFuture(refused(Sites.adoptBusy(groupId)));
+		}
 		return onServer(() -> Groups.removeGroup(server, groupId, o == null ? null : o.requester(), o != null && o.force(), covered(o))).thenCompose(f -> f)
 			.thenApply(SitesImpl::result);
 	}
@@ -354,12 +361,30 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<RemoveResult> undoStage(String groupId, String stage, boolean force) {
+		if (Sites.adoptBusy(groupId) != null) {
+			return CompletableFuture.completedFuture(refused(Sites.adoptBusy(groupId)));
+		}
 		return onServer(() -> Groups.undoStage(server, groupId, stage, force, Sites.Covered.KEEP)).thenCompose(f -> f).thenApply(SitesImpl::result);
 	}
 
 	@Override
 	public CompletableFuture<RemoveResult> undoStage(String groupId, String stage, RemoveOptions o) {
+		if (Sites.adoptBusy(groupId) != null) {
+			return CompletableFuture.completedFuture(refused(Sites.adoptBusy(groupId)));
+		}
 		return onServer(() -> Groups.undoStage(server, groupId, stage, o != null && o.force(), covered(o))).thenCompose(f -> f).thenApply(SitesImpl::result);
+	}
+
+	/** (6d AD) A site (or its group) an adoption or un-adoption is moving now: why, or null. */
+	static @Nullable String adoptBusySite(String siteId) {
+		String b = Sites.adoptBusy(siteId);
+		if (b != null) {
+			return b;
+		}
+		Site s = Sites.get(siteId);
+		String g = s != null && s.member() != null ? s.member().group() : dev.larattalabs.architect.site.Infras.get(siteId) != null ? dev.larattalabs.architect.site.Infras.get(
+			siteId).group() : null;
+		return Sites.adoptBusy(g);
 	}
 
 	private static RemoveResult result(Groups.Removed r) {
@@ -649,6 +674,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.DeltaResult> applyDelta(dev.larattalabs.architect.api.DeltaRequest r) {
 		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
+			String busy = adoptBusySite(r.siteId());
+			if (busy != null) {
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(Reason.SITE_BUSY, busy))); // (6d AD)
+			}
 			Site b = Sites.get(r.siteId());
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
 			if (level == null) {
@@ -682,6 +711,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.DeltaResult> revert(String siteId, int toVersion, @Nullable ServerPlayer actor) {
 		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
+			String busy = adoptBusySite(siteId);
+			if (busy != null) {
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(Reason.SITE_BUSY, busy))); // (6d AD)
+			}
 			Site b = Sites.get(siteId);
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
 			if (level == null) {

@@ -31,7 +31,9 @@ public final class ApiRules {
 		// (6c D3, D-S3) every districts region's land in its ext (architect_mc:land)
 		"districtLand",
 		// (6d LC) Regions.landCheck: the land-change report of a standing region (read-only)
-		"landCheck");
+		"landCheck",
+		// (6d AD) Regions.adopt and Regions.unadopt: a VillageLayout settlement as a region, no cell written
+		"regionAdopt");
 
 	private ApiRules() {
 	}

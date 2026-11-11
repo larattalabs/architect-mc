@@ -530,6 +530,8 @@ public final class JournalStore {
 		private final Map<String, Meta> statuses = new LinkedHashMap<>();
 		private final Set<String> releases = new java.util.LinkedHashSet<>();
 		private final Map<String, String> legacy = new LinkedHashMap<>();
+		/** (6d AD) Entries whose {@code Meta.group} changes (a metadata-only regroup: no section file is written). */
+		private final Map<String, @Nullable String> groups = new LinkedHashMap<>();
 		/** Section keys whose cells go away (an empty section after a transfer). */
 		private final Map<String, Set<Long>> drops = new LinkedHashMap<>();
 		String label = "";
@@ -604,9 +606,21 @@ public final class JournalStore {
 			return this;
 		}
 
+		/**
+		 * (6d AD, CONTRACT AD §2.3) Sets an existing entry's {@code Meta.group} (its cells, sections, status and files stay as they are:
+		 * no section file is written). With {@link #head} beside it the entry's head file gets its next generation (its membership).
+		 */
+		public Txn regroup(String id, @Nullable String group) {
+			if (!creates.containsKey(id) && head.entries().get(id) == null) {
+				throw new IllegalArgumentException("no journal entry " + id);
+			}
+			groups.put(id, group);
+			return this;
+		}
+
 		public boolean isEmpty() {
 			return creates.isEmpty() && sections.isEmpty() && handed.isEmpty() && heads.isEmpty() && statuses.isEmpty() && releases.isEmpty()
-				&& legacy.isEmpty() && drops.isEmpty();
+				&& legacy.isEmpty() && drops.isEmpty() && groups.isEmpty();
 		}
 	}
 
@@ -674,6 +688,7 @@ public final class JournalStore {
 			ids.addAll(t.heads.keySet());
 			ids.addAll(t.statuses.keySet());
 			ids.addAll(t.drops.keySet());
+			ids.addAll(t.groups.keySet());
 			for (String id : ids) {
 				if (t.releases.contains(id)) {
 					continue;
@@ -754,7 +769,8 @@ public final class JournalStore {
 				for (long k : secs) {
 					sa[i++] = k;
 				}
-				metas.put(id, new Meta(m.id(), m.kind(), m.site(), m.group(), m.dimension(), m.policy(), m.layer(), m.status(), m.createdAt(), cells, box,
+				String grp = t.groups.containsKey(id) ? t.groups.get(id) : m.group(); // (6d AD) a regroup
+				metas.put(id, new Meta(m.id(), m.kind(), m.site(), grp, m.dimension(), m.policy(), m.layer(), m.status(), m.createdAt(), cells, box,
 					files, sa, m.undoGroup(), m.undoneAt()));
 				changed.add(id);
 			}

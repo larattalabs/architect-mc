@@ -318,6 +318,23 @@ public final class RegionsImpl implements Regions {
 		return List.copyOf(REGIONS.values());
 	}
 
+	/** (6d AD) A new region id, reserved now (an adoption's). */
+	static String newRegionId() {
+		return "rg" + nextRegion++;
+	}
+
+	/** (6d AD) A region record enters (an adoption's) or leaves (an un-adoption's) the registry. */
+	static void putLive(Live l) {
+		REGIONS.put(l.rec().id, l);
+	}
+
+	static void dropLive(String id) {
+		REGIONS.remove(id);
+		Heights.forget(id);
+		TileStream.forgetRegion(id);
+		RegionFluids.forget(id);
+	}
+
 	/** (6c close-out A) A discarded plan leaves the plan cache. */
 	static void forgetPlan(String planId) {
 		PLANS.remove(planId);
@@ -435,6 +452,16 @@ public final class RegionsImpl implements Regions {
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
 		return Revisions.undo(regionId, toPosition, actor); // (6d RV, §4.4)
+	}
+
+	@Override
+	public CompletableFuture<RegionView> adopt(dev.larattalabs.architect.api.AdoptRegionRequest r) {
+		return RegionAdopt.adopt(r);
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.UnadoptResult> unadopt(String regionId) {
+		return RegionAdopt.unadopt(regionId);
 	}
 
 	@Override
@@ -3066,6 +3093,9 @@ public final class RegionsImpl implements Regions {
 		}
 		if (s == null || l == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId));
+		}
+		if (RegionAdopt.adopting(l.rec()) || RegionAdopt.BUSY.containsValue(regionId)) {
+			return failed(Reason.SITE_BUSY, "region " + regionId + " is being adopted (or un-adopted): try again in a moment"); // (6d AD)
 		}
 		return onServer(s, () -> {
 			ServerLevel lv = l.level(s);

@@ -14,6 +14,7 @@ public final class RegionsMod {
 		dev.larattalabs.architect.Architect.LOGGER.debug("region fluids ticket {}", RegionFluids.Ticket.TICKET); // 6c H
 		GenCounter.init();
 		RegionsImpl.init();
+		RegionAdopt.init(); // (6d AD) the adoption's recovery before Sites.reconcile, its SITE_BUSY
 		RegionCommands.init(); // phase 6b: /architect region ... (N7: commands, no Terrain tab)
 		BrushCommands.init(); // 6c B: /architect brush ...
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {

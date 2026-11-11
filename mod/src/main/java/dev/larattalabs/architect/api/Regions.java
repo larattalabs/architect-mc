@@ -303,4 +303,34 @@ public interface Regions {
 	default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part) {
 		throw new UnsupportedOperationException("Regions.landCheck needs Architect API NEXT");
 	}
+
+	/**
+	 * (6d AD) Adopts a standing VillageLayout settlement as a region (docs/CONTRACT.md "Phase 6d slice AD" §2) <b>without writing a cell</b>:
+	 * no block, no journal cell, no ticket, no prepare. Checks first ({@link Reason#NOT_ALLOWED} naming the site): every site is the owner's,
+	 * standing, inside the claim and in no region; the roads are 4e roads along the given street line; every lot site's box faces the street; a
+	 * survival construction site (or one under a shared crate) is refused; the claim overlaps no other region and no other owner's protected
+	 * area ({@link Reason#OVERLAP}, {@link Reason#PROTECTED}). Then the kit's {@code adopted_village} program describes the settlement as the
+	 * region's IR (its lots, its street roads flagged {@code architect_mc:street {zone: "village"}}, V's graph, no parts), a plan/0 artifact is
+	 * kept for it ({@code region.adopted: true}; its plan's zone {@code village} lists the lots, so a revision plan naming it as
+	 * {@code parentArtifact} grows the village), and the sites move into the region's new group (stage {@code adopted}), crash safely: the
+	 * journal's group of each of their entries and their head records, {@code architect-sites.json}, then the region record. Site ids never
+	 * change; each site's membership becomes the region's ({@code lot:<id>}, {@code road:street_<n>}). While it runs the region reads
+	 * {@link RegionState#PREPARING} and the sites refuse deltas and removal {@link Reason#SITE_BUSY}. Answers the region, {@link RegionState#PLACED},
+	 * its ext {@code architect_mc:adopted} and {@code architect_mc:artifact}. Afterwards it grows ({@link #planRevision}, a revision plan of its
+	 * artifact), revises and is removed ({@link #remove}) as any region. Needs the helper (sidecar). Server thread; the future completes on it.
+	 * Since NEXT, feature {@code "regionAdopt"}.
+	 */
+	default CompletableFuture<RegionView> adopt(AdoptRegionRequest r) {
+		throw new UnsupportedOperationException("Regions.adopt needs Architect API NEXT");
+	}
+
+	/**
+	 * (6d AD, §3) Undoes an adoption: only an adopted region at position 0 (no revision accepted) in state {@link RegionState#PLACED}, else
+	 * {@link Reason#NOT_ALLOWED}. Each site goes back to its old group's stage (or a stage {@code readopted} appended), keeping every change made
+	 * to that group since; a site whose old group is gone gets a new standalone group (named in the result). Nothing is written to the world;
+	 * the region record is deleted. Crash safe as adoption. Since NEXT, feature {@code "regionAdopt"}.
+	 */
+	default CompletableFuture<UnadoptResult> unadopt(String regionId) {
+		throw new UnsupportedOperationException("Regions.unadopt needs Architect API NEXT");
+	}
 }

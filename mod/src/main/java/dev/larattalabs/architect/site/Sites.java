@@ -170,6 +170,17 @@ public final class Sites {
 	private Sites() {
 	}
 
+	/** (6d AD) Runs at the world's start after the sites load and before {@link #reconcile} (RegionAdopt's recovery). */
+	public static volatile java.util.function.@Nullable Consumer<MinecraftServer> BEFORE_RECONCILE;
+	/** (6d AD) Why a site or group can't take a delta or a removal now (an adoption moves it: SITE_BUSY), or null. */
+	public static volatile java.util.function.@Nullable Function<String, @Nullable String> ADOPT_BUSY;
+
+	/** (6d AD) {@link #ADOPT_BUSY} of a site or group, or null. */
+	public static @Nullable String adoptBusy(@Nullable String id) {
+		var f = ADOPT_BUSY;
+		return f == null || id == null ? null : f.apply(id);
+	}
+
 	public static void init() {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		dev.larattalabs.architect.journal.JournalMigration.init();
@@ -179,6 +190,16 @@ public final class Sites {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
 			SiteDeltas.server = server;
+			// (6d AD, §2.3) an adoption or un-adoption that stopped part way rolls forward or back first, so a record reconcile rebuilds
+			// reads the reconciled head meta
+			var before = BEFORE_RECONCILE;
+			if (before != null) {
+				try {
+					before.accept(server);
+				} catch (RuntimeException e) {
+					Architect.LOGGER.error("Region adoptions could not be recovered at the world's start", e);
+				}
+			}
 			reconcile(server, Placement.jobSites(server));
 			SiteDeltas.atStart(server);
 			notifyListeners();
@@ -2311,6 +2332,63 @@ public final class Sites {
 		groups = Collections.unmodifiableMap(m);
 		save(server, state);
 		notifyListeners();
+	}
+
+	/**
+	 * (6d AD, CONTRACT AD §2.3 step 4, §3) One atomic save of {@code architect-sites.json} that moves memberships: the given sites' and
+	 * road/cell sites' {@code member} (null: none), and the given groups put (added or replaced: the new group, the old groups with their
+	 * stage lists changed). Every change is in memory and in the one file together; unlike {@link #save} a failed write throws (and the
+	 * memory goes back as it was). Server thread.
+	 */
+	public static void adoptMove(MinecraftServer server, Map<String, Site.@Nullable Member> siteMembers, Map<String, Site.@Nullable Member> infraMembers,
+		List<SiteGroupRec> groupsPut) throws IOException {
+		if (loadFailed) {
+			throw new IOException(FILE + " could not be read at the world's start: nothing is moved");
+		}
+		State was = state;
+		Map<String, SiteGroupRec> gWas = groups;
+		java.util.List<Infra> iWas = Infras.all();
+		Map<String, Site> byId = new LinkedHashMap<>(was.byId());
+		siteMembers.forEach((id, m) -> {
+			Site b = byId.get(id);
+			if (b != null) {
+				byId.put(id, b.withMember(m));
+			}
+		});
+		Map<String, SiteGroupRec> gs = new LinkedHashMap<>(groups);
+		groupsPut.forEach(g -> gs.put(g.id(), g));
+		State next = new State(Collections.unmodifiableMap(byId), was.next(), was.pending());
+		state = next;
+		groups = Collections.unmodifiableMap(gs);
+		Infras.replaceQuiet(infraMembers);
+		Path f = file(server);
+		try {
+			Path tmp = f.resolveSibling(FILE + ".tmp");
+			JsonObject root = Site.fileJson(List.copyOf(next.byId().values()), next.next(), next.pending(), List.copyOf(groups.values()), nextGroup);
+			JsonArray infra = Infras.toJson();
+			if (!infra.isEmpty()) {
+				root.add("infra", infra);
+			}
+			try (var ch = java.nio.channels.FileChannel.open(tmp, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+				java.nio.file.StandardOpenOption.WRITE)) {
+				ch.write(java.nio.ByteBuffer.wrap(GSON.toJson(root).getBytes(StandardCharsets.UTF_8)));
+				ch.force(true);
+			}
+			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (IOException | RuntimeException e) {
+			state = was;
+			groups = gWas;
+			Map<String, Site.@Nullable Member> back = new LinkedHashMap<>();
+			iWas.forEach(i -> back.put(i.id(), i.member()));
+			Infras.replaceQuiet(back);
+			throw e instanceof IOException io ? io : new IOException(e);
+		}
+		notifyListeners();
+	}
+
+	/** (6d AD) A new group id ({@code g<n>}) for a caller outside the package; the counter is saved with the next commit. */
+	public static String newGroupIdForAdopt() {
+		return newGroupId();
 	}
 
 	/** A site joins its group (and its stage): the caller commits. */

@@ -84,6 +84,18 @@ public final class Infras {
 		Sites.saveAll(server);
 	}
 
+	/** (6d AD) Replaces standing records' memberships without a save (the caller saves once: {@link Sites#adoptMove}). */
+	static void replaceQuiet(Map<String, Site.@org.jspecify.annotations.Nullable Member> members) {
+		Map<String, Infra> m = new LinkedHashMap<>(byId);
+		members.forEach((id, mem) -> {
+			Infra i = m.get(id);
+			if (i != null) {
+				m.put(id, i.withMember(mem));
+			}
+		});
+		byId = Collections.unmodifiableMap(m);
+	}
+
 	/** R3 for a road or cell site: the record goes pending. */
 	static void markPending(MinecraftServer server, String id) {
 		if (markPendingQuiet(id)) {
