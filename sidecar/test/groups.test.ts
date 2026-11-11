@@ -170,7 +170,7 @@ async function harness(over: Partial<Config> = {}, root = tempDir('arch-4b-')): 
 
 const item = (itemKey: string, o: Record<string, unknown> = {}) => ({ ...request({ type: 'cabin', name: undefined, notes: undefined, maxSize: { x: 64, y: 64, z: 64 } }), itemKey, ...o });
 // (PX) generous: the wait ends the moment the group does, so a wide limit costs nothing and a loaded machine (a gate run beside it) no longer fails it
-const groupDone = (h: H, id: string, ms = 240_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(id)!.status), ms);
+const groupDone = (h: H, id: string, ms = 900_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(id)!.status), ms);
 const lastGroup = (h: H, id: string) => [...h.events].reverse().find((e): e is Extract<Outbound, { type: 'group.upsert' }> => e.type === 'group.upsert' && e.group.id === id)!.group;
 const readEntry = (h: H, id: string) => JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, id, `${id}.blueprint.json`), 'utf8')) as Record<string, unknown>;
 
@@ -237,12 +237,12 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     const s = h.sc.requestDesign(DesignRequest.parse(request({ name: 'Solo', maxSize: { x: 64, y: 64, z: 64 } })));
     await groupDone(h, a.id);
     await groupDone(h, b.id);
-    await until(() => h!.sc.designs.get(s.id)!.status === 'done', 120_000);
+    await until(() => h!.sc.designs.get(s.id)!.status === 'done', 600_000);
     const label = new Map([...a.items.map((i) => [i.designId, i.itemKey] as const), ...b.items.map((i) => [i.designId, i.itemKey] as const), [s.id, 'solo'] as const]);
     const firsts = h.events.filter((e): e is Extract<Outbound, { type: 'design.upsert' }> => e.type === 'design.upsert' && e.design.status === 'designing').map((e) => e.design.id);
     const order = firsts.filter((id, i) => firsts.indexOf(id) === i).map((id) => label.get(id));
     expect(order).toEqual(['a1', 'b1', 'solo', 'a2', 'b2', 'a3']);
-  }, 600_000);
+  }, 1_800_000);
 
   it('a usage limit holds the whole group (held_usage); all items resume together after the reset', async () => {
     h = await harness({ designConcurrency: 3 });

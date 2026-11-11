@@ -1481,10 +1481,13 @@ Five small items from "Queued (coordinator, 2026-11-11)". No API member, no Reas
    mechanism counts already did). Unit test `DroppedCountTest` (air cells on the mask are not counted; fails with the old counting). No
    committed fixture's expected value moves: IRR's field entry has no air cells on its masked cells (the gate's `expectedDropped` already
    counted non-air and matched).
-4. **Sidecar timing flakes (done).** `groups.test.ts` round-robin and `groupDone` (60 s to 240 s), `slice0a.test.ts` C7 queued/usage_hold (60 s to
-   240 s), test timeouts widened to match. The waits end when the condition does, so a wide limit costs nothing; the order assertion
-   is untouched (tickets are submitted synchronously, the order does not depend on timing). `eval.e2e.test.ts` compare runs with a new
-   `tools/eval.mjs compare --no-time`: the minutes are still recorded (the test checks them), only the +30% mean-time rule is skipped, since two
-   sim runs of a few seconds each swing with load. The real eval's `compare` still judges time by default.
+4. **Sidecar timing flakes (done).** `groups.test.ts` round-robin (`groupDone` 60 s to 15 min, the other wait 30 s to 10 min), `slice0a.test.ts`
+   (both C7 tests and C9: every `until` 30 s / 60 s to 10 / 15 min), test timeouts to 30 min. A wait ends the moment its condition does, so a
+   wide limit costs nothing; the order assertion is untouched (tickets are submitted synchronously, the order does not depend on timing).
+   `eval.e2e.test.ts` compare runs with a new `tools/eval.mjs compare --no-time`: the minutes are still recorded (the test checks them),
+   only the +30% mean-time rule is skipped, since two sim runs of a few seconds each swing with load; the spawn and test timeouts are wider
+   (15 / 30 min). The real eval's `compare` still judges time by default. Proof: `npm run check` 809/809 with the machine at load average ~50 (other
+   sessions' gates); on a first try at the old limits the C7 `until` timed out under 24 added busy loops. Other sidecar tests (bundle.e2e,
+   simcosts, styles-u5, massing, versionof ...) also fail on their 30-60 s limits under that kind of load; not touched here.
 5. This section; CONTRACT notes under "Slice XR as built" and "Phase 6c slice IRR as built".
 

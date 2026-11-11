@@ -99,7 +99,7 @@ describe.skipIf(!hasKit)('slice 0a sidecar (sim backend, real kit)', () => {
     expect(bo.result).toMatchObject({ adopted: false });
     expect(bo.result!.jobId).not.toBe(b1.result!.jobId);
     expect(sc.bibles.list().length).toBe(2);
-    await until(() => final(sc.bibles.get(b1.result!.jobId as string)!.status), 30_000);
+    await until(() => final(sc.bibles.get(b1.result!.jobId as string)!.status), 600_000);
     // adopted in any state (done)
     expect((await send(sc, { type: 'bible.request', request: { ...breq } })).result).toMatchObject({ jobId: b1.result!.jobId, adopted: true });
     expect((await send(sc, { type: 'bible.byKey', owner: 'steward:s1', opKey: 'st:bible:1' })).result).toMatchObject({ job: { id: b1.result!.jobId, opKey: 'st:bible:1', status: 'done' } });
@@ -118,19 +118,19 @@ describe.skipIf(!hasKit)('slice 0a sidecar (sim backend, real kit)', () => {
     expect((await send(h.sc, { type: 'group.byKey', owner: 'steward:s1', opKey: 'st:group:1' })).result).toMatchObject({ group: { id: g1.result!.groupId, opKey: 'st:group:1' } });
     expect((await send(h.sc, { type: 'group.byKey', owner: 'steward:s1', opKey: 'never' })).result).toEqual({});
     expect((await send(h.sc, { type: 'design.group', group: { ...greq } })).result).toMatchObject({ groupId: g1.result!.groupId, adopted: true });
-  }, 90_000);
+  }, 1_800_000);
 
   it('C7: seq strictly increases on transitions only; lastAction names them; the breakdown lines sum, the bible line once per owner; the log line', async () => {
     h = await harness({ simCosts: { ...MEASURED_SIM_COSTS } });
     const sc = h.sc;
     const b = await send(sc, { type: 'bible.request', request: { prompt: 'a mill town', name: 'Mill', owner: 'steward:s1' } });
-    await until(() => final(sc.bibles.get(b.result!.jobId as string)!.status), 30_000);
+    await until(() => final(sc.bibles.get(b.result!.jobId as string)!.status), 600_000);
     const bibleId = b.result!.bibleId as string;
     const g = (await send(sc, { type: 'design.group', group: { name: 'G', bible: bibleId, owner: 'steward:s1', massingFirst: true, approvalUi: 'owner', critique: { mode: 'report' }, items: [item('a', { notes: 'sim:repair' }), item('b')] } })).result!;
     const gid = g.groupId as string;
-    await until(() => sc.groups.get(gid)!.status === 'awaiting_approval', 30_000);
+    await until(() => sc.groups.get(gid)!.status === 'awaiting_approval', 600_000);
     await send(sc, { type: 'group.approve', groupId: gid, owner: 'steward:s1', approve: ['a', 'b'] });
-    await until(() => final(sc.groups.get(gid)!.status), 60_000);
+    await until(() => final(sc.groups.get(gid)!.status), 900_000);
     const ups = upserts(h, gid);
     const seqs = ups.map((u) => u.seq!);
     // non-decreasing across every upsert, strictly increasing across the distinct transitions, no repeats of a seq with another signature
@@ -164,20 +164,20 @@ describe.skipIf(!hasKit)('slice 0a sidecar (sim backend, real kit)', () => {
     expect(lines.length, lines.map((l) => l.slice(0, 60)).join(" / ") + " :: " + upserts(h, gid).map((u) => `${u.seq}:${u.lastAction}:${u.status}`).join(" ")).toBe(2); // at awaiting approval and at the end
     // a second group of the same owner on the same bible version: its bible line is 0
     const g2 = (await send(sc, { type: 'design.group', group: { name: 'G2', bible: bibleId, owner: 'steward:s1', items: [item('c')] } })).result!;
-    await until(() => final(sc.groups.get(g2.groupId as string)!.status), 30_000);
+    await until(() => final(sc.groups.get(g2.groupId as string)!.status), 600_000);
     expect(sc.groups.get(g2.groupId as string)!.breakdown!.stages.bible).toMatchObject({ usd: 0, count: 0 });
     expect(sc.groups.get(g2.groupId as string)!.breakdown!.bibleJobIds).toEqual([]);
-  }, 120_000);
+  }, 1_800_000);
 
   it('C7: QUEUED time at concurrency 1, USAGE_HOLD time under sim:usage_limit', async () => {
     h = await harness({ designConcurrency: 1 });
     const g = h.sc.groups.create({ name: 'Q', bible: 'birch', concurrency: 1, items: [item('a'), item('b'), item('c', { notes: 'sim:usage_limit' })] } as never) as Group;
-    // (PX) a wide limit: the wait ends when the group does; under machine load the 60 s one timed out
-    await until(() => final(h!.sc.groups.get(g.id)!.status), 240_000);
+    // (PX) wide limits throughout this file: a wait ends when its condition does, so they cost nothing, and under machine load the 30 s and 60 s ones timed out
+    await until(() => final(h!.sc.groups.get(g.id)!.status), 900_000);
     const bd = h.sc.groups.get(g.id)!.breakdown!;
     expect(bd.stages.queued!.ms).toBeGreaterThan(0);
     expect(bd.stages.usage_hold!.ms).toBeGreaterThan(0);
-  }, 300_000);
+  }, 1_800_000);
 
   it('bible.cancel acks with the job, cancelled; a second cancel fails "already cancelled"', async () => {
     h = await harness({ simStepMs: 2000 });
