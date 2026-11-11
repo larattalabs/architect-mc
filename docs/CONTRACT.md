@@ -27291,6 +27291,29 @@ byte-identical (measured; the BuildOrder golden and TerrainFit CLEAR included).
   use 3 to 7c** (its planning and bible jobs are where style references act), so nothing is asked of you in 7b; or, if you'd rather,
   supply 2-3 references for S5 now and P4 adds a third arm on one archetype (about $4 more, within the reserve).
 
-### Changes from Steward's review (pending)
+### Changes from Steward's review (2026-11-11; these win over the text above)
 
-None yet.
+Steward: yes to S-7b-1, 2, 4, 6, 7 and 8; S-7b-3 yes with two asks; S-7b-5 changed; one gap in §2.
+
+1. **Site variant call (the gap in §2, for S-7b-1 (a)).** New `Designs.siteVariant(String entryId, SiteSpec site, String opKey)
+   -> CompletableFuture<String>` (the new entry id): the source entry's program re-run on the new Site, $0, `Derivation.Kind.SITE`,
+   deterministic, idempotent per `opKey`. It **installs directly** into the library (no group, no approval): its approval is the
+   source's, carried per archetype (change 2). A failed site check refuses with the new Reason **`SITE_UNFIT`** (appended to `Reason`),
+   whose detail names the failing check, never free text only, so Steward falls to (b) without parsing words. A source with no program
+   (an original Claude design with no kit program) refuses `SITE_UNSUPPORTED`. Built in **DS**; feature `siteDesign`.
+2. **S-7b-5 changed: one item per lot.** Option (a): every lot keeps its own `GroupRequest.Item` with `itemKey == lotId` and one entry,
+   as Steward binds today. A variant lot's item names its archetype (`Item.ext` `architect_mc:site {archetype: <archetype item key>}`);
+   approval is per archetype, on the archetype's item, and a variant item is approved when its archetype is. No COPY items, no
+   `lotId -> entryId` map. SITE entries follow their source through FS (yes).
+3. **S-7b-3, the link refusal.** LP checks every link **before any write of the realise**: a link that can't reach a design's port
+   refuses the whole realise with the new Reason **`NO_LINK`** (appended), detail `{lot, port}`; nothing is placed, so Steward's
+   cancel path stands. No partial write, no repair loop inside Architect.
+4. **S-7b-3, revisions untouched.** A revision's `realise` (`planRevision` + `realise(lotEntries)`) with no site lot has
+   **byte-identical behaviour and no `links` stage**: LP adds the stage only to a region plan that has site lots or ports to join.
+   An LP gate item re-realises a recorded GR revision and compares bytes. (Adding a site lot by revision stays out of 7b.)
+5. **S-7b-2 and S-7b-4 (Steward's side):** Steward's plan writer gains `site` on lots when SL ships; Steward re-scores recorded plans
+   and the gap table at $0; any paid re-record is Noah's to approve, not in this budget.
+6. **S-7b-7:** Steward never places or looks for the construction crate relative to a door and never assumes bottom-up order; the
+   PL/SO RC's survival flows will show it.
+
+§2's Reason row now appends, in order: `SITE_DRIFTED`, `KEEP_LOST`, `SITE_UNSUPPORTED`, `SITE_MISMATCH`, `SITE_UNFIT`, `NO_LINK`.
