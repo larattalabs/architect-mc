@@ -172,11 +172,12 @@ describe.skipIf(!hasKit)('slice 0a sidecar (sim backend, real kit)', () => {
   it('C7: QUEUED time at concurrency 1, USAGE_HOLD time under sim:usage_limit', async () => {
     h = await harness({ designConcurrency: 1 });
     const g = h.sc.groups.create({ name: 'Q', bible: 'birch', concurrency: 1, items: [item('a'), item('b'), item('c', { notes: 'sim:usage_limit' })] } as never) as Group;
-    await until(() => final(h!.sc.groups.get(g.id)!.status), 60_000);
+    // (PX) a wide limit: the wait ends when the group does; under machine load the 60 s one timed out
+    await until(() => final(h!.sc.groups.get(g.id)!.status), 240_000);
     const bd = h.sc.groups.get(g.id)!.breakdown!;
     expect(bd.stages.queued!.ms).toBeGreaterThan(0);
     expect(bd.stages.usage_hold!.ms).toBeGreaterThan(0);
-  }, 90_000);
+  }, 300_000);
 
   it('bible.cancel acks with the job, cancelled; a second cancel fails "already cancelled"', async () => {
     h = await harness({ simStepMs: 2000 });

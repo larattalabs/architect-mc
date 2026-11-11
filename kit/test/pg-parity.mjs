@@ -18,18 +18,18 @@ const LOTS = [{ id: 'gatehouse_1', type: 'gatehouse', size: [13, 11] }, { id: 'h
 
 /**
  * A plan/0 walled town (a street zone, its own K1 ring at [8, 14]): `gatehouse` the gate lot east of it (`mech` its mechanism), `k1` a K1
- * gate's anchor (a wooden-door gate) or none. Returns {plan, ir, meta, check, R (the reach inputs the mod would send)}.
+ * gate's anchor (a wooden-door gate) or none; `ground` the world function (flat 64 by default). Returns {plan, ir, meta, check, R (the reach inputs the mod would send)}.
  */
-export async function passageTown({ gatehouse = true, mech = null, k1 = null } = {}) {
+export async function passageTown({ gatehouse = true, mech = null, k1 = null, ground = world } = {}) {
   const plan = { schemaVersion: 'plan/0',
     zones: [{ id: 'town', program: { lots: gatehouse ? LOTS : LOTS.slice(1), layout: 'street', orientation: 'ew' }, where: { near: { anchor: 'stone', within: 16 } } }],
     connectors: [{ id: 'town_wall', kind: 'wall', where: { around: { feature: { part: 'town' }, ring: [8, 14] } }, height: 5,
       ...(gatehouse ? { lots: [{ lot: 'gatehouse_1', at: 'gate', near: { anchor: 'east' }, ...(mech ? { mech } : {}) }] } : {}) },
     ...(k1 ? [{ id: 'tg', kind: 'gate', wall: 'town_wall', door: 'door', width: 3, at: { anchor: k1 } }] : [])] };
-  const r = await checkPlanLocal(plan, { survey: encodeColumns(columnsOf(world, 0, 0, 160, 160)), claim: { minX: 0, minZ: 0, maxX: 159, maxZ: 159, minY: -64, maxY: 319 },
+  const r = await checkPlanLocal(plan, { survey: encodeColumns(columnsOf(ground, 0, 0, 160, 160)), claim: { minX: 0, minZ: 0, maxX: 159, maxZ: 159, minY: -64, maxY: 319 },
     anchors: { stone: [80, 65, 80], east: [154, 65, 80], north: [80, 65, 5], south: [80, 65, 154] } });
   const ir = r.res.ir;
-  const t = reachInputs({ id: 'rg1', ir, world, claim: A });
+  const t = reachInputs({ id: 'rg1', ir, world: ground, claim: A });
   return { plan, ir, meta: r.res.meta, check: r.check, R: { ...t.besideReach, gates: besideGates('rg1', ir) } };
 }
 

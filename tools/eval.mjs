@@ -5,7 +5,8 @@
 //                           [--resume <runId>] [--out <dir>] [--ledger <spend.json> --total-cap 120 --reserve N] [--port N]
 //   node tools/eval.mjs rescore <runId> [--out <dir>]          recompute every deterministic metric from the stored files ($0)
 //   node tools/eval.mjs rejudge <runId> [--briefs 1,3] [--out <dir>] [--ledger ...]   the blind judge again (judge cost only)
-//   node tools/eval.mjs compare <runA> <runB> [--judge] [--out <dir>]   A = before, B = after: deltas and a verdict
+//   node tools/eval.mjs compare <runA> <runB> [--judge] [--no-time] [--out <dir>]   A = before, B = after: deltas and a verdict
+//     (--no-time records the minutes but does not judge them: machine load moves a sim run's wall time, the CI test passes it)
 //
 // A run starts its own sidecar (no game) on a free port, 8894 or 8895 (--port 0: an ephemeral one), with fresh data,
 // library and bibles dirs under <out>/<runId>/sidecar/, `--backend sim` for the sim tier, else `--backend claude
@@ -944,7 +945,7 @@ async function cmdCompare(o) {
   if (per.some((p) => p.errors[1] > 0)) hard.push('a checker error in a final');
   if (m('warnings', 1) > 1.25 * m('warnings', 0) + 1e-9) hard.push(`mean warnings +${r2(100 * (m('warnings', 1) / (m('warnings', 0) || 1) - 1))}%`);
   if (m('cost', 1) > 1.3 * m('cost', 0)) hard.push(`mean cost +${r2(100 * (m('cost', 1) / m('cost', 0) - 1))}%`);
-  if (m('minutes', 1) > 1.3 * m('minutes', 0)) hard.push(`mean time +${r2(100 * (m('minutes', 1) / m('minutes', 0) - 1))}%`);
+  if (!o.noTime && m('minutes', 1) > 1.3 * m('minutes', 0)) hard.push(`mean time +${r2(100 * (m('minutes', 1) / m('minutes', 0) - 1))}%`);
   if (100 * (m('paletteAdherence', 0) - m('paletteAdherence', 1)) > 5) hard.push('mean paletteAdherence -5 points');
   let judge = null;
   if (o.judge) judge = await crossJudge(o, a, b, ids);
@@ -1782,6 +1783,7 @@ function parseArgs(argv) {
     else if (a === '--port') o.port = Number(val());
     else if (a === '--max-revisions') o.maxRevisions = Number(val());
     else if (a === '--no-results') o.noResults = true;
+    else if (a === '--no-time') o.noTime = true;
     else if (a === '--judge') o.judge = true;
     else if (a === '--notes') o.notes = val();
     else if (a === '--against') o.against = val();

@@ -48,8 +48,13 @@ describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
       expect(Object.keys(s.provenance.hashes).sort()).toEqual(['briefs', 'critic', 'designPrompts', 'judge', 'kit']);
       const re = run(['rescore', ra, '--out', out]);
       expect(re.stdout).toMatch(/byte-identical/);
-      const cmp = run(['compare', ra, rb, '--out', out]);
+      // --no-time: two sim runs' wall times move with machine load (a 30% rule on seconds-long runs); everything else is judged, and the
+      // minutes are still recorded
+      const cmp = run(['compare', ra, rb, '--no-time', '--out', out]);
       expect(cmp.stdout).toMatch(/no regression/);
+      const cj = JSON.parse(fs.readFileSync(path.join(out, `compare-${ra}-vs-${rb}.json`), 'utf8')) as { means: { minutes: number[] }; hardRegressions: string[] };
+      expect(cj.means.minutes).toHaveLength(2);
+      expect(cj.hardRegressions).toEqual([]);
     } finally {
       rmrf(out);
     }

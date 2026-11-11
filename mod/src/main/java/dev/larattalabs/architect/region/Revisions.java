@@ -1683,7 +1683,7 @@ public final class Revisions {
 				}
 				UNDO_INFLIGHT.add(opId);
 				CompletableFuture<dev.larattalabs.architect.site.Groups.Removed> f = dev.larattalabs.architect.site.Groups.undoStage(s, rec.groupId, st, false,
-					dev.larattalabs.architect.site.Sites.Covered.KEEP);
+					dev.larattalabs.architect.site.Sites.Covered.KEEP, true);
 				f.whenComplete((res, ex) -> s.execute(() -> {
 					UNDO_INFLIGHT.remove(opId);
 					JsonObject cur = readUndo(l, opId);

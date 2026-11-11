@@ -1807,7 +1807,7 @@ public final class PlanChecks {
 		var f = dev.larattalabs.architect.batch.LotFitting.fit(bp, new dev.larattalabs.architect.placement.Anchors.Bounds(b.get(0).getAsInt(), b.get(1)
 			.getAsInt(), b.get(2).getAsInt(), b.get(3).getAsInt(), b.get(4).getAsInt(), b.get(5).getAsInt()), lot.get("front") instanceof JsonElement fr
 				&& fr.isJsonPrimitive() ? fr.getAsString() : "south", true, 0, true);
-		return RegionsImpl.dropped(id, f, dev.larattalabs.architect.site.LotMask.of(maskExt(c)));
+		return RegionsImpl.droppedBlocks(id, f, dev.larattalabs.architect.site.LotMask.of(maskExt(c)));
 	}
 
 	/**
@@ -1828,7 +1828,7 @@ public final class PlanChecks {
 		long written = java.util.Arrays.stream(gm.states()).filter(st -> !st.isAir()).count();
 		JsonObject only = new JsonObject();
 		only.add(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM, gm.maskExt());
-		return written - RegionsImpl.dropped(id, f, dev.larattalabs.architect.site.LotMask.of(only));
+		return written - RegionsImpl.droppedBlocks(id, f, dev.larattalabs.architect.site.LotMask.of(only));
 	}
 
 	/**

@@ -2066,7 +2066,7 @@ public final class RegionsImpl implements Regions {
 		JsonArray irr = lotIrrigation(ir, lot.id());
 		if (irr != null) {
 			ext.add(dev.larattalabs.architect.site.LotMask.EXT, dev.larattalabs.architect.site.LotMask.extOf(irr));
-			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, dropped(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
+			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(ext)));
 		}
 		// (7a K3, §5) a gatehouse's passage on a wall: the realise drops the entry's blocks there (IRR's rule) and the lot's site never owns
 		// them (LotMask's second key; the mask is the union); how many of the entry's non-air blocks it drops is reported (passageDropped)
@@ -2257,8 +2257,9 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/**
-	 * (7a K3) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell. {@link #dropped} counts the template's
-	 * air cells too (its IRR count is kept as it is).
+	 * (6c IRR, 7a K3) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell (the count the realise drops).
+	 * Until PX the IRR count ({@code dropped}) also counted the template's air cells, which inflated {@code irrigationDropped} and the
+	 * provisional cost range's subtraction; every mask kind counts through this now.
 	 */
 	static int droppedBlocks(String bpId, LotFitting.Fit f, java.util.function.@Nullable LongPredicate mask) {
 		var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
@@ -2268,29 +2269,18 @@ public final class RegionsImpl implements Regions {
 	/** {@link #droppedBlocks(String, LotFitting.Fit, java.util.function.LongPredicate)} over a grid. Pure. */
 	static int droppedBlocks(dev.larattalabs.architect.placement.TemplateGrid grid, int turns, int ox, int oy, int oz,
 		java.util.function.@Nullable LongPredicate mask) {
+		return mask == null ? 0 : droppedBlocks(grid.ghost(turns), grid.states(), ox, oy, oz, mask);
+	}
+
+	/** The count over a rotated model and its states (index i of the model is index i of {@code states}). Pure. */
+	static int droppedBlocks(dev.larattalabs.architect.placement.GhostModel m, net.minecraft.world.level.block.state.BlockState[] states, int ox, int oy,
+		int oz, java.util.function.@Nullable LongPredicate mask) {
 		if (mask == null) {
 			return 0;
 		}
-		var m = grid.ghost(turns);
 		int n = 0;
 		for (int i = 0; i < m.count(); i++) {
-			if (!grid.states()[i].isAir() && mask.test(net.minecraft.core.BlockPos.asLong(ox + m.x(i), oy + m.y(i), oz + m.z(i)))) {
-				n++;
-			}
-		}
-		return n;
-	}
-
-	/** (6c IRR) How many of an entry's non-air blocks, fitted by {@code f}, stand on a masked cell (the count the realise drops). */
-	static int dropped(String bpId, LotFitting.Fit f, java.util.function.@Nullable LongPredicate mask) {
-		var grid = dev.larattalabs.architect.placement.TemplateGrid.of(bpId);
-		if (grid == null || mask == null) {
-			return 0;
-		}
-		var m = grid.ghost(f.turns());
-		int n = 0;
-		for (int i = 0; i < m.count(); i++) {
-			if (mask.test(net.minecraft.core.BlockPos.asLong(f.ox() + m.x(i), f.oy() + m.y(i), f.oz() + m.z(i)))) {
+			if (!states[i].isAir() && mask.test(net.minecraft.core.BlockPos.asLong(ox + m.x(i), oy + m.y(i), oz + m.z(i)))) {
 				n++;
 			}
 		}
