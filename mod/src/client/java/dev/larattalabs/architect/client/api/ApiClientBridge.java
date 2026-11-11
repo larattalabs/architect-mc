@@ -62,6 +62,11 @@ public final class ApiClientBridge implements ClientBridge {
 			}
 
 			@Override
+			public void onFollow(JsonObject follow) {
+				ApiImpl.followChanged(follow.deepCopy());
+			}
+
+			@Override
 			public void onMassingRemoved(String massingId, String reason) {
 				ApiImpl.massingRemoved(massingId);
 			}

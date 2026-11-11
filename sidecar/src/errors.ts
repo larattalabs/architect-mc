@@ -7,7 +7,7 @@ export class ClientError extends Error {}
  */
 export class RefusedError extends ClientError {
   constructor(
-    readonly code: 'COPY_REFUSED' | 'VERSION_REFUSED' | 'FIELD_LIMIT',
+    readonly code: 'COPY_REFUSED' | 'VERSION_REFUSED' | 'FIELD_LIMIT' | 'NOT_ALLOWED',
     readonly detail: string,
     message: string,
   ) {

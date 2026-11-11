@@ -817,6 +817,7 @@ final class DesignsImpl implements Designs {
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				case "palette.roles", "bible.save" -> "Style unification U1";
 				case "design.opKeys" -> "7a K3";
+				case "entry.follow" -> "6d slice FS";
 				case "bible.check" -> "Style unification U3";
 				case "bible.parts" -> "Style unification U5";
 				default -> "4b";
@@ -1424,5 +1425,17 @@ final class DesignsImpl implements Designs {
 		m.add("polish", Wire5b.spec(r));
 		m.addProperty("entryId", r.entryId());
 		return ask("design.polish", "polish estimates", m).thenApply(Wire5b::estimate);
+	}
+
+	// ------------------------------------------------------------------ 6d FS
+
+	@Override
+	public CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion, @Nullable String opKey) {
+		return WireFS.follow(ApiImpl.instance().library(), copyEntryId, toSourceVersion, opKey);
+	}
+
+	@Override
+	public CompletableFuture<java.util.List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey) {
+		return WireFS.followAll(sourceEntryId, toSourceVersion, opKey);
 	}
 }

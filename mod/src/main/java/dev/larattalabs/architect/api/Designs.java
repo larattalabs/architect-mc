@@ -221,4 +221,58 @@ public interface Designs {
 	default CompletableFuture<Group> promoteCopy(String groupId, String itemKey, String reason) {
 		throw new UnsupportedOperationException("Designs.promoteCopy needs Architect API 1.11.0");
 	}
+
+	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API NEXT)
+
+	/**
+	 * A COPY follows its source (docs/CONTRACT.md "Phase 6d slice FS" §3): its own recorded recipe (the bible pin and roles, the
+	 * param, the mirror; the param over that source version's own values) re-run on the source's version {@code toSourceVersion}
+	 * (0 = its head), at $0 with no Claude call. The result installs as the copy's head + 1 ({@code by: "follow"},
+	 * {@code derivation.sourceVersion} the new source version, the recipe unchanged; {@link SiteEvents#ENTRY_VERSIONED} fires) only
+	 * when it passes the pristine-kit check, the copy's frame (front and the entrance feet row equal to its head: its lots take the
+	 * delta), its size bound (its request's maximum: {@code fit}) and the variation bar against the new source version (2 of 3
+	 * levers, at least 10% of cells changed; for a copy whose recipe met it). Otherwise nothing installs and
+	 * {@link FollowResult#refused} says why. Nothing is ever applied to a lot: the caller lists {@link Sites#outdated()} and runs
+	 * {@code checkDelta} and {@code applyDelta} per lot.
+	 *
+	 * <p>A copy that already derives from that version (or a later one) answers {@code followed false, alreadyFollowed true} and
+	 * installs nothing. The install is compare-and-set: a copy whose head moved while it was built answers {@code head_moved}.
+	 * {@code opKey}: the same key returns the same result (also after a restart); another body under it fails
+	 * {@link Reason#OP_KEY_CONFLICT}. Fails {@link ArchitectRefused} {@link Reason#NOT_ALLOWED} for an entry that does not follow:
+	 * detail {@code until_7b} (a SITE entry), {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
+	 * {@code adopted} (a copy of an adopted entry); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. Needs a helper with
+	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
+	 * version. Since NEXT.
+	 */
+	default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion, @Nullable String opKey) {
+		throw new UnsupportedOperationException("Designs.follow needs Architect API NEXT");
+	}
+
+	/**
+	 * Every COPY of the source that is behind, as one persisted operation: at its start the helper freezes the source version
+	 * ({@code toSourceVersion}, or the head then) and the follower set (each COPY behind at that moment, with its head) before
+	 * following any, so a copy made or versioned later is not in it, and a source version made meanwhile is not used. Each follower
+	 * as {@link #follow}; one that fails is listed with its reason and left. A restart resumes the operation; {@code opKey} keys the
+	 * whole operation. Completes with one result per frozen follower (empty when none is behind). Since NEXT.
+	 */
+	default CompletableFuture<java.util.List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey) {
+		throw new UnsupportedOperationException("Designs.followAll needs Architect API NEXT");
+	}
+
+	/**
+	 * One follower's outcome (6d FS).
+	 *
+	 * @param entryId the copy
+	 * @param followed a new version was installed
+	 * @param fromVersion the copy's head when the follow started
+	 * @param newVersion its head after (= {@code fromVersion} when nothing installed)
+	 * @param sourceVersion the source version followed (the frozen one)
+	 * @param refused null, or why nothing installed: {@code frame}, {@code check}, {@code bar}, {@code fit}, {@code bible_gone},
+	 *     {@code source_gone}, {@code head_moved}
+	 * @param alreadyFollowed the copy already derived from that version or a later one (a no-op)
+	 * @param message what happened, for a log or a toast
+	 */
+	record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion, @Nullable String refused,
+		boolean alreadyFollowed, String message) {
+	}
 }

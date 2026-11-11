@@ -217,6 +217,11 @@ public final class ApiImpl implements ArchitectApi {
 		instance().bibles.index(bibles);
 	}
 
+	/** (6d FS) {@code follow.upsert {follow}}: a follow operation changed (its pending future completes when it is done). */
+	public static void followChanged(JsonObject follow) {
+		WireFS.changed(follow);
+	}
+
 	/** (4b) {@code snapshot.reskins} / {@code reskin.upsert {reskin}}. */
 	public static void reskinChanged(JsonObject reskin) {
 		instance().library.reskinChanged(reskin);
@@ -267,6 +272,7 @@ public final class ApiImpl implements ArchitectApi {
 		}
 		linkUp = synced;
 		if (was && !synced) {
+			WireFS.linkLost();
 			int n = instance().library.linkLost();
 			if (n > 0) {
 				dev.larattalabs.architect.Architect.LOGGER.info("API: the helper disconnected; {} variant request(s) failed", n);

@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1045,9 +1045,11 @@ export const RegionTileErrorMsg = z.object({
   code: z.enum(['timeout', 'error']).optional().describe("(6c 0a) 'timeout': over its time limit in every retry (the mod waits TILE_SLOW and asks again later); 'error': anything else (no retry)"),
   attempts: z.number().int().min(1).optional().describe('(6c 0a) evaluations made, the retries included'),
 });
-export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated']), designId: z.string().optional() });
+export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated', 'follow']), designId: z.string().optional() });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg, RegionProgressMsg]);
+/** (6d FS) A follow operation changed: `{id, kind, opKey?, source, sourceVersion, status, members, results}` (status `done` last). */
+export const FollowUpsertMsg = z.object({ ...envelope('follow.upsert'), follow: z.record(z.string(), z.unknown()) });
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, FollowUpsertMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg, RegionProgressMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -1210,6 +1212,14 @@ const EntryId = z.string().regex(LIBRARY_ID).max(64);
 export const EntryVersionsMsg = z.object({ ...envelope('entry.versions'), entryId: EntryId });
 export const EntryDeltaMsg = z.object({ ...envelope('entry.delta'), entryId: EntryId, from: z.number().int().min(1), to: z.number().int().min(1) });
 export const EntryRevertMsg = z.object({ ...envelope('entry.revert'), entryId: EntryId, toVersion: z.number().int().min(1) });
+/**
+ * (6d FS, feature `entry.follow`) A copy follows its source: its recipe re-run on the source's version `toSourceVersion` (0 = the head),
+ * installed as the copy's next version when it passes (no Claude call, $0). One persisted operation; the ack carries `{followId, status,
+ * results}` and the results come as `follow.upsert` while it runs. `opKey` keys the result (the same key and body: the same operation).
+ */
+export const EntryFollowMsg = z.object({ ...envelope('entry.follow'), entryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional() });
+/** (6d FS) Every COPY of the source that is behind, frozen at the start, followed one by one (as entry.follow). */
+export const EntryFollowAllMsg = z.object({ ...envelope('entry.followAll'), sourceEntryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional() });
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
@@ -1394,6 +1404,8 @@ export const ClientMessage = z.discriminatedUnion('type', [
   EntryDeltaMsg,
   EntryRevertMsg,
   EntryPinsMsg,
+  EntryFollowMsg,
+  EntryFollowAllMsg,
   DesignPolishMsg,
   RegionPlanMsg,
   RegionTilesRequestMsg,

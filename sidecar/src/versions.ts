@@ -31,7 +31,8 @@ export const VERSION_MAX_AGE_MS = 30 * 24 * 60 * 60_000;
 export const USER_FIELDS = ['favorite', 'userTags', 'displayName'] as const;
 export const SUMMARY_MAX = 200;
 
-export type VersionBy = 'design' | 'polish' | 'revert' | 'migrated';
+/** (6d FS) 'follow': a copy re-made from its source's new version by its recipe. */
+export type VersionBy = 'design' | 'polish' | 'revert' | 'migrated' | 'follow';
 
 /** One entry of the blueprint JSON's `versions` (the lineage). */
 export interface LineageEntry {

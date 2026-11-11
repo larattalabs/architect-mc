@@ -691,6 +691,12 @@ export class SimDesigner implements Designer {
         what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${r2.change})`;
         note = r2.change;
       }
+      // (6d FS) sim:frontmove: the front is turned and kept (the sidecar skips the frame guard for it): a source version whose frame
+      // moved, so its copies' follow is refused `frame`
+      if (faults.has('frontmove')) {
+        source = source.replace(/front:\s*'(north|south|east|west)'/, (_m, f: string) => `front: '${f === 'east' ? 'west' : 'east'}'`);
+        note = `${note}; the front was turned (sim:frontmove)`;
+      }
       // sim:frontchange: round 1 turns the front (the frame guard refuses it), a repair round puts it back
       if (faults.has('frontchange')) {
         const turned = source.replace(/front:\s*'(north|south|east|west)'/, (_m, f: string) => `front: '${f === 'east' ? 'west' : 'east'}'`);

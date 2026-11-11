@@ -276,6 +276,12 @@ public class ApiTest implements ModInitializer {
 			case "apisch": {
 				return ApiTestSchem.step(src, a);
 			}
+			case "followers":
+			case "follow":
+			case "followall":
+			case "apifs": {
+				return ApiTestFS.step(src, a);
+			}
 			case "promote":
 			case "versionof":
 			case "estimatemix":

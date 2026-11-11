@@ -541,4 +541,11 @@ final class LibraryImpl implements Library {
 		});
 		return ApiImpl.onServerFuture(done);
 	}
+
+	// ------------------------------------------------------------------ 6d FS
+
+	@Override
+	public List<dev.larattalabs.architect.api.Library.Follower> followers(String sourceEntryId) {
+		return WireFS.followers(this, sourceEntryId);
+	}
 }

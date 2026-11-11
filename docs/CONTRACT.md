@@ -22818,6 +22818,77 @@ unaffected (a lot is BOX above its pads).
 
 - **N-FS-1:** a copy that can't follow stays as it is, at $0, with no paid redesign.
 
+### As built (slice/FS, 2026-11-11, over main 4b844fea)
+
+**§0 facts re-checked on main 4b844fea.** Unchanged in substance; lines moved: `Library.Derivation` is `Library.java` :276-301 (the
+record at :284); the COPY recipe is written at `variants.ts` :628 (`recipeRecord` :48-50), `COPY_RECIPES` is :369 and its loop :586;
+`checkChangeable`'s `VERSION_REFUSED copy` is `versions.ts` :186-193; `derivation` is carried by `polish.ts` :970 and by
+`installVersionOf` at `sidecar.ts` :1141 (no longer :1009); `SiteDeltas.outdated` is still :1499.
+
+**API (Steward sees; all `Since NEXT.`, binary compatible: new nested records and default methods only).**
+- `Library.followers(String sourceEntryId)` -> `List<Library.Follower>`; `record Library.Follower(String entryId, Library.Derivation.Kind
+  kind, int sourceVersion, int headVersion, int sourceHead, boolean behind)`. Read from the loaded library (no helper); `sourceHead` 0
+  when the source is gone (never `behind` then).
+- `Designs.follow(String copyEntryId, int toSourceVersion, @Nullable String opKey)` -> `CompletableFuture<Designs.FollowResult>`;
+  `Designs.followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey)` -> `CompletableFuture<List<FollowResult>>`;
+  `record Designs.FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion, @Nullable String
+  refused, boolean alreadyFollowed, String message)`, exactly §3's shape.
+- Feature `followSource` (the helper's `entry.follow`). `EntryVersion.by` can be `follow`. Refusals outside `FollowResult.refused`:
+  `ArchitectRefused NOT_ALLOWED` with detail `until_7b` (a SITE entry, answered by the mod also without a helper), `not_copy` (a
+  VARIANT, a RESKIN or an entry derived from nothing) or `adopted` (a copy of an adopted entry); `UNKNOWN_BLUEPRINT` for an unknown
+  entry; `OP_KEY_CONFLICT` for a key re-used with another body.
+
+**Wire.** `entry.follow {entryId, toSourceVersion, opKey?}` and `entry.followAll {sourceEntryId, toSourceVersion, opKey?}`. The link's
+ack timeout is 20 s and a follow is several kit builds, so the helper acks at once with the operation (`{id, kind, source,
+sourceVersion, status, members, results}`), after writing it to `<data>/follows/<file>.json` (`key-<opKey>`, or `keyh-<sha>` for a key
+that is not a safe file name, or a generated `fo...` id). Results come as `follow.upsert {follow}`, `status: "done"` last; the mod's
+future completes on the server thread after the library reloaded. A future pending when the link drops fails; the operation resumes when
+the helper starts again and the same opKey answers its saved results.
+
+**The job (sidecar `follows.ts`, its own serial queue, $0).** As §3, with these readings:
+- **The recipe on the new version (an as-built reading, S-FS-5 below):** the build takes the recipe's `roles` (its bible pin plus the
+  shift), its `mirror`, and its `param` *over the new source version's own `values`*. The recorded `values` are the archetype's values at
+  copy time plus the param (`{width: 9, depth: 7, porch: true, ...}`): taken whole they pin every param, so a source change made
+  through a param default (the sim's `versionOf`, PT2's floors) would never reach a copy and every follow would be a no-op. When the new
+  version's values equal the old ones this is exactly the recorded recipe. The bundled cabin and tavern units show the change arriving
+  and the blocks equal to an independent `kit/build.mjs` rebuild of that composition.
+- Checks in order: the pristine-kit check (`--type`, `--profile`, `--restraint` as a copy's), the copy's request `maxSize` (`fit`; no
+  group records a lot fit box, so that is the bound), the frame against the copy's head (`kit/tools/diff.mjs` `frameKept`), then the
+  variation bar measured against the new source version only (not the siblings `chooseRecipe` compares with), by a small script the
+  sidecar writes into the scratch dir (the kit is unchanged). A copy whose recorded recipe had `bar: false` (0b took the best candidate)
+  is not held to the bar. Massing conformance is not re-checked (not in §3; the archetype's massing describes the old version).
+- The source's `bible/` of the frozen version comes with the source; the copy's other blueprint keys are carried as `installVersionOf`
+  carries them; `variantOfVersion` follows `derivation.sourceVersion`.
+- The compare-and-set runs synchronously right before `versions.install`, after the last await. Order of the no-ops: already followed is
+  answered before `head_moved`, so a second overlapping call answers `alreadyFollowed`.
+- Resume: an `installing` marker (with the version about to commit) is saved before each install, so a follower this operation installed
+  before a kill reports `followed` after the restart, not `alreadyFollowed`. Running operations' frozen source versions are added to
+  the versions GC's in-use set.
+- A copy whose entry is gone or no longer a copy answers `head_moved`. `followAll` of a gone source freezes every COPY of it, each
+  `source_gone`.
+- Test hook: the sim backend's `sim:frontmove` on a `versionOf` turns the source's front and keeps it (the frame guard is skipped for it,
+  sim only), so the gate has a source version whose frame moved (item 5).
+
+**Gate.** `fs-unit` (`tools/gate6dfs.mjs unit`) and `fs-ingame` (`tools/gate6dfs.mjs ingame`, headless), chain `6dfs`, an impact rule
+for FS's files.
+- Item 2 differs from the table: 0b's `copyCap` is at most 3 placements per design, so one archetype has at most **2 copies** through
+  the API. The gate uses the archetype, 2 copies and a VARIANT: `followers` lists 3, `behind` true for the 2 copies; items 3-6 use the 2
+  copies and their 2 lots.
+- Item 4's player block is placed on a cell the delta changes: a probe `applyDelta` and its revert on the first lot find those cells (the
+  probe's revert is checked cell for cell too).
+- Item 7 under DEV MODE: the unit suites (0b's copies and versionOf units, 5b's versions units) and api-compat (0.47.0 and 0.45.0
+  apitest jars; 0.47.0 and 0.57.0 mod surfaces). `5b-deltas` and `pt2-ingame` are left to the nightly: FS changes no mod delta,
+  revert or adopt code.
+
+### Open questions for Steward (as built)
+
+- **S-FS-5. The recipe's values.** A follower takes the recipe's param over the new source version's values (above), so a source
+  change through a param default reaches its copies. The literal reading (the recorded values whole) would make every such follow a
+  no-op. Fine?
+- **S-FS-6. A grown follower and its lot.** `fit` bounds a follower by its copy's request `maxSize`, not by the standing lot box; a
+  follower that grows past its lot passes `follow` and is refused by `checkDelta`/`applyDelta` on that lot. Should `follow` also refuse
+  `fit` against the copy's standing lots?
+
 
 ## Phase 6d slice LC: land change in a standing region, the report (FROZEN 2026-10-20, Steward reviewed)
 

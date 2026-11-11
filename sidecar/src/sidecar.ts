@@ -30,6 +30,8 @@ import { truncate } from './util/text.js';
 import { checkImportPath, findVariantSource, Reskins, VariantBook, VariantRefused, VariantRunner } from './variants.js';
 import { EntryVersions, type VersionBy } from './versions.js';
 import { Polishes } from './polish.js';
+import { simFaults as simFaultsOf } from './sim.js';
+import { Follows, view as followView } from './follows.js';
 import { Regions } from './regions.js';
 import { RegionDesigns } from './regiondesign.js';
 
@@ -158,6 +160,8 @@ export class Sidecar {
   readonly regions: Regions;
   /** (6b) template-first region designs (region.design) */
   readonly regionDesigns: RegionDesigns;
+  /** (6d FS) copies following their source (entry.follow, entry.followAll) */
+  readonly follows: Follows;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -197,6 +201,7 @@ export class Sidecar {
     this.polishes = new Polishes(this);
     this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
     this.regionDesigns = new RegionDesigns(this);
+    this.follows = new Follows(this);
   }
 
   /** trusted, open connections */
@@ -329,13 +334,15 @@ export class Sidecar {
     try {
       const repaired = this.versions.repairAll();
       if (repaired.length) this.log.info(`entry versions repaired: ${repaired.join(', ')}`);
-      this.versions.gc(this.polishes.versionsInUse());
+      // (6d FS) a running follow operation's frozen source version stays too
+      this.versions.gc(new Set([...this.polishes.versionsInUse(), ...this.follows.versionsInUse()]));
     } catch (e) {
       this.log.error(`entry versions: ${(e as Error).stack ?? e}`);
     }
     this.bibles.backend = designer.bibleBackend?.() ?? new SimBibleBackend(this, this.config.simStepMs);
     fs.mkdirSync(this.config.biblesDir, { recursive: true });
     this.variantRunner.start();
+    this.follows.start();
     void this.loadKitInfo();
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
@@ -402,6 +409,7 @@ export class Sidecar {
     this.pool.stop();
     await this.regions.close();
     await this.variantRunner.stop();
+    await this.follows.stop();
     await this.jobs.stop();
     await this.designer?.stop();
     this.store.close();
@@ -635,6 +643,11 @@ export class Sidecar {
         this.entryVersioned(msg.entryId, version, from, 'revert');
         return { entryId: msg.entryId, version };
       }
+      // ---- 6d FS (no Claude): the ack carries the operation; its results follow as follow.upsert
+      case 'entry.follow':
+        return followView(this.follows.follow(msg.entryId, msg.toSourceVersion, msg.opKey));
+      case 'entry.followAll':
+        return followView(this.follows.followAll(msg.sourceEntryId, msg.toSourceVersion, msg.opKey));
       case 'entry.pins':
         this.versions.setPins(msg.pins);
         return { entries: Object.keys(msg.pins).length };
@@ -1109,6 +1122,8 @@ export class Sidecar {
   /** After the pristine check: the problem that fails the round (a massing that is not one; conformance errors), if any. */
   checkOutcome(d: Design, res: CheckResult): string | undefined {
     // (0b, C13) the frame guard of a versionOf: a changed front or entrance feet row is a repair round
+    // (6d FS) sim:frontmove (the sim backend only): the versionOf keeps a turned front, so a test has a source version whose frame moved
+    if (this.designerName() === 'sim' && d.request.versionOf && simFaultsOf(d.request).has('frontmove')) return this.massings.checkOutcome(d, res);
     return this.massings.checkOutcome(d, res) ?? frameProblem(this, d, res);
   }
 

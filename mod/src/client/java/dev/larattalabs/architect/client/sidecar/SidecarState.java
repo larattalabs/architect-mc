@@ -205,6 +205,10 @@ public final class SidecarState {
 		/** (5b) {@code entry.versioned {entryId, version, from, by, designId?}}: a library entry got a new version. */
 		default void onEntryVersioned(JsonObject message) {
 		}
+
+		/** (6d FS) {@code follow.upsert {follow}}: a follow operation changed. */
+		default void onFollow(JsonObject follow) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
@@ -606,6 +610,15 @@ public final class SidecarState {
 			case "entry.versioned" -> {
 				for (Listener l : listeners) {
 					guard(() -> l.onEntryVersioned(json));
+				}
+			}
+			case "follow.upsert" -> {
+				if (!json.has("follow") || !json.get("follow").isJsonObject()) {
+					return;
+				}
+				JsonObject f = json.getAsJsonObject("follow");
+				for (Listener l : listeners) {
+					guard(() -> l.onFollow(f));
 				}
 			}
 			case "bible.index" -> {

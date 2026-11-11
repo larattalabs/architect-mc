@@ -166,6 +166,33 @@ public interface Library {
 		throw new UnsupportedOperationException("Library.exportSchematic needs Architect API 1.18.0");
 	}
 
+	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API NEXT)
+
+	/**
+	 * Every entry whose head derives from {@code sourceEntryId} ({@code derivation.source}), any kind, sorted by id (docs/CONTRACT.md
+	 * "Phase 6d slice FS" §2). {@link Follower#behind} is true for a COPY whose {@code sourceVersion} is below the source's head:
+	 * {@link Designs#follow} or {@link Designs#followAll} re-makes it from that version by its recipe. VARIANT and RESKIN entries are
+	 * listed (they never follow, so never behind), as are SITE entries (7b). Read from the loaded library (no helper needed); empty for
+	 * an unknown source or one nothing derives from. Any thread. Feature {@code "followSource"} (the helper's {@code entry.follow}).
+	 * Since NEXT.
+	 */
+	default List<Follower> followers(String sourceEntryId) {
+		throw new UnsupportedOperationException("Library.followers needs Architect API NEXT");
+	}
+
+	/**
+	 * One entry derived from a source (6d FS, {@link #followers}).
+	 *
+	 * @param entryId the derived entry
+	 * @param kind how it was derived (its head's {@link Derivation#kind})
+	 * @param sourceVersion the source version its head was made from
+	 * @param headVersion its own head version
+	 * @param sourceHead the source's head version (0 when the source is gone)
+	 * @param behind a COPY whose {@code sourceVersion} is below {@code sourceHead}
+	 */
+	record Follower(String entryId, Derivation.Kind kind, int sourceVersion, int headVersion, int sourceHead, boolean behind) {
+	}
+
 	/**
 	 * A library entry.
 	 *
@@ -277,7 +304,8 @@ public interface Library {
 	 * @param source the entry it was made from
 	 * @param sourceVersion the source's version it was made from
 	 * @param kind VARIANT (a player variant), RESKIN (a re-skin to another bible), COPY (a copy in a design group) or SITE
-	 *     (reserved for 7b's site-adapted designs). Only COPY and SITE follow their source (6d)
+	 *     (reserved for 7b's site-adapted designs). Only COPY and SITE follow their source (6d; since NEXT a COPY follows through
+	 *     {@link Designs#follow}, a SITE waits for 7b)
 	 * @param recipe what rebuilds it: a copy's {@code {shift, param, values, mirror, roles, bible, group, itemKey, ...}}; a
 	 *     variant's palette and values; a re-skin's bible
 	 */
