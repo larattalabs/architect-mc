@@ -9,7 +9,16 @@ import dev.larattalabs.architect.api.Library;
 import dev.larattalabs.architect.api.Library.Derivation;
 import dev.larattalabs.architect.api.Library.Follower;
 import dev.larattalabs.architect.api.Reason;
+import dev.larattalabs.architect.delta.LotFrame;
+import dev.larattalabs.architect.delta.TemplateDelta;
+import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprints;
+import dev.larattalabs.architect.placement.BlueprintTransform;
+import dev.larattalabs.architect.region.Ir;
+import dev.larattalabs.architect.region.RegionsImpl;
+import dev.larattalabs.architect.site.Site;
+import dev.larattalabs.architect.site.SiteDeltas;
+import dev.larattalabs.architect.site.Sites;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -67,6 +76,78 @@ public final class WireFS {
 		return List.copyOf(out);
 	}
 
+	// ------------------------------------------------------------------ the standing lots (FS-b, S-FS-6)
+
+	/**
+	 * The standing region lots that hold {@code entryId}: a site of the entry at its current version whose {@code architect_mc:lot} names a
+	 * lot of its region's plan. Each is {@code {siteId, lotId, box: [minX, minY, minZ, maxX, maxY, maxZ], origin: [x, y, z] | null}}: the lot's
+	 * box as template-local blocks of the version the site stands at ({@link LotFrame#localBox}, built on the geometry the delta places a
+	 * new version by), and that version's frame origin (null: unframed). The helper tests a re-made follower against it before it installs
+	 * one. A site that is not a region lot has no box to check against and is not listed. Wire only.
+	 */
+	static JsonArray lotsOf(String entryId) {
+		JsonArray out = new JsonArray();
+		net.minecraft.server.MinecraftServer server = ApiImpl.server();
+		if (server == null) {
+			return out;
+		}
+		Blueprints.Entry he = Blueprints.entry(entryId);
+		int head = he == null ? 0 : Blueprints.headVersion(he);
+		for (Site b : Sites.all()) {
+			if (!entryId.equals(b.blueprint()) || b.group() == null || !(b.ext().get("architect_mc:lot") instanceof JsonElement l) || !l.isJsonPrimitive()) {
+				continue;
+			}
+			int v = SiteDeltas.versionOf(server, b);
+			if (v <= 0 || v != head) {
+				continue;
+			}
+			Ir.Lot lot = lotOf(b.group(), l.getAsString());
+			Blueprints.Version bv = Blueprints.version(server, entryId, v);
+			if (lot == null || bv == null) {
+				continue;
+			}
+			b = Sites.get(b.id()) == null ? b : Sites.get(b.id()); // versionOf may have recorded the derived version
+			int[] min = SiteDeltas.siteMin(b, bv);
+			int[] lb = lot.box();
+			var bp = bv.entry().blueprint();
+			int[] box = LotFrame.localBox(new Anchors.Bounds(lb[0], lb[1], lb[2], lb[3], lb[4], lb[5]), min, bp.sizeX(), bp.sizeZ(), BlueprintTransform.parseTurns(
+				b.rotation()));
+			JsonObject o = new JsonObject();
+			o.addProperty("siteId", b.id());
+			o.addProperty("lotId", lot.id());
+			JsonArray ba = new JsonArray();
+			for (int n : box) {
+				ba.add(n);
+			}
+			o.add("box", ba);
+			if (TemplateDelta.framed(bv.entry().json())) {
+				JsonArray oarr = new JsonArray();
+				for (int n : TemplateDelta.origin(bv.entry().json())) {
+					oarr.add(n);
+				}
+				o.add("origin", oarr);
+			} else {
+				o.add("origin", com.google.gson.JsonNull.INSTANCE);
+			}
+			out.add(o);
+		}
+		return out;
+	}
+
+	private static Ir.@Nullable Lot lotOf(String groupId, String lotId) {
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			if (groupId.equals(l.rec().groupId)) {
+				for (Ir.Lot lot : l.ir().lots()) {
+					if (lot.id().equals(lotId)) {
+						return lot;
+					}
+				}
+				return null;
+			}
+		}
+		return null;
+	}
+
 	// ------------------------------------------------------------------ follow, followAll
 
 	static CompletableFuture<FollowResult> follow(Library lib, String copyEntryId, int toSourceVersion, @Nullable String opKey) {
@@ -87,6 +168,7 @@ public final class WireFS {
 		if (opKey != null) {
 			m.addProperty("opKey", opKey);
 		}
+		m.add("lots", lotsOf(copyEntryId));
 		return send(m).thenApply(op -> {
 			List<FollowResult> rs = results(op);
 			if (rs.isEmpty()) {
@@ -103,6 +185,17 @@ public final class WireFS {
 		if (opKey != null) {
 			m.addProperty("opKey", opKey);
 		}
+		// (FS-b) the standing lots of every COPY of the source, by entry id: the helper refuses a follower a lot can't hold before installing it
+		JsonObject lots = new JsonObject();
+		for (Follower f : followers(ApiImpl.instance().library(), sourceEntryId)) {
+			if (f.kind() == Derivation.Kind.COPY) {
+				JsonArray a = lotsOf(f.entryId());
+				if (!a.isEmpty()) {
+					lots.add(f.entryId(), a);
+				}
+			}
+		}
+		m.add("lots", lots);
 		return send(m).thenApply(WireFS::results);
 	}
 

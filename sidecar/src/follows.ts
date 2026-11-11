@@ -24,7 +24,7 @@ import path from 'node:path';
 import { checkDesign, KIT, refreshKit, renderPreviews, runNode, withDesignId, type CheckResult } from './designs.js';
 import { ClientError, RefusedError } from './errors.js';
 import { bodyHash, OP_KEY_CONFLICT } from './opkeys.js';
-import type { BiblePin, Outbound } from './protocol.js';
+import type { BiblePin, FollowLot, Outbound } from './protocol.js';
 import { truncate } from './util/text.js';
 import { writeFileAtomic } from './util/fsx.js';
 import type { EntryVersions } from './versions.js';
@@ -32,7 +32,7 @@ import { normalizeKitImports } from './variants.js';
 import type { BibleIndex } from './bibles.js';
 import type { Logger } from './context.js';
 
-export type FollowRefusal = 'frame' | 'check' | 'bar' | 'fit' | 'bible_gone' | 'source_gone' | 'head_moved';
+export type FollowRefusal = 'frame' | 'check' | 'bar' | 'fit' | 'lot_too_small' | 'bible_gone' | 'source_gone' | 'head_moved';
 
 /** One follower's outcome (Designs.FollowResult on the mod side). */
 export interface FollowResult {
@@ -53,6 +53,8 @@ export interface FollowMember {
   state: 'pending' | 'installing' | 'done';
   /** the version an install is about to commit (the resume reads it) */
   installing?: number;
+  /** (FS-b) the standing region lots that held the copy when the operation froze it (the mod's; frozen with the member so a resume tests the same set) */
+  lots?: FollowLot[];
   result?: FollowResult;
 }
 
@@ -220,7 +222,7 @@ export class Follows {
   // ---- the requests (synchronous, before the ack) ---------------------------------------------------------------------
 
   /** entry.follow: one copy. */
-  follow(entryId: string, toSourceVersion: number, opKey?: string): FollowOp {
+  follow(entryId: string, toSourceVersion: number, opKey?: string, lots?: FollowLot[]): FollowOp {
     const body = { type: 'entry.follow', entryId, toSourceVersion };
     const prior = this.prior(opKey, body);
     if (prior) return prior;
@@ -230,11 +232,11 @@ export class Follows {
     this.refuseKind(entryId, der);
     const source = der!.source!;
     const target = this.resolveTarget(source, toSourceVersion, true);
-    return this.create('one', source, target, [{ entryId, head: this.host.versions.head(entryId), state: 'pending' }], opKey, body);
+    return this.create('one', source, target, [{ entryId, head: this.host.versions.head(entryId), state: 'pending', ...(lots?.length ? { lots } : {}) }], opKey, body);
   }
 
   /** entry.followAll: every COPY of the source that is behind, frozen now. */
-  followAll(source: string, toSourceVersion: number, opKey?: string): FollowOp {
+  followAll(source: string, toSourceVersion: number, opKey?: string, lots?: Record<string, FollowLot[]>): FollowOp {
     const body = { type: 'entry.followAll', sourceEntryId: source, toSourceVersion };
     const prior = this.prior(opKey, body);
     if (prior) return prior;
@@ -243,7 +245,7 @@ export class Follows {
     // a gone source: every COPY of it is frozen (each answers source_gone)
     const members = this.followers(source)
       .filter((f) => f.kind === 'copy' && (!exists || f.sourceVersion < target))
-      .map((f) => ({ entryId: f.entryId, head: f.headVersion, state: 'pending' as const }));
+      .map((f) => ({ entryId: f.entryId, head: f.headVersion, state: 'pending' as const, ...(lots?.[f.entryId]?.length ? { lots: lots[f.entryId]! } : {}) }));
     return this.create('all', source, target, members, opKey, body);
   }
 
@@ -413,6 +415,9 @@ export class Follows {
       const s = res.sidecar!.size!;
       const max = req.maxSize;
       if (max && (s.x > max.x || s.y > max.y || s.z > max.z)) return refuse('fit', `the follower is ${s.x}x${s.y}x${s.z}, over the copy's maximum ${max.x}x${max.y}x${max.z}`);
+      // (FS-b, S-FS-6) every standing region lot that holds the copy must hold the re-made version: refused before anything installs
+      const tooSmall = lotsTooSmall(m.lots ?? [], s, res.sidecar as Record<string, unknown>);
+      if (tooSmall.length) return refuse('lot_too_small', `the follower is ${s.x}x${s.y}x${s.z}, too big for ${tooSmall.map((l) => `lot ${l.lotId} (site ${l.siteId})`).join(', ')}: ${m.entryId} stays at v${m.head}`);
       // the frame: front and the entrance feet row equal to the copy's head
       const headNbt = path.join(v.dir(m.entryId), `${m.entryId}.nbt`);
       const fr = await runNode(path.join(this.host.config.kitDir, 'tools', 'diff.mjs'), [headNbt, res.nbt!, '--json'], work, KIT_TIMEOUT_MS);
@@ -455,6 +460,31 @@ export class Follows {
       fs.rmSync(scratch, { recursive: true, force: true });
     }
   }
+}
+
+/**
+ * (FS-b) The standing lots a re-made follower of size `size` does not fit. A follower is placed by the delta so that every design coordinate
+ * lands on the world cell it has in the version the site stands at (the mod's `SitePlanner.alignedMin`), so its box in that version's
+ * template-local blocks is `[oa - ob, oa - ob + size)`, where `oa`/`ob` are the two frame origins (an unframed side borrows the framed
+ * side's, as `TemplateDelta.origins` does). The lot's box arrives in the same blocks, so this is containment on x and z (as `fitToLot`
+ * tests a footprint; the lot's height is not tested there).
+ */
+export function lotsTooSmall(lots: readonly FollowLot[], size: { x: number; z: number }, candidate: Record<string, unknown>): FollowLot[] {
+  const fb = frameOrigin(candidate);
+  return lots.filter((l) => {
+    const fa = l.origin;
+    const oa = fa ?? fb ?? [0, 0, 0];
+    const ob = fb ?? fa ?? [0, 0, 0];
+    const x0 = oa[0] - ob[0];
+    const z0 = oa[2] - ob[2];
+    return !(x0 >= l.box[0] && x0 + size.x - 1 <= l.box[3] && z0 >= l.box[2] && z0 + size.z - 1 <= l.box[5]);
+  });
+}
+
+function frameOrigin(j: Record<string, unknown>): [number, number, number] | undefined {
+  const f = j.frame as { origin?: unknown } | undefined;
+  const o = f?.origin;
+  return Array.isArray(o) && o.length === 3 && o.every((n) => typeof n === 'number') ? (o as [number, number, number]) : undefined;
 }
 
 /** The file stem of a keyed operation (a key that is not a safe file name is hashed). */

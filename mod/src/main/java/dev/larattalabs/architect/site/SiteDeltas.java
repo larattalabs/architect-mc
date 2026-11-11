@@ -898,7 +898,7 @@ public final class SiteDeltas {
 	}
 
 	/** The box corner a site's version {@code v} stands at: its history's, else the record's box (placed at that version). */
-	static int[] siteMin(Site b, Blueprints.Version v) {
+	public static int[] siteMin(Site b, Blueprints.Version v) {
 		List<Site.History> h = b.versioning().history();
 		for (int i = h.size() - 1; i >= 0; i--) {
 			if (h.get(i).version() == v.version()) {
