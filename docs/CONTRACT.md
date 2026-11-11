@@ -27299,7 +27299,7 @@ byte-identical (measured; the BuildOrder golden and TerrainFit CLEAR included).
   only the phase close.
 - **N-7b-4 yes:** the images A/B is site renders on vs off on S5's two archetypes, picked blind.
 - **N-7b-5 yes:** scaffolding on by default for non-pad fits under construction, off for `on_pad`.
-- **N-7b-6 yes:** the pin badge goes in (site-bound entries show it in the Library and place elsewhere only as "site variant here").
+- **N-7b-6 yes:** the pin badge goes in (site-bound entries show it in the Library and place elsewhere only as "site variant here"); built in **ST** (the Library and placement UI).
 - **N-7b-7 defer:** reference images (§16.5 use 3) move to 7c; nothing is asked of Noah in 7b, and P4 has two arms.
 
 ### Changes from Steward's review (2026-11-11; these win over the text above)
