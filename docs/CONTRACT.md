@@ -22897,6 +22897,48 @@ for FS's files.
   `fit` against the copy's standing lots?
 
 
+### Steward's answers and FS-b (slice/FS-b, 2026-11-11, over main 24db8a72)
+
+- **S-FS-5 confirmed as built** (Steward, 2026-11-11): the recipe's param wins over the new source version's values. Nothing changed there.
+- **S-FS-6 answered yes, built in FS-b:** "check the standing lots in `follow`, and refuse before anything is re-made. A refusal up front is
+  easier for Steward to explain than a partial follow."
+
+**What FS-b does.** `follow` and `followAll` refuse a copy whose re-made version a standing lot could not hold, before anything is
+installed. A lot holds the copy when it is a region lot (a site with `architect_mc:lot` that names a lot of its region's plan) standing at the
+copy's current head version, as `Library.followers` / `outdated` see it.
+
+- **The test (the same footprint `applyDelta` places).** `applyDelta` has no lot-box test of its own (a grown version is refused by `OVERLAP` or
+  `COVERED` where it grows into another site's cells); what it fixes is *where* the new version stands: `SitePlanner.alignedMin` puts every design
+  coordinate on the world cell it has in the standing version. FS-b tests that placed footprint against the lot's box on x and z, as
+  `LotFitting.fit` tests a footprint (a lot's height is not tested there). A follower of size `s` with the frame origins `oa` (standing version)
+  and `ob` (re-made version; an unframed side borrows the framed side's, as `TemplateDelta.origins`) is the unrotated box `[oa - ob, oa - ob + s)`
+  in the standing version's template-local blocks.
+- **Split.** The mod knows the lots and not the candidate; the helper knows the candidate and no world. So the mod sends, with `entry.follow`
+  (`lots: [...]`) and `entry.followAll` (`lots: {entryId: [...]}`, every COPY of the source), each lot as `{siteId, lotId, box, origin}`:
+  `box` is the lot's box already turned back into the standing version's template-local blocks (`delta/LotFrame.localBox`, with the new
+  `BlueprintTransform.unrotateBlock`, from the site's origin, rotation and size), `origin` that version's frame origin or null. The helper
+  (`follows.ts` `lotsTooSmall`) does plain containment after the `fit` check and before the frame, the bar and the install; no rotation or
+  alignment arithmetic in TypeScript. `LotFrameTest` ties the two: for 4000 random lots, versions, origins and all four turns the lot's local
+  box agrees with the footprint `alignedMin` gives.
+- **Frozen, and not part of the key.** The lots are saved on the operation's member (`members[].lots`), so a restart tests the same set; they
+  are world state and not in the opKey body, so the same key with other lots is a replay, never `OP_KEY_CONFLICT`.
+- **Not checked, by design:** a site that is not a region lot (a plain `fitToLot`/`place` site has no recorded box), and a site standing at an
+  older version than the copy's head.
+
+**The refusal Steward sees (one deliberate reading, API stamped `NEXT`).** The per-copy refusal of `followAll` can only be a `FollowResult`
+(a thrown `ArchitectRefused` would fail the whole future, and its `detail` is a plain string), so both calls answer the same way, as `fit`
+does: `FollowResult{followed false, refused: "lot_too_small", alreadyFollowed false, fromVersion = newVersion = the head, message}`, and the
+message names every lot that fails, e.g. `the follower is 10x8x9, too big for lot h1 (site st3): <copy> stays at v1`. `lot_too_small` is the
+one new value (`Since NEXT.` in `FollowResult`'s javadoc); no record or method changed, so api-compat is unaffected; whether a new refusal string needs a Steward RC is the coordinator's call. In `followAll` the other copies still follow. Nothing is installed for the refused copy and its version list is
+unchanged.
+
+**Gate.** Pinned in units: the sidecar's `follow.test.ts` (a copy grown past its lot is refused with the head, blocks and version list
+unchanged, the other copy of `followAll` follows, the lots are frozen and not in the key; `lotsTooSmall` on framed and unframed origins) and
+the mod's `LotFrameTest`. `fs-ingame` (`tools/gate6dfs.mjs`) gains one check: the real mod sends each copy's standing lot (the helper's saved
+operation holds `[site, lot]` for both) and the two 17 x 17 lots still follow. A real too-small lot in game needs a plan whose lot is tight
+for a grown cabin (a second region and several `versionOf`s, well over the 30 lines the slice allowed), so it is not there.
+
+
 ## Phase 6d slice LC: land change in a standing region, the report (FROZEN 2026-10-20, Steward reviewed)
 
 A standing region can say what has changed in it since it was built, part by part and lot by lot. v2 ships **the report only**: the
