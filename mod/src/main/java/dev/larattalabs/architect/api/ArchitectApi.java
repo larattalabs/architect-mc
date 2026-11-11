@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.49.0";
+	String VERSION = "1.50.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -194,7 +194,7 @@ public interface ArchitectApi {
 	 * {@code NO_ROOM} on a required wall. {@link Regions#realiseApproved} picks the daylight sensor's rung from the bound design (no
 	 * sky-exposed rung: levers only, the lot site's {@code architect_mc:gateMechanism} deviation {@code mechanism.sensor}) and writes the
 	 * mechanism as the region's cells after the lot (the design's blocks there dropped). No new record, method or reason.
-	 * Since NEXT (slice PG), a PG helper ({@code region.plan.passageJoin}) adds {@code "passageJoins"}: a K3 gatehouse's passage is a
+	 * Since 1.50.0 (slice PG), a PG helper ({@code region.plan.passageJoin}) adds {@code "passageJoins"}: a K3 gatehouse's passage is a
 	 * gate of the join through a walled town ({@code "gateJoins"}): the district's join crosses it front port to back port, never writing
 	 * it, and opens on the town's own lane at the back port (no leg in). The IR's {@code reach.gate} gains {@code kind: passage},
 	 * {@code lot} and, with a gate mechanism, {@code mechanism {kind, rest, volatile}}; {@code via} is "region:lot". A gatehouse not built is
