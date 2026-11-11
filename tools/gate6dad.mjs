@@ -398,9 +398,9 @@ steps.ingame = async () => {
   // ---- row 5: Regions.remove: E-flat 0 over the claim against the world before the settlement (the verifier re-runs it)
   const rm = await removeRegion(region);
   const d5 = diff(B0, await cellsOf(BOX));
-  const tomb = await call('dev.region.state', { region }, 60_000).catch(() => null);
-  out.remove = { result: rm, diff: d5, state: tomb?.view?.state };
-  check(rm.removed !== false && tomb?.view?.state === 'REMOVED' && d5.n === 0, `row 5: Regions.remove of the adopted region (its growth, its delta'd lots, both street pieces): ${tomb?.view?.state}; E-flat ${d5.n} against the world before the settlement`, d5.first);
+  const listed = (await call('dev.region.list', {}, 60_000)).regions.some((x) => x.id === region);
+  out.remove = { result: rm, diff: d5, listed };
+  check(rm.removed === true && !listed && d5.n === 0, `row 5: Regions.remove of the adopted region (its growth, its delta'd lots, both street pieces): removed ${rm.removed} (restored ${rm.restored}), no longer standing (${!listed}); E-flat ${d5.n} against the world before the settlement`, d5.first);
   const un5 = await call('dev.ad.unadopt', { region }, 60_000);
   check(!!un5.refused, `row 5: the removed region can't be un-adopted (${un5.refused})`);
 
