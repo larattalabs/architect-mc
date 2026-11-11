@@ -8,7 +8,7 @@ import java.util.Map;
  * a group again: {@code groups} names each site's group (its old group, or a new standalone one), {@code newGroups} the groups made because a
  * site's old group was gone.
  *
- * @since NEXT
+ * @since 1.52.0
  */
 public record UnadoptResult(String regionId, Map<String, String> groups, List<String> newGroups) {
 	public UnadoptResult {

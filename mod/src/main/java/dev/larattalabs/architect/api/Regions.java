@@ -318,7 +318,7 @@ public interface Regions {
 	 * {@link RegionState#PREPARING} and the sites refuse deltas and removal {@link Reason#SITE_BUSY}. Answers the region, {@link RegionState#PLACED},
 	 * its ext {@code architect_mc:adopted} and {@code architect_mc:artifact}. Afterwards it grows ({@link #planRevision}, a revision plan of its
 	 * artifact), revises and is removed ({@link #remove}) as any region. Needs the helper (sidecar). Server thread; the future completes on it.
-	 * Since NEXT, feature {@code "regionAdopt"}.
+	 * Since 1.52.0, feature {@code "regionAdopt"}.
 	 */
 	default CompletableFuture<RegionView> adopt(AdoptRegionRequest r) {
 		throw new UnsupportedOperationException("Regions.adopt needs Architect API NEXT");
@@ -328,7 +328,7 @@ public interface Regions {
 	 * (6d AD, §3) Undoes an adoption: only an adopted region at position 0 (no revision accepted) in state {@link RegionState#PLACED}, else
 	 * {@link Reason#NOT_ALLOWED}. Each site goes back to its old group's stage (or a stage {@code readopted} appended), keeping every change made
 	 * to that group since; a site whose old group is gone gets a new standalone group (named in the result). Nothing is written to the world;
-	 * the region record is deleted. Crash safe as adoption. Since NEXT, feature {@code "regionAdopt"}.
+	 * the region record is deleted. Crash safe as adoption. Since 1.52.0, feature {@code "regionAdopt"}.
 	 */
 	default CompletableFuture<UnadoptResult> unadopt(String regionId) {
 		throw new UnsupportedOperationException("Regions.unadopt needs Architect API NEXT");

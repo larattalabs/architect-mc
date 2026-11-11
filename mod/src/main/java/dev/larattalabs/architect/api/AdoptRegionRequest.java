@@ -22,7 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param opKey the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}): adopting again with the same key and body answers the same region;
  *              with another body {@link Reason#OP_KEY_CONFLICT}; null: none
  * @param ext the region's ext (the caller's keys; {@code architect_mc:} keys are Architect's and refused)
- * @since NEXT
+ * @since 1.52.0
  */
 public record AdoptRegionRequest(@Nullable String owner, ResourceKey<Level> dimension, BoundingBox claim, String layout, JsonObject geometry, List<String> roadSiteIds,
 	Map<String, String> lots, @Nullable String opKey, JsonObject ext) {

@@ -231,7 +231,7 @@ public interface Designs {
 	 * {@code derivation.sourceVersion} the new source version, the recipe unchanged; {@link SiteEvents#ENTRY_VERSIONED} fires) only
 	 * when it passes the pristine-kit check, the copy's frame (front and the entrance feet row equal to its head: its lots take the
 	 * delta), its size bound (its request's maximum: {@code fit}), every standing region lot that holds the copy at its current
-	 * version (the re-made version, placed as the delta places it, must lie inside the lot's box: {@code lot_too_small}, Since NEXT)
+	 * version (the re-made version, placed as the delta places it, must lie inside the lot's box: {@code lot_too_small}, Since 1.52.0)
 	 * and the variation bar against the new source version (2 of 3 levers, at least 10% of cells changed; for a copy whose recipe
 	 * met it). Otherwise nothing installs and
 	 * {@link FollowResult#refused} says why. Nothing is ever applied to a lot: the caller lists {@link Sites#outdated()} and runs
@@ -270,7 +270,7 @@ public interface Designs {
 	 * @param newVersion its head after (= {@code fromVersion} when nothing installed)
 	 * @param sourceVersion the source version followed (the frozen one)
 	 * @param refused null, or why nothing installed: {@code frame}, {@code check}, {@code bar}, {@code fit}, {@code bible_gone},
-	 *     {@code source_gone}, {@code head_moved}, {@code lot_too_small} (Since NEXT: a standing region lot that holds the copy
+	 *     {@code source_gone}, {@code head_moved}, {@code lot_too_small} (Since 1.52.0: a standing region lot that holds the copy
 	 *     could not hold the re-made version; {@code message} names the site and lot ids; nothing was installed)
 	 * @param alreadyFollowed the copy already derived from that version or a later one (a no-op)
 	 * @param message what happened, for a log or a toast
