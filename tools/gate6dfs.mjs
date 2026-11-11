@@ -238,9 +238,10 @@ steps.ingame = async () => {
   const fsApi = await api('apifs');
   check(fsApi.followSource === true, `the API names followSource (${json(fsApi)})`);
   // ---- the family: an archetype and 2 copies (0b's cap: 3 placements per design), plus a VARIANT of the archetype
-  // (the sim's versionOf raises the first int param's default by one, as simRedirect does; a copy whose recipe's param is exactly that
-  // value would no longer differ from the new source by it, and its follow is refused `bar`, correctly: the copies' recipes are seeded by
-  // the group id, so a family whose copy collides is made again under a new group, at most 4 times)
+  // (the sim's versionOf raises the first int param's default by one, as simRedirect does. A copy whose recipe's param is that param pins
+  // it: at the new value it no longer differs from the new source by it (refused `bar`, correctly), at another value its follower's blocks
+  // equal its head (an empty delta). The copies' recipes are seeded by the group id, so a family with such a copy is made again under a
+  // new group, at most 8 times)
   const simChange = (src) => {
     const params = /export\s+const\s+params\s*=\s*\{([\s\S]*?)\n\};/.exec(src)?.[1] ?? '';
     for (const m of params.matchAll(/(\w+)\s*:\s*\{([^}]*type:\s*'int'[^}]*)\}/g)) {
@@ -252,7 +253,7 @@ steps.ingame = async () => {
   const readJson = (id) => JSON.parse(fs.readFileSync(path.join(L.LIBRARY, id, `${id}.blueprint.json`), 'utf8'));
   let fin, arch, copies, gid, by;
   out.families = [];
-  for (let attempt = 1; attempt <= 4; attempt++) {
+  for (let attempt = 1; attempt <= 8; attempt++) {
     const g = { name: `G6D FS Copies ${attempt}`, bible: 'oak', owner: 'apitest:fs', items: [{ type: 'cabin', style: 'rustic', size: [24, 20, 24], itemKey: 'house', count: 3 }] };
     gid = await result(await api(`group fs1${attempt} ${b64(g)}`));
     fin = await until(async () => {
@@ -265,7 +266,7 @@ steps.ingame = async () => {
     if (fin.status !== 'DONE' || !arch || !copies.every(Boolean)) break;
     const change = simChange(fs.readFileSync(path.join(L.LIBRARY, arch, `${arch}.mjs`), 'utf8'));
     const params = copies.map((c) => readJson(c).derivation?.recipe?.param ?? null);
-    const collides = params.some((p) => p && change && p.name === change.name && p.value === change.value);
+    const collides = params.some((p) => p && change && p.name === change.name);
     out.families.push({ gid, arch, copies, change, params, collides });
     log(`  family ${attempt}: ${arch}, copies ${copies.join(', ')}; the sim's change ${json(change)}; the copies' params ${json(params)}${collides ? ': collides, again' : ''}`);
     if (!collides) break;

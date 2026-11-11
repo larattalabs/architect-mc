@@ -22876,8 +22876,9 @@ for FS's files.
   copies and their 2 lots.
 - A real `bar` refusal, seen in game: the copies' recipes are seeded by the group id, and a copy whose param lever is exactly the value
   the source's new version moved to (the sim raises `width` 9 -> 10; a copy with `param: width 10`) no longer differs from the new source
-  by it, so with one lever left it is refused `bar` and stays. Correct by §3; the gate makes the family again under a new group (at most 4
-  times) when a copy's param collides with the sim's change, so items 3-6 are deterministic.
+  by it, so with one lever left it is refused `bar` and stays. Correct by §3. A copy whose param is the same param at another value
+  (`width 8`) pins it: its follower installs with the blocks of its head, and its lot's delta is empty. The gate makes the family again
+  under a new group (at most 8 times) while a copy's param is the param the sim changes, so items 3-6 are deterministic.
 - Item 4's player block is placed on a cell the delta changes: a probe `applyDelta` and its revert on the first lot find those cells (the
   probe's revert is checked cell for cell too).
 - Item 7 under DEV MODE: the unit suites (0b's copies and versionOf units, 5b's versions units) and api-compat (0.47.0 and 0.45.0
