@@ -8,13 +8,14 @@
 //                            in `mech:gatehouse_1`; the wall: player breaks `removed` in the wall's part (by the kit's writers), a broken
 //                            wall cell re-filled by the player `playerPlaced`, a block on a cell the region never wrote not reported; a
 //                            tower's broken and re-filled cells in its LotLand row (its standing lower); each landCheck writes nothing
-//   survival  (lc-survival)  item 3 on rs02_walled (survival, RS's half-fed fixture): mid-build (some targets built, some waiting) and
-//                            fully built: no change on either; a player's block on a waiting cell is not land change (the target has
-//                            not built it); a paid block taken up from a built target is `removed` in its part (and the target stays
-//                            built); re-filled by the player `playerPlaced`; a lot's broken cell in its LotLand row
+//   survival  (lc-survival)  item 3 on gm_castle_13x7 in survival (flat: the kit's writers name every tile cell's part), fed target by
+//                            target: mid-build (a target built, others waiting, the builder idle) and fully built: no change on either;
+//                            a player's block on a waiting cell is not land change (the target has not built it); a paid block taken up
+//                            from a built target is `removed` in its part (the target stays built); fully built, a paid block taken up,
+//                            another re-filled by the player (`playerPlaced`) and a tower's cell broken (its LotLand row)
 //
 // Expected numbers come from the world (dumps before and after each change), the kit's writers (the castle's tile parts), RS's targets
-// (dev.rs.cells: a target's part and its cells) and the journal's stacks (dev.journal.at), never from LandCheck's own code.
+// (dev.rs.cells: a target's cells) and the journal's stacks (dev.journal.at), never from LandCheck's own code.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -515,203 +516,221 @@ export async function registerLC2(steps, h) {
 
   // ------------------------------------------------------------------ survival (item 3)
 
-  /** RS item 6's half feed (tools/gate6crs.mjs halfFeed): half of the whole bill, fed in waves of what the targets lack. */
-  async function halfFeed(ck) {
-    const half = {};
-    const whole = G.plus(ck.check.cost.bom, {});
-    for (const [it, n] of Object.entries((await G.pileState(ctx)).outstanding ?? {})) whole[it] = Math.max(whole[it] ?? 0, n);
-    for (const [it, n] of Object.entries(whole)) if (Math.floor(n / 2) > 0) half[it] = Math.floor(n / 2);
-    let acc = {};
-    for (let k = 0; k < 200; k++) {
-      const ps = await G.pileState(ctx);
-      const need = {};
-      for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
-        const left = (half[it] ?? 0) - (acc[it] ?? 0);
-        const lack = Math.min(left, n - (ps.stock?.[it] ?? 0));
-        if (lack > 0) need[it] = lack;
-      }
-      if (!Object.keys(need).length) { if (k > 3) break; await sleep(4000); continue; }
-      acc = G.plus(acc, (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {});
-      await sleep(3000);
-    }
-    return { half, acc };
-  }
-  /** The builder until the built count stops moving (4 reads in a row). */
+  /** The builder until the built count stops moving (4 reads in a row, 4 s apart). */
   async function idle(region) {
     let last = -1, still = 0;
-    for (let k = 0; k < 120 && still < 4; k++) {
+    for (let k = 0; k < 150 && still < 4; k++) {
       await sleep(4000);
+      await L.boxClear.onState(await G.regionState(ctx, region), region);
       const rs = await G.rsState(ctx, region);
-      const built = (rs.targets ?? []).reduce((a, t) => a + t.built, 0);
+      const built = (rs.targets ?? []).reduce((a, t) => a + t.built, 0) + (rs.targets ?? []).length * 100000;
       still = built === last ? still + 1 : 0;
       last = built;
     }
   }
-  /** Every target's cells (dev.rs.cells: [x, y, z, flags], 1 held, 2 built, 4 a cut), its part, and whether it is done. */
+  /** Every target's cells (dev.rs.cells: [x, y, z, flags], 1 held, 2 built, 4 a cut), its part, done, and what it still lacks. */
   async function targetCells(region) {
     const rc = await call('dev.rs.cells', { region }, 120_000);
     const rs = await G.rsState(ctx, region);
-    const done = new Map((rs.targets ?? []).map((t) => [t.target ?? t.id, !!t.done]));
-    return (rc.targets ?? []).map((t) => ({ target: t.target, part: t.part, done: done.get(t.target) ?? null, cells: t.cells ?? [] }));
+    const by = new Map((rs.targets ?? []).map((t) => [t.target ?? t.id, t]));
+    return (rc.targets ?? []).map((t) => ({ target: t.target, part: t.part, done: by.get(t.target)?.done ?? null, outstanding: by.get(t.target)?.outstanding ?? {}, cells: t.cells ?? [] }));
+  }
+  /** Cells of a lot's site (its lot box's columns), held on top by it, open above and quiet: up to n, at least 3 apart. */
+  async function lotPicks(lotRec, siteId, gy, n, tag) {
+    const tb = lotRec?.box ?? null;
+    const cols = [];
+    if (Array.isArray(tb) && tb.length >= 4) {
+      const [x0, z0, x1, z1] = tb.length === 4 ? tb : [tb[0], tb[2], tb[3], tb[5]];
+      for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++) cols.push([x, z]);
+    }
+    if (!cols.length) return { picks: [], box: tb };
+    const top = await tops(cols);
+    const d = await dumpOf([Math.min(...cols.map((c) => c[0])) - 1, gy - 4, Math.min(...cols.map((c) => c[1])) - 1, Math.max(...cols.map((c) => c[0])) + 1, gy + 40, Math.max(...cols.map((c) => c[1])) + 1], `lc-${tag}-lot`);
+    const picks = [];
+    for (const [k, t] of [...top.entries()].sort((a, b) => Number(b[0].split(',')[1]) - Number(a[0].split(',')[1]))) {
+      if (picks.length >= n) break;
+      if (!t || t.site !== siteId) continue;
+      const c = k.split(',').map(Number);
+      if (!isAir(d.get(key([c[0], c[1] + 1, c[2]]))) || !(await quiet(c, d.get))) continue;
+      if (picks.some((q) => Math.abs(q[0] - c[0]) + Math.abs(q[2] - c[2]) < 3)) continue;
+      picks.push(c);
+    }
+    return { picks, box: tb };
+  }
+  /** The changes round `cells` (dumps before -> now) that count (a shape property of the same block aside), [[key, before, now]]. */
+  async function counted(cells, dumps, tag, keep = new Set()) {
+    const seen = new Set();
+    const out = [];
+    for (let i = 0; i < cells.length; i++) {
+      const ch = await changed(around(cells[i], 1), dumps[i], `lc-${tag}-${i}`);
+      for (const [k, was, now] of ch.list) {
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (keep.has(k) || isAir(now) || idOf(norm(now)) !== idOf(norm(was))) out.push([k, was, now]);
+      }
+    }
+    return out;
   }
 
   steps.survival = async () => {
     await ensure();
     await L.leaveWorld().catch(() => null);
     const out = {};
-    const fx = G.fixture(ctx, 'rs02_walled');
-    const s = await G.site(ctx, 'lc rs02', fx);
+    // gm_castle_13x7 in survival (as gm-survival builds it): flat, so the kit's writers name every tile cell's part; its wall, its lots
+    // and its mechanism built from a stockpile target by target
+    const fx = G.fixture(ctx, 'gm/gm_castle_13x7');
+    const s = await G.site(ctx, 'lc surv', fx, { creative: false });
     await G.designs(ctx);
+    await cmd('/time set 6000');
+    const ck = await call('dev.region.checkPlan', { plan: s.wp.plan, claim: s.W.claim, owner: G.OWNER, anchors: s.wp.anchors, load: 'generate' }, 1_800_000);
+    fs.writeFileSync(path.join(OUT, 'lc-surv-check.json'), `${JSON.stringify(ck, null, 1)}\n`);
+    const sha = ck.check?.artifactSha;
+    check(ck.check?.survival === true && !!sha, `item 3: gm_castle_13x7 checks in survival: ${ck.check?.overall}, survival ${ck.check?.survival}`);
+    if (!sha) return out;
+    const lots = await artifactLots(sha);
     const box = G.boxOf(s.W);
+    box[4] = Math.max(box[4], s.W.maxY + 48);
     const cx = Math.round((s.W.claim[0] + s.W.claim[2]) / 2), cz = Math.round((s.W.claim[1] + s.W.claim[3]) / 2);
-    const ck = await G.check(ctx, 'lc-rs02', s);
-    check(!!ck.check?.artifactSha, `rs02_walled checks in survival: ${ck.check?.overall}`);
-    await G.pile(ctx, s, 4);
-    const region = await G.realise(ctx, ck.check.artifactSha, fx.lotEntries ?? {});
-    await G.waitFor(ctx, region, (st2, rs) => (rs.targets ?? []).length > 0, { timeoutMs: 900_000 });
-    // every target's cells while all of them wait (done targets' runs are gone later)
-    const tc0 = await targetCells(region);
-    const fed = await halfFeed(ck);
-    await idle(region);
-    await L.tp(cx, s.W.maxY + 30, cz);
-    const group = (await G.regionState(ctx, region)).view?.groupId;
-    const tcH = await targetCells(region);
-    const tcAll = new Map(tc0.map((t) => [t.target, t]));
+    const gy = s.W.maxY;
+    const pre = await dumpOf(box, 'lc-surv-pre');
+    const ids = await writeDesigns(lots, { tag: 's', roof: 10 });
+    await G.pile(ctx, s, 8);
+    await cmd('/kill @e[type=!minecraft:player]');
+    const region = await G.realise(ctx, sha, { ...fx.lotEntries, ...ids });
+    await G.waitFor(ctx, region, (st2, rs) => (rs.targets ?? []).length >= 2, { timeoutMs: 900_000 });
+    await L.tp(cx, gy + 30, cz);
+    // mid-build: one target's whole lack fed at a time until a target is built while another still waits, the builder idle
+    let tcH = [];
+    const fedT = [];
+    for (let k = 0; k < 6; k++) {
+      tcH = await targetCells(region);
+      if (tcH.some((t) => t.done) && tcH.some((t) => t.done === false)) break;
+      const next = tcH.find((t) => t.done === false && !fedT.includes(t.target) && Object.keys(t.outstanding).length);
+      if (!next) { await idle(region); continue; }
+      fedT.push(next.target);
+      await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: next.outstanding, exact: true }, 120_000);
+      await idle(region);
+    }
+    const st0 = await G.regionState(ctx, region);
+    const group = st0.view?.groupId;
+    const planDir = path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId ?? st0.view?.planId);
+    const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+    const own = await partsOracle(ir, pre.get, gy);
     const done = tcH.filter((t) => t.done), waiting = tcH.filter((t) => t.done === false);
-    out.mid = { fed: fed.acc, targets: tcH.map((t) => [t.target, t.part, t.done, t.cells.filter((c) => c[3] & 2).length, t.cells.length]) };
-    check(done.length > 0 && waiting.length > 0, `item 3: rs02_walled half fed (${Object.values(fed.acc).reduce((a, b) => a + b, 0)} items), the builder idle: ${done.length} target(s) built (${json([...new Set(done.map((t) => t.part))])}), ${waiting.length} waiting (${json([...new Set(waiting.map((t) => t.part))])})`);
+    out.mid = { fed: fedT, state: st0.view?.state, targets: tcH.map((t) => [t.target, t.part, t.done, t.cells.filter((c) => c[3] & 2).length, t.cells.length]) };
+    check(done.length > 0 && waiting.length > 0, `item 3: mid-build (fed target by target: ${json(fedT)}; the builder idle; ${st0.view?.state}): ${done.length} target(s) built (${json(done.map((t) => [t.target, t.part]))}), ${waiting.length} waiting (${json(waiting.map((t) => [t.target, t.part, t.cells.filter((c) => c[3] & 2).length, t.cells.length]))})`);
 
     // ---- mid-build: no change; a target still building is not the region's land yet
     const lcA = await landCheck(region);
     out.lcA = strip(lcA);
-    const una = row(lcA, 'unattributed');
-    out.mid.unattributed = una?.cells ?? 0;
+    out.mid.unattributed = row(lcA, 'unattributed')?.cells ?? 0;
     check(anyChange(lcA).length === 0 && lcA.unloaded === 0 && lcA.cellsChecked > 0, `item 3, mid-build: no change: ${lcA.parts.length} parts (${json(lcA.parts.map((p) => [p.part, p.cells]))}), lots ${json(lcA.lots.map((l) => [l.lot, l.state, l.changed]))}, ${lcA.cellsChecked} cells checked, ${lcA.unloaded} unloaded`, anyChange(lcA));
-    log(`  item 3, mid-build: ${out.mid.unattributed} cells unattributed (tiles whose targets are not all built, as built: RS's WRITTEN set includes their targets' cells)`);
+    log(`  item 3, mid-build: ${out.mid.unattributed} cells unattributed`);
     const wd = (await call('dev.region.landCheck', { region }, 900_000)).worldDir;
     out.mid.nowrite = (await noWriteLive(region, box, wd, 'item 3, mid-build')).drift;
 
-    // a waiting cell (a paid cell of a target not built yet, air now, its top writer the target): a player's block there is not land change
+    // a waiting cell (a paid cell of a target not built yet, air now, the target on top of its stack): a player's block there is not
+    // land change while the target builds (as built: "not counted yet"); taken back before the build goes on (RS waits on it)
     let wcell = null;
     for (const t of waiting) {
       for (const c of t.cells) {
         if (c[3] & 7) continue;
-        const now = await stateAt(c);
-        if (!isAir(now)) continue;
+        if (!isAir(await stateAt(c))) continue;
         const tp = await topOf(c, group);
         if (tp.top?.site !== t.target) continue;
-        wcell = { at: c.slice(0, 3), target: t.target, part: t.part };
+        wcell = { at: c.slice(0, 3), target: t.target, part: t.part, kit: own.part.get(key(c)) ?? null };
         break;
       }
       if (wcell) break;
     }
-    check(!!wcell, `item 3: a waiting paid cell (its target ${wcell?.target} of ${wcell?.part} not built, air now, the target on top of its journal stack): ${json(wcell?.at)}`);
+    check(!!wcell, `item 3: a waiting paid cell (target ${wcell?.target}, ${wcell?.part}, the kit's part ${wcell?.kit}; not built, air now, the target on top of its stack): ${json(wcell?.at)}`);
     if (wcell) {
       const r = await places([[wcell.at, 'minecraft:cobblestone']]);
       await L.settle(1500);
       const lcW = await landCheck(region);
       out.waiting = { ...wcell, tracked: !!r[0]?.tracked };
-      check(!!r[0]?.tracked && same(lcA, lcW)[0], `item 3: a player's cobblestone on that waiting cell (tracked ${!!r[0]?.tracked}): not reported (the cell is the target's to build; "not counted yet" while it builds): the report as before`, same(lcA, lcW)[1]);
+      check(!!r[0]?.tracked && same(lcA, lcW)[0], `item 3: a player's cobblestone on that waiting cell (tracked ${!!r[0]?.tracked}): not reported (the target's to build; not counted while it builds): the report as before`, same(lcA, lcW)[1]);
       await breaks([wcell.at]);
       await L.settle(1500);
     }
 
-    // a paid block taken up from a built target: removed in its part; the target stays built; put back by the console: as before
+    // a paid block taken up from a built target: removed in the kit's part of the cell; the target stays built; put back: as before
     let pcell = null;
     for (const t of done) {
-      const all = tcAll.get(t.target)?.cells ?? [];
-      for (const c of all) {
-        if (c[3] & 5) continue;
+      for (const c of t.cells) {
+        if (c[3] & 5 || !(c[3] & 2)) continue;
+        const k = key(c);
+        if (!own.part.has(k)) continue;
         const tp = await topOf(c, group);
         if (tp.top?.site !== t.target) continue;
         const d = await dumpOf(around(c, 1), 'lc-p');
         if (!(await quiet(c, d.get))) continue;
-        pcell = { at: c.slice(0, 3), target: t.target, part: t.part, was: d.get(key(c)), dump: d };
+        pcell = { at: c.slice(0, 3), target: t.target, part: own.part.get(k), was: d.get(k), dump: d };
         break;
       }
       if (pcell) break;
     }
-    check(!!pcell, `item 3: a paid cell of a built target (${pcell?.target} of ${pcell?.part}, ${pcell?.was}): ${json(pcell?.at)}`);
+    check(!!pcell, `item 3: a paid cell of a built target (${pcell?.target}, the kit's part ${pcell?.part}, ${pcell?.was}): ${json(pcell?.at)}`);
     if (pcell) {
       await breaks([pcell.at]);
       await L.settle(1500);
-      const ch0 = await changed(around(pcell.at, 1), pcell.dump, 'lc-p2');
-      const ch = { list: ch0.list.filter(([, was, now]) => isAir(now) || idOf(norm(now)) !== idOf(norm(was))) };
+      const ch = await counted([pcell.at], [pcell.dump], 'p2');
       const lcP = await landCheck(region);
       const tAfter = (await targetCells(region)).find((t) => t.target === pcell.target);
       const pd = {};
-      addTo(pd, 'parts', pcell.part, 'removed', ch.list.length);
-      out.paidMid = { ...pcell, dump: undefined, changed: ch.list.map((q) => q[0]), row: row(lcP, pcell.part), stillDone: tAfter?.done };
-      check(ch.list.length === 1 && plusDelta(lcP, lcA, pd)[0] && tAfter?.done === true, `item 3, mid-build: the player took up ${pcell.was} at ${json(pcell.at)}: ${pcell.part} removed ${row(lcP, pcell.part)?.removed}, every other part and lot as before; the target still built (${tAfter?.done})`, plusDelta(lcP, lcA, pd)[1]);
+      for (const [k, , now] of ch) addTo(pd, 'parts', own.part.get(k) ?? 'unknown', classOf(now, new Set(), k), 1, classOf(now, new Set(), k) === 'changed' ? idOf(norm(now)) : null);
+      const [okP, dP] = plusDelta(lcP, lcA, pd);
+      out.paidMid = { at: pcell.at, target: pcell.target, part: pcell.part, was: pcell.was, changed: ch.map((q) => q[0]), row: row(lcP, pcell.part), stillDone: tAfter?.done };
+      check(ch.length === 1 && okP && tAfter?.done === true, `item 3, mid-build: the player took up ${pcell.was} at ${json(pcell.at)}: ${pcell.part} removed ${row(lcP, pcell.part)?.removed}, every other part and lot as before; the target still built (${tAfter?.done})`, dP);
       await cmd(`/setblock ${pcell.at.join(' ')} ${pcell.was}`);
       await L.settle(1500);
       const lcP2 = await landCheck(region);
       check(same(lcA, lcP2)[0], 'item 3, mid-build: the block put back (the console, the same state): the report as before', same(lcA, lcP2)[1]);
     }
 
-    // ---- fully built: no change, no part unattributed
-    const fd = await G.feed(ctx, region, { timeoutMs: 1_800_000 });
+    // ---- fully built: no change, nothing unattributed
+    const fd = await G.feed(ctx, region, { timeoutMs: 3_600_000 });
     await L.settle(3000);
     check(fd.last.st.view.state === 'PLACED' && fd.last.rs.build?.done, `item 3: the rest fed: ${fd.last.st.view.state}, done ${fd.last.rs.build?.done}`);
     const lcB = await landCheck(region);
     out.lcB = strip(lcB);
     check(anyChange(lcB).length === 0 && lcB.unloaded === 0 && !row(lcB, 'unattributed') && lcB.cellsChecked > lcA.cellsChecked, `item 3, fully built: no change, no cell unattributed: ${lcB.parts.length} parts (${json(lcB.parts.map((p) => [p.part, p.cells]))}), lots ${json(lcB.lots.map((l) => [l.lot, l.state, l.standing]))}, ${lcB.cellsChecked} cells checked (${lcA.cellsChecked} mid-build)`, anyChange(lcB));
 
-    // fully built: a paid block taken up (removed), another re-filled by the player (playerPlaced), a lot's cell broken (its row)
-    const tcB = new Map((await targetCells(region)).map((t) => [t.target, t]));
+    // fully built: two paid blocks of built targets (one taken up, one re-filled by the player), a tower's cell broken
+    const tcB = await targetCells(region);
     const pc = [];
-    for (const t of tc0) {
-      if (pc.length >= 2) break;
-      if (tcB.get(t.target)?.done === false) continue;
+    for (const t of tcB) {
+      if (pc.length >= 2 || !t.done) continue;
       for (const c of t.cells) {
-        if (c[3] & 5) continue;
+        if (c[3] & 5 || !own.part.has(key(c))) continue;
         if (pc.some((q) => Math.abs(q.at[0] - c[0]) + Math.abs(q.at[1] - c[1]) + Math.abs(q.at[2] - c[2]) < 4)) continue;
         const tp = await topOf(c, group);
         if (tp.top?.site !== t.target) continue;
         const d = await dumpOf(around(c, 1), 'lc-b');
         if (!(await quiet(c, d.get))) continue;
-        pc.push({ at: c.slice(0, 3), part: t.part, target: t.target, dump: d });
+        pc.push({ at: c.slice(0, 3), part: own.part.get(key(c)), target: t.target, dump: d });
         if (pc.length >= 2) break;
       }
     }
-    // a lot cell: the top of a built lot's site (h1)
-    const l1 = lot(lcB, 'h1');
-    const st1 = await G.regionState(ctx, region);
-    const lbox = st1.record?.lots?.h1?.box ?? st1.view?.lots?.find?.((l) => l.id === 'h1')?.box ?? null;
-    let lcell = null;
-    if (l1?.siteId) {
-      const site = await call('dev.site.state', { site: l1.siteId }, 60_000).catch(() => null);
-      const sb = site?.box ?? site?.bounds ?? lbox;
-      const cols = [];
-      if (Array.isArray(sb) && sb.length === 6) for (let x = sb[0]; x <= sb[3]; x++) for (let z = sb[2]; z <= sb[5]; z++) cols.push([x, z]);
-      const lt = await tops(cols);
-      const ld = cols.length ? await dumpOf([sb[0] - 1, sb[1] - 1, sb[2] - 1, sb[3] + 1, sb[4] + 1, sb[5] + 1], 'lc-lot') : null;
-      for (const [k, t] of [...lt.entries()].sort((a, b) => Number(b[0].split(',')[1]) - Number(a[0].split(',')[1]))) {
-        if (t?.site !== l1.siteId) continue;
-        const c = k.split(',').map(Number);
-        if (!isAir(ld.get(key([c[0], c[1] + 1, c[2]]))) || !(await quiet(c, ld.get))) continue;
-        lcell = { at: c, dump: await dumpOf(around(c, 1), 'lc-l') };
-        break;
-      }
-      out.lotBox = sb;
-    }
-    check(pc.length === 2 && !!lcell, `item 3, fully built: 2 paid cells of built targets (${json(pc.map((q) => [q.part, q.at]))}) and a cell of lot h1's site (${json(lcell?.at)})`);
-    if (pc.length === 2 && lcell) {
+    const tl = lot(lcB, 'tower_1');
+    const lp = await lotPicks(lots.find((l) => l.id === 'tower_1'), tl?.siteId, gy, 1, 'surv');
+    check(pc.length === 2 && lp.picks.length === 1, `item 3, fully built: 2 paid cells of built targets (${json(pc.map((q) => [q.target, q.part, q.at]))}) and a cell of tower_1's site (${json(lp.picks[0])})`);
+    if (pc.length === 2 && lp.picks.length === 1) {
       const fdelta = {};
-      await breaks([pc[0].at, pc[1].at, lcell.at]);
+      const ld = await dumpOf(around(lp.picks[0], 1), 'lc-sl');
+      await breaks([pc[0].at, pc[1].at, lp.picks[0]]);
       const re = await places([[pc[1].at, 'minecraft:cobblestone']]);
       await L.settle(2000);
       const pts = new Set(re[0]?.tracked ? [key(pc[1].at)] : []);
-      for (const q of pc) {
-        const ch = await changed(around(q.at, 1), q.dump, 'lc-b2');
-        for (const [k, was, now] of ch.list) if (pts.has(k) || isAir(now) || idOf(norm(now)) !== idOf(norm(was))) addTo(fdelta, 'parts', q.part, classOf(now, pts, k), 1, classOf(now, pts, k) === 'changed' ? idOf(norm(now)) : null);
+      for (const [k, , now] of await counted(pc.map((q) => q.at), pc.map((q) => q.dump), 'b2', pts)) {
+        const c = classOf(now, pts, k);
+        addTo(fdelta, 'parts', own.part.get(k) ?? 'unknown', c, 1, c === 'changed' ? idOf(norm(now)) : null);
       }
-      const chl = await changed(around(lcell.at, 1), lcell.dump, 'lc-l2');
-      addTo(fdelta, 'lots', 'h1', 'changed', chl.list.filter(([, was, now]) => isAir(now) || idOf(norm(now)) !== idOf(norm(was))).length);
+      addTo(fdelta, 'lots', 'tower_1', 'changed', (await counted(lp.picks, [ld], 'l2')).length);
       const lcC = await landCheck(region);
       const [okC, dC] = plusDelta(lcC, lcB, fdelta);
-      out.built = { picks: pc.map((q) => ({ at: q.at, part: q.part })), lot: lcell.at, delta: fdelta, refill: re[0] };
-      check(okC && !!re[0]?.tracked && lot(lcC, 'h1').standing <= l1.standing, `item 3, fully built: the player took up ${pc[0].part} ${json(pc[0].at)} (removed), took up and re-filled ${pc[1].part} ${json(pc[1].at)} with cobblestone (playerPlaced) and broke lot h1's ${json(lcell.at)}: the report = before + ${json(fdelta)}; h1 standing ${l1.standing} -> ${lot(lcC, 'h1').standing}`, dC);
+      out.built = { picks: pc.map((q) => ({ at: q.at, part: q.part, target: q.target })), lot: lp.picks[0], delta: fdelta, refill: re[0] };
+      check(okC && !!re[0]?.tracked && lot(lcC, 'tower_1').standing < tl.standing, `item 3, fully built: the player took up ${pc[0].part} ${json(pc[0].at)} (removed), took up and re-filled ${pc[1].part} ${json(pc[1].at)} with cobblestone (playerPlaced) and broke tower_1's ${json(lp.picks[0])}: the report = before + ${json(fdelta)}; tower_1 standing ${tl.standing} -> ${lot(lcC, 'tower_1').standing}`, dC);
     }
     out.built ??= {};
     out.built.nowrite = (await noWriteLive(region, box, wd, 'item 3, fully built')).drift;
