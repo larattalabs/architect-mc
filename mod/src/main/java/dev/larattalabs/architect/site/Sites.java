@@ -2388,6 +2388,30 @@ public final class Sites {
 	}
 
 	/**
+	 * (6d LC) A site's world-start standing score: matching / total of {@link #standing}, or -1 when it can't be told (no template, nothing
+	 * to compare, or a chunk of its box not loaded: nothing is loaded). Reads only. Server thread.
+	 */
+	public static double standingScore(MinecraftServer server, Site b) {
+		ServerLevel level = levelOf(server, b);
+		if (level == null) {
+			return -1;
+		}
+		for (int cx = b.box().minX() >> 4; cx <= b.box().maxX() >> 4; cx++) {
+			for (int cz = b.box().minZ() >> 4; cz <= b.box().maxZ() >> 4; cz++) {
+				if (level.getChunkSource().getChunkNow(cx, cz) == null) {
+					return -1;
+				}
+			}
+		}
+		TemplateGrid grid = ownGrid(b);
+		if (grid == null) {
+			return -1;
+		}
+		int[] st = standing(server, b, grid);
+		return st[1] == 0 ? -1 : (double) st[0] / st[1];
+	}
+
+	/**
 	 * {matching non-air blocks, non-air template blocks} of a site's own template in the world, over the cells the site owns
 	 * (phase 4e: a cell another standing entry owns is left out); {0, 0} when it cannot be checked.
 	 */

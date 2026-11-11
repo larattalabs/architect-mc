@@ -29,7 +29,9 @@ public final class ApiRules {
 		// 6c close-out A: keyed artifact pins, the world-start plan sweep, region item waits with their region and parts
 		"keyedPins", "planSweep", "regionWaitParts",
 		// (6c D3, D-S3) every districts region's land in its ext (architect_mc:land)
-		"districtLand");
+		"districtLand",
+		// (6d LC) Regions.landCheck: the land-change report of a standing region (read-only)
+		"landCheck");
 
 	private ApiRules() {
 	}

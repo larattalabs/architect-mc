@@ -278,6 +278,9 @@ At about 02:00 it:
    recorded, the benches it ran and whether each PASS was recorded, megaB's walk and why), `impact-map-misses.json`, `misses-log.md`,
    and `artifacts/nightly/latest.json` when the run finished.
 
+**One-night skip.** An empty file `artifacts/nightly/skip-<UTC date of the start>` skips that night only, and the next night runs as usual
+(for the 02:00 MST run on 11-11, which is 09:00Z: `touch artifacts/nightly/skip-2026-11-11`). The nightly then exits at once, starting nothing, and writes `artifacts/nightly/<date>/summary.json` with `state: skipped`. `--plan` ignores the file.
+
 It sends no notification of any kind; the coordinator reads the summary. It never kills anything:
 - one nightly at a time: `artifacts/nightly/nightly.lock` holds the pid, and a second nightly exits at once ("already active");
 - its gate run takes a slot like any run and waits in the queue;

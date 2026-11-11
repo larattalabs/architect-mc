@@ -286,4 +286,21 @@ public interface Regions {
 	default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
 		throw new UnsupportedOperationException("Regions.undoRevision needs Architect API NEXT");
 	}
+
+	/**
+	 * (6d LC) What has changed in a standing region since it was built (docs/CONTRACT.md "Phase 6d slice LC"), part by part and lot by lot:
+	 * every cell the region holds on top (its tile, revision, road and gate mechanism entries; a cell counted once, for the writer on top of
+	 * the journal there) against what the region wrote, attributed to its part by the realised record ({@link PartLand}), and every lot
+	 * site's standing score and changed cells ({@link LotLand}). It reads and never writes (no journal, record, IR, answer or world
+	 * change), loads no chunk (cells of unloaded chunks are counted in {@link LandReport#unloaded()}), takes no ticket and costs $0; it
+	 * runs over ticks within the queue's budget. A player who flipped a gate mechanism's lever has not changed the land: a mechanism's
+	 * moving and trigger cells and its blocks' dynamic properties are not judged. Cells a survival target, construction road or lot still
+	 * building has not built yet are not counted. {@code part}: only that part (no lots); null: every part, and the lots. At most 4M
+	 * cells per call: a larger region refuses {@link Reason#REGION_LIMIT} unasked a part (ask per part). An unknown region refuses
+	 * {@link Reason#OTHER}; a removed one {@link Reason#NOT_ALLOWED}. Server thread; the future completes on it. Since NEXT, feature
+	 * {@code "landCheck"}.
+	 */
+	default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part) {
+		throw new UnsupportedOperationException("Regions.landCheck needs Architect API NEXT");
+	}
 }

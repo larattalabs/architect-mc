@@ -22981,6 +22981,35 @@ record LotLand(String lot, String siteId, String state, double standing /* Recon
   of this section drafted them.
 - Removal provenance (who broke a block): a PT extension, if Steward asks.
 
+### Slice LC as built (branch `slice/LC` off main 4b844fea / v0.57.0; versions NEXT; recorded 2026-11-11; DEV MODE; $0)
+
+Read-only, so no RC by the API rule's exception (GATES policy 4); Steward picks it up at the next tag. Builds §2 and §4 above.
+
+| Area | As built |
+|---|---|
+| API (Steward-visible) | `Regions.landCheck(String regionId, @Nullable String part)` (a default that throws), the records `LandReport(region, position, parts, lots, cellsChecked, unloaded, ms)`, `PartLand(part, cells, changed, removed, playerPlaced, volatileChanged, kinds, sample)`, `LotLand(lot, siteId, state, standing, changed, playerPlaced)` exactly as §2 (lists and maps copied), the Java feature `landCheck` (no helper needed). All `Since NEXT`. No Reason, enum or record changed; api-compat clean (below). |
+| Which cells (`region/LandCheck`) | Every cell whose writer **on top of the journal** (highest cell layer, ties by entry id: `WorldJournal.stack`'s order) is an ACTIVE entry of the region's group (tiles and revision tiles, their held leaves, 4e roads, gate mechanism sites, survival targets, lot sites). A cell is counted once, for its top writer: XR's one-owner-per-cell rule as the journal records it (a later writer's cell is its own; a lot's cell covered by a tile is the tile's). Scanned per journal section (every section of the group's entries), sliced over ticks at 8 ms (the queue's budget). Lot cells go to `lots`, never to `parts`. |
+| Attribution | A tile cell's part is its winning op's IR part in the realised record's ARWR writers. The record stores codes in payload order without positions, so: the tile's main entry cells (over every site `sites()` lists, RP §6) less its TREE/DEPENDENT extras are its WRITTEN cells (RP's verify invariant); sorted in ARTL payload order (chunk x, chunk z, section y, then `y<<8|z<<4|x`; pinned against a real kit tile in `LandCheckTest`) the k-th is the k-th WRITTEN code's payload index. Extras (and LEAF extras, the leaves entry's cells) take their cause's part. A record not `committed`, without writers, or whose counts disagree attributes nothing: its cells are `unattributed` (as §2's legacy cells). A survival tile whose targets marked cells WRITTEN (RS §5) is retried with the cells of its item's targets when all of them are built; otherwise unattributed. Roads are named by their IR road id (sites.json `roads.<id>.site`, every layer); gate mechanisms `mech:<gate or lot>` (their item key); a survival target by its spec part; anything else of the group by its `architect_mc:part` ext, else `unattributed`. Revision parts carry the revision IR's own ids (`rv1_spire`). |
+| Classes | `WorldJournal.holdsOurs` first (the undo's rule: volatile properties, copper and coral stages, spread, fluids in cleared air, LF bubble columns, CU's player-record-wins): such a cell is unchanged. A player's identical block in place of ours is unchanged too (the land is as built). Then a PT record -> `playerPlaced`; a volatile kind written (leaves, snow, plants, fluids, ice, fire) -> `volatileChanged`; air or a fluid now -> `removed`; a volatile kind now -> `volatileChanged`; else `changed`, `kinds` keyed by the block **now** there. Lots: `changed` = removed + changed (volatile aside), `playerPlaced` apart. |
+| Gate mechanisms (GM-a §4 item 4, PG rule 6) | A `mech:` site's cells: the IR's mechanism moving and trigger cells (every `mechanism {states, triggers[].at, rungs}`, found anywhere in the IR) are never judged; other envelope cells hold with only `extended`, `powered`, `power`, `open`, `short`, `locked` changed, or a moving piston where a piston or head was written (a retracted head's air too). A mined piston is still `removed`. |
+| Not counted yet | Cells of a writer still building: a survival target or construction road (`Infra.building()`), a lot whose construction site is building. A PLACING leftover is never ours (ACTIVE only); a cell on top of which another site's PLACING entry sits is that site's. |
+| Lots | One row per lot of the region record with a site (pads have none). `standing`: `Sites.standingScore` (new public wrapper of the world-start check's `standing`: matching / total by block over the site's template cells it owns, LotMask's irrigation, passage and mechanism exclusions included), **-1** when it can't be told (no site, no template, nothing to compare, or a chunk of the box not loaded: nothing is loaded). K3 towers and gatehouses are lots, so they report here. |
+| Bounds | Part null: the group's ACTIVE journal cells (sum of `Meta.cells`) over 4M refuse `REGION_LIMIT` ("ask per part") before any read. Part given: refused once over 4M of its cells. Unknown region `OTHER`; REMOVED/REMOVING `NOT_ALLOWED`; no journal `JOURNAL_UNAVAILABLE`. |
+| Reads only | No journal, record, region file, IR, answer, ticket or chunk load: `getChunkNow` (an unloaded chunk's cells are counted in `unloaded`), `Placed.record(LevelChunk, ...)`, journal section reads. Proven in game (lc-ingame, lc-nowrite). |
+| Dev | `dev.region.landCheck {region, part?}` (RegionDev, generated for the headless server): the report as JSON plus `worldDir`. |
+
+**§0 facts at 4b844fea.** Still true: PT records only placements and clears on air/fluid/replace (`Placed.changed`, still `Placed.java` :296), so removals carry no actor; `Drift.checkStage` (now :110) holds a stage `DRIFTED`; no `SITE_DRIFTED` reason. **Moved since f3f41d43:** a tile record can name several entries (`mergePrior`, comma-separated `site`: LC unions them); RS's `UNFINISHED` code and `Realised.mark` make a survival tile's WRITTEN set include its targets' cells (handled above); RV's revisions write records at layer `L<rid>` and journal stages `rv<rid>:<stage>`, and share the region's group (LC reads every layer; revision parts are the revision IR's); GM's mechanism is a separate BOX cell site `mech:<lot>` (kind `architect:mechanism`) whose dynamic state GM §4 says LC must not list, and PG made its triggers volatile too (both honoured); K3 wall lots are lot sites (LotLand); XR's one-owner rule = the top writer (LC never counts a cell twice); LF's bubble columns and CU's equivalences come through `holdsOurs` unchanged. The fixture: §4 names `rv_town`; built on rv-ingame's flat town (`flat_village`, three pad lots) because it has the square, lanes and pads §4 describes. On flat ground the lanes write 6 cells and the pads none, so the 12 player placements are the 6 lane cells and 6 verge cells, the console's 20 removals verge cells, and 6 console swaps (sponge, `changed`) square cells were added to exercise `changed`.
+
+| Gate | Evidence |
+|---|---|
+| Merge gate (`gate-run change --only`, ports 8900/8901, `../architect-mc-LC-run`), run `20261111-071710-change` at 265cfe71 | **11 PASS, 1 FAIL** in 41m40s: unit-mod 1021 tests / 0 failures (1 skipped), unit-kit 1107/0, apijars 6/0 (0.42.0, 0.41.0, 0.40.1 jars: 46 oks each), water-lint 135/0, p3-lint 16/0, lint-structure 205/0, lint-look 14/0, **lc-unit 2/0** (LandCheckTest 5, ApiLCTest 1, RealisedTest; api-compat clean against the 0.47.0, 0.45.0 and 0.44.0 apitest jars and the 0.47.0 surface), **lc-ingame 21/0**, **lc-nowrite 9/0**, **rv-ingame 28/0**. The FAIL: unit-sidecar 803/1, `test/eval.e2e.test.ts` "compare of two runs says no regression" answering "regressed (mean time +40%)" (a timing assertion; load average 33-93 on the machine; LC touches no sidecar or kit file). Re-run alone in the gate (`20261111-075908-change`, load 93): the same test, +36%. Re-run by hand in the run worktree at 265cfe71, load 16: `vitest run test/eval.e2e.test.ts` 4/4 pass. |
+| lc-ingame (item 2) | The fresh town: 9 parts (lanes 6, props_bench 2, props_lamp 8, props_planter 18, props_well 26, square 119, street_e 12, street_w 70, verges 48), 309 cells, 0 unloaded, no change, none unattributed; the tile parts' cells 227 = the view's cellsWritten. After the damage: lanes playerPlaced 6; square removed 40, changed 6 (sponge); verges removed 20, playerPlaced 6: equal to the driver's diff attributed by the kit's own writers (evalTile `{writers: true}`, compileIR), 0 cells it can't attribute; one part asked alone equals its row; lots none (pads). |
+| lc-ingame (item 3) | RV revision 1 (mound and spire) realised: position 1, rv1_mound1 6 and rv1_spire 1408 cells, no new change; then the player broke 15 spire cells and the console removed 2 mound cells: rv1_spire removed 15, rv1_mound1 removed 2, the town's parts unchanged. |
+| Writes nothing | Every landCheck of lc-ingame and lc-nowrite: the claim + 8's hash unchanged, every file (path, size, sha256) of `architect-regions/<region>` and `architect-journal` unchanged (39 and 50 files), two calls equal. |
+| Gate-verifier | **PASS** (review of the diff and evidence; re-ran lc-nowrite at 265cfe71, run `20261111-080638-change`, ports 8902/8903: 9/0, three rounds unchanged). Non-blocking: the unit-sidecar re-run is not in its evidence (the only failure on record is the load-sensitive timing assertion); the scan scales with the region's size, within the slicing and the 4M bound. |
+
+**Open.** (1) Gate mechanisms, wall lots, lot standing and survival attribution are covered by unit tests and by code reading, not in game (LC's gate is §4's town; no gatehouse or survival fixture was added). (2) `kinds` is keyed by the block now there (§2 does not say which). (3) A player's identical block over ours reads unchanged (the undo's rule); Steward may want it as `playerPlaced`.
+
 ## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
 
 An existing Steward settlement built by VillageLayout (its own street road and lot sites, placed before regions) becomes a region
@@ -25378,6 +25407,72 @@ Every empty state (no designs, no match, nothing placed, no jobs, helper down) c
 **8. Theming.** Swatches and sheets are the Style's own blocks: the `colors` table that tools/gen-palettes.mjs adds to
 `palettes-fallback.json` (the side face's average from the game's textures, kit/lib/colors.mjs, for every block the Style table, the
 presets and the common role candidates name), else the block's map colour.
+
+## Style unification U4: materials only vs bible set mode, the A/B (as run, 2026-10-24, PAID, cap $20)
+
+Answers docs/STYLE-UNIFY.md question 1. Folded in from the unmerged branch `chore/u4-ab`; its harness (`tools/u4ab.mjs`) was dropped, not merged (`tools/partsab.mjs` was later ported from it). The product default is unchanged.
+The coordinator decides with Noah. Evidence (not committed; local to the run machine): `artifacts/gate-runs-U4/`, with `spend.json`, `runs/<R?A|B>/` (the
+entry's .mjs, blueprint, nbt, the iso/front/top previews, the design record, BRIEF.md, check.txt), `metrics.json`, `verdicts.json`,
+`blind-key.json` and `u4ab.log`. Gallery: https://claude.ai/artifact/YAy1FMDVgCUTz1GSjst1vX (private).
+
+**Setup.**
+- Six requests, each with its own built-in Style: medieval house, japanese chapel, modern workshop (`shop`), nordic tavern,
+  fantasy tower, fortress gatehouse. Three of the Styles are wall-defined.
+- Each request ran twice with the same type, size, features, notes and `style`:
+  - A: `palette: {bible: {id, version, roles}}`, materials only;
+  - B: `bible: <id>`, set mode. B's brief adds the bible section, `bible/bible.json` (the shape hints) and rustic's
+    `components.mjs`, plus `--restraint`. The sim dry run confirmed this by diffing the two BRIEF.md files.
+- The helper ran on the claude login (`authSource` "claude login (personal use)"), on port 8899, with one design at a time, in pairs.
+- **Deviation.** Every run was the SMALL pass (`effort: small`: Opus at medium effort, 40 turns, 2 rounds, a $1.50 cap), in both
+  arms. Twelve standard passes ($2.2-3.6 each in the 0b bench) don't fit $20. Absolute quality is below a standard design, but
+  the comparison is like for like.
+
+**Spend: $10.67 of $20.** 12 of 12 runs done, no failures and no retries. The helper estimated $0.60-1.50 per run; actual runs cost
+$0.62-1.11. A averaged $0.85 per run, B $0.93.
+
+**Judge.** The `design-critic` agent judged blind:
+- the 36 renders were copied to a separate folder as X01-X12, shuffled (seed 4242), with the arms as unlabelled sets P and Q;
+- it got the requested Style's description and roles, and no design files;
+- the key (P = A, Q = B) was opened after its verdicts were saved.
+It reviewed every iso and front view, and top views for 4 of the 12. Fit and quality are scored 1-5.
+
+| request | A fit / quality | B fit / quality | better | B's checker (restraint) |
+|---|---|---|---|---|
+| R1 medieval house | 3 / 3 | 5 / 4 | B, clearly | OK |
+| R2 japanese chapel | 3 / 3 | 4 / 4 | B, slightly | north: 1 window, under 2 |
+| R3 modern workshop | 4 / 4 | 4 / 4 | B, slightly | OK |
+| R4 nordic tavern | 3 / 3 | 3 / 3 | A, slightly | east and west: 1 window each |
+| R5 fantasy tower | 3 / 4 | 4 / 3 | B, slightly | detailNoise 0.452 > 0.42 |
+| R6 fortress gatehouse | 4 / 3 | 4 / 4 | B, slightly | east and west: 0 windows |
+| **mean** | **3.33 / 3.33** | **4.00 / 3.67** | B 5, A 1 | |
+
+- **Variety** within an arm: A scored 4/5, B 3/5.
+  - B: the medieval house and nordic tavern share the corbel sills, the lantern-post porch, the lantern-topped chimney and a gable
+    stub, and are "nearly the same kit". The modern workshop got rustic's campfire chimney. Lantern-post entrances appear on three
+    of the six.
+  - A: a lantern-topped chimney twice, planters twice, stone sills three times.
+- **Objective.** B made 54 component calls (window 28, door_surround 8, lantern_post 8, roof_trim 7, chimney 3), and all six import
+  `bible/components.mjs`. A made none. Block-shape similarity within each arm was 0.838 for A and 0.842 for B, too coarse to show
+  shared details. Share of blocks outside the Style's roles: A 3.8%, B 3.7%.
+- **Checker.** Every design passed (`check: OK`). The four warnings are all B's restraint checks. A runs no restraint check, so those
+  warnings have no A counterpart.
+- **Observed.** Medieval's `wall` role (white_terracotta) renders pink-beige. The judge read A's medieval walls as "salmon", while B
+  leaned on calcite (wall_alt). This is a Style roles matter, not an arm matter.
+
+**Verdict.**
+- B scores higher per building (fit +0.67, quality +0.33, 5 of 6 pairs, only one of them clear).
+- B costs variety, as the worry said: the shared rustic components make different Styles look alike.
+- Evidence is n = 1 per cell and one judge, so it is directional.
+- Most of B's fit lead plausibly comes from the shape hints rather than the components. B's work dir carries `bible.json`, with
+  `roofLanguage` ("steep gables, jettied upper floors"), proportions and the blurb. A's brief carries roles only: none of those
+  words appear in A's BRIEF.md.
+
+**Recommendation: hybrid.**
+- Keep built-in and hand-made Styles materials-only, with no shared components and no "follow it over your own taste". Add the
+  Style's shape hints (blurb, `roofLanguage`, proportions; motifs where authored) to the materials brief as guidance.
+- Required components only for a Style that authors its own: Claude-made bibles and sets, as today. Never rustic's reference
+  components on another Style.
+- Optionally, a cheap follow-up A/B: A plus hints vs B, about $11 at SMALL. It would confirm that the hints close the fit gap.
 
 ## Style unification U5: the hybrid default (U5a), parts for any Style (U5b), medieval's wall (as built)
 

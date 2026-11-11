@@ -10,17 +10,17 @@ around_my_tree/grove zone.standard fits free 32245 held 1071 paid-items 0
 around_my_tree cost.bom 26 items; survival true
 boom_town/boomtown zone.standard fits free 54386 held 836 paid-items 57
 boom_town cost.bom 57 items; survival true
-border_fort/fort zone.standard fits free 46794 held 783 paid-items 54
-border_fort/pass_road connector.road fits free 0 held 0 paid-items 0
-border_fort/fort_wall connector.wall adjusted free 0 held 26 paid-items 5098
-border_fort/fort_relief form.relief fits free 1536 held 0 paid-items 0
-border_fort cost.bom 5152 items; survival true
-camp_to_city/camp_city zone.standard fits free 66641 held 1047 paid-items 54
-camp_to_city/city_wall connector.wall adjusted free 0 held 26 paid-items 9924
-camp_to_city cost.bom 9978 items; survival true
-castle_city/castle zone.standard adjusted free 55641 held 819 paid-items 54
-castle_city/curtain_wall connector.wall adjusted free 0 held 170 paid-items 11647
-castle_city cost.bom 11701 items; survival true
+border_fort/fort zone.standard fits free 49366 held 723 paid-items 54
+border_fort/pass_road connector.road fits free 0 held 2544 paid-items 1917
+border_fort/fort_wall connector.wall fits free 0 held 20 paid-items 5078
+border_fort/fort_relief form.relief fits free 1140 held 0 paid-items 0
+border_fort cost.bom 7051 items; survival true
+camp_to_city/camp_city zone.standard fits free 69081 held 903 paid-items 54
+camp_to_city/city_wall connector.wall fits free 0 held 0 paid-items 8634
+camp_to_city cost.bom 8688 items; survival true
+castle_city/castle zone.standard adjusted free 84054 held 795 paid-items 54
+castle_city/curtain_wall connector.wall fits free 0 held 80 paid-items 10698
+castle_city cost.bom 10752 items; survival true
 cat_sanctuary/sanctuary zone.standard adjusted free 20738 held 332 paid-items 57
 cat_sanctuary cost.bom 57 items; survival true
 cliff_monks/monastery zone.standard fits free 37016 held 795 paid-items 54
@@ -72,9 +72,9 @@ mage_exiles/shared_stone_base rule.palette refused
 mage_exiles cost.bom 54 items; survival true
 market_town/town zone.standard fits free 46558 held 879 paid-items 54
 market_town cost.bom 54 items; survival true
-metropolis/capital zone.standard adjusted free 69839 held 831 paid-items 54
-metropolis/city_wall connector.wall fits free 0 held 26 paid-items 7476
-metropolis cost.bom 7530 items; survival true
+metropolis/capital zone.standard adjusted free 100968 held 831 paid-items 54
+metropolis/city_wall connector.wall fits free 0 held 0 paid-items 7220
+metropolis cost.bom 7274 items; survival true
 mining_town/mining_town zone.standard fits free 47961 held 879 paid-items 54
 mining_town/street_1 connector.street fits free 0 held 0 paid-items 0
 mining_town/rail_1 connector.rail unsupported
@@ -108,7 +108,7 @@ redstone_gate/fortress zone.standard adjusted free 16622 held 308 paid-items 57
 redstone_gate/moat connector.channel fits free 4500 held 6024 paid-items 3860
 redstone_gate/curtain_wall connector.wall adjusted free 0 held 26 paid-items 4554
 redstone_gate/main_gate connector.gate refused
-redstone_gate/drawbridge connector.drawbridge unsupported
+redstone_gate/drawbridge connector.drawbridge blocked
 redstone_gate cost.bom 8471 items; survival true
 ring_city/ring_town zone.standard blocked
 ring_city/crater_lake form.crater unsupported
@@ -164,7 +164,7 @@ treetop_village/bridge_tower connector.rope_bridge refused
 treetop_village/bridge_barn connector.rope_bridge refused
 treetop_village/bridge_cottage connector.rope_bridge refused
 treetop_village/bridge_shop connector.rope_bridge refused
-treetop_village/storehouse_lift connector.lift unsupported
+treetop_village/storehouse_lift connector.lift refused
 treetop_village cost.bom 57 items; survival true
 twin_villages/villages zone.standard fits free 73721 held 1083 paid-items 54
 twin_villages/village_road connector.road fits free 0 held 0 paid-items 0
@@ -179,12 +179,12 @@ underwater_domes cost.bom 0 items; survival true
 upside_down/village zone.standard fits free 36361 held 524 paid-items 57
 upside_down/main_street connector.street fits free 0 held 62 paid-items 69
 upside_down/chain_bridges connector.rope_bridge refused
-upside_down/winch_lift connector.lift unsupported
+upside_down/winch_lift connector.lift refused
 upside_down/hang_from_ceiling rule.suspended unsupported
 upside_down cost.bom 126 items; survival true
-walled_town/town zone.standard fits free 60871 held 963 paid-items 54
-walled_town/town_wall connector.wall adjusted free 0 held 104 paid-items 6864
-walled_town cost.bom 6918 items; survival true
+walled_town/town zone.standard fits free 65447 held 843 paid-items 54
+walled_town/town_wall connector.wall fits free 0 held 0 paid-items 5416
+walled_town cost.bom 5470 items; survival true
 war_camp/camp zone.standard fits free 36564 held 795 paid-items 54
 war_camp/camp_palisade connector.wall fits free 0 held 0 paid-items 3768
 war_camp/camp_relief form.relief fits free 1356 held 0 paid-items 0
