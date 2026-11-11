@@ -11,7 +11,7 @@ import net.minecraft.core.BlockPos;
  * leaves, snow, plants, fluids) and otherwise {@code changed}, counted by the block now there in {@code kinds}. {@code sample}: at most
  * 16 changed positions, in scan order. A cell is attributed to its part by the realised record's writer (RP, RV §3.4); a cell no record
  * attributes (a region realised before the record, or a tile whose record can't be read) is under part {@code unattributed}. Roads
- * are named by their IR road id, gate mechanisms {@code mech:<gate>}. Since NEXT.
+ * are named by their IR road id, gate mechanisms {@code mech:<gate>}. Since 1.51.0.
  */
 public record PartLand(String part, long cells, long changed, long removed, long playerPlaced, long volatileChanged, Map<String, Long> kinds,
 	List<BlockPos> sample) {

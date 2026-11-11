@@ -109,7 +109,7 @@ public final class ApiRules {
 					case "region.revise" -> "regionRevisions"; // 6d RV: Regions.planRevision's revise program and the revision input (--revision)
 					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since 1.43.0)
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
-					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since NEXT)
+					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));

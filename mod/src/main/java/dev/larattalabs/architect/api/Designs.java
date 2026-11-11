@@ -242,7 +242,7 @@ public interface Designs {
 	 * detail {@code until_7b} (a SITE entry), {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
 	 * {@code adopted} (a copy of an adopted entry); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. Needs a helper with
 	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
-	 * version. Since NEXT.
+	 * version. Since 1.51.0.
 	 */
 	default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion, @Nullable String opKey) {
 		throw new UnsupportedOperationException("Designs.follow needs Architect API NEXT");
@@ -253,7 +253,7 @@ public interface Designs {
 	 * ({@code toSourceVersion}, or the head then) and the follower set (each COPY behind at that moment, with its head) before
 	 * following any, so a copy made or versioned later is not in it, and a source version made meanwhile is not used. Each follower
 	 * as {@link #follow}; one that fails is listed with its reason and left. A restart resumes the operation; {@code opKey} keys the
-	 * whole operation. Completes with one result per frozen follower (empty when none is behind). Since NEXT.
+	 * whole operation. Completes with one result per frozen follower (empty when none is behind). Since 1.51.0.
 	 */
 	default CompletableFuture<java.util.List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey) {
 		throw new UnsupportedOperationException("Designs.followAll needs Architect API NEXT");

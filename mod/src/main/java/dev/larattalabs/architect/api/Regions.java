@@ -297,7 +297,7 @@ public interface Regions {
 	 * moving and trigger cells and its blocks' dynamic properties are not judged. Cells a survival target, construction road or lot still
 	 * building has not built yet are not counted. {@code part}: only that part (no lots); null: every part, and the lots. At most 4M
 	 * cells per call: a larger region refuses {@link Reason#REGION_LIMIT} unasked a part (ask per part). An unknown region refuses
-	 * {@link Reason#OTHER}; a removed one {@link Reason#NOT_ALLOWED}. Server thread; the future completes on it. Since NEXT, feature
+	 * {@link Reason#OTHER}; a removed one {@link Reason#NOT_ALLOWED}. Server thread; the future completes on it. Since 1.51.0, feature
 	 * {@code "landCheck"}.
 	 */
 	default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part) {

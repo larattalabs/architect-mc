@@ -9,7 +9,7 @@ import java.util.List;
  * {@code position}: the region's revision head (0 before any revision). {@code parts}: one row per part that holds a cell on top, by
  * name. {@code lots}: one row per lot site of the region (empty when a part was asked). {@code cellsChecked}: the cells read from the
  * world (in loaded chunks); {@code unloaded}: the cells of chunks that were not loaded (counted, never loaded or read). {@code ms}: the
- * call's wall time (recorded, not judged). Since NEXT.
+ * call's wall time (recorded, not judged). Since 1.51.0.
  */
 public record LandReport(String region, int position, List<PartLand> parts, List<LotLand> lots, long cellsChecked, long unloaded, long ms) {
 	public LandReport {
