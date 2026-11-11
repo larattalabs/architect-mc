@@ -233,6 +233,8 @@ steps.ingame = async () => {
   await L.fresh('G6B FS Follow', FLAT);
   await L.setRules('exact');
   await L.tp(CX + 56, 60, CZ + 56);
+  // the helper's follow operations outlive a world (its data dir is the game's): a key of this run
+  const KEY = `fs.all.${Date.now().toString(36)}`;
   const fsApi = await api('apifs');
   check(fsApi.followSource === true, `the API names followSource (${json(fsApi)})`);
   // ---- the family: an archetype and 2 copies (0b's cap: 3 placements per design), plus a VARIANT of the archetype
@@ -275,12 +277,12 @@ steps.ingame = async () => {
   check(f1.length === 3 && f1.filter((f) => f.behind).map((f) => f.entryId).sort().join() === [...copies].sort().join() && f1.every((f) => f.sourceHead === 2), `item 2: after the versionOf, behind is true for exactly the 2 copies (${json(f1.map((f) => [f.entryId, f.behind, f.sourceVersion, f.sourceHead]))})`);
   // ---- item 3: followAll
   const ev1 = (await eventsFrom(0)).length;
-  const fa = await result(await api(`followall fsa ${arch} 0 fs.all`), 900_000);
+  const fa = await result(await api(`followall fsa ${arch} 0 ${KEY}`), 900_000);
   out.followAll = fa;
   check(Array.isArray(fa) && fa.length === 2 && fa.every((r) => r.followed && r.newVersion === 2 && r.sourceVersion === 2 && r.refused === null), `item 3: followAll: 2 new versions, each passing the check and the bar (${json(fa)})`);
   const evs = (await eventsFrom(ev1)).filter((e) => e.event === 'ENTRY_VERSIONED');
   check(copies.every((c) => evs.filter((e) => e.entry === c && e.version === 2).length === 1), `item 3: ENTRY_VERSIONED once per copy (${json(evs.map((e) => [e.entry, e.version, e.from]))})`);
-  const replay = await result(await api(`followall fsb ${arch} 0 fs.all`), 300_000);
+  const replay = await result(await api(`followall fsb ${arch} 0 ${KEY}`), 300_000);
   check(json(replay) === json(fa), 'the same opKey answers the saved results, nothing installed again');
   for (const c of copies) {
     const ev = await api(`eversions ${c}`);
