@@ -99,7 +99,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     h = await harness();
     const e = await entry(h, 'sim:issues=P1@roof sim:polish=er');
     const v = h.sc.requestVariant(e, undefined, undefined, 'Inn variant');
-    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 600_000);
     const ve = h.sc.variants.get(v.id)!.blueprintId!;
     expect(top(h, ve)).toMatchObject({ variantOf: e, variantOfVersion: 1, derivation: { source: e, sourceVersion: 1, kind: 'variant', recipe: {} } });
     const d = await polish(h, ve);
@@ -108,7 +108,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const j = top(h, ve);
     expect(j.version).toBe(2);
     expect(j).toMatchObject({ variantOf: e, variantOfVersion: 1, derivation: { source: e, kind: 'variant' } });
-  }, 120_000);
+  }, 1_800_000);
 
   it('polished: two targeted steps (P1 roof, then P1 taproom), one new version with delta.json and critique.json format 2', async () => {
     h = await harness();
@@ -137,7 +137,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const d2 = await polish(h, e, { maxSteps: 1 });
     expect(d2.polish).toMatchObject({ fromVersion: 2, installedVersion: null, end: 'no_target', untargetable: 1 });
     expect(d2.polish!.report).toBeUndefined();
-  }, 120_000);
+  }, 1_800_000);
 
   it('a pre-5b entry (no frame, origin 1,0,1): delta.json and entry.delta in the rebuilt frame; the first bump records it', async () => {
     h = await harness();
@@ -161,7 +161,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const live = (await h.sc.entryDelta(e, 1, 2)) as { parts: Record<string, { status: string }>; frameHint?: number[] };
     expect(Object.entries(live.parts).filter(([, x]) => x.status !== 'UNCHANGED').map(([k]) => k)).toEqual(['roof']);
     expect(live.frameHint).toBeUndefined();
-  }, 120_000);
+  }, 1_800_000);
 
   it('a group item: the polish critic sees the neighbour renders the entry keeps (the set dimension) and its set line', async () => {
     h = await harness();
@@ -184,7 +184,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
       expect(work[job.id]!.images!.some((im) => /neighbour gen_anchor/.test(im.label))).toBe(true);
     }
     expect(fs.existsSync(path.join(dir, 'versions', '2', 'neighbours', 'gen_anchor.png'))).toBe(true);
-  }, 120_000);
+  }, 1_800_000);
 
   it('no_target: only issues without a part (untargetable); the fresh report becomes the head critique.json', async () => {
     h = await harness();
@@ -194,7 +194,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect(top(h, e).version ?? 1).toBe(1);
     const cj = JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, e, 'critique.json'), 'utf8'));
     expect(cj).toMatchObject({ format: 2, entryVersion: 1, mode: 'report' });
-  }, 120_000);
+  }, 1_800_000);
 
   it('not_resolved, scope_failed, check_failed: nothing installs', async () => {
     h = await harness();
@@ -207,7 +207,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const c = await entry(h, 'sim:issues=P1@roof sim:polish=et', 'C Inn');
     expect((await polish(h, c, { maxSteps: 1 })).polish).toMatchObject({ end: 'check_failed', installedVersion: null });
     for (const e of [a, b, c]) expect(top(h, e).version ?? 1).toBe(1);
-  }, 120_000);
+  }, 1_800_000);
 
   it('a scope failure, then a fix turn that passes: the step is accepted (and the next step starts from the same base when one fails)', async () => {
     h = await harness();
@@ -215,7 +215,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const p = (await polish(h, e)).polish!;
     expect(p.steps.map((s) => [s.target?.part, s.accepted, s.failure, s.fixTurns])).toEqual([['roof', false, 'scope_failed', 2], ['taproom', true, null, 1]]);
     expect(p).toMatchObject({ end: 'polished', installedVersion: 2 });
-  }, 120_000);
+  }, 1_800_000);
 
   it('the acceptance rule: a new P0 and a drop over 0.5 are rejected; a rejected issue is not targeted again', async () => {
     h = await harness();
@@ -225,7 +225,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect(p.end).toBe('not_resolved');
     const e2 = await entry(h, 'sim:base=6 sim:issues=P1@roof sim:polish=erd-0.5', 'Slack Inn');
     expect((await polish(h, e2, { maxSteps: 1 })).polish).toMatchObject({ end: 'polished', installedVersion: 2 });
-  }, 120_000);
+  }, 1_800_000);
 
   it('base_drift: the installed .nbt no longer equals its source: the polish ends before any model call', async () => {
     h = await harness();
@@ -237,7 +237,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect(d.polish).toMatchObject({ end: 'base_drift', installedVersion: null, steps: [] });
     expect(d.step).toMatch(/differs from the installed one in \d+ cells/);
     expect(h.sc.jobs.book.recent().length).toBe(jobsBefore);
-  }, 120_000);
+  }, 1_800_000);
 
   it('caps: a step that does not fit ends budget (the accepted chain still installs); time; critic_failed', async () => {
     h = await harness();
@@ -252,17 +252,17 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect((await polish(h, c, { maxMinutes: 0.0001 })).polish).toMatchObject({ end: 'time', installedVersion: null });
     const f = await entry(h, 'sim:issues=P1@roof sim:polish=erF', 'Mute Inn');
     expect((await polish(h, f)).polish).toMatchObject({ end: 'critic_failed', installedVersion: null });
-  }, 120_000);
+  }, 1_800_000);
 
   it('a usage limit during a step holds it; it resumes after the reset and finishes', async () => {
     h = await harness();
     const e = await entry(h, 'sim:issues=P1@roof sim:polish=erL');
     const d = h.sc.polishes.request(e, { maxSteps: 1 });
-    await until(() => !!h!.sc.store.data.limit, 30_000);
+    await until(() => !!h!.sc.store.data.limit, 600_000);
     expect(get(h, d.id).step).toMatch(/usage limit/);
     await final(h, d.id);
     expect(get(h, d.id).polish).toMatchObject({ end: 'polished', installedVersion: 2 });
-  }, 120_000);
+  }, 1_800_000);
 
   it('a restart mid-step: the step runs again after the restart and the polish installs once', async () => {
     const root = tempDir('arch-5b-restart-');
@@ -271,14 +271,14 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     await h.close(true);
     h = await harness({}, root, 1500);
     const d = h.sc.polishes.request(e, { maxSteps: 1 });
-    await until(() => /step 1/.test(get(h!, d.id).step), 60_000);
+    await until(() => /step 1/.test(get(h!, d.id).step), 600_000);
     await h.close(true);
     h = await harness({}, root, 10);
     await final(h, d.id);
     expect(get(h, d.id).polish).toMatchObject({ end: 'polished', installedVersion: 2 });
     expect(top(h, e).version).toBe(2);
     expect(fs.readdirSync(path.join(h.sc.config.libraryDir, e, 'versions')).sort()).toEqual(['1', '2']);
-  }, 180_000);
+  }, 1_800_000);
 
   it('targets: explicit issues in the order given; notes route through the scoping call (a whole-look request is declined)', async () => {
     h = await harness();
@@ -296,7 +296,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     const q = (await polish(h, e, { maxSteps: 1, target: { notes: 'fewer barrels', parts: ['taproom'] } })).polish!;
     expect(q.scoping).toBeUndefined();
     expect(q.steps[0]!.allowedParts).toEqual(['taproom']);
-  }, 180_000);
+  }, 1_800_000);
 
   it('refusals and the estimate (polish as its own fields); protocol 1 never sees a polish', async () => {
     h = await harness();
@@ -322,7 +322,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     for (const m of h.events.filter((x) => x.type === 'design.upsert' && (x as { design: Design }).design.id === id)) expect(toProtocol1({ v: 1, ...m })).toBeUndefined();
     expect((toProtocol1({ v: 1, ...h.sc.snapshot(2) }) as { designs: Design[] }).designs.some((x) => x.id === id)).toBe(false);
     expect(h.sc.snapshot(2)).toMatchObject({ features: expect.arrayContaining(['entry.versions', 'entry.delta', 'design.polish', 'critique.polish']) });
-  }, 120_000);
+  }, 1_800_000);
 
   it('critique.mode "polish" in a new design: round 0 installs with its report, then a polish of the new entry installs v2', async () => {
     h = await harness();
@@ -330,10 +330,10 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     await final(h, d.id);
     expect(get(h, d.id)).toMatchObject({ status: 'done' });
     const e = get(h, d.id).blueprintId!;
-    await until(() => h!.sc.designs.list().some((x) => x.kind === 'polish' && x.polish?.entryId === e && FINAL.includes(x.status)), 60_000);
+    await until(() => h!.sc.designs.list().some((x) => x.kind === 'polish' && x.polish?.entryId === e && FINAL.includes(x.status)), 600_000);
     const p = h.sc.designs.list().find((x) => x.kind === 'polish' && x.polish?.entryId === e)!;
     expect(p.polish).toMatchObject({ fromVersion: 1, installedVersion: 2, end: 'polished' });
     // the report's critique.json was reused (fresh), so no second report ran
     expect(p.polish!.report).toBeUndefined();
-  }, 120_000);
+  }, 1_800_000);
 });

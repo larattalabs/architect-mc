@@ -51,8 +51,8 @@ async function harness(kit: 'fixture' | 'real', over: Partial<Config> = {}, root
   };
 }
 
-const finished = (h: H, id: string, ms = 30_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), ms);
-const groupIs = (h: H, id: string, ...st: string[]) => until(() => st.includes(h.sc.groups.get(id)!.status), 60_000);
+const finished = (h: H, id: string, ms = 600_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), ms);
+const groupIs = (h: H, id: string, ...st: string[]) => until(() => st.includes(h.sc.groups.get(id)!.status), 600_000);
 const json = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8')) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const massingReq = (o: Record<string, unknown> = {}) => DesignRequest.parse(request({ name: 'Lakeside Cabin', massing: true, maxSize: { x: 40, y: 30, z: 40 }, ...o }));
 const item = (itemKey: string, o: Record<string, unknown> = {}) => ({ ...request({ type: 'cabin', name: undefined, notes: undefined, maxSize: { x: 40, y: 30, z: 40 } }), itemKey, ...o });
@@ -110,7 +110,7 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(snap1.designs).toEqual([]);
     expect(() => h!.sc.requestDesign(DesignRequest.parse(request({ redirect: { fromVersion: 1, notes: 'x' } })))).toThrow(/set by massing.redirect/);
     expect(DesignRequest.safeParse(request({ massing: true, fromMassing: 'x' })).success).toBe(false);
-  }, 60_000);
+  }, 1_800_000);
 
   it('the detail pass from a massing conforms; a detail over the massing + 2 fails on the hard cap', async () => {
     h = await harness('fixture');
@@ -151,7 +151,7 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(h.sc.designs.get(plain.id)).toMatchObject({ status: 'done', blueprintId: 'gen_plain' });
     // refusals: an unknown massing, a group's massing
     expect(() => h!.sc.requestDesign(DesignRequest.parse(request({ fromMassing: 'mas_nope' })))).toThrow(/no massing "mas_nope"/);
-  }, 60_000);
+  }, 1_800_000);
 
   it('conformance issues alone never fail a detail round; only errors (the size cap) do', async () => {
     h = await harness('fixture');
@@ -196,7 +196,7 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(h.sc.massings.get('mas_gamma')).toBeUndefined();
     expect(fs.existsSync(path.join(h.sc.config.massing.dir, 'mas_gamma'))).toBe(false);
     expect(() => h!.sc.massings.delete('mas_gamma')).toThrow(/no massing/);
-  }, 60_000);
+  }, 1_800_000);
 
   it('estimates: a massing ($0.12-0.30, 1-3 min), and a massingFirst group adds the massing pass', () => {
     const root = tempDir();
@@ -271,9 +271,9 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     expect(r.redirected.house_b).toMatchObject({ version: 2 });
     expect(() => h!.sc.groups.approve(g0.id, { approve: ['hall'], redirect: {}, cancel: [] })).toThrow(/not awaiting approval \(detail\)/);
     // the redirected item gets its new massing, then the group awaits approval again (details may still run)
-    await until(() => h!.sc.groups.get(g0.id)!.items[2]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[2]!.massing!.version === 2, 30_000);
+    await until(() => h!.sc.groups.get(g0.id)!.items[2]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[2]!.massing!.version === 2, 600_000);
     await groupIs(h, g0.id, 'awaiting_approval', 'running', 'queued');
-    await until(() => h!.sc.groups.get(g0.id)!.status === 'awaiting_approval' || h!.sc.groups.get(g0.id)!.awaiting!.length === 1, 30_000);
+    await until(() => h!.sc.groups.get(g0.id)!.status === 'awaiting_approval' || h!.sc.groups.get(g0.id)!.awaiting!.length === 1, 600_000);
     g = h.sc.groups.get(g0.id)!;
     expect(g.awaiting).toEqual(['house_b']);
     expect(g.items[2]).toMatchObject({ rounds: 1, massing: { version: 2 } });
@@ -295,7 +295,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     const db = fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', g.items[2]!.designId, 'BRIEF.md'), 'utf8');
     expect(db).toContain(`## The approved massing (binding): \`${g.items[2]!.massing!.id}\` v2`);
     expect(db).toContain('"site": "a river bend"');
-  }, 90_000);
+  }, 1_800_000);
 
   it('approvalUi owner: only the owner approves; the redirect cap; cancel an item; owner is required', async () => {
     h = await harness('fixture');
@@ -309,7 +309,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     expect(() => h!.sc.redirectMassing(ma, 'taller')).toThrow(/approved by its owner only/);
     const d = h.sc.redirectMassing(ma, 'taller', { owner: 'steward_mc:s1' });
     expect(d.massing).toEqual({ id: ma, version: 2 });
-    await until(() => h!.sc.groups.get(g0.id)!.items[0]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[0]!.rounds === 1, 30_000);
+    await until(() => h!.sc.groups.get(g0.id)!.items[0]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[0]!.rounds === 1, 600_000);
     // the cap: one redirect per item
     expect(() => h!.sc.groups.approve(g0.id, { approve: [], redirect: { a: 'again' }, cancel: [], owner: 'steward_mc:s1' })).toThrow(/used its 1 redirect round/);
     h.sc.groups.approve(g0.id, { approve: ['a'], redirect: {}, cancel: ['b'], owner: 'steward_mc:s1' });
@@ -318,7 +318,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     expect(g).toMatchObject({ status: 'done', done: 1, failed: 1 });
     expect(g.items[1]).toMatchObject({ status: 'cancelled', stage: 'approval' });
     expect(() => h!.sc.groups.approve(g0.id, { approve: ['b'], redirect: {}, cancel: [], owner: 'steward_mc:s1' })).toThrow(/already done/);
-  }, 60_000);
+  }, 1_800_000);
 
   it('massings count toward the budget: the soft budget holds the detail pass until extend + resume', async () => {
     // 3 steps x $0.1 per design: three massings are $0.9 of $1 (soft at $0.8)
@@ -326,7 +326,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     const g0 = h.sc.groups.create(GroupRequest.parse({ name: 'Thrifty', bible: 'rustic', massingFirst: true, budgetUsd: 1, concurrency: 1, items: [item('a'), item('b'), item('c')] }));
     await groupIs(h, g0.id, 'awaiting_approval');
     // (the 3rd massing crossed the soft budget while it ran, and finished)
-    await until(() => h!.sc.groups.get(g0.id)!.awaiting!.length === 3, 30_000);
+    await until(() => h!.sc.groups.get(g0.id)!.awaiting!.length === 3, 600_000);
     expect(h.sc.groups.get(g0.id)!.cost.usd).toBeCloseTo(0.9, 5);
     expect(h.sc.groups.get(g0.id)!.reason).toMatch(/soft budget/);
     h.sc.groups.approve(g0.id, { approve: ['a', 'b', 'c'], redirect: {}, cancel: [] });
@@ -345,7 +345,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     const f = h.sc.groups.get(g1.id)!;
     expect(f).toMatchObject({ status: 'failed', reason: 'budget', done: 0 });
     expect(f.items.every((i) => i.status === 'cancelled' || i.status === 'failed')).toBe(true);
-  }, 90_000);
+  }, 1_800_000);
 
   it('a restart mid-approval keeps ext, itemKey and the massings; approval after it finishes the group', async () => {
     const root = tempDir('arch-4c-restart-');
@@ -364,7 +364,7 @@ describe('massingFirst groups (sim backend, fixture kit)', () => {
     expect(g).toMatchObject({ status: 'done', done: 2 });
     for (const it of g.items) expect(json(path.join(h.sc.config.libraryDir, it.entryId!, `${it.entryId}.blueprint.json`))).toMatchObject({ groupItem: it.itemKey, ext: it.ext, group: g0.id });
     expect(fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', g.items[0]!.designId, 'BRIEF.md'), 'utf8')).toContain('quiet hamlet');
-  }, 60_000);
+  }, 1_800_000);
 });
 
 describe('the sim redirect', () => {
@@ -399,7 +399,7 @@ describe.skipIf(!hasRealKit)('massings with the REAL kit (sim backend)', () => {
     const done = h.sc.designs.get(det.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.conformance).toEqual({ ok: true, errors: [], issues: [] });
-  }, 120_000);
+  }, 1_800_000);
 
   it('a massingFirst set of three on the real kit: approve 2, redirect 1, all detailed', async () => {
     h = await harness('real', { designConcurrency: 3 });
@@ -407,11 +407,11 @@ describe.skipIf(!hasRealKit)('massings with the REAL kit (sim backend)', () => {
     const g0 = h.sc.groups.create(GroupRequest.parse({ name: 'Real Set', bible: 'oak', massingFirst: true, context: 'a crossroads', items: [real('inn', 'tavern', { anchor: true, role: 'landmark' }), real('watch', 'tower'), real('gate', 'gatehouse')] }));
     await groupIs(h, g0.id, 'awaiting_approval');
     h.sc.groups.approve(g0.id, { approve: ['inn', 'watch'], redirect: { gate: 'hip the roof' }, cancel: [] });
-    await until(() => h!.sc.groups.get(g0.id)!.items[2]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[2]!.massing!.version === 2, 60_000);
+    await until(() => h!.sc.groups.get(g0.id)!.items[2]!.stage === 'approval' && h!.sc.groups.get(g0.id)!.items[2]!.massing!.version === 2, 600_000);
     h.sc.groups.approve(g0.id, { approve: ['gate'], redirect: {}, cancel: [] });
     await groupIs(h, g0.id, 'done', 'failed');
     const g = h.sc.groups.get(g0.id)!;
     expect(g, JSON.stringify(g.items.map((i) => i.error))).toMatchObject({ status: 'done', done: 3 });
     for (const it of g.items) expect(h.sc.designs.get(it.designId)!.conformance?.errors).toEqual([]);
-  }, 180_000);
+  }, 1_800_000);
 });

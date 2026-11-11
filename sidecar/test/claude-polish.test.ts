@@ -70,7 +70,7 @@ describe.skipIf(!hasKit)('polish through the Claude designer (fake SDK)', () => 
     };
     await sc.start(new ClaudeDesigner(sc, { queryFn: queryFn as never, skipAuthCheck: true }));
     sc.setAuthSettings('sk-ant-test-key', undefined);
-  }, 60_000);
+  }, 1_800_000);
   afterAll(async () => {
     await sc.close();
     rmrf(root);
@@ -78,7 +78,7 @@ describe.skipIf(!hasKit)('polish through the Claude designer (fake SDK)', () => 
 
   it('one step: POLISH.md and the base renders, the polish system prompt and policy, the scope check, v2 installed', async () => {
     const d = sc.polishes.request('inn', { maxSteps: 1, budgetUsd: 3 });
-    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 120_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 600_000);
     const done = sc.designs.get(d.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.polish).toMatchObject({ end: 'polished', installedVersion: 2 });
@@ -96,5 +96,5 @@ describe.skipIf(!hasKit)('polish through the Claude designer (fake SDK)', () => 
     const delta = JSON.parse(fs.readFileSync(path.join(sc.config.libraryDir, 'inn', 'versions', '2', 'delta.json'), 'utf8')) as { parts: Record<string, { status: string }> };
     expect(Object.entries(delta.parts).filter(([, p]) => p.status !== 'UNCHANGED').map(([k]) => k)).toEqual(['roof']);
     expect(done.cost!.usd).toBeGreaterThan(0);
-  }, 120_000);
+  }, 1_800_000);
 });

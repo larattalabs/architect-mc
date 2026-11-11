@@ -289,7 +289,7 @@ export function gateStep(D) {
       const e = dryRoute({ at: q.at, facing: q.facing }, { at: feetOut(g), facing: fOut, lead: LEAD }, fronts.has(`${g.region}:${g.id}`) ? hardRects(hardKeys, { contact: fronts.get(`${g.region}:${g.id}`) }) : hardNone, F);
       if (e.ok && (!l1 || e.cost < l1.cost)) l1 = { cost: e.cost, length: e.length, end: q, qi };
     }
-    if (!l1) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from a district end to its outer cell' }); if (cut) break; continue; }
+    if (!l1) { tried.push({ region: g.region, id: g.id, why: cut ? 'the dry-route budget ran out' : 'no route from a district end to its outer cell: the gatehouse pad or its front strip is unreachable (on sloped ground, a pad slope past LEAD makes the front strip too steep to reach), which is not the wall blocking the way' }); if (cut) break; continue; }
     if (best && l1.cost + v.b2 > best.cost) continue;
     // the leg in: the inner cell (leaving square on, heading in) to the cheapest D3 candidate
     let l2 = null;

@@ -83,7 +83,7 @@ describe.skipIf(!hasKit)('an adopted entry (sim backend, real kit)', () => {
     await sc.start(new SimDesigner(sc, cfg.simStepMs));
     close = async () => { await sc.close(); rmrf(root); };
     const d = sc.requestDesign(DesignRequest.parse(request({ type: 'adopted', notes: 'add a floor', maxSize: { x: 16, y: 20, z: 16 }, versionOf: { entryId: ID, siteId: 's1' } })));
-    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 600_000);
     const done = sc.designs.get(d.id)!;
     expect(done.status, done.error).toBe('done');
     const j = JSON.parse(fs.readFileSync(path.join(cfg.libraryDir, ID, `${ID}.blueprint.json`), 'utf8')) as Record<string, unknown>;
@@ -115,7 +115,7 @@ describe.skipIf(!hasKit)('an adopted entry (sim backend, real kit)', () => {
     await sc.start(new SimDesigner(sc, cfg.simStepMs));
     close = async () => { await sc.close(); rmrf(root); };
     const d = sc.requestDesign(DesignRequest.parse(request({ type: 'adopted', notes: 'add a floor', bible: 'birch', maxSize: { x: 16, y: 20, z: 16 }, versionOf: { entryId: ID, siteId: 's1' } })));
-    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 600_000);
     const done = sc.designs.get(d.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.step).toMatch(/; bible birch v\d+ ignored \(captured: the player's blocks kept\)/);

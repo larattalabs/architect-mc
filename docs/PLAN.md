@@ -1448,7 +1448,7 @@ From the folded and dropped branches and the v0.57.0 batch (PG, XR, NS). Nothing
 - Java tests from unit-mod's JUnit XML (`junit-reuse`) for 0b-unit, sch-unit, rp-unit, f3-unit and rs-unit; `umt` and `p3-lint` superseded by unit-mod.
 - An api-compat memo per run, `lint-mutations` running its eight mutations side by side, `p2-calibration` reading t3a-probe's `probe.json`, and `umt-long` as one test class per generator on `maxParallelForks = 4`.
 - `--no-daemon` stays (the branch documents why).
-- **Re-check the umt-long DRIFT seed 804021437** that the branch found (not diagnosed: model gap or journal bug): `Place[kind=SITE, x=15, z=30, w=7, d=8, h=5, group=1]`, then `Place[kind=ROAD, x=15, z=36, w=7, d=2, h=3, group=2]`, then `finish` removes r2 and s1, which gave an unexplained violation in `UmtLongDriftTest`. Repro in `mod/`: `./gradlew --offline umtLong -Dumt.from=804021437 -Dumt.seeds=1`. The road-terrain fix on fix/nightly-infra (2026-10-25) may have closed it. If it still fails, pin it in `UmtFindingsTest` or fix the model; if it passes, record that.
+- **Re-check the umt-long DRIFT seed 804021437** (**Done in QF**: still failed on v0.59.0, a model gap, fixed in the model and pinned; see "Chore QF as built") that the branch found (not diagnosed: model gap or journal bug): `Place[kind=SITE, x=15, z=30, w=7, d=8, h=5, group=1]`, then `Place[kind=ROAD, x=15, z=36, w=7, d=2, h=3, group=2]`, then `finish` removes r2 and s1, which gave an unexplained violation in `UmtLongDriftTest`. Repro in `mod/`: `./gradlew --offline umtLong -Dumt.from=804021437 -Dumt.seeds=1`. The road-terrain fix on fix/nightly-infra (2026-10-25) may have closed it. If it still fails, pin it in `UmtFindingsTest` or fix the model; if it passes, record that.
 
 **Follow-ups from the v0.57.0 batch:**
 - **PG:** on sloped ground, a K3 pad slope longer than LEAD past the front port refuses the join. Untested, because the fixtures are flat. Add a sloped fixture. **Done in PX** (see "Slice PX" below).
@@ -1473,7 +1473,7 @@ Five small items from "Queued (coordinator, 2026-11-11)". No API member, no Reas
    this claim)`, and the town itself still plans READY. `passageTown` and `planDistrict` take a ground function (flat by default, so the
    parity fixture is unchanged). Does the refusal look right? The refusal itself, yes: past LEAD the pad is the town's, not contact, and
    the leg out may not write it (PG §3). The wording is misleading: it blames wall enclosure ("enclosed by a wall"), when the cause is the
-   unreachable front strip, so a user cannot tell a sloped pad from a walled-in town. Follow-up (not done): name the pad slope in the
+   unreachable front strip, so a user cannot tell a sloped pad from a walled-in town. Follow-up (done in QF): name the pad slope in the
    `no route ... to its outer cell` reason. Also: a continuous ramp of 1 per block failed earlier, at the district's own placement
    (`NO_ROOM ... no_candidate`), so a step is the clean fixture.
 3. **IRR dropped count (done).** `RegionsImpl.dropped()` is gone; `irrigationDropped` and the cost range's subtraction (`PlanChecks`
@@ -1488,6 +1488,26 @@ Five small items from "Queued (coordinator, 2026-11-11)". No API member, no Reas
    only the +30% mean-time rule is skipped, since two sim runs of a few seconds each swing with load; the spawn and test timeouts are wider
    (15 / 30 min). The real eval's `compare` still judges time by default. Proof: `npm run check` 809/809 with the machine at load average ~50 (other
    sessions' gates); on a first try at the old limits the C7 `until` timed out under 24 added busy loops. Other sidecar tests (bundle.e2e,
-   simcosts, styles-u5, massing, versionof ...) also fail on their 30-60 s limits under that kind of load; not touched here.
+   simcosts, styles-u5, massing, versionof ...) also fail on their 30-60 s limits under that kind of load; not touched here (done in QF).
 5. This section; CONTRACT notes under "Slice XR as built" and "Phase 6c slice IRR as built".
 
+## Chore QF as built (builder, 2026-11-12; branch `chore/QF` off main f5e96625, v0.59.0; DEV MODE; $0)
+
+The three small items left in "Queued (coordinator, 2026-11-11)" and "Slice PX". No API member, no schema, no version stamped.
+
+1. **PG slope wording (done, behaviour unchanged).** The `gateJoin.mjs` reason `no route from a district end to its outer cell` now continues
+   `: the gatehouse pad or its front strip is unreachable (on sloped ground, a pad slope past LEAD makes the front strip too steep to reach),
+   which is not the wall blocking the way`, so a sloped pad no longer reads as a walled-in town. The refusal code (`NO_JOIN: [wall]`), the
+   routing and every other reason are as before. `kit/test/pg.test.mjs` "PX: sloped ground" asserts the new text; nothing else matched the old one.
+2. **Sidecar timing limits (done).** Every wait and test limit of 1 s and over is widened across `sidecar/test/*.test.ts` (37 files): each
+   `until(..., N)` to 10 min, `until`'s own default 10 s to 10 min, `ready()` in bundle.e2e and `finished()` in massing to 10 min, every
+   per-test timeout to 30 min, and `vitest.config.ts` `testTimeout`/`hookTimeout` 60 s to 30 min. A wait ends when its condition does, so
+   the wide limits cost nothing. No assertion changed; the bound the shutdown test asserts (12 s), the fixed sleeps and the config timeouts that
+   a test provokes on purpose are untouched. `npm run check`: 55 files, 811/811 pass.
+3. **umt-long DRIFT seed 804021437 (still failed on v0.59.0; model gap, fixed in the model).** The 2-op scenario (a site, then a road over its
+   south edge at z36..37) removes the road, then the site; a fault in the removal's commit makes the next start read the road's evidence as
+   standing and recover it, and its re-removal writes back the road's before, the site's block, at 5 solid cells (x16..20, z36, y63). That is F9's
+   mechanism exactly (the production behaviour F9 already documents), but `UmtSim.tag` named only the road's air head room. It now also names a
+   cell the road wrote solid over a lower entry's block when the final block is that block (`roadOver`). No journal or production code
+   changed. Pinned in `UmtFindingsTest.f9_aRoadsSolidCellsOverASiteAreWrittenBackToo` (world seed 24924664554: fails with the old tag rule,
+   passes with the new one); `umtLong -Dumt.from=804021437 -Dumt.seeds=1` passes.

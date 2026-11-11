@@ -58,7 +58,7 @@ function send(sc: Sidecar, msg: Record<string, unknown>): Promise<Ack> {
   });
 }
 
-const final = (sc: Sidecar, id: string) => until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(id)!.status), 60_000);
+const final = (sc: Sidecar, id: string) => until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(id)!.status), 600_000);
 const designs = (sc: Sidecar) => sc.designs.list().length;
 const keyed = (over: Record<string, unknown> = {}) => request({ owner: 'steward:s1', opKey: 'st:design:1', ...over });
 

@@ -82,14 +82,14 @@ describe.skipIf(!hasKit)('flat_village through the sidecar (real kit)', () => {
     const site = p.sitePlan as { graph: { derived: boolean }; unplaced: { id: string }[] } | undefined;
     expect(site?.graph.derived).toBe(false);
     expect(site?.unplaced.map((u) => u.id)).toEqual(['keep_1']);
-  }, 180_000);
+  }, 1_800_000);
 
   it('without keepOut the program records an empty honoured set', async () => {
     const p = await plan({ check: false });
     const ir = JSON.parse(p.ir ?? fs.readFileSync(sc.blobs.file(p.irBlobId!), 'utf8'));
     expect(ir.keepOut).toEqual([]);
     expect(fs.existsSync(path.join(dataDir, 'regions', 'plans', p.planId, 'keepout.json'))).toBe(false);
-  }, 180_000);
+  }, 1_800_000);
 });
 
 // (6c D1) region.plan's beside: the standing region reaches the plan CLI (--beside, beside.json), ctx.beside reads it, the IR records
@@ -148,5 +148,5 @@ describe.skipIf(!hasKit || !fs.existsSync(path.join(KIT, 'regions', 'districts.m
     expect(ir.graph.edges.filter((e: { external?: boolean }) => e.external).map((e: { to: string }) => e.to)).toEqual(['rg1:street_w_start.street']);
     const site = p.sitePlan as { graph: { edges: { id: string; external?: boolean }[] } } | undefined;
     expect(site?.graph.edges.filter((e) => e.external).map((e) => e.id)).toEqual(['join_external']);
-  }, 180_000);
+  }, 1_800_000);
 });

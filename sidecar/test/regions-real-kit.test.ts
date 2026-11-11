@@ -140,7 +140,7 @@ describe.skipIf(!hasKit)('region plans and tiles with the real kit (mega_bench)'
     // a spread of 24 evaluations across the stages and sets
     const step = Math.max(1, Math.floor(all.length / 24));
     tiles = all.filter((_, i) => i % step === 0).slice(0, 24);
-  }, 180_000);
+  }, 1_800_000);
 
   it('the same tile bytes for 1 and 4 workers, forward and shuffled, and the same as the kit\'s own evalTile', async () => {
     expect(planned, 'the plan test ran first').toBeDefined();
@@ -166,7 +166,7 @@ describe.skipIf(!hasKit)('region plans and tiles with the real kit (mega_bench)'
       expect(Buffer.from(r.payload).equals(mine.payload), `${t.stage}/${t.set}/${t.key}`).toBe(true);
       expect(crypto.createHash('sha256').update(r.payload).digest('hex')).toBe(mine.sha);
     }
-  }, 300_000);
+  }, 1_800_000);
 });
 
 // ---- the real evaluator with a hand-made IR (until the kit's plan CLI and mega_bench land) ----------------------
@@ -261,5 +261,5 @@ describe.skipIf(!hasRealise)('the pool with the real evaluator (a hand-made IR s
       expect(crypto.createHash('sha256').update(r.payload).digest('hex'), k).toBe(a.out.get(k));
     }
     for (const [w, r] of [[1, a], [4, b]] as const) console.log(`[numbers] real evaluator, stand-in IR, ${w} worker(s): ${r.cells} cells in ${Math.round(r.wall)} ms = ${Math.round(r.cells / (r.wall / 1000))} cells/s, ${(r.gz / r.cells).toFixed(3)} gzip bytes/cell, peak RSS ${Math.round(r.rss / 1048576)} MB`);
-  }, 300_000);
+  }, 1_800_000);
 });

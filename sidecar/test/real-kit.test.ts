@@ -30,7 +30,7 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
   });
 
   it('the snapshot carries the kit palettes in the mod\'s shape', async () => {
-    await until(() => 'palettes' in (sc.snapshot() as Record<string, unknown>), 30_000);
+    await until(() => 'palettes' in (sc.snapshot() as Record<string, unknown>), 600_000);
     const p = (sc.snapshot() as unknown as { palettes: { presets: Record<string, Record<string, string>>; woods: string[]; stones: string[]; roofs: string[] } }).palettes;
     expect(Object.keys(p.presets)).toEqual(expect.arrayContaining(['rustic', 'cherry', 'mangrove', 'crimson', 'fortress']));
     expect(p.presets.fortress).toEqual({ wood: 'spruce', stone: 'stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak' });
@@ -41,7 +41,7 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
 
   it('variants of a kit example installed in the library: a palette and a param change', async () => {
     const d = sc.requestDesign(DesignRequest.parse(request({ type: 'tower', name: 'Var Tower', maxSize: { x: 64, y: 64, z: 64 } })));
-    await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 120_000);
+    await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 600_000);
     expect(sc.designs.get(d.id)!.status).toBe('done');
     const from = 'gen_var_tower';
     const a = sc.requestVariant(from, 'cherry');
@@ -64,7 +64,7 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
     }
     expect(sc.variants.get(c.id)).toMatchObject({ status: 'failed' });
     expect(sc.variants.get(c.id)!.error).toMatch(/floors must be an integer 3\.\.6/);
-  }, 150_000);
+  }, 1_800_000);
 
   it('imports a tiny structure-block save; a modded one fails with the list of its blocks', async () => {
     const imports = path.join(path.dirname(sc.config.libraryDir), 'imports');
@@ -82,12 +82,12 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
     // (5b) a part map is not a structure
     fs.copyFileSync(path.join(SIDECAR_ROOT, 'test', 'fixtures', 'imports', 'tiny_hut.nbt'), path.join(imports, 'x.parts.nbt'));
     expect(() => sc.requestImport(path.join(imports, 'x.parts.nbt'))).toThrow(/is a part map/);
-  }, 60_000);
+  }, 1_800_000);
 
   for (const type of ['cabin', 'tower', 'tavern', 'gatehouse', 'chapel'] as const) {
     it(`a ${type}: built, checked, rendered and installed`, async () => {
       const d = sc.requestDesign(DesignRequest.parse(request({ type, name: `Real ${type}`, maxSize: { x: 64, y: 64, z: 64 } })));
-      await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 120_000);
+      await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 600_000);
       const done = sc.designs.get(d.id)!;
       expect(done.status, done.error).toBe('done');
       const id = `gen_real_${type}`;
@@ -99,6 +99,6 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
       expect(scj).toMatchObject({ id, source: `${id}.mjs`, type: type === 'chapel' ? 'cabin' : type });
       expect(fs.readFileSync(path.join(dir, `${id}.mjs`), 'utf8')).toContain(`export const id = '${id}'`);
       expect(fs.readFileSync(path.join(dir, `${id}.preview-iso.png`)).subarray(1, 4).toString()).toBe('PNG');
-    }, 150_000);
+    }, 1_800_000);
   }
 });

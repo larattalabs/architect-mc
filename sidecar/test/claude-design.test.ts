@@ -92,7 +92,7 @@ describe('Claude designer (fake SDK)', () => {
 
   const statuses = (id: string) => h.events.filter((e): e is Extract<Outbound, { type: 'design.upsert' }> => e.type === 'design.upsert' && e.design.id === id).map((e) => e.design.status);
   const req = (over: Record<string, unknown> = {}) => DesignRequest.parse(request(over));
-  const finished = (id: string) => until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 30_000);
+  const finished = (id: string) => until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 600_000);
 
   it('designs, re-checks with a pristine kit, renders and installs without overwriting', async () => {
     fs.mkdirSync(path.join(h.cfg.libraryDir, 'gen_lakeside_cabin'), { recursive: true });
@@ -340,7 +340,7 @@ describe('Claude designer across a restart', () => {
         yield ok(opts.resume!);
       };
       sc = await boot();
-      await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 30_000);
+      await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 600_000);
       expect(sc.designs.get(d.id)!.status).toBe('done');
       expect(calls[1]!.opts.resume).toBe('11111111-1111-4111-8111-111111111111');
       expect(calls[1]!.prompt).toMatch(/sidecar restarted/);

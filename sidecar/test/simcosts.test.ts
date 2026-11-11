@@ -112,10 +112,10 @@ describe.skipIf(!hasKit)('the sim as the consumer stub (real kit)', () => {
     const t0 = Date.now();
     const schema = { type: 'object', properties: { title: { type: 'string' }, floors: { type: 'integer' } }, required: ['title', 'floors'] };
     const job = sc.jobs.run(JobSpec.parse({ kind: 'structured', prompt: 'a card', schema, ext: { 'architect:simAnswer': { title: 'Mill', floors: 2 } } }), undefined);
-    await until(() => final(sc.jobs.book.get(job.id)!.status), 30_000);
+    await until(() => final(sc.jobs.book.get(job.id)!.status), 600_000);
     expect(sc.jobs.book.get(job.id)).toMatchObject({ status: 'done', result: { title: 'Mill', floors: 2 } });
     const bj = sc.bibles.request(BibleRequest.parse({ prompt: 'a mill town', name: 'Mill Town', owner: 'steward:s1' }));
-    await until(() => final(sc.bibles.get(bj.id)!.status), 60_000);
+    await until(() => final(sc.bibles.get(bj.id)!.status), 600_000);
     expect(sc.bibles.get(bj.id)!.status).toBe('done');
     expect(sc.bibles.get(bj.id)!.cost.usd).toBe(1.35);
     const g = sc.groups.create(GroupRequest.parse({ name: 'Hamlet', bible: bj.bibleId, owner: 'steward:s1', massingFirst: true, approvalUi: 'owner', items: [item('a'), item('b', { type: 'tavern' }), item('c', { type: 'tower' })] }));
@@ -123,12 +123,12 @@ describe.skipIf(!hasKit)('the sim as the consumer stub (real kit)', () => {
       const x = sc.groups.get(g.id)!;
       return x.status === 'awaiting_approval' && x.items.every((i) => i.stage === 'approval') && (v === undefined || x.items[0]!.massing!.version === v);
     };
-    await until(allWaiting(1), 60_000);
+    await until(allWaiting(1), 600_000);
     expect(() => sc.groups.approve(g.id, { approve: ['a'], redirect: {}, cancel: [], owner: 'someone:else' })).toThrow();
     sc.groups.approve(g.id, { approve: [], redirect: { a: 'a longer hall' }, cancel: [], owner: 'steward:s1' });
-    await until(allWaiting(2), 60_000);
+    await until(allWaiting(2), 600_000);
     sc.groups.approve(g.id, { approve: ['a', 'b', 'c'], redirect: {}, cancel: [], owner: 'steward:s1' });
-    await until(() => final(sc.groups.get(g.id)!.status), 90_000);
+    await until(() => final(sc.groups.get(g.id)!.status), 600_000);
     const done = sc.groups.get(g.id)!;
     const secs = (Date.now() - t0) / 1000;
     expect(done.status).toBe('done');
@@ -143,13 +143,13 @@ describe.skipIf(!hasKit)('the sim as the consumer stub (real kit)', () => {
     });
     expect(ack.ok).toBe(true);
     expect(String(ack.result?.basis)).toMatch(/sim: true, notional sim costs "measured"/);
-  }, 150_000);
+  }, 1_800_000);
 
   it('sim:fail fails the design; sim:repair adds one repair round; sim:usage_limit holds the group', async () => {
     h = await harness({ simCosts: { ...MEASURED_SIM_COSTS } });
     const sc = h.sc;
     const g = sc.groups.create(GroupRequest.parse({ name: 'Faults', bible: 'birch', concurrency: 3, items: [item('f', { notes: 'sim:fail' }), item('r', { ext: { 'architect:sim': ['repair'] } }), item('ok')] }));
-    await until(() => final(sc.groups.get(g.id)!.status), 60_000);
+    await until(() => final(sc.groups.get(g.id)!.status), 600_000);
     const x = sc.groups.get(g.id)!;
     const [f, r, ok] = x.items;
     expect(f!.status).toBe('failed');
@@ -160,16 +160,16 @@ describe.skipIf(!hasKit)('the sim as the consumer stub (real kit)', () => {
     expect(sc.designs.get(ok!.designId)!.cost).toMatchObject({ usd: 3.4, turns: 3 });
     // the usage limit: the group holds, then finishes; the item's cost is still the detail's figure (a step run again adds nothing)
     const g2 = sc.groups.create(GroupRequest.parse({ name: 'Held', bible: 'birch', items: [item('u', { notes: 'sim:usage_limit' })] }));
-    await until(() => final(sc.groups.get(g2.id)!.status), 60_000);
+    await until(() => final(sc.groups.get(g2.id)!.status), 600_000);
     expect(h!.events.some((e) => e.type === 'group.upsert' && e.group.id === g2.id && e.group.status === 'held_usage')).toBe(true);
     expect(sc.groups.get(g2.id)!.status).toBe('done');
     expect(sc.designs.get(sc.groups.get(g2.id)!.items[0]!.designId)!.cost!.usd).toBe(3.4);
-  }, 90_000);
+  }, 1_800_000);
 
   it('a report critique costs the critique figure; zero costs keep the old step costs', async () => {
     h = await harness({ simCosts: { ...MEASURED_SIM_COSTS } });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Crit', bible: 'birch', critique: { mode: 'report' }, items: [item('a')] }));
-    await until(() => final(h!.sc.groups.get(g.id)!.status), 60_000);
+    await until(() => final(h!.sc.groups.get(g.id)!.status), 600_000);
     const d = h.sc.designs.get(h.sc.groups.get(g.id)!.items[0]!.designId)!;
     expect(d.status).toBe('done');
     expect(d.critique!.cost.critic.usd).toBe(0.1);
@@ -177,16 +177,16 @@ describe.skipIf(!hasKit)('the sim as the consumer stub (real kit)', () => {
     await h.close();
     h = await harness({ simDesignUsd: 0.1 });
     const g2 = h.sc.groups.create(GroupRequest.parse({ name: 'Old', bible: 'birch', items: [item('a', { notes: 'sim:repair' })] }));
-    await until(() => final(h!.sc.groups.get(g2.id)!.status), 60_000);
+    await until(() => final(h!.sc.groups.get(g2.id)!.status), 600_000);
     expect(h.sc.designs.get(h.sc.groups.get(g2.id)!.items[0]!.designId)!.cost).toMatchObject({ usd: 0.4, turns: 4 });
-  }, 90_000);
+  }, 1_800_000);
 
   it('a scripted answer that does not match the schema fails the job at once', async () => {
     h = await harness();
     const schema = { type: 'object', properties: { title: { type: 'string' } }, required: ['title'] };
     const j = h.sc.jobs.run(JobSpec.parse({ kind: 'structured', prompt: 'a card', schema, ext: { 'architect:simAnswer': { name: 'Mill' } } }), undefined);
-    await until(() => final(h!.sc.jobs.book.get(j.id)!.status), 10_000);
+    await until(() => final(h!.sc.jobs.book.get(j.id)!.status), 600_000);
     expect(h.sc.jobs.book.get(j.id)).toMatchObject({ status: 'failed' });
     expect(h.sc.jobs.book.get(j.id)!.error).toMatch(/scripted answer .* does not match the job's schema/);
-  }, 30_000);
+  }, 1_800_000);
 });
