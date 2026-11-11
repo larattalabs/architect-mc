@@ -150,6 +150,19 @@ const releaseLock = () => {
 };
 process.on('exit', releaseLock);
 
+// a one-night skip (Noah 2026-11-10): an empty file artifacts/nightly/skip-<UTC date of the start> skips that night only, then the
+// next night runs as usual (e.g. `touch artifacts/nightly/skip-2026-11-11` for the 02:00 MST run on 11-11, 09:00Z)
+{
+  const day = new Date().toISOString().slice(0, 10);
+  const skipFile = path.join(NIGHTLY, `skip-${day}`);
+  if (!flag('--plan') && fs.existsSync(skipFile)) {
+    log(`nightly: skipped by ${skipFile} (one night only); nothing started`);
+    fs.mkdirSync(path.join(NIGHTLY, day), { recursive: true });
+    fs.writeFileSync(path.join(NIGHTLY, day, 'summary.json'), `${JSON.stringify({ date: day, state: 'skipped', why: `skip file ${path.basename(skipFile)}`, at: stamp() }, null, 1)}\n`);
+    process.exit(0);
+  }
+}
+
 // any gate run active or waiting: skip the night (a turbo nightly would hold the machine; queued behind a run it would start late)
 const SLOT_DIR = path.resolve(process.env.GATE_SLOTS_DIR ?? path.join(MAIN, '..', '.gate-slots'));
 async function activeRuns() {
