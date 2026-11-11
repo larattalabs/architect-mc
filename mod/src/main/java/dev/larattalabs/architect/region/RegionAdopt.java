@@ -330,6 +330,7 @@ public final class RegionAdopt {
 		}
 		JsonObject ir = p.ir().json();
 		Path w = s.getWorldPath(LevelResource.ROOT);
+		PlanChecks.serverIs(s);
 		String id = RegionsImpl.newRegionId();
 		String group = Sites.newGroupIdForAdopt();
 		String batch = "adopt-" + id;

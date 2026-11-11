@@ -101,6 +101,16 @@ public final class PlanChecks {
 		return root(world).resolve("checks");
 	}
 
+	/**
+	 * (6d AD) The server, for an artifact kept outside a check (an adoption's): a world with no region directory at its start never ran
+	 * {@link #started}, so {@link #artifact} would answer empty until the first check.
+	 */
+	static void serverIs(MinecraftServer s) {
+		if (server == null) {
+			server = s;
+		}
+	}
+
 	/** The world start: the keyed checks into the registry. */
 	static void started(MinecraftServer s) {
 		server = s;
