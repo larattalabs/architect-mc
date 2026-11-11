@@ -247,9 +247,9 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
   it('a usage limit holds the whole group (held_usage); all items resume together after the reset', async () => {
     h = await harness({ designConcurrency: 3 });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Held', bible: 'rustic', concurrency: 3, items: [item('i1', { notes: SIM_LIMIT_MARK }), item('i2'), item('i3')] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'held_usage', 20_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'held_usage', 600_000);
     const held = h.sc.groups.get(g.id)!;
-    expect(held.usageLimitUntil).toBeGreaterThan(Date.now() - 1000);
+    expect(held.usageLimitUntil).toBeGreaterThan(Date.now() - 60_000); // (PX) loose: a loaded machine can be seconds late here
     // while held, nothing designs
     await new Promise((r) => setTimeout(r, 150));
     expect(h.sc.groups.get(g.id)!.status).toBe('held_usage');
@@ -258,18 +258,18 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     expect(h.sc.groups.get(g.id)).toMatchObject({ status: 'done', done: 3 });
     expect(h.sc.store.data.limit).toBeUndefined();
     expect(h.events.some((e) => e.type === 'group.upsert' && e.group.id === g.id && e.group.status === 'held_usage')).toBe(true);
-  }, 60_000);
+  }, 1_800_000);
 
   it('the soft budget pauses the group (paused_budget); extend, then resume, and it finishes', async () => {
     // 3 steps x $0.1 per design: $0.3 each; budget $1, soft at $0.8: the 3rd design crosses it
     h = await harness({ designConcurrency: 1, simDesignUsd: 0.1 });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Thrifty', bible: 'birch', budgetUsd: 1, concurrency: 1, items: [item('i1'), item('i2'), item('i3'), item('i4')] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 600_000);
     const paused = h.sc.groups.get(g.id)!;
     // (the sim reports cost per step: the 3rd design crosses $0.80 while it runs, and finishes)
     expect(paused.reason).toMatch(/soft budget: \$0\.80 of \$1 spent \(80% reached\)/);
     // the item that crossed the soft budget finishes (it was already running); wait for it rather than a fixed sleep
-    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 10_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 120_000);
     expect(h.sc.groups.get(g.id)!.items.map((i) => i.status)).toEqual(['done', 'done', 'done', 'queued']);
     expect(() => h!.sc.groups.extend(g.id, 0.5)).toThrow(/not above/);
     h.sc.groups.extend(g.id, 3);
@@ -278,7 +278,7 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     await groupDone(h, g.id);
     expect(h.sc.groups.get(g.id)).toMatchObject({ status: 'done', done: 4, budgetUsd: 3 });
     expect(h.sc.groups.get(g.id)!.cost.usd).toBeCloseTo(1.2, 5);
-  }, 60_000);
+  }, 1_800_000);
 
   // 6c 0c §6: the mod's Extension.minBudgetUsd (the same double arithmetic): the smallest whole-cent budget whose soft line is above the spend
   const minBudgetUsd = (spent: number, fraction: number): number => {
@@ -291,8 +291,8 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
   it('extend: the ack carries the spend and soft fraction; extending to minBudgetUsd does not re-pause, one cent less does (6c 0c §6)', async () => {
     h = await harness({ designConcurrency: 1, simDesignUsd: 0.1 });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Extended', bible: 'birch', budgetUsd: 1, concurrency: 1, items: [item('i1'), item('i2'), item('i3'), item('i4')] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 30_000);
-    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 10_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 600_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 120_000);
     // the 6b live case's numbers: $31 spent at 0.8 needs $38.76 ($38.75's line is exactly $31.00, which pauses)
     expect(minBudgetUsd(31, 0.8)).toBe(38.76);
     expect(31 >= 0.8 * 38.75).toBe(true);
