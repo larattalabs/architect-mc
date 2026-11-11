@@ -27274,7 +27274,7 @@ byte-identical (measured; the BuildOrder golden and TerrainFit CLEAR included).
 - **S-7b-8. Still no nav.** `nav.json`, `seconds`, `risk` and the `steward` mover stay out of 7b (S-7a-6). Default: yes, until your
   villager or steward phase asks.
 
-**For Noah:**
+**For Noah** (answered 2026-11-11, "Keep all defaults": see "Noah's answers" below):
 - **N-7b-1. Scope trims.** Out of 7b: the nav slice; standalone single connectors (`Sites.placeConnector`); `form.hidden_room` and
   `rule.suspended` (to 7c). Default: yes.
 - **N-7b-2. Spend.** $51 estimated plus $7 reserve, all in one late batch after every $0 slice merges; stop and ask past $60, never past
@@ -27290,6 +27290,17 @@ byte-identical (measured; the BuildOrder golden and TerrainFit CLEAR included).
   per scenario when a phase is ready. 7b's A/B is the site renders (kit-made); style references are §16.5's use 3. Default: **defer
   use 3 to 7c** (its planning and bible jobs are where style references act), so nothing is asked of you in 7b; or, if you'd rather,
   supply 2-3 references for S5 now and P4 adds a third arm on one archetype (about $4 more, within the reserve).
+
+### Noah's answers (2026-11-11: "Keep all defaults"; these replace the provisional defaults above)
+
+- **N-7b-1 yes:** out of 7b are the nav slice, `Sites.placeConnector`, `form.hidden_room` and `rule.suspended` (the last two to 7c).
+- **N-7b-2 yes:** one late paid batch ($51 estimated + $7 reserve) after every $0 slice merges; stop and ask past $60; never past $90.
+- **N-7b-3 yes:** S5, S6 and the three survival fits gate the phase; S4 is a stretch, S3 v2 a gallery item; gallery approval gates
+  only the phase close.
+- **N-7b-4 yes:** the images A/B is site renders on vs off on S5's two archetypes, picked blind.
+- **N-7b-5 yes:** scaffolding on by default for non-pad fits under construction, off for `on_pad`.
+- **N-7b-6 yes:** the pin badge goes in (site-bound entries show it in the Library and place elsewhere only as "site variant here").
+- **N-7b-7 defer:** reference images (§16.5 use 3) move to 7c; nothing is asked of Noah in 7b, and P4 has two arms.
 
 ### Changes from Steward's review (2026-11-11; these win over the text above)
 
