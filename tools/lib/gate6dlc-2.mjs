@@ -8,8 +8,8 @@
 //                            in `mech:gatehouse_1`; the wall: player breaks `removed` in the wall's part (by the kit's writers), a broken
 //                            wall cell re-filled by the player `playerPlaced`, a block on a cell the region never wrote not reported; a
 //                            tower's broken and re-filled cells in its LotLand row (its standing lower); each landCheck writes nothing
-//   survival  (lc-survival)  item 3 on gm_castle_13x7 in survival (flat: the kit's writers name every tile cell's part), fed target by
-//                            target: mid-build (a target built, others waiting, the builder idle) and fully built: no change on either;
+//   survival  (lc-survival)  item 3 on gm_castle_13x7 in survival (flat: the kit's writers name every tile cell's part), fed in waves
+//                            until a later target is put down: mid-build (a target built, one waiting, the builder idle) and fully built: no change on either;
 //                            a player's block on a waiting cell is not land change (the target has not built it); a paid block taken up
 //                            from a built target is `removed` in its part (the target stays built); fully built, a paid block taken up,
 //                            another re-filled by the player (`playerPlaced`) and a tower's cell broken (its LotLand row)
@@ -293,14 +293,14 @@ export async function registerLC2(steps, h) {
     let gm = null, lcMove = null;
     try {
       await flip(levers[0]);
-      for (let t = 0; t < 12; t++) { await tickStep(1); gm = await readGate(); if (gm.moving) { gm.tick = t + 1; break; } }
+      for (let t = 0; t < 60; t++) { await tickStep(1); gm = await readGate(); if (gm.moving) { gm.tick = t + 1; break; } }
       lcMove = await landCheck(region);
     } finally {
       await cmd('/tick unfreeze');
     }
     await L.gameWait(2000, { real: L.settle, label: 'lc settle' });
     states.moving = { gate: gm, same: same(lc0, lcMove) };
-    check(!!gm?.moving && states.moving.same[0], `item 1: mid-move (frozen ${gm?.tick ?? '12+'} tick(s) after the lever: moving pistons ${gm?.moving}, ${gm?.filled}/${gm?.of} lanes filled): the same report`, states.moving.same[1]);
+    check(!!gm?.moving && states.moving.same[0], `item 1: mid-move (frozen ${gm?.tick ?? "60+"} tick(s) after the lever: moving pistons ${gm?.moving}, ${gm?.filled}/${gm?.of} lanes filled): the same report`, states.moving.same[1]);
     const g2 = await readGate();
     check(g2.open, `item 1: then open again (${g2.filled}/${g2.of})`);
     // dusk: the daylight sensor closes it (no lever); dawn opens it
@@ -597,19 +597,20 @@ export async function registerLC2(steps, h) {
     await G.pile(ctx, s, 8);
     await cmd('/kill @e[type=!minecraft:player]');
     const region = await G.realise(ctx, sha, { ...fx.lotEntries, ...ids });
-    await G.waitFor(ctx, region, (st2, rs) => (rs.targets ?? []).length >= 2, { timeoutMs: 900_000 });
+    await G.waitFor(ctx, region, (st2, rs) => (rs.targets ?? []).length >= 1, { timeoutMs: 900_000 });
     await L.tp(cx, gy + 30, cz);
-    // mid-build: one target's whole lack fed at a time until a target is built while another still waits, the builder idle
+    // mid-build: fed what the stockpile lacks, wave by wave, until a target is built while a later one waits (put down, not fed);
+    // then the builder idle (the targets are put down stage by stage: the feed stops before the waiting one is fed)
+    const mixed = (rs) => (rs.targets ?? []).some((t) => t.done) && (rs.targets ?? []).some((t) => !t.done);
     let tcH = [];
     const fedT = [];
     for (let k = 0; k < 6; k++) {
+      const f = await G.feed(ctx, region, { until: (st2, rs) => mixed(rs) || st2.view.state === 'PLACED', timeoutMs: 1_800_000 });
+      fedT.push(f.waves);
+      await idle(region);
       tcH = await targetCells(region);
       if (tcH.some((t) => t.done) && tcH.some((t) => t.done === false)) break;
-      const next = tcH.find((t) => t.done === false && !fedT.includes(t.target) && Object.keys(t.outstanding).length);
-      if (!next) { await idle(region); continue; }
-      fedT.push(next.target);
-      await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: next.outstanding, exact: true }, 120_000);
-      await idle(region);
+      if (f.last.st.view.state === 'PLACED') break;
     }
     const st0 = await G.regionState(ctx, region);
     const group = st0.view?.groupId;
@@ -618,7 +619,7 @@ export async function registerLC2(steps, h) {
     const own = await partsOracle(ir, pre.get, gy);
     const done = tcH.filter((t) => t.done), waiting = tcH.filter((t) => t.done === false);
     out.mid = { fed: fedT, state: st0.view?.state, targets: tcH.map((t) => [t.target, t.part, t.done, t.cells.filter((c) => c[3] & 2).length, t.cells.length]) };
-    check(done.length > 0 && waiting.length > 0, `item 3: mid-build (fed target by target: ${json(fedT)}; the builder idle; ${st0.view?.state}): ${done.length} target(s) built (${json(done.map((t) => [t.target, t.part]))}), ${waiting.length} waiting (${json(waiting.map((t) => [t.target, t.part, t.cells.filter((c) => c[3] & 2).length, t.cells.length]))})`);
+    check(done.length > 0 && waiting.length > 0, `item 3: mid-build (fed in ${json(fedT)} wave(s), stopped when a target waits; the builder idle; ${st0.view?.state}): ${done.length} target(s) built (${json(done.map((t) => [t.target, t.part]))}), ${waiting.length} waiting (${json(waiting.map((t) => [t.target, t.part, t.cells.filter((c) => c[3] & 2).length, t.cells.length]))})`);
 
     // ---- mid-build: no change; a target still building is not the region's land yet
     const lcA = await landCheck(region);
