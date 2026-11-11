@@ -241,7 +241,7 @@ steps.ingame = async () => {
   // (the sim's versionOf raises the first int param's default by one, as simRedirect does. A copy whose recipe's param is that param pins
   // it: at the new value it no longer differs from the new source by it (refused `bar`, correctly), at another value its follower's blocks
   // equal its head (an empty delta). The copies' recipes are seeded by the group id, so a family with such a copy is made again under a
-  // new group, at most 8 times)
+  // new group, at most 16 times)
   const simChange = (src) => {
     const params = /export\s+const\s+params\s*=\s*\{([\s\S]*?)\n\};/.exec(src)?.[1] ?? '';
     for (const m of params.matchAll(/(\w+)\s*:\s*\{([^}]*type:\s*'int'[^}]*)\}/g)) {
@@ -253,7 +253,7 @@ steps.ingame = async () => {
   const readJson = (id) => JSON.parse(fs.readFileSync(path.join(L.LIBRARY, id, `${id}.blueprint.json`), 'utf8'));
   let fin, arch, copies, gid, by;
   out.families = [];
-  for (let attempt = 1; attempt <= 8; attempt++) {
+  for (let attempt = 1; attempt <= 16; attempt++) {
     const g = { name: `G6D FS Copies ${attempt}`, bible: 'oak', owner: 'apitest:fs', items: [{ type: 'cabin', style: 'rustic', size: [24, 20, 24], itemKey: 'house', count: 3 }] };
     gid = await result(await api(`group fs1${attempt} ${b64(g)}`));
     fin = await until(async () => {
