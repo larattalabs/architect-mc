@@ -1437,3 +1437,20 @@ animal watch after a restart); both sides use one shared rule (slice OC).
 - Queued, Steward's ask: announce a mechanism's bill wait (ITEM_WAITING with a waitsFor.say naming the missing items on MechCharges.hold), and give the first wait sentence a proper subject ("Main gatehouse waits for Main gatehouse to be built").
 - Auto-gate swing (Noah, 2026-11-04: "No, opt-in only"): the gates a wall cuts on its own stay plain by default; only named gates with `mech: swing` get one. Add a wall-level opt-in (slice WS) that gives every gate of that wall a swing. The §17 fallbacks still apply (villager route, thin wall, no 3-wide run -> wooden door with deviation `mechanism`), and survival bills each swing as usual. Order: WE (Steward's bill-wait event) and WS, then GM-c.
 - Later idea: try a smaller grid (fewer blocks or lots per block) before refusing NO_ROOM.
+
+## Queued (coordinator, 2026-11-11)
+
+From the folded and dropped branches and the v0.57.0 batch (PG, XR, NS). Nothing here is scheduled; each is its own slice or chore.
+
+**Gate speed set A** (branch `chore/speed-audit-a`, 2026-10-23; not merged, not re-cut: re-do it on current main as one slice, same assertions in every step):
+- More unit drivers plan through the shared plan store: rs-unit and coa-unit (`unchanged()`, the 59 asks), hy-unit, h-unit, vocc-unit and voc-unit (the `CP.hyRun` loop they share), and the kit tests `plan-p0-asks` item 11 and `plan-k1a` item 7. The store becomes `calls-v2`, whose record carries the artifact (`art`), and `artSig` throws on a result with none.
+- `kitReuse` in vocc-unit, voc-unit, rs-unit, coa-unit, c37-unit, c38-unit, pt-unit, pt2-unit and rp-unit (all `waitFor: unit-kit`), and it says why whenever it falls back.
+- Java tests from unit-mod's JUnit XML (`junit-reuse`) for 0b-unit, sch-unit, rp-unit, f3-unit and rs-unit; `umt` and `p3-lint` superseded by unit-mod.
+- An api-compat memo per run, `lint-mutations` running its eight mutations side by side, `p2-calibration` reading t3a-probe's `probe.json`, and `umt-long` as one test class per generator on `maxParallelForks = 4`.
+- `--no-daemon` stays (the branch documents why).
+- **Re-check the umt-long DRIFT seed 804021437** that the branch found (not diagnosed: model gap or journal bug): `Place[kind=SITE, x=15, z=30, w=7, d=8, h=5, group=1]`, then `Place[kind=ROAD, x=15, z=36, w=7, d=2, h=3, group=2]`, then `finish` removes r2 and s1, which gave an unexplained violation in `UmtLongDriftTest`. Repro in `mod/`: `./gradlew --offline umtLong -Dumt.from=804021437 -Dumt.seeds=1`. The road-terrain fix on fix/nightly-infra (2026-10-25) may have closed it. If it still fails, pin it in `UmtFindingsTest` or fix the model; if it passes, record that.
+
+**Follow-ups from the v0.57.0 batch:**
+- **PG:** on sloped ground, a K3 pad slope longer than LEAD past the front port refuses the join. Untested, because the fixtures are flat. Add a sloped fixture.
+- **XR:** a direct `Sites.undoStage` on a survival region's group would hand back a taken-up block for free. No Regions path does this; guard it in `Sites.undoStage` (refuse, or settle the bill) and test it.
+- **Nightly skip file:** a one-night skip file `artifacts/nightly/skip-<UTC date>` exists since 4b844fea; described in docs/GATES.md "The nightly".
