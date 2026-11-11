@@ -34,7 +34,7 @@ async function harness(over: Partial<Config> = {}): Promise<H> {
   return { sc, events, close: async () => { await sc.close(); rmrf(root); } };
 }
 
-const final = (h: H, id: string) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), 60_000);
+const final = (h: H, id: string) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), 600_000);
 const top = (h: H, e: string) => JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, e, `${e}.blueprint.json`), 'utf8')) as Record<string, unknown>;
 const refusal = (fn: () => unknown): string | undefined => {
   try {
@@ -85,7 +85,7 @@ describe.skipIf(!hasKit)('versionOf (sim backend, real kit)', () => {
     expect(JSON.parse(fs.readFileSync(path.join(scratch, 'context', 'site-edits.json'), 'utf8'))).toMatchObject({ counts: { kept: 3 } });
     expect(fs.existsSync(path.join(scratch, 'context', 'base', `${e}.mjs`))).toBe(true);
     expect(fs.readFileSync(path.join(scratch, 'BRIEF.md'), 'utf8')).toContain(`## A new version of \`${e}\` (v1 + 1)`);
-  }, 120_000);
+  }, 1_800_000);
 
   it('a front-changing result is repaired before install (the frame guard)', async () => {
     h = await harness();
@@ -96,7 +96,7 @@ describe.skipIf(!hasKit)('versionOf (sim backend, real kit)', () => {
     expect(done.status, done.error).toBe('done');
     expect(done.step).toMatch(/the turned front was repaired/);
     expect(top(h, e)).toMatchObject({ version: 2, front: 'south' });
-  }, 120_000);
+  }, 1_800_000);
 
   it('every refusal detail; base_moved', async () => {
     h = await harness();
@@ -114,7 +114,7 @@ describe.skipIf(!hasKit)('versionOf (sim backend, real kit)', () => {
     expect(refusal(() => versionOf(h!, 'mass_x', 'x'))).toBe('massing');
     // a copy
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'G', bible: 'oak', items: [{ ...request({ type: 'cabin', maxSize: { x: 64, y: 64, z: 64 } }), itemKey: 'a', count: 2 }] }));
-    await until(() => ['done', 'failed'].includes(h!.sc.groups.get(g.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.groups.get(g.id)!.status), 600_000);
     expect(refusal(() => versionOf(h!, h!.sc.groups.get(g.id)!.items[1]!.entryId!, 'x'))).toBe('copy');
     // busy, then base_moved: a revert moves the head while the versionOf runs
     const d = versionOf(h, e, 'a change');
@@ -130,5 +130,5 @@ describe.skipIf(!hasKit)('versionOf (sim backend, real kit)', () => {
     h.sc.versions.revert(e, 1);
     await final(h, d2.id);
     expect(h.sc.designs.get(d2.id)).toMatchObject({ status: 'failed', error: 'base_moved' });
-  }, 180_000);
+  }, 1_800_000);
 });

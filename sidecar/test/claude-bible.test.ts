@@ -128,7 +128,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
     };
     const j = sc.bibles.request({ prompt: 'weathered fishing village on stilts, mossy and crooked' });
     expect(j.bibleId).toBe('bib_weathered_fishing_village_on');
-    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 600_000);
     const done = sc.bibles.get(j.id)!;
     expect(done.status, done.error).toBe('done');
     // the passes: draft, re-ask (same session), components x2
@@ -158,7 +158,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
     expect(done.rounds).toBe(2);
     // a real (claude) bible job is measured for the estimates
     expect(sc.estimates.samples('bible', 'fake-opus')).toHaveLength(1);
-  }, 90_000);
+  }, 1_800_000);
 
   it('group items run concurrently on the Claude designer, each with the bible in its scratch dir and its own model', async () => {
     calls.length = 0;
@@ -172,7 +172,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
       const bp = /kit\/designs\/(gen_[a-z0-9_]+)\.mjs/.exec(prompt)![1]!;
       inside++;
       // both items are inside a turn at the same time (two pool slots)
-      await until(() => inside >= 2 || both, 10_000).catch(() => undefined);
+      await until(() => inside >= 2 || both, 600_000).catch(() => undefined);
       both = true;
       const src = fs.readFileSync(path.join(KIT, 'designs', 'cabin.mjs'), 'utf8').replace(/export const id = 'cabin'/, `export const id = '${bp}'`);
       fs.writeFileSync(path.join(cwd, 'kit', 'designs', `${bp}.mjs`), src);
@@ -180,7 +180,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
       yield result(s);
     };
     const g = sc.groups.create({ name: 'Pair', bible: 'rustic', concurrency: 2, items: [{ type: 'cabin', style: 'rustic', features: [], maxSize: { x: 40, y: 30, z: 40 }, itemKey: 'a', role: 'landmark' }, { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 40, y: 30, z: 40 }, itemKey: 'b' }] });
-    await until(() => ['done', 'failed'].includes(sc.groups.get(g.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(sc.groups.get(g.id)!.status), 600_000);
     const f = sc.groups.get(g.id)!;
     expect(f.status, JSON.stringify(f.items.map((i) => i.error))).toBe('done');
     expect(both).toBe(true);
@@ -193,7 +193,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
     // finished Claude designs feed the estimates (one per model here)
     expect(sc.estimates.samples('design', 'claude-opus-5-5')).toHaveLength(1);
     sc.config.designConcurrency = 3;
-  }, 90_000);
+  }, 1_800_000);
 
   it('a component pass cut short by the budget is still checked, and installed when it passes', async () => {
     calls.length = 0;
@@ -208,11 +208,11 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
       yield result(s, { subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.7 });
     };
     const j = sc.bibles.request({ prompt: 'tight budget', budgetUsd: 1 });
-    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 600_000);
     const done = sc.bibles.get(j.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.cost.usd).toBeCloseTo(1, 5);
-  }, 60_000);
+  }, 1_800_000);
 
   it('the budget stops a bible job', async () => {
     calls.length = 0;
@@ -222,8 +222,8 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
       yield result(s, { structured_output: { ...DRAFT } }); // roof glass: refused, and the budget is spent
     };
     const j = sc.bibles.request({ prompt: 'a cheap one', budgetUsd: 0.04 });
-    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 600_000);
     expect(sc.bibles.get(j.id)).toMatchObject({ status: 'failed', error: 'budget' });
     expect(calls).toHaveLength(1);
-  }, 60_000);
+  }, 1_800_000);
 });

@@ -336,6 +336,8 @@ final class UmtSim {
 	final LongOpenHashSet roadCells = new LongOpenHashSet();
 	/** (6c close-out B, [F9]) Cells a road wrote air at over a block (its head room over a lower site's cell). */
 	final LongOpenHashSet roadAir = new LongOpenHashSet();
+	/** (6c close-out B, [F9]) A road's solid cell over a lower entry's block: the block the road's before holds there (its re-removal writes it back). */
+	final java.util.Map<Long, BlockState> roadOver = new java.util.HashMap<>();
 	/** (6c close-out B, [DPT], [F10]) Cells a site delta wrote. */
 	final LongOpenHashSet deltaWritten = new LongOpenHashSet();
 	/** Every cell a plan ever wrote (an entry's cell), for the noise rule. */
@@ -355,6 +357,10 @@ final class UmtSim {
 	 * The finding a world difference belongs to (docs/UMT.md "Findings"), or "" (an unexplained one):
 	 * F2 a restored gravity block that hung over a free cell fell (its column); LP a dirt path turned to dirt.
 	 */
+	private boolean roadOverIs(long p, BlockState now) {
+		return now == roadOver.get(p);
+	}
+
 	String tag(long p) {
 		int x = BlockPos.getX(p);
 		int z = BlockPos.getZ(p);
@@ -400,6 +406,11 @@ final class UmtSim {
 		// (6c close-out B, F9) a road's head room (air it wrote over a lower site's block): the road removed first, then the site, the road's
 		// evidence reads the site's restored air as its own after and recovers it at the next start; its re-removal writes the site's blocks back
 		if (roadAir.contains(p) && initial.get(p).isAir() && !now.isAir()) {
+			return "[F9] ";
+		}
+		// (QF, umt-long DRIFT seed 804021437) F9's other half: the road's solid cells over the site's blocks (its surface over the site's floor
+		// at the site's edge). Its re-removal writes back what its before holds, the site's block, though the site's removal restored the ground
+		if (roadOverIs(p, now) && now != initial.get(p)) {
 			return "[F9] ";
 		}
 		// (6c close-out B, DPT) a player's block a delta wrote over comes back without its PT record (SiteDeltas' D7 rewrites the cells
@@ -798,6 +809,9 @@ final class UmtSim {
 			}
 			if (rec.kind == Kind.ROAD && e.getValue().isAir() && !world.get(e.getKey()).isAir()) {
 				roadAir.add(e.getKey().longValue());
+			}
+			if (rec.kind == Kind.ROAD && !e.getValue().isAir() && world.get(e.getKey()) != initial.get(e.getKey()) && !world.get(e.getKey()).isAir()) {
+				roadOver.putIfAbsent(e.getKey(), world.get(e.getKey()));
 			}
 			world.write(e.getKey(), e.getValue(), null, Sites.CELL_FLAGS);
 		}

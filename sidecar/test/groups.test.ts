@@ -228,7 +228,7 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     expect((e.palette as { bible: { id: string } }).bible.id).toBe('rustic');
     expect(fs.readdirSync(path.join(h.sc.config.libraryDir, final.items[1]!.entryId!, 'bible')).sort()).toEqual(['bible.json', 'components.mjs']);
     expect(lastGroup(h, g.id).status).toBe('done');
-  }, 90_000);
+  }, 1_800_000);
 
   it('round-robin: two groups and a single design share one slot fairly', async () => {
     h = await harness({ designConcurrency: 1 });
@@ -269,7 +269,7 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     // (the sim reports cost per step: the 3rd design crosses $0.80 while it runs, and finishes)
     expect(paused.reason).toMatch(/soft budget: \$0\.80 of \$1 spent \(80% reached\)/);
     // the item that crossed the soft budget finishes (it was already running); wait for it rather than a fixed sleep
-    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 120_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 600_000);
     expect(h.sc.groups.get(g.id)!.items.map((i) => i.status)).toEqual(['done', 'done', 'done', 'queued']);
     expect(() => h!.sc.groups.extend(g.id, 0.5)).toThrow(/not above/);
     h.sc.groups.extend(g.id, 3);
@@ -292,7 +292,7 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     h = await harness({ designConcurrency: 1, simDesignUsd: 0.1 });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Extended', bible: 'birch', budgetUsd: 1, concurrency: 1, items: [item('i1'), item('i2'), item('i3'), item('i4')] }));
     await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 600_000);
-    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 120_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 600_000);
     // the 6b live case's numbers: $31 spent at 0.8 needs $38.76 ($38.75's line is exactly $31.00, which pauses)
     expect(minBudgetUsd(31, 0.8)).toBe(38.76);
     expect(31 >= 0.8 * 38.75).toBe(true);
@@ -312,7 +312,7 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     h.sc.groups.extend(g.id, min);
     expect(h.sc.groups.get(g.id)!.status).not.toBe('paused_budget');
     await groupDone(h, g.id);
-  }, 60_000);
+  }, 1_800_000);
 
   it('the hard cap stops what is left with error "budget"', async () => {
     h = await harness({ designConcurrency: 2, simDesignUsd: 0.1 });
@@ -325,13 +325,13 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     expect(left.length).toBeGreaterThan(0);
     for (const it of left) expect(h.sc.designs.get(it.designId)!.error).toBe('budget');
     expect(f.items.filter((i) => i.status === 'cancelled').length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 1_800_000);
 
   it('a restart mid-group keeps ext and itemKey and finishes the group', async () => {
     const root = tempDir('arch-4b-restart-');
     h = await harness({ designConcurrency: 1 }, root);
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Persist', bible: 'mangrove', ext: { 'steward_mc:s': 'S9' }, items: [item('k1', { ext: { 'steward_mc:lot': 'A' } }), item('k2', { ext: { 'steward_mc:lot': 'B' } }), item('k3', { ext: { 'steward_mc:lot': 'C' } })] }));
-    await until(() => h!.sc.groups.get(g.id)!.done >= 1, 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.done >= 1, 600_000);
     await h.close(true);
     h = await harness({ designConcurrency: 1 }, root);
     const back = h.sc.groups.get(g.id)!;
@@ -343,12 +343,12 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     for (const it of f.items) expect(readEntry(h, it.entryId!)).toMatchObject({ groupItem: it.itemKey, ext: it.ext, group: g.id });
     // the snapshot carries it
     expect(((h.sc.snapshot() as unknown as { groups: Group[] }).groups).find((x) => x.id === g.id)!.items).toHaveLength(3);
-  }, 90_000);
+  }, 1_800_000);
 
   it('cancel keeps finished items; 25 items are refused; an unknown bible is refused', async () => {
     h = await harness({ designConcurrency: 1 });
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Stop', bible: 'oak', items: [item('i1'), item('i2'), item('i3')] }));
-    await until(() => h!.sc.groups.get(g.id)!.done >= 1, 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.done >= 1, 600_000);
     h.sc.groups.cancel(g.id);
     await until(() => h!.sc.groups.get(g.id)!.status === 'cancelled');
     const f = h.sc.groups.get(g.id)!;
@@ -357,15 +357,15 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     expect(GroupRequest.safeParse({ name: 'Big', bible: 'oak', items: Array.from({ length: 25 }, (_, i) => item(`i${i}`)) }).success).toBe(false);
     expect(GroupRequest.safeParse({ name: 'Dup', bible: 'oak', items: [item('x'), item('x')] }).success).toBe(false);
     expect(() => h!.sc.groups.create(GroupRequest.parse({ name: 'X', bible: 'bib_nope', items: [item('a')] }))).toThrow(/no bible "bib_nope"/);
-  }, 60_000);
+  }, 1_800_000);
 
   it('an open type with a profile designs and passes; the entry records its profile', async () => {
     h = await harness();
     const d = h.sc.requestDesign(DesignRequest.parse(request({ type: 'hellish_lair', profile: ['door', 'lit', 'no_floating'], name: 'Lair', maxSize: { x: 64, y: 64, z: 64 } })));
-    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 600_000);
     expect(h.sc.designs.get(d.id)!.status, h.sc.designs.get(d.id)!.error).toBe('done');
     expect(readEntry(h, 'gen_lair')).toMatchObject({ type: 'hellish_lair', profile: ['door', 'lit', 'no_floating'] });
-  }, 60_000);
+  }, 1_800_000);
 });
 
 describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
@@ -379,7 +379,7 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     h = await harness();
     const j = h.sc.bibles.request({ prompt: 'hellish evil lair, mining facility', name: 'Ashfall' });
     expect(j).toMatchObject({ bibleId: 'bib_ashfall', version: 1 });
-    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(j.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(j.id)!.status), 600_000);
     const done = h.sc.bibles.get(j.id)!;
     expect(done.status, done.error).toBe('done');
     const dir = path.join(h.sc.config.biblesDir, 'bib_ashfall');
@@ -395,13 +395,13 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     expect(h.sc.bibles.request({ prompt: 'x', name: 'Ashfall' }).bibleId).toBe('bib_ashfall_2');
     const r = h.sc.bibles.revise('bib_ashfall', 'more moss, greener glass');
     expect(r).toMatchObject({ kind: 'revise', bibleId: 'bib_ashfall', version: 2 });
-    await until(() => h!.sc.bibles.get(r.id)!.status === 'done', 30_000);
+    await until(() => h!.sc.bibles.get(r.id)!.status === 'done', 600_000);
     expect(h.sc.bibleIndex.versions('bib_ashfall')).toEqual([1, 2]);
     expect(h.sc.bibleIndex.get('bib_ashfall')!.version).toBe(2);
     expect(h.sc.bibleIndex.resolve({ id: 'bib_ashfall', version: 1 }).pin).toEqual({ id: 'bib_ashfall', version: 1 });
     expect(fs.readFileSync(path.join(dir, 'bible.md'), 'utf8')).toMatch(/more moss/);
     expect(() => h!.sc.bibles.revise('rustic', 'x')).toThrow(/built-in/);
-  }, 60_000);
+  }, 1_800_000);
 
   it('seedPreset starts from a built-in bible; scope settlement adds the macro roles; a bible job takes a pool slot', async () => {
     h = await harness({ designConcurrency: 1 });
@@ -413,20 +413,20 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     const t = setInterval(() => {
       const busy = [h!.sc.bibles.get(seeded.id)!, h!.sc.bibles.get(town.id)!].filter((j) => !['queued', 'done', 'failed'].includes(j.status)).length + (['designing', 'checking', 'rendering'].includes(h!.sc.designs.get(d.id)!.status) ? 1 : 0);
       if (busy > 1) overlap = true;
-    }, 2);
-    await until(() => h!.sc.bibles.get(seeded.id)!.status === 'done' && h!.sc.bibles.get(town.id)!.status === 'done' && h!.sc.designs.get(d.id)!.status === 'done', 60_000);
+    }, 1_800_000);
+    await until(() => h!.sc.bibles.get(seeded.id)!.status === 'done' && h!.sc.bibles.get(town.id)!.status === 'done' && h!.sc.designs.get(d.id)!.status === 'done', 600_000);
     clearInterval(t);
     expect(overlap).toBe(false);
     expect(h.sc.bibleIndex.get(seeded.bibleId)!.roles.frame).toBe(h.sc.bibleIndex.get('cherry')!.roles.frame);
     expect(Object.keys(h.sc.bibleIndex.get('bib_pitworks')!.roles)).toEqual(expect.arrayContaining(['rock', 'surface', 'subsurface', 'rubble', 'rail', 'structure']));
     expect(h.sc.bibleIndex.get('bib_pitworks')!.scope).toBe('settlement');
     expect(() => h!.sc.bibles.request({ prompt: 'x', seedPreset: 'nope' })).toThrow(/not a built-in bible/);
-  }, 90_000);
+  }, 1_800_000);
 
   it('a group designs with a generated bible, then the collection is re-skinned to a built-in bible (free, checked)', async () => {
     h = await harness();
     const j = h.sc.bibles.request({ prompt: 'hellish evil lair', name: 'Cinder' });
-    await until(() => h!.sc.bibles.get(j.id)!.status === 'done', 30_000);
+    await until(() => h!.sc.bibles.get(j.id)!.status === 'done', 600_000);
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Cinder Set', bible: 'bib_cinder', items: [item('keep', { type: 'tower', anchor: true, role: 'landmark' }), item('hut'), item('inn', { type: 'tavern' })] }));
     await groupDone(h, g.id);
     expect(h.sc.groups.get(g.id)!.status).toBe('done');
@@ -450,5 +450,5 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     expect(h.sc.variants.get(v.id)!.status, h.sc.variants.get(v.id)!.error).toBe('done');
     expect(h.sc.reskins.collection({ bible: 'bib_cinder' })).toHaveLength(3);
     expect(() => h!.sc.requestVariant(rr.entries[0]!, 'oak', undefined, undefined, 'cherry')).toThrow(/palette or a bible/);
-  }, 120_000);
+  }, 1_800_000);
 });

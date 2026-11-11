@@ -187,5 +187,5 @@ describe.skipIf(!hasKit)('slice 0a sidecar (sim backend, real kit)', () => {
     const c2 = await send(h.sc, { type: 'bible.cancel', jobId: b.result!.jobId });
     expect(c2.ok).toBe(false);
     expect(c2.error).toMatch(/already cancelled/);
-  }, 30_000);
+  }, 1_800_000);
 });

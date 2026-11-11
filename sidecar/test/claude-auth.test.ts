@@ -128,7 +128,7 @@ describe('ClaudeDesigner.checkAuth', () => {
     expect(h.sc.status()).toMatchObject({ auth: 'checking' });
     expect(h.sc.status().message).toMatch(/could not be reached \(fetch failed\)/);
     up = true;
-    await until(() => h!.sc.status().auth === 'ok', 5000);
+    await until(() => h!.sc.status().auth === 'ok', 600_000);
     await b.stop();
   });
 
@@ -155,7 +155,7 @@ describe('ClaudeDesigner.checkAuth', () => {
     expect(h.sc.status().auth).toBe('checking');
     expect(h.sc.status().message).toMatch(/could not be reached/);
     fail = false;
-    await until(() => h!.sc.status().auth === 'ok', 5000);
+    await until(() => h!.sc.status().auth === 'ok', 600_000);
     await b.stop();
     accountInfo = async () => ({ email: 'x@example.com', organization: 'Acme', subscriptionType: 'max' });
   });

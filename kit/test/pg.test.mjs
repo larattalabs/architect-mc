@@ -152,7 +152,7 @@ test('PX: sloped ground, a K3 pad slope no longer than LEAD past the front port 
     const g = stepWorld(d), T = await passageTown({ ground: g });
     assert.equal(T.check.overall, 'READY', `step ${d}: the town still plans`);
     await assert.rejects(planDistrict(T, T.R, '1', g), (e) => {
-      assert.match(e.message, /^NO_JOIN: \[wall\] every street end and side of region rg1 is enclosed by a wall \(its own, or another owner's held columns\); the gates tried: rg1:gatehouse_1 no route from a district end to its outer cell \(no street end of it lies inside this claim\)/, `step ${d}`);
+      assert.match(e.message, /^NO_JOIN: \[wall\] every street end and side of region rg1 is enclosed by a wall \(its own, or another owner's held columns\); the gates tried: rg1:gatehouse_1 no route from a district end to its outer cell: the gatehouse pad or its front strip is unreachable \(on sloped ground, a pad slope past LEAD makes the front strip too steep to reach\), which is not the wall blocking the way \(no street end of it lies inside this claim\)/, `step ${d}`);
       return true;
     });
   }

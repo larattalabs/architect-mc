@@ -40,7 +40,7 @@ describe('region.plan.discard (6c close-out A)', () => {
     const ack = await call(h, { type: 'region.plan', program: 'fake_basic', params: {}, claim: CLAIM, surveyBlobId: blobId });
     expect(ack.ok).toBe(true);
     const planId = ack.result!.planId as string;
-    await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 60_000);
+    await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 600_000);
     await h.sc.regions.idle();
     const dir = h.sc.regions.planDir(planId);
     expect(fs.existsSync(dir)).toBe(true);

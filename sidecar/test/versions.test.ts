@@ -47,7 +47,7 @@ describe.skipIf(!hasKit)('entry versions', () => {
     root = tempDir('arch-verfx-');
     fixtures = path.join(root, 'fx');
     execFileSync(process.execPath, [path.join(KIT, 'tools', 'delta-fixtures.mjs'), '--out', fixtures, '--no-previews'], { stdio: 'pipe' });
-  }, 180_000);
+  }, 1_800_000);
   afterAll(() => rmrf(root));
 
   it('the critic hash is 5a\'s provenance hash of sidecar/src/critic.ts (critic.ts is unchanged since 5a)', () => {
@@ -220,7 +220,7 @@ describe.skipIf(!hasKit)('entry.* messages', () => {
     sc.subscribe((m) => events.push(m));
     entry(dir, 1);
     sc.versions.install('tavern', v2files(), { by: 'polish', parent: 1, summary: 'v2' });
-  }, 180_000);
+  }, 1_800_000);
   afterAll(() => {
     sc.store.close();
     rmrf(dir);

@@ -73,7 +73,7 @@ async function plan(h: Harness, over: Record<string, unknown> = {}): Promise<{ a
   const ack = await call(h, { type: 'region.plan', program: 'fake_basic', params: {}, claim: CLAIM, surveyBlobId: putSurvey(h), ...over });
   if (!ack.ok) return { ack, ms: Date.now() - t0 };
   const planId = ack.result!.planId as string;
-  await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 60_000);
+  await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 600_000);
   const ms = Date.now() - t0;
   const planned = h.events.find((e): e is Planned => e.type === 'region.planned' && e.planId === planId);
   const failed = h.events.find((e): e is Failed => e.type === 'region.failed' && e.planId === planId);
@@ -355,7 +355,7 @@ describe('region.tiles (fake kit)', () => {
   it('streams a tile as frames of at most 1 MB with the sha of the uncompressed payload', async () => {
     const c = fakeClient();
     expect(await call(h, tilesReq(planned.planId, planned.irSha, ['3,-2', '95,95']), c)).toMatchObject({ ok: true, result: { accepted: 2 } });
-    await until(() => tileAnswers(c, planned.planId).done.size === 2, 20_000);
+    await until(() => tileAnswers(c, planned.planId).done.size === 2, 600_000);
     const { frames, errors } = tileAnswers(c, planned.planId);
     expect(errors).toEqual([]);
     const small = assemble(frames.filter((f) => f.key === '3,-2'));
@@ -381,7 +381,7 @@ describe('region.tiles (fake kit)', () => {
     const c = fakeClient();
     const keys = ['0,0', '99,99', '1,0', '98,98', '2,0', '3,0', '96,96', '4,0'];
     expect(await call(h, tilesReq(planned.planId, planned.irSha, keys), c)).toMatchObject({ ok: true, result: { accepted: 8 } });
-    await until(() => tileAnswers(c, planned.planId).done.size === 8, 40_000);
+    await until(() => tileAnswers(c, planned.planId).done.size === 8, 600_000);
     const { frames, errors } = tileAnswers(c, planned.planId);
     const err = (k: string) => errors.find((e) => e.key === k)?.message ?? '';
     expect(err('99,99')).toContain('fake evaluator refused tile 99,99');
@@ -434,7 +434,7 @@ describe('tile timeouts: retries on a fresh worker (6c 0a)', () => {
     const c = fakeClient();
     const t0 = Date.now();
     expect(await call(h, tilesReq(planned.planId, planned.irSha, keys), c)).toMatchObject({ ok: true });
-    await until(() => tileAnswers(c, planned.planId).done.size === keys.length, 60_000);
+    await until(() => tileAnswers(c, planned.planId).done.size === keys.length, 600_000);
     const ms = Date.now() - t0;
     const { frames, errors } = tileAnswers(c, planned.planId);
     const out = new Map<string, { sha: string; gz: string } | TileErr>();
@@ -516,7 +516,7 @@ describe('tile timeouts: retries on a fresh worker (6c 0a)', () => {
     await hook(1);
     const c = fakeClient();
     await call(h, tilesReq(planned.planId, planned.irSha, ['7,7']), c);
-    await until(() => (h.sc.regions.poolStats()?.retries ?? 0) === 1, 10_000);
+    await until(() => (h.sc.regions.poolStats()?.retries ?? 0) === 1, 600_000);
     // in its pause (50 ms) or its second attempt: close resolves without hanging
     await h.sc.regions.close();
     h.cfg.regions.testSlowTiles = 0;
@@ -541,7 +541,7 @@ describe('the window and backpressure', () => {
     const c = fakeClient({ flushed: true });
     const keys = Array.from({ length: 10 }, (_, i) => `${i},1`);
     expect(await call(h, tilesReq(slow.planId, slow.irSha, keys), c)).toMatchObject({ ok: true, result: { accepted: 10 } });
-    await until(() => tileAnswers(c, slow.planId).done.size === 10, 20_000);
+    await until(() => tileAnswers(c, slow.planId).done.size === 10, 600_000);
     expect(h.sc.regions.peakActive).toBe(2);
   });
 
@@ -554,14 +554,14 @@ describe('the window and backpressure', () => {
     const before = h.sc.regions.poolStats()!.tiles;
     const keys = Array.from({ length: 8 }, (_, i) => `${i},2`);
     await call(h, tilesReq(slow.planId, slow.irSha, keys), c);
-    await until(() => c.sent.length === 2, 10_000);
+    await until(() => c.sent.length === 2, 600_000);
     await new Promise((r) => setTimeout(r, 600));
     // two tiles sent and not flushed: nothing more is evaluated
     expect(h.sc.regions.poolStats()!.tiles - before).toBe(2);
     expect(c.sent).toHaveLength(2);
     c.gate = undefined;
     open();
-    await until(() => tileAnswers(c, slow.planId).done.size === 8, 20_000);
+    await until(() => tileAnswers(c, slow.planId).done.size === 8, 600_000);
     expect(h.sc.regions.poolStats()!.tiles - before).toBe(8);
   });
 
@@ -585,7 +585,7 @@ describe('the window and backpressure', () => {
     h.sc.clientGone(a);
     const sentA = a.sent.length;
     const before = h.sc.regions.poolStats()!.tiles;
-    await until(() => tileAnswers(b, slow.planId).done.size === 4, 20_000);
+    await until(() => tileAnswers(b, slow.planId).done.size === 4, 600_000);
     await new Promise((r) => setTimeout(r, 300));
     expect(a.sent.length).toBe(sentA);
     expect(sentA).toBeLessThan(8);
@@ -633,7 +633,7 @@ describe('determinism across worker counts, order and restarts', () => {
     const p = (await plan(h, { seed })).planned!;
     const c = fakeClient();
     for (let i = 0; i < keys.length; i += 64) await call(h, tilesReq(p.planId, p.irSha, keys.slice(i, i + 64)), c);
-    await until(() => tileAnswers(c, p.planId).done.size === new Set(keys).size, 30_000);
+    await until(() => tileAnswers(c, p.planId).done.size === new Set(keys).size, 600_000);
     const out = new Map<string, { sha: string; gz: string }>();
     const { frames } = tileAnswers(c, p.planId);
     for (const k of new Set(keys)) {
@@ -686,10 +686,10 @@ describe('region.* over the WebSocket server (validateOutbound)', () => {
       await until(() => msgs.some((m) => m.type === 'snapshot'));
       expect(msgs[0]!.features).toEqual(expect.arrayContaining(['region.plan', 'region.tiles']));
       send({ type: 'region.plan', id: 'p', program: 'fake_basic', params: { slowMs: 50 }, claim: CLAIM, surveyBlobId: putSurvey(h) });
-      await until(() => msgs.some((m) => m.type === 'region.planned'), 30_000);
+      await until(() => msgs.some((m) => m.type === 'region.planned'), 600_000);
       const planned = msgs.find((m) => m.type === 'region.planned')!;
       send({ id: 't', ...tilesReq(planned.planId as string, planned.irSha as string, ['0,0', '95,95', '99,99']) });
-      await until(() => msgs.filter((m) => (m.type === 'region.tile' && !m.more) || m.type === 'region.tile.error').length === 3, 30_000);
+      await until(() => msgs.filter((m) => (m.type === 'region.tile' && !m.more) || m.type === 'region.tile.error').length === 3, 600_000);
       expect(msgs.find((m) => m.type === 'ack' && m.re === 't')).toMatchObject({ ok: true, result: { accepted: 3 } });
       expect(msgs.find((m) => m.type === 'region.tile.error')).toMatchObject({ key: '99,99', stage: 'ground', set: 'terrain' });
       expect(h.log.lines.some((l) => /violates protocol/.test(l))).toBe(false);

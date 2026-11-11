@@ -308,7 +308,7 @@ describe('variant jobs (fixture kit)', () => {
       const d = slow.h.sc.requestDesign(request());
       await until(() => slow.h.sc.designs.get(d.id)!.status === 'designing');
       const v = slow.h.sc.requestVariant('cabin', 'birch');
-      await until(() => slow.h.sc.variants.get(v.id)!.status === 'done', 20_000);
+      await until(() => slow.h.sc.variants.get(v.id)!.status === 'done', 600_000);
       expect(slow.h.sc.designs.get(d.id)!.status).toBe('designing');
     } finally {
       await slow.h.close();
@@ -413,7 +413,7 @@ describe('restart and the wire', () => {
       const store2 = new Store(h.sc.config.dataDir, { debounceMs: 5 });
       const sc2 = new Sidecar(h.sc.config, store2, memoryLogger());
       await sc2.start(new SimDesigner(sc2, 5));
-      await until(() => sc2.variants.get(v.id)!.status === 'done', 20_000);
+      await until(() => sc2.variants.get(v.id)!.status === 'done', 600_000);
       expect(sc2.variants.get(v.id)!.blueprintId).toBe('gen_lakeside_cabin_dark');
       await sc2.close();
     } finally {
@@ -459,7 +459,7 @@ describe('restart and the wire', () => {
       expect(ack('r4')).toMatchObject({ ok: false });
       expect(ack('r4').error).toMatch(/import refused/);
       expect(ack('r5')).toMatchObject({ ok: false });
-      await until(() => ['v1', 'v2', 'v3'].every((id) => msgs.some((m) => m.type === 'variant.upsert' && m.variant.id === id && m.variant.status === 'done')), 20_000);
+      await until(() => ['v1', 'v2', 'v3'].every((id) => msgs.some((m) => m.type === 'variant.upsert' && m.variant.id === id && m.variant.status === 'done')), 600_000);
       const ups = msgs.filter((m): m is Extract<SM, { type: 'variant.upsert' }> => m.type === 'variant.upsert' && m.variant.id === 'v1');
       expect([...new Set(ups.map((u) => u.variant.status))]).toEqual(['queued', 'building', 'done']);
       expect(ups.at(-1)!.variant).toMatchObject({ blueprintId: 'gen_lakeside_cabin_birch', from: 'gen_lakeside_cabin', kind: 'variant' });

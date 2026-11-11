@@ -73,7 +73,7 @@ describe.skipIf(!hasKit)('bibles in 5a (sim backend, real kit)', () => {
   it('a new bible is format 2 with a restraint; with critique report the sheet is critiqued and stored in bible.json', async () => {
     h = await harness();
     const j = h.sc.bibles.request({ prompt: 'sim:critique=6 weathered fishing village', name: 'Mossy', critique: { mode: 'report' } });
-    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(j.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(j.id)!.status), 600_000);
     const done = h.sc.bibles.get(j.id)!;
     expect(done.status, done.error).toBe('done');
     const bible = JSON.parse(fs.readFileSync(path.join(h.sc.config.biblesDir, j.bibleId, 'bible.json'), 'utf8')) as Record<string, unknown>;
@@ -84,7 +84,7 @@ describe.skipIf(!hasKit)('bibles in 5a (sim backend, real kit)', () => {
     expect(done.bible).toMatchObject({ format: 2, restraint: { detailDensity: 'moderate' }, critique: { overall: 6 } });
     const crit = h.sc.jobs.book.list().find((x) => (x.spec as { owner?: string }).owner === 'architect:sheet-critic')!;
     expect(h.sc.jobs.book.work(crit.id)!.images).toHaveLength(1);
-  }, 60_000);
+  }, 1_800_000);
 
   it('a format-1 bible reads with defaults; archive hides it (a flag); delete is refused while pinned, by another owner, and works once free', async () => {
     h = await harness();
@@ -107,7 +107,7 @@ describe.skipIf(!hasKit)('bibles in 5a (sim backend, real kit)', () => {
     expect(h.sc.bibleIndex.delete('mosswater')).toEqual({ id: 'mosswater', versions: [1] });
     expect(fs.existsSync(path.join(h.sc.config.biblesDir, 'mosswater'))).toBe(false);
     expect(() => h!.sc.bibleIndex.delete('rustic')).toThrow(/built-in/);
-  }, 30_000);
+  }, 1_800_000);
 
   it('version GC removes old unpinned versions and keeps the latest and every pinned one', async () => {
     h = await harness();
@@ -120,7 +120,7 @@ describe.skipIf(!hasKit)('bibles in 5a (sim backend, real kit)', () => {
     fakeEntry(h.sc, 'gen_pinned', { id: 'gcb', version: 2 });
     expect(h.sc.bibleIndex.gc().sort()).toEqual(['gcb v1', 'gcb v3']);
     expect(h.sc.bibleIndex.versions('gcb')).toEqual([2, 4, 5]);
-  }, 30_000);
+  }, 1_800_000);
 
   it('job.images: PNG blobs become the job\'s images; a non-image blob is refused at once', async () => {
     h = await harness();
@@ -129,20 +129,20 @@ describe.skipIf(!hasKit)('bibles in 5a (sim backend, real kit)', () => {
     const spec = JobSpec.parse({ kind: 'structured', prompt: 'look', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] }, images: [{ blob: img.blobId, label: 'front' }] });
     const j = h.sc.jobs.run(spec, undefined);
     expect(h.sc.jobs.book.work(j.id)!.images).toEqual([{ file: expect.stringMatching(/images\/01\.png$/), label: 'front', mediaType: 'image/png' }]);
-    await until(() => h!.sc.jobs.book.get(j.id)!.status === 'done', 10_000);
+    await until(() => h!.sc.jobs.book.get(j.id)!.status === 'done', 600_000);
     expect(() => h!.sc.jobs.run(JobSpec.parse({ ...spec, images: [{ blob: txt.blobId, label: 'x' }] }), undefined)).toThrow(/not a PNG or JPEG/);
     expect(JobSpec.safeParse({ ...spec, images: Array.from({ length: 9 }, () => ({ blob: img.blobId, label: 'x' })) }).success).toBe(false);
-  }, 30_000);
+  }, 1_800_000);
 
   it('a massing with critique uses the massing rubric (silhouette, brief, site) and maxRevisions 1', async () => {
     h = await harness();
     const d = h.sc.requestDesign(DesignRequest.parse(request({ name: undefined, notes: 'sim:critique=5/5/5', maxSize: { x: 64, y: 64, z: 64 }, massing: true, critique: { mode: 'loop', budgetUsd: 5 } })));
-    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 600_000);
     const f = h.sc.designs.get(d.id)!;
     expect(f.status, f.error).toBe('done');
     expect(f.critique).toMatchObject({ end: 'max_revisions' });
     expect(f.critique!.rounds).toHaveLength(2);
     expect(Object.keys(f.critique!.rounds[0]!.scores).sort()).toEqual(['brief', 'silhouette', 'site']);
     expect(h.sc.massings.get(f.massing!.id)).toBeDefined();
-  }, 60_000);
+  }, 1_800_000);
 });

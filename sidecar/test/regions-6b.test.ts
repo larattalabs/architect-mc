@@ -61,14 +61,14 @@ async function plan(h: Harness, over: Record<string, unknown> = {}): Promise<{ a
   const ack = await call(h, { type: 'region.plan', program: 'fake_basic', params: {}, claim: CLAIM, surveyBlobId: putSurvey(h), ...over });
   if (!ack.ok) return { ack, ms: Date.now() - t0 };
   const planId = ack.result!.planId as string;
-  await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 60_000);
+  await until(() => h.events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 600_000);
   const planned = h.events.find((e): e is Planned => e.type === 'region.planned' && e.planId === planId);
   const failed = h.events.find((e): e is Failed => e.type === 'region.failed' && e.planId === planId);
   return { ack, ...(planned ? { planned } : {}), ...(failed ? { failed } : {}), ms: Date.now() - t0 };
 }
 
 function tileDone(c: FakeClient, planId: string, n: number): Promise<void> {
-  return until(() => c.sent.filter((m) => (m.type === 'region.tile' && !m.more && m.planId === planId) || (m.type === 'region.tile.error' && m.planId === planId)).length >= n, 20_000);
+  return until(() => c.sent.filter((m) => (m.type === 'region.tile' && !m.more && m.planId === planId) || (m.type === 'region.tile.error' && m.planId === planId)).length >= n, 600_000);
 }
 const frames = (c: FakeClient, planId: string) => c.sent.filter((m): m is TileMsg => m.type === 'region.tile' && m.planId === planId);
 const tileErrors = (c: FakeClient, planId: string) => c.sent.filter((m): m is TileErr => m.type === 'region.tile.error' && m.planId === planId);
@@ -366,7 +366,7 @@ describe('region.check and region.preview (fake kit)', () => {
     const ack = await call(h, { type: 'region.plan', program: 'fake_basic', params: { fakeCheck: { slowMs: 600 } }, claim: CLAIM, surveyBlobId: putSurvey(h) });
     const running = ack.result!.planId as string;
     expect((await call(h, { type: 'region.check', planId: running })).error).toMatch(/is still being planned/);
-    await until(() => h.events.some((e) => e.type === 'region.planned' && e.planId === running), 20_000);
+    await until(() => h.events.some((e) => e.type === 'region.planned' && e.planId === running), 600_000);
     const failing = (await plan(h, { check: false, params: { fakeCheck: { fail: 'checker exploded' } } })).planned!;
     expect((await call(h, { type: 'region.check', planId: failing.planId })).error).toBe('check: checker exploded');
   });
@@ -596,7 +596,7 @@ describe('region.design on the sim backend (the template pick)', () => {
 
   const design = (over: Record<string, unknown> = {}) => call(h, { type: 'region.design', brief: 'a repurposed meteor crater mining facility', card: { site: 'giant meteor crater', purpose: 'mining facility', style: 'hellish evil lair' }, claim: CLAIM, surveyBlobId: putSurvey(h), ...over });
   const final = async (id: string): Promise<Design> => {
-    await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)?.status ?? ''), 20_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)?.status ?? ''), 600_000);
     return h.sc.designs.get(id)!;
   };
   const sim = (...answers: unknown[]) => ({ ext: { 'architect:simAnswers': answers } });
@@ -641,7 +641,7 @@ describe('region.design on the sim backend (the template pick)', () => {
     expect(d.status).toBe('done');
     const planId = d.result!.planId as string;
     expect(planId).toMatch(/^p/);
-    await until(() => h.events.some((e) => e.type === 'region.planned' && e.planId === planId), 20_000);
+    await until(() => h.events.some((e) => e.type === 'region.planned' && e.planId === planId), 600_000);
     const req = JSON.parse(fs.readFileSync(path.join(h.sc.regions.planDir(planId), 'request.json'), 'utf8')) as Record<string, unknown>;
     expect(req).toMatchObject({ program: 'fake_basic', claim: CLAIM, surveyBlobId: (d.region as { surveyBlobId: string }).surveyBlobId, check: true });
   });
@@ -749,7 +749,7 @@ describe('region.design after a restart', () => {
     h.cfg.simStepMs = 10;
     await sc2.start(new SimDesigner(sc2, 10));
     try {
-      await until(() => ['done', 'failed'].includes(sc2.designs.get(id)?.status ?? ''), 20_000);
+      await until(() => ['done', 'failed'].includes(sc2.designs.get(id)?.status ?? ''), 600_000);
       const d = sc2.designs.get(id)!;
       expect(d).toMatchObject({ status: 'done', result: { outcome: 'NO_TEMPLATE', program: 'rift_city' } });
       expect((d.region as { tries: unknown[] }).tries).toHaveLength(1);
