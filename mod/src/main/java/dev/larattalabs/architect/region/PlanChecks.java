@@ -102,13 +102,11 @@ public final class PlanChecks {
 	}
 
 	/**
-	 * (6d AD) The server, for an artifact kept outside a check (an adoption's): a world with no region directory at its start never ran
-	 * {@link #started}, so {@link #artifact} would answer empty until the first check.
+	 * (6d AD) The running server. A world with no region directory at its start never ran {@link #started}, so {@link #artifact} read the
+	 * previous world's directory (or none) until its first check: an artifact an adoption kept was not found.
 	 */
 	static void serverIs(MinecraftServer s) {
-		if (server == null) {
-			server = s;
-		}
+		server = s;
 	}
 
 	/** The world start: the keyed checks into the registry. */

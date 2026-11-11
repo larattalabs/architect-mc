@@ -215,6 +215,7 @@ public final class RegionsImpl implements Regions {
 		REALISE_KEYS.clear();
 		TOMBS.clear();
 		PlanRetention.loadTombstones(w); // (6c close-out A) discarded keyed plans
+		PlanChecks.serverIs(s); // (6d AD) this world's artifacts, also when it has no region directory yet
 		if (!Files.isDirectory(root)) {
 			return;
 		}

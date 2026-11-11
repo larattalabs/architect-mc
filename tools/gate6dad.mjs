@@ -474,6 +474,9 @@ steps.crash = async () => {
   const d2 = await call('dev.site.delta.apply', { site: T.lotSites.home_1, version: 2, owner: OWNER }, 120_000);
   const d3 = await call('dev.site.delta.apply', { site: T.lotSites.home_1, version: 3, owner: OWNER }, 120_000);
   check(d2.applied === true && d3.applied === true, `row 6b: home_1 has two deltas (v2 ${d2.applied}, v3 ${d3.applied})`);
+  // the settlement on disk before the first kill (a halt saves nothing: the builds' own chunks would go back, which is not the adoption's)
+  await cmd('/save-all flush');
+  await L.settle(3000);
   const H0 = await hashOf(BOX);
   const sites = sitesOf(T);
   const st0 = await adState(sites);
@@ -535,6 +538,7 @@ steps.crash = async () => {
       check(!a.refused, `row 6b: adopted again after ${point}: ${a.region ?? a.refused}`);
       region = a.region;
       groupId = a.groupId;
+      await cmd('/save-all flush');
     }
   }
   // the last adoption un-adopted cleanly, then architect-sites.json deleted: Sites.reconcile rebuilds every record with the same membership
