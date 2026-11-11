@@ -9,8 +9,8 @@
 //                                      gate mechanism's dynamic state), ApiLCTest, RealisedTest; api-compat against the 0.47.0, 0.45.0 and
 //                                      0.44.0 apitest jars and the 0.47.0 mod surface
 //     ingame    (lc-ingame)            items 2 and 3 in game on rv-ingame's flat town (flat_village, pads): the fresh town reports no change;
-//                                      a player breaks 40 square cells, breaks and re-places 12 lane cells (cobblestone), the console removes
-//                                      20 pad cells and swaps 6 more (sponge); landCheck's removed / playerPlaced / changed / kinds per part
+//                                      a player breaks 40 square cells, breaks and re-places 12 cells (6 lane, 6 verge: cobblestone), the console removes
+//                                      20 verge cells and swaps 6 square cells (sponge); landCheck's removed / playerPlaced / changed / kinds per part
 //                                      equal the driver's own diff attributed by the kit's writers; then a revision (a mound and a spire)
 //                                      is damaged the same way and its parts report it; every landCheck writes nothing (the claim's hash and
 //                                      every file of the region's dir and the journal unchanged; two calls equal)
@@ -166,7 +166,7 @@ async function landCheck(region, part = null) {
   log(`  landCheck ${region}${part ? ` part ${part}` : ''}: ${r.parts.length} parts, ${r.cellsChecked} cells, ${r.unloaded} unloaded, ${r.ms} ms; ${json(r.parts.filter((p) => p.changed + p.removed + p.playerPlaced + p.volatileChanged).map((p) => [p.part, p.removed, p.playerPlaced, p.changed, p.volatileChanged]))}`);
   return r;
 }
-const strip = (r) => ({ ...r, ms: 0 });
+const strip = (r) => { const { id, type, ok, ms, ...rest } = r; void id; void type; void ok; void ms; return rest; };
 
 /** Every file under a dir: relative path -> size and sha256 (missing dir: empty). */
 function listing(dir) {
@@ -372,25 +372,29 @@ steps.ingame = async () => {
   out.lc0 = lc0;
   const ch0 = lc0.parts.filter((p) => p.changed + p.removed + p.playerPlaced + p.volatileChanged);
   check(ch0.length === 0 && lc0.unloaded === 0 && lc0.cellsChecked > 0 && lc0.position === 0, `the fresh town reports no change: ${lc0.parts.length} parts (${json(lc0.parts.map((p) => [p.part, p.cells]))}), ${lc0.cellsChecked} cells checked, ${lc0.unloaded} unloaded, position ${lc0.position}`, ch0);
-  const kitParts = out.parts.filter((p) => lc0.parts.some((q) => q.part === p));
-  check(kitParts.length === out.parts.length && !lc0.parts.some((p) => p.part === 'unattributed'), `every part the kit's writers name is reported (${kitParts.length}/${out.parts.length}); no cell unattributed (a region realised with RP's record)`, lc0.parts.map((p) => p.part));
+  const roadParts = lc0.parts.filter((p) => !out.parts.includes(p.part)).map((p) => p.part);
+  const roadIds = (S.ir0.roads ?? []).map((r) => r.id);
+  check(roadParts.every((p) => roadIds.includes(p)) && !lc0.parts.some((p) => p.part === 'unattributed'), `every reported part is a part the kit's writers name or an IR road (${json(roadParts)} of roads ${json(roadIds)}); no cell unattributed (a region realised with RP's record)`, lc0.parts.map((p) => p.part));
   const tileCells = lc0.parts.filter((p) => out.parts.includes(p.part)).reduce((n, p) => n + p.cells, 0);
-  out.tileCells = { reported: tileCells, oracle: own.part.size };
-  check(tileCells <= own.part.size && tileCells >= own.part.size * 0.8, `the tile parts' cells: ${tileCells} reported, ${own.part.size} the kit wrote (fewer where a road or later entry holds the cell on top)`);
+  out.tileCells = { reported: tileCells, cellsWritten: T.st.view.cellsWritten };
+  check(tileCells === T.st.view.cellsWritten, `the tile parts' cells: ${tileCells} reported = the region's cellsWritten ${T.st.view.cellsWritten} (no road or later entry covers a tile cell in this town)`);
 
   // ---- item 2: a player breaks 40 square cells and swaps 12 lane cells; the console removes 20 pad cells and swaps 6
   const s1 = await cellsOf(BOX);
-  const sq = await pick(own, s1, region, /square|shared|plaza/, 40, group, roadSites);
-  const lane = await pick(own, s1, region, /lane/, 12, group, roadSites);
-  const padAll = await pick(own, s1, region, /pad/, 26, group, roadSites);
-  const pads = padAll.slice(0, 20), swap = padAll.slice(20);
+  // (flat ground: the lanes write 6 cells and the pads none, so the 12 placements are the 6 lane cells and 6 verge cells, and the console's
+  // 20 removals verge cells; its 6 swaps square cells)
+  const sqAll = await pick(own, s1, region, /^square$/, 46, group, roadSites);
+  const sq = sqAll.slice(0, 40), swap = sqAll.slice(40);
+  const lanes = await pick(own, s1, region, /^lanes$/, 6, group, roadSites);
+  const verges = await pick(own, s1, region, /^verges$/, 26, group, roadSites);
+  const lane = [...lanes, ...verges.slice(0, 6)], pads = verges.slice(6);
   const placed = await damage(sq, lane, pads, swap);
   const s2 = await cellsOf(BOX);
   const exp = expectedOf(s1, s2, own.part, placed);
   out.expected = exp.byPart;
   const lc1 = await noWrite(region, BOX, (await call('dev.region.landCheck', { region }, 900_000)).worldDir, 'item 2');
   out.lc1 = lc1;
-  compare('item 2 (rv-ingame\'s flat town)', lc1, exp, 'square, lanes, pads', null);
+  compare('item 2 (rv-ingame\'s flat town)', lc1, exp, 'square, lanes, verges', null);
   const sqPart = sq[0]?.[3];
   if (sqPart) {
     const one = await landCheck(region, sqPart);
@@ -419,7 +423,7 @@ steps.ingame = async () => {
   const base = lc1;
   compare('item 3, the revision realised (no new change)', lc2, { byPart: {}, stray: [] }, 'every part as before the revision', base);
   check(lc2.position === 1 && out.revisionParts.every((p) => lc2.parts.some((q) => q.part === p && q.cells > 0)), `position ${lc2.position}; the revision's parts reported (${json(out.revisionParts)}: ${json(lc2.parts.filter((q) => out.revisionParts.includes(q.part)).map((q) => [q.part, q.cells]))})`);
-  const any = (re) => ({ test: (p) => out.revisionParts.includes(p) && re.test(p) });
+  const any = (re) => ({ test: (p) => out.revisionParts.includes(p) && re.test(p), toString: () => `revision ${re}` });
   const spire = await pick(ownR, s3, region, any(/spire/), 15, group, roadSites);
   const mound = await pick(ownR, s3, region, any(/mound/), 2, group, roadSites);
   const placedR = new Set();
@@ -442,8 +446,8 @@ steps.nowrite = async () => {
   const S = await setup('G6B LC NoWrite');
   const region = S.T.region;
   const s1 = await cellsOf(S.BOX);
-  const sq = await pick(S.own, s1, region, /square|shared|plaza/, 10, S.group, S.roadSites);
-  const lane = await pick(S.own, s1, region, /lane/, 4, S.group, S.roadSites);
+  const sq = await pick(S.own, s1, region, /^square$/, 10, S.group, S.roadSites);
+  const lane = await pick(S.own, s1, region, /^lanes$/, 4, S.group, S.roadSites);
   await damage(sq, lane, [], []);
   const wd = (await call('dev.region.landCheck', { region }, 900_000)).worldDir;
   const r = [];
