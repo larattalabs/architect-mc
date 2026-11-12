@@ -98,6 +98,15 @@ class SiteFitTest {
 		assertNotNull(r);
 		assertEquals(Reason.SITE_MISMATCH, r.reason());
 		assertTrue(r.message().startsWith(SHA + ":"), "the message starts with the bound sha (the detail)");
+		// (slice SV) a design built over a site records the spec in its sidecar's `site`: bound by it, and to its frame
+		JsonObject kit = new JsonObject();
+		kit.add("site", s.wire());
+		assertNull(SiteFit.mismatch(kit, s));
+		assertNull(SiteFit.frameOfEntry(kit, s));
+		assertEquals(Reason.SITE_MISMATCH, SiteFit.mismatch(kit, other).reason());
+		assertNull(SiteFit.frameOfEntry(kit, other), "another sha is mismatch's");
+		SiteSpec moved = new SiteSpec(SHA, "local:" + SHA, s.volume(), s.fit(), new SiteFrame(new BlockPos(1, 5, 0), Rotation.NONE), List.of(), List.of(), null);
+		assertEquals(Reason.OTHER, SiteFit.frameOfEntry(kit, moved).reason());
 		assertTrue(SiteFit.bound(SiteFit.withBinding(null, s)));
 		assertFalse(SiteFit.bound(new JsonObject()));
 		JsonObject mine = new JsonObject();

@@ -42,7 +42,9 @@ import org.jspecify.annotations.Nullable;
  * <ol>
  * <li>the spec's own problems ({@link SiteSpec#problems()}), the request's origin and rotation against the site's frame, the template box
  * inside the site's volume ({@code OTHER}, {@code OTHER}, {@code LOT_TOO_SMALL});</li>
- * <li>{@code SITE_MISMATCH}: the entry is bound ({@link SiteBinding}) to another volume sha; the message starts with the bound sha;</li>
+ * <li>{@code SITE_MISMATCH}: the entry is bound ({@link SiteBinding} in its ext, else its sidecar's own {@code site} spec, slice SV) to
+ * another volume sha; the message starts with the bound sha; a sidecar {@code site} on this sha with another frame is refused
+ * {@code OTHER};</li>
  * <li>{@code KEEP_LOST}: a keep-critical cell is gone (its class now is air, a fluid or a plant, or not the frozen volume's), or the
  * template writes one; the message starts with the first cell {@code x,y,z};</li>
  * <li>{@code SITE_DRIFTED}: a cell of the site volume changed class since the frozen survey (keep-critical cells left out: they are
@@ -138,13 +140,53 @@ public final class SiteFit {
 		return null;
 	}
 
-	/** {@code SITE_MISMATCH} when the entry (its sidecar JSON) is bound to another volume sha; an unbound entry may be fitted. */
-	static @Nullable Refusal mismatch(@Nullable JsonObject entryJson, SiteSpec s) {
+	/**
+	 * The volume sha an entry (its sidecar JSON) is bound to: its {@link SiteBinding} ({@code ext["architect_mc:site"]}, written by DS and
+	 * by a site placement's record), else the kit's own {@code site} spec (slice SV: a design built over a site records the spec it was
+	 * built for in its sidecar); empty for an unbound entry.
+	 */
+	static Optional<String> boundSha(@Nullable JsonObject entryJson) {
 		JsonObject ext = entryJson != null && entryJson.get("ext") instanceof JsonObject e ? e : null;
 		Optional<SiteBinding> b = SiteBinding.ofExt(ext);
-		if (b.isPresent() && !b.get().volumeSha().equals(s.volumeSha())) {
-			return new Refusal(Reason.SITE_MISMATCH, b.get().volumeSha() + ": the design is bound to another site volume than " + s.volumeSha()
+		if (b.isPresent()) {
+			return Optional.of(b.get().volumeSha());
+		}
+		if (entryJson != null && entryJson.get(SiteSpec.WIRE_KEY) instanceof JsonObject site && site.get("volumeSha") instanceof com.google.gson.JsonPrimitive p
+			&& p.isString()) {
+			return Optional.of(p.getAsString());
+		}
+		return Optional.empty();
+	}
+
+	/** {@code SITE_MISMATCH} when the entry is bound ({@link #boundSha}) to another volume sha; an unbound entry may be fitted. */
+	static @Nullable Refusal mismatch(@Nullable JsonObject entryJson, SiteSpec s) {
+		Optional<String> b = boundSha(entryJson);
+		if (b.isPresent() && !b.get().equals(s.volumeSha())) {
+			return new Refusal(Reason.SITE_MISMATCH, b.get() + ": the design is bound to another site volume than " + s.volumeSha()
 				+ "; place a site variant here instead");
+		}
+		return null;
+	}
+
+	/**
+	 * A design built over a site (its sidecar {@code site}, slice SV) on the same volume but another frame: its cells are the site's at
+	 * that frame, so another one is refused ({@code OTHER}); null otherwise (no sidecar site, another sha: {@link #mismatch}'s).
+	 */
+	static @Nullable Refusal frameOfEntry(@Nullable JsonObject entryJson, SiteSpec s) {
+		if (entryJson == null || !(entryJson.get(SiteSpec.WIRE_KEY) instanceof JsonObject site) || !(site.get("frame") instanceof JsonObject f)) {
+			return null;
+		}
+		try {
+			if (site.get("volumeSha") == null || !s.volumeSha().equals(site.get("volumeSha").getAsString())) {
+				return null;
+			}
+			dev.larattalabs.architect.api.SiteFrame bound = dev.larattalabs.architect.api.SiteFrame.fromWire(f);
+			if (!bound.equals(s.frame())) {
+				return new Refusal(Reason.OTHER, "The design was built for its site's frame " + bound.origin().toShortString() + " "
+					+ dev.larattalabs.architect.api.SiteFrame.rotationWire(bound.rotation()) + ", not this one; place a site variant here instead");
+			}
+		} catch (RuntimeException e) {
+			return null; // a malformed sidecar site: not the placement's to judge
 		}
 		return null;
 	}
@@ -380,6 +422,10 @@ public final class SiteFit {
 		Refusal mm = mismatch(entryJson, s);
 		if (mm != null) {
 			out.add(mm);
+		}
+		Refusal fr = frameOfEntry(entryJson, s);
+		if (fr != null) {
+			out.add(fr);
 		}
 		IdentityHashMap<BlockState, Byte> memo = new IdentityHashMap<>();
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();

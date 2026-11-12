@@ -3,7 +3,8 @@
 // run worktree (GATE6B_RUN, default `../architect-mc-pl-run`, a detached worktree at this checkout's HEAD; the sim sidecar, no Claude). $0.
 //
 //   node tools/gate7bpl.mjs <step>
-//     ingame   (pl-ingame)  on a flat world (exact rules), one hand-built site per non-pad fit (a log trunk, a cliff face, a rock hill, a
+//     ingame   (pl-ingame)  slice SV's five non-pad fit examples on their fixtures' land (built in the world from the frozen volumes), placed
+//                           by fitToSite with the sidecar's site, KEEP and an exact Remove; then on a flat world (exact rules), one hand-built site per non-pad fit (a log trunk, a cliff face, a rock hill, a
 //                           ceiling slab, two pillars), frozen by Survey.volume, and a stub design bound to it: Sites.fitToSite (the frame,
 //                           no rotation search, a clean verdict with the port note), Sites.place with the site (TerrainFit KEEP: every cell the
 //                           template does not write unchanged, nothing written outside the box: no fill, no approach), the binding in the
@@ -283,6 +284,11 @@ steps.ingame = async () => {
     check(rm.removed && e.n === 0, `${s.fit}: Remove is exact: E-flat 0 over the ${before.size}-cell volume`, e.first);
     out.fits[s.fit] = r;
   }
+  // (slice SV) the kit's fit examples, bundled into the library, placed on their own sites: each fixture's frozen volume built in the
+  // world (dev.pl.terrain: its land block for block by class, the file frozen as this world's volume), the example's sidecar `site` as
+  // the request's site (as SV writes it), fitToSite clean in that frame, Sites.place KEEP (every cell the template does not write unchanged,
+  // nothing outside the box), Remove exact over the volume
+  out.examples = await examples();
   // the four Reasons, each provoked alone (the trunk site)
   const t = S[0];
   await L.tp(t.origin[0] + 3, gy + 20, t.origin[2] - 12);
@@ -363,6 +369,53 @@ steps.ingame = async () => {
   await L.leaveWorld();
   return out;
 };
+
+/** The kit fit examples on their fixtures (slice SV), the non-pad ones. */
+const EXAMPLES = [['fit_wrap_trunk', 'trunk'], ['fit_attach_to_cliff', 'cliff_face'], ['fit_suspend', 'overhang'], ['fit_carve_into', 'tunnel_hill'], ['fit_span', 'rift_site']];
+
+/** A template's written cells (template coordinates "x,y,z" -> block id) from its .nbt. */
+async function templateCells(nbtPath) {
+  const { parse, plain } = await imp('lib/nbt.mjs');
+  const st = plain(parse(fs.readFileSync(nbtPath)));
+  const m = new Map();
+  for (const b of st.blocks) m.set(b.pos.join(','), st.palette[b.state].Name);
+  return m;
+}
+
+async function examples() {
+  const out = {};
+  for (const [id, fixture] of EXAMPLES) {
+    const side = JSON.parse(fs.readFileSync(path.join(KIT, 'examples', id, `${id}.blueprint.json`), 'utf8'));
+    const site = side.site;
+    const v = site.volume;
+    const vol = [v.minX, v.minY, v.minZ, v.maxX, v.maxY, v.maxZ];
+    const o = site.frame.origin;
+    await L.tp(o[0] + 8, v.maxY + 10, o[2] - 16);
+    const t = await call('dev.pl.terrain', { file: path.join(KIT, 'test', 'fixtures', 'site', fixture, 'volume.bin'), blocks: { WATER: 'minecraft:water' } }, 300_000);
+    await L.settle(2000);
+    check(t.sha === site.volumeSha, `${id}: its fixture ${fixture}'s land built (${t.written} of ${t.cells} cells) and frozen; the sha is the sidecar site's (${t.sha.slice(0, 12)})`, t);
+    const f = await call('dev.pl.fit', { blueprint: id, site }, 120_000);
+    check(f.clean && json(f.origin) === json(o), `${id}: fitToSite with the sidecar's site: the frame ${json(o)}, a clean verdict`, f.refusals);
+    const before = await cellsOf(vol);
+    const p = await call('dev.pl.place', { blueprint: id, site }, 300_000);
+    check(p.placed, `${id}: Sites.place with its site placed ${p.site}`, p);
+    if (!p.placed) { out[id] = { fit: f.refusals, place: p.refusals }; continue; }
+    const after = await cellsOf(vol);
+    const tc = await templateCells(path.join(KIT, 'examples', id, `${id}.nbt`));
+    const w = new Map([...tc].map(([k, b]) => { const [x, y, z] = k.split(',').map(Number); return [k3(o[0] + x, o[1] + y, o[2] + z), b]; }));
+    let wrong = 0;
+    for (const [k, b] of w) if (idOf(after.get(k)) !== idOf(b)) wrong++;
+    const kd = diff(before, after, new Set(w.keys()));
+    const keepCells = (side.keep?.critical ?? []).length;
+    check(wrong === 0 && kd.n === 0, `${id}: KEEP: the ${w.size} written cells hold the template; every other cell of the ${before.size}-cell volume (its ${keepCells} keep-critical cells among them) is unchanged`, { wrong, first: kd.first });
+    const rm = await call('dev.pl.remove', { site: p.site }, 600_000);
+    await L.settle(1500);
+    const e = diff(before, await cellsOf(vol));
+    check(rm.removed && e.n === 0, `${id}: Remove is exact: E-flat 0 over the volume`, e.first);
+    out[id] = { site: p.site, written: w.size, wrong, changedUnwritten: kd.n, eflat: e.n, notes: p.notes };
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ undo (strict): keep cells under BOX, both removal orders
 

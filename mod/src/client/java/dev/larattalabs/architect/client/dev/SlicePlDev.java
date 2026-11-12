@@ -94,6 +94,62 @@ public final class SlicePlDev {
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().sites(s).remove(id, new RemoveOptions(force, requester, covered))).thenCompose(x -> x)
 					.thenApply(SlicePlDev::removed);
 			});
+		DevBridge.register("dev.pl.terrain", 300_000, "{file: <a frozen volume, gzip ARVX (a kit site fixture's volume.bin)>, blocks?: {CLASS: block}} - (7b PL, TEST) "
+			+ "builds the volume's land in the world (each cell its class's block: AIR air, ROCK stone, SOIL dirt, LOG oak_log, LEAVES persistent oak "
+			+ "leaves; no neighbour updates, no journal) and freezes the file as this world's architect/volumes/<sha>.bin -> {sha, box, cells, written}", (req, mc) -> {
+				java.nio.file.Path file = java.nio.file.Path.of(Fields.of(req).nonBlank("file"));
+				java.util.Map<String, String> blocks = new java.util.HashMap<>(java.util.Map.of("AIR", "minecraft:air", "ROCK", "minecraft:stone", "SOIL",
+					"minecraft:dirt", "LOG", "minecraft:oak_log[axis=y]", "LEAVES", "minecraft:oak_leaves[persistent=true]"));
+				if (req.has("blocks")) {
+					req.getAsJsonObject("blocks").entrySet().forEach(e -> blocks.put(e.getKey(), e.getValue().getAsString()));
+				}
+				return ServerTasks.callOnServer(s -> {
+					try {
+						byte[] gz = java.nio.file.Files.readAllBytes(file);
+						byte[] raw = dev.larattalabs.architect.region.volume.Arvx.gunzip(gz);
+						String sha = dev.larattalabs.architect.region.volume.Arvx.sha256(raw);
+						dev.larattalabs.architect.region.volume.Arvx.Decoded d = dev.larattalabs.architect.region.volume.Arvx.decode(raw);
+						var level = s.overworld();
+						dev.larattalabs.architect.region.volume.VolumeSurvey.freeze(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(
+							dev.larattalabs.architect.region.volume.VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin"), gz, sha);
+						var names = dev.larattalabs.architect.api.VoxelClass.values();
+						java.util.Map<Integer, net.minecraft.world.level.block.state.BlockState> states = new java.util.HashMap<>();
+						int[] b = d.box();
+						long cells = 0;
+						long written = 0;
+						BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+						for (int x = b[0]; x <= b[3]; x++) {
+							for (int z = b[2]; z <= b[5]; z++) {
+								for (int y = b[1]; y <= b[4]; y++) {
+									int c = d.classAt(x, y, z);
+									cells++;
+									String id = blocks.get(names[c].name());
+									if (id == null) {
+										throw new DevBridge.DevException("no block for class " + names[c] + " at " + x + "," + y + "," + z);
+									}
+									var st = states.computeIfAbsent(c, k -> blockState(level, id));
+									if (level.setBlock(m.set(x, y, z), st, net.minecraft.world.level.block.Block.UPDATE_CLIENTS
+										| net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE)) {
+										written++;
+									}
+								}
+							}
+						}
+						JsonObject o = new JsonObject();
+						o.addProperty("sha", sha);
+						JsonArray box = new JsonArray();
+						for (int v : b) {
+							box.add(v);
+						}
+						o.add("box", box);
+						o.addProperty("cells", cells);
+						o.addProperty("written", written);
+						return o;
+					} catch (java.io.IOException e) {
+						throw new DevBridge.DevException("can't read " + file + ": " + e.getMessage());
+					}
+				});
+			});
 		DevBridge.register("dev.pl.reload", 60_000, "{} - (7b PL) reloads the library (designs written into architect/library) -> {entries}", (req, mc) ->
 			ServerTasks.callOnServer(s -> {
 				dev.larattalabs.architect.placement.Blueprints.reload(s);
@@ -135,6 +191,15 @@ public final class SlicePlDev {
 				return o;
 			});
 		});
+	}
+
+	static net.minecraft.world.level.block.state.BlockState blockState(net.minecraft.server.level.ServerLevel level, String id) {
+		try {
+			return net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(level.holderLookup(net.minecraft.core.registries.Registries.BLOCK),
+				id, false).blockState();
+		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+			throw new DevBridge.DevException("bad block " + id + ": " + e.getMessage());
+		}
 	}
 
 	static JsonObject removed(RemoveResult r) {
