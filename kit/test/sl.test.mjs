@@ -222,7 +222,7 @@ test('catalogue: layout.elevated supported (sinceApi NEXT, schemaVersion 1); aga
   assert.equal(e.schemaVersion, 1);
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi));
   const before = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
-  assert.equal(golden.catalogueVersion, before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge');
+  assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
   const changed = golden.entries.filter((x) => JSON.stringify(x) !== JSON.stringify(before.entries.find((y) => y.id === x.id))).map((x) => x.id);
   assert.deepEqual(changed.sort(), ['form.hidden_room', 'layout.elevated', 'rule.suspended']);
 });

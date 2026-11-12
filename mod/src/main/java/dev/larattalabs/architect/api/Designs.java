@@ -244,7 +244,7 @@ public interface Designs {
 	 * detail {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
 	 * {@code adopted} (a copy of an adopted entry); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. Needs a helper with
 	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
-	 * version. Since 1.51.0. (7b DS, since NEXT) A SITE entry follows too: the source's version re-run on the entry's own site, checked
+	 * version. Since 1.51.0. (7b DS, since 1.53.0) A SITE entry follows too: the source's version re-run on the entry's own site, checked
 	 * on the composite (a site rule failing answers {@code check}, its message naming the rule); no variation bar and no frame check
 	 * (a site-bound entry places only in its site's frame). Before NEXT a SITE entry was refused {@code until_7b}.
 	 */
@@ -292,9 +292,9 @@ public interface Designs {
 	 * without its source) or a program that is not site-aware (detail {@code not_site_aware}: it declares no fit);
 	 * {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. The key is scoped by the player's owner (none). The new entry copies the
 	 * source's values, palette, bible, profile and ext, its request with the new site, and keeps the site's files. Built by slice DS
-	 * (feature {@code "siteDesign"}). Since NEXT.
+	 * (feature {@code "siteDesign"}). Since 1.53.0.
 	 */
 	default CompletableFuture<String> siteVariant(String entryId, SiteSpec site, String opKey) {
-		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since NEXT (slice DS)");
+		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since 1.53.0 (slice DS)");
 	}
 }

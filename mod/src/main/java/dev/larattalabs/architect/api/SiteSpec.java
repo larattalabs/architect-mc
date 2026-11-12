@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (7b) A lot's site, for a site-aware design, its placement and its fit (docs/CONTRACT.md "Phase 7b" §2): one record for
  * {@link DesignRequest#site()}, {@link PlaceRequest#site()}, {@link LotSpec#site()} and {@link Sites#fitToSite} (SETTLEMENTS'
- * {@code SiteLotSpec} and {@code SiteSpec} merged). The wire form ({@link #wire()}) is {@code kit/schemas/site-spec.json}. Since NEXT.
+ * {@code SiteLotSpec} and {@code SiteSpec} merged). The wire form ({@link #wire()}) is {@code kit/schemas/site-spec.json}. Since 1.53.0.
  *
  * @param volumeSha the frozen volume's ARVX sha ({@link Volume#sha()}): the site the design was made for
  * @param volumeBlobId the frozen volume's blob id ({@link Volume#blobId()})

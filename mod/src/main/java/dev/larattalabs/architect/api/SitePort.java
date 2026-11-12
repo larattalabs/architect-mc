@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * (7b) A port a site-bound design must meet: where the settlement graph (or the player) arrives (docs/CONTRACT.md "Phase 7b" §2,
- * SETTLEMENTS §7.5 {@code PortReq}). Since NEXT.
+ * SETTLEMENTS §7.5 {@code PortReq}). Since 1.53.0.
  *
  * @param name the port's name (unique in a {@link SiteSpec}), as the design's {@code bp.port(name, ...)}
  * @param kind {@link #WALK} ({@code architect:walk}, a walkable opening: a deck edge, a stair head, a hatch) or {@link #DOOR}
