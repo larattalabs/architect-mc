@@ -169,7 +169,7 @@ final class DesignEditor {
 		boolean custom = text.equals("custom");
 		Paint.box(g, x, y, w, 11, custom ? UiStyle.withAlpha(UiStyle.CLAY, 60) : 0xFFF1E3B6, custom ? UiStyle.withAlpha(UiStyle.CLAY_DARK, 140)
 			: 0xFFD9C27A);
-		g.text(font, t, x + 3, y + 2, custom ? UiStyle.CLAY_DARK : 0xFF6B5420, false);
+		g.text(font, t, x + 3, y + 2, custom ? dev.larattalabs.architect.client.ui.PaperInk.clay() : 0xFF6B5420, false);
 		return w;
 	}
 
@@ -204,7 +204,7 @@ final class DesignEditor {
 	}
 
 	private int label(GuiGraphicsExtractor g, String text, int x, int y) {
-		g.text(font(), text, x, y + 5, UiStyle.CLAY_DARK, false);
+		g.text(font(), text, x, y + 5, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		return LABEL_W;
 	}
 
@@ -378,7 +378,7 @@ final class DesignEditor {
 			int sw = Button.width(font(), sv);
 			int cnw = Button.width(font(), cn);
 			int fx = x + 4 + font().width("Name") + 6;
-			g.text(font(), "Name", x + 4, by + 6, UiStyle.CLAY_DARK, false);
+			g.text(font(), "Name", x + 4, by + 6, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			int fw = Math.max(60, x + w - 4 - sw - 4 - cnw - 6 - fx);
 			s.textField(g, Focus.SAVE_NAME, saveNameView, saveName, fx, by + 1, fw, new TextFieldView.Style(null, 0, nameOf(base) + " mix", null, null, 0, 1));
 			Button save = new Button(saving ? "Saving…" : sv, this::confirmSave).primary(true);
@@ -396,7 +396,7 @@ final class DesignEditor {
 			String sv = "Save as style…";
 			int rw = Button.width(font(), rv);
 			int sw = Button.width(font(), sv);
-			g.text(font(), TextUtil.ellipsize(font(), "custom mix · based on " + nameOf(base), w - rw - sw - 20), x + 5, by + 6, UiStyle.CLAY_DARK, false);
+			g.text(font(), TextUtil.ellipsize(font(), "custom mix · based on " + nameOf(base), w - rw - sw - 20), x + 5, by + 6, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			Button revert = new Button(rv, sf::revert);
 			revert.draw(g, font(), x + w - 4 - sw - 4 - rw, by, rw, Button.H, mx, my(my));
 			s.control("style:revert", rv, revert, false);
@@ -493,7 +493,7 @@ final class DesignEditor {
 			n.draw(g, font(), cx, y, mx, my);
 			s.control("editor:mode:new", "New", n, !variant);
 		}
-		g.text(font(), TextUtil.ellipsize(font(), title, cx - x - 8), x, y + 5, UiStyle.CLAY_DARK, false);
+		g.text(font(), TextUtil.ellipsize(font(), title, cx - x - 8), x, y + 5, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 	}
 
 	/** A "saved draft" bar: Restore / Discard. Returns the y after (unchanged without a draft). */
@@ -916,7 +916,7 @@ final class DesignEditor {
 		if (critique) {
 			Chip c = new Chip(f.critique ? "Critique and revise: on" : "Critique and revise: off", cToggle).selected(f.critique);
 			int cx = x + chip(g, "design:critique", c, x, y, mx, my) + 6;
-			g.text(font(), "Revisions", cx, y + 5, f.critique ? UiStyle.CLAY_DARK : UiStyle.mutedText(), false);
+			g.text(font(), "Revisions", cx, y + 5, f.critique ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiStyle.mutedText(), false);
 			cx += font().width("Revisions") + 4;
 			for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
 				Chip r = new Chip(Integer.toString(n), () -> f.maxRevisions = n).selected(f.critique && f.maxRevisions == n);
