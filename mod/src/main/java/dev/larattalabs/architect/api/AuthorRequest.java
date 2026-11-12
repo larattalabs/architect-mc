@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * (7c) A request to {@link Regions#authorProgram}: an authoring session that writes a region program for a part no catalogue kind
  * fits (docs/CONTRACT.md "Phase 7c" §2, slice AU, S-7c-5). The program is installed world-local, owned by the caller, and a plan names
  * it as {@code program.authored {id, sha}}; the approved artifact freezes its source by sha ({@link Reason#AUTHORED_STALE} if it moves).
- * Frozen by the 7c foundation; built by slice AU (feature {@code "programAuthoring"}). Since NEXT.
+ * Frozen by the 7c foundation; built by slice AU (feature {@code "programAuthoring"}). Since 1.55.0.
  *
  * @param brief what the program is to make
  * @param claim the claim it is authored for

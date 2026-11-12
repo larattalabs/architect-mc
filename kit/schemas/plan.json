@@ -79,7 +79,7 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi: the API version at which the entry reached its current state and schemaVersion, always a real semver; a new or changed entry carries the branch's placeholder API version and the merge-time renumber restamps it, which tools/catalogue-since-check.mjs enforces), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 18,
+    "catalogueVersion": 19,
     "entries": [
       { "id": "zone.standard", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "1.29.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
@@ -90,7 +90,7 @@
       { "id": "program.crater_works", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled crater_works program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.rift_city", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "program.floating_islands", "sinceApi": "1.23.0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
-      { "id": "program.authored", "sinceApi": "NEXT", "schemaVersion": 0, "state": "reserved", "until": "AU", "draft": "#/$defs/program.authored", "note": "A region program written by Regions.authorProgram, named by {id, sha} and frozen into the approved artifact by sha (AUTHORED_STALE if it moves)." },
+      { "id": "program.authored", "sinceApi": "1.55.0", "schemaVersion": 0, "state": "reserved", "until": "AU", "draft": "#/$defs/program.authored", "note": "A region program written by Regions.authorProgram, named by {id, sha} and frozen into the approved artifact by sha (AUTHORED_STALE if it moves)." },
       { "id": "layout.street", "sinceApi": "1.30.0", "schemaVersion": 2, "state": "supported", "def": "#/$defs/program.lots", "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts." },
       { "id": "layout.ring", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: a closed street round an open hub, lots outside it facing in; central and landmark lots in the hub." },
       { "id": "layout.spiral", "sinceApi": "1.38.0", "schemaVersion": 1, "state": "supported", "note": "FL: an open street winding out from the hub (up to 3 turns), lots on its outer side; on a hill it climbs to the summit." },

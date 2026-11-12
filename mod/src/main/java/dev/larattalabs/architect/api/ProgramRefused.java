@@ -21,7 +21,7 @@ import java.util.List;
  * {@code not_given}: a variant of an entry that was not made by {@link Designs#fromProgram} (its variants are
  * {@link Library#makeVariant}).</li>
  * </ul>
- * Since NEXT.
+ * Since 1.55.0.
  */
 public class ProgramRefused extends ArchitectRefused {
 	private final CheckReport report;

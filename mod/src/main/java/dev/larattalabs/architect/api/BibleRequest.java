@@ -34,7 +34,7 @@ public record BibleRequest(String prompt, @Nullable String name, @Nullable Strin
 	@Nullable String opKey, @Nullable Rarity rarity) {
 	/**
 	 * (7c, slice SF) {@code ext[EXT_RELATED_TO]}: the settlement Style (its id) a zone Style derives from, sharing its core roles
-	 * (Style format 3, S-7c-3). Frozen by the 7c foundation. Since NEXT.
+	 * (Style format 3, S-7c-3). Frozen by the 7c foundation. Since 1.55.0.
 	 */
 	public static final String EXT_RELATED_TO = "architect_mc:relatedTo";
 

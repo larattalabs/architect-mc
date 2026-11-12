@@ -353,7 +353,7 @@ public interface Regions {
 	 * definition with every description (its supported def, or a reserved kind's draft; absent when the kind has none), and
 	 * {@code unknown}: the named ids the catalogue lacks, sorted. The compact plan/0 the plan writer reads ({@code plan/0#compact})
 	 * carries one line per kind; this answers the rest for the kinds a plan uses or a check answers. Synchronous, read from the mod
-	 * jar like {@link #planCatalogue()} (no sidecar, no claim); any thread; a fresh copy each call. Since NEXT.
+	 * jar like {@link #planCatalogue()} (no sidecar, no claim); any thread; a fresh copy each call. Since 1.55.0.
 	 */
 	default com.google.gson.JsonObject planCatalogue(Set<String> kinds) {
 		throw new UnsupportedOperationException("Regions.planCatalogue(kinds) needs Architect API NEXT (slice 7cF)");
@@ -364,7 +364,7 @@ public interface Regions {
 	 * structured job writes plan/0 parts from the brief, then {@link #checkPlan} and one repair round. Completes with a design id of
 	 * kind {@code settlement}, whose result holds {@code outcome} ({@code PICKED}, {@code COMPOSED} or {@code NO_PLAN}), {@code plan},
 	 * {@code check} and {@code cost}. For players and tests; Steward keeps its own plan writer. Built by slice CO (feature
-	 * {@code "compose"}); until then it throws. Since NEXT.
+	 * {@code "compose"}); until then it throws. Since 1.55.0.
 	 */
 	default CompletableFuture<String> compose(ComposeRequest request) {
 		throw new UnsupportedOperationException("Regions.compose needs Architect API NEXT (slice CO)");
@@ -374,7 +374,7 @@ public interface Regions {
 	 * (7c) Program authoring (docs/CONTRACT.md "Phase 7c" §2, slice AU, S-7c-5): an authoring session writes a region program on the
 	 * plan path only, checker-driven, at most 4 rounds. Completes with the authored program id; its result holds the outcome
 	 * ({@code AUTHORED} or {@code NOT_SHOWN}), the rounds, the checker findings and the cost. Runs under the caller's budget and the
-	 * player's approval. Built by slice AU (feature {@code "programAuthoring"}); until then it throws. Since NEXT.
+	 * player's approval. Built by slice AU (feature {@code "programAuthoring"}); until then it throws. Since 1.55.0.
 	 */
 	default CompletableFuture<String> authorProgram(AuthorRequest request) {
 		throw new UnsupportedOperationException("Regions.authorProgram needs Architect API NEXT (slice AU)");
@@ -402,7 +402,7 @@ public interface Regions {
 	 * (M5 QT, Steward's review change 1) {@link #quote} of an approved artifact, as {@link #realiseApproved} would realise it: its own plan,
 	 * with the artifact's lot entries and then {@code lotEntries} over them ({@link #checkPalette}'s merge). The same {@link Quote}, read-only,
 	 * $0: no pin, no retention touch, no key. An unknown or removed artifact refuses {@link Reason#ARTIFACT_UNAPPROVED}; otherwise as
-	 * {@link #quote}. Server thread. Since NEXT, feature {@code "quote"}.
+	 * {@link #quote}. Server thread. Since 1.55.0, feature {@code "quote"}.
 	 */
 	default CompletableFuture<Quote> quoteApproved(String artifactSha, java.util.Map<String, String> lotEntries) {
 		throw new UnsupportedOperationException("Regions.quoteApproved needs Architect API NEXT");

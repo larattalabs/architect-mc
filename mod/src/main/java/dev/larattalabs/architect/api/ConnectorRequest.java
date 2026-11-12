@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (7c) A request to {@link Sites#placeConnector}: a single 7a connector outside any region, between two points a player marks (or from
  * a site house's port to ground) (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1). Frozen by the 7c foundation; built by slice
- * CX (feature {@code "placeConnector"}). Since NEXT.
+ * CX (feature {@code "placeConnector"}). Since 1.55.0.
  *
  * @param kind the connector's plan/0 kind, such as {@code rope_bridge}, {@code ladder}, {@code catwalk}, {@code rock_stair}
  * @param from the first end (world cell)

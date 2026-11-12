@@ -112,13 +112,13 @@ package dev.larattalabs.architect.api;
  * {@code fit:wrap_trunk}), never free text only. Fall back to a paid adaptation or an original.</li>
  * <li>{@code NO_LINK} (7b, since 1.53.0): {@link Regions#realiseApproved} of a plan with site lots: a link can't reach a design's port;
  * checked before any write, so nothing was placed. {@link ArchitectRefused#detail()} is {@code {lot, port}} as JSON.</li>
- * <li>{@code PROGRAM_REFUSED} (M5 GP, since NEXT): {@link Designs#fromProgram} or {@link Designs#variant}: the caller's program did not
+ * <li>{@code PROGRAM_REFUSED} (M5 GP, since 1.55.0): {@link Designs#fromProgram} or {@link Designs#variant}: the caller's program did not
  * build or did not pass the checker; the exception is a {@link ProgramRefused}, its {@link ProgramRefused#report()} the checker's typed
  * findings and {@link ArchitectRefused#detail()} the first finding's rule (see {@link ProgramRefused}). Nothing was installed.</li>
- * <li>{@code JOINT_MISMATCH} (7c, since NEXT): placing a composite entry ({@link CompositeInfo}): a joint is unmatched (a joint port
+ * <li>{@code JOINT_MISMATCH} (7c, since 1.55.0): placing a composite entry ({@link CompositeInfo}): a joint is unmatched (a joint port
  * with no partner) or mismatched (not the same cell boundary, not opposite facings, or another width or height); the message names the
  * module and the port. Nothing is placed. Answered from slice CM-b.</li>
- * <li>{@code AUTHORED_STALE} (7c, since NEXT): an approved artifact names an authored program ({@code program.authored {id, sha}})
+ * <li>{@code AUTHORED_STALE} (7c, since 1.55.0): an approved artifact names an authored program ({@code program.authored {id, sha}})
  * whose installed source no longer has the approved sha; {@link ArchitectRefused#detail()} is the program id. Answered from slice
  * AU.</li>
  * </ul>

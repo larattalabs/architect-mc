@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (M5 QT, Steward's S-M5-7) A read-only, $0 quote of what a survival realise of a plan takes from its owner's stockpile
  * ({@link Regions#quote}, {@link Regions#quoteApproved}): the whole operation's bill per item, in the plan check's {@code cost.bom} shape,
- * with every bound lot entry in it. Nothing is consumed, reserved or written. Since NEXT.
+ * with every bound lot entry in it. Nothing is consumed, reserved or written. Since 1.55.0.
  *
  * <p>{@code bomParts} names each piece the bill sums, as the plan check's {@code cost.bomParts} does: {@code tiles:<group>} (the region's paid
  * cells of that target group, over the plan survey: the kit's own bill), {@code lot:<lot>} (the bound entry's construction bill at the fit the

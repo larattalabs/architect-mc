@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (7c) A request to {@link Regions#compose}: the standalone composer (docs/CONTRACT.md "Phase 7c" §2, slice CO, S-7c-2). For players
  * and tests with no Steward; Steward's own plan writer keeps composing plan/0. Frozen by the 7c foundation; built by slice CO
- * (feature {@code "compose"}). Since NEXT.
+ * (feature {@code "compose"}). Since 1.55.0.
  *
  * @param brief the one-line brief the settlement is composed from
  * @param claim the claim the plan is composed over

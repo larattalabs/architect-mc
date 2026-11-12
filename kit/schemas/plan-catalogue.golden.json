@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 18,
- "api": "1.54.0",
- "kitVersion": "0.56.0",
+ "catalogueVersion": 19,
+ "api": "1.55.0",
+ "kitVersion": "0.57.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -68,7 +68,7 @@
   },
   {
    "id": "program.authored",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.55.0",
    "schemaVersion": 0,
    "state": "reserved",
    "until": "AU",

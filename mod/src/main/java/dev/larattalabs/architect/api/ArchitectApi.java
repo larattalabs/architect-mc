@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.54.0";
+	String VERSION = "1.55.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -218,9 +218,9 @@ public interface ArchitectApi {
 	 * {@link Survey#site} and {@link Regions#affordances} work. (7b DS, since 1.53.0) {@code "siteDesign"} is advertised when the helper
 	 * designs into sites (its {@code site.design}): {@link DesignRequest#site()} on a design, a group item or an estimate,
 	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
-	 * (M5 GP, since NEXT) {@code "givenPrograms"} is advertised when the helper runs callers' kit programs (its {@code design.program}):
+	 * (M5 GP, since 1.55.0) {@code "givenPrograms"} is advertised when the helper runs callers' kit programs (its {@code design.program}):
 	 * {@link Designs#fromProgram}, {@link Designs#variant} and {@link Designs#variantByKey}.
-	 * (7c, since NEXT) Names reserved for phase 7c (composition), advertised only by the slice that makes each work, never by the
+	 * (7c, since 1.55.0) Names reserved for phase 7c (composition), advertised only by the slice that makes each work, never by the
 	 * foundation (docs/CONTRACT.md "Phase 7c" §2): {@code "bigForms"} (BF: form.hollow_mountain, form.crater, form.floating_island),
 	 * {@code "hiddenRooms"} (HR: form.hidden_room and the artifact's secrets), {@code "suspendedBuilds"} (US: rule.suspended),
 	 * {@code "aqueduct"} (AQ: channel.aqueduct), {@code "regionM15"} (RM), {@code "styleFormat3"} (SF), {@code "scenarioTemplates"}

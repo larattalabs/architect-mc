@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * entry's {@code ext} under {@link #EXT_KEY}, so {@link Library.Entry} gains no component; read with {@link #of(Library.Entry)}. The
  * module entries are hidden from the Library. A composite is one entry and one group item (Steward's {@code itemKey == lotId} binding
  * holds). Frozen by the 7c foundation; written by slice CM-b (feature {@code "composites"}), which also refuses
- * {@link Reason#JOINT_MISMATCH}. Since NEXT.
+ * {@link Reason#JOINT_MISMATCH}. Since 1.55.0.
  *
  * @param moduleEntryIds the module entries, in support order (a module that rests on another follows it)
  * @param joints the joints between modules
@@ -34,7 +34,7 @@ public record CompositeInfo(List<String> moduleEntryIds, List<Joint> joints, Bou
 
 	/**
 	 * One joint: a pair of {@code architect:joint} ports, one on each module, at the same cell boundary with opposite facings and the
-	 * same width and height (the geometry is the ports' own, in each module's entry). Since NEXT.
+	 * same width and height (the geometry is the ports' own, in each module's entry). Since 1.55.0.
 	 *
 	 * @param fromModule the first module's entry id (one of {@link #moduleEntryIds()})
 	 * @param fromPort the first module's port name

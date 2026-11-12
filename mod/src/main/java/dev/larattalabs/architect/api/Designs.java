@@ -320,13 +320,13 @@ public interface Designs {
 	 * player's): the same key and body answers the first one's entry, also after a restart (a restart resumes one still running);
 	 * another body under it fails {@link Reason#OP_KEY_CONFLICT}. Completes on the server thread with the new entry's id once the library
 	 * has loaded it, or fails {@link ProgramRefused} ({@link Reason#PROGRAM_REFUSED}: the checker's typed findings and why, see there).
-	 * Needs a helper with {@code "givenPrograms"}. Since NEXT.
+	 * Needs a helper with {@code "givenPrograms"}. Since 1.55.0.
 	 */
 	default CompletableFuture<String> fromProgram(String source, com.google.gson.JsonObject params, @Nullable BiblePin bible, String opKey) {
 		return fromProgram(source, params, bible, opKey, null);
 	}
 
-	/** {@link #fromProgram(String, com.google.gson.JsonObject, BiblePin, String)} under an owner's key scope. Since NEXT. */
+	/** {@link #fromProgram(String, com.google.gson.JsonObject, BiblePin, String)} under an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<String> fromProgram(String source, com.google.gson.JsonObject params, @Nullable BiblePin bible, String opKey, @Nullable String owner) {
 		throw new UnsupportedOperationException("Designs.fromProgram needs Architect API NEXT (slice GP)");
 	}
@@ -347,14 +347,14 @@ public interface Designs {
 	 * <p>{@code opKey} keys it (owner-scoped), as {@link #fromProgram}; {@link #variantByKey} finds it again. Fails
 	 * {@link ProgramRefused} as {@link #fromProgram}, also with {@code not_given} (the entry is not a given program) and
 	 * {@code program_stale} (its kept source's sha is not the recorded one); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry.
-	 * {@link Library#makeVariant} is unchanged. Needs {@code "givenPrograms"}. Since NEXT.
+	 * {@link Library#makeVariant} is unchanged. Needs {@code "givenPrograms"}. Since 1.55.0.
 	 */
 	default CompletableFuture<String> variant(String entryId, com.google.gson.JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved,
 		String opKey) {
 		return variant(entryId, params, bible, reserved, opKey, null);
 	}
 
-	/** {@link #variant(String, com.google.gson.JsonObject, BiblePin, DesignRequest.Reserved, String)} under an owner's key scope. Since NEXT. */
+	/** {@link #variant(String, com.google.gson.JsonObject, BiblePin, DesignRequest.Reserved, String)} under an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<String> variant(String entryId, com.google.gson.JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved,
 		String opKey, @Nullable String owner) {
 		throw new UnsupportedOperationException("Designs.variant needs Architect API NEXT (slice GP)");
@@ -364,13 +364,13 @@ public interface Designs {
 	 * (M5 GP) The keyed variant made under {@code opKey} (the player's scope), from the helper's persisted operation (also after a
 	 * restart): empty when this key never made one; the entry id once it is installed and loaded (a running one is waited for, as the
 	 * call that made it); fails as that call did ({@link ProgramRefused}) when it was refused. Fails {@link ArchitectRefused}
-	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper can't be reached (never "empty" then). Needs {@code "givenPrograms"}. Since NEXT.
+	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper can't be reached (never "empty" then). Needs {@code "givenPrograms"}. Since 1.55.0.
 	 */
 	default CompletableFuture<Optional<String>> variantByKey(String opKey) {
 		return variantByKey(null, opKey);
 	}
 
-	/** {@link #variantByKey(String)} in an owner's key scope. Since NEXT. */
+	/** {@link #variantByKey(String)} in an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<Optional<String>> variantByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Designs.variantByKey needs Architect API NEXT (slice GP)");
 	}
