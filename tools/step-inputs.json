@@ -91132,6 +91132,7 @@
     "tools/lib/scenario-route.mjs",
     "tools/lib/scenario-s2.mjs",
     "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-sb.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
@@ -91178,8 +91179,8 @@
      "expr": "K('region/preview.mjs'))"
     },
     {
-     "from": "tools/lib/realised-virtual.mjs",
-     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "path.join(root, 'kit', p))"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -91188,6 +91189,10 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     }
    ],
    "env": [
@@ -101463,6 +101468,7 @@
     "tools/lib/scenario-route.mjs",
     "tools/lib/scenario-s2.mjs",
     "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-sb.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
@@ -101509,8 +101515,8 @@
      "expr": "K('region/preview.mjs'))"
     },
     {
-     "from": "tools/lib/realised-virtual.mjs",
-     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "path.join(root, 'kit', p))"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -101519,6 +101525,10 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     },
     {
      "from": "kit/build.mjs",
@@ -101858,6 +101868,7 @@
     "tools/lib/scenario-route.mjs",
     "tools/lib/scenario-s2.mjs",
     "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-sb.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
@@ -101899,8 +101910,8 @@
      "expr": "K('region/preview.mjs'))"
     },
     {
-     "from": "tools/lib/realised-virtual.mjs",
-     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "path.join(root, 'kit', p))"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -101909,6 +101920,10 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     },
     {
      "from": "kit/build.mjs",
@@ -102238,6 +102253,7 @@
     "tools/lib/scenario-route.mjs",
     "tools/lib/scenario-s2.mjs",
     "tools/lib/scenario-s3.mjs",
+    "tools/lib/scenario-sb.mjs",
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
@@ -102284,8 +102300,8 @@
      "expr": "K('region/preview.mjs'))"
     },
     {
-     "from": "tools/lib/realised-virtual.mjs",
-     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "path.join(root, 'kit', p))"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -102294,6 +102310,10 @@
     {
      "from": "tools/lib/corpus-plan-worker.mjs",
      "expr": "j.module)"
+    },
+    {
+     "from": "tools/lib/realised-virtual.mjs",
+     "expr": "pathToFileURL(path.join(KIT, rel)).href)"
     },
     {
      "from": "kit/build.mjs",
