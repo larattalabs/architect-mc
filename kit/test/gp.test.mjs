@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildDesign, loadDesign, UsageError } from '../build.mjs';
 import { parseReserved, frameToTemplate } from '../lib/reserved.mjs';
 
@@ -14,10 +14,11 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'gp', 'gp_crop_field.mjs'), 'utf8');
 const RESERVED = parseReserved({ front: 'south', size: [11, 11], cells: [[5, -1, 5], [5, 0, 5]] });
 
-/** A design dir one level under the kit (its `../lib/` imports resolve to kit/lib), removed after. */
+/** A temp design dir (outside the kit: other runs copy it), its `../lib/` imports pointed at this kit's lib; removed after. */
 function designDir(files) {
-  const dir = fs.mkdtempSync(path.join(KIT, '.gp-test-'));
-  for (const [id, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, `${id}.mjs`), src);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gp-test-'));
+  const lib = pathToFileURL(path.join(KIT, 'lib')).href;
+  for (const [id, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, `${id}.mjs`), src.replaceAll("'../lib/", `'${lib}/`));
   return dir;
 }
 const out = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gp-out-'));

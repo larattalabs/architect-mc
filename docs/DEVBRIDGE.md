@@ -740,3 +740,8 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `infra` or `site`, and its ext keys that are not `architect_mc:*`: the realise's ext carried onto every item). `dev.region.plan` and
   `dev.region.realise` take `ext` (the plan's and the realise's). `dev.journal.killAt` takes RD3 (a revision's road, a street extension,
   after its first cell; `RD3+save` with the chunks saved first).
+- **2026-11-12 (M5 slice GP):** new (`SliceGpDev`, generated headless too) `dev.gp.fromProgram {source, params?, bible?: {id, version?}, opKey,
+  owner?}` (`Designs.fromProgram` -> `{entryId, ms}`), `dev.gp.variant {entryId, params?, bible?, reserved?: {front, size: [w, d], cells:
+  [[u, y, v]...]}, opKey, owner?}` (`Designs.variant` -> `{entryId, ms}`) and `dev.gp.byKey {opKey, owner?}` (`Designs.variantByKey` ->
+  `{found, entryId?}`). A refusal answers `{refused: "<REASON>: message", detail}` and, for a `ProgramRefused`, `findings: [{rule, severity,
+  message}]`. Driven by `tools/gatem5gp.mjs`.

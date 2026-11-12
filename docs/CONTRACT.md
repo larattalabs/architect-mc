@@ -28750,3 +28750,63 @@ undo then skips it). 3. Not climbable (it is look, not a working scaffold; nobod
 | `node tools/step-inputs.mjs check` | clean (333 steps) |
 | in game, run 20261112-061109-change at 034060d8 | **PASS** `so-survival` 55 ok / 0 FAIL: SO's 48 checks on the three houses, plus the no-dupe pass on the cliff house (184 `architect_mc:scaffold` cells): a cell mined by hand drops nothing and is gone; a powered piston against a cell leaves it standing and stays retracted; TNT at a cell destroys it with no scaffolding item; the deconstruct leaves no scaffolding item over the whole site and no scaffold cell |
 | gate-verifier (strict) | **PASS** at 8acf5f8f: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-063726-change, 55 ok / 0 FAIL) and the three unit classes (forced past the test cache); reviewed the diff: every way off its cell yields no item (mining, explosions, pistons; no collapse, fall or tick; not flammable; water can't take it), SO's accounting unchanged, registration and the test's reflection contained, the new checks can fail. Minor: no positive control in game that vanilla scaffolding would drop (the unit test asserts its loot table); the no-dupe pass runs on one house; other breakers (an anvil, a creeper) take the same loot-table path |
+
+### Slice GP as built (branch `slice/GP` off `origin/main` f1c78b06, v0.61.0; versions NEXT; $0; recorded 2026-11-12)
+
+Steward's S-M5-1: a caller's own kit program installed as a library entry at $0, and keyed variants of it with other params, a Style and the
+lot's reserved cells, found again by key after a restart. Feature `"givenPrograms"` (the helper's `design.program`). API additive only.
+
+**API (exact signatures; all `default` methods that throw on an older implementation, `Since NEXT`):**
+- `Designs.fromProgram(String source, JsonObject params, @Nullable BiblePin bible, String opKey)` and
+  `fromProgram(..., String opKey, @Nullable String owner)` -> `CompletableFuture<String>` (the new entry id, once the library loaded it).
+- `Designs.variant(String entryId, JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved, String opKey)`
+  and the same with `@Nullable String owner` last -> `CompletableFuture<String>`.
+- `Designs.variantByKey(String opKey)` and `variantByKey(@Nullable String owner, String opKey)` -> `CompletableFuture<Optional<String>>`.
+- `Reason.PROGRAM_REFUSED` (appended last); `class ProgramRefused extends ArchitectRefused` with `CheckReport report()` (the checker's
+  findings as `CheckReport.Finding(rule, "error", null, null, 1, [], message)`); `Limits.PROGRAM_SOURCE_MAX` 262144,
+  `Limits.PROGRAM_PARAMS_MAX` 16384. `Library.makeVariant` is unchanged.
+
+**How it works:**
+- **The program** is a kit design module as `kit/designs/*.mjs` are written: `export const id` (the entry id's base), `export const params`
+  (**its parameter schema**: the kit's int/bool/enum declarations, so there is no separate schema argument), a default export
+  `build({palette, reserved, ...values})` returning a Blueprint, relative kit imports. Its own `type` and `profile` stand: no request type,
+  profile or `--max` is imposed (a farm meets no house profile). `params` are its `--values`; `bible` its `--bible` (`version 0`: the
+  latest; null: the program's own default palette; for a variant, null keeps the entry's own Style).
+- **The sandbox:** the build is `kit/build.mjs` of a fresh pristine-kit copy in a scratch dir, in a child with a minimal env (as every
+  design check), and **under the region plan's sandbox**: Node's permission model reading and writing only the scratch dir, no network
+  (the plan runner's `NO_NETWORK` preload), no child processes, the plan's heap (`regionPlanHeapMb`) and time (`regionPlanMs`). Then the
+  kit's renders. A program reading `/etc/hosts` is refused `program` (the permission error in its finding).
+- **Reserved cells:** `kit/build.mjs` now hands `--reserved` to the design as its `reserved` option (lot frame, `kit/lib/reserved.mjs`),
+  so a module program leaves those cells open (`frameToTemplate` maps one); the checker's reserved rule still refuses a program that
+  writes one. This is the channel MODULES §3.1's farm needs for IRR's `irrigation.lotCells`.
+- **The entry** records `givenProgram {sha, opKey, owner?}` (sha256 of the caller's exact source, 7c AU's rule), keeps the exact source as
+  `program/source.mjs` (the `.mjs` beside it is the id-rewritten copy that builds), its `values`, `bible` and, for a variant, `reserved`,
+  `variantOf`, the source's `ext` and `derivation {source, sourceVersion, kind: "variant", recipe {values, bible?, reserved?, programSha,
+  opKey}}`. A variant re-reads `program/source.mjs`, refuses `program_stale` when its sha is not the recorded one, and records the same sha.
+  Ids: `<declared id>`, then `_2`...; a variant `<entryId>_kv`, `_kv_2`...
+- **Keys and restarts:** one persisted operation per (owner, kind, opKey) in `<data>/programs/<id>.json` with the body's hash (DS's site
+  variants' pattern): the same key and body answers the first operation in any state, another body `OP_KEY_CONFLICT`; the ack carries the
+  operation and a running one reports through `follow.upsert`; a restart resumes a running one; a kill between the install and the record
+  finds the installed entry by its `programOp` (nothing installed twice). `variantByKey` reads the operation file (empty: never made).
+- **Refusals** (`ProgramRefused`, `detail`): a checker refusal names its first finding's rule (`reserved`, `size`, `sidecar`, `structure`,
+  `blocks`, `anchors`, `massing`, `check`), classified from the checker's line prefixes (the kit's errors are plain lines, unchanged);
+  `params`/`palette` (values outside the schema, a bible the program can't take); `program` (threw, no default export, too long, or
+  reached outside the sandbox); `timeout`; `sandbox` (no permission model); `program_stale`; `not_given` (a variant of an entry not made by
+  `fromProgram`). An unknown entry is `UNKNOWN_BLUEPRINT`; an unknown bible a plain refusal before anything runs.
+
+**Readings:**
+1. **The schema is the program's own `export const params`** (the kit's convention), not a separate argument: a second copy could drift.
+2. **`variant` is for given-program entries only** (`not_given` otherwise): a Claude-written entry's variants stay `makeVariant`, which
+   runs outside the sandbox; a keyed variant always runs sandboxed.
+3. **Owner overloads** beside the contract's signatures: every other keyed call (`designByKey`, `groupByKey`, site variants on the wire) is
+   owner-scoped, and Steward's groups carry an owner. The contract's forms are the player's scope.
+4. **`variantByKey` covers variants only**; a `fromProgram` is found again by calling it again with the same key and body (Steward holds
+   the source).
+5. **Reserved is not a size limit:** the variant's box is the program's; the reserved object's lot size only places the cells.
+6. **Time limit:** the plan's `regionPlanMs` (30 s default) bounds one build; a module build takes about a second.
+
+**Steward RC areas** (with QT): `Designs.fromProgram`/`variant`/`variantByKey` and `ProgramRefused` (new); the kit's `build.mjs` now gives
+every design its `reserved` option when `--reserved` is passed (Claude-written lot designs too; a design that ignores it is unchanged);
+the helper's new messages `design.fromProgram`, `design.variant`, `design.variantByKey` and feature `design.program`.
+
+**Checks** ($0): see the table below.

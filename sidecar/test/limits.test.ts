@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import * as P from '../src/protocol.js';
+import { PROGRAM_PARAMS_MAX, PROGRAM_SOURCE_MAX } from '../src/programs.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const LIMITS = path.resolve(here, '..', '..', 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Limits.java');
@@ -47,6 +48,9 @@ function constantOf(p: string): string | null {
     [/^JobSpec\.systemRefs\[\]$/, 'JOB_SYSTEM_REF_MAX'],
     [/^JobSpec\./, null],
     [/^MassingRedirectMsg\.id$/, null],
+    // (M5 GP) a given program's source; its envelope id is not a request field
+    [/^DesignFromProgramMsg\.id$/, null],
+    [/^DesignFromProgramMsg\.source$/, 'PROGRAM_SOURCE_MAX'],
     [/\.redirect\.notes$|^MassingRedirectMsg\.notes$/, 'REDIRECT_NOTES_MAX'],
     [/^PolishSpec\.target\.notes$/, 'POLISH_NOTES_MAX'],
     [/^PolishSpec\.target\.issues$/, 'POLISH_ISSUES_MAX'],
@@ -93,7 +97,7 @@ function constantOf(p: string): string | null {
   return 'UNMAPPED';
 }
 
-const SCHEMAS = { DesignRequest: P.DesignRequest, GroupRequest: P.GroupRequest, BibleRequest: P.BibleRequest, CritiqueSpec: P.CritiqueSpec, PolishSpec: P.PolishSpec, MassingRedirectMsg: P.MassingRedirectMsg, JobSpec: P.JobSpec } as const;
+const SCHEMAS = { DesignRequest: P.DesignRequest, GroupRequest: P.GroupRequest, BibleRequest: P.BibleRequest, CritiqueSpec: P.CritiqueSpec, PolishSpec: P.PolishSpec, MassingRedirectMsg: P.MassingRedirectMsg, JobSpec: P.JobSpec, DesignFromProgramMsg: P.DesignFromProgramMsg } as const;
 
 describe('Limits.java against the zod bounds (6c 0c §5)', () => {
   const { ints, patterns } = javaLimits();
@@ -120,7 +124,13 @@ describe('Limits.java against the zod bounds (6c 0c §5)', () => {
   it('every Limits constant is used by a bound (no stale constant), but for the custom-refined ones', () => {
     const used = new Set(all.map((b) => constantOf(b.path)));
     // (6c B) the brush's radius and strength are the mod's own bounds (no sidecar message carries them; kit/lib/region/brush.mjs BRUSH_LIMITS, held equal by kit/test/brush-b.test.mjs)
-    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'JOB_SYSTEM_AGENT_MAX', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX', 'PALETTE_ROLES_MAX']);
+    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'JOB_SYSTEM_AGENT_MAX', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX', 'PALETTE_ROLES_MAX', 'PROGRAM_PARAMS_MAX']);
+    // (M5 GP) PROGRAM_PARAMS_MAX is the params record's refine (characters as JSON), and both equal the helper's own (programs.ts)
+    const at = (n: number) => ({ type: 'design.fromProgram', v: 1, source: 'export default function () {}', opKey: 'k', params: { notes: 'y'.repeat(n - '{"notes":""}'.length) } });
+    expect(P.DesignFromProgramMsg.safeParse(at(ints.get('PROGRAM_PARAMS_MAX')!)).success).toBe(true);
+    expect(P.DesignFromProgramMsg.safeParse(at(ints.get('PROGRAM_PARAMS_MAX')! + 1)).success).toBe(false);
+    expect(ints.get('PROGRAM_PARAMS_MAX')).toBe(PROGRAM_PARAMS_MAX);
+    expect(ints.get('PROGRAM_SOURCE_MAX')).toBe(PROGRAM_SOURCE_MAX);
     // (U1) PALETTE_ROLES_MAX is the roles record's refine (at most 64 roles)
     expect(P.Roles.safeParse(Object.fromEntries(Array.from({ length: ints.get('PALETTE_ROLES_MAX')! + 1 }, (_, i) => [`r${i}`, 'minecraft:stone']))).success).toBe(false);
     const stale = [...ints.keys()].filter((k) => !used.has(k) && !custom.has(k));
