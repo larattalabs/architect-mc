@@ -27317,3 +27317,73 @@ Steward: yes to S-7b-1, 2, 4, 6, 7 and 8; S-7b-3 yes with two asks; S-7b-5 chang
    PL/SO RC's survival flows will show it.
 
 §2's Reason row now appends, in order: `SITE_DRIFTED`, `KEEP_LOST`, `SITE_UNSUPPORTED`, `SITE_MISMATCH`, `SITE_UNFIT`, `NO_LINK`.
+
+### Slice 7bF as built (branch `slice/7bF` off main 228f775b; versions NEXT; $0, no client; recorded 2026-11-11)
+
+The foundation: shared types and API surface, frozen so SV, PL and AF can build on it in parallel. It changes no answer: every new
+method throws, a request carrying a site is refused, and every plan fixture plans as on main.
+
+**Frozen Java surface** (`dev.larattalabs.architect.api`, all `Since NEXT`):
+
+| Member | Signature |
+|---|---|
+| `enum FitMode` | `ON_PAD, CARVE_INTO, ATTACH_TO_CLIFF, SPAN, WRAP_TRUNK, SUSPEND`; `String wire()` (lowercase), `static Optional<FitMode> of(String)` |
+| `record SiteFrame` | `(BlockPos origin, Rotation rotation)`; `JsonObject wire()`, `static SiteFrame fromWire(JsonObject)`, `static String rotationWire(Rotation)`, `static Rotation rotationOf(String)` |
+| `record SitePort` | `(String name, String kind, BlockPos atDesign, Direction facing, int width, int height, @Nullable String edge)`; `WALK = "architect:walk"`, `DOOR = "door"`; `wire()`, `fromWire(JsonObject)` |
+| `record SiteSpec` | `(String volumeSha, String volumeBlobId, BoundingBox volume, FitMode fit, SiteFrame frame, List<BlockPos> keepCritical, List<SitePort> ports, @Nullable String lotId)`; `WIRE_KEY = "site"`, `MAX_KEEP_CRITICAL = 65536`, `MAX_PORTS = 16`, `MAX_PORT_SIZE = 16`, `ID` pattern; `List<String> problems()`, `JsonObject wire()`, `static SiteSpec fromWire(JsonObject)`, `static JsonObject box(BoundingBox)`, `static BoundingBox boxOf(JsonObject)` |
+| `record SiteSample` | `(Volume volume, List<Affordance> affordances, Optional<SiteFrame> proposed)` |
+| `record Affordance` | `(String id, Kind kind, BoundingBox box, List<BlockPos> anchors, @Nullable Direction normal, JsonObject metrics, double score)`; `enum Kind { CLIFF_FACE, LEDGE, OVERHANG, CAVE, TRUNK, CANOPY, SPIKE, WATER, GAP, PAD }` with `wire()` |
+| `record SiteBinding` | `(String volumeSha, FitMode fit, @Nullable String lotId, BoundingBox volume, @Nullable String regionPlanId)`; `EXT_KEY = "architect_mc:site"`; `static Optional<SiteBinding> of(Library.Entry)`, `static Optional<SiteBinding> ofExt(JsonObject)`, `static SiteBinding of(SiteSpec, String regionPlanId)`, `JsonObject wire()` |
+| `DesignRequest` | trailing `@Nullable SiteSpec site`; the 26-argument (1.52.0) constructor kept; `withSite(SiteSpec)`; every copy method carries `site` |
+| `PlaceRequest` | trailing `@Nullable SiteSpec site`; the 12-argument (PT) constructor kept; `withSite(SiteSpec)`; `withOverlap`/`withPathStyle`/`withConsent` carry it |
+| `LotSpec` | trailing `@Nullable SiteSpec site`; the 8-argument (1.8.0) constructor kept |
+| `Survey` | `default CompletableFuture<SiteSample> site(ServerLevel level, BoundingBox lot, FitMode fit, LoadPolicy load)`: throws until AF |
+| `Sites` | `default LotFit fitToSite(String blueprintId, SiteSpec site, FitOptions options)`: throws until PL |
+| `Designs` | `default CompletableFuture<String> siteVariant(String entryId, SiteSpec site, String opKey)`: throws until DS |
+| `Regions` | `default Optional<List<Affordance>> affordances(String planId)`: throws until AF (§2's "default accessor") |
+| `Reason` | appended after `NO_ROOM`: `SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK`, each documented with its detail (`SITE_UNFIT`: the failing check's id; `NO_LINK`: `{lot, port}` JSON) |
+| Features | none advertised; `ArchitectApi.features()` javadoc names `siteDesign`, `siteSurvey`, `siteLots`, `linkPass` as reserved for their slices (as 7a's foundation: each slice adds its own) |
+
+**Kit:** `kit/lib/siteFits.mjs` (a leaf, no imports): `FIT_IDS`, `FITS` (one row per fit: `terrain` clear/keep, `foundationFill`,
+`clearLeaves`, `approach` ground/port, `ports` (the fewest; span 2), `support` (`no_floating` or `fit:<id>`), `bears`, `keepCritical`
+(null, `host`, `hang`), `limits`), `fitOf`, `SITE_PORT_KINDS`, `SITE_PORT_FACINGS`, `SITE_ROTATIONS`, `SITE_LIMITS`, `SITE_KEY`,
+`SITE_BINDING_KEY`, `SITE_MARGIN` (8). `kit/schemas/site-spec.json` (the wire schema, bundled into the mod jar beside mask.json) and
+`kit/lib/siteSpec.mjs` `siteSpecProblems` (schema plus x-rules). `SiteSpec.fromWire` runs the same schema through `api.SpecSchema`,
+then `problems()`. Catalogue: `form.hidden_room` and `rule.suspended` `until: "7c"`, `sinceApi: "NEXT"`, notes naming N-7b-1
+(catalogueVersion left for the coordinator); `catalogue-pre7b.json` archived; waterfall's hollow deviation and notes say 7c.
+**The six site fixtures** `kit/test/fixtures/site/<id>/{volume.bin, site.json}` from `kit/tools/site-fixtures.mjs` (`--check`):
+`cliff_face` (attach_to_cliff), `tunnel_hill` (carve_into), `rift_site` (span, two ports), `grove` (on_pad, with a pond for the stilts
+example), `overhang` (suspend, four hang points, a `down` walk port) and `trunk` (wrap_trunk, its 260 lot logs keep-critical).
+
+**Readings chosen** (the contract was silent or the code disagreed; the smallest reading each time):
+1. **Fixtures are synthesized, not cut.** The 7bF gate runs no client, and `scenarios/sites/*` pin a seed, a claim and a 2.5D survey
+   sha, not a 3D volume; frozen volumes in artifacts are stored by blob sha and none covers these lots. So each fixture is an
+   ARVX v1 volume built deterministically by `site-fixtures.mjs`, shaped after its site's recorded geometry and placed at its
+   coordinates (gzip OS byte pinned, sha = ARVX sha). A slice needing the real land cuts it in game from the pinned seed.
+2. **A site before its slice is refused, never ignored:** `apiimpl/SiteGuards` throws `UnsupportedOperationException` (as the stub
+   defaults do) for `Designs.request`/`requestGroup`/`estimate` (until DS) and `Sites.place`/`check`/`queue` (until PL) when a
+   request carries a site, so nothing is designed or placed as a plain one. Each slice deletes its own guard.
+3. **Op-key hashes:** `BatchKeys.json` leaves out a null `SiteSpec` component, so a batch (or region request) hashed before 7b keeps
+   its body hash (D1's precedent for `beside`).
+4. **`SiteFrame`** is exactly a `PlaceRequest`'s `(origin, rotation)`: origin = the rotated template box's minimum corner; design
+   coordinates are the kit's (+x east, +z south, front south, the template's minimum corner at 0,0,0). Rotations on the wire are the
+   lowercase Minecraft names (as a site's own record).
+5. **`SiteSpec.keepCritical` is world cells; `SitePort.atDesign` is design cells.** `SiteSpec.volume` is the lot volume including
+   its margin (in every fixture, the frozen volume's box = the lot box plus 8). Port facings take `up`/`down`; width and height
+   1-16. Caps frozen in the spec, not `Limits` (a `Limits` constant without a sidecar bound fails sidecar's limits test; DS adds the
+   zod bounds and moves them there if it wants).
+6. **`SitePort.edge`** is the settlement graph edge id the port expects (null = any), as the link pass names it.
+7. **`Regions.affordances`** is a default on `Regions` (a record can't read its plan's JSON): `Optional.empty()` for an unknown plan.
+8. **`SiteBinding.lotId`/`regionPlanId` are nullable** (the standalone path has neither); `of(entry)` answers empty, never throws,
+   on a missing or malformed member. `SiteBinding` is written by PL/DS; the foundation only reads and writes its shape.
+9. **`SiteSample`** (Survey.site's answer) is in the foundation because the method's signature needs it.
+
+**Checks** (offline, $0, no client: the 7bF gate column is units, api-compat and the catalogue golden):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1118/1118 (f7b-foundation.test.mjs 5/5: the fit table against FitMode.java, the schema against the records, siteSpecProblems, the six fixtures regenerated byte for byte, the catalogue diff against catalogue-pre7b.json exactly the two ids; cl, f7a-foundation and gm-c leave the two 7bF ids to it) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1046 tests, 0 failures, 1 skipped (Api7bFTest 12/12: Reasons order, wires round-trip, the kit fixtures read and written equal through the shared schema, old constructors, copies carry the site, stubs throw "since NEXT", guards, null-site hash, no feature advertised) |
+| sidecar `npm ci && npm run check` | 811/811 (a first run beside the kit and mod builds failed simcosts' 120 s wall bar at 121 s, machine load; alone it passes) |
+| api-compat | clean: `--surface` of main 228f775b's own jar (2753 members) and of the 0.57.0 jar (2671); the 0.47.0 and 0.45.0 apitest jars (932 references each) |
+| `node tools/step-inputs.mjs check` | clean after `build` (unit-kit's closure gains f7b-foundation, the site fixtures and FitMode.java) |
