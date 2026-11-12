@@ -236,7 +236,7 @@ test('renders and written files are byte-stable (sha goldens; a Linux run reprod
     assert.deepEqual(x, fs.readFileSync(rb.files[v]), `${v}: two renders differ`);
     got.renders[`castle.${v}`] = sha(x);
   }
-  if (process.env.CM_A_WRITE_GOLDENS === '1') fs.writeFileSync(GOLDENS, `${JSON.stringify(got, null, 2)}\n`);
+  if (process.env.UPDATE_GOLDEN === '1') fs.writeFileSync(GOLDENS, `${JSON.stringify(got, null, 2)}\n`);
   assert.deepEqual(got, goldens, 'the composite output moved (kit/test/fixtures/cm-a.json)');
 });
 
