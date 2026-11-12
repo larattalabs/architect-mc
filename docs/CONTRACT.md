@@ -27914,3 +27914,79 @@ only).
 (the feature `siteDesign`, the volume sent from the world's frozen file, the entry's `SiteBinding`), `Designs.siteVariant` (the new entry, its
 SITE derivation and binding; `SITE_UNFIT` with a rule id, `SITE_UNSUPPORTED`; the opKey replay), `Designs.follow` of a SITE entry, the
 estimate kinds `site` and `adapted`, a massingFirst group with a site item refused. The PLAYBOOK's §7 is new (Steward's skill is its upstream).
+
+### Slice ST as built (branch `slice/ST` off main f2a90f2a, main 7c9179a6 merged; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+The standalone player path (§3 row 8, SETTLEMENTS §7.8) and the pin badge (N-7b-6), on 7bF's frozen surface (no 7bF signature changed; no
+API member added: the API package is untouched). Helper feature `site.standalone` added (protocol only); no API feature advertised.
+
+**The player's path:**
+- **The fit picker** (`client/placement/PlotMarker`, `PlotHud`): F cycles the fit while marking (Shift+F back): `on_pad` (every new plot's
+  default), `attach_to_cliff`, `carve_into`, `span`, `wrap_trunk`, `suspend`. The HUD names it in words ("attach to a cliff") and the keys
+  fit at GUI scale 4. **`on_pad` is today's plot exactly**: no sample, no site in the request.
+- **The sample** (a site fit, Enter on the second corner): the lot is the plot's rectangle from its ground row up to the height limit;
+  `SiteAnalysis.standalone` (Survey.site's own path: the lot + 8 frozen read-only to `architect/volumes/<sha>.bin`, uploaded, `site.analyse`
+  with `standalone: true`) answers the sample and the **whole `SiteSpec`**; a refusal (no such land at the plot, the clifftop above the
+  plot, no helper) goes back to the second corner with the reason in the HUD.
+- **The frame confirmed on the ghost**: the plot drawn with the frame's entrance side (brass) and its ports (brass cubes); Enter confirms,
+  Backspace re-marks, Esc leaves.
+- **The request carries the `SiteSpec`**: `DesignForm.site` -> `requestJson().site` (DesignRequest.site's wire); its volume's blob resolved by
+  DS's `SiteDesigns.resolve` (made public) on the integrated server first; massing-first is off for a site request (DS reading 2); a helper
+  without `site.design` refuses before sending.
+- **Placing a site-bound design** (`BuildPlacement.startOnSite`, Library "Place on its site", "Place on the plot" of a site design): the
+  ghost locked at the site's frame (rotate, nudge and unlock refused with a HUD note), drawn with the server's KEEP terrain and no ground
+  strip, its verdict and placement run inside `SiteFit.with(site)` and the record carries the binding (`SiteFit.withBinding`), as
+  `Sites.place` with `PlaceRequest.site` does.
+- **"The entrance opens onto a drop"** (`SiteFit.drops`, PL's site-check block and the client ghost): for a standalone site (no lot id, not
+  `on_pad`), each port facing a side whose world cell just outside it has no standable floor (that cell and the one above open, not a
+  fluid; the one below site-solid) gets a verdict note `the entrance opens onto a drop: port <name> faces <dir> at x,y,z ...`. A warning,
+  never a refusal.
+- **The pin badge (N-7b-6)**: `LibraryCard.pinnedFit` (the ext binding's fit, else the sidecar `site`'s); the card's badge `PINNED` (clay;
+  it wins over IMPORTED and VARIANT); the detail says "pinned to its site (<fit>)", Place becomes "Place on its site", and the ⋯ menu gets
+  **"Site variant here…"** (`client/design/SiteVariantHere`): plot marking with the fit locked to the entry's, sample, frame, then
+  `Designs.siteVariant(entryId, site, opKey)` ($0, DS) and the variant's ghost on the new site; a refusal is a toast with its Reason and
+  detail. A plain placement of a pinned entry from the client is refused ("pinned to its site: Place on its site, or make a site variant
+  here").
+
+**The standalone spec** (`kit/lib/siteStandalone.mjs` `standaloneSite(volume, {lot, fit, frame?, affordances?})`, CLI `affordances.mjs
+--standalone`): the frame from AF's `proposeFrame`, and one port and keep rule per fit, the 7bF fixtures' own rules written over the land
+(design frame; W x H x D): `attach_to_cliff` walk `walk_top` 2x2 north at `[floor((W-1)/2), top+1, 1]`; `carve_into` door `door_s` 1x2 south
+on the front ground row at the last solid cell before the front; `span` walk `walk_w`/`walk_e` 2x3 one above each rim at `z = floor((D-1)/2)`;
+`wrap_trunk` walk `walk_w` 2x2 west at `[0, max(2, ground+1), floor((D-1)/2)]`, keep = the lot's LOG cells; `suspend` walk `hatch` 1x1 down at
+`[floor(W/2), 0, floor(D/2)]`, keep = the first solid cell over the corners inset 2 (x) and 3 (z), which must be the row just above the lot.
+
+**Readings chosen** (the contract silent; the smallest reading):
+1. **`on_pad` sends no site**: an on_pad plot is today's request byte for byte (the standalone path only adds a site for the five site fits).
+2. **The ports and keep cells come from the kit**, not Java: `Survey.site` answers no ports, yet the sim's stand-ins (and any design into a
+   site) need them by name, so the helper's `site.analyse` gains an opt-in `standalone` member (feature `site.standalone`); AF's output is
+   unchanged without it (byte for byte, held by st.test). `Survey.site` (API) is unchanged; the client calls the internal
+   `SiteAnalysis.standalone` on the same path.
+3. **No lot id** on a standalone spec (it is what tells the drop warning and PL's port note that the way in is the player's).
+4. **The frame is confirmed, not edited**: no rotation of a proposed frame (the port rules ran on it); a wrong frame is re-marked.
+5. **N-7b-6 is enforced in the UI**: the client's placement and the Library; `/architect place` and the API (`Sites.place` without a site)
+   still place a pinned entry plainly, as PL left them (a server refusal would be an API behaviour change and an RC).
+6. **The pin badge is the word `PINNED`** (Minecraft's font has no pin glyph), and it wins over VARIANT (a site variant is pinned too).
+7. **The bundled fit examples are pinned** (their sidecar `site` is their 7bF fixture's): they place on their fixtures' frames or as site
+   variants, as PL's rule binds them.
+8. **Survival**: no survival-specific path; a site-bound design placed in a survival world goes through the same `Sites.place` (a
+   construction site) and gets SO's support order when SO merges. Gated in creative only.
+9. **The variant's plot starts at the source's height** (PgUp/PgDn change it; the gate passes the new lot's height).
+
+**Not covered by a unit or the gate:** the five other fits in game (their rules are held by st.test over the fixtures, where every fit
+example builds clean on its derived spec), survival placement of a standalone site house (SO's), and a real Claude design into a sampled
+site (PA).
+
+**Checks** ($0, sim only; branch head f2259458 before the main merge, units re-run after it):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1173/1173 (st.test.mjs 7/7: the six 7bF fixtures and DS's cliff_owned re-derive their specs bar the lot id, cliff_east gets its own walk_top and builds, every fit example builds with no error on its derived spec, a quarter-turned cliff, the refusals, the CLI) |
+| sidecar `npm ci && npm run check` | 832/832, 57 files; the bundle built (after the merge: site-analyse, site-design, jobs 42/42) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1069 tests, 0 failures, 1 skipped (ApiSTTest 4/4: the drop rule, turned frames, lots/vertical ports/pads skipped; the pin badge and its precedence; the standalone answer read with the uploaded blob, a reason, an old kit, another volume refused) |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 135/135 |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars; `--surface` of the 0.57.0 jar (2671 members) |
+| `node tools/step-inputs.mjs check` | clean (336 steps; st-unit, st-ingame entered) |
+| in game, run 20261112-060600-change at f2259458 (ports 8904/8905, `--out artifacts/gate-runs-st`) | **PASS** 3/3: `st-unit` 2/0; `st-ingame` 25/0 on a dev client (cliff_face and cliff_east built by /fill; the picker on attach_to_cliff; the sample to the fixture's own sha with its walk_top and no lot id; the frame confirmed; the sim's design bound and lot-sized with the PINNED badge; a plain placement refused; the ghost on the frame, rotate refused; the drop warning in the HUD and the verdict, gone with the land back; placed bound, verify 0, Remove exact by the volume's hash; Site variant here onto cliff_east: the locked picker, a SITE derivation placed bound and removed exact); `pl-ingame` 86/0 (impact: PL's verdict notes). Run 20261112-054857 failed on two harness bugs (st-unit's count; the variant plot's height) and was stopped by PID |
+
+**Gallery (glance, not awaited):** `artifacts/gate-runs-st/20261112-060600-change/gate7b-st/shots/`: `st-picker.png`, `st-picker-gui4.png`,
+`st-frame.png`, `st-ghost.png`, `st-drop-warning.png`, `st-placed.png`, `st-library-pin.png`.
