@@ -28080,6 +28080,7 @@ changed.
 | `node tools/step-inputs.mjs check` | clean (345 steps; slb-ingame new, chain 7bslb, impact rule "7b SL-b") |
 | before the fix | LP's run 20261112-084742-change: trees 24 apart, hut_a PLACED, hut_b `failed:SITE_DRIFTED`, the region PARTIAL |
 | run 20261112-104119-change at 52b914f5 | **PASS** 2/2: `slb-ingame` 16/0 (trees 24 apart, each site volume reaching the other lot's box; both lot orders, each lot placed second once: both placed, the region PLACED; region-first Remove E-flat 0; houses first: each lot back to its site, the walk standing 164/164, then Remove E-flat 0); `lp-remove` 13/0 (LP's removal orders unchanged) |
+| gate-verifier (strict: removal order, drift) | **PASS** at 8da4a575: re-ran `slb-ingame` 16/0 on 8910/8911 (run 20261112-105032-change); reviewed the scope (only a region site lot gets its group; SitesImpl's API path none), only the lot's own region group's cells left out (a stranger's change still drifts), KEEP_LOST unchanged, fail closed on an unreadable section; SiteFitOwnTest re-run. Residual, not blocking: the skip is by cell, so a player's edit of a cell the region already wrote is not seen as drift |
 
 **For the Steward RC:** two neighbouring site lots in one region now both place (an S5-like grove). A site whose margin another owner or
 a player changed still answers `SITE_DRIFTED`.
