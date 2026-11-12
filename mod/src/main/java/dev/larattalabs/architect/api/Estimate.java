@@ -43,9 +43,11 @@ public record Estimate(double usdLow, double usdHigh, double minutesLow, double 
 
 	/**
 	 * The kinds of an {@link EstimateRequest} estimate's lines ({@link #byKind}; since 1.10.0): its key is the line's
-	 * {@link Item#itemKey} too. New values are only ever appended.
+	 * {@link Item#itemKey} too. New values are only ever appended. {@code ADAPTED} is measured since NEXT (7b DS: a paid adaptation,
+	 * {@code versionOf} + {@code site}); {@code SITE} (since NEXT, 7b DS) is a group's site-aware items ({@link GroupRequest.Item}s whose
+	 * request carries a {@link DesignRequest#site}), designed in one pass at 1.3-2x a design until measured.
 	 */
-	public enum Kind { BIBLE, ORIGINAL, ADAPTED, COPY, SMALL, CHANGE }
+	public enum Kind { BIBLE, ORIGINAL, ADAPTED, COPY, SMALL, CHANGE, SITE }
 
 	/** The 1.6.0 constructor (no polish figures). */
 	public Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,

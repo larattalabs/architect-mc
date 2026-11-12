@@ -51,8 +51,13 @@ import org.jspecify.annotations.Nullable;
  *     keyed design is kept at least 30 days after it is final. See {@link Designs#designByKey}. A helper without
  *     {@code design.opKeys} refuses a keyed request (it would drop the key). Null = none
  * @param site (since NEXT, 7b) the lot's site ({@link SiteSpec}): the design is site-aware, of the site's fit, in its frame. Null (every
- *     older constructor) = a plain design. Designed by slice DS; until then a request with a site is refused
- *     ({@link UnsupportedOperationException}), never designed as a plain one
+ *     older constructor) = a plain design. With a site (slice DS, feature {@code "siteDesign"}) the template is exactly the lot box
+ *     (maxSize is not used), it is built and checked on the composite (the kit's site rules), the designer's scratch gets the site
+ *     (the frozen volume, site.json, four renders of the empty site) and BRIEF.md a "Site" section, and the installed entry carries
+ *     its {@link SiteBinding} in {@code ext}. The volume is sent from this world's frozen file (architect/volumes/&lt;sha&gt;.bin), else
+ *     by the spec's blob id. With {@link #versionOf()}: a paid adaptation of that entry to the site. A group item with a site is
+ *     designed in one pass: its group can't be massingFirst, and it has no count or copyOf (its site variants are
+ *     {@link Designs#siteVariant}). A versionOf of a site-bound entry without a site is built into the entry's own site
  *
  * <p>Binary compatibility (Steward's U1 review): every earlier canonical constructor stays as a secondary one (the 14-argument
  * 1.1.0 one Steward calls among them); a later change to this record keeps them all and adds its own.

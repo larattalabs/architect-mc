@@ -241,10 +241,12 @@ public interface Designs {
 	 * installs nothing. The install is compare-and-set: a copy whose head moved while it was built answers {@code head_moved}.
 	 * {@code opKey}: the same key returns the same result (also after a restart); another body under it fails
 	 * {@link Reason#OP_KEY_CONFLICT}. Fails {@link ArchitectRefused} {@link Reason#NOT_ALLOWED} for an entry that does not follow:
-	 * detail {@code until_7b} (a SITE entry), {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
+	 * detail {@code not_copy} (a VARIANT, a RESKIN or an entry derived from nothing),
 	 * {@code adopted} (a copy of an adopted entry); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. Needs a helper with
 	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
-	 * version. Since 1.51.0.
+	 * version. Since 1.51.0. (7b DS, since NEXT) A SITE entry follows too: the source's version re-run on the entry's own site, checked
+	 * on the composite (a site rule failing answers {@code check}, its message naming the rule); no variation bar and no frame check
+	 * (a site-bound entry places only in its site's frame). Before NEXT a SITE entry was refused {@code until_7b}.
 	 */
 	default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion, @Nullable String opKey) {
 		throw new UnsupportedOperationException("Designs.follow needs Architect API NEXT");
@@ -285,8 +287,12 @@ public interface Designs {
 	 * installed directly in the library (no group, no approval: its approval is the source's). Idempotent per {@code opKey}: the same
 	 * key and body answers the first variant's entry id. Completes with the new entry's id, or exceptionally with
 	 * {@link ArchitectRefused}: {@link Reason#SITE_UNFIT} when the re-run fails a site check ({@link ArchitectRefused#detail()} names the
-	 * check), {@link Reason#SITE_UNSUPPORTED} when the source has no program to re-run (an original Claude design). Built by slice DS
-	 * (feature {@code "siteDesign"}); until then it throws. Since NEXT.
+	 * check: one of the kit's site rule ids, {@code site_bound} when the program can't be built into this site at all, e.g. another
+	 * fit), {@link Reason#SITE_UNSUPPORTED} when the source has no program to re-run (detail {@code no_program}: an import or an entry
+	 * without its source) or a program that is not site-aware (detail {@code not_site_aware}: it declares no fit);
+	 * {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry. The key is scoped by the player's owner (none). The new entry copies the
+	 * source's values, palette, bible, profile and ext, its request with the new site, and keeps the site's files. Built by slice DS
+	 * (feature {@code "siteDesign"}). Since NEXT.
 	 */
 	default CompletableFuture<String> siteVariant(String entryId, SiteSpec site, String opKey) {
 		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since NEXT (slice DS)");

@@ -215,7 +215,9 @@ public interface ArchitectApi {
 	 * {@link DesignRequest#site()}, {@link PlaceRequest#site()}, fitToSite, siteVariant), {@code "siteSurvey"} (Survey.site and a
 	 * plan's affordances), {@code "siteLots"} ({@link LotSpec#site()}) and {@code "linkPass"} (links to design ports at realise).
 	 * (7b AF, since NEXT) {@code "siteSurvey"} is advertised when the helper has the site analysis (its {@code site.analyse}):
-	 * {@link Survey#site} and {@link Regions#affordances} work.
+	 * {@link Survey#site} and {@link Regions#affordances} work. (7b DS, since NEXT) {@code "siteDesign"} is advertised when the helper
+	 * designs into sites (its {@code site.design}): {@link DesignRequest#site()} on a design, a group item or an estimate,
+	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
 	 */
 	Set<String> features();
 }
