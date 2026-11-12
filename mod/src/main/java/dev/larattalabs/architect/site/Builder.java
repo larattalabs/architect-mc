@@ -906,19 +906,7 @@ public final class Builder {
 		Site probe = new Site(id, bp.id(), "none", built.box(), built.box(), Map.of(), 0L, Sites.dimensionId(level), sb, built.snapshot(), null, null,
 			new Construction(Construction.BUILDING, boxIdx, JOURNAL_TARGET, null, new BitSet(), false, owner));
 		Run r = new Run(probe, t);
-		int[] y = new int[n];
-		int[] kind = new int[n];
-		int[] pairOf = new int[n];
-		for (int i = 0; i < n; i++) {
-			y[i] = r.pos(i).getY();
-			kind[i] = kind(r.target[i]);
-			pairOf[i] = r.isSecond[i] ? r.pairFirst(i) : -1;
-		}
-		int[] order = BuildOrder.order(y, kind, r.support, pairOf);
-		int[] queue = new int[n];
-		for (int i = 0; i < n; i++) {
-			queue[i] = boxIdx[order[i]];
-		}
+		int[] queue = queueOrder(r, boxIdx, null);
 		// the crate: outside the snapshot box, at the approach's end (or 2 out from the entrance); a batch whose group shares one
 		// crate (phase 4d, R6) puts it down once (at crateAt, or beside the first site's approach end) and every site uses it
 		String sharedId = stockpiled ? null : SHARED_CRATE.get();
@@ -948,6 +936,28 @@ public final class Builder {
 			r.waterlogged > 0 ? ", " + r.waterlogged + " waterlogged cell(s) built dry" : "");
 		return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, crate, new BitSet(), false, owner), target, sb, newCrate,
 			grp == null ? null : grp.id());
+	}
+
+	/**
+	 * The construction queue of a probe run {@code r} (its cells in {@code boxIdx} order): {@link BuildOrder#order} over each cell's
+	 * height, kind, support and pair, as box indices. The seam the build-order golden drives (BuildOrderGoldenTest). Pure of the level.
+	 */
+	static int[] queueOrder(Run r, int[] boxIdx, int @Nullable [] dist) {
+		int n = boxIdx.length;
+		int[] y = new int[n];
+		int[] kind = new int[n];
+		int[] pairOf = new int[n];
+		for (int i = 0; i < n; i++) {
+			y[i] = r.pos(i).getY();
+			kind[i] = kind(r.target[i]);
+			pairOf[i] = r.isSecond[i] ? r.pairFirst(i) : -1;
+		}
+		int[] order = BuildOrder.order(y, kind, r.support, pairOf);
+		int[] queue = new int[n];
+		for (int i = 0; i < n; i++) {
+			queue[i] = boxIdx[order[i]];
+		}
+		return queue;
 	}
 
 	/** {@link Construction#target} of a 4e construction site: its target lives in its journal entry ({@code after}). */
