@@ -28683,6 +28683,82 @@ site (PA).
 **Gallery (glance, not awaited):** `artifacts/gate-runs-st/20261112-060600-change/gate7b-st/shots/`: `st-picker.png`, `st-picker-gui4.png`,
 `st-frame.png`, `st-ghost.png`, `st-drop-warning.png`, `st-placed.png`, `st-library-pin.png`.
 
+### Slice 7cF as built (branch `slice/7cF` off main f1c78b06, LP 9d98d74b merged; versions NEXT; $0, no client; recorded 2026-11-12)
+
+The foundation: 7c's shared surface, frozen so BF, HR, SF and CM-a can build on it in parallel, and the catalogue text served on demand so
+the compact plan/0 has room for 7c's kinds. It changes no plan answer: every new method but one throws, every new kind is reserved, and
+every committed fixture plans as on main.
+
+**Frozen Java surface** (`dev.larattalabs.architect.api`, all `Since NEXT`; defaults throw `UnsupportedOperationException` "needs
+Architect API NEXT (slice X)"):
+
+| Member | Signature |
+|---|---|
+| `record ComposeRequest` | `(String brief, BoundingBox claim, @Nullable String styleId, boolean images, @Nullable Double budgetUsd, String opKey, JsonObject ext)`; brief, claim, opKey non-null; a null `ext` is `{}` |
+| `record AuthorRequest` | `(String brief, BoundingBox claim, @Nullable String planId, @Nullable String partId, @Nullable Double budgetUsd, String opKey, JsonObject ext)`; brief, claim, opKey non-null; a null `ext` is `{}` |
+| `record ConnectorRequest` | `(String kind, BlockPos from, BlockPos to, @Nullable String styleId, JsonObject params, Mode mode, String opKey)`; all but styleId non-null; a null `params` is `{}` |
+| `record CompositeInfo` | `(List<String> moduleEntryIds, List<Joint> joints, BoundingBox union)`; `EXT_KEY = "architect_mc:composite"`; `static Optional<CompositeInfo> of(Library.Entry)`, `static Optional<CompositeInfo> ofExt(JsonObject)` (empty, never a throw, on none or malformed); `JsonObject wire()` = `{modules: [entryId...], joints: [{from: {module, port}, to: {module, port}}...], union: {minX..maxZ}}` |
+| `record CompositeInfo.Joint` | `(String fromModule, String fromPort, String toModule, String toPort)`; `JsonObject wire()` |
+| `Regions` | `default CompletableFuture<String> compose(ComposeRequest)`: throws until CO; `default CompletableFuture<String> authorProgram(AuthorRequest)`: throws until AU; `default JsonObject planCatalogue(Set<String> kinds)`: **works now** (RegionsImpl), the no-arg `planCatalogue()` unchanged |
+| `Sites` | `default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest)`: throws until CX |
+| `Reason` | appended after `NO_LINK`: `JOINT_MISMATCH, AUTHORED_STALE`, each documented (`AUTHORED_STALE`'s detail: the program id) |
+| ext keys | `PlanRequest.EXT_SECRETS = "architect_mc:secrets"` (HR), `PlanRequest.EXT_PLAN_IMAGES = "architect_mc:planImages"` (CO), `BibleRequest.EXT_RELATED_TO = "architect_mc:relatedTo"` (SF) |
+| Features | none advertised; `ArchitectApi.features()` javadoc reserves `bigForms`, `hiddenRooms`, `suspendedBuilds`, `aqueduct`, `regionM15`, `styleFormat3`, `scenarioTemplates`, `compose`, `programAuthoring`, `shapePromotion`, `composites`, `placeConnector` for their slices |
+
+**`Regions.planCatalogue(Set<String> kinds)`** (and the kit's `planCatalogueKinds(kinds)` in `kit/lib/plan/catalogue.mjs`, the one
+source; `PlanCatalogueTest` holds the jar's answer equal to a node run): `{catalogueVersion, api, kitVersion, schemaVersion, entries,
+unknown}`; `entries` are the named kinds in catalogue order, each the full entry `planCatalogue()` answers (note, limits, until ...) plus
+`def`, the kind's plan/0 def with every description (a supported entry's `def`, a reserved one's `draft`; absent when it has neither);
+`unknown` the named ids the catalogue lacks, sorted. Synchronous, from the jar's plan.json, any thread, a fresh copy; null is no kinds.
+
+**Catalogue and plan/0:** `program.authored` added, reserved `until: "AU"`, `sinceApi: "NEXT"`, `draft` its skeleton (catalogueVersion
+left for the coordinator); `catalogue-pre7c.json` archived. Draft skeletons (`x-state: reserved`, named by each entry's `draft`, never
+`def`, so the parts stay envelope-checked and answer `unsupported {block}`) for `form.hollow_mountain {kind, where, size, params}`,
+`form.crater {kind, where, size, lake, params}`, `form.floating_island {kind, where, size, params}`, `form.hidden_room {kind, host:
+partRef, size, entrance: bookshelf|trapdoor|waterfall|wall, params}`, `rule.suspended {kind, scope}`, `channel.aqueduct {params.span:
+piers|arches}` and `program.authored` (a zone's program `{template: "authored", params: {id, sha, params}}`). The six entries' state,
+until, note and sinceApi are unchanged (the answer, the golden, has exactly one new entry). Extension fixtures `e19_authored_program`
+and `e20_7c_drafts` cover them.
+
+**The compact copy** (`plan/0#compact`, `sidecar/src/jobs/systemrefs.ts` `COMPACT`): the catalogue is now a head line plus **one line per
+kind** (`<id> <state>[ until <slice>][ alias of <id>][ replaced by <id>][ retired in <api>][ limits <JSON>]`), and each kind def (a def an
+entry names as `def` or `draft`, 45 of them) drops its own top-level description; member descriptions and every other def stay. Notes
+and those descriptions are the long text `planCatalogue(kinds)` serves. The full `plan/0` rendering is unchanged but for the additions.
+**Measured by the gates' `compactOf`: 78,821 characters** (main f1c78b06: 99,981), against the 100,000 bound with 10% spare (90,000):
+11,179 under the spare line, 21,179 under the bound; at the six skeletons' grown size (about 1,300 each as full defs) that is room for
+about 8 kinds under 90,000.
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **`Joint` is two ends**, module entry id and port name each. Nothing defined it beyond SETTLEMENTS §12; the geometry (cell, facing,
+   width, height) is the ports' own in each module's entry, so CM-a/CM-b can check it there. A later constructor can add members.
+2. **Drafts, not defs.** A `def` would strict-check reserved parts (schema.mjs dispatches on `def`) and could answer `malformed`; `draft`
+   keeps them envelope-checked, as `rule.shape`'s does. Adding `draft` changes no catalogue answer (it is not in `OPTIONAL`), so the six
+   keep their `sinceApi`.
+3. **`program.authored`'s shape follows today's dispatch**: a zone program `{template: "authored", params: {id, sha}}` already answers
+   `unsupported program.authored`. AU may move it to its own dispatch key (the draft is reserved, not frozen).
+4. **`channel.aqueduct` is a course, not a kind:** its draft is the lenient `params.span` of a `connector.channel` course (a new top-level
+   member would make a supported channel part malformed today).
+5. **The kind defs' top-level descriptions moved too.** The catalogue lines alone measured 90,228 with the skeletons (over the 90,000
+   line); the descriptions are each kind's long text in the contract's sense. Member descriptions stay, so the plan writer still sees what
+   each member means. This changes what Steward's PlanWriter reads from `plan/0#compact` (S-7c-1, agreed); its repair rounds can fetch the
+   long text of the kinds a plan uses or a check answers.
+6. **`planCatalogue(kinds)` has no feature name**: it is not in §2's feature list; it works from API NEXT on (an older Architect throws).
+7. **`unknown` is listed, not dropped,** so a caller can tell a typo from a kind with no long text.
+
+**Checks** (offline, $0, no client: the gate column is units, api-compat, the catalogue golden and the compact copy measured):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1206 tests: 1205 pass, 1 fail on the dirty tree (gate-corpus-plan's store test: a dirty kit/ is never stored, by design); that file 3/3 on the committed tree. f7c-foundation 3/3 (the diff against catalogue-pre7c.json exactly `program.authored`, the drafts, planCatalogueKinds); plan-p0 item 1 and item 9 with e19/e20; cl, f7a-foundation, f7b-foundation, gm-c, k2, lp and sl leave `program.authored` to f7c (the `revision.*` precedent) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1105 tests, 0 failures, 1 skipped (Api7cFTest 6/6: Reasons order, stubs throw naming their slice, the request records, CompositeInfo's wire and its empty answers, the ext keys, no feature advertised; PlanCatalogueTest's kinds overload equal to a node run of planCatalogueKinds; ApiLPTest reads NO_LINK as 7bF's last, no longer the enum's last) |
+| sidecar `npm ci && npm run check` | 838/838 (system-refs: the one-line catalogue, kind defs without their own description, every other def whole, the bound) |
+| compact plan/0 (`compactOf`, `plan/0#compact`) | **78,821** characters (main 99,981; the bound 100,000, the 10% spare line 90,000) |
+| api-compat | clean: `--surface` of main f1c78b06's own API classes (2845 members, compiled from a detached worktree; the 0.61.0 jars on disk were slice builds); the 0.48.0 and 0.47.0 apitest jars |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 (p3-lint runs inside unit-mod) |
+| `node tools/step-inputs.mjs check` | clean after `build` (345 steps; unit-kit gains f7c-foundation) |
+| `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
+| gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop

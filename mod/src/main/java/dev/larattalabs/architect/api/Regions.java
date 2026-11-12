@@ -343,4 +343,40 @@ public interface Regions {
 	default Optional<java.util.List<Affordance>> affordances(String planId) {
 		throw new UnsupportedOperationException("Regions.affordances needs the Architect API since 1.53.0 (slice AF)");
 	}
+
+	// ------------------------------------------------------------------ phase 7c: composition (docs/CONTRACT.md "Phase 7c" §2)
+
+	/**
+	 * (7c) The capability catalogue's long text for the named kinds (docs/CONTRACT.md "Phase 7c" §2, "catalogue text on demand"): the
+	 * same envelope as {@link #planCatalogue()} ({@code catalogueVersion, api, kitVersion, schemaVersion}) with {@code entries} holding
+	 * only the named kinds, in catalogue order, each the full entry {@link #planCatalogue()} answers plus {@code def}: the kind's plan/0
+	 * definition with every description (its supported def, or a reserved kind's draft; absent when the kind has none), and
+	 * {@code unknown}: the named ids the catalogue lacks, sorted. The compact plan/0 the plan writer reads ({@code plan/0#compact})
+	 * carries one line per kind; this answers the rest for the kinds a plan uses or a check answers. Synchronous, read from the mod
+	 * jar like {@link #planCatalogue()} (no sidecar, no claim); any thread; a fresh copy each call. Since NEXT.
+	 */
+	default com.google.gson.JsonObject planCatalogue(Set<String> kinds) {
+		throw new UnsupportedOperationException("Regions.planCatalogue(kinds) needs Architect API NEXT (slice 7cF)");
+	}
+
+	/**
+	 * (7c) The standalone composer (docs/CONTRACT.md "Phase 7c" §2, slice CO, S-7c-2): a template pick first; without a fit, a
+	 * structured job writes plan/0 parts from the brief, then {@link #checkPlan} and one repair round. Completes with a design id of
+	 * kind {@code settlement}, whose result holds {@code outcome} ({@code PICKED}, {@code COMPOSED} or {@code NO_PLAN}), {@code plan},
+	 * {@code check} and {@code cost}. For players and tests; Steward keeps its own plan writer. Built by slice CO (feature
+	 * {@code "compose"}); until then it throws. Since NEXT.
+	 */
+	default CompletableFuture<String> compose(ComposeRequest request) {
+		throw new UnsupportedOperationException("Regions.compose needs Architect API NEXT (slice CO)");
+	}
+
+	/**
+	 * (7c) Program authoring (docs/CONTRACT.md "Phase 7c" §2, slice AU, S-7c-5): an authoring session writes a region program on the
+	 * plan path only, checker-driven, at most 4 rounds. Completes with the authored program id; its result holds the outcome
+	 * ({@code AUTHORED} or {@code NOT_SHOWN}), the rounds, the checker findings and the cost. Runs under the caller's budget and the
+	 * player's approval. Built by slice AU (feature {@code "programAuthoring"}); until then it throws. Since NEXT.
+	 */
+	default CompletableFuture<String> authorProgram(AuthorRequest request) {
+		throw new UnsupportedOperationException("Regions.authorProgram needs Architect API NEXT (slice AU)");
+	}
 }

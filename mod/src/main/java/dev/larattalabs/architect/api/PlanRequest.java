@@ -26,6 +26,17 @@ import org.jspecify.annotations.Nullable;
  */
 public record PlanRequest(JsonObject plan, ServerLevel level, BoundingBox claim, Map<String, BlockPos> anchors, @Nullable String owner, @Nullable String bible,
 	@Nullable Integer bibleVersion, @Nullable PlanBudget budget, @Nullable String opKey, JsonObject ext, @Nullable LoadPolicy load) {
+	/**
+	 * (7c, slice HR) {@code ext[EXT_SECRETS]: true} asks for the artifact's {@code $.secrets[]} (hidden rooms' entrances) in previews and
+	 * {@code siteplan.json}; without it they are left out (S-7c-4). Frozen by the 7c foundation. Since NEXT.
+	 */
+	public static final String EXT_SECRETS = "architect_mc:secrets";
+	/**
+	 * (7c, slice CO) {@code ext[EXT_PLAN_IMAGES]: true} returns the planning renders' blob ids in the check (S-7c-2). Frozen by the 7c
+	 * foundation. Since NEXT.
+	 */
+	public static final String EXT_PLAN_IMAGES = "architect_mc:planImages";
+
 	public PlanRequest {
 		plan = plan == null ? new JsonObject() : plan;
 		anchors = anchors == null ? Map.of() : Map.copyOf(anchors);

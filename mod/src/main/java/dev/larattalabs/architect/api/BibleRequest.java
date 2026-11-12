@@ -33,6 +33,12 @@ public record BibleRequest(String prompt, @Nullable String name, @Nullable Strin
 	@Nullable Double budgetUsd, List<String> references, @Nullable String scope, @Nullable String seedPreset, boolean sheetCritique,
 	@Nullable String opKey, @Nullable Rarity rarity) {
 	/**
+	 * (7c, slice SF) {@code ext[EXT_RELATED_TO]}: the settlement Style (its id) a zone Style derives from, sharing its core roles
+	 * (Style format 3, S-7c-3). Frozen by the 7c foundation. Since NEXT.
+	 */
+	public static final String EXT_RELATED_TO = "architect_mc:relatedTo";
+
+	/**
 	 * A bible's rarity budget (docs/CONTRACT.md "Phase 6c slice VOC" §4.1; kit/lib/vocab/rarity.mjs holds the schema, the limits and the
 	 * defaults). Every member is optional (null: the default, or free for {@code colours}). Shares are over a design's non-air cells (a
 	 * region's non-terrain written cells); the blocks the bible's roles, patterns and {@code allow} name are the style's own and exempt

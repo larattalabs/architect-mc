@@ -1,0 +1,24 @@
+{
+  "about": "(7cF) an authored program in its draft shape (program.authored: a zone's program {template: authored, params: {id, sha}}): reserved until AU",
+  "on": "s7",
+  "expect": {
+    "part": "hall",
+    "block": "program.authored"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "hall",
+        "program": {
+          "template": "authored",
+          "params": {
+            "id": "sea_stack_monastery",
+            "sha": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "params": { "terraces": 3 }
+          }
+        }
+      }
+    ]
+  }
+}

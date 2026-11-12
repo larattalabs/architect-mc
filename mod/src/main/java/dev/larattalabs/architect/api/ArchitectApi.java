@@ -220,6 +220,13 @@ public interface ArchitectApi {
 	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
 	 * (M5 GP, since NEXT) {@code "givenPrograms"} is advertised when the helper runs callers' kit programs (its {@code design.program}):
 	 * {@link Designs#fromProgram}, {@link Designs#variant} and {@link Designs#variantByKey}.
+	 * (7c, since NEXT) Names reserved for phase 7c (composition), advertised only by the slice that makes each work, never by the
+	 * foundation (docs/CONTRACT.md "Phase 7c" §2): {@code "bigForms"} (BF: form.hollow_mountain, form.crater, form.floating_island),
+	 * {@code "hiddenRooms"} (HR: form.hidden_room and the artifact's secrets), {@code "suspendedBuilds"} (US: rule.suspended),
+	 * {@code "aqueduct"} (AQ: channel.aqueduct), {@code "regionM15"} (RM), {@code "styleFormat3"} (SF), {@code "scenarioTemplates"}
+	 * (TC), {@code "compose"} (CO: {@link Regions#compose}), {@code "programAuthoring"} (AU: {@link Regions#authorProgram}),
+	 * {@code "shapePromotion"} (PM), {@code "composites"} (CM-b: {@link CompositeInfo}) and {@code "placeConnector"} (CX:
+	 * {@link Sites#placeConnector}). {@link Regions#planCatalogue(Set)} has no feature name: it works from API NEXT on.
 	 */
 	Set<String> features();
 }

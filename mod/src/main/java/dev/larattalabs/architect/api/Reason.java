@@ -115,6 +115,12 @@ package dev.larattalabs.architect.api;
  * <li>{@code PROGRAM_REFUSED} (M5 GP, since NEXT): {@link Designs#fromProgram} or {@link Designs#variant}: the caller's program did not
  * build or did not pass the checker; the exception is a {@link ProgramRefused}, its {@link ProgramRefused#report()} the checker's typed
  * findings and {@link ArchitectRefused#detail()} the first finding's rule (see {@link ProgramRefused}). Nothing was installed.</li>
+ * <li>{@code JOINT_MISMATCH} (7c, since NEXT): placing a composite entry ({@link CompositeInfo}): a joint is unmatched (a joint port
+ * with no partner) or mismatched (not the same cell boundary, not opposite facings, or another width or height); the message names the
+ * module and the port. Nothing is placed. Answered from slice CM-b.</li>
+ * <li>{@code AUTHORED_STALE} (7c, since NEXT): an approved artifact names an authored program ({@code program.authored {id, sha}})
+ * whose installed source no longer has the approved sha; {@link ArchitectRefused#detail()} is the program id. Answered from slice
+ * AU.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -143,5 +149,7 @@ public enum Reason {
 	// NEXT (7b foundation): the site-aware design reasons, in the contract's order
 	SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK,
 	// NEXT (M5 GP): a given program refused (Designs.fromProgram, Designs.variant)
-	PROGRAM_REFUSED
+	PROGRAM_REFUSED,
+	// NEXT (7c foundation): composition's reasons, in the contract's order
+	JOINT_MISMATCH, AUTHORED_STALE
 }

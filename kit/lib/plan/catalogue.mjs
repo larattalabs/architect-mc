@@ -22,6 +22,27 @@ export function planCatalogue({ api = PLAN_API, kitVersion = KIT_VERSION } = {})
 }
 
 /**
+ * (7cF) The catalogue's long text for the named kinds (docs/CONTRACT.md "Phase 7c" §2, "catalogue text on demand";
+ * `Regions.planCatalogue(Set<String> kinds)` answers the same from the mod jar). The compact plan/0 a plan writer reads carries one line
+ * per kind (sidecar/src/jobs/systemrefs.ts COMPACT); this serves the rest for the kinds a plan uses or a check answers: the envelope of
+ * planCatalogue() with `entries` only the named kinds, in catalogue order, each the full entry plus `def`, the kind's plan/0 definition
+ * with every description (a supported entry's `def`, a reserved one's `draft`; absent when it has neither), and `unknown`: the named ids
+ * the catalogue lacks, sorted. Pure; a fresh object each call.
+ */
+export function planCatalogueKinds(kinds, opts = {}) {
+  const want = new Set(kinds ?? []);
+  const all = planCatalogue(opts);
+  const src = new Map(PLAN_SCHEMA['x-catalogue'].entries.map((e) => [e.id, e]));
+  const entries = all.entries.filter((e) => want.has(e.id)).map((e) => {
+    const ref = src.get(e.id).def ?? src.get(e.id).draft;
+    const def = typeof ref === 'string' && ref.startsWith('#/$defs/') ? PLAN_SCHEMA.$defs[ref.slice('#/$defs/'.length)] : undefined;
+    return def === undefined ? e : { ...e, def: structuredClone(def) };
+  });
+  const unknown = [...want].filter((k) => !src.has(k)).sort();
+  return { catalogueVersion: all.catalogueVersion, api: all.api, kitVersion: all.kitVersion, schemaVersion: all.schemaVersion, entries, unknown };
+}
+
+/**
  * Diff two catalogues by id. `pending`: recorded unsupported answers [{part?, block}] (Steward's pending parts); those whose
  * block the new catalogue supports are flagged for a recheck.
  */

@@ -66,6 +66,53 @@ class PlanCatalogueTest {
 	}
 
 	@Test
+	void kindsEqualTheKitsPlanCatalogueKinds() throws Exception {
+		// (7cF) Regions.planCatalogue(kinds): the jar's answer equals the kit's planCatalogueKinds for the same kinds (a def, a draft, an
+		// alias with neither, a reserved kind with neither, and two unknown ids)
+		java.util.List<String> kinds = java.util.List.of("form.crater", "connector.wall", "zone.district", "program.authored", "form.brush", "zz.nope",
+			"aa.nope", "program.crater_works");
+		Process p;
+		try {
+			String arr = new com.google.gson.Gson().toJson(kinds);
+			p = new ProcessBuilder("node", "--input-type=module", "-e",
+				"import { planCatalogueKinds } from '" + KIT.toAbsolutePath().normalize().resolve("lib/plan/catalogue.mjs").toUri() + "'; process.stdout.write(JSON.stringify(planCatalogueKinds(" + arr + ")));")
+				.redirectErrorStream(true).start();
+		} catch (java.io.IOException e) {
+			Assumptions.abort("node is not on the PATH: " + e.getMessage());
+			return;
+		}
+		String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+		assertTrue(p.waitFor(60, TimeUnit.SECONDS) && p.exitValue() == 0, out);
+		JsonObject kit = JsonParser.parseString(out).getAsJsonObject();
+		JsonObject mod = RegionsImpl.INSTANCE.planCatalogue(new java.util.HashSet<>(kinds));
+		assertEquals(kit, mod);
+		JsonArray e = mod.getAsJsonArray("entries");
+		assertEquals(6, e.size());
+		assertEquals("zone.district", e.get(0).getAsJsonObject().get("id").getAsString(), "catalogue order, not the caller's");
+		assertFalse(e.get(0).getAsJsonObject().has("def"), "an alias with neither def nor draft");
+		assertEquals("program.crater_works", e.get(1).getAsJsonObject().get("id").getAsString());
+		assertTrue(e.get(1).getAsJsonObject().getAsJsonObject("def").has("properties"), "a supported entry's def");
+		JsonObject crater = null;
+		for (var x : e) {
+			if (x.getAsJsonObject().get("id").getAsString().equals("form.crater")) {
+				crater = x.getAsJsonObject();
+			}
+		}
+		assertEquals("reserved", crater.getAsJsonObject("def").get("x-state").getAsString(), "a reserved entry's draft");
+		assertTrue(crater.has("note"), "the long text: its note");
+		assertEquals(JsonParser.parseString("[\"aa.nope\", \"zz.nope\"]"), mod.get("unknown"));
+		for (String k : new String[] {"catalogueVersion", "api", "kitVersion", "schemaVersion"}) {
+			assertEquals(PlanCatalogue.get().get(k), mod.get(k), k);
+		}
+		assertEquals(0, PlanCatalogue.kinds(null).getAsJsonArray("entries").size(), "null is no kinds");
+		JsonObject a = PlanCatalogue.kinds(java.util.Set.of("form.crater"));
+		a.getAsJsonArray("entries").get(0).getAsJsonObject().getAsJsonObject("def").addProperty("scribble", 1);
+		assertFalse(PlanCatalogue.kinds(java.util.Set.of("form.crater")).getAsJsonArray("entries").get(0).getAsJsonObject().getAsJsonObject("def")
+			.has("scribble"), "a defensive copy");
+		assertEquals(RegionsImpl.class, RegionsImpl.class.getMethod("planCatalogue", java.util.Set.class).getDeclaringClass());
+	}
+
+	@Test
 	void bundledSchemaIsTheKitsSchema() throws Exception {
 		// the build copies kit/schemas/plan.json to /architect_mc/schemas/plan.json (mod/build.gradle); the test classpath has that resource
 		try (var in = PlanCatalogue.class.getResourceAsStream("/architect_mc/schemas/plan.json")) {

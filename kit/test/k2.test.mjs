@@ -67,7 +67,7 @@ test('item 11: the catalogue: wall.along reserved -> supported, nothing else of 
   assert.deepEqual(mine(d.reservedToSupported), ['wall.along']);
   assert.deepEqual(mine(d.schemaVersionBumps), [{ id: 'wall.along', from: 0, to: 1 }]);
   // ((6d RV) the revision.* entries RV adds are rv-a.test.mjs's)
-  assert.deepEqual([mine(d.untilChanged), mine(d.otherStateChanges), mine(d.limitsChanged), d.added.filter((x) => !/^revision\./.test(x.id)), d.removed, d.retired], [[], [], [], [], [], []]);
+  assert.deepEqual([mine(d.untilChanged), mine(d.otherStateChanges), mine(d.limitsChanged), d.added.filter((x) => !/^(revision\.|program\.authored$)/.test(x.id)), d.removed, d.retired], [[], [], [], [], [], []]); // ((7cF) program.authored: f7c-foundation.test.mjs)
   assert.deepEqual(d.recheck, [{ part: 'w', block: 'wall.along' }]);
   const e = golden.entries.find((x) => x.id === 'wall.along');
   // (released in v0.44.0 at API 1.41.0: a later release's golden.api moves on, the stamp stays)
