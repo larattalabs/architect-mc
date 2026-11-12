@@ -28186,3 +28186,18 @@ re-checks and re-places byte-identical (measured; format 2 Styles included).
   world-local unless promoted. Ship authoring behind the `programAuthoring` feature, on for claude-login users? Default: yes.
 - **N-7c-6. The promotion gallery.** §13 step 5 makes your approval of each candidate's 20-seed contact sheet a gate. Is one sheet per
   candidate the role you want? Default: yes.
+
+### Changes from Steward's review (2026-11-12; these win over the text above)
+
+Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
+1. **S-7c-3, format 3 reads format 2.** Steward keeps one style bible per settlement; it becomes the settlement Style and its zones' Styles
+   are `relatedTo` it. Format 3 must read a **format-2 Style as a settlement Style with no zone Styles** (SF's units cover it).
+2. **S-7c-4.** Steward never puts a secret in a brief line, a screen or a history entry; the steward may say "there's more to it than it
+   looks" without naming the room. Secrets stay in `$.secrets[]` only.
+3. **S-7c-5.** `Regions.authorProgram` runs under Steward's settlement budget and the player's approval, like a paid build (a card line, then Start).
+4. **S-7c-6, composites keep the lot binding.** A composite is one entry and one group item, so Steward's `itemKey == lotId` binding holds;
+   CM-a/CM-b must keep it true (a gate item asserts it).
+5. **S-7c-9 done:** Steward main 045c6ea refreshed `fixtures/strange-asks/capabilities.json` at $0 (from the plan catalogue at main bdd1fdc0):
+   **15 built, 20 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
+   (7b carve_into + 7c hollow mountain, 5), sculpted forms (7c BF, 4), megastructure (7c CM, 3), off ground (7b SL, 3), secrets (7c HR).
+   It supports the order BF, CM, HR after 7b's site lots (Steward's `artifacts/strange-asks/report.md`, `node tools/strange-asks.mjs`).
