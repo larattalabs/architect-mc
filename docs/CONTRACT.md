@@ -28274,9 +28274,7 @@ checks do) at conversion and on the record's `ext["architect_mc:site"]` binding 
    (or no port) falls back to today's rule. The three gate houses all find their landing.
 9. **Only `Sites.place`** (one request, synchronous: `SiteFit.now()` is set) converts a site placement; PL keeps batches refusing a site, so
    the ticked `PlaceJob` conversion never sees one.
-10. **Mining a standing scaffolding block** gives vanilla's drop (a player's own action, outside the site's accounting); the Deconstruct
-   and completion paths never drop one. `removeScaffold` logs and carries on if the undo fails (the site still completes; Remove then
-   undoes the entry with the group).
+10. **Superseded by SO-b** (below): mined, blown up or pushed, the scaffolding gives no item.
 
 **Checks** ($0; no API change):
 
@@ -28549,3 +28547,36 @@ Steward: ok on everything, with one change.
    `realiseApproved(artifactSha, ...)`, so a module lot in a composition is quoted against the artifact. QT adds the twin
    **`Regions.quoteApproved(String artifactSha, lotEntries)`** beside `Regions.quote(planId, lotEntries)`: same `cost.bom` shape,
    read-only, $0, a no-write proof for both.
+
+### Slice SO-b as built (branch `slice/SO-b` off `origin/slice/SO` a9897362; versions NEXT; $0; recorded 2026-11-12)
+
+The coordinator's follow-up on SO's reading 10: free scaffolding that drops vanilla's item when mined is a dupe. **Fix: the cosmetic
+scaffolding is Architect's own block, `architect_mc:scaffold`** (`survival/ScaffoldBlock`, registered beside the crate in `CrateBlocks`):
+vanilla scaffolding's look (its blockstate is `minecraft:block/scaffolding_stable`; no client code: 26.3 takes the chunk layer from the
+sprite), **no loot table** (mined by hand, blown up, broken by anything: no drop), **immovable** (`PushReaction.IMMOVEABLE`: a piston can't
+move it out of its `architect:scaffold` entry, where it would stand for good, nor break it), **one state, no tick, not a gravity block** (vanilla
+scaffolding collapses and drops when the block under it goes, which a block-by-block drop rule could not have caught), no item. Its lang
+name "Construction Scaffolding". Everything else in SO is unchanged: the same columns, entry, completion, Deconstruct tally and anchors
+(`Builder.isScaffold`; `anchorState` now checks the identity of scaffolding and the crate before the site-solid flags). No API change.
+
+**Readings:** 1. A block of its own rather than drop hooks (player, explosion, piston, collapse and falling-block paths each need one, and a
+falling vanilla scaffold carries no cell identity). 2. Instabreak, no tool needed (as vanilla's); a mined cell just goes (the entry's CELL
+undo then skips it). 3. Not climbable (it is look, not a working scaffold; nobody needs to stand on it: SETTLEMENTS §7.7).
+
+**Known items (the SO verifier's minor notes, not fixed):**
+- **The attach gate counts any site-solid world block a player put down as support**, the hopper chain and chest included
+  (`Builder.anchorState` excludes only scaffolding and the crate). The crate stands outside the snapshot box, so a cell hanging on the chain
+  is unlikely; every independent scan in `so-survival` passed.
+- **`removeScaffold` logs and carries on if its undo fails** (`Builder.removeScaffold`): the site completes with the scaffolding standing
+  (immovable, drops nothing); a later Remove undoes the entry with the site's group. No test drives that failure.
+
+**Checks** ($0; no API change):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass at 034060d8; 1072 tests, 0 failures, 1 skipped (`ScaffoldBlockTest` 3: a block built from the registered one's properties has no loot table, can't be pushed, has no random tick, one state, not Fallable, not vanilla scaffolding (which has a loot table), not a builder gravity block; `Builder.isScaffold`/`anchorState` treat it as scaffolding; its blockstate is vanilla's `scaffolding_stable`. The test opens the frozen block registry by reflection for one intrusive holder and puts it back in a `finally`) |
+| kit / sidecar / lints | not re-run: SO-b touches no kit or sidecar file (SO's 1159/1159, 814/814 and lints stand) |
+| api-compat | clean: `--surface` of the 0.57.0 jar; the 0.47.0 and 0.45.0 apitest jars |
+| `node tools/step-inputs.mjs check` | clean (333 steps) |
+| in game, run 20261112-061109-change at 034060d8 | **PASS** `so-survival` 55 ok / 0 FAIL: SO's 48 checks on the three houses, plus the no-dupe pass on the cliff house (184 `architect_mc:scaffold` cells): a cell mined by hand drops nothing and is gone; a powered piston against a cell leaves it standing and stays retracted; TNT at a cell destroys it with no scaffolding item; the deconstruct leaves no scaffolding item over the whole site and no scaffold cell |
+| gate-verifier (strict) | **PASS** at 8acf5f8f: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-063726-change, 55 ok / 0 FAIL) and the three unit classes (forced past the test cache); reviewed the diff: every way off its cell yields no item (mining, explosions, pistons; no collapse, fall or tick; not flammable; water can't take it), SO's accounting unchanged, registration and the test's reflection contained, the new checks can fail. Minor: no positive control in game that vanilla scaffolding would drop (the unit test asserts its loot table); the no-dupe pass runs on one house; other breakers (an anvil, a creeper) take the same loot-table path |
