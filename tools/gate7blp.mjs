@@ -55,7 +55,6 @@ const SL_HEAD = '51fddf7c';
 /** The fixtures that move by name (byte identity against SL's head). */
 export const LP_MOVED = Object.freeze({
   'asks/secret_tunnels.json': 'LP: its three tunnels under flat ground answer refused NO_FEATURE {tunnel.under} (supported between site lots\' cellar doors; was unsupported until 7b); the IR unchanged',
-  'extension/e15_every_reserved_a.json': 'LP: connector.branch_walk shipped, so c_branch_walk left the every-reserved fixture',
   'extension/e17_tunnel_under.json': 'LP: its tunnel under flat ground answers refused NO_FEATURE {tunnel.under} (was unsupported until 7b)',
   'tunnel/tn10_tunnel_under.json': 'LP: flat ends answer refused NO_FEATURE {tunnel.under} (was unsupported until 7b)',
 });
@@ -212,7 +211,15 @@ async function planAndDesigns(W, tag) {
   const ex = await imp('designs/site/fit_wrap_trunk.mjs');
   const entries = {};
   for (const [id, lot] of lots) {
-    const file = volumeFile(lot.site.volumeSha);
+    // (the site volume is frozen into architect/volumes the first time a check or placement needs it: Survey.volume of the lot's volume
+    // box freezes the same cells, as SL's gate reads them; its sha is the plan's)
+    let file = volumeFile(lot.site.volumeSha);
+    if (!file) {
+      const sv = await call('dev.survey.volume', { box: arr(lot.site.volume), load: 'loaded' }, 600_000);
+      check(sv.sha === lot.site.volumeSha, `${tag}: Survey.volume of ${id}'s site volume has the plan's sha (${String(sv.sha).slice(0, 12)})`);
+      file = volumeFile(lot.site.volumeSha);
+    }
+    check(!!file, `${tag}: ${id}'s frozen site volume is in the world (architect/volumes)`);
     if (!file) continue;
     const bp = ex.default({ site: new Site(fs.readFileSync(file), lot.site) });
     bp.id = `lp_${id}`;
@@ -259,6 +266,7 @@ steps.ingame = async () => {
   const canopy = P.ck.check?.parts?.find((p) => p.part === 'canopy');
   out.check = { overall: P.ck.check?.overall, canopy: canopy?.class, walk: walk?.class, link: walk?.geometry?.link, lots: [...P.lots.keys()] };
   check(P.ck.check?.overall === 'READY' && canopy?.class === 'fits' && walk?.class === 'fits' && P.lots.size === 2, `the two-lot plan through Regions.checkPlan: ${P.ck.check?.overall}; canopy ${canopy?.class}, walk ${walk?.class} (${json(walk?.geometry?.link)})`, out.check);
+  check(!!P.entries.hut_a && !!P.entries.hut_b, 'SV\'s trunk house built on each lot\'s Site into the library (lp_hut_a, lp_hut_b, lp_hut_b_noport)');
   if (P.lots.size !== 2 || !P.entries.hut_a || !P.entries.hut_b) return out;
   const snap = path.join(OUT, 'ingame-snap.gz');
   await call('dev.region.hash', { box: W.claimBox, mode: 'snap', file: snap }, 3_600_000);
