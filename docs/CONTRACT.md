@@ -28201,3 +28201,12 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
    **15 built, 20 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
    (7b carve_into + 7c hollow mountain, 5), sculpted forms (7c BF, 4), megastructure (7c CM, 3), off ground (7b SL, 3), secrets (7c HR).
    It supports the order BF, CM, HR after 7b's site lots (Steward's `artifacts/strange-asks/report.md`, `node tools/strange-asks.mjs`).
+
+### Noah's answers (2026-11-12, Noah via parent session: "Keep all defaults"; these replace the provisional defaults above)
+
+- **N-7c-1 yes:** 7c starts once 7b's LP merges. Budget $65 (est. $57 + $8 reserve); stop and ask past $65; **hard cap $120**.
+- **N-7c-2 keep both:** US (inverted builds) and CX (`Sites.placeConnector`) stay in scope, ordered last, so they're dropped first if 7c runs long.
+- **N-7c-3 yes:** the phase gate as proposed (§5).
+- **N-7c-4 yes:** when SF merges, the coordinator asks Noah (via the parent session) for 2-3 GPT Image references each for S3 and S5.
+- **N-7c-5 yes:** program authoring ships behind the `programAuthoring` feature, on for claude-login users.
+- **N-7c-6 yes:** Noah approves each promotion candidate's 20-seed contact sheet.
