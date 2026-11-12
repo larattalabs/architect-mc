@@ -378,7 +378,7 @@ async function templateCells(nbtPath) {
   const { parse, plain } = await imp('lib/nbt.mjs');
   const st = plain(parse(fs.readFileSync(nbtPath)));
   const m = new Map();
-  for (const b of st.blocks) m.set(b.pos.join(','), st.palette[b.state].Name);
+  for (const b of st.blocks) m.set(b.pos.join(","), st.palette[b.state].Name ?? st.palette[b.state].id);
   return m;
 }
 
