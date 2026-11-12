@@ -279,7 +279,9 @@ old `preset:<name>` / `bible:<id>`. The Library: `place`, `edit`, `more` (⋯), 
 
 Controls (`dev.ui.click`): `design_set`, `design:bible`, `design:profile`, `type:other`; in the dialog `set:bible`,
 `set:draft_bible`, `set:type_pick:<row>`, `set:role:<row>`, `set:remove:<row>`, `set:add`, `set:concurrency±`,
-`set:budget±`, `set:submit`, `set:cancel`, and the fields `field:set_name`, `field:set_prompt`, `field:set_type:<row>`,
+`set:budget±`, `set:submit`, `set:cancel` (since slice SD also the Style row's `set:bible:<id>`, `set:bible:new`, `set:browse`, the
+Options header `section:set_options` (lab-ui fold key `architect_mc.set.options`, `dev.u3.sections` sets it), and a filled row's
+`set:remove:<row>` is a lab-ui Confirm: press it twice), and the fields `field:set_name`, `field:set_prompt`, `field:set_type:<row>`,
 `field:set_iname:<row>`, `field:set_notes:<row>` (`dev.ui.focus {field: "set_iname:2"}`); in the Designs tab
 `group:resume`, `group:extend`, `group:cancel`, `group:library`, `bible:cancel`, `bible:use`; in the Library
 `filter:collection`, `collection:reskin`, `collection:clear`, `sort` (when the sort chips fold into one), and in the
