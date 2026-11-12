@@ -181,19 +181,19 @@ async function removeRegion(region) {
 // ------------------------------------------------------------------ the two-lot plan
 
 /** A plan/0 with an elevated zone `canopy` (two huts) near the anchor and a branch_walk between the huts. */
-const linkedPlan = () => ({ schemaVersion: 'plan/0', planId: 'lp_canopy', zones: [{ id: 'canopy', kind: 'standard', size: { preset: 'L' }, where: { near: { anchor: 'grove', within: 8 } },
-  program: { layout: 'elevated', lots: ['hut_a', 'hut_b'].map((id) => ({ id, type: 'cabin', role: 'canopy_hut', size: [17, 17], villager: 'dwelling', brief: 'A small home on its tree\'s platform.' })) } }],
+const linkedPlan = (order = ['hut_a', 'hut_b']) => ({ schemaVersion: 'plan/0', planId: 'lp_canopy', zones: [{ id: 'canopy', kind: 'standard', size: { preset: 'L' }, where: { near: { anchor: 'grove', within: 8 } },
+  program: { layout: 'elevated', lots: order.map((id) => ({ id, type: 'cabin', role: 'canopy_hut', size: [17, 17], villager: 'dwelling', brief: 'A small home on its tree\'s platform.' })) } }],
   connectors: [{ id: 'walk', kind: 'branch_walk', from: { part: 'hut_a' }, to: { part: 'hut_b' } }] });
 
 /** A fresh flat world with two giant trees 26 apart (each site volume, its lot box + 8, clear of the other lot's box: a neighbour's house
  * inside a site volume drifts that site, SL's SITE_DRIFTED) (3x3 oak trunks 20 tall, 23x23 persistent leaf layers 5 thick, one column apart: two canopies):
  * a 17-wide hut (SV's trunk house's size) on each, the walk round hut_a under the leaves. */
-async function twoTrees(world) {
+async function twoTrees(world, half = 13) {
   await L.fresh(world, FLAT);
   await L.setRules('exact');
   await L.tp(TX - 20, 0, TZ - 30);
   const gy = await groundY();
-  for (const x of [TX - 13, TX + 13]) {
+  for (const x of [TX - half, TX + half]) {
     await cmd(`/fill ${x - 1} ${gy + 1} ${TZ - 1} ${x + 1} ${gy + 20} ${TZ + 1} minecraft:oak_log`);
     await cmd(`/fill ${x - 11} ${gy + 21} ${TZ - 11} ${x + 11} ${gy + 25} ${TZ + 11} minecraft:oak_leaves[persistent=true]`);
   }
@@ -320,30 +320,53 @@ steps.ingame = async () => {
   return out;
 };
 
-steps.remove = async () => {
+steps.remove = async () => removeOrders('G6B LP Remove', 'remove', { half: 13, orders: [['hut_a', 'hut_b'], ['hut_a', 'hut_b']] });
+
+/**
+ * (7b SL-b) The failing case of SL's finding: trees 24 apart, so each site volume (its lot box + 8) reaches the other lot's box. Before
+ * SL-b the house placed first drifted the second site (SITE_DRIFTED, the region PARTIAL). Now both lots place, in both lot orders (each
+ * lot second once), and both removal orders are exact.
+ */
+steps.slb = async () => removeOrders('G6B SLb Overlap', 'slb', { half: 12, orders: [['hut_a', 'hut_b'], ['hut_b', 'hut_a']], lotsPlaced: true });
+
+/** The removal orders over the two-lot plan: region first (the plan's lots in orders[0]), houses first (in orders[1]). */
+async function removeOrders(world, tag0, { half, orders, lotsPlaced = false }) {
   await ensure();
   spendZero();
   const out = {};
-  const world = 'G6B LP Remove';
-  const W = await twoTrees(world);
-  const P = await planAndDesigns(W, 'remove');
+  const W = await twoTrees(world, half);
+  const P = await planAndDesigns(W, tag0);
+  // (each house is bound to its site: by the site volume's sha, so a plan whose lots come in another order binds the same houses)
+  const bySha = new Map([...P.lots].filter(([id]) => P.entries[id]).map(([id, l]) => [l.site.volumeSha, P.entries[id].id]));
+  if (half < 13) {
+    const [a, b] = [...P.lots.values()].map((l) => l.box);
+    const reach = (x, y) => x && y && x[0] - 8 <= y[3] && x[3] + 8 >= y[0] && x[2] - 8 <= y[5] && x[5] + 8 >= y[2];
+    check(reach(a, b), `${tag0}: each site volume (its lot box + 8) reaches the other lot's box (boxes ${json(a)} and ${json(b)}): SL's failing case`);
+  }
   check(P.ck.check?.overall === 'READY' && P.lots.size === 2 && !!P.entries.hut_a && !!P.entries.hut_b, `the two-lot plan checked (${P.ck.check?.overall}) and both houses built`);
   if (!P.entries.hut_a || !P.entries.hut_b) return out;
   const B0 = await cellsOf(W.claimBox);
-  const realise = async (tag) => {
+  const realise = async (tag, order) => {
     // (a removed region's artifact is tombstoned: each realise checks the plan again, as Steward's retry does)
-    const ck = await call('dev.region.checkPlan', { plan: linkedPlan(), claim: W.claim, owner: OWNER, anchors: { grove: W.anchor }, load: 'generate' }, 1_800_000);
-    check(ck.check?.overall === 'READY', `${tag}: the plan checked again: ${ck.check?.overall}`);
-    const rr = await call('dev.region.realiseApproved', { sha: ck.check.artifactSha, lotEntries: { hut_a: 'lp_hut_a', hut_b: 'lp_hut_b' } }, 600_000);
+    const ck = await call('dev.region.checkPlan', { plan: linkedPlan(order), claim: W.claim, owner: OWNER, anchors: { grove: W.anchor }, load: 'generate' }, 1_800_000);
+    check(ck.check?.overall === 'READY', `${tag}: the plan (lots ${json(order)}) checked again: ${ck.check?.overall}`);
+    const art = (await call('dev.region.artifact', { sha: ck.check.artifactSha, body: true }, 60_000)).artifact;
+    const lotEntries = Object.fromEntries((art?.body?.lots ?? []).map((l) => [l.id, bySha.get(l.site?.volumeSha)]).filter(([, e]) => e));
+    const rr = await call('dev.region.realiseApproved', { sha: ck.check.artifactSha, lotEntries }, 600_000);
     if (!rr.region) throw new Error(`${tag}: realiseApproved refused (${json(rr)})`);
     const st = await L.waitRegion(rr.region, 3_600_000);
     await L.settle(3000);
     check(st.view.state === 'PLACED', `${tag}: realised ${rr.region} from IR v2: ${st.view.state}`);
-    return { region: rr.region, ir: regionIr(world, rr.region) };
+    if (lotsPlaced) {
+      const states = {};
+      for (const id of order) states[id] = (await call('dev.sl.lot', { region: rr.region, lot: id }, 60_000)).state;
+      check(Object.values(states).every((s) => /placed/i.test(String(s)) && !/fail/i.test(String(s))), `${tag}: both site lots placed, ${order[1]} second (no SITE_DRIFTED from its neighbour's house): ${json(states)}`, states);
+    }
+    return { region: rr.region, ir: regionIr(world, rr.region), lots: new Map((art?.body?.lots ?? []).map((l) => [l.id, l])) };
   };
   // ---- region first
   {
-    const R = await realise('region first');
+    const R = await realise('region first', orders[0]);
     const rm = await removeRegion(R.region);
     const d = diff(B0, await cellsOf(W.claimBox));
     out.regionFirst = { removed: rm.removed, eflat: d.n, first: d.first };
@@ -351,13 +374,13 @@ steps.remove = async () => {
   }
   // ---- houses first: hut_b, then hut_a, then the region
   {
-    const R = await realise('houses first');
+    const R = await realise('houses first', orders[1]);
     const cells = linkCells(R.ir);
     const walkBox = [Math.min(...cells.map((c) => c.at[0])), Math.min(...cells.map((c) => c.at[1])), Math.min(...cells.map((c) => c.at[2])), Math.max(...cells.map((c) => c.at[0])), Math.max(...cells.map((c) => c.at[1])), Math.max(...cells.map((c) => c.at[2]))];
     const r = {};
     for (const id of ['hut_b', 'hut_a']) {
       const rec = await call('dev.sl.lot', { region: R.region, lot: id }, 60_000);
-      const lb = P.lots.get(id).box; // (the artifact's box: [x0, y0, z0, x1, y1, z1])
+      const lb = R.lots.get(id).box; // (this realise's artifact's box: [x0, y0, z0, x1, y1, z1])
       const sr = await call('dev.rv.siteRemove', { site: rec.siteId, force: true, requester: OWNER }, 600_000);
       await L.settle(3000);
       const lotNow = await cellsOf(lb);
@@ -376,7 +399,7 @@ steps.remove = async () => {
   }
   await L.leaveWorld?.();
   return out;
-};
+}
 
 // ------------------------------------------------------------------ gr: the GR revision byte item (change 4)
 
