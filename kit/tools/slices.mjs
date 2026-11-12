@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// node kit/tools/slices.mjs <file.nbt> [--sidecar <json>] [--y N|A-B] [--box x0,z0,x1,z1] [--storeys] [--max-chars N]
+// node kit/tools/slices.mjs <file.nbt> [--sidecar <json>] [--y N|A-B] [--box x0,z0,x1,z1] [--storeys] [--max-chars N] [--site <volume> [--lot <site.json>]]
 //
 // From Steward's minecraft-structure-design skill (scripts/slices.mjs), owned by Architect from phase 5a; changes are
 // reported to Steward. It reads the kit's own lib directly (no --kit).
@@ -16,17 +16,24 @@
 //               the interior's floor levels (lib/check.mjs floorLevels), or the ground row without an interior. Needs
 //               the sidecar (groundY, interior)
 //   --max-chars truncate the whole output to N characters, ending with a `... (truncated)` line
+//   --site      (7b SV) the volume the design was built into (--lot: its site spec; default the sidecar's `site`): every template cell
+//               the design leaves shows the site there (SITE_GLYPHS: # rock, : soil, ; loose, = ice, * snow, ~ water, ! lava, T log,
+//               % leaves, " plant, @ owned, & player, $ block entity; '.' air), and the block letters skip those glyphs
 // Exit code 0 = printed, 2 = bad usage / unreadable file.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse, plain } from '../lib/nbt.mjs';
 import { floorLevels, makeGrid, fmt } from '../lib/check.mjs';
+import { Site } from '../lib/site.mjs';
 
-const USAGE = 'usage: node kit/tools/slices.mjs <file.nbt> [--sidecar <json>] [--y N|A-B] [--box x0,z0,x1,z1] [--storeys] [--max-chars N]';
+const USAGE = 'usage: node kit/tools/slices.mjs <file.nbt> [--sidecar <json>] [--y N|A-B] [--box x0,z0,x1,z1] [--storeys] [--max-chars N] [--site <volume> [--lot <site.json>]]';
 const FACING = { north: '^', south: 'v', east: '>', west: '<', up: 'u', down: 'd' };
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#%&*+=@?!~';
 const AIR = new Set(['air', 'cave_air', 'void_air']);
+/** (7b SV) The glyph of a site class in a cell the design leaves (--site). */
+export const SITE_GLYPHS = Object.freeze({ ROCK: '#', SOIL: ':', LOOSE: ';', ICE: '=', SNOW: '*', WATER: '~', LAVA: '!', LOG: 'T', LEAVES: '%', PLANT: '"', OWNED: '@', PLAYER: '&', BLOCK_ENTITY: '$' });
+const SITE_GLYPH_SET = new Set(Object.values(SITE_GLYPHS));
 const DIRECTIONAL = /stairs|door|trapdoor|ladder|torch|sign|banner|bed|lectern|furnace|smoker|chest|barrel|anvil|grindstone|bell|button|lever/;
 export const MAX_STOREY_LAYERS = 6;
 export const TRUNCATED = '... (truncated)';
@@ -65,7 +72,7 @@ export function truncateChars(text, n) {
  * Layered ASCII of a structure.
  * @param {object} structure plain parsed NBT root ({ size, palette, blocks })
  * @param {object|null} sidecar the blueprint JSON (needed for `storeys`)
- * @param {{ name?: string, y?: [number, number], box?: [number, number, number, number], storeys?: boolean, maxChars?: number }} [opts]
+ * @param {{ name?: string, y?: [number, number], box?: [number, number, number, number], storeys?: boolean, maxChars?: number, site?: import('../lib/site.mjs').Site }} [opts]
  * @returns {string}
  */
 export function slices(structure, sidecar, opts = {}) {
@@ -75,10 +82,13 @@ export function slices(structure, sidecar, opts = {}) {
   for (const b of structure.blocks) grid.set(`${b.pos[0]},${b.pos[1]},${b.pos[2]}`, b.state);
   const glyphOf = new Map();
   const legend = [];
+  const site = opts.site ?? null;
+  const pool = site ? [...GLYPHS].filter((c) => !SITE_GLYPH_SET.has(c)).join('') : GLYPHS;
+  const seen = new Set();
   const glyph = (i) => {
     const p = pal[i];
     if (AIR.has(p.name)) return '.';
-    if (!glyphOf.has(p.name)) { glyphOf.set(p.name, GLYPHS[glyphOf.size] ?? '?'); legend.push([glyphOf.get(p.name), p.name]); }
+    if (!glyphOf.has(p.name)) { glyphOf.set(p.name, pool[glyphOf.size] ?? '?'); legend.push([glyphOf.get(p.name), p.name]); }
     return glyphOf.get(p.name);
   };
   let layers;
@@ -99,7 +109,8 @@ export function slices(structure, sidecar, opts = {}) {
       let row = '';
       for (let x = x0; x <= x1; x++) {
         const st = grid.get(`${x},${y},${z}`);
-        const c = st === undefined ? '.' : glyph(st);
+        let c = st === undefined ? '.' : glyph(st);
+        if (st === undefined && site) { const g = SITE_GLYPHS[site.at(x, y, z)]; if (g) { c = g; seen.add(site.at(x, y, z)); } }
         if (c !== '.') any = true;
         row += c;
       }
@@ -109,6 +120,7 @@ export function slices(structure, sidecar, opts = {}) {
     if (any) lines.push(hdr, ...rows);
   }
   lines.push('', `legend: ${legend.map(([g, n]) => `${g}=${n}`).join('  ')}`);
+  if (site) lines.push(`site (${site.fit}, ${site.sha.slice(0, 12)}; cells the design leaves): ${Object.entries(SITE_GLYPHS).filter(([k]) => seen.has(k)).map(([k, g]) => `${g}=${k.toLowerCase()}`).join('  ') || 'open air only'}`);
   // directional detail for blocks whose facing matters, so a facing mistake shows without a render (within the box)
   const dirs = new Map();
   const ys = new Set(layers.map((l) => l.y));
@@ -140,6 +152,8 @@ function parseArgs(argv) {
       if (v.length !== 4 || !v.every(Number.isInteger)) throw new Error('--box must be x0,z0,x1,z1');
       o.box = [Math.min(v[0], v[2]), Math.min(v[1], v[3]), Math.max(v[0], v[2]), Math.max(v[1], v[3])];
     } else if (a === '--storeys') o.storeys = true;
+    else if (a === '--site') o.site = path.resolve(val());
+    else if (a === '--lot') o.lot = path.resolve(val());
     else if (a === '--max-chars') {
       o.maxChars = Number(val());
       if (!Number.isInteger(o.maxChars) || o.maxChars < 1) throw new Error('--max-chars must be a positive integer');
@@ -149,6 +163,7 @@ function parseArgs(argv) {
   }
   if (!o.help && o._.length !== 1) throw new Error('one .nbt file');
   if (o.storeys && o.y) throw new Error('--storeys and --y exclude each other');
+  if (o.lot && !o.site) throw new Error('--lot needs --site');
   return o;
 }
 
@@ -162,7 +177,13 @@ function main() {
     const sp = o.sidecar ?? path.join(path.dirname(file), `${path.basename(file, '.nbt')}.blueprint.json`);
     const sidecar = fs.existsSync(sp) ? JSON.parse(fs.readFileSync(sp, 'utf8')) : null;
     if (o.sidecar && !sidecar) throw new Error(`no such file: ${o.sidecar}`);
-    console.log(slices(structure, sidecar, { name: path.basename(file), y: o.y, box: o.box, storeys: o.storeys, maxChars: o.maxChars }));
+    let site;
+    if (o.site) {
+      const lot = o.lot ? JSON.parse(fs.readFileSync(o.lot, 'utf8')) : sidecar?.site;
+      if (!lot) throw new Error('--site needs the lot: --lot <site.json>, or a sidecar with a `site`');
+      site = new Site(fs.readFileSync(o.site), lot);
+    }
+    console.log(slices(structure, sidecar, { name: path.basename(file), y: o.y, box: o.box, storeys: o.storeys, maxChars: o.maxChars, site }));
   } catch (e) {
     console.error(`${o._[0]}: ${e.message}`);
     process.exitCode = 2;
