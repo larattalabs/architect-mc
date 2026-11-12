@@ -656,18 +656,25 @@ export async function registerLC2(steps, h) {
     }
 
     // a paid block taken up from a built target: removed in the kit's part of the cell; the target stays built; put back: as before
+    // (a quiet one first; the built targets mid-build may hold only props: a fence under its lantern, whose break takes both: the
+    // change counted from the world either way)
     let pcell = null;
-    for (const t of done) {
-      for (const c of t.cells) {
-        if (c[3] & 5 || !(c[3] & 2)) continue;
-        const k = key(c);
-        if (!own.part.has(k)) continue;
-        const tp = await topOf(c, group);
-        if (tp.top?.site !== t.target) continue;
-        const d = await dumpOf(around(c, 1), 'lc-p');
-        if (!(await quiet(c, d.get))) continue;
-        pcell = { at: c.slice(0, 3), target: t.target, part: own.part.get(k), was: d.get(k), dump: d };
-        break;
+    for (const strict of [true, false]) {
+      for (const t of done) {
+        for (const c of t.cells) {
+          if (c[3] & 5 || !(c[3] & 2)) continue;
+          const k = key(c);
+          if (!own.part.has(k)) continue;
+          const d = await dumpOf(around(c, 1), 'lc-p');
+          const st = d.get(k);
+          if (!st || isAir(st) || /door|bed|tall|large|piston/.test(idOf(st))) continue;
+          if (strict && !(await quiet(c, d.get))) continue;
+          const tp = await topOf(c, group);
+          if (tp.top?.site !== t.target) continue;
+          pcell = { at: c.slice(0, 3), target: t.target, part: own.part.get(k), was: st, dump: d };
+          break;
+        }
+        if (pcell) break;
       }
       if (pcell) break;
     }
@@ -682,8 +689,8 @@ export async function registerLC2(steps, h) {
       for (const [k, , now] of ch) addTo(pd, 'parts', own.part.get(k) ?? 'unknown', classOf(now, new Set(), k), 1, classOf(now, new Set(), k) === 'changed' ? idOf(norm(now)) : null);
       const [okP, dP] = plusDelta(lcP, lcA, pd);
       out.paidMid = { at: pcell.at, target: pcell.target, part: pcell.part, was: pcell.was, changed: ch.map((q) => q[0]), row: row(lcP, pcell.part), stillDone: tAfter?.done };
-      check(ch.length === 1 && okP && tAfter?.done === true, `item 3, mid-build: the player took up ${pcell.was} at ${json(pcell.at)}: ${pcell.part} removed ${row(lcP, pcell.part)?.removed}, every other part and lot as before; the target still built (${tAfter?.done})`, dP);
-      await cmd(`/setblock ${pcell.at.join(' ')} ${pcell.was}`);
+      check(ch.length >= 1 && okP && tAfter?.done === true, `item 3, mid-build: the player took up ${pcell.was} at ${json(pcell.at)}: the report = before + ${json(pd)} (the world's change, ${ch.length} cell(s), by the kit's parts), every other part and lot as before; the target still built (${tAfter?.done})`, dP);
+      for (const [k, was] of [...ch].sort((a, b) => Number(a[0].split(',')[1]) - Number(b[0].split(',')[1]))) await cmd(`/setblock ${k.split(',').join(' ')} ${was}`);
       await L.settle(1500);
       const lcP2 = await landCheck(region);
       check(same(lcA, lcP2)[0], 'item 3, mid-build: the block put back (the console, the same state): the report as before', same(lcA, lcP2)[1]);
