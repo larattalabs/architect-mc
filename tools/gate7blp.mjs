@@ -404,10 +404,11 @@ async function rvWait(region, rid, timeoutMs = 1_800_000) {
 
 /** The town and its growth on a fresh world; the world after the growth (cells), the revision's IR, the link calls made. */
 async function grOnce(world, bypass) {
-  await call('dev.lp.bypass', { on: bypass }, 30_000);
+  // (the bypass is the server's: set once the world is open; the step before may have left none)
   try {
     await L.fresh(world, FLAT);
     await L.setRules('exact');
+    await call('dev.lp.bypass', { on: bypass }, 30_000);
     await L.tp(GCX + 80, 60, GCZ + 56);
     const gy = await groundY(GCX + 4, GCZ + 4);
     const BOX = [P0_CLAIM[0] - 8, gy - 12, P0_CLAIM[1] - 8, P0_CLAIM[2] + 8, gy + 24, P0_CLAIM[3] + 8];
@@ -429,7 +430,7 @@ async function grOnce(world, bypass) {
     await removeRegion(ra.region);
     return { town: { overall: c0.overall, state: st0.view.state }, growth: { overall: c1.overall, region: r1.region, state: w.r.state, rid: w.r.rid }, S1, rvIr, calls: s1.calls - s0.calls, undo: { removed: u.removed, diff: du.n, first: du.first } };
   } finally {
-    await call('dev.lp.bypass', { on: false }, 30_000);
+    await call('dev.lp.bypass', { on: false }, 30_000).catch(() => null);
   }
 }
 
