@@ -193,7 +193,7 @@ export function loadGate(me, others, { load, loadNow = () => os.loadavg()[0], no
   const l1 = loadNow();
   const why = now - newest < load.settleSec * 1000
     ? `a run started less than ${load.settleSec} s ago: its load is not in the average yet`
-    : l1 > load.max1 ? `the 1-min load ${Math.round(l1 / 5) * 5} (about) above ${load.max1}` : null;
+    : l1 > load.max1 ? `the 1-min load above ${load.max1}` : null; // no number: the wait is logged when its reason changes
   if (!why) return go(false);
   me.loadWaitSince ??= now;
   if (now - me.loadWaitSince >= load.maxWaitMin * 60_000) return go(true);
@@ -241,7 +241,7 @@ export async function tryAcquire(dir, me, { slots, fill = slots, decide = async 
       const h = all.find((s) => s.i === n)?.holder;
       if (h) continue;
       const held = loadGate(me, others, { load, loadNow, now: now?.() ?? Date.now() });
-      if (held) return { acquired: false, waitingOn: [held], load: true };
+      if (held) return { acquired: false, waitingOn: [held], load: true, load1: Math.round((loadNow ?? (() => os.loadavg()[0]))() * 10) / 10 };
       const d = await decide(n);
       writeAtomic(slotFile(dir, n), { pid: me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports });
       fs.rmSync(ticketFile(dir, me), { force: true });
@@ -325,7 +325,7 @@ export async function acquire(dir, me, { slots, fill, decide, pollMs = 15_000, l
     if (r) {
       const text = r.waitingOn.join('; ');
       if (text !== lastText || Date.now() - lastLog > 300_000) {
-        log(`waiting${me.turbo ? ' (turbo: the whole machine)' : ''}${r.reserved?.length ? `, holding slot(s) ${r.reserved.join(',')} for it` : ''}: ${text}`);
+        log(`waiting${me.turbo ? ' (turbo: the whole machine)' : ''}${r.reserved?.length ? `, holding slot(s) ${r.reserved.join(',')} for it` : ''}: ${text}${r.load ? ` (load now ${r.load1})` : ''}`);
         lastText = text;
         lastLog = Date.now();
       }

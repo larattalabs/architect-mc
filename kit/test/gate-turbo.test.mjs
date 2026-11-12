@@ -206,7 +206,8 @@ test('load-aware start: the head of the queue waits while the load is high and g
   const wa = await go(dir, a, o);
   assert.equal(wa.acquired, false);
   assert.equal(wa.load, true);
-  assert.match(wa.waitingOn.join(), /load-aware start: the 1-min load 70 \(about\) above 36/);
+  assert.equal(wa.load1, 70);
+  assert.match(wa.waitingOn.join(), /load-aware start: the 1-min load above 36/);
   // b is behind a: it waits for a, not on the load, and does not overtake it
   const wb = await go(dir, b, o);
   assert.equal(wb.acquired, false);
