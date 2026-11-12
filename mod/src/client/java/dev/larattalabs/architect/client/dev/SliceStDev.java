@@ -39,14 +39,19 @@ public final class SliceStDev {
 				PlotMarker.enter();
 				return PlotMarker.state();
 			}));
-		DevBridge.register("dev.st.variant", 10_000, "{entryId} - (7b ST) Library ⋯ › Site variant here… of a site-bound entry: plot marking with "
+		DevBridge.register("dev.st.variant", 10_000, "{entryId, height?} - (7b ST) Library ⋯ › Site variant here… of a site-bound entry: plot marking with "
 			+ "its fit locked (then dev.plot.corner, dev.plot.enter; the variant is made and its ghost starts on the new site) -> dev.st.state",
 			(req, mc) -> {
-				String id = Fields.of(req).nonBlank("entryId");
+				Fields f = Fields.of(req);
+				String id = f.nonBlank("entryId");
+				Integer height = f.has("height") ? f.optInt("height", 16, 6, 64) : null;
 				return DevBridge.onClient(mc, () -> {
 					String why = SiteVariantHere.start(id, DesignFeature.reopen);
 					if (why != null) {
 						throw new DevBridge.DevException(why);
+					}
+					if (height != null) {
+						PlotMarker.setHeight(height); // the new plot's height limit (PgUp/PgDn); it starts at the source's height
 					}
 					return state();
 				});

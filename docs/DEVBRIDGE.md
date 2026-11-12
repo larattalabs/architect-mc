@@ -404,6 +404,17 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   entry: `{known, binding (SiteBinding.of), derivation {source, sourceVersion, kind, recipe}, ext, size}`) and `dev.ds.variant {entryId,
   site, opKey}` (`Designs.siteVariant` -> `{entryId, ms}`). A refusal answers `{refused: "<REASON>: message", detail}`. Driven by
   `tools/gate7bds.mjs`.
+- **2026-11-12 (7b slice ST):** new (`SliceStDev`, client only: the picker, the ghost and the Library are client UI) `dev.plot.fit {fit}`
+  (the plot marker's fit picker, as F: `on_pad` (each new plot's default), `attach_to_cliff`, `carve_into`, `span`, `wrap_trunk`, `suspend`;
+  refused while sampling or confirming the frame, and when the fit is locked), `dev.plot.enter {}` (Enter in any plot phase: the corner
+  looked at, or the frame confirmed), `dev.st.variant {entryId, height?}` (Library ⋯ › Site variant here… of a site-bound entry: plot marking with
+  its fit locked, its height limit the source's or `height`; after the frame is confirmed the variant is made by `Designs.siteVariant` and its ghost starts on the new site) and
+  `dev.st.state {blueprint?}` (`{variantRunning, variantEntry, variantError, plot, placingSite, pinned?}`: `pinned` is the site a design is
+  bound to, `PlacementFeature.siteOf`). `dev.plot.state` gains `fit`, `fitLocked`, the phases `sampling` and `frame`, and in the frame step
+  `site` (the proposed `SiteSpec` wire) and `ports` (world cells); `lastSite` is the last confirmed site plot's spec. `dev.build.start`
+  takes `onSite: true` (a site-bound design on its site's frame, as Library › Place on its site; a plain start of one is refused) and
+  `dev.build.state` gains `site`. `dev.library.state`'s cards carry `pinnedFit` (the pin badge's fit; `badge` is `PINNED`). Driven by
+  `tools/gate7bst.mjs`.
 
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,

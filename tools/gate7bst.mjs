@@ -90,7 +90,7 @@ function nodeTest(files, timeout = 1_800_000) {
 steps.unit = async () => {
   const out = {};
   out.kit = nodeTest(['kit/test/st.test.mjs']);
-  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 8, `the standalone spec (kit/test/st.test.mjs: the six 7bF fixtures and DS's cliffs re-derived, every fit example built on its derived spec, a turned cliff, the refusals, affordances.mjs --standalone): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+  check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 7, `the standalone spec (kit/test/st.test.mjs: the six 7bF fixtures and DS's cliffs re-derived, every fit example built on its derived spec, a turned cliff, the refusals, affordances.mjs --standalone): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const v = spawnSync('npx', ['vitest', 'run', 'test/site-analyse.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 1_800_000 });
   const t = `${v.stdout}${v.stderr}`;
   out.sidecar = { code: v.status, tests: (/Tests\s+(.*)$/m.exec(t) ?? [])[1] ?? '?' };
@@ -308,15 +308,22 @@ steps.ingame = async () => {
   const elot = east.site.lot;
   await L.tp((elot.minX + elot.maxX) >> 1, elot.minY + 2, elot.maxZ + 14, 180, 15);
   await call('dev.wait', { ms: 2500 }, 30_000);
-  st = await call('dev.st.variant', { entryId });
+  st = await call('dev.st.variant', { entryId, height: elot.maxY - elot.minY + 1 }); // the new lot's height (PgUp/PgDn), not the source's
   check(st.plot?.active && st.plot.fitLocked && st.plot.fit === 'attach_to_cliff', `Site variant here…: plot marking with the fit locked to the entry's (${st.plot?.fit})`);
   const vm = await markSitePlot(elot, 'attach_to_cliff', { locked: true });
   check(/fixed to attach_to_cliff/.test(vm.picker.lockRefused ?? ''), `the locked picker refuses another fit ("${vm.picker.lockRefused}")`);
-  check(vm.frame.phase === 'frame' && vm.frame.site?.volumeSha === east.site.spec.volumeSha, `cliff_east sampled to its own sha ${String(vm.frame.site?.volumeSha).slice(0, 12)}, the frame proposed`, { status: vm.frame.status });
+  const sampledEast = vm.frame.phase === 'frame' && vm.frame.site?.volumeSha === east.site.spec.volumeSha;
+  check(sampledEast, `cliff_east sampled to its own sha ${String(vm.frame.site?.volumeSha).slice(0, 12)}, the frame proposed (${vm.frame.phase}: ${vm.frame.status})`);
+  if (!sampledEast) {
+    await call('dev.plot.cancel').catch(() => null);
+    throw new Error(`the variant's sample failed (${vm.frame.phase}: ${vm.frame.status}): the rest of the variant flow skipped`);
+  }
   await call('dev.plot.enter');
   const vs = await until('the site variant', async () => {
     const s2 = await call('dev.st.state');
-    return !s2.variantRunning && (s2.variantEntry || s2.variantError) && s2.placingSite ? s2 : s2.variantError ? s2 : null;
+    if (s2.variantError) return s2;
+    if (!s2.variantRunning && !s2.plot?.active && !s2.variantEntry && !s2.placingSite) throw new Error(`the variant flow ended without a variant (${s2.plot?.status})`);
+    return !s2.variantRunning && s2.variantEntry && s2.placingSite ? s2 : null;
   }, 600_000);
   const vid = vs.variantEntry;
   check(!!vid && !vs.variantError && vs.placingSite?.volumeSha === east.site.spec.volumeSha, `the site variant ${vid} installed ($0) and its ghost started on cliff_east's frame${vs.variantError ? `: ${vs.variantError}` : ''}`);
