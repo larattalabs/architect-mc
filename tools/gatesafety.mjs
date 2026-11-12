@@ -314,7 +314,7 @@ steps.ingame = async () => {
   await sleep(300);
   const leg = await buildState();
   const legKeys = leg.hud.filter((r) => r.startsWith('keys:')).join(' ');
-  check(/Z undo last placement/.test(legKeys) && /1,000\+ blocks: Enter twice/.test(legKeys), `the "?" legend names Z and the threshold (${legKeys})`, leg.hud);
+  check(/Z undo last placement/.test(legKeys) && /Enter ×2 1,000\+ blocks/.test(legKeys), `the "?" legend names Z and the threshold (${legKeys})`, leg.hud);
   out.shots.push(await shot('legend_s2'));
   await call('dev.build.legend', { on: false });
   await call('dev.build.cancel');
