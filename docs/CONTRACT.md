@@ -27868,9 +27868,14 @@ spec's id, which must not be `local:` (refused). Estimates send the spec as is (
 - Config `siteRenders` (default true): false is the A/B's "images off" arm (P4).
 
 **Readings chosen** (the contract silent or the code disagreeing; the smallest reading):
-1. **Change 2 (one item per lot)**: the minimal reading (asked of the coordinator; no answer by the end of the slice). Steward calls
-   `siteVariant` per variant lot and binds the entry itself; `Item.ext` (`architect_mc:site {archetype}`) passes through untouched. The
-   group machinery has no variant item kind (no approval inheritance inside a group).
+1. **Change 2 (one item per lot)**: the minimal reading, confirmed by the coordinator (2026-11-12). Steward calls `siteVariant` for each
+   variant lot itself (S-7b-1 step a) and binds the entry; a group item's `Item.ext["architect_mc:site"]` is validated (`{archetype: <another
+   item's key in the group>}`, else the group is refused) and passed through. No COPY-like machinery, no item kind that makes its own variant.
+   **Open point (for Steward, via the coordinator):** change 2's "a variant item is approved when its archetype is" needs a group item that
+   arrives with a ready entry (the siteVariant result): no Claude call for it, its approval following the archetype item's. The Group API
+   can't express that today (`GroupRequest.Item` has no entry id and the helper's item has none), and DS adds no API member or item kind
+   for it, so such an item in a group is still designed as any other. Until a slice adds it, a variant lot stays out of the group (Steward
+   binds the variant entry beside the group's items).
 2. **A site item has no massing pass**: a group with `massingFirst` and a site item is refused (`ClientError`); a site item has no
    `count` and nothing may `copyOf` it. Steward's GroupPlanner is massing-first: when SL ships, Steward's site lots go in a group
    without massingFirst or as single designs (or SL revisits this).
@@ -27896,7 +27901,7 @@ only).
 | Check | Result |
 |---|---|
 | kit `node --test kit/test/*.test.mjs` | 1166/1166 after merging main b1ee8dcc (ds.test.mjs 7/7) |
-| sidecar `npm ci && npm run check` | 831/831, 57 files (site-design.test.ts 17/17); the bundle built |
+| sidecar `npm ci && npm run check` | 831/831, 57 files (site-design.test.ts 17/17, with the change-2 ext validation); the bundle built |
 | mod `./gradlew build --offline --no-daemon` | pass after the merge; 1065 tests, 0 failures, 1 skipped (ApiDSTest 6/6, Api7bFTest, WireFSTest) |
 | lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 135/135 |
 | api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar |
