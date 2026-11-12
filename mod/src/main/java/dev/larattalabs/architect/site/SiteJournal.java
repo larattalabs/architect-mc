@@ -102,7 +102,8 @@ public final class SiteJournal {
 	/** The site's main entry (its {@code site}, road or cell-site entry) that is active, or null. */
 	static JournalStore.@Nullable Meta main(String siteId) {
 		for (JournalStore.Meta m : active(siteId)) {
-			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && !m.kind().equals(WorldJournal.DELTA)) {
+			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && !m.kind().equals(WorldJournal.DELTA)
+				&& !m.kind().equals(WorldJournal.SCAFFOLD)) {
 				return m;
 			}
 		}
@@ -471,6 +472,51 @@ public final class SiteJournal {
 		t.create(JournalStore.Meta.header(id, WorldJournal.CRATE, siteId, group, Sites.dimensionId(level), Policy.BOX, layer, Status.ACTIVE,
 			System.currentTimeMillis()), JournalStore.bySection(List.of(new Cell(at.asLong(), layer, before, crate))), JournalNbt.Head.EMPTY);
 		return id;
+	}
+
+	/**
+	 * (7b slice SO) A new {@code architect:scaffold} CELL entry over {@code cells} (each {@code before} what stands there now, its
+	 * {@code after} {@code scaffold}), in the site's undo group, added to {@code t}.
+	 */
+	static String scaffoldEntry(JournalStore.Txn t, ServerLevel level, String siteId, @Nullable String group, List<BlockPos> cells, Value scaffold)
+		throws Sites.SiteException {
+		JournalStore s = store();
+		String id = s.newId();
+		long layer = s.newLayer();
+		List<Cell> list = new ArrayList<>(cells.size());
+		for (BlockPos p : cells) {
+			list.add(new Cell(p.asLong(), layer, WorldJournal.valueAt(level, p), scaffold));
+		}
+		t.create(JournalStore.Meta.header(id, WorldJournal.SCAFFOLD, siteId, group, Sites.dimensionId(level), Policy.CELL, layer, Status.ACTIVE,
+			System.currentTimeMillis()), JournalStore.bySection(list), JournalNbt.Head.EMPTY);
+		return id;
+	}
+
+	/** (7b slice SO) The cells of a site's active entries of {@code kind} (its scaffolding), as {@link BlockPos#asLong}; empty when none. */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet cellsOfKind(String siteId, String kind) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			return out;
+		}
+		try {
+			for (JournalStore.Meta m : active(siteId)) {
+				if (!m.kind().equals(kind)) {
+					continue;
+				}
+				for (long k : m.sections()) {
+					SectionCells sc = s.section(m.id(), k);
+					if (sc != null) {
+						for (int i = 0; i < sc.size(); i++) {
+							out.add(sc.pos(i));
+						}
+					}
+				}
+			}
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Could not read the {} entries of {}", kind, siteId, e);
+		}
+		return out;
 	}
 
 	/** 6c Y: releases one entry (a stockpile crate that went: its cell is the ground again). */
