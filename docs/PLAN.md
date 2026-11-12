@@ -1523,16 +1523,17 @@ The three small items left in "Queued (coordinator, 2026-11-11)" and "Slice PX".
 
 SP's gate run found five unit items failing on main itself: coa-unit item 6, h-unit item 10, hy-unit item 11, vocc-unit item 3, f3-unit §9.
 Their committed "after" asks tables were older than slices that moved recorded answers, and two movers (GM-c, 7bF) had no normaliser where an
-item compares with a fixed "before" table. Done as chore FF did rs-unit item 2 (d3e5ff69): the five after tables re-cut on bcd9eddb, each
-with the function its item calls; the before tables, slice history, untouched.
+item compares with a fixed "before" table. Done as chore FF did rs-unit item 2 (d3e5ff69): four after tables re-cut on bcd9eddb, each with
+the function its item calls; the before tables, slice history, untouched. H-a's `h/asks-gap-after-ha.txt` is not re-cut: `kit/test/h-a.test.mjs`
+item 10 holds it as H-a's record (only waterfall_curtain and moat differ from the before table; a first re-cut failed that test in the gate run).
 
 **Tables re-cut** (and the function that cut them):
 - `fixtures/plan/coa/asks-after.txt` (`asksGap(kit, { current: true })`, the asks as they stand)
-- `fixtures/plan/h/asks-gap-after-ha.txt` (H-a's `haAsks`), `fixtures/plan/hy/asks-gap-after.txt` (HY-b's `asksGap`) and
-  `fixtures/plan/f3/asks-after.md` (`asksGap`): one table, byte-identical across the three (the first recordings, asks-8703dbd)
+- `fixtures/plan/hy/asks-gap-after.txt` (HY-b's `asksGap`) and `fixtures/plan/f3/asks-after.md` (`asksGap`): one table, byte-identical
+  across the two (the first recordings, asks-8703dbd); H-a's `haAsks` cuts the same table, compared with H-a's record as below
 - `fixtures/plan/vocc/asks-after.txt` (VOC-c's `asksTable`, per-ask blocks without `until`)
 
-**Every row that changed, by owner** (each row in a table only where that table carries it):
+**Every row that changed, by owner** (each row in a table only where that table carries it; "h" is what haAsks now cuts against H-a's record):
 - **FL** (free layouts): around_my_tree/grove, grid_city, nomad_camp/camp, organic_hamlet/hamlet unsupported (layout.*) -> zone.standard fits
   (their asks REQUIRED_BLOCKED -> READY in vocc), ring_city/ring_town -> zone.standard blocked DEPENDENCY; the layout.* gap rows go (h, hy, vocc).
 - **VOC-c** (`rule.palette` supported): the 7 palette parts unsupported until RC -> refused NO_FEATURE / TOLERANCE; the rule.palette gap row
@@ -1555,5 +1556,6 @@ with the function its item calls; the before tables, slice history, untouched.
 
 **One code change:** h-unit item 10 and hy-unit item 11 also compare the parts' classes with their fixed before tables (v0.36.0's, v0.37.0's),
 which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains `atAskLine` (GM-c's drawbridge by part and kind, 7bF's
-hang_from_ceiling without its `until`), read only by those two before comparisons (`gate6ch-a.mjs` haAsks, `gate6chy-b.mjs` item 11), as CL's,
-LF's and K3's movers were. `flAsksFilter` and its other callers are unchanged.
+hang_from_ceiling without its `until`), as CL's, LF's and K3's movers were. HY-b's item 11 reads it in its before comparison; H-a's haAsks reads it
+(with the connector.drawbridge gap row dropped) in both its comparisons, against H-a's record and the before table. `flAsksFilter` and its
+other callers are unchanged.
