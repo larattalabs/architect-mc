@@ -74,12 +74,75 @@ public final class SiteFit {
 
 	/** Runs {@code r} with {@code site} as the site its checks and writes see ({@link #now}); null = a plain placement. Server thread. */
 	public static <T, E extends Exception> T with(@Nullable SiteSpec site, Body<T, E> r) throws E {
+		return with(site, null, r);
+	}
+
+	/** (7b SL-b) The region group of the site lot whose checks run now (null outside one, or off a region): its own cells never drift its site. */
+	private static final Deque<Optional<String>> GROUPS = new ArrayDeque<>();
+
+	/**
+	 * (7b SL-b) As {@link #with(SiteSpec, Body)}, for a region's site lot: {@code regionGroup} is its region's group, whose own journal
+	 * entries (its earlier lots, tiles and roads) are left out of the site's drift check ({@link #ownCells}). Server thread.
+	 */
+	public static <T, E extends Exception> T with(@Nullable SiteSpec site, @Nullable String regionGroup, Body<T, E> r) throws E {
 		SITES.push(Optional.ofNullable(site));
+		GROUPS.push(Optional.ofNullable(site == null ? null : regionGroup));
 		try {
 			return r.run();
 		} finally {
+			GROUPS.pop();
 			SITES.pop();
 		}
+	}
+
+	/** (7b SL-b) The region group of the site lot whose checks run now, or null. */
+	public static @Nullable String regionGroupNow() {
+		Optional<String> g = GROUPS.peek();
+		return g == null ? null : g.orElse(null);
+	}
+
+	/**
+	 * (7b SL-b) The cells of {@code vol} that the region group {@code group} has written: every active journal entry of that group (its
+	 * earlier lots' houses, its tiles, its roads, the leaves they cut) in the volume's sections, by the journal's own index. A neighbour site
+	 * lot's house standing in this site's margin is the region's own change, not drift; anyone else's change still is. Empty with no group or
+	 * no journal. Server thread.
+	 */
+	static Set<Long> ownCells(@Nullable String group, @Nullable String dim, BoundingBox vol) {
+		Set<Long> out = new HashSet<>();
+		dev.larattalabs.architect.journal.JournalStore js = group == null || dim == null ? null : dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+		if (js == null) {
+			return out;
+		}
+		for (int sx = vol.minX() >> 4; sx <= vol.maxX() >> 4; sx++) {
+			for (int sy = vol.minY() >> 4; sy <= vol.maxY() >> 4; sy++) {
+				for (int sz = vol.minZ() >> 4; sz <= vol.maxZ() >> 4; sz++) {
+					long k = dev.larattalabs.architect.journal.Sections.key(sx, sy, sz);
+					for (String id : js.inSection(dim, k)) {
+						dev.larattalabs.architect.journal.JournalStore.Meta m = js.meta(id);
+						if (m == null || !m.active() || !group.equals(m.group())) {
+							continue;
+						}
+						dev.larattalabs.architect.journal.SectionCells sc;
+						try {
+							sc = js.section(id, k);
+						} catch (java.io.IOException e) {
+							continue; // unreadable: its cells stay compared (fail closed: drift, never a missed change)
+						}
+						if (sc == null) {
+							continue;
+						}
+						for (int i = 0; i < sc.size(); i++) {
+							long p = sc.pos(i);
+							int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+							if (vol.isInside(x, y, z)) {
+								out.add(p);
+							}
+						}
+					}
+				}
+			}
+		}
+		return out;
 	}
 
 	/** The site of the request whose checks run now (null outside one, or for a plain placement). */
@@ -484,6 +547,12 @@ public final class SiteFit {
 	 */
 	static List<Refusal> check(MinecraftServer server, SiteSpec s, @Nullable JsonObject entryJson, int sx, int sy, int sz, byte[] writes, int ox, int oy,
 		int oz, java.util.function.Function<BlockPos, @Nullable BlockState> states, TerrainFit.World world) {
+		return check(server, s, entryJson, sx, sy, sz, writes, ox, oy, oz, states, world, Set.of());
+	}
+
+	/** As above; {@code own}: the cells the site lot's own region has written ({@link #ownCells}), left out of the drift check. */
+	static List<Refusal> check(MinecraftServer server, SiteSpec s, @Nullable JsonObject entryJson, int sx, int sy, int sz, byte[] writes, int ox, int oy,
+		int oz, java.util.function.Function<BlockPos, @Nullable BlockState> states, TerrainFit.World world, Set<Long> own) {
 		List<Refusal> out = new ArrayList<>();
 		Refusal mm = mismatch(entryJson, s);
 		if (mm != null) {
@@ -526,7 +595,13 @@ public final class SiteFit {
 				out.add(new Refusal(Reason.KEEP_LOST, gone.get(0).substring(0, gone.get(0).indexOf(' ')) + ": " + lost[0] + " keep-critical cell"
 					+ (lost[0] == 1 ? " is" : "s are") + " gone (" + String.join("; ", gone) + ")"));
 			}
-			Drift dr = drift(s.volume(), frozen, live, keep);
+			// ((7b SL-b) the cells the lot's own region wrote (a neighbour lot's house in this site's margin) are its own change, not drift)
+			Set<Long> skip = keep;
+			if (!own.isEmpty()) {
+				skip = new HashSet<>(keep);
+				skip.addAll(own);
+			}
+			Drift dr = drift(s.volume(), frozen, live, skip);
 			if (dr.drifted() > 0) {
 				out.add(new Refusal(Reason.SITE_DRIFTED, dr.drifted() + " of " + dr.compared() + " cells of the site changed since its survey (" + String.join("; ",
 					dr.first()) + "); survey the site again"));

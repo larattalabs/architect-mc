@@ -28051,6 +28051,40 @@ lot boxes. A leftover for the coordinator (SB depends on it).
 - A revision of a region realised from IR v2: untested; adding a site lot by revision stays out of 7b.
 - The composited designs' blocks as support for a link: only their ports and boxes are read (reading 5).
 
+### Slice SL-b as built (branch `slice/SL-b` off `slice/LP` d1b6a462, slice/LP bafc66a1 merged; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+The fix of LP's SL finding (the coordinator's ask, 2026-11-12): two site lots whose site volumes (box + 8) reach each other's lot box. The
+house placed first drifted the second site, so it failed `SITE_DRIFTED` and the region ended PARTIAL. No API change; no 7bF signature
+changed.
+
+**Built (fix (a), the coordinator's lean: the drift check stays strict against the world):**
+- `SiteFit.with(site, regionGroup, body)`: `Batches.tryStart` runs a region's site lot item with its batch's group, the region's.
+  `SiteFit.with(site, body)` is unchanged for every other caller: no group.
+- `SiteFit.ownCells(group, dim, volume)`: the cells of the site volume that active journal entries of that group wrote. It reads the
+  journal's section index (`inSection`, `meta().group`, `section`), as `TileCheck.owners` reads a region's own tile cells. That covers the
+  region's earlier lots' houses, its tiles and roads, and the leaves they cut.
+- `Sites.placeNow` passes them to `SiteFit.check`, and the drift compare leaves them out. Keep-critical cells keep KEEP_LOST's check, and
+  any other owner's change, or a player's, still drifts. An unreadable section leaves its cells compared, so it fails closed.
+
+**Readings chosen:**
+1. **Every kind of the region group's entries is left out** (lots, tiles, roads, leaves), not only lots. The region's earlier stages
+   writing in a site's margin are its own planned change too.
+2. **The site's frozen volume is not re-cut** after the neighbour's placement. The drift check simply doesn't compare those cells: (a)
+   over (b), so no planning refusal and no spacing rule.
+
+**Checks** ($0; ports 8896/8897):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass; 1098 tests, 0 failures, 1 skipped (SiteFitOwnTest 2/2: the group scoped to a site lot's checks only; the drift leaves out exactly the region's own cells, a stranger's change still drifts) |
+| `node tools/step-inputs.mjs check` | clean (345 steps; slb-ingame new, chain 7bslb, impact rule "7b SL-b") |
+| before the fix | LP's run 20261112-084742-change: trees 24 apart, hut_a PLACED, hut_b `failed:SITE_DRIFTED`, the region PARTIAL |
+| run 20261112-104119-change at 52b914f5 | **PASS** 2/2: `slb-ingame` 16/0 (trees 24 apart, each site volume reaching the other lot's box; both lot orders, each lot placed second once: both placed, the region PLACED; region-first Remove E-flat 0; houses first: each lot back to its site, the walk standing 164/164, then Remove E-flat 0); `lp-remove` 13/0 (LP's removal orders unchanged) |
+| gate-verifier (strict: removal order, drift) | **PASS** at 8da4a575: re-ran `slb-ingame` 16/0 on 8910/8911 (run 20261112-105032-change); reviewed the scope (only a region site lot gets its group; SitesImpl's API path none), only the lot's own region group's cells left out (a stranger's change still drifts), KEEP_LOST unchanged, fail closed on an unreadable section; SiteFitOwnTest re-run. Residual, not blocking: the skip is by cell, so a player's edit of a cell the region already wrote is not seen as drift |
+
+**For the Steward RC:** two neighbouring site lots in one region now both place (an S5-like grove). A site whose margin another owner or
+a player changed still answers `SITE_DRIFTED`.
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6

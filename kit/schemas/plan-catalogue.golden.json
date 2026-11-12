@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 17,
- "api": "1.53.0",
- "kitVersion": "0.55.0",
+ "catalogueVersion": 18,
+ "api": "1.54.0",
+ "kitVersion": "0.56.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -464,7 +464,7 @@
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.54.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -565,7 +565,7 @@
   },
   {
    "id": "tunnel.under",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.54.0",
    "schemaVersion": 0,
    "state": "supported",
    "note": "LP: between site lots' cellar doors; else refused."

@@ -686,8 +686,10 @@ public final class Sites {
 						: level.getChunk(p.getX() >> 4, p.getZ() >> 4);
 					return c == null ? null : c.getBlockState(p);
 				};
+				// ((7b SL-b) a region's site lot: the cells its region already wrote are left out of its drift check)
+				java.util.Set<Long> own = SiteFit.ownCells(SiteFit.regionGroupNow(), dimensionId(level), siteSpec.volume());
 				for (dev.larattalabs.architect.api.Refusal r : SiteFit.check(level.getServer(), siteSpec, entry.json(), model.sizeX, model.sizeY, model.sizeZ,
-					writes, box.minX(), box.minY(), box.minZ(), states, world)) {
+					writes, box.minX(), box.minY(), box.minZ(), states, world, own)) {
 					out.add(r.reason(), r.message());
 				}
 			}
