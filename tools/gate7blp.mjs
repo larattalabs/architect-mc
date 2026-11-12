@@ -357,7 +357,7 @@ steps.remove = async () => {
     const r = {};
     for (const id of ['hut_b', 'hut_a']) {
       const rec = await call('dev.sl.lot', { region: R.region, lot: id }, 60_000);
-      const lb = arr(P.lots.get(id).box);
+      const lb = P.lots.get(id).box; // (the artifact's box: [x0, y0, z0, x1, y1, z1])
       const sr = await call('dev.rv.siteRemove', { site: rec.siteId, force: true, requester: OWNER }, 600_000);
       await L.settle(3000);
       const lotNow = await cellsOf(lb);
