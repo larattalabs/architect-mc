@@ -23089,8 +23089,8 @@ connections after its neighbour is broken) is not a change, as `holdsOurs` says.
    target is not reported (RS's rescan re-queues it), and a player's block on an unbuilt cell is not either (RS waits on it). Both as
    LC's as built says ("not counted yet"); Steward sees the second as RS's blocked cell, not as land change.
 4. **Mid-build attribution is clean here.** LC's as built feared a survival tile's free-pass cells `unattributed` until all its item's
-   targets are built; on this castle none were (0 unattributed mid-build): the tile's record only counts a target's cells WRITTEN once
-   it is built, and the counts agreed. A tile whose item has a target half built and cells of its own was not seen.
+   targets are built; on this castle none were (0 unattributed mid-build, with three wall targets half built), so that case was not
+   shown in game; it stays covered by code reading only.
 5. The driver's wall oracle names the K2 part `w_curtain_wall` (the wall lots' own part `wl_curtain_wall` sits under the lots' sites).
 
 | Gate | Evidence |
