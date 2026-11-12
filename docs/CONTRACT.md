@@ -23095,8 +23095,8 @@ connections after its neighbour is broken) is not a change, as `holdsOurs` says.
 
 | Gate | Evidence |
 |---|---|
-| Proof (`gate-run change --only lc-unit,lc-ingame,lc-nowrite,lc-castle,lc-survival`, ports 8896/8897, `../architect-mc-LCi-run`) | RUN_PLACEHOLDER |
-| Units | UNITS_PLACEHOLDER |
+| Proof (`gate-run change --only lc-unit,lc-ingame,lc-nowrite,lc-castle,lc-survival`, ports 8896/8897, `../architect-mc-LCi-run`) | run `20261112-001552-change` at e455f2ae (main merged): **5 PASS** in 6m24s (load 20-107 from other sessions): lc-unit 2/0 (LandCheckTest 5 with the classifyCell cases, ApiLCTest, RealisedTest; api-compat clean), lc-ingame 21/0, lc-nowrite 9/0, **lc-castle 22/0**, **lc-survival 14/0**. Earlier iterations (20261111-232610 .. 20261112-000830) fixed the driver's own comparisons and fixture choice (rs02_walled's first stage had only free and held cells, so the survival half moved to the castle), and showed finding 1 before the fix (lane cobblestone: playerPlaced 0). |
+| Units | at e455f2ae: `node --test kit/test/*.test.mjs` 1118/0; sidecar `npm ci && npm run check` 811/811; `./gradlew build --offline --no-daemon` BUILD SUCCESSFUL; `node tools/step-inputs.mjs check` 325 steps clean (the two new steps built in). |
 
 ## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
 
