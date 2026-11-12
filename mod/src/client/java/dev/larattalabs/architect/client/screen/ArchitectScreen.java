@@ -518,7 +518,8 @@ public final class ArchitectScreen extends Screen {
 				order.add(new Object[] {f, i});
 			}
 		}
-		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
+		if (dev.larattalabs.architect.client.design.SetFeature.has("massing") && SetDialog.optionsOpen()) {
+			// (SD) the context field is in the Options section: only while it is open
 			order.add(new Object[] {Focus.SET_CONTEXT, -1});
 		}
 		int at = -1;
