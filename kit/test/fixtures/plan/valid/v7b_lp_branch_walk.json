@@ -1,0 +1,128 @@
+{
+ "about": "(7b LP) a branch_walk between the two canopy huts of v7b_sl_canopy (two wrap_trunk site lots on two synthetic trees): a port link routed at plan time to the sites' walk_w ports (round hut_b), the plan's stage site_links empty and its portLinks recorded; the realise's link pass writes it to the bound entries' ports",
+ "terrain": {
+  "trees": [
+   [
+    1100,
+    2080,
+    20
+   ],
+   [
+    1116,
+    2080,
+    20
+   ]
+  ]
+ },
+ "anchors": {
+  "grove": [
+   1108,
+   65,
+   2080
+  ]
+ },
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1099,
+     65,
+     2079,
+     1101,
+     84,
+     2081
+    ],
+    "class": "LOG"
+   },
+   {
+    "box": [
+     1093,
+     85,
+     2073,
+     1107,
+     89,
+     2087
+    ],
+    "class": "LEAVES"
+   },
+   {
+    "box": [
+     1115,
+     65,
+     2079,
+     1117,
+     84,
+     2081
+    ],
+    "class": "LOG"
+   },
+   {
+    "box": [
+     1110,
+     85,
+     2073,
+     1124,
+     89,
+     2087
+    ],
+    "class": "LEAVES"
+   }
+  ]
+ },
+ "covers": [
+  "connector.branch_walk"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "canopy",
+    "kind": "standard",
+    "size": {
+     "preset": "M"
+    },
+    "where": {
+     "near": {
+      "anchor": "grove",
+      "within": 8
+     }
+    },
+    "program": {
+     "layout": "elevated",
+     "lots": [
+      {
+       "id": "hut_a",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small home on its tree's platform."
+      },
+      {
+       "id": "hut_b",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small home on its tree's platform."
+      }
+     ]
+    }
+   }
+  ],
+  "connectors": [
+   {
+    "id": "walk",
+    "kind": "branch_walk",
+    "from": {
+     "part": "hut_a"
+    },
+    "to": {
+     "part": "hut_b"
+    }
+   }
+  ]
+ }
+}

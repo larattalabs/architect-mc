@@ -1,8 +1,10 @@
 {
-  "about": "(6c T3b, S-T3-4) a tunnel between two places on flat ground answers unsupported {tunnel.under, until 7b}: no line has cover, so it is the reserved passage under flat ground, never a NO_COVER path repair",
+  "about": "(6c T3b, S-T3-4) a tunnel between two places on flat ground answers unsupported {tunnel.under, until 7b}: no line has cover, so it is the reserved passage under flat ground, never a NO_COVER path repair ((7b LP) moved by name: tunnel.under is supported between two site lots' cellar doors, so between these ends it answers refused NO_FEATURE {tunnel.under})",
   "on": "asks",
   "expect": {
     "part": "secret",
+    "class": "refused",
+    "code": "NO_FEATURE",
     "block": "tunnel.under"
   },
   "plan": {

@@ -1252,7 +1252,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const elevatedIds = new Set(), siteLotZone = new Map();
   for (const q of V.parts) if (isElevatedZone(q)) { elevatedIds.add(q.id); for (const l of zoneLots(q.part)) { elevatedIds.add(l.id); siteLotZone.set(l.id, q.id); } }
   const portLinkParts = [];
-  if (elevatedIds.size) {
+  // (a branch_walk is only ever a port link: one in a plan without an elevated zone answers unsupported here too, never the route pass's)
+  if (elevatedIds.size || order.some((p) => p.family === 'connector' && p.kind === 'branch_walk' && !answers.has(p.id))) {
     const siteEnd = (e) => (typeof e?.part !== 'string' ? null : siteLotZone.has(e.part) ? { lot: e.part, ...(e.port ? { port: e.port } : {}), zone: siteLotZone.get(e.part) }
       : elevatedIds.has(e.part) && siteLotZone.get(e.port) === e.part ? { lot: e.port, zone: e.part } : null);
     for (const p of order) {

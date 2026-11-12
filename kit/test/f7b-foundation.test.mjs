@@ -118,7 +118,7 @@ test('catalogue: form.hidden_room and rule.suspended re-reserved until 7c (N-7b-
   assert.equal(golden.catalogueVersion, before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge');
   assert.deepEqual(golden.entries.map((e) => e.id), before.entries.map((e) => e.id));
   // ((7b SL) layout.elevated flipped to supported by its own slice: sl.test.mjs holds that change)
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => id !== 'layout.elevated');
+  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under'].includes(id)); // ((7b LP) its two flips: lp.test.mjs)
   assert.deepEqual(changed, ['form.hidden_room', 'rule.suspended']);
   for (const id of changed) {
     const e = golden.entries.find((x) => x.id === id);
@@ -127,5 +127,5 @@ test('catalogue: form.hidden_room and rule.suspended re-reserved until 7c (N-7b-
     assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);
   }
   // the 7b promises that stay 7b's
-  for (const id of ['connector.branch_walk', 'tunnel.under']) assert.equal(golden.entries.find((x) => x.id === id).until, '7b', id);
+  // ((7b LP) connector.branch_walk and tunnel.under, until 7b here, flipped to supported in LP: lp.test.mjs)
 });

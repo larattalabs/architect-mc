@@ -1,5 +1,5 @@
 {
-  "about": "flat ends: unsupported {tunnel.under, until 7b}",
+  "about": "flat ends: refused NO_FEATURE {tunnel.under} ((7b LP) tunnel.under joins two site lots' cellar doors; was unsupported until 7b)",
   "on": "flat",
   "anchors": {
     "west": [
@@ -29,7 +29,8 @@
     ]
   },
   "expect": {
-    "class": "unsupported",
+    "class": "refused",
+    "code": "NO_FEATURE",
     "block": "tunnel.under"
   }
 }

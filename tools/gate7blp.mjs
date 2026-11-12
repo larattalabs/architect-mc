@@ -53,7 +53,12 @@ const TX = 9600, TZ = 9600;
 const SL_HEAD = '51fddf7c';
 
 /** The fixtures that move by name (byte identity against SL's head). */
-export const LP_MOVED = Object.freeze({});
+export const LP_MOVED = Object.freeze({
+  'asks/secret_tunnels.json': 'LP: its three tunnels under flat ground answer refused NO_FEATURE {tunnel.under} (supported between site lots\' cellar doors; was unsupported until 7b); the IR unchanged',
+  'extension/e15_every_reserved_a.json': 'LP: connector.branch_walk shipped, so c_branch_walk left the every-reserved fixture',
+  'extension/e17_tunnel_under.json': 'LP: its tunnel under flat ground answers refused NO_FEATURE {tunnel.under} (was unsupported until 7b)',
+  'tunnel/tn10_tunnel_under.json': 'LP: flat ends answer refused NO_FEATURE {tunnel.under} (was unsupported until 7b)',
+});
 
 const steps = {};
 async function run(name) {

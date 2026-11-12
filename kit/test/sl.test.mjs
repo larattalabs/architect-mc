@@ -207,7 +207,8 @@ test('layout.elevated: count tolerance (adjusted), nothing to stand on (refused 
   const rb = await run({ ...V7B, plan: { ...V7B.plan, connectors: [bridge] } });
   const ab = rb.check.parts.find((p) => p.part === 'b1');
   assert.equal(ab.class, 'unsupported');
-  assert.equal(ab.reasons[0].until, 'LP');
+  // ((7b LP) the link pass shipped: a rope bridge is not a port link kind, so it stays unsupported, with no `until`)
+  assert.equal(ab.reasons[0].until, undefined);
   assert.equal(rb.check.parts.find((p) => p.part === 'canopy').class, 'fits');
   const fb = await run({ ...V7B, terrain: {}, volume: { edits: [] }, plan: { ...V7B.plan, connectors: [bridge], dependencies: [{ part: 'b1', after: ['canopy'] }] } });
   assert.equal(fb.check.parts.find((p) => p.part === 'b1').class, 'blocked');
@@ -224,5 +225,6 @@ test('catalogue: layout.elevated supported (sinceApi NEXT, schemaVersion 1); aga
   const before = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
   assert.equal(golden.catalogueVersion, before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge');
   const changed = golden.entries.filter((x) => JSON.stringify(x) !== JSON.stringify(before.entries.find((y) => y.id === x.id))).map((x) => x.id);
-  assert.deepEqual(changed.sort(), ['form.hidden_room', 'layout.elevated', 'rule.suspended']);
+  // ((7b LP) connector.branch_walk's and tunnel.under's flips are lp.test.mjs's)
+  assert.deepEqual(changed.filter((id) => !['connector.branch_walk', 'tunnel.under'].includes(id)).sort(), ['form.hidden_room', 'layout.elevated', 'rule.suspended']);
 });

@@ -206,7 +206,7 @@ test('plan/0: the zone-and-lot endpoint form, a named site port, a rope bridge (
   assert.equal(z.check.parts.find((p) => p.part === 'walk').class, 'fits');
   const np = await run(withConn({ id: 'walk', kind: 'branch_walk', from: { part: 'hut_a', port: 'walk_x' }, to: { part: 'hut_b' } }));
   const anp = np.check.parts.find((p) => p.part === 'walk');
-  assert.deepEqual([anp.class, anp.reasons[0].code, anp.reasons[0].evidence.lot, anp.reasons[0].evidence.port], ['refused', 'NO_PORT', 'hut_a', 'walk_x']);
+  assert.deepEqual([anp.class, anp.reasons[0].code, anp.reasons[0].evidence.link, anp.reasons[0].evidence.lot, anp.reasons[0].evidence.port], ['refused', 'NO_FEATURE', 'NO_PORT', 'hut_a', 'walk_x']);
   const rb = await run(withConn({ id: 'b1', kind: 'rope_bridge', from: { part: 'hut_a' }, to: { part: 'hut_b' } }));
   const ab = rb.check.parts.find((p) => p.part === 'b1');
   assert.equal(ab.class, 'unsupported');
@@ -214,7 +214,7 @@ test('plan/0: the zone-and-lot endpoint form, a named site port, a rope bridge (
   assert.ok(!rb.res.ir.stages.includes(LINK_STAGE), 'no port link: no site_links stage');
   const cw = await run(withConn({ id: 'cw', kind: 'catwalk', from: { part: 'hut_a' }, to: { part: 'hut_b' } }));
   const ac = cw.check.parts.find((p) => p.part === 'cw');
-  assert.deepEqual([ac.class, ac.reasons[0].code], ['refused', 'FACING']);
+  assert.deepEqual([ac.class, ac.reasons[0].code, ac.reasons[0].evidence.link], ['refused', 'ANCHOR', 'FACING']);
   assert.equal(cw.res.ir.portLinks, undefined, 'a refused link is not recorded');
   // a branch walk with an end that isn't a site lot
   const off = await run(withConn({ id: 'bw', kind: 'branch_walk', from: { part: 'hut_a' }, to: { anchor: 'grove' } }));
@@ -230,4 +230,24 @@ test('change 4: a plan without port links keeps its stages and IR (no site_links
     const q = await run(f);
     assert.ok(!q.res.ir.stages.includes(LINK_STAGE), f.name);
   }
+});
+
+test('the catalogue: connector.branch_walk (schemaVersion 1) and tunnel.under flip reserved -> supported, sinceApi NEXT, no until; nothing else of LP\'s', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { planCatalogue } = await import('../lib/plan/catalogue.mjs');
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const golden = JSON.parse(fs.readFileSync(path.join(here, '..', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
+  assert.deepEqual(planCatalogue(), golden);
+  const before = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
+  assert.equal(golden.catalogueVersion, before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge');
+  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
+  assert.deepEqual(changed.filter((id) => !['form.hidden_room', 'rule.suspended', 'layout.elevated'].includes(id)).sort(), ['connector.branch_walk', 'tunnel.under']);
+  for (const id of ['connector.branch_walk', 'tunnel.under']) {
+    const e = golden.entries.find((x) => x.id === id);
+    assert.equal(e.state, 'supported', id);
+    assert.equal(e.until, undefined, id);
+    assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), id);
+  }
+  assert.equal(golden.entries.find((x) => x.id === 'connector.branch_walk').schemaVersion, 1);
 });
