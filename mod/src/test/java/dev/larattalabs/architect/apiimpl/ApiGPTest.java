@@ -127,9 +127,8 @@ class ApiGPTest {
 	void featureReasonAndDefaults() {
 		assertTrue(ApiRules.features(2, List.of("design.program")).contains("givenPrograms"));
 		assertFalse(ApiRules.features(2, List.of("site.design")).contains("givenPrograms"));
-		Reason[] all = Reason.values();
-		assertEquals(Reason.PROGRAM_REFUSED, all[all.length - 1]);
-		assertEquals(Reason.NO_LINK, all[all.length - 2]);
+		// appended right after NO_LINK (later reasons go after it)
+		assertEquals(Reason.NO_LINK.ordinal() + 1, Reason.PROGRAM_REFUSED.ordinal());
 		// every abstract method unimplemented; the GP defaults run as an older implementation sees them
 		Designs d = (Designs) java.lang.reflect.Proxy.newProxyInstance(Designs.class.getClassLoader(), new Class<?>[] {Designs.class}, (proxy, method, args) -> {
 			if (method.isDefault()) {

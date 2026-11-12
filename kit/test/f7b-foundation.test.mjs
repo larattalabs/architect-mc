@@ -58,7 +58,7 @@ test('the site-spec schema and the Java records agree: kinds, facings, rotations
   const kinds = /enum Kind \{\s*([A-Z_,\s]+);/.exec(java('Affordance.java'))[1].split(',').map((s) => s.trim()).filter(Boolean);
   assert.deepEqual(kinds, ['CLIFF_FACE', 'LEDGE', 'OVERHANG', 'CAVE', 'TRUNK', 'CANOPY', 'SPIKE', 'WATER', 'GAP', 'PAD']);
   // the six Reasons, appended after NO_ROOM in the contract's order
-  assert.match(java('Reason.java'), /NO_ROOM,\s*\/\/[^\n]*\n\s*SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK\n\}/);
+  assert.match(java('Reason.java'), /NO_ROOM,\s*\/\/[^\n]*\n\s*SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK(,\s*\/\/[^\n]*\n[\s\S]*)?\n\}/); // (M5 GP) later reasons are appended after NO_LINK
 });
 
 test('siteSpecProblems: a valid spec passes; each malformed one names its problem', () => {

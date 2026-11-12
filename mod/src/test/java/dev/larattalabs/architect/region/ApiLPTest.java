@@ -50,8 +50,8 @@ class ApiLPTest {
 		assertTrue(ApiRules.features(2, List.of("region.link")).contains("linkPass"));
 		assertFalse(ApiRules.features(1, List.of("region.link")).contains("linkPass"));
 		assertFalse(ApiRules.features(2, List.of("region.plan", "region.siteLots")).contains("linkPass"));
-		Reason[] all = Reason.values();
-		assertEquals(Reason.NO_LINK, all[all.length - 1], "NO_LINK is appended last (7bF)");
+		// NO_LINK was appended right after SITE_UNFIT (7bF); later reasons are appended after it (M5 GP: PROGRAM_REFUSED)
+		assertEquals(Reason.SITE_UNFIT.ordinal() + 1, Reason.NO_LINK.ordinal(), "NO_LINK keeps its place after SITE_UNFIT (7bF)");
 	}
 
 	@Test
