@@ -15,6 +15,7 @@
 // per-shard resident memory) that a run writes to <out>/machine.jsonl.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { availableMemGB } from './shard-auto.mjs';
@@ -159,11 +160,52 @@ export async function enqueue(dir, me) {
 }
 
 /**
+ * The load-aware start (docs/GATES.md "Load-aware start", 2026-11-12): three gate runs, Gradle tests and Steward's e2e took the machine to load
+ * 75-85 and steps failed on time. A shared run whose turn it is (no ticket ahead, no turbo run, a free slot) still waits while
+ *   - the 1-minute load average is above `max1`, or
+ *   - another run took its slot less than `settleSec` ago (the load average lags about a minute: without this, runs queued behind a high load
+ *     would all start in the same poll once it dips).
+ * It never waits when no other gate run holds a slot (the machine's load is then not the gate runs': nothing to wait for that ends), and at most
+ * `maxWaitMin` minutes in all (then it starts and records that it gave up), so non-gate load can't starve the queue or the nightly. FIFO is
+ * unchanged: only the head of the queue waits on the load, and the runs behind it wait for it as before. max1 0: off.
+ * A turbo run needs no gate: it starts only once every other run has ended (its reserved slots keep later runs out meanwhile).
+ */
+export const LOAD_DEFAULTS = { max1: 36, settleSec: 120, maxWaitMin: 30 };
+export function loadConfig(cfg, env = process.env) {
+  const c = { ...LOAD_DEFAULTS, ...(cfg.slots?.load ?? {}) };
+  if (env.GATE_LOAD_MAX !== undefined && env.GATE_LOAD_MAX !== '') c.max1 = Number(env.GATE_LOAD_MAX);
+  if (env.GATE_LOAD_WAIT_MAX_MIN !== undefined && env.GATE_LOAD_WAIT_MAX_MIN !== '') c.maxWaitMin = Number(env.GATE_LOAD_WAIT_MAX_MIN);
+  return c;
+}
+
+/**
+ * The gate for one attempt: -> null (go) or a reason to wait. me.loadWaitSince is set the first time it holds the run back (the cap counts from
+ * there); a run that goes after waiting gets me.loadWait = { seconds, gaveUp, max1, load1 }.
+ */
+export function loadGate(me, others, { load, loadNow = () => os.loadavg()[0], now = Date.now() } = {}) {
+  if (!load || !(load.max1 > 0)) return null;
+  const go = (gaveUp) => {
+    if (me.loadWaitSince) me.loadWait = { seconds: Math.round((now - me.loadWaitSince) / 1000), gaveUp, max1: load.max1, load1: Math.round(loadNow() * 10) / 10 };
+    return null;
+  };
+  if (!others.length) return go(false);
+  const newest = Math.max(0, ...others.map((h) => Date.parse(h.startedAt ?? '') || 0));
+  const l1 = loadNow();
+  const why = now - newest < load.settleSec * 1000
+    ? `a run started less than ${load.settleSec} s ago: its load is not in the average yet`
+    : l1 > load.max1 ? `the 1-min load ${Math.round(l1 / 5) * 5} (about) above ${load.max1}` : null;
+  if (!why) return go(false);
+  me.loadWaitSince ??= now;
+  if (now - me.loadWaitSince >= load.maxWaitMin * 60_000) return go(true);
+  return `load-aware start: ${why}`;
+}
+
+/**
  * One attempt, under the mutex. shared: slots 1..slots; turbo: every slot 1..fill (more if higher slot files exist).
  * decide(n) runs under the same mutex once the run can go and returns what its slot files record ({ shards, ports }).
  * -> { acquired: true, slot, slots } | { acquired: false, waitingOn: [string] } | null (mutex busy)
  */
-export async function tryAcquire(dir, me, { slots, fill = slots, decide = async () => ({}), alive = pidAlive } = {}) {
+export async function tryAcquire(dir, me, { slots, fill = slots, decide = async () => ({}), alive = pidAlive, load = null, loadNow, now } = {}) {
   return withMutex(dir, async () => {
     const tickets = liveTickets(dir, { alive });
     const ahead = tickets.filter((t) => t.pid !== me.pid && before(t, me));
@@ -198,6 +240,8 @@ export async function tryAcquire(dir, me, { slots, fill = slots, decide = async 
     for (let n = 1; n <= slots; n++) {
       const h = all.find((s) => s.i === n)?.holder;
       if (h) continue;
+      const held = loadGate(me, others, { load, loadNow, now: now?.() ?? Date.now() });
+      if (held) return { acquired: false, waitingOn: [held], load: true };
       const d = await decide(n);
       writeAtomic(slotFile(dir, n), { pid: me.pid, worktree: me.worktree, chain: me.chain, turbo: false, startedAt: new Date().toISOString(), shards: d.shards, ports: d.ports });
       fs.rmSync(ticketFile(dir, me), { force: true });
@@ -267,14 +311,17 @@ export function releaseAll(dir, pid, { handoff = true } = {}) {
  * Waits for the machine: enqueue, then tryAcquire every pollMs, logging who it waits on (at once, on every change, and every 5
  * minutes). -> { slot, slots, waitedSeconds }. On a signal while waiting the caller's exit handler calls releaseAll.
  */
-export async function acquire(dir, me, { slots, fill, decide, pollMs = 15_000, log = console.log, alive = pidAlive, shouldStop = () => false } = {}) {
+export async function acquire(dir, me, { slots, fill, decide, pollMs = 15_000, log = console.log, alive = pidAlive, shouldStop = () => false, load = null, loadNow } = {}) {
   await enqueue(dir, me);
   const t0 = Date.now();
   let lastText = '';
   let lastLog = 0;
   for (;;) {
-    const r = await tryAcquire(dir, me, { slots, fill, decide, alive });
-    if (r?.acquired) return { slot: r.slot, slots: r.slots, waitedSeconds: Math.round((Date.now() - t0) / 1000) };
+    const r = await tryAcquire(dir, me, { slots, fill, decide, alive, load, loadNow });
+    if (r?.acquired) {
+      if (me.loadWait) log(me.loadWait.gaveUp ? `load-aware start: gave up after ${me.loadWait.seconds} s (cap ${load.maxWaitMin} min), starting at load ${me.loadWait.load1}` : `load-aware start: waited ${me.loadWait.seconds} s, starting at load ${me.loadWait.load1}`);
+      return { slot: r.slot, slots: r.slots, waitedSeconds: Math.round((Date.now() - t0) / 1000), loadWait: me.loadWait ?? null };
+    }
     if (r) {
       const text = r.waitingOn.join('; ');
       if (text !== lastText || Date.now() - lastLog > 300_000) {

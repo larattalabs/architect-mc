@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chooseTurbo, enqueue, liveHolders, liveTickets, releaseAll, slotFile, tryAcquire } from '../../tools/lib/turbo.mjs';
+import { chooseTurbo, enqueue, liveHolders, liveTickets, loadConfig, loadGate, releaseAll, slotFile, tryAcquire } from '../../tools/lib/turbo.mjs';
 
 const kids = [];
 after(() => {
@@ -179,4 +179,84 @@ test('a turbo run hands the machine straight to the next queued turbo run: a pre
   assert.equal(releaseAll(dir, t2.pid), null);
   assert.equal(liveHolders(dir).length, 0);
   assert.ok((await go(dir, b)).acquired);
+});
+
+// ------------------------------------------------------------------ the load-aware start (docs/GATES.md "Load-aware start")
+
+const LOAD = { max1: 36, settleSec: 120, maxWaitMin: 30 };
+/** A holder that started `ago` ms before `at`. */
+const startedAgo = (h, at, ago) => {
+  for (const i of liveHolders(h.dir).find((x) => x.pid === h.pid).slots) {
+    const f = slotFile(h.dir, i);
+    fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, 'utf8')), startedAt: new Date(at - ago).toISOString() }));
+  }
+};
+
+test('load-aware start: the head of the queue waits while the load is high and goes when it drops; FIFO holds behind it', async () => {
+  const dir = tmp();
+  const t = Date.now();
+  const h = await queued(dir, run('h'));
+  await go(dir, h);
+  h.dir = dir;
+  startedAgo(h, t, 10 * 60_000);
+  const a = await queued(dir, run('a'));
+  const b = await queued(dir, run('b'));
+  let load = 70;
+  const o = { load: LOAD, loadNow: () => load, now: () => t };
+  const wa = await go(dir, a, o);
+  assert.equal(wa.acquired, false);
+  assert.equal(wa.load, true);
+  assert.match(wa.waitingOn.join(), /load-aware start: the 1-min load 70 \(about\) above 36/);
+  // b is behind a: it waits for a, not on the load, and does not overtake it
+  const wb = await go(dir, b, o);
+  assert.equal(wb.acquired, false);
+  assert.match(wb.waitingOn.join(), new RegExp(`queued before it: pid ${a.pid}`));
+  load = 20;
+  const ga = await go(dir, a, { ...o, now: () => t + 90_000 });
+  assert.deepEqual(ga.slots, [2]);
+  assert.equal(a.m.loadWait.seconds, 90);
+  assert.equal(a.m.loadWait.gaveUp, false);
+});
+
+test('load-aware start: no herd; a run that just started holds the next back until its load shows', async () => {
+  const dir = tmp();
+  const t = Date.now();
+  const h = await queued(dir, run('h'));
+  await go(dir, h);
+  h.dir = dir;
+  startedAgo(h, t, 30_000);
+  const a = await queued(dir, run('a'));
+  const o = { load: LOAD, loadNow: () => 5 };
+  const w = await go(dir, a, { ...o, now: () => t });
+  assert.equal(w.acquired, false);
+  assert.match(w.waitingOn.join(), /started less than 120 s ago/);
+  assert.ok((await go(dir, a, { ...o, now: () => t + 91_000 })).acquired, 'two minutes after the last start, at a low load');
+});
+
+test('load-aware start: never waits when it would be the only gate run; gives up after the cap; max1 0 is off', async () => {
+  const dir = tmp();
+  const t = Date.now();
+  const alone = await queued(dir, run('alone'));
+  const ga = await go(dir, alone, { load: LOAD, loadNow: () => 99, now: () => t });
+  assert.ok(ga.acquired, 'alone: the load is not the gate runs\'');
+  assert.equal(alone.m.loadWait, undefined);
+  alone.dir = dir;
+  startedAgo(alone, t, 10 * 60_000);
+  const c = await queued(dir, run('c'));
+  const o = { load: LOAD, loadNow: () => 99 };
+  assert.equal((await go(dir, c, { ...o, now: () => t })).acquired, false);
+  assert.equal((await go(dir, c, { ...o, now: () => t + 29 * 60_000 })).acquired, false);
+  const gc = await go(dir, c, { ...o, now: () => t + 30 * 60_000 });
+  assert.ok(gc.acquired);
+  assert.equal(c.m.loadWait.gaveUp, true);
+  assert.equal(c.m.loadWait.seconds, 1800);
+  const d = await queued(dir, run('d'));
+  assert.ok((await go(dir, d, { load: { ...LOAD, max1: 0 }, loadNow: () => 99, now: () => t })).acquired);
+});
+
+test('load-aware start: config and env', () => {
+  assert.deepEqual(loadConfig({}, {}), { max1: 36, settleSec: 120, maxWaitMin: 30 });
+  assert.deepEqual(loadConfig({ slots: { load: { max1: 30 } } }, { GATE_LOAD_WAIT_MAX_MIN: '10' }), { max1: 30, settleSec: 120, maxWaitMin: 10 });
+  assert.equal(loadConfig({}, { GATE_LOAD_MAX: '0' }).max1, 0);
+  assert.equal(loadGate({}, [{ startedAt: new Date(0).toISOString() }], { load: null }), null);
 });
