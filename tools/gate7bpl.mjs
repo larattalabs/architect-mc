@@ -102,7 +102,7 @@ function diff(a, b, skip = null) {
 }
 
 async function groundY() {
-  const h = await call('dev.box.hash', { min: [CX, -64, CZ], max: [CX, 40, CZ], cells: true }, 120_000);
+  const h = await call('dev.box.hash', { min: [CX, -64, CZ], max: [CX, 250, CZ], cells: true }, 120_000);
   let g = -64;
   for (const l of h.cells ?? []) { const [k, ...rest] = l.split(' '); const y = Number(k.split(',')[1]); if (idOf(asState(rest.join(' '))) !== 'air' && y > g) g = y; }
   return g;
@@ -289,11 +289,12 @@ steps.ingame = async () => {
   const kl = await call('dev.pl.fit', { blueprint: t.id, site: t.wire }, 120_000);
   check(json(reasons(kl)) === json(['KEEP_LOST']) && kl.refusals[0].message.startsWith(`${cut.join(',')}:`), `KEEP_LOST alone when a trunk log (keep-critical) is cut; the message starts with the cell`, kl.refusals);
   await cmd(`/setblock ${cut[0]} ${cut[1]} ${cut[2]} minecraft:oak_log`);
-  const mg = [t.vol[0] + 1, t.vol[1] + 6, t.vol[2] + 1];
+  const mg = [t.vol[0] + 1, t.box[1] + 2, t.vol[2] + 1];
+  const mgWas = (await cellsOf([...mg, ...mg])).get(k3(...mg));
   await cmd(`/setblock ${mg[0]} ${mg[1]} ${mg[2]} minecraft:cobblestone`);
   const dr = await call('dev.pl.fit', { blueprint: t.id, site: t.wire }, 120_000);
   check(json(reasons(dr)) === json(['SITE_DRIFTED']), 'SITE_DRIFTED alone when a block is set in the site margin', dr.refusals);
-  await cmd(`/setblock ${mg[0]} ${mg[1]} ${mg[2]} minecraft:air`);
+  await cmd(`/setblock ${mg[0]} ${mg[1]} ${mg[2]} ${mgWas}`);
   const ok = await call('dev.pl.fit', { blueprint: t.id, site: t.wire }, 120_000);
   check(ok.clean, 'the site restored: the fit is clean again', ok.refusals);
   const vol2 = grow(t.vol, 1, gy - 2);
