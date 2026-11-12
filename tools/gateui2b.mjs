@@ -441,6 +441,7 @@ steps.gallery = async () => {
     'architect_mc.variant.what': false, 'architect_mc.variant.style': true, 'architect_mc.variant.materials': true, 'architect_mc.variant.more_roles': false,
     'architect_mc.variant.features': false, 'architect_mc.variant.rules': false, 'architect_mc.variant.parameters': true,
     'architect_mc.style_editor.roles': false, 'architect_mc.style_editor.settlement': false, 'architect_mc.style_editor.slots': false,
+    'architect_mc.set.options': false,
   };
   const folds = (o) => call('dev.u3.sections', { set: { ...U3FOLDS, ...o } }).catch(() => null);
   await folds({});
@@ -475,6 +476,14 @@ steps.gallery = async () => {
     await call('dev.set.fill', { name: 'Gallery hamlet', prompt: 'a quiet hamlet by a river', items: [{ type: 'tower', name: 'Watchtower', role: 'landmark' }, { type: 'cabin', name: 'Ferry cabin' }, { type: 'gatehouse', name: 'Ford gate' }], concurrency: 2 });
     await sleep(1200);
   });
+  // (SD) a bible picked and the Options section open: the controls folded by default
+  await sec('ui', 'design', 'set_dialog_options', async () => {
+    await folds({ 'architect_mc.set.options': true });
+    await openTab('design'); await call('dev.set.open');
+    await call('dev.set.fill', { name: 'Gallery hamlet', bible: 'oak', items: [{ type: 'tower', name: 'Watchtower', role: 'landmark' }, { type: 'cabin', name: 'Ferry cabin', notes: 'by the ford' }], concurrency: 2, budgetUsd: 20, massingFirst: true, maxRedirects: 2, context: 'a river hamlet at a ford; the road runs north to south' });
+    await sleep(1200);
+  });
+  await folds({});
   await call('dev.set.close').catch(() => null);
 
   // ================================================================ Designs tab (a sim design: $0)

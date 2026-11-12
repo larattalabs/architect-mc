@@ -307,7 +307,7 @@ never changes the verdict. It uses its own run dir, out dir, lock and ports (`ni
 - **What it shoots**, each at GUI scale 2 and 4, as `<screen>__<state>__s<scale>.png`:
   - the Library (grid, the Type / Tag / Collection / Sort pop-ups, starred, search, detail, the rename and tag editors, the variant
     form with its palette pop-ups, Import, Placed); the Design tab (default, filled, custom size, large with options, other type,
-    profile and bible pop-ups, remix, the set dialog empty and filled); the Designs tab (before and after a sim design); the Status tab and
+    profile and bible pop-ups, remix, the set dialog empty, filled and with its Options open); the Designs tab (before and after a sim design); the Status tab and
     the helper strip;
   - the placement HUD (checking, ready, key legend, force armed); the Placed toast; one paged chat list (pages 1 and 2); CrateScreen
     (open, Confirm armed); the SiteHud modes (full, line, hidden);

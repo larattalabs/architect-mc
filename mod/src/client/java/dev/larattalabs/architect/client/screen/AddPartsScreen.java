@@ -114,7 +114,7 @@ final class AddPartsScreen extends U3Screen {
 				+ "without, it gets the Style's materials and look as guidance."};
 		for (String para : lines) {
 			for (String l : TextUtil.wrapPlain(font, para, cw)) {
-				g.text(font, l, cx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
+				g.text(font, l, cx, y, UiStyle.clayText(), false);
 				y += 10;
 			}
 			y += 4;
