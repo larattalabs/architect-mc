@@ -145,7 +145,32 @@ public final class Quotes {
 			rec.survival = sv;
 		}
 		EntranceStyle style = revision ? EntranceStyle.region(rec.id) : EntranceStyle.ofIr(irJson, null);
-		// 2. the lots: a revision's refills (from the effective IR, each needs its entry as the realise does), then the plan's own lots
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet roadCells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		// 2. the 4e roads, over the land now (the plan check's call); their surface cells stand when the lots go down
+		for (Ir.Road road : ir.roads()) {
+			List<BlockPos> pts = new ArrayList<>();
+			road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
+			try {
+				var c = dev.larattalabs.architect.site.InfraPlace.checkRoad(level, pts, road.width(), road.surface(), null, road.lanterns(), false, p.owner(), true,
+					true, null, road.lamp(), revision ? rec.groupId : null);
+				if (c.ok()) {
+					bill.add("road:" + road.id(), dev.larattalabs.architect.site.RoadBuilder.bom(level, c.positions(), c.values()));
+					for (int i = 0; i < c.positions().length; i++) {
+						String n = c.values()[i] == null ? null : c.values()[i].name();
+						if (n != null && !n.equals("minecraft:air") && !dev.larattalabs.architect.site.roads.RoadPlan.isLampBlock(n)) {
+							roadCells.add(c.positions()[i]); // as Roads.roadCells reads a standing road's journal entry
+						}
+					}
+				} else {
+					bill.exact = false;
+					notes.add("road " + road.id() + ": its check refuses over the land now (" + c.refusals().get(0).message() + "): not billed");
+				}
+			} catch (RuntimeException e) {
+				bill.exact = false;
+				notes.add("road " + road.id() + ": its bill could not be read (" + e + ")");
+			}
+		}
+		// 3. the lots: a revision's refills (from the effective IR, each needs its entry as the realise does), then the plan's own lots
 		if (revision) {
 			Ir eff = Ir.lenient(Revisions.effective(live), rec.claim);
 			for (String lotId : Revisions.refills(irJson)) {
@@ -155,7 +180,7 @@ public final class Quotes {
 				}
 				Ir.Lot lot = eff.lots().stream().filter(x -> x.id().equals(lotId)).findFirst().orElse(null);
 				if (lot != null) {
-					lot(level, rec, eff, lot, entry, entries, style, bill, notes, false);
+					lot(level, rec, eff, lot, entry, entries, style, roadCells, bill, notes, false);
 					bound.put(lotId, entry);
 				}
 			}
@@ -165,31 +190,13 @@ public final class Quotes {
 			if (entry == null) {
 				continue; // a pad: its paid cells are the tiles'
 			}
-			lot(level, rec, ir, lot, entry, entries, style, bill, notes, !revision);
+			lot(level, rec, ir, lot, entry, entries, style, roadCells, bill, notes, !revision);
 			bound.put(lot.id(), entry);
 		}
-		// 3. a first realise's K1 swing gates (a revision queues no mechanism item)
+		// 4. a first realise's K1 swing gates (a revision queues no mechanism item)
 		if (!revision) {
 			for (JsonObject gw : GateMech.gateWrites(ir)) {
 				bill.add("mech:" + RegionsImpl.str(gw, "gate", ""), GateMech.plan(gw, null, null, 0, 0, 0).bill());
-			}
-		}
-		// 4. the 4e roads, over the land now (the plan check's call)
-		for (Ir.Road road : ir.roads()) {
-			List<BlockPos> pts = new ArrayList<>();
-			road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
-			try {
-				var c = dev.larattalabs.architect.site.InfraPlace.checkRoad(level, pts, road.width(), road.surface(), null, road.lanterns(), false, p.owner(), true,
-					true, null, road.lamp(), revision ? rec.groupId : null);
-				if (c.ok()) {
-					bill.add("road:" + road.id(), dev.larattalabs.architect.site.RoadBuilder.bom(level, c.positions(), c.values()));
-				} else {
-					bill.exact = false;
-					notes.add("road " + road.id() + ": its check refuses over the land now (" + c.refusals().get(0).message() + "): not billed");
-				}
-			} catch (RuntimeException e) {
-				bill.exact = false;
-				notes.add("road " + road.id() + ": its bill could not be read (" + e + ")");
 			}
 		}
 		// 5. the fluids' charge: once per region
@@ -210,7 +217,7 @@ public final class Quotes {
 
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */
 	private static void lot(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, Map<String, String> entries, @Nullable EntranceStyle style,
-		Bill bill, List<String> notes, boolean mech) {
+		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech) {
 		QItem q = RegionsImpl.lotItemOf(level, rec, ir, lot, entry, new ArrayList<>(), entries, null);
 		if (q == null) {
 			return;
@@ -233,7 +240,13 @@ public final class Quotes {
 		JsonObject lotJson = dev.larattalabs.architect.site.SiteLots.lotJson(ir.json(), lot.id());
 		dev.larattalabs.architect.api.SiteSpec site = dev.larattalabs.architect.site.SiteLots.isSiteLot(lotJson) ? dev.larattalabs.architect.site.SiteLots.siteOf(
 			ir.json(), lot.id()) : null;
-		Sites.Verdict v = SiteFit.with(site, rec.groupId, () -> Sites.verdict(level, bp, origin, rot, q.force, null, true, true, true, rec.owner, style, false));
+		Sites.Verdict v;
+		Sites.QUOTE_ROADS.set(roadCells);
+		try {
+			v = SiteFit.with(site, rec.groupId, () -> Sites.verdict(level, bp, origin, rot, q.force, null, true, true, true, rec.owner, style, false));
+		} finally {
+			Sites.QUOTE_ROADS.remove();
+		}
 		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
 		if (b == null) {
 			bill.exact = false;

@@ -40,7 +40,7 @@ function listDiff(a, b) {
 export async function registerQT(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, P0_TOWN, P0_LOT, P0_CLAIM, growPlan, rvState, rvWait, root } = h;
   const ctx = { L, OUT, imp: h.imp, KIT: path.join(root, 'kit') };
-  const strip = (q) => { const o = { ...q }; delete o.ms; delete o.thread; return o; };
+  const strip = (q) => { const o = { ...q }; for (const k of ['id', 'type', 'ok', 'ms', 'thread']) delete o[k]; return o; };
 
   /** The quote designs: rs_hut and rs_shed (RS's), and qt_hut: rs_hut's room with a generated approach (its bill is more than its template's). */
   async function designs() {

@@ -627,6 +627,11 @@ public final class Sites {
 		// phase 4e: standing roads' surface cells near the box (the approach stops at a road)
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
+		// (M5 QT) a quote's verdict: the plan's own 4e roads stand by the time its lots go down (a lot's item waits for its stage's roads)
+		it.unimi.dsi.fastutil.longs.LongSet quoteRoads = QUOTE_ROADS.get();
+		if (quoteRoads != null) {
+			roads.addAll(quoteRoads);
+		}
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
 		dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
 		// the chunk of the last column read (a size-cap box reads 600k cells: no per-cell chunk lookup)
@@ -980,6 +985,13 @@ public final class Sites {
 		return o;
 	}
 
+	/**
+	 * (M5 QT) Set while a quote ({@code region.Quotes}) runs a lot's dry-run verdict on this thread: the surface cells of the plan's own 4e
+	 * roads, which stand when the realise puts the lot down (the approach stops at them, as at a standing road). A quote's verdict never seeds
+	 * the placement's check cache. Null otherwise.
+	 */
+	public static final ThreadLocal<it.unimi.dsi.fastutil.longs.@Nullable LongSet> QUOTE_ROADS = new ThreadLocal<>();
+
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
@@ -1141,7 +1153,7 @@ public final class Sites {
 					out.add(Reason.PROTECTED, Protected.message(moving != null ? "Moving " + movingId : "Placing " + bp.id(), pa));
 				}
 			}
-			if (site != null && typed.isEmpty() && moving == null && given == null) {
+			if (site != null && typed.isEmpty() && moving == null && given == null && QUOTE_ROADS.get() == null) {
 				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}
 			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));
