@@ -1594,8 +1594,11 @@ item 10 holds it as H-a's record (only waterfall_curtain and moat differ from th
   connector.drawbridge row goes (all five).
 - **7bF** (4f804a00, rule.suspended re-reserved until 7c, N-7b-1): upside_down/hang_from_ceiling until 7b -> until 7c (h, hy, f3; vocc and coa
   print no `until` / already had it).
+- **SL** (51fddf7c, after merging v0.60.0 at fbefeab8): swamp_stilts/hollow, treetop_village/canopy and upside_down/hanging_village
+  layout.elevated unsupported until 7b -> zone.standard refused NO_FEATURE; the layout.elevated gap row (3) goes. Only coa's table moves: the
+  others read Steward's first recordings (asks-8703dbd), which hold no layout.elevated part.
 - The tally lines follow: first recordings now adjusted 8, blocked 5, fits 70, refused 30, unsupported 19; coa's current asks adjusted 16,
-  blocked 21, fits 64, refused 8, unsupported 19. 0 malformed everywhere. No row changed without an owner above.
+  blocked 21, fits 64, refused 11, unsupported 16. 0 malformed everywhere. No row changed without an owner above.
 
 **One code change:** h-unit item 10 and hy-unit item 11 also compare the parts' classes with their fixed before tables (v0.36.0's, v0.37.0's),
 which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains `atAskLine` (GM-c's drawbridge by part and kind, 7bF's

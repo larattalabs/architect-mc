@@ -1,6 +1,5 @@
-# 59 asks: adjusted 16, blocked 21, fits 64, refused 8, unsupported 19
+# 59 asks: adjusted 16, blocked 21, fits 64, refused 11, unsupported 16
 # gap table (unsupported parts per block id):
-  layout.elevated          3
   tunnel.under             3
   form.crater              2
   rule.variety             2
@@ -107,7 +106,7 @@ sky_monastery/sky_island form.floating_island unsupported UNSUPPORTED until N-P0
 sorting_warehouse/trading_post zone.standard fits
 spiral_town/hill_town zone.standard adjusted
 survival_village/village zone.standard fits
-swamp_stilts/hollow layout.elevated unsupported UNSUPPORTED until 7b
+swamp_stilts/hollow zone.standard refused NO_FEATURE
 swamp_stilts/bridge_coven connector.rope_bridge blocked DEPENDENCY
 swamp_stilts/bridge_circle connector.rope_bridge blocked DEPENDENCY
 swamp_stilts/bridge_perch connector.rope_bridge blocked DEPENDENCY
@@ -116,7 +115,7 @@ terraced_hill/switchback_street connector.street blocked DEPENDENCY
 terraced_hill/terraces form.terrace fits
 terraced_hill/blend form.relief fits
 trade_hub/market_town zone.standard fits
-treetop_village/canopy layout.elevated unsupported UNSUPPORTED until 7b
+treetop_village/canopy zone.standard refused NO_FEATURE
 treetop_village/bridge_cabin_1 connector.rope_bridge blocked DEPENDENCY
 treetop_village/bridge_cabin_2 connector.rope_bridge blocked DEPENDENCY
 treetop_village/bridge_cabin_3 connector.rope_bridge blocked DEPENDENCY
@@ -134,7 +133,7 @@ two_districts/east_street connector.street blocked DEPENDENCY
 underwater_domes/colony zone.standard blocked DEPENDENCY
 underwater_domes/glass_tubes connector.tube unsupported UNSUPPORTED until UW
 underwater_domes/seabed form.seabed_site unsupported UNSUPPORTED until later
-upside_down/hanging_village layout.elevated unsupported UNSUPPORTED until 7b
+upside_down/hanging_village zone.standard refused NO_FEATURE
 upside_down/chain_bridge_1 connector.rope_bridge blocked DEPENDENCY
 walled_town/town zone.standard fits
 walled_town/town_wall connector.wall fits
