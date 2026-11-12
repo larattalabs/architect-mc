@@ -21,6 +21,7 @@ import { fixtureFor, fixtureCells, roadLamp } from './fixtures.mjs';
 import { traceBoundary, normalAt } from './boundary.mjs';
 import { followLots, smoothLine, maskRuns, FOLLOW_PAD } from './followEmit.mjs';
 import { FLAG_WATER, FLAG_LAVA, FLAG_MISSING } from './pack.mjs';
+import { emitFields, parseField } from './field.mjs';
 
 export const GROW_FORMAT = 'grow/1';
 /** A frontage lot's lane length (the rows between the verge row and its front edge): the pad's batter (PAD_MAX) plus one stays off the verge. */
@@ -227,6 +228,8 @@ export function stopSays(b) {
 function specOf(s, i) {
   if (!s || typeof s.id !== 'string' || !ID.test(s.id)) throw new Error(`NOT_ALLOWED: [call] grow.lots[${i}]: id must match ${ID}`);
   if (!Array.isArray(s.size) || s.size.length !== 2 || !s.size.every((v) => Number.isInteger(v) && v >= 3 && v <= 48)) throw new Error(`NOT_ALLOWED: [call] grow.lots[${i}] ${s.id}: size must be [along, deep], 3..48`);
+  // ((M5 FC) a module lot's field: checked here, recorded by emitGrowth)
+  if (s.field !== undefined) { try { parseField(s.field, `grow.lots[${i}] ${s.id}.field`); } catch (e) { throw new Error(`NOT_ALLOWED: [call] ${e.message}`); } }
   return { ...s, _i: i };
 }
 
@@ -767,6 +770,10 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     props._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
     (r.meta.parts[props.id] ??= {}).kind = 'add';
   }
+  // (M5 FC, S-M5-4) a grown lot's field (field {cells, crops} on its spec, checked at the search): on the IR's lot, as plan/0's compiler
+  // records it (field.mjs)
+  const fd = plan.lots.filter((l) => l.spec.field).map((l) => ({ zone: `${pre}pads`, def: l.spec }));
+  if (fd.length) emitFields(r.lots, fd);
   return { nodes, edges, roads, lamps, lots: lotsOut.map((l) => l.spec.id) };
 }
 

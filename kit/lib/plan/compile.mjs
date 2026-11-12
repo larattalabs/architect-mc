@@ -13,6 +13,7 @@
 // performance.now() for maxMs (a check that hits it is never cached and never makes an artifact).
 import { classifyRevision, revisionInput, revisionRecord, standingEntry } from './revision.mjs';
 import { growPlan, emitGrowth, growObstacles, stopSays } from '../region/grow.mjs';
+import { fieldDefs, emitFields } from '../region/field.mjs';
 import { validatePlan, zoneLots, entryOf, cmp, ZONE_PORTS } from './schema.mjs';
 import { canonicalJson, sha256Hex, FLAG_WATER, FLAG_LAVA, FLAG_FROZEN, encodeColumns } from '../region/pack.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from '../region/village.mjs';
@@ -1622,6 +1623,15 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     for (const [zid, ns] of ir.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
     for (const q of ir.lots) for (const b of q.bodies) if (b.volume && b.guardRuns) (K.record.guards ??= []).push({ part: q.zone, body: b.id, kind: 'body', fluids: true, volume: b.volume, runs: b.guardRuns.flat() });
     for (const q of ir.lots) for (const b of q.bodies) registerBody(keep, b, q.zone);
+  }
+  // ---- (M5 FC, S-M5-4) the module lots' fields (field {cells, crops} on a lot): after the irrigation (a field cell under an irrigation
+  // cell is dropped), recorded on the IR's lot (lots[].field); a plan that asks none is unchanged
+  {
+    const fd = fieldDefs(order, okClass, (z) => zoneLots(z).map((l) => l.lot));
+    if (fd.length) {
+      const fr = emitFields(r.lots, fd);
+      for (const [zid, ns] of fr.notes) { const a = answers.get(zid); if (a) a.notes = [...(a.notes ?? []), ...ns]; }
+    }
   }
   // ---- (6c H) step 3 for H parts: water bodies, moats and quays, before the routes (the route pass sees their water), each under a
   // checkpoint; a generator refuses by throwing 'CODE: message'
