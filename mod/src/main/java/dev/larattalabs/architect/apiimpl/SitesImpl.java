@@ -133,6 +133,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<PlaceResult> place(PlaceRequest r) {
+		SiteGuards.place(r); // 7b: until slice PL
 		return onServer(() -> dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> {
 			boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 			Blueprint bp = Blueprints.get(r.blueprintId());
@@ -154,6 +155,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public Verdict check(PlaceRequest r) {
+		SiteGuards.place(r); // 7b: until slice PL
 		boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 		Blueprint bp = Blueprints.get(r.blueprintId());
 		Sites.Verdict[] v = new Sites.Verdict[1];
@@ -299,6 +301,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<String> queue(Batch batch) {
+		SiteGuards.batch(batch); // 7b: until slice PL
 		return onServer(() -> Batches.queue(server, batch));
 	}
 

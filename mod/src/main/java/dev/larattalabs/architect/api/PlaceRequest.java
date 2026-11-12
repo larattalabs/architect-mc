@@ -27,10 +27,13 @@ import org.jspecify.annotations.Nullable;
  * @param consent (PT) the player builds this request may write over (docs/CONTRACT.md "Phase 6c slice PT" §6): only builds it names,
  *        each with an actor who placed at least 10% of it or holds permission level 2. Null (every older constructor) = none: a
  *        build in the way refuses {@link Reason#PLAYER_BUILD} (or is skipped), and {@code force} never overrides a build.
+ * @param site (since NEXT, 7b) the site of a site-bound design ({@link SiteSpec}): TerrainFit KEEP and the port approach per its fit; the
+ *        origin and rotation are the site's frame. Null (every older constructor) = a plain placement. Placed by slice PL; until then
+ *        a request with a site is refused ({@link UnsupportedOperationException}), never placed as a plain one.
  */
 public record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode,
 	@Nullable String owner, JsonObject ext, boolean force, @Nullable ServerPlayer actor, @Nullable OverlapPolicy overlap,
-	@Nullable String pathStyle, @Nullable BuildConsent consent) {
+	@Nullable String pathStyle, @Nullable BuildConsent consent, @Nullable SiteSpec site) {
 	public PlaceRequest {
 		ext = ext == null ? new JsonObject() : ext;
 		mode = mode == null ? Mode.AUTO : mode;
@@ -46,39 +49,54 @@ public record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origi
 	}
 
 	/** The 1.5.0 constructor (no path style: the design's own approach). */
+	/** The PT constructor (no site). Kept for binary compatibility. */
+	public PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode, @Nullable String owner, JsonObject ext,
+		boolean force, @Nullable ServerPlayer actor, @Nullable OverlapPolicy overlap, @Nullable String pathStyle, @Nullable BuildConsent consent) {
+		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, consent, null);
+	}
+
 	public PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode, @Nullable String owner, JsonObject ext,
 		boolean force, @Nullable ServerPlayer actor, @Nullable OverlapPolicy overlap, @Nullable String pathStyle) {
-		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, null);
+		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, null, null);
 	}
 
 	public PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode, @Nullable String owner, JsonObject ext,
 		boolean force, @Nullable ServerPlayer actor, @Nullable OverlapPolicy overlap) {
-		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, null, null);
+		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, null, null, null);
 	}
 
 	/** The 1.4.0 constructor (no overlap policy: REFUSE). */
 	public PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode, @Nullable String owner, JsonObject ext,
 		boolean force, @Nullable ServerPlayer actor) {
-		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, null, null, null);
+		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, null, null, null, null);
 	}
 
 	/** A request with the defaults: AUTO mode, no owner, no ext, no force, no actor. */
 	public static PlaceRequest of(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation) {
-		return new PlaceRequest(blueprintId, level, origin, rotation, Mode.AUTO, null, new JsonObject(), false, null, null, null, null);
+		return new PlaceRequest(blueprintId, level, origin, rotation, Mode.AUTO, null, new JsonObject(), false, null, null, null, null, null);
 	}
 
 	/** The same request with an overlap policy. Since 1.5.0. */
 	public PlaceRequest withOverlap(@Nullable OverlapPolicy policy) {
-		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, policy, pathStyle, consent);
+		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, policy, pathStyle, consent, site);
 	}
 
 	/** The same request with a path style ({@link #pathStyle}; null = the design's own approach). Since 1.9.0. */
 	public PlaceRequest withPathStyle(@Nullable String style) {
-		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, style, consent);
+		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, style, consent, site);
 	}
 
 	/** (PT) The same request with this consent. */
 	public PlaceRequest withConsent(@Nullable BuildConsent c) {
-		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, c);
+		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, c, site);
+	}
+
+	/**
+	 * (7b) The same request placing a site-bound design over {@code s} (null = a plain placement, as before): TerrainFit and the
+	 * approach follow the site's fit, in its frame. Placed by slice PL; until then a request with a site is refused, never placed as a
+	 * plain one. Since NEXT.
+	 */
+	public PlaceRequest withSite(@Nullable SiteSpec s) {
+		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, consent, s);
 	}
 }

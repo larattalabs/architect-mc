@@ -30,7 +30,7 @@ final class SpecSchema {
 	private SpecSchema() {
 	}
 
-	/** The bundled schema {@code name} ({@code mask} or {@code pattern}). */
+	/** The bundled schema {@code name} ({@code mask}, {@code pattern} or (7b) {@code site-spec}). */
 	static JsonObject schema(String name) {
 		return SCHEMAS.computeIfAbsent(name, n -> {
 			String res = "/architect_mc/schemas/" + n + ".json";

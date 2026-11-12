@@ -32,4 +32,14 @@ public interface Survey {
 	default CompletableFuture<Volume> volume(ServerLevel level, BoundingBox box, LoadPolicy load) {
 		throw new UnsupportedOperationException("Survey.volume needs Architect API 1.9.0");
 	}
+
+	/**
+	 * (7b) A lot's site, sampled and analysed (docs/CONTRACT.md "Phase 7b" §2): the {@link #volume} of {@code lot} grown by 8 cells on
+	 * every side, frozen, its affordances found ({@link Affordance}) and, when the analysis finds one for {@code fit}, a proposed
+	 * {@link SiteFrame}. {@code load} as {@link #volume}. Built by slice AF (feature {@code "siteSurvey"}); until then it throws.
+	 * Since NEXT.
+	 */
+	default CompletableFuture<SiteSample> site(ServerLevel level, BoundingBox lot, FitMode fit, LoadPolicy load) {
+		throw new UnsupportedOperationException("Survey.site needs the Architect API since NEXT (slice AF)");
+	}
 }

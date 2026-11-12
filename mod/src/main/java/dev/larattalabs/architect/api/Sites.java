@@ -163,6 +163,17 @@ public interface Sites {
 	}
 
 	/**
+	 * (7b) Fits a site-bound design to its site (docs/CONTRACT.md "Phase 7b" §2): no rotation search; the design is placed only in the
+	 * site's own frame ({@link SiteSpec#frame()}), and the verdict runs the site checks: {@link Reason#SITE_MISMATCH} (the entry is
+	 * bound to another volume sha), {@link Reason#SITE_DRIFTED}, {@link Reason#KEEP_LOST}, {@link Reason#SITE_UNSUPPORTED}. Pass the
+	 * answer's origin and rotation with the site into a {@link PlaceRequest#withSite}. An {@code on_pad} site lot keeps
+	 * {@link #fitToLot}. Nothing is placed. Built by slice PL (feature {@code "siteDesign"}); until then it throws. Since NEXT.
+	 */
+	default LotFit fitToSite(String blueprintId, SiteSpec site, FitOptions options) {
+		throw new UnsupportedOperationException("Sites.fitToSite needs the Architect API since NEXT (slice PL)");
+	}
+
+	/**
 	 * Predicts where a detail of a massing version will stand on a lot (docs/CONTRACT.md 6c slice 0a §4): the same fit as
 	 * {@link #fitToLot}, on the massing version's template, with the normal verdict there. A detail of that version fitted to the
 	 * same lot gets the same rotation and an origin within 2 on x and z (equal in y). An unknown massing or version is

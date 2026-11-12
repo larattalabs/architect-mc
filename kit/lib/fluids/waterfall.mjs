@@ -20,7 +20,7 @@
 // top behind it; `sculpt` raises a rock outcrop in stage `ground` (the face `drop` over the basin, at most WATERFALL.sculpt high) and
 // sets the pool in its top; `auto` (the default) is existing where one passes, else sculpt. A waterfall already in the world is never
 // adopted (the survey can't tell one from a pond: `params.existing` reads as auto, noted). The hollow behind the curtain is not built
-// (7b, form.hidden_room): a hollow written inside the waterfall's own members (its label, notes or params) makes it answer `adjusted`
+// (7c, form.hidden_room; re-reserved from 7b by N-7b-1): a hollow written inside the waterfall's own members (its label, notes or params) makes it answer `adjusted`
 // with a deviation naming it (S-H-7); a separate form.hidden_room part waits on its own.
 import { VC, classAt } from '../region/volume.mjs';
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mjs';
@@ -224,9 +224,9 @@ export function resolve(C, p) {
   // S-H-7: the hollow behind the curtain is never dropped silently
   const notes = [...sp.notes];
   const hollowPart = C.order.some((q) => q.family === 'form' && q.kind === 'hidden_room');
-  if (hollowIn(part) && !hollowPart) devs.push({ what: 'count', kind: 'hollow', value: 1, max: 0, block: 'form.hidden_room', until: '7b', note: 'the hollow behind the curtain is not built (form.hidden_room waits for 7b): the fall is built in front of the face' });
-  else if (hollowPart) notes.push('the hollow behind the curtain is its own part (form.hidden_room, until 7b)');
-  else notes.push('the cliff behind the curtain is not hollowed (a hollow is form.hidden_room, 7b)');
+  if (hollowIn(part) && !hollowPart) devs.push({ what: 'count', kind: 'hollow', value: 1, max: 0, block: 'form.hidden_room', until: '7c', note: 'the hollow behind the curtain is not built (form.hidden_room waits for 7c): the fall is built in front of the face' });
+  else if (hollowPart) notes.push('the hollow behind the curtain is its own part (form.hidden_room, until 7c)');
+  else notes.push('the cliff behind the curtain is not hollowed (a hollow is form.hidden_room, 7c)');
   const j = C.judge([{ what: 'move', value: best.move, ...C.tolOf(part, 'move') }, ...(best.sketch ? [{ what: 'sketch', value: best.sketch, ...C.tolOf(part, 'sketch') }] : []), ...devs.filter((d) => d.what !== 'count')]);
   const hollow = devs.find((d) => d.kind === 'hollow');
   const klass = j.klass === 'fits' && hollow ? 'adjusted' : j.klass;

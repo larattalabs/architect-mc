@@ -868,10 +868,11 @@
   },
   {
    "id": "form.hidden_room",
-   "sinceApi": "1.23.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "7b"
+   "until": "7c",
+   "note": "Re-reserved for 7c (N-7b-1)."
   },
   {
    "id": "form.crater",
@@ -1014,11 +1015,11 @@
   },
   {
    "id": "rule.suspended",
-   "sinceApi": "1.23.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
    "state": "reserved",
-   "until": "7b",
-   "note": "Upside-down or hanging builds; 7b's other surfaces."
+   "until": "7c",
+   "note": "Upside-down builds: 7c (N-7b-1); a house hanging from a ceiling is 7b's suspend fit."
   },
   {
    "id": "locator.inside",
