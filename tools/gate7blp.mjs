@@ -181,19 +181,20 @@ async function removeRegion(region) {
 // ------------------------------------------------------------------ the two-lot plan
 
 /** A plan/0 with an elevated zone `canopy` (two huts) near the anchor and a branch_walk between the huts. */
-const linkedPlan = () => ({ schemaVersion: 'plan/0', planId: 'lp_canopy', zones: [{ id: 'canopy', kind: 'standard', size: { preset: 'M' }, where: { near: { anchor: 'grove', within: 8 } },
-  program: { layout: 'elevated', lots: ['hut_a', 'hut_b'].map((id) => ({ id, type: 'cabin', role: 'canopy_hut', size: [9, 9], villager: 'dwelling', brief: 'A small home on its tree\'s platform.' })) } }],
+const linkedPlan = () => ({ schemaVersion: 'plan/0', planId: 'lp_canopy', zones: [{ id: 'canopy', kind: 'standard', size: { preset: 'L' }, where: { near: { anchor: 'grove', within: 8 } },
+  program: { layout: 'elevated', lots: ['hut_a', 'hut_b'].map((id) => ({ id, type: 'cabin', role: 'canopy_hut', size: [17, 17], villager: 'dwelling', brief: 'A small home on its tree\'s platform.' })) } }],
   connectors: [{ id: 'walk', kind: 'branch_walk', from: { part: 'hut_a' }, to: { part: 'hut_b' } }] });
 
-/** A fresh flat world with two giant trees 16 apart (3x3 oak trunks 20 tall, 15x15 persistent leaf layers 5 thick). */
+/** A fresh flat world with two giant trees 24 apart (3x3 oak trunks 20 tall, 23x23 persistent leaf layers 5 thick, one column apart: two canopies):
+ * a 17-wide hut (SV's trunk house's size) on each, the walk round hut_a under the leaves. */
 async function twoTrees(world) {
   await L.fresh(world, FLAT);
   await L.setRules('exact');
   await L.tp(TX - 20, 0, TZ - 30);
   const gy = await groundY();
-  for (const x of [TX - 8, TX + 8]) {
+  for (const x of [TX - 12, TX + 12]) {
     await cmd(`/fill ${x - 1} ${gy + 1} ${TZ - 1} ${x + 1} ${gy + 20} ${TZ + 1} minecraft:oak_log`);
-    await cmd(`/fill ${x - 7} ${gy + 21} ${TZ - 7} ${x + 7} ${gy + 25} ${TZ + 7} minecraft:oak_leaves[persistent=true]`);
+    await cmd(`/fill ${x - 11} ${gy + 21} ${TZ - 11} ${x + 11} ${gy + 25} ${TZ + 11} minecraft:oak_leaves[persistent=true]`);
   }
   await L.settle(1500);
   const claim = [TX - 80, TZ - 80, TX + 79, TZ + 79];
@@ -441,8 +442,13 @@ steps.gr = async () => {
     check(x.undo.removed !== false && x.undo.diff === 0, `${tag}: the growth undone: the world before it (${x.undo.diff} differ)`, x.undo.first);
   }
   const d = diff(B.S1, A.S1);
-  out.bytes = { cells: A.S1.size, differ: d.n, first: d.first, rvIrSame: json(A.rvIr) === json(B.rvIr) };
-  check(d.n === 0 && A.S1.size === B.S1.size && out.bytes.rvIrSame, `the revision realised with LP is byte for byte the realise before LP: ${A.S1.size} cells over the claim + 8, ${d.n} differ; the revision IRs equal (${out.bytes.rvIrSame})`, d.first);
+  // (the revision IRs' build members: their parts, stages, lots, roads, paths and tiles; the ids of the plan, parent artifact and region
+  // differ between the two worlds by construction)
+  const BUILD = ['stages', 'parts', 'lots', 'roads', 'paths', 'tiles', 'budget', 'claim', 'anchors'];
+  const keys = [...new Set([...Object.keys(A.rvIr ?? {}), ...Object.keys(B.rvIr ?? {})])].sort();
+  const differ = keys.filter((k) => json(A.rvIr?.[k]) !== json(B.rvIr?.[k]));
+  out.bytes = { cells: A.S1.size, differ: d.n, first: d.first, irKeysDiffer: differ, buildDiffer: differ.filter((k) => BUILD.includes(k)) };
+  check(d.n === 0 && A.S1.size === B.S1.size && out.bytes.buildDiffer.length === 0, `the revision realised with LP is byte for byte the realise before LP: ${A.S1.size} cells over the claim + 8, ${d.n} differ; the revision IRs' build members equal (${json(BUILD)}; members that differ: ${json(differ)})`, d.first);
   await L.leaveWorld?.();
   return out;
 };
