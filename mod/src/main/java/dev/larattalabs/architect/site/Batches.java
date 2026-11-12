@@ -1010,13 +1010,38 @@ public final class Batches {
 		long t0 = System.nanoTime();
 		dev.larattalabs.architect.placement.Occupancy.regionScope = RegionItems.isRegion(b);
 		try {
-			tryStart0(server, b, i);
+			// (7b SL) a region site lot: its checks and writes see its site (TerrainFit KEEP, the port approach, PL's site checks), rebuilt from the
+			// region's IR each time (never persisted on the item); a pad lot or any other item: null, as before
+			dev.larattalabs.architect.api.SiteSpec site;
+			try {
+				site = regionSite(b, i);
+			} catch (IllegalArgumentException e) {
+				fail(b, i, Reason.OTHER, "Site lot " + i.key.substring(4) + ": the plan's site is malformed: " + e.getMessage());
+				return;
+			}
+			SiteFit.with(site, () -> {
+				tryStart0(server, b, i);
+				return null;
+			});
 		} finally {
 			dev.larattalabs.architect.placement.Occupancy.regionScope = false;
 		}
 		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
 			Architect.LOGGER.info("TRACE tick {} tryStart {} {} ms", server.getTickCount(), i.key, (System.nanoTime() - t0) / 1e6);
 		}
+	}
+
+	/**
+	 * (7b SL) The site of a region's site lot item ({@code lot:<id>}, a building): read again from the live region's IR; null for any other
+	 * item, a pad lot, or a region not live. A malformed site throws {@link IllegalArgumentException}.
+	 */
+	static dev.larattalabs.architect.api.@Nullable SiteSpec regionSite(QBatch b, QItem i) {
+		if (!RegionItems.isRegion(b) || !"building".equals(i.itemKind) || i.key == null || !i.key.startsWith("lot:")) {
+			return null;
+		}
+		String region = RegionItems.regionOf(b);
+		dev.larattalabs.architect.region.RegionsImpl.Live r = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
+		return r == null ? null : SiteLots.siteOf(r.ir().json(), i.key.substring(4));
 	}
 
 	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
@@ -1096,8 +1121,11 @@ public final class Batches {
 			waitFor(b, i, Reason.NOT_LOADED, "the area around the site is not loaded on the server (walk closer)");
 			return;
 		}
-		if (RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, snap != null ? snap : new Anchors.Bounds(i.x, i.y, i.z, i.x + sx - 1, i.y
-			+ bp.sizeY() - 1, i.z + sz - 1))) {
+		Anchors.Bounds freeze = snap != null ? snap : new Anchors.Bounds(i.x, i.y, i.z, i.x + sx - 1, i.y + bp.sizeY() - 1, i.z + sz - 1);
+		if (SiteFit.now() != null) {
+			freeze = SiteLots.freezeBox(freeze, SiteFit.now()); // (7b SL) freeze before lots, the general form: the site volume's columns too
+		}
+		if (RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, freeze)) {
 			return; // phase 6a: a region lot's columns are frozen before it writes (H0)
 		}
 		if (large) {

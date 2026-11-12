@@ -1223,6 +1223,12 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
+	/** (7b SL, dev hooks) A known plan's view ({@link #view}), or null. */
+	public static @Nullable RegionPlan planView(String planId) {
+		PlanRec p = planRec(planId);
+		return p == null ? null : view(p);
+	}
+
 	static RegionPlan view(PlanRec p) {
 		List<LotSpec> lots = new ArrayList<>();
 		JsonArray irLots = p.ir().json().get("lots") instanceof JsonArray a ? a : new JsonArray();
@@ -1237,9 +1243,20 @@ public final class RegionsImpl implements Regions {
 			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("ext") instanceof JsonObject le) {
 				le.entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
 			}
+			// (7b SL) a site lot: LotSpec.site from its `site` (the SiteSpec wire); a malformed one leaves the lot without (logged), never a throw
+			dev.larattalabs.architect.api.SiteSpec site = null;
+			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && dev.larattalabs.architect.site.SiteLots.isSiteLot(lo)) {
+				try {
+					site = dev.larattalabs.architect.site.SiteLots.siteOf(lo);
+				} catch (IllegalArgumentException e) {
+					Architect.LOGGER.warn("Plan {}: site lot {} has a malformed site: {}", p.planId(), l.id(), e.getMessage());
+				}
+			}
 			li++;
-			lots.add(new LotSpec(l.id(), l.stage(), new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]), l.floorY(), dir(l.front()), l.brief(), new BlockSize(
-				l.max()[0], l.max()[1], l.max()[2]), ext));
+			BoundingBox lb = new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]);
+			BlockSize lm = new BlockSize(l.max()[0], l.max()[1], l.max()[2]);
+			lots.add(site == null ? new LotSpec(l.id(), l.stage(), lb, l.floorY(), dir(l.front()), l.brief(), lm, ext)
+				: new LotSpec(l.id(), l.stage(), lb, l.floorY(), dir(l.front()), l.brief(), lm, ext, site));
 		}
 		Map<String, BlockPos> anchors = new LinkedHashMap<>();
 		p.ir().anchors().forEach((k, v) -> anchors.put(k, new BlockPos(v[0], v[1], v[2])));
@@ -2101,6 +2118,12 @@ public final class RegionsImpl implements Regions {
 			q.fail(Reason.UNKNOWN_BLUEPRINT.name(), "No design " + bpId + " in the library");
 			return q;
 		}
+		// (7b SL) a site lot: no LotFitting; the design is placed in its site's frame (PL's site placement: Batches runs the item's checks
+		// and writes under SiteFit.with(the site rebuilt from this IR)); the record carries the binding
+		JsonObject siteLot = dev.larattalabs.architect.site.SiteLots.lotJson(ir.json(), lot.id());
+		if (dev.larattalabs.architect.site.SiteLots.isSiteLot(siteLot)) {
+			return siteLotItem(rec, ir, lot, siteLot, bp, bpId, entry, after, ext, actorUuid);
+		}
 		LotFitting.Fit f = LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), lot.front(), true, 0, true);
 		// (6c IRR, §4) the region's irrigation cells in this lot's box: the lot's design drops its blocks there and its site never owns them
 		// (LotMask, on the site's ext); how many of the entry's blocks the mask drops is reported (irrigationDropped)
@@ -2135,6 +2158,38 @@ public final class RegionsImpl implements Regions {
 		q.consented.addAll(rec.consented); // (6c PT) the realise's consented builds
 		if (!f.fits()) {
 			q.fail(Reason.LOT_TOO_SMALL.name(), "The lot is too small for " + bpId + ": " + f.why());
+		}
+		return q;
+	}
+
+	/**
+	 * (7b SL) A site lot's item: the entry at the site's frame origin, turned by its rotation, LAYERed as every lot item; its record's ext
+	 * gains the binding ({@code architect_mc:site}, the region's plan id). A malformed site, or an entry whose size (in the frame) is not
+	 * the lot box or that is bound to another volume, fails the item (never a pad placement).
+	 */
+	static QItem siteLotItem(RegionRec rec, Ir ir, Ir.Lot lot, JsonObject lotJson, Blueprint bp, String bpId, String entry, List<String> after,
+		JsonObject ext, @Nullable String actorUuid) {
+		int[] b = lot.box();
+		dev.larattalabs.architect.api.SiteSpec site;
+		try {
+			site = dev.larattalabs.architect.site.SiteLots.siteOf(lotJson);
+		} catch (IllegalArgumentException e) {
+			QItem q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, b[0], b[1], b[2], 0, false, ext, actorUuid, rec.survival(),
+				dev.larattalabs.architect.survival.SurvivalWorld.on());
+			q.fail(Reason.OTHER.name(), "Site lot " + lot.id() + ": the plan's site is malformed: " + e.getMessage());
+			return q;
+		}
+		BlockPos o = site.frame().origin();
+		JsonObject bound = dev.larattalabs.architect.site.SiteLots.withBinding(ext, site, rec.planId);
+		QItem q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, o.getX(), o.getY(), o.getZ(), dev.larattalabs.architect.site.SiteLots
+			.turns(site), false, bound, actorUuid, rec.survival(), dev.larattalabs.architect.survival.SurvivalWorld.on());
+		q.layer = true;
+		q.consented.addAll(rec.consented);
+		var ent = Blueprints.entry(bpId);
+		String why = dev.larattalabs.architect.site.SiteLots.bindProblem(lot.id(), entry, site, lotJson.get("box"), bp.sizeX(), bp.sizeY(), bp.sizeZ(),
+			ent == null ? null : ent.json());
+		if (why != null) {
+			q.fail((why.contains("SITE_MISMATCH") ? Reason.SITE_MISMATCH : Reason.LOT_TOO_SMALL).name(), why);
 		}
 		return q;
 	}

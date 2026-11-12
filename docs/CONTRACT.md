@@ -27826,16 +27826,24 @@ refuses an extra key.
 | `plan.json` | `affordances[]` | AF's member, now written by every plan with a site lot placed from an affordance |
 | `RegionPlan.lots()` | `LotSpec.site` | `SiteSpec.fromWire($.lots[].site)`; `null` for every pad lot (unchanged) |
 
-- **`site.volume`** = the lot box grown by `SITE_MARGIN` (8) each way, intersected with the claim (x, y and z). The region asks the
-  frozen volume of exactly this box (`needVolume`), so `site.volumeSha` is that volume's ARVX sha.
-- **`site.volumeBlobId`** = `local:<volumeSha>`: the region's frozen volume is this world's `architect/volumes/<sha>.bin` (the two-plan
-  flow freezes it there; `RegionBlobs.installVolumes` copies it into the region's own store), as 7bF's fixtures name theirs. An upload
-  blob id would make the plan depend on an upload; the sha is the identity.
+- **`site.volume`** = the lot box grown by `SITE_MARGIN` (8) each way, and it must lie inside the claim (a lot whose margin leaves the
+  claim is refused; SV's `Site` reads the lot box as the volume less the margin). `site.volumeSha` is that volume's ARVX sha (of the
+  uncompressed bytes). (Amended before LP started, same day: first drafted as "cut to the claim".)
+- **Where the volume comes from.** The two-plan flow plans exactly twice, so a lot found from an affordance cannot ask for its own volume.
+  It is **cut** from a volume the plan already read (an elevated zone's: its rect + 8), encoded as ARVX version 1 and carried as an IR side
+  blob `site_<lotId>` of kind `volume` (gzip, OS byte pinned; the blob's sha is the gzip's, `site.volumeSha` the raw ARVX's). A lot box
+  whose volume equals one the plan read uses it as it is (no blob); a box no read volume covers asks for it (`needVolume`) and the lot is
+  placed on the second plan. The mod finds the volume by sha in this order: `architect/volumes/<sha>.bin`, the region's
+  `architect-regions/<id>/volumes/`, the region IR's `volume` side blobs (gunzipped, sha-checked, then frozen into `architect/volumes`).
+- **`site.volumeBlobId`** = `local:<volumeSha>`, as 7bF's fixtures name theirs: an upload blob id would make the plan depend on an upload;
+  the sha is the identity.
 - **`site.frame`** = `{origin: the box's minimum corner, rotation: AF's proposeFrame for the fit}` (`none` with no affordance).
 - **`site.keepCritical`** (world cells): `wrap_trunk` the volume's LOG cells inside the box (the host); `suspend` the affordance's hang
   points (anchors) that are site-solid in the volume; every other fit `[]`.
-- **`site.ports`** (design cells): the program's `ports`, else the default per fit: none for `on_pad`; `span` two `architect:walk`
-  ports `west` at `[0, 0, floor((d-1)/2)]` facing west and `east` at `[w-1, 0, floor((d-1)/2)]` facing east; `suspend` one walk port
-  `hatch` at `[floor((w-1)/2), 0, floor((d-1)/2)]` facing down (1x1); every other fit one walk port `front` at `[floor((w-1)/2), 0, d-1]`
-  facing south (2x2). `w`, `d` are the design's own size (the box turned back by the rotation).
+- **`site.ports`** (design cells): the program's `ports`, else the default per fit, named and placed as 7bF's fixtures name theirs so
+  SV's examples (and DS's site variants of them) find them (`mx = floor((w-1)/2)`, `mz = floor((d-1)/2)`; walk ports 2x2):
+  `on_pad` none; `wrap_trunk` `walk_w` at `[0, min(2, h-1), mz]` facing west; `span` `walk_w` at `[0, 0, mz]` facing west and `walk_e`
+  at `[w-1, 0, mz]` facing east; `suspend` `hatch` at `[mx, 0, mz]` facing down (1x1); `attach_to_cliff` `walk_top` at
+  `[mx, max(0, h-3), min(1, d-1)]` facing north; `carve_into` a `door` `door_s` at `[mx, 0, d-1]` facing south (1x2). `w, h, d` are the
+  design's own size (the box turned back by the rotation). (Amended before LP started, same day: first drafted as one `front` port.)
 - **`site.lotId`** = the lot id.
