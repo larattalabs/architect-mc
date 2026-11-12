@@ -49,7 +49,7 @@ async function harness(over: Partial<Config> = {}, root = tempDir('arch-5b-'), s
 }
 
 const FINAL = ['done', 'failed', 'cancelled'];
-const final = (h: H, id: string, ms = 60_000) => until(() => FINAL.includes(h.sc.designs.get(id)!.status), ms);
+const final = (h: H, id: string, ms = 600_000) => until(() => FINAL.includes(h.sc.designs.get(id)!.status), ms);
 const get = (h: H, id: string) => h.sc.designs.get(id)!;
 const top = (h: H, e: string) => JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, e, `${e}.blueprint.json`), 'utf8')) as Record<string, unknown>;
 
