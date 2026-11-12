@@ -127,6 +127,53 @@ separate from the run's own `--lock`, which still guards one runner's run dir an
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
 
+### Load-aware start (2026-11-12)
+
+On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot
+rules above stay as they are. On top of them, a **shared** run whose turn it is (no ticket ahead of it, no turbo run, a free slot)
+still waits while:
+- the 1-minute load average is above `slots.load.max1` (36, about twice the 18 cores), or
+- another run took its slot less than `slots.load.settleSec` (120 s) ago. The load average lags by about a minute, so without this
+  every run queued behind a high load would start in the same 15 s poll once it dips.
+
+It **never waits when it would be the only gate run** (the load is then not the gate runs', so waiting would not end it), and waits
+**at most `slots.load.maxWaitMin` (30) minutes**, then starts and records that it gave up. So non-gate load can't starve the queue
+or the 02:00 nightly. FIFO is unchanged: only the head of the queue waits on the load, and the runs behind it wait for it as
+before. A turbo run has no load gate: it starts only once every other run has ended, and its reserved slots keep later runs out.
+
+- **Overrides:** `--no-load-wait` (or `GATE_LOAD_MAX=0`) turns it off; `GATE_LOAD_MAX` and `GATE_LOAD_WAIT_MAX_MIN` override the
+  limit and the cap.
+- **What it records:** `--plan` prints the rule and the load now. The runner logs the wait like a slot wait (`waiting: load-aware
+  start: ...`). `summary.json` `slot.loadWait` (`seconds`, `gaveUp`, `max1`, `load1`) and `SUMMARY.md` say how long it waited.
+- **Code and tests:** `loadGate` in `tools/lib/turbo.mjs`, called inside `tryAcquire` under the slot mutex. Tests in
+  `kit/test/gate-turbo.test.mjs`: waits and goes, FIFO behind it, the herd guard, alone, the cap, off.
+
+### Stalled after a FAIL (2026-11-12)
+
+On 2026-11-12 `st-ingame` printed `FAIL cliff_east sampled to its own sha undefined` at 05:54:11, then waited in a 10-minute
+`until()` for a variant that could not come. The runner acts only on a step's exit or its timeout (45 min there). So the dev client
+sat idle in its world, the step's end went unrecorded and the slot stayed taken until the runner got SIGTERM at 06:02.
+
+- **The rule.** A step that has printed a **functional FAIL** and then **no output at all for `stallAfterFailMin` minutes** (5, in
+  `gate-chains.json`; a step's own `stallAfterFailMin` overrides it, 0 or `false` turns it off) is killed (its process group, SIGTERM
+  then SIGKILL). It ends `FAIL` with `error: stalled: ...` and `stalledAfterFail` (the FAIL line, the idle seconds) in `summary.json`.
+  The usual failed-step path then stops the shard's client (`dev.quit`, then by PID) and removes stray apitest jars. The next step
+  starts fresh, or the run finishes.
+- **What counts as a FAIL.** A driver's own check line (`FAIL ...` at the start of a line). Not a test runner's indented
+  ` FAIL  file > test`. Not a `FAIL BAR` line in a tier that records timing bars (that step can still pass, and its driver goes on).
+- **Output resets the clock.** Any output after the FAIL resets it, so a driver still working after a failure is never cut. Silence
+  without a FAIL never triggers it either: a long quiet build or scenario keeps its timeout.
+- **Code and tests:** `tools/lib/stall-watch.mjs` (pure, `kit/test/gate-stall.test.mjs`), polled every 10 s in `runProcess`
+  (`GATE_STALL_POLL_MS`).
+- **Repro and proof** (`artifacts/gate-runs-robust/`, local): a scratch `--config` with a step on client 6b that prints `ok`, then
+  `FAIL`, then `exec sleep 100000`, followed by a client-less step.
+  - On main's runner the client sat idle (38% CPU) with the step RUNNING for minutes, and only a SIGTERM ended it.
+  - On main's runner (`20261112-063259-zzrepro`), the client (pid 87817) sat idle at 25-38% CPU with the step RUNNING for 5 min after
+    its FAIL. Its timeout would have been 45 min; my own SIGTERM ended it.
+  - With the watch (`20261112-064633-zzrepro`), the step logged `STALLED: no output for 5m00s` and was killed at 06:52:33. The client
+    (pid 16909) was stopped at 06:52:34, and the next step passed at 06:52:39. `summary.json` has the step's `stalledAfterFail`.
+  - The same run proved the load-aware start live: queued at load 80-85 beside 3 other runs, it waited 315 s and started at load 33.4.
+
 ## Affected-only releases: the step cache and the nightly (Noah, 2026-10-22)
 
 A release re-ran about 140 steps even when the batch's slices had passed them on the same code; 0.41.0 took about 12 hours end to

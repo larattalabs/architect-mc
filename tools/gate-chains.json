@@ -425,7 +425,9 @@
     "6dgr-look": ["gr-look"],
     "6cfl-look": ["fl-look"]
   },
-  "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides.", "max": 4 },
+  "stallAfterFailMin": 5,
+  "$stallAfterFailMin": "A step that printed a functional FAIL and then nothing for this many minutes is killed and ends FAIL; its client is stopped by PID (tools/lib/stall-watch.mjs, docs/GATES.md \"Stalled after a FAIL\"). A step's own stallAfterFailMin overrides it; 0 or false turns it off.",
+  "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides. load: the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md \"Load-aware start\"): a shared run whose turn it is waits while the 1-min load is above max1 or another run started less than settleSec ago; never when it would be the only gate run, at most maxWaitMin minutes; GATE_LOAD_MAX / GATE_LOAD_WAIT_MAX_MIN / --no-load-wait override.", "max": 4, "load": { "max1": 36, "settleSec": 120, "maxWaitMin": 30 } },
   "cpu": { "$comment": "One CPU budget per gate run (docs/GATES.md \"CPU budget\", tools/lib/cpu-budget.mjs): the machine's cores (GATE_CPU_CORES overrides) split over the run's workers (turbo: its shards and lanes; shared: at least --slots), at least minShare each. Each step's children get its share (a step's cpuShares: that many shares) as node --test's concurrency, gradle's and vitest's max workers and corpus-plan's workers (at least 4). Client starts and setup builds keep their defaults; outside the runner every default stays.", "minShare": 2 },
   "shards": {
     "$comment": "--shards N (at most max). Each shard has its own run worktree (shard 1: --run-dir/GATE_RUN_DIR; shard k: <run dir>-s<k>, or --run-dirs) and port pair (--ports S:D,S:D,... / GATE_PORTS; no default for shards 2..: name them, several agents share the machine). 8892-8895 are never a shard's: the gates' old-version clients and eval sidecars use them.",

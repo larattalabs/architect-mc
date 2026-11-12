@@ -384,18 +384,18 @@ describe.skipIf(!hasRealKit)('massings with the REAL kit (sim backend)', () => {
   it('a tavern massing from the example, a redirect, and the detail pass conforms', async () => {
     h = await harness('real');
     const d = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', name: 'Inn', massing: true, bible: 'oak', maxSize: { x: 64, y: 40, z: 64 } })));
-    await finished(h, d.id, 60_000);
+    await finished(h, d.id);
     expect(h.sc.designs.get(d.id)!.status, h.sc.designs.get(d.id)!.error).toBe('done');
     const m = h.sc.massings.get('mas_inn')!;
     expect(m.size).toEqual({ x: 16, y: 17, z: 12 });
     expect(Object.keys(m.parts).length).toBeGreaterThanOrEqual(3);
     expect(json(path.join(m.dir, 'mas_inn.blueprint.json'))).toMatchObject({ massing: true, type: 'tavern' });
     const r = h.sc.redirectMassing('mas_inn', 'a hipped roof');
-    await finished(h, r.id, 60_000);
+    await finished(h, r.id);
     expect(h.sc.designs.get(r.id)!.status, h.sc.designs.get(r.id)!.error).toBe('done');
     expect(h.sc.massings.get('mas_inn')!.version).toBe(2);
     const det = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', name: 'Inn', fromMassing: 'mas_inn', massingVersion: 1, maxSize: { x: 64, y: 40, z: 64 } })));
-    await finished(h, det.id, 60_000);
+    await finished(h, det.id);
     const done = h.sc.designs.get(det.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.conformance).toEqual({ ok: true, errors: [], issues: [] });

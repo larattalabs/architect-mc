@@ -92,7 +92,7 @@ async function harness(over: Partial<Config> = {}, root = tempDir('arch-0b-')): 
   return { root, sc, events, close: async (keep = false) => { await sc.close(); if (!keep) rmrf(root); } };
 }
 
-const groupDone = (h: H, id: string, ms = 90_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(id)!.status), ms);
+const groupDone = (h: H, id: string, ms = 600_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(id)!.status), ms);
 const readEntry = (h: H, id: string) => JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, id, `${id}.blueprint.json`), 'utf8')) as Record<string, unknown>;
 
 describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
