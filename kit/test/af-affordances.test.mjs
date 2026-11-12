@@ -289,3 +289,28 @@ export default (ctx) => { const r = region(ctx); ${ask ? `r.affordances(${JSON.s
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// the S4-S6 windows (kit/test/fixtures/af/<id>.bin, windows.json): real land cut from the pinned seed by tools/gate7baf.mjs cut
+test('the S4-S6 windows (real land, the pinned seed): the kinds measured at the cut found again, deterministic, ids stable in a narrower window', () => {
+  const W = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'af', 'windows.json'), 'utf8')).windows;
+  // what each scenario's land must show (the measured kinds the scenario is about; the rest recorded in windows.json)
+  const MUST = { s4_ravine_town: ['cliff_face', 'gap'], s5_treehouses: ['canopy', 'trunk'], s6_cave_city: ['cave', 'overhang'] };
+  for (const [id, w] of Object.entries(W)) {
+    const v = decodeArvx(fs.readFileSync(path.join(HERE, 'fixtures', 'af', `${id}.bin`)));
+    assert.equal(v.sha, w.sha, `${id}: the cut volume`);
+    const a = analyseVolume(v);
+    const counts = {};
+    for (const x of a) counts[x.kind] = (counts[x.kind] ?? 0) + 1;
+    assert.deepEqual(counts, w.kinds, `${id}: the kinds and counts measured at the cut`);
+    for (const k of MUST[id]) assert.ok(counts[k] >= 1, `${id}: a ${k}`);
+    assert.equal(JSON.stringify(analyseVolume(v)), JSON.stringify(a), `${id}: deterministic`);
+    // every affordance well inside a window 8 narrower on each side keeps its id there (no per-kind cap in either run)
+    const all = analyseVolume(v, { perKind: 1e6, limit: 1e6 });
+    const b = v.box, c = { minX: b.minX + 8, minY: b.minY, minZ: b.minZ + 8, maxX: b.maxX - 8, maxY: b.maxY, maxZ: b.maxZ - 8 };
+    const inner = all.filter((x) => !x.metrics.clipped && x.box.minX >= c.minX + 5 && x.box.maxX <= c.maxX - 5 && x.box.minZ >= c.minZ + 5 && x.box.maxZ <= c.maxZ - 5);
+    const ids = new Set(analyseVolume(crop(v, c), { perKind: 1e6, limit: 1e6 }).map((x) => x.id));
+    const lost = inner.filter((x) => !ids.has(x.id));
+    assert.ok(inner.length >= 1, `${id}: ${inner.length} affordances well inside`);
+    assert.deepEqual(lost.map((x) => `${x.kind} ${JSON.stringify(x.box)}`), [], `${id}: ids kept in the narrower window`);
+  }
+});

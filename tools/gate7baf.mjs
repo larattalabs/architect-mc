@@ -5,7 +5,8 @@
 //   node tools/gate7baf.mjs <step>
 //     start [world] | stop | base      the headless server (or client) and the base worlds (G6B Seed Base, G6B Flat Base)
 //     unit      (af-unit)              offline: kit/test/af-affordances.test.mjs (the detectors over the six site fixtures, stable ids, the
-//                                      frames, the goldens, r.affordances in a plan and through the plan CLI) and the foundation's
+//                                      frames, the goldens, r.affordances in a plan and through the plan CLI, the S4-S6 windows) and the
+//                                      foundation's
 //     site      (af-site)              Survey.site in game (dev.af.site, the public API): (a) the cliff, overhang and trunk fixtures built
 //                                      cell for cell by commands at their own coordinates in a flat world: the frozen volume's sha is the
 //                                      fixture's, the affordances are the kit's golden (kit/test/fixtures/af/<id>.json) and the proposed
@@ -99,7 +100,7 @@ function nodeTest(files, timeout = 1_800_000) {
 steps.unit = async () => {
   const out = {};
   out.af = nodeTest(['kit/test/af-affordances.test.mjs']);
-  check(out.af.code === 0 && out.af.fail === 0 && out.af.pass >= 12, `the analysis (kit/test/af-affordances.test.mjs): the six fixtures' kinds and frames, ledge, cave and spike with a negative each, stable ids, the turned frames, the goldens, r.affordances in a plan and through the plan CLI: ${out.af.pass} pass, ${out.af.fail} fail`, out.af.failing);
+  check(out.af.code === 0 && out.af.fail === 0 && out.af.pass >= 13, `the analysis (kit/test/af-affordances.test.mjs): the six fixtures' kinds and frames, ledge, cave and spike with a negative each, stable ids, the turned frames, the goldens, r.affordances in a plan and through the plan CLI, the S4-S6 windows cut from the pinned seed: ${out.af.pass} pass, ${out.af.fail} fail`, out.af.failing);
   out.found = nodeTest(['kit/test/f7b-foundation.test.mjs']);
   check(out.found.code === 0 && out.found.fail === 0, `the foundation's (fixtures byte for byte, the kinds against Affordance.java): ${out.found.pass} pass`, out.found.failing);
   spendZero();

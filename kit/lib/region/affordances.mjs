@@ -222,7 +222,7 @@ function gaps(fs, g, o) {
       const length = u1 - u0 + 1, height = y1 - y0 + 1;
       out.push({
         kind: 'gap', box, normal: null, anchors: [rim(a), rim(b)],
-        metrics: { span, length, height, axis: alongX ? 'z' : 'x', faces: [a.id, b.id], clipped: clippedBox(box, g) },
+        metrics: { span, length, height, axis: alongX ? 'z' : 'x', faces: [a.id, b.id], clipped: clippedBox(box, g) || a.metrics.clipped || b.metrics.clipped }, // (a face cut by the volume's side cuts its gap's overlap)
         score: (length * height) / (length * height + 64) * (span <= 16 ? 1 : 16 / span),
       });
     }
