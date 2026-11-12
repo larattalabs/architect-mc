@@ -1183,17 +1183,18 @@ export class Regions {
    * (7b AF) site.analyse {volumeBlobId, sha?, lot, fit} -> {sha, box, affordances, proposed}: the kit's site analysis
    * (tools/affordances.mjs) over a frozen volume blob, in a child process (a lot volume of up to ~1M cells takes about a second).
    */
-  async siteAnalyse(msg: { volumeBlobId: string; sha?: string; lot: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number }; fit: string }): Promise<Record<string, unknown>> {
+  async siteAnalyse(msg: { volumeBlobId: string; sha?: string; lot: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number }; fit: string; standalone?: boolean | undefined }): Promise<Record<string, unknown>> {
     const script = path.join(this.host.config.kitDir, 'tools', 'affordances.mjs');
     if (!fs.existsSync(script)) throw new ClientError('the kit has no tools/affordances.mjs (an older kit)');
     if (!this.host.blobs.get(msg.volumeBlobId)) throw new ClientError(`no blob "${msg.volumeBlobId}"`);
     const l = msg.lot;
-    const args = [this.host.blobs.file(msg.volumeBlobId), '--lot', [l.minX, l.minY, l.minZ, l.maxX, l.maxY, l.maxZ].join(','), '--fit', msg.fit, ...(msg.sha ? ['--sha', msg.sha] : [])];
+    const args = [this.host.blobs.file(msg.volumeBlobId), '--lot', [l.minX, l.minY, l.minZ, l.maxX, l.maxY, l.maxZ].join(','), '--fit', msg.fit, ...(msg.sha ? ['--sha', msg.sha] : []), ...(msg.standalone ? ['--standalone'] : [])];
     const r = await run(process.execPath, [script, ...args], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
     const out = lastJson(r.stdout);
     if (r.timedOut) throw new ClientError('the site analysis took longer than 120 s and was stopped');
     if (!out || out.ok !== true) throw new ClientError(`the site analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
-    return { sha: out.sha, box: out.box, affordances: out.affordances, proposed: out.proposed ?? null };
+    // (7b ST) the standalone spec only when asked (a kit without it answers none: the mod refuses the player's sample then)
+    return { sha: out.sha, box: out.box, affordances: out.affordances, proposed: out.proposed ?? null, ...(msg.standalone ? { standalone: out.standalone ?? null } : {}) };
   }
 
   clientGone(client: ClientHandle): void {

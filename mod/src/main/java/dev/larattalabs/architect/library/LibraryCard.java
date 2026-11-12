@@ -22,11 +22,14 @@ import org.jspecify.annotations.Nullable;
  * @param request the DesignRequest it was made from, or null
  * @param bible the style bible it was designed or re-skinned with (phase 4b), or null; {@code bibleVersion} its version (0 when none)
  * @param group the design group it was made in (phase 4b), or null; {@code groupItem} its item key there
+ * @param pinnedFit (7b ST, N-7b-6) the fit of the site it is bound to (its ext's {@code architect_mc:site}, else its sidecar's own
+ *                  {@code site}: PL's rule), or null when it is not site-bound
  */
 public record LibraryCard(String id, String name, String baseName, String type, String description, List<String> tags, List<String> userTags,
 	boolean favorite, int sizeX, int sizeY, int sizeZ, long createdAt, List<String> materials, @Nullable String variantOf, boolean imported,
 	boolean bundled, boolean hasSource, @Nullable JsonObject params, @Nullable JsonObject values, @Nullable JsonObject palette,
-	@Nullable JsonObject request, @Nullable String bible, int bibleVersion, @Nullable String group, @Nullable String groupItem) {
+	@Nullable JsonObject request, @Nullable String bible, int bibleVersion, @Nullable String group, @Nullable String groupItem,
+	@Nullable String pinnedFit) {
 
 	public LibraryCard {
 		tags = List.copyOf(tags);
@@ -42,7 +45,24 @@ public record LibraryCard(String id, String name, String baseName, String type, 
 		String name = meta.displayName() != null ? meta.displayName() : b.name();
 		return new LibraryCard(b.id(), name, b.name(), b.type(), b.description(), b.tags(), meta.userTags(), meta.favorite(), b.sizeX(), b.sizeY(),
 			b.sizeZ(), b.createdAt(), b.materials(), variantOf, imported, bundled, !imported && !b.source().isBlank(), obj(j.get("params")),
-			obj(j.get("values")), obj(j.get("palette")), b.request(), bibleId(j), bibleVersion(j), str(j.get("group")), str(j.get("groupItem")));
+			obj(j.get("values")), obj(j.get("palette")), b.request(), bibleId(j), bibleVersion(j), str(j.get("group")), str(j.get("groupItem")),
+			pinnedFit(j));
+	}
+
+	/** (7b ST) The bound site's fit: the ext binding's, else the sidecar {@code site}'s (a malformed one: not pinned). Pure. */
+	static @Nullable String pinnedFit(JsonObject j) {
+		var b = dev.larattalabs.architect.api.SiteBinding.ofExt(obj(j.get("ext")));
+		if (b.isPresent()) {
+			return b.get().fit().wire();
+		}
+		JsonObject site = obj(j.get(dev.larattalabs.architect.api.SiteSpec.WIRE_KEY));
+		String fit = site == null ? null : str(site.get("fit"));
+		return fit != null && dev.larattalabs.architect.api.FitMode.of(fit).isPresent() ? fit : null;
+	}
+
+	/** (7b ST, N-7b-6) Site-bound: it places only on its own site, or elsewhere as a site variant of it. */
+	public boolean pinned() {
+		return pinnedFit != null;
 	}
 
 	private static @Nullable String bibleId(JsonObject j) {
@@ -104,8 +124,11 @@ public record LibraryCard(String id, String name, String baseName, String type, 
 		return bundled ? "bundled with Architect" : "in your library";
 	}
 
-	/** A short badge for the card, or null: VARIANT, IMPORTED. */
+	/** The badge text of a site-bound entry (7b ST, N-7b-6: the pin badge). */
+	public static final String PIN_BADGE = "PINNED";
+
+	/** A short badge for the card, or null: (7b ST) PINNED (site-bound: it wins over the others), IMPORTED, VARIANT. */
 	public @Nullable String badge() {
-		return imported ? "IMPORTED" : variantOf != null ? "VARIANT" : null;
+		return pinned() ? PIN_BADGE : imported ? "IMPORTED" : variantOf != null ? "VARIANT" : null;
 	}
 }

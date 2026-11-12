@@ -255,7 +255,14 @@ final class LibraryTab {
 	}
 
 	void place(String id) {
-		String why = PlacementFeature.placeNow(id);
+		// (7b ST, N-7b-6) a site-bound design: on its own site's frame
+		String why = PlacementFeature.siteOf(id) != null ? PlacementFeature.placeOnSite(id) : PlacementFeature.placeNow(id);
+		LibraryFeature.say(why, why != null);
+	}
+
+	/** (7b ST, N-7b-6) "Site variant here…": mark a plot (the entry's fit), sample it, confirm the frame; the variant is made and placed there. */
+	void siteVariantHere(String id) {
+		String why = dev.larattalabs.architect.client.design.SiteVariantHere.start(id, dev.larattalabs.architect.client.design.DesignFeature.reopen);
 		LibraryFeature.say(why, why != null);
 	}
 
@@ -544,7 +551,8 @@ final class LibraryTab {
 		String badge = c.badge();
 		if (badge != null) {
 			int bw = font.width(badge) + 6;
-			g.fill(x + 3, y + ph - 10, x + 3 + bw, y + ph, UiStyle.withAlpha(c.imported() ? UiStyle.TEAL : UiStyle.WALNUT, 220));
+			// (7b ST, N-7b-6) the pin badge: clay, so it reads apart from IMPORTED (teal) and VARIANT (walnut)
+			g.fill(x + 3, y + ph - 10, x + 3 + bw, y + ph, UiStyle.withAlpha(c.pinned() ? UiStyle.CLAY_DARK : c.imported() ? UiStyle.TEAL : UiStyle.WALNUT, 220));
 			g.text(font, badge, x + 6, y + ph - 9, UiStyle.OnDark.text(), false); // on the dark badge bar: the on-dark token
 		}
 		g.text(font, TextUtil.ellipsize(font, c.name(), w - 6), x + 3, y + ph + 4, UiBits.ink(), false);
@@ -586,8 +594,13 @@ final class LibraryTab {
 		boolean inWorld = s.inWorld();
 		boolean survival = dev.larattalabs.architect.survival.SurvivalWorld.on();
 		List<Btn> items = new ArrayList<>();
-		if (DesignFeature.plotForBlueprint(c.id()) != null) {
+		if (DesignFeature.plotForBlueprint(c.id()) != null && !c.pinned()) {
 			items.add(new Btn("place_plot", "Place on the plot", false, inWorld, () -> placeOnPlot(c.id())));
+		}
+		// (7b ST, N-7b-6) a site-bound design places elsewhere only as a site variant of it
+		if (c.pinned()) {
+			items.add(new Btn("site_variant_here", "Site variant here… (mark a " + c.pinnedFit().replace('_', ' ') + " plot)", false, inWorld
+				&& dev.larattalabs.architect.client.design.SiteVariantHere.running() == null, () -> siteVariantHere(c.id())));
 		}
 		items.add(new Btn("variants", "Variants… (re-skin, parameters)", false, c.canVariant(), () -> openVariants(c.id())));
 		items.add(new Btn("remix", "Remix… (Claude)", false, true, () -> s.remix(c.id())));
@@ -679,6 +692,9 @@ final class LibraryTab {
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
 		ty += 10;
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
+		if (c.pinned()) {
+			prov = "pinned to its site (" + c.pinnedFit().replace('_', ' ') + ") · " + prov; // (7b ST, N-7b-6)
+		}
 		if (c.bible() != null) {
 			// phase 4b: the bible it was built with (and its set)
 			prov = (c.group() != null ? collectionName(LibraryQuery.GROUP_PREFIX + c.group()) + " · " : "") + collectionName(LibraryQuery.BIBLE_PREFIX
@@ -738,7 +754,7 @@ final class LibraryTab {
 			}
 		}
 		// buttons: Place, Edit, ⋯
-		String placeL = survival ? "Place construction site" : "Place";
+		String placeL = c.pinned() ? (survival ? "Construction site on its site" : "Place on its site") : survival ? "Place construction site" : "Place";
 		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 14));
 		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, mx, my, () -> place(c.id()));
 		int ex = x + pw + 4;

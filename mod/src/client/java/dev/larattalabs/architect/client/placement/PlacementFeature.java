@@ -76,6 +76,38 @@ public final class PlacementFeature {
 		}
 	}
 
+	/**
+	 * (7b ST, N-7b-6) The site a library design is pinned to: its sidecar's {@code site} (the whole SiteSpec a site-aware design records,
+	 * slice SV) when the entry is bound (its ext's {@code architect_mc:site}, or that sidecar member: PL's rule). Null for every other design
+	 * (and for a malformed member: the entry then places as a plain one would, and the server's site checks are not involved).
+	 */
+	public static dev.larattalabs.architect.api.@Nullable SiteSpec siteOf(String blueprintId) {
+		dev.larattalabs.architect.placement.Blueprints.Entry e = dev.larattalabs.architect.placement.Blueprints.entry(blueprintId);
+		if (e == null || !(e.json().get(dev.larattalabs.architect.api.SiteSpec.WIRE_KEY) instanceof com.google.gson.JsonObject w)) {
+			return null;
+		}
+		try {
+			return dev.larattalabs.architect.api.SiteSpec.fromWire(w);
+		} catch (RuntimeException ex) {
+			Architect.LOGGER.warn("Placement: {}'s site can't be read: {}", blueprintId, ex.toString());
+			return null;
+		}
+	}
+
+	/** (7b ST) "Place on its site": a site-bound design's ghost locked on its site's frame. Returns why not, or null when the ghost is up. */
+	public static @Nullable String placeOnSite(String blueprintId) {
+		dev.larattalabs.architect.api.SiteSpec s = siteOf(blueprintId);
+		if (s == null) {
+			return blueprintId + " is not bound to a site";
+		}
+		try {
+			BuildPlacement.startOnSite(blueprintId, s);
+			return null;
+		} catch (IllegalArgumentException e) {
+			return e.getMessage();
+		}
+	}
+
 	/** {@link #placeNow}, then locks the ghost at {@code origin} with {@code turns} (a marked plot). */
 	public static @Nullable String placeNowAt(String blueprintId, int[] origin, int turns) {
 		String why = placeNow(blueprintId);
@@ -151,9 +183,14 @@ public final class PlacementFeature {
 		return true;
 	}
 
-	/** Plot-marking keys: Enter corner, PgUp/PgDn height (Shift: 4), Backspace back a corner, Esc cancel. */
+	/** Plot-marking keys: Enter corner, PgUp/PgDn height (Shift: 4), Backspace back a corner, Esc cancel; (7b ST) F the fit (Shift: back). */
 	private static boolean plotKey(KeyEvent e, boolean repeat) {
 		switch (e.key()) {
+			case InputConstants.KEY_F -> {
+				if (!repeat) {
+					PlotMarker.cycleFit(e.hasShiftDown() ? -1 : 1);
+				}
+			}
 			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
 				if (!repeat) {
 					PlotMarker.confirm();
@@ -207,10 +244,12 @@ public final class PlacementFeature {
 
 	private static void registerDev() {
 		DevBridge.register("dev.build.start", 10_000, "{blueprint, origin?: [x,y,z] (rotated box minimum; locks the ghost there), ground?: false "
-			+ "(origin's y replaced by the footprint's median surface), turns?: 0-3 | rotation name, move?: siteId} - enter placement mode", (req, mc) -> {
+			+ "(origin's y replaced by the footprint's median surface), turns?: 0-3 | rotation name, move?: siteId, onSite?: false (7b ST: a site-bound "
+			+ "design on its site's frame, as Library \u203a Place on its site)} - enter placement mode", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String bp = f.optStr("blueprint", null);
 				String move = f.optStr("move", null);
+				boolean onSite = f.optBool("onSite", false);
 				if (bp == null && move == null) {
 					throw new DevBridge.DevException("blueprint (or move: siteId) is required");
 				}
@@ -229,6 +268,12 @@ public final class PlacementFeature {
 					try {
 						if (move != null) {
 							BuildPlacement.startMove(move);
+						} else if (onSite) {
+							String why = placeOnSite(bp);
+							if (why != null) {
+								throw new IllegalArgumentException(why);
+							}
+							return BuildPlacement.state();
 						} else {
 							BuildPlacement.start(bp);
 						}

@@ -693,6 +693,10 @@ public final class Sites {
 			}
 			tr.mark("siteChecks");
 			layerNotes.addAll(SiteFit.notes(siteSpec));
+			// (7b ST) a standalone port that meets no standable ground: a warning, never a refusal
+			int dsx = turns % 2 == 0 ? model.sizeX : model.sizeZ;
+			int dsz = turns % 2 == 0 ? model.sizeZ : model.sizeX;
+			layerNotes.addAll(SiteFit.drops(siteSpec, dsx, dsz, world));
 		}
 		if (approach.metRoad()) {
 			int[] r = approach.road();

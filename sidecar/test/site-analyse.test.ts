@@ -63,6 +63,25 @@ describe('site.analyse (7b AF)', () => {
     expect(outside.error).toMatch(/not inside the volume/);
   });
 
+  it('(7b ST) standalone: the whole site spec beside the analysis when asked; a flat plot answers a reason; without it no member', async () => {
+    expect(FEATURES).toContain('site.standalone');
+    const site = JSON.parse(fs.readFileSync(path.join(FIX, 'site.json'), 'utf8')) as { lot: Record<string, number>; fit: string; spec: Record<string, unknown> };
+    const blobId = h.sc.blobs.put({ kind: 'region.volume', chunks: [fs.readFileSync(path.join(FIX, 'volume.bin')).toString('base64')] }).blobId;
+    const a = await call(h, { type: 'site.analyse', volumeBlobId: blobId, lot: site.lot, fit: site.fit, standalone: true });
+    expect(a.error).toBeUndefined();
+    const { lotId: _lot, ...want } = site.spec;
+    expect(a.result!.standalone).toEqual({ ok: true, affordance: (a.result!.proposed as { affordance: string }).affordance, spec: want });
+    const plain = await call(h, { type: 'site.analyse', volumeBlobId: blobId, lot: site.lot, fit: site.fit });
+    expect(plain.result!.standalone).toBeUndefined();
+    const grove = path.join(KIT, 'test', 'fixtures', 'site', 'grove');
+    const g = JSON.parse(fs.readFileSync(path.join(grove, 'site.json'), 'utf8')) as { lot: Record<string, number> };
+    const gb = h.sc.blobs.put({ kind: 'region.volume', chunks: [fs.readFileSync(path.join(grove, 'volume.bin')).toString('base64')] }).blobId;
+    const flat = await call(h, { type: 'site.analyse', volumeBlobId: gb, lot: g.lot, fit: 'attach_to_cliff', standalone: true });
+    expect(flat.ok).toBe(true);
+    expect(flat.result!.standalone).toMatchObject({ ok: false });
+    expect((flat.result!.standalone as { reason: string }).reason).toMatch(/no cliff face at the plot/);
+  });
+
   it("a plan's affordances (plan.json's affordances[]) ride on region.planned; a plan without any has no member", async () => {
     const f = makeSidecar(['--backend', 'sim']); // the fixture kit's fake planner
     await f.sc.start(new SimDesigner(f.sc, 20));
