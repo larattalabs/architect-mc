@@ -7,8 +7,6 @@ import { Blueprint, PALETTES } from '../../lib/kit.mjs';
 export const id = 'fit_on_pad';
 export const fit = 'on_pad';
 export const exampleSite = 'grove';
-/** The warnings (rule names) of the template-only check (no composite until SC): none: it checks clean on the template alone. kit/tools/examples.mjs holds them exact. */
-export const templateOnlyWarnings = [];
 
 export default function build({ palette = PALETTES.rustic, site } = {}) {
   const p = palette;

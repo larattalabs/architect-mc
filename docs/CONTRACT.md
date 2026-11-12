@@ -27706,3 +27706,102 @@ Reasons and their message-first details), `place`/`check` with `PlaceRequest.sit
 `ext["architect_mc:site"]` in `SiteView`, move/`applyDelta`/`revert` refused for it, Remove and removal orders over a site placement
 layered on Steward's own cell or region sites, a batch item with a site still refused (`UnsupportedOperationException`), and (with SO)
 the survival flows of a site-bound house. No feature flag changes in PL.
+### Slice SC as built (branch `slice/SC` off main 592912ca; versions NEXT; $0, no client; recorded 2026-11-11)
+
+The checker with a site: the template composited with its site, the site rules of SETTLEMENTS §7.4 (M21) and building-scale M15, on 7bF's
+frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change; no new feature).
+
+**Frozen interface (DS builds on it).** All in the kit; nothing in Java reads it.
+
+| Member | Shape |
+|---|---|
+| `checkStructure(sidecar, structure, opts)` (`lib/check.mjs`; also `checkFiles`, `checkBlueprint`) | new `opts.site`: a `lib/site.mjs` `Site` (the one the design was built into); new `opts.siteLimits`: overrides of the limits below. Without `opts.site` nothing changes, except that a sidecar carrying `site` gets the warning `site_unchecked: ...` (checked on the template alone) |
+| the result | `{ok, errors, warnings, metrics, conformance?, site?}`; `site` only with `opts.site`: `{fit, ok, findings, metrics}`. `ok` is false when any site finding exists (the check's own `ok` stays errors-only) |
+| a finding | `{rule, severity: 'error' or 'warning', m?: 'M21' or 'M15', count, cells: [[x, y, z]] (at most 8, design cells), message}`; `message` starts `<rule>: ` and is also one line of `errors`/`warnings` (fit:on_pad's line is the `floating:` warning, not repeated) |
+| rule ids (`SITE_RULE_IDS`, report order) | `site_bound` (error), `site_keep` (error), `fit:on_pad`, `fit:carve_into`, `fit:attach_to_cliff`, `fit:span`, `fit:wrap_trunk`, `fit:suspend` (M21), `ports_met`, `floors_reachable`, `site_breach`, `cut_volume`, `cantilever`, `neck` (M15); plus `site_unchecked` (`SITE_UNCHECKED`, a warning, never a finding). `SITE_UNFIT`'s detail (DS) is one of these ids |
+| `metrics` | `fit, volumeSha, lotId, bearing` (cells touching the site's solid); keep fits add `connected, loose, portsMet[], reached, breach, cave, cut {rock, logs, allowance}, cantileverMax, cantileverLimit, cantileverPortCells [{cell, dist}], cantileverHeld, necks`; per fit `bearings` (attach), `span, spanEnds [{u0, u1, cells, square, cell}]` (span), `chainMax` (suspend) |
+| `lib/siteCheck.mjs` | `siteGrid(cells, size, groundY, site)`, `siteFindings(ctx)`, `SITE_CHECK_LIMITS` (`cantilever 4, neckMass 200, bearCells 2, endBearing [2, 2], portWithin 2, breachWithin 1`), `siteLimits(fit, overrides)` (adds the fit row's limits; a `'bible'` limit is `null` = unbounded), `SITE_RULE_IDS`, `SITE_RULE_M`, `SITE_UNTOUCHABLE` (`PLAYER, BLOCK_ENTITY, OWNED`), `SITE_UNCHECKED` |
+| CLIs | `kit/check.mjs ... --site <volume> [--lot <site.json>]` (the lot defaults to the sidecar's `site`; a volume that is not the spec's exits 2); `build.mjs --site --lot` now checks on the composite; both `--json` print `site` |
+
+**Built:**
+- **The composite grid** (`siteGrid`): the template's written cells as written; a cell it leaves is the site's under a keep fit (a stand-in
+  block per class from SV's `SITE_STAND_IN`: rock as stone, a log as a log, water as water; plants and air as air), and under `on_pad`
+  today's box (cleared above the ground row, filled below) with the site round it; nothing outside the window. `g.cells` stays the template's,
+  so palette, parts, survival, metrics, doors and the vocabulary rules never see the site; `at`, `cls`, `free`, `floor`, the outside flood
+  (over the window plus a ring, seeded in the ring), light (unwritten site solids opaque), the walker (anywhere in the window), the
+  enclosure's cover (the site above, to the window's top), `sturdyFace` and `wallish` see the composite. Every no-site path is unchanged
+  (`lightLevels` reads `g.terrain`, which is the old `y < groundY` for a plain grid; the full kit suite run on the grid change failed only
+  fit_suspend's re-cut schem golden and SV's `templateOnlyWarnings` assertion, both expected).
+- **The rules**, all warnings but the first two:
+  - `site_bound` (error): the template is the lot box (size), of this volume (the sidecar's `site.volumeSha`, `lotId`), with this fit (the SV
+    verifier's note).
+  - `site_keep` (error): no written cell (air included) on a keep cell (the sidecar's `keep.critical`, the site's `keepCritical`, a host
+    fit's lot logs) or on a PLAYER, BLOCK_ENTITY or OWNED cell.
+  - `fit:<mode>` (M21) replaces `no_floating` for every keep fit: every block (attachables through their support) connects through the mass
+    to the site's solid (`bears`: site solid on any side; wrap_trunk the trunk too; suspend only the solid above a cell). Per fit:
+    attach_to_cliff's bearings (6-connected groups of cells touching the face) touch at least `bearCells` rock cells each; span's ends
+    (the first and last run, along the span axis, of cells bearing on the solid below) are two, each with a 2x2 of bearing cells, and the
+    longest gap between runs is within `span`; suspend's chain runs within `chain`. `fit:on_pad` is today's `floating`.
+  - `ports_met`: every site port has a design port of its name, kind and facing, within `portWithin` of the hint, facing out (the cell
+    beyond it is outside on the composite) and standable or climbable; at least the fit row's `ports` walk or door ports.
+  - `floors_reachable` (port fits): every interior floor level reached from the ports (check.mjs's own entrance rule keeps on_pad and the
+    door rule).
+  - `site_breach` (keep fits): a free cell the design writes beside the site's unwritten water or lava (within `breachWithin`); a room whose
+    free space reaches more dark cave cells (the site's air, not outside, unlit) than its own free cells.
+  - `cut_volume` (keep fits): carve_into replaces at most its interior box grown by one (interior plus walls); wrap_trunk replaces no log.
+  - `cantilever` (M15): a 0-1 flood from the cells bearing on the site: resting on the cell below, hanging from the one above and a stair
+    stepping diagonally up (a brace, a roof step) carry its distance; a horizontal step (8 ways, Chebyshev) adds 1. A cell over the limit
+    warns unless its row's run of the mass reaches a cell within the limit both ways along x or z (a span, not a cantilever).
+  - `neck` (M15): an articulation point of the mass (a virtual ground joined to every bearing cell) holding more than `neckMass` cells.
+- **Examples:** the two `templateOnlyWarnings` declarations and the mechanism in `tools/examples.mjs` are gone; every site example now
+  checks with zero warnings on its composite, as every other example. **One example changed: `fit_suspend`** (its open hatch was an open
+  hole into the room on the composite, as a doorway without a door): the ladder stops one row lower and a closed trapdoor (the palette's
+  `trapdoor` role, top half) sits in the floor over it; ports_met and floors_reachable pass through it. Its nbt, sidecar and source in
+  `kit/examples`, and its schem goldens (kit and mod halves) are re-cut; its renders did not move. **PL's in-game evidence for
+  fit_suspend predates this block.**
+- **Tests:** `kit/test/sc.test.mjs` (13): the interface (ids, limits, the result's and a finding's shape), the six examples clean,
+  `site_unchecked`, and one broken variant per rule (the template, the sidecar or the fixture's volume re-encoded with classes changed:
+  a trunk log written, a PLAYER cell under the cliff house, a floating block per fit, a span end lifted, the trunk deck cut off, the chains
+  gone, a port renamed or moved or walled up, water beside the carved hall, a cave behind it, an over-carve, a beam six out of the span
+  house, the hanging house on one chain, the span and chain limits); `sv.test.mjs`'s composite stand-ins (keep cells, ports, connected to
+  the site) now assert the checker's findings, and keep each fit's own geometry checks.
+
+**Readings chosen** (the contract was silent or the code disagreed):
+1. **`opts.site` is a `Site`**, the same object the design was built with (SETTLEMENTS §7.2: "the same object in the designer's scratch dir,
+   the checker and the renderer"); CLIs build it from `--site` and the lot.
+2. **'bible' limits with no bible are unbounded.** The fit table names attach_to_cliff's cantilever, span's span and suspend's chain as the
+   bible's; no bible carries them, so they are measured into the metrics and judged only with `siteLimits` (24, the region bridges'
+   `maxSpan`, is the obvious first bible value for span). M15's 4 applies to every other keep fit. The cliff house measures a cantilever of
+   6 (Chebyshev) off its face: a real one, unjudged until a bible sets the limit.
+3. **A walk port's own column may stand one step past a supported cell.** The trunk fixture puts the west walk port at the lot edge 5
+   (Chebyshev) from the nearest log contact, with one row below (air under the lot) and nothing above, so every wrap_trunk design that meets
+   it reads 5; the link pass lands the connector on the cell outside the box (§8.4) and region M15 judges that joint (7c). Exempt: a
+   horizontal `architect:walk` port's cells (its width, the floor row under its feet through its height), only when the cell one step
+   inward is within the limit; reported in `cantileverPortCells`. Two columns past a support always warn (a sc.test variant).
+4. **Spans inside a building part are not cantilevers** and are unbounded here (no bible limit); the largest held distance is
+   `cantileverHeld`.
+5. **OWNED is always another owner's**: the volume carries no owner, and a site lot is new land, so a written OWNED cell is a `site_keep`
+   error.
+6. **`cut_volume` judges only what §7.4 states**: carve_into's interior plus walls (the interior box grown by one each way) and wrap_trunk's
+   zero logs; other fits record `cut` only (the cliff house's three joist ends replace rock by design).
+7. **`site_breach`, `cut_volume`, `cantilever` and `neck` apply to keep fits only**; `on_pad` places as today (cleared and filled).
+8. **A finding is also a line**: `site.findings` carries the structure; `errors`/`warnings` carry the same message, so every existing caller
+   (the sidecar's rounds, `build --json`) sees site findings without change.
+
+**Shared-file touches** (PL and AF build in parallel): `kit/lib/check.mjs` (the grid switch, four guarded hooks and the site call; no-site
+paths unchanged), `kit/build.mjs` and `kit/check.mjs` (pass and print the site), `kit/tools/examples.mjs`, `kit/designs/site/*` (one
+comment line each, fit_suspend's hatch), `kit/test/sv.test.mjs`, the goldens named above, `tools/step-inputs.json` (rebuilt by the tool)
+and this file. Neither PL nor AF touches any of them but step-inputs and CONTRACT.md (a textual merge at the coordinator).
+
+**Checks** ($0, no client; SC's gate column has no in-game items, so no gate run and no lane):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1144/1144 (sc.test.mjs 13/13; sv.test.mjs 13/13 with the stand-ins moved to the checker) |
+| sidecar `npm ci && npm run check` | 811/811 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1046 tests, 0 failures, 1 skipped (SchematicTest with fit_suspend's mod golden re-cut; LedgerLint/RegionFluidsLint = p3-lint) |
+| lint-structure / lint-look | 68 cases, 0 failing / 13 cases, 0 failing |
+| water-lint `node --test kit/lint/*.lint.mjs` | 135/135 |
+| `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the closures that reach lib/check.mjs gain lib/siteCheck.mjs) |
+| api-compat | not run: no Java change |
+| gate-verifier (review only, DEV MODE) | **PASS** at 61b6d615: scope (no Java, no PL/AF/DS work, no versions), no-site byte identity (every check.mjs change guarded by `g.window` but lightLevels' `g.terrain`, equal for a plain grid), each rule against §7.4/§11, the eight readings, fit_suspend's one-block change and re-cut goldens, the variants not vacuous; sc, sv, schem, check, phase5a and f7b-foundation re-run (78/78), step-inputs clean. Minor, fixed after: the neck message named an unused `neckContact` limit (dropped: a neck is one cell of contact); a stray blank line. Noted: span, chain and the cliff cantilever stay unjudged until a bible sets them (DS and the bible work own that) |

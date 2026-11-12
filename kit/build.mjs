@@ -31,7 +31,8 @@
 // --site <volume> --lot <site.json> (7b SV, SETTLEMENTS §7.2): build a site-aware design into a site: the frozen ARVX volume (gzip or
 // raw) and the lot's site spec (a bare api.SiteSpec wire, or a 7bF fixture's site.json). The design gets it as `site` (lib/site.mjs);
 // the sidecar records `fit`, `site` and `keep`. A design that exports a non-pad `fit` needs them; the six fit examples live in
-// kit/designs/site/ (found by id like kit/designs/). The check is today's, on the template alone (the composite with the site is SC's).
+// kit/designs/site/ (found by id like kit/designs/). (7b SC) The check runs on the template composited with the site (lib/siteCheck.mjs):
+// the site rules' findings join the errors and warnings, and --json adds `site: {fit, ok, findings, metrics}`.
 // --mirror (slice 0b): the build is mirrored left-right across its front axis (lib/mirror.mjs: x flips for a north or south
 // front, z for east or west; `front` is unchanged); the sidecar records `mirrored: 'x'|'z'`. With --massing, the massing is
 // mirrored the same way before conformance.
@@ -123,7 +124,7 @@ export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, p
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
   if (mirror && massing) massing = mirrorSidecar(massing, mirrorAxisOf(bp.front));
   const written = writeBlueprint(bp, out);
-  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(massing !== undefined && massingCap ? { massingCap } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}), ...(reserved ? { reserved } : {}) });
+  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(massing !== undefined && massingCap ? { massingCap } : {}), ...(restraint ? { restraint } : {}), ...(style ? { style } : {}), ...(reserved ? { reserved } : {}), ...(site ? { site } : {}) });
   // (C35) said where a caller reads it: the check's warnings
   if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
@@ -217,7 +218,7 @@ async function main() {
   Object.assign(console, saved);
   const { bp, written, result } = r;
   if (o.json) {
-    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, parts: written.partsPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}) }));
+    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, parts: written.partsPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}), ...(result.site ? { site: result.site } : {}) }));
   } else {
     const rel = (p) => path.relative(process.cwd(), p) || p;
     console.log(`${id}: ${bp.type}, ${bp.size.x}x${bp.size.y}x${bp.size.z}, ${written.blocks} blocks, ${written.bytes} bytes gz`);

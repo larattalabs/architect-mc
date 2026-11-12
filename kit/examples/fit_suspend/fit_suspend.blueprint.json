@@ -34,7 +34,8 @@
     "minecraft:lantern",
     "minecraft:red_bed",
     "minecraft:spruce_door",
-    "minecraft:spruce_stairs"
+    "minecraft:spruce_stairs",
+    "minecraft:spruce_trapdoor"
   ],
   "foundationBlock": "minecraft:cobblestone",
   "approach": {

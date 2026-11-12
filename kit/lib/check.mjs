@@ -2,7 +2,12 @@
 //   checkFiles(nbtPath, jsonPath, opts) / checkBlueprint(bp, opts) / checkStructure(sidecar, structure, opts)
 //     -> { ok, errors: string[], warnings: string[] }
 //   opts: { max?: {x,y,z}, type?: string, imported?: boolean, profile?: string[]|'massing', massing?: <massing sidecar>, reserved?: (6c IRR)
-//     {front, size: [w, d], cells: [[u, y, v]]} (lib/reserved.mjs: the lot's cells the design must leave) }
+//     {front, size: [w, d], cells: [[u, y, v]]} (lib/reserved.mjs: the lot's cells the design must leave), site?: (7b SC) a lib/site.mjs Site,
+//     siteLimits?: {cantilever, span, chain, ...} (lib/siteCheck.mjs SITE_CHECK_LIMITS) }
+// (7b SC, SETTLEMENTS §7.4) With `site` the grid is the template composited with its site (lib/siteCheck.mjs siteGrid) and every rule runs
+// on it; the site rules add their findings (site_bound and site_keep errors, the rest warnings) and the result gets `site: {fit, ok,
+// findings: [{rule, severity, m?, count, cells, message}], metrics}` (docs/CONTRACT.md "Slice SC as built"). A site-bound sidecar checked
+// without its site gets the warning `site_unchecked: ...` (the template alone).
 // The `massing` profile (phase 4c) applies to a sidecar with `massing: true` (or when opts.profile is 'massing'): the
 // structure, palette, sidecar, anchor and size rules, no floating, parts, and the entrance reaching into the building; no
 // door, light, interior or type-geometry rules. opts.massing (a massing's sidecar) adds massing conformance
@@ -25,6 +30,8 @@ import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, T
 import { checkConformance } from './massing.mjs';
 import { CREATIVE_ONLY } from './vocab/survival.mjs';
 import { reservedHits } from './reserved.mjs';
+// (7b SC) the checker with a site: the composite grid and the site rules (lib/siteCheck.mjs)
+import { SITE_UNCHECKED, siteFindings, siteGrid } from './siteCheck.mjs';
 // (6c VOC-b) the `state` and `hazard` errors, `metrics.rarity` and `metrics.drift`, and the opt-in `rarity`/`coherence` warnings
 import { HAZARD, driftsWhere, fireReachOf, hazardKindOf, isLogName, isPairOf, isWaterlogged, measureRarity, pairOffset, rarityWarnings, styleOf, waterReachOffsets } from './vocab/budget.mjs';
 
@@ -65,6 +72,7 @@ export function makeGrid(cells, size, groundY) {
  * @returns {Map<string,string|null>} reached cell -> the cell it came from
  */
 export function outsideFlood(g, capY = null) {
+  if (g.window) return siteOutsideFlood(g, capY);
   const [sx, sy, sz] = g.size;
   const top = capY ?? sy;
   const open = (x, y, z) => {
@@ -81,6 +89,36 @@ export function outsideFlood(g, capY = null) {
     for (const [, dx, dy, dz] of DIRS6) {
       const nx = x + dx; const ny = y + dy; const nz = z + dz;
       if (nx < -1 || nx > sx || nz < -1 || nz > sz || ny > top || ny < Math.min(g.groundY, 0)) continue;
+      const k = fmt(nx, ny, nz);
+      if (parent.has(k) || !open(nx, ny, nz)) continue;
+      parent.set(k, fmt(x, y, z));
+      q.push([nx, ny, nz]);
+    }
+  }
+  return parent;
+}
+
+/**
+ * (7b SC) The outside on a composite grid: the flood runs over the site's window plus one ring of unknown (open) cells round it, seeded
+ * in that ring (every open cell on the window's boundary is reached from it), through the composite's open cells; `capY` caps it as above.
+ */
+function siteOutsideFlood(g, capY) {
+  const W = g.window;
+  const top = capY ?? W.maxY + 1;
+  const open = (x, y, z) => {
+    if (x < W.minX || x > W.maxX || y < W.minY || y > W.maxY || z < W.minZ || z > W.maxZ) return true;
+    const k = g.cls(x, y, z);
+    return k === 'none' || k === 'low' || k === 'partial';
+  };
+  const parent = new Map();
+  const seed = [W.minX - 1, Math.min(top, W.maxY + 1), W.minZ - 1];
+  parent.set(fmt(...seed), null);
+  const q = [seed];
+  for (let i = 0; i < q.length; i++) {
+    const [x, y, z] = q[i];
+    for (const [, dx, dy, dz] of DIRS6) {
+      const nx = x + dx; const ny = y + dy; const nz = z + dz;
+      if (nx < W.minX - 1 || nx > W.maxX + 1 || nz < W.minZ - 1 || nz > W.maxZ + 1 || ny > top || ny < W.minY - 1) continue;
       const k = fmt(nx, ny, nz);
       if (parent.has(k) || !open(nx, ny, nz)) continue;
       parent.set(k, fmt(x, y, z));
@@ -108,7 +146,7 @@ export function lightLevels(g) {
   for (let z = 0; z < sz; z++) for (let y = 0; y < sy; y++) for (let x = 0; x < sx; x++) {
     const i = idx(x, y, z);
     const c = g.at(x, y, z);
-    if (!c) { optic[i] = y < g.groundY ? 1 : 0; continue; }
+    if (!c) { optic[i] = g.terrain(x, y, z) ? 1 : 0; continue; }
     const o = opticsOf(c);
     optic[i] = o === 'opaque' ? 1 : o === 'shape' ? 2 : 0;
     if (o === 'shape') vox[i] = voxelsOf(c);
@@ -381,7 +419,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
   }
   if (errors.length) return { ok: false, errors, warnings, metrics: null };
 
-  const g = makeGrid(cells, size, sidecar.groundY);
+  // (7b SC) with a site: the template composited with it (lib/siteCheck.mjs)
+  const site = opts.site ?? null;
+  const g = site ? siteGrid(cells, size, sidecar.groundY, site) : makeGrid(cells, size, sidecar.groundY);
 
   // ---- anchors: entrance + spawn, standable
   const anchors = sidecar.anchors ?? {};
@@ -431,6 +471,23 @@ export function checkStructure(sidecar, structure, opts = {}) {
     try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
   }
 
+  // ---- (7b SC) the site rules on the composite (lib/siteCheck.mjs); without the site, a site-bound sidecar is checked on the template only
+  let siteResult = null;
+  if (site) {
+    try {
+      const r = siteFindings({ g, sidecar, structureSize: size, interior: w, outside, walker: walker(g), light: lightLevels(g), floorLevels, limits: opts.siteLimits });
+      // on_pad's support rule is today's no_floating: its `floating:` line is the fit:on_pad finding (not repeated)
+      if (g.fitRow.support === 'no_floating') {
+        const fl = warnings.find((m) => m.startsWith('floating:'));
+        if (fl) r.findings.unshift({ rule: 'fit:on_pad', severity: 'warning', m: 'M21', count: Number(/^floating: (\d+)/.exec(fl)?.[1] ?? 1), cells: [], message: fl });
+      }
+      for (const f of r.findings) if (f.rule !== 'fit:on_pad') (f.severity === 'error' ? errors : warnings).push(f.message);
+      siteResult = { fit: site.fit, ok: r.findings.length === 0, findings: r.findings, metrics: r.metrics };
+    } catch (e) { warn(`checker: the site rules failed: ${e.message}`); }
+  } else if (sidecar.site && typeof sidecar.site === 'object') {
+    warn(`${SITE_UNCHECKED}: a site-bound design (fit ${sidecar.fit ?? sidecar.site.fit}) checked on its template alone: the site rules need its site (--site <volume>)`);
+  }
+
   // ---- metrics (phase 5a) and, against a bible's restraint, the `restraint:` warnings
   let metrics = null;
   try { metrics = computeMetrics(g, sidecar, outside); } catch (e) { warn(`checker: metrics failed: ${e.message}`); }
@@ -455,7 +512,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
     for (const m of c.issues) warn(`massing: ${m}`);
   }
 
-  return { ok: errors.length === 0, errors, warnings, metrics, ...(conformance ? { conformance } : {}) };
+  return { ok: errors.length === 0, errors, warnings, metrics, ...(conformance ? { conformance } : {}), ...(siteResult ? { site: siteResult } : {}) };
 }
 
 /** Check a Blueprint object (serialised exactly as write.mjs would). */
@@ -489,7 +546,8 @@ export const MIN_VOLUME = { cabin: 60, cottage: 80, house: 120, shop: 80, smithy
 export function walker(g, margin = 0) {
   const [sx, sy, sz] = g.size;
   // the walk may leave the template by `margin` cells (the ground around it: terrain below groundY, air above)
-  const inArea = (x, y, z) => y >= 1 && y < sy && x >= -margin && z >= -margin && x < sx + margin && z < sz + margin;
+  // ((7b SC) on a composite the walk may go anywhere in the site's window)
+  const inArea = g.window ? (x, y, z) => g.inWindow(x, y, z) : (x, y, z) => y >= 1 && y < sy && x >= -margin && z >= -margin && x < sx + margin && z < sz + margin;
   const pass = (x, y, z) => {
     const c = g.at(x, y, z);
     if (c) return isPassable(c);
@@ -555,6 +613,8 @@ const sample = (list, n = 5) => list.slice(0, n).join('; ') + (list.length > n ?
 /** Nothing floating: every block connects to the ground through other blocks (attachables through their support). */
 function floating({ g, rule }) {
   if (!rule('no_floating')) return [];
+  // ((7b SC) a keep fit's support rule is fit:<mode> on the composite, lib/siteCheck.mjs)
+  if (g.window && g.fitRow.support !== 'no_floating') return [];
   const nodes = [];
   for (const [k, c] of g.cells) {
     const fam = BLOCKS[c.name]?.family;
@@ -607,7 +667,8 @@ function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors,
     if (!front.length) out.push(`doors: no outside door on the ${sidecar.front} (front) face`);
     else if (!frontReached.length) out.push(`doors: the front door${front.length > 1 ? 's' : ''} at ${front.map((d) => fmt(d.x, d.y, d.z)).join('; ')} cannot be walked to from the entrance`);
   }
-  if (w && rule('floors_reachable')) {
+  // ((7b SC) a port fit's floors are reached from its ports: floors_reachable, lib/siteCheck.mjs)
+  if (w && rule('floors_reachable') && !(g.window && g.fitRow.approach === 'port')) {
     const levels = floorLevels(g, w, wk);
     if (!levels.length) out.push('reachability: the interior has no floor level (no row with enough standing room)');
     let ok = 0;
@@ -630,17 +691,21 @@ function enclosure({ g, sidecar, interior: w, rule }) {
   const open = [];
   const unwritten = [];
   for (const [x, y, z] of interiorCells(w)) {
-    if (!g.cells.has(fmt(x, y, z))) unwritten.push(fmt(x, y, z));
+    // ((7b SC) under a keep fit an unwritten cell stays as the site has it: only the site's solid left in the room counts, never a keep cell)
+    if (!g.cells.has(fmt(x, y, z)) && (!g.window || g.fitRow.terrain === 'clear' || (g.cls(x, y, z) !== 'none' && !g.keep.has(fmt(x, y, z))))) unwritten.push(fmt(x, y, z));
     if (!g.free(x, y, z)) continue;
     let covered = false;
-    for (let yy = y + 1; yy < sy && !covered; yy++) {
+    // ((7b SC) on a composite the site above covers too, up to the window's top)
+    for (let yy = y + 1, top = g.window ? g.window.maxY + 1 : sy; yy < top && !covered; yy++) {
       const c = g.at(x, yy, z);
       if (c && BLOCKS[c.name]?.family !== 'air') covered = true;
     }
     if (!covered) open.push(fmt(x, y, z));
   }
   if (open.length) out.push(`enclosure: ${open.length} interior cell(s) open to the sky (no roof above), e.g. ${sample(open)}`);
-  if (unwritten.length) out.push(`interior: ${unwritten.length} cell(s) not written (write interior air explicitly so placement clears it), e.g. ${sample(unwritten)}`);
+  if (unwritten.length) out.push(g.window && g.fitRow.terrain === 'keep'
+    ? `interior: ${unwritten.length} cell(s) of the site left standing in the interior (a ${g.fit} fit keeps the cells the template does not write: carve them with air or keep them), e.g. ${sample(unwritten)}`
+    : `interior: ${unwritten.length} cell(s) not written (write interior air explicitly so placement clears it), e.g. ${sample(unwritten)}`);
   if (sidecar.type !== 'barn') {
     const walls = outsideFlood(g, w.maxY);
     const inW = (x, y, z) => x >= w.minX && x <= w.maxX && y >= w.minY && y <= w.maxY && z >= w.minZ && z <= w.maxZ;
@@ -855,7 +920,7 @@ const NOT_STURDY = new Set(['door', 'trapdoor', 'fence_gate']);
  */
 export function sturdyFace(g, x, y, z, dir) {
   const c = g.at(x, y, z);
-  if (!c) return g.terrain(x, y, z) || (!g.inBox(x, y, z) && y < g.groundY);
+  if (!c) return g.terrain(x, y, z) || (!g.window && !g.inBox(x, y, z) && y < g.groundY);
   const f = familyOfCell(c);
   if (NOT_STURDY.has(f)) return false;
   if (f === 'stairs' || f === 'slab') return faceMask(voxelsOf(c), dir) === 15;
@@ -865,7 +930,7 @@ export function sturdyFace(g, x, y, z, dir) {
 /** A cell that closes a passage or backs a bed: terrain, a full block (not a door / trapdoor / gate), or a thin block (pane, bars, fence, wall). */
 function wallish(g, x, y, z) {
   const c = g.at(x, y, z);
-  if (!c) return g.terrain(x, y, z) || (!g.inBox(x, y, z) && y < g.groundY);
+  if (!c) return g.terrain(x, y, z) || (!g.window && !g.inBox(x, y, z) && y < g.groundY);
   if (NOT_STURDY.has(familyOfCell(c))) return false;
   const k = collisionOf(c);
   return k === 'full' || k === 'thin';
