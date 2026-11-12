@@ -8,7 +8,8 @@
 //                           lake body, the island's anchor, survival free, the four recorded asks) and the 7c/P0 tests it touches; the
 //                           Java ApiBFTest and Api7cFTest; byte identity: every committed plan fixture planned here and on the merge base
 //                           (../architect-mc-BF-main) identical but the named ones (BF_MOVED); the 59 asks re-made here and on the merge
-//                           base: only the four parts that waited on the three forms move, to fits or adjusted, 0 malformed, both tables
+//                           base: only the four parts that waited on the three forms (and ring_city's ring_town, blocked on its crater lake) move, to fits or
+//                           adjusted, 0 malformed, both tables
 //                           equal kit/test/fixtures/plan/bf/asks-{before,after}.txt
 //     ingame   (bf-ingame)  creative, on the flat base with each fixture's terrain (exact rules): x01 (the hollow mountain with carved
 //                           halls), x02 (the free crater with a lake), x03 (the floating-island hamlet) each through Regions.checkPlan
@@ -52,7 +53,8 @@ export const BF_MOVED = Object.freeze({
   'asks/sky_monastery.json': 'BF: sky_island (form.floating_island) answers adjusted (placed again around the cloister; was unsupported until N-P0-1)',
   'asks/crater_mine.json': 'BF: crater (form.crater) answers fits (was unsupported until 7c)',
 });
-const ASKS_MOVE = /^(dwarven_hold\/mountain_hollow|ring_city\/crater_lake|sky_monastery\/sky_island|crater_mine\/crater) /;
+// (and ring_city's ring_town, blocked DEPENDENCY on its crater lake before: the dependency lifted, it fits)
+const ASKS_MOVE = /^(dwarven_hold\/mountain_hollow|ring_city\/crater_lake|ring_city\/ring_town|sky_monastery\/sky_island|crater_mine\/crater) /;
 
 const steps = {};
 async function run(name) {
@@ -107,8 +109,8 @@ steps.unit = async () => {
   const moved = [...new Set([...la.keys(), ...lb.keys()])].filter((k) => lb.get(k) !== la.get(k));
   const F = path.join(KIT, 'test', 'fixtures', 'plan', 'bf');
   out.asks = { moved: moved.map((k) => la.get(k)), malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text };
-  check(after.malformed === 0 && moved.length === 4 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k))) && out.asks.committedAfter && out.asks.committedBefore,
-    `the 59 asks on the merge base and here: 0 malformed; exactly the four parts that waited on the three forms move, each to fits or adjusted (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
+  check(after.malformed === 0 && moved.length === 5 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k))) && out.asks.committedAfter && out.asks.committedBefore,
+    `the 59 asks on the merge base and here: 0 malformed; exactly the four parts that waited on the three forms and ring_city's ring_town (blocked on its crater lake) move, each to fits or adjusted (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
   spendZero();
   return out;
 };
