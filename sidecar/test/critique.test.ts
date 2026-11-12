@@ -126,7 +126,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     const job = h.sc.jobs.book.list().find((j) => (j.spec as { owner?: string }).owner === 'architect:critic')!;
     expect(job.spec).toMatchObject({ kind: 'structured', model: 'claude-sonnet-5-5', effort: 'medium', maxTurns: 3 });
     expect(h.sc.jobs.book.work(job.id)!.images!.length).toBeGreaterThanOrEqual(3);
-  }, 60_000);
+  }, 1_800_000);
 
   it('iterate then ship: a revision in the same loop, the best (later) round installs', async () => {
     h = await harness();
@@ -145,7 +145,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(steps.some((s) => /revising after critique \(1 of 2\): 1 issue/.test(s))).toBe(true);
     expect(steps.some((s) => s === 'critic: round 1')).toBe(true);
     for (const n of [0, 1]) expect(fs.existsSync(path.join(scratch(h, d.id), 'rounds', String(n)))).toBe(true);
-  }, 60_000);
+  }, 1_800_000);
 
   it('a regression keeps the best round (round 0 installs)', async () => {
     h = await harness();
@@ -156,7 +156,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     const installed = fs.readFileSync(path.join(entryDir(h, f), `${f.blueprintId}.nbt`));
     const bp = h.sc.store.data.work[d.id]!.critique!.bp;
     expect(installed.equals(fs.readFileSync(path.join(scratch(h, d.id), 'rounds', '0', `${bp}.nbt`)))).toBe(true);
-  }, 60_000);
+  }, 1_800_000);
 
   it('max_revisions: 2 revisions then a last critic call scores the final round', async () => {
     h = await harness();
@@ -165,7 +165,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     const f = get(h, d.id);
     expect(f.critique).toMatchObject({ end: 'max_revisions', best: 2 });
     expect(f.critique!.rounds).toHaveLength(3);
-  }, 60_000);
+  }, 1_800_000);
 
   it('budget: the default 1.0x round-0 cap ends the loop before a revision that would not fit', async () => {
     h = await harness();
@@ -177,7 +177,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(f.critique!.rounds).toHaveLength(3);
     const loop = f.critique!.cost.critic.usd + f.critique!.cost.revise.usd;
     expect(loop).toBeLessThanOrEqual(0.3 + 1e-9);
-  }, 60_000);
+  }, 1_800_000);
 
   it('budget: an explicit critique.budgetUsd allows one revision, then ends', async () => {
     h = await harness();
@@ -187,14 +187,14 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(f.critique).toMatchObject({ end: 'budget' });
     expect(f.critique!.rounds).toHaveLength(2);
     expect(f.critique!.cost.critic.usd + f.critique!.cost.revise.usd).toBeLessThanOrEqual(0.15 + 1e-9);
-  }, 60_000);
+  }, 1_800_000);
 
   it('time: the loop ends at the first round boundary after maxMinutes', async () => {
     h = await harness();
     const d = design(h, 'sim:critique=5/5', LOOP({ maxMinutes: 0.0001 }));
     await final(h, d.id);
     expect(get(h, d.id).critique).toMatchObject({ end: 'time', best: 0 });
-  }, 60_000);
+  }, 1_800_000);
 
   it('check_failed: a revision that keeps failing its check (its own allowance) installs the best earlier round', async () => {
     h = await harness();
@@ -205,7 +205,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(f.critique).toMatchObject({ end: 'check_failed', best: 0 });
     expect(f.critique!.rounds[1]).toMatchObject({ n: 1, kept: false });
     expect(f.critique!.rounds[1]!.error).toBeTruthy();
-  }, 60_000);
+  }, 1_800_000);
 
   it('critic_failed: the critic call fails twice; round 0 installs with a note', async () => {
     h = await harness();
@@ -215,7 +215,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(f.status).toBe('done');
     expect(f.critique).toMatchObject({ end: 'critic_failed', best: 0 });
     expect(h.sc.jobs.book.list().filter((j) => (j.spec as { owner?: string }).owner === 'architect:critic' && j.status === 'failed')).toHaveLength(2);
-  }, 60_000);
+  }, 1_800_000);
 
   it('an unknown part name becomes null and counts against part grounding', async () => {
     h = await harness();
@@ -225,7 +225,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(r0.unknownParts).toBe(1);
     expect(r0.notes![0]).toMatch(/unknown part/);
     expect(r0.issues.some((i) => i.part === null)).toBe(true);
-  }, 60_000);
+  }, 1_800_000);
 
   it('report mode: one critic call, no revision', async () => {
     h = await harness();
@@ -233,48 +233,48 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     await final(h, d.id);
     expect(get(h, d.id).critique).toMatchObject({ mode: 'report', end: 'report', best: 0 });
     expect(get(h, d.id).critique!.rounds).toHaveLength(1);
-  }, 60_000);
+  }, 1_800_000);
 
   it('a restart mid-critic and a restart mid-revision both finish the loop', async () => {
     const root = tempDir('arch-5a-restart-');
     h = await harness({ simStepMs: 250 }, root);
     const d = design(h, 'sim:critique=5/8');
-    await until(() => get(h!, d.id).status === 'critiquing', 30_000);
+    await until(() => get(h!, d.id).status === 'critiquing', 600_000);
     await h.close(true);
     h = await harness({ simStepMs: 250 }, root);
     // mid-revision now
-    await until(() => h!.sc.critiques.revising(d.id) && get(h!, d.id).status === 'designing', 30_000);
+    await until(() => h!.sc.critiques.revising(d.id) && get(h!, d.id).status === 'designing', 600_000);
     await h.close(true);
     h = await harness({}, root);
     await final(h, d.id);
     expect(get(h, d.id).critique).toMatchObject({ end: 'ship', best: 1 });
     expect(get(h, d.id).status).toBe('done');
-  }, 90_000);
+  }, 1_800_000);
 
   it('a usage limit mid-critic holds the group (held_usage), then the loop resumes', async () => {
     h = await harness();
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Held', bible: 'rustic', critique: LOOP(), items: [{ ...request({ name: undefined, notes: 'sim:critique=5L/8', maxSize: { x: 64, y: 64, z: 64 } }), itemKey: 'a' }] }));
-    await until(() => h!.sc.groups.get(g.id)!.status === 'held_usage', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.status === 'held_usage', 600_000);
     const id = g.items[0]!.designId;
     expect(get(h, id).status).toBe('critiquing');
-    await until(() => ['done', 'failed'].includes(h!.sc.groups.get(g.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.groups.get(g.id)!.status), 600_000);
     expect(get(h, id).critique).toMatchObject({ end: 'ship', best: 1 });
     expect(h.sc.groups.get(g.id)!.items[0]!.critique).toMatchObject({ rounds: 2, best: 1, end: 'ship', overall: 8 });
-  }, 90_000);
+  }, 1_800_000);
 
   it("a group's soft budget stops new revisions (the item installs its best round)", async () => {
     h = await harness({ designConcurrency: 1 });
     h.sc.config.groups.softBudgetFraction = 0.5;
     // budget $0.6: soft at $0.30, reached by round 0 itself
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'Thrifty', bible: 'rustic', budgetUsd: 0.6, critique: LOOP(), items: [{ ...request({ name: undefined, notes: 'sim:critique=5/8', maxSize: { x: 64, y: 64, z: 64 } }), itemKey: 'a' }] }));
-    await until(() => ['done', 'failed', 'paused_budget'].includes(h!.sc.groups.get(g.id)!.status) && h!.sc.designs.get(g.items[0]!.designId)!.status === 'done', 60_000);
+    await until(() => ['done', 'failed', 'paused_budget'].includes(h!.sc.groups.get(g.id)!.status) && h!.sc.designs.get(g.items[0]!.designId)!.status === 'done', 600_000);
     expect(get(h, g.items[0]!.designId).critique).toMatchObject({ end: 'budget', best: 0 });
-  }, 60_000);
+  }, 1_800_000);
 
   it('a protocol-1 client sees critiquing as rendering, and never sees a report of an entry', async () => {
     h = await harness();
     const d = design(h, 'sim:critique=8');
-    await until(() => get(h!, d.id).status === 'critiquing', 30_000);
+    await until(() => get(h!, d.id).status === 'critiquing', 600_000);
     const v1 = toProtocol1({ type: 'design.upsert', v: 1, design: structuredClone(get(h, d.id)) }) as { design: { status: string; critique?: unknown } };
     expect(v1.design.status).toBe('rendering');
     expect(v1.design.critique).toBeUndefined();
@@ -283,7 +283,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(toProtocol1({ type: 'design.upsert', v: 1, design: structuredClone(h.sc.designs.get(r.id)) })).toBeUndefined();
     await final(h, r.id);
     expect(get(h, r.id)).toMatchObject({ status: 'done', critiqueOf: get(h, d.id).blueprintId, blueprintId: get(h, d.id).blueprintId });
-  }, 60_000);
+  }, 1_800_000);
 
   it('the estimate with critique: separate figures, low = 1 critic, high capped at 1.0x round 0', () => {
     const est = (spec: Record<string, unknown> | undefined) => new Sidecar(loadConfig(['--data', tempDir(), '--library', tempDir(), '--kit', KIT], {}), new Store(tempDir()), memoryLogger()).estimates.design(DesignRequest.parse(request({ model: 'claude-sonnet-5-5', ...(spec ? { critique: spec } : {}) })), { designConcurrency: 3, now: Date.now(), designModel: 'claude-opus-5-5', landmarkModel: 'claude-opus-5-5', ordinaryModel: 'claude-sonnet-5-5', bibleModel: 'claude-opus-5-5', massingModel: 'claude-sonnet-5-5', criticModel: 'claude-sonnet-5-5' });

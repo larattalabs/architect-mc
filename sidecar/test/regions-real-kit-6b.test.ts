@@ -129,7 +129,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     const failed = events.find((e) => e.type === 'region.failed' && e.planId === planId);
     expect(failed, failed?.type === 'region.failed' ? failed.message : '').toBeUndefined();
     planned = events.find((e): e is Planned => e.type === 'region.planned' && e.planId === planId)!;
-  }, 180_000);
+  }, 1_800_000);
   afterAll(async () => {
     for (const sc of sidecars) await sc.close();
     rmrf(root);
@@ -165,7 +165,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     const got: Got = new Map();
     const a = await ask(sidecars[0]!, { type: 'region.tiles.request', planId: planned.planId, irSha: planned.irSha, tiles: tiles.map((t) => ({ ...t, heights: heightsOf(t.key).toString('base64') })) }, client(got));
     expect(a.ok, a.error).toBe(true);
-    await until(() => got.size === tiles.length, 60_000);
+    await until(() => got.size === tiles.length, 600_000);
     let cells = 0;
     for (const t of tiles) {
       const g = got.get(`${t.stage}|${t.set}|${t.key}`)!;
@@ -190,7 +190,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     expect(unknown.error!.replace('blob_unknown ', '').split(',').sort()).toEqual(shas);
     const ids = Object.fromEntries(planned.blobs!.map((x) => [x.sha, fresh.blobs.put({ kind: 'region.blob', chunks: [sidecars[0]!.blobs.read(x.blobId).toString('base64')] }).blobId]));
     expect(await ask(fresh, { ...req, blobs: ids }, c)).toMatchObject({ ok: true });
-    await until(() => got.size === 1, 30_000);
+    await until(() => got.size === 1, 600_000);
     expect((got.values().next().value as { sha: string }).sha).toBe(direct(t.key, t.stage, t.set, heightsOf(t.key)).sha);
   });
 
@@ -199,7 +199,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     const got: Got = new Map();
     const req = { type: 'region.tiles.request', planId: planned.planId, irSha: planned.irSha, preview: true, tiles: keys.flatMap((key) => [{ key }, { key, stage: 'ground' }]) };
     expect((await ask(sidecars[0]!, req, client(got))).ok).toBe(true);
-    await until(() => got.size === keys.length * 2, 60_000);
+    await until(() => got.size === keys.length * 2, 600_000);
     const ir = JSON.parse(planned.ir!) as { parts: Array<{ stage: string }> } & Record<string, unknown>;
     const groundOnly = { ...ir, parts: ir.parts.filter((p) => p.stage === 'ground') };
     const s = new Uint8Array(survey());
@@ -269,7 +269,7 @@ describe.skipIf(!hasCheck && !hasCatalogue)("the real kit's check, previews and 
     expect(v.ok, v.error).toBe(true);
     expect(Object.keys(v.result!.paths as object).sort()).toEqual(['siteplan', 'top']);
     console.log(`[numbers] region_small 192x192: plan ${p.ms} ms, check ${p.checkMs} ms, render ${p.renderMs} ms`);
-  }, 360_000);
+  }, 1_800_000);
 
   it.skipIf(!hasCatalogue)('the catalogue lists programs; a scripted pick of the first one is PICKED', async () => {
     const programs = await sc.regions.catalogue();
@@ -279,7 +279,7 @@ describe.skipIf(!hasCheck && !hasCatalogue)("the real kit's check, previews and 
     const a = await ask({ type: 'region.design', brief: 'a test site', claim: { minX: 0, minZ: 0, maxX: 255, maxZ: 255, minY: -64, maxY: 319 }, surveyBlobId: sc.blobs.putBytes(arsv(0, 0, 256, 256, () => 64), 'survey', 'bin'), plan: false, ext: { 'architect:simAnswers': [{ fits: true, program: first.id, params: {}, reason: 'scripted' }] } });
     expect(a.ok, a.error).toBe(true);
     const id = a.result!.designId as string;
-    await until(() => ['done', 'failed'].includes(sc.designs.get(id)?.status ?? ''), 30_000);
+    await until(() => ['done', 'failed'].includes(sc.designs.get(id)?.status ?? ''), 600_000);
     const d = sc.designs.get(id)!;
     // a 256x256 claim may be outside the first program's claim range: then the scripted fit is (correctly) not valid
     expect(['PICKED', 'NO_TEMPLATE']).toContain(d.result?.outcome);

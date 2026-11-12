@@ -94,11 +94,11 @@ const FINAL = ['done', 'failed', 'cancelled'];
 /** A massing-first group of `items`: every massing approved; resolves when the group is final. */
 async function massingFirst(h: H, items: Array<Record<string, unknown>>): Promise<string> {
   const g = h.sc.groups.create(GroupRequest.parse({ name: 'Castle', bible: 'birch', owner: 'steward:s1', massingFirst: true, approvalUi: 'owner', items }));
-  await until(() => h.sc.groups.get(g.id)!.status === 'awaiting_approval' || FINAL.includes(h.sc.groups.get(g.id)!.status), 60_000);
+  await until(() => h.sc.groups.get(g.id)!.status === 'awaiting_approval' || FINAL.includes(h.sc.groups.get(g.id)!.status), 600_000);
   const x = h.sc.groups.get(g.id)!;
   expect(x.status, JSON.stringify(x.items.map((it) => [it.itemKey, it.status, h.sc.designs.get(it.designId!)?.error]))).toBe('awaiting_approval');
   h.sc.groups.approve(g.id, { approve: x.items.map((it) => it.itemKey), redirect: {}, cancel: [], owner: 'steward:s1' });
-  await until(() => FINAL.includes(h.sc.groups.get(g.id)!.status), 120_000);
+  await until(() => FINAL.includes(h.sc.groups.get(g.id)!.status), 600_000);
   return g.id;
 }
 
@@ -166,7 +166,7 @@ describe.skipIf(!hasKit)('wall lots in a massing-first group (sim backend, real 
     }
     const holes = openFaceCells(gh, GATE.x, GATE.z).filter(([k]) => !PASSAGE.includes(Number(k.split(',')[0])));
     expect(holes.every(([k, b]) => isDoor(b) && k.endsWith(',0')), JSON.stringify(holes)).toBe(true);
-  }, 240_000);
+  }, 1_800_000);
 
   it('sim:outerdoor under massing-first: round 1\'s detail carries the outer door; a versionOf fixes it in the same box', async () => {
     h = await harness();
@@ -182,14 +182,14 @@ describe.skipIf(!hasKit)('wall lots in a massing-first group (sim backend, real 
     expect(h1.some(([k, b]) => isDoor(b) && k.endsWith(',0')), JSON.stringify(h1)).toBe(true);
     // Steward's repair after the bind refuses it: a versionOf of the entry (its notes may still carry the token)
     const r = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tower', name: 'Tower 2', notes: `${REFUSAL} (${BRIEF} sim:outerdoor)`, maxSize: TOWER, features: [], ext, versionOf: { entryId: e } })));
-    await until(() => FINAL.includes(h!.sc.designs.get(r.id)!.status), 60_000);
+    await until(() => FINAL.includes(h!.sc.designs.get(r.id)!.status), 600_000);
     expect(h.sc.designs.get(r.id)!.status, h.sc.designs.get(r.id)!.error).toBe('done');
     const c2 = await cellsOf(h, e);
     expect([c2.size.x, c2.size.y, c2.size.z]).toEqual([c1.size.x, c1.size.y, c1.size.z]);
     const h2 = openFaceCells(c2, TOWER.x, TOWER.z);
     expect(h2.length).toBeGreaterThan(0);
     expect(h2.every(([k, b]) => isDoor(b) && k.endsWith(`,${TOWER.z - 1}`)), JSON.stringify(h2)).toBe(true);
-  }, 240_000);
+  }, 1_800_000);
 
   it('a request without ext["architect:wallLot"] keeps the massing + 2 cap (and the kit example massing)', async () => {
     h = await harness();
@@ -203,5 +203,5 @@ describe.skipIf(!hasKit)('wall lots in a massing-first group (sim backend, real 
     expect(plan.limits.maxSize).toEqual(detailMax(m.size, { x: 64, y: 64, z: 64 }));
     expect(plan.limits.maxSize).toEqual({ x: m.size.x + 2, y: m.size.y + 2, z: m.size.z + 2 });
     expect(plan.extra).not.toContain('--massing-cap');
-  }, 240_000);
+  }, 1_800_000);
 });

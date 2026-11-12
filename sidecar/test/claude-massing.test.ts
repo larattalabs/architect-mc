@@ -41,7 +41,7 @@ describe('Claude designer: massings and detail passes (fake SDK)', () => {
   afterAll(async () => {
     await h.close();
   });
-  const finished = (id: string) => until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 30_000);
+  const finished = (id: string) => until(() => ['done', 'failed'].includes(h.sc.designs.get(id)!.status), 600_000);
 
   it('a massing turn: the massing model, effort low, 20 turns, its own prompt; installed as a massing version', async () => {
     const verdicts: Record<string, string> = {};

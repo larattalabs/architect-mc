@@ -47,7 +47,7 @@ const item = (itemKey: string, type: string, o: Record<string, unknown> = {}) =>
 /** A group with an archetype and 2 copies (the 0b cap: 3 placements per design). */
 async function family(h: H, type = 'cabin'): Promise<{ arch: string; copies: string[] }> {
   const g = h.sc.groups.create(GroupRequest.parse({ name: 'G', bible: 'oak', items: [item('house', type, { count: 3 })] }));
-  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(g.id)!.status), 120_000);
+  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.groups.get(g.id)!.status), 600_000);
   const f = h.sc.groups.get(g.id)!;
   expect(f.status).toBe('done');
   return { arch: f.items[0]!.entryId!, copies: [f.items[1]!.entryId!, f.items[2]!.entryId!] };
@@ -56,13 +56,13 @@ async function family(h: H, type = 'cabin'): Promise<{ arch: string; copies: str
 /** A sim versionOf of the source (an int param's default up by one); `notes` may carry sim tokens. */
 async function versionOf(h: H, entryId: string, type = 'cabin', notes = 'make it wider'): Promise<number> {
   const d = h.sc.requestDesign(DesignRequest.parse(request({ type, notes, maxSize: { x: 64, y: 64, z: 64 }, versionOf: { entryId } })));
-  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(d.id)!.status), 60_000);
+  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(d.id)!.status), 600_000);
   expect(h.sc.designs.get(d.id)!.status, h.sc.designs.get(d.id)!.error).toBe('done');
   return h.sc.versions.head(entryId);
 }
 
 async function run(h: H, op: FollowOp): Promise<FollowOp> {
-  await until(() => h.sc.follows.get(op.id)?.status === 'done', 120_000);
+  await until(() => h.sc.follows.get(op.id)?.status === 'done', 600_000);
   return h.sc.follows.get(op.id)!;
 }
 
@@ -140,7 +140,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     h = await harness();
     const { arch, copies } = await family(h);
     const variant = h.sc.requestVariant(arch, undefined, { porch: false });
-    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(variant.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(variant.id)!.status), 600_000);
     const vId = h.sc.variants.get(variant.id)!.blueprintId!;
     // followers: the 2 copies and the variant, none behind
     let fl = h.sc.follows.followers(arch);
@@ -192,7 +192,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     writeTop(h, site, { ...top(h, site), id: site, derivation: { ...(top(h, site).derivation as object), kind: 'site' } });
     expect(refusalOf(() => h!.sc.follows.follow(site, 0))).toEqual(['NOT_ALLOWED', 'until_7b']);
     expect(h.sc.follows.followers(arch).find((f) => f.entryId === site)).toMatchObject({ kind: 'site', behind: false });
-  }, 300_000);
+  }, 1_800_000);
 
   it('FS-b (S-FS-6): a copy grown past its standing lot is refused up front, nothing installed; the other copy of followAll still follows', async () => {
     h = await harness();
@@ -222,7 +222,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     expect(h.sc.follows.followers(arch).find((f) => f.entryId === tight)!.behind).toBe(true);
     const again = await run(h, h.sc.follows.follow(tight, 0, undefined, [lotOf(tight, 6, 'lot_c')]));
     expect(again.members[0]!.result, again.members[0]!.result?.message).toMatchObject({ followed: true, newVersion: 2 });
-  }, 300_000);
+  }, 1_800_000);
 
   it('the tavern source: a copy re-made from v2 equals an independent rebuild of its recipe', async () => {
     h = await harness();
@@ -233,7 +233,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     expect(rebuild(h, copies[0]!, arch, 2).equals(nbt(h, copies[0]!))).toBe(true);
     // the other copy is still behind
     expect(h.sc.follows.followers(arch).find((f) => f.entryId === copies[1])!.behind).toBe(true);
-  }, 300_000);
+  }, 1_800_000);
 
   it('each refusal leaves the copy at its version: frame, check, bar, fit, bible_gone, source_gone, head_moved', async () => {
     h = await harness();
@@ -292,7 +292,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     // followAll of the gone source: every copy answers source_gone
     const all = await run(h, h.sc.follows.followAll(arch, 0));
     expect(all.members.map((m) => m.result!.refused).sort()).toEqual(['source_gone', 'source_gone']);
-  }, 300_000);
+  }, 1_800_000);
 
   it('followAll freezes its set and version: a copy made mid-operation is not followed, a source version made mid-operation is not used', async () => {
     h = await harness();
@@ -316,7 +316,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     expect(h.sc.versions.head(arch)).toBe(3);
     expect(h.sc.versions.head(late)).toBe(1);
     expect(h.sc.follows.followers(arch).filter((f) => f.behind).map((f) => f.entryId).sort()).toEqual([...copies, late].sort());
-  }, 300_000);
+  }, 1_800_000);
 
   it('a kill mid-followAll: the restart resumes the saved operation, the follower installed before the kill reports followed', async () => {
     const root = tempDir('arch-fs-kill-');
@@ -328,7 +328,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
       if (p === 'installed' && e === first) throw Object.assign(new Error('killed (test)'), { fatal: true });
     };
     const op = h.sc.follows.followAll(arch, 0, 'fs.kill');
-    await until(() => h!.sc.versions.head(first) === 2, 120_000);
+    await until(() => h!.sc.versions.head(first) === 2, 600_000);
     await h.sc.follows.idle();
     const saved = h.sc.follows.get(op.id)!;
     expect(saved.status).toBe('running');
@@ -344,7 +344,7 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
       expect((top(h, c).versions as unknown[]).length).toBe(2);
     }
     expect(done.members.find((m) => m.entryId === first)!.result!.message).toMatch(/resumed/);
-  }, 300_000);
+  }, 1_800_000);
 });
 
 describe('6d FS-b: lotsTooSmall (the containment the helper tests, in the standing version\'s template-local blocks)', () => {

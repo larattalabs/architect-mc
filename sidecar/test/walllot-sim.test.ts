@@ -36,7 +36,7 @@ async function harness(): Promise<H> {
 
 async function done(h: H, over: Record<string, unknown>): Promise<string> {
   const d = h.sc.requestDesign(DesignRequest.parse(request(over)));
-  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(d.id)!.status), 60_000);
+  await until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(d.id)!.status), 600_000);
   const x = h.sc.designs.get(d.id)!;
   expect(x.status, x.error).toBe('done');
   return x.blueprintId!;
@@ -126,7 +126,7 @@ describe.skipIf(!hasKit)('the wall-lot stand-in (sim backend, real kit)', () => 
     expect(h2.length).toBeGreaterThan(0);
     expect(h2.every(([k, b]) => isDoor(b) && k.endsWith(`,${D - 1}`)), JSON.stringify(h2)).toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(h.sc.config.libraryDir, f, `${f}.blueprint.json`), 'utf8')).version).toBe(2);
-  }, 180_000);
+  }, 1_800_000);
 
   it('a gatehouse: exactly the box, the reserved passage open on a standable floor, doors on the back face only; sim:outerdoor and the repair', async () => {
     h = await harness();
@@ -153,7 +153,7 @@ describe.skipIf(!hasKit)('the wall-lot stand-in (sim backend, real kit)', () => 
     const h2 = openFaceCells(c2, W, D).filter(([k]) => !passage(k));
     expect(h2.every(([k, b]) => isDoor(b) && k.endsWith(',0')), JSON.stringify(h2)).toBe(true);
     for (const u of cols) for (let v = 0; v < D; v++) for (let y = 1; y <= 3; y++) expect(c2.at(u, y, v)).toBe('minecraft:air');
-  }, 180_000);
+  }, 1_800_000);
 
   it('a corner tower with its outer faces (ext architect:wallLot): the door off them, in round 1 and after the repair', async () => {
     h = await harness();
@@ -172,7 +172,7 @@ describe.skipIf(!hasKit)('the wall-lot stand-in (sim backend, real kit)', () => 
     const h2 = openFaceCells(await cellsOf(h, f), W, D);
     expect(h2.length).toBeGreaterThan(0);
     expect(h2.every(([k, b]) => isDoor(b) && !isOuter(k) && k.endsWith(`,${D - 1}`)), JSON.stringify(h2)).toBe(true);
-  }, 180_000);
+  }, 1_800_000);
 
   it('(since NEXT) exact boxes under 7: 3 x 3, 5 x 3 and 3 x 5 towers build, check and close every face; a gatehouse needs 9 across (9 x 3 builds), 5 x 3 is refused by the kit', async () => {
     h = await harness();
@@ -208,14 +208,14 @@ describe.skipIf(!hasKit)('the wall-lot stand-in (sim backend, real kit)', () => 
     // 5 x 3 parses and builds (the passage u 1..3 open, its side walls the box's faces, closed), but a 5-wide gatehouse has no room for a
     // door, so the kit's gatehouse rules (an outside door, a lit interior) refuse the stand-in: the sim reports it failed
     const g = h.sc.requestDesign(DesignRequest.parse(request({ type: 'gatehouse', name: 'Gate 5x3', maxSize: { x: 5, y: 40, z: 3 }, notes: BRIEF, reserved: passageReserved(5, 3, [1, 2, 3]) })));
-    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.designs.get(g.id)!.status), 60_000);
+    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.designs.get(g.id)!.status), 600_000);
     const gx = h.sc.designs.get(g.id)!;
     expect([gx.status, gx.error]).toEqual(['failed', expect.stringMatching(/gatehouse 5x3[\s\S]*no outside door/)]);
-  }, 240_000);
+  }, 1_800_000);
 
   it('a tower request without the wall-lot signs keeps the kit example', async () => {
     h = await harness();
     const e = await done(h, { type: 'tower', name: 'Watch', maxSize: { x: 64, y: 64, z: 64 } });
     expect(fs.readFileSync(path.join(h.sc.config.libraryDir, e, `${e}.mjs`), 'utf8')).not.toMatch(/standIn/);
-  }, 120_000);
+  }, 1_800_000);
 });

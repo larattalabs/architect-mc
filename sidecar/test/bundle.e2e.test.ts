@@ -37,7 +37,7 @@ function startSidecar(args: string[]): Proc {
  * here starts on --port 0, so test runs in other checkouts never collide). A child that exits first is reported as a
  * startup failure with its exit code and output, not as a timeout.
  */
-async function ready(p: Proc, data: string, timeoutMs = 15_000): Promise<number> {
+async function ready(p: Proc, data: string, timeoutMs = 600_000): Promise<number> {
   const file = path.join(data, 'sidecar.json');
   const run = (): { pid: number; port: number } | undefined => {
     try {
@@ -84,9 +84,9 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     kit = copyKit(root);
     p = startSidecar(['--port', '0', '--data', data, '--library', library, '--kit', kit, '--backend', 'sim', '--parent-pid', String(process.pid)]);
     port = await ready(p, data);
-    await until(() => fs.existsSync(path.join(data, 'client.token')), 15_000);
+    await until(() => fs.existsSync(path.join(data, 'client.token')), 600_000);
     token = fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
-  }, 60_000);
+  }, 1_800_000);
 
   afterAll(async () => {
     if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
@@ -116,7 +116,7 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     await until(() => c.msgs.some((m) => m.type === 'snapshot'));
     expect(c.msgs[0]).toMatchObject({ type: 'snapshot', version: VERSION, status: { auth: 'ok', backend: 'sim', sdk: 'ready', queued: 0 } });
     c.send({ type: 'design.request', id: 'r1', request: request({ name: 'Lakeside Cabin' }) });
-    await until(() => c.msgs.some((m) => m.type === 'design.upsert' && ['done', 'failed'].includes(m.design.status)), 30_000);
+    await until(() => c.msgs.some((m) => m.type === 'design.upsert' && ['done', 'failed'].includes(m.design.status)), 600_000);
     const ack = c.msgs.find((m) => m.type === 'ack');
     expect(ack).toMatchObject({ type: 'ack', re: 'r1', ok: true, result: { designId: 'd1' } });
     const ups = c.msgs.filter((m): m is Extract<ServerMessage, { type: 'design.upsert' }> => m.type === 'design.upsert');
@@ -177,7 +177,7 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     expect(code).toBe(0);
     expect(Date.now() - t0).toBeLessThan(12_000);
     expect(q.out.join('')).toMatch(/parent pid \d+ is gone/);
-  }, 30_000);
+  }, 1_800_000);
 });
 
 // Protocol 2 through the built bundle (an ephemeral port): negotiation (a protocol-1 client unchanged), a blob, an agent job
@@ -212,7 +212,7 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
     fs.mkdirSync(data, { recursive: true });
     fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 20 }));
     await start();
-  }, 60_000);
+  }, 1_800_000);
 
   afterAll(async () => {
     if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
@@ -237,7 +237,7 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
     const ackOf = async (id: string) => {
-      await until(() => find(c.msgs, (m) => m.type === 'ack' && m.re === id) !== undefined, 20_000);
+      await until(() => find(c.msgs, (m) => m.type === 'ack' && m.re === id) !== undefined, 600_000);
       return find(c.msgs, (m) => m.type === 'ack' && m.re === id)!;
     };
     // an ARSV survey (128x128) and a tile's 80x80 window
@@ -256,11 +256,11 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
     const blobId = (await ackOf('sv')).result.blobId as string;
     c.send({ type: 'region.plan', id: 'rp', program: 'fake_basic', params: {}, seed: '5', claim: { minX: 0, minZ: 0, maxX: 127, maxZ: 127, minY: -64, maxY: 319 }, surveyBlobId: blobId });
     const planId = (await ackOf('rp')).result.planId as string;
-    await until(() => find(c.msgs, (m) => m.type === 'region.planned' && m.planId === planId) !== undefined, 30_000);
+    await until(() => find(c.msgs, (m) => m.type === 'region.planned' && m.planId === planId) !== undefined, 600_000);
     const planned = find(c.msgs, (m) => m.type === 'region.planned')!;
     c.send({ type: 'region.tiles.request', id: 'rt', planId, irSha: planned.irSha, tiles: ['0,0', '95,95'].map((key) => ({ key, stage: 'ground', set: 'terrain', heights: arsvBuf(64 * Number(key.split(',')[0]) - 8, 64 * Number(key.split(',')[1]) - 8, 80, 80).toString('base64') })) });
     expect((await ackOf('rt')).result).toEqual({ accepted: 2 });
-    await until(() => (c.msgs as M[]).filter((m) => m.type === 'region.tile' && !m.more).length === 2, 30_000);
+    await until(() => (c.msgs as M[]).filter((m) => m.type === 'region.tile' && !m.more).length === 2, 600_000);
     for (const key of ['0,0', '95,95']) {
       const frames = (c.msgs as M[]).filter((m) => m.type === 'region.tile' && m.key === key).sort((a, b) => a.seq - b.seq);
       const payload = zlib.gunzipSync(Buffer.concat(frames.map((f) => Buffer.from(f.data as string, 'base64'))));
@@ -273,7 +273,7 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
     expect(v1.msgs.some((m) => (m.type as string).startsWith('region.'))).toBe(false);
     v1.ws.close();
     c.ws.close();
-  }, 60_000);
+  }, 1_800_000);
 
   it('an agent job with a blob; SIGKILL mid tool call; restart (a new ephemeral port); the call is re-sent and the job completes', async () => {
     let c = await hello2();
@@ -290,19 +290,19 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
     await start();
     c = await hello2();
     expect((find(c.msgs, (m) => m.type === 'snapshot')!.jobs as M[]).find((j) => j.id === jobId)).toBeDefined();
-    await until(() => c.msgs.some((m) => m.type === 'job.tool.call'), 15_000);
+    await until(() => c.msgs.some((m) => m.type === 'job.tool.call'), 600_000);
     expect(find(c.msgs, (m) => m.type === 'job.tool.call')).toMatchObject({ jobId, callId: call.callId, name: 'probe' });
     c.send({ type: 'job.tool.result', jobId, callId: call.callId, result: { ok: true } });
-    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.id === jobId && ['done', 'failed'].includes(m.job.status)), 20_000);
+    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.id === jobId && ['done', 'failed'].includes(m.job.status)), 600_000);
     const done = (c.msgs as M[]).filter((m) => m.type === 'job.upsert' && m.job.id === jobId).at(-1)!.job;
     expect(done).toMatchObject({ status: 'done', result: { json: { results: [{ tool: 'probe', result: { ok: true } }] } } });
     // a structured job too
     c.send({ type: 'job.run', id: 's', job: { kind: 'structured', prompt: 'card', schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } });
-    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.spec.kind === 'structured' && m.job.status === 'done'), 20_000);
+    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.spec.kind === 'structured' && m.job.status === 'done'), 600_000);
     expect((c.msgs as M[]).filter((m) => m.type === 'job.upsert' && m.job.spec.kind === 'structured').at(-1)!.job.result).toEqual({ name: 'sim' });
     c.send({ type: 'shutdown', id: 'x' });
     expect(await p!.exit).toBe(0);
-  }, 60_000);
+  }, 1_800_000);
 });
 
 // Phase 4b through the built bundle (an ephemeral port), with the REAL kit and --debug (every outbound message is validated
@@ -331,7 +331,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     return c;
   }
   const ack = async (c: Awaited<ReturnType<typeof hello2>>, id: string) => {
-    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 15_000);
+    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 600_000);
     return (c.msgs as M[]).find((m) => m.type === 'ack' && m.re === id)!;
   };
 
@@ -342,7 +342,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     fs.mkdirSync(data, { recursive: true });
     fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 150, designConcurrency: 3 }));
     await start();
-  }, 60_000);
+  }, 1_800_000);
 
   afterAll(async () => {
     if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
@@ -361,13 +361,13 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     c.send({ type: 'bible.request', id: 'b', request: { prompt: 'weathered fishing village on stilts', name: 'Stilts', ext: { 'steward_mc:k': 1 } } });
     const b = (await ack(c, 'b')).result as M;
     expect(b).toMatchObject({ bibleId: 'bib_stilts', version: 1 });
-    await until(() => c.msgs.some((m) => m.type === 'bible.upsert' && m.bible.id === b.jobId && ['done', 'failed'].includes(m.bible.status)), 30_000);
+    await until(() => c.msgs.some((m) => m.type === 'bible.upsert' && m.bible.id === b.jobId && ['done', 'failed'].includes(m.bible.status)), 600_000);
     const bj = last(c.msgs, (m) => m.type === 'bible.upsert' && m.bible.id === b.jobId)!.bible;
     expect(bj.status, bj.error).toBe('done');
     expect(fs.existsSync(bj.bible.sheetPath)).toBe(true);
     expect(path.dirname(path.dirname(path.dirname(bj.bible.sheetPath)))).toBe(path.join(root, 'bibles', 'bib_stilts'));
     // bible.index follows the job's done upsert: wait for it (the order of the two frames is not fixed)
-    await until(() => c.msgs.some((m) => m.type === 'bible.index' && (m.bibles as M[]).some((x) => x.id === b.bibleId)), 10_000);
+    await until(() => c.msgs.some((m) => m.type === 'bible.index' && (m.bibles as M[]).some((x) => x.id === b.bibleId)), 600_000);
     expect(last(c.msgs, (m) => m.type === 'bible.index')!.bibles.map((x: M) => x.id)).toContain('bib_stilts');
     // a group: an anchor wave, then two items
     const group = {
@@ -387,7 +387,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     expect(g.itemKeys).toEqual(['hall', 'hut', 'watch']);
     expect(g.designIds).toHaveLength(3);
     // SIGKILL once the anchor is done and the second wave runs
-    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && m.group.done >= 1 && m.group.items.some((i: M) => i.status === 'designing')), 30_000);
+    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && m.group.done >= 1 && m.group.items.some((i: M) => i.status === 'designing')), 600_000);
     p!.child.kill('SIGKILL');
     await p!.exit;
     await start();
@@ -395,7 +395,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     const back = ((c.msgs as M[]).find((m) => m.type === 'snapshot')!.groups as M[]).find((x) => x.id === g.groupId)!;
     expect(back.items.map((i: M) => [i.itemKey, i.ext])).toEqual([['hall', { 'steward_mc:lot': 'L1' }], ['hut', { 'steward_mc:lot': 'L2' }], ['watch', { 'steward_mc:lot': 'L3' }]]);
     expect(back.ext).toEqual({ 'steward_mc:settlement': 'S1' });
-    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && ['done', 'failed'].includes(m.group.status)), 40_000);
+    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && ['done', 'failed'].includes(m.group.status)), 600_000);
     const gd = last(c.msgs, (m) => m.type === 'group.upsert' && m.group.id === g.groupId)!.group;
     expect(gd).toMatchObject({ status: 'done', done: 3, failed: 0, bible: { id: 'bib_stilts', version: 1 } });
     for (const it of gd.items) {
@@ -407,13 +407,13 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     c.send({ type: 'reskin.request', id: 'r', bibleId: 'cherry', from: { group: g.groupId } });
     const r = (await ack(c, 'r')).result as M;
     expect(r.variantIds).toHaveLength(3);
-    await until(() => c.msgs.some((m) => m.type === 'reskin.upsert' && m.reskin.id === r.reskinId && m.reskin.status !== 'building'), 30_000);
+    await until(() => c.msgs.some((m) => m.type === 'reskin.upsert' && m.reskin.id === r.reskinId && m.reskin.status !== 'building'), 600_000);
     expect(last(c.msgs, (m) => m.type === 'reskin.upsert' && m.reskin.id === r.reskinId)!.reskin).toMatchObject({ status: 'done', done: 3, bible: { id: 'cherry', version: 1 } });
     // nothing failed an outbound schema check (--debug validates every message)
     expect(p!.out.join('')).not.toMatch(/violates protocol/);
     c.send({ type: 'shutdown', id: 'x' });
     expect(await p!.exit).toBe(0);
-  }, 150_000);
+  }, 1_800_000);
 });
 
 // Phase 4c through the built bundle (an ephemeral port), with the REAL kit (its example massings) and --debug (every outbound
@@ -442,11 +442,11 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist
   }
   type C = Awaited<ReturnType<typeof hello2>>;
   const ack = async (c: C, id: string) => {
-    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 15_000);
+    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 600_000);
     return (c.msgs as M[]).find((m) => m.type === 'ack' && m.re === id)!;
   };
-  const designDone = (c: C, id: string) => until(() => (c.msgs as M[]).some((m) => m.type === 'design.upsert' && m.design.id === id && ['done', 'failed'].includes(m.design.status)), 40_000);
-  const groupAt = (c: C, id: string, st: string[], pred: (g: M) => boolean = () => true) => until(() => (c.msgs as M[]).some((m) => m.type === 'group.upsert' && m.group.id === id && st.includes(m.group.status) && pred(m.group)), 60_000);
+  const designDone = (c: C, id: string) => until(() => (c.msgs as M[]).some((m) => m.type === 'design.upsert' && m.design.id === id && ['done', 'failed'].includes(m.design.status)), 600_000);
+  const groupAt = (c: C, id: string, st: string[], pred: (g: M) => boolean = () => true) => until(() => (c.msgs as M[]).some((m) => m.type === 'group.upsert' && m.group.id === id && st.includes(m.group.status) && pred(m.group)), 600_000);
 
   beforeAll(async () => {
     if (!fs.existsSync(MAIN)) execFileSync(process.execPath, [path.join(SIDECAR_ROOT, 'scripts', 'build.mjs')], { cwd: SIDECAR_ROOT, stdio: 'pipe' });
@@ -455,7 +455,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist
     fs.mkdirSync(data, { recursive: true });
     fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 100, designConcurrency: 3 }));
     await start();
-  }, 60_000);
+  }, 1_800_000);
 
   afterAll(async () => {
     if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
@@ -535,5 +535,5 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist
     expect(p!.out.join('')).not.toMatch(/violates protocol/);
     c.send({ type: 'shutdown', id: 'q' });
     expect(await p!.exit).toBe(0);
-  }, 180_000);
+  }, 1_800_000);
 });

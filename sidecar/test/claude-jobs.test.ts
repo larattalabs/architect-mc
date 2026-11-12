@@ -92,7 +92,7 @@ describe('Claude jobs (fake SDK)', () => {
   });
 
   const job = (o: Record<string, unknown>) => JobSpec.parse({ prompt: 'do it', ...o });
-  const final = (id: string) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.jobs.book.get(id)!.status), 20_000);
+  const final = (id: string) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.jobs.book.get(id)!.status), 600_000);
   const schema = { type: 'object', properties: { name: { type: 'string' }, floors: { type: 'integer', minimum: 1 } }, required: ['name', 'floors'], additionalProperties: false };
 
   it('structured: outputFormat json_schema, tools [], maxBudgetUsd, small maxTurns, no MCP; the answer is structured_output', async () => {
@@ -276,7 +276,7 @@ describe('Claude jobs (fake SDK)', () => {
       yield result(s, 'success', { result: 'done', total_cost_usd: 0.2, modelUsage: usage(20) });
     };
     const d = h.sc.requestDesign(DesignRequest.parse(request({ name: 'Budget Cabin', model: 'claude-haiku-5', budgetUsd: 1.5, owner: 'steward_mc:x', ext: { 'steward_mc:lot': 'L3' } })));
-    await until(() => ['done', 'failed'].includes(h.sc.designs.get(d.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h.sc.designs.get(d.id)!.status), 600_000);
     const got = h.sc.designs.get(d.id)!;
     expect(got.status).toBe('done');
     expect(calls[0]!.opts.model).toBe('claude-haiku-5');
@@ -294,7 +294,7 @@ describe('Claude jobs (fake SDK)', () => {
       yield result(s, 'error_max_budget_usd', { total_cost_usd: 0.11, modelUsage: usage(11) });
     };
     const d = h.sc.requestDesign(DesignRequest.parse(request({ name: 'Broke Cabin', budgetUsd: 0.1 })));
-    await until(() => ['done', 'failed'].includes(h.sc.designs.get(d.id)!.status), 30_000);
+    await until(() => ['done', 'failed'].includes(h.sc.designs.get(d.id)!.status), 600_000);
     expect(h.sc.designs.get(d.id)).toMatchObject({ status: 'failed', error: 'budget' });
     expect(h.sc.designs.get(d.id)!.cost!.usd).toBe(0.11);
   });

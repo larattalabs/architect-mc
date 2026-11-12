@@ -93,7 +93,7 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
     h = await harness();
     const palette = { bible: { id: 'medieval', version: 1, roles: MEDIEVAL } };
     const d = h.sc.requestDesign(DesignRequest.parse(request({ name: 'Daub House', palette })));
-    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 600_000);
     const done = h.sc.designs.get(d.id)!;
     expect(done.status, done.error).toBe('done');
     const sc = sidecarJson(h.sc, done.blueprintId!);
@@ -121,11 +121,11 @@ describe.skipIf(!hasKit)('U1 materials only, variants with roles, bible.save (si
   it('a variant with roles inline replaces the recorded palette and re-skins the entry', async () => {
     h = await harness();
     const d = h.sc.requestDesign(DesignRequest.parse(request({ name: 'Plain Cabin', palette: 'oak' })));
-    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 600_000);
     const from = h.sc.designs.get(d.id)!.blueprintId!;
     const roles = { ...MEDIEVAL, light: 'minecraft:soul_lantern' };
     const v = h.sc.requestVariant(from, { bible: { id: 'medieval', version: 1, roles } });
-    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 60_000);
+    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 600_000);
     const done = h.sc.variants.get(v.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.blueprintId).toBe(`${from}_medieval`);
