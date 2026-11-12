@@ -78,6 +78,8 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
   'design.critique',
   'design.polish',
   'site.variant',
+  'design.fromProgram',
+  'design.variant',
 ]);
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
@@ -89,6 +91,7 @@ import { checkPaletteSpec } from './styles.js';
 import { hintsOf, type StyleHints } from './claude/brief.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 import { SiteVariants, siteVariantView } from './sitevariants.js';
+import { Programs, programView } from './programs.js';
 import { entrySite, keepSiteVolume, siteVolumeFile, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
 import { siteSize } from './protocol.js';
 
@@ -168,6 +171,8 @@ export class Sidecar {
   readonly follows: Follows;
   /** (7b DS) site variants (Designs.siteVariant): a source's program re-run on another site, $0 */
   readonly siteVariants: SiteVariants;
+  /** (M5 GP) given-program designs and keyed variants (Designs.fromProgram, variant, variantByKey), $0 */
+  readonly programs: Programs;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -209,6 +214,7 @@ export class Sidecar {
     this.regionDesigns = new RegionDesigns(this);
     this.follows = new Follows(this);
     this.siteVariants = new SiteVariants(this);
+    this.programs = new Programs(this);
   }
 
   /** trusted, open connections */
@@ -351,6 +357,7 @@ export class Sidecar {
     this.variantRunner.start();
     this.follows.start();
     this.siteVariants.start();
+    this.programs.start();
     void this.loadKitInfo();
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
@@ -419,6 +426,7 @@ export class Sidecar {
     await this.variantRunner.stop();
     await this.follows.stop();
     await this.siteVariants.stop();
+    await this.programs.stop();
     await this.jobs.stop();
     await this.designer?.stop();
     this.store.close();
@@ -689,6 +697,15 @@ export class Sidecar {
       // ---- 7b DS (no Claude): the ack carries the operation; a running one reports done through follow.upsert
       case 'site.variant':
         return siteVariantView(this.siteVariants.request(msg.entryId, msg.site, msg.opKey, msg.owner));
+      // ---- M5 GP (no Claude): the ack carries the operation; a running one reports done through follow.upsert
+      case 'design.fromProgram':
+        return programView(this.programs.fromProgram(msg.source, msg.params, msg.bible, msg.opKey, msg.owner));
+      case 'design.variant':
+        return programView(this.programs.variant(msg.entryId, msg.params, msg.bible, msg.reserved, msg.opKey, msg.owner));
+      case 'design.variantByKey': {
+        const op = this.programs.variantByKey(msg.opKey, msg.owner);
+        return op ? programView(op) : {};
+      }
     }
   }
 

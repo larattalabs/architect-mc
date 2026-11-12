@@ -297,4 +297,81 @@ public interface Designs {
 	default CompletableFuture<String> siteVariant(String entryId, SiteSpec site, String opKey) {
 		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since 1.53.0 (slice DS)");
 	}
+
+	// ------------------------------------------------------------------ M5 GP: given programs (API NEXT)
+
+	/**
+	 * (M5 GP, Steward's S-M5-1; docs/CONTRACT.md "M5 support") A design from the caller's own kit program, at $0 with no Claude call: the
+	 * program runs through the same kit, checker and renders as a Claude-written design, in the region plan's sandbox (Node's permission
+	 * model: it reads and writes only its scratch dir with a fresh copy of the pristine kit, no network, no child process, the plan's heap
+	 * and time limits), and is installed directly as a new library entry (no group, no approval).
+	 *
+	 * <p>{@code source} is a kit design module, as {@code kit/designs/*.mjs} are written: {@code export const id} (the entry id's base;
+	 * the installed copy's id is rewritten to the entry's), {@code export const params} (its parameter schema: {@code int},
+	 * {@code bool}, {@code enum}; kit/lib/params.mjs) and a default export {@code build({palette, reserved, ...values})} returning a
+	 * Blueprint; its kit imports are relative ({@code '../lib/kit.mjs'}). Its own {@code type} and {@code profile} stand (no request's
+	 * type, profile or size is imposed). {@code params} are its values (checked against its schema; at most
+	 * {@link Limits#PROGRAM_PARAMS_MAX} characters as JSON). {@code bible}: a Style's roles for the palette ({@code version 0}: its
+	 * latest), null for the program's own default palette.
+	 *
+	 * <p>The entry records the program's sha (sha256 of {@code source}'s UTF-8 bytes, exactly as given) in its sidecar
+	 * {@code givenProgram {sha, opKey, owner?}} and keeps the exact source as {@code program/source.mjs}; its {@code values},
+	 * {@code bible} and the parts map are recorded as for any design. {@code opKey} keys the operation (scoped by the owner: none is the
+	 * player's): the same key and body answers the first one's entry, also after a restart (a restart resumes one still running);
+	 * another body under it fails {@link Reason#OP_KEY_CONFLICT}. Completes on the server thread with the new entry's id once the library
+	 * has loaded it, or fails {@link ProgramRefused} ({@link Reason#PROGRAM_REFUSED}: the checker's typed findings and why, see there).
+	 * Needs a helper with {@code "givenPrograms"}. Since NEXT.
+	 */
+	default CompletableFuture<String> fromProgram(String source, com.google.gson.JsonObject params, @Nullable BiblePin bible, String opKey) {
+		return fromProgram(source, params, bible, opKey, null);
+	}
+
+	/** {@link #fromProgram(String, com.google.gson.JsonObject, BiblePin, String)} under an owner's key scope. Since NEXT. */
+	default CompletableFuture<String> fromProgram(String source, com.google.gson.JsonObject params, @Nullable BiblePin bible, String opKey, @Nullable String owner) {
+		throw new UnsupportedOperationException("Designs.fromProgram needs Architect API NEXT (slice GP)");
+	}
+
+	/**
+	 * (M5 GP) A keyed variant of a given-program entry ({@link #fromProgram}, or a variant of one): its kept program re-run at $0 with
+	 * {@code params} over the entry's values, {@code bible} (null: the entry's own Style, else the program's default palette;
+	 * {@code version 0}: the latest) and the lot's {@code reserved} cells (null: none), in the same sandbox, checker and renders, and
+	 * installed as a new entry ({@code <entryId>_kv}, {@code _kv_2}, ...; {@code derivation {source, sourceVersion, kind: "variant",
+	 * recipe {values, bible?, reserved?, programSha, opKey}}}, the source's ext, the same {@code givenProgram.sha} and
+	 * {@code program/source.mjs}, its {@code reserved} recorded).
+	 *
+	 * <p>{@code reserved} is in the lot's frame ({@link DesignRequest.Reserved}: the lot seen with its front to the south, u across, v
+	 * from the back, y from the lot's floor; kit/lib/reserved.mjs): the program is given it ({@code build({reserved})}, so it can leave
+	 * those cells open: {@code frameToTemplate} in kit/lib/reserved.mjs maps one to a template cell) and the checker refuses a design
+	 * that puts a non-air block on one, placed as a lot places it ({@code reserved}).
+	 *
+	 * <p>{@code opKey} keys it (owner-scoped), as {@link #fromProgram}; {@link #variantByKey} finds it again. Fails
+	 * {@link ProgramRefused} as {@link #fromProgram}, also with {@code not_given} (the entry is not a given program) and
+	 * {@code program_stale} (its kept source's sha is not the recorded one); {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry.
+	 * {@link Library#makeVariant} is unchanged. Needs {@code "givenPrograms"}. Since NEXT.
+	 */
+	default CompletableFuture<String> variant(String entryId, com.google.gson.JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved,
+		String opKey) {
+		return variant(entryId, params, bible, reserved, opKey, null);
+	}
+
+	/** {@link #variant(String, com.google.gson.JsonObject, BiblePin, DesignRequest.Reserved, String)} under an owner's key scope. Since NEXT. */
+	default CompletableFuture<String> variant(String entryId, com.google.gson.JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved,
+		String opKey, @Nullable String owner) {
+		throw new UnsupportedOperationException("Designs.variant needs Architect API NEXT (slice GP)");
+	}
+
+	/**
+	 * (M5 GP) The keyed variant made under {@code opKey} (the player's scope), from the helper's persisted operation (also after a
+	 * restart): empty when this key never made one; the entry id once it is installed and loaded (a running one is waited for, as the
+	 * call that made it); fails as that call did ({@link ProgramRefused}) when it was refused. Fails {@link ArchitectRefused}
+	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper can't be reached (never "empty" then). Needs {@code "givenPrograms"}. Since NEXT.
+	 */
+	default CompletableFuture<Optional<String>> variantByKey(String opKey) {
+		return variantByKey(null, opKey);
+	}
+
+	/** {@link #variantByKey(String)} in an owner's key scope. Since NEXT. */
+	default CompletableFuture<Optional<String>> variantByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Designs.variantByKey needs Architect API NEXT (slice GP)");
+	}
 }

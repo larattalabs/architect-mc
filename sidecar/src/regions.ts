@@ -67,7 +67,7 @@ export const REGION_BLOB_KIND = 'region.blob';
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
 /** Refuses networking inside the plan child (Node 24's permission model has no network switch). Loaded with --import. */
-const NO_NETWORK = [
+export const NO_NETWORK = [
   "import net from 'node:net'; import tls from 'node:tls'; import dgram from 'node:dgram'; import dns from 'node:dns'; import http from 'node:http'; import https from 'node:https';",
   "import { syncBuiltinESMExports } from 'node:module';",
   "const no = () => { throw Object.assign(new Error('network access is not allowed in a region plan'), { code: 'ERR_ACCESS_DENIED' }); };",

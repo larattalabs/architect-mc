@@ -82,7 +82,7 @@ export async function importDesign(id, dir = DESIGNS) {
  * `opts.values` the param values over the defaults; both throw a UsageError when invalid. Without a palette the design
  * uses its own default.
  */
-export async function loadDesign(id, { palette, values, dir, mirror, site } = {}) {
+export async function loadDesign(id, { palette, values, dir, mirror, site, reserved } = {}) {
   const mod = await importDesign(id, dir);
   // (7b SV) a site-aware design: its declared fit and the site it is built into
   if (mod.fit !== undefined && mod.fit !== 'on_pad' && !site) throw new UsageError(`${id} is a site-aware design (fit ${mod.fit}): give its site (--site <volume> --lot <site.json>)${mod.exampleSite ? `; its example site is kit/test/fixtures/site/${mod.exampleSite}` : ''}`);
@@ -96,7 +96,9 @@ export async function loadDesign(id, { palette, values, dir, mirror, site } = {}
   } catch (e) {
     throw new UsageError(e.message);
   }
-  const bp = await mod.default({ ...(p ? { palette: p } : {}), ...(site ? { site } : {}), ...v });
+  // (M5 GP, S-M5-1) a lot's reserved cells (--reserved, in the lot's frame: kit/lib/reserved.mjs) are given to the program too, so a
+  // module program (an irrigated farm) can leave them open; a program that ignores them is still refused by the checker if it writes one
+  const bp = await mod.default({ ...(p ? { palette: p } : {}), ...(site ? { site } : {}), ...(reserved ? { reserved: structuredClone(reserved) } : {}), ...v });
   if (!bp || typeof bp.toStructure !== 'function') throw new Error(`kit/designs/${id}.mjs: the default export must return a Blueprint`);
   if (bp.id !== id) throw new Error(`kit/designs/${id}.mjs builds id '${bp.id}' (must match the file name)`);
   if (site && bp.site !== site) throw new Error(`kit/designs/${id}.mjs ignores the site it is given (pass \`site\` to the Blueprint)`);
@@ -118,7 +120,7 @@ export async function loadDesign(id, { palette, values, dir, mirror, site } = {}
 
 /** Build + check one design. */
 export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, massingCap, restraint, style, dir, mirror, reserved, leave = false, site } = {}) {
-  const bp = await loadDesign(id, { palette, values, dir, mirror, site });
+  const bp = await loadDesign(id, { palette, values, dir, mirror, site, ...(reserved ? { reserved } : {}) });
   // ((6c IRR) --leave-reserved: the reserved cells are dropped before the write (the sim's stand-in honours them so))
   if (reserved && leave) leaveReserved(bp, reserved);
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it

@@ -1144,6 +1144,29 @@ final class DesignsImpl implements Designs {
 		return SiteDesigns.siteVariant(entryId, site, opKey, null);
 	}
 
+	/** (M5 GP) {@link GivenPrograms#fromProgram}. */
+	@Override
+	public CompletableFuture<String> fromProgram(String source, JsonObject params, dev.larattalabs.architect.api.@Nullable BiblePin bible, String opKey,
+		@Nullable String owner) {
+		load();
+		return GivenPrograms.fromProgram(source, params, bible, opKey, owner);
+	}
+
+	/** (M5 GP) {@link GivenPrograms#variant}. */
+	@Override
+	public CompletableFuture<String> variant(String entryId, JsonObject params, dev.larattalabs.architect.api.@Nullable BiblePin bible,
+		dev.larattalabs.architect.api.DesignRequest.@Nullable Reserved reserved, String opKey, @Nullable String owner) {
+		load();
+		return GivenPrograms.variant(entryId, params, bible, reserved, opKey, owner);
+	}
+
+	/** (M5 GP) {@link GivenPrograms#variantByKey}. */
+	@Override
+	public CompletableFuture<java.util.Optional<String>> variantByKey(@Nullable String owner, String opKey) {
+		load();
+		return GivenPrograms.variantByKey(owner, opKey);
+	}
+
 	/** {@code group.upsert} or a snapshot's group (any thread): merged; the events fire on the server thread. */
 	void groupChanged(JsonObject raw) {
 		JsonObject g = groups.merge(raw);

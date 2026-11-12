@@ -95,6 +95,12 @@ public final class Limits {
 	 */
 	public static final int SITE_KEEP_CRITICAL_MAX = 65536;
 	public static final int SITE_PORTS_MAX = 16;
+	/**
+	 * (M5 GP) {@link Designs#fromProgram}: the most a given program's source may be (UTF-16 units) and its params as compact JSON (zod
+	 * {@code DesignFromProgramMsg}). Since NEXT.
+	 */
+	public static final int PROGRAM_SOURCE_MAX = 262144;
+	public static final int PROGRAM_PARAMS_MAX = 16384;
 	/** (since 1.41.0) The most roles a palette carries inline ({@code {bible: {id, version, roles}}}). */
 	public static final int PALETTE_ROLES_MAX = 64;
 

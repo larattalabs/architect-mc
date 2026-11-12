@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1318,6 +1318,19 @@ export const EntryFollowAllMsg = z.object({ ...envelope('entry.followAll'), sour
  * (detail: no_program, not_site_aware). Keyed by (owner, "siteVariant", opKey); the key's body leaves out the volume's blob id.
  */
 export const SiteVariantMsg = z.object({ ...envelope('site.variant'), entryId: EntryId, site: SiteSpec, opKey: OpKey, owner: Owner.optional() });
+/**
+ * (M5 GP, feature design.program) Given-program designs (Designs.fromProgram / variant / variantByKey; docs/CONTRACT.md "M5 support"). The
+ * program is a kit design module (its parameter schema its own `export const params`); it runs in the plan sandbox at $0. Each keyed by
+ * (owner, kind, opKey); the ack carries the operation {id, kind, status, entryId?, programSha, newEntryId?, refused?} and a running one
+ * reports done through follow.upsert. Refusals PROGRAM_REFUSED (detail: the first finding's rule, params, palette, program, timeout,
+ * program_stale, not_given; findings: [{rule, severity, message}]).
+ */
+export const ProgramBible = z.object({ id: BibleId, version: z.number().int().min(1).optional().describe('absent: the latest') });
+export type ProgramBible = z.infer<typeof ProgramBible>;
+const ProgramParams = z.record(z.string().regex(/^[a-z][a-zA-Z0-9_]{0,31}$/), z.unknown()).refine((v) => JSON.stringify(v).length <= 16_384, 'params are larger than 16384 characters as JSON');
+export const DesignFromProgramMsg = z.object({ ...envelope('design.fromProgram'), source: z.string().min(1).max(262_144), params: ProgramParams, bible: ProgramBible.optional(), opKey: OpKey, owner: Owner.optional() });
+export const DesignVariantMsg = z.object({ ...envelope('design.variant'), entryId: EntryId, params: ProgramParams, bible: ProgramBible.optional(), reserved: Reserved.optional(), opKey: OpKey, owner: Owner.optional() });
+export const DesignVariantByKeyMsg = z.object({ ...envelope('design.variantByKey'), opKey: OpKey, owner: Owner.optional() });
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
@@ -1539,6 +1552,9 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionDesignMsg,
   SiteAnalyseMsg,
   SiteVariantMsg,
+  DesignFromProgramMsg,
+  DesignVariantMsg,
+  DesignVariantByKeyMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */

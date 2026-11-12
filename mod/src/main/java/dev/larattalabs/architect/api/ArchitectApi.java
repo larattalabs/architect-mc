@@ -218,6 +218,8 @@ public interface ArchitectApi {
 	 * {@link Survey#site} and {@link Regions#affordances} work. (7b DS, since 1.53.0) {@code "siteDesign"} is advertised when the helper
 	 * designs into sites (its {@code site.design}): {@link DesignRequest#site()} on a design, a group item or an estimate,
 	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
+	 * (M5 GP, since NEXT) {@code "givenPrograms"} is advertised when the helper runs callers' kit programs (its {@code design.program}):
+	 * {@link Designs#fromProgram}, {@link Designs#variant} and {@link Designs#variantByKey}.
 	 */
 	Set<String> features();
 }

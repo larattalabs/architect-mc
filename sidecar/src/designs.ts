@@ -203,10 +203,10 @@ export interface NodeRun {
   timedOut: boolean;
 }
 
-/** Run a kit script with this node, in a minimal environment. */
-export async function runNode(script: string, args: string[], cwd: string, timeoutMs: number): Promise<NodeRun> {
+/** Run a kit script with this node, in a minimal environment. `nodeFlags` (M5 GP: the permission sandbox) go before the script. */
+export async function runNode(script: string, args: string[], cwd: string, timeoutMs: number, nodeFlags: string[] = []): Promise<NodeRun> {
   try {
-    const r = await run(process.execPath, [script, ...args], { cwd, env: minimalEnv(), timeoutMs });
+    const r = await run(process.execPath, [...nodeFlags, script, ...args], { cwd, env: minimalEnv(), timeoutMs });
     return { ok: r.code === 0 && !r.timedOut, code: r.code, stdout: r.stdout, output: `${r.stdout}${r.stderr ? `\n${r.stderr}` : ''}`.trim(), timedOut: r.timedOut };
   } catch (e) {
     return { ok: false, code: -1, stdout: '', output: (e as Error).message, timedOut: false };
@@ -260,6 +260,23 @@ export interface CheckResult {
   conformance?: Conformance;
   /** (5a) the kit's metrics (accentShare, detailNoise, windowsPerFacade, paletteAdherence, parts, ...), when it printed them */
   metrics?: Record<string, unknown>;
+  /** (M5 GP) the kit's exit code (1: the checker refused; 2: bad usage, e.g. values outside the params; else the program threw) */
+  code?: number;
+  /** (M5 GP) the build ran out of time */
+  timedOut?: boolean;
+  /** (M5 GP) the kit's error lines as it printed them (the checker's and the conformance's) */
+  errors?: string[];
+}
+
+/**
+ * (M5 GP) A caller's program runs in the plan sandbox's permission model: it reads and writes only its scratch dir (where the kit copy,
+ * the bible and the outputs are), no child processes, no network (`NO_NETWORK`), a heap cap. Undefined when this node has no permission
+ * model (the caller refuses then).
+ */
+export function sandboxFlags(scratch: string, heapMb: number, noNetwork: string, perm: string | undefined): string[] | undefined {
+  if (!perm) return undefined;
+  const dir = fs.realpathSync(scratch);
+  return [perm, `--allow-fs-read=${dir}`, `--allow-fs-write=${dir}`, `--max-old-space-size=${heapMb}`, `--import=data:text/javascript,${encodeURIComponent(noNetwork)}`];
 }
 
 /** The kit's `--json` line (`{ ok, errors[], warnings[], nbt, sidecar }`), if it printed one. */
@@ -287,7 +304,7 @@ export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]
  * exit code and the files on disk decide; the JSON line only supplies the error and warning text.
  * `extra` carries a variant's `--palette` / `--values`.
  */
-export async function checkDesign(kitSrc: string, scratch: string, bp: string, limits: Limits, timeoutMs = 120_000, extra: string[] = []): Promise<CheckResult> {
+export async function checkDesign(kitSrc: string, scratch: string, bp: string, limits: Limits, timeoutMs = 120_000, extra: string[] = [], nodeFlags: string[] = []): Promise<CheckResult> {
   const rel = `${KIT}/designs/${bp}.mjs`;
   if (!fs.existsSync(path.join(scratch, KIT, 'designs', `${bp}.mjs`))) return { ok: false, problem: `there is no ${rel}`, output: '', warnings: [] };
   refreshKit(kitSrc, scratch, [bp]);
@@ -296,7 +313,7 @@ export async function checkDesign(kitSrc: string, scratch: string, bp: string, l
   fs.mkdirSync(out, { recursive: true });
   const m = limits.maxSize;
   const args = [bp, '--out', out, ...(m ? ['--max', `${m.x},${m.y},${m.z}`] : []), ...(limits.type ? ['--type', limits.type] : []), ...(limits.profile?.length ? ['--profile', limits.profile.join(',')] : []), ...extra, '--json'];
-  return finishCheck(await runNode(path.join(KIT, 'build.mjs'), args, scratch, timeoutMs), out, bp, limits, timeoutMs);
+  return finishCheck(await runNode(path.join(KIT, 'build.mjs'), args, scratch, timeoutMs, nodeFlags), out, bp, limits, timeoutMs);
 }
 
 /**
@@ -310,11 +327,11 @@ export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits,
   const nbt = path.join(out, `${bp}.nbt`);
   const json = path.join(out, `${bp}.blueprint.json`);
   if (!r.ok) {
-    if (r.timedOut) return { ok: false, problem: `build.mjs timed out after ${timeoutMs / 1000}s`, output: r.output, warnings, ...conf };
+    if (r.timedOut) return { ok: false, problem: `build.mjs timed out after ${timeoutMs / 1000}s`, output: r.output, warnings, ...conf, code: r.code, timedOut: true };
     const what = r.code === 1 ? 'the checker refused the design' : 'the kit failed (the design threw, or bad usage)';
     const errs = [...(j?.errors ?? []), ...(j?.conformance?.errors ?? []).filter((e) => !j!.errors.includes(e))];
     const detail = errs.length ? errs.map((e) => `- ${e}`).join('\n') : outputTail(r.output);
-    return { ok: false, problem: `${what}:\n${truncate(detail, 1500)}`, output: r.output, warnings, ...conf };
+    return { ok: false, problem: `${what}:\n${truncate(detail, 1500)}`, output: r.output, warnings, ...conf, code: r.code, errors: errs };
   }
   if (!fs.existsSync(nbt) || !fs.existsSync(json)) return { ok: false, problem: `the kit did not write ${bp}.nbt and ${bp}.blueprint.json`, output: r.output, warnings, ...conf };
   let sc: Sidecar;
