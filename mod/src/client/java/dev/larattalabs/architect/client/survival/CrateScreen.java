@@ -183,7 +183,7 @@ public final class CrateScreen extends Screen {
 		boolean wasArmed = confirmDeconstruct();
 		deconShown().press();
 		if (!wasArmed && confirmDeconstruct()) {
-			flash("The ground comes back; placed blocks are refunded here", false);
+			flash("The ground comes back; blocks are refunded", false);
 		}
 	}
 
@@ -226,7 +226,7 @@ public final class CrateScreen extends Screen {
 		boolean wasArmed = confirmDeconstruct();
 		if (decon.mouseClicked(e.x(), e.y(), e.button()) | deconOwned.mouseClicked(e.x(), e.y(), e.button())) {
 			if (!wasArmed && confirmDeconstruct()) {
-				flash("The ground comes back; placed blocks are refunded here", false);
+				flash("The ground comes back; blocks are refunded", false);
 			}
 			return true;
 		}
@@ -403,7 +403,7 @@ public final class CrateScreen extends Screen {
 			Panels.text(g, font, String.valueOf(num(r, "needed")), colNeed, ry + 5, ink);
 			Panels.text(g, font, String.valueOf(num(r, "delivered")), colDel, ry + 5, ink);
 			Panels.text(g, font, String.valueOf(num(r, "placed")), colPl, ry + 5, ink);
-			Panels.text(g, font, missing > 0 ? String.valueOf(missing) : UiBits.CHECK, colMiss, ry + 5, missing > 0 ? UiStyle.CLAY_DARK : UiBits.okText());
+			Panels.text(g, font, missing > 0 ? String.valueOf(missing) : UiBits.CHECK, colMiss, ry + 5, missing > 0 ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.okText());
 			ry += ROW;
 		}
 		if (rows.size() > visible) {

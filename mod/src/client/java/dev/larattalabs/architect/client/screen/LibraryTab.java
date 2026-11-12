@@ -700,7 +700,7 @@ final class LibraryTab {
 			prov = (c.group() != null ? collectionName(LibraryQuery.GROUP_PREFIX + c.group()) + " · " : "") + collectionName(LibraryQuery.BIBLE_PREFIX
 				+ c.bible()) + " v" + c.bibleVersion() + " · " + prov;
 		}
-		g.text(font, TextUtil.ellipsize(font, prov, w), x, ty, UiStyle.CLAY_DARK, false);
+		g.text(font, TextUtil.ellipsize(font, prov, w), x, ty, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		ty += 10;
 		if (!c.userTags().isEmpty()) {
 			g.text(font, TextUtil.ellipsize(font, "#" + String.join("  #", c.userTags()), w), x, ty, UiStyle.color("palette.ui.teal_text", 0xFF1E7472),
@@ -726,7 +726,7 @@ final class LibraryTab {
 				|| !cr.scored()) ? " · " + cr.end().label() : "") + " · "
 				+ cr.openIssues().size() + " open issue" + (cr.openIssues().size() == 1 ? "" : "s") + (cr.stale() ? " · stale: the design changed since"
 					: "");
-			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : UiStyle.CLAY_DARK, false);
+			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			ty += 10;
 			if (!cr.scores().isEmpty()) {
 				g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(cr.scores()), w), x, ty, cr.stale()
@@ -748,7 +748,7 @@ final class LibraryTab {
 				: "Needs: " + bom.total() + " items";
 			int cw = bom == null || !bom.creativeOnly().isEmpty() ? 0 : font.width(showBom ? "Preview" : "BOM ▸") + 12;
 			g.text(font, TextUtil.ellipsize(font, needs, w - cw - 4), x, ty, bom != null && !bom.creativeOnly().isEmpty() ? UiBits.errorText()
-				: UiStyle.CLAY_DARK, false);
+				: dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			if (cw > 0) {
 				s.chip(g, "bom", showBom ? "Preview" : "BOM ▸", x + w - cw, ty - 3, showBom, true, mx, my, () -> showBom = !showBom);
 			}
@@ -1133,7 +1133,7 @@ final class LibraryTab {
 	private void drawImport(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
 		Font font = font();
 		int y = top - 3;
-		g.text(font, "Import a structure (.nbt)", x, y + 1, UiStyle.CLAY_DARK, false);
+		g.text(font, "Import a structure (.nbt)", x, y + 1, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		y += 12;
 		for (String line : TextUtil.wrapPlain(font, "From architect/imports/ and this world's structure-block saves (generated/<namespace>/structure/). "
 			+ "It becomes a custom entry, checked by the helper; imports have no source, so no variants.", w).stream().limit(2).toList()) {
