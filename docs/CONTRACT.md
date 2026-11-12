@@ -28210,3 +28210,85 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
 - **N-7c-4 yes:** when SF merges, the coordinator asks Noah (via the parent session) for 2-3 GPT Image references each for S3 and S5.
 - **N-7c-5 yes:** program authoring ships behind the `programAuthoring` feature, on for claude-login users.
 - **N-7c-6 yes:** Noah approves each promotion candidate's 20-seed contact sheet.
+### Slice SO as built (branch `slice/SO` off main b1ee8dcc; versions NEXT; $0; recorded 2026-11-11)
+
+Support order, gravity after support, cosmetic scaffolding and the crate at the first port's landing for a site-aware building under
+construction (SETTLEMENTS §7.7, slice table row 6), on 7bF's frozen surface and PL's placement (no 7bF or PL signature changed; **the API
+package is untouched**: no member, no feature, no Reason; api-compat clean). Everything keys on the request's site (`SiteFit.now()`, as PL's
+checks do) at conversion and on the record's `ext["architect_mc:site"]` binding afterwards; a plain or `on_pad` placement takes none of it.
+
+**Built:**
+- **`BuildOrder.bySupport(y, kind, support, pairOf, anchor, neighbours, below)`** (pure; `BuildOrder.order` untouched): a BFS over the queued
+  cells (faces) from the anchor cells gives each cell its support distance; cells come by (distance, y, today's full/partial/attachable
+  rank, index), each only once it is connected (an anchor, or a face neighbour already emitted) and its dependency is emitted (an attachable's
+  support, a gravity block's queued cell below); second halves ride with their first. So every prefix of the queue is connected to the site.
+  Cells no anchor reaches (none in the examples: PL's `SITE_UNSUPPORTED` refuses such a placement) come last, lowest key first.
+- **Anchors** (`Builder.anchors`, at conversion, the instant placement standing): a queued cell face-adjacent to a cell the template does not
+  write (`TerrainFit.writes` 0, or outside the template box) that is site-solid in the world (`SiteFit.siteSolid`: PL's support scan's
+  predicate; never scaffolding or a crate) or keep-critical. The written cells (blocks and the air a design carves) never anchor, so this is
+  PL's live support scan's start, over the same world.
+- **The runtime attach gate** (`Builder.Run.bySupport`, `Run.attached`): the builder skips cells the crate can't pay and places later ones,
+  so a sorted queue alone would let a hopper-fed build float a cell. A support-order run places a cell only when a face neighbour is a built
+  cell of the site or a site-solid world cell (read without a ticket), and a gravity block only once its queued cell below is built. The run
+  reads its fit from the record's binding, so a restart rebuilds the gate.
+- **Gravity** (`Builder.gravity`): `FallingBlock`s (sand, gravel, concrete powder, anvils) and scaffolding wait for their queued cell below,
+  in the order and at run time.
+- **Scaffolding** (N-7b-5: on for every fit but `on_pad`): vanilla scaffolding columns (`distance=0`, settled) under the building, every
+  3rd column along world x and z: under the column's lowest queued cell, down through open air the template does not write and no other
+  site holds, standing on a sturdy site-solid cell within 24 (else left out: water, the building itself, nothing within reach). Inside
+  the site's own restore box too: a Deconstruct leaves the site's scaffolding cells out of its tally (never the player's block, never a
+  refund; `SiteJournal.cellsOfKind`). On the gate houses: the cliff house 12 columns, the hanging house 10, the span house none (water under
+  it). Written as one **`architect:scaffold` CELL entry** (`WorldJournal.SCAFFOLD`) in the site's undo group, created in the same journal
+  transaction as the site's target and its crate, placed with the cell sites' flags (no side effects, no drops). It costs nothing and refunds
+  nothing. On completion (every path reaches `Builder.complete`: the step and `finish`) it is undone through the journal (CELL: only cells
+  still holding scaffolding go back) and released, first thing, so a stop between runs complete again and finds nothing left. A Deconstruct
+  or Remove before that undoes it with the site's group. `SiteJournal.main`, the removal evidence and the start-up "only guard entries"
+  sweep leave the kind out as they do the crate's; a road plan treats it as a blocker, as the crate.
+- **The crate** (S-7b-7): beside the first port's landing: the port's design cell through the placement's rotation, one step along a side
+  port's facing, then up at most 3 or down at most 8 to the first standable cell (a `down` port: the first standable cell at most 24 under
+  it; `up`: 8 over it); then the landing's right, its left, one and two steps further out and their sides (a vertical port: the four sides),
+  the first that is standable, outside the snapshot box and every other site, no entry's, with two air cells over it (the hopper chain).
+  None: today's rule. `on_pad` and plain placements keep today's crate.
+- **Dev hooks** (`SliceSoDev`, generated headless too; docs/DEVBRIDGE.md): `dev.so.watch`, `dev.so.snapshots`, `dev.so.scaffold`.
+- **Gate step** `so-survival` (`tools/gate7bso.mjs`, impact entry "7b SO support order", chain `7bso`).
+
+**Readings chosen** (the contract silent, the smallest reading):
+1. **Distance is computed at conversion from the template's write grid over the live world** (written cells never anchor) rather than
+   threaded from PL's pre-write scan: under KEEP the unwritten cells are the site's, unchanged by the placement, so the two are the same set.
+2. **The golden covers template cells.** `BuildOrderGoldenTest` records, on main b1ee8dcc's BuildOrder (committed before SO touched it), the
+   queue `Builder.queueOrder` gives over each `on_pad` example's template (the four examples, the four massings, `fit_on_pad`; 9 designs); an
+   `on_pad` placement's fill and approach cells depend on the world (PL's in-game `on_pad` byte identity covers the whole placement). The
+   dispatch (`Builder.supportOrdered`, the one condition planConvert takes) is asserted
+   by the same test: false for a plain placement and for `fit_on_pad`'s own site, true for the five non-pad examples (the verifier's minor 1).
+3. **Unreachable cells and dependency cycles** come last (lowest key first) rather than refusing: PL already refuses an unsupported template.
+4. **A gravity block over a cell that is neither queued nor site-solid** is not held (it would never be placed); only a queued cell below is
+   waited for.
+5. **Scaffolding is static**, planned and written at conversion ("under unsupported prefixes" read as under the bottom cells that hang over
+   air), not grown with the build: one journal transaction, one entry, no per-tick journal writes.
+6. **A column per lattice column, under its lowest cell**, inside the restore box where the house hangs over air in it (none of the three
+   gate houses touches its box's bottom row): the Deconstruct tally skips a cell that is the site's scaffolding and still holds it, so the
+   BOX entry's "player's block" rule never sees it. Spacing 3, height cap 24, at most 2048 cells; never at the crate (or its two cells over),
+   nor within one column of a port or its landing (the way in stays open).
+7. **No scaffolding switch** ("optional per bible" in §7.7): no bible member reads it in 7b; on per N-7b-5 for every fit but `on_pad`.
+8. **The crate's landing for a `down` port** is the first standable cell under it; a port whose landing has no standable cell within reach
+   (or no port) falls back to today's rule. The three gate houses all find their landing.
+9. **Only `Sites.place`** (one request, synchronous: `SiteFit.now()` is set) converts a site placement; PL keeps batches refusing a site, so
+   the ticked `PlaceJob` conversion never sees one.
+10. **Mining a standing scaffolding block** gives vanilla's drop (a player's own action, outside the site's accounting); the Deconstruct
+   and completion paths never drop one. `removeScaffold` logs and carries on if the undo fails (the site still completes; Remove then
+   undoes the entry with the group).
+
+**Checks** ($0; no API change):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass at 6144bc99; 1069 tests, 0 failures, 1 skipped (`BuildOrderGoldenTest` 1: the 9 on_pad designs' queues equal main's, recorded in 5456f72a before BuildOrder changed, plus the dispatch; `SupportOrderFixtureTest` 3: every queue prefix of the five non-pad examples connected by the fixture volume's classes, gravity and attachables after their support, bottom-up `fit_suspend` floats, the runtime gate keeps every built set connected over 12 seeds x 5 examples of random partial stock and without it some placement floats; `SupportOrderTest` 6: distance/y/rank keys, gravity, pairs, unreachable last, 400 random shapes, the old order equal to a copy of main's) |
+| kit `node --test kit/test/*.test.mjs` | 1159/1159 (no kit change) |
+| sidecar `npm ci && npm run check` | 814/814 |
+| lint-structure / lint-look / water-lint | 68 cases, 0 failing / 13 cases, 0 failing / 135/135 (p3-lint is in the mod build) |
+| api-compat | clean: `--surface` of the 0.57.0 jar; the 0.47.0 and 0.45.0 apitest jars. The API package is untouched |
+| `node tools/step-inputs.mjs check` | clean after `build` (333 steps; `so-survival` new) |
+| in game, run 20261112-051244-change at f64967ee | **PASS** `so-survival` 48 ok / 0 FAIL: per house (`fit_attach_to_cliff`, `fit_span`, `fit_suspend`): partial build deconstructed with scaffolding standing (184 / 0 / 72 cells): every item back, no scaffolding item, E-flat 0; the crate at the first port's landing (2 / 1 / 1 from the port, on dirt); one `architect:scaffold` CELL entry of as many cells; save/quit/reload at about half (182/356, 210/418, 174/337) resumes with the gate rebuilt; built from the hopper chain (356, 418, 337 cells; 354, 415, 335 items); 4 / 5 / 4 built prefixes recorded, each connected by the independent scan; scaffolding down and released; items in = items out; deconstructed: every item back, E-flat 0; identical to the instant placement (57344 / 53248 / 50176 cells, the chain's two left out); the instant Remove exact. (Run 1, 20261112-045231-change at 21408c84: FAIL, a harness bug: the hopper chain stood in the site volume, so the instant reference was correctly `SITE_DRIFTED`; it also showed the first scaffolding rule found no column on any gate house, both fixed) |
+| gate-verifier (strict) | **PASS** at 6144bc99: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-052903-change, 48 ok / 0 FAIL), the three unit classes, and reviewed the diff (BuildOrder.order untouched, the golden recorded before the change, the dispatch only for non-pad sites, the gate read from the record, SCAFFOLD excluded where CRATE/DELTA are, removeScaffold first in complete). Minor: the golden did not drive the dispatch (fixed after: `Builder.supportOrdered`, asserted in the golden test; an expression extract, no behaviour change); a mined scaffolding block drops (reading 10); the attach gate also counts the player's hopper chain as solid (outside the box; not seen); removeScaffold swallows errors (reading 10) |
+
+**For the Steward RC (with PL)**, the areas for its `--only` filter: the survival flow of a site-bound house (`Sites.place` with `PlaceRequest.site` and `Mode.CONSTRUCTION`, or AUTO in a survival world): the crate at the first port's landing (not in front of a door; S-7b-7: Steward assumes no crate position and no bottom-up order), the build progressing in support order from a hopper or Insert, Pause/Deconstruct/Remove mid-build with scaffolding standing (refunds = paid + crate stock, no scaffolding item, land exact), completion (scaffolding gone, the `built` event), and a plain or `on_pad` construction site unchanged. No API member, feature or Reason changes in SO.
