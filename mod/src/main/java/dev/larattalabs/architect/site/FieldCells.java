@@ -113,9 +113,15 @@ public final class FieldCells {
 		return crops.contains(s.getBlock());
 	}
 
-	/** The field rule: a crop cell holding air or a field crop of any age reads unchanged. False off the crop cells. */
+	/**
+	 * The field rule: a crop cell holding air or a field crop of any age reads unchanged; a farmland cell holding farmland or dirt (a
+	 * harvested cell's farmland dries, a player tramples it: CU's S-CU-3, which LC's "still ours" already reads so) too. False elsewhere.
+	 */
 	public boolean unchanged(long pos, BlockState now) {
-		return crop.contains(pos) && (now.isAir() || fieldCrop(now));
+		if (crop.contains(pos)) {
+			return now.isAir() || fieldCrop(now);
+		}
+		return farmland.contains(pos) && (now.is(net.minecraft.world.level.block.Blocks.FARMLAND) || now.is(net.minecraft.world.level.block.Blocks.DIRT));
 	}
 
 	/** How many farmland cells the field has. */

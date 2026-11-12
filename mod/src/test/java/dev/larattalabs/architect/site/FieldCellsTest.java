@@ -59,7 +59,7 @@ class FieldCellsTest {
 	}
 
 	@Test
-	void theFieldRuleReadsAirAndAnyAgeAsUnchangedOnCropCellsOnly() {
+	void theFieldRuleReadsAirAnyAgeAndDriedFarmlandAsUnchanged() {
 		FieldCells f = FieldCells.of(ext());
 		assertNotNull(f);
 		assertEquals(3, f.size());
@@ -75,7 +75,10 @@ class FieldCellsTest {
 		assertFalse(f.unchanged(crop, Blocks.POTATOES.defaultBlockState()), "not one of the field's crops");
 		assertFalse(f.unchanged(crop, Blocks.TORCH.defaultBlockState()), "a player's torch stays as PT says");
 		assertFalse(f.unchanged(off, Blocks.AIR.defaultBlockState()), "off the field");
-		assertFalse(f.unchanged(farmland, Blocks.AIR.defaultBlockState()), "the farmland cell itself is judged as before");
+		assertFalse(f.unchanged(farmland, Blocks.AIR.defaultBlockState()), "dug out: changed");
+		assertTrue(f.unchanged(farmland, Blocks.FARMLAND.defaultBlockState()));
+		assertTrue(f.unchanged(farmland, Blocks.DIRT.defaultBlockState()), "dried or trampled");
+		assertFalse(f.unchanged(farmland, Blocks.STONE.defaultBlockState()));
 	}
 
 	@Test
