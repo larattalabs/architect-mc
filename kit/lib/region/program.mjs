@@ -36,6 +36,7 @@ import { giantMushroom } from '../forms/giantMushroom.mjs';
 import { lintStates } from '../forms/states.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { analyseVolume } from './affordances.mjs';
+import { siteLot as siteLotOf } from './siteLots.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
 import * as CONNECTOR_WALL from '../connectors/wall.mjs';
@@ -993,6 +994,16 @@ export class Region {
     const seen = (this._affordances ??= new Map());
     for (const a of list) if (!seen.has(a.id)) seen.set(a.id, a);
     return list.map((a) => JSON.parse(JSON.stringify(a)));
+  }
+
+  /**
+   * (7b SL, lib/region/siteLots.mjs) A site lot: `{affordance (an r.affordances one or its id), fit, max: [x, y, z] (the design's size,
+   * front south), ports?, brief?, stage?, box? (instead of placing it from the affordance), host? (the part whose ops may write inside),
+   * y? (the floor), ext?, part?}`. Records the lot with its `site` (api.SiteSpec's wire), reserves its box and writes no pad. Returns the
+   * lot, or null on the plan that asks its volume (the two-plan flow places it on the next).
+   */
+  siteLot(id, opts = {}) {
+    return siteLotOf(this, id, opts);
   }
 
   /** (7b AF) The affordances recorded by r.affordances, best first (score, then id), at most AFFORDANCES_MAX. */

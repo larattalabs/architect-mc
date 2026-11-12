@@ -14,7 +14,7 @@ import java.util.Optional;
  * <li>{@code WRAP_TRUNK}: rings a trunk (natural, generated or a spike); the trunk cells are keep-critical.</li>
  * <li>{@code SUSPEND}: hangs from a ceiling, overhang or branch; the hang points are keep-critical.</li>
  * </ul>
- * New values are only ever appended. Since NEXT.
+ * New values are only ever appended. Since 1.53.0.
  */
 public enum FitMode {
 	ON_PAD, CARVE_INTO, ATTACH_TO_CLIFF, SPAN, WRAP_TRUNK, SUSPEND;

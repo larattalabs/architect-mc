@@ -122,6 +122,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   // ((7bF, N-7b-1) form.hidden_room and rule.suspended re-reserved until 7c: f7b-foundation.test.mjs)
   flipped.add('form.hidden_room');
   flipped.add('rule.suspended');
+  // ((7b SL) layout.elevated's flip (reserved -> supported, schemaVersion 1) is SL's: sl.test.mjs)
+  flipped.add('layout.elevated');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);

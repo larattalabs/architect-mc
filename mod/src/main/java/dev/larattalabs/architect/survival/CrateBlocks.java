@@ -27,6 +27,10 @@ public final class CrateBlocks {
 	public static final BlockEntityType<CrateBlockEntity> CRATE_ENTITY = Registry.register(BuiltInRegistries.BLOCK_ENTITY_TYPE,
 		Architect.id("construction_crate"), new BlockEntityType<>(CrateBlockEntity::new, Set.of(CRATE)));
 
+	/** (7b slice SO-b) The cosmetic scaffolding block ({@link ScaffoldBlock}): no loot, immovable, never falls. */
+	public static final ResourceKey<Block> SCAFFOLD_KEY = ResourceKey.create(Registries.BLOCK, Architect.id("scaffold"));
+	public static final Block SCAFFOLD = Registry.register(BuiltInRegistries.BLOCK, SCAFFOLD_KEY, new ScaffoldBlock(ScaffoldBlock.properties(SCAFFOLD_KEY)));
+
 	private CrateBlocks() {
 	}
 

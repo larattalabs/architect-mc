@@ -142,7 +142,9 @@ export async function checkPlanVolumes(plan, { volume = {}, ...o } = {}) {
     || /"(farmPond|irrigate)":true/.test(JSON.stringify(plan.zones ?? [])); // ((6c IRR) irrigate too: PlanChecks.hasH)
   // ((6c F3 §3.3) the cave forms read a frozen volume too: PlanChecks.hasCaveForm)
   const hasCave = (plan.forms ?? []).some((p) => ['stalactites', 'roots'].includes(p?.kind));
-  if (!need.length || !(hasTunnel || hasH || hasCave) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
+  // ((7b SL) an elevated zone reads its land's volume: PlanChecks.hasElevated)
+  const hasElevated = (plan.zones ?? []).some((z) => z?.program?.layout === 'elevated');
+  if (!need.length || !(hasTunnel || hasH || hasCave || hasElevated) || volume.missing) return { ...first, volumes: o.volumes ?? [], first, asked: need };
   const vols = [...(o.volumes ?? [])];
   for (const b of need) if (!vols.some((v) => v.box.minX === b.minX && v.box.minY === b.minY && v.box.minZ === b.minZ && v.box.maxX === b.maxX && v.box.maxY === b.maxY && v.box.maxZ === b.maxZ)) vols.push(await fixtureVolume(b, volume, o.survey, o.claim));
   const second = await checkPlanLocal(plan, { ...o, volumes: vols });

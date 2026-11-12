@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * (7b) {@link Survey#site}: a lot's site, sampled and analysed. Since NEXT.
+ * (7b) {@link Survey#site}: a lot's site, sampled and analysed. Since 1.53.0.
  *
  * @param volume the frozen volume of the lot box plus 8 cells on every side
  * @param affordances what the analysis found in it, best first

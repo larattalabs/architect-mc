@@ -70,7 +70,7 @@ public final class SiteDesigns {
 	 * Give every site in {@code message} a helper blob of its volume (in place), then complete with the message. Reads the frozen files on
 	 * the server thread; uploads through the helper link.
 	 */
-	static CompletableFuture<JsonObject> resolve(JsonObject message) {
+	public static CompletableFuture<JsonObject> resolve(JsonObject message) {
 		List<JsonObject> sites = sitesIn(message);
 		if (sites.isEmpty()) {
 			return CompletableFuture.completedFuture(message);

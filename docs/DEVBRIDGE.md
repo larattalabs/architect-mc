@@ -386,6 +386,14 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
+  `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
+  `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,
+  rotation, box, restoreBox, state, ext (with `architect_mc:site`)} | null}`. (2026-11-12, Steward's DS answers) `dev.sl.group {name,
+  massingFirst?: true, items: [{key, site?, buildingType?, size?}]}` (`Designs.requestGroup`, bible rustic -> `{groupId}` or `{refused}`),
+  `dev.sl.groupState {groupId}` (`Designs.group` -> `{known, status, awaiting, items: [{key, stage, status, designId, designIds, entryId,
+  step}]}`) and `dev.sl.approve {groupId, approve: [keys]}` (`Designs.approveGroup` -> `{approved}` or `{refused}`).
+
 - **2026-11-11 (7b slice AF):** new (`SliceAfDev`, generated headless too) `dev.af.site {lot: [x0,y0,z0,x1,y1,z1], fit, load?:
   loaded|generated:<n>|bounded:<n>}`: `Survey.site` in the player's level through the public API (the lot plus 8 frozen to
   `<world>/architect/volumes/<sha>.bin`, the helper's `site.analyse`, the proposed frame) -> `{sha, blobId, box, file, counts,
@@ -404,6 +412,22 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   entry: `{known, binding (SiteBinding.of), derivation {source, sourceVersion, kind, recipe}, ext, size}`) and `dev.ds.variant {entryId,
   site, opKey}` (`Designs.siteVariant` -> `{entryId, ms}`). A refusal answers `{refused: "<REASON>: message", detail}`. Driven by
   `tools/gate7bds.mjs`.
+- **2026-11-11 (7b slice SO):** new (`SliceSoDev`, generated headless too, TEST) `dev.so.watch {every?: 100}` (0: off; the records
+  cleared): a support-order construction site (a site-bound placement with a fit other than `on_pad`) records its built set each time its
+  built count crosses a multiple of `every`; `dev.so.snapshots {site}` -> `{every, bySupport?, queued?, built?, snapshots: [{built, cells:
+  [[x, y, z]...]}]}`; `dev.so.scaffold {site}` -> `{entries: [{id, policy, status, cells, group, box}]}` (the site's `architect:scaffold`
+  journal entries). Construction mode of a site placement is `dev.pl.place {..., mode: "construction"}`. Driven by `tools/gate7bso.mjs`.
+- **2026-11-12 (7b slice ST):** new (`SliceStDev`, client only: the picker, the ghost and the Library are client UI) `dev.plot.fit {fit}`
+  (the plot marker's fit picker, as F: `on_pad` (each new plot's default), `attach_to_cliff`, `carve_into`, `span`, `wrap_trunk`, `suspend`;
+  refused while sampling or confirming the frame, and when the fit is locked), `dev.plot.enter {}` (Enter in any plot phase: the corner
+  looked at, or the frame confirmed), `dev.st.variant {entryId, height?}` (Library ⋯ › Site variant here… of a site-bound entry: plot marking with
+  its fit locked, its height limit the source's or `height`; after the frame is confirmed the variant is made by `Designs.siteVariant` and its ghost starts on the new site) and
+  `dev.st.state {blueprint?}` (`{variantRunning, variantEntry, variantError, plot, placingSite, pinned?}`: `pinned` is the site a design is
+  bound to, `PlacementFeature.siteOf`). `dev.plot.state` gains `fit`, `fitLocked`, the phases `sampling` and `frame`, and in the frame step
+  `site` (the proposed `SiteSpec` wire) and `ports` (world cells); `lastSite` is the last confirmed site plot's spec. `dev.build.start`
+  takes `onSite: true` (a site-bound design on its site's frame, as Library › Place on its site; a plain start of one is refused) and
+  `dev.build.state` gains `site`. `dev.library.state`'s cards carry `pinnedFit` (the pin badge's fit; `badge` is `PINNED`). Driven by
+  `tools/gate7bst.mjs`.
 
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,

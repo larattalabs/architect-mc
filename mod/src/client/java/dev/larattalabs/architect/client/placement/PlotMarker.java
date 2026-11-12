@@ -4,6 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.design.DesignSpec;
+import dev.larattalabs.architect.api.FitMode;
+import dev.larattalabs.architect.api.SiteSpec;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Direction;
@@ -22,18 +25,43 @@ import org.jspecify.annotations.Nullable;
  * look, with its size and the height limit), Enter. PgUp/PgDn change the height limit (Shift: by 4),
  * Backspace goes back a corner, Esc cancels. The plot's front is the side facing the player when the
  * second corner is confirmed (the entrance goes there); its ground is the lower corner's surface.
+ *
+ * <p>(7b ST, SETTLEMENTS §7.8) <b>The fit picker:</b> F cycles the fit ({@code on_pad}, the default, then the five site fits; Shift+F
+ * back). {@code on_pad} is today's plot exactly (no sample, no site). With a site fit the second corner starts the <b>sample</b>: the lot
+ * (the plot's rectangle from its ground up to the height limit) plus 8 is frozen and analysed on the integrated server
+ * ({@link dev.larattalabs.architect.apiimpl.SiteAnalysis#standalone}, Survey.site's path with the kit's standalone spec), then the
+ * <b>frame</b> is shown on the plot (its entrance side, its ports) for the player to confirm (Enter) or go back (Backspace: to the second
+ * corner). A refusal (no such land at the plot, the helper missing) goes back to the second corner with the reason.
  */
 public final class PlotMarker {
 	/** What the renderer and HUD draw this frame. {@code first} null = still choosing the first corner. */
-	record View(int @Nullable [] first, int[] hover, int height, String front, boolean pinned) {
+	record View(int @Nullable [] first, int[] hover, int height, String front, boolean pinned, FitMode fit, boolean fitLocked, Phase phase,
+		@Nullable SiteSpec site) {
 		DesignSpec.Plot plot(String dimension) {
 			int[] a = first != null ? first : hover;
 			return DesignSpec.Plot.of(a[0], a[1], a[2], hover[0], hover[1], hover[2], height, front, dimension);
 		}
 	}
 
+	/** (7b ST) Where the marking is: the two corners, then (a site fit) the sample on the server and the frame to confirm. */
+	public enum Phase {
+		FIRST, SECOND, SAMPLING, FRAME
+	}
+
+	/** (7b ST) The fits in picker order (on_pad first: the default). */
+	static final FitMode[] FITS = {FitMode.ON_PAD, FitMode.ATTACH_TO_CLIFF, FitMode.CARVE_INTO, FitMode.SPAN, FitMode.WRAP_TRUNK, FitMode.SUSPEND};
+
 	private static boolean active;
 	private static @Nullable Level level;
+	private static FitMode fit = FitMode.ON_PAD;
+	private static boolean fitLocked;
+	private static Phase phase = Phase.FIRST;
+	private static @Nullable SiteSpec frameSpec;
+	private static DesignSpec.@Nullable Plot framePlot;
+	/** The sample in flight (a later answer for an older one is dropped). */
+	private static int sampleGen;
+	private static @Nullable BiConsumer<DesignSpec.Plot, SiteSpec> onDoneSite;
+	private static @Nullable SiteSpec lastSite;
 	private static String dimension = "";
 	private static int @Nullable [] first;
 	/** DevBridge: a pinned hover corner (preview without confirming). */
@@ -59,6 +87,16 @@ public final class PlotMarker {
 	 * the second corner; {@code cancel} runs on Esc. Throws IllegalArgumentException when not in a world.
 	 */
 	public static void start(int startHeight, Consumer<DesignSpec.Plot> done, Runnable cancel) {
+		start(startHeight, null, done, (p, site) -> done.accept(p), cancel);
+	}
+
+	/**
+	 * (7b ST) {@link #start} with the fit picker's outcome: {@code done} gets an {@code on_pad} plot (no site, today's), {@code doneSite}
+	 * the plot and its confirmed {@link SiteSpec} (a site fit). {@code lockFit} non-null: the picker is fixed to it (a site-bound entry's
+	 * "Site variant here": its own fit).
+	 */
+	public static void start(int startHeight, @Nullable FitMode lockFit, Consumer<DesignSpec.Plot> done, BiConsumer<DesignSpec.Plot, SiteSpec> doneSite,
+		Runnable cancel) {
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.player == null || mc.level == null) {
 			throw new IllegalArgumentException("Not in a world");
@@ -70,7 +108,10 @@ public final class PlotMarker {
 		dimension = mc.level.dimension().identifier().toString();
 		height = DesignSpec.clampY(startHeight);
 		onDone = done;
+		onDoneSite = doneSite;
 		onCancel = cancel;
+		fitLocked = lockFit != null;
+		fit = lockFit != null ? lockFit : FitMode.ON_PAD; // on_pad is every new plot's default (the picker changes it)
 		status = null;
 		mc.gui.setScreen(null);
 		update(mc);
@@ -84,7 +125,16 @@ public final class PlotMarker {
 		frontOverride = null;
 		view = null;
 		onDone = null;
+		onDoneSite = null;
 		onCancel = null;
+		phase = Phase.FIRST;
+		frameSpec = null;
+		framePlot = null;
+		sampleGen++;
+		if (fitLocked) {
+			fitLocked = false;
+			fit = FitMode.ON_PAD; // a locked fit was the entry's, not the player's pick
+		}
 	}
 
 	/** Leaves plot mode without calling back (placement starting, leaving the world). */
@@ -110,33 +160,106 @@ public final class PlotMarker {
 		if (!active) {
 			return;
 		}
+		if (phase == Phase.SAMPLING || phase == Phase.FRAME) {
+			// (7b ST) back to the second corner (the sample is dropped)
+			phase = Phase.SECOND;
+			frameSpec = null;
+			framePlot = null;
+			pinned = null;
+			sampleGen++;
+			update(Minecraft.getInstance());
+			return;
+		}
 		if (first == null) {
 			cancel();
 			return;
 		}
 		first = null;
 		pinned = null;
+		phase = Phase.FIRST;
 		update(Minecraft.getInstance());
 	}
 
 	public static void adjustHeight(int delta) {
-		if (active) {
+		if (active && cornerPhase()) {
 			height = DesignSpec.clampY(height + delta);
 			update(Minecraft.getInstance());
 		}
 	}
 
 	public static void setHeight(int h) {
-		if (active) {
+		if (active && cornerPhase()) {
 			height = DesignSpec.clampY(h);
 			update(Minecraft.getInstance());
 		}
 	}
 
-	/** Enter: confirms the corner under the look (or the pinned one). */
+	private static boolean cornerPhase() {
+		return phase == Phase.FIRST || phase == Phase.SECOND;
+	}
+
+	/** (7b ST) F: the next fit (Shift: the previous); not while sampling or confirming the frame, nor when the fit is locked. */
+	static void cycleFit(int step) {
+		if (!active || fitLocked || !cornerPhase()) {
+			return;
+		}
+		int i = java.util.Arrays.asList(FITS).indexOf(fit);
+		fit = FITS[Math.floorMod(i + step, FITS.length)];
+		update(Minecraft.getInstance());
+	}
+
+	/** (7b ST) DevBridge: pick a fit. Throws IllegalStateException when the fit can't change now. */
+	public static void setFit(FitMode f) {
+		if (!active) {
+			throw new IllegalStateException("not marking a plot");
+		}
+		if (fitLocked && f != fit) {
+			throw new IllegalStateException("the fit is fixed to " + fit.wire() + " (the entry's own)");
+		}
+		if (!cornerPhase()) {
+			throw new IllegalStateException("the fit can't change while " + (phase == Phase.SAMPLING ? "sampling the site" : "confirming the frame"));
+		}
+		fit = f;
+		update(Minecraft.getInstance());
+	}
+
+	public static FitMode fit() {
+		return fit;
+	}
+
+	/** (7b ST) DevBridge: Enter (a corner, or the frame). */
+	public static void enter() {
+		confirm();
+	}
+
+	/** (7b ST) The phase now (FIRST when not marking). */
+	public static Phase phase() {
+		return active ? phase : Phase.FIRST;
+	}
+
+	/** Enter: confirms the corner under the look (or the pinned one); (7b ST) in the frame step, confirms the frame. */
 	static void confirm() {
 		Minecraft mc = Minecraft.getInstance();
 		if (!active || mc.player == null) {
+			return;
+		}
+		if (phase == Phase.SAMPLING) {
+			return; // wait for the sample
+		}
+		if (phase == Phase.FRAME) {
+			SiteSpec site = frameSpec;
+			DesignSpec.Plot p = framePlot;
+			BiConsumer<DesignSpec.Plot, SiteSpec> done = onDoneSite;
+			if (site == null || p == null) {
+				return;
+			}
+			reset();
+			last = p;
+			lastSite = site;
+			setStatus("Site plot " + p.dx() + " × " + p.dz() + ", height " + p.height() + ", fit " + site.fit().wire() + ", entrance " + p.front());
+			if (done != null) {
+				done.accept(p, site);
+			}
 			return;
 		}
 		update(mc);
@@ -147,17 +270,106 @@ public final class PlotMarker {
 		if (first == null) {
 			first = v.hover().clone();
 			pinned = null;
+			phase = Phase.SECOND;
 			update(mc);
 			return;
 		}
 		DesignSpec.Plot p = v.plot(dimension);
+		if (fit != FitMode.ON_PAD) {
+			sample(mc, v);
+			return;
+		}
 		Consumer<DesignSpec.Plot> done = onDone;
 		reset();
 		last = p;
+		lastSite = null;
 		setStatus("Plot " + p.dx() + " × " + p.dz() + ", height " + p.height() + ", entrance " + p.front());
 		if (done != null) {
 			done.accept(p);
 		}
+	}
+
+	/** (7b ST) The lot box of a plot: its rectangle from the ground row up to the height limit. Pure. */
+	public static net.minecraft.world.level.levelgen.structure.BoundingBox lotOf(DesignSpec.Plot p) {
+		return new net.minecraft.world.level.levelgen.structure.BoundingBox(p.minX(), p.y(), p.minZ(), p.maxX(), p.y() + p.height() - 1, p.maxZ());
+	}
+
+	/** (7b ST) The design-frame front (south) in the world for a frame's rotation. Pure. */
+	public static String frontOf(SiteSpec s) {
+		return dev.larattalabs.architect.placement.BlueprintTransform.rotateDirection("south", s.frame().rotation().ordinal());
+	}
+
+	/** (7b ST) The sample: the second corner held, Survey.site's path with the standalone spec on the integrated server. */
+	private static void sample(Minecraft mc, View v) {
+		net.minecraft.client.server.IntegratedServer srv = mc.getSingleplayerServer();
+		if (srv == null || mc.player == null) {
+			setStatus("Site plots need the integrated server (singleplayer)");
+			return;
+		}
+		DesignSpec.Plot p = v.plot(dimension);
+		if (p.tooSmall() || p.tooLarge() || p.height() < DesignSpec.MIN_Y) {
+			setStatus("A site plot is " + DesignSpec.MIN_XZ + ".." + DesignSpec.MAX_XZ + " a side: mark it again");
+			return;
+		}
+		pinned = v.hover().clone();
+		phase = Phase.SAMPLING;
+		int gen = ++sampleGen;
+		FitMode f = fit;
+		var dim = mc.player.level().dimension();
+		var lot = lotOf(p);
+		setStatus("Sampling the site…");
+		update(mc);
+		srv.execute(() -> {
+			var sl = srv.getLevel(dim);
+			if (sl == null) {
+				mc.execute(() -> sampled(gen, p, null, "that dimension is not loaded"));
+				return;
+			}
+			dev.larattalabs.architect.apiimpl.SiteAnalysis.standalone(sl, lot, f, dev.larattalabs.architect.api.LoadPolicy.LOAD_BOUNDED(64)).whenComplete((st,
+				e) -> mc.execute(() -> {
+				Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
+				sampled(gen, p, st == null ? null : st.spec(), c != null ? (c.getMessage() == null ? c.toString() : c.getMessage()) : st.reason());
+			}));
+		});
+	}
+
+	private static void sampled(int gen, DesignSpec.Plot p, @Nullable SiteSpec spec, @Nullable String why) {
+		if (!active || gen != sampleGen || phase != Phase.SAMPLING) {
+			return; // cancelled or gone back meanwhile
+		}
+		if (spec == null) {
+			phase = Phase.SECOND;
+			pinned = null;
+			setStatus("Not a " + fit.wire() + " site: " + (why == null ? "no reason given" : why));
+			update(Minecraft.getInstance());
+			return;
+		}
+		frameSpec = spec;
+		framePlot = new DesignSpec.Plot(p.minX(), p.y(), p.minZ(), p.dx(), p.dz(), p.height(), frontOf(spec), p.dimension());
+		phase = Phase.FRAME;
+		setStatus("Frame proposed: entrance " + framePlot.front() + ", " + spec.ports().size() + " port" + (spec.ports().size() == 1 ? "" : "s"));
+		update(Minecraft.getInstance());
+	}
+
+	/** (7b ST) The ports of the frame being confirmed as world cells (x, y, z triples), or empty. */
+	static int[] framePorts() {
+		SiteSpec s = frameSpec;
+		if (s == null || phase != Phase.FRAME) {
+			return new int[0];
+		}
+		var lot = lotOf(framePlot);
+		int turns = s.frame().rotation().ordinal();
+		int sx = turns % 2 == 0 ? lot.getXSpan() : lot.getZSpan();
+		int sz = turns % 2 == 0 ? lot.getZSpan() : lot.getXSpan();
+		int[] out = new int[s.ports().size() * 3];
+		int i = 0;
+		for (var port : s.ports()) {
+			int[] r = dev.larattalabs.architect.placement.BlueprintTransform.rotateBlock(port.atDesign().getX(), port.atDesign().getZ(), sx, sz, turns);
+			out[i++] = s.frame().origin().getX() + r[0];
+			out[i++] = s.frame().origin().getY() + port.atDesign().getY();
+			out[i++] = s.frame().origin().getZ() + r[1];
+		}
+		return out;
 	}
 
 	/**
@@ -168,6 +380,9 @@ public final class PlotMarker {
 	public static void corner(int x, int y, int z, @Nullable String front, boolean confirm) {
 		if (!active) {
 			throw new IllegalStateException("not marking a plot");
+		}
+		if (!cornerPhase()) {
+			throw new IllegalStateException("not choosing a corner (" + phase.name().toLowerCase(java.util.Locale.ROOT) + ")");
 		}
 		if (front != null) {
 			if (BlueprintTransform.directionIndex(front) < 0) {
@@ -202,7 +417,11 @@ public final class PlotMarker {
 		}
 		int[] hover = pinned != null ? pinned : lookCorner(mc, mc.player);
 		String front = frontOverride != null ? frontOverride : BlueprintTransform.rotateDirection(facing(mc.player), 2);
-		view = new View(first == null ? null : first.clone(), hover, height, front, pinned != null);
+		if (phase == Phase.FRAME && framePlot != null) {
+			front = framePlot.front(); // the frame's entrance, not the player's facing
+		}
+		view = new View(first == null ? null : first.clone(), hover, height, front, pinned != null, fit, fitLocked, phase, phase == Phase.FRAME ? frameSpec
+			: null);
 	}
 
 	private static int[] lookCorner(Minecraft mc, Player p) {
@@ -234,6 +453,11 @@ public final class PlotMarker {
 		return status;
 	}
 
+	/** (7b ST) The site of the last plot marked (null: the last was an on_pad plot, or none). */
+	public static @Nullable SiteSpec lastSite() {
+		return lastSite;
+	}
+
 	private static void setStatus(String s) {
 		status = s;
 		statusAt = Util.getMillis();
@@ -243,9 +467,20 @@ public final class PlotMarker {
 		JsonObject o = new JsonObject();
 		o.addProperty("active", active);
 		o.addProperty("status", status);
+		o.addProperty("fit", fit.wire());
+		o.addProperty("fitLocked", active && fitLocked);
 		View v = view();
 		if (v != null) {
-			o.addProperty("phase", v.first() == null ? "first_corner" : "second_corner");
+			o.addProperty("phase", switch (v.phase()) {
+				case FIRST -> "first_corner";
+				case SECOND -> "second_corner";
+				case SAMPLING -> "sampling";
+				case FRAME -> "frame";
+			});
+			if (v.site() != null) {
+				o.add("site", v.site().wire());
+				o.add("ports", portsJson(framePorts()));
+			}
 			o.add("first", v.first() == null ? null : xyz(v.first()));
 			o.add("hover", xyz(v.hover()));
 			o.addProperty("pinned", v.pinned());
@@ -256,7 +491,16 @@ public final class PlotMarker {
 			}
 		}
 		o.add("last", last == null ? null : plotJson(last));
+		o.add("lastSite", lastSite == null ? null : lastSite.wire());
 		return o;
+	}
+
+	private static JsonArray portsJson(int[] cells) {
+		JsonArray a = new JsonArray();
+		for (int i = 0; i + 2 < cells.length; i += 3) {
+			a.add(xyz(new int[] {cells[i], cells[i + 1], cells[i + 2]}));
+		}
+		return a;
 	}
 
 	public static JsonObject plotJson(DesignSpec.Plot p) {

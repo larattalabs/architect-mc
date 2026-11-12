@@ -719,6 +719,8 @@ so they would break "checked without the game". Two routes:
 
 ### 10.1 What Claude decides and what code decides
 
+> **Superseded (2026-11-12):** the SettlementPlan here was replaced by COMPOSITION v2 (plan/0, additive kinds); see docs/CONTRACT.md "Phase 7c: composition".
+
 Claude decides **concept, districts, circulation and verticality**: structured data, not code. Code assigns, routes,
 generates and checks. That keeps the expensive and unreliable part (spatial reasoning over voxels) in deterministic passes.
 

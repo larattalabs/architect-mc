@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * (7b) A library entry's binding to the site it was designed for (docs/CONTRACT.md "Phase 7b" §2, S-7b-6): stored in the entry's
  * {@code ext} under {@link #EXT_KEY}, so {@link Library.Entry} gains no component. Read with {@link #of(Library.Entry)}. A site-bound
  * entry places only in its own frame ({@link Sites#fitToSite}); elsewhere it is adapted ({@link Designs#siteVariant}). Written by
- * the slices that make site-bound entries (placement and the designer). Since NEXT.
+ * the slices that make site-bound entries (placement and the designer). Since 1.53.0.
  *
  * @param volumeSha the frozen volume's ARVX sha the design was made for ({@link SiteSpec#volumeSha()})
  * @param fit the design's fit

@@ -58,6 +58,8 @@ public final class BuildPlacement {
 	}
 
 	static final int REACH = 64;
+	/** (7b ST) The HUD note for a rotate, nudge or unlock of a site-bound ghost. */
+	static final String PINNED = "Pinned to its site: a site-bound design is placed only in its site's frame";
 	/** The HUD note while {@link #tooFar()}. */
 	static final String TOO_FAR = "Too far: aim within " + REACH + " blocks (the ghost stays at the last spot in reach)";
 	/** How far below the looked-at spot the ground is searched for (a ray that hits a wall lands on the floor below). */
@@ -111,6 +113,12 @@ public final class BuildPlacement {
 	}
 
 	private static boolean active;
+	/**
+	 * (7b ST) A site-bound design placed on its site: the spec its verdict and placement run with ({@code SiteFit.with}: TerrainFit KEEP, the
+	 * port approach, the site checks), the ghost locked at the site's frame (no rotate, nudge or unlock), the record bound (its ext's
+	 * {@code architect_mc:site}). Null for every other placement.
+	 */
+	private static dev.larattalabs.architect.api.@Nullable SiteSpec site;
 	private static @Nullable Blueprint bp;
 	private static Blueprints.@Nullable Entry entry;
 	/** Move mode: the site being moved, null = a new one. */
@@ -214,6 +222,30 @@ public final class BuildPlacement {
 
 	/** Enters placement mode (closes any screen). Throws IllegalArgumentException with a player-facing message. */
 	public static void start(String blueprintId) {
+		// (7b ST, N-7b-6) a site-bound design is placed only on its own site, or elsewhere as a site variant of it
+		if (PlacementFeature.siteOf(blueprintId) != null) {
+			throw new IllegalArgumentException(blueprintId + " is pinned to its site: Place on its site, or make a site variant here (Library ⋯ › Site variant here…)");
+		}
+		startAny(blueprintId);
+	}
+
+	/**
+	 * (7b ST) A site-bound design on its site: the ghost locked at the site's frame ({@code origin}, {@code rotation}), placed with the site
+	 * (KEEP, the port approach, the site checks; the record bound). Throws IllegalArgumentException with a player-facing message.
+	 */
+	public static void startOnSite(String blueprintId, dev.larattalabs.architect.api.SiteSpec spec) {
+		startAny(blueprintId);
+		site = spec;
+		BlockPos o = spec.frame().origin();
+		lockAt(o.getX(), o.getY(), o.getZ(), spec.frame().rotation().ordinal());
+	}
+
+	/** (7b ST) The site of the placement under way (null: a plain one). */
+	public static dev.larattalabs.architect.api.@Nullable SiteSpec site() {
+		return active ? site : null;
+	}
+
+	private static void startAny(String blueprintId) {
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.player == null || mc.level == null) {
 			throw new IllegalArgumentException("Not in a world");
@@ -298,6 +330,7 @@ public final class BuildPlacement {
 
 	private static void cancelQuietly() {
 		active = false;
+		site = null;
 		preview = false;
 		moving = null;
 		bp = null;
@@ -328,6 +361,10 @@ public final class BuildPlacement {
 		if (!active) {
 			return;
 		}
+		if (site != null) {
+			setStatus(PINNED, true); // (7b ST) the site's frame is fixed
+			return;
+		}
 		userTurns = Math.floorMod(userTurns + quarterTurns, 4);
 		forceArmed = false;
 		layerArmed = false;
@@ -339,6 +376,10 @@ public final class BuildPlacement {
 	public static void nudge(int forward, int right, int up) {
 		Minecraft mc = Minecraft.getInstance();
 		if (!active || mc.player == null) {
+			return;
+		}
+		if (site != null) {
+			setStatus(PINNED, true);
 			return;
 		}
 		int[] d = GhostModel.relativeToWorld(horizontalFacing(mc.player).getName(), forward, right);
@@ -354,6 +395,10 @@ public final class BuildPlacement {
 	public static void setLocked(boolean on) {
 		Minecraft mc = Minecraft.getInstance();
 		if (!active || on == locked) {
+			return;
+		}
+		if (site != null) {
+			setStatus(PINNED, true);
 			return;
 		}
 		if (on) {
@@ -425,6 +470,7 @@ public final class BuildPlacement {
 		Rotation rotation = Rotation.values()[v.turns()];
 		String moveId = moving;
 		String owner = mc.player.getUUID().toString();
+		dev.larattalabs.architect.api.SiteSpec onSite = site;
 		CompletableFuture<Result> f = new CompletableFuture<>();
 		pending = true;
 		inFlight = f;
@@ -440,7 +486,9 @@ public final class BuildPlacement {
 					throw new Sites.SiteException(sl == null ? "That dimension is not loaded" : "Design " + bpId + " is gone (reloaded?)");
 				}
 				// the server's verdict on the exact site first (S4): a refusal lists every reason, not only the first
-				checked = Sites.verdict(sl, b, origin, rotation, useForce, moveId, false, null, useLayer, null); // reads the site as place() does
+				// (7b ST) a site-bound design: its verdict and placement see its site (SiteFit.with), and the record carries the binding
+				checked = dev.larattalabs.architect.site.SiteFit.with(onSite, () -> Sites.verdict(sl, b, origin, rotation, useForce, moveId, false, null, useLayer,
+					null)); // reads the site as place() does
 				if (!checked.ok()) {
 					if (moveId == null) {
 						// a refused placement attempt (not the ghost's live verdict): PLACE_FAILED, as the API and commands fire it
@@ -455,7 +503,9 @@ public final class BuildPlacement {
 					r = new Result(true, moved.id(), "Moved " + moved.id() + " (" + b.name() + "); its old place is as it was before"
 						+ (note == null ? "" : " (" + note + ")"));
 				} else {
-					Site placed = Sites.place(sl, b, origin, rotation, useForce, owner, null, null, null, Sites.playerOf(server, owner), null, useLayer);
+					JsonObject ext = onSite == null ? null : dev.larattalabs.architect.site.SiteFit.withBinding(null, onSite);
+					Site placed = dev.larattalabs.architect.site.SiteFit.with(onSite, () -> Sites.place(sl, b, origin, rotation, useForce, owner, null, null, ext,
+						Sites.playerOf(server, owner), null, useLayer));
 					dev.larattalabs.architect.site.PlayerRemove.record(owner, placed); // SAFETY: the undo key's candidates
 					String note = Sites.lastNote();
 					r = placed.building()
@@ -716,6 +766,7 @@ public final class BuildPlacement {
 		Rotation rotation = Rotation.values()[v.turns()];
 		String moveId = moving;
 		boolean force = forceArmed;
+		dev.larattalabs.architect.api.SiteSpec onSite = site;
 		verdictAsked = key;
 		server.execute(() -> {
 			Sites.Verdict out;
@@ -723,7 +774,8 @@ public final class BuildPlacement {
 				ServerLevel sl = server.getLevel(dim);
 				Blueprint b = Blueprints.get(bpId);
 				out = sl == null || b == null ? new Sites.Verdict(List.of(sl == null ? "That dimension is not loaded" : "Design " + bpId
-					+ " is gone (reloaded?)"), List.of()) : Sites.verdict(sl, b, origin, rotation, force, moveId);
+					+ " is gone (reloaded?)"), List.of()) : dev.larattalabs.architect.site.SiteFit.with(onSite, () -> Sites.verdict(sl, b, origin, rotation, force,
+						moveId));
 			} catch (RuntimeException e) {
 				Architect.LOGGER.warn("Placement: the server verdict for {} failed", bpId, e);
 				out = new Sites.Verdict(List.of("the server could not check the site (" + e + ")"), List.of());
@@ -914,9 +966,12 @@ public final class BuildPlacement {
 		String roadDim = lv.dimension().identifier().toString();
 		// phase 4e: road cells the server synced count as roads (the approach stops at one)
 		TerrainFit.World world = (x, y, z) -> TerrainFit.flags(lv, p.set(x, y, z)) | (RoadCellsClient.road(roadDim, x, y, z) ? TerrainFit.ROAD : 0);
-		TerrainFit.Plan plan = TerrainFit.plan(m, ox, oy, oz, world);
+		// (7b ST) a site placement: the server's KEEP terrain and port approach (no fill, clearing or ground strip drawn)
+		dev.larattalabs.architect.api.SiteSpec onSite = site;
+		TerrainFit.Plan plan = TerrainFit.plan(m, ox, oy, oz, world, dev.larattalabs.architect.site.SiteFit.policy(onSite));
 		Anchors.Bounds box = new Anchors.Bounds(ox, oy, oz, ox + sx - 1, oy + sy - 1, oz + sz - 1);
-		Approach.Plan approach = Approach.forBlueprint(b, turns, box, world);
+		boolean ground = dev.larattalabs.architect.site.SiteFit.approach(onSite) == Approach.Mode.GROUND;
+		Approach.Plan approach = ground ? Approach.forBlueprint(b, turns, box, world) : Approach.Plan.EMPTY;
 		// the box place() snapshots and checks: the template's, the foundation below it, the entrance approach
 		Anchors.Bounds snapBox = Sites.snapshotBox(box, plan, approach);
 		int qx = snapBox.maxX() - snapBox.minX() + 1;
@@ -1016,10 +1071,19 @@ public final class BuildPlacement {
 			noteInk.add(0);
 		}
 		// site warnings (never a refusal): what the ground in front of the door and under the path is like
-		SiteWarnings.Result site = SiteWarnings.forBlueprint(b, turns, box, approach, world);
+		SiteWarnings.Result site = ground ? SiteWarnings.forBlueprint(b, turns, box, approach, world) : SiteWarnings.Result.NONE;
 		for (String w : site.warnings()) {
 			notes.add(w);
 			noteInk.add(GhostRenderer.HAZARD);
+		}
+		// (7b ST) the standalone ports that meet no standable ground ("the entrance opens onto a drop"), as the server's verdict notes them
+		if (onSite != null) {
+			int dsx = turns % 2 == 0 ? sx : sz;
+			int dsz = turns % 2 == 0 ? sz : sx;
+			for (String w : dev.larattalabs.architect.site.SiteFit.drops(onSite, dsx, dsz, world)) {
+				notes.add(w);
+				noteInk.add(GhostRenderer.HAZARD);
+			}
 		}
 		String front = BlueprintTransform.rotateDirection(b.front(), turns);
 		return new View(b, m, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, List.copyOf(refusals), inside, locked,
@@ -1123,6 +1187,7 @@ public final class BuildPlacement {
 		o.addProperty("active", active);
 		o.addProperty("status", status);
 		o.addProperty("statusError", statusError);
+		o.add("site", site() == null ? null : site.wire()); // (7b ST)
 		// UI-2b: the HUD as drawn last frame (rows as plain text, chips in [..]), the legend, the armed choices, the Placed chat line
 		o.addProperty("legend", legend);
 		o.addProperty("layerArmed", layerArmed);

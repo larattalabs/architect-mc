@@ -61,6 +61,8 @@ import { readPaletteRule } from './palette.mjs';
 // (6c FL) free layouts: ring, spiral, grid, organic, around and outlines (free.mjs resolves, frontage.mjs emits)
 import { isFreeZone, resolveFreeZone, freeGeometry, aroundSites, bodyKeepRects, whereParts } from './free.mjs';
 import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region/frontage.mjs';
+// (7b SL) layout.elevated: a lots zone whose lots are site lots on the land's affordances (elevated.mjs)
+import { emitElevatedZone, isElevatedZone, resolveElevatedZone } from './elevated.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -1134,6 +1136,16 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, notes: z.notes });
       continue;
     }
+    if (isElevatedZone(p)) {
+      // (7b SL) an elevated zone: its lots placed as site lots on the affordances of its frozen volume (never cached; the first plan
+      // asks for the volume and answers incomplete VOLUME)
+      const loc = locatorOf(env, p.part.where, geomOf, { within0: 32 });
+      const z = resolveElevatedZone(env, p, { loc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], tol: tolOf(p.part, 'count') });
+      res.set(p.id, { ...z, elevated: true });
+      if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
+      ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
+      continue;
+    }
     if (p.family === 'zone' && isFreeZone(p)) {
       // (6c FL) a free layout (ring, spiral, grid, organic, around, an outline): placed clear of every zone and form before it and of every
       // H footprint (KC §5), never cached
@@ -1231,6 +1243,18 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
   }
 
+  // (7b SL) a connector with an end on an elevated zone (or one of its lots): joining site lots is the link pass's (LP), so it answers
+  // unsupported until LP (blocked first when a dependency failed); none in a plan without an elevated zone
+  const elevatedIds = new Set();
+  for (const q of V.parts) if (isElevatedZone(q)) { elevatedIds.add(q.id); for (const l of zoneLots(q.part)) elevatedIds.add(l.id); }
+  if (elevatedIds.size) {
+    for (const p of order) {
+      if (answers.has(p.id) || p.family !== 'connector') continue;
+      const ends = [p.part.from?.part, p.part.to?.part].filter((x) => typeof x === 'string');
+      if (!ends.some((id) => elevatedIds.has(id))) continue;
+      ans(p, depState(p) ?? { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: `${p.id} joins an elevated zone's site lots: links to site lots are built by the link pass (LP)`, block: p.block, until: 'LP' }] });
+    }
+  }
   // ---- 3. emit zones (pads blend where a relief names them), relief, forms
   // (7a K1) a plan with a wall, gate, rope bridge or auto connector to compile gets the `links` stage after `routes` (none
   // otherwise: every plan without K1 parts keeps its stages, so its IR); (6c T3) so does one with a bridge or tunnel
@@ -1262,6 +1286,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
   }
   if (!r) { r = makeRegion(null); r.stages(stagesWanted); }
+  // (7b SL) each elevated zone's volume, asked whatever its answer (the two-plan flow's first plan asks; the second reads it here)
+  for (const p of order) { const z = res.get(p.id); if (z?.elevated && z.volBox) r.needVolume(z.volBox); }
   // ((6c HY) the overflow store rides on the region for checkpoint/rollback; a plan without a course has none)
   if (overflows.length) Object.defineProperty(r, '_overflows', { value: overflows, enumerable: false, writable: true, configurable: true });
   // ((6c KC) the footprint registry rides on the region for checkpoint/rollback, always (an empty one for a plan without an H part))
@@ -1370,6 +1396,21 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       emitDZone(p, z, {});
       continue;
     }
+    if (z.elevated) {
+      // (7b SL) an elevated zone: one site lot per lot placed at resolve (no street, no pad, no props)
+      const cp0 = checkpoint(r);
+      try {
+        const lots = emitElevatedZone(r, p, z, { stage: stageOf('lots') });
+        zoneEmit.set(p.id, { elevated: true, lots, prefix: '' });
+        geom.set(p.id, { rect: z.rect });
+        mark(p.id, addedSince(r, cp0));
+      } catch (e) {
+        rollback(r, cp0);
+        ans(p, { class: 'refused', reasons: [{ code: 'NO_FEATURE', message: `the zone's site lots failed: ${e.message}` }] });
+        geom.delete(p.id);
+      }
+      continue;
+    }
     const prefix = villages === 0 ? '' : `z${villages + 1}_`;
     const cp = checkpoint(r);
     if (z.free) {
@@ -1430,7 +1471,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     const c = centre(z.rect);
     let best = null;
     for (const [zid, e] of zoneEmit) {
-      if (zid === p.id) continue;
+      if (zid === p.id || e.elevated) continue; // ((7b SL) an elevated zone has no street end)
       const ends = e.districts ? Object.values(e.districts.ends).flat().map((x) => ({ x: x.x, z: x.z, facing: x.facing })) : e.free ? freeEnds(e.L) : (() => {
         const o = e.L.orientation, sv = e.L.road.sv;
         return [[e.L.u0 - 1, -1], [e.L.u1 + 1, 1]].map(([u, sg]) => { const [x, zz] = toWorld(o, u, sv); return { x, z: zz, facing: o === 'ew' ? [sg, 0] : [0, sg] }; });
@@ -1809,7 +1850,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   }
   // ---- 5. apron lamps over every village lot; anchors
   if (villages && !whole) {
-    const anyBell = [...zoneEmit.values()][0].L.res.bell;
+    const anyBell = [...zoneEmit.values()].find((e) => e.L)?.L.res.bell;
     r.anchor('entrance', anyBell); r.anchor('spawn', anyBell);
     const cp = checkpoint(r);
     try {
@@ -1886,6 +1927,14 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
         continue;
       }
+      if (e?.elevated) {
+        // (7b SL) an elevated zone's geometry: its rect and its site lots (the artifact's lots[] take their site from record.siteLots)
+        const lots = e.lots.map(({ site, affordance, ...l }) => l);
+        a.geometry = { rect: rectArr(z.rect), elevated: true, lots, ...(z.unplaced?.length ? { unplaced: z.unplaced } : {}) };
+        const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
+        a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
+        continue;
+      }
       if (e?.free) {
         // (6c FL, §6) a free layout's geometry: V's members plus layout, streets, hub and (around, outline) mask
         const lots = e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }));
@@ -1926,6 +1975,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     ...(K ? { links: K.record } : {}),
     // ((7a K3, §6) the lots on walls' lines: each one's onWall record and a gatehouse's ports (the artifact's lots[]), only when there are some)
     ...(K?.walls?.some((W) => W.lots?.length) ? { wallLots: Object.fromEntries(K.walls.filter((W) => okClass(W.id)).flatMap((W) => (W.lots ?? []).map((q) => [q.lot, { onWall: q.onWall, ...(q.ports ? { ports: q.ports } : {}) }]))) } : {}),
+    // ((7b SL) the site lots' site (api.SiteSpec's wire) and affordance by lot id: the artifact's lots[].site and .affordance (only when there are some)
+    ...([...zoneEmit.values()].some((e) => e.elevated && e.lots.length) ? { siteLots: Object.fromEntries([...zoneEmit.entries()].filter(([id, e]) => e.elevated && okClass(id)).flatMap(([, e]) => e.lots.map((l) => [l.id, { site: l.site, affordance: l.affordance }]))) } : {}),
     // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
     ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
     ...(paletteRules.length ? { palette: paletteRules } : {}),
@@ -2107,7 +2158,8 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     // an anchor inside a zone laid out over it (Steward's stone under the town): the route ends at that zone's street end
     // (not when the leg's other end is that zone or one of its lots: the route then runs inside the zone, from the anchor itself)
     const sameZone = (zid) => other?.part !== undefined && (other.part === zid || lotZone.get(other.part) === zid);
-    for (const [zid] of zoneEmit) {
+    for (const [zid, ze] of zoneEmit) {
+      if (ze.elevated) continue; // ((7b SL) an elevated zone has no street end: the anchor stays the end)
       const g = geom.get(zid)?.rect;
       if (g && !sameZone(zid) && p[0] >= g.minX && p[0] <= g.maxX && p[1] >= g.minZ && p[1] <= g.maxZ) return { ...endpointNode(env, { part: zid }, other, geom, zoneEmit, lotZone, r, conn, where), snapped: { anchor: e.anchor, zone: zid } };
     }
@@ -2121,6 +2173,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     }
     const g = geom.get(e.part);
     const z = zoneEmit.get(e.part);
+    if (z?.elevated) return { error: { code: 'UNSUPPORTED', message: `${e.part} is an elevated zone: links to its site lots are the link pass's (LP)`, path: where } };
     if (z?.districts) {
       // (D1) a districts zone: the named district (port), else the district nearest the other end; its street end nearest that end
       const out = z.districts, op = posOf(other);
