@@ -1,0 +1,234 @@
+{
+  "id": "fit_suspend",
+  "name": "Hanging House",
+  "description": "A flat-roofed house hung on chains from a rock overhang, entered by a ladder from below or the balcony.",
+  "type": "cabin",
+  "tags": [
+    "site",
+    "hanging",
+    "small"
+  ],
+  "size": {
+    "x": 16,
+    "y": 14,
+    "z": 12
+  },
+  "groundY": 5,
+  "front": "south",
+  "frame": {
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:dark_oak_planks",
+    "minecraft:iron_chain",
+    "minecraft:dark_oak_slab",
+    "minecraft:spruce_log",
+    "minecraft:spruce_fence",
+    "minecraft:glass_pane",
+    "minecraft:ladder",
+    "minecraft:lantern",
+    "minecraft:red_bed",
+    "minecraft:spruce_door",
+    "minecraft:spruce_stairs"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 0,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 3,
+    "minY": 5,
+    "minZ": 4,
+    "maxX": 12,
+    "maxY": 7,
+    "maxZ": 7
+  },
+  "anchors": {
+    "entrance": {
+      "x": 7.5,
+      "y": 5,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 8.5,
+      "y": 5,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -6,
+      "y": 12,
+      "z": 22,
+      "yaw": -140.711,
+      "pitch": 20.569
+    }
+  },
+  "source": "fit_suspend.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "ports": [
+    {
+      "name": "hatch",
+      "kind": "architect:walk",
+      "x": 8,
+      "y": 0,
+      "z": 6,
+      "facing": "down"
+    }
+  ],
+  "parts": {
+    "main": {
+      "box": [
+        2,
+        4,
+        3,
+        13,
+        7,
+        8
+      ],
+      "cells": 274
+    },
+    "roof": {
+      "box": [
+        2,
+        8,
+        3,
+        13,
+        9,
+        8
+      ],
+      "cells": 100,
+      "roof": "flat"
+    },
+    "chains": {
+      "box": [
+        2,
+        6,
+        3,
+        13,
+        13,
+        10
+      ],
+      "cells": 36
+    },
+    "balcony": {
+      "box": [
+        5,
+        4,
+        9,
+        10,
+        5,
+        10
+      ],
+      "cells": 20
+    },
+    "hatch": {
+      "box": [
+        8,
+        0,
+        6,
+        8,
+        4,
+        7
+      ],
+      "cells": 9
+    },
+    "openings": {
+      "box": [
+        2,
+        5,
+        5,
+        13,
+        6,
+        8
+      ],
+      "cells": 8
+    },
+    "furnishings": {
+      "box": [
+        3,
+        5,
+        4,
+        12,
+        7,
+        6
+      ],
+      "cells": 5
+    }
+  },
+  "fit": "suspend",
+  "site": {
+    "volumeSha": "ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+    "volumeBlobId": "local:ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+    "volume": {
+      "minX": -951,
+      "minY": 112,
+      "minZ": -2441,
+      "maxX": -920,
+      "maxY": 141,
+      "maxZ": -2414
+    },
+    "fit": "suspend",
+    "frame": {
+      "origin": [
+        -943,
+        120,
+        -2433
+      ],
+      "rotation": "none"
+    },
+    "keepCritical": [
+      [
+        -941,
+        134,
+        -2430
+      ],
+      [
+        -930,
+        134,
+        -2430
+      ],
+      [
+        -941,
+        134,
+        -2425
+      ],
+      [
+        -930,
+        134,
+        -2425
+      ]
+    ],
+    "ports": [
+      {
+        "name": "hatch",
+        "kind": "architect:walk",
+        "at": [
+          8,
+          0,
+          6
+        ],
+        "facing": "down",
+        "width": 1,
+        "height": 1
+      }
+    ],
+    "lotId": "lot_overhang"
+  }
+}

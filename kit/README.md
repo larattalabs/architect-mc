@@ -298,6 +298,37 @@ bible set 0.45-0.50; frozen after the 5a smoke run).
 **Playbook** (`PLAYBOOK.md`): Steward's design playbook (SKILL.md without §7), owned by Architect from 5a. The sidecar
 copies it into each design scratch dir and names it in BRIEF.md; it is never loaded through `settingSources`.
 
+## Site-aware designs (7b SV)
+
+A site-aware design is built **into a site**: a frozen ARVX volume and the lot's site spec (`kit/schemas/site-spec.json`).
+`lib/site.mjs` `Site` reads both in the design's own frame (template coordinates, front south; the template is exactly the lot box,
+the window reaches 8 cells of margin round it): `at(x, y, z)` (the voxel class), `solid`, `surface(x, z)`, `ceiling(x, z)`,
+`faces()` / `face(normal)`, `trunk()`, `ledges()`, `cellsOf(cls)`, `port(name|side)` / `portHint`, `hangPoints()`, `size`.
+
+```js
+export const id = 'fit_wrap_trunk';
+export const fit = 'wrap_trunk';
+export default function build({ palette, site }) {
+  const bp = new Blueprint({ id, type: 'cabin', site, palette });   // size = the lot; fit = the site's
+  bp.keep(site.cellsOf('LOG'));                                     // never written (the spec's keep-critical cells are kept already)
+  const t = site.trunk();
+  bp.ringDeck(t.cx, t.cz, t.radiusAt(1), 7, 1, { rail: palette.fence, brackets: 'trunk' });
+  ...
+}
+```
+
+- `bp.keep(cells)`: cells the template leaves out, so a keep placement leaves the site there; writing one throws (the helpers skip
+  them). The sidecar records `fit`, `site` (the spec it was built into) and `keep.critical` (template cells); `frame` stays the
+  design origin.
+- Helpers (`lib/siteHelpers.mjs`, on every Blueprint): `ringDeck`, `bracket`, `hangChain`, `beamInto`, `carveRoom`, `facadeOnFace`,
+  `stilts`, `put` (a keep-skipping set). Every block comes from the palette's roles.
+- A walk port (`architect:walk`) may face `up` or `down`.
+- CLI: `node kit/build.mjs <id> --site <volume> --lot <site.json>`; `node kit/render.mjs <nbt> --site <volume> [--lot ...]` adds the
+  `composite` (iso in the land) and `section` (cut through the lot's middle row) views; `node kit/tools/slices.mjs <nbt> --site <volume>`
+  shows the land in the cells the design leaves (`#` rock, `:` soil, `~` water, `T` log, ...).
+- The six examples (`designs/site/fit_*.mjs`, one per fit, built into the 7bF fixtures by `tools/examples.mjs`) are the $0 subjects of
+  the 7b gates. Until SC the check is the template-only one; each example names the warnings only the composite can clear.
+
 ## Generated tables
 
 `lib/blocks.mjs` (every vanilla 26.3 block: properties, defaults, collision class, family, light, optics,

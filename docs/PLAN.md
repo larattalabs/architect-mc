@@ -1511,3 +1511,10 @@ The three small items left in "Queued (coordinator, 2026-11-11)" and "Slice PX".
    cell the road wrote solid over a lower entry's block when the final block is that block (`roadOver`). No journal or production code
    changed. Pinned in `UmtFindingsTest.f9_aRoadsSolidCellsOverASiteAreWrittenBackToo` (world seed 24924664554: fails with the old tag rule,
    passes with the new one); `umtLong -Dumt.from=804021437 -Dumt.seeds=1` passes.
+
+## Queued fix-forward (coordinator, 2026-11-11)
+
+- **LC: a missing trigger block reads `removed`** (LCi finding 2; Steward yes, 2026-11-11). `LandCheck.classifyCell` judges a mechanism's
+  `triggers[].at` cells like the rest of the mechanism: their state (powered, facing) stays excused, a missing lever or button reads
+  `removed` in `mech:<lot>`. Lanes and rungs stay as they are (an empty lane can't be told from an open gate). Read-only; extend
+  `LandCheckTest` and `lc-castle` (break the lever). LCi's other notes: only one lane cell exercised; a piston pushing a player block untested.
