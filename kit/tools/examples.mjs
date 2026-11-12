@@ -18,7 +18,6 @@ const OUT = path.resolve(HERE, '../examples');
 /** The site examples' ids (kit/designs/site). */
 export const listSiteDesigns = () => listDesigns(SITE_DESIGNS);
 
-
 /** Build one example into `out` (default kit/examples/<id>). Returns {id, ok, problems: [...]}. */
 export async function buildExample(id, { out = path.join(OUT, id) } = {}) {
   const isSite = listSiteDesigns().includes(id);

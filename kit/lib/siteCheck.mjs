@@ -21,12 +21,12 @@ import { SITE_SOLID, SITE_STAND_IN } from './site.mjs';
  * The site rules' numbers (opts.siteLimits overrides any of them; siteLimits below adds the fit's own):
  * - cantilever 4: M15's "a solid cell more than 4 horizontally from a support column or a bracket" (SETTLEMENTS §11), for every keep fit
  *   but attach_to_cliff, whose row names the bible's limit;
- * - neckMass 200, neckContact 2: M15's necks ("a mass over 200 cells hanging on fewer than 2 cells of contact");
+ * - neckMass 200: M15's necks ("a mass over 200 cells hanging on fewer than 2 cells of contact");
  * - bearCells 2: attach_to_cliff's "brackets bear on at least 2 rock cells each"; endBearing [2, 2]: span's "2x2 cells each";
  * - portWithin 2: ports_met's "at the hinted cell within 2"; breachWithin 1: site_breach's "WATER or LAVA within 1".
  */
 export const SITE_CHECK_LIMITS = Object.freeze({
-  cantilever: 4, neckMass: 200, neckContact: 2, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1,
+  cantilever: 4, neckMass: 200, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1,
 });
 
 /**
@@ -342,7 +342,7 @@ export function siteFindings(ctx) {
     if (over.length) add('cantilever', 'warning', over.length, over, `${over.length} block(s) more than ${limit} horizontally from a support column or a bracket, held on one side only (farthest ${Math.max(...over.map((k) => cant.dist.get(k)))}), e.g. ${sample(over)}`);
     const nk = necks(structural, seeds, L.neckMass);
     metrics.necks = nk.length;
-    if (nk.length) add('neck', 'warning', nk.length, nk.map((n) => n.at), nk.map((n) => `a mass of ${n.mass} cells hangs on the one cell ${n.at}`).join('; ') + ` (more than ${L.neckMass} cells need at least ${L.neckContact} cells of contact)`);
+    if (nk.length) add('neck', 'warning', nk.length, nk.map((n) => n.at), nk.map((n) => `a mass of ${n.mass} cells hangs on the one cell ${n.at}`).join('; ') + ` (a mass of more than ${L.neckMass} cells needs at least 2 cells of contact)`);
   }
 
   findings.sort((a, b) => SITE_RULE_IDS.indexOf(a.rule) - SITE_RULE_IDS.indexOf(b.rule));
