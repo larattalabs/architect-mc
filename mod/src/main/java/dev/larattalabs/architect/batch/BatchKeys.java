@@ -79,7 +79,12 @@ public final class BatchKeys {
 					continue;
 				}
 				try {
-					o.add(c.getName(), json(c.getAccessor().invoke(r), false));
+					Object x = c.getAccessor().invoke(r);
+					// (7b) a null site leaves no key, so a body hashed before the site member (PlaceRequest, DesignRequest) keeps its hash
+					if (x == null && c.getType() == dev.larattalabs.architect.api.SiteSpec.class) {
+						continue;
+					}
+					o.add(c.getName(), json(x, false));
 				} catch (ReflectiveOperationException e) {
 					throw new IllegalStateException("cannot read " + c.getName(), e);
 				}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architect:site-spec-1",
+  "title": "Architect site spec (docs/CONTRACT.md \"Phase 7b\" §2, slice 7bF)",
+  "description": "A lot's site for a site-aware design, its placement and its fit: the wire form of api.SiteSpec (DesignRequest.site, PlaceRequest.site, LotSpec.site, Sites.fitToSite), the kit's Site and plan.json's $.lots[].site. The kit (lib/siteSpec.mjs) and the mod (api.SiteSpec.fromWire) check it with this schema (the subset kit/lib/specschema.mjs and api.SpecSchema read) plus the rules in x-rules. Fit ids are kit/lib/siteFits.mjs's and api.FitMode's wire names.",
+  "x-rules": [
+    "port names are unique",
+    "every keepCritical cell lies inside volume",
+    "volume: minX <= maxX, minY <= maxY, minZ <= maxZ",
+    "keepCritical cells are world cells; port cells (at) are in the design's own frame (front south, the template's minimum corner at 0,0,0)"
+  ],
+  "$ref": "#/$defs/site",
+  "$defs": {
+    "site": {
+      "type": "object", "required": ["volumeSha", "volumeBlobId", "volume", "fit", "frame", "keepCritical", "ports"], "additionalProperties": false,
+      "properties": {
+        "volumeSha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "volumeBlobId": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+        "volume": { "$ref": "#/$defs/box" },
+        "fit": { "enum": ["on_pad", "carve_into", "attach_to_cliff", "span", "wrap_trunk", "suspend"] },
+        "frame": { "$ref": "#/$defs/frame" },
+        "keepCritical": { "type": "array", "maxItems": 65536, "items": { "$ref": "#/$defs/cell" } },
+        "ports": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/port" } },
+        "lotId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,64}$" },
+    "cell": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },
+    "box": {
+      "type": "object", "required": ["minX", "minY", "minZ", "maxX", "maxY", "maxZ"], "additionalProperties": false,
+      "properties": {
+        "minX": { "type": "integer" }, "minY": { "type": "integer" }, "minZ": { "type": "integer" },
+        "maxX": { "type": "integer" }, "maxY": { "type": "integer" }, "maxZ": { "type": "integer" }
+      }
+    },
+    "frame": {
+      "type": "object", "required": ["origin", "rotation"], "additionalProperties": false,
+      "properties": {
+        "origin": { "$ref": "#/$defs/cell" },
+        "rotation": { "enum": ["none", "clockwise_90", "clockwise_180", "counterclockwise_90"] }
+      }
+    },
+    "port": {
+      "type": "object", "required": ["name", "kind", "at", "facing", "width", "height"], "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["architect:walk", "door"] },
+        "at": { "$ref": "#/$defs/cell" },
+        "facing": { "enum": ["north", "south", "east", "west", "up", "down"] },
+        "width": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "edge": { "$ref": "#/$defs/id" }
+      }
+    }
+  }
+}

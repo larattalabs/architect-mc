@@ -1,0 +1,53 @@
+{
+ "id": "grove",
+ "fit": "on_pad",
+ "purpose": "flat plains with natural trees at the north and west edges and a shallow pond in the south of the lot: a stilt house on_pad (SV fit_on_pad stilts)",
+ "after": "scenarios/sites/grove.json",
+ "from": "synthesized by kit/tools/site-fixtures.mjs (no client in the 7bF gate)",
+ "lot": {
+  "minX": 3408,
+  "minY": 62,
+  "minZ": -1520,
+  "maxX": 3423,
+  "maxY": 77,
+  "maxZ": -1505
+ },
+ "maxSize": [
+  16,
+  16,
+  16
+ ],
+ "counts": {
+  "AIR": 22124,
+  "LEAVES": 294,
+  "LOG": 18,
+  "PLANT": 92,
+  "ROCK": 6144,
+  "SOIL": 3936,
+  "WATER": 160
+ },
+ "spec": {
+  "volumeSha": "b10fd091930f0f4f28aa8bd40e406663c34174aa3b92f0b4c9a4d54cbd3b1f28",
+  "volumeBlobId": "local:b10fd091930f0f4f28aa8bd40e406663c34174aa3b92f0b4c9a4d54cbd3b1f28",
+  "volume": {
+   "minX": 3400,
+   "minY": 54,
+   "minZ": -1528,
+   "maxX": 3431,
+   "maxY": 85,
+   "maxZ": -1497
+  },
+  "fit": "on_pad",
+  "frame": {
+   "origin": [
+    3408,
+    62,
+    -1520
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [],
+  "lotId": "lot_grove"
+ }
+}
