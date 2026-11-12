@@ -87,5 +87,5 @@
   "seed": "7442507342751420382",
   "cams": {},
   "camsNote": "7b SB: the cameras are computed per run from the plan's cam_* anchors looking at its hub (the layout is the sculpt's)",
-  "lotEntriesNote": "7b SB: per run, an archetype per fit by the sim's site-aware stub, then Designs.siteVariant of it for every other site lot (/bin/zsh; run.json lots, site-entries.json)"
+  "lotEntriesNote": "7b SB: per run, an archetype per fit by the sim's site-aware stub, then Designs.siteVariant of it for every other site lot ($0; run.json lots, site-entries.json)"
 }
