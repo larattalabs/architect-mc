@@ -6,13 +6,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
 import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
 import { clAskLine } from './fl-norm.mjs'; // (7a CL) its three ask movers compare by part and kind
+import { kitReuse } from './kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
+import * as CP from './corpus-plan.mjs'; // (speed audit A) the plans from the run's shared store, prewarmed on every core
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 /** The artifact compared with its kitVersion, catalogueVersion, api and irSha normalised (§5's catalogue bump moves every artifact's
@@ -20,26 +21,40 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 const normArt = (a) => normSiblingIr(JSON.stringify(a ?? null)).replace(/"catalogueVersion":\d+/g, '"catalogueVersion":"*"').replace(/"api":"\d+\.\d+\.\d+"/g, '"api":"*"')
   .replace(/"irSha":"[0-9a-f]{64}"/g, '"irSha":"*"'); // (the IR itself is compared kitVersion-normalised above; its sha holds the kitVersion)
 
+/**
+ * The artifact's signature. The artifact is part of what this step compares: a result that carries none (a result with no `artifact`
+ * property, as opposed to a plan that made none: null) throws here, so it can never compare as undefined against undefined.
+ * (kit/test/gate-corpus-plan.test.mjs)
+ */
+export function artSig(r) {
+  if (!r || !('artifact' in r) || r.artifact === undefined) throw new Error('the plan result carries no artifact (nothing to compare)');
+  return sha256(normArt(r.artifact));
+}
+
 /** The base worktree ../architect-mc-coA-base at the merge base of HEAD and origin/main (base-tree.mjs: the run's GATE_MERGE_BASE under gate-run). */
 export function baseTree(root) {
   return syncBaseTree(root, path.resolve(root, '..', 'architect-mc-coA-base'));
 }
 
-export async function unchanged(root, { check = null, log = console.log, only = null, moved = {} } = {}) {
+export async function unchanged(root, { check = null, log = console.log, only = null, moved = {}, baseDir: given = null } = {}) {
+  // (baseDir: a test's own base tree, kit/test/gate-corpus-plan.test.mjs; a gate run always uses the merge base's worktree)
   // (speed audit D, K1) base kit and scenarios trees identical to HEAD's: the loop can only agree
-  const sk = identicalToBase(root);
+  const sk = given ? null : identicalToBase(root);
   if (sk) {
     const n = fixtures(root).filter(([name]) => !only || only.test(name)).length;
     if (check) check(true, skippedLine(sk));
     log(skippedLine(sk));
     return { base: sk.base, head: sk.head, fixtures: {}, n, same: n, differ: [], skipped: true };
   }
-  const { dir: baseDir, base } = baseTree(root);
-  const H = (d) => import(pathToFileURL(path.join(d, 'kit', 'test', 'plan-helpers.mjs')).href);
-  const [hNew, hOld] = [await H(root), await H(baseDir)];
-  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: sha256(normArt(r.artifact)) });
+  const { dir: baseDir, base } = given ? { dir: given, base: 'given' } : baseTree(root);
+  // ((speed audit A) the same two-plan calls through the shared store, prewarmed on the pool; the record carries the artifact `art`
+  // compares: corpus-plan.mjs SCHEMA calls-v2. GATE_PLAN_CACHE=0: the plain helpers and the serial loop, as before)
+  const { hNew, hOld } = await CP.corpusHelpers(root, baseDir);
+  const sig = (r) => ({ answers: sha256(JSON.stringify(r.check.parts)), overall: r.check.overall, ir: sha256(normSiblingIr(r.res.irJson)), first: r.first && r.first !== r ? sha256(normSiblingIr(r.first.res?.irJson ?? JSON.stringify(r.first))) : null, art: artSig(r) });
   const out = { base, head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim(), fixtures: {} };
-  for (const [name, fx] of fixtures(root)) {
+  const all = fixtures(root);
+  await CP.prewarm(root, CP.fixtureJobs(root, all.filter(([name]) => !(only && !only.test(name))).flatMap(([name, fx]) => [[root, root, fx, 'head', name], ...(fs.existsSync(path.join(baseDir, 'kit', 'test', 'fixtures', 'plan', name)) ? [[baseDir, baseDir, fx, 'base', name]] : [])])), { log });
+  for (const [name, fx] of all) {
     if (only && !only.test(name)) continue;
     const existsOld = fs.existsSync(path.join(baseDir, 'kit', 'test', 'fixtures', 'plan', name));
     let a = null, b = null, err = null;
@@ -55,6 +70,7 @@ export async function unchanged(root, { check = null, log = console.log, only = 
   out.n = rows.length;
   out.same = rows.filter(([, r]) => r.same).length;
   out.differ = rows.filter(([, r]) => !r.same).map(([k]) => k);
+  log(CP.statsLine());
   return out;
 }
 
@@ -93,7 +109,7 @@ async function asksBefore(root, baseDir) {
 /** coa-unit's kit half: items 4, 5, 7, 9 (kit tests), 6 (the asks tables), 10 (byte identity), the catalogue diff. */
 export async function unit(root, { check, log, OUT, nodeTest }) {
   const out = {};
-  out.kit = nodeTest(['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']);
+  out.kit = kitReuse(root, ['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']) ?? nodeTest(['kit/test/coa.test.mjs', 'kit/test/vocc.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 10, `items 4, 5, 7, 9 (kit, coa.test.mjs and vocc.test.mjs): blocked routes to an unplaced lot or district (b01, b02), rule.palette over and exempt ways/forms and the lenient string scope (p01-p03), the catalogue bump alone, the grove pond near the stone placed with 0 LEAK and the only lot-clear site chosen (n01, n02), a district route kept out of a protected rect (d01): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // item 6: the asks before (the base kit, these asks) and after (HEAD), both committed
   const { asksGap } = await import('./gate6chy-b.mjs');
