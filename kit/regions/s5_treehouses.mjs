@@ -33,8 +33,8 @@ export default function s5Treehouses(ctx) {
   if (!G) throw new Error('s5_treehouses: no grove (give the sculpt\'s record as params.grove)');
   const [W, H, D] = TREE.box;
   // a house's box: centred on its tree's trunk axis at the deck (the sculpt's record), on the shared floor
-  const boxOn = ([ax, az]) => [ax - (W >> 1), G.deckY, az - (D >> 1), ax - (W >> 1) + W - 1, G.deckY + H - 1, az - (D >> 1) + D - 1];
-  const lots = G.trees.map((t, i) => ({ id: `tree_${i + 1}`, tree: t.id, row: Math.floor(i / TREE.cols), box: boxOn(t.axis ?? [t.at[0], t.at[2]]) }));
+  const boxOn = ([ax, az], y) => [ax - (W >> 1), y, az - (D >> 1), ax - (W >> 1) + W - 1, y + H - 1, az - (D >> 1) + D - 1];
+  const lots = G.trees.map((t, i) => ({ id: `tree_${i + 1}`, tree: t.id, row: Math.floor(i / TREE.cols), box: boxOn(t.axis ?? [t.at[0], t.at[2]], t.deckY ?? G.deckY) }));
   r.meta.sb = { scenario: 's5', deckY: G.deckY, ramps: G.ramps ?? [], centre: G.centre, trees: G.trees.map((t) => t.id), dwellings: lots.map((l) => l.id), fitCalledFor: { wrap_trunk: lots.map((l) => l.id), suspend: [] } };
   // the way in: on the ground south of the grove (the ramps climb from the east to each pair's walk)
   const [gx, gz] = G.centre;
@@ -42,15 +42,21 @@ export default function s5Treehouses(ctx) {
   r.anchor('entrance', [gx, survey.heightAt(gx, ez) + 1, ez]);
   r.anchor('spawn', [gx + 2, survey.heightAt(gx + 2, ez) + 1, ez]);
   r.anchor('hub', [gx, G.deckY + 2, gz]); // (the middle pair's walk: the cameras aim at it; an M2 node, reached up the ramp)
-  r.anchor('cam_high', [gx, G.deckY + 40, gz + 70]);
-  r.anchor('cam_n', [gx, G.deckY + 14, gz - 60]);
-  r.anchor('cam_s', [gx, G.deckY + 14, gz + 60]);
-  r.anchor('cam_e', [gx + 70, G.deckY + 18, gz]);
-  r.anchor('cam_w', [gx - 70, G.deckY + 18, gz]);
-  r.anchor('cam_deck', [gx, G.deckY + 4, gz]);
+  // the cameras round the grove, kept inside the claim
+  const cam = (n, x, y, z) => r.anchor(n, [Math.max(claim.minX + 1, Math.min(claim.maxX - 1, x)), y, Math.max(claim.minZ + 1, Math.min(claim.maxZ - 1, z))]);
+  cam('cam_high', gx, G.deckY + 40, gz + 70);
+  cam('cam_n', gx, G.deckY + 14, gz - 60);
+  cam('cam_s', gx, G.deckY + 14, gz + 60);
+  cam('cam_e', gx + 70, G.deckY + 18, gz);
+  cam('cam_w', gx - 70, G.deckY + 18, gz);
+  cam('cam_deck', gx, G.deckY + 4, gz);
   // the grove's volume: every house's site (its box + 8) and the walks between them, up to the crowns
   const xs = lots.flatMap((l) => [l.box[0], l.box[3]]), zs = lots.flatMap((l) => [l.box[2], l.box[5]]);
-  const vb = { minX: Math.min(...xs) - 12, maxX: Math.max(...xs) + 12, minZ: Math.min(...zs) - 12, maxZ: Math.max(...zs) + 12, minY: G.deckY - 12, maxY: G.deckY + H + 24 };
+  const vb = { minX: Math.min(...xs) - 12, maxX: Math.max(...xs) + 12, minZ: Math.min(...zs) - 12, maxZ: Math.max(...zs) + 12, minY: Math.min(...lots.map((l) => l.box[1])) - 12, maxY: Math.max(...lots.map((l) => l.box[4])) + 24 };
+  // the lane: a path on the ground along the grove's south side, from its west end past the last ramp's foot (the region's own cells)
+  const lane = r.part('lane', { stage: 'ground', set: 'path' });
+  const lx0 = Math.min(...lots.map((l) => l.box[0])), lx1 = Math.max(...lots.map((l) => l.box[3])) + 12;
+  for (let x = lx0; x <= Math.min(claim.maxX - 1, lx1); x++) lane.fill({ kind: 'box', min: [x, { surface: 0 }, ez - 1], max: [x, { surface: 0 }, ez + 1] }, 'path', { cond: 1 });
   const v = r.needVolume({ minX: Math.max(claim.minX, vb.minX), maxX: Math.min(claim.maxX, vb.maxX), minZ: Math.max(claim.minZ, vb.minZ), maxZ: Math.min(claim.maxZ, vb.maxZ), minY: vb.minY, maxY: vb.maxY });
   if (!v) return r;
   for (const l of lots) {

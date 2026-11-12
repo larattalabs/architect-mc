@@ -153,7 +153,7 @@ export async function sbRows({ L, ir, meta, before, after, world, lotStates, ent
   const dwell = sb.dwellings ?? site.map((l) => l.id);
   const called = new Set(Object.values(sb.fitCalledFor ?? {}).flat());
   const fits = Object.keys(sb.fitCalledFor ?? {});
-  const okFit = dwell.filter((id) => { const l = ir.lots.find((q) => q.id === id); return l?.site && fits.includes(l.site.fit) && called.has(id) && placed.get(id) === 'PLACED'; });
+  const okFit = dwell.filter((id) => { const l = ir.lots.find((q) => q.id === id); return l?.site && fits.includes(l.site.fit) && called.has(id) && String(placed.get(id)).toUpperCase() === 'PLACED'; });
   const share = dwell.length ? okFit.length / dwell.length : 0;
   // ---- disturbance per site lot
   const per = [];

@@ -38,7 +38,7 @@ export const params = {};
 
 /** The grove's numbers: the sites' offsets from the grove's centre, the house box (x, h, z), its floor over the highest tree's ground. */
 export const TREE = Object.freeze({
-  preset: 'oak', spacing: 26, pairGap: 20, rows: 2, cols: 3, box: Object.freeze([17, 8, 17]), deckOver: 4, clear: 20, search: 40, step: 4, branchOver: 1, seeds: 8, taller: 8,
+  preset: 'oak', spacing: 26, pairGap: 20, rows: 2, cols: 3, box: Object.freeze([17, 8, 17]), deckOver: 4, clear: 20, search: 56, step: 4, branchOver: 1, seeds: 12, taller: 12,
 });
 
 /** The tree sites' offsets [dx, dz] from the grove's centre (row-major from the north-west): TREE.spacing apart along x, the two rows
@@ -57,41 +57,50 @@ export function branchStart(h) {
 
 /**
  * The grove from the survey: the centre (searched on a TREE.step grid within TREE.search of the claim's centre) whose six sites are dry
- * (no water within 12) with the least spread of ground (then the least roughness under each house, then nearest the centre); each
- * tree's height the least whose branches start TREE.branchOver over the deck box. Pure. Returns {centre, deckY, trees [{id, at, height}]} (the program adds each tree's `axis` at the deck).
+ * (no water within 12) with the least spread of ground within a pair (each pair's walk is level; pairs may stand at different heights),
+ * then the least roughness under the houses, then nearest the centre. Each pair's deck floor clears the ground under both its houses by 2
+ * and its trees' feet by TREE.deckOver; each tree's height is the least whose branches start TREE.branchOver over its house box. Pure.
+ * Returns {centre, deckY (the middle pair's), spread, trees [{id, at, height, deckY}]} (the program adds each tree's `axis` at the deck).
  */
 export function groveLayout(claim, survey) {
   const cx = claim.minX + Math.floor((claim.maxX - claim.minX + 1) / 2), cz = claim.minZ + Math.floor((claim.maxZ - claim.minZ + 1) / 2);
   const off = siteOffsets();
   const half = Math.floor(TREE.box[0] / 2), reach = half + 8 + 2;
+  const footMax = (x, z) => { let b = -Infinity; for (let u = -half; u <= half; u++) for (let v = -half; v <= half; v++) b = Math.max(b, survey.heightAt(x + u, z + v)); return b; };
   let best = null;
   for (let dz = -TREE.search; dz <= TREE.search; dz += TREE.step) for (let dx = -TREE.search; dx <= TREE.search; dx += TREE.step) {
     const ox = cx + dx, oz = cz + dz;
-    let ok = true, lo = Infinity, hi = -Infinity, rough = 0;
+    let ok = true, rough = 0;
+    const g = [];
     for (const [sx, sz] of off) {
       const x = ox + sx, z = oz + sz;
       if (x - reach < claim.minX || x + reach > claim.maxX || z - reach < claim.minZ || z + reach > claim.maxZ) { ok = false; break; }
       for (let u = -12; u <= 12 && ok; u += 2) for (let v = -12; v <= 12; v += 2) if (survey.waterAt(x + u, z + v)) { ok = false; break; }
       if (!ok) break;
-      const g = survey.heightAt(x, z);
-      lo = Math.min(lo, g); hi = Math.max(hi, g);
+      g.push(survey.heightAt(x, z));
       let a = Infinity, b = -Infinity;
       for (let u = -half; u <= half; u += 2) for (let v = -half; v <= half; v += 2) { const h = survey.heightAt(x + u, z + v); a = Math.min(a, h); b = Math.max(b, h); }
       rough += b - a;
     }
     if (!ok) continue;
-    const score = [hi - lo, rough, Math.abs(dx) + Math.abs(dz)];
-    if (!best || score[0] < best.score[0] || (score[0] === best.score[0] && (score[1] < best.score[1] || (score[1] === best.score[1] && score[2] < best.score[2])))) best = { ox, oz, lo, hi, score };
+    let spread = 0;
+    for (let i = 0; i < TREE.cols; i++) spread = Math.max(spread, Math.abs(g[i] - g[TREE.cols + i]));
+    const score = [spread, rough, Math.abs(dx) + Math.abs(dz)];
+    if (!best || score[0] < best.score[0] || (score[0] === best.score[0] && (score[1] < best.score[1] || (score[1] === best.score[1] && score[2] < best.score[2])))) best = { ox, oz, score };
   }
   if (!best) return null;
-  const deckY = best.hi + TREE.deckOver;
-  const trees = off.map(([sx, sz], i) => {
-    const x = best.ox + sx, z = best.oz + sz, g = survey.heightAt(x, z);
+  const at = off.map(([sx, sz]) => { const x = best.ox + sx, z = best.oz + sz; return [x, survey.heightAt(x, z), z]; });
+  const deck = [];
+  for (let i = 0; i < TREE.cols; i++) {
+    const n = at[i], s = at[TREE.cols + i];
+    deck[i] = deck[TREE.cols + i] = Math.max(n[1], s[1]) + TREE.deckOver > Math.max(footMax(n[0], n[2]), footMax(s[0], s[2])) + 2 ? Math.max(n[1], s[1]) + TREE.deckOver : Math.max(footMax(n[0], n[2]), footMax(s[0], s[2])) + 2;
+  }
+  const trees = at.map((a, i) => {
     let h = 24;
-    while (h < 64 && g + branchStart(h) < deckY + TREE.box[1] + TREE.branchOver) h++;
-    return { id: `t${i + 1}`, at: [x, g, z], height: h };
+    while (h < 64 && a[1] + branchStart(h) < deck[i] + TREE.box[1] + TREE.branchOver) h++;
+    return { id: `t${i + 1}`, at: a, height: h, deckY: deck[i] };
   });
-  return { centre: [best.ox, best.oz], spread: best.hi - best.lo, deckY, trees };
+  return { centre: [best.ox, best.oz], spread: best.score[0], deckY: deck[(TREE.cols - 1) >> 1], trees };
 }
 
 export default function s5GroveSculpt(ctx) {
@@ -105,7 +114,7 @@ export default function s5GroveSculpt(ctx) {
   r.anchor('spawn', [G.centre[0], survey.heightAt(G.centre[0], G.centre[1]) + 1, G.centre[1]]);
   // the clearing: the natural trees' logs and leaves within TREE.clear columns of a site (from the volume over the grove)
   const xs = G.trees.map((t) => t.at[0]), zs = G.trees.map((t) => t.at[2]), gs = G.trees.map((t) => t.at[1]);
-  const vb = { minX: Math.max(claim.minX, Math.min(...xs) - TREE.clear), maxX: Math.min(claim.maxX, Math.max(...xs) + TREE.clear), minZ: Math.max(claim.minZ, Math.min(...zs) - TREE.clear), maxZ: Math.min(claim.maxZ, Math.max(...zs) + TREE.clear), minY: Math.min(...gs) - 4, maxY: Math.max(...gs) + 40 };
+  const vb = { minX: Math.max(claim.minX, Math.min(...xs) - TREE.clear), maxX: Math.min(claim.maxX, Math.max(...xs) + TREE.clear), minZ: Math.max(claim.minZ, Math.min(...zs) - TREE.clear), maxZ: Math.min(claim.maxZ, Math.max(...zs) + TREE.clear), minY: Math.min(...gs) - 4, maxY: Math.max(...gs) + 64 };
   const v = r.needVolume(vb);
   if (v) {
     const clear = r.part('clearing', { stage: 'clear' });
@@ -131,23 +140,23 @@ export default function s5GroveSculpt(ctx) {
       const seed = fnv64(ctx.seed, 'giantTree', t.id, h, k).hex;
       const gen = giantTree({ at: t.at, preset: TREE.preset, height: h, seed }, { groundAt: (x, z) => survey.heightAt(x, z) });
       const rows = [];
-      for (let y = G.deckY; y < G.deckY + H; y++) rows.push(trunkRow(gen.cells, y, t.at, W >> 1));
-      if (rows[0].length && rows.every((q) => q === rows[0])) pick = { seed, h, k, axis: axisAt(gen.cells, G.deckY + 1, t.at), straight: true };
+      for (let y = t.deckY; y < t.deckY + H; y++) rows.push(trunkRow(gen.cells, y, t.at, W >> 1));
+      if (rows[0].length && rows.every((q) => q === rows[0])) pick = { seed, h, k, axis: axisAt(gen.cells, t.deckY + 1, t.at), straight: true };
     }
     if (!pick) pick = { seed: fnv64(ctx.seed, 'giantTree', t.id, t.height, 0).hex, h: t.height, k: 0, axis: null, straight: false };
     const gen = r.giantTree(t.id, { at: t.at, preset: TREE.preset, height: pick.h, seed: pick.seed }, { stage: 'trees' });
-    Object.assign(t, { height: pick.h, seed: pick.k, axis: pick.axis ?? axisAt(gen.cells, G.deckY + 1, t.at), straight: pick.straight });
+    Object.assign(t, { height: pick.h, seed: pick.k, axis: pick.axis ?? axisAt(gen.cells, t.deckY + 1, t.at), straight: pick.straight });
   }
   // the ramps: the land's way up (as S6's ramp is). Each pair's houses face each other across a gap TREE.pairGap - box wide, where the
   // village's branch walk runs at the houses' feet row (deckY + 2). An earthen ramp meets it from the east: a tongue between the two
   // house boxes whose top is the walk's feet row (a solid cell beside the deck: the walk rails every open side, so a ramp is a cell the
   // walk leaves open and a player steps down from), then a mound falling one row per column east and sideways to the ground (no drop
   // over 1). Grass on top, dirt under (the surface and subsurface roles). Recorded in meta.sb.ramps.
-  const fy = G.deckY + 2;
   const ramp = r.part('ramps', { stage: 'trees' });
   G.ramps = [];
   for (let i = 0; i < TREE.cols; i++) {
     const n = G.trees[i], s = G.trees[TREE.cols + i];
+    const fy = n.deckY + 2; // (the pair's walk: its feet row)
     const zg0 = n.axis[1] - (D >> 1) + D, zg1 = s.axis[1] - (D >> 1) - 1; // the gap's rows between the boxes
     const zc = (zg0 + zg1) >> 1, hw = (zg1 - zg0) >> 1;
     const x0 = Math.max(n.axis[0], s.axis[0]) + 1, xe = Math.max(n.axis[0], s.axis[0]) + (W >> 1); // the tongue: east of the deck to the boxes' east edge
