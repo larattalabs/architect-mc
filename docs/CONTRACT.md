@@ -27578,3 +27578,17 @@ keep cells.
 
 | Check | Result |
 |---|---|
+| mod `./gradlew build --offline --no-daemon` | pass; 1055 tests, 0 failures, 1 skipped (SiteFitTest 7/7: policy and approach per fit, the context and cache key, shape, mismatch from the ext binding and from SV's sidecar `site` (and its frame), drift, keep lost, the support scan; TerrainFitTest 10/10 with KEEP and CLEAR-unchanged) |
+| kit `node --test kit/test/*.test.mjs` | 1131/1131 (after merging SV) |
+| sidecar `npm ci && npm run check` | 811/811 before the SV merge (quiet); after it 810/811, the one miss simcosts' 120 s wall bar at 123.7 s under load average 56 (timing only; PL touches no sidecar file) |
+| api-compat | clean: `--surface` of the 0.57.0 jar (2671 members); the 0.47.0 and 0.45.0 apitest jars. The API package is untouched |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / pass (p3-lint is in the mod build's tests) |
+| `node tools/step-inputs.mjs check` | clean after `build` (328 steps) |
+| in game, run 20261112-022428-change at 6cd63939 | **PASS** 3/3: `pl-ingame` 86 ok (SV's five non-pad examples on their fixtures' land, built from the frozen volumes by `dev.pl.terrain`, placed by `fitToSite` with the sidecar's `site`: KEEP, every unwritten cell unchanged, Remove E-flat 0; five hand-built sites, one per non-pad fit, the same plus the binding, move refused, verify 0; `KEEP_LOST`, `SITE_DRIFTED`, `SITE_MISMATCH`, `SITE_UNSUPPORTED` each alone; `on_pad` byte-identical to the plain placement over 12834 cells, fill, clearing and approach included), `pl-undo` 16 ok (region first and house first E-flat 0 over 14580 cells, a trunk cell's stack 2, the player-cut keep cell restored), `pl-crash` 42 ok (K1, K2, K2+save rolled back exactly; K4, K4+save the journal wins and Remove is exact (K4 without a save: verify 71/343 recorded, as gate4e's K4 judges only the record and the final removal); removal K5, K8, K6, K7, K6+save under the standing house: the trunk kept, removing what stands E-flat 0) |
+| gate-verifier (strict) | **PASS** at 6cd63939: re-ran `pl-undo` (16 ok) and `pl-crash` (42 ok) on its own ports 8906/8907 (run 20261112-023530-change); reviewed the diff: no CLEAR plan can reach a site placement (checkKey, the batch guard, move/update/revert refused), plain and `on_pad` paths unchanged, API package untouched, the readings fail closed. Minor: `SiteFit.with` is a server-thread context as `Placed.withConsent` is (`Sites.check` keeps main's server-thread assumption) |
+
+**For the Steward RC (with SO)**, the areas for its `--only` filter: `fitToSite` on a site-bound entry (the frame, the verdict's site
+Reasons and their message-first details), `place`/`check` with `PlaceRequest.site` (KEEP, the port note, the restore box), the record's
+`ext["architect_mc:site"]` in `SiteView`, move/`applyDelta`/`revert` refused for it, Remove and removal orders over a site placement
+layered on Steward's own cell or region sites, a batch item with a site still refused (`UnsupportedOperationException`), and (with SO)
+the survival flows of a site-bound house. No feature flag changes in PL.
