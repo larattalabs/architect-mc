@@ -56,7 +56,8 @@ import org.jspecify.annotations.Nullable;
  *     (the frozen volume, site.json, four renders of the empty site) and BRIEF.md a "Site" section, and the installed entry carries
  *     its {@link SiteBinding} in {@code ext}. The volume is sent from this world's frozen file (architect/volumes/&lt;sha&gt;.bin), else
  *     by the spec's blob id. With {@link #versionOf()}: a paid adaptation of that entry to the site. A group item with a site is
- *     designed in one pass: its group can't be massingFirst, and it has no count or copyOf (its site variants are
+ *     designed in one pass with no massing of its own (since NEXT, 7b SL: in a massingFirst group it waits for the group's massing step,
+ *     then designs in the same group), and it has no count or copyOf (its site variants are
  *     {@link Designs#siteVariant}). A versionOf of a site-bound entry without a site is built into the entry's own site
  *
  * <p>Binary compatibility (Steward's U1 review): every earlier canonical constructor stays as a secondary one (the 14-argument

@@ -103,11 +103,10 @@
   },
   {
    "id": "layout.elevated",
-   "sinceApi": "1.32.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7b",
-   "note": "Lots carried at a level above the ground (canopy huts in trees, cliff ledges): Claude can write them now and they wait as unsupported (S-K1-6)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "Lots above the ground, each a site lot on a canopy, trunk, overhang, ledge or water (7b SL); links to them wait for LP."
   },
   {
    "id": "connector.street",

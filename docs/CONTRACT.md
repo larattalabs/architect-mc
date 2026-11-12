@@ -27997,3 +27997,150 @@ checks do) at conversion and on the record's `ext["architect_mc:site"]` binding 
 | gate-verifier (strict) | **PASS** at 6144bc99: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-052903-change, 48 ok / 0 FAIL), the three unit classes, and reviewed the diff (BuildOrder.order untouched, the golden recorded before the change, the dispatch only for non-pad sites, the gate read from the record, SCAFFOLD excluded where CRATE/DELTA are, removeScaffold first in complete). Minor: the golden did not drive the dispatch (fixed after: `Builder.supportOrdered`, asserted in the golden test; an expression extract, no behaviour change); a mined scaffolding block drops (reading 10); the attach gate also counts the player's hopper chain as solid (outside the box; not seen); removeScaffold swallows errors (reading 10) |
 
 **For the Steward RC (with PL)**, the areas for its `--only` filter: the survival flow of a site-bound house (`Sites.place` with `PlaceRequest.site` and `Mode.CONSTRUCTION`, or AUTO in a survival world): the crate at the first port's landing (not in front of a door; S-7b-7: Steward assumes no crate position and no bottom-up order), the build progressing in support order from a hopper or Insert, Pause/Deconstruct/Remove mid-build with scaffolding standing (refunds = paid + crate stock, no scaffolding item, land exact), completion (scaffolding gone, the `built` event), and a plain or `on_pad` construction site unchanged. No API member, feature or Reason changes in SO.
+### Slice SL as built (branch `slice/SL` off main b1ee8dcc, main f2a90f2a (DS) merged; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+**The plan wire, FROZEN first (LP builds on it).** Additive: a pad lot's members and bytes are unchanged everywhere; only a site lot
+carries the members below. `site` is **exactly the `SiteSpec` wire** (`kit/schemas/site-spec.json`, 7bF's schema, untouched; it has
+`additionalProperties: false`), so the kit (`siteSpecProblems`), the mod (`SiteSpec.fromWire`, `LotSpec.site`), Steward and LP read it
+with the one parser. What §2 lists as `$.lots[].site.affordance` sits **beside** `site`, as `$.lots[].affordance`, because the schema
+refuses an extra key.
+
+| Where | Member | Shape |
+|---|---|---|
+| the artifact `$.lots[]` (site lot) | `site` | `{volumeSha, volumeBlobId, volume, fit, frame {origin, rotation}, keepCritical, ports, lotId}` = `SiteSpec.wire()` |
+| | `affordance` | `{id, kind}` (AF's id and wire kind) the lot stands on, or `null` for a lot given an explicit box |
+| | `box`, `fitBox` | the lot box = the fit box, exact (K3's precedent): a site-bound template is exactly this box (SV reading 3) |
+| | `front` | the frame's facing: the design's front (south) turned by `frame.rotation` |
+| | `entrance` | `null` (a port fit has no ground approach; the ports are the way in) |
+| the IR `lots[]` (site lot) | `site`, `affordance` | as above (the artifact copies them); `floorY` = `box.minY`, `max` = the box's size, `front` as above, no `pad` |
+| | `host` | the part id whose ops may write inside the reserved box (the host tree or rock), or `null` |
+| `plan.json` | `affordances[]` | AF's member, now written by every plan with a site lot placed from an affordance |
+| `RegionPlan.lots()` | `LotSpec.site` | `SiteSpec.fromWire($.lots[].site)`; `null` for every pad lot (unchanged) |
+
+- **`site.volume`** = the lot box grown by `SITE_MARGIN` (8) each way, and it must lie inside the claim (a lot whose margin leaves the
+  claim is refused; SV's `Site` reads the lot box as the volume less the margin). `site.volumeSha` is that volume's ARVX sha (of the
+  uncompressed bytes). (Amended before LP started, same day: first drafted as "cut to the claim".)
+- **Where the volume comes from.** The two-plan flow plans exactly twice, so a lot found from an affordance cannot ask for its own volume.
+  It is **cut** from a volume the plan already read (an elevated zone's: its rect + 8), encoded as ARVX version 1 and carried as an IR side
+  blob `site_<lotId>` of kind `volume` (gzip, OS byte pinned; the blob's sha is the gzip's, `site.volumeSha` the raw ARVX's). A lot box
+  whose volume equals one the plan read uses it as it is (no blob); a box no read volume covers asks for it (`needVolume`) and the lot is
+  placed on the second plan. The mod finds the volume by sha in this order: `architect/volumes/<sha>.bin`, the region's
+  `architect-regions/<id>/volumes/`, the region IR's `volume` side blobs (gunzipped, sha-checked, then frozen into `architect/volumes`).
+- **`site.volumeBlobId`** = `local:<volumeSha>`, as 7bF's fixtures name theirs: an upload blob id would make the plan depend on an upload;
+  the sha is the identity.
+- **`site.frame`** = `{origin: the box's minimum corner, rotation: AF's proposeFrame for the fit}` (`none` with no affordance).
+- **`site.keepCritical`** (world cells): `wrap_trunk` the volume's LOG cells inside the box (the host); `suspend` the affordance's hang
+  points (anchors) that are site-solid in the volume; every other fit `[]`.
+- **`site.ports`** (design cells): the program's `ports`, else the default per fit, named and placed as 7bF's fixtures name theirs so
+  SV's examples (and DS's site variants of them) find them (`mx = floor((w-1)/2)`, `mz = floor((d-1)/2)`; walk ports 2x2):
+  `on_pad` none; `wrap_trunk` `walk_w` at `[0, min(2, h-1), mz]` facing west; `span` `walk_w` at `[0, 0, mz]` facing west and `walk_e`
+  at `[w-1, 0, mz]` facing east; `suspend` `hatch` at `[mx, 0, mz]` facing down (1x1); `attach_to_cliff` `walk_top` at
+  `[mx, max(0, h-3), min(1, d-1)]` facing north; `carve_into` a `door` `door_s` at `[mx, 0, d-1]` facing south (1x2). `w, h, d` are the
+  design's own size (the box turned back by the rotation). (Amended before LP started, same day: first drafted as one `front` port.)
+- **`site.lotId`** = the lot id.
+
+**Built** (no 7bF signature changed; the API package is untouched: SL implements `LotSpec.site` through the 9-argument constructor 7bF
+froze; feature `siteLots`):
+- **Kit, `r.siteLot(id, {affordance, fit, max, ports, brief, stage, box, host, y, ext, part})`** (`kit/lib/region/siteLots.mjs`, a method
+  on `Region`): the lot box from the affordance per kind (`placeFromAffordance`: x/z centred on it, a trunk, spike or canopy on its axis;
+  the floor per kind, `y` overrides) or an explicit `box`; the frame (AF's rotation rule, `rotationOf`); the volume (above); keep cells
+  per fit; default ports; `siteSpecProblems` on the result. It writes no op (no pad) and records the IR lot with `site`, `affordance`,
+  `host`. `cropVolume(decoded, box)` cuts an ARVX v1 volume (owners compacted).
+- **The reserved box and the host exemption** (`kit/lib/region/check.mjs`): an M1 error per (site lot, part) for every cell a part other
+  than the lot's `host` writes inside the box, only in a plan with a site lot. Site lots are left out of M9 (no pad) and of the M2 walk
+  nodes (no ground entrance: their ports are LP's endpoints).
+- **`layout.elevated`** (`kit/lib/plan/elevated.mjs`, three hooks in `compile.mjs`, one line in `finish.mjs`): an elevated zone resolves
+  from its frozen volume (the zone's rect, a square of its size preset centred on its locator's aim, grown by 8, from the lowest floor
+  less 8 to the highest top plus 24): AF's `analyseVolume` for `canopy`, `trunk` (wrap_trunk), `overhang` (suspend), `ledge`, `water`
+  (on_pad); each lot in plan order takes the best unused affordance whose box (the lot's `size`, 16 high) and its site volume fit in the
+  zone, apart from the lots and zones before it. Answers: `fits`; `adjusted` (a count deviation, judged as every lots zone's: soft up to
+  the ceiling, hard past its max); `refused NO_FEATURE` (wouldFit: the lots that fit); `incomplete VOLUME` on the first plan. Emitted as
+  `r.siteLot`s in the `lots` stage; geometry `{rect, elevated: true, lots, unplaced?}`; the artifact's `lots[]` gain `site`, `affordance`
+  and `fitBox` (record `siteLots`). A connector with an end on an elevated zone or one of its lots answers `unsupported until LP` (blocked
+  first when a dependency failed); an anchor inside an elevated zone is never snapped to it.
+- **Catalogue:** `layout.elevated` `supported`, `schemaVersion` 1, `sinceApi` `NEXT`, no `until`; the golden re-cut (catalogueVersion left
+  for the coordinator); e15's zone z12 removed; the catalogue-diff tests of CL, GM-c and the 7a foundation leave the flip to `sl.test.mjs`.
+- **Mod** (`site/SiteLots.java` new; `RegionsImpl`, `Batches`, `SiteFit`, `PlanChecks`, `ApiRules`): `RegionPlan.lots()` builds
+  `LotSpec.site` from the IR lot's `site`; a site lot's realise item has no LotFitting: its origin and turns are the frame's, it is LAYERed
+  as a pad lot's design is, and `Batches.tryStart` runs it inside `SiteFit.with(site)` (PL's KEEP terrain, port approach and site checks),
+  the site **rebuilt from the live region's IR on every try, never persisted**, so `SiteGuards.batch` (the public `Batch` with a site) is
+  unchanged; the bind check (`lotProblem`) refuses a site lot whose entry is not exactly the lot box in the site's frame or is bound to
+  another volume (`SITE_MISMATCH` in the message), nothing written; freeze before lots, the general form (below); the region volume
+  lookup (above); `PlanChecks.hasElevated` joins the second-plan trigger; `region.siteLots` -> feature `siteLots`. The placed record's
+  ext carries `architect_mc:site` = `SiteBinding.of(site, <the region's plan id>)`.
+- **Sidecar:** `region.siteLots` in the feature list (protocol.ts and the two feature-list tests). **Dev hooks** (`SliceSlDev`, generated
+  headless too): `dev.sl.plan {plan}`, `dev.sl.lot {region, lot}` (docs/DEVBRIDGE.md).
+- **Gate:** `tools/gate7bsl.mjs` (`sl-unit`, `sl-ingame`; chain `7bsl`), `kit/test/sl.test.mjs`, `kit/test/fixtures/plan/valid/v7b_sl_canopy.json`
+  (two canopy huts on two synthetic trees through the two-plan flow), `kit/test/fixtures/plan/sl/asks-{before,after}.txt`, `ApiSLTest`.
+
+**Readings chosen** (the contract was silent or the code disagreed; the smallest reading each time):
+1. **`affordance` beside `site`** (`$.lots[].affordance`), not inside it: 7bF's schema has `additionalProperties: false` and 7bF's surface
+   is frozen.
+2. **A site lot's volume is cut from the zone's**, because the two-plan flow plans exactly twice (`PlanChecks.secondPlan`): the affordances
+   are found on the second plan, too late to ask another volume. The cut is a gzip IR side blob (`site_<lot>`), found by the mod by sha
+   and frozen into `architect/volumes` the first time a check or placement needs it.
+3. **The margin must lie inside the claim** (a lot near the claim's edge is refused, or skipped by an elevated zone): SV's `Site` reads the
+   lot box as the volume less 8, so a clipped volume would make DS's `Site` of the lot disagree with the lot.
+4. **Default ports are SV's fixtures' names and places**, so SV's examples (and DS's site variants of them) run on a site lot as they are.
+5. **Keep cells:** wrap_trunk the volume's LOG cells inside the box (7bF's trunk fixture's rule); suspend the first site-solid cell over
+   each corner of the box inset 2 (AF's overhang anchors are the overhang's corners and centre, often outside a smaller lot box; the
+   overhang fixture's own hang points are 4 cells over the box). Every other fit none.
+6. **The elevated fits:** canopy and trunk give `wrap_trunk` (a canopy lot wraps its first trunk top, under the leaf layer), overhang
+   `suspend`, ledge and water `on_pad` (the design brings its own stilts or foundation). Cliff faces, caves and gaps are not "elevated"
+   lots; a program reaches them through `r.siteLot` directly.
+7. **An elevated zone is answered at resolve** (from `ctx.volumes`) so its dependents see its class, and its volume is asked at emit
+   whatever its answer (the first plan's ask).
+8. **Freeze before lots, general form:** a site lot item freezes the columns of its snapshot box and of its site volume's x/z (the lot box
+   + 8) before its check and capture; a pad lot keeps the narrow form (byte-identical realises).
+9. **An unmapped site lot writes nothing** (no pad): `RealiseRequest.lotEntries` "unmapped lots stay pads" reads as "stay what the plan
+   wrote", which for a site lot is nothing.
+10. **The bind check is exact** (the template is the lot box in the site's frame), not a pad lot's "fits inside": a site-bound design is
+    the lot box (SV reading 3).
+11. **The feature's sidecar name is `region.siteLots`** (`Api7bFTest` feeds `region.siteLot` to prove the foundation advertises nothing;
+    that test is untouched).
+12. **A revision's refill of a site lot** reads the base region's IR (adding a site lot by revision is out of 7b).
+13. **`site.volumeBlobId` is `local:<sha>`** (the sha is the identity; an upload id would tie the plan to an upload).
+
+**Shared files touched:** `kit/lib/region/program.mjs` (the method), `kit/lib/region/check.mjs` (three guarded hooks), `kit/lib/plan/
+compile.mjs` (the resolve, the connector pre-pass, the volume ask, the emit, the geometry, the record; four `zoneEmit` readers skip an
+elevated zone), `kit/lib/plan/finish.mjs` (one spread), `kit/schemas/plan.json` (the entry and two descriptions, shortened: the sidecar's
+compact plan/0 stays under its 100,000-character bar), the golden, e15, `kit/test/plan-helpers.mjs` (`hasElevated`), the catalogue-diff
+tests of CL, GM-c and the foundations, `mod/.../RegionsImpl.java`, `Batches.java`, `SiteFit.java`, `PlanChecks.java`, `ApiRules.java`,
+`ArchitectClient.java`, `DevServer.java`, `devserver/build.gradle`, sidecar `protocol.ts` and two tests, `tools/gate-chains.json`,
+`tools/step-inputs.json`, docs/DEVBRIDGE.md.
+
+**For the Steward RC (with LP), the areas for its `--only` filter:** a plan/0 with `layout: "elevated"` through `checkPlan` (fits,
+adjusted, refused `NO_FEATURE`, the first plan's `incomplete VOLUME` when the land is not generated); the artifact's `$.lots[].site` and
+`.affordance` (parse `site` with `SiteSpec.fromWire`); `RegionPlan.lots()` `LotSpec.site`; `DesignRequest.site` from it (DS's); a
+site-bound entry bound by `realiseApproved` (`lotEntries`), the bind refusals (not the lot box; `SITE_MISMATCH`) with nothing written,
+and PL's site Reasons at placement (`KEEP_LOST`, `SITE_DRIFTED`, `SITE_UNSUPPORTED`); an unmapped site lot writing nothing; Remove of a
+region with a site lot (exact); `Regions.affordances(planId)` for an elevated plan; feature `siteLots`; Steward's re-scored gap table (the
+three asks that waited on `layout.elevated` now answer `refused NO_FEATURE` on flat land); a connector to a site lot `unsupported until LP`
+(LP lifts it).
+
+**Steward's DS answers (2026-11-12; agreed by the coordinator with Steward, added to SL's scope):**
+1. **A variant lot needs no Architect change:** Steward puts the `Designs.siteVariant` entry id straight into `realiseApproved`'s
+   `lotEntries`, outside any group; a variant refused `SITE_UNFIT` falls back to a group item (`versionOf` + `site`).
+2. **A `massingFirst` group takes site items** (DS refused them; Steward's GroupPlanner is massing-first and tracks one group per build).
+   Built in the sidecar (`groups.ts`; no Java change but javadoc on `DesignRequest.site` and `GroupRequest.massingFirst`): a site item of
+   a massingFirst group gets no massing; it is created waiting (`designId ""`, stage `detail`, step "waiting for the group's massing
+   step"), and once no other item has a massing designing or awaiting approval (a failed or cancelled massing holds nothing; a group of
+   site items only starts them at once) it designs in one pass from its request (no `fromMassing`), in the same group: the group's
+   approvals, budget (soft pause, hard stop: a waiting item ends `budget`), cancellation and usage-limit holds apply to it. `count` and
+   `copyOf` stay refused for site items. Tests: `sidecar/test/site-design.test.ts` (the item waits through the massing and its approval,
+   then designs once with no massing and the group ends done; a failed massing does not hold it; a site-only group starts at once; count
+   and copyOf refused); in game, `sl-ingame`'s massingFirst round (below).
+
+**Checks** ($0; ports 8896/8897):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1167/1167 at 50a143b5 (sl.test.mjs 8/8); the catalogue-diff tests of CL, GM-c and the 7a foundation leave the flip to sl.test.mjs |
+| sidecar `npm ci && npm run check` | 834/834 (site-design.test.ts 20/20 with the three massingFirst cases); system-refs' compact plan/0 under 100,000 characters after shortening the entry's text |
+| mod `./gradlew build --offline --no-daemon` | pass; 1074 tests, 0 failures, 1 skipped (ApiSLTest 9/9, Api7bFTest 12/12 untouched) |
+| api-compat | clean before the DS merge (the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar); SL's own API package diff is javadoc only (DesignRequest.site, GroupRequest.massingFirst), so not re-run after the merge |
+| lint-structure / lint-look / water-lint / p3-lint | 68/0 / 13/0 / 135/135 / in the mod build |
+| `node tools/step-inputs.mjs check` | clean after `build` (336 steps) |
+| in game, run 20261112-050741-change at 979b3e10 | pl-ingame 86/0 and pl-undo 16/0 PASS (PL's steps over the changed `SiteFit`/`Batches`); sl-unit and sl-ingame failed on two gate bugs (e15 named but not moved; the survey box sent as an object), fixed |
+| in game, run 20261112-054511-change at 9b3cd9cb | **PASS** 3/3: unit-sidecar 834; `sl-unit` 435/0 (sl.test and the 7b/P0 tests 56/0, ApiSLTest + Api7bFTest, **424 committed plan fixtures byte-identical** against main b1ee8dcc, the 3 named asks move as named, v7b_sl_canopy new; the 59 asks: exactly `swamp_stilts/hollow`, `treetop_village/canopy`, `upside_down/hanging_village` move, unsupported -> refused NO_FEATURE, their bridges stay blocked, 0 malformed); `sl-ingame` 20/0 (fits: READY, a wrap_trunk canopy lot with 144 keep-critical logs; Survey.volume of the lot volume has the plan's sha (the kit's cut = the mod's freeze); the massingFirst group: the site item waits through the massing and its approval, then one design, group DONE, its entry bound to the lot; bind refusals for another size and SITE_MISMATCH with nothing written; realised PLACED at the frame with `architect_mc:site`; LotSpec.site = the artifact's; Regions.affordances answers; KEEP: 762 template cells, the other cells of the 34848-cell site volume unchanged; Remove E-flat 0. Adjusted: 1 of 2 placed, realised with no entry writes 0 cells, E-flat 0. Refused: NO_FEATURE, its realise writes nothing) |
+| gate-verifier (review only, DEV MODE) | **PASS** at 0ce54c5f: pad-lot and no-site byte identity (every Java and kit hook guarded on a site member; the 424 identical fixtures), the wire through the one `SiteSpec` parser, no 7bF signature changed (api diff javadoc only), a site lot never placed as a pad (no LotFitting, the frame, the bind refusals, the site rebuilt from the live IR), the massingFirst site-item logic (wait, start, cancel, budget, `siteWait` persisted), the 13 readings; sl.test 8/8 and site-design 20/20 re-run. Minor, fixed after (`Batches.tryStart`): a site lot item whose region is not live ran without its site (fail-open, probably unreachable): it now fails `OTHER` when its ext carries `architect_mc:site` and the site can't be read. Noted: `RegionItems.frozenFor` answers true for a region not live (the same shape, pre-existing, unchanged) |

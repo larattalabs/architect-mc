@@ -376,8 +376,13 @@ public final class SiteFit {
 		if (!sha.matches("[0-9a-f]{64}")) {
 			return null;
 		}
-		Path f = server.getWorldPath(LevelResource.ROOT).resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
-		if (!Files.isRegularFile(f)) {
+		Path world = server.getWorldPath(LevelResource.ROOT);
+		Path f = volumeFile(world, sha);
+		if (f == null) {
+			List<dev.larattalabs.architect.region.RegionsImpl.Live> live = dev.larattalabs.architect.region.RegionsImpl.all();
+			f = fromRegionBlobs(world, sha, live.stream().map(l -> l.rec().id).toList(), live.stream().map(l -> l.ir().blobs()).toList());
+		}
+		if (f == null) {
 			return null;
 		}
 		try {
@@ -393,6 +398,67 @@ public final class SiteFit {
 		}
 		VOLUMES.put(sha, d);
 		return d;
+	}
+
+	/**
+	 * (7b SL) The frozen volume's file: this world's {@code architect/volumes/<sha>.bin} first (where {@code Survey.volume} and a region
+	 * plan's two-plan flow freeze it), else a region's own copy {@code architect-regions/<id>/volumes/<sha>.bin} (a region site lot's
+	 * volume, {@code RegionBlobs.installVolumes}); null when neither exists (the checks then fail closed, {@code SITE_DRIFTED}).
+	 */
+	public static @Nullable Path volumeFile(Path world, String sha) {
+		Path f = world.resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
+		if (Files.isRegularFile(f)) {
+			return f;
+		}
+		Path root = dev.larattalabs.architect.region.RegionStore.root(world);
+		if (!Files.isDirectory(root)) {
+			return null;
+		}
+		try (var st = Files.list(root)) {
+			for (Path d : st.sorted().toList()) {
+				Path g = d.resolve("volumes").resolve(sha + ".bin");
+				if (Files.isRegularFile(g)) {
+					return g;
+				}
+			}
+		} catch (IOException e) {
+			return null;
+		}
+		return null;
+	}
+
+	/**
+	 * (7b SL) A region site lot's volume kept only as its IR's side blob (the kit crops a site lot's lot + 8 out of a volume the plan
+	 * read and records it as a blob of kind {@code volume}, e.g. {@code site_<lotId>}): each region's blob copy
+	 * ({@code architect-regions/<id>/blobs/<blob sha>.bin}, gzip ARVX) of kind {@code volume} is read, gunzipped and checked against
+	 * {@code sha} (the ARVX sha of the uncompressed bytes); the first that matches is frozen into this world's
+	 * {@code architect/volumes/<sha>.bin} ({@link VolumeSurvey#freeze}: written once, read back), whose path is answered, so PL's read
+	 * path works from then. Null when none matches. {@code regions.get(i)} is a region id, {@code blobs.get(i)} its IR's blobs.
+	 */
+	public static @Nullable Path fromRegionBlobs(Path world, String sha, List<String> regions, List<List<dev.larattalabs.architect.region.Ir.BlobRef>> blobs) {
+		for (int i = 0; i < regions.size(); i++) {
+			for (dev.larattalabs.architect.region.Ir.BlobRef b : blobs.get(i)) {
+				if (!"volume".equals(b.kind()) || !b.sha().matches("[0-9a-f]{64}")) {
+					continue;
+				}
+				Path f = dev.larattalabs.architect.region.RegionBlobs.file(world, regions.get(i), b.sha());
+				if (!Files.isRegularFile(f)) {
+					continue;
+				}
+				try {
+					byte[] gz = Files.readAllBytes(f);
+					if (!Arvx.sha256(Arvx.gunzip(gz)).equals(sha)) {
+						continue;
+					}
+					Path to = world.resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
+					VolumeSurvey.freeze(to, gz, sha);
+					return to;
+				} catch (IOException | RuntimeException e) {
+					Architect.LOGGER.warn("Region {} volume blob {} can't be read: {}", regions.get(i), b.sha(), e.toString());
+				}
+			}
+		}
+		return null;
 	}
 
 	/** The frozen classes of a decoded volume; MISSING outside its box. */

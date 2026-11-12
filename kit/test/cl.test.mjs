@@ -209,7 +209,8 @@ test('§10 item 12: the catalogue: the three flips against the foundation\'s arc
   // ((6d RV) the revision.* entries are rv-a.test.mjs's)
   // ((GM-c) connector.drawbridge's flip is gm-c.test.mjs's)
   // ((7bF) form.hidden_room and rule.suspended re-reserved until 7c are f7b-foundation.test.mjs's)
-  const cl = (xs) => xs.filter((x) => !F.includes(x.id ?? x) && !/^(wall\.|connector\.(wall|gate|drawbridge)$|revision\.|form\.hidden_room$|rule\.suspended$)/.test(x.id ?? x));
+  // ((7b SL) layout.elevated's flip is sl.test.mjs's)
+  const cl = (xs) => xs.filter((x) => !F.includes(x.id ?? x) && !/^(wall\.|connector\.(wall|gate|drawbridge)$|revision\.|form\.hidden_room$|rule\.suspended$|layout\.elevated$)/.test(x.id ?? x));
   assert.deepEqual(cl(d.reservedToSupported), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual(cl(d.schemaVersionBumps).map((x) => x.id).sort(), ['connector.ladder', 'connector.stair', 'connector.switchback']);
   assert.deepEqual([cl(d.added), d.removed, d.retired, d.otherStateChanges, cl(d.untilChanged), cl(d.notesChanged), cl(d.limitsChanged)], [[], [], [], [], [], [], []]);

@@ -560,6 +560,37 @@ public final class PlanChecks {
 		return false;
 	}
 
+	/**
+	 * (7b SL) Whether a plan has an elevated zone: a {@code layout: "elevated"} anywhere under {@code zones} (a zone's {@code program}, or
+	 * a district's). Its site lots stand on affordances found in a frozen volume, so with one a check plans twice, as a tunnel's.
+	 */
+	static boolean hasElevated(JsonObject plan) {
+		return plan.get("zones") instanceof JsonArray a && elevatedIn(a, 0);
+	}
+
+	private static boolean elevatedIn(JsonElement e, int depth) {
+		if (depth > 8 || e == null) {
+			return false;
+		}
+		if (e instanceof JsonObject o) {
+			if (o.get("layout") instanceof JsonElement l && l.isJsonPrimitive() && "elevated".equals(l.getAsString())) {
+				return true;
+			}
+			for (var x : o.entrySet()) {
+				if (elevatedIn(x.getValue(), depth + 1)) {
+					return true;
+				}
+			}
+		} else if (e instanceof JsonArray a) {
+			for (JsonElement x : a) {
+				if (elevatedIn(x, depth + 1)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** (6c H §10) The kinds whose parts ask fluid volumes in a check: the bodies (pond, fountain, waterfall, the moat channel) and the quay. */
 	static final java.util.Set<String> H_KINDS = java.util.Set.of("pond", "fountain", "waterfall", "quay", "channel");
 
@@ -634,7 +665,7 @@ public final class PlanChecks {
 		String blobId, String surveySha, byte[] survey, @Nullable LoadPolicy load, long t0, Object[] first) {
 		JsonObject planned = (JsonObject) first[0];
 		JsonArray need = planned.get("needVolumes") instanceof JsonArray a ? a : new JsonArray();
-		if (need.isEmpty() || !(hasTunnel(r.plan()) || hasH(r.plan()) || hasCaveForm(r.plan()) || wetAsked(planned))) {
+		if (need.isEmpty() || !(hasTunnel(r.plan()) || hasH(r.plan()) || hasCaveForm(r.plan()) || hasElevated(r.plan()) || wetAsked(planned))) {
 			lastVolumePass = null;
 			return CompletableFuture.completedFuture(first);
 		}
@@ -659,7 +690,8 @@ public final class PlanChecks {
 				vp.addProperty("read", 0);
 				vp.addProperty("why", why);
 				lastVolumePass = vp;
-				checkNote(planned, (hasTunnel(r.plan()) ? "the tunnels" : hasCaveForm(r.plan()) && !hasH(r.plan()) ? "the cave forms" : "the plan's water") + " asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
+				checkNote(planned, (hasTunnel(r.plan()) ? "the tunnels" : hasCaveForm(r.plan()) && !hasH(r.plan()) ? "the cave forms" : hasElevated(r.plan())
+					&& !hasH(r.plan()) ? "the elevated zones" : "the plan's water") + " asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s") + " (" + nCells + " cells) that could not be read ("
 					+ why + "): prepare (or check with load: \"generate\"), then check again");
 				Architect.LOGGER.info("Plan check: volume pass not read ({}), {} boxes, {} cells", why, need.size(), nCells);
 				return CompletableFuture.completedFuture(first);
@@ -1776,6 +1808,14 @@ public final class PlanChecks {
 			if (l == null) {
 				return "lot " + e.getKey() + " is not a lot of the artifact";
 			}
+			// (7b SL) a site lot: the bound design is exactly its box in the site's frame and not bound to another volume (every lot, provisional
+			// or not; a pad lot is unchanged)
+			if (dev.larattalabs.architect.site.SiteLots.isSiteLot(l)) {
+				String sw = siteLotProblem(e.getKey(), e.getValue(), l);
+				if (sw != null) {
+					return sw;
+				}
+			}
 			if (!(l.get("provisional") instanceof JsonElement pv && pv.getAsBoolean())) {
 				continue;
 			}
@@ -1801,6 +1841,24 @@ public final class PlanChecks {
 			}
 		}
 		return null;
+	}
+
+	/** (7b SL) {@link dev.larattalabs.architect.site.SiteLots#bindProblem} of an artifact's site lot bound to {@code entry}, or null. */
+	static @Nullable String siteLotProblem(String lotId, String entry, JsonObject lot) {
+		dev.larattalabs.architect.api.SiteSpec site;
+		try {
+			site = dev.larattalabs.architect.site.SiteLots.siteOf(lot);
+		} catch (IllegalArgumentException x) {
+			return "lot " + lotId + ": the artifact's site is malformed (" + x.getMessage() + "): check the plan again";
+		}
+		String id = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;
+		var bp = Blueprints.get(id);
+		if (bp == null) {
+			return "lot " + lotId + ": no library entry " + entry;
+		}
+		var ent = Blueprints.entry(id);
+		return dev.larattalabs.architect.site.SiteLots.bindProblem(lotId, entry, site, lot.get("box"), bp.sizeX(), bp.sizeY(), bp.sizeZ(), ent == null ? null
+			: ent.json());
 	}
 
 	/**
