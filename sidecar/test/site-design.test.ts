@@ -122,15 +122,73 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
     expect(h.sc.designs.list().length).toBe(0);
   });
 
-  it("refuses a blob that is not the spec's volume (the kept volume is content-addressed) and a site item under massingFirst", async () => {
+  it("refuses a blob that is not the spec's volume (the kept volume is content-addressed)", async () => {
     const wrong = put(h, RIFT.bytes);
     const a = await call(h, { type: 'design.request', request: req({ site: { ...CLIFF.spec, volumeBlobId: wrong } }) });
     expect(a.ok).toBe(false);
     expect(a.error).toMatch(/is not the site's frozen volume/);
     expect(fs.existsSync(path.join(h.cfg.dataDir, 'sites', `${CLIFF.spec.volumeSha}.arvx`))).toBe(false);
-    const g = await call(h, { type: 'design.group', group: { name: 'g', bible: 'rustic', massingFirst: true, items: [{ type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'a', site: { ...CLIFF.spec, volumeBlobId: put(h, CLIFF.bytes) } }] } });
-    expect(g.ok).toBe(false);
-    expect(g.error).toMatch(/no massing pass/);
+  });
+
+  // (7b SL, Steward's DS answers 2026-11-12) a massingFirst group takes site-aware items: they wait for the group's massing step, then
+  // design in one pass (no massing of their own) in the same group; count and copyOf stay refused for them
+  it('a massingFirst group with a site item: the site item waits for the massing step, then designs in one pass in the same group', async () => {
+    const blob = put(h, CLIFF.bytes);
+    const plain = { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'hall' };
+    const sited = { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'cliff', site: { ...CLIFF.spec, volumeBlobId: blob } };
+    const a = await call(h, { type: 'design.group', group: { name: 'mf', bible: 'rustic', massingFirst: true, items: [plain, sited] } });
+    expect(a.error).toBeUndefined();
+    const gid = a.result!.groupId as string;
+    const g0 = h.sc.groups.get(gid)!;
+    const site0 = g0.items.find((x) => x.itemKey === 'cliff')!;
+    expect(site0.designId).toBe('');
+    expect(site0.step).toMatch(/waiting for the group's massing step/);
+    expect(g0.items.find((x) => x.itemKey === 'hall')!.stage).toBe('massing');
+    await until(() => h.sc.groups.get(gid)!.status === 'awaiting_approval', 300_000);
+    const g1 = h.sc.groups.get(gid)!;
+    expect(g1.awaiting).toEqual(['hall']);
+    expect(g1.items.find((x) => x.itemKey === 'cliff')!.designId, 'still waiting while a massing awaits approval').toBe('');
+    const ap = await call(h, { type: 'group.approve', groupId: gid, approve: ['hall'] });
+    expect(ap.error).toBeUndefined();
+    await until(() => ['done', 'failed'].includes(h.sc.groups.get(gid)!.status), 300_000);
+    const g2 = h.sc.groups.get(gid)!;
+    expect(g2.status, JSON.stringify(g2.items.map((x) => [x.itemKey, x.status, x.step]))).toBe('done');
+    const site2 = g2.items.find((x) => x.itemKey === 'cliff')!;
+    expect(site2.designIds).toHaveLength(1);
+    const d = h.sc.designs.get(site2.designId)!;
+    expect(d.request.site?.volumeSha).toBe(CLIFF.spec.volumeSha);
+    expect(d.request.massing ?? false, 'no massing of its own').toBe(false);
+    expect(d.request.fromMassing).toBeUndefined();
+    expect(d.request.group).toBe(gid);
+    expect(g2.done).toBe(2);
+  });
+
+  it('a massingFirst group whose massing fails still designs its site item (a failed massing holds nothing)', async () => {
+    const blob = put(h, CLIFF.bytes);
+    const tiny = { type: 'house', style: 'rustic', features: [], maxSize: { x: 11, y: 10, z: 11 }, itemKey: 'tiny' };
+    const sited = { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'cliff', site: { ...CLIFF.spec, volumeBlobId: blob } };
+    const a = await call(h, { type: 'design.group', group: { name: 'mf5', bible: 'rustic', massingFirst: true, items: [tiny, sited] } });
+    expect(a.error).toBeUndefined();
+    const gid = a.result!.groupId as string;
+    await until(() => ['done', 'failed'].includes(h.sc.groups.get(gid)!.status), 300_000);
+    const g = h.sc.groups.get(gid)!;
+    expect(g.items.find((x) => x.itemKey === 'tiny')!.status, 'the sim massing refuses the 11x10x11 cap').toBe('failed');
+    expect(g.items.find((x) => x.itemKey === 'cliff')!.status).toBe('done');
+    expect(g.status).toBe('done');
+  });
+
+  it('a massingFirst group of site items only starts them at once; count and copyOf stay refused for site items', async () => {
+    const blob = put(h, CLIFF.bytes);
+    const sited = { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'cliff', site: { ...CLIFF.spec, volumeBlobId: blob } };
+    const a = await call(h, { type: 'design.group', group: { name: 'mf2', bible: 'rustic', massingFirst: true, items: [sited] } });
+    expect(a.error).toBeUndefined();
+    const g = h.sc.groups.get(a.result!.groupId as string)!;
+    expect(g.items[0]!.designId).not.toBe('');
+    const n = await call(h, { type: 'design.group', group: { name: 'mf3', bible: 'rustic', massingFirst: true, items: [{ ...sited, count: 2 }] } });
+    expect(n.ok).toBe(false);
+    const c = await call(h, { type: 'design.group', group: { name: 'mf4', bible: 'rustic', massingFirst: true, items: [sited, { type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'b', copyOf: 'cliff' }] } });
+    expect(c.ok).toBe(false);
+    await until(() => ['done', 'failed'].includes(h.sc.groups.get(g.id)!.status), 300_000);
   });
 
   let entryId = '';

@@ -530,7 +530,7 @@ export const GroupItemInput = DesignRequestBase.extend({
   count: z.number().int().min(1).max(MAX_GROUP_ITEMS).optional().describe('(0b, C1) placements of this item: <key>, <key>#2 ... <key>#n; every copyCap-th starts a new archetype, the others are $0 copies'),
   copyOf: ItemKey.optional().describe("(0b, C1) this item is a copy of that item's archetype (counts toward its copyCap)"),
   effort: ItemEffort.optional().describe('(0b, C8) default auto'),
-  site: SiteSpec.optional().describe('(7b DS) a site-aware item: designed into this site in one pass (no massing first, no count or copyOf: its site variants are Designs.siteVariant)'),
+  site: SiteSpec.optional().describe('(7b DS) a site-aware item: designed into this site in one pass, no massing of its own (7b SL: in a massingFirst group it waits for the group\'s massing step, then designs in the same group); no count or copyOf: its site variants are Designs.siteVariant'),
 }).superRefine(noDuplicateFeatures).superRefine((it, ctx) => {
   if (it.site && ((it.count ?? 1) > 1 || it.copyOf !== undefined)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware item is one placement: its site variants come from Designs.siteVariant, not count or copyOf' });
 });

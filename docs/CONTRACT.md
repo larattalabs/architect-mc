@@ -28030,3 +28030,16 @@ and PL's site Reasons at placement (`KEEP_LOST`, `SITE_DRIFTED`, `SITE_UNSUPPORT
 region with a site lot (exact); `Regions.affordances(planId)` for an elevated plan; feature `siteLots`; Steward's re-scored gap table (the
 three asks that waited on `layout.elevated` now answer `refused NO_FEATURE` on flat land); a connector to a site lot `unsupported until LP`
 (LP lifts it).
+
+**Steward's DS answers (2026-11-12; agreed by the coordinator with Steward, added to SL's scope):**
+1. **A variant lot needs no Architect change:** Steward puts the `Designs.siteVariant` entry id straight into `realiseApproved`'s
+   `lotEntries`, outside any group; a variant refused `SITE_UNFIT` falls back to a group item (`versionOf` + `site`).
+2. **A `massingFirst` group takes site items** (DS refused them; Steward's GroupPlanner is massing-first and tracks one group per build).
+   Built in the sidecar (`groups.ts`; no Java change but javadoc on `DesignRequest.site` and `GroupRequest.massingFirst`): a site item of
+   a massingFirst group gets no massing; it is created waiting (`designId ""`, stage `detail`, step "waiting for the group's massing
+   step"), and once no other item has a massing designing or awaiting approval (a failed or cancelled massing holds nothing; a group of
+   site items only starts them at once) it designs in one pass from its request (no `fromMassing`), in the same group: the group's
+   approvals, budget (soft pause, hard stop: a waiting item ends `budget`), cancellation and usage-limit holds apply to it. `count` and
+   `copyOf` stay refused for site items. Tests: `sidecar/test/site-design.test.ts` (the item waits through the massing and its approval,
+   then designs once with no massing and the group ends done; a failed massing does not hold it; a site-only group starts at once; count
+   and copyOf refused); in game, `sl-ingame`'s massingFirst round (below).

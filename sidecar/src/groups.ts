@@ -60,6 +60,11 @@ export interface GroupWork {
   ordinals?: Record<string, number>;
   /** (6c 0a) the breakdown, seq and lastAction bookkeeping (breakdown.ts) */
   bd?: BreakdownWork;
+  /**
+   * (7b SL, Steward's DS answers 2026-11-12) a massingFirst group's site-aware items not started yet: designed in one pass (no massing of
+   * their own) once the group's massing step is over (no other item's massing designing or awaiting approval)
+   */
+  siteWait?: string[];
 }
 
 const FINAL_DESIGN = new Set(['done', 'failed', 'cancelled']);
@@ -126,12 +131,13 @@ export class Groups {
     const itemRequests: Record<string, DesignRequestT> = {};
     // (0b) count / copyOf / copyCap: the placements (originals and copies); refusals before anything is created
     const expanded = expandItems(req);
-    // (7b DS) site-aware items: designed in one pass (no massing first), their volumes kept now; refusals before anything is created
-    for (const [i, it] of req.items.entries()) {
+    // (7b DS) site-aware items: designed in one pass (no massing first), their volumes kept now; refusals before anything is created.
+    // (7b SL) a massingFirst group takes them too: they wait for the group's massing step, then design in one pass (siteWait)
+    for (const it of req.items) {
       if (!it.site) continue;
-      if (req.massingFirst) throw new ClientError(`item ${it.itemKey ?? `item${i + 1}`}: a site-aware item has no massing pass (7b DS); send its group without massingFirst, or the item as its own design`);
       this.sc.acceptSite(it.site);
     }
+    const siteWait: string[] = [];
     const waveOf = new Map<string, number>();
     const ordinals: Record<string, number> = {};
     for (const e of expanded) {
@@ -182,6 +188,27 @@ export class Groups {
           stage: 'copy' as const,
           kind: 'copy' as const,
           copyOf: e.copyOf!,
+          ...small,
+        });
+        continue;
+      }
+      // (7b SL) a site-aware item of a massingFirst group: no massing; its one-pass design starts after the group's massing step
+      if (req.massingFirst && it.site) {
+        itemRequests[itemKey] = request;
+        siteWait.push(itemKey);
+        items.push({
+          itemKey,
+          ...(ext && Object.keys(ext).length ? { ext } : {}),
+          designId: '',
+          status: 'queued',
+          step: 'waiting for the group\'s massing step (a site-aware item: one pass, no massing)',
+          cost: zeroCost(),
+          wave,
+          role,
+          model,
+          type: request.type,
+          ...(request.name ? { name: request.name } : {}),
+          stage: 'detail' as const,
           ...small,
         });
         continue;
@@ -241,6 +268,7 @@ export class Groups {
       updatedAt: now,
     };
     if (Object.keys(itemRequests).length) this.work(id).itemRequests = itemRequests;
+    if (siteWait.length) this.work(id).siteWait = siteWait;
     if (copies.length) this.work(id).ordinals = ordinals;
     // (6c 0a) the breakdown: the bible line is claimed now (the owner's first group to pin this version carries it)
     this.work(id).bd = { designs: {}, items: {}, lastTick: now, bible: bibleLine(this.sc, g) };
@@ -257,6 +285,8 @@ export class Groups {
     this.refresh(g, true);
     this.sc.log.info(`group ${id} "${g.name}": ${items.length} item(s)${copies.length ? ` (${copies.length} cop${copies.length === 1 ? 'y' : 'ies'}, cap ${g.copyCap})` : ''}, bible ${pin.id} v${pin.version}, concurrency ${g.concurrency}${g.budgetUsd !== undefined ? `, budget $${g.budgetUsd}` : ''}${g.massingFirst ? `, massing first (approval: ${g.approvalUi}, ${g.maxRedirects} redirect(s) per item)` : ''}`);
     for (const d of designs) this.sc.scheduler.enqueue(d.id);
+    // (7b SL) a group whose only items are site-aware has no massing step: they start now
+    if (siteWait.length) this.refresh(g);
     return g;
   }
 
@@ -423,8 +453,8 @@ export class Groups {
       }
       const d = it.designId ? this.sc.designs.get(it.designId) : undefined;
       if (d && !isFinalDesign(d)) this.sc.stopDesign(it.designId, 'cancelled', undefined, 'cancelled with its group');
-      // (4c) an item awaiting approval has no design left to cancel
-      if (it.stage === 'approval') (this.work(id).ended ??= {})[it.itemKey] ??= 'cancelled';
+      // (4c) an item awaiting approval has no design left to cancel; (7b SL) nor has a site item still waiting for the massing step
+      if (it.stage === 'approval' || this.work(id).siteWait?.includes(it.itemKey)) (this.work(id).ended ??= {})[it.itemKey] ??= 'cancelled';
     }
     this.refresh(g);
     this.sc.log.info(`group ${id} cancelled (finished items stay in the library)`);
@@ -664,6 +694,38 @@ export class Groups {
     if (g) this.refresh(g);
   }
 
+  /**
+   * (7b SL) Starts a massingFirst group's waiting site-aware items once its massing step is over: no other item (a copy aside) has a
+   * massing designing or awaiting approval (a failed or cancelled massing holds nothing). Each is designed in one pass from its request (no fromMassing), in the same group (its
+   * budget, approvals and usage-limit holds). Not while the group is cancelled, paused by its soft budget or past its hard one.
+   */
+  private startSiteItems(g: Group, w: GroupWork): void {
+    if (!w.siteWait?.length || w.cancelled || w.paused) return;
+    // (a massing that failed or was cancelled holds nothing: its item has ended)
+    const massing = g.items.some((it) => it.kind !== 'copy' && !w.siteWait!.includes(it.itemKey) && !w.ended?.[it.itemKey]
+      && (it.stage === 'approval' || (it.stage === 'massing' && !['failed', 'cancelled'].includes(this.sc.designs.get(it.designId)?.status ?? 'queued'))));
+    if (massing) return;
+    if (g.budgetUsd !== undefined && g.cost.usd >= g.budgetUsd) return; // (the hard budget ends them in derive)
+    const started: string[] = [];
+    for (const key of w.siteWait) {
+      if (w.ended?.[key]) continue;
+      const it = g.items.find((x) => x.itemKey === key);
+      const req = w.itemRequests?.[key];
+      if (!it || !req) continue;
+      const d = this.sc.designs.create(req);
+      it.designId = d.id;
+      it.designIds = [d.id];
+      it.status = d.status;
+      it.step = d.step;
+      started.push(d.id);
+      this.sc.log.info(`group ${g.id}: ${key} (site-aware) designs in one pass after the massing step: ${d.id}`);
+    }
+    w.siteWait = w.siteWait.filter((k) => w.ended?.[k]);
+    if (!w.siteWait.length) delete w.siteWait;
+    this.sc.store.markDirty();
+    for (const id of started) this.sc.scheduler.enqueue(id);
+  }
+
   /** One pass; returns whether the group changed. */
   private derive(g: Group): boolean {
     // (6c 0a) the breakdown's clock fields change on every pass: they alone are no change
@@ -671,6 +733,7 @@ export class Groups {
     const before = sans(g);
     if (isFinalGroup(g)) return false;
     const w = this.work(g.id);
+    this.startSiteItems(g, w);
     let cost: Cost = zeroCost();
     for (const it of g.items) {
       // (0b) a copy follows its variant job
@@ -695,7 +758,7 @@ export class Groups {
         }
       }
       const ended = w.ended?.[it.itemKey];
-      if (ended && it.stage === 'approval') {
+      if (ended && (it.stage === 'approval' || w.siteWait?.includes(it.itemKey))) {
         it.status = 'cancelled';
         it.step = ended === 'budget' ? 'stopped: the group budget is spent' : 'cancelled (not approved)';
         if (ended === 'budget') it.error = 'budget';
@@ -718,7 +781,7 @@ export class Groups {
       if (g.cost.usd >= g.budgetUsd) {
         g.reason = 'budget';
         for (const it of open) {
-          if (it.stage === 'approval') (w.ended ??= {})[it.itemKey] = 'budget';
+          if (it.stage === 'approval' || w.siteWait?.includes(it.itemKey)) (w.ended ??= {})[it.itemKey] = 'budget';
           // (0b) copies cost nothing: they go on (a copy whose archetype is stopped fails with source_failed)
           else if (it.kind === 'copy') continue;
           else this.sc.stopDesign(it.designId, 'budget', 'budget', `stopped: the group budget ($${g.budgetUsd}) is spent`);

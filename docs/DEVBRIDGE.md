@@ -389,7 +389,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - **2026-11-11 (7b slice SL):** new (`SliceSlDev`, generated headless too) `dev.sl.plan {plan}`: the plan's `RegionPlan.lots()` ->
   `{known, lots: [{id, stage, box, floorY, front, max, site}]}` (`site` = `LotSpec.site` in its wire form, or null for a pad lot);
   `dev.sl.lot {region, lot}`: the region's lot record and its placed site -> `{known, state, entry, siteId, site: {blueprint, origin,
-  rotation, box, restoreBox, state, ext (with `architect_mc:site`)} | null}`.
+  rotation, box, restoreBox, state, ext (with `architect_mc:site`)} | null}`. (2026-11-12, Steward's DS answers) `dev.sl.group {name,
+  massingFirst?: true, items: [{key, site?, buildingType?, size?}]}` (`Designs.requestGroup`, bible rustic -> `{groupId}` or `{refused}`),
+  `dev.sl.groupState {groupId}` (`Designs.group` -> `{known, status, awaiting, items: [{key, stage, status, designId, designIds, entryId,
+  step}]}`) and `dev.sl.approve {groupId, approve: [keys]}` (`Designs.approveGroup` -> `{approved}` or `{refused}`).
 
 - **2026-11-11 (7b slice AF):** new (`SliceAfDev`, generated headless too) `dev.af.site {lot: [x0,y0,z0,x1,y1,z1], fit, load?:
   loaded|generated:<n>|bounded:<n>}`: `Survey.site` in the player's level through the public API (the lot plus 8 frozen to

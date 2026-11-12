@@ -22,6 +22,9 @@
 //                             adjusted two huts on one tree: one placed (the count tolerance), realised with no entry: nothing
 //                                      written (a site lot writes no pad), E-flat 0
 //                             refused  a zone over open flat land (required false): refused NO_FEATURE; realiseApproved writes nothing
+//                           and a Steward-shaped massingFirst group with the fits plan's site lot as an item (Steward's DS answers,
+//                           2026-11-12): the site item waits while the other item's massing designs and awaits approval, then designs
+//                           in one pass (no massing) in the same group after the approval
 //     report                REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7b-sl/<step>.json in the main checkout (GATE7BSL_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -53,12 +56,12 @@ const OWNER = 'test:sl';
 /** The tree's axis on the flat world. */
 const TX = 9600, TZ = 9600;
 
-/** The fixtures that move by name (byte identity): the recorded asks that waited on layout.elevated, and e15 (its elevated zone left). */
+/** The fixtures that move by name (byte identity): the recorded asks that waited on layout.elevated. (e15 lost its elevated zone, but
+ * both sides plan the head's fixture, so it does not move.) */
 export const SL_MOVED = Object.freeze({
   'asks/treetop_village.json': 'SL: canopy (layout.elevated) answers refused NO_FEATURE on the flat asks claim (was unsupported until 7b); its bridges stay blocked DEPENDENCY',
   'asks/swamp_stilts.json': 'SL: hollow (layout.elevated) answers refused NO_FEATURE on the flat asks claim (was unsupported until 7b); its bridges stay blocked DEPENDENCY',
   'asks/upside_down.json': 'SL: hanging_village (layout.elevated) answers refused NO_FEATURE on the flat asks claim (was unsupported until 7b); its bridge stays blocked DEPENDENCY',
-  'extension/e15_every_reserved_a.json': 'SL: its layout.elevated zone z12 left e15 when the layout shipped',
 });
 const ASKS_MOVE = /^(treetop_village|swamp_stilts|upside_down)\//;
 
@@ -217,9 +220,39 @@ steps.ingame = async () => {
       `fits: the artifact's lots[] hut carries site (wrap_trunk, its frame at the box's corner, ${lot?.site?.keepCritical?.length} keep-critical logs), fitBox = box, no entrance, affordance ${json(lot?.affordance)}`, r.lot);
     if (!lot?.site) { out.fits = r; return out; }
     // the mod's own freeze of the lot's volume has the plan's sha (the kit cut it from the zone's volume)
-    const sv = await call('dev.survey.volume', { box: lot.site.volume, load: 'loaded' }, 600_000);
+    const sv = await call('dev.survey.volume', { box: arr(lot.site.volume), load: 'loaded' }, 600_000);
     r.survey = { sha: sv.sha, missing: sv.missingColumns };
     check(sv.sha === lot.site.volumeSha && sv.missingColumns === 0, `fits: Survey.volume of the lot's site volume freezes the plan's sha (${String(sv.sha).slice(0, 12)}): the kit's cut equals the mod's survey`, { sv: sv.sha, plan: lot.site.volumeSha });
+    // (Steward's DS answers 2026-11-12) a Steward-shaped massingFirst group with the site lot as an item: it waits for the group's
+    // massing step, then designs in one pass in the same group (the sim designer)
+    {
+      const gq = await call('dev.sl.group', { name: 'sl_mf', items: [{ key: 'hall', size: [20, 24, 20] }, { key: 'hut', site: lot.site }] }, 120_000);
+      const G = { groupId: gq.groupId ?? null, refused: gq.refused ?? null };
+      check(!!gq.groupId, `massingFirst: Designs.requestGroup of a massingFirst group with the site lot as an item is accepted (${gq.refused ?? gq.groupId})`, G);
+      if (gq.groupId) {
+        const st0 = await call('dev.sl.groupState', { groupId: gq.groupId }, 60_000);
+        const hut0 = st0.items?.find((x) => x.key === 'hut');
+        G.first = { hall: st0.items?.find((x) => x.key === 'hall')?.stage, hut: { designId: hut0?.designId, step: hut0?.step } };
+        let st = st0;
+        for (let t = 0; t < 120 && st.status !== 'AWAITING_APPROVAL' && !['DONE', 'FAILED', 'CANCELLED'].includes(st.status); t++) { await L.sleep(2000); st = await call('dev.sl.groupState', { groupId: gq.groupId }, 60_000); }
+        const hutA = st.items?.find((x) => x.key === 'hut');
+        G.awaiting = { status: st.status, awaiting: st.awaiting, hutDesign: hutA?.designId };
+        check(G.first.hall === 'MASSING' && hut0?.designId === '' && st.status === 'AWAITING_APPROVAL' && json(st.awaiting) === json(['hall']) && hutA?.designId === '',
+          `massingFirst: the hall's massing designs and awaits approval while the site item waits with no design (${hut0?.step})`, G);
+        const ap = await call('dev.sl.approve', { groupId: gq.groupId, approve: ['hall'] }, 60_000);
+        for (let t = 0; t < 300 && !['DONE', 'FAILED', 'CANCELLED'].includes(st.status); t++) { await L.sleep(2000); st = await call('dev.sl.groupState', { groupId: gq.groupId }, 60_000); }
+        const hutE = st.items?.find((x) => x.key === 'hut');
+        G.end = { approved: ap.approved ?? ap.refused, status: st.status, hut: { status: hutE?.status, designIds: hutE?.designIds, entryId: hutE?.entryId, step: hutE?.step } };
+        check(!!ap.approved && ['DONE', 'FAILED'].includes(st.status) && hutE?.designIds?.length === 1 && hutE.designId !== '',
+          `massingFirst: after approval the site item designs in one pass (one design, no massing) in the same group; the group ends ${st.status} (hut ${hutE?.status}: ${String(hutE?.step).slice(0, 120)})`, G.end);
+        if (hutE?.entryId) {
+          const en = await call('dev.ds.entry', { entryId: hutE.entryId }, 60_000).catch(() => null);
+          G.binding = en?.binding ?? null;
+          check(en?.binding?.volumeSha === lot.site.volumeSha && en.binding.lotId === 'hut', 'massingFirst: the site item\'s entry is bound to the lot (SiteBinding: the lot volume\'s sha, lot hut)', G.binding);
+        }
+      }
+      r.massingFirst = G;
+    }
     // SV's trunk house built on the lot's Site (a $0 site variant), written to the library as sl_hut, bound by its sidecar site
     const file = volumeFile(lot.site.volumeSha);
     check(!!file, 'fits: the frozen volume file is in the world (architect/volumes)', { file });
