@@ -398,7 +398,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   (`Sites.remove`, a site or a cell site), `dev.pl.reload {}` (the library), `dev.pl.record {site}` (the record's blueprint, boxes, ext
   and whether it is site-bound) and `dev.pl.move {site, by: [dx, dy, dz]}` (the internal move: refused for a site-bound placement). `site`
   is a `SiteSpec` in its wire form (`kit/schemas/site-spec.json`). Driven by `tools/gate7bpl.mjs`.
-- **2026-11-11 (7b slice DS):** new (`SliceDsDev`, generated headless too) `dev.ds.request {site, plain?, type?, style?, name?, notes?, opKey?}`
+- **2026-11-11 (7b slice DS):** new (`SliceDsDev`, generated headless too) `dev.ds.request {site, plain?, buildingType?, style?, name?, notes?, opKey?}`
   (`Designs.request` of a cabin with `DesignRequest.site`; `plain: true` sends the same request without it, for the BRIEF diff) ->
   `{designId}`, `dev.ds.design {designId}` (`Designs.get`: `{status, step, entryId?, error?, entry?}`), `dev.ds.entry {entryId}` (the loaded
   entry: `{known, binding (SiteBinding.of), derivation {source, sourceVersion, kind, recipe}, ext, size}`) and `dev.ds.variant {entryId,

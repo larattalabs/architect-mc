@@ -22,7 +22,7 @@ public final class SliceDsDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.ds.request", 60_000, "{site (a site spec's wire), plain?, type?, style?, name?, notes?, opKey?} - (7b DS) Designs.request with a "
+		DevBridge.register("dev.ds.request", 60_000, "{site (a site spec's wire), plain?, buildingType?, style?, name?, notes?, opKey?} - (7b DS) Designs.request with a "
 			+ "site (the volume sent from this world's frozen file) -> {designId} or {refused, detail}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				// {plain: true}: the same request without the site (the BRIEF diffed against a plain one)
@@ -30,7 +30,7 @@ public final class SliceDsDev {
 				SiteSpec site = SiteSpec.fromWire(req.getAsJsonObject("site"));
 				// the 26-argument (1.52.0) constructor: type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible,
 				// group, profile, bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey
-				DesignRequest r = new DesignRequest(f.optStr("type", "cabin"), f.optStr("style", "rustic"), null, List.of(), new BlockSize(20, 24, 20), f.optStr(
+				DesignRequest r = new DesignRequest(f.optStr("buildingType", "cabin"), f.optStr("style", "rustic"), null, List.of(), new BlockSize(20, 24, 20), f.optStr(
 					"name", null), f.optStr("notes", null), null, null, null, null, null, null, null, List.of(), null, false, null, null, null, null, null, null, null,
 					null, f.optStr("opKey", null)).withSite(plain ? null : site);
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().designs().request(r)).thenCompose(x -> x).thenApply(id -> {
