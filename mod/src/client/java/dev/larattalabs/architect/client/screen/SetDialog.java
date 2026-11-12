@@ -4,17 +4,23 @@ import dev.larattalabs.architect.api.Bible;
 import dev.larattalabs.architect.api.BibleJob;
 import dev.larattalabs.architect.apiimpl.Wire4b;
 import dev.larattalabs.architect.client.design.SetFeature;
-import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Focus;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Option;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
-import dev.larattalabs.labui.client.text.TextFieldView;
-import dev.larattalabs.labui.client.text.TextModel;
-import dev.larattalabs.labui.client.ui.Panels;
-import dev.larattalabs.labui.client.ui.TextUtil;
-import dev.larattalabs.labui.client.ui.UiStyle;
+import dev.larattalabs.architect.design.CritiqueRules;
 import dev.larattalabs.architect.design.DesignSpec;
 import dev.larattalabs.architect.design.SetSpec;
+import dev.larattalabs.labui.client.hud.UiBits;
+import dev.larattalabs.labui.client.picker.PickerStore;
+import dev.larattalabs.labui.client.text.TextFieldView;
+import dev.larattalabs.labui.client.text.TextModel;
+import dev.larattalabs.labui.client.ui.TextUtil;
+import dev.larattalabs.labui.client.ui.UiStyle;
+import dev.larattalabs.labui.client.widget.Button;
+import dev.larattalabs.labui.client.widget.Chip;
+import dev.larattalabs.labui.client.widget.CollapsibleSection;
+import dev.larattalabs.labui.client.widget.Confirm;
+import dev.larattalabs.labui.ui.ConfirmArm;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -25,20 +31,39 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The Design tab's "Design a set…" dialog (docs/CONTRACT.md phase 4b "Design groups"): a name, a style bible (pick one, or
- * "New from prompt…", which drafts one with {@code bible.request}), up to 24 buildings (type, name, landmark or ordinary,
- * notes), the concurrency and a budget, and the live estimate before "Design the set". Drawn by {@link ArchitectScreen} into
- * its hit list; the model is {@link SetFeature}. Client thread.
+ * "New from a prompt…", which drafts one with {@code bible.request}), up to 24 buildings (type, name, landmark or ordinary,
+ * notes), the concurrency and, folded under Options, massing first and its redirects, critique and its revisions, a budget and the
+ * context; the live estimate before Generate. Drawn by {@link ArchitectScreen} into its hit list; the model is {@link SetFeature}.
+ * <p>
+ * (Slice SD) Built on the lab-ui kit like the U3 design editor: a title row, one body that scrolls (wheel, a draggable bar) above a
+ * rule, a pinned footer with the status line, Cancel and Generate. Every control is a kit Chip, Button or Confirm at 18 px; the row
+ * "×" asks again when the row has a name or notes. Every control keeps its id for dev.ui.click; a control in the closed Options
+ * section stays a control for the DevBridge (zero size). Client thread.
  */
 final class SetDialog {
-	static final int ROW_H = 20;
+	/** One building row: a kit field or chip (18 px) and a gap. */
+	static final int ROW_H = TextFieldView.BASE_H + 4;
 	/** Text fields drawn per item row, in Tab order. */
 	static final Focus[] ITEM_FIELDS = {Focus.SET_TYPE, Focus.SET_INAME, Focus.SET_NOTES};
+	static final String OPTIONS_KEY = "architect_mc.set.options";
+	private static final int LABEL_W = 52;
+	private static final int ROW = Chip.H + 4;
 
 	private final ArchitectScreen s;
 	private final TextFieldView nameView = new TextFieldView();
 	private final TextFieldView promptView = new TextFieldView();
 	private final TextFieldView contextView = new TextFieldView();
 	private final List<TextFieldView[]> rowViews = new ArrayList<>();
+	private final CollapsibleSection options = new CollapsibleSection(OPTIONS_KEY, "Options", false);
+	/** One arm for every row's "×" (a fresh arm per frame would never stay armed). */
+	private final ConfirmArm removeArm = new ConfirmArm();
+	private int contentH;
+	/** The building rows' offset in the body's content (for "+ Add a building" to scroll to the new row). */
+	private int rowsAt;
+	/** The body's viewport this frame (x, y, w, h): the mouse outside it hovers nothing in it. */
+	private int[] view = new int[4];
+	/** A refused Style browser pick (a Style that is not a bible): said on the status line. */
+	private @Nullable String styleNote;
 
 	SetDialog(ArchitectScreen s) {
 		this.s = s;
@@ -46,6 +71,11 @@ final class SetDialog {
 
 	private Font font() {
 		return s.font();
+	}
+
+	/** The Options section is open (the Tab order skips its context field when it is folded). */
+	static boolean optionsOpen() {
+		return CollapsibleSection.isOpen(OPTIONS_KEY, false);
 	}
 
 	/** The text model a set field focuses ({@code index}: the item row). */
@@ -74,6 +104,50 @@ final class SetDialog {
 		return rowViews.get(i);
 	}
 
+	// ------------------------------------------------------------------ kit pieces
+
+	private int my(int my) {
+		return my >= view[1] && my < view[1] + view[3] ? my : -1000;
+	}
+
+	private int chip(GuiGraphicsExtractor g, String id, Chip c, int x, int y, int mx, int my) {
+		int w = c.draw(g, font(), x, y, mx, my(my));
+		s.control(id, c.label(), c, c.isSelected());
+		return w;
+	}
+
+	private int button(GuiGraphicsExtractor g, String id, Button b, int x, int y, int w, int mx, int my) {
+		b.draw(g, font(), x, y, w, Button.MIN_H, mx, my(my));
+		s.control(id, b.label(), b, false);
+		return w;
+	}
+
+	private void label(GuiGraphicsExtractor g, String text, int x, int y) {
+		g.text(font(), text, x, y + 5, UiStyle.clayText(), false);
+	}
+
+	private void muted(GuiGraphicsExtractor g, String text, int x, int y, int w) {
+		if (w > 10) {
+			g.text(font(), TextUtil.ellipsize(font(), text, w), x, y, UiStyle.mutedText(), false);
+		}
+	}
+
+	/** A stepper: kit Buttons (18 px) around the value; returns the x after it. */
+	private int stepper(GuiGraphicsExtractor g, String id, String value, int valueW, boolean minus, boolean plus, Runnable dec, Runnable inc, boolean on,
+		int x, int y, int mx, int my) {
+		int bw = Button.MIN_H + 2;
+		Button m = new Button("−", dec);
+		m.disabled(!minus);
+		x += button(g, id + "-", m, x, y, bw, mx, my) + 3;
+		g.text(font(), value, x + (valueW - font().width(value)) / 2, y + 5, on ? UiBits.ink() : UiStyle.mutedText(), false);
+		x += valueW + 3;
+		Button p = new Button("+", inc);
+		p.disabled(!plus);
+		return x + button(g, id + "+", p, x, y, bw, mx, my);
+	}
+
+	// ------------------------------------------------------------------ the dialog
+
 	void draw(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
 		SetFeature.Form f = SetFeature.form();
 		if (f == null) {
@@ -82,179 +156,353 @@ final class SetDialog {
 		SetFeature.tick();
 		Font font = font();
 		Map<String, String> errors = f.errors();
-		int y = top - 3;
-		g.text(font, "Design a set", x, y + 1, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
-		String sub = "One style bible for every building, several designed at once; landmarks first, the rest see their renders.";
-		g.text(font, TextUtil.ellipsize(font, sub, w - font.width("Design a set") - 10), x + font.width("Design a set") + 10, y + 1, UiBits.muted(), false);
-		y += 13;
-		// name + bible
-		int nameW = Math.min(200, (w - 12) / 2);
-		label(g, "Name", errors.get("name"), x, y, nameW);
-		int bx = x + nameW + 12;
-		int bw = w - nameW - 12;
-		label(g, "Style bible", errors.get("bible"), bx, y, bw);
+		// the title row
+		int ty = top - 2;
+		String title = "Design a set";
+		g.text(font, title, x, ty + 5, UiStyle.clayText(), false);
+		muted(g, "One style bible for every building, several designed at once; landmarks first, the rest see their renders.", x + font.width(title)
+			+ 10, ty + 5, w - font.width(title) - 10);
+		// the body: it scrolls above a rule, the footer's status line below it
+		int by = ty + Chip.H + 4;
+		int bottom = footerY - 13 - 4;
+		int bh = Math.max(ROW_H, bottom - by);
+		view = new int[] {x, by, w - 8, bh};
+		s.setScrollArea(x, by, w - 8, bh, contentH, 24);
+		g.enableScissor(x, by, x + w - 8, by + bh);
+		s.clipControls(view);
+		int y0 = by - s.scroll();
+		int iw = w - 12;
+		int y = body(g, f, errors, x, y0, iw, mx, my);
+		g.disableScissor();
+		s.clipControls(null);
+		contentH = y - y0 + 8;
+		s.setScrollArea(x, by, w - 8, bh, contentH, 24);
+		s.scrollbarAt(g, x + w - 6, by, bh);
+		g.fill(x, bottom + 1, x + w, bottom + 2, UiStyle.rule());
+		footer(g, f, errors, x, w, footerY, mx, my);
+	}
+
+	/** The body's rows from {@code y}; returns the y after. */
+	private int body(GuiGraphicsExtractor g, SetFeature.Form f, Map<String, String> errors, int x, int y, int w, int mx, int my) {
+		Font font = font();
+		int y0 = y;
+		int fx = x + LABEL_W;
+		int fw = w - LABEL_W;
+		// ---- Name
+		label(g, "Name", x, y);
+		int nameW = Math.min(240, fw);
+		s.textField(g, Focus.SET_NAME, nameView, f.name, fx, y, nameW, new TextFieldView.Style(null, 0, "e.g. Ashfall hamlet", null, null, 0, 1));
+		String ne = errors.get("name");
+		if (ne != null) {
+			g.text(font, TextUtil.ellipsize(font, ne, Math.max(10, fw - nameW - 8)), fx + nameW + 8, y + 5, UiBits.errorText(), false);
+		}
+		y += ROW;
+		// ---- Style (the set's bible): the editor's Style row, bibles only, plus "New from a prompt…"
+		label(g, "Style", x, y);
+		y = styleRow(g, f, fx, y, fw, mx, my);
+		Bible picked = f.bible == null ? null : SetFeature.bible(f.bible).orElse(null);
+		String be = errors.get("bible");
+		if (f.newBible) {
+			String go = f.bibleJob == null ? "Draft bible" : "Drafting…";
+			int gw = Button.width(font, go);
+			s.textField(g, Focus.SET_PROMPT, promptView, f.prompt, fx, y, fw - gw - 6, new TextFieldView.Style(null, 0,
+				"what the place is, e.g. hellish evil lair, mining facility", null, null, 0, 1));
+			Button draft = new Button(go, SetFeature::draftBible);
+			draft.disabled(!(f.bibleJob == null && !f.sending && SetFeature.has("bibles")));
+			button(g, "set:draft_bible", draft, fx + fw - gw, y, gw, mx, my);
+			y += ROW;
+			String line = bibleJobLine(f.bibleJob);
+			if (line != null) {
+				muted(g, line, fx, y, fw);
+				y += 12;
+			}
+		} else if (be != null) {
+			g.text(font, TextUtil.ellipsize(font, be, fw), fx, y, UiBits.errorText(), false);
+			y += 12;
+		} else if (picked != null) {
+			// RolesSwatch draws 16 px item icons, 17 px apart, and returns how many
+			int sw = RolesSwatch.draw(g, picked, fx, y, Math.min(180, fw)) * 17;
+			muted(g, "every building uses " + picked.name() + "'s roles and look", fx + sw + 6, y + 4, fw - sw - 6);
+			y += 18;
+		}
+		y += 4;
+		// ---- Buildings
+		g.text(font, "Buildings", x, y + 5, UiStyle.clayText(), false);
+		String count = f.items.size() + " of " + SetSpec.MAX_ITEMS;
+		g.text(font, count, fx, y + 5, UiBits.ink(), false);
+		int cx = fx + font.width(count) + 10;
+		String ie = errors.get("items");
+		if (ie != null) {
+			g.text(font, TextUtil.ellipsize(font, ie, Math.max(10, x + w - cx)), cx, y + 5, UiBits.errorText(), false);
+		} else {
+			muted(g, "landmarks: Opus, designed first · ordinary: Sonnet", cx, y + 5, x + w - cx);
+		}
+		y += ROW - 4;
+		// the columns
+		int numW = 14;
+		int tx = x + numW;
+		int typeW = 84;
+		int pickW = Chip.H;
+		int nameX = tx + typeW + 2 + pickW + 6;
+		int nameColW = Math.min(110, Math.max(60, (w - nameX + x) / 4));
+		int roleX = nameX + nameColW + 6;
+		Chip roleProbe = new Chip("landmark");
+		int roleW = roleProbe.width(font);
+		int delW = Button.MIN_H + 2;
+		int notesX = roleX + roleW + 6;
+		int notesW = x + w - delW - 6 - notesX;
+		muted(g, "type", tx + 2, y, typeW);
+		muted(g, "name", nameX + 2, y, nameColW);
+		muted(g, "role", roleX + 2, y, roleW);
+		muted(g, "notes", notesX + 2, y, notesW);
 		y += 11;
-		s.textField(g, Focus.SET_NAME, nameView, f.name, x, y, nameW, new TextFieldView.Style(null, 0, "e.g. Ashfall hamlet", null, null, 0, 1));
-		String bl = f.newBible ? "New from a prompt… ▾" : f.bible == null ? "pick one ▾" : SetFeature.bible(f.bible).map(b -> b.name()
-			+ (b.builtin() ? " (built in)" : " v" + b.version())).orElse(f.bible) + " ▾";
-		int ddW = Math.min(180, bw);
-		int ddY = y + 2;
-		s.dropdown(g, "set:bible", bl, bx, ddY, ddW, mx, my, () -> s.openPopup("set:bible", bx, ddY + ArchitectScreen.CHIP_H + 1, Math.max(260, ddW),
-			bibleOptions(f.bible, true), v -> {
+		rowsAt = y - y0;
+		for (int i = 0; i < f.items.size(); i++) {
+			y = itemRow(g, f, errors, i, x, y, tx, typeW, pickW, nameX, nameColW, roleX, roleW, notesX, notesW, x + w - delW, delW, mx, my);
+		}
+		// "+ Add a building"
+		Button add = new Button("+ Add a building", () -> {
+			f.addItem();
+			s.scrollTo(rowsAt + f.items.size() * ROW_H - view[3] / 2); // the new row in view
+		});
+		add.disabled(f.items.size() >= SetSpec.MAX_ITEMS);
+		button(g, "set:add", add, tx, y, add.width(font), mx, my);
+		y += ROW + 2;
+		// ---- At once and the estimate
+		label(g, "At once", x, y);
+		int ax = stepper(g, "set:concurrency", Integer.toString(f.concurrency), font.width("0") + 4, f.concurrency > SetSpec.MIN_CONCURRENCY,
+			f.concurrency < SetSpec.MAX_CONCURRENCY, () -> f.concurrency--, () -> f.concurrency++, true, fx, y, mx, my) + 12;
+		String est = estimateLine(f);
+		g.text(font, TextUtil.ellipsize(font, est, Math.max(10, x + w - ax)), ax, y + 5, f.estimateError != null ? UiBits.errorText() : UiBits.ink(), false);
+		y += ROW + 2;
+		// ---- Options: massing first, redirects, critique, revisions, budget, context
+		y = optionsSection(g, f, errors, x, y, w, mx, my);
+		return y;
+	}
+
+	/** One building row; returns the y after. */
+	private int itemRow(GuiGraphicsExtractor g, SetFeature.Form f, Map<String, String> errors, int i, int x, int y, int tx, int typeW, int pickW, int nameX,
+		int nameW, int roleX, int roleW, int notesX, int notesW, int delX, int delW, int mx, int my) {
+		Font font = font();
+		SetFeature.Item it = f.items.get(i);
+		int idx = i;
+		String rowErr = errors.get("item" + (i + 1));
+		String n = Integer.toString(i + 1);
+		g.text(font, n, x + (tx - x - 4 - font.width(n)), y + 5, rowErr != null ? UiBits.errorText() : UiStyle.mutedText(), false);
+		TextFieldView[] v = views(i);
+		s.textField(g, Focus.SET_TYPE, i, v[0], it.type, tx, y, typeW, new TextFieldView.Style(null, 0, "type", null, null, 0, 1));
+		int py = y;
+		Chip pick = new Chip("▾", () -> s.openPopup("set:type:" + idx, tx, py + Chip.H + 1, 280, typeOptions(it.type.value()), val -> it.type.set(val)));
+		pick.draw(g, font, tx + typeW + 2, y, pickW, mx, my(my));
+		s.control("set:type_pick:" + i, "type", pick, false);
+		s.textField(g, Focus.SET_INAME, i, v[1], it.name, nameX, y, nameW, new TextFieldView.Style(null, 0, "name (optional)", null, null, 0, 1));
+		Chip role = new Chip(it.landmark ? "landmark" : "ordinary", () -> it.landmark = !it.landmark).selected(it.landmark);
+		role.draw(g, font, roleX, y, roleW, mx, my(my));
+		s.control("set:role:" + i, role.label(), role, it.landmark);
+		Runnable remove = () -> {
+			s.setFocusPublic(Focus.NONE);
+			f.removeItem(idx);
+		};
+		boolean filled = !it.name.value().isBlank() || !it.notes.value().isBlank();
+		String key = "set:remove:" + i;
+		boolean armed = filled && f.items.size() > 1 && removeArm.armed(key, net.minecraft.util.Util.getMillis());
+		if (!armed) {
+			s.textField(g, Focus.SET_NOTES, i, v[2], it.notes, notesX, y, notesW, new TextFieldView.Style(null, 0, rowErr != null ? rowErr
+				: "notes for the designer", null, null, 0, 1));
+		}
+		if (filled && f.items.size() > 1) {
+			// armed, it takes the notes' place so "Press again to remove (N)" reads whole
+			Confirm c = new Confirm(removeArm, key, "×", "remove", remove);
+			int cx = armed ? notesX : delX;
+			c.draw(g, font, cx, y, delX + delW - cx, Button.MIN_H, mx, my(my));
+			s.control(key, "×", c, false);
+		} else {
+			Button b = new Button("×", remove);
+			b.disabled(f.items.size() <= 1);
+			b.tooltip(f.items.size() <= 1 ? "a set has at least one building" : null);
+			button(g, "set:remove:" + i, b, delX, y, delW, mx, my);
+		}
+		return y + ROW_H;
+	}
+
+	/**
+	 * The Style row for a set: the picked bible, recents and a few built-ins as chips (as many as fit, at most 4), "New from a
+	 * prompt…" and "browse N styles…" (the {@link StyleBrowserScreen}; a Style that is not a bible is refused, since a set needs one).
+	 * Returns the y after.
+	 */
+	private int styleRow(GuiGraphicsExtractor g, SetFeature.Form f, int x, int y, int w, int mx, int my) {
+		Font font = font();
+		String current = f.newBible ? null : f.bible;
+		List<Bible> all = SetFeature.bibles().stream().filter(b -> !b.archived() || b.id().equals(current)).toList();
+		List<String> ids = dev.larattalabs.labui.ui.PickerModel.compact(current, PickerStore.memory().recents(StyleBrowserScreen.ID), List.of("rustic",
+			"medieval", "modern", "oak"), 3, id -> all.stream().anyMatch(b -> b.id().equals(id)));
+		Chip more = new Chip("browse " + all.size() + " styles…", () -> StyleBrowserScreen.open(current, b -> pickFromBrowser(f, b))).kind(Chip.Kind.MORE);
+		Chip fresh = new Chip("New from a prompt…", () -> {
+			f.newBible = true;
+			f.bible = null;
+		}).selected(f.newBible);
+		int reserved = more.width(font) + 4 + fresh.width(font) + 4;
+		int cx = x;
+		for (String id : ids) {
+			Bible b = all.stream().filter(k -> k.id().equals(id)).findFirst().orElseThrow();
+			Chip c = new Chip(label(b), () -> pick(f, b.id())).selected(id.equals(current)).swatch(StylePaint.rgb(b.roles().get("wall")));
+			int cw = c.width(font);
+			if (cx > x && cx + cw > x + w - reserved) {
+				break;
+			}
+			cw = Math.min(cw, x + w - reserved - cx);
+			c.draw(g, font, cx, y, cw, mx, my(my));
+			s.control("set:bible:" + id, c.label(), c, c.isSelected());
+			cx += cw + 4;
+		}
+		cx += chip(g, "set:bible:new", fresh, cx, y, mx, my) + 4;
+		chip(g, "set:browse", more, cx, y, mx, my);
+		// the list of every bible (and "New from a prompt…") as before, for the DevBridge
+		int py = y;
+		s.devControl("set:bible", "the bible list", true, false, () -> s.openPopup("set:bible", x, py + Chip.H + 1, Math.max(260, w / 2), bibleOptions(f.bible,
+			true), v -> {
 				if ("new".equals(v)) {
 					f.newBible = true;
 					f.bible = null;
 				} else {
-					f.newBible = false;
-					f.bible = v;
+					pick(f, v);
 				}
 			}));
-		Bible picked = f.bible == null ? null : SetFeature.bible(f.bible).orElse(null);
-		if (picked != null && bw - ddW > 40) {
-			RolesSwatch.draw(g, picked, bx + ddW + 6, y + 1, bw - ddW - 6);
+		return y + ROW;
+	}
+
+	private static String label(Bible b) {
+		return b.builtin() ? b.name() : b.name() + " v" + b.version();
+	}
+
+	private void pick(SetFeature.Form f, String id) {
+		f.newBible = false;
+		f.bible = id;
+		styleNote = null;
+		PickerStore.used(StyleBrowserScreen.ID, id);
+	}
+
+	private void pickFromBrowser(SetFeature.Form f, Bible b) {
+		if (SetFeature.bible(b.id()).isPresent()) {
+			pick(f, b.id());
+		} else {
+			styleNote = b.name() + " is a palette, not a style bible: a set needs a bible (pick one, or New from a prompt…)";
 		}
-		y += TextFieldView.BASE_H + 4;
-		// the new bible's prompt, or what the picked one is
-		if (f.newBible) {
-			String go = f.bibleJob == null ? "Draft bible" : "Drafting…";
-			int gw = s.bw(go);
-			s.textField(g, Focus.SET_PROMPT, promptView, f.prompt, x, y, w - gw - 6, new TextFieldView.Style("Prompt ", dev.larattalabs.architect.client.ui.PaperInk.clay(),
-				"what the place is, e.g. hellish evil lair, mining facility", null, null, 0, 1));
-			s.button(g, "set:draft_bible", go, x + w - gw, y - 1, gw, false, f.bibleJob == null && !f.sending && SetFeature.has("bibles"), mx, my,
-				SetFeature::draftBible);
-			y += TextFieldView.BASE_H + 2;
-			String line = bibleJobLine(f.bibleJob);
-			if (line != null) {
-				g.text(font, TextUtil.ellipsize(font, line, w), x, y, UiBits.muted(), false);
-			}
-			y += 11;
-		}
-		// the buildings
-		g.text(font, "Buildings (" + f.items.size() + "/" + SetSpec.MAX_ITEMS + ")", x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
-		String err = errors.get("items");
-		if (err != null) {
-			g.text(font, TextUtil.ellipsize(font, err, w / 2), x + 110, y, UiBits.errorText(), false);
-		}
-		int typeW = 92;
-		int nameColW = 110;
-		int roleW = 62;
-		int delW = 12;
-		int notesX = x + 16 + typeW + 14 + nameColW + 4 + roleW + 4;
-		int notesW = x + w - 10 - delW - 4 - notesX;
-		g.text(font, "type", x + 16, y + 12, UiBits.muted(), false);
-		g.text(font, "name", x + 16 + typeW + 14, y + 12, UiBits.muted(), false);
-		g.text(font, "role", x + 16 + typeW + 14 + nameColW + 4, y + 12, UiBits.muted(), false);
-		g.text(font, "notes", notesX, y + 12, UiBits.muted(), false);
-		y += 22;
+	}
+
+	/** The folded Options section; returns the y after. */
+	private int optionsSection(GuiGraphicsExtractor g, SetFeature.Form f, Map<String, String> errors, int x, int y, int w, int mx, int my) {
+		Font font = font();
 		boolean m4c = SetFeature.has("massing");
-		// add row + (4c: massing first and redirects; the context, up to 2 lines) + concurrency/budget/estimate. On a short screen
-		// (GUI scale 4 at 1080p) the 4c controls share one row and the context keeps one line, so the list still shows 2 rows
-		int roomy4c = 18 + TextFieldView.BASE_H + TextFieldView.LINE + 4;
-		int compact4c = TextFieldView.BASE_H + 4;
-		boolean compact = m4c && footerY - 16 - 34 - roomy4c - y < 2 * ROW_H;
-		// (5a) the critique row
 		boolean m5a = SetFeature.has("critique");
-		int bottomBlock = 34 + (m4c ? compact ? compact4c : roomy4c : 0) + (m5a ? 16 : 0);
-		int listH = Math.max(ROW_H, footerY - 16 - bottomBlock - y);
-		int fit = Math.max(1, listH / ROW_H);
-		s.setScrollArea(x, y, w - 6, fit * ROW_H, f.items.size() * ROW_H, ROW_H);
-		int first = Math.min(s.scroll() / ROW_H, Math.max(0, f.items.size() - fit));
-		for (int i = first; i < Math.min(f.items.size(), first + fit); i++) {
-			SetFeature.Item it = f.items.get(i);
-			int ry = y + (i - first) * ROW_H;
-			int idx = i;
-			String rowErr = errors.get("item" + (i + 1));
-			g.text(font, Integer.toString(i + 1), x + 2, ry + 5, rowErr != null ? UiBits.errorText() : UiBits.muted(), false);
-			TextFieldView[] v = views(i);
-			int tx = x + 16;
-			s.textField(g, Focus.SET_TYPE, i, v[0], it.type, tx, ry, typeW, new TextFieldView.Style(null, 0, "type", null, null, 0, 1));
-			s.chip(g, "set:type_pick:" + i, "▾", tx + typeW + 1, ry + 2, false, true, mx, my, () -> s.openPopup("set:type:" + idx, tx, ry + 19, 280,
-				typeOptions(it.type.value()), val -> it.type.set(val)));
-			s.textField(g, Focus.SET_INAME, i, v[1], it.name, tx + typeW + 14, ry, nameColW, new TextFieldView.Style(null, 0, "name (optional)", null,
-				null, 0, 1));
-			int rx = tx + typeW + 14 + nameColW + 4;
-			s.chip(g, "set:role:" + i, it.landmark ? "landmark" : "ordinary", rx, ry + 2, it.landmark, true, mx, my, () -> it.landmark = !it.landmark);
-			s.textField(g, Focus.SET_NOTES, i, v[2], it.notes, notesX, ry, notesW, new TextFieldView.Style(null, 0, rowErr != null ? rowErr
-				: "anything the designer should know", null, null, 0, 1));
-			s.chip(g, "set:remove:" + i, "×", x + w - 10 - delW, ry + 2, false, f.items.size() > 1, mx, my, () -> {
-				s.setFocusPublic(Focus.NONE);
-				f.removeItem(idx);
-			});
-		}
-		s.scrollbarAt(g, x + w - 7, y, fit * ROW_H);
-		y += fit * ROW_H + 2;
-		int ax = x;
-		ax += s.chip(g, "set:add", "+ Add a building", ax, y, false, f.items.size() < SetSpec.MAX_ITEMS, mx, my, () -> {
-			f.addItem();
-			s.scrollTo(f.items.size() * ROW_H); // the new row in view
-		}) + 8;
-		g.text(font, TextUtil.ellipsize(font, "landmarks: Opus, designed first · ordinary: Sonnet", Math.max(10, x + w - ax)), ax, y + 3, UiBits.muted(),
-			false);
-		y += ArchitectScreen.CHIP_H + 4;
-		// (4c) massing first, redirect rounds, the context for every brief
+		Runnable mToggle = () -> f.massingFirst = !f.massingFirst;
+		Runnable cToggle = () -> f.critique = !f.critique;
+		Runnable rDec = () -> f.maxRedirects--;
+		Runnable rInc = () -> f.maxRedirects++;
+		Runnable bDec = () -> f.budgetUsd = budgetStep(f.budgetUsd, -1);
+		Runnable bInc = () -> f.budgetUsd = budgetStep(f.budgetUsd, 1);
+		boolean rMinus = f.massingFirst && f.maxRedirects > 0;
+		boolean rPlus = f.massingFirst && f.maxRedirects < SetSpec.MAX_REDIRECTS;
+		boolean bPlus = f.budgetUsd == null || f.budgetUsd < 1000;
+		String budget = f.budgetUsd == null ? "none" : String.format(Locale.ROOT, "$%.0f", f.budgetUsd);
+		List<String> sum = new ArrayList<>();
 		if (m4c) {
-			int mx0 = x;
-			boolean on = f.massingFirst;
-			String ml = "Massing first";
-			int hw = 12 + font.width(ml) + 4;
-			s.addHit(new ArchitectScreen.Hit("set:massing_first", ml, mx0, y + 3, hw, 12, true, on, () -> f.massingFirst = !f.massingFirst));
-			Panels.sprite(g, on ? dev.larattalabs.labui.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.labui.client.ui.Kit.CHECKBOX, mx0, y + 4, 10,
-				10);
-			g.text(font, ml, mx0 + 13, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
-			mx0 += hw + 8;
-			g.text(font, "Redirects", mx0, y + 5, on ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
-			mx0 += font.width("Redirects") + 4;
-			mx0 += s.chip(g, "set:redirects-", "−", mx0, y + 2, false, on && f.maxRedirects > 0, mx, my, () -> f.maxRedirects--) + 2;
-			g.text(font, Integer.toString(f.maxRedirects), mx0 + 2, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
-			mx0 += font.width("10") + 6;
-			mx0 += s.chip(g, "set:redirects+", "+", mx0, y + 2, false, on && f.maxRedirects < SetSpec.MAX_REDIRECTS, mx, my, () -> f.maxRedirects++) + 12;
-			String ce = errors.get("context");
-			TextFieldView.Style cs = new TextFieldView.Style("Context ", dev.larattalabs.architect.client.ui.PaperInk.clay(), ce != null ? ce
-				: "the site, its purpose, the neighbours, the street side: it goes into every brief", null, f.context.length() > 200 ? f.context.length() + "/"
-					+ SetSpec.MAX_CONTEXT : null, UiBits.muted(), compact ? 1 : 2);
-			if (compact) {
-				s.textField(g, Focus.SET_CONTEXT, contextView, f.context, mx0, y, x + w - mx0, cs);
-				y += compact4c;
-			} else {
-				g.text(font, TextUtil.ellipsize(font, on ? "each shape waits for your approval in the Designs tab" : "the detail at once", Math.max(10, x + w
-					- mx0)), mx0, y + 5, UiBits.muted(), false);
-				y += 18;
-				s.textField(g, Focus.SET_CONTEXT, contextView, f.context, x, y, w, cs);
-				y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
-			}
+			sum.add(f.massingFirst ? "massing first, " + f.maxRedirects + " redirect" + (f.maxRedirects == 1 ? "" : "s") : "no massing");
 		}
-		// (5a) "Critique and revise" for every building, its revisions (1 or 2)
 		if (m5a) {
-			y = critiqueRow(s, g, f, x, y, w, mx, my);
+			sum.add(f.critique ? "critique ×" + f.maxRevisions : "no critique");
 		}
-		// concurrency, budget, estimate
-		int cx = x;
-		g.text(font, "At once", cx, y + 3, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
-		cx += font.width("At once") + 4;
-		cx += s.chip(g, "set:concurrency-", "−", cx, y, false, f.concurrency > SetSpec.MIN_CONCURRENCY, mx, my, () -> f.concurrency--) + 2;
-		String cv = Integer.toString(f.concurrency);
-		g.text(font, cv, cx + 2, y + 3, UiBits.ink(), false);
-		cx += font.width("0") + 6;
-		cx += s.chip(g, "set:concurrency+", "+", cx, y, false, f.concurrency < SetSpec.MAX_CONCURRENCY, mx, my, () -> f.concurrency++) + 12;
-		g.text(font, "Budget", cx, y + 3, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
-		cx += font.width("Budget") + 4;
-		cx += s.chip(g, "set:budget-", "−", cx, y, false, f.budgetUsd != null, mx, my, () -> f.budgetUsd = budgetStep(f.budgetUsd, -1)) + 2;
-		String bv = f.budgetUsd == null ? "none" : String.format(Locale.ROOT, "$%.0f", f.budgetUsd);
-		g.text(font, bv, cx + 2, y + 3, UiBits.ink(), false);
-		cx += Math.max(font.width("none"), font.width("$100")) + 6;
-		cx += s.chip(g, "set:budget+", "+", cx, y, false, f.budgetUsd == null || f.budgetUsd < 1000, mx, my, () -> f.budgetUsd = budgetStep(f.budgetUsd,
-			1)) + 12;
-		String est = estimateLine(f);
-		g.text(font, TextUtil.ellipsize(font, est, Math.max(10, x + w - cx)), cx, y + 3, f.estimateError != null ? UiBits.errorText() : UiStyle.color("palette.ui.teal_text", 0xFF1E7472),
-			false);
-		// footer
+		sum.add(f.budgetUsd == null ? "no budget" : "at most " + budget);
+		if (m4c) {
+			sum.add(f.context.value().isBlank() ? "no context" : "context");
+		}
+		long bad = errors.keySet().stream().filter(k -> k.equals("budget") || k.equals("redirects") || k.equals("context")).count();
+		options.summary((bad > 0 ? bad + " to fix · " : "") + String.join(" · ", sum));
+		y += options.draw(g, font, x, y, w, mx, my(my));
+		s.control("section:set_options", options.key(), options, options.open());
+		if (!options.open()) {
+			if (m4c) {
+				s.devControl("set:massing_first", "Massing first", true, f.massingFirst, mToggle);
+				s.devControl("set:redirects-", "−", rMinus, false, rDec);
+				s.devControl("set:redirects+", "+", rPlus, false, rInc);
+			}
+			if (m5a) {
+				s.devControl("set:critique", "Critique and revise", true, f.critique, cToggle);
+				for (int n : CritiqueRules.REVISION_CHOICES) {
+					s.devControl("set:revisions:" + n, Integer.toString(n), f.critique, f.critique && f.maxRevisions == n, () -> f.maxRevisions = n);
+				}
+			}
+			s.devControl("set:budget-", "−", f.budgetUsd != null, false, bDec);
+			s.devControl("set:budget+", "+", bPlus, false, bInc);
+			return y;
+		}
+		int ox = x + CollapsibleSection.INDENT;
+		int ow = w - CollapsibleSection.INDENT;
+		y += 3;
+		if (m4c) {
+			Chip c = new Chip(f.massingFirst ? "Massing first: on" : "Massing first: off", mToggle).selected(f.massingFirst);
+			int cx = ox + chip(g, "set:massing_first", c, ox, y, mx, my) + 10;
+			g.text(font, "Redirects", cx, y + 5, f.massingFirst ? UiStyle.clayText() : UiStyle.mutedText(), false);
+			cx += font.width("Redirects") + 4;
+			cx = stepper(g, "set:redirects", Integer.toString(f.maxRedirects), font.width("10") + 2, rMinus, rPlus, rDec, rInc, f.massingFirst, cx, y, mx,
+				my) + 10;
+			muted(g, f.massingFirst ? "each shape waits for your approval in the Designs tab" : "the detail at once", cx, y + 5, ox + ow - cx);
+			y += ROW;
+		}
+		if (m5a) {
+			Chip c = new Chip(f.critique ? "Critique and revise: on" : "Critique and revise: off", cToggle).selected(f.critique);
+			int cx = ox + chip(g, "set:critique", c, ox, y, mx, my) + 10;
+			g.text(font, "Revisions", cx, y + 5, f.critique ? UiStyle.clayText() : UiStyle.mutedText(), false);
+			cx += font.width("Revisions") + 4;
+			for (int n : CritiqueRules.REVISION_CHOICES) {
+				Chip r = new Chip(Integer.toString(n), () -> f.maxRevisions = n).selected(f.critique && f.maxRevisions == n);
+				r.disabled(!f.critique);
+				cx += chip(g, "set:revisions:" + n, r, cx, y, mx, my) + 3;
+			}
+			cx += 7;
+			muted(g, f.critique ? "a critic scores each building; Claude revises until it ships (experimental)" : "off: each building as designed", cx, y
+				+ 5, ox + ow - cx);
+			y += ROW;
+		}
+		label(g, "Budget", ox, y);
+		int bx = stepper(g, "set:budget", budget, Math.max(font.width("none"), font.width("$1000")) + 2, f.budgetUsd != null, bPlus, bDec, bInc, true, ox
+			+ LABEL_W, y, mx, my) + 10;
+		String be = errors.get("budget");
+		if (be != null) {
+			g.text(font, TextUtil.ellipsize(font, be, ox + ow - bx), bx, y + 5, UiBits.errorText(), false);
+		} else {
+			muted(g, f.budgetUsd == null ? "no cap: the set runs to the end" : "the set pauses at the cap; extend it from the Designs tab", bx, y + 5, ox
+				+ ow - bx);
+		}
+		y += ROW;
+		if (m4c) {
+			label(g, "Context", ox, y);
+			String ce = errors.get("context");
+			TextFieldView.Style cs = new TextFieldView.Style(null, 0, ce != null ? ce : "the site, its purpose, the neighbours, the street side: it goes "
+				+ "into every brief", null, f.context.length() > 200 ? f.context.length() + "/" + SetSpec.MAX_CONTEXT : null, UiStyle.mutedText(), 2);
+			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, ox + LABEL_W, y, ow - LABEL_W, cs);
+			y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
+		}
+		return y;
+	}
+
+	/** The status line, Cancel and Generate, pinned under the body's rule. */
+	private void footer(GuiGraphicsExtractor g, SetFeature.Form f, Map<String, String> errors, int x, int w, int footerY, int mx, int my) {
+		Font font = font();
 		String status;
 		boolean bad;
-		if (f.sending) {
+		String armed = removeArm.armedKey(net.minecraft.util.Util.getMillis());
+		if (armed != null && armed.startsWith("set:remove:")) {
+			status = "Press × again to remove building " + (Integer.parseInt(armed.substring("set:remove:".length())) + 1) + " (Esc keeps it).";
+			bad = true;
+		} else if (f.sending) {
 			status = "Sending…";
 			bad = false;
 		} else if (f.sendError != null) {
 			status = f.sendError;
+			bad = true;
+		} else if (styleNote != null) {
+			status = styleNote;
 			bad = true;
 		} else if (!Sidecar.connected()) {
 			status = "The design helper is not running (Status tab).";
@@ -263,17 +511,20 @@ final class SetDialog {
 			status = "This helper does not design sets (it needs phase 4b).";
 			bad = true;
 		} else if (!errors.isEmpty()) {
-			status = errors.size() == 1 ? errors.values().iterator().next() : errors.size() + " things to fix: " + errors.values().iterator().next();
+			status = errors.size() == 1 ? "1 thing to fix: " + errors.values().iterator().next() : errors.size() + " things to fix: " + errors.values()
+				.iterator().next();
 			bad = true;
 		} else {
-			status = "Ready: " + f.items.size() + " buildings with " + (picked == null ? f.bible : picked.name()) + ", " + f.concurrency + " at a time"
-				+ (f.budgetUsd == null ? "" : String.format(Locale.ROOT, ", at most $%.0f", f.budgetUsd)) + (f.draft().massingFirst()
-					? "; massings first, you approve each shape" : "") + ".";
+			Bible picked = f.bible == null ? null : SetFeature.bible(f.bible).orElse(null);
+			// short enough to read whole at GUI scale 4
+			status = "Ready: " + f.items.size() + " buildings, " + (picked == null ? f.bible : picked.name()) + ", " + f.concurrency + " at once"
+				+ (f.budgetUsd == null ? "" : String.format(Locale.ROOT, ", max $%.0f", f.budgetUsd)) + (f.draft().massingFirst()
+					? "; you approve each massing" : "") + ".";
 			bad = false;
 		}
 		s.statusLineAt(g, status, bad, x, footerY - 13, w);
 		int fx = x + w;
-		String go = "Design the set";
+		String go = "Generate";
 		fx -= s.bw(go);
 		s.button(g, "set:submit", go, fx, footerY, s.bw(go), true, errors.isEmpty() && !f.sending && SetFeature.has("design.groups"), mx, my,
 			s::submitSet);
@@ -286,43 +537,12 @@ final class SetDialog {
 		}
 	}
 
-	private void label(GuiGraphicsExtractor g, String text, @Nullable String err, int x, int y, int w) {
-		Font font = font();
-		g.text(font, text, x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
-		if (err != null) {
-			int ex = x + font.width(text) + 6;
-			g.text(font, TextUtil.ellipsize(font, err, Math.max(10, x + w - ex)), ex, y, UiBits.errorText(), false);
-		}
-	}
-
 	/** $5 steps up to $20, then $10 steps; below $1 is none. */
 	static @Nullable Double budgetStep(@Nullable Double cur, int dir) {
 		double v = cur == null ? 0 : cur;
 		double step = v + (dir > 0 ? 0 : -1) >= 20 ? 10 : 5;
 		double n = dir > 0 ? (v == 0 ? 5 : v + step) : v - step;
 		return n < 1 ? null : Math.min(1000, n);
-	}
-
-	/** (5a) The set's critique toggle and revisions; returns the next y. */
-	private int critiqueRow(ArchitectScreen s, GuiGraphicsExtractor g, SetFeature.Form f, int x, int y, int w, int mx, int my) {
-		Font font = font();
-		int cx = x;
-		boolean on = f.critique;
-		String cl = "Critique and revise (experimental)";
-		int hw = 12 + font.width(cl) + 4;
-		s.addHit(new ArchitectScreen.Hit("set:critique", cl, cx, y, hw, 12, true, on, () -> f.critique = !f.critique));
-		Panels.sprite(g, on ? dev.larattalabs.labui.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.labui.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
-		g.text(font, cl, cx + 13, y + 2, on ? UiBits.ink() : UiBits.muted(), false);
-		cx += hw + 8;
-		g.text(font, "Revisions", cx, y + 2, on ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
-		cx += font.width("Revisions") + 4;
-		for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
-			cx += s.chip(g, "set:revisions:" + n, Integer.toString(n), cx, y - 1, on && f.maxRevisions == n, on, mx, my, () -> f.maxRevisions = n) + 3;
-		}
-		cx += 6;
-		g.text(font, TextUtil.ellipsize(font, on ? "a critic scores each building; Claude revises until it ships" : "off: each building as designed",
-			Math.max(10, x + w - cx)), cx, y + 2, UiBits.muted(), false);
-		return y + 16;
 	}
 
 	static String estimateLine(SetFeature.Form f) {

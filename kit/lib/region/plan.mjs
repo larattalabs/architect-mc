@@ -455,6 +455,14 @@ export async function planRegion(o) {
     Object.defineProperty(ctx, 'besideReach', { enumerable: false, get: () => besideReach });
     // (6d RV) a revision's inputs (Regions.planRevision: {rid, position, parent, base, effective, standing}); not enumerable, as besideReach
     if (o.revision) Object.defineProperty(ctx, 'revision', { enumerable: false, value: o.revision });
+    // (7b LP) the link pass's input at realise ({lots: {lot: {entry, version?, ports}}}: the bound entries' own ports); not enumerable, as
+    // besideReach. A plan without it records its port links (ir.portLinks) and writes none; with it, it writes them in LINK_STAGE.
+    if (o.links) {
+      const { linksInputProblems } = await import('./links.mjs');
+      const probs = linksInputProblems(o.links);
+      if (probs.length) throw new Error(`links: ${probs.join('; ')}`);
+      Object.defineProperty(ctx, 'links', { enumerable: false, value: JSON.parse(JSON.stringify(o.links)) });
+    }
     out = await mod.default(ctx);
     regionObj = out;
     ctx.__id = id; ctx.__params = params;
@@ -528,6 +536,11 @@ export async function planRegion(o) {
   if (gmw.length) ir.gateMechanisms = gmw;
   // (6c V) the settlement graph (SETTLEMENTS §8.1's shape; a format-1 member the evaluator ignores) and the honoured keep-out
   if (r.graph.nodes.length) ir.graph = { nodes: r.graph.nodes, edges: r.graph.edges };
+  // (7b LP) the plan's port links (each link's id, kind and the port each end takes: the realise's link pass replays them), and at
+  // realise the input the links were written from (the bound entries and their ports, by lot: IR v2's identity). Only a plan with a
+  // link to a site lot's port has them (every other IR unchanged: change 4)
+  if (r.meta.portLinks?.length) ir.portLinks = r.meta.portLinks;
+  if (ctx.links && r.meta.portLinks?.length) ir.linked = { lots: Object.fromEntries(Object.keys(ctx.links.lots).sort().filter((id) => r.meta.portLinks.some((l) => l.from.lot === id || l.to.lot === id)).map((id) => [id, ctx.links.lots[id]])) };
   if (keepOutRead) ir.keepOut = keepOut.map((k) => [...k]);
   // (6c D1) the standing region the plan read (its id and the sha of what it read: the join and the obstacles came from it)
   if (besideRead) ir.beside = { id: beside.id, sha: sha256Hex(canonicalJson(beside)) };
@@ -643,7 +656,7 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.monastery ? { monastery: r.meta.monastery } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}), ...Object.fromEntries(['climbs', 'rockStairs', 'lifts', 'catwalks', 'spirals'].filter((k) => r.meta[k]).map((k) => [k, r.meta[k]])), ...(r.meta.waters ? { waters: r.meta.waters } : {}), ...(r.meta.quays ? { quays: r.meta.quays } : {}), ...(r.meta.wet ? { wet: r.meta.wet } : {}), ...(r.meta.wetAsked ? { wetAsked: true } : {}), ...(r.meta.courses ? { courses: r.meta.courses } : {}), ...(r.meta.forest ? { forest: r.meta.forest } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}), ...(r.meta.districts ? { districts: r.meta.districts } : {}), ...(r.meta.outpost ? { outpost: r.meta.outpost } : {}), ...(r.meta.monastery ? { monastery: r.meta.monastery } : {}), ...(r.meta.walls ? { walls: r.meta.walls } : {}), ...(r.meta.ropes ? { ropes: r.meta.ropes } : {}), ...(r.meta.bridges ? { bridges: r.meta.bridges } : {}), ...(r.meta.tunnels ? { tunnels: r.meta.tunnels } : {}), ...Object.fromEntries(['climbs', 'rockStairs', 'lifts', 'catwalks', 'spirals', 'branchWalks', 'portLinks', 'links'].filter((k) => r.meta[k]).map((k) => [k, r.meta[k]])), ...(r.meta.waters ? { waters: r.meta.waters } : {}), ...(r.meta.quays ? { quays: r.meta.quays } : {}), ...(r.meta.wet ? { wet: r.meta.wet } : {}), ...(r.meta.wetAsked ? { wetAsked: true } : {}), ...(r.meta.courses ? { courses: r.meta.courses } : {}), ...(r.meta.forest ? { forest: r.meta.forest } : {}) };
   // (6c VOC) the style the region checker measures with (M26, M27:role): the roles the bible names (resolved) and the style's own blocks
   meta.vocab = { roles: Object.fromEntries(Object.keys(o.roles ?? {}).filter((k) => roles[k]).sort().map((k) => [k, roles[k]])), own: [...vocabStyle.own].sort(), opted: vocabStyle.opted, ...(vocabStyle.opted ? { rarity: vocabStyle.rarity } : {}) };
   // (6c VOC, §5.2 "New in VOC") a plan check: M27's state and convert and M20 (a) over each part's emitted cells (the virtual world of

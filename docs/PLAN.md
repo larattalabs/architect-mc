@@ -1562,6 +1562,33 @@ the safeguards and the measurements are in docs/GATES.md "Speed set A (slice SP)
   `removed` in `mech:<lot>`. Lanes and rungs stay as they are (an empty lane can't be told from an open gate). Read-only; extend
   `LandCheckTest` and `lc-castle` (break the lever). LCi's other notes: only one lane cell exercised; a piston pushing a player block untested.
 
+## SD as built: the "Design a set" dialog on the lab-ui kit (2026-11-12)
+
+Scope from UI-AUDIT item 14 (Noah, via the parent session). Client UI only: no API change, no lab-ui change, $0 (sim sidecar).
+- **Layout** (`SetDialog`): a title row; one body that scrolls (wheel, bar) above a rule; a pinned footer with the status line,
+  Cancel and **Generate** (was "Design the set"; id `set:submit` unchanged). The old list-only scroll and its dead space are gone.
+- **Controls** are kit Chips, Buttons and a Confirm at 18 px; no `s.chip`/`s.dropdown` (14 px) left in the dialog.
+  - Rows: the type stays a text field (open types are valid), with an 18 px Chip ▾ for the preset list (`set:type_pick:<row>`);
+    a role Chip; name and notes fields; "×" is a Button, or a lab-ui Confirm when the row has a name or notes (armed, it takes
+    the notes' place so "Press again to remove (N)" reads whole; the status line says so too).
+  - Steppers (At once, Budget, Redirects): Buttons around the value, same ids. No building-count stepper: "+ Add a building"
+    and the row "×" are the count (the brief's "row count" read as the rows' own add/remove).
+- **Style**: the editor's Style row with the set's bibles only (`SetFeature.bibles()`; the sidecar refuses a palette-only id),
+  "New from a prompt…" and "browse N styles…"; a Style browser pick that is not a bible is refused on the status line.
+  New ids `set:bible:<id>`, `set:bible:new`, `set:browse`; `set:bible` (the old list popup) stays a DevBridge control.
+- **Options** (`CollapsibleSection` `architect_mc.set.options`, closed, with a summary): massing first + redirects, critique +
+  revisions, budget, context. Folded, each stays a zero-size DevBridge control; Tab skips the context field while folded.
+- **Colours**: labels `UiStyle.clayText()` (lab-ui 0.4.1, below); the estimate in ink (no teal); errors `errorText`.
+- **Gallery**: new state `design/set_dialog_options` (a bible picked, Options open); the two old states unchanged.
+
+Leftovers: the editor's own scroll-body/status overlap (audit item 14) is not touched; a shared lab-ui stepper (Buttons around
+a value: the set dialog and the editor's W/H/D) is a lab-ui PR proposal; the disabled primary button's contrast and the title
+bar's 1-2 px offset are kit-wide. j3-ingame's "the split" check assumes only Steward and Architect spend today; in a run dir
+where sim-sets ran first an `apitest` owner appears and the check fails (gate isolation, not this slice).
+- **lab-ui 0.4.1** (Noah: "Merge and release 0.4.1", 2026-11-12): `lab_ui_version` 0.4.0 -> 0.4.1; polish-1's `PaperInk.clay()`
+  fallback (`semantic.clay_text`) is gone, every call site reads `UiStyle.clayText()` (the same #9A3F27). `semantic.placeholder` needed
+  no swap: lab-ui's `TextFieldView` draws it itself. Every gate slot's `.gradle-home` needs 0.4.1 resolved once (tools/lib/pinned-deps.mjs).
+
 ## Chore AT as built (builder, 2026-11-11; branch `chore/AT` off main bcd9eddb; DEV MODE; $0)
 
 SP's gate run found five unit items failing on main itself: coa-unit item 6, h-unit item 10, hy-unit item 11, vocc-unit item 3, f3-unit §9.

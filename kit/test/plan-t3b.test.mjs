@@ -109,7 +109,7 @@ test('refusals (fixtures/plan/tunnel): each its code and evidence; the pocket at
     if (e.evidenceClass) assert.equal(a.reasons[0].evidence.class, e.evidenceClass, f.name);
     if (e.cap) assert.equal(a.reasons[0].evidence.cap, e.cap, f.name);
     if (e.cap) assert.equal(r.asked.length, 0, `${f.name}: a corridor past the cap is never asked`);
-    if (e.block) { assert.equal(a.block, e.block, f.name); assert.equal(a.reasons[0].block, e.block); assert.equal(a.reasons[0].until, '7b'); }
+    if (e.block) { assert.equal(a.block, e.block, f.name); assert.equal(a.reasons[0].block, e.block); assert.equal(a.reasons[0].until, e.until); }
     if (e.note) assert.ok((a.notes ?? []).some((n) => n.includes(e.note)), `${f.name}: ${JSON.stringify(a.notes)}`);
     if (e.walls) assert.ok(a.reasons[0].evidence.walls?.some((q) => q.sealed), `${f.name}: evidence.walls names the sealed wall`);
     for (const n of e.notes ?? []) assert.ok((a.notes ?? []).some((x) => x.startsWith(n)), `${f.name}: ${n} in ${JSON.stringify(a.notes)}`);
@@ -133,7 +133,7 @@ test('broken variants: no lining over the sand (M3:gravity, M3:tunnel), no lamps
   // a hump with 1 cover over the roof: refused by the rule, built by the broken variant, found by the checker
   const hump = { name: 'hump', on: 'flat', terrain: { bands: [{ x0: 1100, z0: 2000, x1: 1150, z1: 2159, y: 68 }] }, anchors: { west: [1096, 65, 2080], east: [1154, 65, 2080] }, volume: {}, plan: { schemaVersion: 'plan/0', connectors: [{ id: 'bore', kind: 'tunnel', approach: 0, from: { anchor: 'west' }, to: { anchor: 'east' } }] } };
   const refused = await run(hump);
-  assert.equal(part(refused, 'bore').class, 'unsupported', 'a hump with 1 cover has no line with cover: tunnel.under');
+  assert.equal(part(refused, 'bore').class, 'refused', 'a hump with 1 cover has no line with cover: tunnel.under ((7b LP) refused NO_FEATURE between ends that are not cellar doors)');
   const c1 = await rules(withExt(hump, { cover: 1 }));
   assert.ok(c1.includes('M3:tunnel'), c1.join(', '));
 });
@@ -142,13 +142,14 @@ test('broken variants: no lining over the sand (M3:gravity, M3:tunnel), no lamps
 const asksPlan = (name) => JSON.parse(fs.readFileSync(asksFirstPath(`${name}.json`), 'utf8')).answer.plan; // ((6c close-out A) the first recordings)
 const A = asksSurvey();
 
-test('§9: secret_tunnels\' three tunnels answer unsupported {tunnel.under, until 7b}; glass_tunnels as recorded is blocked by its zone (no ocean on the asks claim), and with the zone placed answers tunnel.under, params.width read, material noted', async () => {
+test('§9: secret_tunnels\' three tunnels answer refused NO_FEATURE {tunnel.under} ((7b LP): it joins site lots\' cellar doors; was unsupported until 7b); glass_tunnels as recorded is blocked by its zone (no ocean on the asks claim), and with the zone placed answers tunnel.under, params.width read, material noted', async () => {
   const st = await checkPlanLocal(asksPlan('secret_tunnels'), { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
   for (const id of ['tunnel_cellar', 'tunnel_dock', 'tunnel_hatch']) {
     const a = part(st, id);
-    assert.equal(a.class, 'unsupported', `${id}: ${a.class} ${JSON.stringify(a.reasons)}`);
+    assert.equal(a.class, 'refused', `${id}: ${a.class} ${JSON.stringify(a.reasons)}`);
     assert.equal(a.block, 'tunnel.under', id);
-    assert.equal(a.reasons[0].until, '7b');
+    assert.equal(a.reasons[0].code, 'NO_FEATURE', id);
+    assert.equal(a.reasons[0].until, undefined);
   }
   // as recorded: the colony zone wants ocean water (none on the asks claim: refused NO_FEATURE), so its tunnel is blocked (a deviation
   // from §9's prediction, recorded in "T3b as built")
@@ -162,7 +163,7 @@ test('§9: secret_tunnels\' three tunnels answer unsupported {tunnel.under, unti
   const uw = await checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim) });
   assert.ok(['fits', 'adjusted'].includes(part(uw, 'colony').class), JSON.stringify(part(uw, 'colony')));
   const g = part(uw, 'glass_tunnels');
-  assert.equal(g.class, 'unsupported', JSON.stringify(g));
+  assert.equal(g.class, 'refused', JSON.stringify(g));
   assert.equal(g.block, 'tunnel.under');
   assert.ok((g.notes ?? []).some((n) => n.startsWith('params.material not read')), JSON.stringify(g.notes));
   assert.ok(!(g.notes ?? []).some((n) => n.startsWith('params.width')), 'params.width is read');

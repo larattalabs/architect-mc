@@ -84,10 +84,10 @@ final class DescribeStyleScreen extends U3Screen {
 		int cw = Math.min(420, w - 24);
 		int cx = x + (w - cw) / 2;
 		int y = top + 10;
-		g.text(font, "Name", cx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
+		g.text(font, "Name", cx, y, UiStyle.clayText(), false);
 		y += 11;
 		y += drawField(g, nameField, cx, y, cw) + 6;
-		g.text(font, "What should it look like?", cx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
+		g.text(font, "What should it look like?", cx, y, UiStyle.clayText(), false);
 		y += 11;
 		y += drawField(g, promptField, cx, y, cw) + 6;
 		for (String l : TextUtil.wrapPlain(font, costLine(), cw)) {

@@ -279,7 +279,9 @@ old `preset:<name>` / `bible:<id>`. The Library: `place`, `edit`, `more` (⋯), 
 
 Controls (`dev.ui.click`): `design_set`, `design:bible`, `design:profile`, `type:other`; in the dialog `set:bible`,
 `set:draft_bible`, `set:type_pick:<row>`, `set:role:<row>`, `set:remove:<row>`, `set:add`, `set:concurrency±`,
-`set:budget±`, `set:submit`, `set:cancel`, and the fields `field:set_name`, `field:set_prompt`, `field:set_type:<row>`,
+`set:budget±`, `set:submit`, `set:cancel` (since slice SD also the Style row's `set:bible:<id>`, `set:bible:new`, `set:browse`, the
+Options header `section:set_options` (lab-ui fold key `architect_mc.set.options`, `dev.u3.sections` sets it), and a filled row's
+`set:remove:<row>` is a lab-ui Confirm: press it twice), and the fields `field:set_name`, `field:set_prompt`, `field:set_type:<row>`,
 `field:set_iname:<row>`, `field:set_notes:<row>` (`dev.ui.focus {field: "set_iname:2"}`); in the Designs tab
 `group:resume`, `group:extend`, `group:cancel`, `group:library`, `bible:cancel`, `bible:use`; in the Library
 `filter:collection`, `collection:reskin`, `collection:clear`, `sort` (when the sort chips fold into one), and in the
@@ -393,6 +395,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   massingFirst?: true, items: [{key, site?, buildingType?, size?}]}` (`Designs.requestGroup`, bible rustic -> `{groupId}` or `{refused}`),
   `dev.sl.groupState {groupId}` (`Designs.group` -> `{known, status, awaiting, items: [{key, stage, status, designId, designIds, entryId,
   step}]}`) and `dev.sl.approve {groupId, approve: [keys]}` (`Designs.approveGroup` -> `{approved}` or `{refused}`).
+
+- **2026-11-12 (7b slice LP):** new (`SliceLpDev`, generated headless too) `dev.lp.stats {}` (the link passes run since the start: `{calls,
+  noLinks, bypass}`) and `dev.lp.bypass {on}` (TEST, the gate's GR byte item only: realise as before LP, no link pass at all; off again
+  after). `dev.region.realiseApproved` (and every hook through `SliceP0Dev.wrap`) answers a refusal's `detail` too (NO_LINK's `{lot,
+  port}` as JSON).
 
 - **2026-11-11 (7b slice AF):** new (`SliceAfDev`, generated headless too) `dev.af.site {lot: [x0,y0,z0,x1,y1,z1], fit, load?:
   loaded|generated:<n>|bounded:<n>}`: `Survey.site` in the player's level through the public API (the lot plus 8 frozen to

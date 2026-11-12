@@ -30,6 +30,9 @@
 //   --slots N              GATE_SLOTS     machine-wide gate-run slots (default slots.max in gate-chains.json, 4): at most N runs at once, across worktrees. A run
 //                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
+//   --no-load-wait         GATE_LOAD_MAX=0  no load-aware start (docs/GATES.md "Load-aware start"): by default a shared run whose turn it is
+//                                         waits while load1 > slots.load.max1 or another run started under settleSec ago (never alone, at
+//                                         most maxWaitMin); GATE_LOAD_MAX / GATE_LOAD_WAIT_MAX_MIN override
 //   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
 //                          (and isolates the bench steps again)
 //   --no-history-timeouts  the configured timeoutMin for every step; --no-history also ignores the history for the order
@@ -99,7 +102,8 @@ import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/
 import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
-import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
+import { stallMinutes, stallWatch } from './lib/stall-watch.mjs';
+import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -849,6 +853,9 @@ function releaseSlot() {
 }
 process.on('exit', releaseSlot);
 const slotNote = { waitedSeconds: 0, slot: null, slots: null, limit: SLOTS, dir: SLOT_DIR, turbo: false };
+// the load-aware start (tools/lib/turbo.mjs loadGate, docs/GATES.md "Load-aware start"): slots.load in gate-chains.json, GATE_LOAD_MAX /
+// GATE_LOAD_WAIT_MAX_MIN, --no-load-wait (max1 0)
+const LOAD_GATE = flag('--no-load-wait') ? { ...loadConfig(cfg), max1: 0 } : loadConfig(cfg);
 async function acquireSlot(decide) {
   fs.mkdirSync(SLOT_DIR, { recursive: true });
   const stamp = () => new Date().toISOString().slice(11, 19);
@@ -861,9 +868,9 @@ async function acquireSlot(decide) {
   holdingSlots = true; // the ticket (and a turbo run's reserved slots) from here on
   const me = { pid: process.pid, worktree: SRC, chain: chainName, turbo: TURBO };
   const fill = Math.max(TC.fillSlots, SLOTS, cfg.slots?.max ?? 0);
-  const got = await acquireMachine(SLOT_DIR, me, { slots: SLOTS, fill, decide, pollMs: Number(process.env.GATE_SLOT_POLL_MS ?? (TURBO ? TC.pollMs : 15_000)),
+  const got = await acquireMachine(SLOT_DIR, me, { slots: SLOTS, fill, decide, load: LOAD_GATE, pollMs: Number(process.env.GATE_SLOT_POLL_MS ?? (TURBO ? TC.pollMs : 15_000)),
     log: (m) => console.log(`[${stamp()}] gate-run ${chainName}: ${m}`) });
-  Object.assign(slotNote, { slot: got.slot, slots: got.slots, waitedSeconds: got.waitedSeconds, turbo: TURBO });
+  Object.assign(slotNote, { slot: got.slot, slots: got.slots, waitedSeconds: got.waitedSeconds, turbo: TURBO, loadGate: LOAD_GATE, loadWait: got.loadWait });
   process.removeListener('SIGINT', onSig);
   process.removeListener('SIGTERM', onSig);
   console.log(`[${stamp()}] gate-run ${chainName}: ${TURBO ? `TURBO: holds the machine (slots ${got.slots.join(',')})` : `took slot ${got.slot}/${SLOTS}`}${got.waitedSeconds ? ` after waiting ${fmtDur(got.waitedSeconds)}` : ''}`);
@@ -1231,6 +1238,7 @@ function printPlan() {
   if (autoChoice) console.log(`${autoChoice.text}\n  mode: ${autoChoice.mode}; ports ${autoChoice.ports.join(',')} (${autoChoice.portSource}; the run re-decides under the slot mutex when it starts)`);
   else console.log(`shards: ${NSHARDS} (--shards ${SHARDS_ARG ?? `omitted: ${steps.length} steps${['slice', 'release'].includes(chainName) ? ` <= ${AC.minSteps}` : `, ${chainName} is not slice/release`}`})`);
   console.log(`${TURBO ? `TURBO: waits for the whole machine and holds every slot (queue FIFO; --no-turbo for a shared run)` : `slots: at most ${SLOTS} gate runs on the machine`} (${SLOT_DIR}); now: ${describeQueue(SLOT_DIR).text}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
+  console.log(`load-aware start: ${LOAD_GATE.max1 > 0 ? `${TURBO ? 'none for a turbo run (it starts once every other run has ended)' : `waits its turn while the 1-min load is above ${LOAD_GATE.max1} or another run started less than ${LOAD_GATE.settleSec} s ago (never when it would be the only run; at most ${LOAD_GATE.maxWaitMin} min)`}; load now ${load1()}` : 'off (--no-load-wait / GATE_LOAD_MAX=0)'}`);
   console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const sched = estimate();
@@ -1373,7 +1381,7 @@ const writeSummary = () => {
   fs.renameSync(path.join(OUT, 'summary.json.tmp'), path.join(OUT, 'summary.json'));
 };
 writeSummary();
-if (slotNote.slot !== null) log(`${TURBO ? `TURBO: the machine held (slots ${slotNote.slots.join(',')})` : `slot ${slotNote.slot}/${SLOTS} held`} (pid ${process.pid})${slotNote.waitedSeconds ? `, waited ${fmtDur(slotNote.waitedSeconds)} for it` : ''}; timing bars ${RECORD_TIMING ? 'recorded, not judged' : 'judged'}; quiet-wait ${QUIET === null ? 'off' : `load < ${QUIET}`}`);
+if (slotNote.slot !== null) log(`${TURBO ? `TURBO: the machine held (slots ${slotNote.slots.join(',')})` : `slot ${slotNote.slot}/${SLOTS} held`} (pid ${process.pid})${slotNote.waitedSeconds ? `, waited ${fmtDur(slotNote.waitedSeconds)} for it` : ''}${slotNote.loadWait ? ` (${fmtDur(slotNote.loadWait.seconds)} of it the load-aware start${slotNote.loadWait.gaveUp ? ', gave up' : ''})` : ''}; timing bars ${RECORD_TIMING ? 'recorded, not judged' : 'judged'}; quiet-wait ${QUIET === null ? 'off' : `load < ${QUIET}`}`);
 
 // ------------------------------------------------------------------ processes: kill only ours
 
@@ -1672,23 +1680,56 @@ function runProcess(sh, step, logFile) {
     const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     let timedOut = false;
     let killTimer;
+    // stalled after a FAIL (tools/lib/stall-watch.mjs, docs/GATES.md "Stalled after a FAIL"): a driver that printed a functional FAIL and then
+    // nothing for stallAfterFailMin minutes is killed now, not at its timeout; the failed-step path below stops the client by PID
+    let stalled = null;
+    const stallMin = stallMinutes(step, cfg);
+    const watch = stallWatch({ idleMs: stallMin * 60_000, barsRecorded: recordsTiming(step) });
+    let readAt = fs.statSync(logFile).size;
+    const stallTimer = stallMin > 0 ? setInterval(() => {
+      try {
+        const size = fs.statSync(logFile).size;
+        if (size > readAt) {
+          const rfd = fs.openSync(logFile, 'r');
+          const buf = Buffer.alloc(Math.min(size - readAt, 4 << 20));
+          fs.readSync(rfd, buf, 0, buf.length, size - buf.length);
+          fs.closeSync(rfd);
+          readAt = size;
+          watch.feed(buf.toString('utf8'));
+        }
+      } catch {
+        // the log is read again next tick
+      }
+      const st = stalled ? null : watch.check();
+      if (st) {
+        stalled = st;
+        log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
+        killGroup(child.pid, 'SIGTERM');
+        clearTimeout(killTimer);
+        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
+      }
+    }, Number(process.env.GATE_STALL_POLL_MS ?? 10_000)) : null;
     const timer = setTimeout(() => {
       timedOut = true;
       log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
+      clearTimeout(killTimer); // a stall kill's timer, if both fired: one pending SIGKILL, cleared on exit
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
     }, step.effTimeoutMin * 60_000);
     child.on('error', (e) => {
       clearTimeout(timer);
+      clearInterval(stallTimer);
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
       resolve({ code: 127, timedOut: false });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       clearTimeout(killTimer);
+      clearInterval(stallTimer);
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
+      if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
-      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut });
+      resolve({ code: code ?? (signal ? 128 : 1), signal, timedOut, stalled });
     });
     sh.activeGroup = child.pid;
   });
@@ -1781,10 +1822,14 @@ async function runStep(sh, step, rec) {
   // summed over a `&&` chain: at least one must be printed and they must add up to the FAIL lines, so a timing miss followed by an early
   // exit (the rest of the checks never ran) does not pass
   const totals = [...lines.filter((l) => !l.startsWith('# ')).join('\n').matchAll(/(\d+) FAILURE\(S\)|FAILED \((\d+)\)|(\d+) failure\(s\)|(\d+) FAILED ->/g)].map((m) => Number(m[1] ?? m[2] ?? m[3] ?? m[4]));
-  const timingOnly = recordsTiming(step) && !r.timedOut && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
+  const timingOnly = recordsTiming(step) && !r.timedOut && !r.stalled && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
     && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
   if (r.timedOut) rec.status = 'TIMEOUT';
-  else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
+  else if (r.stalled) {
+    rec.status = 'FAIL';
+    rec.stalledAfterFail = { failLine: r.stalled.failLine, idleSeconds: Math.round(r.stalled.idleMs / 1000), failAt: new Date(r.stalled.failAt).toISOString() };
+    rec.error = `stalled: no output for ${fmtDur(r.stalled.idleMs / 1000)} after its FAIL; the step was killed and its client stopped`;
+  } else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
   else if (timingOnly) {
     rec.status = 'PASS';
     rec.timingRecorded = barLines.map((l) => l.replace(/^\[[\d:]+\] /, '').slice(0, 300));
@@ -1793,7 +1838,8 @@ async function runStep(sh, step, rec) {
   // a step with timing bars passing in record mode that also missed none still lists nothing; a recorded miss on a loaded box says so
   if (rec.timingRecorded) rec.timingLoad1 = { start: rec.load1.start, end: rec.load1.end };
   // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
-  if (rec.noisy && !recordsTiming(step) && ['PASS', 'FAIL'].includes(rec.status)) {
+  // a stalled step is a functional failure whatever the load: it stays FAIL
+  if (rec.noisy && !recordsTiming(step) && !r.stalled && ['PASS', 'FAIL'].includes(rec.status)) {
     rec.noisyOutcome = rec.status;
     rec.status = 'NOISY';
   }
@@ -1810,7 +1856,7 @@ async function runStep(sh, step, rec) {
   // a killed or failed step may leave a client in any state (or one it started itself): stop it, the next step starts fresh
   if (rec.status !== 'PASS' || step.client === 'self') {
     await stopClient(sh, `${step.id} ${rec.status}`);
-    if (rec.status === 'TIMEOUT') cleanStrays(sh);
+    if (rec.status === 'TIMEOUT' || rec.stalledAfterFail) cleanStrays(sh);
   }
   return rec;
 }
@@ -1886,7 +1932,7 @@ function summaryMd() {
     `${summary.state}, ${fmtDur(summary.durationSeconds)}, head ${summary.head?.slice(0, 9) ?? '?'}${summary.sourceDirty ? ' (source dirty)' : ''}, `
       + `${shards.map((s) => `${shards.length > 1 ? `${s.name} ` : ''}ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join(', ')}.`,
     `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.timingRecorded.length ? ` ${summary.timingRecorded.length} timing bar miss(es) recorded.` : ''}${summary.error ? ` Error: ${summary.error}` : ''}`,
-    `${summary.slot.turbo ? `TURBO (the machine held, ${NSHARDS} shard(s) + ${NLANES} offline lane(s))` : `Slot ${summary.slot.slot}/${summary.slot.limit}`}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
+    `${summary.slot.turbo ? `TURBO (the machine held, ${NSHARDS} shard(s) + ${NLANES} offline lane(s))` : `Slot ${summary.slot.slot}/${summary.slot.limit}`}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}${summary.slot.loadWait ? `; load-aware start: ${summary.slot.loadWait.gaveUp ? 'gave up after' : 'waited'} ${fmtDur(summary.slot.loadWait.seconds)} (load ${summary.slot.loadWait.load1} at the start, limit ${summary.slot.loadWait.max1})` : ''}; timing bars ${summary.timingPolicy}; benches ${summary.schedule.benches}; ${summary.schedule.historyTimeouts ? 'timeouts from history' : 'configured timeouts'}.`,
   ];
   if (autoChoice) lines.push('', '```', autoChoice.text, '```');
   const mc = summary.machine;

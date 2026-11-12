@@ -1,0 +1,6 @@
+{
+  "about": "(7b LP) tunnel.under is supported between two site lots' cellar doors (door ports), which plan/0 can't make (no elevated zone places a carve_into lot): r.portLink's units cover it (kit/test/lp.test.mjs); a plan/0 tunnel under flat ground answers refused NO_FEATURE {tunnel.under} (fixtures/plan/tunnel/tn10)",
+  "ids": [
+    "tunnel.under"
+  ]
+}

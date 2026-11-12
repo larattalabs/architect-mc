@@ -2,6 +2,8 @@
 // Region programs CLI (docs/CONTRACT.md §6 "Kit CLI", kit/REGIONS.md "Plan CLI"):
 //   node kit/tools/region.mjs plan <program.mjs> --params p.json --survey s.bin [--seed u64] --claim minX,minZ,maxX,maxZ[,minY,maxY]
 //        [--bible b.json] [--roles r.json] [--out dir] [--json] [--node N]   (--node: the Node major the IR records; a re-cut golden keeps its own)
+//        [--links l.json [--link-base ir.json]]   ((7b LP) the realise's link pass: the plan replayed with the bound entries' ports, its links
+//        written; NO_LINK {lot, port} or REPLAY when the replay is not the checked plan plus the links)
 //   node kit/tools/region.mjs eval <ir.json> --tile tx,tz --heights h.bin [--stage s] [--set terrain|path] [--json] [--out file]
 //   node kit/tools/region.mjs synth --box minX,minZ,maxX,maxZ [--res 1|4] [--seed s] --out file      (a synthetic ARSV, for tests)
 // Exit 0 ok, 1 failure, 2 usage. With --json the last stdout line is one JSON object. `plan` writes only into --out.
@@ -20,6 +22,7 @@ import { finishCheck } from '../lib/plan/finish.mjs';
 import { fillMissing } from '../lib/region/plan.mjs';
 import { asColumns, canonicalJson as canonicalJsonOf } from '../lib/region/pack.mjs';
 import { withStandingIds } from '../lib/region/revise.mjs';
+import { LinkError, replayDiff } from '../lib/region/links.mjs';
 
 /** (6d RV) a revision input's standing data, its ids filled from its effective IR (M29:revision). */
 const revisionStandingOf = (rv) => withStandingIds(rv?.standing ?? null, rv?.effective ?? null);
@@ -45,7 +48,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1 }); // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1, links: 1, 'link-base': 1 }); // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -107,7 +110,32 @@ async function plan(argv) {
     if (!/^[0-9a-f]{64}$/.test(key)) return null;
     try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
   } : null;
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}) });
+  // (7b LP) the realise's link pass: --links <f> ({lots: {lot: {entry, version?, ports}}}: the bound entries' ports) re-plans the same plan
+  // writing its port links; --link-base <ir.json> (the checked plan's IR) then proves the replay: every member but the links equal
+  const links = opts.links ? readJson(opts.links, '--links') : null;
+  const linkBase = opts['link-base'] ? readJson(opts['link-base'], '--link-base') : null;
+  if (linkBase && !links) throw new Usage('--link-base needs --links');
+  let res;
+  try {
+    res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
+  } catch (e) {
+    // (7b LP, change 3) a link that can't reach an entry's port: NO_LINK {lot, port} (the realise is refused, nothing written)
+    if (links && e instanceof LinkError) {
+      const noLink = { lot: e.lot, port: e.port, code: e.code, message: e.message };
+      if (opts.json) console.log(JSON.stringify({ ok: false, noLink, error: `NO_LINK: ${e.message}` }));
+      else console.error(`NO_LINK: ${e.message}`);
+      return 1;
+    }
+    throw e;
+  }
+  if (linkBase) {
+    const why = replayDiff(linkBase, res.ir, canonicalJsonOf);
+    if (why) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, replay: why, error: `REPLAY: the plan replayed with the links is not the checked plan: ${why}` }));
+      else console.error(`REPLAY: ${why}`);
+      return 1;
+    }
+  }
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
@@ -140,7 +168,7 @@ async function plan(argv) {
     }
   }
   const ir = res.ir;
-  const summary = { ok: true, ...(checked ? { planCheck: checked } : {}), irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
+  const summary = { ok: true, ...(checked ? { planCheck: checked } : {}), ...(links ? { links: res.meta.links ?? [] } : {}), irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
   if (opts.json) console.log(JSON.stringify(summary));
   else {
     console.log(`plan ${ir.id}: irSha ${res.irSha}`);
