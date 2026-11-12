@@ -283,6 +283,7 @@ const isT2 = (sc) => sc.phase === '6c-t2'; // (6c T2) route_demo on S3's claim
 const isD = (sc) => sc.phase === '6c-d'; // (6c D1) districts_demo on S3's claim
 const isS2 = (sc) => sc.program === 'ice_outpost'; // (6c S2) the ice-spike outpost on S2's claim
 const isS3 = (sc) => sc.program === 'terraced_monastery'; // (6c S3) the terraced monastery on S3's claim
+const isSB = (sc) => !!sc.sculpt; // (7b SB) S5's treehouses and S6's cave city: a sculpt first, site lots with $0 site variants (tools/lib/scenario-sb.mjs)
 const BARS = new Set(['mspt', 't1-tiles', 't2-tiles', 'd-tiles', 's2-tiles', 's3-tiles']); // timing rows (recorded, not blocking in change/slice)
 
 /** (6c T2) An /apitest command's JSON answer (the apitest mod: protected areas). */
@@ -429,6 +430,9 @@ async function runScenario(id) {
   const owner = isT2(sc) ? sc.owner : undefined;
   const protect = isT2(sc) && !flat ? sc.protect ?? [] : [];
   for (const a of protect) { await apitest(`unprotect ${owner} ${a.id}`).catch(() => null); await apitest(`protect ${JSON.stringify({ owner, ...a }).replaceAll(' ', '_')}`); }
+  // (7b SB) the sculpt (natural land, vanilla /fill) before any plan; its record gives the program its params
+  let sbRun = null;
+  if (isSB(sc)) { const SB = await import('./lib/scenario-sb.mjs'); sbRun = { sculpt: await SB.sculpt(L, sc, claim, flat) }; sc.params = SB.paramsFrom(sc, sbRun.sculpt.record); T('sculpt', t0); t0 = Date.now(); }
   const p1 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });
   T('plan', t0);
   t0 = Date.now();
@@ -448,7 +452,7 @@ async function runScenario(id) {
   // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
   // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
   // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
-  const freeze = isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc); // (6c F2) scatter_demo reads the frozen volume; (6c T2) route_demo on S3; (6c D1) districts_demo too; (6c S2) the outpost reads S2's frozen volume too
+  const freeze = isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) || isSB(sc); // (7b SB) the plans read frozen volumes of a live world too // (6c F2) scatter_demo reads the frozen volume; (6c T2) route_demo on S3; (6c D1) districts_demo too; (6c S2) the outpost reads S2's frozen volume too
   if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
@@ -465,6 +469,22 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'siteplan.json'), path.join(out, 'previews', 'siteplan.json'));
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  // (7b SB) the cameras: the plan's cam_* anchors looking at its hub (as `pin` aims them; the layout is the sculpt's, known only now)
+  if (isSB(sc)) {
+    const hub = ir.anchors.hub ?? ir.anchors.entrance;
+    for (const [n, a] of Object.entries(ir.anchors).filter(([k]) => k.startsWith('cam_')).sort()) cams[n] = [a[0] + 0.5 + off[0], a[1], a[2] + 0.5 + off[1], ...look([a[0] + 0.5, a[1], a[2] + 0.5], [hub[0], hub[1], hub[2]])];
+  }
+  // (7b SB) the $0 lots: an archetype per fit (the sim's site-aware stub) and Designs.siteVariant of it for every other site lot
+  if (isSB(sc)) {
+    t0 = Date.now();
+    const se = await (await import('./lib/scenario-sb.mjs')).siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
+    sbRun.entries = se;
+    sc.lotEntries = se.entries;
+    fs.writeFileSync(path.join(out, 'site-entries.json'), `${JSON.stringify(se, null, 2)}\n`);
+    T('siteEntries', t0);
+    const missing = ir.lots.filter((l) => l.site && !se.entries[l.id]).map((l) => l.id);
+    if (missing.length) L.log(`  SB: no $0 entry for ${missing.join(', ')}: ${JSON.stringify(se.rows.filter((x) => !x.entry))}`);
+  }
   // (6c W) a close-up camera on the first apron lamp (the lamp look for the gallery): 4 out and 2 up, on the side away from its lot
   if (!flat) {
     const pm = JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8'));
@@ -492,7 +512,7 @@ async function runScenario(id) {
   // there without its shots (recorded in run.json); every other scenario keeps the client
   const headless = (await L.call('dev.state').catch(() => ({}))).headless === true;
   // (6c S2) S2's flat variant takes no shots either (docs/GATES.md "Headless gates": only the gallery's shots stay on a client)
-  if (headless && !isF2(sc) && !isD(sc) && !((isS2(sc) || isS3(sc)) && flat)) throw new Error('this scenario shoots its cameras: run it on a client (only F2\'s and D\'s scenarios and S2\'s flat variant run headless)');
+  if (headless && !isF2(sc) && !isD(sc) && !((isS2(sc) || isS3(sc) || isSB(sc)) && flat)) throw new Error('this scenario shoots its cameras: run it on a client (only F2\'s and D\'s scenarios and S2\'s flat variant run headless)');
   const shotsOn = !flat && !headless;
   if (shotsOn) { t0 = Date.now(); before = await shoot(cams, path.join(out, 'before')); T('beforeShots', t0); }
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
@@ -588,7 +608,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: 0, lotStates, mobs, ...(hill ? { hill } : {}),
+    spendUsd: 0, lotStates, mobs, ...(hill ? { hill } : {}), ...(sbRun ? { sb: sbRun } : {}),
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
@@ -620,7 +640,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc) ? { blobs } : {}) });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc) || isSB(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -658,7 +678,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // holds the golden itself: its committed inputs re-plan to its IR sha and every tile sha (1 = 4 workers), and it records how far
     // the run's survey is from the golden's
     const gDir = path.join(SCEN, 'goldens', short(sc));
-    if ((isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) { // (6c T2: route_demo on S3 too; 6c D1: districts_demo; 6c S2: the outpost reads a live survey and frozen volume)
+    if ((isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) || isSB(sc)) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) { // (6c T2: route_demo on S3 too; 6c D1: districts_demo; 6c S2: the outpost reads a live survey and frozen volume)
       const runSurvey = fs.readFileSync(path.join(planDir, 'survey.bin')), gSurvey = fs.readFileSync(path.join(gDir, 'survey.bin'));
       if (sha256(runSurvey) !== sha256(gSurvey)) {
         const { asColumns } = await import('../kit/lib/region/pack.mjs');
@@ -894,7 +914,14 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   rows.push({ id: 'realisedVirtual', label: 'P2 realised == virtual (per writer kind)', value: `${rv.differ} of ${rv.written} written cells differ; ${RV.describeRealised(rv)}${rv.first.length ? `; first ${JSON.stringify(rv.first.slice(0, 3))}` : ''}`, threshold: `0 differing cells of every writer kind${flat ? ' (flat: none but child)' : ''}`, pass: RV.realisedOk(rv, [], { strict: flat }).pass, gated: true });
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  // (7b SB) the Fit and disturbance rows (SETTLEMENTS §16.3) and the site lots' ports reached on the realised world
+  let sbm = null;
+  if (isSB(sc)) {
+    sbm = await (await import('./lib/scenario-sb.mjs')).sbRows({ L: lib6, ir, meta, before, after, world, lotStates, entries: sc.lotEntries ?? {} });
+    rows = [...rows, ...sbm.rows];
+    fs.writeFileSync(path.join(out, 'sb-metrics.json'), `${JSON.stringify({ ...sbm, rows: undefined }, null, 1)}\n`);
+  }
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${BARS.has(r.id) ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
@@ -915,6 +942,7 @@ async function metricsOf(runDir) {
   await lib();
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   const sc = readSc(run.scenario);
+  if (isSB(sc) && run.lots) sc.lotEntries = run.lots; // (7b SB) the run's own $0 entries
   const planDir = path.join(runDir, 'raw', 'plan');
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
   const old = JSON.parse(fs.readFileSync(path.join(runDir, 'metrics.json'), 'utf8'));

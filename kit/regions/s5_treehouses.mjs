@@ -41,6 +41,7 @@ export default function s5Treehouses(ctx) {
   const ez = gz + TREE.pairGap + 4;
   r.anchor('entrance', [gx, survey.heightAt(gx, ez) + 1, ez]);
   r.anchor('spawn', [gx + 2, survey.heightAt(gx + 2, ez) + 1, ez]);
+  r.anchor('hub', [gx, G.deckY + 2, gz]); // (the middle pair's walk: the cameras aim at it; an M2 node, reached up the ramp)
   r.anchor('cam_high', [gx, G.deckY + 40, gz + 70]);
   r.anchor('cam_n', [gx, G.deckY + 14, gz - 60]);
   r.anchor('cam_s', [gx, G.deckY + 14, gz + 60]);

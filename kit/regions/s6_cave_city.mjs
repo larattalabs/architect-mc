@@ -72,6 +72,7 @@ export default function s6CaveCity(ctx) {
   r.anchor('spawn', [at[0] - 2, at[1] - 2, at[2]]); // (two steps down the ramp)
   // cameras: two in the hall (from each end, looking along it), one at the ramp's foot, three outside over the mountain
   const H = L.hall, cy = H.y0 + 4;
+  r.anchor('hub', [L.cx, H.y0, L.cz]); // (the hall's middle: the cameras aim at it; an M2 node)
   r.anchor('cam_hall_w', [H.x0 + 2, cy, L.cz]);
   r.anchor('cam_hall_e', [H.x1 - 1, cy, L.cz]);
   r.anchor('cam_ramp', [H.x1 + 6, L.floorY + 8, L.cz]);

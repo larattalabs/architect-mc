@@ -6,7 +6,7 @@
 // the hall's middle, plain air cuts for the hall's two edge rows and west column (the dwellings' front rows: no cavern light lands
 // in a lot) and for the ramp up to the surface at the east end, with a lantern beside every sixth step. The hall's floor is chosen from
 // the city's frozen volume: of the floors from CITY.cover to CITY.cover + 12 under the lowest ground, the one whose lot boxes and hall
-// hold the fewest natural voids (caves; water and lava weigh 100), ties to the higher floor; s6_cave_city plans with it (params.floorY).
+// hold the fewest natural voids (caves; water, lava, sand and gravel weigh 100), ties to the higher floor; s6_cave_city plans with it (params.floorY).
 // Deterministic: no Math.random, no clock.
 import { region } from '../lib/region/program.mjs';
 import { VC } from '../lib/region/volume.mjs';
@@ -29,7 +29,7 @@ function voidCost(L, v) {
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) {
       if (inHall(x, y, z)) continue;
       const c = cls(x, y, z);
-      if (c === VC.WATER || c === VC.LAVA) cost += 100;
+      if (c === VC.WATER || c === VC.LAVA || c === VC.LOOSE) cost += 100; // (sand and gravel fall into a cut under them)
       else if (c === VC.AIR || c === VC.PLANT) cost += 1;
     }
   };
@@ -68,7 +68,7 @@ export default function s6CavernSculpt(ctx) {
   const ramp = r.part('ramp', { stage: 'ground' });
   for (const [i, s] of L.ramp.entries()) {
     ramp.fill({ kind: 'box', min: [s.x, { abs: s.y + 1 }, s.z0], max: [s.x, { abs: s.y + 4 }, s.z1] }, null, { cond: 0 });
-    if (i % 6 === 3) ramp.fill({ kind: 'box', min: [s.x, { abs: s.y + 1 }, s.z0], max: [s.x, { abs: s.y + 1 }, s.z0] }, 'minecraft:lantern', { cond: 0 });
+    if (i % 6 === 3) ramp.fill({ kind: 'box', min: [s.x, { abs: s.y + 1 }, s.z0], max: [s.x, { abs: s.y + 1 }, s.z0] }, 'light', { cond: 0 });
   }
   return r;
 }
