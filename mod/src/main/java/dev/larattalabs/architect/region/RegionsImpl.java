@@ -2182,6 +2182,12 @@ public final class RegionsImpl implements Regions {
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(only)));
 			ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
 		}
+		// (M5 FC, S-M5-4) a module lot's field (its farmland cells, the crop kinds): on the site's ext, so LC, the standing score and the
+		// deconstruct judge its crop cells by the field rule (FieldCells)
+		JsonObject field = lotField(ir, lot.id());
+		if (field != null) {
+			ext.add(dev.larattalabs.architect.site.FieldCells.EXT, field);
+		}
 		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, actorUuid, rec.survival(),
 			dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -2353,6 +2359,23 @@ public final class RegionsImpl implements Regions {
 				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("irrigation") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
 					&& !c.isEmpty()) {
 					return g.get("unmasked") instanceof JsonElement u && u.isJsonPrimitive() && u.getAsBoolean() ? null : c;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (M5 FC) A lot's field in the IR ({@code lots[].field {cells: world column runs [x, z, y0, y1] of its farmland, crops}}) as the site's
+	 * ext value ({@link dev.larattalabs.architect.site.FieldCells#extOf}), or null: none, or no cell or known crop (never throws).
+	 */
+	static @Nullable JsonObject lotField(Ir ir, String lotId) {
+		if (ir.json().get("lots") instanceof JsonArray lots) {
+			for (JsonElement e : lots) {
+				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("field") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
+					&& !c.isEmpty()) {
+					JsonObject v = dev.larattalabs.architect.site.FieldCells.extOf(c, g.get("crops") instanceof JsonArray cr ? cr : null);
+					return v.getAsJsonArray("cells").isEmpty() || v.getAsJsonArray("crops").isEmpty() ? null : v;
 				}
 			}
 		}

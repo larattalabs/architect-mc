@@ -2391,6 +2391,7 @@ public final class Builder {
 		// (7b SO) the site's scaffolding standing in its restore box is cosmetic: never the player's block, never a refund (its entry's undo
 		// takes it down with the site's group)
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet scaffold = SiteJournal.cellsOfKind(s.id(), WorldJournal.SCAFFOLD);
+		FieldCells field = FieldCells.of(s.ext()); // (M5 FC) a module lot's field: a player's crop there is cargo, not construction
 		for (int y = b.minY(); y <= b.maxY(); y++) {
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
@@ -2422,6 +2423,10 @@ public final class Builder {
 					}
 					BlockState now = level.getBlockState(m);
 					if (qi0 < 0 && !scaffold.isEmpty() && scaffold.contains(m.asLong()) && isScaffold(now)) {
+						continue;
+					}
+					if (field != null && fieldCell(field, m.asLong(), now, field.cropCell(m.asLong())
+						&& dev.larattalabs.architect.placed.Placed.record(level, m) != null, tally)) {
 						continue;
 					}
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
@@ -2494,6 +2499,21 @@ public final class Builder {
 			return null;
 		}
 		return o;
+	}
+
+	/**
+	 * (M5 FC, S-M5-4) One crop cell of a module lot's field at a deconstruct: a field crop (of the field's kinds, at any age) that a player
+	 * planted (a PT record, {@code playerRecord}) goes with the lot, is no blocker, and gives back its planting item once, as cargo (the
+	 * player's blocks, dropped at the site; never credited to the stockpile as construction), whatever the template wrote there (the same
+	 * crop included: a same-kind replant is not our construction seed). Returns whether the cell was booked; anything else goes to {@link
+	 * #tallyCell} as before (our crop at any age refunds as construction, air nothing). The ledger lint's seam, as {@link #tallyCell}.
+	 */
+	static boolean fieldCell(@Nullable FieldCells f, long pos, BlockState now, boolean playerRecord, Refunds.Tally tally) {
+		if (f == null || !playerRecord || !f.cropCell(pos) || !f.fieldCrop(now)) {
+			return false;
+		}
+		tally.add(Refunds.Outcome.PLAYER_DROP, Cells.cost(now.getBlock().defaultBlockState()));
+		return true;
 	}
 
 	/**
