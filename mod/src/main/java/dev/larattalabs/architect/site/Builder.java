@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.journal.Copper;
+import dev.larattalabs.architect.journal.JournalStore;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
@@ -224,6 +225,14 @@ public final class Builder {
 		/** Phase 5b: a construction delta's swap cells (changed cells that keep the old block until swapped) and their old states. */
 		final BitSet swap;
 		final BlockState @Nullable [] old;
+		/**
+		 * (7b slice SO) A site-aware building's run (its record's ext carries a {@link dev.larattalabs.architect.api.SiteBinding} with a fit
+		 * other than {@code on_pad}): a cell is placed only when it is attached ({@link #attached}), so every built prefix stays connected to
+		 * the site whatever the crate's stock skips. Read from the record, so a restart rebuilds it.
+		 */
+		final boolean bySupport;
+		/** (7b slice SO) For a gravity block ({@link #gravity}), the queued cell under it, else -1. */
+		final int[] below;
 
 		Run(Site s, Cells t) {
 			Construction c = s.construction();
@@ -268,6 +277,12 @@ public final class Builder {
 				}
 				support[i] = supportOf(i);
 			}
+			this.below = new int[n];
+			for (int i = 0; i < n; i++) {
+				below[i] = gravity(target[i]) ? queuePos(pos(i).below()) : -1;
+			}
+			this.bySupport = s.ext() != null && dev.larattalabs.architect.api.SiteBinding.ofExt(s.ext())
+				.map(b -> b.fit() != dev.larattalabs.architect.api.FitMode.ON_PAD).orElse(false);
 			// nothing built yet: rescan derives it from the world
 			for (int i = 0; i < n; i++) {
 				cost.get(i).forEach(x -> unbuilt.merge(x.item(), x.count(), Integer::sum));
@@ -333,6 +348,38 @@ public final class Builder {
 			Direction d = supportDirection(s);
 			int q = queuePos(pos(i).relative(d));
 			return q == i ? -1 : q;
+		}
+
+		/**
+		 * (7b slice SO) Whether cell {@code i} may be placed now in a support-order run: a face neighbour is a built cell of this site, or a
+		 * cell of the site that is solid ({@link SiteFit#siteSolid}: not air, a fluid, replaceable or leaves; never scaffolding or a crate);
+		 * and a gravity block's queued cell below is built. A neighbour in an unloaded chunk counts as not there. Read without a ticket.
+		 */
+		boolean attached(ServerLevel level, int i) {
+			return attached(q -> stateIfLoaded(level, q), i);
+		}
+
+		/** {@link #attached(ServerLevel, int)} over a world lookup (null: not loaded). Pure of the level: the unit tests' seam. */
+		boolean attached(java.util.function.Function<BlockPos, @Nullable BlockState> world, int i) {
+			if (below[i] >= 0 && !built.get(below[i])) {
+				return false;
+			}
+			BlockPos p = pos(i);
+			for (Direction d : Direction.values()) {
+				BlockPos q = p.relative(d);
+				int k = queuePos(q);
+				if (k >= 0) {
+					if (built.get(k)) {
+						return true;
+					}
+					continue;
+				}
+				BlockState st = world.apply(q);
+				if (st != null && anchorState(st)) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		boolean affordable(int i, Ledger ledger) {
@@ -824,7 +871,10 @@ public final class Builder {
 	 * {@code after}), the crate's cell (and whether a new crate goes there).
 	 */
 	record ConvertPlan(String id, Construction construction, WorldJournal.Captured target, Anchors.Bounds sb, boolean newCrate,
-		@Nullable String sharedGroup) {
+		@Nullable String sharedGroup, List<BlockPos> scaffold) {
+		ConvertPlan(String id, Construction construction, WorldJournal.Captured target, Anchors.Bounds sb, boolean newCrate, @Nullable String sharedGroup) {
+			this(id, construction, target, sb, newCrate, sharedGroup, List.of());
+		}
 	}
 
 	/**
@@ -906,7 +956,17 @@ public final class Builder {
 		Site probe = new Site(id, bp.id(), "none", built.box(), built.box(), Map.of(), 0L, Sites.dimensionId(level), sb, built.snapshot(), null, null,
 			new Construction(Construction.BUILDING, boxIdx, JOURNAL_TARGET, null, new BitSet(), false, owner));
 		Run r = new Run(probe, t);
-		int[] queue = queueOrder(r, boxIdx, null);
+		// (7b slice SO) a site-aware building (the request's site, SiteFit.now, with a fit other than on_pad) builds in support order;
+		// on_pad and plain placements keep today's order byte for byte
+		dev.larattalabs.architect.api.SiteSpec spec = SiteFit.now();
+		boolean bySupport = spec != null && spec.fit() != dev.larattalabs.architect.api.FitMode.ON_PAD;
+		boolean[] anchor = null;
+		if (bySupport) {
+			Set<Long> keep = new HashSet<>();
+			spec.keepCritical().forEach(k -> keep.add(k.asLong()));
+			anchor = anchors(level::getBlockState, r, built.box(), m.sizeX, m.sizeY, m.sizeZ, TerrainFit.writes(m), keep);
+		}
+		int[] queue = queueOrder(r, boxIdx, anchor);
 		// the crate: outside the snapshot box, at the approach's end (or 2 out from the entrance); a batch whose group shares one
 		// crate (phase 4d, R6) puts it down once (at crateAt, or beside the first site's approach end) and every site uses it
 		String sharedId = stockpiled ? null : SHARED_CRATE.get();
@@ -915,7 +975,7 @@ public final class Builder {
 		if (stockpiled) {
 			Architect.LOGGER.info("Construction site {} ({}): {} cells queued; it draws from the stockpile of {}", id, bp.id(), n, siteOwner);
 			return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, null, new BitSet(), false, owner), target, sb, false,
-				null);
+				null, bySupport ? scaffoldPlan(level, r, built, sb, spec, null) : List.of());
 		}
 		if (grp != null && grp.crate() != null) {
 			Construction.Crate gc = grp.crate();
@@ -925,8 +985,9 @@ public final class Builder {
 		}
 		boolean newCrate = crate == null;
 		if (crate == null) {
+			BlockPos portCrate = bySupport && (grp == null || grp.crateAt() == null) ? portCrate(level, spec, built, sb) : null;
 			BlockPos cratePos = grp != null && grp.crateAt() != null ? new BlockPos(grp.crateAt()[0], grp.crateAt()[1], grp.crateAt()[2])
-				: cratePos(level, bp, built, sb);
+				: portCrate != null ? portCrate : cratePos(level, bp, built, sb);
 			BlockState was = level.getBlockState(cratePos);
 			BlockEntity wasBe = level.getBlockEntity(cratePos);
 			String wasNbt = wasBe == null ? null : wasBe.saveWithFullMetadata(level.registryAccess()).toString();
@@ -934,15 +995,19 @@ public final class Builder {
 		}
 		Architect.LOGGER.info("Construction site {} ({}): {} cells queued, crate at {}{}", id, bp.id(), n, crate.x() + "," + crate.y() + "," + crate.z(),
 			r.waterlogged > 0 ? ", " + r.waterlogged + " waterlogged cell(s) built dry" : "");
+		List<BlockPos> scaffold = bySupport ? scaffoldPlan(level, r, built, sb, spec, new BlockPos(crate.x(), crate.y(), crate.z())) : List.of();
+		if (!scaffold.isEmpty()) {
+			Architect.LOGGER.info("Construction site {}: {} scaffolding cell(s) under it (cosmetic: no items, no refund)", id, scaffold.size());
+		}
 		return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, crate, new BitSet(), false, owner), target, sb, newCrate,
-			grp == null ? null : grp.id());
+			grp == null ? null : grp.id(), scaffold);
 	}
 
 	/**
 	 * The construction queue of a probe run {@code r} (its cells in {@code boxIdx} order): {@link BuildOrder#order} over each cell's
 	 * height, kind, support and pair, as box indices. The seam the build-order golden drives (BuildOrderGoldenTest). Pure of the level.
 	 */
-	static int[] queueOrder(Run r, int[] boxIdx, int @Nullable [] dist) {
+	static int[] queueOrder(Run r, int[] boxIdx, boolean @Nullable [] anchor) {
 		int n = boxIdx.length;
 		int[] y = new int[n];
 		int[] kind = new int[n];
@@ -952,12 +1017,74 @@ public final class Builder {
 			kind[i] = kind(r.target[i]);
 			pairOf[i] = r.isSecond[i] ? r.pairFirst(i) : -1;
 		}
-		int[] order = BuildOrder.order(y, kind, r.support, pairOf);
+		int[] order = anchor == null ? BuildOrder.order(y, kind, r.support, pairOf)
+			: BuildOrder.bySupport(y, kind, r.support, pairOf, anchor, neighbours(r), r.below);
 		int[] queue = new int[n];
 		for (int i = 0; i < n; i++) {
 			queue[i] = boxIdx[order[i]];
 		}
 		return queue;
+	}
+
+	/** (7b slice SO) Each queued cell's face-adjacent queued cells. */
+	static int[][] neighbours(Run r) {
+		int n = r.size();
+		int[][] out = new int[n][];
+		int[] buf = new int[6];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = r.pos(i);
+			int c = 0;
+			for (Direction d : Direction.values()) {
+				int k = r.queuePos(p.relative(d));
+				if (k >= 0 && k != i) {
+					buf[c++] = k;
+				}
+			}
+			out[i] = Arrays.copyOf(buf, c);
+		}
+		return out;
+	}
+
+	/**
+	 * (7b slice SO) The support order's anchors of a site placement's probe run: a queued cell face-adjacent to a cell of the site the
+	 * template does not write ({@code writes} 0 there, or outside the template box) that is site-solid in the world now, or keep-critical.
+	 * The instant placement stands while this runs; its written cells (blocks and air) never count, so this is PL's support scan's start.
+	 */
+	static boolean[] anchors(java.util.function.Function<BlockPos, BlockState> world, Run r, Anchors.Bounds box, int sx, int sy, int sz, byte[] writes,
+		Set<Long> keep) {
+		int n = r.size();
+		boolean[] out = new boolean[n];
+		for (int i = 0; i < n; i++) {
+			BlockPos p = r.pos(i);
+			for (Direction d : Direction.values()) {
+				BlockPos q = p.relative(d);
+				if (r.queuePos(q) >= 0) {
+					continue;
+				}
+				int x = q.getX() - box.minX();
+				int y = q.getY() - box.minY();
+				int z = q.getZ() - box.minZ();
+				if (x >= 0 && y >= 0 && z >= 0 && x < sx && y < sy && z < sz && writes[(y * sz + z) * sx + x] != 0) {
+					continue; // written by the template (a block, or air it carved): not the site's
+				}
+				if (keep.contains(q.asLong()) || anchorState(world.apply(q))) {
+					out[i] = true;
+					break;
+				}
+			}
+		}
+		return out;
+	}
+
+	/** (7b slice SO) A world block a site-aware building may hang its first cells on: site-solid, never scaffolding or a crate. */
+	static boolean anchorState(BlockState st) {
+		return SiteFit.siteSolid(TerrainFit.flags(st)) && !st.is(Blocks.SCAFFOLDING)
+			&& !(st.getBlock() instanceof dev.larattalabs.architect.survival.CrateBlock);
+	}
+
+	/** (7b slice SO) A block that falls when nothing is under it (sand, gravel, concrete powder, anvils) or scaffolding. */
+	static boolean gravity(BlockState st) {
+		return st.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || st.is(Blocks.SCAFFOLDING);
 	}
 
 	/** {@link Construction#target} of a 4e construction site: its target lives in its journal entry ({@code after}). */
@@ -967,7 +1094,15 @@ public final class Builder {
 	static java.util.concurrent.CompletableFuture<Void> commitConvert(ServerLevel level, ConvertPlan p) throws Sites.SiteException {
 		Construction.Crate c = p.construction().crate();
 		if (!p.newCrate() || c == null) {
-			return SiteJournal.complete(p.id(), p.target(), null);
+			if (p.scaffold().isEmpty()) {
+				return SiteJournal.complete(p.id(), p.target(), null);
+			}
+			Sites.SiteException[] err = new Sites.SiteException[1];
+			var f = SiteJournal.complete(p.id(), p.target(), t -> scaffoldEntry(t, level, p, err));
+			if (err[0] != null) {
+				throw err[0];
+			}
+			return f;
 		}
 		String owner = p.sharedGroup() != null ? SiteGroupRec.CRATE_PREFIX + p.sharedGroup() : p.id();
 		SiteGroupRec g = p.sharedGroup() == null ? null : Sites.group(p.sharedGroup());
@@ -979,11 +1114,196 @@ public final class Builder {
 			} catch (Sites.SiteException e) {
 				err[0] = e;
 			}
+			scaffoldEntry(t, level, p, err);
 		});
 		if (err[0] != null) {
 			throw err[0];
 		}
 		return f;
+	}
+
+	/** (7b slice SO) The scaffolding's CELL entry, in the site's undo group, added to {@code t} (with the site's and the crate's). */
+	private static void scaffoldEntry(JournalStore.Txn t, ServerLevel level, ConvertPlan p, Sites.SiteException[] err) {
+		if (p.scaffold().isEmpty() || err[0] != null) {
+			return;
+		}
+		try {
+			Site rec = Sites.get(p.id());
+			SiteJournal.scaffoldEntry(t, level, p.id(), rec == null ? null : rec.group(), p.scaffold(), WorldJournal.value(SCAFFOLD));
+		} catch (Sites.SiteException e) {
+			err[0] = e;
+		}
+	}
+
+	/** (7b slice SO) A scaffolding block standing on a sturdy cell or on scaffolding below (vanilla's settled state of a column). */
+	static final BlockState SCAFFOLD = Blocks.SCAFFOLDING.defaultBlockState().setValue(net.minecraft.world.level.block.ScaffoldingBlock.DISTANCE, 0)
+		.setValue(net.minecraft.world.level.block.ScaffoldingBlock.BOTTOM, false);
+	/** (7b slice SO) Columns stand under every {@value}th bottom cell along x and z (world coordinates). */
+	static final int SCAFFOLD_SPACING = 3;
+	/** (7b slice SO) The tallest column; a column that finds no sturdy ground within it is left out. */
+	static final int SCAFFOLD_MAX_HEIGHT = 24;
+	/** (7b slice SO) The most scaffolding cells of one site. */
+	static final int SCAFFOLD_MAX_CELLS = 2048;
+
+	/** After P7: the scaffolding goes up (its entry is committed), bottom-up, with the cell sites' flags (no side effects, no drops). */
+	static void placeScaffold(ServerLevel level, ConvertPlan p) {
+		for (BlockPos q : p.scaffold()) {
+			dev.larattalabs.architect.placed.Placed.set(level, q, SCAFFOLD, Sites.CELL_FLAGS);
+		}
+	}
+
+	/**
+	 * (7b slice SO, N-7b-5) Cosmetic scaffolding of a site-aware building (SETTLEMENTS §7.7): vanilla scaffolding columns under the
+	 * building's bottom cells that have open air under them, every {@link #SCAFFOLD_SPACING}th cell along x and z. A column starts under
+	 * the snapshot box (the row under the template box is the site entry's: a block there would count as the player's at a deconstruct),
+	 * runs down through air no entry owns and no other site's box holds, and stands on a sturdy site-solid cell within
+	 * {@link #SCAFFOLD_MAX_HEIGHT}; else it is left out. Never at the crate (and the two cells over it, the hopper chain's), nor within one
+	 * column of a port or its landing. Bottom-up per column. Reads the world; writes nothing.
+	 */
+	static List<BlockPos> scaffoldPlan(ServerLevel level, Run r, Sites.Built built, Anchors.Bounds sb, dev.larattalabs.architect.api.SiteSpec spec,
+		@Nullable BlockPos crate) {
+		Anchors.Bounds box = built.box();
+		Set<Long> skip = new HashSet<>();
+		GhostModel m0 = built.grid().ghost(0);
+		for (dev.larattalabs.architect.api.SitePort port : spec.ports()) {
+			BlockPos pw = portWorld(port, box, built.turns(), m0.sizeX, m0.sizeZ);
+			BlockPos l = landing(level, pw, portFacing(port, built.turns()));
+			for (BlockPos c : l == null ? List.of(pw) : List.of(pw, l)) {
+				for (int dx = -1; dx <= 1; dx++) {
+					for (int dz = -1; dz <= 1; dz++) {
+						skip.add(BlockPos.asLong(c.getX() + dx, 0, c.getZ() + dz));
+					}
+				}
+			}
+		}
+		if (crate != null) {
+			skip.add(BlockPos.asLong(crate.getX(), 0, crate.getZ()));
+		}
+		String dim = Sites.dimensionId(level);
+		List<BlockPos> out = new ArrayList<>();
+		for (int i = 0; i < r.size() && out.size() < SCAFFOLD_MAX_CELLS; i++) {
+			BlockPos p = r.pos(i);
+			if (p.getY() != box.minY() || Math.floorMod(p.getX(), SCAFFOLD_SPACING) != 0 || Math.floorMod(p.getZ(), SCAFFOLD_SPACING) != 0
+				|| skip.contains(BlockPos.asLong(p.getX(), 0, p.getZ()))) {
+				continue;
+			}
+			BlockPos under = p.below();
+			if (r.queuePos(under) >= 0 || !level.getBlockState(under).isAir()) {
+				continue; // something is under it already
+			}
+			List<BlockPos> col = new ArrayList<>();
+			boolean grounded = false;
+			for (BlockPos q = under.below(); col.size() <= SCAFFOLD_MAX_HEIGHT && q.getY() >= level.getMinY(); q = q.below()) {
+				BlockState st = level.getBlockState(q);
+				if (!st.isAir()) {
+					grounded = !col.isEmpty() && anchorState(st) && st.isFaceSturdy(level, q, Direction.UP);
+					break;
+				}
+				if (sb.contains(q.getX(), q.getY(), q.getZ()) || SiteJournal.owned(dim, q.asLong()) || inOtherSite(level, q)) {
+					break;
+				}
+				col.add(q);
+			}
+			if (grounded && col.size() <= SCAFFOLD_MAX_HEIGHT && out.size() + col.size() <= SCAFFOLD_MAX_CELLS) {
+				for (int k = col.size() - 1; k >= 0; k--) {
+					out.add(col.get(k));
+				}
+			}
+		}
+		return out;
+	}
+
+	/** (7b slice SO) A site port's cell in the world: its design cell through the placement's rotation, from the template box's corner. */
+	static BlockPos portWorld(dev.larattalabs.architect.api.SitePort port, Anchors.Bounds box, int turns, int sx, int sz) {
+		BlockPos a = port.atDesign();
+		int[] rc = dev.larattalabs.architect.placement.BlueprintTransform.rotateBlock(a.getX(), a.getZ(), sx, sz, turns);
+		return new BlockPos(box.minX() + rc[0], box.minY() + a.getY(), box.minZ() + rc[1]);
+	}
+
+	/** (7b slice SO) A site port's facing in the world (up and down stay). */
+	static Direction portFacing(dev.larattalabs.architect.api.SitePort port, int turns) {
+		Direction f = port.facing();
+		return f.getAxis().isVertical() ? f
+			: Direction.byName(dev.larattalabs.architect.placement.BlueprintTransform.rotateDirection(f.getName(), turns));
+	}
+
+	/** (7b slice SO) A cell a player stands in: air or replaceable (no fluid) over a site-solid cell. */
+	static boolean standable(ServerLevel level, BlockPos c) {
+		BlockState st = level.getBlockState(c);
+		return (st.isAir() || st.canBeReplaced()) && st.getFluidState().isEmpty() && anchorState(level.getBlockState(c.below()));
+	}
+
+	/**
+	 * (7b slice SO) A port's landing: the first cell a player stands in just outside it: one step along a side port's facing, then up at
+	 * most 3 (over a step) or down at most 8 (to the ground); under a {@code down} port the first standable cell at most 24 below; over an
+	 * {@code up} port at most 8 above. Null when there is none.
+	 */
+	static @Nullable BlockPos landing(ServerLevel level, BlockPos port, Direction facing) {
+		if (facing == Direction.DOWN || facing == Direction.UP) {
+			BlockPos c = port.relative(facing);
+			for (int i = 0; i < (facing == Direction.DOWN ? 24 : 8); i++, c = c.relative(facing)) {
+				if (standable(level, c)) {
+					return c;
+				}
+			}
+			return null;
+		}
+		BlockPos c = port.relative(facing);
+		if (standable(level, c)) {
+			return c;
+		}
+		BlockState st = level.getBlockState(c);
+		boolean open = st.isAir() || st.canBeReplaced();
+		for (int i = 0; i < (open ? 8 : 3); i++) {
+			c = open ? c.below() : c.above();
+			if (standable(level, c)) {
+				return c;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (7b slice SO, S-7b-7) The crate of a site-aware building: beside the first port's landing (reachable on foot), never in front of a door
+	 * onto air. Tried in order: the landing's right, its left (seen walking out), then one and two steps further out and their sides; for a
+	 * vertical port the four sides of the landing (north, east, south, west). A cell qualifies when it is standable, outside the snapshot
+	 * box and every other site, no entry owns it and the two cells over it are air (the hopper chain). Null: today's rule.
+	 */
+	static @Nullable BlockPos portCrate(ServerLevel level, dev.larattalabs.architect.api.SiteSpec spec, Sites.Built built, Anchors.Bounds sb) {
+		if (spec.ports().isEmpty()) {
+			return null;
+		}
+		dev.larattalabs.architect.api.SitePort port = spec.ports().get(0);
+		GhostModel m0 = built.grid().ghost(0);
+		BlockPos pw = portWorld(port, built.box(), built.turns(), m0.sizeX, m0.sizeZ);
+		Direction f = portFacing(port, built.turns());
+		BlockPos l = landing(level, pw, f);
+		if (l == null) {
+			return null;
+		}
+		List<BlockPos> tries = new ArrayList<>();
+		if (f.getAxis().isHorizontal()) {
+			for (int out = 0; out <= 2; out++) {
+				BlockPos c = l.relative(f, out);
+				tries.add(c.relative(f.getClockWise()));
+				tries.add(c.relative(f.getCounterClockWise()));
+				if (out > 0) {
+					tries.add(c);
+				}
+			}
+		} else {
+			for (Direction d : new Direction[] {Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST}) {
+				tries.add(l.relative(d));
+			}
+		}
+		String dim = Sites.dimensionId(level);
+		for (BlockPos c : tries) {
+			if (standable(level, c) && !sb.contains(c.getX(), c.getY(), c.getZ()) && !inOtherSite(level, c) && !SiteJournal.owned(dim, c.asLong())
+				&& level.getBlockState(c.above()).isAir() && level.getBlockState(c.above(2)).isAir()) {
+				return c;
+			}
+		}
+		return null;
 	}
 
 	/** After P7: a new crate goes down (its entry is committed). */
@@ -1054,6 +1374,7 @@ public final class Builder {
 		SiteJournal.await(commitConvert(level, p), "the construction plan of " + id);
 		placeCrate(level, p);
 		clear(level, p.construction(), p.sb(), 0, Long.MAX_VALUE);
+		placeScaffold(level, p);
 		Placement.noteConvert(id, System.nanoTime() - t0);
 		return p.construction();
 	}
@@ -1240,6 +1561,9 @@ public final class Builder {
 				r.markBuilt(i, true); // already there (the player placed it)
 				continue;
 			}
+			if (r.bySupport && !r.attached(level, i)) {
+				continue; // (7b SO) not yet attached to the site or a built cell: every built prefix stays connected
+			}
 			if (!r.affordable(i, purse::stock)) {
 				// C25: a frontier cell (its support is built) the stock cannot pay
 				starved |= r.support[i] < 0 || r.built.get(r.support[i]);
@@ -1371,6 +1695,7 @@ public final class Builder {
 
 	/** Every queued cell built: the site is built, the crate gives back its stock and goes, a toast and a chat note fire. */
 	private static void complete(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable CrateBlockEntity crate) {
+		removeScaffold(level, s.id()); // (7b SO) first: a stop before the BUILT record runs complete again, and this finds nothing left
 		Construction c = s.construction();
 		// a group's shared crate stays while another of its sites still builds (R6)
 		boolean keepCrate = !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty();
@@ -1401,6 +1726,27 @@ public final class Builder {
 		dev.larattalabs.architect.apiimpl.ApiEvents.built(srv, now != null ? now : done);
 		// (6c close-out A) a survival region's lot built: its heights become the later stages' drift baseline
 		dev.larattalabs.architect.region.RegionsImpl.constructionBuilt(srv, s.group(), s.restoreBox());
+	}
+
+	/**
+	 * (7b slice SO) Takes a site's scaffolding down: its {@code architect:scaffold} entries undone through the journal (CELL: only cells
+	 * that still hold scaffolding go back, with the cell sites' flags, so nothing drops or falls), then released. Idempotent.
+	 */
+	static void removeScaffold(ServerLevel level, String siteId) {
+		List<String> ids = SiteJournal.idsOf(siteId, WorldJournal.SCAFFOLD);
+		if (ids.isEmpty()) {
+			return;
+		}
+		try {
+			String g = SiteJournal.group("scaffold-" + siteId);
+			SiteJournal.Undone u = SiteJournal.undoEntries(level, ids, g);
+			SiteJournal.await(u.commit(), "taking down the scaffolding of " + siteId);
+			SiteJournal.Restore rs = SiteJournal.writeNow(level, siteId, g);
+			SiteJournal.releaseGroup(u.work().ids());
+			Architect.LOGGER.info("Construction site {}: its scaffolding came down ({} cells)", siteId, rs.cells().size());
+		} catch (Sites.SiteException | RuntimeException e) {
+			Architect.LOGGER.error("Could not take the scaffolding of {} down", siteId, e);
+		}
 	}
 
 	// ------------------------------------------------------------------ ghost sync
