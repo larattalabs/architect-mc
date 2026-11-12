@@ -112,19 +112,21 @@ export default function s5GroveSculpt(ctx) {
   r.meta.sb = { scenario: 's5', sculpt: 'grove', ...G };
   r.anchor('entrance', [G.centre[0], survey.heightAt(G.centre[0], G.centre[1]) + 1, G.centre[1]]);
   r.anchor('spawn', [G.centre[0], survey.heightAt(G.centre[0], G.centre[1]) + 1, G.centre[1]]);
-  // the clearing: the natural trees' logs and leaves within TREE.clear columns of a site (from the volume over the grove)
+  // the clearing: the natural trees' logs within TREE.clear columns of a site and leaves within 6 more (from the volume over the grove)
   const xs = G.trees.map((t) => t.at[0]), zs = G.trees.map((t) => t.at[2]), gs = G.trees.map((t) => t.at[1]);
-  const vb = { minX: Math.max(claim.minX, Math.min(...xs) - TREE.clear), maxX: Math.min(claim.maxX, Math.max(...xs) + TREE.clear), minZ: Math.max(claim.minZ, Math.min(...zs) - TREE.clear), maxZ: Math.min(claim.maxZ, Math.max(...zs) + TREE.clear), minY: Math.min(...gs) - 4, maxY: Math.max(...gs) + 64 };
+  const cr = TREE.clear + 6;
+  const vb = { minX: Math.max(claim.minX, Math.min(...xs) - cr), maxX: Math.min(claim.maxX, Math.max(...xs) + cr), minZ: Math.max(claim.minZ, Math.min(...zs) - cr), maxZ: Math.min(claim.maxZ, Math.max(...zs) + cr), minY: Math.min(...gs) - 4, maxY: Math.max(...gs) + 64 };
   const v = r.needVolume(vb);
   if (v) {
     const clear = r.part('clearing', { stage: 'clear' });
     const b = v.box;
     for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {
-      if (!G.trees.some((t) => Math.max(Math.abs(t.at[0] - x), Math.abs(t.at[2] - z)) <= TREE.clear)) continue;
+      const d = Math.min(...G.trees.map((t) => Math.max(Math.abs(t.at[0] - x), Math.abs(t.at[2] - z))));
+      if (d > TREE.clear + 6) continue; // (logs within TREE.clear; leaves 6 further: a cleared tree's leaves would decay after the snapshot)
       let y0 = null;
       for (let y = b.minY; y <= b.maxY + 1; y++) {
         const c = y <= b.maxY ? v.classes[((x - b.minX) * v.depth + (z - b.minZ)) * v.height + (y - b.minY)] : VC.AIR;
-        const tree = c === VC.LOG || c === VC.LEAVES;
+        const tree = (c === VC.LOG && d <= TREE.clear) || c === VC.LEAVES;
         if (tree && y0 === null) y0 = y;
         if (!tree && y0 !== null) { clear.fill({ kind: 'box', min: [x, { abs: y0 }, z], max: [x, { abs: y - 1 }, z] }, null, { cond: 0 }); y0 = null; }
       }

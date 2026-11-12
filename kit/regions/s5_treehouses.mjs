@@ -57,6 +57,17 @@ export default function s5Treehouses(ctx) {
   const lane = r.part('lane', { stage: 'ground', set: 'path' });
   const lx0 = Math.min(...lots.map((l) => l.box[0])), lx1 = Math.max(...lots.map((l) => l.box[3])) + 12;
   for (let x = lx0; x <= Math.min(claim.maxX - 1, lx1); x++) lane.fill({ kind: 'box', min: [x, { surface: 0 }, ez - 1], max: [x, { surface: 0 }, ez + 1] }, 'path', { cond: 1 });
+  // the ramps' paths: the path role on the tongue and down the middle of each ramp's mound (the sculpt's ramps). The walker reads a
+  // column from its written cells or its top, and under a giant crown the column's top is the leaves: a written path is what makes the
+  // sculpted ramp walkable to it (as S6's street does the hall)
+  for (const [i, rp] of (G.ramps ?? []).entries()) {
+    const zc = (rp.gap[0] + rp.gap[1]) >> 1;
+    const run = r.part(`ramp_path_${i + 1}`, { stage: 'ground', set: 'path' });
+    for (let x = rp.x0; x <= Math.min(claim.maxX - 1, rp.xe + 24); x++) {
+      if (x > rp.xe && survey.heightAt(x, zc) !== rp.top - (x - rp.xe)) break; // (past the mound's foot: the ground is the land's)
+      run.fill({ kind: 'box', min: [x, { surface: 0 }, zc - 1], max: [x, { surface: 0 }, zc + 1] }, 'path', { cond: 1 });
+    }
+  }
   const v = r.needVolume({ minX: Math.max(claim.minX, vb.minX), maxX: Math.min(claim.maxX, vb.maxX), minZ: Math.max(claim.minZ, vb.minZ), maxZ: Math.min(claim.maxZ, vb.maxZ), minY: vb.minY, maxY: vb.maxY });
   if (!v) return r;
   for (const l of lots) {
