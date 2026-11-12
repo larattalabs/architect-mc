@@ -1541,7 +1541,7 @@ public final class RegionsImpl implements Regions {
 		// written); every other plan goes on as before
 		return onServer(s, () -> {
 			PlanRec p0 = planRec(r.planId());
-			if (p0 != null && !Revisions.isRevision(p0) && RegionLinks.needs(p0.ir().json()) && staleReason(p0.ir().json()) == null) {
+			if (p0 != null && !RegionLinks.bypass && !Revisions.isRevision(p0) && RegionLinks.needs(p0.ir().json()) && staleReason(p0.ir().json()) == null) {
 				return RegionLinks.run(s, p0, r.lotEntries()).thenCompose(lk -> realise0(s, r, lk));
 			}
 			return realise0(s, r, null);

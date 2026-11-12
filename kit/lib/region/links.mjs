@@ -11,7 +11,7 @@
 // `connector.tunnel` whose two ends are door ports: a straight bore between cellar doors, no portal). Plan time only, pure, integers.
 import { rotateBlock } from '../reserved.mjs';
 import { VC, VOXEL_CLASSES } from './volume.mjs';
-import { catwalkRun, checkCatwalk } from '../connectors/catwalkGeom.mjs';
+import { catwalkLanes, catwalkRun, checkCatwalk } from '../connectors/catwalkGeom.mjs';
 import { tunnel as tunnelRun, tunnelLand } from '../connectors/tunnelGeom.mjs';
 import { deckChoice, railOf } from '../connectors/bridgeGeom.mjs';
 import { rightOf } from '../connectors/ropeGeom.mjs';
@@ -36,6 +36,9 @@ const turnFacing = (f, t) => { const i = H_DIRS.indexOf(f); return i < 0 ? f : H
 const k3 = (x, y, z) => `${x},${y},${z}`;
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const quarter = (rot) => rot === 'clockwise_90' || rot === 'counterclockwise_90';
+
+/** A link code as a plan/0 answer's reason code (its enum is closed; the link's own code rides in `evidence.link`). */
+export const PLAN_CODE_OF_LINK = Object.freeze({ NO_PORT: 'NO_FEATURE', FACING: 'ANCHOR', ALIGN: 'ANCHOR', LEVEL: 'TOO_STEEP', NO_PATH: 'UNREACHABLE' });
 
 /** A link error: `code` (LINK_CODES), the end it names ({lot, port}), the message. Thrown at realise; an answer's reason at plan time. */
 export class LinkError extends Error {
@@ -156,11 +159,16 @@ function routeCatwalk(r, land, A, B, link, lotBoxes) {
   const y = A.cell[1] - 1; // the deck's surface (feet on y + 1)
   const width = link.width ?? 1;
   let last = null;
+  const [rx, rz] = rightOf(dir);
   for (const side of ['right', 'left']) {
-    const c = checkCatwalk(land, [A.cell[0], y, A.cell[2]], dir, n, side, width);
+    // (the ends' rail beds, deck indices 0 and n + 1, lie beside the port cells in the end lots' columns: the check lets them pass and
+    // they are dropped below, never written: the design owns its landing)
+    const bed = catwalkLanes(width, dir, side).bed;
+    const endBeds = new Set([0, n + 1].map((i) => `${A.cell[0] + dir[0] * i + rx * bed},${A.cell[2] + dir[1] * i + rz * bed}`));
+    const endLand = { ...land, blocked: (x, z) => (endBeds.has(`${x},${z}`) ? null : land.blocked(x, z)) };
+    const c = checkCatwalk(endLand, [A.cell[0], y, A.cell[2]], dir, n, side, width);
     if (c.ok) {
       // (an end's bed column inside a lot's box is the design's: K5, nothing written there)
-      const [rx, rz] = rightOf(dir);
       c.ends = (c.ends ?? []).filter((i) => {
         const qx = A.cell[0] + dir[0] * i + rx * c.lanes.bed, qz = A.cell[2] + dir[1] * i + rz * c.lanes.bed;
         return !lotBoxes.some((b) => inCols(b, qx, qz));
@@ -386,8 +394,11 @@ export function writeLink(r, routed) {
   } else if (R.kind === 'tunnel') {
     const S = r.survey;
     const tl = tunnelLand(S, { volumes: land.vols, classOfVolume: (v, x, y, z) => { const b = v.box; if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ) return 'MISSING'; return VOXEL_CLASSES[v.classes[((x - b.minX) * v.depth + (z - b.minZ)) * v.height + (y - b.minY)]]; }, blocked: (x, z) => { const q = land.blocked(x, z); return q && q.class !== 'lot' ? q : null; } });
+    // (the frozen volume the bore is checked against: the first one read that holds both ends; the checker's M4:tunnel reads it)
+    const holds = (bx, p) => p[0] >= bx.minX && p[0] <= bx.maxX && p[1] >= bx.minY && p[1] <= bx.maxY && p[2] >= bx.minZ && p[2] <= bx.maxZ;
+    const vu = Object.entries(r.volumesUsed ?? {}).sort(([x], [y]) => cmp(x, y)).find(([, u]) => holds(u.box, R.a) && holds(u.box, R.b))?.[1];
     try {
-      rec = tunnelRun(r, R.a, R.b, { land: tl, stage: LINK_STAGE, part, id: `tunnel_${link.id}`.slice(0, 48), portal: 'plain', width: link.width ?? 1, height: 2, under: true });
+      rec = tunnelRun(r, R.a, R.b, { land: tl, stage: LINK_STAGE, part, id: `tunnel_${link.id}`.slice(0, 48), portal: 'plain', width: link.width ?? 1, height: 2, ...(vu ? { volume: { sha: vu.sha, box: { ...vu.box } } } : {}) });
     } catch (e) {
       const code = /TUNNEL ([A-Z_]+)/.exec(e.message)?.[1] ?? 'NO_PATH';
       throw new LinkError(LINK_CODES.includes(code) ? code : 'NO_PATH', B.lot, B.name, `no tunnel under between ${A.lot}.${A.name} and ${B.lot}.${B.name}: ${e.message}`);

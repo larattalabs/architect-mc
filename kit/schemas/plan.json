@@ -126,7 +126,7 @@
       { "id": "bridge.beam", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a deck on piers to site-solid ground; H: piers stand in water up to waterDepth, never in flowing water or lava." },
       { "id": "bridge.arch", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: one masonry arch between two abutments, no piers (span 4..24)." },
       { "id": "tunnel.through", "sinceApi": "1.33.0", "schemaVersion": 1, "state": "supported", "note": "T3: a level bore through rising ground, portal to portal." },
-      { "id": "tunnel.under", "sinceApi": "1.33.0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)." },
+      { "id": "tunnel.under", "sinceApi": "NEXT", "schemaVersion": 0, "state": "supported", "note": "LP: a passage under flat ground between two site lots' cellar doors (a door port at each end, facing each other), built by the link pass at realise; a tunnel under flat ground between other ends is refused NO_FEATURE (block tunnel.under)." },
       { "id": "channel.moat", "sinceApi": "1.34.0", "schemaVersion": 1, "state": "supported", "note": "H: a level ring of still water round a feature (where.around; ring default [6, 12]), sunk, lined, closed or capped on the side facing the claim's centre; routes cross it on T3's bridge fallback. HY: may feed a course (overflow) or receive one (a fall over the rim)." },
       { "id": "channel.course", "sinceApi": "1.36.0", "schemaVersion": 1, "state": "supported", "limits": { "width": [1, 5], "depth": [1, 3], "length": [4, 512], "drop": [1, 8], "riffle": [2, 6], "cut": [0, 6], "fill": [0, 2], "flows": ["level", "pools", "riffles"], "looks": ["natural", "built"] }, "note": "A channel along a line (from, via, to) with reaches at several levels or joined to natural water: HY's, built from H's fluid bodies." },
       { "id": "channel.race", "sinceApi": "1.36.0", "schemaVersion": 1, "state": "supported", "note": "HY: a mill race, a course with a lot in via: a wheel fall of at least 3 beside the lot, outside its box (the wheel is the lot design's); the answer names the side and the fall (serves)." },
@@ -686,7 +686,7 @@
 
     "connector.tunnel": {
       "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
-      "description": "(T3) A tunnel (tunnel.through): one straight level bore through rising ground, portal to portal, lined where soil, sand or ice shows, lit, 2 cells from any fluid, walking at most approach (default 16) at each end. width default 3 villager, 2 player-only; height 2..5 clear (default 3); lining exposed (default) or all; portal arch (default) or plain. Flat ground between the ends answers unsupported {tunnel.under, until 7b}. R18, R19.",
+      "description": "(T3) A tunnel (tunnel.through): one straight level bore through rising ground, portal to portal, lined where soil, sand or ice shows, lit, 2 cells from any fluid, walking at most approach (default 16) at each end. width default 3 villager, 2 player-only; height 2..5 clear (default 3); lining exposed (default) or all; portal arch (default) or plain. Flat ground between the ends answers refused NO_FEATURE {tunnel.under} (LP: built between two site lots' cellar doors). R18, R19.",
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "kind": { "const": "tunnel" },

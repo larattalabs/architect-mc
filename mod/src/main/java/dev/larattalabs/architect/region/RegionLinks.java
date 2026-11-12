@@ -25,8 +25,28 @@ import org.jspecify.annotations.Nullable;
  * isn't the checked plan refuses {@link Reason#ARTIFACT_STALE}. A plan without port links (every plan before 7b, every revision) never
  * comes here: its realise is byte for byte as before (change 4). Internal.
  */
-final class RegionLinks {
+public final class RegionLinks {
 	private RegionLinks() {
+	}
+
+	/** (DevBridge dev.lp.stats) The link passes run since the start (calls to the helper), and their outcomes. */
+	static final java.util.concurrent.atomic.AtomicInteger CALLS = new java.util.concurrent.atomic.AtomicInteger();
+	static final java.util.concurrent.atomic.AtomicInteger NO_LINKS = new java.util.concurrent.atomic.AtomicInteger();
+	/** (DevBridge dev.lp.bypass, the gate's GR byte item only) Realise as before LP: no link pass at all. */
+	static volatile boolean bypass;
+
+	/** DevBridge: {calls, noLinks, bypass}. */
+	public static JsonObject devStats() {
+		JsonObject o = new JsonObject();
+		o.addProperty("calls", CALLS.get());
+		o.addProperty("noLinks", NO_LINKS.get());
+		o.addProperty("bypass", bypass);
+		return o;
+	}
+
+	/** DevBridge: the bypass on or off (the gate's comparison of a revision realised with and without LP's hook). */
+	public static void devBypass(boolean on) {
+		bypass = on;
 	}
 
 	/** The realise report's member ({@code RegionView.ext}): the links written, one row each ({@code $.links[]}). */
@@ -103,6 +123,7 @@ final class RegionLinks {
 		m.addProperty("planId", p.planId());
 		m.addProperty("irSha", p.irSha());
 		m.add("links", input(p.ir().json(), lotEntries));
+		CALLS.incrementAndGet();
 		return link.send(m).thenCompose(ack -> RegionsImpl.onServer(s, () -> {
 			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
 				String err = RegionsImpl.str(ack, "error");
@@ -113,6 +134,7 @@ final class RegionLinks {
 			}
 			JsonObject res = ack.get("result") instanceof JsonObject r ? r : ack;
 			if (res.get("noLink") instanceof JsonObject nl) {
+				NO_LINKS.incrementAndGet();
 				String lot = RegionsImpl.str(nl, "lot", "?"), port = nl.get("port") instanceof JsonElement pe && pe.isJsonPrimitive() ? pe.getAsString() : null;
 				JsonObject detail = new JsonObject();
 				detail.addProperty("lot", lot);

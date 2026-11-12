@@ -56,6 +56,14 @@ public final class SliceP0Dev {
 				String r = reason(e);
 				o.addProperty("refused", r);
 				o.addProperty("reason", r.contains(":") ? r.substring(0, r.indexOf(':')) : r);
+				// ((7b LP) a refusal's detail, e.g. NO_LINK's {lot, port})
+				Throwable t = e;
+				while (t instanceof java.util.concurrent.CompletionException && t.getCause() != null) {
+					t = t.getCause();
+				}
+				if (t instanceof dev.larattalabs.architect.api.ArchitectRefused ar && ar.detail() != null) {
+					o.addProperty("detail", ar.detail());
+				}
 				return o;
 			}
 			return ok.apply(v);

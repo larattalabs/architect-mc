@@ -21,7 +21,8 @@
 //                                      rebuilds every record with the same membership; Steward's own undo of every site exact (E-flat 0)
 //     report                            the step JSONs' check counts
 //
-// Row 7 (the joint row: 7a's link pass over the adopted region, then rows 3-5 again) is deferred: the link pass moved to 7b (CONTRACT ~19884).
+// Row 7 (the joint row: the link pass over the adopted region, then rows 3-5 again) is 7b LP's: GATE6DAD_LP=1 adds its checks to this
+// step (step lp-ad of tools/gate-chains.json; the adopted region has no port link, so its growth's realise runs no link pass).
 // Evidence: artifacts/gate6d-ad/<step>.json in the main checkout (GATE6DAD_OUT overrides), all.log, spend.json ($0.00).
 // Ports: 8896/8897 (the AD lane).
 import fs from 'node:fs';
@@ -382,6 +383,10 @@ steps.ingame = async () => {
   out.check3 = { overall: c3.overall, village: z3 };
   check(c3.overall === 'READY' && z3?.class === 'fits' && z3?.standing === true && json(z3?.grown) === json(['grown_1']), `row 3: checkPlan of the adopted zone with one more lot: ${c3.overall ?? c3.refused}; village ${z3?.class} standing ${z3?.standing} grown ${json(z3?.grown)}`);
   const S3 = await cellsOf(BOX);
+  // ((7b LP, AD row 7: GATE6DAD_LP=1) the link pass over the adopted region: the adopted IR and the growth have no port links, so the
+  // growth's realise runs no link pass and its revision IR has no site_links stage (change 4); rows 3-5 are then AD's own, on LP)
+  const LP = process.env.GATE6DAD_LP === '1';
+  const lp0 = LP ? await call('dev.lp.stats', {}, 30_000) : null;
   const r3 = await call('dev.region.realiseApproved', { sha: c3.artifactSha, lotEntries: { grown_1: ENTRY } }, 300_000);
   check(r3.region === region, `row 3: realiseApproved answers the adopted region (${json(r3)})`);
   const st3 = await rvState(region);
@@ -389,6 +394,12 @@ steps.ingame = async () => {
   const lots3 = w3.st.view.lots.filter((l) => l.id === 'grown_1');
   const d3 = diff(S3, await cellsOf(BOX));
   check(w3.r.state === 'PLACED' && lots3.length === 1 && lots3[0].state === 'placed' && d3.n > 0, `row 3: the growth ${w3.r.state} (rid ${w3.r.rid}); grown_1 ${json(lots3.map((l) => [l.state, l.siteId]))}; ${d3.n} cells written`);
+  if (LP) {
+    const lp1 = await call('dev.lp.stats', {}, 30_000);
+    const rvIr = (await call('dev.rv.ir', { region, rid: w3.r.rid }, 60_000)).ir;
+    out.row7 = { calls: lp1.calls - lp0.calls, adoptedPortLinks: !!ir.portLinks, rvStages: rvIr?.stages ?? null, rvPortLinks: !!rvIr?.portLinks };
+    check(out.row7.calls === 0 && !ir.portLinks && !(rvIr?.stages ?? []).includes('site_links') && !rvIr?.portLinks, `row 7 (LP): the link pass over the adopted region: no port link in its IR or its growth, so the growth's realise ran no link pass (${out.row7.calls} calls) and its revision IR has no site_links stage (${json(rvIr?.stages)})`, out.row7);
+  }
   // the street stands as it was: none of its cells changed
   const street = [T.x0, gy - 2, T.sz - 1, T.x1, gy + 6, T.sz + 1];
   const ds = diff(new Map([...S3].filter(([k]) => { const [x, y, z] = k.split(',').map(Number); return x >= street[0] && x <= street[3] && y >= street[1] && y <= street[4] && z >= street[2] && z <= street[5]; })),

@@ -464,11 +464,19 @@
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "1.40.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7b",
-   "note": "A deck along a giant tree's branches between canopy lots: needs layout.elevated and F3's branch skeleton (S-7a-4)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "width": [
+     1,
+     1
+    ],
+    "span": 8,
+    "reach": 16,
+    "length": 96
+   },
+   "note": "LP: a level deck between two site lots' walk ports, routed round the lots and hung on chains from the leaves or logs over it (hangers at most 8 apart); written at realise to the bound designs' ports (the link pass)."
   },
   {
    "id": "connector.span_bridge",
@@ -562,11 +570,10 @@
   },
   {
    "id": "tunnel.under",
-   "sinceApi": "1.33.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7b",
-   "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)."
+   "state": "supported",
+   "note": "LP: a passage under flat ground between two site lots' cellar doors (a door port at each end, facing each other), built by the link pass at realise; a tunnel under flat ground between other ends is refused NO_FEATURE (block tunnel.under)."
   },
   {
    "id": "channel.moat",

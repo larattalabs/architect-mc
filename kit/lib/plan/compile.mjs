@@ -64,7 +64,7 @@ import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region
 // (7b SL) layout.elevated: a lots zone whose lots are site lots on the land's affordances (elevated.mjs)
 import { emitElevatedZone, isElevatedZone, resolveElevatedZone } from './elevated.mjs';
 // (7b LP) port links between site lots (the link pass)
-import { LINK_STAGE, LinkError, PORT_LINK_KINDS } from '../region/links.mjs';
+import { LINK_STAGE, LinkError, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -1503,7 +1503,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       } catch (e) {
         if (!(e instanceof LinkError) || ctx.links) throw e;
         rollback(r, cp);
-        ans(p, { class: 'refused', reasons: [{ code: e.code, message: e.message, evidence: { lot: e.lot, port: e.port, ...(e.evidence ? { detail: e.evidence } : {}) } }] });
+        ans(p, { class: 'refused', reasons: [{ code: PLAN_CODE_OF_LINK[e.code] ?? e.code, message: e.message, evidence: { lot: e.lot, port: e.port, link: e.code, ...(e.evidence ? { detail: e.evidence } : {}) } }] });
       }
     }
   }
