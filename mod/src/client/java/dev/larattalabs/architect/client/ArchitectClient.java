@@ -58,6 +58,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.SliceAfDev.init(); // phase 7b slice AF hooks (dev.af.*)
 		dev.larattalabs.architect.client.dev.SlicePlDev.init(); // phase 7b slice PL hooks (dev.pl.*)
 		dev.larattalabs.architect.client.dev.SliceDsDev.init(); // phase 7b slice DS hooks (dev.ds.*)
+		dev.larattalabs.architect.client.dev.SliceGpDev.init(); // M5 slice GP hooks (dev.gp.*)
 		dev.larattalabs.architect.client.dev.SliceSoDev.init(); // phase 7b slice SO hooks (dev.so.*)
 		dev.larattalabs.architect.client.dev.SliceSlDev.init(); // phase 7b slice SL hooks (dev.sl.*)
 		dev.larattalabs.architect.client.dev.SliceStDev.init(); // phase 7b slice ST hooks (dev.st.*, dev.plot.fit, dev.plot.enter)
