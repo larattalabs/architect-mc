@@ -914,6 +914,11 @@ public final class RegionsImpl implements Regions {
 	public static final String EXT_CHECK = "architect_mc:check";
 	/** RegionPlanRequest ext (any value): the first plan stands even when the program asks for volumes (no two-plan flow). */
 	public static final String EXT_NO_VOLUMES = "architect_mc:noVolumes";
+	/**
+	 * (M5 IG) A plan lot's ({@code LotSpec.ext}) irrigation record, on an irrigated lot only: IRR's {@code {sources, bodies, field, cells,
+	 * frame, lotCells}} (a revision's grown farm lot with {@code irrigate}, or a plan/0 farm lot). Not the lot site's {@code LotMask.EXT}. Since NEXT.
+	 */
+	public static final String EXT_IRRIGATION = "architect_mc:lotIrrigation";
 
 	static boolean checkOf(RegionPlanRequest r) {
 		JsonElement e = r.ext().get(EXT_CHECK);
@@ -1257,6 +1262,11 @@ public final class RegionsImpl implements Regions {
 			// 6c V: the program's lot data (e.g. "architect_mc:village" = {role, type, villager, entrance, lane, water, bellDistance})
 			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("ext") instanceof JsonObject le) {
 				le.entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
+			}
+			// (M5 IG, S-M5-2) an irrigated lot's record (IRR's lots[].irrigation {sources, bodies, field, cells, frame, lotCells}), so the
+			// caller makes the lot's design with the cells reserved before the realise; only on an irrigated lot (every other ext unchanged)
+			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("irrigation") instanceof JsonObject irr) {
+				ext.add(EXT_IRRIGATION, irr.deepCopy());
 			}
 			// (7b SL) a site lot: LotSpec.site from its `site` (the SiteSpec wire); a malformed one leaves the lot without (logged), never a throw
 			dev.larattalabs.architect.api.SiteSpec site = null;
