@@ -4,8 +4,8 @@
 //
 //   node tools/gate7baf.mjs <step>
 //     start [world] | stop | base      the headless server (or client) and the base worlds (G6B Seed Base, G6B Flat Base)
-//     unit      (af-unit)              offline: kit/test/af-affordances.test.mjs (the detectors over the six site fixtures and the cut S4-S6
-//                                      windows, stable ids, the frames, the goldens, r.affordances in a plan) and the foundation's
+//     unit      (af-unit)              offline: kit/test/af-affordances.test.mjs (the detectors over the six site fixtures, stable ids, the
+//                                      frames, the goldens, r.affordances in a plan and through the plan CLI) and the foundation's
 //     site      (af-site)              Survey.site in game (dev.af.site, the public API): (a) the cliff, overhang and trunk fixtures built
 //                                      cell for cell by commands at their own coordinates in a flat world: the frozen volume's sha is the
 //                                      fixture's, the affordances are the kit's golden (kit/test/fixtures/af/<id>.json) and the proposed
@@ -99,7 +99,7 @@ function nodeTest(files, timeout = 1_800_000) {
 steps.unit = async () => {
   const out = {};
   out.af = nodeTest(['kit/test/af-affordances.test.mjs']);
-  check(out.af.code === 0 && out.af.fail === 0 && out.af.pass >= 11, `the analysis (kit/test/af-affordances.test.mjs): the six fixtures' kinds and frames, ledge, cave and spike with a negative each, stable ids, the turned frames, the goldens, r.affordances in a plan, the S4-S6 windows: ${out.af.pass} pass, ${out.af.fail} fail`, out.af.failing);
+  check(out.af.code === 0 && out.af.fail === 0 && out.af.pass >= 12, `the analysis (kit/test/af-affordances.test.mjs): the six fixtures' kinds and frames, ledge, cave and spike with a negative each, stable ids, the turned frames, the goldens, r.affordances in a plan and through the plan CLI: ${out.af.pass} pass, ${out.af.fail} fail`, out.af.failing);
   out.found = nodeTest(['kit/test/f7b-foundation.test.mjs']);
   check(out.found.code === 0 && out.found.fail === 0, `the foundation's (fixtures byte for byte, the kinds against Affordance.java): ${out.found.pass} pass`, out.found.failing);
   spendZero();
@@ -244,7 +244,8 @@ steps.nowrite = async () => {
   const first = await site(lot, 'attach_to_cliff', 'bounded:64');
   const box = first.box;
   const worldDir = path.resolve(path.dirname(first.file), '..', '..');
-  const dirs = [path.join(worldDir, 'architect-journal'), path.join(worldDir, 'architect', 'volumes'), path.join(worldDir, 'architect-regions')];
+  // Architect's whole world state: the journal, every file under <world>/architect (the volumes dir among them) and the regions
+  const dirs = [path.join(worldDir, 'architect-journal'), path.join(worldDir, 'architect'), path.join(worldDir, 'architect-regions')];
   await call('dev.wait', { ms: 5000 }, 30_000);
   // the land's own drift with no call (fluids settling after generation, if any)
   const d0 = await hashOf(box);
@@ -263,11 +264,12 @@ steps.nowrite = async () => {
     const l1 = dirs.map(listing);
     const diffs = dirs.map((d, n) => listDiff(l0[n], l1[n]));
     const same = json(strip(a)) === json(strip(first)) && json(b.affordances) === json(first.affordances) && b.sha === first.sha;
-    check(h0 === h1 && diffs.every((d) => d.length === 0) && same, `round ${i + 1}: two Survey.site calls${i === 1 ? ' (one for carve_into)' : ''} wrote nothing: the volume box's hash ${h0 === h1 ? 'unchanged' : 'MOVED'}; the journal (${Object.keys(l0[0]).length} files), the volumes dir (${Object.keys(l0[1]).length}: no new file) and the regions dir unchanged (${diffs.flat().length} differ); the answers equal the first's: ${same}`, { diffs, h0, h1 });
+    check(h0 === h1 && diffs.every((d) => d.length === 0) && same, `round ${i + 1}: two Survey.site calls${i === 1 ? ' (one for carve_into)' : ''} wrote nothing: the volume box's hash ${h0 === h1 ? 'unchanged' : 'MOVED'}; the journal (${Object.keys(l0[0]).length} files), <world>/architect (${Object.keys(l0[1]).length} files, the frozen volume among them: no new file) and the regions dir unchanged (${diffs.flat().length} differ); the answers equal the first's: ${same}`, { diffs, h0, h1 });
     rounds.push({ h0, h1, diffs, proposedB: b.proposed });
   }
   const sites1 = await call('dev.sites.state', {}, 60_000);
-  check(json(sites0.sites ?? sites0) === json(sites1.sites ?? sites1), 'no site was placed or changed (dev.sites.state equal before and after)');
+  const ids = (st) => json({ sites: (st.sites ?? []).map((x) => [x.id, x.state ?? null]), pending: (st.pending ?? []).length });
+  check(ids(sites0) === ids(sites1), `no site was placed or changed (dev.sites.state's site ids and states equal before and after: ${(sites0.sites ?? []).length} sites)`);
   await L.leaveWorld();
   spendZero();
   return { lot: lot6(lot), box, sha: first.sha, worldDir, rounds };

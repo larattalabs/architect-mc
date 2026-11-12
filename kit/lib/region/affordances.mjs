@@ -47,7 +47,7 @@ export const AFFORDANCE_DEFAULTS = Object.freeze({
   limit: 128,
 });
 
-/** Which kinds a fit's frame is proposed from, in preference order (api.FitMode wire names). */
+/** Which kinds a fit's frame is proposed from (api.FitMode wire names): proposeFrame takes the best score among them, whatever the kind. */
 export const FIT_AFFORDANCES = Object.freeze({
   on_pad: Object.freeze(['pad']),
   carve_into: Object.freeze(['cliff_face', 'cave']),

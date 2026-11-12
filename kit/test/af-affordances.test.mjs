@@ -256,3 +256,36 @@ test('the goldens: kit/tools/affordances.mjs on four fixtures, byte for byte', a
     assert.deepEqual(JSON.parse(r.stdout).proposed.frame, site.spec.frame);
   }
 });
+
+test('through the plan CLI (kit/tools/region.mjs plan, as the helper runs it): plan.json carries affordances[] only for a program that asks', async () => {
+  const os = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const { makeColumns, encodeColumns } = await import('../lib/region/pack.mjs');
+  const { site, vol: v } = fixture('cliff_face');
+  const b = v.box;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'af-cli-'));
+  try {
+    const c = makeColumns(b.minX, b.minZ, v.width, v.depth, 1);
+    for (let n = 0; n < v.width * v.depth; n++) { c.ground[n] = 116; c.height[n] = 116; c.floor[n] = 116; }
+    fs.writeFileSync(path.join(tmp, 'survey.bin'), encodeColumns(c));
+    fs.mkdirSync(path.join(tmp, 'volumes'));
+    fs.copyFileSync(path.join(FIX, 'cliff_face', 'volume.bin'), path.join(tmp, 'volumes', `${v.sha}.bin`));
+    const prog = (ask) => `import { region } from ${JSON.stringify(path.join(ROOT, 'kit', 'lib', 'region', 'program.mjs'))};
+export const id = 'aff_cli';
+export default (ctx) => { const r = region(ctx); ${ask ? `r.affordances(${JSON.stringify(b)}, { kinds: ['cliff_face'] });` : ''}
+  r.anchor('entrance', [${site.lot.minX}, 117, ${site.lot.maxZ + 4}]); r.anchor('spawn', [${site.lot.minX}, 117, ${site.lot.maxZ + 4}]); return r; };\n`;
+    const planned = (ask, out) => {
+      fs.writeFileSync(path.join(tmp, `p${ask ? 1 : 0}.mjs`), prog(ask));
+      const r = spawnSync(process.execPath, [path.join(ROOT, 'kit', 'tools', 'region.mjs'), 'plan', path.join(tmp, `p${ask ? 1 : 0}.mjs`), '--survey', path.join(tmp, 'survey.bin'), '--seed', '1', '--claim', [b.minX, b.minZ, b.maxX, b.maxZ].join(','), '--volumes', path.join(tmp, 'volumes'), '--out', path.join(tmp, out), '--json'], { encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      return JSON.parse(fs.readFileSync(path.join(tmp, out, 'plan.json'), 'utf8'));
+    };
+    const asked = planned(true, 'a');
+    assert.deepEqual(asked.affordances.map((a) => a.id), analyseVolume(v, { kinds: ['cliff_face'] }).map((a) => a.id));
+    assert.ok(asked.affordances.length >= 1);
+    const plain = planned(false, 'b');
+    assert.ok(!('affordances' in plain));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
