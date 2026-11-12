@@ -72,10 +72,15 @@ function norm(s) {
   const props = m[2] ? m[2].split(',').filter(Boolean).sort() : [];
   return props.length ? `${id}[${props.join(',')}]` : id;
 }
+/** A dev.box.hash cell line's state as "minecraft:x[k=v,...]" (props sorted): its SNBT ({Name|id, Properties|properties}). */
 function asState(nbt) {
   const bs = /^Block\{([a-z0-9_.-]+:[a-z0-9_./-]+)\}(\[[^\]]*\])?/.exec(nbt);
   if (bs) return norm(`${bs[1]}${bs[2] ?? ''}`);
-  return nbt;
+  const n = /(?:Name|id)\s*:\s*["']?([a-z0-9_.-]+:[a-z0-9_./-]+)/i.exec(nbt)?.[1];
+  if (!n) return nbt;
+  const pm = /properties\s*:\s*\{([^}]*)\}/i.exec(nbt)?.[1];
+  const props = pm ? [...pm.matchAll(/["']?([a-z0-9_]+)["']?\s*:\s*["']?([a-z0-9_]+)["']?/g)].map((m) => `${m[1]}=${m[2]}`).sort() : [];
+  return props.length ? `${n}[${props.join(',')}]` : n;
 }
 const idOf = (s) => String(s).replace(/\[.*$/, '').replace(/^minecraft:/, '');
 const k3 = (x, y, z) => `${x},${y},${z}`;
@@ -365,8 +370,10 @@ steps.undo = async () => {
     await freshFlat(`G6B PL Undo ${order}`);
     const gy = await groundY();
     const s = fitSites(gy)[0];
-    s.cmds = [s.cmds[1]]; // the dirt heap only: the trunk comes from the cell site
     await L.tp(s.origin[0] + 3, gy + 20, s.origin[2] - 12);
+    await cmd(s.cmds[1]); // the dirt heap (the test's ground, before the baseline); the trunk comes from the cell site
+    s.cmds = [];
+    await L.settle(1000);
     const area = grow(s.box, 10, gy - 3);
     const h0 = await hashOf(area);
     const c0 = await cellsOf(area);
@@ -483,7 +490,13 @@ steps.crash = async () => {
       const keepDiff = diff(c0, c1, new Set(w.keys()));
       const v = await call('dev.site.verify', { site: id }, 120_000);
       const rec = await call('dev.pl.record', { site: id });
-      check(standing.length === 1 && v.mismatches === 0 && keepDiff.n === 0 && rec.bound, `${point}: after the restart the site ${id} stands, verifies (0 mismatches), carries its binding and every unwritten cell (the trunk) is unchanged`, { v, first: keepDiff.first });
+      // K4 without a save: the journal wins (CONTRACT 4e "K4, P7 to P8"): the record is placed though the halted world never saved the
+      // blocks written after the last autosave, so its cells may read as before (verify is recorded, not judged: main's rule, gate4e's
+      // K4 judges the record and the final exact removal); with +save the blocks are on disk and must verify
+      const saved = point.endsWith('+save');
+      check(standing.length === 1 && (!saved || v.mismatches === 0) && keepDiff.n === 0 && rec.bound, `${point}: after the restart the site ${id} stands (the journal wins), `
+        + `carries its binding, every unwritten cell (the trunk) is unchanged; verify ${v.mismatches} mismatch(es) of ${v.owned}${saved ? '' : ' (recorded: the blocks were not saved before the halt)'}`, { v: { owned: v.owned, mismatches: v.mismatches, first: (v.first ?? []).slice(0, 2) }, first: keepDiff.first });
+      r.verify = { owned: v.owned, mismatches: v.mismatches };
       const rm = await call('dev.pl.remove', { site: id }, 600_000);
       await L.settle(1500);
       const e = diff(c0, await cellsOf(area));
