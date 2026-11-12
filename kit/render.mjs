@@ -8,6 +8,11 @@
 //   cutaway   the iso view without the rows above the interior and the two near walls
 // --views picks the list (comma-separated, in VIEWS); the default is iso, top, front, and --cutaway adds cutaway. An
 // unknown view is bad usage.
+// --site <volume> [--lot <site.json>] (7b SV): the design IN its site. Adds the views (SITE_VIEWS, only with a site; with --site and no
+// --views they are the default):
+//   composite  the iso view of the template composited with the whole site window (lib/site.mjs compositeStructure)
+//   section    the composite cut through the lot's middle row (z) and seen from the south: the design's front elevation in the land
+// The lot (the site spec) defaults to the sidecar's `site` (what the design was built into); the volume must be the spec's.
 // The sidecar (<id>.blueprint.json next to the .nbt, or --sidecar) supplies `front` and `interior`; without one the
 // front is south. --out defaults to the .nbt's directory. Exit code 0 = written, 1 = render failed, 2 = bad usage.
 import fs from 'node:fs';
@@ -16,11 +21,14 @@ import { fileURLToPath } from 'node:url';
 import { parse, plain } from './lib/nbt.mjs';
 import { encodePng } from './lib/png.mjs';
 import { buildScene, renderIso, renderTop, renderFront } from './lib/render.mjs';
+import { Site, compositeStructure } from './lib/site.mjs';
 
-const USAGE = 'usage: node kit/render.mjs <file.nbt> [--out <dir>] [--views iso,iso_back,front,top,cutaway] [--sidecar <path>] [--cutaway] [--width N] [--transparent]';
+const USAGE = 'usage: node kit/render.mjs <file.nbt> [--out <dir>] [--views iso,iso_back,front,top,cutaway,composite,section] [--sidecar <path>] [--cutaway] [--width N] [--transparent] [--site <volume> [--lot <site.json>]]';
 
 /** Every view the renderer draws. */
 export const VIEWS = ['iso', 'iso_back', 'front', 'top', 'cutaway'];
+/** (7b SV) The views drawn only with a site: the design in its site. */
+export const SITE_VIEWS = ['composite', 'section'];
 /** The views written without --views. */
 export const DEFAULT_VIEWS = ['iso', 'top', 'front'];
 const BACK = { north: 'south', south: 'north', east: 'west', west: 'east' };
@@ -29,8 +37,8 @@ const BACK = { north: 'south', south: 'north', east: 'west', west: 'east' };
 export function parseViews(v) {
   const list = Array.isArray(v) ? v : String(v).split(',').map((s) => s.trim()).filter(Boolean);
   if (!list.length) throw new Error('--views: no view named');
-  const bad = list.filter((x) => !VIEWS.includes(x));
-  if (bad.length) throw new Error(`unknown view${bad.length > 1 ? 's' : ''} ${bad.join(', ')} (one of ${VIEWS.join(', ')})`);
+  const bad = list.filter((x) => !VIEWS.includes(x) && !SITE_VIEWS.includes(x));
+  if (bad.length) throw new Error(`unknown view${bad.length > 1 ? 's' : ''} ${bad.join(', ')} (one of ${[...VIEWS, ...SITE_VIEWS].join(', ')}; composite and section need --site)`);
   return [...new Set(list)];
 }
 
@@ -38,15 +46,27 @@ export function parseViews(v) {
  * Render the views of one structure (`views`: a list from VIEWS, default DEFAULT_VIEWS; `cutaway` adds cutaway).
  * @returns {{id:string, files:Record<string,string>, ms:number, blocks:number, unknown:string[]}}
  */
-export function renderStructure(nbtPath, { out, sidecar: sidecarPath, cutaway = false, views, width, bg } = {}) {
+export function renderStructure(nbtPath, { out, sidecar: sidecarPath, cutaway = false, views, width, bg, site, sitePath, lotPath } = {}) {
   const t0 = performance.now();
-  const list = parseViews(views ?? DEFAULT_VIEWS);
+  const list = parseViews(views ?? (site || sitePath ? [...DEFAULT_VIEWS, ...SITE_VIEWS] : DEFAULT_VIEWS));
   if (cutaway && !list.includes('cutaway')) list.push('cutaway');
   if (!fs.existsSync(nbtPath)) throw new Error(`no such file: ${nbtPath}`);
   const id = path.basename(nbtPath, '.nbt');
   const sp = sidecarPath ?? path.join(path.dirname(nbtPath), `${id}.blueprint.json`);
   const sidecar = fs.existsSync(sp) ? JSON.parse(fs.readFileSync(sp, 'utf8')) : null;
   const structure = plain(parse(fs.readFileSync(nbtPath)));
+  // (7b SV) the site: given, or read from --site (the volume) and --lot (default: the sidecar's site spec)
+  if (!site && sitePath) {
+    const lot = lotPath ? JSON.parse(fs.readFileSync(lotPath, 'utf8')) : sidecar?.site;
+    if (!lot) throw new Error('--site needs the lot: --lot <site.json>, or a sidecar with a `site` (a design built into a site)');
+    site = new Site(fs.readFileSync(sitePath), lot);
+  }
+  const siteViews = list.filter((v) => SITE_VIEWS.includes(v));
+  if (siteViews.length && !site) throw new Error(`the view${siteViews.length > 1 ? 's' : ''} ${siteViews.join(', ')} need${siteViews.length > 1 ? '' : 's'} a site (--site <volume>)`);
+  if (site) {
+    const [sx, sy, sz] = structure.size;
+    if (sx !== site.size.x || sy !== site.size.y || sz !== site.size.z) throw new Error(`the template ${sx}x${sy}x${sz} is not the site's lot ${site.size.x}x${site.size.y}x${site.size.z}`);
+  }
   const unknown = new Set();
   const scene = buildScene(structure, { front: sidecar?.front ?? 'south', unknown });
   const dir = out ?? path.dirname(nbtPath);
@@ -62,6 +82,8 @@ export function renderStructure(nbtPath, { out, sidecar: sidecarPath, cutaway = 
     else if (v === 'iso_back') write('iso_back', renderIso(buildScene(structure, { front: BACK[sidecar?.front] ?? 'north' }), { width, bg }));
     else if (v === 'top') write('top', renderTop(scene, { bg }));
     else if (v === 'front') write('front', renderFront(scene, { bg }));
+    else if (v === 'composite') write('composite', renderIso(buildScene(compositeStructure(structure, site).structure, { unknown }), { width, bg }));
+    else if (v === 'section') write('section', renderFront(buildScene(compositeStructure(structure, site, { cut: Math.floor((structure.size[2] - 1) / 2) }).structure, { unknown }), { width, bg }));
     else if (v === 'cutaway') {
       const w = sidecar?.interior;
       const maxY = w ? w.maxY : Math.ceil(structure.size[1] / 2);
@@ -92,10 +114,13 @@ function parseArgs(argv) {
     else if (a === '--views') o.views = parseViews(val());
     else if (a === '--width') o.width = Number(val());
     else if (a === '--transparent') o.bg = 'transparent';
+    else if (a === '--site') o.sitePath = path.resolve(val());
+    else if (a === '--lot') o.lotPath = path.resolve(val());
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o._.push(a);
   }
   if (o._.length !== 1) throw new Error('one .nbt file');
+  if (o.lotPath && !o.sitePath) throw new Error('--lot needs --site');
   return o;
 }
 

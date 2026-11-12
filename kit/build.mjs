@@ -28,6 +28,10 @@
 // warnings `restraint: ...` when accentShare, windowsMin or detailNoise break it. (6c VOC-b) The same bible's style sets the rarity budget
 // (lib/vocab/budget.mjs styleOf): `metrics.rarity` (and `metrics.drift`) always, measured at the defaults when the bible carries no
 // `rarity`; warnings `rarity: ...` and `coherence: ...` only when it does. Without --restraint, a --bible's style is used.
+// --site <volume> --lot <site.json> (7b SV, SETTLEMENTS §7.2): build a site-aware design into a site: the frozen ARVX volume (gzip or
+// raw) and the lot's site spec (a bare api.SiteSpec wire, or a 7bF fixture's site.json). The design gets it as `site` (lib/site.mjs);
+// the sidecar records `fit`, `site` and `keep`. A design that exports a non-pad `fit` needs them; the six fit examples live in
+// kit/designs/site/ (found by id like kit/designs/). The check is today's, on the template alone (the composite with the site is SC's).
 // --mirror (slice 0b): the build is mirrored left-right across its front axis (lib/mirror.mjs: x flips for a north or south
 // front, z for east or west; `front` is unchanged); the sidecar records `mirrored: 'x'|'z'`. With --massing, the massing is
 // mirrored the same way before conformance.
@@ -43,11 +47,14 @@ import { readMassingArg } from './lib/massing.mjs';
 import { resolveValues, validateParams } from './lib/params.mjs';
 import { leaveReserved, parseReserved } from './lib/reserved.mjs';
 import { mirrorAxisOf, mirrorBlueprint, mirrorSidecar } from './lib/mirror.mjs';
+import { Site } from './lib/site.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DESIGNS = path.join(HERE, 'designs');
+/** (7b SV) the site-aware examples' sources (kit/designs/site/fit_*.mjs): kept apart so tools that build every design without a site skip them */
+export const SITE_DESIGNS = path.join(DESIGNS, 'site');
 export const DEFAULT_OUT = path.join(HERE, 'out');
-const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json> [--massing-cap x,y,z]] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--reserved <json|file> [--leave-reserved]] [--mirror] [--json]';
+const USAGE = 'usage: node kit/build.mjs <id> [--site <volume> --lot <site.json>] [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>|massing] [--massing <massing.blueprint.json> [--massing-cap x,y,z]] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--restraint <bible.json>] [--reserved <json|file> [--leave-reserved]] [--mirror] [--json]';
 
 /** A request the design cannot build (bad palette or values): exit 2, but not the design's fault. */
 export class UsageError extends Error {}
@@ -58,7 +65,9 @@ export function listDesigns(dir = DESIGNS) {
 
 /** Import a design module and check its exports (`id`, `params`, the default export). */
 export async function importDesign(id, dir = DESIGNS) {
-  const file = path.join(dir, `${id}.mjs`);
+  let file = path.join(dir, `${id}.mjs`);
+  // (7b SV) the site examples are found by id too
+  if (dir === DESIGNS && !fs.existsSync(file) && fs.existsSync(path.join(SITE_DESIGNS, `${id}.mjs`))) file = path.join(SITE_DESIGNS, `${id}.mjs`);
   if (!fs.existsSync(file)) throw new UsageError(`no design '${id}' (${path.relative(path.dirname(HERE), file)}; have: ${listDesigns(dir).join(', ') || 'none'})`);
   const mod = await import(pathToFileURL(file).href);
   if (typeof mod.default !== 'function') throw new Error(`kit/designs/${id}.mjs has no default export function`);
@@ -72,8 +81,12 @@ export async function importDesign(id, dir = DESIGNS) {
  * `opts.values` the param values over the defaults; both throw a UsageError when invalid. Without a palette the design
  * uses its own default.
  */
-export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
+export async function loadDesign(id, { palette, values, dir, mirror, site } = {}) {
   const mod = await importDesign(id, dir);
+  // (7b SV) a site-aware design: its declared fit and the site it is built into
+  if (mod.fit !== undefined && mod.fit !== 'on_pad' && !site) throw new UsageError(`${id} is a site-aware design (fit ${mod.fit}): give its site (--site <volume> --lot <site.json>)${mod.exampleSite ? `; its example site is kit/test/fixtures/site/${mod.exampleSite}` : ''}`);
+  if (site && mod.fit !== undefined && mod.fit !== site.fit) throw new UsageError(`${id} declares fit ${mod.fit}, but the site is a ${site.fit} lot`);
+  if (site && mirror) throw new UsageError(`${id}: a site-bound build is never mirrored (it is placed in its site's frame)`);
   let p;
   let v;
   try {
@@ -82,9 +95,10 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
   } catch (e) {
     throw new UsageError(e.message);
   }
-  const bp = await mod.default({ ...(p ? { palette: p } : {}), ...v });
+  const bp = await mod.default({ ...(p ? { palette: p } : {}), ...(site ? { site } : {}), ...v });
   if (!bp || typeof bp.toStructure !== 'function') throw new Error(`kit/designs/${id}.mjs: the default export must return a Blueprint`);
   if (bp.id !== id) throw new Error(`kit/designs/${id}.mjs builds id '${bp.id}' (must match the file name)`);
+  if (site && bp.site !== site) throw new Error(`kit/designs/${id}.mjs ignores the site it is given (pass \`site\` to the Blueprint)`);
   if (p && bp.p !== p) {
     // (C35) a captured source (lib/adopt.mjs: an adopted player build) declares itself exempt: the player's house as built is
     // theirs, so a palette or bible asked for (a settlement's bible on a change request) is ignored, never an error, and recorded
@@ -102,8 +116,8 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
 }
 
 /** Build + check one design. */
-export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, massingCap, restraint, style, dir, mirror, reserved, leave = false } = {}) {
-  const bp = await loadDesign(id, { palette, values, dir, mirror });
+export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, massingCap, restraint, style, dir, mirror, reserved, leave = false, site } = {}) {
+  const bp = await loadDesign(id, { palette, values, dir, mirror, site });
   // ((6c IRR) --leave-reserved: the reserved cells are dropped before the write (the sim's stand-in honours them so))
   if (reserved && leave) leaveReserved(bp, reserved);
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
@@ -158,12 +172,16 @@ function parseArgs(argv) {
     } else if (a === '--mirror') o.mirror = true;
     else if (a === '--reserved') { const v = val(); o.reserved = parseReserved(JSON.parse(v.trim().startsWith('{') ? v : fs.readFileSync(v, 'utf8'))); } // (6c IRR) inline JSON or a file
     else if (a === '--leave-reserved') o.leave = true;
+    else if (a === '--site') o.siteFile = path.resolve(val());
+    else if (a === '--lot') o.lotFile = path.resolve(val());
     else if (a === '--json') o.json = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o.ids.push(a);
   }
   if (!o.help && o.ids.length !== 1) throw new Error(o.ids.length ? 'one design id at a time' : 'no design id');
+  if (!o.help && !!o.siteFile !== !!o.lotFile) throw new Error('--site and --lot go together (the volume and its site spec)');
+  if (o.siteFile) o.site = Site.fromFiles(o.siteFile, o.lotFile);
   return o;
 }
 
@@ -190,7 +208,7 @@ async function main() {
   if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
-    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, massingCap: o.massingCap, restraint: o.restraint, style: o.style, mirror: o.mirror, reserved: o.reserved, leave: o.leave });
+    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values, massing: o.massing, massingCap: o.massingCap, restraint: o.restraint, style: o.style, mirror: o.mirror, reserved: o.reserved, leave: o.leave, site: o.site });
   } catch (e) {
     Object.assign(console, saved);
     if (e instanceof UsageError) return fail2(e.message);

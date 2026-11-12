@@ -32,7 +32,12 @@ class MinLotSizeTest {
 			}
 			try (Stream<Path> s = Files.walk(d)) {
 				for (Path p : s.filter(f -> f.getFileName().toString().endsWith(".blueprint.json")).sorted().toList()) {
-					out.add(Blueprint.fromJson(JsonParser.parseString(Files.readString(p)).getAsJsonObject()));
+					var json = JsonParser.parseString(Files.readString(p)).getAsJsonObject();
+					// (7b SV) the site-bound fit examples are placed in their site's frame (fitToSite), never fitted to a lot
+					if (json.has("site")) {
+						continue;
+					}
+					out.add(Blueprint.fromJson(json));
 				}
 			}
 		}
