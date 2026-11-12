@@ -27910,7 +27910,7 @@ only).
 SITE derivation and binding; `SITE_UNFIT` with a rule id, `SITE_UNSUPPORTED`; the opKey replay), `Designs.follow` of a SITE entry, the
 estimate kinds `site` and `adapted`, a massingFirst group with a site item refused. The PLAYBOOK's §7 is new (Steward's skill is its upstream).
 
-### Slice SL as built (branch `slice/SL` off main b1ee8dcc; versions NEXT; $0; IN PROGRESS, recorded 2026-11-11)
+### Slice SL as built (branch `slice/SL` off main b1ee8dcc, main f2a90f2a (DS) merged; versions NEXT; $0, sim only; recorded 2026-11-12)
 
 **The plan wire, FROZEN first (LP builds on it).** Additive: a pad lot's members and bytes are unchanged everywhere; only a site lot
 carries the members below. `site` is **exactly the `SiteSpec` wire** (`kit/schemas/site-spec.json`, 7bF's schema, untouched; it has
@@ -28043,3 +28043,16 @@ three asks that waited on `layout.elevated` now answer `refused NO_FEATURE` on f
    `copyOf` stay refused for site items. Tests: `sidecar/test/site-design.test.ts` (the item waits through the massing and its approval,
    then designs once with no massing and the group ends done; a failed massing does not hold it; a site-only group starts at once; count
    and copyOf refused); in game, `sl-ingame`'s massingFirst round (below).
+
+**Checks** ($0; ports 8896/8897):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1167/1167 at 50a143b5 (sl.test.mjs 8/8); the catalogue-diff tests of CL, GM-c and the 7a foundation leave the flip to sl.test.mjs |
+| sidecar `npm ci && npm run check` | 834/834 (site-design.test.ts 20/20 with the three massingFirst cases); system-refs' compact plan/0 under 100,000 characters after shortening the entry's text |
+| mod `./gradlew build --offline --no-daemon` | pass; 1074 tests, 0 failures, 1 skipped (ApiSLTest 9/9, Api7bFTest 12/12 untouched) |
+| api-compat | clean (the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar); the API package diff is javadoc only (DesignRequest.site, GroupRequest.massingFirst) |
+| lint-structure / lint-look / water-lint / p3-lint | 68/0 / 13/0 / 135/135 / in the mod build |
+| `node tools/step-inputs.mjs check` | clean after `build` (336 steps) |
+| in game, run 20261112-050741-change at 979b3e10 | pl-ingame 86/0 and pl-undo 16/0 PASS (PL's steps over the changed `SiteFit`/`Batches`); sl-unit and sl-ingame failed on two gate bugs (e15 named but not moved; the survey box sent as an object), fixed |
+| in game, run 20261112-054511-change at 9b3cd9cb | **PASS** 3/3: unit-sidecar 834; `sl-unit` 435/0 (sl.test and the 7b/P0 tests 56/0, ApiSLTest + Api7bFTest, **424 committed plan fixtures byte-identical** against main b1ee8dcc, the 3 named asks move as named, v7b_sl_canopy new; the 59 asks: exactly `swamp_stilts/hollow`, `treetop_village/canopy`, `upside_down/hanging_village` move, unsupported -> refused NO_FEATURE, their bridges stay blocked, 0 malformed); `sl-ingame` 20/0 (fits: READY, a wrap_trunk canopy lot with 144 keep-critical logs; Survey.volume of the lot volume has the plan's sha (the kit's cut = the mod's freeze); the massingFirst group: the site item waits through the massing and its approval, then one design, group DONE, its entry bound to the lot; bind refusals for another size and SITE_MISMATCH with nothing written; realised PLACED at the frame with `architect_mc:site`; LotSpec.site = the artifact's; Regions.affordances answers; KEEP: 762 template cells, the other cells of the 34848-cell site volume unchanged; Remove E-flat 0. Adjusted: 1 of 2 placed, realised with no entry writes 0 cells, E-flat 0. Refused: NO_FEATURE, its realise writes nothing) |
