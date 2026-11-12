@@ -1025,7 +1025,8 @@ public final class Batches {
 					+ ": its region's site can't be read (the region is not live): not placed");
 				return;
 			}
-			SiteFit.with(site, () -> {
+			// ((7b SL-b) with its region's group: the region's own earlier writes in the site's margin never drift it)
+			SiteFit.with(site, b.group, () -> {
 				tryStart0(server, b, i);
 				return null;
 			});
