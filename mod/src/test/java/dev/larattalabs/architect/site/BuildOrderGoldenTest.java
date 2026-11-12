@@ -144,9 +144,20 @@ class BuildOrderGoldenTest {
 		for (var e : ex.entrySet()) {
 			Blueprint bp = Blueprint.fromJson(JsonParser.parseString(Files.readString(e.getValue()[0])).getAsJsonObject());
 			Probe p = probe(bp, template(e.getValue()[1]));
+			// the dispatch planConvert runs: a plain placement (no site) and fit_on_pad's own on_pad site take today's order
+			JsonObject json = JsonParser.parseString(Files.readString(e.getValue()[0])).getAsJsonObject();
+			assertTrue(!Builder.supportOrdered(null), "a plain placement keeps today's order");
+			if (json.has("site")) {
+				var spec = dev.larattalabs.architect.api.SiteSpec.fromWire(json.getAsJsonObject("site"));
+				assertTrue(!Builder.supportOrdered(spec), e.getKey() + ": its on_pad site keeps today's order");
+			}
 			int[] q = Builder.queueOrder(p.run(), p.boxIdx(), null);
 			assertEquals(p.boxIdx().length, q.length, e.getKey());
 			now.put(e.getKey(), q.length + ":" + sha(q));
+		}
+		for (String id : nonPad) {
+			JsonObject json = JsonParser.parseString(Files.readString(Path.of("../kit/examples", id, id + ".blueprint.json"))).getAsJsonObject();
+			assertTrue(Builder.supportOrdered(dev.larattalabs.architect.api.SiteSpec.fromWire(json.getAsJsonObject("site"))), id + ": support order");
 		}
 		Gson gson = new GsonBuilder().setPrettyPrinting().create();
 		if (System.getenv("ARCHITECT_WRITE_GOLDEN") != null) {

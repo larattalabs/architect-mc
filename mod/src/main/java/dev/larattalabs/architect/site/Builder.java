@@ -959,7 +959,7 @@ public final class Builder {
 		// (7b slice SO) a site-aware building (the request's site, SiteFit.now, with a fit other than on_pad) builds in support order;
 		// on_pad and plain placements keep today's order byte for byte
 		dev.larattalabs.architect.api.SiteSpec spec = SiteFit.now();
-		boolean bySupport = spec != null && spec.fit() != dev.larattalabs.architect.api.FitMode.ON_PAD;
+		boolean bySupport = supportOrdered(spec);
 		boolean[] anchor = null;
 		if (bySupport) {
 			Set<Long> keep = new HashSet<>();
@@ -1024,6 +1024,11 @@ public final class Builder {
 			queue[i] = boxIdx[order[i]];
 		}
 		return queue;
+	}
+
+	/** (7b slice SO) Whether a placement with this site builds in support order: a site with a fit other than {@code on_pad}. */
+	static boolean supportOrdered(dev.larattalabs.architect.api.@Nullable SiteSpec spec) {
+		return spec != null && spec.fit() != dev.larattalabs.architect.api.FitMode.ON_PAD;
 	}
 
 	/** (7b slice SO) Each queued cell's face-adjacent queued cells. */
