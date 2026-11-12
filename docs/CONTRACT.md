@@ -23057,7 +23057,46 @@ Read-only, so no RC by the API rule's exception (GATES policy 4); Steward picks 
 | Writes nothing | Every landCheck of lc-ingame and lc-nowrite: the claim + 8's hash unchanged, every file (path, size, sha256) of `architect-regions/<region>` and `architect-journal` unchanged (39 and 50 files), two calls equal. |
 | Gate-verifier | **PASS** (review of the diff and evidence; re-ran lc-nowrite at 265cfe71, run `20261111-080638-change`, ports 8902/8903: 9/0, three rounds unchanged). Non-blocking: the unit-sidecar re-run is not in its evidence (the only failure on record is the load-sensitive timing assertion); the scan scales with the region's size, within the slicing and the 4M bound. |
 
-**Open.** (1) Gate mechanisms, wall lots, lot standing and survival attribution are covered by unit tests and by code reading, not in game (LC's gate is §4's town; no gatehouse or survival fixture was added). (2) `kinds` is keyed by the block now there (§2 does not say which). (3) A player's identical block over ours reads unchanged (the undo's rule); Steward may want it as `playerPlaced`.
+**Open.** (1) Gate mechanisms, wall lots, lot standing and survival attribution are covered by unit tests and by code reading, not in game (LC's gate is §4's town; no gatehouse or survival fixture was added). **Closed by LCi** (below). (2) `kinds` is keyed by the block now there (§2 does not say which). (3) A player's identical block over ours reads unchanged (the undo's rule); Steward may want it as `playerPlaced`.
+
+### Slice LCi as built (branch `slice/LCi` off main f5e96625 / v0.59.0, main merged at d976d7fb; recorded 2026-11-12; DEV MODE; $0)
+
+LC's Open (1): the in-game coverage LC shipped without. Two new headless steps of `tools/gate6dlc.mjs` (the code in
+`tools/lib/gate6dlc-2.mjs`), in the `6dlc` chain and LC's impact entry (`slice`). One behaviour fix (finding 1). No API, Reason, record,
+kit, IR or catalogue change; LandCheck stays read-only.
+
+Every expected number comes from outside LandCheck: dumps of the world before and after each change, the kit's own writers for a tile
+cell's part (`partsOracle`: evalTile `{writers: true}` over the pre-realise dump; both fixtures are flat), RS's targets (`dev.rs.cells`,
+`dev.rs.state`) and the journal's stacks (`dev.journal.at` / `columns`) for who holds a cell. A shape property of the same block (a wall's
+connections after its neighbour is broken) is not a change, as `holdsOurs` says.
+
+| Step | Fixture | What it shows |
+|---|---|---|
+| `lc-castle` (items 1, 2) | `gm/gm_castle_13x7` in creative: a K3 castle (K2 walk wall `curtain_wall`, 4 corner towers, a 13x7 portcullis gatehouse with its sensor at row 10) with GM-a's stub designs | **Fresh:** no change; parts `mech:gatehouse_1` (329 cells), `w_curtain_wall` (4454; the kit's writers' name), the town's and the routes'; none unattributed; the 5 wall lots (and h1-h3) in `lots` at standing 1. **The gate's own state (GM §4 item 4):** closed by the outside lever (a real use: the lever powered, the pistons extended), mid-move (under `/tick freeze`, the lever used, stepped until a `moving_piston` stands in the envelope: 20 ticks), at dusk closed by the sensor, at dawn open: every report equal to the fresh one (parts with their cells and kinds, lots with standing, cells checked); a used lever carries no PT record. **A player's cobblestone in an open lane cell:** `mech:gatehouse_1` playerPlaced 1 (finding 1), taken back: as fresh. **A piston the player mines:** `mech:gatehouse_1` removed 1 (= the envelope's change). **Wall:** 4 `w_curtain_wall` cells held on top by a tile, open above: the player breaks 3 (removed 3) and breaks and re-fills 1 with cobblestone (playerPlaced 1); a cobblestone on the cell above the wall, which no entry of the group holds, is not reported. **Tower:** two `tower_1` roof cells broken, one re-filled: its LotLand changed 1, playerPlaced 1, standing 1 -> 0.998; every part and other lot as before. Each landCheck writes nothing (hash, the region's dir and the journal, two calls equal). |
+| `lc-survival` (item 3) | the same castle in survival (a stockpile; GM-a's designs), fed a quarter of what it lacks per wave until a target with paid cells is built while others wait, then the builder idle | **Mid-build** (c1 town and c3 wall built; c2, c4, c5 wall targets 654/886, 500/1668, 428/1566 built): no change; 866 cells counted (the built targets' and the free-pass tiles'), the building targets' cells not at all (as built: "not counted yet"), nothing unattributed, no lot row (no lot site yet). **A player's cobblestone on a waiting cell** (c2's, air, the target on top of its stack): not reported (taken back before the build goes on: RS's builder waits on a player's block, `blockedSince`). **A paid block taken up from a built target** (c3's stone bricks): `w_curtain_wall` removed 1, the target still built (no re-open: it stays counted); put back by the console: as before. **Fully built** (PLACED, build.done): no change, nothing unattributed, every part's cells equal to the creative castle's (16559 checked); a paid wall block taken up (removed 1), another re-filled with cobblestone (playerPlaced 1), a `tower_1` cell broken (its LotLand changed 1, standing 1 -> 0.999). Each landCheck writes nothing (the files listed twice first: no drift by themselves). |
+
+**Findings.**
+1. **A player's block in a mechanism's moving or trigger cell read unchanged (fixed).** LC treated every `mechanism.states` and
+   `triggers` cell as never judged, before the PT check, so a player's cobblestone in an open portcullis lane did not show. §2 says a
+   block with a PT record is `playerPlaced`, and GM §4 item 4 excuses only the gate's own state ("a player who flips the lever"). Fixed
+   (read-only): `LandCheck.classifyCell` judges such a cell as before (SAME: its state never judged) unless a PT record is there, then
+   as `classify` (a player's lever as written, only powered, is still SAME). `LandCheckTest` covers it; lc-castle shows it in game.
+2. **A missing lever or leaf is not reported (reported, not changed).** Without a PT record a trigger or lane cell still reads SAME, so
+   a lever the player breaks does not show (lc-castle records it, unjudged). A lane cell is legitimately air or a leaf, so no state rule
+   tells a missing leaf from an open gate; a trigger (`triggers[].at`) is never legitimately gone, but `rungs` may be. If Steward wants
+   a broken lever reported, judge `triggers[].at` cells as envelope cells (dynamic properties only) and keep lanes and rungs volatile.
+3. **A waiting cell is not land.** A target still building is skipped whole, its built cells too: a block taken up from a half-built
+   target is not reported (RS's rescan re-queues it), and a player's block on an unbuilt cell is not either (RS waits on it). Both as
+   LC's as built says ("not counted yet"); Steward sees the second as RS's blocked cell, not as land change.
+4. **Mid-build attribution is clean here.** LC's as built feared a survival tile's free-pass cells `unattributed` until all its item's
+   targets are built; on this castle none were (0 unattributed mid-build): the tile's record only counts a target's cells WRITTEN once
+   it is built, and the counts agreed. A tile whose item has a target half built and cells of its own was not seen.
+5. The driver's wall oracle names the K2 part `w_curtain_wall` (the wall lots' own part `wl_curtain_wall` sits under the lots' sites).
+
+| Gate | Evidence |
+|---|---|
+| Proof (`gate-run change --only lc-unit,lc-ingame,lc-nowrite,lc-castle,lc-survival`, ports 8896/8897, `../architect-mc-LCi-run`) | RUN_PLACEHOLDER |
+| Units | UNITS_PLACEHOLDER |
 
 ## Phase 6d slice AD: adopting a VillageLayout settlement as a region, the 6d half of C12 (FROZEN 2026-10-20, Steward reviewed)
 
