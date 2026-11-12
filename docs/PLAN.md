@@ -1442,7 +1442,7 @@ animal watch after a restart); both sides use one shared rule (slice OC).
 
 From the folded and dropped branches and the v0.57.0 batch (PG, XR, NS). Nothing here is scheduled; each is its own slice or chore.
 
-**Gate speed set A** (branch `chore/speed-audit-a`, 2026-10-23; not merged, not re-cut: re-do it on current main as one slice, same assertions in every step):
+**Gate speed set A** (branch `chore/speed-audit-a`, 2026-10-23; not merged, not re-cut: re-do it on current main as one slice, same assertions in every step). **Done in SP** (the five items below; the DRIFT seed was QF's): see "Slice SP as built".
 - More unit drivers plan through the shared plan store: rs-unit and coa-unit (`unchanged()`, the 59 asks), hy-unit, h-unit, vocc-unit and voc-unit (the `CP.hyRun` loop they share), and the kit tests `plan-p0-asks` item 11 and `plan-k1a` item 7. The store becomes `calls-v2`, whose record carries the artifact (`art`), and `artSig` throws on a result with none.
 - `kitReuse` in vocc-unit, voc-unit, rs-unit, coa-unit, c37-unit, c38-unit, pt-unit, pt2-unit and rp-unit (all `waitFor: unit-kit`), and it says why whenever it falls back.
 - Java tests from unit-mod's JUnit XML (`junit-reuse`) for 0b-unit, sch-unit, rp-unit, f3-unit and rs-unit; `umt` and `p3-lint` superseded by unit-mod.
@@ -1511,3 +1511,47 @@ The three small items left in "Queued (coordinator, 2026-11-11)" and "Slice PX".
    cell the road wrote solid over a lower entry's block when the final block is that block (`roadOver`). No journal or production code
    changed. Pinned in `UmtFindingsTest.f9_aRoadsSolidCellsOverASiteAreWrittenBackToo` (world seed 24924664554: fails with the old tag rule,
    passes with the new one); `umtLong -Dumt.from=804021437 -Dumt.seeds=1` passes.
+
+## Slice SP as built: gate speed set A (builder, 2026-11-12; branch `slice/SP` off main f5e96625, merged with dd1ca4d6; DEV MODE; $0)
+
+Gate speed set A from "Queued (coordinator, 2026-11-11)", re-done on current main as one slice. The old branch `chore/speed-audit-a`
+was the reference only. Tools and tests only: no API member, no schema, no catalogue entry, no version, no mod main code. Details,
+the safeguards and the measurements are in docs/GATES.md "Speed set A (slice SP)".
+
+1. **Plan store** (done):
+   - rs-unit's and coa-unit's `unchanged()`, and rs's 59 asks (creative and survival, first recordings), plan through the shared
+     store, as do the identity loops of hy-unit (item 12), h-unit (item 11), vocc-unit (item 4) and voc-unit. Those four share one
+     call, `CP.hyRun`. voc's census uses the `vocCensus` derive.
+   - The kit tests `plan-p0-asks` item 11 and `plan-k1a` item 7 read the 59 asks from the store, inside a gate run only.
+   - The store is `calls-v2`: each record carries `art`, `record()` refuses a result without an `artifact`, and coa's `artSig`
+     throws on one.
+   - main's `identicalToBase` skips are kept in every one of them.
+2. **kitReuse** (done) in vocc, voc, rs, coa, c37, c38, pt, pt2 and rp-unit, all `waitFor: unit-kit`. Every fallback prints why.
+3. **junit-reuse** (done) for 0b, sch, rp, f3 and rs-unit (`waitFor: unit-mod`, never pulled in).
+   - Reuse is refused when a class is missing, has no tests, has all of them skipped, failed or errored.
+   - rs's second filter names a method pattern (`*IrStale*`) that no XML file carries, so it falls back to gradle and says why, as
+     designed.
+   - umt and p3-lint are `supersededBy: unit-mod`. A reader without unit-mod's XML gets its configured timeout.
+4. **Done:**
+   - the api-compat memo per run (`<run>/shared/apicompat-memo`);
+   - lint-mutations side by side;
+   - p2-calibration reading t3a-probe's `probe.json` (with a guard: one shard's evidence dir is the same file);
+   - umt-long as `UmtLong{Plain,Crash,Drift,All}Test` on `maxParallelForks = 4`, with `umt.from` fixed once by the task. JUnit now
+     counts 4 tests where it counted 1.
+5. **`--no-daemon` stays** (the reason is in GATES.md). The umt-long DRIFT seed was QF's, not this slice's.
+
+**Proof.**
+- Branch gate run `artifacts/gate-runs-SP/20261111-233614-change`: 17 PASS and 6 FAIL, in 54 min.
+  - Five of the FAILs are main's own stale asks tables: coa item 6, h item 10, hy item 11, vocc item 3 and f3 §9. coa's is FAIL
+    on main's own run as well.
+  - The sixth, voc item 1's Linux leg, failed because docker was down.
+- Every step's assertion count equals main's, from main's partial run at dd1ca4d6 or its recorded runs.
+- The main comparison run was stopped on Noah's word, and the "before" figures are the step history.
+- Speed: rs 29m -> 1m19, hy 11m42 -> 40s, vocc 15m50 -> 3m07, voc 12m -> 6m14, c37/c38 3m -> 2s, f3 7m49 -> 7s and coa 11m21 -> 9m04
+  (on a cold store). Two steps got slower: unit-kit (10m42 p50 -> 8m30 here, against main's run of 6m48: the asks kit tests
+  prewarm a cold store) and h-unit (its base tree was cold).
+
+**Follow-ups (not done):**
+- junit-reuse could match method-pattern filters (`*IrStale*`) on testcase names.
+- The stale committed asks tables (coa, h-a, hy, vocc, f3) are a fix-forward for the nightly's owner.
+- The kit tests now import `tools/lib/corpus-plan.mjs`, so a change there invalidates unit-kit (step inputs).
