@@ -27805,3 +27805,37 @@ and this file. Neither PL nor AF touches any of them but step-inputs and CONTRAC
 | `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the closures that reach lib/check.mjs gain lib/siteCheck.mjs) |
 | api-compat | not run: no Java change |
 | gate-verifier (review only, DEV MODE) | **PASS** at 61b6d615: scope (no Java, no PL/AF/DS work, no versions), no-site byte identity (every check.mjs change guarded by `g.window` but lightLevels' `g.terrain`, equal for a plain grid), each rule against §7.4/§11, the eight readings, fit_suspend's one-block change and re-cut goldens, the variants not vacuous; sc, sv, schem, check, phase5a and f7b-foundation re-run (78/78), step-inputs clean. Minor, fixed after: the neck message named an unused `neckContact` limit (dropped: a neck is one cell of contact); a stray blank line. Noted: span, chain and the cliff cantilever stay unjudged until a bible sets them (DS and the bible work own that) |
+
+### Slice SL as built (branch `slice/SL` off main b1ee8dcc; versions NEXT; $0; IN PROGRESS, recorded 2026-11-11)
+
+**The plan wire, FROZEN first (LP builds on it).** Additive: a pad lot's members and bytes are unchanged everywhere; only a site lot
+carries the members below. `site` is **exactly the `SiteSpec` wire** (`kit/schemas/site-spec.json`, 7bF's schema, untouched; it has
+`additionalProperties: false`), so the kit (`siteSpecProblems`), the mod (`SiteSpec.fromWire`, `LotSpec.site`), Steward and LP read it
+with the one parser. What §2 lists as `$.lots[].site.affordance` sits **beside** `site`, as `$.lots[].affordance`, because the schema
+refuses an extra key.
+
+| Where | Member | Shape |
+|---|---|---|
+| the artifact `$.lots[]` (site lot) | `site` | `{volumeSha, volumeBlobId, volume, fit, frame {origin, rotation}, keepCritical, ports, lotId}` = `SiteSpec.wire()` |
+| | `affordance` | `{id, kind}` (AF's id and wire kind) the lot stands on, or `null` for a lot given an explicit box |
+| | `box`, `fitBox` | the lot box = the fit box, exact (K3's precedent): a site-bound template is exactly this box (SV reading 3) |
+| | `front` | the frame's facing: the design's front (south) turned by `frame.rotation` |
+| | `entrance` | `null` (a port fit has no ground approach; the ports are the way in) |
+| the IR `lots[]` (site lot) | `site`, `affordance` | as above (the artifact copies them); `floorY` = `box.minY`, `max` = the box's size, `front` as above, no `pad` |
+| | `host` | the part id whose ops may write inside the reserved box (the host tree or rock), or `null` |
+| `plan.json` | `affordances[]` | AF's member, now written by every plan with a site lot placed from an affordance |
+| `RegionPlan.lots()` | `LotSpec.site` | `SiteSpec.fromWire($.lots[].site)`; `null` for every pad lot (unchanged) |
+
+- **`site.volume`** = the lot box grown by `SITE_MARGIN` (8) each way, intersected with the claim (x, y and z). The region asks the
+  frozen volume of exactly this box (`needVolume`), so `site.volumeSha` is that volume's ARVX sha.
+- **`site.volumeBlobId`** = `local:<volumeSha>`: the region's frozen volume is this world's `architect/volumes/<sha>.bin` (the two-plan
+  flow freezes it there; `RegionBlobs.installVolumes` copies it into the region's own store), as 7bF's fixtures name theirs. An upload
+  blob id would make the plan depend on an upload; the sha is the identity.
+- **`site.frame`** = `{origin: the box's minimum corner, rotation: AF's proposeFrame for the fit}` (`none` with no affordance).
+- **`site.keepCritical`** (world cells): `wrap_trunk` the volume's LOG cells inside the box (the host); `suspend` the affordance's hang
+  points (anchors) that are site-solid in the volume; every other fit `[]`.
+- **`site.ports`** (design cells): the program's `ports`, else the default per fit: none for `on_pad`; `span` two `architect:walk`
+  ports `west` at `[0, 0, floor((d-1)/2)]` facing west and `east` at `[w-1, 0, floor((d-1)/2)]` facing east; `suspend` one walk port
+  `hatch` at `[floor((w-1)/2), 0, floor((d-1)/2)]` facing down (1x1); every other fit one walk port `front` at `[floor((w-1)/2), 0, d-1]`
+  facing south (2x2). `w`, `d` are the design's own size (the box turned back by the rotation).
+- **`site.lotId`** = the lot id.
