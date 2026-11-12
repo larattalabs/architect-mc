@@ -1,0 +1,24 @@
+{
+  "files": {
+    "castle.nbt": "e0d912e435626247f6b06f64f44a9b201319806f56cb9334c133bc32b0455d53",
+    "castle.parts.nbt": "d1151e1dc59d8815047afc8479c19ab1e8d9d522dee9d014db7981af9c3f6b34",
+    "castle.blueprint.json": "7cb039598796ef7ca15d4187c9d261f19b0aa9ef9bf55dee83c6494cd5201a4a",
+    "castle__west.nbt": "7feb87a4acffc28e342de8049b320da35c17f6e0cf1012c726d167a25723af3f",
+    "castle__west.parts.nbt": "1ecaebcb5e2dc5e1a2928bc8f4061c11e5a490e5619994f2a2bafbaab2c6e24e",
+    "castle__west.blueprint.json": "1e3e858b8274bdf48cbddecfa92d644e90ea78b301efa4766bc3bfb4538b6820",
+    "castle__centre.nbt": "6aa075559ccd72b4f5e99960af091abc1db06091606237b60927e032590f2f5e",
+    "castle__centre.parts.nbt": "fe5caef7b2cf609ee9e5e53e7c33cb65b268de8caddeecb15bba773766c2ef64",
+    "castle__centre.blueprint.json": "760e4a09e809606a7ba3d9e6fe9865615b90d5da43fc9fcec016f46816b517f2",
+    "castle__east.nbt": "45469a934e8a5cd463e383fad4a36bbc47213519a9fbe11784faf58dbd791907",
+    "castle__east.parts.nbt": "b353268f9104a1be22267778c8139eb508863d76e3fdd7fce72a2cf67e2fcd3b",
+    "castle__east.blueprint.json": "7ca015979518737ec77088f693b90ace14542cf92ed8b762d1397e5416e80a0f",
+    "castle.composite.json": "dabb0de32d9ceb4651436f82542fa8be11579f28384bf1a781a79611fa110bc7"
+  },
+  "renders": {
+    "castle.iso": "14bd6bf2abc006e5232baec2c48f29f983c71c5fb85a59dc27d85ffb7f9852e7",
+    "castle.iso_back": "58dd31a512f96450f525e5970e4e7f82d0b46ca50675ea91b18585cb85be997b",
+    "castle.top": "5b17dc72fb9a1e87e0cc1c80a6ab43be0be9f2e2ac5d44fb1149f00583fa96c2",
+    "castle.front": "92f53cb9f1c0a9045bb82501c4caeec2f8c0d11ae5a3a5b51e9997b4fbf7ff28",
+    "castle.cutaway": "1f8d0c29978f3be790f5e9fb7e512ffce07b018d178b4673e868ad56d7fd4073"
+  }
+}
