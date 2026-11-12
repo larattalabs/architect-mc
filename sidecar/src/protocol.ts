@@ -561,6 +561,15 @@ export const GroupRequest = z
     if (g.approvalUi === 'owner' && !g.owner) ctx.addIssue({ code: 'custom', path: ['approvalUi'], message: 'approvalUi "owner" needs the group\'s owner' });
     // (7b DS) a site item is one placement: nothing copies it (its site variants are Designs.siteVariant)
     const sited = new Set(g.items.map((it, i) => (it.site ? (it.itemKey ?? `item${i + 1}`) : undefined)).filter(Boolean));
+    // (7b DS, Steward's change 2) a variant lot's item names its archetype item: Item.ext["architect_mc:site"] = {archetype: <item key>},
+    // validated here and passed through (the group designs such an item as any other: the Group API has no item with a ready entry)
+    g.items.forEach((it, i) => {
+      const own = it.itemKey ?? `item${i + 1}`;
+      const v = (it.ext as Record<string, unknown> | undefined)?.['architect_mc:site'];
+      if (v === undefined) return;
+      const arch = v && typeof v === 'object' && !Array.isArray(v) ? (v as { archetype?: unknown }).archetype : undefined;
+      if (typeof arch !== 'string' || !keys.includes(arch) || arch === own) ctx.addIssue({ code: 'custom', path: ['items', i, 'ext', 'architect_mc:site'], message: `ext["architect_mc:site"] is {archetype: <another item's key in this group>} (got ${JSON.stringify(v).slice(0, 80)})` });
+    });
     g.items.forEach((it, i) => {
       if (it.copyOf !== undefined && sited.has(it.copyOf)) ctx.addIssue({ code: 'custom', path: ['items', i, 'copyOf'], message: `copyOf "${it.copyOf}" is a site-aware item: its site variants are Designs.siteVariant, not copies` });
     });

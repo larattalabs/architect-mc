@@ -61,6 +61,13 @@ describe('DesignRequest.site (7b DS): schema', () => {
     expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec }), item({ itemKey: 'b', copyOf: 'a' })] }).success).toBe(false);
     expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec, count: 2 })] }).success).toBe(false);
     expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec }), item({ itemKey: 'b' })] }).success).toBe(true);
+    // (change 2) a variant lot's item names its archetype item: validated, passed through
+    const arch = (v: unknown) => GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec }), item({ itemKey: 'b', site: EAST.spec, ext: { 'architect_mc:site': v } })] });
+    expect(arch({ archetype: 'a' }).success).toBe(true);
+    expect((arch({ archetype: 'a' }) as { data: GroupRequest }).data.items[1]!.ext).toEqual({ 'architect_mc:site': { archetype: 'a' } });
+    expect(arch({ archetype: 'zz' }).success).toBe(false);
+    expect(arch({ archetype: 'b' }).success).toBe(false);
+    expect(arch('a').success).toBe(false);
     expect(siteSize(CLIFF.spec)).toEqual({ x: 16, y: 22, z: 12 });
     expect(siteSize({ ...CLIFF.spec, frame: { ...CLIFF.spec.frame, rotation: 'clockwise_90' } })).toEqual({ x: 12, y: 22, z: 16 });
   });
