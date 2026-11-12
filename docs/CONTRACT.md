@@ -27886,3 +27886,26 @@ spec's id, which must not be `local:` (refused). Estimates send the spec as is (
    run it (`writeSiteFiles`: the spec and lot only).
 9. **DS's own fixtures** (`kit/test/fixtures/ds/`, `tools/ds-fixtures.mjs --check`): `cliff_east` (another cliff, 4 taller) and
    `cliff_owned` (cliff_face's shape with a player's pillar where the house goes), beside 7bF's six (f7b-foundation holds that dir).
+
+**Not covered by a unit or the gate:** a real Claude design into a site (PA's P0/P1; no paid call in DS), the volume upload when the helper
+already lost the spec's blob and the world lacks the frozen file (refused by design), and a SITE follow through the mod (sidecar units
+only).
+
+**Checks** ($0, sim only; branch head 72d59e22 plus this as-built):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1166/1166 after merging main b1ee8dcc (ds.test.mjs 7/7) |
+| sidecar `npm ci && npm run check` | 831/831, 57 files (site-design.test.ts 17/17); the bundle built |
+| mod `./gradlew build --offline --no-daemon` | pass after the merge; 1065 tests, 0 failures, 1 skipped (ApiDSTest 6/6, Api7bFTest, WireFSTest) |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 135/135 |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar |
+| `node tools/step-inputs.mjs check` | clean (334 steps; ds-unit, ds-sim entered) |
+| `node kit/tools/ds-fixtures.mjs --check` | clean |
+| in game, run 20261112-045654-change at 72d59e22 (ports 8904/8905, `--out artifacts/gate-runs-ds`) | **PASS** 2/2: `ds-unit`; `ds-sim` 14 ok (the three cliffs built and frozen to their own shas; a site-aware design sent with a `local:` blob id, designed by the sim, installed bound and lot-sized; its BRIEF +21/-4 against the plain request's, every removed line an expected one; the scratch's site/; a site variant onto cliff_east, a SITE derivation bound to it, the opKey replayed; cliff_owned SITE_UNFIT site_keep; cabin SITE_UNSUPPORTED not_site_aware). Earlier runs 044453 (a hook read the DevBridge message's own `type`), 044920 (the BRIEF diff counted the plain design's `_2` id), 045344 (fixed opKeys met the previous run's in the kept helper data) were harness fixes |
+| gate-verifier (review only, DEV MODE) | **PASS** at 72d59e22: scope, 7bF signatures unchanged (javadoc only), additive API, SITE_UNFIT details within SC's rule ids, refusals against the javadoc, opKey bodies without the blob id, the sha-checked kept volume, `--site` on every check path and polish refused, the Site section from the analysis and not tuned to S5/S6, the in-game evidence, readings 1-9; ds/sc/sv/f7b-foundation (38/38), site-design/follow/limits (29/29), ds-fixtures and step-inputs re-run. No blocking defect; minor: readings 1, 3 and 5 as recorded |
+
+**For the PL/SO RC** (DS rides in that jar), the areas for Steward's `--only`: `Designs.request`/`requestGroup` with `DesignRequest.site`
+(the feature `siteDesign`, the volume sent from the world's frozen file, the entry's `SiteBinding`), `Designs.siteVariant` (the new entry, its
+SITE derivation and binding; `SITE_UNFIT` with a rule id, `SITE_UNSUPPORTED`; the opKey replay), `Designs.follow` of a SITE entry, the
+estimate kinds `site` and `adapted`, a massingFirst group with a site item refused. The PLAYBOOK's §7 is new (Steward's skill is its upstream).
