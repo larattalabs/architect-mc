@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program', 'bible.format3'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -728,6 +728,8 @@ export const EstimateMix = z.object({
 export type EstimateMix = z.infer<typeof EstimateMix>;
 
 export const BibleScope = z.enum(['building', 'settlement']);
+/** (7c SF, S-7c-3) BibleRequest ext: the settlement Style (its id) a zone Style derives from (Java BibleRequest.EXT_RELATED_TO). */
+export const EXT_RELATED_TO = 'architect_mc:relatedTo';
 export const BibleRequest = z.object({
   prompt: z.string().trim().min(1).max(2000).describe('what the place is ("weathered fishing village on stilts")'),
   name: z.string().trim().min(1).max(40).optional(),
@@ -764,7 +766,8 @@ export const BibleInfo = z.object({
   ext: Ext.optional(),
   createdAt: Ts.optional(),
   cost: Cost.optional(),
-  format: z.number().int().optional().describe('(5a) the bible format: 1 (4b) or 2 (with restraint)'),
+  format: z.number().int().optional().describe('(5a) the bible format: 1 (4b) or 2 (with restraint); (7c SF) 3 (a settlement or zone Style: connectors prefer and look, forms, scatter, settlement, references, relatedTo; kit/lib/style3.mjs)'),
+  relatedTo: BiblePin.optional().describe("(7c SF) a zone Style's settlement Style (format 3), pinned when it was made"),
   restraint: z
     .object({ heroMotifs: z.array(z.string()), accentShareMax: z.number(), detailDensity: z.enum(['sparse', 'moderate', 'rich']), windowsPerFacadeMin: z.number().int() })
     .optional()
@@ -800,6 +803,7 @@ export const BibleJob = z.object({
   request: BibleRequest.extend({
     notes: z.string().max(4000).optional(),
     partsOf: BiblePin.optional().describe("(U5b, bible.parts) the Style whose parts this job drafts: its roles and hints are kept, no drafting pass"),
+    relatedTo: BiblePin.optional().describe('(7c SF) a zone Style job: the settlement Style (ext architect_mc:relatedTo) pinned at the request, whose core roles it copies in'),
   }),
   status: BibleJobStatus,
   step: z.string(),

@@ -76,6 +76,9 @@ export function ropeResolve(K, p) {
   return null;
 }
 
+/** (7c SF) A format 3 Style's rope_bridge.maxSpan (a part's span.max when it sets no span), or null. */
+const lookMaxSpan = (K) => K.ctx.connectorLook?.look?.rope_bridge?.maxSpan ?? null;
+
 /** A rope_bridge or auto connector's leg options for the route pass (spans, spanOnce, span, approach, width, movers). */
 export function ropeLeg(K, p) {
   const o = stateOf(K).parts.get(p.id);
@@ -83,7 +86,7 @@ export function ropeLeg(K, p) {
   const part = p.part;
   return {
     width: o.width, movers: o.movers,
-    ...(o.spans ? { spans: ['rope'], spanOnce: p.kind === 'rope_bridge', approach: o.approach, ...(part.span ? { span: { ...part.span } } : {}) } : {}),
+    ...(o.spans ? { spans: ['rope'], spanOnce: p.kind === 'rope_bridge', approach: o.approach, ...(part.span ? { span: { ...part.span } } : lookMaxSpan(K) ? { span: { min: ROPE.spanMin, max: lookMaxSpan(K) } } : {}) } : {}),
   };
 }
 
@@ -188,7 +191,9 @@ export function emitRopes(K) {
     const cp = K.checkpoint();
     try {
       const idx = K.order.indexOf(p);
-      const style = p.part.lamps === 'none' ? { light: null } : {};
+      // ((7c SF) a format 3 Style's rope_bridge.light: a role, or 'none'; a part's own lamps: none wins)
+      const lookLight = K.ctx.connectorLook?.look?.rope_bridge?.light;
+      const style = p.part.lamps === 'none' || lookLight === 'none' ? { light: null } : lookLight ? { light: lookLight } : {};
       const recs = emitRouteRopes(K.r, { only: [x.meta.id], stage: K.stageOf('links'), part: `links_r${idx}`, prefix: `rope_r${idx}_`, style, ...(o?.whole ? { whole: true } : {}) });
       K.mark(p.id, K.addedSince(cp));
       // a rope_bridge connector's graph edge is typed (§8: type rope_bridge, its crossing)

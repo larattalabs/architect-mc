@@ -2,6 +2,7 @@
 // checker over two ARWD dumps of the claim with the plan's attribution), the palette and organic-read measures, the placed
 // entries' kit checks, MSPT, exactness and determinism. Pure functions; tools/scenarios.mjs gathers the inputs.
 import { F_WRITTEN } from '../../kit/lib/region/vworld.mjs';
+import { traceRole } from '../../kit/lib/connectors/style.mjs';
 
 const M14 = /^M[1-4](\b|:)/;
 
@@ -45,6 +46,42 @@ export function paletteAdherence(ir, world) {
     else off.set(id, (off.get(id) ?? 0) + 1);
   });
   return { cells: n, adherent: ok, share: n ? ok / n : 1, offPalette: Object.fromEntries([...off].sort((a, b) => b[1] - a[1]).slice(0, 20)) };
+}
+
+/**
+ * (7c SF) Theme fit: role shares (SETTLEMENTS §16 "role shares within the bible's roleShares bands"; a format 3 Style's
+ * `settlement.roleShares`, {role: [lo, hi]}): over the non-air cells the realise wrote outside the lots' boxes (paletteAdherence's
+ * cells), the share whose block traces to each role (kit/lib/connectors/style.mjs traceRole: the role's block or one of its shape
+ * variants; the light role's fixture counts as light). Returns `{cells, shares: {role: share}, bands: {role: {lo, hi, share, inside}},
+ * outside: [role]}`; `bands` null gives the shares only.
+ */
+export function roleShares(ir, world, bands = null) {
+  const roles = ir.roles ?? {};
+  const counts = new Map();
+  const memo = new Map();
+  let n = 0;
+  world.eachWritten((x, y, z, idx) => {
+    if (world.pal.air[idx] || world.lotAt(x, y, z)) return;
+    n++;
+    const id = world.pal.states[idx];
+    let role = memo.get(id);
+    if (role === undefined) {
+      const t = traceRole(id, roles, { lightFixture: roles.light ?? null });
+      role = t && t !== 'functional' ? t.split('.')[0] : null;
+      memo.set(id, role);
+    }
+    if (role) counts.set(role, (counts.get(role) ?? 0) + 1);
+  });
+  const shares = Object.fromEntries([...counts].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([r, c]) => [r, n ? c / n : 0]));
+  if (!bands) return { cells: n, shares, bands: null, outside: [] };
+  const out = {}, outside = [];
+  for (const [r, [lo, hi]] of Object.entries(bands).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
+    const share = shares[r] ?? 0;
+    const inside = share >= lo && share <= hi;
+    out[r] = { lo, hi, share, inside };
+    if (!inside) outside.push(r);
+  }
+  return { cells: n, shares, bands: out, outside };
 }
 
 /**
@@ -113,6 +150,9 @@ export function bars(x) {
   out.push(row('safety', 'Safety (M4, M5, M8)', `M4 ${M4}; M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% dark spawnable; M8 ${M8 ? (100 * M8.share).toFixed(1) : '?'}% guarded (${M8?.unguarded ?? '?'} open of ${M8?.edgeCells ?? '?'})`,
     'M4 0; M5 < 1% of walk area; M8 100%', M4 === 0 && M5 && M5.share < 0.01 && M8 && M8.unguarded === 0));
   out.push(row('palette', 'Theme fit: palette', x.palette ? `${x.palette.share.toFixed(3)} (${x.palette.adherent}/${x.palette.cells})` : 'n/a', '>= 0.9', x.palette && x.palette.share >= 0.9));
+  // ((7c SF) only for a run whose Style sets settlement.roleShares: recorded, not gated, until BR turns the bars on)
+  if (x.roleShares?.bands) out.push(row('roleShares', 'Theme fit: role shares', `${Object.entries(x.roleShares.bands).map(([r, b]) => `${r} ${b.share.toFixed(3)} [${b.lo}, ${b.hi}]${b.inside ? '' : ' OUTSIDE'}`).join('; ')} of ${x.roleShares.cells} cells`,
+    "every banded role inside the Style's roleShares band (recorded until BR)", x.roleShares.outside.length === 0, false));
   out.push(row('organic', 'Theme fit: organic read', x.organic ? `axis-run share ${x.organic.share.toFixed(3)} of ${x.organic.boundaryCells} boundary cells` : 'n/a', 'recorded (calibrated on held-out seeds for 6c)', null, false));
   const bErr = (x.buildings ?? []).reduce((a, b) => a + b.errors, 0);
   const bRes = (x.buildings ?? []).flatMap((b) => b.restraint ?? []);

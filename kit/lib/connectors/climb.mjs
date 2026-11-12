@@ -140,7 +140,7 @@ export function resolve(K, p) {
   const width = ladder ? 1 : part.width ?? pr.read.width ?? 2;
   const unsafe = part.ext?.[UNSAFE_EXT_7A] ?? {};
   const lamps = (part.lamps ?? pr.read.lamps) !== 'none';
-  const o = { kind: p.kind, movers, width, notes, lamps, rails: part.rails ?? 'drops', retaining: part.retaining ?? 'plain', rest: part.rest ?? CLIMB.rest, top: part.top ?? 'gate', landing: part.landing ?? null, unsafe };
+  const o = { kind: p.kind, movers, width, notes, lamps, rails: part.rails ?? 'drops', retaining: part.retaining ?? 'plain', rest: part.rest ?? (ladder ? K.ctx.connectorLook?.look?.ladder?.landingEvery : undefined) ?? CLIMB.rest, top: part.top ?? 'gate', landing: part.landing ?? null, unsafe };
   st.parts.set(p.id, o);
   if (o.rails === 'none') notes.push('rails: none: no rail beside its drops (M8 warns of them)');
   if (ladder && o.top === 'open') notes.push('top: open: no gate over the ladder\'s top (M8 notes the open edge)');

@@ -21,6 +21,7 @@ import { mapPatternMats, patternError } from '../pattern.mjs';
 import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 import { connectorRoles, connectorsError } from '../connectors/style.mjs';
+import { connectors3Errors, hasConnectors3, splitConnectors } from '../style3.mjs';
 import { lintFluidState } from '../fluids/body.mjs';
 import { fluidsError } from '../fluids/place.mjs';
 import { revisionSeed } from './revise.mjs';
@@ -406,9 +407,13 @@ export async function planRegion(o) {
     roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const patterns = resolvePatterns(o.patterns ?? {}, roles);
     // (7a K1) the bible's connector roles (each slot a role the plan resolves, else its default chain)
-    const ce = connectorsError(o.connectors ?? undefined, roles);
+    // ((7c SF) a format 3 Style's connectors: its slots as format 2's; its prefer list and look parameters, checked here, go to
+    // ctx.connectorLook only when it has any, so a format 2 Style's plan is unchanged)
+    const split = splitConnectors(o.connectors ?? undefined);
+    const ce = connectorsError(split.slots ?? undefined, roles) ?? connectors3Errors(o.connectors ?? undefined, roles)[0] ?? null;
     if (ce) throw new Error(ce);
-    const connectors = Object.freeze(connectorRoles(roles, o.connectors ?? null));
+    const connectors = Object.freeze(connectorRoles(roles, split.slots ?? null));
+    const connectorLook = hasConnectors3(o.connectors) ? Object.freeze({ prefer: Object.freeze(split.prefer ?? []), look: Object.freeze(split.look) }) : null;
     // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring; lib/fluids/place.mjs)
     const fe = fluidsError(o.fluids ?? undefined, roles);
     if (fe) throw new Error(fe);
@@ -423,6 +428,7 @@ export async function planRegion(o) {
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, connectors, seed, params: Object.freeze({ ...params }),
+      ...(connectorLook ? { connectorLook } : {}),
       fluidsGiven: o.fluids ? Object.freeze({ ...o.fluids }) : null,
       // (6c VOC) the bible's rarity budget (defaults filled in), or null when the bible carries none; the plan compile's VOCAB/FIRE
       // refusals of the second plan ({part: reason})
