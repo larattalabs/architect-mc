@@ -117,7 +117,7 @@ const entryFile = (id) => {
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
 };
 /** A dev.box.hash cell line's block id ("minecraft:x"). */
-const idOf = (line) => (/(?:Block\{|Name\s*:\s*["']?)([a-z0-9_.-]+:[a-z0-9_./-]+)/.exec(line)?.[1] ?? line).replace(/^minecraft:/, '');
+const idOf = (line) => (/(?:Block\{|(?:Name|id)\s*:\s*["']?)([a-z0-9_.-]+:[a-z0-9_./-]+)/i.exec(line)?.[1] ?? line).replace(/^minecraft:/, '');
 async function cells(b) {
   const h = await call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]], cells: true }, 300_000);
   return new Map((h.cells ?? []).map((l) => { const sp = l.indexOf(' '); return [l.slice(0, sp), idOf(l.slice(sp + 1))]; }));
