@@ -29,6 +29,8 @@ test('catalogue: against catalogue-pre7c.json exactly program.authored added (re
 test('plan/0: program.authored and the six flips have reserved draft defs (x-state reserved), named by draft, never def', () => {
   for (const id of ['program.authored', ...FLIPS]) {
     const e = PLAN_SCHEMA['x-catalogue'].entries.find((x) => x.id === id);
+    // (a later 7c slice's flip, supported with its def, is that slice's test: BF's bf.test.mjs)
+    if (e.state === 'supported') continue;
     assert.equal(e.def, undefined, `${id}: a def would make the part strict-checked`);
     assert.equal(e.draft, `#/$defs/${id}`, id);
     assert.equal(PLAN_SCHEMA.$defs[id]['x-state'], 'reserved', id);
@@ -50,7 +52,8 @@ test('planCatalogueKinds: the named kinds in catalogue order, full entries plus 
   assert.deepEqual(def, PLAN_SCHEMA.$defs['connector.wall']);
   assert.ok(typeof def.description === 'string' && def.description.length > 0, 'the def keeps its descriptions');
   assert.equal(r.entries[1].def, undefined, 'a reserved kind with neither def nor draft');
-  assert.equal(r.entries[2].def['x-state'], 'reserved');
+  // (form.crater: BF's supported def; the draft was 7cF's)
+  assert.deepEqual(r.entries[2].def, PLAN_SCHEMA.$defs[PLAN_SCHEMA['x-catalogue'].entries.find((x) => x.id === 'form.crater').def?.slice(8) ?? 'form.crater']);
   def.scribble = 1;
   assert.equal(PLAN_SCHEMA.$defs['connector.wall'].scribble, undefined);
   assert.deepEqual(planCatalogueKinds([]), { ...planCatalogueKinds(undefined) });

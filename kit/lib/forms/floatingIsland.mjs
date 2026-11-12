@@ -42,7 +42,7 @@ function rng(seed, label) {
 export function islandParams(p) {
   const o = {
     at: p.at, r: p.r, thickness: p.thickness ?? 16, seed: String(p.seed ?? '1'),
-    top: { relief: p.top?.relief ?? 2, pads: p.top?.pads ?? [], edge: p.top?.edge ?? 'rail', lights: p.top?.lights ?? 0 },
+    top: { relief: p.top?.relief ?? 2, pads: p.top?.pads ?? [], edge: p.top && Object.hasOwn(p.top, 'edge') && p.top.edge !== undefined ? p.top.edge : 'rail', lights: p.top?.lights ?? 0 },
     underside: { taper: p.underside?.taper ?? 0.7, roots: p.underside?.roots ?? 4 },
     materials: p.materials ?? 'island',
     anchorAt: p.anchorAt ?? null,
