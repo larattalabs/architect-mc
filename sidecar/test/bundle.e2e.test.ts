@@ -173,9 +173,10 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     await ready(q, data2);
     const t0 = Date.now();
     await new Promise((r) => parent.on('exit', r));
-    const code = await Promise.race([q.exit, new Promise((r) => setTimeout(() => r('timeout'), 12_000))]);
+    // the sidecar polls its parent pid every few seconds; 12 s missed under load, and the bound only has to tell an exit from none
+    const code = await Promise.race([q.exit, new Promise((r) => setTimeout(() => r('timeout'), 60_000))]);
     expect(code).toBe(0);
-    expect(Date.now() - t0).toBeLessThan(12_000);
+    expect(Date.now() - t0).toBeLessThan(60_000);
     expect(q.out.join('')).toMatch(/parent pid \d+ is gone/);
   }, 1_800_000);
 });

@@ -238,8 +238,9 @@ describe('region.plan with the check and previews (fake kit)', () => {
     h.cfg.regions.checkMs = 800;
     try {
       const t0 = Date.now();
-      const slow = (await plan(h, { params: { fakeCheck: { slowMs: 5000 } } })).planned!;
-      expect(Date.now() - t0).toBeLessThan(4000);
+      // the check would take 20 s; the 0.8 s budget cuts it. The bound sits well under 20 s, not near the budget (4 s missed under load)
+      const slow = (await plan(h, { params: { fakeCheck: { slowMs: 20_000 } } })).planned!;
+      expect(Date.now() - t0).toBeLessThan(15_000);
       expect(slow.report).toBeUndefined();
       expect(slow.checkError).toMatch(/check took longer than 0\.8 s/);
       // the check used the whole budget: no time left for the previews

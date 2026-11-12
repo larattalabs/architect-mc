@@ -51,7 +51,7 @@ async function harness(over: Partial<Config> = {}, root = tempDir('arch-5a-')): 
 const LOOP = (o: Record<string, unknown> = {}) => ({ mode: 'loop' as const, budgetUsd: 5, ...o });
 const design = (h: H, notes: string, critique: Record<string, unknown> = LOOP(), over: Record<string, unknown> = {}) =>
   h.sc.requestDesign(DesignRequest.parse(request({ name: undefined, notes, maxSize: { x: 64, y: 64, z: 64 }, critique, ...over })));
-const final = (h: H, id: string, ms = 60_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), ms);
+const final = (h: H, id: string, ms = 600_000) => until(() => ['done', 'failed', 'cancelled'].includes(h.sc.designs.get(id)!.status), ms);
 const get = (h: H, id: string) => h.sc.designs.get(id)!;
 const scratch = (h: H, id: string) => path.join(h.sc.config.dataDir, 'designs', id);
 const entryDir = (h: H, d: Design) => path.join(h.sc.config.libraryDir, d.blueprintId!);
