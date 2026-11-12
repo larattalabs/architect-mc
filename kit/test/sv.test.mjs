@@ -1,7 +1,7 @@
 // 7b SV (docs/CONTRACT.md "Phase 7b" §3 row 2): the site in the kit. lib/site.mjs (frames, rotations, the shapes a design reads), the
 // Blueprint's fit, site and keep cells, the terrain-merged helpers, --site on build, render and slices, and the six fit examples: each
-// builds over its 7bF fixture, deterministically, into what kit/examples holds; it meets its site on the composite (the invariants below
-// stand in for SC's checker until it lands); it is themed (every block traces to a role of its palette under three palettes); and its
+// builds over its 7bF fixture, deterministically, into what kit/examples holds; it meets its site on the composite (7b SC's checker judges
+// it there: kit/test/sc.test.mjs holds the site rules); it is themed (every block traces to a role of its palette under three palettes); and its
 // composite and section renders are byte-stable (committed sha goldens that CI's Linux run must reproduce).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +23,7 @@ import { parse, plain } from '../lib/nbt.mjs';
 import { traceRole } from '../lib/connectors/style.mjs';
 import { builtinBible } from '../lib/bible.mjs';
 import { importDesign, loadDesign, SITE_DESIGNS } from '../build.mjs';
-import { buildExample, listSiteDesigns, ruleNames } from '../tools/examples.mjs';
+import { buildExample, listSiteDesigns } from '../tools/examples.mjs';
 import { renderStructure } from '../render.mjs';
 import { slices } from '../tools/slices.mjs';
 
@@ -212,7 +212,7 @@ const cellsOf = (structure) => {
   return m;
 };
 
-test('the six fit examples: one per fit, each built into its fixture, clean but for its declared template-only warnings, and current in kit/examples', async () => {
+test('the six fit examples: one per fit, each built into its fixture, clean on the composite (7b SC), and current in kit/examples', async () => {
   assert.deepEqual(listSiteDesigns().sort(), Object.keys(EXAMPLES).sort());
   for (const [id, fx] of Object.entries(EXAMPLES)) {
     const mod = await importDesign(id, SITE_DESIGNS);
@@ -221,7 +221,9 @@ test('the six fit examples: one per fit, each built into its fixture, clean but 
     const r = await built(id);
     assert.ok(r.ok, `${id}: ${r.problems.join(' | ')}`);
     assert.deepEqual(r.result.errors, []);
-    assert.deepEqual(ruleNames(r.result.warnings), [...mod.templateOnlyWarnings].sort());
+    assert.deepEqual(r.result.warnings, [], id);
+    assert.equal(mod.templateOnlyWarnings, undefined, `${id}: SC's composite checks it whole`);
+    assert.deepEqual(r.result.site.findings, [], id);
     for (const f of [`${id}.nbt`, `${id}.blueprint.json`, `${id}.parts.nbt`, `${id}.mjs`]) {
       assert.deepEqual(fs.readFileSync(path.join(tmp, 'ex', id, f)), fs.readFileSync(path.join(KIT, 'examples', id, f)), `${id}/${f}: kit/examples is out of date (node kit/tools/examples.mjs)`);
     }
@@ -237,7 +239,7 @@ test('the six fit examples: one per fit, each built into its fixture, clean but 
   }
 });
 
-test('the six fit examples meet their sites on the composite (no keep cell written, every port met, every block connected to the site)', async () => {
+test('the six fit examples meet their sites on the composite: the checker\'s site rules (7b SC) find nothing, and each fit\'s own geometry holds', async () => {
   for (const [id, fx] of Object.entries(EXAMPLES)) {
     const site = siteFixture(fx);
     const r = await built(id);
@@ -245,38 +247,15 @@ test('the six fit examples meet their sites on the composite (no keep cell writt
     const sc = JSON.parse(fs.readFileSync(path.join(tmp, 'ex', id, `${id}.blueprint.json`), 'utf8'));
     const cells = cellsOf(s);
     const solidWritten = new Set([...cells].filter(([, n]) => n !== 'minecraft:air').map(([k]) => k));
-    // keep cells: the site's keep-critical cells (and, round a trunk, every log) are never written
-    for (const c of site.keepCritical) assert.ok(!cells.has(c.join(',')), `${id}: writes keep-critical ${c}`);
-    for (const c of site.cellsOf('LOG')) assert.ok(!cells.has(c.join(',')), `${id}: writes the host's log ${c}`);
+    const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    // SV's stand-ins (keep cells, ports met, every block connected to the site) are the checker's rules now (lib/siteCheck.mjs:
+    // site_keep, ports_met, fit:<mode>), run on the composite by the build
+    assert.equal(r.result.site.fit, site.fit, id);
+    assert.deepEqual(r.result.site.findings, [], id);
+    assert.deepEqual(r.result.site.metrics.portsMet, site.ports.map((p) => p.name), id);
     // the keep-critical cells inside the template are the sidecar's keep.critical (the overhang's hang points lie above its box: none)
     const inside = site.keepCritical.filter((c) => site.inLot(...c));
     assert.deepEqual(sc.keep?.critical ?? [], inside.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]), id);
-    // ports: each of the site's ports is a design port of the same name and kind, at its hinted cell within 2, facing as hinted
-    for (const p of site.ports) {
-      const d = sc.ports.find((q) => q.name === p.name);
-      assert.ok(d, `${id}: no port ${p.name}`);
-      assert.equal(d.kind, p.kind);
-      assert.equal(d.facing, p.facing);
-      assert.ok(Math.max(Math.abs(d.x - p.at[0]), Math.abs(d.y - p.at[1]), Math.abs(d.z - p.at[2])) <= 2, `${id}: port ${p.name} is off its hint`);
-    }
-    // support: every written block reaches the site's solid (or, for on_pad, the ground row) through written blocks
-    const seeds = [];
-    const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-    for (const k of solidWritten) {
-      const [x, y, z] = k.split(',').map(Number);
-      const onSite = N6.some(([dx, dy, dz]) => !solidWritten.has(`${x + dx},${y + dy},${z + dz}`) && !cells.has(`${x + dx},${y + dy},${z + dz}`) && site.solid(x + dx, y + dy, z + dz));
-      if (onSite || (site.fit === 'on_pad' && y <= sc.groundY - 1)) seeds.push(k);
-    }
-    const reached = new Set(seeds);
-    for (let i = 0; i < seeds.length; i++) {
-      const [x, y, z] = seeds[i].split(',').map(Number);
-      for (const [dx, dy, dz] of N6) {
-        const n = `${x + dx},${y + dy},${z + dz}`;
-        if (solidWritten.has(n) && !reached.has(n)) { reached.add(n); seeds.push(n); }
-      }
-    }
-    const loose = [...solidWritten].filter((k) => !reached.has(k));
-    assert.deepEqual(loose, [], `${id}: blocks not connected to the site`);
     // per fit: what bears
     const byName = (k) => cells.get(k);
     if (site.fit === 'suspend') {

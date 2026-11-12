@@ -11,6 +11,9 @@
 // (since NEXT, 7a K3): the conformance size cap in place of the massing's size + 2 (a wall lot's exact box).
 // --restraint <bible.json|name> (phase 5a): warnings `restraint: ...` against the bible's restraint (lib/bible.mjs restraintOf); (6c VOC-b)
 // and `rarity: ...` / `coherence: ...` against its `rarity` when it carries one (lib/vocab/budget.mjs styleOf; metrics.rarity always).
+// --site <volume> [--lot <site.json>] (7b SC): check the template composited with its site (lib/siteCheck.mjs): the frozen ARVX volume and
+// the lot's site spec (default: the sidecar's `site`, what the design was built into). The site rules' findings join the errors and
+// warnings; --json adds `site: {fit, ok, findings, metrics}`.
 // Exit code 0 = OK, 1 = the check failed, 2 = bad usage / unreadable files.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,8 +23,9 @@ import { readMassingArg } from './lib/massing.mjs';
 import { BUILDING_TYPES, TYPE_RE } from './lib/kit.mjs';
 import { readBibleArg, restraintOf } from './lib/bible.mjs';
 import { styleOf } from './lib/vocab/budget.mjs';
+import { Site } from './lib/site.mjs';
 
-const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--profile massing] [--massing <massing.blueprint.json> [--massing-cap x,y,z]] [--imported] [--restraint <bible.json>] [--json]';
+const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--profile massing] [--massing <massing.blueprint.json> [--massing-cap x,y,z]] [--imported] [--restraint <bible.json>] [--site <volume> [--lot <site.json>]] [--json]';
 
 export function parseCheckArgs(argv) {
   const o = { files: [] };
@@ -40,17 +44,20 @@ export function parseCheckArgs(argv) {
     else if (a === '--massing-cap') o.massingCap = parseMax(val());
     else if (a === '--imported') o.imported = true;
     else if (a === '--restraint') { const b = readBibleArg(val()); o.restraint = restraintOf(b); o.style = styleOf(b); }
+    else if (a === '--site') o.sitePath = path.resolve(val());
+    else if (a === '--lot') o.lotPath = path.resolve(val());
     else if (a === '--json') o.json = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o.files.push(path.resolve(a));
   }
   if (o.files.length !== 2) throw new Error('needs <file.nbt> and <sidecar.json>');
+  if (o.lotPath && !o.sitePath) throw new Error('--lot needs --site');
   return o;
 }
 
 /** Print a check result the way build.mjs does. */
 export function report(result, { json, nbt, sidecar }) {
-  if (json) console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt, sidecar, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}) }));
+  if (json) console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt, sidecar, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}), ...(result.site ? { site: result.site } : {}) }));
   else {
     for (const w of result.warnings) console.log(`warning: ${w}`);
     for (const e of result.errors) console.log(`error: ${e}`);
@@ -76,7 +83,21 @@ function main() {
       return;
     }
   }
-  const result = checkFiles(nbt, sidecar, { max: o.max, type: o.type, imported: o.imported, ...(o.profile ? { profile: o.profile } : {}), ...(o.massing ? { massing: o.massing } : {}), ...(o.massing && o.massingCap ? { massingCap: o.massingCap } : {}), ...(o.restraint ? { restraint: o.restraint } : {}), ...(o.style ? { style: o.style } : {}) });
+  // (7b SC) the site: --site (the volume) and --lot (default: the sidecar's site spec)
+  let site;
+  if (o.sitePath) {
+    try {
+      const lot = o.lotPath ? JSON.parse(fs.readFileSync(o.lotPath, 'utf8')) : JSON.parse(fs.readFileSync(sidecar, 'utf8')).site;
+      if (!lot) throw new Error('--site needs the lot: --lot <site.json>, or a sidecar with a `site` (a design built into a site)');
+      site = new Site(fs.readFileSync(o.sitePath), lot);
+    } catch (e) {
+      if (o.json) console.log(JSON.stringify({ ok: false, errors: [e.message], warnings: [], nbt, sidecar, metrics: null }));
+      else console.error(`error: ${e.message}`);
+      process.exitCode = 2;
+      return;
+    }
+  }
+  const result = checkFiles(nbt, sidecar, { ...(site ? { site } : {}), max: o.max, type: o.type, imported: o.imported, ...(o.profile ? { profile: o.profile } : {}), ...(o.massing ? { massing: o.massing } : {}), ...(o.massing && o.massingCap ? { massingCap: o.massingCap } : {}), ...(o.restraint ? { restraint: o.restraint } : {}), ...(o.style ? { style: o.style } : {}) });
   report(result, { json: o.json, nbt, sidecar });
   process.exitCode = result.ok ? 0 : 1;
 }

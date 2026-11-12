@@ -18,8 +18,6 @@ const OUT = path.resolve(HERE, '../examples');
 /** The site examples' ids (kit/designs/site). */
 export const listSiteDesigns = () => listDesigns(SITE_DESIGNS);
 
-/** The rule names of a check's warnings ("enclosure: ..." -> "enclosure"), sorted. */
-export const ruleNames = (warnings) => warnings.map((w) => w.split(':')[0]).sort();
 
 /** Build one example into `out` (default kit/examples/<id>). Returns {id, ok, problems: [...]}. */
 export async function buildExample(id, { out = path.join(OUT, id) } = {}) {
