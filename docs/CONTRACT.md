@@ -27909,4 +27909,13 @@ undo then skips it). 3. Not climbable (it is look, not a working scaffold; nobod
 - **`removeScaffold` logs and carries on if its undo fails** (`Builder.removeScaffold`): the site completes with the scaffolding standing
   (immovable, drops nothing); a later Remove undoes the entry with the site's group. No test drives that failure.
 
-**Checks:** see the table below once filled.
+**Checks** ($0; no API change):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass at 034060d8; 1072 tests, 0 failures, 1 skipped (`ScaffoldBlockTest` 3: a block built from the registered one's properties has no loot table, can't be pushed, has no random tick, one state, not Fallable, not vanilla scaffolding (which has a loot table), not a builder gravity block; `Builder.isScaffold`/`anchorState` treat it as scaffolding; its blockstate is vanilla's `scaffolding_stable`. The test opens the frozen block registry by reflection for one intrusive holder and puts it back in a `finally`) |
+| kit / sidecar / lints | not re-run: SO-b touches no kit or sidecar file (SO's 1159/1159, 814/814 and lints stand) |
+| api-compat | clean: `--surface` of the 0.57.0 jar; the 0.47.0 and 0.45.0 apitest jars |
+| `node tools/step-inputs.mjs check` | clean (333 steps) |
+| in game, run 20261112-061109-change at 034060d8 | **PASS** `so-survival` 55 ok / 0 FAIL: SO's 48 checks on the three houses, plus the no-dupe pass on the cliff house (184 `architect_mc:scaffold` cells): a cell mined by hand drops nothing and is gone; a powered piston against a cell leaves it standing and stays retracted; TNT at a cell destroys it with no scaffolding item; the deconstruct leaves no scaffolding item over the whole site and no scaffold cell |
+| gate-verifier (strict) | **PASS** at 8acf5f8f: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-063726-change, 55 ok / 0 FAIL) and the three unit classes (forced past the test cache); reviewed the diff: every way off its cell yields no item (mining, explosions, pistons; no collapse, fall or tick; not flammable; water can't take it), SO's accounting unchanged, registration and the test's reflection contained, the new checks can fail. Minor: no positive control in game that vanilla scaffolding would drop (the unit test asserts its loot table); the no-dupe pass runs on one house; other breakers (an anvil, a creeper) take the same loot-table path |
