@@ -1,4 +1,4 @@
-# 59 asks (adjusted 8, blocked 5, fits 70, refused 30, unsupported 19); 0 malformed
+# 59 asks (adjusted 8, blocked 5, fits 70, refused 33, unsupported 16); 0 malformed
 arcology REQUIRED_BLOCKED
   tower_city zone.standard fits
   unused_placeholder zone.standard refused NO_ROOM
@@ -124,9 +124,9 @@ ruined_empire READY
   survivors_camp zone.standard fits
 secret_tunnels REQUIRED_BLOCKED
   cove zone.standard fits
-  tunnel_cellar tunnel.under unsupported UNSUPPORTED
-  tunnel_dock tunnel.under unsupported UNSUPPORTED
-  tunnel_hatch tunnel.under unsupported UNSUPPORTED
+  tunnel_cellar tunnel.under refused NO_FEATURE
+  tunnel_dock tunnel.under refused NO_FEATURE
+  tunnel_hatch tunnel.under refused NO_FEATURE
 ship_town REQUIRED_BLOCKED
   ship_deck zone.standard fits
   ship_hull form.ship_hull unsupported UNSUPPORTED

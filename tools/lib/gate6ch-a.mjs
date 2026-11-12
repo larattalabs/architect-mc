@@ -139,9 +139,9 @@ async function haAsks(ctx) {
   const before = fs.readFileSync(path.join(ctx.KIT, 'test', 'fixtures', 'plan', 'h', 'asks-gap-before.txt'), 'utf8');
   // ((6c close-out A, PLAN "Stale asks tables after VOC-c") what later slices moved is theirs: VOC-c's palette rules (its item 3) and FL's five
   // free asks with the free-layout rows (its item 8), compared without them, as KC's and HY-b's asks items do)
-  // ((chore AT) and GM-c's drawbridge (its line by part and kind, its gap row) and 7bF's hang_from_ceiling (no `until`): fl-norm atAskLine;
+  // ((chore AT) and GM-c's drawbridge (its line by part and kind, its gap row) and 7bF's hang_from_ceiling (no `until`), LP's tunnel.under (by part and kind, its gap row): fl-norm atAskLine;
   // asks-gap-after-ha.txt stays H-a's record, which kit/test/h-a.test.mjs item 10 compares with the before table)
-  const later = (t) => flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l) && !/^\s+connector\.drawbridge\s+\d+$/.test(l)).map(atAskLine).join('\n');
+  const later = (t) => flAsksFilter(t).split('\n').filter((l) => !/rule\.palette/.test(l) && !/^\s+(?:connector\.drawbridge|tunnel\.under)\s+\d+$/.test(l)).map(atAskLine).join('\n');
   const lines = (t) => new Map(later(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/')).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before), la = lines(text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).sort();

@@ -497,7 +497,7 @@ export const items = {
         // asks-before.txt and asks-after.txt); every other line is HY's as committed)
         // ((6c FL) and FL's five free asks and the gap table's free-layout rows: tools/lib/fl-norm.mjs flAsksFilter)
         const vocc = (t) => flAsksFilter(t.split('\n').filter((l) => !/rule\.palette/.test(l) && !/^# 59 asks:/.test(l)).join('\n'));
-        // ((chore AT) GM-c's drawbridge and 7bF's hang_from_ceiling move against v0.37.0's table: fl-norm atAskLine)
+        // ((chore AT) GM-c's drawbridge, 7bF's hang_from_ceiling and LP's tunnel.under move against v0.37.0's table: fl-norm atAskLine)
         const lines = (t) => new Map(flAsksFilter(t).split('\n').filter((l) => !l.startsWith('#') && !l.startsWith('  ') && l.includes('/') && !/rule\.palette/.test(l)).map((l) => [l.split(' ')[0], atAskLine(l)]));
         const lb = lines(before), la = lines(after.text);
         const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k);

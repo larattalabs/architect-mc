@@ -1624,11 +1624,13 @@ item 10 holds it as H-a's record (only waterfall_curtain and moat differ from th
 - **SL** (51fddf7c, after merging v0.60.0 at fbefeab8): swamp_stilts/hollow, treetop_village/canopy and upside_down/hanging_village
   layout.elevated unsupported until 7b -> zone.standard refused NO_FEATURE; the layout.elevated gap row (3) goes. Only coa's table moves: the
   others read Steward's first recordings (asks-8703dbd), which hold no layout.elevated part.
-- The tally lines follow: first recordings now adjusted 8, blocked 5, fits 70, refused 30, unsupported 19; coa's current asks adjusted 16,
-  blocked 21, fits 64, refused 11, unsupported 16. 0 malformed everywhere. No row changed without an owner above.
+- **LP** (4e910591, tunnel.under supported; after merging main at 9d98d74b): secret_tunnels/tunnel_cellar, tunnel_dock and tunnel_hatch
+  tunnel.under unsupported until 7b -> refused NO_FEATURE; the tunnel.under gap row (3) goes (all five).
+- The tally lines follow: first recordings now adjusted 8, blocked 5, fits 70, refused 33, unsupported 16; coa's current asks adjusted 16,
+  blocked 21, fits 64, refused 14, unsupported 13. 0 malformed everywhere. No row changed without an owner above.
 
 **One code change:** h-unit item 10 and hy-unit item 11 also compare the parts' classes with their fixed before tables (v0.36.0's, v0.37.0's),
-which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains `atAskLine` (GM-c's drawbridge by part and kind, 7bF's
-hang_from_ceiling without its `until`), as CL's, LF's and K3's movers were. HY-b's item 11 reads it in its before comparison; H-a's haAsks reads it
-(with the connector.drawbridge gap row dropped) in both its comparisons, against H-a's record and the before table. `flAsksFilter` and its
+which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains `atAskLine` (GM-c's drawbridge and LP's three tunnels by part and kind,
+7bF's hang_from_ceiling without its `until`), as CL's, LF's and K3's movers were. HY-b's item 11 reads it in its before comparison; H-a's haAsks reads it
+(with the connector.drawbridge and tunnel.under gap rows dropped) in both its comparisons, against H-a's record and the before table. `flAsksFilter` and its
 other callers are unchanged.

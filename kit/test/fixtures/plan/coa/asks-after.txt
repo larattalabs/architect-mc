@@ -1,6 +1,5 @@
-# 59 asks: adjusted 16, blocked 21, fits 64, refused 11, unsupported 16
+# 59 asks: adjusted 16, blocked 21, fits 64, refused 14, unsupported 13
 # gap table (unsupported parts per block id):
-  tunnel.under             3
   form.crater              2
   rule.variety             2
   connector.rail           1
@@ -94,9 +93,9 @@ row_houses/identical_houses rule.variety unsupported UNSUPPORTED until RC
 row_houses/plain_palette rule.palette refused NO_FEATURE
 ruined_empire/survivors_camp zone.standard fits
 secret_tunnels/cove zone.standard fits
-secret_tunnels/tunnel_cellar tunnel.under unsupported UNSUPPORTED until 7b
-secret_tunnels/tunnel_dock tunnel.under unsupported UNSUPPORTED until 7b
-secret_tunnels/tunnel_hatch tunnel.under unsupported UNSUPPORTED until 7b
+secret_tunnels/tunnel_cellar tunnel.under refused NO_FEATURE
+secret_tunnels/tunnel_dock tunnel.under refused NO_FEATURE
+secret_tunnels/tunnel_hatch tunnel.under refused NO_FEATURE
 ship_town/ship_deck zone.standard fits
 ship_town/ship_hull form.ship_hull unsupported UNSUPPORTED until unscheduled
 ship_town/ship_masts form.mast unsupported UNSUPPORTED until unscheduled
