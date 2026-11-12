@@ -27513,3 +27513,4 @@ new feature advertised). The kit has no `NEXT` stamp to carry: the kit version i
 | lint-structure / lint-look | 68 cases, 0 failing / 13 cases, 0 failing |
 | water-lint `node --test kit/lint/*.lint.mjs` | 135/135 |
 | `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the fixture loader is its own module so the build's closure stays off the fixtures) |
+| gate-verifier (review only, DEV MODE) | **PASS** at b8003025: scope against SV's row (no PL/AF/SC/DS work), 7bF's frozen files unchanged, the four examples and every golden unchanged, the frame and rotation math against vanilla's, the examples (geometry from the Site, themed, no randomness) and the ten readings reviewed; sv, f7b-foundation, schem, diff and phase5a re-run (66/66) and `site-fixtures.mjs --check` clean. No blocking defect; minor: SC's composite should also assert a site-bound size equals the lot |
