@@ -58,7 +58,7 @@ test('the site-spec schema and the Java records agree: kinds, facings, rotations
   const kinds = /enum Kind \{\s*([A-Z_,\s]+);/.exec(java('Affordance.java'))[1].split(',').map((s) => s.trim()).filter(Boolean);
   assert.deepEqual(kinds, ['CLIFF_FACE', 'LEDGE', 'OVERHANG', 'CAVE', 'TRUNK', 'CANOPY', 'SPIKE', 'WATER', 'GAP', 'PAD']);
   // the six Reasons, appended after NO_ROOM in the contract's order
-  assert.match(java('Reason.java'), /NO_ROOM,\s*\/\/[^\n]*\n\s*SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK\n\}/);
+  assert.match(java('Reason.java'), /NO_ROOM,\s*\/\/[^\n]*\n\s*SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK[,\n]/); // ((7cF) 7c appends after NO_LINK: f7c-foundation.test.mjs)
 });
 
 test('siteSpecProblems: a valid spec passes; each malformed one names its problem', () => {
@@ -116,9 +116,9 @@ test('catalogue: form.hidden_room and rule.suspended re-reserved until 7c (N-7b-
   assert.deepEqual(planCatalogue(), golden);
   const before = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
   assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
-  assert.deepEqual(golden.entries.map((e) => e.id), before.entries.map((e) => e.id));
+  assert.deepEqual(golden.entries.map((e) => e.id).filter((id) => id !== 'program.authored'), before.entries.map((e) => e.id)); // ((7cF) program.authored added: f7c-foundation.test.mjs)
   // ((7b SL) layout.elevated flipped to supported by its own slice: sl.test.mjs holds that change)
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under'].includes(id)); // ((7b LP) its two flips: lp.test.mjs)
+  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored'].includes(id)); // ((7b LP) its two flips: lp.test.mjs; (7cF) program.authored: f7c-foundation.test.mjs)
   assert.deepEqual(changed, ['form.hidden_room', 'rule.suspended']);
   for (const id of changed) {
     const e = golden.entries.find((x) => x.id === id);

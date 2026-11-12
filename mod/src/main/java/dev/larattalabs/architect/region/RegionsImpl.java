@@ -499,6 +499,11 @@ public final class RegionsImpl implements Regions {
 	}
 
 	@Override
+	public com.google.gson.JsonObject planCatalogue(java.util.Set<String> kinds) {
+		return PlanCatalogue.kinds(kinds); // (7cF) the long text by kind, from the same jar copy: synchronous, no helper
+	}
+
+	@Override
 	public boolean cancelCheck(@Nullable String owner, String opKey) {
 		return PlanChecks.cancel(owner, opKey);
 	}

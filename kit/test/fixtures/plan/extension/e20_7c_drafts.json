@@ -1,0 +1,28 @@
+{
+  "about": "(7cF) the 7c flips' parts written in their draft defs' shapes answer unsupported with their own block ids until their slices (BF, HR, US)",
+  "on": "s7",
+  "expect": {
+    "all": [
+      { "part": "hold", "block": "form.hollow_mountain" },
+      { "part": "bowl", "block": "form.crater" },
+      { "part": "isle", "block": "form.floating_island" },
+      { "part": "vault", "block": "form.hidden_room" },
+      { "part": "hang", "block": "rule.suspended" }
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      { "id": "town", "program": { "lots": [{ "id": "c1", "type": "cottage", "size": [9, 9] }] } }
+    ],
+    "forms": [
+      { "id": "hold", "kind": "hollow_mountain", "where": { "near": { "anchor": "claim_center" } }, "size": { "preset": "M" }, "params": { "halls": 3 } },
+      { "id": "bowl", "kind": "crater", "where": { "near": { "anchor": "claim_n" } }, "size": { "w": 32, "d": 32 }, "lake": true },
+      { "id": "isle", "kind": "floating_island", "where": { "near": { "anchor": "claim_e" } }, "size": { "preset": "S" } },
+      { "id": "vault", "kind": "hidden_room", "host": "hold", "size": { "w": 8, "d": 8 }, "entrance": "bookshelf" }
+    ],
+    "rules": [
+      { "id": "hang", "kind": "suspended", "scope": ["town"] }
+    ]
+  }
+}

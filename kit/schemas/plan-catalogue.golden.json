@@ -67,6 +67,14 @@
    "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim."
   },
   {
+   "id": "program.authored",
+   "sinceApi": "NEXT",
+   "schemaVersion": 0,
+   "state": "reserved",
+   "until": "AU",
+   "note": "A region program written by Regions.authorProgram, named by {id, sha} and frozen into the approved artifact by sha (AUTHORED_STALE if it moves)."
+  },
+  {
    "id": "layout.street",
    "sinceApi": "1.30.0",
    "schemaVersion": 2,

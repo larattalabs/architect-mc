@@ -55,12 +55,23 @@ export function knownSystemRefs(): string[] {
 
 /**
  * What `#compact` drops, and nothing else:
- *   - catalogue entries: `sinceApi` and `schemaVersion` (per entry), and the catalogue's `api`, `kitVersion` and `schemaVersion`;
- *     `catalogueVersion`, ids, states, `until`, `replacedBy`, `aliasOf`, `limits`, `note` and every other member stay
+ *   - catalogue entries: `sinceApi` and `schemaVersion` (per entry), and the catalogue's `api`, `kitVersion` and `schemaVersion`
+ *   - (7cF, "catalogue text on demand") each entry's `note` and any member not in `lineKeys`: the long text, served by kind
+ *     (`Regions.planCatalogue(Set<String> kinds)`, the kit's planCatalogueKinds)
+ *   - (7cF) a kind def's own top-level `description` (a def a catalogue entry names as its `def` or `draft`): long text too, served by
+ *     kind with the def; its members' descriptions, and every other def's, stay
  *   - `$defs` that are only a `$ref` to another def: inlined at their uses, and removed
  * A schema's own members are never touched by name: `schemaVersion` inside a def stays.
+ *
+ * (7cF) The compact catalogue is one line per kind, in catalogue order, after a head line naming the catalogueVersion
+ * (compactCatalogueText):
+ *   <id> <state>[ until <slice>][ alias of <id>][ replaced by <id>][ retired in <api>][ limits <JSON>]
  */
-export const COMPACT = { entryKeys: ['sinceApi', 'schemaVersion'], catalogueKeys: ['api', 'kitVersion', 'schemaVersion'] } as const;
+export const COMPACT = {
+  entryKeys: ['sinceApi', 'schemaVersion'],
+  catalogueKeys: ['api', 'kitVersion', 'schemaVersion'],
+  lineKeys: ['id', 'state', 'until', 'aliasOf', 'replacedBy', 'retiredInApi', 'limits'],
+} as const;
 
 export interface ParsedRef {
   ref: string;
@@ -117,6 +128,29 @@ export function inlineTrivialRefs(schema: Record<string, Json>): Record<string, 
   return out;
 }
 
+/** (7cF) The defs a catalogue entry names as its `def` or `draft` (the kind defs), by name. */
+export function kindDefNames(schema: Record<string, Json>): Set<string> {
+  const x = schema['x-catalogue'];
+  const entries = isObj(x) && Array.isArray(x.entries) ? x.entries.filter(isObj) : [];
+  const out = new Set<string>();
+  for (const e of entries) for (const k of ['def', 'draft']) if (typeof e[k] === 'string' && (e[k] as string).startsWith('#/$defs/')) out.add((e[k] as string).slice('#/$defs/'.length));
+  return out;
+}
+
+/** (7cF) The schema with each kind def's top-level description left out (COMPACT). */
+export function dropKindDescriptions(schema: Record<string, Json>, kinds: Set<string>): Record<string, Json> {
+  if (!isObj(schema.$defs)) return schema;
+  const defs: Record<string, Json> = {};
+  for (const [name, d] of Object.entries(schema.$defs)) {
+    if (kinds.has(name) && isObj(d) && 'description' in d) {
+      const { description: _d, ...rest } = d;
+      void _d;
+      defs[name] = rest;
+    } else defs[name] = d;
+  }
+  return { ...schema, $defs: defs };
+}
+
 const catalogueModules = new Map<string, Promise<Record<string, unknown>>>();
 
 /** The kit's own planCatalogue() (what every plan check returns), imported from the kit at run time (never bundled). */
@@ -132,13 +166,22 @@ async function kitCatalogue(kitDir: string): Promise<Record<string, Json>> {
   return (fn as () => Record<string, Json>)();
 }
 
-function compactCatalogue(cat: Record<string, Json>): Record<string, Json> {
-  const o: Record<string, Json> = {};
-  for (const [k, v] of Object.entries(cat)) {
-    if ((COMPACT.catalogueKeys as readonly string[]).includes(k)) continue;
-    o[k] = k === 'entries' && Array.isArray(v) ? v.map((e) => (isObj(e) ? Object.fromEntries(Object.entries(e).filter(([x]) => !(COMPACT.entryKeys as readonly string[]).includes(x))) : e)) : v;
-  }
-  return o;
+/** One compact catalogue line (COMPACT's grammar). */
+export function compactCatalogueLine(e: Record<string, Json>): string {
+  let l = `${String(e.id)} ${String(e.state)}`;
+  if (typeof e.until === 'string') l += ` until ${e.until}`;
+  if (typeof e.aliasOf === 'string') l += ` alias of ${e.aliasOf}`;
+  if (typeof e.replacedBy === 'string') l += ` replaced by ${e.replacedBy}`;
+  if (typeof e.retiredInApi === 'string') l += ` retired in ${e.retiredInApi}`;
+  if (e.limits !== undefined) l += ` limits ${JSON.stringify(e.limits)}`;
+  return l;
+}
+
+/** (7cF) The compact catalogue: a head line, then one line per kind (COMPACT). */
+export function compactCatalogueText(cat: Record<string, Json>): string {
+  const entries = Array.isArray(cat.entries) ? cat.entries.filter(isObj) : [];
+  const head = `catalogueVersion ${String(cat.catalogueVersion)}; one line per kind: id state [until slice] [alias of id] [replaced by id] [retired in api] [limits {...}]. A kind's note and full entry are served on demand (Regions.planCatalogue(kinds)).`;
+  return [head, ...entries.map(compactCatalogueLine)].join('\n');
 }
 
 /** One ref's block (the schema file is read and rendered each time: about a millisecond; the catalogue module is imported once per sidecar process, the kit being fixed for it). */
@@ -157,6 +200,7 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
     throw refuse('system_ref_unavailable', `systemRefs: "${p.ref}" is not readable in this helper's kit (schemas/${p.doc.file} is not JSON)`);
   }
   let catalogue: Record<string, Json> | undefined;
+  const kinds = p.doc.catalogue && p.compact ? kindDefNames(schema) : new Set<string>();
   if (p.doc.catalogue) {
     try {
       catalogue = await kitCatalogue(kitDir);
@@ -169,12 +213,11 @@ async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
     // (6c VOC) a document with both forms in one file: each rendering keeps its own member
     delete schema[p.compact ? p.doc.forms.full : p.doc.forms.compact];
   } else if (p.compact) {
-    schema = inlineTrivialRefs(schema);
-    if (catalogue) catalogue = compactCatalogue(catalogue);
+    schema = inlineTrivialRefs(dropKindDescriptions(schema, kinds));
   }
   const head = `## ${p.doc.title}${p.compact ? ', compact' : ''}\n\n`;
   let out = `${head}${JSON.stringify(schema)}`;
-  if (catalogue) out += `\n\n## Capability catalogue of ${p.doc.id}${p.compact ? ', compact' : ''}\n\n${JSON.stringify(catalogue)}`;
+  if (catalogue) out += `\n\n## Capability catalogue of ${p.doc.id}${p.compact ? ', compact' : ''}\n\n${p.compact && !p.doc.forms ? compactCatalogueText(catalogue) : JSON.stringify(catalogue)}`;
   return out;
 }
 

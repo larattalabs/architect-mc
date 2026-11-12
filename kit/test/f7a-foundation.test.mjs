@@ -133,13 +133,13 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   assert.deepEqual(own(d.untilChanged, (x) => x.id), [{ id: 'connector.rail', from: '7a', to: 'CR' }]);
   assert.deepEqual(own(d.notesChanged, (x) => x.id).map((x) => x.id), ['connector.rail']);
   // ((6d RV) the revision.* entries RV adds are rv-a.test.mjs's)
-  assert.deepEqual([d.added.filter((x) => !/^revision\./.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
+  assert.deepEqual([d.added.filter((x) => !/^(revision\.|program\.authored$)/.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'x', block: 'connector.span_bridge' }]);
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
-  assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id).filter((id) => !/^revision\./.test(id)), ['connector.rail', 'connector.span_bridge']);
+  assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id).filter((id) => !/^(revision\.|program\.authored$)/.test(id)), ['connector.rail', 'connector.span_bridge']); // ((7cF) program.authored: f7c-foundation.test.mjs)
   // (released in v0.43.0 at API 1.40.0, catalogue-v0430.json: a later release's golden.api moves on, the stamp stays; the 7a slices'
   // flips and RV's revision.* entries in `changed` too: each keeps the stamp of its own release, whichever that was, so a later release does not move this item;
   // tools/catalogue-since-check.mjs holds every stamp at or below the API)

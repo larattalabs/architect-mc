@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RefusedError } from '../src/errors.js';
-import { composeSystem, expandSystemRefs, inlineTrivialRefs, knownSystemRefs, parseSystemRefs, SYSTEM_REF_DOCS } from '../src/jobs/systemrefs.js';
+import { compactCatalogueLine, composeSystem, expandSystemRefs, inlineTrivialRefs, kindDefNames, knownSystemRefs, parseSystemRefs, SYSTEM_REF_DOCS } from '../src/jobs/systemrefs.js';
 import * as P from '../src/protocol.js';
 import { SIDECAR_ROOT } from './helpers.js';
 
@@ -25,27 +25,44 @@ describe('systemRefs: expansion from the kit', () => {
     expect(cat.entries.every((e) => 'sinceApi' in e && 'schemaVersion' in e)).toBe(true);
   });
 
-  it('plan/0#compact drops exactly the bookkeeping COMPACT says, and keeps the rest', async () => {
+  it('plan/0#compact drops exactly what COMPACT says: one catalogue line per kind (7cF), kind defs without their own description', async () => {
     const full = await expandSystemRefs(KIT, ['plan/0']);
     const compact = await expandSystemRefs(KIT, ['plan/0#compact']);
     expect(compact.length).toBeLessThan(full.length);
-    const fc = JSON.parse(full.split('## Capability catalogue of plan/0\n\n')[1]!) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const cc = JSON.parse(compact.split('## Capability catalogue of plan/0, compact\n\n')[1]!) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(Object.keys(cc).sort()).toEqual(['catalogueVersion', 'entries']);
-    expect(cc.entries.length).toBe(fc.entries.length);
-    cc.entries.forEach((e: Record<string, unknown>, i: number) => {
-      expect(e).not.toHaveProperty('sinceApi');
-      expect(e).not.toHaveProperty('schemaVersion');
-      const { sinceApi: _a, schemaVersion: _b, ...rest } = fc.entries[i];
-      expect(e).toEqual(rest); // ids, state, until, note ... stay
+    const fc = JSON.parse(full.split('## Capability catalogue of plan/0\n\n')[1]!) as { catalogueVersion: number; entries: Array<Record<string, unknown>> };
+    const lines = compact.split('## Capability catalogue of plan/0, compact\n\n')[1]!.split('\n');
+    // a head line naming the catalogueVersion and the grammar, then one line per kind in catalogue order
+    expect(lines[0]).toMatch(new RegExp(`^catalogueVersion ${fc.catalogueVersion}; one line per kind: `));
+    expect(lines[0]).toContain('Regions.planCatalogue(kinds)');
+    expect(lines.length - 1).toBe(fc.entries.length);
+    fc.entries.forEach((e, i) => {
+      const l = lines[i + 1]!;
+      expect(l).toBe(compactCatalogueLine(e as Record<string, never>));
+      expect(l.startsWith(`${String(e.id)} ${String(e.state)}`)).toBe(true);
+      if (typeof e.until === 'string') expect(l).toContain(` until ${e.until}`);
+      if (typeof e.aliasOf === 'string') expect(l).toContain(` alias of ${e.aliasOf}`);
+      if (e.limits !== undefined) expect(l).toContain(` limits ${JSON.stringify(e.limits)}`);
+      if (typeof e.note === 'string' && e.note.length > 24) expect(compact).not.toContain(e.note); // notes are served on demand
     });
-    // the schema's own members are never dropped by name
-    const fs = JSON.parse(full.split('\n\n')[1]!) as { $defs: Record<string, unknown>; properties: Record<string, unknown> };
+    expect(lines.find((l) => l.startsWith('zone.district '))).toBe('zone.district reserved until D1 alias of program.districts');
+    // the schema: its own members never dropped by name; a kind def loses only its top-level description, every other def is kept whole
+    const fs = JSON.parse(full.split('\n\n')[1]!) as { $defs: Record<string, Record<string, unknown>>; properties: Record<string, unknown> };
     const cs = JSON.parse(compact.split('\n\n')[1]!) as typeof fs;
     expect(cs.properties).toEqual(fs.properties);
     expect(JSON.stringify(fs.properties)).toContain('schemaVersion');
     // no trivial `$ref` def exists in plan/0 today, so none is inlined
     expect(Object.keys(cs.$defs)).toEqual(Object.keys(fs.$defs));
+    const raw = JSON.parse(await import('node:fs').then((m) => m.readFileSync(path.join(KIT, 'schemas', 'plan.json'), 'utf8'))) as Record<string, never>;
+    const kinds = kindDefNames(raw);
+    expect(kinds.has('connector.channel') && kinds.has('program.template') && kinds.has('form.crater')).toBe(true); // a def and a draft
+    expect(kinds.has('lot') || kinds.has('where')).toBe(false);
+    for (const [name, d] of Object.entries(fs.$defs)) {
+      if (kinds.has(name)) {
+        const { description: _d, ...rest } = d;
+        expect(cs.$defs[name]).toEqual(rest);
+      } else expect(cs.$defs[name]).toEqual(d);
+    }
+    expect(cs.$defs['connector.channel']!.properties).toEqual(fs.$defs['connector.channel']!.properties); // members keep their descriptions
   });
 
   it('is deterministic and independent of the order and repetition the caller listed the refs in', async () => {
@@ -103,7 +120,9 @@ describe('systemRefs: expansion from the kit', () => {
     // (6c FL/F3, Steward's S-FL-8) 80,000 -> 84,000: FL's descriptions and F3's five lean form defs together may pass 80,000
     // (7a foundation) 84,000 -> 96,000: the seven 7a defs (strict, connector.routed's members each), NO_CLIMB and R25-R27 measured
     // 92,556 (the coordinator, 2026-10-23, asked of Steward). (6d RV) 96,000 -> 100,000: main measured 95,276 after RK; RV's five
-    // revision.* catalogue entries and the lot's refill member add 1,121 (96,397)
+    // revision.* catalogue entries and the lot's refill member add 1,121 (96,397). (7cF) Catalogue text on demand: one catalogue line
+    // per kind and the kind defs' own descriptions served by kind took main's 99,981 to 78,821 with program.authored and the six 7c
+    // skeletons added (the bound kept with 10% spare, room for about 8 kinds)
     console.log(`# compact plan/0: ${compact.length} characters`);
     expect(compact.length).toBeLessThan(100_000);
   });
