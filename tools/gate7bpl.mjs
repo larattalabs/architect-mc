@@ -241,13 +241,13 @@ steps.ingame = async () => {
     const r = { fit: s.fit, design: s.id, sha: s.sha };
     // fitToSite: the frame, no rotation search, the site checks pass, the port note
     const f = await call('dev.pl.fit', { blueprint: s.id, site: s.wire }, 120_000);
-    r.fit = { ok: f.ok, origin: f.origin, rotation: f.rotation, refusals: f.refusals, notes: f.notes };
-    check(f.ok && json(f.origin) === json(s.origin) && f.rotation === 'none' && json(f.box) === json(s.box), `${s.fit}: fitToSite answers the site's frame ${json(s.origin)} none, the template box ${json(s.box)}, a clean verdict`, f);
+    r.fit = { clean: f.clean, origin: f.origin, rotation: f.rotation, refusals: f.refusals, notes: f.notes };
+    check(f.clean && json(f.origin) === json(s.origin) && f.rotation === 'none' && json(f.box) === json(s.box), `${s.fit}: fitToSite answers the site's frame ${json(s.origin)} none, the template box ${json(s.box)}, a clean verdict`, f);
     check(f.notes.some((n) => n.includes(`site fit ${s.fit}: approach by port`)) && json(f.restoreBox) === json([s.box[0], s.box[1] - 1, s.box[2], s.box[3], s.box[4], s.box[5]]),
       `${s.fit}: the verdict notes the port approach; the restore box is the template box and the row under it (no fill, no approach strip)`, { notes: f.notes, restoreBox: f.restoreBox });
     // a request off the frame is refused (no rotation search, no other origin)
     const off = await call('dev.pl.place', { blueprint: s.id, site: s.wire, origin: [s.origin[0] + 1, s.origin[1], s.origin[2]], check: true }, 120_000);
-    check(!off.ok && reasons(off).includes('OTHER'), `${s.fit}: a placement off the site's frame is refused`, off.refusals);
+    check(!off.clean && reasons(off).includes('OTHER'), `${s.fit}: a placement off the site's frame is refused`, off.refusals);
     // place with the site: KEEP (every unwritten cell as it was, nothing outside the box)
     const before = await cellsOf(s.vol);
     const p = await call('dev.pl.place', { blueprint: s.id, site: s.wire }, 300_000);
@@ -290,7 +290,7 @@ steps.ingame = async () => {
   check(json(reasons(dr)) === json(['SITE_DRIFTED']), 'SITE_DRIFTED alone when a block is set in the site margin', dr.refusals);
   await cmd(`/setblock ${mg[0]} ${mg[1]} ${mg[2]} minecraft:air`);
   const ok = await call('dev.pl.fit', { blueprint: t.id, site: t.wire }, 120_000);
-  check(ok.ok, 'the site restored: the fit is clean again', ok.refusals);
+  check(ok.clean, 'the site restored: the fit is clean again', ok.refusals);
   const vol2 = grow(t.vol, 1, gy - 2);
   const v2 = await survey(vol2);
   const other = { ...t.wire, volumeSha: v2.sha, volumeBlobId: `local:${v2.sha}` };

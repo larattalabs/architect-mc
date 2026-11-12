@@ -387,7 +387,7 @@ region. Previews print as file links (with a [copy] link).
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
 - **2026-11-11 (7b slice PL):** new (`SlicePlDev`, generated headless too) `dev.pl.fit {blueprint, site, owner?, mode?}` (`Sites.fitToSite`
-  -> `{origin, rotation, box, restoreBox, ok, refusals: [{reason, message}], notes}`), `dev.pl.place {blueprint, site?, origin?, rotation?,
+  -> `{origin, rotation, box, restoreBox, clean, refusals: [{reason, message}], notes}`), `dev.pl.place {blueprint, site?, origin?, rotation?,
   check?, overlap?: refuse|layer, owner?, force?, mode?}` (`Sites.place`, or `Sites.check` with `check`, of a `PlaceRequest` carrying the
   site; origin and rotation default to the site's frame), `dev.pl.remove {site, covered?: keep|cascade|refuse, requester?, force?}`
   (`Sites.remove`, a site or a cell site), `dev.pl.reload {}` (the library), `dev.pl.record {site}` (the record's blueprint, boxes, ext

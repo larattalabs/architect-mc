@@ -34,7 +34,7 @@ public final class SlicePlDev {
 
 	public static void init() {
 		DevBridge.register("dev.pl.fit", 120_000, "{blueprint, site: <SiteSpec wire>, owner?, mode?: instant} - (7b PL) Sites.fitToSite -> {origin, rotation, box, "
-			+ "restoreBox, ok, refusals: [{reason, message}], notes}", (req, mc) -> {
+			+ "restoreBox, clean, refusals: [{reason, message}], notes}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String bp = f.nonBlank("blueprint");
 				SiteSpec site = SiteSpec.fromWire(req.getAsJsonObject("site"));
@@ -156,7 +156,7 @@ public final class SlicePlDev {
 
 	static JsonObject verdict(Verdict v) {
 		JsonObject o = new JsonObject();
-		o.addProperty("ok", v.ok());
+		o.addProperty("clean", v.ok()); // (not "ok": the DevBridge answer's own member)
 		o.add("refusals", refusals(v.refusals()));
 		JsonArray n = new JsonArray();
 		v.notes().forEach(n::add);
