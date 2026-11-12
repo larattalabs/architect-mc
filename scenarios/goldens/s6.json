@@ -1,0 +1,13 @@
+{
+ "scenario": "s6_cave_city",
+ "version": 1,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s6/",
+ "fromRun": "20261112-220859",
+ "irSha": "c28b58bdbe36923fee27ccf96c8cbb3acb354956e75f9969871c6ede077ce61a",
+ "kitVersion": "0.56.0",
+ "cells": 612,
+ "tiles": {
+  "ground|path|58,-27": "e6f124cd2301fa0dc17c8c90d67b00758bf4a4a19456d8ddfa40244ad1da8877",
+  "ground|path|59,-27": "14b10f656e722aa4d5ca0a77abd436ee7b31e80a17ff62447abefe151c49e8db"
+ }
+}

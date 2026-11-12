@@ -1,8 +1,16 @@
 {
   "id": "s5_treehouses",
+  "short": "s5",
   "phase": "7b",
-  "version": 0,
+  "version": 1,
   "brief": "a village in the crowns of giant trees",
+  "program": "s5_treehouses",
+  "params": {},
+  "sculpt": {
+    "program": "s5_grove_sculpt",
+    "note": "7b SB: written into the fresh world as natural, unowned land with vanilla /fill before the plan (tools/lib/scenario-sb.mjs); its record gives the program its params"
+  },
+  "restraint": "rustic",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -73,5 +81,9 @@
       3168,
       -1760
     ]
-  }
+  },
+  "seed": "4697755965307579111",
+  "cams": {},
+  "camsNote": "7b SB: the cameras are computed per run from the plan's cam_* anchors looking at its hub (the layout is the sculpt's)",
+  "lotEntriesNote": "7b SB: per run, an archetype per fit by the sim's site-aware stub, then Designs.siteVariant of it for every other site lot ($0; run.json lots, site-entries.json)"
 }

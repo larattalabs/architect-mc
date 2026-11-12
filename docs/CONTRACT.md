@@ -28085,6 +28085,137 @@ changed.
 **For the Steward RC:** two neighbouring site lots in one region now both place (an S5-like grove). A site whose margin another owner or
 a player changed still answers `SITE_DRIFTED`.
 
+### Slice SB as built (branch `slice/SB` off main f1c78b06; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+The scenario programs (§3 row 11): S5 and S6 as bundled region programs whose lots are filled at $0 by site variants of SV's fit examples,
+`tools/scenarios.mjs` with the Fit and disturbance metrics, and flat variants for E-flat. No API change, no Java change, no catalogue change.
+S4 (the stretch) is not built.
+
+**The sculpts.** S5's fixture is a natural forest of small trees, and S6's is weak (73% meadow on a high plateau, no cavern). Each scenario
+therefore gets a **sculpt**: a kit region program (`catalogue = false`) planned through the mod on the fresh world. Its virtual world's cells
+are merged into boxes of one block state (`kit/lib/region/sculpt.mjs` `sculptRuns`) and written with vanilla `/fill` as natural, unowned land
+before any plan (`tools/lib/scenario-sb.mjs` `sculpt`). Both variants are sculpted; S6's flat variant first raises S3's hill (`raiseHill`).
+The sculpt's record (its `meta.sb`) gives the program its params.
+- **S6 `s6_cavern_sculpt`:**
+  - a hall 12 wide and 8 high along x under the claim's centre. Its middle is 6b's `cavern` (lit, `every` 6, a flat rock floor), and its two
+    edge rows and west column are plain air cuts, so no cavern light lands in a lot's front row;
+  - a 3-wide ramp from the hall's east end up to the surface, one row up per column, with a `light`-role lamp beside every sixth step;
+  - the floor chosen from the city's frozen volume: of the floors 24 to 36 under the lowest ground, the one whose lot boxes and hall shell
+    hold the fewest natural voids (water, lava, sand and gravel weigh 100), ties to the higher floor.
+- **S5 `s5_grove_sculpt`:**
+  - six F3 `giantTree` oaks in three facing pairs (26 apart along x, the pairs 20 apart in z) on the dry, level spot nearest the claim's
+    centre;
+  - the natural forest's logs and leaves cleared within 20 columns of each site;
+  - each tree's height (from the least that clears the house box, up to 8 more) and seed (0..7, `fnv64(seed, 'giantTree', id, h, k)`): the
+    first whose trunk has the same cross-section of logs on every row of the house box. A straight, round trunk is what SV's trunk house
+    rings: a lean or taper step inside the box gave `cantilever` warnings;
+  - an earthen ramp to each pair's walk (grass over dirt, the `surface` and `subsurface` roles): a tongue between the two house boxes whose
+    top is the walk's feet row, then a mound falling one row per column east and sideways to the ground.
+
+**The programs.**
+- **`s6_cave_city`** (`params.floorY`, the sculpt's) has seven `carve_into` site lots dug into the hall's walls, each 16x12x15 in its design
+  frame: three on the north wall facing south, three on the south wall turned 180, one at the west end turned a quarter to face east. Each
+  lot's front row is the hall's edge row (air) and its other rows are rock, so the carved hall's face is the hall's wall and its door step
+  stands on the hall's floor. A `street` part paves the hall's floor (outside the lots' front rows) and every ramp step with the `path` role:
+  the walker only explores a column's written or surveyed range, and the sculpted hall is neither, so without the paving the hall would not
+  be walkable. `entrance` and `spawn` stand at the ramp's top, and `hub` at the hall's middle.
+- **`s5_treehouses`** (`params.grove`, the sculpt's record) puts a `wrap_trunk` site lot on each tree, 17x8x17, centred on the trunk's axis
+  at the shared deck floor (the highest site's ground + 4). Each lot is turned so its one walk port faces its pair. A `branch_walk` port link
+  joins each pair across the 3-cell gap; the walk is short enough to need no hanger, since the ports' landings carry it. `entrance` is on the
+  ground south of the grove, and `hub` is on the middle pair's walk. Its own cells are paths (the `path` role): a lane on the ground south of the grove and a path
+  up each ramp, because the walker reads a column from its written range or its top, and under a giant crown the top is the leaves.
+- `meta.sb` records the dwellings and the fit each is called for. `plan.mjs` passes `r.meta.sb` through to meta.json (one guarded spread;
+  every other plan is unchanged).
+
+**The $0 lots** (`siteEntries`). Per fit, an **archetype** comes from `Designs.request` with the first site lot's `SiteSpec`. On the sim
+backend, DS's site-aware stub installs the fit example re-run on that site, bound to it. Every other lot of that fit gets
+**`Designs.siteVariant`** of the archetype (`dev.ds.variant`, opKey `sb-<scenario>-<run>-<lot>`): Steward's adapt-first flow (S-7b-1 (a)). The
+archetype's own lot uses the archetype. Each site volume is frozen into the world first (`Survey.volume` of its box, sha-checked against the
+plan's). The entries go to `realise` as `lotEntries`, and the link pass runs there (LP reading 8).
+
+**The metrics** (`sbRows`, rows in metrics.json and `sb-metrics.json`):
+- `sb-fit`: of the dwellings (every site lot here), the share PLACED with the fit called for. Bar 75%.
+- `sb-disturbance`: per site lot, (cut + fill) / the lot box's volume, with the worst lot judged (bar 0.3).
+  - cut: box cells the site held solid (rock, soil, loose, ice, snow, a log; the kit's model of the game's classes, `stateClass`) that the
+    realise changed;
+  - fill: cells of the box and the 16 under it that changed but that the entry's template does not write. That is placement's own terrain
+    work (TerrainFit's foundation fill and clearing; KEEP, every fit but `on_pad`, does none). Building cells in the air are neither.
+- `sb-ports`: every site lot's entry ports reached from `entrance` by the player mover on the realised world. The houses' real blocks count,
+  with no box obstacles; a port counts when its out cell or a 4-neighbour within 1 in y is reached (`nodeReached`). Bar 0 unreachable.
+- `sb-pad`: the pad area's share of the claim, recorded.
+
+**The harness** (`tools/scenarios.mjs`, every hook guarded on `sc.sculpt`):
+- the sculpt runs before the first plan, and `sc.params` comes from its record;
+- the plans tick frozen;
+- the cameras are the plan's `cam_*` anchors looking at its `hub`, computed per run, because the layout is the sculpt's;
+- the $0 entries are made before the dumps;
+- the realised check reads the plan's blobs;
+- a flat run may be headless;
+- the golden row re-plans the golden's inputs when the live survey moved (as S3's);
+- `metrics <runDir>` reads the run's own entries.
+
+**Readings chosen** (the contract silent or the code disagreeing; the smallest reading):
+1. **The cavern and the giant trees are land, not region writes.** A site lot's Site is the frozen volume read at plan time (SL reading 2),
+   so a cavern or tree that the scenario's own region wrote would not be in it: `fit_carve_into` would find no face and `fit_wrap_trunk` no
+   trunk. A separate region would make every cell another owner's (S3's finding with its hill). The sculpt goes in before the snapshot, so
+   E-flat and E-normal judge the city's region only.
+2. **S5's way up is the land's** (agreed with the coordinator, 2026-11-12). **Plainly: S5's ground-to-canopy access and S6's ramp down
+   to the hall are scenario setup, terrain sculpted before the plan, not something the generator builds.** They are not product
+   coverage of canopy or cave access. The canopy network itself joins only by LP port links (branch walks). Only branch walks, catwalks and `tunnel.under` may end on a port
+   (LP), and a branch walk rails every open side of its deck, so a climb the region wrote could never join it. As S6's ramp is the cavern's,
+   S5's ramps are the grove's. A climb that ends on a port is an LP leftover (below).
+3. **Pairs, not a chain.** SV's trunk house has one walk port, so a house joins one walk. A wider-spaced chain of walks failed `ANCHOR` at the
+   crown's edge: the oak crowns leave no leaf within 16 over the walk mid-span.
+4. **The trunk house's tree is an oak, straight through the box.** The dark oak's trunk (radius about 3.5) fills the trunk house's interior
+   (`floors_reachable`), while the oak's (2-2.5) matches SV's trunk fixture (2).
+5. **The archetype is the sim's site-aware stub, then site variants.** The brief names `Designs.siteVariant`, which needs a source entry with a
+   program: the stub's entry is exactly SV's example built into the first lot. LP's gate built its houses with the kit directly. That isn't
+   the API path.
+6. **Disturbance counts terrain only** (above), so a treehouse in the air scores its cut logs (0), not its walls.
+7. **The cameras are computed per run** (`pin`'s aim at `hub`), not pinned in the scenario file. The layout depends on the sculpt's choices
+   over the live survey.
+
+**Not covered:** S4 (the stretch); S5's `suspend` dwellings (S5 calls for `wrap_trunk`/`suspend`, and every dwelling here is `wrap_trunk`);
+villager reachability (no node declares `villager`: S5's canopy dwellings are the player's and Steward's, §5); a natural cave the volume finds
+being used by S6 (the sculpt avoids voids instead).
+
+**Leftovers:** a climb (ladder or stair) that ends on a site lot's walk port, so a canopy network needs no earthen ramp (LP); a second walk
+port on SV's trunk house, so treehouses can form a chain; a suspend lot in S5's program (hang points under a giant tree's limbs).
+
+**Checks** ($0; ports 8896/8897):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/sb.test.mjs` | 5/5: both flat variants offline. S6: 7/7 carved halls clean, Fit 100%, disturbance 0.179, 7/7 doors reached, 0 checker errors. S5: 6/6 trunk houses clean, the 3 walks linked (IR v2, M10:branch_walk ok), Fit 100%, disturbance 0, 6/6 ports reached, 0 errors. Sculpt runs deterministic, /fill-sized |
+| kit `node --test kit/test/*.test.mjs` | 1208/1208 (the gate's `unit-kit`, run 211214, at b6f45c88); `sb.test.mjs` 5/5 and `scenario-goldens.test.mjs` (s5, s6 new) green at the head |
+| sidecar `npm ci && npm run check` | 838/838, 58 files; the bundle built (no sidecar change) |
+| mod `./gradlew build --offline --no-daemon` | pass (no Java change) |
+| lint-structure / lint-look | 68 cases 0 failing / 13 cases 0 failing |
+| `node tools/step-inputs.mjs check` | clean (348 steps; `sb-unit`, `7b-scenario-s6`, `7b-scenario-s5` new, chain `7bsb`, impact rule "7b SB") |
+| **S6 natural** (run 20261112-220630-change, at ee265e30, client, the gallery's cameras) | §16.3, every bar met: checker 0 errors, M1-M4 0; M2 2/2 nodes; **sb-ports 7/7**; M3 0 floating; M4 0, M5 0.00%, M8 100%; palette 1.000 (612/612); buildings 7 entries 0 errors; **Fit 7/7 carve_into (100%)**; **disturbance 0.179** (the worst lot); E-flat 0 (flat run) and E-normal 16, all `growth`, 0 unclassified; realised == virtual 0/612; IR sha the same over 3 plans, 1 = 4 workers; spend $0. Recorded: MSPT own tick max 23.9 ms (flat 37.3 ms); pad 0%. Sculpt: hall floor 86, void cost 12225 (the plateau's caves; the realised bars hold) |
+| **S5 natural** (run 20261112-222529-change, at 729d9d39) | §16.3, every bar met: checker 0 errors; M2 2/2 nodes (the hub on the middle walk); **sb-ports 6/6**; M3 0; M4 0, M5 0.00%, M8 100%; palette 1.000 (363/363); buildings 6 entries 0 errors; **Fit 6/6 wrap_trunk (100%)**; **disturbance 0.000** (no log cut); the 3 branch walks realised (IR v2); E-flat 0 and E-normal 98, all `growth`, 0 unclassified; realised == virtual 0/363; determinism as S6's; $0. Recorded: MSPT own tick max 24.2 ms (the flat run 57.5 ms, 1 tick over 50: a timing bar, recorded per DEV MODE) |
+| goldens | `scenarios/goldens/s6.json` (IR c28b58bd, 2 tiles, from S6's natural run) and `s5.json` (IR 87d0889e, 4 tiles, from S5's natural run): their committed inputs re-plan to the IR sha and every tile sha, with 1 worker = 4 workers |
+| gate-verifier (review only, DEV MODE) | **PASS** at a784f6a4: no API, Java or catalogue change, the one plan.mjs spread guarded, every harness hook on `sc.sculpt`; the $0 lots through `dev.ds.request` (the sim archetype) then `dev.ds.variant` (none refused, spend $0); sbRows' definitions honest and every SB bar met in both natural runs; the goldens replay (sb.test + scenario-goldens 23/23); the setup wording; themed writes; no prompt tuning. Minor: `sb-fit` counts the declared fit placed (its shape is judged by the checker, disturbance and ports); no single run shows every row green because the goldens were cut after the runs |
+| gallery (not awaited; the phase close is PA's) | `artifacts/gate-runs-sb/20261112-220630-change/scenarios/s6/shots/` (cam_hall_w, cam_hall_e, cam_ramp, cam_high, cam_n, cam_s) and `.../20261112-222529-change/scenarios/s5/shots/` (cam_high, cam_deck, cam_n, cam_s, cam_e, cam_w), each with its `before/` |
+
+**The gate runs** (4: one past the 3-run rule, run 4 with the coordinator's after-the-fact OK; a run past 3 now asks first):
+1. **211214** at b6f45c88:
+   - `sb-fit` read 0%: the lot states are lowercase;
+   - `sb-unit` failed only because its step lacked `okLines: false`;
+   - S5 flat: realised == virtual had no region cell to compare (the region wrote only its links);
+   - S5 natural: refused (a camera outside the claim).
+   The rest of S6 passed.
+2. **214746** at 489b8b2b, with per-pair decks, the lane, the cameras clamped and the two fixes: S6 green bar the golden; S5 flat green.
+   S5 natural refused `HEADROOM` at a walk's port: natural leaves. The sculpt's clearing wrote air where the survey alone already reads air,
+   so its /fill never came. `sculptRuns` now reads the sculpt's frozen volumes (sb.test plants a natural tree to hold it).
+3. **220630** at ee265e30: S6 green bar the golden (cut from this run). S5 natural failed two bars:
+   - `sb-ports` 3/6 and M2 1/2: the walker reads a column from its written range or its top, and under a giant crown the top is the
+     leaves, so the sculpted ramps were not walked;
+   - E-normal 6 unclassified: leaves of cleared trees decaying after the snapshot.
+   Run 4's change: the program paves its ramps with the path role (as S6's street), and the clearing takes leaves 6 columns further than
+   logs.
+4. **222529** at 729d9d39 (S5 only): every SB bar met; the golden cut from it.
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6

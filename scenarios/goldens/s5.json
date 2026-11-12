@@ -1,0 +1,15 @@
+{
+ "scenario": "s5_treehouses",
+ "version": 1,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s5/",
+ "fromRun": "20261112-222817",
+ "irSha": "87d0889e84cb345fa600dabd505acb5fd7abece919c44e3904f315d1f0cb256f",
+ "kitVersion": "0.56.0",
+ "cells": 363,
+ "tiles": {
+  "ground|path|53,-24": "25d53f557aab2a0be6b9400b4d19e414dd88c850cb9bd3acce5528306e23c1cf",
+  "ground|path|53,-25": "f0e946f852fdf562c8f7191bd9567313a42cd0a645a81497c1c917bdbc45c9c5",
+  "ground|path|54,-24": "65d3e769730609664abf302da443d802dada38342a2d9774b6f936f663ea2b9d",
+  "ground|path|54,-25": "52690a1b1cb3f42b150ecdf202f584e2dee8220873456a6dccd9d138edd04bd4"
+ }
+}
