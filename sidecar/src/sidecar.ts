@@ -674,6 +674,9 @@ export class Sidecar {
       // ---- 6b
       case 'region.check':
         return this.regions.check(msg.planId);
+      // ---- 7b LP: the realise's link pass (the ack carries IR v2, or noLink {lot, port})
+      case 'region.link':
+        return this.regions.link(msg.planId, msg.irSha, msg.links);
       case 'region.plan.discard':
         return this.regions.discard(msg.planId);
       case 'region.preview':

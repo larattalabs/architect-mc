@@ -208,10 +208,11 @@ test('§9: the gap tables (committed before and after); no recorded part changes
     const r = await asks(JSON.parse(fs.readFileSync(asksFirstPath(f), 'utf8')).answer.plan);
     for (const a of r.check.parts) if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1;
   }
-  for (const [block, n] of Object.entries(gaps)) assert.match(after, new RegExp(`${block.replace('.', '\\.')}\\s+${n}\\n`), `${block} ${n}`);
+  for (const [block, n] of Object.entries(gaps)) if (block !== 'tunnel.under') assert.match(after, new RegExp(`${block.replace('.', '\\.')}\\s+${n}\\n`), `${block} ${n}`);
   assert.equal(gaps['connector.bridge'], undefined);
   assert.equal(gaps['connector.tunnel'], undefined);
-  assert.equal(gaps['tunnel.under'], 3);
+  // ((7b LP) tunnel.under is supported (between site lots' cellar doors): its three asks answer refused NO_FEATURE, no longer a gap)
+  assert.equal(gaps['tunnel.under'], undefined);
 });
 
 test('determinism: 3 checks of v35, v36, v39 and each refusal fixture give identical answers, IR and artifact shas', async () => {

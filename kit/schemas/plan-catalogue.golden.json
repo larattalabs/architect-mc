@@ -464,11 +464,14 @@
   },
   {
    "id": "connector.branch_walk",
-   "sinceApi": "1.40.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7b",
-   "note": "A deck along a giant tree's branches between canopy lots: needs layout.elevated and F3's branch skeleton (S-7a-4)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "span": 8,
+    "reach": 16
+   },
+   "note": "LP: a deck hung from trees between site lots' ports."
   },
   {
    "id": "connector.span_bridge",
@@ -562,11 +565,10 @@
   },
   {
    "id": "tunnel.under",
-   "sinceApi": "1.33.0",
+   "sinceApi": "NEXT",
    "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7b",
-   "note": "A passage under flat ground whose ends sit in cellars: a tunnel whose every line lacks cover answers this block; it waits for 7b's ports in buildings (K5 forbids writes in lot boxes)."
+   "state": "supported",
+   "note": "LP: between site lots' cellar doors; else refused."
   },
   {
    "id": "channel.moat",

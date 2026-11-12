@@ -63,6 +63,8 @@ import { isFreeZone, resolveFreeZone, freeGeometry, aroundSites, bodyKeepRects, 
 import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region/frontage.mjs';
 // (7b SL) layout.elevated: a lots zone whose lots are site lots on the land's affordances (elevated.mjs)
 import { emitElevatedZone, isElevatedZone, resolveElevatedZone } from './elevated.mjs';
+// (7b LP) port links between site lots (the link pass)
+import { LINK_STAGE, LinkError, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -1243,16 +1245,34 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     }
   }
 
-  // (7b SL) a connector with an end on an elevated zone (or one of its lots): joining site lots is the link pass's (LP), so it answers
-  // unsupported until LP (blocked first when a dependency failed); none in a plan without an elevated zone
-  const elevatedIds = new Set();
-  for (const q of V.parts) if (isElevatedZone(q)) { elevatedIds.add(q.id); for (const l of zoneLots(q.part)) elevatedIds.add(l.id); }
-  if (elevatedIds.size) {
+  // (7b SL, LP) a connector with an end on an elevated zone (or one of its lots) is a port link (lib/region/links.mjs): a catwalk,
+  // branch_walk or tunnel whose two ends are site lots ({part: lot, port?: the site's port} or {part: zone, port: lot}) is answered
+  // `fits` here (provisional: the link is routed to the sites' ports once the lots are placed, below) and kept out of the route pass;
+  // any other connector there answers unsupported (blocked first when a dependency failed); none in a plan without an elevated zone
+  const elevatedIds = new Set(), siteLotZone = new Map();
+  for (const q of V.parts) if (isElevatedZone(q)) { elevatedIds.add(q.id); for (const l of zoneLots(q.part)) { elevatedIds.add(l.id); siteLotZone.set(l.id, q.id); } }
+  const portLinkParts = [];
+  // (a branch_walk is only ever a port link: one in a plan without an elevated zone answers unsupported here too, never the route pass's)
+  if (elevatedIds.size || order.some((p) => p.family === 'connector' && p.kind === 'branch_walk' && !answers.has(p.id))) {
+    const siteEnd = (e) => (typeof e?.part !== 'string' ? null : siteLotZone.has(e.part) ? { lot: e.part, ...(e.port ? { port: e.port } : {}), zone: siteLotZone.get(e.part) }
+      : elevatedIds.has(e.part) && siteLotZone.get(e.port) === e.part ? { lot: e.port, zone: e.part } : null);
     for (const p of order) {
       if (answers.has(p.id) || p.family !== 'connector') continue;
       const ends = [p.part.from?.part, p.part.to?.part].filter((x) => typeof x === 'string');
-      if (!ends.some((id) => elevatedIds.has(id))) continue;
-      ans(p, depState(p) ?? { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: `${p.id} joins an elevated zone's site lots: links to site lots are built by the link pass (LP)`, block: p.block, until: 'LP' }] });
+      const toSite = ends.some((id) => elevatedIds.has(id));
+      if (!toSite && p.kind !== 'branch_walk') continue;
+      const dep = depState(p);
+      if (dep) { ans(p, dep); continue; }
+      const A = siteEnd(p.part.from), B = siteEnd(p.part.to);
+      if (PORT_LINK_KINDS.includes(p.kind) && A && B && A.lot !== B.lot && !ctx.survival) {
+        portLinkParts.push({ p, from: A, to: B });
+        ans(p, { class: 'fits', provisional: true, notes: [`a link between site lots ${A.lot} and ${B.lot}: routed to their sites' ports here, written at realise to the bound entries' ports (the link pass)`] });
+        continue;
+      }
+      const why = ctx.survival ? 'links to site lots are not built in survival (7b keeps the standalone path for survival)'
+        : !PORT_LINK_KINDS.includes(p.kind) ? `a link at a site lot's port is a catwalk, branch_walk or tunnel (not ${p.kind})`
+          : 'a link at a site lot\'s port joins two different site lots (each end a lot of an elevated zone)';
+      ans(p, { class: 'unsupported', reasons: [{ code: 'UNSUPPORTED', message: `${p.id}: ${why}`, block: p.block }] });
     }
   }
   // ---- 3. emit zones (pads blend where a relief names them), relief, forms
@@ -1261,7 +1281,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const k1Parts = order.filter((p) => p.family === 'connector' && LINK_KINDS.includes(p.kind) && !answers.has(p.id));
   // (6c H, §3.1) a plan with a body gets the `fluids` stage last (none otherwise: its stage list, so its IR, is unchanged)
   const fluidsWanted = fluidStageWanted({ env, ctx, plan: P.plan, V, byId, order, answers, okClass });
+  // ((7b LP) a plan with a port link gets LINK_STAGE right after `lots`: empty at plan time, the realise's link pass writes the links there)
   const stagesWanted = [...(k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props']), ...(fluidsWanted ? [FLUIDS_STAGE] : [])];
+  if (portLinkParts.length) stagesWanted.splice(stagesWanted.indexOf('lots') + 1, 0, LINK_STAGE);
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
   const partOf = {}; // region part / lot / road id -> plan part id
@@ -1463,6 +1485,27 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       rollback(r, cp);
       ans(p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `the zone's layout failed: ${e.message}` }] });
       geom.delete(p.id);
+    }
+  }
+  // (7b LP) the port links, now the site lots are placed: each routed to its sites' ports (plan time: a link that can't reach them is
+  // refused with its code) or, at realise (ctx.links), written to the bound entries' ports in LINK_STAGE (a LinkError then refuses the
+  // whole realise NO_LINK: change 3)
+  if (portLinkParts.length && r.stageList.includes(LINK_STAGE)) {
+    for (const { p, from, to } of portLinkParts) {
+      if (!okClass(from.zone) || !okClass(to.zone)) { ans(p, depState(p) ?? { class: 'blocked', blockedBy: [from.zone, to.zone].filter((z) => !okClass(z)), reasons: [{ code: 'DEPENDENCY', message: `a site lot's zone was not placed` }] }); continue; }
+      const placed = (e) => r.lots.some((l) => l.id === e.lot);
+      const miss = [from, to].find((e) => !placed(e));
+      if (miss) { ans(p, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `lot ${miss.lot} was not placed (unplaced in its zone)`, evidence: { lot: miss.lot } }] }); continue; }
+      const cp = checkpoint(r);
+      try {
+        const rec = r.portLink(p.id, { kind: p.kind, from: { lot: from.lot, ...(from.port ? { port: from.port } : {}) }, to: { lot: to.lot, ...(to.port ? { port: to.port } : {}) }, ...(p.part.width ? { width: p.part.width } : {}), planPart: p.id });
+        ans(p, { class: 'fits', geometry: { link: { kind: p.kind, from: rec.from, to: rec.to } }, notes: ['the link is written at realise to the bound entries\' ports (the link pass; NO_LINK refuses the realise when one can\'t be reached)'] });
+        mark(p.id, addedSince(r, cp));
+      } catch (e) {
+        if (!(e instanceof LinkError) || ctx.links) throw e;
+        rollback(r, cp);
+        ans(p, { class: 'refused', reasons: [{ code: PLAN_CODE_OF_LINK[e.code] ?? e.code, message: e.message, evidence: { lot: e.lot, port: e.port, link: e.code, ...(e.evidence ? { detail: e.evidence } : {}) } }] });
+      }
     }
   }
   // (D2) the outposts: each joined by a road to the nearest other zone's street end (the cell past it) or a district's

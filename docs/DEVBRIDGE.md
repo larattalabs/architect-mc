@@ -396,6 +396,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.sl.groupState {groupId}` (`Designs.group` -> `{known, status, awaiting, items: [{key, stage, status, designId, designIds, entryId,
   step}]}`) and `dev.sl.approve {groupId, approve: [keys]}` (`Designs.approveGroup` -> `{approved}` or `{refused}`).
 
+- **2026-11-12 (7b slice LP):** new (`SliceLpDev`, generated headless too) `dev.lp.stats {}` (the link passes run since the start: `{calls,
+  noLinks, bypass}`) and `dev.lp.bypass {on}` (TEST, the gate's GR byte item only: realise as before LP, no link pass at all; off again
+  after). `dev.region.realiseApproved` (and every hook through `SliceP0Dev.wrap`) answers a refusal's `detail` too (NO_LINK's `{lot,
+  port}` as JSON).
+
 - **2026-11-11 (7b slice AF):** new (`SliceAfDev`, generated headless too) `dev.af.site {lot: [x0,y0,z0,x1,y1,z1], fit, load?:
   loaded|generated:<n>|bounded:<n>}`: `Survey.site` in the player's level through the public API (the lot plus 8 frozen to
   `<world>/architect/volumes/<sha>.bin`, the helper's `site.analyse`, the proposed frame) -> `{sha, blobId, box, file, counts,

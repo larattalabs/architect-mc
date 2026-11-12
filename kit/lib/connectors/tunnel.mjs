@@ -10,7 +10,7 @@
 //   tunnelPassInput(K) -> object | null    the route pass's `tunnel` input: the frozen volumes (decoded, each recorded in the IR through
 //                                          needVolume), after asking each explicit tunnel's corridor (§6: when the survey shows a hill
 //                                          in it, under 4M cells per edge and 16M per plan; MISSING survey columns ask nothing)
-//   tunnelFailAnswer(K, l, m) -> answer    a tunnel leg the pass could not bore: `unsupported {tunnel.under, until 7b}` for flat ground
+//   tunnelFailAnswer(K, l, m) -> answer    a tunnel leg the pass could not bore: `refused NO_FEATURE {tunnel.under}` for flat ground (LP)
 //                                          (S-T3-4), `incomplete VOLUME` past the caps or over a corridor not read, else refused with the
 //                                          diagnosis's code and evidence
 //   tunnelAnswer(K, p, legs) -> extra|null a routed connector's bores (geometry.tunnels, each with its crossing) and notes; null for
@@ -197,9 +197,10 @@ export function tunnelFailAnswer(K, l, m) {
   const why = m?.tunnel ?? { code: 'UNREACHABLE', evidence: {} };
   const ev = { leg: l.k + 1, from: l.from.at, to: l.to.at, ...(why.evidence ?? {}) };
   if (why.under) {
-    // S-T3-4: a tunnel under flat ground is the reserved shape `tunnel.under` (until 7b), never a NO_COVER path repair
+    // S-T3-4: a tunnel under flat ground is the shape `tunnel.under`, never a NO_COVER path repair. (7b LP) It is built between two site
+    // lots' cellar doors (their door ports, the link pass: lib/region/links.mjs); between these ends it is refused NO_FEATURE
     l.conn.block = 'tunnel.under';
-    return { class: 'unsupported', notes: o?.notes, reasons: [{ code: 'UNSUPPORTED', message: 'a passage under flat ground (stairs down, a covered run, stairs up) is tunnel.under, reserved until 7b: no hill stands between the ends', block: 'tunnel.under', until: '7b', evidence: ev }] };
+    return { class: 'refused', notes: o?.notes, reasons: [{ code: 'NO_FEATURE', message: 'a passage under flat ground (stairs down, a covered run, stairs up) is tunnel.under: it joins two site lots\' cellar doors (a door port at each end, the link pass); these ends are not, and no hill stands between them', block: 'tunnel.under', evidence: { ...ev, link: 'NO_PORT' } }] };
   }
   if (why.code === 'VOLUME') {
     const c = stateOf(K).corridors.get(l.conn.id);

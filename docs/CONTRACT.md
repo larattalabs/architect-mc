@@ -27915,6 +27915,142 @@ only).
 SITE derivation and binding; `SITE_UNFIT` with a rule id, `SITE_UNSUPPORTED`; the opKey replay), `Designs.follow` of a SITE entry, the
 estimate kinds `site` and `adapted`, a massingFirst group with a site item refused. The PLAYBOOK's §7 is new (Steward's skill is its upstream).
 
+### Slice LP as built (branch `slice/LP` off `slice/SL` 51fddf7c; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+The link pass (§3 row 10, changes 3 and 4) on 7bF's frozen surface (no 7bF signature changed; the API package is untouched; feature
+`linkPass`, advertised when the helper has `region.link`).
+
+**How it runs.** A link is planned once and written once, by the same kit code:
+1. **Plan time** (`checkPlan`, any region program): a connector between two site lots is a **port link**. It is routed to the ports the
+   lots' sites declare (`site.ports`, turned by the site's frame), so the check's answer means something, and recorded in the IR as
+   `portLinks[]` (`{id, kind, planPart?, width?, from: {lot, port, facing}, to}`: the port each end takes). The plan gets the stage
+   **`site_links`** right after `lots`, empty. No op is written.
+2. **Realise** (`realiseApproved`, and `Regions.realise` of such a plan): before anything is reserved or written, the mod sends
+   `region.link {planId, irSha, links: {lots: {lot: {entry, ports}}}}`, the bound entries and their own template ports. The helper replays
+   the plan in its plan dir with the plan's own recorded arguments (`plan-args.json`) plus `--links` and `--link-base`. The kit routes each
+   link again, to the entry's port of the name chosen at plan time, and writes it in `site_links`. It then proves the replay: every IR
+   member but the link parts, their tiles, `linked`, `budget` and the claim's y range is equal to the checked IR (`replayDiff`). The answer is
+   **IR v2**: the same plan id, a new irSha (the sha of the kit's canonical text), the links in `site_links`, and `linked` (the entries and
+   ports by lot: IR v2's identity). The helper caches it for the tiles. The region is realised from it: its record, `ir.json` and tiles are
+   IR v2's.
+3. **Refusals before any write:**
+   - **`NO_LINK`** (detail `{lot, port}` JSON): a lot with no entry bound, an entry without the port, its port with another facing or kind or
+     outside the box, or the connector's own check failing at the entry's real cell. Nothing is written and no region is made.
+   - **`ARTIFACT_STALE`** ("check the plan again"): the replay is not the checked plan, or the helper lost the plan dir or its arguments.
+   - `SIDECAR_UNAVAILABLE`: the helper is not connected.
+4. **The realise report's `$.links[]`** is `RegionView.ext["architect_mc:links"]`: one row per link, `{id, kind (branch_walk, catwalk,
+   tunnel.under), part, from: {lot, port, at, out, facing}, to, cells, record}`. `at` is the port cell, `out` the connector's end, the cell
+   just outside the box (§8.4).
+5. **Change 4:** an IR without `portLinks` (every plan before LP, every revision, an adopted village) never comes here. It has no
+   `site_links` stage and realises byte for byte as before.
+
+**The port connectors** (`kit/lib/region/links.mjs`; `r.portLink(id, {kind, from: {lot, port?}, to, width?})` for programs; plan/0's
+connector parts with both ends site lots: `{part: lot, port?: the site's port}` or `{part: zone, port: lot}`):
+- **`connector.branch_walk`** (supported, schemaVersion 1, `NEXT`): a level 1-wide deck between two walk ports at one feet y. It is routed
+  round the lots: 4-neighbour, fewest steps then fewest turns, at most 96 cells, within 24 of the ends. Every deck cell is open with 2 of head
+  room. Rails stand on every open side, with joined fence states. Iron chains hang from a rail up to the first leaf, log or site-solid cell
+  within 16, at most 8 deck cells apart (the ports' landings carry the ends). A lamp on a rail at most every 12. The new checker rule
+  `M10:branch_walk` (`checkBranchWalks.mjs`) re-measures every bar from the world's blocks, and K5.
+- **`connector.catwalk` to a port:** a straight level run between two walk ports facing each other on one axis, the face on the right or
+  else the left (CW's `checkCatwalk` and `catwalkRun`). The ends' rail beds beside the port cells are the design's: the check lets them pass
+  and nothing is written there.
+- **`tunnel.under`** (supported, `NEXT`): a bore between two door ports (cellar doors) facing each other, T3's `tunnel` primitive (plain
+  portals, width 1 by default, height 2) over the frozen volume that holds both ends. A coverless T3 tunnel between other ends now answers
+  `refused NO_FEATURE {block: tunnel.under}`, no longer `unsupported until 7b`.
+- **Any other connector** with an end on a site lot answers `unsupported` naming the three. So does any connector to a site lot in
+  survival.
+- **Every link writes columns ops only, in its part `link_<id>` (a path part).** Each cell is checked outside every lot's box before it is
+  kept (K5).
+
+**Readings chosen** (the contract was silent or the code disagreed; the smallest reading each time):
+1. **The stage is `site_links`**, not `links`: K1's `links` stage (before `lots`) holds that name, and stage names are unique.
+2. **IR v2 is the plan replayed, not an IR edited in Java.** The connector code stays the kit's alone. The replay guard makes a moved
+   plan a refusal, never a different build. A plan checked before LP has no `plan-args.json`, and has no port links anyway.
+3. **Site lots only.** Pad lots get their frame from LotFitting at `tryStart`, so joining their designs' ports would need fits at realise.
+   Out of 7b; listed as a leftover.
+4. **The port each end takes is chosen at plan time:**
+   - the named one (plan/0 `port` on a lot endpoint);
+   - else the site's port whose `edge` is the link's id;
+   - else the horizontal port of a kind the connector takes whose out cell is nearest the other lot's centre (ties by name).
+   At realise the entry's port of that name must have the same facing and kind. Its cell may differ (SC holds it within 2 of the hint), and
+   the link follows the entry.
+5. **The land a link reads** is the plan survey plus the frozen volumes the plan read: the zone's volume and the site cuts. The composited
+   designs contribute their ports and their lot boxes (columns blocked), not their blocks. A branch walk hangs from the trees, a catwalk from
+   the rock.
+6. **branch_walk anchors on leaves as well as logs.** Real trees have no F3 skeleton; the volume's LOG and LEAVES cells stand in for
+   S-7a-4's branch capsules.
+7. **A plan/0 answer's reason code** stays in plan.json's closed enum: NO_PORT -> NO_FEATURE, FACING/ALIGN -> ANCHOR, LEVEL -> TOO_STEEP,
+   NO_PATH -> UNREACHABLE. The link's own code rides in `evidence.link`. NO_LINK's detail is `{lot, port}` as change 3 names it; the kit's
+   code is in the message.
+8. **`Regions.realise` runs the link pass too** (the hook is in `RegionsImpl.realise0`), so no path realises a linked plan without its
+   links.
+9. **Survival:** links to site lots are not built in survival (§0 row 5: the survival gate keeps the standalone path).
+10. **AD row 7:** an adopted village has no site lot and no port link, so "its link pass" is the no-op change 4 promises. Row 7 runs AD's
+    own rows 2-6c again on LP's build (`GATE6DAD_LP=1`) and checks that the growth's realise ran no link pass and that its revision IR has no
+    `site_links` stage.
+11. **The GR byte item:** a town and its GR growth realised twice on identical fresh worlds, once as LP realises it and once with the link
+    hook bypassed (`dev.lp.bypass`: the realise exactly as before LP). The world after the growth is compared cell for cell, as are the
+    revision IRs. Recorded GR evidence from October predates the code since, so it can't serve as the reference.
+12. **The gate's land:** trees 26 apart, two canopies, 17-wide huts (SV's trunk house's size). Each site volume (its lot box + 8) is clear of
+    the other lot's box. See the finding below.
+
+**Finding for SL (not changed here):** a site lot's volume (its box + 8) that meets a neighbouring lot's box is drifted by that
+neighbour's house. The lot placed second fails `SITE_DRIFTED` at placement. In game, two canopy huts on trees 24 apart: hut_a PLACED,
+hut_b `failed:SITE_DRIFTED`, the region PARTIAL. `layout.elevated` places lots "apart from the lots before it", but not 8 apart, so an
+S5-like grove can hit it. Either the drift check skips the region's own earlier cells, or the elevated placement keeps volumes clear of
+lot boxes. A leftover for the coordinator (SB depends on it).
+
+**Shared files touched:**
+- kit: `lib/plan/compile.mjs` (the port-link pre-pass, the stage, the emit after the zones), `lib/region/plan.mjs` (ctx.links,
+  `portLinks`/`linked`, meta), `lib/region/program.mjs` (`r.portLink`), `lib/realise.mjs` (two known members), `lib/region/check.mjs` (the
+  branch-walk rule), `lib/connectors/tunnel.mjs` (the tunnel.under answer), `tools/region.mjs` (--links, --link-base),
+  `schemas/plan.json` (two entries, one def, one description), the golden;
+- kit tests and fixtures: `test/plan-helpers.mjs` (`links`); the catalogue-diff tests of CL, GM-c, the 7a and 7b foundations, SL;
+  `plan-p0.test.mjs` (lp-pending, the refused class); T3a/T3b tests; e15, e17, tn10;
+- sidecar: `protocol.ts`, `regions.ts`, `sidecar.ts` and two feature tests;
+- mod: `RegionsImpl.java` (realise0), `ApiRules.java`, `SliceP0Dev.java` (the refusal's detail), `ArchitectClient.java`, `DevServer.java`,
+  `devserver/build.gradle`;
+- tools: `gate-chains.json`, `step-inputs.json`, `gate6dad.mjs` (GATE6DAD_LP); docs/DEVBRIDGE.md.
+
+**For the Steward RC (with SL), the areas for its `--only` filter:**
+- plan/0 connectors between two site lots: `branch_walk` fits; a catwalk whose ports don't face each other is refused (ANCHOR,
+  `evidence.link`); other kinds, or survival, are unsupported. The plan's stage `site_links`.
+- `realiseApproved` of such a plan: the link pass runs; the region's IR is IR v2 (new irSha, same planId); `RegionView.ext
+  architect_mc:links` (`$.links[]`).
+- **`NO_LINK`** (detail `{lot, port}` JSON) with nothing written and no region (Steward's cancel path); `ARTIFACT_STALE` when the replay
+  fails.
+- Removing a region with links, in both orders (`Regions.remove`, `Sites.remove` of a house first).
+- **The asks:** secret_tunnels' three tunnels now answer `refused NO_FEATURE {tunnel.under}`, not `unsupported until 7b` (Steward's gap
+  table moves: tunnel.under 3 -> 0).
+- `connector.branch_walk` and `tunnel.under` supported in the catalogue (catalogueVersion left for the coordinator).
+- The feature `linkPass`.
+- No API change: change 3's `NO_LINK` was already appended by 7bF.
+
+**Checks** ($0; ports 8896/8897, the verifier 8910/8911; the machine loaded throughout, load p50 50-76):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1185/1185 at 050c8a8e (lp.test.mjs 11/11) |
+| sidecar `npm ci && npm run check` | 837 tests: 807 passed in the full run at load 118, where 30 timed out (29 "timed out waiting for condition", 1 simcosts wall bar) in copies, critique, eval.e2e, massing, polish and simcosts, files LP doesn't touch; those 6 files re-run alone at load 51: 76/76. regions-link.test.ts 3/3; system-refs' compact plan/0 under 100,000 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1079 tests, 0 failures, 1 skipped (ApiLPTest 5/5, ApiSLTest) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars (932 references each), `--surface` of the 0.47.0 mod jar (2605 members); the api package diff against SL is empty |
+| lint-structure / lint-look / water-lint | 68/0 / 13/0 / 135/135 |
+| `node tools/step-inputs.mjs check` | clean after `build` (341 steps) |
+| run 20261112-084742-change at 725c5ebb | `lp-unit` 436/0 (lp.test and the 7b/T3/catalogue tests; region.link; ApiLPTest + ApiSLTest; 428 of 431 committed plan fixtures byte-identical against SL's head, the 3 named movers moving: asks/secret_tunnels, e17, tn10, their IRs unchanged); `lp-gr` 7/0 (with LP and with the hook bypassed: 0 link calls, no site_links stage in the revision IR, 833,536 cells identical, undo exact); `lp-ad` 36/0 (AD rows 2-6c on LP plus row 7: 0 link calls, no site_links stage) |
+| run 20261112-090525-change at 32accd0c | `lp-ingame` 14/0: READY; NO_LINK `{hut_b, walk_w}`, 0 cells written, no region; PLACED from IR v2 (site_links: link_walk; linked); `$.links[]`; 169 link cells as the IR writes them, none in a lot's box, each end just outside its port; Remove E-flat 0 |
+| run 20261112-091535-change at 050c8a8e | `lp-remove` 11/0: region first E-flat 0; houses first: hut_b then hut_a each back to its site (0 differ), the walk standing (170/170), then Regions.remove E-flat 0 |
+| earlier runs | 072932 (the headless hooks unregistered, the volume not yet frozen), 082339 (the gate's lot size), 084742's lp-ingame and lp-remove (the SITE_DRIFTED finding above), 090525's and 091227's lp-remove (the gate read the artifact's lot box wrongly): gate-side faults, fixed |
+| on the merged head (main fbefeab8 v0.60.0, then b7631f33) | kit 1192/1192, Gradle build 1096 tests 0 failures; `lp-unit` 436/0 at d1b6a462 (run 20261112-101449-change: 428 of 431 fixtures byte-identical against main, the 3 named movers); `lp-ingame` 14/0, `lp-remove` 11/0, `lp-ad` 36/0 at d1b6a462 (run 20261112-103032-change, a fresh run dir from the refilled seed); `lp-gr` 7/0 at ce67d15f (run 20261112-103752-change; ce67d15f moves the gate's bypass after the world opens, gate code only) |
+| gate-verifier (strict: removal order) | **PASS** at 050c8a8e: re-ran `lp-remove` 11/0 and `lp-ingame` 14/0 on 8910/8911 (run 20261112-092015-change); reviewed no write before NO_LINK, change 4's guard, K5, the replay guard, the IR v2 sha and tile resend path, the api package untouched; lp.test 11/11 |
+
+**Leftovers:**
+- The SL finding above.
+- Joining pad lots' design ports (reading 3).
+- A stepped branch walk between ports at different heights (now refused TOO_STEEP / `link: LEVEL`).
+- Rope bridges and other kinds at a site lot's port.
+- A revision of a region realised from IR v2: untested; adding a site lot by revision stays out of 7b.
+- The composited designs' blocks as support for a link: only their ports and boxes are read (reading 5).
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6

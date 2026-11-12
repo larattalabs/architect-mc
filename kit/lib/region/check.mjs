@@ -21,6 +21,7 @@ import { bridgeRules } from './checkBridges.mjs';
 import { tunnelRules } from './checkTunnels.mjs';
 // (7a CW) catwalks (M10:catwalk)
 import { catwalkRules } from './checkCatwalks.mjs';
+import { branchWalkRules } from './checkBranchWalks.mjs';
 import { climbRules } from './checkClimbs.mjs'; // (7a CL)
 import { rockStairRules } from './checkRockStairs.mjs'; // (7a RK)
 import { spiralRules } from './checkSpirals.mjs'; // (7a SA)
@@ -519,6 +520,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (Array.isArray(meta?.tunnels) && meta.tunnels.length) time('M3', () => tunnelRules({ ir, vw, tunnels: meta.tunnels, meta, want, findings, metrics, partStage, finding }));
   // (7a CW) catwalks (M10:catwalk: checkCatwalks.mjs), only when the plan meta records some
   if (Array.isArray(meta?.catwalks) && meta.catwalks.length) time('M10', () => catwalkRules({ ir, vw, catwalks: meta.catwalks, meta, want, findings, metrics, partStage, finding }));
+  // (7b LP) branch walks (M10:branch_walk: checkBranchWalks.mjs), only when the plan meta records some (IR v2's link pass)
+  if (Array.isArray(meta?.branchWalks) && meta.branchWalks.length) time('M10', () => branchWalkRules({ ir, vw, branchWalks: meta.branchWalks, meta, want, findings, metrics, partStage, finding }));
   // (7a CL) climbs (checkClimbs.mjs): stair flights, ladder faces, rest landings, the top gate, M8 and M5 over the treads and landings
   if (Array.isArray(meta?.climbs) && meta.climbs.length) time('M10', () => climbRules({ vw, climbs: meta.climbs, want, findings, metrics, finding, light: () => blockLight(vw) }));
   // (7a RK) rock stairs (checkRockStairs.mjs): T3b's M3:tunnel, M3:gravity, M4:tunnel and M6 over the flight's void and shell, and M10:rock_stair

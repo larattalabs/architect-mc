@@ -64,7 +64,10 @@ export const MEMBERS_FORMAT2 = ['anchors', 'biomes', 'blobs', 'blockTags', 'budg
   // ((6c D3) a districts plan's `beside`, `corridor` (D1, D2) and `reach` (D3): known members the evaluator reads only for `reach`)
   'beside', 'corridor', 'reach', 'revision',
   // ((GM-b, CONTRACT GM §17 item 4) the K1 swing gates' write data: the realise's mech:<gate> items read it, the evaluator ignores it)
-  'gateMechanisms'];
+  'gateMechanisms',
+  // ((7b LP) a plan's port links (the realise's link pass replays them) and, in IR v2, the bound entries' ports they were written from:
+  // known members the evaluator ignores; only a plan with a link to a site lot's port has them)
+  'portLinks', 'linked'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
