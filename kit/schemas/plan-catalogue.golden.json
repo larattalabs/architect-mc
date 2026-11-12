@@ -106,7 +106,7 @@
    "sinceApi": "NEXT",
    "schemaVersion": 1,
    "state": "supported",
-   "note": "7b SL: lots carried above the ground, each a site lot on the zone's land (a canopy or trunk: wrap_trunk; an overhang: suspend; a ledge or water: on_pad), from the zone's frozen volume; a lot with none is left out (the count tolerance) or the zone refused NO_FEATURE. The artifact's lots[] carry site (api.SiteSpec) and affordance. Links to them are the link pass's (LP)."
+   "note": "Lots above the ground, each a site lot on a canopy, trunk, overhang, ledge or water (7b SL); links to them wait for LP."
   },
   {
    "id": "connector.street",
