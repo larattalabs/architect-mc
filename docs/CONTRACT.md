@@ -23086,7 +23086,7 @@ connections after its neighbour is broken) is not a change, as `holdsOurs` says.
    tells a missing leaf from an open gate; a trigger (`triggers[].at`) is never legitimately gone, but `rungs` may be. If Steward wants
    a broken lever reported, judge `triggers[].at` cells as envelope cells (dynamic properties only) and keep lanes and rungs volatile.
 3. **A waiting cell is not land.** A target still building is skipped whole, its built cells too: a block taken up from a half-built
-   target is not reported (RS's rescan re-queues it), and a player's block on an unbuilt cell is not either (RS waits on it). Both as
+   target is not reported (RS's rescan re-queues it: code reading), and a player's block on an unbuilt cell is not either (RS's builder waits on it, `blockedSince`: code reading). Both as
    LC's as built says ("not counted yet"); Steward sees the second as RS's blocked cell, not as land change.
 4. **Mid-build attribution is clean here.** LC's as built feared a survival tile's free-pass cells `unattributed` until all its item's
    targets are built; on this castle none were (0 unattributed mid-build, with three wall targets half built), so that case was not
