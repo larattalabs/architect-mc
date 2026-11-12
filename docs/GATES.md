@@ -30,7 +30,7 @@ These override the tier, verifier and RC rules below for as long as dev mode is 
 
 **A slice merges when these pass:**
 - unit tests;
-- the instant lints (lint-structure, lint-look, water-lint, p3-lint);
+- the instant lints (lint-structure, lint-look, water-lint, p3-lint; since slice SP p3-lint's two classes run inside unit-mod, which supersedes it);
 - the slice's OWN in-game steps.
 No regression suite, impact steps or before/after comparison runs per slice. Use `gate-run change --only <the slice's own steps>`.
 
@@ -968,7 +968,8 @@ the whole kit suite (about 190 s and 950 CPU-s each) next to `unit-kit`. The cha
 - A slice's own kit tests always run: a name pattern, a pass-count threshold, the test names, or the diagnostics.
 - Without `unit-kit` in the run (`--only`, a named chain, the verifier's re-runs), or when a file failed, the driver runs the files
   itself, exactly as before. So a failing kit file fails the driver's check as before, and `unit-kit` fails too.
-- The unit steps that read the report `waitFor` `unit-kit` (13; 18 since "Gate waits" added h-, hy-, t3a-, t3b- and ha-unit).
+- The unit steps that read the report `waitFor` `unit-kit` (13; 18 since "Gate waits" added h-, hy-, t3a-, t3b- and ha-unit; slice SP added
+  vocc-, voc-, rs-, coa-, c37-, c38-, pt-, pt2- and rp-unit, "Speed set A").
 - Within the suite, `--test-concurrency` doesn't help. The suite's wall time (about 190 s on a loaded box) is set by single
   files run serially in one process: `plan-p0.test.mjs` (187 s of tests), `plan-k1a` (150 s), `village` (147 s; one test of
   500 seeded claims takes 138 s). Splitting those tests is kit work, not runner work.
@@ -1175,6 +1176,10 @@ the same assertions; only idle time and pure duplication went. The before/after 
   - `ha-ingame`, `ha-natural`, `ha-cold`, `ha-look` → `h-ingame`, `h-natural`, `h-cold`, `6ch-look` (gate6ch runs the same H-a
     items, `gate6ch-a.mjs` `items`, after H-core's; ha-ingame's 23 check lines are all in h-ingame's in KC's and IRR's slices).
     Chain `6ch-a` still runs them alone.
+  - (slice SP) `umt` and `p3-lint` → `unit-mod`. unit-mod's `./gradlew build` runs the same `test` task with the same excluded tags
+    (`umt-findings`, `umt-long`, `umt-explore`), and `Umt*` (UmtFuzzTest, UmtGateMovesTest, UmtPropertiesTest), `LedgerLintTest` and
+    `RegionFluidsLintTest` are untagged, so they are in it. Their finding counts are in that XML's system-out. A drop rests on
+    unit-mod's real result or the run fails (`aggregateProblems`).
 
 ### The offline unit floor
 
@@ -1261,7 +1266,7 @@ fl/s3/f3/kc/irr-unit each planned all 313 committed fixtures on this head and on
 - **Extras that need the whole result** (KC's M25:clear census, F3's M18/M19: `tools/lib/corpus-derive.mjs`, the drivers' code
   moved) are computed where the plan runs and stored beside it, keyed by the head's kit tree too.
 - **Where:** the `unchanged()` loops of `gate6ckc-kit`, `gate6cs3-kit`, `gate6cf3-kit`, `gate6cirr-kit`, `gate6cfl-kit` and VOC-c's;
-  the asks tables (`gate6chy-b` asksGap, FL's and VOC-c's asksTable). HY's and H's loops keep `plan-cache.mjs` (their own key).
+  the asks tables (`gate6chy-b` asksGap, FL's and VOC-c's asksTable). HY's and H's loops kept `plan-cache.mjs` (their own key) until slice SP moved them, VOC's and rs/coa's onto the store too ("Speed set A" below).
 - **api-compat** caches each javap answer by the class file's sha (a JDK class by name) and the JDK's real path, and runs its
   checks side by side.
 - **f3/kc/irr-unit** take their kit files from unit-kit (`kitReuse`, `waitFor: unit-kit`), as the other drivers do.
@@ -1298,6 +1303,117 @@ api-compat outputs are otherwise the same.
 The head's corpus alone: serial 535 s, 9 workers 70 s, warm 0 s. The pool peaks at about 3.9 GB with 8 workers; the store is about
 21 MB for two trees. What is left is each driver's own work: FL's layout tests (3m40: they read the tests' diagnostics, so unit-kit
 can't serve them), S3's sidecar and mod tests, the drivers' Gradle runs.
+
+## Speed set A (slice SP, 2026-11-11): the offline and unit drivers
+
+Gate speed set A from the 2026-10-23 audit (branch `chore/speed-audit-a`, never merged), re-done on main as slice SP. Every step keeps
+its assertions; what moved is who computes what, and how often. Nothing reused may stand for a result that does not exist: each
+reuse refuses an empty or partial source and says why when it falls back.
+
+- **More drivers on the plan store** (`tools/lib/corpus-plan.mjs`):
+  - rs-unit: `unchanged()`, and the 59 asks in creative and survival from each ask's first recording (`CP.firstAskJobs`);
+  - coa-unit: `unchanged()`;
+  - hy-unit (item 12), h-unit (item 11), vocc-unit (item 4) and voc-unit's identity: the fixtures and the asks. They go through
+    the pool first (`CP.hyRun` / `jobHyFixture`), the one call hy, h, vocc and voc-a all make, so they share entries;
+  - voc-unit's census: its whole-result extras come from the store as a derive (`vocCensus`, `corpus-derive.mjs`). Its compile
+    timing is the plan's own, recorded when the plan ran (a recorded metric, never judged);
+  - the kit tests `plan-p0-asks` item 11 and `plan-k1a` item 7: inside a gate run (`GATE_RUNNER=1`, store on) they read the 59 asks
+    from the store (`CP.asksPlanner`). Outside a gate run, and in the determinism tests, they plan for themselves as before.
+
+  hy and h no longer use `plan-cache.mjs`'s `planSide`. The `identicalToBase` skip ("Speed audit D", K1) is kept in all of them.
+- **The record carries the artifact.** coa-unit's signature compares the plan's artifact, which the lite record did not hold.
+  - The store is now `calls-v2`: every record has `art` (the artifact JSON; `null` for a plan that made none).
+  - A record without `art` is not an entry: it is planned again.
+  - `record()` refuses a result with no `artifact` property.
+  - `artSig` throws on a result with no `artifact` property, so nothing compares undefined with undefined
+    (`kit/test/gate-corpus-plan.test.mjs`).
+  - The first run after this lands plans cold. The v1 entries are left alone, never read.
+- **A pool only for a clean tree.** `prewarm` does nothing when `kit/` or `scenarios/` is dirty (nothing would be stored).
+- **kitReuse in more drivers** (`tools/lib/kit-reuse.mjs`), all `waitFor: unit-kit`:
+  - vocc-unit, voc-unit (vocab, vocab-rules), rs-unit (rs.test) and coa-unit (coa.test, vocc.test);
+  - c37-unit and c38-unit (pass/fail counts only);
+  - pt-unit, pt2-unit and rp-unit.
+
+  `kitReuse` now prints why whenever it falls back: no unit-kit in the run, a dirty `kit/`, a different tree, or a file that is
+  missing, has no tests or failed.
+- **Java tests from unit-mod's XML** (`tools/lib/junit-reuse.mjs`):
+  - After unit-mod passes, the runner copies its JUnit XML to `<run>/unit-mod-junit` and passes `GATE_UNIT_MOD_JUNIT` and
+    `GATE_UNIT_MOD_TREE`.
+  - 0b-unit, sch-unit, rp-unit, f3-unit and rs-unit (both Java filters) take their classes' results from it when all of these hold:
+    - this checkout's HEAD tree is the one unit-mod ran, with no tracked file modified;
+    - every pattern matches a class with tests > 0, not all skipped, failures = 0 and errors = 0;
+    - no `-Dumt.`, `ledger.`, `arvx.write`, `mirror.write` or `c6.evidence` property is set.
+  - Otherwise they run gradle as before and print why (`java: not reused (...)`).
+  - They `waitFor` unit-mod, but don't pull it into a run.
+  - A coverage-cached PASS of such a step serves only a run that holds unit-mod. Without unit-mod's XML (unit-mod CACHED, failed
+    or not in the run), the reader gets its configured timeout, not the history's fast-path one (as `kitReaderSlowPath` does for
+    the kit readers).
+- **umt and p3-lint are `supersededBy: unit-mod`** ("Duplicates" above).
+- **api-compat memo.** The runner sets `GATE_APICOMPAT_MEMO` (`<run>/shared/apicompat-memo`).
+  - A clean check (one jar against the classes) is stored under the sha of everything it reads: the check, the jar, every class
+    file under the classes dirs, `api-compat.mjs`, the JDK and Node, and the dirs as printed.
+  - The next caller of the same check in the run replays its stdout.
+  - A failure is never stored.
+- **lint-mutations** runs its eight mutations side by side, each in its own scratch tree. With a CPU share set by the runner, at
+  most `GATE_CPU_SHARE/2` run at once. They print in the list's order, as before.
+- **p2-calibration** reads t3a-probe's `probe.json` (`tools/lib/probe-reuse.mjs`, `GATE_STEP_EVIDENCE`, `waitFor: t3a-probe`) when:
+  - t3a-probe passed in this run, on this HEAD;
+  - the file has checks, every one ok, and no error.
+
+  It then replays the check lines. Otherwise it runs the probe itself, as before, and says why.
+- **umt-long** is one test class per generator (`UmtLongPlainTest`, `-Crash`, `-Drift`, `-All`) on `maxParallelForks = 4`: a JVM
+  each.
+  - The seeds are the same: the task fixes `umt.from` once for all four.
+  - Every generator runs, and each fails its own test, so the JUnit count goes from 1 to 4 by design.
+  - The fuzz keeps process-wide state (statics, the Minecraft bootstrap), so it is a JVM per generator, not threads.
+- **`--no-daemon` stays.**
+  - Nothing records why it was added (the first runner commit has it).
+  - The gate's gradle runs are in per-run worktrees under the coverage tracer's `JAVA_TOOL_OPTIONS`, which makes gradle fork a
+    single-use daemon anyway ("To honour the JVM settings ...").
+  - So dropping the flag saves nothing there, and it would leave daemons holding the run worktrees.
+
+### Measured (slice SP)
+
+One branch run, the changed steps plus their producers, 1 shard, `--no-turbo`, the `calls-v2` store cold at the start (coa-unit was the
+first to plan this tree, so it paid the store's cold fill), load p50 38 (`artifacts/gate-runs-SP/20261111-233614-change`). "Before" is
+main's recorded step history (`artifacts/gate-step-history.json`, p50 over its last samples) and, where it got that far, a main run
+of the same list at dd1ca4d6 stopped part-way on Noah's word (`artifacts/gate-runs-SP-main/20261112-003127-change`).
+
+| step | before: history p50 | before: main run | after (branch) | what took it |
+|---|---|---|---|---|
+| rs-unit | 29m17 | 34m20 | 1m19 | store (warm from coa), kitReuse, junit-reuse (one of its two Java filters) |
+| coa-unit | 11m21 | 43m17 | 9m04 (cold store) | the pool; kitReuse |
+| vocc-unit | 15m50 | - | 3m07 | store via the pool; kitReuse |
+| voc-unit | 12m01 | - | 6m14 | store (identity, census derive); kitReuse |
+| hy-unit | 11m42 | - | 40s | store via the pool |
+| h-unit | 5m17 | 17m52 (stopped; it re-ran the kit suite, since that run's unit-kit failed its `identicalToBase` test under `GATE_NO_UNCHANGED_SKIP=1`) | 8m09 | store via the pool, but its base (the live origin/main) was a new tree, cold; its H-a and H-b asks loops plan for themselves (unchanged) |
+| c37-unit | 3m00 | 4m11 | 2s | kitReuse |
+| c38-unit | 2m56 | 2m56 | 2s | kitReuse |
+| f3-unit | 7m49 | - | 7s | junit-reuse (and its store, as before) |
+| 0b-unit | 1m37 | - | 8s | junit-reuse |
+| sch-unit | 34s | 17s | 1s | junit-reuse |
+| rp-unit | 33s | - | 3s | junit-reuse, kitReuse |
+| pt-unit / pt2-unit | 42s / 1m44 | 23s / 11s | 22s / 11s | kitReuse (both were already fast) |
+| umt-long | 3m42 | 3m42 | 1m36 | 4 JVMs side by side |
+| lint-mutations | 2m36 | - | 1m36 | 8 mutations side by side |
+| p2-calibration | 1m35 | - | 1m14 | t3a-probe's probe.json |
+| umt, p3-lint | 1m23, 12s | 43s, - | dropped in the slice tier | supersededBy unit-mod |
+| unit-kit | 10m42 | 6m48 (1 FAIL: the `identicalToBase` test under that run's `GATE_NO_UNCHANGED_SKIP=1`) | 8m30 | slower: plan-p0-asks/k1a prewarm a cold store; gate-corpus-plan.test.mjs 16 -> 33 s (two tests added) |
+
+The whole run took 54 min, against the plan's 2h18m estimate from history.
+
+**Same assertions.**
+- Steps both runs finished (sch, pt, pt2, c37, c38, coa, rs): the same ok/FAIL counts, and every masked check line is the same.
+- The rest, against the last recorded runs on main: h 12, voc 17, vocc 8, hy 10, rp 3, 0b 22, lint-mutations 8 and p2-calibration
+  19 lines each. f3 has the same 9 item lines; its per-fixture lines grew with main's fixtures (374 -> 382).
+- unit-mod's XML holds umt's 32 tests (UmtFuzzTest 4, UmtGateMovesTest 4, UmtPropertiesTest 24) and p3-lint's 16 (LedgerLintTest
+  14, RegionFluidsLintTest 2), every one passing.
+- The asks-table FAILs in coa (item 6), h (item 10), hy (item 11), vocc (item 3) and f3 (§9) are main's own: the committed tables
+  predate FL and the palette rules.
+  - Main's run at dd1ca4d6 fails coa's item 6 the same way.
+  - h's item 10 calls plan-helpers directly, with no store.
+  - `asksGap` over this head is byte-identical with `GATE_PLAN_CACHE=0` and through the store.
+- voc-unit's item 1 Linux leg failed because the docker socket was down (OrbStack not running), which is outside this slice.
 
 ## Sprinted game-time waits (2026-10-22)
 
@@ -2444,7 +2560,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
 | `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | `slots.max` (4); `<LarattaLabs>/.gate-slots/` |
 | `--judge-timing` | | change/slice record timing bars; this judges them as at release |
-| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; under the runner the step's CPU share, at least 4 ("Frozen source and the CPU budget"), else the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v1` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
+| | `GATE_PLAN_CACHE`, `GATE_PLAN_WORKERS`, `GATE_PLAN_CACHE_DIR` | on; under the runner the step's CPU share, at least 4 ("Frozen source and the CPU budget"), else the cores free now, at least 4; `<main checkout>/artifacts/plan-cache/calls-v2` ("Shared plans"). `GATE_PLAN_CACHE=0`: no store, no pool, as before |
 | | `GATE_CPU_CORES` | the machine's cores (`hw.ncpu`, 18 here): the run's CPU budget ("Frozen source and the CPU budget") |
 | | `GATE_TEST_CONCURRENCY`, `VITEST_MAX_WORKERS`, `GRADLE_OPTS` (`-Dorg.gradle.workers.max`), `GATE_CPU_SHARE` (recorded) | set by the runner for each step to its CPU share; a value the runner was started with is kept; outside the runner: each tool's own default |
 | | `GATE_JAVAP_CACHE`, `GATE_JAVAP_CACHE_DIR` | on; `<main checkout>/artifacts/javap-cache` (api-compat's javap answers, "Shared plans") |

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -46,55 +46,75 @@ export const MUTATIONS = [
   { id: 'c31-felling', bug: 'C31 felling into protected areas (5cc0d7f1): felling crossed the owner\'s protected area', kind: 'model', prefix: 'felling:c31', cases: ['hist:felling'], expect: /S-FELL/ },
 ];
 
-function lint(args, env = {}) {
+async function lint(args, env = {}) {
   const t0 = Date.now();
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lint-mut-')), 'r.json');
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'lint.mjs'), 'structure', ...args, '--json', out], { encoding: 'utf8', env: { ...process.env, ...env }, maxBuffer: 64 << 20 });
+  // (speed audit A) async, so the mutations can run side by side: the same process, arguments and environment as before
+  const r = await new Promise((resolve) => {
+    const c = spawn(process.execPath, [path.join(ROOT, 'tools', 'lint.mjs'), 'structure', ...args, '--json', out], { env: { ...process.env, ...env } });
+    let text = '';
+    c.stdout.on('data', (d) => { text += d; });
+    c.stderr.on('data', (d) => { text += d; });
+    c.on('close', (code) => resolve({ status: code, text }));
+    c.on('error', (e) => resolve({ status: 1, text: String(e) }));
+  });
   let j = null;
   try { j = JSON.parse(fs.readFileSync(out, 'utf8')); } catch { /* none */ }
   fs.rmSync(path.dirname(out), { recursive: true, force: true });
-  return { code: r.status, ms: Date.now() - t0, json: j, tail: (r.stdout + r.stderr).trim().split('\n').slice(-3).join(' / ') };
+  return { code: r.status, ms: Date.now() - t0, json: j, tail: r.text.trim().split('\n').slice(-3).join(' / ') };
+}
+
+/** How many mutations at once: all of them (each in its own scratch tree), within the runner's CPU share when it set one (docs/GATES.md "CPU budget"). */
+function concurrency(n) {
+  const share = Number(process.env.GATE_CPU_SHARE);
+  const cap = Number.isInteger(share) && share >= 1 ? Math.max(1, Math.floor(share / 2)) : n;
+  return Math.max(1, Math.min(n, cap));
+}
+
+async function one(m) {
+  let scratch = null;
+  const args = ['--only', m.cases.join(',')];
+  const env = {};
+  try {
+    if (m.kind === 'kit') {
+      scratch = fs.mkdtempSync(path.join(os.tmpdir(), `lint-mut-${m.id}-`));
+      // (kit/ and scenarios/: the kit's test helpers read the scenario goldens from the kit's parent)
+      for (const d of ['kit', 'scenarios']) {
+        const r = spawnSync('cp', ['-c', '-R', path.join(ROOT, d), path.join(scratch, d)]);
+        if (r.status !== 0) spawnSync('cp', ['-R', path.join(ROOT, d), path.join(scratch, d)]);
+      }
+      for (const [file, find, rep] of m.edits) {
+        const f = path.join(scratch, 'kit', file);
+        const src = fs.readFileSync(f, 'utf8');
+        if (src.split(find).length !== 2) throw new Error(`${file}: the fix's hunk is not there exactly once (${find.slice(0, 60)}...): update the mutation`);
+        fs.writeFileSync(f, src.replace(find, rep));
+      }
+      args.push('--kit', path.join(scratch, 'kit'));
+    } else env.LINT_PREFIX = m.prefix;
+    const r = await lint(args, env);
+    const lines = (r.json?.results ?? []).flatMap((q) => (q.fails ?? []).map((l) => `${q.id}: ${l}`));
+    const hit = lines.filter((l) => m.expect.test(l));
+    const ok = r.code === 1 && hit.length > 0;
+    return { ok, rec: { id: m.id, kind: m.kind, bug: m.bug, caught: ok, ms: r.ms, rule: String(m.expect), evidence: hit.slice(0, 3), other: lines.filter((l) => !m.expect.test(l)).slice(0, 3), tail: ok ? undefined : r.tail },
+      line: `${ok ? 'ok  ' : 'FAIL'} ${m.id} (${m.kind}, ${(r.ms / 1000).toFixed(1)} s): ${m.bug}\n       ${ok ? `caught: ${hit[0].slice(0, 260)}` : `NOT caught (exit ${r.code}): ${lines.slice(0, 2).join(' | ').slice(0, 260) || r.tail}`}` };
+  } catch (e) {
+    return { ok: false, rec: { id: m.id, caught: false, error: e.message }, line: `FAIL ${m.id}: ${e.message}` };
+  } finally {
+    if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 export async function runMutations({ only = null, json = null } = {}) {
   const list = MUTATIONS.filter((m) => !only || only.includes(m.id));
-  const res = [];
+  // (speed audit A) side by side, each in its own scratch tree; the lines print in the list's order, as before, once all are done
+  const done = new Array(list.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: concurrency(list.length) }, async () => {
+    for (let i = next++; i < list.length; i = next++) done[i] = await one(list[i]);
+  }));
+  const res = done.map((d) => d.rec);
   let bad = 0;
-  for (const m of list) {
-    let scratch = null;
-    const args = ['--only', m.cases.join(',')];
-    const env = {};
-    try {
-      if (m.kind === 'kit') {
-        scratch = fs.mkdtempSync(path.join(os.tmpdir(), `lint-mut-${m.id}-`));
-        // (kit/ and scenarios/: the kit's test helpers read the scenario goldens from the kit's parent)
-        for (const d of ['kit', 'scenarios']) {
-          const r = spawnSync('cp', ['-c', '-R', path.join(ROOT, d), path.join(scratch, d)]);
-          if (r.status !== 0) spawnSync('cp', ['-R', path.join(ROOT, d), path.join(scratch, d)]);
-        }
-        for (const [file, find, rep] of m.edits) {
-          const f = path.join(scratch, 'kit', file);
-          const src = fs.readFileSync(f, 'utf8');
-          if (src.split(find).length !== 2) throw new Error(`${file}: the fix's hunk is not there exactly once (${find.slice(0, 60)}...): update the mutation`);
-          fs.writeFileSync(f, src.replace(find, rep));
-        }
-        args.push('--kit', path.join(scratch, 'kit'));
-      } else env.LINT_PREFIX = m.prefix;
-      const r = lint(args, env);
-      const lines = (r.json?.results ?? []).flatMap((q) => (q.fails ?? []).map((l) => `${q.id}: ${l}`));
-      const hit = lines.filter((l) => m.expect.test(l));
-      const ok = r.code === 1 && hit.length > 0;
-      if (!ok) bad++;
-      res.push({ id: m.id, kind: m.kind, bug: m.bug, caught: ok, ms: r.ms, rule: String(m.expect), evidence: hit.slice(0, 3), other: lines.filter((l) => !m.expect.test(l)).slice(0, 3), tail: ok ? undefined : r.tail });
-      console.log(`${ok ? 'ok  ' : 'FAIL'} ${m.id} (${m.kind}, ${(r.ms / 1000).toFixed(1)} s): ${m.bug}\n       ${ok ? `caught: ${hit[0].slice(0, 260)}` : `NOT caught (exit ${r.code}): ${lines.slice(0, 2).join(' | ').slice(0, 260) || r.tail}`}`);
-    } catch (e) {
-      bad++;
-      res.push({ id: m.id, caught: false, error: e.message });
-      console.log(`FAIL ${m.id}: ${e.message}`);
-    } finally {
-      if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
-    }
-  }
+  for (const d of done) { if (!d.ok) bad++; console.log(d.line); }
   if (json) fs.mkdirSync(path.dirname(path.resolve(json)), { recursive: true });
   if (json) fs.writeFileSync(json, `${JSON.stringify({ mutations: res }, null, 1)}\n`);
   console.log(`== mutations: ${res.length - bad} of ${res.length} historical bugs caught`);

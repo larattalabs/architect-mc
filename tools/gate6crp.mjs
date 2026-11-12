@@ -24,6 +24,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { kitReuse } from './lib/kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
+import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -197,6 +199,8 @@ steps.base = async () => {
 // ------------------------------------------------------------------ offline
 
 async function javaTests(patterns, minTests) {
+  const re = javaReuse(root, patterns);
+  if (re) return { ...re, ok: re.tests >= minTests };
   const { srcGradle } = await import('./lib/src-gradle.mjs');
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
   const args = ['test', '--offline', '-q', ...patterns.flatMap((p) => ['--tests', p])];
@@ -213,6 +217,8 @@ async function javaTests(patterns, minTests) {
   return { code: g.status, tests, failures, names, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').slice(-12), ok: g.status === 0 && tests >= minTests && failures === 0 };
 }
 function nodeTest(files, timeout = 3_600_000) {
+  const re = kitReuse(root, files); // (speed audit A) unit-kit ran this file in this run
+  if (re) return re;
   const r = spawnSync(process.execPath, ['--test', ...testConcurrencyArgs(), ...files], { cwd: root, encoding: 'utf8', timeout });
   const t = `${r.stdout}${r.stderr}`;
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);

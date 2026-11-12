@@ -9,6 +9,19 @@ import { pathToFileURL } from 'node:url';
 const K = (root, f) => import(pathToFileURL(path.join(root, 'kit', 'lib', ...f.split('/'))).href);
 
 export const DERIVE = {
+  // (speed audit A) voc-unit's census (gate6cvoc-b census): what it reads of one plan's whole result (the vocab compile timing in the
+  // result's meta, the checker's M20/M26/M27 findings over its IR, blobs and volumes), with this head's checker. The timing is the
+  // plan's own, as recorded when it was planned (a recorded metric, never judged). A throw is returned as { err }.
+  async vocCensus(r, opts, { headRoot }) {
+    try {
+      const { checkRegion } = await K(headRoot, 'region/check.mjs');
+      const v = r.res.meta.planCheck?.vocab;
+      const rep = checkRegion({ ir: r.res.ir, survey: opts.survey, blobs: (s) => r.res.blobs.get(s) ?? null, meta: r.res.meta, volumes: (r.volumes ?? []).map((x) => x.decoded), prefix: false, rules: ['M20', 'M26', 'M27'] });
+      return { compileMs: v ? (v.first?.ms ?? 0) + v.ms : null, findings: rep.findings.map((f) => ({ rule: f.rule, part: f.part, message: f.message, count: f.count })) }; // (undefined drops from the JSON: read back as undefined)
+    } catch (e) {
+      return { err: String(e.message).slice(0, 160) };
+    }
+  },
   async kcCensus(r, opts, { headRoot }) {
     try {
       const { clearScan, bodiesOf } = await K(headRoot, 'region/checkFluids.mjs');
