@@ -126,6 +126,12 @@ export class Groups {
     const itemRequests: Record<string, DesignRequestT> = {};
     // (0b) count / copyOf / copyCap: the placements (originals and copies); refusals before anything is created
     const expanded = expandItems(req);
+    // (7b DS) site-aware items: designed in one pass (no massing first), their volumes kept now; refusals before anything is created
+    for (const [i, it] of req.items.entries()) {
+      if (!it.site) continue;
+      if (req.massingFirst) throw new ClientError(`item ${it.itemKey ?? `item${i + 1}`}: a site-aware item has no massing pass (7b DS); send its group without massingFirst, or the item as its own design`);
+      this.sc.acceptSite(it.site);
+    }
     const waveOf = new Map<string, number>();
     const ordinals: Record<string, number> = {};
     for (const e of expanded) {

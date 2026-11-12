@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -308,6 +308,68 @@ export type PaletteSpec = z.infer<typeof PaletteSpec>;
 /** A palette as a stored variant record holds it (lenient: records written before U1 parse as they were). */
 export const StoredPaletteSpec = z.union([z.string().min(1).max(32).regex(/^[a-z0-9_]+$/), BiblePalette, PaletteInputs]);
 
+/**
+ * (7b DS, feature site.design) A lot's site (docs/CONTRACT.md "Phase 7b" §2; the wire of api.SiteSpec, kit/schemas/site-spec.json): the
+ * frozen volume (lot plus 8, by sha and the helper's blob id), the fit mode, the frame (origin = the lot box's minimum corner),
+ * keep-critical world cells and the ports (design cells). Bounds as 7bF froze them (SiteSpec.MAX_*).
+ */
+const SiteCell = z.tuple([z.number().int(), z.number().int(), z.number().int()]);
+const SiteId = z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/);
+const SiteBox = z.object({ minX: z.number().int(), minY: z.number().int(), minZ: z.number().int(), maxX: z.number().int(), maxY: z.number().int(), maxZ: z.number().int() }).strict();
+export const SITE_FITS = ['on_pad', 'carve_into', 'attach_to_cliff', 'span', 'wrap_trunk', 'suspend'] as const;
+export const SITE_MARGIN = 8;
+export const SiteSpec = z
+  .object({
+    volumeSha: z.string().regex(/^[0-9a-f]{64}$/),
+    volumeBlobId: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).describe("the helper's blob of the frozen volume (ARVX); a local:<sha> id is uploaded by the mod first"),
+    volume: SiteBox,
+    fit: z.enum(SITE_FITS),
+    frame: z.object({ origin: SiteCell, rotation: z.enum(['none', 'clockwise_90', 'clockwise_180', 'counterclockwise_90']) }).strict(),
+    keepCritical: z.array(SiteCell).max(65536),
+    ports: z
+      .array(
+        z
+          .object({
+            name: SiteId,
+            kind: z.enum(['architect:walk', 'door']),
+            at: SiteCell,
+            facing: z.enum(['north', 'south', 'east', 'west', 'up', 'down']),
+            width: z.number().int().min(1).max(16),
+            height: z.number().int().min(1).max(16),
+            edge: SiteId.optional(),
+          })
+          .strict(),
+      )
+      .max(16),
+    lotId: SiteId.nullable().optional(),
+  })
+  .strict()
+  .superRefine((s, ctx) => {
+    const b = s.volume;
+    if (b.minX > b.maxX || b.minY > b.maxY || b.minZ > b.maxZ) ctx.addIssue({ code: 'custom', path: ['volume'], message: 'volume: min > max' });
+    if (new Set(s.ports.map((p) => p.name)).size !== s.ports.length) ctx.addIssue({ code: 'custom', path: ['ports'], message: 'port names are unique' });
+    if (s.keepCritical.some(([x, y, z]) => x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ)) ctx.addIssue({ code: 'custom', path: ['keepCritical'], message: 'every keepCritical cell lies inside volume' });
+    const L = siteLotBox(s);
+    if (L.minX > L.maxX || L.minY > L.maxY || L.minZ > L.maxZ) ctx.addIssue({ code: 'custom', path: ['volume'], message: `the volume is too small for a lot inside its ${SITE_MARGIN}-cell margin` });
+    const [ox, oy, oz] = s.frame.origin;
+    if (ox !== L.minX || oy !== L.minY || oz !== L.minZ) ctx.addIssue({ code: 'custom', path: ['frame', 'origin'], message: "the frame's origin must be the lot box's minimum corner (the volume less its margin)" });
+  });
+export type SiteSpec = z.infer<typeof SiteSpec>;
+
+/** (7b DS) The lot box of a site spec: its volume less the margin (7bF reading 5; kit lib/site.mjs's default). */
+export function siteLotBox(s: { volume: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } }): { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } {
+  const b = s.volume;
+  return { minX: b.minX + SITE_MARGIN, minY: b.minY + SITE_MARGIN, minZ: b.minZ + SITE_MARGIN, maxX: b.maxX - SITE_MARGIN, maxY: b.maxY - SITE_MARGIN, maxZ: b.maxZ - SITE_MARGIN };
+}
+
+/** (7b DS) The template size a site-bound design has: the lot box in the design frame (a quarter turn swaps x and z). */
+export function siteSize(s: SiteSpec): { x: number; y: number; z: number } {
+  const L = siteLotBox(s);
+  const wx = L.maxX - L.minX + 1, wy = L.maxY - L.minY + 1, wz = L.maxZ - L.minZ + 1;
+  const quarter = s.frame.rotation === 'clockwise_90' || s.frame.rotation === 'counterclockwise_90';
+  return quarter ? { x: wz, y: wy, z: wx } : { x: wx, y: wy, z: wz };
+}
+
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
   profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
@@ -341,7 +403,9 @@ export const DesignRequest = DesignRequestBase.extend({
   palette: PaletteSpec.optional().describe('(Style unification U1, feature palette.roles) materials only: the design builds with this palette (a preset, inputs, or a Style\'s roles inline `{ bible: { id, version, roles } }`) and its default palette is it. Never bible set mode: no components, no restraint. Excludes `bible`'),
   reserved: Reserved.optional().describe("(6c IRR, S-IRR-2) the lot's cells the design must leave as given (an irrigated farm's water and its edges): the brief names them, the checker refuses a design writing one (kit build.mjs --reserved)"),
   opKey: OpKey.optional().describe("(7a K3, feature design.opKeys) the caller's operation key, scoped by (owner, \"design\", opKey): the same key and body answers the first design (adopted, in any state; never a second job, never VERSION_REFUSED busy); another body is refused op_key_conflict. The body is the request as sent without opKey and without versionOf's siteNow, siteEdits and baseVersion"),
+  site: SiteSpec.optional().describe("(7b DS, feature site.design) a site-aware design: built INTO this site (the template is the lot box, checked on the composite; the scratch gets site/ and the brief a Site section). With versionOf: a paid adaptation of that entry to the site. Excludes massing and fromMassing"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
+  if (r.site && (r.massing || r.fromMassing)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware design has no massing pass (7b DS): send it as one design' });
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
   if (r.palette !== undefined && r.bible !== undefined) ctx.addIssue({ code: 'custom', path: ['palette'], message: 'a request takes a palette (materials only) or a bible (set mode), not both' });
@@ -465,7 +529,10 @@ export const GroupItemInput = DesignRequestBase.extend({
   count: z.number().int().min(1).max(MAX_GROUP_ITEMS).optional().describe('(0b, C1) placements of this item: <key>, <key>#2 ... <key>#n; every copyCap-th starts a new archetype, the others are $0 copies'),
   copyOf: ItemKey.optional().describe("(0b, C1) this item is a copy of that item's archetype (counts toward its copyCap)"),
   effort: ItemEffort.optional().describe('(0b, C8) default auto'),
-}).superRefine(noDuplicateFeatures);
+  site: SiteSpec.optional().describe('(7b DS) a site-aware item: designed into this site in one pass (no massing first, no count or copyOf: its site variants are Designs.siteVariant)'),
+}).superRefine(noDuplicateFeatures).superRefine((it, ctx) => {
+  if (it.site && ((it.count ?? 1) > 1 || it.copyOf !== undefined)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware item is one placement: its site variants come from Designs.siteVariant, not count or copyOf' });
+});
 export type GroupItemInput = z.infer<typeof GroupItemInput>;
 
 export const GroupRequest = z
@@ -1229,6 +1296,12 @@ export type FollowLot = z.infer<typeof FollowLot>;
 export const EntryFollowMsg = z.object({ ...envelope('entry.follow'), entryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional(), lots: z.array(FollowLot).max(512).optional() });
 /** (6d FS) Every COPY of the source that is behind, frozen at the start, followed one by one (as entry.follow). */
 export const EntryFollowAllMsg = z.object({ ...envelope('entry.followAll'), sourceEntryId: EntryId, toSourceVersion: z.number().int().min(0), opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional(), lots: z.record(EntryId, z.array(FollowLot).max(512)).optional() });
+/**
+ * (7b DS, feature site.design) Designs.siteVariant: the entry's kit program re-run on another site, $0, installed directly as a SITE
+ * derivation bound to the site. Answers {entryId, adopted}; refuses SITE_UNFIT (detail: the failing site rule id) or SITE_UNSUPPORTED
+ * (detail: no_program, not_site_aware). Keyed by (owner, "siteVariant", opKey); the key's body leaves out the volume's blob id.
+ */
+export const SiteVariantMsg = z.object({ ...envelope('site.variant'), entryId: EntryId, site: SiteSpec, opKey: OpKey, owner: Owner.optional() });
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
@@ -1435,6 +1508,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionPreviewMsg,
   RegionDesignMsg,
   SiteAnalyseMsg,
+  SiteVariantMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */

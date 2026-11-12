@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { simCostsLabel, VERSION } from './config.js';
-import { designKeyBody, OpKeys } from './opkeys.js';
+import { designKeyBody, groupKeyBody, OpKeys } from './opkeys.js';
 import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
@@ -77,6 +77,7 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
   'massing.delete',
   'design.critique',
   'design.polish',
+  'site.variant',
 ]);
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
@@ -87,6 +88,9 @@ import { checkRarity } from './rarity.js';
 import { checkPaletteSpec } from './styles.js';
 import { hintsOf, type StyleHints } from './claude/brief.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
+import { SiteVariants, siteVariantView } from './sitevariants.js';
+import { keepSiteVolume, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
+import { siteSize } from './protocol.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -162,6 +166,8 @@ export class Sidecar {
   readonly regionDesigns: RegionDesigns;
   /** (6d FS) copies following their source (entry.follow, entry.followAll) */
   readonly follows: Follows;
+  /** (7b DS) site variants (Designs.siteVariant): a source's program re-run on another site, $0 */
+  readonly siteVariants: SiteVariants;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -202,6 +208,7 @@ export class Sidecar {
     this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
     this.regionDesigns = new RegionDesigns(this);
     this.follows = new Follows(this);
+    this.siteVariants = new SiteVariants(this);
   }
 
   /** trusted, open connections */
@@ -343,6 +350,7 @@ export class Sidecar {
     fs.mkdirSync(this.config.biblesDir, { recursive: true });
     this.variantRunner.start();
     this.follows.start();
+    this.siteVariants.start();
     void this.loadKitInfo();
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
@@ -410,6 +418,7 @@ export class Sidecar {
     await this.regions.close();
     await this.variantRunner.stop();
     await this.follows.stop();
+    await this.siteVariants.stop();
     await this.jobs.stop();
     await this.designer?.stop();
     this.store.close();
@@ -533,7 +542,7 @@ export class Sidecar {
         const ack = (g: Group, adopted: boolean) => ({ groupId: g.id, designIds: g.items.map((it) => it.designId), itemKeys: g.items.map((it) => it.itemKey), bible: g.bible, adopted });
         // (6c 0a, C9) the same key and body: the first group, adopted (in any state); another body: op_key_conflict
         const key = msg.group.opKey;
-        const prior = key ? this.opKeys.check('group', msg.group.owner, key, msg.group as Record<string, unknown>) : undefined;
+        const prior = key ? this.opKeys.check('group', msg.group.owner, key, groupKeyBody(msg.group as Record<string, unknown>)) : undefined;
         const pg = prior ? this.groups.get(prior) : undefined;
         if (pg) {
           this.log.info(`group ${pg.id}: adopted by opKey ${key} (${pg.status})`);
@@ -541,7 +550,7 @@ export class Sidecar {
         }
         this.ensureClaudeAvailable();
         const g = this.groups.create(msg.group);
-        if (key) this.opKeys.record('group', msg.group.owner, key, msg.group as Record<string, unknown>, g.id);
+        if (key) this.opKeys.record('group', msg.group.owner, key, groupKeyBody(msg.group as Record<string, unknown>), g.id);
         return ack(g, false);
       }
       case 'group.byKey': {
@@ -674,6 +683,9 @@ export class Sidecar {
       // ---- 7b AF (no Claude)
       case 'site.analyse':
         return this.regions.siteAnalyse(msg);
+      // ---- 7b DS (no Claude): the ack carries the operation; a running one reports done through follow.upsert
+      case 'site.variant':
+        return siteVariantView(this.siteVariants.request(msg.entryId, msg.site, msg.opKey, msg.owner));
     }
   }
 
@@ -815,6 +827,8 @@ export class Sidecar {
     }
     // (Style unification U1) materials only: a palette the kit cannot build is refused now, not after a design round
     if (req.palette !== undefined) checkPaletteSpec(this.config.kitDir, req.palette);
+    // (7b DS) a site-aware design: the kit must build into a site, and the frozen volume is kept now (the blob may be GC'd later)
+    if (req.site) this.acceptSite(req.site);
     if (req.bible) {
       const pin = this.bibleIndex.resolve(req.bibleVersion ? { id: req.bible, version: req.bibleVersion } : req.bible).pin;
       req = { ...req, bible: pin.id, bibleVersion: pin.version };
@@ -997,7 +1011,7 @@ export class Sidecar {
   }
 
   /** prepareScratch's extras: the bible's files and up to 4 iso renders of finished earlier-wave siblings. */
-  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }>; massing?: ScratchMassing; styleHints?: StyleHints } {
+  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }>; massing?: ScratchMassing; styleHints?: StyleHints; site?: { volumeFile: string; spec: import('./protocol.js').SiteSpec; renders: boolean } } {
     const b = this.designBible(d);
     // a massing job's neighbours are the earlier waves' massings; a design's, their finished entries
     const neighbours = (
@@ -1016,7 +1030,15 @@ export class Sidecar {
       if (prev) massing = { record: prev, role: 'redirect' };
     }
     const styleHints = this.paletteHints(d);
-    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}), ...(massing ? { massing } : {}), ...(styleHints ? { styleHints } : {}) };
+    // (7b DS) a site-aware design: its kept volume (copied at request time) and spec
+    const site = d.request.site ? { volumeFile: keepSiteVolume(this.config.dataDir, this.blobs, d.request.site), spec: d.request.site, renders: this.config.siteRenders } : undefined;
+    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}), ...(massing ? { massing } : {}), ...(styleHints ? { styleHints } : {}), ...(site ? { site } : {}) };
+  }
+
+  /** (7b DS) A request's site: a kit that builds into sites, and the frozen volume kept (<data>/sites/<sha>.arvx). Throws ClientError. */
+  acceptSite(site: import('./protocol.js').SiteSpec): void {
+    if (!this.kitHas('--site')) throw new ClientError('this helper\'s kit cannot build into a site (no build.mjs --site)');
+    keepSiteVolume(this.config.dataDir, this.blobs, site);
   }
 
   /**
@@ -1051,14 +1073,18 @@ export class Sidecar {
     // (5b) a group item keeps the neighbour renders it was designed and critiqued with (a later polish's critic sees them)
     const nb = path.join(scratch, 'neighbours');
     const neighbours = !d.request.massing && d.request.group && fs.existsSync(nb) ? fs.readdirSync(nb).filter((f) => f.endsWith('.png')).sort().slice(0, 4).map((f) => ({ from: path.join(nb, f), to: path.join('neighbours', f) })) : [];
-    return [...bible, ...neighbours];
+    // (7b DS) a site-bound entry keeps its site (site/site.arvx, site/site.json): its variants and follows re-run on it
+    const site = d.request.site && !d.request.massing ? siteEntryFiles(scratch) : [];
+    return [...bible, ...neighbours, ...site];
   }
 
   /** The entry's extra sidecar fields: ext, the bible pin and the group (collections, R10), the item key. */
   entryExtra(d: Design): Record<string, unknown> {
     const r = d.request;
+    // (7b DS) a site-bound entry carries its binding (api.SiteBinding) in ext["architect_mc:site"], beside the caller's ext
+    const ext = r.site && !r.massing ? { ...(r.ext ?? {}), [SITE_BINDING_KEY]: siteBinding(r.site) } : r.ext;
     return {
-      ...(r.ext && Object.keys(r.ext).length ? { ext: r.ext } : {}),
+      ...(ext && Object.keys(ext).length ? { ext } : {}),
       ...(r.bible ? { bible: { id: r.bible, version: r.bibleVersion ?? 1 } } : {}),
       ...(r.group ? { group: r.group } : {}),
       ...(r.itemKey ? { groupItem: r.itemKey } : {}),
@@ -1106,6 +1132,8 @@ export class Sidecar {
     // (Style unification U1) materials only: the design is checked and installed built with the palette asked for, whatever its
     // own default (the entry records it as its palette); never bible set mode (no --restraint, no bible files)
     const pal = d.request.palette !== undefined && !d.request.massing && !extra.includes('--palette') ? ['--palette', typeof d.request.palette === 'string' ? d.request.palette : JSON.stringify(d.request.palette)] : [];
+    // (7b DS) a site-aware design: exactly the lot box, built and checked on the composite (site/ in the scratch dir)
+    if (d.request.site && !d.request.massing) return { limits: { ...p.limits, maxSize: siteSize(d.request.site) }, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal, ...SITE_CHECK_ARGS] };
     return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
   }
 

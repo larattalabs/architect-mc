@@ -65,6 +65,11 @@ export interface Config {
   simDesignUsd: number;
   /** sim: how long a simulated usage limit lasts (config simLimitMs) */
   simLimitMs: number;
+  /**
+   * (7b DS) a site-aware design's scratch gets the four empty-site renders (config siteRenders, default true). False is the "images
+   * off" arm of 7b's A/B (PA's P4): site/ keeps the volume, site.json and the brief's words, without the PNGs.
+   */
+  siteRenders: boolean;
   /** (4c) massing jobs */
   massing: MassingConfig;
   /** (5a) the critic */
@@ -300,6 +305,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     },
     simDesignUsd: typeof file.simDesignUsd === 'number' && file.simDesignUsd >= 0 ? file.simDesignUsd : 0,
     simLimitMs: num(file.simLimitMs, 1500),
+    siteRenders: file.siteRenders !== false,
     massing: {
       dir: str('massings') ? path.resolve(str('massings')!) : path.join(path.dirname(need('library')), 'massings'),
       model: (typeof file.massingModel === 'string' && file.massingModel.trim()) || DEFAULT_JOB_MODEL,
