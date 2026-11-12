@@ -1537,9 +1537,21 @@ public final class RegionsImpl implements Regions {
 	}
 
 	private CompletableFuture<String> realise0(MinecraftServer s, RealiseRequest r) {
+		// (7b LP, changes 3 and 4) a plan with port links is realised from IR v2: the link pass first (NO_LINK before anything is reserved or
+		// written); every other plan goes on as before
+		return onServer(s, () -> {
+			PlanRec p0 = planRec(r.planId());
+			if (p0 != null && !Revisions.isRevision(p0) && RegionLinks.needs(p0.ir().json()) && staleReason(p0.ir().json()) == null) {
+				return RegionLinks.run(s, p0, r.lotEntries()).thenCompose(lk -> realise0(s, r, lk));
+			}
+			return realise0(s, r, null);
+		}).thenCompose(f -> f);
+	}
+
+	private CompletableFuture<String> realise0(MinecraftServer s, RealiseRequest r, RegionLinks.@Nullable Linked lk) {
 		String[] id = {null};
 		return onServer(s, () -> {
-			PlanRec p = planRec(r.planId());
+			PlanRec p = lk != null ? lk.plan() : planRec(r.planId());
 			ServerLevel level = p == null ? null : Sites.levelOf(s, p.dimension());
 			if (p == null || level == null) {
 				return CompletableFuture.<Drift.@Nullable Result>completedFuture(null);
@@ -1557,7 +1569,7 @@ public final class RegionsImpl implements Regions {
 			id[0] = "rg" + nextRegion++; // reserved now: the blob copies go into its dir before the record exists
 			return Drift.check(level, p);
 		}).thenCompose(f -> f).thenComposeAsync(drift -> { // off the server thread: the copies are file I/O
-			PlanRec p = id[0] == null ? null : PLANS.get(r.planId());
+			PlanRec p = id[0] == null ? null : lk != null ? lk.plan() : PLANS.get(r.planId());
 			if (p != null && !RegionBlobs.volumeShas(p.ir().json()).isEmpty()) {
 				List<String> miss = RegionBlobs.installVolumes(s.getWorldPath(LevelResource.ROOT), id[0], RegionBlobs.volumeShas(p.ir().json()));
 				if (!miss.isEmpty()) {
@@ -1572,7 +1584,7 @@ public final class RegionsImpl implements Regions {
 			return RegionBlobs.install(dir, p.ir().blobShas(), RegionBlobs.blobIds(p.planned()), BlobPut::read).thenApply(err -> new Object[] {drift, err});
 		}).thenCompose(o -> onServer(s, () -> {
 			try {
-				return realise0(s, r, (Drift.Result) o[0], id[0], (String) o[1]);
+				return realise0(s, r, (Drift.Result) o[0], id[0], (String) o[1], lk);
 			} catch (RuntimeException e) {
 				if (id[0] != null && REGIONS.get(id[0]) == null) {
 					// refused before the record: the copies made for it go (the reserved id stays unused)
@@ -1585,8 +1597,9 @@ public final class RegionsImpl implements Regions {
 		}));
 	}
 
-	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift, @Nullable String reserved, @Nullable String blobError) {
-		PlanRec p = planRec(r.planId());
+	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift, @Nullable String reserved, @Nullable String blobError,
+		RegionLinks.@Nullable Linked lk) {
+		PlanRec p = lk != null ? lk.plan() : planRec(r.planId());
 		// (6d RV) a revision candidate: accepted onto its region (Revisions.realise), never a region of its own
 		if (p != null && Revisions.isRevision(p)) {
 			if (blobError != null) {
@@ -1662,6 +1675,9 @@ public final class RegionsImpl implements Regions {
 		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
+		if (lk != null) {
+			rec.ext.add(RegionLinks.EXT_LINKS, lk.rows().deepCopy()); // (7b LP) the realise report's $.links[]
+		}
 		if (survival) {
 			JsonObject sv = new JsonObject();
 			sv.addProperty("on", true);

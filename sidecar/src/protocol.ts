@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'region.link'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1419,6 +1419,18 @@ export const RegionReleaseMsg = z.object({
 });
 // 6b regions (client -> sidecar)
 export const RegionCheckMsg = z.object({ ...envelope('region.check'), planId: PlanId });
+/** (7b LP) The realise's link pass: the plan replayed in its dir with the bound entries' ports, its port links written (IR v2). */
+export const RegionLinkPort = z
+  .object({ name: z.string().min(1).max(64), kind: z.string().min(1).max(64), facing: z.string().min(1).max(16), at: z.tuple([z.number().int(), z.number().int(), z.number().int()]).optional(), x: z.number().int().optional(), y: z.number().int().optional(), z: z.number().int().optional(), width: z.number().int().min(1).max(16).optional(), height: z.number().int().min(1).max(16).optional(), edge: z.string().max(64).nullable().optional() })
+  .passthrough();
+export const RegionLinkMsg = z.object({
+  ...envelope('region.link'),
+  planId: PlanId,
+  irSha: Sha256Hex.describe("the checked plan's IR (IR v1): the link pass replays exactly it"),
+  links: z
+    .object({ lots: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,47}$/), z.object({ entry: z.string().min(1).max(200), version: z.number().int().min(0).optional(), ports: z.array(RegionLinkPort).max(64) })).refine((o) => Object.keys(o).length <= 256, 'at most 256 lots') })
+    .describe("the bound site lots' entries and their own ports (design cells): lot id -> {entry, version?, ports}"),
+});
 /** (6c close-out A, §3) Discard a plan's dir (`Regions.discardPlan` and the world-start sweep): -> {planId, existed}. */
 export const RegionPlanDiscardMsg = z.object({ ...envelope('region.plan.discard'), planId: PlanId });
 export const RegionPreviewMsg = z.object({
@@ -1511,6 +1523,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionTilesRequestMsg,
   RegionReleaseMsg,
   RegionCheckMsg,
+  RegionLinkMsg,
   RegionPlanDiscardMsg,
   RegionPreviewMsg,
   RegionDesignMsg,

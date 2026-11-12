@@ -205,7 +205,7 @@ interface IrEntry {
   shared?: Record<string, Uint8Array>;
 }
 
-type KitRun = { ok: true; out: Record<string, unknown>; ms: number } | { ok: false; message: string; ms: number };
+type KitRun = { ok: true; out: Record<string, unknown>; ms: number } | { ok: false; message: string; ms: number; out?: Record<string, unknown> };
 
 export class Regions {
   private pool: TilePool | undefined;
@@ -623,7 +623,7 @@ export class Regions {
     if (/heap out of memory|ERR_WORKER_OUT_OF_MEMORY|Allocation failed/i.test(r.stderr)) return { ok: false, message: `the ${o.what} ran out of memory (${o.heapMb} MB heap)`, ms: ms() };
     if (r.code !== 0 || (out && out.ok === false)) {
       const msg = (typeof out?.error === 'string' && out.error) || (typeof out?.message === 'string' && out.message) || outputTail(`${r.stdout}\n${r.stderr}`) || `the ${o.what} exited with code ${r.code}`;
-      return { ok: false, message: msg, ms: ms() };
+      return { ok: false, message: msg, ms: ms(), ...(out ? { out } : {}) };
     }
     return { ok: true, out: out ?? {}, ms: ms() };
   }
@@ -657,7 +657,11 @@ export class Regions {
       // (6c P0) a check may only lower the program's budget (maxMs plus its grace, maxHeapMb)
       const b = this.planBudget(o.passes ?? []);
       const budget = { timeoutMs: Math.min(b.timeoutMs, o.timeoutMs ?? b.timeoutMs), heapMb: Math.min(b.heapMb, o.heapMb ?? b.heapMb) };
-      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...budget, extraReads: [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : []), ...(o.planCache ? [o.planCache] : [])], what: 'plan' });
+      const args = this.planArgs(dir, program, o);
+      const extraReads = [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : []), ...(o.planCache ? [o.planCache] : [])];
+      // ((7b LP) the plan's own arguments, so the realise's link pass replays exactly this plan: region.link)
+      if (!o.dry) fs.writeFileSync(path.join(dir, 'plan-args.json'), JSON.stringify({ args, extraReads, budget }));
+      const r = await this.runKit(dir, args, { ...budget, extraReads, what: 'plan' });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
       const out = r.out;
@@ -876,6 +880,65 @@ export class Regions {
         const r = await this.runCheck(dir, this.cfg.checkMs);
         if (!r.ok) throw new ClientError(`check: ${r.message}`);
         return { report: r.report, ms: r.ms };
+      }),
+    );
+  }
+
+  /**
+   * (7b LP) region.link {planId, irSha, links} -> {irSha, ir, links} | {noLink}: the realise's link pass. The plan is replayed in its
+   * dir with its own arguments (plan-args.json) plus `--links` (the bound entries' ports) and `--link-base` (its IR): the kit writes the
+   * port links in the stage after the lots and proves every other member equal (else REPLAY, a ClientError: the mod refuses
+   * ARTIFACT_STALE). A link that can't reach an entry's port answers `noLink {lot, port, code, message}` (the mod refuses NO_LINK). The
+   * IR goes back inline (and into the IR cache: the tiles name its sha); its side blobs are the plan's own.
+   */
+  async link(planId: string, irSha: string, links: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const dir = this.finishedPlanDir(planId);
+    const base = fs.readFileSync(path.join(dir, 'ir.json'));
+    if (sha256(base) !== irSha) throw new ClientError(`plan ${planId}'s IR is not ${irSha.slice(0, 12)} (it hashes to ${sha256(base).slice(0, 12)})`);
+    let pa: { args: string[]; extraReads: string[]; budget: { timeoutMs: number; heapMb: number } };
+    try {
+      pa = JSON.parse(fs.readFileSync(path.join(dir, 'plan-args.json'), 'utf8')) as typeof pa;
+    } catch {
+      throw new ClientError(`plan ${planId} has no recorded arguments (planned before the link pass): check it again`);
+    }
+    const key = sha256(Buffer.from(canonicalJson(links))).slice(0, 16);
+    return this.withPlanLock(planId, () =>
+      this.withPlanSlot(async () => {
+        const sub = path.join(dir, `link-${key}`);
+        fs.rmSync(sub, { recursive: true, force: true });
+        fs.mkdirSync(sub, { recursive: true });
+        fs.writeFileSync(path.join(sub, 'links.json'), JSON.stringify(links));
+        const args = [...pa.args];
+        const at = (flag: string) => args.indexOf(flag);
+        if (at('--out') >= 0) args[at('--out') + 1] = sub;
+        if (at('--blobs-out') >= 0) args[at('--blobs-out') + 1] = path.join(sub, 'blobs');
+        args.push('--links', path.join(sub, 'links.json'), '--link-base', path.join(dir, 'ir.json'));
+        const extraReads = (pa.extraReads ?? []).filter((x) => fs.existsSync(x));
+        const r = await this.runKit(dir, args, { timeoutMs: pa.budget?.timeoutMs ?? this.cfg.planMs, heapMb: pa.budget?.heapMb ?? this.cfg.planHeapMb, extraReads, what: 'link pass' });
+        if (!r.ok) {
+          const nl = r.out?.noLink as Record<string, unknown> | undefined;
+          if (nl && typeof nl === 'object') {
+            this.host.log.info(`region plan ${planId}: link pass NO_LINK ${String(nl.lot)}.${String(nl.port)}: ${String(nl.message).slice(0, 200)}`);
+            return { noLink: nl };
+          }
+          throw new ClientError(`link pass: ${r.message}`);
+        }
+        const file = path.join(sub, 'ir.json');
+        if (!fs.existsSync(file)) throw new ClientError('link pass: the kit did not write ir.json');
+        const bytes = fs.readFileSync(file);
+        if (bytes.length > this.cfg.irMaxBytes) throw new ClientError(`link pass: the IR is ${bytes.length} bytes (at most ${this.cfg.irMaxBytes})`);
+        const sha = sha256(bytes);
+        if (typeof r.out.irSha === 'string' && r.out.irSha !== sha) throw new ClientError(`link pass: the kit reported irSha ${String(r.out.irSha)} but ir.json hashes to ${sha}`);
+        const json = bytes.toString('utf8');
+        // the IR's side blobs are the plan's own (the replay guard holds every member but the links)
+        const blobFiles = new Map<string, string>();
+        for (const b of sideBlobs(JSON.parse(json) as Record<string, unknown>)) {
+          const f = path.join(dir, 'blobs', `${b.sha}.bin`);
+          if (fs.existsSync(f)) blobFiles.set(b.sha, f);
+        }
+        this.cacheIr(sha, json, planId, blobFiles);
+        this.host.log.info(`region plan ${planId}: link pass in ${r.ms} ms: IR v2 ${sha.slice(0, 12)}, ${Array.isArray(r.out.links) ? r.out.links.length : 0} link(s)`);
+        return { irSha: sha, ir: json, links: Array.isArray(r.out.links) ? r.out.links : [], ms: r.ms };
       }),
     );
   }
