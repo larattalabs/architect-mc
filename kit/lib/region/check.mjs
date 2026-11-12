@@ -184,6 +184,8 @@ export function walkNodes(ir, meta, stageIdx = null) {
   const partStage = new Map(ir.parts.map((p) => [p.id, si(p.stage)]));
   const nodes = [];
   for (const l of ir.lots ?? []) {
+    // ((7b SL) a site lot has no ground entrance: its ports are the link pass's endpoints (LP), not M2 nodes)
+    if (l.site) continue;
     // a lot's entrance is a node from the lot's own stage on (its building stands from then)
     const ps = Math.max(partStage.get(l.part) ?? 0, si(l.stage));
     if (stageIdx !== null && ps > stageIdx) continue;
@@ -466,6 +468,23 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
         if (hit.length) findings.push(finding('M1', rd.part ?? null, rd.stage, hit.length, hit, `${hit.length} cell(s) of road ${rd.id} fall inside a lot box (no road crosses a lot)`));
       }
     }
+    // ((7b SL) a site lot's box is reserved: no region op writes inside it but its host part's; only a plan with a site lot runs this)
+    const siteLots = (ir.lots ?? []).filter((l) => l.site);
+    if (siteLots.length) {
+      const byLot = new Map();
+      vw.eachWritten((x, y, z, idx, f, pi) => {
+        const pid = ir.parts[pi]?.id ?? null;
+        for (const l of siteLots) {
+          const b = l.box;
+          if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ || (l.host && pid === l.host)) continue;
+          const k = `${l.id}\u0000${pid}`;
+          const e = byLot.get(k) ?? { l, pid, cells: [] };
+          e.cells.push([x, y, z]);
+          byLot.set(k, e);
+        }
+      });
+      for (const { l, pid, cells } of byLot.values()) findings.push(finding('M1', pid, partStage.get(pid) ?? null, cells.length, cells.slice(0, 64), `${cells.length} cell(s) of part ${pid} fall inside site lot ${l.id}'s reserved box (only its host${l.host ? ` ${l.host}` : ''} writes there)`));
+    }
   });
 
   // ---- M2 reachability (player mover)
@@ -729,6 +748,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // ---- M9 lot pads
   if (want.has('M9')) time('M9', () => {
     for (const l of ir.lots ?? []) {
+      if (l.site) continue; // (7b SL) a site lot writes no pad: its design bears on the site (the kit checker's fit rules)
       const b = l.box;
       const bad = [];
       for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {

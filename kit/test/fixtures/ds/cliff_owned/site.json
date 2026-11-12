@@ -1,0 +1,62 @@
+{
+ "id": "cliff_owned",
+ "fit": "attach_to_cliff",
+ "purpose": "cliff_face's shape elsewhere, with a player's pillar standing in front of the face: a cliff house built there writes into it (site_keep)",
+ "from": "synthesized by kit/tools/ds-fixtures.mjs (7b DS)",
+ "lot": {
+  "minX": -852,
+  "minY": 120,
+  "minZ": -2489,
+  "maxX": -837,
+  "maxY": 141,
+  "maxZ": -2478
+ },
+ "maxSize": [
+  16,
+  22,
+  12
+ ],
+ "counts": {
+  "AIR": 22506,
+  "PLAYER": 22,
+  "ROCK": 9728,
+  "SOIL": 1792
+ },
+ "spec": {
+  "volumeSha": "c747a6c7bbd4cdcecdd3b881a788fdc2abf1650dd7170b1ce0b97e417cd7a7fc",
+  "volumeBlobId": "local:c747a6c7bbd4cdcecdd3b881a788fdc2abf1650dd7170b1ce0b97e417cd7a7fc",
+  "volume": {
+   "minX": -860,
+   "minY": 112,
+   "minZ": -2497,
+   "maxX": -829,
+   "maxY": 149,
+   "maxZ": -2470
+  },
+  "fit": "attach_to_cliff",
+  "frame": {
+   "origin": [
+    -852,
+    120,
+    -2489
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [
+   {
+    "name": "walk_top",
+    "kind": "architect:walk",
+    "at": [
+     7,
+     19,
+     1
+    ],
+    "facing": "north",
+    "width": 2,
+    "height": 2
+   }
+  ],
+  "lotId": "lot_cliff_owned"
+ }
+}

@@ -9,7 +9,7 @@ import net.minecraft.world.level.block.Rotation;
  * (7b) The frame of a site-bound design: how its own coordinates (the kit's: +x east, +y up, +z south, front south, the template's
  * minimum corner at 0,0,0) map to the world. Exactly the {@code (origin, rotation)} a {@link PlaceRequest} of that template takes:
  * {@code origin} is the rotated template box's minimum corner, {@code rotation} the vanilla template rotation. Not called
- * {@code Frame}: {@link Reason#FRAME_CHANGED} is a different thing. Since NEXT.
+ * {@code Frame}: {@link Reason#FRAME_CHANGED} is a different thing. Since 1.53.0.
  *
  * @param origin the rotated template box's minimum corner in the world (as {@link PlaceRequest#origin()})
  * @param rotation the template's rotation (as {@link PlaceRequest#rotation()}); null reads as {@link Rotation#NONE}

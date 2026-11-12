@@ -3,8 +3,8 @@
  "variant": "natural",
  "version": 0,
  "note": "tile shas of grove_demo planned by the kit over its forest site's own survey (the f3-natural check's), 1 worker = 4 workers shuffled; inputs in goldens/grove_demo/",
- "irSha": "c909ff5c62899102f3de22eea1b2367608f77486397f2a0acf6651c49ac28b95",
- "kitVersion": "0.54.0",
+ "irSha": "f867349a1b126a84f73ea007c1bcdd1f14e19c5f63bc438b686e1f32db8d3662",
+ "kitVersion": "0.55.0",
  "cells": 18383,
  "tiles": {
   "forms|terrain|53,-22": "3964ccdd5f6b106e0b3555b39068cf008bbcad6aab675349e1303a8e864d9b8c",

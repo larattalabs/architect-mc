@@ -11,6 +11,8 @@ import { CONTRACT_EXCERPT } from './claude/contract.js';
 import { KIT, refreshKit, rendererIn } from './designs.js';
 import type { BibleInfo, BiblePin, Design } from './protocol.js';
 import type { ScratchMassing } from './sidecar.js';
+import type { SiteSpec } from './protocol.js';
+import { writeSiteScratch, type SiteInputs } from './sitedesign.js';
 
 export function scratchDirFor(dataDir: string, designId: string): string {
   return path.join(dataDir, 'designs', designId);
@@ -44,6 +46,8 @@ export interface PrepareInput {
   massing?: ScratchMassing | undefined;
   /** (Style unification U5a) a materials-only request's Style hints (guidance in the brief) */
   styleHints?: StyleHints | undefined;
+  /** (7b DS) a site-aware design: its kept volume and spec; site/ is written and the brief gets its Site section (renders: off for P4's arm) */
+  site?: { volumeFile: string; spec: SiteSpec; renders: boolean } | undefined;
 }
 
 /** Create / refresh the scratch dir: fresh kit, BRIEF.md, CONTRACT.md and the remix source. */
@@ -55,6 +59,9 @@ export function prepareScratch(input: PrepareInput): string {
   const scratch = fs.realpathSync(scratchDirFor(input.dataDir, d.id));
   refreshKit(input.kitDir, scratch, [bp]);
   fs.writeFileSync(path.join(scratch, 'CONTRACT.md'), CONTRACT_EXCERPT);
+  // (7b DS) the site: site/ (the volume, the spec, site.json, the empty-site renders) and the brief's Site section
+  let site: SiteInputs | undefined;
+  if (input.site) site = writeSiteScratch(scratch, input.site.volumeFile, input.site.spec, { renders: input.site.renders });
   let remix: string | undefined;
   const r = d.request.remix;
   if (r) {
@@ -122,6 +129,7 @@ export function prepareScratch(input: PrepareInput): string {
       playbook: fs.existsSync(path.join(scratch, KIT, 'PLAYBOOK.md')),
       ...(neighbours.length ? { neighbours } : {}),
       ...(massing ? { massing } : {}),
+      ...(site ? { site: { section: site.section, size: site.size } } : {}),
     }),
   );
   return scratch;

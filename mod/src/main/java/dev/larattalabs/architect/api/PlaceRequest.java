@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * @param consent (PT) the player builds this request may write over (docs/CONTRACT.md "Phase 6c slice PT" §6): only builds it names,
  *        each with an actor who placed at least 10% of it or holds permission level 2. Null (every older constructor) = none: a
  *        build in the way refuses {@link Reason#PLAYER_BUILD} (or is skipped), and {@code force} never overrides a build.
- * @param site (since NEXT, 7b) the site of a site-bound design ({@link SiteSpec}): TerrainFit KEEP and the port approach per its fit; the
+ * @param site (since 1.53.0, 7b) the site of a site-bound design ({@link SiteSpec}): TerrainFit KEEP and the port approach per its fit; the
  *        origin and rotation are the site's frame. Null (every older constructor) = a plain placement. Placed by slice PL; until then
  *        a request with a site is refused ({@link UnsupportedOperationException}), never placed as a plain one.
  */
@@ -94,7 +94,7 @@ public record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origi
 	/**
 	 * (7b) The same request placing a site-bound design over {@code s} (null = a plain placement, as before): TerrainFit and the
 	 * approach follow the site's fit, in its frame. Placed by slice PL; until then a request with a site is refused, never placed as a
-	 * plain one. Since NEXT.
+	 * plain one. Since 1.53.0.
 	 */
 	public PlaceRequest withSite(@Nullable SiteSpec s) {
 		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, overlap, pathStyle, consent, s);

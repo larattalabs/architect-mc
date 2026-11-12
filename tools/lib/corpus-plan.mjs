@@ -19,7 +19,7 @@
 // share each other's work within a run; the base's entries stay valid for every run on that base.
 //
 // Switches: GATE_PLAN_CACHE=0 (the exact old path: no store, no pool), GATE_PLAN_WORKERS=<n> (1: no pool, the loop plans serially),
-// GATE_PLAN_CACHE_DIR (the store; default <main checkout>/artifacts/plan-cache/calls-v1, untracked; deleting it only costs a re-run).
+// GATE_PLAN_CACHE_DIR (the store; default <main checkout>/artifacts/plan-cache/calls-v2, untracked; deleting it only costs a re-run).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,9 +27,12 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { firstAsk } from './asks-first.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SCHEMA = 'calls-v1';
+// (speed audit A) v2: a record carries the plan's artifact (`art`), which coa-unit's signatures compare. A v1 entry has none and is
+// never read (a different directory), so no signature can compare an absent artifact with an absent artifact.
+const SCHEMA = 'calls-v2';
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -82,6 +85,11 @@ const entryFile = (dir, trees, key) => path.join(storeDir(dir), trees, key.slice
 function readEntry(file) {
   try { return JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')); } catch { return null; }
 }
+/** A plan record: an entry that carries its artifact (any other is a miss, re-planned and rewritten). */
+function readRecord(file) {
+  const e = readEntry(file);
+  return e && typeof e.art === 'string' ? e : null;
+}
 function writeEntry(file, v) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -116,7 +124,10 @@ export const stats = { hit: 0, miss: 0, waited: 0, uncached: 0, deriveMiss: 0 };
 
 function record(r) {
   const first = r.first == null ? { kind: 'none' } : r.first === r ? { kind: 'self' } : { kind: 'obj', check: JSON.stringify(r.first.check), irJson: r.first.res?.irJson ?? null };
-  return { check: JSON.stringify(r.check), irJson: r.res?.irJson ?? null, first, asked: r.asked ?? null };
+  // (speed audit A) the artifact as the call returned it (null: the plan made none, a legitimate answer); a result with no `artifact`
+  // property at all is a different thing and is never stored
+  if (!('artifact' in r)) throw new Error('corpus-plan: the plan result carries no artifact property');
+  return { check: JSON.stringify(r.check), irJson: r.res?.irJson ?? null, first, asked: r.asked ?? null, art: JSON.stringify(r.artifact ?? null) };
 }
 function lite(rec, derived) {
   const r = { check: JSON.parse(rec.check), res: { irJson: rec.irJson }, cached: true };
@@ -124,6 +135,7 @@ function lite(rec, derived) {
   else if (rec.first.kind === 'obj') r.first = { check: JSON.parse(rec.first.check), res: { irJson: rec.first.irJson } };
   else r.first = undefined;
   if (rec.asked) r.asked = rec.asked;
+  r.artifact = JSON.parse(rec.art); // (speed audit A) a record without `art` is not an entry (readRecord)
   r.derived = derived ?? {};
   return r;
 }
@@ -162,7 +174,7 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
     const dKey = (n) => sha256(JSON.stringify([key, n, headTrees, dSrc]));
     const dFile = (n) => entryFile(dir, trees, dKey(n));
     for (let waited = false; ;) {
-      const rec = readEntry(file);
+      const rec = readRecord(file);
       const ds = rec ? Object.fromEntries(derive.map((n) => [n, readEntry(dFile(n))])) : null;
       if (rec && derive.every((n) => ds[n])) {
         if (waited) stats.waited++; else stats.hit++;
@@ -171,7 +183,7 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
       if (tryLock(file)) {
         try {
           // (re-read under the lock: another process may have just written it)
-          const again = readEntry(file);
+          const again = readRecord(file);
           const dsAgain = again ? Object.fromEntries(derive.map((n) => [n, readEntry(dFile(n))])) : null;
           if (again && derive.every((n) => dsAgain[n])) { stats.hit++; return lite(again, Object.fromEntries(derive.map((n) => [n, dsAgain[n].v]))); }
           if (again) stats.deriveMiss++; else stats.miss++;
@@ -188,7 +200,8 @@ export async function helpers(dir, { derive = [], headRoot = null } = {}) {
       await sleep(250);
     }
   };
-  const w = { ...h, checkPlanVolumes: wrap('checkPlanVolumes'), checkPlanLocal: wrap('checkPlanLocal'), cachedHelpers: true };
+  // (a tree whose plan-helpers has no checkPlanVolumes keeps having none: hy-unit's "h.checkPlanVolumes ?" test)
+  const w = { ...h, ...(h.checkPlanVolumes ? { checkPlanVolumes: wrap('checkPlanVolumes') } : {}), checkPlanLocal: wrap('checkPlanLocal'), cachedHelpers: true };
   memo.set(mk, w);
   return w;
 }
@@ -227,6 +240,8 @@ export function poolSize(jobs) {
  */
 export async function prewarm(root, jobs, { log = () => {} } = {}) {
   if (!cacheOn() || !jobs.length) return { jobs: jobs.length, workers: 0, ms: 0, failed: 0 };
+  // (a dirty kit/ or scenarios/ is never stored: the pool's answers would be thrown away and the loop would plan them all again)
+  if (!treesOf(root)) return { jobs: jobs.length, workers: 0, ms: 0, failed: 0, skipped: 'dirty tree: nothing is stored' };
   const workers = poolSize(jobs.length);
   if (workers <= 1) return { jobs: jobs.length, workers: 1, ms: 0, failed: 0, skipped: 'one worker: the loop plans serially' };
   const { Worker } = await import('node:worker_threads');
@@ -302,4 +317,82 @@ export async function prewarmAsks(root, dirs, shape, { fxAnchors = false, log } 
     for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) jobs.push({ id: `ask:${shape}:${f}`, module: mod, export: 'jobAsk', args: [dir, shape, f, fxAnchors] });
   }
   return prewarm(root, jobs, { log });
+}
+
+/**
+ * (speed audit A) A prewarm job for an ask's FIRST recording (asks-first.mjs: what the earlier slices' asks tables read), planned by
+ * checkPlanVolumes exactly as gate6crs-kit asksTables calls it: creative, or `survival: true`.
+ */
+export async function jobFirstAsk(dir, f, survival = false, shape = 'checkPlanVolumes', planDir = dir, side = null, headRoot = null) {
+  // (side: 'head' | 'base' plans with that side's corpusHelpers config, so the entry is complete for the drivers that read extras)
+  const H = await helpers(dir, side ? { derive: [...(side === 'head' ? HEAD_DERIVE : BASE_DERIVE)], headRoot } : {});
+  const asks = path.join(planDir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  const plan = JSON.parse(fs.readFileSync(firstAsk(asks, f), 'utf8')).answer.plan;
+  const s = H.asksSurvey();
+  // ('checkPlanLocal': voc-a's identity loop, the plain check with no volume option and no survival)
+  if (shape === 'checkPlanLocal') await H.checkPlanLocal(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim) });
+  else await H.checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim), volume: {}, ...(survival ? { survival: true } : {}) });
+}
+/** The jobs of jobFirstAsk for each of `modes` (false: creative, true: survival) over every ask under `dir`. */
+/** (`planDir`: the checkout whose recordings are planned, when not `dir`'s own: voc-a plans this head's on the base too) */
+export function firstAskJobs(root, dir, modes, shape = 'checkPlanVolumes', planDir = dir, side = null) {
+  const mod = pathToFileURL(path.join(HERE, 'corpus-plan.mjs')).href;
+  const a = path.join(planDir, 'kit', 'test', 'fixtures', 'plan', 'asks');
+  const jobs = [];
+  for (const f of fs.readdirSync(a).filter((x) => x.endsWith('.json') && x !== 'SOURCE.json').sort()) for (const m of modes) jobs.push({ id: `ask1:${dir === planDir ? '' : 'on:'}${shape}:${m ? 'surv' : 'cre'}:${f}`, module: mod, export: 'jobFirstAsk', args: [dir, f, m, shape, planDir, side, root] });
+  return jobs;
+}
+
+/**
+ * (speed audit A) hy-unit's call (gate6chy-core unchanged()): fixture `fx`'s options with plan `p`, over h's helpers: the two-plan flow
+ * when the fixture has a frozen volume of its own and h has it, else one plan. The loop and the prewarm jobs make this one call.
+ */
+export async function hyRun(h, fx, p, name) {
+  const on = fx.on ?? (name.startsWith('asks/') ? 'asks' : undefined);
+  const s = fx.terrain ? h.flatSurvey(fx.terrain) : on === 'asks' ? h.asksSurvey() : on === 'flat' ? h.flatSurvey() : on ? h.goldenSurvey(on) : h.flatSurvey();
+  const o = { survey: s.bytes, claim: s.claim, anchors: { ...h.stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}) };
+  return fx.volume !== undefined && h.checkPlanVolumes ? h.checkPlanVolumes(p, { ...o, volume: fx.volume }) : h.checkPlanLocal(p, o);
+}
+/** A prewarm job for hyRun: `name`'s fixture options and plan from headRoot, the plan from dir's own copy when `base`. */
+export async function jobHyFixture(dir, headRoot, name, base, derive = []) {
+  const rd = (d) => JSON.parse(fs.readFileSync(path.join(d, 'kit', 'test', 'fixtures', 'plan', name), 'utf8'));
+  const fx = rd(headRoot);
+  const src = base ? rd(dir) : fx;
+  await hyRun(await helpers(dir, { derive, headRoot }), fx, src.plan ?? src.answer?.plan, name);
+}
+
+/**
+ * (speed audit A) voc-unit's census call (gate6cvoc-b census): the plan with the fixture's options through the two-plan flow, over h's
+ * helpers (with the 'vocCensus' derive for the checker's findings). `fx`: the fixture ({on: 'asks'} for an ask).
+ */
+export async function vocCensusCall(h, fx, plan) {
+  const sv = fx.terrain ? h.flatSurvey(fx.terrain) : fx.on === 'asks' ? h.asksSurvey() : fx.on === 'flat' ? h.flatSurvey() : fx.on ? h.goldenSurvey(fx.on) : h.flatSurvey();
+  const opts = { survey: sv.bytes, claim: sv.claim, anchors: { ...h.stewardAnchors(sv.claim), ...(fx.anchors ?? {}) }, protected: fx.protected ?? [], builds: fx.builds ?? [], volume: fx.volume ?? {} };
+  return { c: await h.checkPlanVolumes(plan, opts), opts };
+}
+/** The census' helpers config: one derive, this head's kit. */
+export const censusHelpers = (root) => helpers(root, { derive: ['vocCensus'], headRoot: root });
+/** A prewarm job for the census: `d`/`f` a plan fixture, or d === 'asks' an ask's first recording. */
+export async function jobVocCensus(root, d, f) {
+  const H = await censusHelpers(root);
+  const base = path.join(root, 'kit', 'test', 'fixtures', 'plan');
+  if (d === 'asks') await vocCensusCall(H, { on: 'asks' }, JSON.parse(fs.readFileSync(firstAsk(path.join(base, 'asks'), f), 'utf8')).answer.plan);
+  else { const fx = JSON.parse(fs.readFileSync(path.join(base, d, f), 'utf8')); await vocCensusCall(H, fx, fx.plan); }
+}
+
+/**
+ * (speed audit A) The kit tests that plan Steward's 59 asks with the plain check (plan-p0-asks item 11, plan-k1a item 7: they read the
+ * parts of each check and nothing else) take the answers from the store, planned on the pool first. -> async (plan) => the check result
+ * (a lite one from the store). Only inside a gate run (GATE_RUNNER) and with the store on; otherwise exactly the plain call, as before.
+ * `first`: Steward's first recordings (asks-first.mjs), else the asks as they stand. The determinism tests never use this.
+ */
+export async function asksPlanner(root, { first = false } = {}) {
+  const plain = await import(pathToFileURL(path.join(root, 'kit', 'test', 'plan-helpers.mjs')).href);
+  const s = plain.asksSurvey();
+  const optsOf = (H) => ({ survey: s.bytes, claim: s.claim, anchors: H.stewardAnchors(s.claim) });
+  if (!cacheOn() || process.env.GATE_RUNNER !== '1') return (plan) => plain.checkPlanLocal(plan, optsOf(plain));
+  if (first) await prewarm(root, firstAskJobs(root, root, [false], 'checkPlanLocal'));
+  else await prewarmAsks(root, [root], 'checkPlanLocal');
+  const H = await helpers(root);
+  return (plan) => H.checkPlanLocal(plan, optsOf(H));
 }

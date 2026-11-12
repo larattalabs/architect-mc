@@ -29,6 +29,8 @@ import { truncate } from './util/text.js';
 import { writeFileAtomic } from './util/fsx.js';
 import type { EntryVersions } from './versions.js';
 import { normalizeKitImports } from './variants.js';
+import { entrySite, SITE_ARVX, SITE_CHECK_ARGS, SITE_DIR, SITE_JSON, siteEntryFiles } from './sitedesign.js';
+import { siteResult, unfitRule } from './sitevariants.js';
 import type { BibleIndex } from './bibles.js';
 import type { Logger } from './context.js';
 
@@ -214,7 +216,7 @@ export class Follows {
       if (!der || der.source !== source) continue;
       const kind = (['reskin', 'copy', 'site'].includes(der.kind ?? '') ? der.kind : 'variant') as Follower['kind'];
       const sv = typeof der.sourceVersion === 'number' ? der.sourceVersion : 1;
-      out.push({ entryId: id, kind, sourceVersion: sv, headVersion: this.host.versions.head(id), sourceHead, behind: kind === 'copy' && sourceHead > 0 && sv < sourceHead });
+      out.push({ entryId: id, kind, sourceVersion: sv, headVersion: this.host.versions.head(id), sourceHead, behind: (kind === 'copy' || kind === 'site') && sourceHead > 0 && sv < sourceHead });
     }
     return out;
   }
@@ -244,7 +246,7 @@ export class Follows {
     const target = this.resolveTarget(source, toSourceVersion, false);
     // a gone source: every COPY of it is frozen (each answers source_gone)
     const members = this.followers(source)
-      .filter((f) => f.kind === 'copy' && (!exists || f.sourceVersion < target))
+      .filter((f) => (f.kind === 'copy' || f.kind === 'site') && (!exists || f.sourceVersion < target))
       .map((f) => ({ entryId: f.entryId, head: f.headVersion, state: 'pending' as const, ...(lots?.[f.entryId]?.length ? { lots: lots[f.entryId]! } : {}) }));
     return this.create('all', source, target, members, opKey, body);
   }
@@ -259,9 +261,10 @@ export class Follows {
     return op;
   }
 
-  /** Only a COPY follows (SITE in 7b; a variant or a re-skin was made to differ; a copy of an adopted entry is its own ask). */
+  /** Only a COPY or (7b DS) a SITE entry follows (a variant or a re-skin was made to differ; a copy of an adopted entry is its own ask). */
   private refuseKind(entryId: string, der: Derivation | undefined): void {
-    if (der?.kind === 'site') throw new RefusedError('NOT_ALLOWED', 'until_7b', `${entryId} is a site-adapted entry: it follows its source in 7b, with its fit parameters`);
+    // (7b DS) a SITE entry follows its source: the source's new version re-run on the entry's own site
+    if (der?.kind === 'site' && typeof der.source === 'string') return;
     if (der?.kind !== 'copy' || typeof der.source !== 'string') throw new RefusedError('NOT_ALLOWED', 'not_copy', `${entryId} is ${der ? `a ${der.kind ?? 'variant'} (made to differ from its source)` : 'not derived from another entry'}: only a copy follows its source`);
     const src = this.host.versions.top(der.source);
     if (src?.adopted === true) throw new RefusedError('NOT_ALLOWED', 'adopted', `${entryId} is a copy of an adopted entry (${der.source}): following it is not supported yet`);
@@ -371,6 +374,7 @@ export class Follows {
     if (m.state === 'installing' && m.installing && top && head === m.installing && der?.sourceVersion === op.target) {
       return { ...base, followed: true, newVersion: head, refused: null, alreadyFollowed: false, message: `followed ${op.source} v${op.target}: v${head} (resumed after a restart)` };
     }
+    if (top && der?.kind === 'site') return this.runSiteMember(op, m, top, der, base, refuse);
     if (!top || !der || der.kind !== 'copy') return refuse('head_moved', `${m.entryId} is gone or no longer a copy`);
     if ((der.sourceVersion ?? 1) >= op.target && op.target > 0) return { ...base, followed: false, newVersion: head, refused: null, alreadyFollowed: true, message: `${m.entryId} v${head} already derives from ${op.source} v${der.sourceVersion}` };
     if (head !== m.head) return refuse('head_moved', `${m.entryId} moved from v${m.head} to v${head} meanwhile`);
@@ -456,6 +460,76 @@ export class Follows {
       this.fault?.('installed', m.entryId);
       this.host.entryVersioned(m.entryId, version, m.head, 'follow');
       return { ...base, followed: true, newVersion: version, refused: null, alreadyFollowed: false, message: `followed ${op.source} v${op.target}: v${version} (${s.x}x${s.y}x${s.z}; levers ${(bj.levers ?? []).join(', ')}, ${Math.round((bj.share ?? 0) * 1000) / 10}% changed)` };
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * (7b DS) A SITE entry follows its source: the source's .mjs at the frozen version, under the entry's id, with the new version's
+   * values and the entry's palette, re-run on the entry's own site (its site/ files) and checked on the composite (a failed site rule
+   * refuses `check`, naming the rule). No variation bar (a site variant is the source on another site, not a variation of it) and no
+   * frame check (a site-bound design places in its site's frame only). Installed as the entry's head + 1, its site files and binding kept.
+   */
+  private async runSiteMember(op: FollowOp, m: FollowMember, top: Record<string, unknown>, der: Derivation, base: Pick<FollowResult, 'entryId' | 'fromVersion' | 'sourceVersion'>, refuse: (r: FollowRefusal, message: string) => FollowResult): Promise<FollowResult> {
+    const v = this.host.versions;
+    const head = v.head(m.entryId);
+    if ((der.sourceVersion ?? 1) >= op.target && op.target > 0) return { ...base, followed: false, newVersion: head, refused: null, alreadyFollowed: true, message: `${m.entryId} v${head} already derives from ${op.source} v${der.sourceVersion}` };
+    if (head !== m.head) return refuse('head_moved', `${m.entryId} moved from v${m.head} to v${head} meanwhile`);
+    const srcDir = op.target > 0 && v.top(op.source) ? v.versionDir(op.source, op.target) : undefined;
+    const srcFile = srcDir ? path.join(srcDir, `${op.source}.mjs`) : undefined;
+    if (!srcFile || !fs.existsSync(srcFile)) return refuse('source_gone', `${op.source}${op.target > 0 ? ` v${op.target}` : ''} is gone`);
+    const own = entrySite(v.dir(m.entryId));
+    if (!own) return refuse('check', `${m.entryId} is a site entry without its site's files (site/site.arvx, site/site.json)`);
+    const srcJson = readObj(path.join(srcDir!, `${op.source}.blueprint.json`)) ?? {};
+    const values = srcJson.values && typeof srcJson.values === 'object' ? (srcJson.values as Record<string, unknown>) : {};
+    const palette = top.palette;
+    const scratch = path.join(this.host.config.dataDir, 'follow-scratch', `${op.id}-${m.entryId}`);
+    fs.rmSync(scratch, { recursive: true, force: true });
+    fs.mkdirSync(scratch, { recursive: true });
+    try {
+      const work = fs.realpathSync(scratch);
+      refreshKit(this.host.config.kitDir, work);
+      const bp = m.entryId;
+      const design = path.join(work, KIT, 'designs', `${bp}.mjs`);
+      fs.writeFileSync(design, withDesignId(normalizeKitImports(fs.readFileSync(srcFile, 'utf8')), bp));
+      const ownBible = [path.join(srcDir!, 'bible'), path.join(v.dir(op.source), 'bible')].find((d) => fs.existsSync(d));
+      if (ownBible) fs.cpSync(ownBible, path.join(work, 'bible'), { recursive: true });
+      fs.mkdirSync(path.join(work, SITE_DIR), { recursive: true });
+      fs.copyFileSync(own.arvx, path.join(work, SITE_ARVX));
+      fs.copyFileSync(own.json, path.join(work, SITE_JSON));
+      const type = typeof top.type === 'string' ? top.type : undefined;
+      const profile = Array.isArray(top.profile) ? (top.profile as string[]) : undefined;
+      const extra = [...(palette !== undefined ? ['--palette', typeof palette === 'string' ? palette : JSON.stringify(palette)] : []), ...(Object.keys(values).length ? ['--values', JSON.stringify(values)] : []), ...SITE_CHECK_ARGS];
+      const res: CheckResult = await checkDesign(this.host.config.kitDir, work, bp, { ...(type ? { type } : {}), ...(profile ? { profile } : {}) }, KIT_TIMEOUT_MS, extra);
+      const rule = unfitRule(res);
+      if (rule || !res.ok) return refuse('check', `the follower does not fit its site${rule ? ` (${rule})` : ''}: ${siteResult(res.output)?.findings?.[0]?.message ?? res.problem ?? 'the check failed'}`);
+      const rp = await renderPreviews(work, res.nbt!, KIT_TIMEOUT_MS);
+      this.fault?.('built', m.entryId);
+      const now = v.top(m.entryId);
+      const nowDer = derivationOf(now);
+      const nowHead = now ? v.head(m.entryId) : 0;
+      if (now && (nowDer?.sourceVersion ?? 1) >= op.target) return { ...base, followed: false, newVersion: nowHead, refused: null, alreadyFollowed: true, message: `${m.entryId} v${nowHead} already derives from ${op.source} v${nowDer?.sourceVersion}` };
+      if (!now || nowHead !== m.head) return refuse('head_moved', `${m.entryId} moved from v${m.head} to v${nowHead} meanwhile`);
+      const json: Record<string, unknown> = { ...(res.sidecar as Record<string, unknown>) };
+      for (const k of CARRY) if (now[k] !== undefined) json[k] = now[k];
+      json.variantOfVersion = op.target;
+      json.derivation = { ...nowDer, sourceVersion: op.target, recipe: { ...(nowDer?.recipe ?? {}), values } };
+      const parts = res.nbt!.replace(/\.nbt$/, '.parts.nbt');
+      m.state = 'installing';
+      m.installing = m.head + 1;
+      this.save(op);
+      this.fault?.('marked', m.entryId);
+      const bibleFiles = fs.existsSync(path.join(work, 'bible')) ? ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(work, 'bible', f), to: path.join('bible', f) })) : [];
+      const version = v.install(
+        m.entryId,
+        { nbt: res.nbt!, json, ...(fs.existsSync(parts) ? { parts } : {}), source: design, previews: rp.files, files: [...bibleFiles, ...siteEntryFiles(work)] },
+        { by: 'follow', parent: m.head, summary: `follow: ${op.source} v${op.target} (on its site)` },
+      );
+      this.fault?.('installed', m.entryId);
+      this.host.entryVersioned(m.entryId, version, m.head, 'follow');
+      const s = res.sidecar!.size!;
+      return { ...base, followed: true, newVersion: version, refused: null, alreadyFollowed: false, message: `followed ${op.source} v${op.target} on its site: v${version} (${s.x}x${s.y}x${s.z})` };
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
     }

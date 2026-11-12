@@ -376,8 +376,13 @@ public final class SiteFit {
 		if (!sha.matches("[0-9a-f]{64}")) {
 			return null;
 		}
-		Path f = server.getWorldPath(LevelResource.ROOT).resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
-		if (!Files.isRegularFile(f)) {
+		Path world = server.getWorldPath(LevelResource.ROOT);
+		Path f = volumeFile(world, sha);
+		if (f == null) {
+			List<dev.larattalabs.architect.region.RegionsImpl.Live> live = dev.larattalabs.architect.region.RegionsImpl.all();
+			f = fromRegionBlobs(world, sha, live.stream().map(l -> l.rec().id).toList(), live.stream().map(l -> l.ir().blobs()).toList());
+		}
+		if (f == null) {
 			return null;
 		}
 		try {
@@ -393,6 +398,67 @@ public final class SiteFit {
 		}
 		VOLUMES.put(sha, d);
 		return d;
+	}
+
+	/**
+	 * (7b SL) The frozen volume's file: this world's {@code architect/volumes/<sha>.bin} first (where {@code Survey.volume} and a region
+	 * plan's two-plan flow freeze it), else a region's own copy {@code architect-regions/<id>/volumes/<sha>.bin} (a region site lot's
+	 * volume, {@code RegionBlobs.installVolumes}); null when neither exists (the checks then fail closed, {@code SITE_DRIFTED}).
+	 */
+	public static @Nullable Path volumeFile(Path world, String sha) {
+		Path f = world.resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
+		if (Files.isRegularFile(f)) {
+			return f;
+		}
+		Path root = dev.larattalabs.architect.region.RegionStore.root(world);
+		if (!Files.isDirectory(root)) {
+			return null;
+		}
+		try (var st = Files.list(root)) {
+			for (Path d : st.sorted().toList()) {
+				Path g = d.resolve("volumes").resolve(sha + ".bin");
+				if (Files.isRegularFile(g)) {
+					return g;
+				}
+			}
+		} catch (IOException e) {
+			return null;
+		}
+		return null;
+	}
+
+	/**
+	 * (7b SL) A region site lot's volume kept only as its IR's side blob (the kit crops a site lot's lot + 8 out of a volume the plan
+	 * read and records it as a blob of kind {@code volume}, e.g. {@code site_<lotId>}): each region's blob copy
+	 * ({@code architect-regions/<id>/blobs/<blob sha>.bin}, gzip ARVX) of kind {@code volume} is read, gunzipped and checked against
+	 * {@code sha} (the ARVX sha of the uncompressed bytes); the first that matches is frozen into this world's
+	 * {@code architect/volumes/<sha>.bin} ({@link VolumeSurvey#freeze}: written once, read back), whose path is answered, so PL's read
+	 * path works from then. Null when none matches. {@code regions.get(i)} is a region id, {@code blobs.get(i)} its IR's blobs.
+	 */
+	public static @Nullable Path fromRegionBlobs(Path world, String sha, List<String> regions, List<List<dev.larattalabs.architect.region.Ir.BlobRef>> blobs) {
+		for (int i = 0; i < regions.size(); i++) {
+			for (dev.larattalabs.architect.region.Ir.BlobRef b : blobs.get(i)) {
+				if (!"volume".equals(b.kind()) || !b.sha().matches("[0-9a-f]{64}")) {
+					continue;
+				}
+				Path f = dev.larattalabs.architect.region.RegionBlobs.file(world, regions.get(i), b.sha());
+				if (!Files.isRegularFile(f)) {
+					continue;
+				}
+				try {
+					byte[] gz = Files.readAllBytes(f);
+					if (!Arvx.sha256(Arvx.gunzip(gz)).equals(sha)) {
+						continue;
+					}
+					Path to = world.resolve(VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
+					VolumeSurvey.freeze(to, gz, sha);
+					return to;
+				} catch (IOException | RuntimeException e) {
+					Architect.LOGGER.warn("Region {} volume blob {} can't be read: {}", regions.get(i), b.sha(), e.toString());
+				}
+			}
+		}
+		return null;
 	}
 
 	/** The frozen classes of a decoded volume; MISSING outside its box. */
@@ -475,6 +541,45 @@ public final class SiteFit {
 			}
 		}
 		return out;
+	}
+
+	/** (7b ST) The start of the "opens onto a drop" warning (SETTLEMENTS §7.8): one per port that meets no standable cell. */
+	public static final String DROP = "the entrance opens onto a drop";
+
+	/**
+	 * (7b ST) The "opens onto a drop" warnings of a standalone site (no lot id; a site under a lot is the link pass's): for each port
+	 * facing a side, the world cell just outside its first cell (the frame's rotation applied to the port's cell and facing) must be
+	 * standable: that cell and the one above open (fillable, not a fluid), the one below solid ({@link #siteSolid}). A port facing up or
+	 * down has no such cell. Warnings only, never a refusal. {@code sx, sz}: the template's size in the design frame. Pure.
+	 */
+	public static List<String> drops(SiteSpec s, int sx, int sz, TerrainFit.World w) {
+		List<String> out = new ArrayList<>();
+		if (s == null || s.lotId() != null || s.fit() == FitMode.ON_PAD) {
+			return out;
+		}
+		int turns = s.frame().rotation().ordinal();
+		BlockPos o = s.frame().origin();
+		for (dev.larattalabs.architect.api.SitePort p : s.ports()) {
+			if (!p.facing().getAxis().isHorizontal()) {
+				continue;
+			}
+			int[] r = dev.larattalabs.architect.placement.BlueprintTransform.rotateBlock(p.atDesign().getX(), p.atDesign().getZ(), sx, sz, turns);
+			net.minecraft.core.Direction f = p.facing();
+			for (int i = 0; i < turns; i++) {
+				f = f.getClockWise();
+			}
+			int x = o.getX() + r[0] + f.getStepX();
+			int y = o.getY() + p.atDesign().getY();
+			int z = o.getZ() + r[1] + f.getStepZ();
+			if (!open(w.flags(x, y, z)) || !open(w.flags(x, y + 1, z)) || !siteSolid(w.flags(x, y - 1, z))) {
+				out.add(DROP + ": port " + p.name() + " faces " + f.getName() + " at " + x + "," + y + "," + z + " with no ground to stand on (build the way in)");
+			}
+		}
+		return out;
+	}
+
+	private static boolean open(int flags) {
+		return (flags & TerrainFit.FILLABLE) != 0 && (flags & (TerrainFit.WATER | TerrainFit.LAVA)) == 0;
 	}
 
 	/** The verdict notes of a site placement's approach. */

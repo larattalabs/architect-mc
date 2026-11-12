@@ -171,7 +171,12 @@ export interface BriefOptions {
   neighbours?: Array<{ file: string; entryId: string; name?: string; type: string }>;
   /** (4c) the massing copied into massing/: the one a detail pass is bound to, or the version a redirect starts from */
   massing?: { record: Massing; role: 'detail' | 'redirect'; files: string[]; maxSize?: DesignRequest['maxSize'] };
+  /** (7b DS) a site-aware design: the "Site" section (kit tools/site-brief.mjs) and the lot's size (the template's, exactly) */
+  site?: { section: string[]; size: { x: number; y: number; z: number } };
 }
+
+/** (7b DS) The build and render args of a site-bound design (relative to the scratch dir). */
+export const SITE_BUILD_ARGS = ' --site site/site.arvx --lot site/site.json';
 
 /** (4c) the context section (a group's site, purpose, neighbour lots), for every brief. */
 export function contextSection(ctx: Context | undefined): string[] {
@@ -419,7 +424,9 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
   if (req.massing) return massingBrief(req, bp, opts);
   const bound = opts.massing?.role === 'detail' ? opts.massing : undefined;
   // (4c) a detail pass's hard cap: min(massing size + 2, request.maxSize)
-  const m = bound?.maxSize ?? req.maxSize;
+  // (7b DS) a site-bound design is exactly the lot box
+  const site = req.site ? opts.site : undefined;
+  const m = site?.size ?? bound?.maxSize ?? req.maxSize;
   // (since NEXT, 7a K3) a wall lot's detail: the box caps the conformance size too
   const massingArg = bound ? ` --massing massing/${bound.record.id}.blueprint.json${isWallLotRequest(req) ? ` --massing-cap ${m.x},${m.y},${m.z}` : ''}` : '';
   const ex = examplesFor(req.type, opts.examples);
@@ -438,8 +445,10 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     `- style: "${req.style}". Interpret it with vanilla blocks; let it shape the materials, the roof form, the windows and the details.`,
     ...(req.palette !== undefined ? paletteLines(req.palette) : [req.materials ? `- materials: "${req.materials}". Make the design's default palette match them (a preset, or \`palette({ wood, stone, roof, accent })\` with the closest vanilla names).` : '- materials: your choice, fitting the type and the style: pick the default palette (a preset or `palette({ wood, stone, roof, accent })`).']),
     `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'}`,
-    `- maximum size (the whole template, including roof overhangs, porch, chimney and garden): x <= ${m.x}, y <= ${m.y}, z <= ${m.z}. Use the space well, but never exceed it.`,
-    plot,
+    site
+      ? `- size: exactly the lot, x ${m.x}, y ${m.y}, z ${m.z} (\`size: site.size\`): the Site section below says what is in it.`
+      : `- maximum size (the whole template, including roof overhangs, porch, chimney and garden): x <= ${m.x}, y <= ${m.y}, z <= ${m.z}. Use the space well, but never exceed it.`,
+    site ? '' : plot,
     ...reservedLines(req.reserved),
     req.name ? `- name: "${req.name}" (the sidecar's \`name\`)` : '- name: pick a short, fitting display name for the sidecar\'s `name`',
     '- description: one sentence for the sidecar\'s `description`; tags: a few words (style, size) for `tags`.',
@@ -448,6 +457,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     req.group ? `- this is item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece, the most elaborate and recognisable' : ': it supports the landmarks, simpler and smaller'}) of a design group, wave ${req.wave ?? 1}.` : '',
     '',
     ...contextSection(req.context),
+    ...(site ? site.section : []),
     ...(bound ? massingBindingSection(bound.record, m, isWallLotRequest(req)) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
     // (Style unification U5a) a materials-only request: the Style's hints as guidance (the hybrid default; never set mode)
@@ -464,7 +474,9 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '## The contract (CONTRACT.md has the full text: read it)',
     '',
     '- Coordinates are relative to the template origin (minimum corner); +x east, +y up, +z south. `front` is the side the entrance faces: keep `south` unless the notes say otherwise. Every door is written closed.',
-    '- `groundY` is the feet row; row groundY-1 is the floor. Set `foundationBlock` (a vanilla block the mod fills below the floor down to the ground) and `approach` to match the style.',
+    site && req.site!.fit !== 'on_pad'
+      ? '- `groundY` is your main floor\'s feet row (it has no placement meaning in a site: nothing is filled or cleared). No `foundationBlock` fill and no ground `approach`: the site\'s ports are the way in (the Site section).'
+      : '- `groundY` is the feet row; row groundY-1 is the floor. Set `foundationBlock` (a vanilla block the mod fills below the floor down to the ground) and `approach` to match the style.',
     '- Required anchors: `entrance` (just outside the front door, as the examples do with `bp.spot(\'entrance\', ...)`) and `spawn` (a little further out in front), both on a standable cell; add a `cam_overview` camera for a nice first view.',
     `- Declare \`interior\` (the inside box)${req.type === 'custom' ? '' : `: it is required for a ${req.type} (a checker error without it)`}. Every standable interior cell must be lit by vanilla light sources (lanterns, torches, candles, glowstone, sea lanterns, froglights, shroomlights, lit campfires): mind the corners, each floor and the stairwells. Every floor must be reachable from the entrance by walking (stairs, ladders; max step 1). The roof must close the interior (no sky straight down into it except declared skylights / courtyards). Nothing may float.`,
     '- An outside door on the front face, reachable from the entrance. Wooden doors are fine; an iron door needs a button on both sides.',
@@ -474,14 +486,17 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '',
     `- Only \`kit/designs/${bp}.mjs\` is yours: you cannot write anywhere else, and the sidecar re-checks your design with a fresh copy of the kit, so changes to the kit would not count anyway.`,
     '- Read `kit/README.md` first: it has the kit API and a complete small parametric design.',
+    site ? '- **Read `site/site.json` and the empty-site renders first**, and plan in the site\'s frame (the Site section). The PLAYBOOK\'s "Building into a site" section is for you.' : '',
     opts.playbook ? '- Read `kit/PLAYBOOK.md` too: how to plan, build in layers, look at it (slices with `node kit/tools/slices.mjs`, then the renders) and critique your own design before you finish. It adds to this brief and never overrides it.' : '',
     '- **Make it parametric** (players make variants of it later without you, so this matters): `export const params = {...}` with 2 to 4 meaningful params (e.g. floors, width or depth, porch on/off, roof style; `int` with min/max/default, `bool`, `enum` with options), each with a `label`. The default export takes `{ palette, ...values }` with the defaults in the signature. The defaults must fit the maximum size above; the bounds may go past it. Every combination must build and pass the checker: try the corners (`--values \'{"floors":3,"porch":false}\'`) before you finish.',
     '- **Materials come from the palette**: the default export gets `palette` (default: the preset or `palette({ wood, stone, roof, accent })` that fits the request). Read every wood and stone from it (`p.planks`, `p.log`, `p.strippedLog`, `p.stairs`, `p.slab`, `p.fence`, `p.door`, `p.trapdoor`, `p.accentLog`, `p.accentStairs`, `p.stone`, `p.stoneStairs`, `p.stoneSlab`, `p.stoneWall`, `p.stoneTrim`, `p.roofStairs`, `p.roofSlab`, `p.roofBlock`, `p.plaster`), never a hard-coded wood or stone id, so a palette swap re-skins the whole building; the checker warns otherwise. Decor (chests, barrels, beds, lanterns, glass, carpets, iron) is free. Check a second preset too (`--palette cherry`, `--palette fortress`).',
     "- **Name the parts**: wrap every major mass in `bp.part('<name>', () => { ... })` (e.g. `main`, `roof`, `porch`, `tower`, `wing_east`, `chimney`, `furnishings`): at least 2 parts, and at most 20% of the cells outside any part (the checker warns otherwise). Names are stable ids (later edits diff by them): lower_snake_case, unique. Declare consts outside the part closures if several parts use them. Design coordinates are stable too: to grow toward -x, -y or -z, raise `origin`; never move existing coordinates.",
     `- Build it semantically with the kit helpers in \`kit/lib/kit.mjs\` (walls with openings, floors, doors, roofs with overhang, stairs and ladders, windows, chimney, porch, lighting, \`anchor()\`), not as a dump of raw coordinates. ${ex.length ? `Start by reading the closest example${ex.length > 1 ? 's' : ''}: ${ex.map((e) => `\`kit/designs/${e}.mjs\``).join(', ')} (each is parametric and palette-driven: see how its \`params\` shape the code).` : 'Look at the examples in `kit/designs/`.'}`,
-    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}${massingArg}${req.reserved ? ` --reserved '${JSON.stringify(req.reserved)}'` : ''}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
+    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${site ? SITE_BUILD_ARGS : ''}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}${massingArg}${req.reserved ? ` --reserved '${JSON.stringify(req.reserved)}'` : ''}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
     opts.renderer
-      ? `- Look at it: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` writes ${bp}.preview-iso.png / -top.png / -front.png into previews/; Read the PNGs and fix what looks wrong (holes, floating blocks, a missing roof, the entrance not on the front, dark rooms, a flat or boxy look). Iterate until it looks like a ${req.type} a player would be proud of.`
+      ? site
+        ? `- Look at it IN its site: \`node kit/render.mjs kit/out/${bp}.nbt --out previews --site site/site.arvx --lot site/site.json --views iso,top,composite,section\` writes ${bp}.preview-iso.png / -top.png / -composite.png / -section.png into previews/; judge the composite and the section (the design in its land), not the floating template, and slices with the land shown (\`node kit/tools/slices.mjs kit/out/${bp}.nbt --site site/site.arvx --lot site/site.json --y <rows>\`). Fix what looks wrong (blocks in the air, a door that opens onto a drop, rock where a room should be, the port unmet). Iterate until it looks like it grew out of the land.`
+        : `- Look at it: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` writes ${bp}.preview-iso.png / -top.png / -front.png into previews/; Read the PNGs and fix what looks wrong (holes, floating blocks, a missing roof, the entrance not on the front, dark rooms, a flat or boxy look). Iterate until it looks like a ${req.type} a player would be proud of.`
       : '- There is no renderer in this kit: check the layout by reasoning about the code and the checker output.',
     '- Report progress with the `design_status` tool (one short line, e.g. "roof done, checking").',
     '- No network, no installs, no git, no subagents; nobody can answer questions or permission prompts during the job. Decide yourself and mention assumptions in your summary.',

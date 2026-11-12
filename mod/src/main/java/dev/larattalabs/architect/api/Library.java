@@ -172,7 +172,7 @@ public interface Library {
 	 * Every entry whose head derives from {@code sourceEntryId} ({@code derivation.source}), any kind, sorted by id (docs/CONTRACT.md
 	 * "Phase 6d slice FS" §2). {@link Follower#behind} is true for a COPY whose {@code sourceVersion} is below the source's head:
 	 * {@link Designs#follow} or {@link Designs#followAll} re-makes it from that version by its recipe. VARIANT and RESKIN entries are
-	 * listed (they never follow, so never behind), as are SITE entries (7b). Read from the loaded library (no helper needed); empty for
+	 * listed (they never follow, so never behind); a SITE entry is behind as a COPY is (since 1.53.0, 7b DS: it follows on its own site). Read from the loaded library (no helper needed); empty for
 	 * an unknown source or one nothing derives from. Any thread. Feature {@code "followSource"} (the helper's {@code entry.follow}).
 	 * Since 1.51.0.
 	 */
@@ -304,8 +304,8 @@ public interface Library {
 	 * @param source the entry it was made from
 	 * @param sourceVersion the source's version it was made from
 	 * @param kind VARIANT (a player variant), RESKIN (a re-skin to another bible), COPY (a copy in a design group) or SITE
-	 *     (reserved for 7b's site-adapted designs). Only COPY and SITE follow their source (6d; since 1.51.0 a COPY follows through
-	 *     {@link Designs#follow}, a SITE waits for 7b)
+	 *     (7b's site variants, {@link Designs#siteVariant}; recipe {@code {lotId, volumeSha, fit, frame, values}}). Only COPY and SITE
+	 *     follow their source (6d; since 1.51.0 a COPY follows through {@link Designs#follow}, since 1.53.0 a SITE too)
 	 * @param recipe what rebuilds it: a copy's {@code {shift, param, values, mirror, roles, bible, group, itemKey, ...}}; a
 	 *     variant's palette and values; a re-skin's bible
 	 */

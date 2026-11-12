@@ -44,14 +44,15 @@ class WireFSTest {
 	}
 
 	@Test
-	void followersListTheFamilyAndOnlyCopiesAreBehind() {
+	void followersListTheFamilyAndOnlyCopiesAndSitesAreBehind() {
 		Library l = lib(List.of(entry("arch", 2, null), entry("c1", 1, der("arch", 1, Derivation.Kind.COPY)), entry("c2", 2, der("arch", 2,
 			Derivation.Kind.COPY)), entry("c3", 1, der("arch", 1, Derivation.Kind.COPY)), entry("v1", 1, der("arch", 1, Derivation.Kind.VARIANT)),
 			entry("r1", 1, der("arch", 1, Derivation.Kind.RESKIN)), entry("s1", 1, der("arch", 1, Derivation.Kind.SITE)), entry("other", 1, der("x", 1,
 				Derivation.Kind.COPY))));
 		List<Follower> f = WireFS.followers(l, "arch");
 		assertEquals(List.of("c1", "c2", "c3", "r1", "s1", "v1"), f.stream().map(Follower::entryId).toList());
-		assertEquals(List.of("c1", "c3"), f.stream().filter(Follower::behind).map(Follower::entryId).toList());
+		// (7b DS) a SITE entry follows its source too: behind as a COPY is
+		assertEquals(List.of("c1", "c3", "s1"), f.stream().filter(Follower::behind).map(Follower::entryId).toList());
 		Follower c1 = f.get(0);
 		assertEquals(new Follower("c1", Derivation.Kind.COPY, 1, 1, 2, true), c1);
 		assertEquals(List.of(), WireFS.followers(l, "nothing"));

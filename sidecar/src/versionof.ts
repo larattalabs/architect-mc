@@ -57,16 +57,18 @@ export function writeVersionContext(sc: VersionOfHost, d: Design, scratch: strin
   }
   if (v.siteNow) fs.writeFileSync(path.join(dir, 'site-now.nbt'), fs.readFileSync(sc.blobs.file(v.siteNow)));
   if (v.siteEdits) fs.writeFileSync(path.join(dir, 'site-edits.json'), fs.readFileSync(sc.blobs.file(v.siteEdits)));
-  return versionOfSection(v.entryId, v.baseVersion ?? 1, !!v.siteNow, !!v.siteEdits);
+  return versionOfSection(v.entryId, v.baseVersion ?? 1, !!v.siteNow, !!v.siteEdits, !!d.request.site);
 }
 
 /** The brief's section: apply the change, keep `front` and the parts, leave the player's edited cells alone. */
-export function versionOfSection(entryId: string, base: number, siteNow: boolean, siteEdits: boolean): string[] {
+export function versionOfSection(entryId: string, base: number, siteNow: boolean, siteEdits: boolean, site = false): string[] {
   return [
     `## A new version of \`${entryId}\` (v${base} + 1)`,
     '',
     `- Your design file starts as a copy of v${base}'s source (\`context/base/${entryId}.mjs\`, with its blueprint JSON and renders next to it). Apply the change the notes ask for, and only that.`,
-    "- Keep `front`, the entrance feet row (`groundY` minus the origin's y) and the part names: the sidecar refuses a result whose frame changed, and players' placed copies are updated by part. Growing is fine, up to the maximum size.",
+    site
+      ? '- (7b) This version is built into the site of the Site section below: the template is exactly its lot box and the site\'s frame places it (no frame check). Keep the part names, the materials and the character of v' + base + '; fit the form to the land as the Site section says (a design that is not site-aware yet gains `fit` and `site` here).'
+      : "- Keep `front`, the entrance feet row (`groundY` minus the origin's y) and the part names: the sidecar refuses a result whose frame changed, and players' placed copies are updated by part. Growing is fine, up to the maximum size.",
     siteNow ? '- `context/site-now.nbt` is the placed site as it stands now (its restore box), with what the player changed.' : '',
     siteEdits ? "- `context/site-edits.json` lists the cells the player edited (by part and block, plus counts). Leave those cells alone unless the request is about them: the mod keeps them when it applies your version." : '',
     '',
@@ -77,6 +79,9 @@ export function versionOfSection(entryId: string, base: number, siteNow: boolean
 export function frameProblem(sc: VersionOfHost, d: Design, res: CheckResult): string | undefined {
   const v = d.request.versionOf;
   if (!v || !res.ok || !res.nbt) return undefined;
+  // (7b DS) a version built into a site places only in its site's frame (Sites.fitToSite); placed site-bound sites never take a
+  // delta (PL refuses applyDelta for them), so the frame guard that protects lot deltas does not apply
+  if (d.request.site) return undefined;
   const dir = sc.versions.versionDir(v.entryId, v.baseVersion ?? 1) ?? sc.versions.dir(v.entryId);
   const baseNbt = path.join(dir, `${v.entryId}.nbt`);
   const r = spawnSync(process.execPath, [path.join(sc.config.kitDir, 'tools', 'diff.mjs'), baseNbt, res.nbt, '--json'], { encoding: 'utf8', timeout: 120_000 });

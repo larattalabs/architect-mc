@@ -51,7 +51,7 @@ export type VersionRefusal = 'bundled' | 'no_source' | 'massing';
 
 export class VersionRefused extends RefusedError {
   constructor(
-    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved' | 'adopted_polish',
+    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved' | 'adopted_polish' | 'site_bound',
     message: string,
   ) {
     // (0b) a typed refusal: VERSION_REFUSED with the sub-code (no_entry / no_version stay plain errors on the wire too)
@@ -106,6 +106,8 @@ function readObj(file: string): Record<string, unknown> | undefined {
   }
 }
 
+/** (7b DS) the site binding's ext key (api.SiteBinding.EXT_KEY) */
+const SITE_BINDING_EXT = 'architect_mc:site';
 const jsonText = (o: unknown) => `${JSON.stringify(o, null, 2)}\n`;
 
 export class EntryVersions {
@@ -289,11 +291,27 @@ export class EntryVersions {
     }
     const layout = (f: string) => f === `${entryId}.parts.nbt` || f === `${entryId}.mjs` || f === 'critique.json' || (f.startsWith(`${entryId}.preview-`) && f.endsWith('.png'));
     for (const f of fs.readdirSync(dir)) if (layout(f) && !names.has(f)) fs.rmSync(path.join(dir, f), { force: true });
+    // (7b DS) a site-bound version's site (site/site.arvx, site/site.json) is the top's: a later variant, version or follow re-runs on it
+    const vsite = path.join(vd, 'site');
+    if (fs.existsSync(vsite) && fs.statSync(vsite).isDirectory()) {
+      fs.mkdirSync(path.join(dir, 'site'), { recursive: true });
+      for (const f of fs.readdirSync(vsite)) if (fs.statSync(path.join(vsite, f)).isFile()) writeFileAtomic(path.join(dir, 'site', f), fs.readFileSync(path.join(vsite, f)));
+    } else fs.rmSync(path.join(dir, 'site'), { recursive: true, force: true });
     this.fault?.('top-files-done');
     const j = readObj(path.join(vd, `${entryId}.blueprint.json`)) ?? {};
     const cur = this.top(entryId) ?? {};
+    // (7b DS) the version's site binding (ext["architect_mc:site"]) wins over the top's: the rest of ext is the user's, kept
+    const vext = j.ext && typeof j.ext === 'object' ? (j.ext as Record<string, unknown>) : undefined;
+    const binding = vext?.[SITE_BINDING_EXT];
     for (const k of [...USER_FIELDS, 'ext']) delete j[k];
     for (const k of [...USER_FIELDS, 'ext']) if (cur[k] !== undefined) j[k] = cur[k];
+    if (binding !== undefined) j.ext = { ...((j.ext as Record<string, unknown> | undefined) ?? {}), [SITE_BINDING_EXT]: binding };
+    else if (j.ext && typeof j.ext === 'object' && SITE_BINDING_EXT in (j.ext as object)) {
+      // a version with no site (a revert past an adaptation): the binding goes with it
+      const { [SITE_BINDING_EXT]: _gone, ...rest } = j.ext as Record<string, unknown>;
+      if (Object.keys(rest).length) j.ext = rest;
+      else delete j.ext;
+    }
     this.fault?.('top-json');
     writeFileAtomic(this.jsonFile(entryId), jsonText(j));
   }

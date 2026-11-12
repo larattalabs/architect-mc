@@ -1,7 +1,7 @@
 # Designing a structure: the playbook
 
 > From Steward's minecraft-structure-design skill (steward-mc `docs/skills/minecraft-structure-design/SKILL.md`), owned by
-> Architect from phase 5a; changes are reported to Steward. Architect's copy drops §7 (region programs, until A5b), runs
+> Architect from phase 5a; changes are reported to Steward. Architect's copy drops Steward's §7 (region programs, until A5b; its own §7 is "Building into a site", 7b DS), runs
 > slices from `kit/tools/`, and has the attach checks in the kit checker. A plain document the design agent reads (the
 > sidecar copies it into the scratch dir and names it in BRIEF.md), never loaded through `settingSources`.
 
@@ -114,3 +114,37 @@ problem left that a player would notice, not when you run out of ideas.
   a table with chairs, a chimney with campfire smoke, a path to the entrance.
 - Make style choices **from the request and the style bible** if one is present (`bibles/<id>.json`): its palette roles, roof language
   and motifs win over your defaults, so a set of buildings reads as one place.
+
+## 7. Building into a site (7b: when BRIEF.md has a "Site" section)
+
+A site-aware design is built INTO one piece of land: `site/site.arvx` (the frozen volume) and `site/site.json` (the lot, its
+fit, its ports and the site analysis). The template is exactly the lot box; the mod keeps every cell you do not write.
+
+- **Plan in the site's frame.** Your default export gets `site` (a `Site`, `kit/lib/site.mjs`): `new Blueprint({ ..., fit, site,
+  size: site.size })`. Read the geometry from it, never from constants: `site.face(normal)`, `site.surface(x, z)`,
+  `site.ceiling(x, z)`, `site.trunk()`, `site.ledges()`, `site.hangPoints()`, `site.port(name)`, `site.cellsOf(cls)`,
+  `site.at(x, y, z)`. A program that reads the land re-runs on another site of the same kind (a site variant, $0).
+- **Look at the land first:** the empty-site renders (`site/site-*.png`), then slices with the land shown
+  (`node kit/tools/slices.mjs <nbt> --site site/site.arvx --lot site/site.json --y A-B`: `#` rock, `:` soil, `~` water,
+  `T` log, `%` leaves). Sketch where each mass goes against the face, the rim, the trunk or the overhang before writing code.
+- **Keep what you don't need to change.** Write only what the building needs; never write a keep-critical cell (`bp.keep(...)`,
+  the trunk's logs, the hang points) or a player's block, not even as air. Carve only the rooms you need (`carveRoom`).
+- **Bear on rock.** Every block must connect, through your blocks, to the site's solid: beams end inside the rock (`beamInto`),
+  braces bear on the face (`bracket`), a span's ends sit on both rims, chains hang from the solid above (`hangChain`), a deck
+  rests on the trunk (`ringDeck`). The checker's `fit:<mode>` names the cells that float.
+- **Put the door where the port is.** Each site port wants a design port of the same name, kind and facing within 2 of its hint,
+  facing out and standable (`bp.port(name, kind, ...site.portHint(name), facing)`); every floor is reached from a port. The approach
+  is a port, not a ground strip: no foundation fill, no approach path.
+- **Look at the composite, not the floating template.** Render with `--site site/site.arvx --lot site/site.json --views
+  iso,top,composite,section`: judge the composite (the design in its land) and the section (the lot cut through its middle).
+- **Mind the site rules** in the check: `site_keep` (an error), `fit:<mode>`, `ports_met`, `floors_reachable`, `site_breach`
+  (never open into water, lava or a dark cave), `cut_volume` (carve at most the interior plus its walls; never cut the trunk),
+  `cantilever` and `neck` (how far the mass reaches past what bears it).
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `site_keep: the template writes ... cell(s) the site keeps` | a wall, floor or air box over a log, hang point or player block | `bp.keep(...)` those cells, or move the mass |
+| `fit:attach_to_cliff` / `fit:span` floating cells | a part that only touches air | run a beam into the rock, add a bracket, extend the end onto the rim |
+| `ports_met: no design port ...` | the door moved, renamed or turned | put the port at `site.portHint(name)` with the site's facing |
+| `site_breach: ... beside the site's water` | a carved room next to water | keep a wall of rock (1 cell) between the room and the water |
+| the build exits 2: "declares fit ..., but the site is ..." | the design's `fit` is not the site's | set `fit` to the site's fit (BRIEF.md) |

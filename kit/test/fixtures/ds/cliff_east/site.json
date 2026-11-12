@@ -1,0 +1,61 @@
+{
+ "id": "cliff_east",
+ "fit": "attach_to_cliff",
+ "purpose": "a second rock face (normal south), 4 taller than cliff_face, its lot 18x24x12: a site variant of a cliff house installs here",
+ "from": "synthesized by kit/tools/ds-fixtures.mjs (7b DS)",
+ "lot": {
+  "minX": -892,
+  "minY": 118,
+  "minZ": -2489,
+  "maxX": -875,
+  "maxY": 141,
+  "maxZ": -2478
+ },
+ "maxSize": [
+  18,
+  24,
+  12
+ ],
+ "counts": {
+  "AIR": 24480,
+  "ROCK": 11696,
+  "SOIL": 1904
+ },
+ "spec": {
+  "volumeSha": "fef868f366f5b5ebb55216b573f75418fa123c8372d5271e08dd8dea59bf3054",
+  "volumeBlobId": "local:fef868f366f5b5ebb55216b573f75418fa123c8372d5271e08dd8dea59bf3054",
+  "volume": {
+   "minX": -900,
+   "minY": 110,
+   "minZ": -2497,
+   "maxX": -867,
+   "maxY": 149,
+   "maxZ": -2470
+  },
+  "fit": "attach_to_cliff",
+  "frame": {
+   "origin": [
+    -892,
+    118,
+    -2489
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [
+   {
+    "name": "walk_top",
+    "kind": "architect:walk",
+    "at": [
+     9,
+     23,
+     1
+    ],
+    "facing": "north",
+    "width": 2,
+    "height": 2
+   }
+  ],
+  "lotId": "lot_cliff_east"
+ }
+}

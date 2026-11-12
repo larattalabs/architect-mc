@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.52.0";
+	String VERSION = "1.53.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -209,13 +209,15 @@ public interface ArchitectApi {
 	 * {@code reach.gate}. The realise re-check refuses {@code ARTIFACT_STALE} naming the gate when it no longer stands as planned; removing
 	 * the wall region first sets the district's {@code dangling} (with {@code gateRemoved}). {@link BesideJoin} is unchanged (its kind is the
 	 * junction the join ends at). No new record, method or reason.
-	 * (7b, since NEXT) Names reserved for phase 7b, advertised only by the slice that makes each work (never by the foundation, whose
+	 * (7b, since 1.53.0) Names reserved for phase 7b, advertised only by the slice that makes each work (never by the foundation, whose
 	 * members are stubs: {@link Sites#fitToSite}, {@link Survey#site}, {@link Designs#siteVariant} and {@link Regions#affordances} throw,
 	 * and a request carrying a {@link SiteSpec} is refused, until then): {@code "siteDesign"} (site-aware design and placement:
 	 * {@link DesignRequest#site()}, {@link PlaceRequest#site()}, fitToSite, siteVariant), {@code "siteSurvey"} (Survey.site and a
 	 * plan's affordances), {@code "siteLots"} ({@link LotSpec#site()}) and {@code "linkPass"} (links to design ports at realise).
-	 * (7b AF, since NEXT) {@code "siteSurvey"} is advertised when the helper has the site analysis (its {@code site.analyse}):
-	 * {@link Survey#site} and {@link Regions#affordances} work.
+	 * (7b AF, since 1.53.0) {@code "siteSurvey"} is advertised when the helper has the site analysis (its {@code site.analyse}):
+	 * {@link Survey#site} and {@link Regions#affordances} work. (7b DS, since 1.53.0) {@code "siteDesign"} is advertised when the helper
+	 * designs into sites (its {@code site.design}): {@link DesignRequest#site()} on a design, a group item or an estimate,
+	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
 	 */
 	Set<String> features();
 }

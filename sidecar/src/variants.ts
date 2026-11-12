@@ -24,6 +24,7 @@ import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 import { SIM_COPY_FAIL, SIM_COPY_SIZE } from './copies.js';
 import { isWallLotRequest } from './massings.js';
+import { entrySite, SITE_ARVX, SITE_CHECK_ARGS, SITE_JSON, siteEntryFiles } from './sitedesign.js';
 
 /** (0b) the kit's recipe (kit/lib/variation.mjs chooseRecipe) */
 export interface CopyRecipe {
@@ -219,6 +220,28 @@ export function findVariantSource(libraryDir: string, kitDir: string, from: stri
     return { from, sourceFile: kitSrc, ...(entry ? { entry } : {}), bundled: true };
   }
   throw new VariantRefused(`no library entry "${from}"`);
+}
+
+/**
+ * (7b DS) The site a variant of a site-bound source re-runs on, copied into the scratch's site/: the entry's own site/ files, or a
+ * bundled site example's 7bF fixture (its `exampleSite`, in the kit's test fixtures). Undefined for a source with no fit.
+ */
+export function variantSite(src: VariantSource, scratch: string): { arvx: string; json: string } | undefined {
+  const text = fs.readFileSync(src.sourceFile, 'utf8');
+  if (!/export\s+const\s+fit\s*=/.test(text)) return undefined;
+  let from: { arvx: string; json: string } | undefined;
+  const own = entrySite(path.dirname(src.sourceFile));
+  if (own) from = { arvx: own.arvx, json: own.json };
+  else {
+    const ex = /export\s+const\s+exampleSite\s*=\s*['"]([a-z0-9_]+)['"]/.exec(text)?.[1];
+    const dir = ex ? path.join(scratch, KIT, 'test', 'fixtures', 'site', ex) : undefined;
+    if (dir && fs.existsSync(path.join(dir, 'volume.bin'))) from = { arvx: path.join(dir, 'volume.bin'), json: path.join(dir, 'site.json') };
+  }
+  if (!from) throw new VariantRefused(`${src.from} is built into a site, and its site's files are missing: no variants`);
+  fs.mkdirSync(path.join(scratch, 'site'), { recursive: true });
+  fs.copyFileSync(from.arvx, path.join(scratch, SITE_ARVX));
+  fs.copyFileSync(from.json, path.join(scratch, SITE_JSON));
+  return { arvx: path.join(scratch, SITE_ARVX), json: path.join(scratch, SITE_JSON) };
 }
 
 /**
@@ -493,6 +516,10 @@ export class VariantRunner {
         ...bibleArgs,
         ...(Object.keys(values).length ? ['--values', JSON.stringify(values)] : []),
       ];
+      // (7b DS) a site-bound entry's variant re-runs its program on the entry's own site (SV's note): its site/ files, or a bundled
+      // example's fixture; the check runs on the composite and the variant keeps the site's files and binding
+      const site = variantSite(src, scratch);
+      if (site) extra.push(...SITE_CHECK_ARGS);
       const res = await checkDesign(cfg.kitDir, scratch, bp, { type, ...(Array.isArray(entry.profile) ? { profile: entry.profile as string[] } : {}) }, KIT_TIMEOUT_MS, extra);
       if (!res.ok) throw new Error(`the variant did not pass: ${res.problem ?? 'the check failed'}`);
       this.step(v.id, 'rendering previews');
@@ -508,7 +535,7 @@ export class VariantRunner {
         sidecar: sc,
         source: design,
         previews: r.files,
-        files: bibleFiles,
+        files: [...bibleFiles, ...(site ? siteEntryFiles(scratch) : [])],
         meta: {
           name,
           description: typeof entry.description === 'string' ? entry.description : undefined,

@@ -213,6 +213,10 @@ final class DesignsImpl implements Designs {
 			if (r.reserved() != null) {
 				o.add("reserved", r.reserved().wire());
 			}
+			// (7b DS) a site-aware design (only when set; the volume's blob id is resolved by SiteDesigns.resolve before the send)
+			if (r.site() != null) {
+				o.add("site", r.site().wire());
+			}
 			// (Style unification U1) materials only (only when set; refusalPalette first holds a helper without palette.roles)
 			if (r.palette() != null) {
 				o.add("palette", r.palette().deepCopy());
@@ -340,7 +344,6 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> request(DesignRequest r) {
-		SiteGuards.design(r); // 7b: until slice DS
 		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.design("", r)); // 6c 0c §5: FIELD_LIMIT, nothing sent
 		if (limit != null) {
 			return limit;
@@ -355,14 +358,27 @@ final class DesignsImpl implements Designs {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
 		}
 		String why = refusal(r, b);
+		if (why == null && r.site() != null) {
+			why = unavailable4b(b, SiteDesigns.FEATURE, "site-aware designs");
+		}
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why)));
 		}
-		if (r.opKey() != null) {
+		if (r.opKey() != null || r.site() != null) {
 			// (7a K3) a keyed request goes through ask(): an op_key_conflict ack fails it ArchitectRefused OP_KEY_CONFLICT
+			// (7b DS) a site-aware one too, after its volume's blob is resolved on the server thread
 			JsonObject m = msg("design.request");
 			m.add("request", wire(r, b.protocol()));
-			return ask("design.opKeys", "design operation keys", m).thenApply(res -> keyedAck(r, res));
+			CompletableFuture<JsonObject> resolved = new CompletableFuture<>();
+			ApiImpl.runOnServer(() -> SiteDesigns.resolve(m).whenComplete((x, e) -> {
+				if (e != null) {
+					resolved.completeExceptionally(e);
+				} else {
+					resolved.complete(x);
+				}
+			}));
+			return ApiImpl.onServerFuture(resolved.thenCompose(x -> ask(r.opKey() != null ? "design.opKeys" : SiteDesigns.FEATURE, r.opKey() != null
+				? "design operation keys" : "site-aware designs", x)).thenApply(res -> keyedAck(r, res)));
 		}
 		CompletableFuture<String> out = b.designRequest(wire(r, b.protocol())).thenApply(id -> {
 			synchronized (this) {
@@ -455,7 +471,23 @@ final class DesignsImpl implements Designs {
 		return wired.thenCompose(req -> {
 			JsonObject m = msg("design.request");
 			m.add("request", req);
-			return ask("versionOf", "versionOf designs", m);
+			// (7b DS) a paid adaptation (versionOf + site): the site's volume blob first
+			if (r.site() == null) {
+				return ask("versionOf", "versionOf designs", m);
+			}
+			String whyS = unavailable4b(ApiImpl.bridge(), SiteDesigns.FEATURE, "site-aware designs");
+			if (whyS != null) {
+				return CompletableFuture.failedFuture(new IllegalStateException(whyS));
+			}
+			CompletableFuture<JsonObject> resolved = new CompletableFuture<>();
+			ApiImpl.runOnServer(() -> SiteDesigns.resolve(m).whenComplete((x, e) -> {
+				if (e != null) {
+					resolved.completeExceptionally(e);
+				} else {
+					resolved.complete(x);
+				}
+			}));
+			return resolved.thenCompose(x -> ask("versionOf", "versionOf designs", x));
 		}).thenApply(res -> {
 			String id = res.has("designId") ? res.get("designId").getAsString() : null;
 			if (id == null) {
@@ -857,7 +889,6 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> requestGroup(GroupRequest r) {
-		SiteGuards.group(r); // 7b: until slice DS
 		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.group(r)); // 6c 0c §5: FIELD_LIMIT, no group created
 		if (limit != null) {
 			return limit;
@@ -879,7 +910,26 @@ final class DesignsImpl implements Designs {
 		}
 		// (6c 0b) copies or SMALL effort need a 0b helper
 		String feature0b = Wire0b.feature(r);
-		return ask(feature0b != null ? feature0b : "design.groups", "design groups", m).thenApply(res -> {
+		// (7b DS) site-aware items: the helper builds into sites, and each site's volume blob is resolved first
+		CompletableFuture<JsonObject> sent;
+		if (SiteDesigns.hasSite(m)) {
+			String whyS = unavailable4b(ApiImpl.bridge(), SiteDesigns.FEATURE, "site-aware designs");
+			if (whyS != null) {
+				return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(whyS)));
+			}
+			CompletableFuture<JsonObject> resolved = new CompletableFuture<>();
+			ApiImpl.runOnServer(() -> SiteDesigns.resolve(m).whenComplete((x, e) -> {
+				if (e != null) {
+					resolved.completeExceptionally(e);
+				} else {
+					resolved.complete(x);
+				}
+			}));
+			sent = ApiImpl.onServerFuture(resolved.thenCompose(x -> ask(feature0b != null ? feature0b : "design.groups", "design groups", x)));
+		} else {
+			sent = ask(feature0b != null ? feature0b : "design.groups", "design groups", m);
+		}
+		return sent.thenApply(res -> {
 			String id = res.has("groupId") ? res.get("groupId").getAsString() : null;
 			if (id == null) {
 				throw new IllegalStateException("the helper sent no groupId");
@@ -1057,7 +1107,6 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Estimate> estimate(GroupRequest r) {
-		SiteGuards.group(r); // 7b: until slice DS
 		JsonObject m = msg("design.estimate");
 		try {
 			m.add("group", Wire4b.group(r));
@@ -1073,9 +1122,12 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Estimate> estimate(DesignRequest r) {
-		SiteGuards.design(r); // 7b: until slice DS
 		ClientBridge cb = ApiImpl.bridge();
 		String why5a = cb == null ? null : refusal5a(r.critique(), cb.protocol(), cb.sidecarFeatures());
+		// (7b DS) a site-aware design's estimate (kind site, or adapted with versionOf) needs a helper that knows sites
+		if (why5a == null && r.site() != null && cb != null) {
+			why5a = unavailable4b(cb, SiteDesigns.FEATURE, "site-aware estimates");
+		}
 		if (why5a != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why5a)));
 		}
@@ -1083,6 +1135,13 @@ final class DesignsImpl implements Designs {
 		JsonObject w = wire(r, 2);
 		m.add("request", w);
 		return ask("estimates", "estimates", m).thenApply(Wire4b::estimate);
+	}
+
+	/** (7b DS) {@link SiteDesigns#siteVariant}: the owner is the opKey's scope (none: the player's). */
+	@Override
+	public CompletableFuture<String> siteVariant(String entryId, dev.larattalabs.architect.api.SiteSpec site, String opKey) {
+		load();
+		return SiteDesigns.siteVariant(entryId, site, opKey, null);
 	}
 
 	/** {@code group.upsert} or a snapshot's group (any thread): merged; the events fire on the server thread. */

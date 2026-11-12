@@ -131,6 +131,14 @@ final class GhostRenderer {
 				case "west" -> cube(pose, vc, x0 - b, y, z0, x0 + b, y + 2 * b, z1, brass, 0x3F, false);
 				default -> cube(pose, vc, x1 - b, y, z0, x1 + b, y + 2 * b, z1, brass, 0x3F, false);
 			}
+			// (7b ST) the frame's ports (brass cubes on their cells)
+			int[] ports = PlotMarker.framePorts();
+			for (int i = 0; i + 2 < ports.length; i += 3) {
+				float px = (float) (ports[i] - cam.x);
+				float py = (float) (ports[i + 1] - cam.y);
+				float pz = (float) (ports[i + 2] - cam.z);
+				cube(pose, vc, px + 0.15f, py + 0.05f, pz + 0.15f, px + 0.85f, py + 1.85f, pz + 0.85f, brass, 0x3F, false);
+			}
 			// the height limit: corner posts and the top outline, faintly
 			float ft = t * 0.6f;
 			for (float px : new float[] {x0, x1}) {

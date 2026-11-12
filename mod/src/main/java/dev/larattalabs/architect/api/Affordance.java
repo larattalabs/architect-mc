@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * (7b) A place in the land a site-aware design can use (docs/CONTRACT.md "Phase 7b" §2, SETTLEMENTS §6): found by a deterministic
  * analysis of a frozen volume at plan time ({@link Survey#site}, a region plan's {@code affordances[]}). The analysis is slice AF's;
- * this record is the shape it answers in. Since NEXT.
+ * this record is the shape it answers in. Since 1.53.0.
  *
  * @param id stable: a hash of the kind and the geometry quantized to 4 (box and normal), so a re-analysis of unchanged land gives
  *           the same id (6d replanning keys on it)
@@ -29,7 +29,7 @@ public record Affordance(String id, Kind kind, BoundingBox box, List<BlockPos> a
 		metrics = metrics == null ? new JsonObject() : metrics;
 	}
 
-	/** The kinds of affordance (SETTLEMENTS §6's table). New values are only ever appended. Since NEXT. */
+	/** The kinds of affordance (SETTLEMENTS §6's table). New values are only ever appended. Since 1.53.0. */
 	public enum Kind {
 		CLIFF_FACE, LEDGE, OVERHANG, CAVE, TRUNK, CANOPY, SPIKE, WATER, GAP, PAD;
 

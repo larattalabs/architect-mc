@@ -201,10 +201,7 @@ class Api7bFTest {
 		PlaceRequest p = PlaceRequest.of("bp", null, BlockPos.ZERO, Rotation.NONE);
 		SiteGuards.place(p);
 		assertThrows(UnsupportedOperationException.class, () -> SiteGuards.place(p.withSite(site())));
-		DesignRequest d = new DesignRequest("house", "rustic", null, List.of(), new BlockSize(9, 9, 9), null, null, null, null, null, null, null,
-			null, null, List.of(), null, false, null, null, null, null, null, null, null, null, null);
-		SiteGuards.design(d);
-		assertThrows(UnsupportedOperationException.class, () -> SiteGuards.design(d.withSite(site())));
+		// (7b DS) the design and group guards are gone: DesignRequest.site is designed (ApiDSTest)
 	}
 
 	@Test
@@ -219,9 +216,11 @@ class Api7bFTest {
 	@Test
 	void featuresNotAdvertisedByTheFoundation() {
 		var f = ApiRules.features(2, List.of("site.design", "site.survey", "site.lots", "link.pass", "region.siteLot", "region.links"));
-		for (String n : List.of("siteDesign", "siteSurvey", "siteLots", "linkPass")) {
+		for (String n : List.of("siteSurvey", "siteLots", "linkPass")) {
 			assertFalse(f.contains(n), n + " is advertised by its slice, not the foundation");
 		}
+		// (7b DS) slice DS advertises siteDesign from the helper's site.design (ApiDSTest)
+		assertTrue(f.contains("siteDesign"));
 	}
 
 	private static void assertThrowsDefault(Class<?> api, String name, Object... args) throws Throwable {

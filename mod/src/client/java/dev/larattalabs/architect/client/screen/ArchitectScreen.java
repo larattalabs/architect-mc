@@ -143,7 +143,7 @@ public final class ArchitectScreen extends Screen {
 				rh, sel, hov) -> {
 				int tx = rx + 5;
 				if (o.on()) {
-					g.text(f, "✓", tx, ry + (rh - 8) / 2, UiStyle.CLAY_DARK, false);
+					g.text(f, "✓", tx, ry + (rh - 8) / 2, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 				}
 				g.text(f, TextUtil.ellipsize(f, o.label(), rw - 20), tx + 10, ry + (rh - 8) / 2, UiBits.ink(), false);
 			});
@@ -1256,7 +1256,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private int label(GuiGraphicsExtractor g, String text, Map<String, String> errors, int x, int y, int w, String field) {
-		g.text(font, text, x, y, UiStyle.CLAY_DARK, false);
+		g.text(font, text, x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		String err = errors.get(field);
 		if (err != null) {
 			int ex = x + font.width(text) + 6;
@@ -1516,7 +1516,7 @@ public final class ArchitectScreen extends Screen {
 		y += 2;
 		String line = v == 0 ? "its version can't be found (remove or place it again)" : "v" + v + (head > v ? " · v" + head + " available" : " · up to date")
 			+ (s.versioning().deviations() > 0 ? " · " + s.versioning().deviations() + " cell(s) you changed kept" : "");
-		g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, head > v && v > 0 ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+		g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, head > v && v > 0 ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
 		y += 12;
 		int bx = dx;
 		if (v > 0 && head > v && !s.id().equals(updateSite)) {
@@ -1862,7 +1862,7 @@ public final class ArchitectScreen extends Screen {
 				int kw = kind.isEmpty() ? 0 : font.width(kind) + 6;
 				g.text(font, TextUtil.ellipsize(font, j.title(), listW - 26 - kw), x + 16, ry + 2, UiBits.ink(), false);
 				if (!kind.isEmpty()) {
-					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, UiStyle.CLAY_DARK, false);
+					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 				}
 				g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : " · " + j.step()), listW - 24), x + 16, ry + 12,
 					UiBits.muted(), false);
@@ -1927,7 +1927,7 @@ public final class ArchitectScreen extends Screen {
 				JsonObject mraw = Sidecar.state().massing(mref.get().id());
 				String extra = mraw == null ? "" : " · " + dev.larattalabs.architect.apiimpl.Wire4c.massing(mraw).parts().size() + " masses" + (mraw.has(
 					"detail") ? " · detailed" : "");
-				g.text(font, TextUtil.ellipsize(font, "massing " + mref.get().id() + " v" + mref.get().version() + extra, dw), dx, y, UiStyle.CLAY_DARK, false);
+				g.text(font, TextUtil.ellipsize(font, "massing " + mref.get().id() + " v" + mref.get().version() + extra, dw), dx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 				y += 10;
 				if (r.has("redirect") && r.get("redirect").isJsonObject()) {
 					for (String line : TextUtil.wrapPlain(font, "redirect: " + r.getAsJsonObject("redirect").get("notes").getAsString(), dw).stream().limit(2)
@@ -1939,7 +1939,7 @@ public final class ArchitectScreen extends Screen {
 			}
 			if (r.has("fromMassing")) {
 				g.text(font, TextUtil.ellipsize(font, "detail of massing " + r.get("fromMassing").getAsString() + (r.has("massingVersion") ? " v" + r.get(
-					"massingVersion").getAsString() : ""), dw), dx, y, UiStyle.CLAY_DARK, false);
+					"massingVersion").getAsString() : ""), dw), dx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 				y += 10;
 			}
 			var conf = dev.larattalabs.architect.apiimpl.Wire4c.conformance(j.design().raw().get("conformance"));
@@ -1947,12 +1947,12 @@ public final class ArchitectScreen extends Screen {
 				var c = conf.get();
 				String cl = c.ok() && c.warnings() == 0 ? "conformance: ok (" + UiBits.CHECK + " part names, boxes, size, roofs)" : "conformance: " + (c.ok()
 					? "ok" : "not ok") + ", " + c.warnings() + " warning" + (c.warnings() == 1 ? "" : "s");
-				g.text(font, TextUtil.ellipsize(font, cl, dw), dx, y, c.ok() && c.warnings() == 0 ? UiBits.okText() : UiStyle.CLAY_DARK, false);
+				g.text(font, TextUtil.ellipsize(font, cl, dw), dx, y, c.ok() && c.warnings() == 0 ? UiBits.okText() : dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 				y += 10;
 				List<String> all = new ArrayList<>(c.errors());
 				all.addAll(c.issues());
 				for (String warn : all.stream().limit(4).toList()) {
-					g.text(font, TextUtil.ellipsize(font, "· " + warn, dw), dx, y, UiStyle.CLAY_DARK, false);
+					g.text(font, TextUtil.ellipsize(font, "· " + warn, dw), dx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 					y += 10;
 				}
 				if (all.size() > 4) {
@@ -2036,7 +2036,7 @@ public final class ArchitectScreen extends Screen {
 		String head = dev.larattalabs.architect.design.CritiqueRules.endLine(c) + (of != null ? " · of " + of : "") + String.format(Locale.ROOT,
 			" · $%.2f", c.usd());
 		g.text(font, TextUtil.ellipsize(font, head, dw), dx, y, c.ended() && c.end() == dev.larattalabs.architect.api.Critique.EndReason.SHIP
-			? UiBits.okText() : UiStyle.CLAY_DARK, false);
+			? UiBits.okText() : dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		y += 11;
 		List<String> rounds = dev.larattalabs.architect.design.CritiqueRules.roundLines(c);
 		for (int i = 0; i < rounds.size() && y + 10 <= bottom; i++) {
@@ -2045,7 +2045,7 @@ public final class ArchitectScreen extends Screen {
 			if (best) {
 				g.fill(dx, y - 1, dx + dw, y + 9, 0x22D97757);
 			}
-			g.text(font, TextUtil.ellipsize(font, rounds.get(i), dw - 4), dx + 2, y, best ? UiBits.ink() : r.error().isPresent() ? UiStyle.CLAY_DARK
+			g.text(font, TextUtil.ellipsize(font, rounds.get(i), dw - 4), dx + 2, y, best ? UiBits.ink() : r.error().isPresent() ? dev.larattalabs.architect.client.ui.PaperInk.clay()
 				: UiBits.muted(), false);
 			y += 10;
 		}
@@ -2055,7 +2055,7 @@ public final class ArchitectScreen extends Screen {
 		}
 		List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(c.openIssues());
 		for (int i = 0; i < issues.size() && y + 10 <= bottom; i++) {
-			g.text(font, TextUtil.ellipsize(font, "· " + issues.get(i), dw), dx, y, UiStyle.CLAY_DARK, false);
+			g.text(font, TextUtil.ellipsize(font, "· " + issues.get(i), dw), dx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			y += 10;
 		}
 		return y;
@@ -2083,11 +2083,11 @@ public final class ArchitectScreen extends Screen {
 		if (st == dev.larattalabs.architect.api.Group.Status.HELD_USAGE) {
 			String until = gr.usageLimitUntil() > 0 ? UiBits.clock(gr.usageLimitUntil()) : "the reset";
 			g.text(font, TextUtil.ellipsize(font, "Held by a usage limit: every building waits until " + until + ", then all resume.", dw), dx, y,
-				UiStyle.CLAY_DARK, false);
+				dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			y += 10;
 		} else if (gr.reason().isPresent()) {
 			for (String line : TextUtil.wrapPlain(font, gr.reason().get(), dw).stream().limit(2).toList()) {
-				g.text(font, line, dx, y, st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET ? UiStyle.CLAY_DARK : UiBits.errorText(), false);
+				g.text(font, line, dx, y, st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.errorText(), false);
 				y += 10;
 			}
 		}
@@ -2097,7 +2097,7 @@ public final class ArchitectScreen extends Screen {
 		if (gr.massingFirst()) {
 			String who = architectUi ? "massings first · approve each shape here" + (gr.maxRedirects() > 0 ? ", " + gr.maxRedirects() + " redirect"
 				+ (gr.maxRedirects() == 1 ? "" : "s") + " each" : "") : "massings first · its owner approves: " + gr.owner().orElse("?");
-			g.text(font, TextUtil.ellipsize(font, who, dw), dx, y, architectUi ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+			g.text(font, TextUtil.ellipsize(font, who, dw), dx, y, architectUi ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
 			y += 10;
 		}
 		y += 3;
@@ -2170,7 +2170,7 @@ public final class ArchitectScreen extends Screen {
 			String line = stage + conf + crit + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() || !crit.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
 				e -> " → " + e).orElse("") + it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
 			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
-				? UiBits.errorText() : it.awaitingApproval() || warn ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+				? UiBits.errorText() : it.awaitingApproval() || warn ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
 		}
 		if (gr.items().size() > fit) {
 			TextUtil.Scroll sc = new TextUtil.Scroll().update(gr.items().size() * rowH, fit * rowH);
@@ -2186,7 +2186,7 @@ public final class ArchitectScreen extends Screen {
 			int sw = bw(send);
 			int fy = by - 1;
 			textField(g, Focus.REDIRECT, redirectView, redirectNotes, dx, fy + 1, dw - sw - 6, new TextFieldView.Style(TextUtil.ellipsize(font, iname, 70)
-				+ ": ", UiStyle.CLAY_DARK, "how should it change? Enter sends", null, null, 0, 1));
+				+ ": ", dev.larattalabs.architect.client.ui.PaperInk.clay(), "how should it change? Enter sends", null, null, 0, 1));
 			button(g, "group:redirect_send", send, dx + dw - sw, fy, sw, true, !redirectNotes.value().isBlank(), mx, my, this::sendRedirect);
 			by += TextFieldView.BASE_H + 4;
 		}
@@ -2311,7 +2311,7 @@ public final class ArchitectScreen extends Screen {
 		int rx = x + colW + 14;
 		int y = top;
 		// left: the helper
-		g.text(font, "Design helper", lx, y, UiStyle.CLAY_DARK, false);
+		g.text(font, "Design helper", lx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		y += 12;
 		LauncherPlan.State st = Launcher.state();
 		String fam = switch (st) {
@@ -2375,7 +2375,7 @@ public final class ArchitectScreen extends Screen {
 		}
 		y += 24;
 		// SAFETY: the big-placement confirm's threshold and the undo key (the left column: the right one is full at GUI scale 4)
-		g.text(font, "Safety", lx, y, UiStyle.CLAY_DARK, false);
+		g.text(font, "Safety", lx, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		y += 12;
 		String safety = "Placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
 			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (confirmBlocks in config/architect_mc.json). Undo last "
@@ -2399,7 +2399,7 @@ public final class ArchitectScreen extends Screen {
 		}
 		// right: auth
 		int ry = top;
-		g.text(font, "Claude access", rx, ry, UiStyle.CLAY_DARK, false);
+		g.text(font, "Claude access", rx, ry, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		ry += 12;
 		SidecarState.Status s = Sidecar.state().status();
 		String auth = !Sidecar.connected() ? "unknown (helper not connected)" : switch (s.auth()) {
@@ -2418,7 +2418,7 @@ public final class ArchitectScreen extends Screen {
 			ry += 10;
 		}
 		ry += 6;
-		g.text(font, "Anthropic API key", rx, ry, UiStyle.CLAY_DARK, false);
+		g.text(font, "Anthropic API key", rx, ry, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		ry += 11;
 		int fw = colW;
 		Hit field = new Hit("key_field", "API key", rx, ry, fw, TextFieldView.BASE_H, true, focus == Focus.KEY, () -> setFocus(Focus.KEY));
@@ -2488,7 +2488,7 @@ public final class ArchitectScreen extends Screen {
 		ry += 12;
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
-		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);
+		g.text(font, "Survival (this world)", rx, ry, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		ry += 12;
 		boolean inWorld = dev.larattalabs.architect.survival.SurvivalWorld.loaded();
 		boolean survivalOn = dev.larattalabs.architect.survival.SurvivalWorld.on();
