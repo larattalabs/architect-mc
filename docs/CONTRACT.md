@@ -27621,3 +27621,11 @@ sidecar's `region.planned` member are tested, and no bundled program calls `r.af
 | af-nowrite | the land holds still with no call; three rounds of two calls (one `carve_into`): the volume box's hash unchanged, the journal, all of `<world>/architect` and the regions dir unchanged (no new file), the answers equal; no site placed |
 | af-cut | the three S4-S6 windows frozen, 0 missing columns |
 | lints | lint-structure 205/0, lint-look 14/0, water-lint 135/135, p3-lint 16/16 |
+
+Runs: 20261112-015556-change (b7f1f234: af-unit, af-site 13/0, af-nowrite 5/0, the four lints PASS; af-cut a path bug), 20261112-020726-change
+(38cec4eb: af-cut PASS), and the confirmation at the merged head 20261112-024611-change (35f63556: af-unit, af-site, af-nowrite PASS).
+**gate-verifier (review only, DEV MODE): PASS** at f0a81629: the frozen surface (api diff javadoc only), Survey.site read only (the
+nowrite evidence), ids and determinism, unchanged plans without `r.affordances`, the feature mapping, the threading and failure paths and
+the nine readings reviewed; af-affordances + f7b-foundation (18/18) and site-analyse (3/3) re-run. No blocking defect; minor: the
+duplicate-id tie-break used `localeCompare` (now plain code-unit order, 35f63556); `Regions.affordances` has no in-game plan using it
+until SL.
