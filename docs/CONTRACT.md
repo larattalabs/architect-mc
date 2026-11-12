@@ -27847,3 +27847,82 @@ refuses an extra key.
   `[mx, max(0, h-3), min(1, d-1)]` facing north; `carve_into` a `door` `door_s` at `[mx, 0, d-1]` facing south (1x2). `w, h, d` are the
   design's own size (the box turned back by the rotation). (Amended before LP started, same day: first drafted as one `front` port.)
 - **`site.lotId`** = the lot id.
+
+**Built** (no 7bF signature changed; the API package is untouched: SL implements `LotSpec.site` through the 9-argument constructor 7bF
+froze; feature `siteLots`):
+- **Kit, `r.siteLot(id, {affordance, fit, max, ports, brief, stage, box, host, y, ext, part})`** (`kit/lib/region/siteLots.mjs`, a method
+  on `Region`): the lot box from the affordance per kind (`placeFromAffordance`: x/z centred on it, a trunk, spike or canopy on its axis;
+  the floor per kind, `y` overrides) or an explicit `box`; the frame (AF's rotation rule, `rotationOf`); the volume (above); keep cells
+  per fit; default ports; `siteSpecProblems` on the result. It writes no op (no pad) and records the IR lot with `site`, `affordance`,
+  `host`. `cropVolume(decoded, box)` cuts an ARVX v1 volume (owners compacted).
+- **The reserved box and the host exemption** (`kit/lib/region/check.mjs`): an M1 error per (site lot, part) for every cell a part other
+  than the lot's `host` writes inside the box, only in a plan with a site lot. Site lots are left out of M9 (no pad) and of the M2 walk
+  nodes (no ground entrance: their ports are LP's endpoints).
+- **`layout.elevated`** (`kit/lib/plan/elevated.mjs`, three hooks in `compile.mjs`, one line in `finish.mjs`): an elevated zone resolves
+  from its frozen volume (the zone's rect, a square of its size preset centred on its locator's aim, grown by 8, from the lowest floor
+  less 8 to the highest top plus 24): AF's `analyseVolume` for `canopy`, `trunk` (wrap_trunk), `overhang` (suspend), `ledge`, `water`
+  (on_pad); each lot in plan order takes the best unused affordance whose box (the lot's `size`, 16 high) and its site volume fit in the
+  zone, apart from the lots and zones before it. Answers: `fits`; `adjusted` (a count deviation, judged as every lots zone's: soft up to
+  the ceiling, hard past its max); `refused NO_FEATURE` (wouldFit: the lots that fit); `incomplete VOLUME` on the first plan. Emitted as
+  `r.siteLot`s in the `lots` stage; geometry `{rect, elevated: true, lots, unplaced?}`; the artifact's `lots[]` gain `site`, `affordance`
+  and `fitBox` (record `siteLots`). A connector with an end on an elevated zone or one of its lots answers `unsupported until LP` (blocked
+  first when a dependency failed); an anchor inside an elevated zone is never snapped to it.
+- **Catalogue:** `layout.elevated` `supported`, `schemaVersion` 1, `sinceApi` `NEXT`, no `until`; the golden re-cut (catalogueVersion left
+  for the coordinator); e15's zone z12 removed; the catalogue-diff tests of CL, GM-c and the 7a foundation leave the flip to `sl.test.mjs`.
+- **Mod** (`site/SiteLots.java` new; `RegionsImpl`, `Batches`, `SiteFit`, `PlanChecks`, `ApiRules`): `RegionPlan.lots()` builds
+  `LotSpec.site` from the IR lot's `site`; a site lot's realise item has no LotFitting: its origin and turns are the frame's, it is LAYERed
+  as a pad lot's design is, and `Batches.tryStart` runs it inside `SiteFit.with(site)` (PL's KEEP terrain, port approach and site checks),
+  the site **rebuilt from the live region's IR on every try, never persisted**, so `SiteGuards.batch` (the public `Batch` with a site) is
+  unchanged; the bind check (`lotProblem`) refuses a site lot whose entry is not exactly the lot box in the site's frame or is bound to
+  another volume (`SITE_MISMATCH` in the message), nothing written; freeze before lots, the general form (below); the region volume
+  lookup (above); `PlanChecks.hasElevated` joins the second-plan trigger; `region.siteLots` -> feature `siteLots`. The placed record's
+  ext carries `architect_mc:site` = `SiteBinding.of(site, <the region's plan id>)`.
+- **Sidecar:** `region.siteLots` in the feature list (protocol.ts and the two feature-list tests). **Dev hooks** (`SliceSlDev`, generated
+  headless too): `dev.sl.plan {plan}`, `dev.sl.lot {region, lot}` (docs/DEVBRIDGE.md).
+- **Gate:** `tools/gate7bsl.mjs` (`sl-unit`, `sl-ingame`; chain `7bsl`), `kit/test/sl.test.mjs`, `kit/test/fixtures/plan/valid/v7b_sl_canopy.json`
+  (two canopy huts on two synthetic trees through the two-plan flow), `kit/test/fixtures/plan/sl/asks-{before,after}.txt`, `ApiSLTest`.
+
+**Readings chosen** (the contract was silent or the code disagreed; the smallest reading each time):
+1. **`affordance` beside `site`** (`$.lots[].affordance`), not inside it: 7bF's schema has `additionalProperties: false` and 7bF's surface
+   is frozen.
+2. **A site lot's volume is cut from the zone's**, because the two-plan flow plans exactly twice (`PlanChecks.secondPlan`): the affordances
+   are found on the second plan, too late to ask another volume. The cut is a gzip IR side blob (`site_<lot>`), found by the mod by sha
+   and frozen into `architect/volumes` the first time a check or placement needs it.
+3. **The margin must lie inside the claim** (a lot near the claim's edge is refused, or skipped by an elevated zone): SV's `Site` reads the
+   lot box as the volume less 8, so a clipped volume would make DS's `Site` of the lot disagree with the lot.
+4. **Default ports are SV's fixtures' names and places**, so SV's examples (and DS's site variants of them) run on a site lot as they are.
+5. **Keep cells:** wrap_trunk the volume's LOG cells inside the box (7bF's trunk fixture's rule); suspend the first site-solid cell over
+   each corner of the box inset 2 (AF's overhang anchors are the overhang's corners and centre, often outside a smaller lot box; the
+   overhang fixture's own hang points are 4 cells over the box). Every other fit none.
+6. **The elevated fits:** canopy and trunk give `wrap_trunk` (a canopy lot wraps its first trunk top, under the leaf layer), overhang
+   `suspend`, ledge and water `on_pad` (the design brings its own stilts or foundation). Cliff faces, caves and gaps are not "elevated"
+   lots; a program reaches them through `r.siteLot` directly.
+7. **An elevated zone is answered at resolve** (from `ctx.volumes`) so its dependents see its class, and its volume is asked at emit
+   whatever its answer (the first plan's ask).
+8. **Freeze before lots, general form:** a site lot item freezes the columns of its snapshot box and of its site volume's x/z (the lot box
+   + 8) before its check and capture; a pad lot keeps the narrow form (byte-identical realises).
+9. **An unmapped site lot writes nothing** (no pad): `RealiseRequest.lotEntries` "unmapped lots stay pads" reads as "stay what the plan
+   wrote", which for a site lot is nothing.
+10. **The bind check is exact** (the template is the lot box in the site's frame), not a pad lot's "fits inside": a site-bound design is
+    the lot box (SV reading 3).
+11. **The feature's sidecar name is `region.siteLots`** (`Api7bFTest` feeds `region.siteLot` to prove the foundation advertises nothing;
+    that test is untouched).
+12. **A revision's refill of a site lot** reads the base region's IR (adding a site lot by revision is out of 7b).
+13. **`site.volumeBlobId` is `local:<sha>`** (the sha is the identity; an upload id would tie the plan to an upload).
+
+**Shared files touched:** `kit/lib/region/program.mjs` (the method), `kit/lib/region/check.mjs` (three guarded hooks), `kit/lib/plan/
+compile.mjs` (the resolve, the connector pre-pass, the volume ask, the emit, the geometry, the record; four `zoneEmit` readers skip an
+elevated zone), `kit/lib/plan/finish.mjs` (one spread), `kit/schemas/plan.json` (the entry and two descriptions, shortened: the sidecar's
+compact plan/0 stays under its 100,000-character bar), the golden, e15, `kit/test/plan-helpers.mjs` (`hasElevated`), the catalogue-diff
+tests of CL, GM-c and the foundations, `mod/.../RegionsImpl.java`, `Batches.java`, `SiteFit.java`, `PlanChecks.java`, `ApiRules.java`,
+`ArchitectClient.java`, `DevServer.java`, `devserver/build.gradle`, sidecar `protocol.ts` and two tests, `tools/gate-chains.json`,
+`tools/step-inputs.json`, docs/DEVBRIDGE.md.
+
+**For the Steward RC (with LP), the areas for its `--only` filter:** a plan/0 with `layout: "elevated"` through `checkPlan` (fits,
+adjusted, refused `NO_FEATURE`, the first plan's `incomplete VOLUME` when the land is not generated); the artifact's `$.lots[].site` and
+`.affordance` (parse `site` with `SiteSpec.fromWire`); `RegionPlan.lots()` `LotSpec.site`; `DesignRequest.site` from it (DS's); a
+site-bound entry bound by `realiseApproved` (`lotEntries`), the bind refusals (not the lot box; `SITE_MISMATCH`) with nothing written,
+and PL's site Reasons at placement (`KEEP_LOST`, `SITE_DRIFTED`, `SITE_UNSUPPORTED`); an unmapped site lot writing nothing; Remove of a
+region with a site lot (exact); `Regions.affordances(planId)` for an elevated plan; feature `siteLots`; Steward's re-scored gap table (the
+three asks that waited on `layout.elevated` now answer `refused NO_FEATURE` on flat land); a connector to a site lot `unsupported until LP`
+(LP lifts it).
