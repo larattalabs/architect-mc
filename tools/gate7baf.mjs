@@ -297,7 +297,7 @@ steps.cut = async () => {
     const v = await call('dev.survey.volume', { box, load: 'bounded:64' }, 1_800_000);
     if (v.refused) { check(false, `${id}: Survey.volume refused: ${v.refused}`); continue; }
     const f = path.join(dir, `${id}.bin`);
-    fs.copyFileSync(v.file, f);
+    fs.copyFileSync(path.resolve(L.GAME_DIR, v.file), f); // (dev.survey.volume's file is relative to the game dir)
     const d = decodeArvx(fs.readFileSync(f));
     const t = Date.now();
     const a = analyseVolume(d);
