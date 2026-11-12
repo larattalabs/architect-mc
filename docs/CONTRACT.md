@@ -28757,7 +28757,7 @@ about 8 kinds under 90,000.
 | instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 (p3-lint runs inside unit-mod) |
 | `node tools/step-inputs.mjs check` | clean after `build` (345 steps; unit-kit gains f7c-foundation) |
 | `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
-| gate-verifier (review only, DEV MODE) | VERDICT |
+| gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
