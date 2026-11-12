@@ -1,0 +1,83 @@
+{
+ "id": "overhang",
+ "fit": "suspend",
+ "purpose": "a rock ceiling 8 thick reaching 14 out from a face, 18 of air under it: a hanging house from four hang points (SV fit_suspend)",
+ "after": "new (beside cliff_face's run)",
+ "from": "synthesized by kit/tools/site-fixtures.mjs (no client in the 7bF gate)",
+ "lot": {
+  "minX": -943,
+  "minY": 120,
+  "minZ": -2433,
+  "maxX": -928,
+  "maxY": 133,
+  "maxZ": -2422
+ },
+ "maxSize": [
+  16,
+  14,
+  12
+ ],
+ "counts": {
+  "AIR": 11392,
+  "ROCK": 13696,
+  "SOIL": 1792
+ },
+ "spec": {
+  "volumeSha": "ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+  "volumeBlobId": "local:ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+  "volume": {
+   "minX": -951,
+   "minY": 112,
+   "minZ": -2441,
+   "maxX": -920,
+   "maxY": 141,
+   "maxZ": -2414
+  },
+  "fit": "suspend",
+  "frame": {
+   "origin": [
+    -943,
+    120,
+    -2433
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [
+   [
+    -941,
+    134,
+    -2430
+   ],
+   [
+    -930,
+    134,
+    -2430
+   ],
+   [
+    -941,
+    134,
+    -2425
+   ],
+   [
+    -930,
+    134,
+    -2425
+   ]
+  ],
+  "ports": [
+   {
+    "name": "hatch",
+    "kind": "architect:walk",
+    "at": [
+     8,
+     0,
+     6
+    ],
+    "facing": "down",
+    "width": 1,
+    "height": 1
+   }
+  ],
+  "lotId": "lot_overhang"
+ }
+}

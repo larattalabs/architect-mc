@@ -119,6 +119,9 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   flipped.add('connector.wall');
   // ((GM-c, CONTRACT GM §5) connector.drawbridge's flip (reserved -> supported, schemaVersion 1, the limits) is GM-c's: gm-c.test.mjs)
   flipped.add('connector.drawbridge');
+  // ((7bF, N-7b-1) form.hidden_room and rule.suspended re-reserved until 7c: f7b-foundation.test.mjs)
+  flipped.add('form.hidden_room');
+  flipped.add('rule.suspended');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
@@ -140,7 +143,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)));
   assert.ok(!ext.has('connector.span_bridge'));
   for (const id of ['connector.rail', 'connector.branch_walk', 'connector.tube', ...own(K7.KINDS_7A.map((k) => `connector.${k}`))]) assert.ok(ext.has(id), id);
-  for (const id of flipped) assert.ok(!ext.has(id), `${id} left e15 when it shipped`);
+  // (the two 7bF ids stay reserved: they keep their extension fixtures)
+  for (const id of flipped) if (!['form.hidden_room', 'rule.suspended'].includes(id)) assert.ok(!ext.has(id), `${id} left e15 when it shipped`);
 });
 
 test('§7 item 4: a span_bridge part answers as the same bridge part, block connector.bridge, with the note (R25); the caller\'s plan untouched', async () => {
