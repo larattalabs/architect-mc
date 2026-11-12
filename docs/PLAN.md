@@ -1518,3 +1518,42 @@ The three small items left in "Queued (coordinator, 2026-11-11)" and "Slice PX".
   `triggers[].at` cells like the rest of the mechanism: their state (powered, facing) stays excused, a missing lever or button reads
   `removed` in `mech:<lot>`. Lanes and rungs stay as they are (an empty lane can't be told from an open gate). Read-only; extend
   `LandCheckTest` and `lc-castle` (break the lever). LCi's other notes: only one lane cell exercised; a piston pushing a player block untested.
+
+## Chore AT as built (builder, 2026-11-11; branch `chore/AT` off main bcd9eddb; DEV MODE; $0)
+
+SP's gate run found five unit items failing on main itself: coa-unit item 6, h-unit item 10, hy-unit item 11, vocc-unit item 3, f3-unit §9.
+Their committed "after" asks tables were older than slices that moved recorded answers, and two movers (GM-c, 7bF) had no normaliser where an
+item compares with a fixed "before" table. Done as chore FF did rs-unit item 2 (d3e5ff69): the five after tables re-cut on bcd9eddb, each
+with the function its item calls; the before tables, slice history, untouched.
+
+**Tables re-cut** (and the function that cut them):
+- `fixtures/plan/coa/asks-after.txt` (`asksGap(kit, { current: true })`, the asks as they stand)
+- `fixtures/plan/h/asks-gap-after-ha.txt` (H-a's `haAsks`), `fixtures/plan/hy/asks-gap-after.txt` (HY-b's `asksGap`) and
+  `fixtures/plan/f3/asks-after.md` (`asksGap`): one table, byte-identical across the three (the first recordings, asks-8703dbd)
+- `fixtures/plan/vocc/asks-after.txt` (VOC-c's `asksTable`, per-ask blocks without `until`)
+
+**Every row that changed, by owner** (each row in a table only where that table carries it):
+- **FL** (free layouts): around_my_tree/grove, grid_city, nomad_camp/camp, organic_hamlet/hamlet unsupported (layout.*) -> zone.standard fits
+  (their asks REQUIRED_BLOCKED -> READY in vocc), ring_city/ring_town -> zone.standard blocked DEPENDENCY; the layout.* gap rows go (h, hy, vocc).
+- **VOC-c** (`rule.palette` supported): the 7 palette parts unsupported until RC -> refused NO_FEATURE / TOLERANCE; the rule.palette gap row
+  (7) goes (h, hy; coa, f3 and vocc already had them).
+- **7a foundation** (S-7a-5): mining_town/rail_1 until 7a -> until CR (h, hy, coa, f3).
+- **7a CL**: hidden_village/cave_ladders -> blocked DEPENDENCY, old_new_town/quarter_stair and sky_monastery/long_stair -> refused NO_CLIMB;
+  the connector.stair/ladder gap rows go (all five).
+- **7a LF** (d8da5f21): treetop_village/storehouse_lift, upside_down/winch_lift -> refused NO_CLIMB; the connector.lift row goes (h, hy, f3,
+  vocc; coa already had it).
+- **7a K3** (bba9d605): border_fort/fort_wall, camp_to_city/city_wall, castle_city/curtain_wall, walled_town/town_wall adjusted -> fits (all
+  five).
+- **GC** (74c7a596, gatehouse coverage hints): redstone_gate/curtain_wall fits -> adjusted in coa's table (the re-recorded redstone_gate; the
+  first recording already answered adjusted, F7A_MOVED's GC note).
+- **GM-c** (v0.55.0, connector.drawbridge supported): redstone_gate/drawbridge unsupported until mechanism -> blocked DEPENDENCY; the
+  connector.drawbridge row goes (all five).
+- **7bF** (4f804a00, rule.suspended re-reserved until 7c, N-7b-1): upside_down/hang_from_ceiling until 7b -> until 7c (h, hy, f3; vocc and coa
+  print no `until` / already had it).
+- The tally lines follow: first recordings now adjusted 8, blocked 5, fits 70, refused 30, unsupported 19; coa's current asks adjusted 16,
+  blocked 21, fits 64, refused 8, unsupported 19. 0 malformed everywhere. No row changed without an owner above.
+
+**One code change:** h-unit item 10 and hy-unit item 11 also compare the parts' classes with their fixed before tables (v0.36.0's, v0.37.0's),
+which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains `atAskLine` (GM-c's drawbridge by part and kind, 7bF's
+hang_from_ceiling without its `until`), read only by those two before comparisons (`gate6ch-a.mjs` haAsks, `gate6chy-b.mjs` item 11), as CL's,
+LF's and K3's movers were. `flAsksFilter` and its other callers are unchanged.

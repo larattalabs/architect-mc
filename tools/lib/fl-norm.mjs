@@ -50,6 +50,12 @@ export const lfAskLine = (l) => moverLine(l, LF_ASK_PARTS, 'LF');
  * K3_MOVED): compared by part and kind only, as CL's and LF's. */
 export const K3_ASK_PARTS = Object.freeze(['border_fort/fort_wall', 'camp_to_city/city_wall', 'castle_city/curtain_wall', 'walled_town/town_wall']);
 export const k3AskLine = (l) => moverLine(l, K3_ASK_PARTS, 'K3');
+/** (chore AT) Two parts later slices moved that the H-a and HY-b items' fixed "before" tables (v0.36.0's, v0.37.0's) still hold: GM-c's
+ * redstone_gate/drawbridge (unsupported until mechanism -> blocked DEPENDENCY, connector.drawbridge supported, v0.55.0) compares by part and
+ * kind, and 7bF's upside_down/hang_from_ceiling (rule.suspended re-reserved until 7b -> 7c, 4f804a00) without its `until`. Only those two
+ * items' before comparisons read it; their after tables are re-cut (docs/PLAN.md "Chore AT as built"). */
+export const atAskLine = (l) => l.replace(/^(redstone_gate\/drawbridge connector\.drawbridge) .*$/, '$1 GMc')
+  .replace(/^(upside_down\/hang_from_ceiling rule\.suspended unsupported UNSUPPORTED) until \S+$/, '$1');
 export function flAsksFilter(text) {
   const asks = FL_MOVED_ASKS.map((f) => f.replace(/\.json$/, ''));
   const out = [];

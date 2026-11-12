@@ -1,13 +1,9 @@
-# 59 asks: adjusted 12, blocked 3, fits 66, refused 26, unsupported 25
+# 59 asks: adjusted 8, blocked 5, fits 70, refused 30, unsupported 19
 # gap table (unsupported parts per block id):
   rule.shape               3
   tunnel.under             3
-  connector.lift           2
-  connector.stair          2
   form.crater              2
   rule.variety             2
-  connector.drawbridge     1
-  connector.ladder         1
   connector.rail           1
   form.floating_island     1
   form.hollow_mountain     1
@@ -26,12 +22,12 @@ around_my_tree/grove zone.standard fits
 boom_town/boomtown zone.standard fits
 border_fort/fort zone.standard fits
 border_fort/pass_road connector.road fits
-border_fort/fort_wall connector.wall adjusted
+border_fort/fort_wall connector.wall fits
 border_fort/fort_relief form.relief fits
 camp_to_city/camp_city zone.standard fits
-camp_to_city/city_wall connector.wall adjusted
+camp_to_city/city_wall connector.wall fits
 castle_city/castle zone.standard adjusted
-castle_city/curtain_wall connector.wall adjusted
+castle_city/curtain_wall connector.wall fits
 cat_sanctuary/sanctuary zone.standard adjusted
 cliff_monks/monastery zone.standard fits
 cliff_monks/sea_stair connector.path fits
@@ -55,7 +51,7 @@ grid_city/grid_city zone.standard fits
 harbour/harbour zone.standard fits
 harvest_hamlet/hamlet zone.standard fits
 hidden_village/hollow zone.standard adjusted
-hidden_village/cave_ladders connector.ladder unsupported UNSUPPORTED until 7a
+hidden_village/cave_ladders connector.ladder blocked DEPENDENCY
 hidden_village/waterfall_curtain form.waterfall adjusted
 hidden_village/mossy_palette rule.palette refused NO_FEATURE
 ice_village/village zone.standard adjusted
@@ -68,7 +64,7 @@ metropolis/capital zone.standard adjusted
 metropolis/city_wall connector.wall fits
 mining_town/mining_town zone.standard fits
 mining_town/street_1 connector.street fits
-mining_town/rail_1 connector.rail unsupported UNSUPPORTED until 7a
+mining_town/rail_1 connector.rail unsupported UNSUPPORTED until CR
 mushroom_town/hamlet zone.standard fits
 nether_outpost/outpost zone.standard fits
 no_right_angles/town zone.standard fits
@@ -78,7 +74,7 @@ no_two_alike/no_two_alike rule.variety unsupported UNSUPPORTED until RC
 nomad_camp/camp zone.standard fits
 old_new_town/town zone.standard fits
 old_new_town/hill_street connector.street fits
-old_new_town/quarter_stair connector.stair unsupported UNSUPPORTED until 7a
+old_new_town/quarter_stair connector.stair refused NO_CLIMB
 old_new_town/two_styles rule.palette refused NO_FEATURE
 one_block/reach zone.standard fits
 one_block/gentle_terraces form.terrace refused OVERLAP
@@ -89,7 +85,7 @@ redstone_gate/fortress zone.standard adjusted
 redstone_gate/moat connector.channel fits
 redstone_gate/curtain_wall connector.wall adjusted
 redstone_gate/main_gate connector.gate refused NO_ROOM
-redstone_gate/drawbridge connector.drawbridge unsupported UNSUPPORTED until mechanism
+redstone_gate/drawbridge connector.drawbridge blocked DEPENDENCY
 ring_city/ring_town zone.standard blocked DEPENDENCY
 ring_city/crater_lake form.crater unsupported UNSUPPORTED until 7c
 rival_families/estates zone.standard refused NO_FEATURE
@@ -107,7 +103,7 @@ ship_town/ship_deck zone.standard fits
 ship_town/ship_hull form.ship_hull unsupported UNSUPPORTED until unscheduled
 ship_town/ship_masts form.mast unsupported UNSUPPORTED until unscheduled
 sky_monastery/cloister zone.standard fits
-sky_monastery/long_stair connector.stair unsupported UNSUPPORTED until 7a
+sky_monastery/long_stair connector.stair refused NO_CLIMB
 sky_monastery/sky_island form.floating_island unsupported UNSUPPORTED until N-P0-1
 sorting_warehouse/trading_post zone.standard fits
 spiral_town/hill_town zone.standard fits
@@ -131,7 +127,7 @@ treetop_village/bridge_tower connector.rope_bridge refused NO_GAP
 treetop_village/bridge_barn connector.rope_bridge refused NO_GAP
 treetop_village/bridge_cottage connector.rope_bridge refused NO_GAP
 treetop_village/bridge_shop connector.rope_bridge refused NO_GAP
-treetop_village/storehouse_lift connector.lift unsupported UNSUPPORTED until 7a
+treetop_village/storehouse_lift connector.lift refused NO_CLIMB
 twin_villages/villages zone.standard fits
 twin_villages/village_road connector.road fits
 two_districts/town zone.standard fits
@@ -142,10 +138,10 @@ underwater_domes/sea_floor form.seabed_site unsupported UNSUPPORTED until later
 upside_down/village zone.standard fits
 upside_down/main_street connector.street fits
 upside_down/chain_bridges connector.rope_bridge refused NO_GAP
-upside_down/winch_lift connector.lift unsupported UNSUPPORTED until 7a
-upside_down/hang_from_ceiling rule.suspended unsupported UNSUPPORTED until 7b
+upside_down/winch_lift connector.lift refused NO_CLIMB
+upside_down/hang_from_ceiling rule.suspended unsupported UNSUPPORTED until 7c
 walled_town/town zone.standard fits
-walled_town/town_wall connector.wall adjusted
+walled_town/town_wall connector.wall fits
 war_camp/camp zone.standard fits
 war_camp/camp_palisade connector.wall fits
 war_camp/camp_relief form.relief fits
