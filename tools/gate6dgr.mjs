@@ -968,6 +968,13 @@ steps.look = async () => {
   await registerQT(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, P0_TOWN, P0_LOT, P0_CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest });
 }
 
+// ------------------------------------------------------------------ (M5 IG) igunit, iginstant, igsurvival: tools/lib/gatem5ig.mjs
+
+{
+  const { registerIG } = await import('./lib/gatem5ig.mjs');
+  await registerIG(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest, cellsOf, diff, haltWait, removeRegion, OWNER });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);
