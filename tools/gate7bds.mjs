@@ -186,13 +186,18 @@ steps.sim = async () => {
   const e1 = d1.entry ?? {};
   check(e1.binding?.volumeSha === fx.cliff_face.s.spec.volumeSha && e1.binding?.fit === 'attach_to_cliff' && e1.binding?.lotId === 'lot_cliff_face', `the entry carries its SiteBinding in ext (SiteBinding.of: ${json(e1.binding)})`);
   check(json(e1.size) === json({ x: 16, y: 22, z: 12 }), `the entry is exactly the lot box: ${json(e1.size)}`);
-  const b1 = brief(r1.designId), b0 = brief(p1.designId);
+  const b1 = brief(r1.designId);
+  // the two designs got different ids (the same name: <id> and <id>_2): the plain BRIEF's id is read as the site one's before the diff
+  const idOf = (t) => (/^Design id: `([a-z0-9_]+)`/m.exec(t ?? '') ?? [])[1];
+  const b0raw = brief(p1.designId);
+  const b0 = b0raw && idOf(b0raw) && idOf(b1) ? b0raw.replaceAll(idOf(b0raw), idOf(b1)) : b0raw;
   const lines = (t) => (t ?? '').split('\n');
   const added = lines(b1).filter((l) => !lines(b0).includes(l));
   const removed = lines(b0).filter((l) => !lines(b1).includes(l));
   const siteSec = added.filter((l) => l.startsWith('## Site'));
-  check(!!b1 && !!b0 && dp.status === 'DONE' && siteSec.length === 1 && added.some((l) => /cliff face facing south/.test(l)) && added.some((l) => /--site site\/site\.arvx --lot site\/site\.json/.test(l)) && removed.length <= 4,
-    `the BRIEF diffed against the plain request's: +${added.length} lines (the Site section in words from the analysis, the lot size, the site commands), -${removed.length} (the maximum size, groundY, the build and render commands); nothing else moved`, { removed, addedHead: added.slice(0, 12) });
+  const expected = /^$|^- maximum size \(|^- `groundY` is the feet row|^- Build and check: `node kit\/build\.mjs|^- Look at it: `node kit\/render\.mjs/;
+  check(!!b1 && !!b0 && dp.status === 'DONE' && siteSec.length === 1 && added.some((l) => /cliff face facing south/.test(l)) && added.some((l) => /--site site\/site\.arvx --lot site\/site\.json/.test(l)) && removed.every((l) => expected.test(l)),
+    `the BRIEF diffed against the plain request's (ids aligned): +${added.length} lines (the Site section in words from the analysis, the lot size, the site commands), -${removed.length}, each the maximum size, groundY, the build or the render command (or a blank line); nothing else moved`, { removed, addedHead: added.slice(0, 12) });
   fs.mkdirSync(path.join(OUT, 'sim'), { recursive: true });
   if (b1) fs.writeFileSync(path.join(OUT, 'sim', 'BRIEF-site.md'), b1);
   if (b0) fs.writeFileSync(path.join(OUT, 'sim', 'BRIEF-plain.md'), b0);
