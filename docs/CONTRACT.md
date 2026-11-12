@@ -27805,3 +27805,68 @@ and this file. Neither PL nor AF touches any of them but step-inputs and CONTRAC
 | `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the closures that reach lib/check.mjs gain lib/siteCheck.mjs) |
 | api-compat | not run: no Java change |
 | gate-verifier (review only, DEV MODE) | **PASS** at 61b6d615: scope (no Java, no PL/AF/DS work, no versions), no-site byte identity (every check.mjs change guarded by `g.window` but lightLevels' `g.terrain`, equal for a plain grid), each rule against §7.4/§11, the eight readings, fit_suspend's one-block change and re-cut goldens, the variants not vacuous; sc, sv, schem, check, phase5a and f7b-foundation re-run (78/78), step-inputs clean. Minor, fixed after: the neck message named an unused `neckContact` limit (dropped: a neck is one cell of contact); a stray blank line. Noted: span, chain and the cliff cantilever stay unjudged until a bible sets them (DS and the bible work own that) |
+
+### Slice SO as built (branch `slice/SO` off main b1ee8dcc; versions NEXT; $0; recorded 2026-11-11)
+
+Support order, gravity after support, cosmetic scaffolding and the crate at the first port's landing for a site-aware building under
+construction (SETTLEMENTS §7.7, slice table row 6), on 7bF's frozen surface and PL's placement (no 7bF or PL signature changed; **the API
+package is untouched**: no member, no feature, no Reason; api-compat clean). Everything keys on the request's site (`SiteFit.now()`, as PL's
+checks do) at conversion and on the record's `ext["architect_mc:site"]` binding afterwards; a plain or `on_pad` placement takes none of it.
+
+**Built:**
+- **`BuildOrder.bySupport(y, kind, support, pairOf, anchor, neighbours, below)`** (pure; `BuildOrder.order` untouched): a BFS over the queued
+  cells (faces) from the anchor cells gives each cell its support distance; cells come by (distance, y, today's full/partial/attachable
+  rank, index), each only once it is connected (an anchor, or a face neighbour already emitted) and its dependency is emitted (an attachable's
+  support, a gravity block's queued cell below); second halves ride with their first. So every prefix of the queue is connected to the site.
+  Cells no anchor reaches (none in the examples: PL's `SITE_UNSUPPORTED` refuses such a placement) come last, lowest key first.
+- **Anchors** (`Builder.anchors`, at conversion, the instant placement standing): a queued cell face-adjacent to a cell the template does not
+  write (`TerrainFit.writes` 0, or outside the template box) that is site-solid in the world (`SiteFit.siteSolid`: PL's support scan's
+  predicate; never scaffolding or a crate) or keep-critical. The written cells (blocks and the air a design carves) never anchor, so this is
+  PL's live support scan's start, over the same world.
+- **The runtime attach gate** (`Builder.Run.bySupport`, `Run.attached`): the builder skips cells the crate can't pay and places later ones,
+  so a sorted queue alone would let a hopper-fed build float a cell. A support-order run places a cell only when a face neighbour is a built
+  cell of the site or a site-solid world cell (read without a ticket), and a gravity block only once its queued cell below is built. The run
+  reads its fit from the record's binding, so a restart rebuilds the gate.
+- **Gravity** (`Builder.gravity`): `FallingBlock`s (sand, gravel, concrete powder, anvils) and scaffolding wait for their queued cell below,
+  in the order and at run time.
+- **Scaffolding** (N-7b-5: on for every fit but `on_pad`): vanilla scaffolding columns (`distance=0`, settled) under the building, every
+  3rd column along world x and z: under the column's lowest queued cell, down through open air the template does not write and no other
+  site holds, standing on a sturdy site-solid cell within 24 (else left out: water, the building itself, nothing within reach). Inside
+  the site's own restore box too: a Deconstruct leaves the site's scaffolding cells out of its tally (never the player's block, never a
+  refund; `SiteJournal.cellsOfKind`). On the gate houses: the cliff house 12 columns, the hanging house 10, the span house none (water under
+  it). Written as one **`architect:scaffold` CELL entry** (`WorldJournal.SCAFFOLD`) in the site's undo group, created in the same journal
+  transaction as the site's target and its crate, placed with the cell sites' flags (no side effects, no drops). It costs nothing and refunds
+  nothing. On completion (every path reaches `Builder.complete`: the step and `finish`) it is undone through the journal (CELL: only cells
+  still holding scaffolding go back) and released, first thing, so a stop between runs complete again and finds nothing left. A Deconstruct
+  or Remove before that undoes it with the site's group. `SiteJournal.main`, the removal evidence and the start-up "only guard entries"
+  sweep leave the kind out as they do the crate's; a road plan treats it as a blocker, as the crate.
+- **The crate** (S-7b-7): beside the first port's landing: the port's design cell through the placement's rotation, one step along a side
+  port's facing, then up at most 3 or down at most 8 to the first standable cell (a `down` port: the first standable cell at most 24 under
+  it; `up`: 8 over it); then the landing's right, its left, one and two steps further out and their sides (a vertical port: the four sides),
+  the first that is standable, outside the snapshot box and every other site, no entry's, with two air cells over it (the hopper chain).
+  None: today's rule. `on_pad` and plain placements keep today's crate.
+- **Dev hooks** (`SliceSoDev`, generated headless too; docs/DEVBRIDGE.md): `dev.so.watch`, `dev.so.snapshots`, `dev.so.scaffold`.
+- **Gate step** `so-survival` (`tools/gate7bso.mjs`, impact entry "7b SO support order", chain `7bso`).
+
+**Readings chosen** (the contract silent, the smallest reading):
+1. **Distance is computed at conversion from the template's write grid over the live world** (written cells never anchor) rather than
+   threaded from PL's pre-write scan: under KEEP the unwritten cells are the site's, unchanged by the placement, so the two are the same set.
+2. **The golden covers template cells.** `BuildOrderGoldenTest` records, on main b1ee8dcc's BuildOrder (committed before SO touched it), the
+   queue `Builder.queueOrder` gives over each `on_pad` example's template (the four examples, the four massings, `fit_on_pad`; 9 designs); an
+   `on_pad` placement's fill and approach cells depend on the world (PL's in-game `on_pad` byte identity covers the whole placement). The
+   dispatch is the test's seam: a support order reaching `on_pad` fails it.
+3. **Unreachable cells and dependency cycles** come last (lowest key first) rather than refusing: PL already refuses an unsupported template.
+4. **A gravity block over a cell that is neither queued nor site-solid** is not held (it would never be placed); only a queued cell below is
+   waited for.
+5. **Scaffolding is static**, planned and written at conversion ("under unsupported prefixes" read as under the bottom cells that hang over
+   air), not grown with the build: one journal transaction, one entry, no per-tick journal writes.
+6. **A column per lattice column, under its lowest cell**, inside the restore box where the house hangs over air in it (none of the three
+   gate houses touches its box's bottom row): the Deconstruct tally skips a cell that is the site's scaffolding and still holds it, so the
+   BOX entry's "player's block" rule never sees it. Spacing 3, height cap 24, at most 2048 cells; never at the crate (or its two cells over),
+   nor within one column of a port or its landing (the way in stays open).
+7. **No scaffolding switch** ("optional per bible" in §7.7): no bible member reads it in 7b; on per N-7b-5 for every fit but `on_pad`.
+8. **The crate's landing for a `down` port** is the first standable cell under it; a port whose landing has no standable cell within reach
+   (or no port) falls back to today's rule. The three gate houses all find their landing.
+9. **Only `Sites.place`** (one request, synchronous: `SiteFit.now()` is set) converts a site placement; PL keeps batches refusing a site, so
+   the ticked `PlaceJob` conversion never sees one.
+
