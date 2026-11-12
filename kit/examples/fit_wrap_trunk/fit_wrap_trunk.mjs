@@ -6,8 +6,6 @@ import { Blueprint, PALETTES } from '../../lib/kit.mjs';
 export const id = 'fit_wrap_trunk';
 export const fit = 'wrap_trunk';
 export const exampleSite = 'trunk';
-/** The warnings (rule names) of the template-only check (no composite until SC): the trunk's cells inside the room are site, not template, and only the composite (SC) sees them. kit/tools/examples.mjs holds them exact. */
-export const templateOnlyWarnings = ['enclosure', 'interior'];
 
 export default function build({ palette = PALETTES.rustic, site } = {}) {
   const p = palette;

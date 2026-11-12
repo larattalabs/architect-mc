@@ -18,18 +18,29 @@ import { fitOf } from './siteFits.mjs';
 import { SITE_SOLID, SITE_STAND_IN } from './site.mjs';
 
 /**
- * The site rules' numbers. The fit table names three of them 'bible' (the cantilever, the unsupported span, the chain run); no bible
- * carries one yet, so these are the defaults (opts.siteLimits overrides any of them):
- * - cantilever 4: M15's "a solid cell more than 4 horizontally from a support column or a bracket" (SETTLEMENTS §11);
- * - span 24: the region bridges' default maxSpan (kit/lib/region/program.mjs `bridge`, checked by region M10);
- * - chain 24: a chain run as long as the longest unsupported span;
+ * The site rules' numbers (opts.siteLimits overrides any of them; siteLimits below adds the fit's own):
+ * - cantilever 4: M15's "a solid cell more than 4 horizontally from a support column or a bracket" (SETTLEMENTS §11), for every keep fit
+ *   but attach_to_cliff, whose row names the bible's limit;
  * - neckMass 200, neckContact 2: M15's necks ("a mass over 200 cells hanging on fewer than 2 cells of contact");
  * - bearCells 2: attach_to_cliff's "brackets bear on at least 2 rock cells each"; endBearing [2, 2]: span's "2x2 cells each";
  * - portWithin 2: ports_met's "at the hinted cell within 2"; breachWithin 1: site_breach's "WATER or LAVA within 1".
  */
 export const SITE_CHECK_LIMITS = Object.freeze({
-  cantilever: 4, span: 24, chain: 24, neckMass: 200, neckContact: 2, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1,
+  cantilever: 4, neckMass: 200, neckContact: 2, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1,
 });
+
+/**
+ * The limits a fit is judged by: SITE_CHECK_LIMITS, then the fit row's own (lib/siteFits.mjs `limits`), then `overrides` (opts.siteLimits).
+ * A fit row's 'bible' limit (attach_to_cliff's cantilever, span's span, suspend's chain) is the bible's; no bible carries one yet, so
+ * without an override it is unbounded (null: measured into the metrics, never a finding).
+ */
+export function siteLimits(fit, overrides = {}) {
+  const row = fitOf(fit);
+  const out = { ...SITE_CHECK_LIMITS, span: null, chain: null };
+  for (const [k, v] of Object.entries(row.limits)) if (k in out || v === 'bible') out[k] = v === 'bible' ? null : v;
+  for (const [k, v] of Object.entries(overrides ?? {})) if (v !== undefined) out[k] = v;
+  return out;
+}
 
 /**
  * The site rules' ids, in report order (each finding's `rule`; SITE_UNFIT's detail names one). `fit:<mode>` is one id per fit. Errors:
@@ -49,6 +60,7 @@ const SOLID = new Set(SITE_SOLID);
 /** Site classes a written cell may never replace (site_keep): a player's block, a block entity, another owner's cell. */
 export const SITE_UNTOUCHABLE = Object.freeze(['PLAYER', 'BLOCK_ENTITY', 'OWNED']);
 const UNTOUCHABLE = new Set(SITE_UNTOUCHABLE);
+const byCell = (a, b) => { const p = unfmt(a); const q = unfmt(b); return p[0] - q[0] || p[1] - q[1] || p[2] - q[2]; };
 const sample = (list, n = 5) => list.slice(0, n).join('; ') + (list.length > n ? '; ...' : '');
 
 /** The checker's stand-in cell per site class (null: air to the checker: air, plants, nothing known). */
@@ -105,7 +117,7 @@ const massOf = (c) => { const f = BLOCKS[c.name]?.family; return f !== 'air' && 
 export function siteFindings(ctx) {
   const { g, sidecar, structureSize, interior: w, outside, walker: wk, light } = ctx;
   const site = g.site;
-  const L = { ...SITE_CHECK_LIMITS, ...(ctx.limits ?? {}) };
+  const L = siteLimits(site.fit, ctx.limits);
   const findings = [];
   const add = (rule, severity, count, cells, message) => {
     findings.push({ rule, severity, ...(SITE_RULE_M[rule] ? { m: SITE_RULE_M[rule] } : {}), count, cells: cells.slice(0, 8).map((c) => (typeof c === 'string' ? unfmt(c) : [...c])), message: `${rule}: ${message}` });
@@ -194,12 +206,12 @@ export function siteFindings(ctx) {
         const thin = s.ends.filter((e) => !e.square);
         if (thin.length) extra.push({ n: thin.length, cells: thin.map((e) => e.cell), text: `${thin.length} end(s) bear on no ${L.endBearing[0]}x${L.endBearing[1]} of the site's solid (end at ${thin.map((e) => `${s.axis}=${e.u0}..${e.u1}`).join(', ')})` });
       }
-      if (s.span > L.span) extra.push({ n: 1, cells: [], text: `an unsupported span of ${s.span} (at most ${L.span})` });
+      if (L.span !== null && s.span > L.span) extra.push({ n: 1, cells: [], text: `an unsupported span of ${s.span} (at most ${L.span})` });
     }
     if (site.fit === 'suspend') {
       const runs = chainRuns(g);
       metrics.chainMax = runs.max;
-      const over = runs.tops.filter(([, n]) => n > L.chain).map(([k]) => k);
+      const over = L.chain === null ? [] : runs.tops.filter(([, n]) => n > L.chain).map(([k]) => k);
       if (over.length) extra.push({ n: over.length, cells: over, text: `${over.length} chain run(s) longer than ${L.chain} (longest ${runs.max})` });
     }
     if (extra.length) add(fitRule, 'warning', extra.reduce((a, e) => a + e.n, 0), extra.flatMap((e) => e.cells), extra.map((e) => e.text).join('; '));
@@ -295,8 +307,39 @@ export function siteFindings(ctx) {
     const seeds = [...structural].filter((k) => { const [x, y, z] = unfmt(k); return row.bears === 'up' ? solidLeft(x, y + 1, z) || bearing.has(k) : bearing.has(k); });
     const cant = cantilever(structural, seeds, new Set([...structural].filter((k) => BLOCKS[g.cells.get(k).name]?.family === 'stairs')));
     metrics.cantileverMax = cant.max;
-    const over = [...cant.dist].filter(([, d]) => d > L.cantilever).map(([k]) => k);
-    if (over.length) add('cantilever', 'warning', over.length, over, `${over.length} block(s) more than ${L.cantilever} horizontally from a support column or a bracket (farthest ${cant.max}), e.g. ${sample(over)}`);
+    const limit = L.cantilever;
+    metrics.cantileverLimit = limit;
+    // a cell held on both sides along x or z (its row's run of the mass reaches a cell within the limit each way) is a span, not a cantilever
+    const near = (k) => (cant.dist.get(k) ?? Infinity) <= limit;
+    const held = (k) => {
+      const [x, y, z] = unfmt(k);
+      return [[1, 0], [0, 1]].some(([dx, dz]) => [1, -1].every((sgn) => {
+        for (let i = 1; ; i++) {
+          const n = fmt(x + sgn * i * dx, y, z + sgn * i * dz);
+          if (!structural.has(n)) return false;
+          if (near(n)) return true;
+        }
+      }));
+    };
+    // a horizontal walk port's own column (its width, the floor row under its feet through its height) may stand one step past a supported
+    // cell: the connector lands on the cell outside the lot box (§8.4) and region M15 judges that joint (7c). Only that one column.
+    const portCol = new Map();
+    for (const sp of site.ports) {
+      const d = designPorts.find((q) => q.name === sp.name && q.kind === 'architect:walk');
+      const v = d && VEC[d.facing];
+      if (!v || v[1] !== 0) continue;
+      const along = v[0] ? [0, 0, 1] : [1, 0, 0];
+      for (let i = 0; i < (sp.width ?? 1); i++) for (let dy = -1; dy < (sp.height ?? 2); dy++) {
+        const c = [d.x + along[0] * i, d.y + dy, d.z + along[2] * i];
+        portCol.set(fmt(...c), fmt(c[0] - v[0], c[1], c[2] - v[2]));
+      }
+    }
+    const portExempt = (k) => portCol.has(k) && near(portCol.get(k));
+    metrics.cantileverPortCells = [...portCol.keys()].filter((k) => cant.dist.has(k)).sort(byCell).map((k) => ({ cell: unfmt(k), dist: cant.dist.get(k) }));
+    const heldCells = limit === null ? [] : [...cant.dist].filter(([k, d]) => d > limit && held(k));
+    metrics.cantileverHeld = heldCells.length ? Math.max(...heldCells.map(([, d]) => d)) : 0;
+    const over = limit === null ? [] : [...cant.dist].filter(([k, d]) => d > limit && !held(k) && !portExempt(k)).map(([k]) => k).sort(byCell);
+    if (over.length) add('cantilever', 'warning', over.length, over, `${over.length} block(s) more than ${limit} horizontally from a support column or a bracket, held on one side only (farthest ${Math.max(...over.map((k) => cant.dist.get(k)))}), e.g. ${sample(over)}`);
     const nk = necks(structural, seeds, L.neckMass);
     metrics.necks = nk.length;
     if (nk.length) add('neck', 'warning', nk.length, nk.map((n) => n.at), nk.map((n) => `a mass of ${n.mass} cells hangs on the one cell ${n.at}`).join('; ') + ` (more than ${L.neckMass} cells need at least ${L.neckContact} cells of contact)`);
@@ -442,8 +485,11 @@ function caveOf(g, w, outside, light) {
 /**
  * M15 cantilever: each structural cell's horizontal distance through the mass to a support. Supports (distance 0) are the cells that bear
  * on the site; a cell resting on a cell (the one below it), hanging from one (the one above) or a stair stepping up diagonally from one (a
- * bracket's brace, a roof slope) carries that cell's distance; a horizontal step through the mass adds 1. A 0-1 flood from the supports.
+ * bracket's brace, a roof slope) carries that cell's distance; a horizontal step through the mass (8 ways: a diagonal step counts one, as
+ * "4 horizontally" reads) adds 1. A 0-1 flood from the supports.
  */
+/** horizontal steps (Chebyshev: "4 horizontally" counts a diagonal step as one) */
+const H8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const ZERO = [[0, 1, 0], [0, -1, 0], [1, 1, 0], [-1, 1, 0], [0, 1, 1], [0, 1, -1]];
 function cantilever(structural, seeds, stairs) {
   const dist = new Map();
@@ -467,7 +513,7 @@ function cantilever(structural, seeds, stairs) {
         dist.set(n, level);
         now.push(n);
       }
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (const [dx, dz] of H8) {
         const n = fmt(x + dx, y, z + dz);
         if (!structural.has(n) || (dist.has(n) && dist.get(n) <= level + 1)) continue;
         dist.set(n, level + 1);

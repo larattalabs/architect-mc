@@ -7,8 +7,6 @@ import { Blueprint, PALETTES } from '../../lib/kit.mjs';
 export const id = 'fit_carve_into';
 export const fit = 'carve_into';
 export const exampleSite = 'tunnel_hill';
-/** The warnings (rule names) of the template-only check (no composite until SC): the rock is the room's walls and ceiling, and only the composite (SC) sees it. kit/tools/examples.mjs holds them exact. */
-export const templateOnlyWarnings = ['enclosure', 'enclosure'];
 
 export const params = {
   depth: { type: 'int', min: 6, max: 10, default: 10, label: 'Depth' },

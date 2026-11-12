@@ -1,13 +1,12 @@
 // Hanging house (7b SV, fit suspend): a flat-roofed house hung on chains from a rock overhang, built into the 7bF fixture `overhang`. A
 // chain rises from each roof corner to a hang point on the overhang's underside (the site's keep-critical cells), two more carry the
-// balcony's front, and a ladder hangs from the floor down to the site's walk port (a hatch: the graph arrives from below).
+// balcony's front, and a ladder hangs from the floor down to the site's walk port (a hatch: the graph arrives from below), closed by a
+// trapdoor in the floor.
 import { Blueprint, PALETTES } from '../../lib/kit.mjs';
 
 export const id = 'fit_suspend';
 export const fit = 'suspend';
 export const exampleSite = 'overhang';
-/** The warnings (rule names) of the template-only check (no composite until SC): none: it checks clean on the template alone. kit/tools/examples.mjs holds them exact. */
-export const templateOnlyWarnings = [];
 
 export default function build({ palette = PALETTES.rustic, site } = {}) {
   const p = palette;
@@ -51,9 +50,11 @@ export default function build({ palette = PALETTES.rustic, site } = {}) {
   });
 
   bp.part('hatch', () => {
-    // a ladder from the walk port up through the floor, on a post of the frame role
+    // a ladder from the walk port up to the floor, on a post of the frame role, and a closed trapdoor in the floor over it (7b SC: on the
+    // composite an open hatch lets the outside into the room, as a doorway without a door does)
     bp.post(hx, hz + 1, hatch.at[1], floorY - 1);
-    bp.ladder(hx, hz, hatch.at[1], floorY, 'north');
+    bp.ladder(hx, hz, hatch.at[1], floorY - 1, 'north');
+    bp.set(hx, floorY, hz, p.trapdoor, { facing: 'north', half: 'top', open: 'false' });
   });
 
   bp.part('openings', () => {

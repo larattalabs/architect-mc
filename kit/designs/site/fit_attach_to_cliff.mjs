@@ -11,8 +11,6 @@ export const id = 'fit_attach_to_cliff';
 export const fit = 'attach_to_cliff';
 /** The 7bF fixture this example is built into (kit/tools/examples.mjs). */
 export const exampleSite = 'cliff_face';
-/** The warnings (rule names) of the template-only check (no composite until SC): none: it checks clean on the template alone. kit/tools/examples.mjs holds them exact. */
-export const templateOnlyWarnings = [];
 
 export default function build({ palette = PALETTES.rustic, site } = {}) {
   const p = palette;
