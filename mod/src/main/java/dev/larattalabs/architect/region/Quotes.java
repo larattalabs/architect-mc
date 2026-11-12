@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  * bill), which RegionTargets' runs pay cell by cell;
  * <li>each bound lot: {@link RegionsImpl#lotItemOf} (the realise's own fit, LotMask and site binding), then the put-down's dry-run
  * verdict (Batches: construction, LAYER, the region's entrance style, no protected-area check; a site lot under {@link SiteFit#with}), then
- * {@link Sites#quoteBill} (C26's full bill less the masked cells and the cells the land holds already);
+ * {@link Sites#quoteBill} (C26's full bill less the masked cells), with the plan's own 4e roads standing ({@link Sites#QUOTE_ROADS});
  * <li>each 4e road: checkRoad over the land now and {@code RoadBuilder.bom} (the plan check's call);
  * <li>a first realise's gate mechanisms (MechCharges charges them whole; a revision queues none);
  * <li>the fluids' charge: once per region ({@code survival.chargedAt}), so a revision of a region charged already has none.

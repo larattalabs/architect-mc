@@ -6,8 +6,8 @@
 //                                                      lots: Regions.quote twice between two hashes of the claim box, two listings of the
 //                                                      journal, <world>/architect and the regions dir and two stockpile states (nothing
 //                                                      written, nothing consumed, the answers equal); realised with those entries and fed:
-//                                                      the stockpile's consumed delta equals the quote's bom item for item; qt_hut's piece is not
-//                                                      its template's bill (the put-down's bill, not the template's)
+//                                                      the stockpile's consumed delta equals the quote's bom item for item; the town's qt_hut piece
+//                                                      is more than its template's bill (its approach: C26's full bill)
 //   node tools/gate6dgr.mjs qtapproved  (qt-approved)  a plan/0 town checked in survival: Regions.quoteApproved with two lot entries over the
 //                                                      artifact (the same no-write proof; quote of the artifact's plan id with the merged
 //                                                      entries equals it), realiseApproved with them, fed: consumed equals the quote
@@ -42,17 +42,14 @@ export async function registerQT(steps, h) {
   const ctx = { L, OUT, imp: h.imp, KIT: path.join(root, 'kit') };
   const strip = (q) => { const o = { ...q }; for (const k of ['id', 'type', 'ok', 'ms', 'thread']) delete o[k]; return o; };
 
-  /**
-   * The quote designs: rs_hut and rs_shed (RS's), and qt_hut: a room whose floor (its ground row, y 0 under groundY 1) is grass, as the flat
-   * land's own ground there: the builder finds those cells built and pays nothing, so the lot's bill is not its template's.
-   */
+  /** The quote designs: rs_hut and rs_shed (RS's), and qt_hut: a room with a generated approach (off a road, its bill is more than its template's). */
   async function designs() {
     await G.designs(ctx);
     const { Blueprint, palette } = await h.imp('lib/kit.mjs');
     const { writeBlueprint } = await h.imp('lib/write.mjs');
     const X = 6, Z = 4, H = 4;
     const bp = new Blueprint({ id: 'qt_hut', name: 'qt_hut', description: 'QT hut (a generated approach)', type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 1], origin: [0, 0, 0], groundY: 1, front: 'south', palette: palette({}), interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
-    bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall: 'minecraft:spruce_planks', floor: 'minecraft:grass_block', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
+    bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall: 'minecraft:spruce_planks', floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
     bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); });
     bp.spot('entrance', 3, Z + 1, 180);
     const dir = path.join(L.LIBRARY, 'qt_hut');
@@ -142,11 +139,16 @@ export async function registerQT(steps, h) {
     check(!cr.refused, `a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
     // the town in survival: flat_village, its lots pads, realised and fed until built
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }] }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const q0 = await quote({ planId: p0.planId, lotEntries: { cottage_1: 'rs_hut' } });
+    const q0 = await quote({ planId: p0.planId, lotEntries: { cottage_1: 'qt_hut' } });
     out.town = { planId: p0.planId, quote: strip(q0) };
     check(!q0.refused && q0.survival === true && q0.region === null, `the town's plan quoted (a first realise, survival): ${q0.refused ?? `bom ${json(q0.bom)}`}`);
     const ps00 = await pile();
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'qt_hut' } });
+    // the put-down's bill, not the template's (the plan check's lot bill): qt_hut's generated approach is in its piece
+    const tq0 = await tmplBom('qt_hut');
+    const d0 = G.minus(q0.bomParts?.['lot:cottage_1'] ?? {}, tq0);
+    out.town.template = { qt_hut: tq0, diff: d0 };
+    check(Object.values(d0).some((n) => n > 0), `lot cottage_1 (qt_hut)'s piece is more than its template's bill: + ${json(d0)} (its approach, C26's full bill)`);
     const t = await consumedEquals(region, q0, ps00, 'the town (a first realise, quote(planId) with a bound lot)', (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
     out.town.paid = t.paid;
     // a growth by planRevision with two bound lots: quoted, nothing written; realised with those entries, fed; consumed = quote
@@ -158,11 +160,8 @@ export async function registerQT(steps, h) {
     out.growth = { planId: g.planId, quote: strip(q), rounds: nw.rounds };
     check(q.survival === true && q.region === region && json(q.lotEntries) === json(entries) && Object.keys(q.bomParts).some((k) => k.startsWith('tiles:')) && q.bomParts['lot:qa'] && q.bomParts['lot:qb'],
       `the growth's quote: region ${q.region}, entries ${json(q.lotEntries)}, parts ${json(Object.keys(q.bomParts ?? {}))}, exact ${q.exact}${q.notes?.length ? `; notes ${json(q.notes)}` : ''}`);
-    // the put-down's bill, not the template's (the plan check's lot bill): qt_hut's grass floor stands already, so its piece is less
-    const tq = await tmplBom('qt_hut');
-    const d1 = G.minus(q.bomParts['lot:qa'] ?? {}, tq);
-    out.growth.template = { qt_hut: tq, diff: d1 };
-    check(Object.keys(d1).length > 0, `lot qa (qt_hut)'s piece is not its template's bill (the cells the land holds already, C26's full bill): piece - template = ${json(d1)}`);
+    // (recorded) by a plan road the approach stops at it: the piece is then the template's
+    out.growth.template = { diff: G.minus(q.bomParts['lot:qa'] ?? {}, await tmplBom('qt_hut')) };
     // the quote of an over-bound bill takes nothing (Steward's 4.2 step 5): the stockpile unchanged across the quotes (above), the realise now
     const ps0 = await pile();
     const r = await call('dev.region.realise', { planId: g.planId, lots: entries }, 300_000);
@@ -216,10 +215,7 @@ export async function registerQT(steps, h) {
     check(!qp.refused && json(qp.bom) === json(q.bom) && json(qp.bomParts) === json(q.bomParts), `quote(planId) of the artifact's plan with the same entries equals quoteApproved's bill: ${qp.refused ?? json(qp.bom)}`);
     // the plan check's own bill (lots as template bills) is not the quote: the quote's lot pieces carry C26's full bill
     out.check = { bom: c0.cost?.bom, bomParts: c0.cost?.bomParts };
-    const tq = await tmplBom('qt_hut');
-    const d2 = G.minus(q.bomParts['lot:h1'] ?? {}, tq);
-    out.template = { qt_hut: tq, diff: d2 };
-    check(Object.keys(d2).length > 0, `lot h1 (qt_hut)'s piece is not its template's bill: piece - template = ${json(d2)}`);
+    out.template = { diff: G.minus(q.bomParts['lot:h1'] ?? {}, await tmplBom('qt_hut')) }; // (recorded)
     const ps0 = await pile();
     const region = await G.realise(ctx, c0.artifactSha, entries);
     const c = await consumedEquals(region, q, ps0, 'the approved artifact (quoteApproved with two lot entries, then realiseApproved)', (st, rs) => st.view.state === 'PLACED' && rs.build?.done);

@@ -1014,8 +1014,7 @@ public final class Sites {
 	/**
 	 * (M5 QT) What a construction placement behind a dry-run {@link Verdict} takes from a stockpile, as the builder pays it: C26's full bill
 	 * ({@link FullBom}: template, foundation and approach at their last write), less the cells in {@code masked} (a region lot's LotMask: never
-	 * the site's), less the cells whose block the world holds already (the builder marks them built and pays nothing, {@code Run.matches}),
-	 * each cell costed dry as the run costs it. Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
+	 * the site's), each cell costed dry as the run costs it (the conversion clears every queued cell to air, so each is paid). Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
 	 */
 	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
 		if (v.plan() == null || !v.construction()) {
@@ -1032,21 +1031,13 @@ public final class Sites {
 			if (masked != null && masked.contains(p)) {
 				continue;
 			}
+			// (every queued cell is cleared to air at the conversion, Builder.clear: none is found built, each is paid)
 			BlockState target = RegionTargets.dry(e.getValue());
-			net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
-			BlockState now = c == null ? null : c.getBlockState(BlockPos.of(p));
-			if (now == null) {
-				if (!why.contains("a cell is not loaded")) {
-					why.add("a cell is not loaded");
-				}
-			} else if (dev.larattalabs.architect.journal.Copper.is(now, target.getBlock())) {
-				continue;
-			}
 			for (dev.larattalabs.architect.survival.SurvivalItems.Cost k : Cells.cost(target)) {
 				items.merge(k.item(), k.count(), Integer::sum);
 			}
 		}
-		boolean exact = r.exact() && v.refusals().isEmpty() && why.size() == r.inexactBecause().size();
+		boolean exact = r.exact() && v.refusals().isEmpty();
 		return new BomFull(items, exact, r.driftCells(), List.copyOf(why));
 	}
 

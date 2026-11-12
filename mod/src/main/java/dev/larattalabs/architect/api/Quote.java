@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>{@code bomParts} names each piece the bill sums, as the plan check's {@code cost.bomParts} does: {@code tiles:<group>} (the region's paid
  * cells of that target group, over the plan survey: the kit's own bill), {@code lot:<lot>} (the bound entry's construction bill at the fit the
- * realise places it: template, foundation and approach, less the lot's masked cells and the cells the land holds already), {@code road:<id>}
+ * realise places it: template, foundation and approach, less the lot's masked cells; its approach stops at the plan's own 4e roads, which stand by then), {@code road:<id>}
  * (a 4e road's construction bill over the land now), {@code mech:<lot>} / {@code mech:<gate>} (a gate mechanism's bill: a first realise only;
  * a revision writes none), {@code fluids} (a lava bucket per lava source, an iron bars per grate cell: once per region, so a revision of a
  * region whose fluids were charged has none; the bucket comes back). Later slices add pieces of their own (FK: {@code fill:<lot>}, a filled
