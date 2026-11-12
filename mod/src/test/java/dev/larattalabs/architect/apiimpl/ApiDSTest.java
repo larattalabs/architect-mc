@@ -141,4 +141,14 @@ class ApiDSTest {
 		assertEquals(SiteSpec.MAX_PORTS, Limits.SITE_PORTS_MAX);
 		assertNull(Wire4b.str(new JsonObject(), "newEntryId"));
 	}
+
+	@Test
+	void aSiteVariantsDerivationReadsAsSite() {
+		JsonObject j = JsonParser.parseString("{\"derivation\":{\"source\":\"gen_cliff_house\",\"sourceVersion\":1,\"kind\":\"site\",\"recipe\":"
+			+ "{\"lotId\":\"lot_cliff_east\",\"volumeSha\":\"" + "f".repeat(64) + "\",\"fit\":\"attach_to_cliff\",\"values\":{}}}}").getAsJsonObject();
+		var d = Wire0b.derivation(j).orElseThrow();
+		assertEquals(dev.larattalabs.architect.api.Library.Derivation.Kind.SITE, d.kind());
+		assertEquals("gen_cliff_house", d.source());
+		assertEquals("lot_cliff_east", d.recipe().get("lotId").getAsString());
+	}
 }

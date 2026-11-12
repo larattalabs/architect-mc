@@ -299,7 +299,8 @@ export class Estimates {
     const bases: string[] = [];
     for (const it of items) {
       const m = model(it);
-      const pj = this.perJob(kind, m);
+      // (7b DS) a site-aware item is a site-aware design ('site': 1.3-2x until measured)
+      const pj = this.perJob(kind === 'design' && it.site ? 'site' : kind, m);
       if (!bases.includes(pj.basis)) bases.push(pj.basis);
       usd[0] += pj.usd[0];
       usd[1] += pj.usd[1];

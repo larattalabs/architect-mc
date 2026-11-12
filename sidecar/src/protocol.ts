@@ -406,6 +406,7 @@ export const DesignRequest = DesignRequestBase.extend({
   site: SiteSpec.optional().describe("(7b DS, feature site.design) a site-aware design: built INTO this site (the template is the lot box, checked on the composite; the scratch gets site/ and the brief a Site section). With versionOf: a paid adaptation of that entry to the site. Excludes massing and fromMassing"),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.site && (r.massing || r.fromMassing)) ctx.addIssue({ code: 'custom', path: ['site'], message: 'a site-aware design has no massing pass (7b DS): send it as one design' });
+  if (r.site && r.critique?.mode === 'polish') ctx.addIssue({ code: 'custom', path: ['critique'], message: 'a site-aware design is changed by versionOf, not polish (7b DS): critique mode polish is refused' });
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
   if (r.palette !== undefined && r.bible !== undefined) ctx.addIssue({ code: 'custom', path: ['palette'], message: 'a request takes a palette (materials only) or a bible (set mode), not both' });
@@ -558,6 +559,11 @@ export const GroupRequest = z
     const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
     if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', path: ['items'], message: 'duplicate itemKey' });
     if (g.approvalUi === 'owner' && !g.owner) ctx.addIssue({ code: 'custom', path: ['approvalUi'], message: 'approvalUi "owner" needs the group\'s owner' });
+    // (7b DS) a site item is one placement: nothing copies it (its site variants are Designs.siteVariant)
+    const sited = new Set(g.items.map((it, i) => (it.site ? (it.itemKey ?? `item${i + 1}`) : undefined)).filter(Boolean));
+    g.items.forEach((it, i) => {
+      if (it.copyOf !== undefined && sited.has(it.copyOf)) ctx.addIssue({ code: 'custom', path: ['items', i, 'copyOf'], message: `copyOf "${it.copyOf}" is a site-aware item: its site variants are Designs.siteVariant, not copies` });
+    });
   });
 export type GroupRequest = z.infer<typeof GroupRequest>;
 

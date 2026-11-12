@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DesignRequest, FEATURES, parseClientMessage, siteSize, SiteSpec, type Outbound } from '../src/protocol.js';
+import { DesignRequest, FEATURES, GroupRequest, parseClientMessage, siteSize, SiteSpec, type Outbound } from '../src/protocol.js';
 import { SimDesigner } from '../src/sim.js';
 import { designBrief } from '../src/claude/brief.js';
 import { scratchDirFor } from '../src/scratch.js';
@@ -56,6 +56,11 @@ describe('DesignRequest.site (7b DS): schema', () => {
     expect(DesignRequest.safeParse(req({ site: { ...CLIFF.spec, frame: { origin: [0, 0, 0], rotation: 'none' } } })).success).toBe(false);
     expect(DesignRequest.safeParse(req({ site: { ...CLIFF.spec, ports: [CLIFF.spec.ports[0], CLIFF.spec.ports[0]] } })).success).toBe(false);
     expect(DesignRequest.safeParse(req({ site: CLIFF.spec, massing: true })).success).toBe(false);
+    expect(DesignRequest.safeParse(req({ site: CLIFF.spec, critique: { mode: 'polish' } })).success).toBe(false);
+    const item = (over: Record<string, unknown>) => ({ type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, ...over });
+    expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec }), item({ itemKey: 'b', copyOf: 'a' })] }).success).toBe(false);
+    expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec, count: 2 })] }).success).toBe(false);
+    expect(GroupRequest.safeParse({ name: 'g', bible: 'rustic', items: [item({ itemKey: 'a', site: CLIFF.spec }), item({ itemKey: 'b' })] }).success).toBe(true);
     expect(siteSize(CLIFF.spec)).toEqual({ x: 16, y: 22, z: 12 });
     expect(siteSize({ ...CLIFF.spec, frame: { ...CLIFF.spec.frame, rotation: 'clockwise_90' } })).toEqual({ x: 12, y: 22, z: 16 });
   });
@@ -115,6 +120,17 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
     expect(a.ok).toBe(false);
     expect(a.error).toMatch(/no blob "bnothere"/);
     expect(h.sc.designs.list().length).toBe(0);
+  });
+
+  it("refuses a blob that is not the spec's volume (the kept volume is content-addressed) and a site item under massingFirst", async () => {
+    const wrong = put(h, RIFT.bytes);
+    const a = await call(h, { type: 'design.request', request: req({ site: { ...CLIFF.spec, volumeBlobId: wrong } }) });
+    expect(a.ok).toBe(false);
+    expect(a.error).toMatch(/is not the site's frozen volume/);
+    expect(fs.existsSync(path.join(h.cfg.dataDir, 'sites', `${CLIFF.spec.volumeSha}.arvx`))).toBe(false);
+    const g = await call(h, { type: 'design.group', group: { name: 'g', bible: 'rustic', massingFirst: true, items: [{ type: 'cabin', style: 'rustic', features: [], maxSize: { x: 20, y: 24, z: 20 }, itemKey: 'a', site: { ...CLIFF.spec, volumeBlobId: put(h, CLIFF.bytes) } }] } });
+    expect(g.ok).toBe(false);
+    expect(g.error).toMatch(/no massing pass/);
   });
 
   let entryId = '';
@@ -281,8 +297,17 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
     expect(mix.byKind.site).toMatchObject({ count: 2 });
     expect(mix.byKind.original).toMatchObject({ count: 1 });
     expect(mix.byKind.adapted).toMatchObject({ count: 2, usdLow: 0.6, usdHigh: 1.8 });
+    // the group estimate (Java's estimate(GroupRequest)): a site item at the site figure
+    const g = h.sc.estimates.group({ items: [req({ itemKey: 'b', model: 'claude-opus-5-5', site: CLIFF.spec })], concurrency: 1 } as never, ctx);
+    expect(g.basis).toMatch(/site-aware design: 1\.3-2x/);
+    expect(g.usdLow).toBeCloseTo(2.5 * 1.3, 2);
     h.sc.estimates.record('adapted', 'claude-sonnet-5-5', 0.5, 120_000);
     expect(h.sc.estimates.perJob('adapted', 'claude-sonnet-5-5').basis).toMatch(/adaptation claude-sonnet-5-5: 1 measured/);
+  });
+
+  it('refuses polish of a site-bound entry (VERSION_REFUSED site_bound): it is changed by versionOf on its site', async () => {
+    const a = await call(h, { type: 'design.polish', entryId });
+    expect(a).toMatchObject({ ok: false, code: 'VERSION_REFUSED', detail: 'site_bound' });
   });
 
   it('the kit and the sidecar agree on the site rule ids', async () => {

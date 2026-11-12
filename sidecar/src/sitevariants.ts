@@ -22,7 +22,7 @@ import { checkDesign, freeLibraryId, installDesign, KIT, refreshKit, renderPrevi
 import { ClientError, RefusedError } from './errors.js';
 import { bodyHash, OP_KEY_CONFLICT, siteKeyBody } from './opkeys.js';
 import { siteSize, type DesignRequest, type Outbound, type SiteSpec } from './protocol.js';
-import { keepSiteVolume, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles, writeSiteScratch } from './sitedesign.js';
+import { keepSiteVolume, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles, writeSiteFiles } from './sitedesign.js';
 import { findVariantSource, isExt, normalizeKitImports, VariantRefused } from './variants.js';
 import { truncate } from './util/text.js';
 import { writeFileAtomic } from './util/fsx.js';
@@ -263,7 +263,7 @@ export class SiteVariants {
       fs.writeFileSync(design, withDesignId(normalizeKitImports(fs.readFileSync(src.file, 'utf8')), bp));
       const ownBible = path.join(src.dir, 'bible');
       if (!src.bundled && fs.existsSync(ownBible)) fs.cpSync(ownBible, path.join(work, 'bible'), { recursive: true });
-      writeSiteScratch(work, keepSiteVolume(cfg.dataDir, this.host.blobs, site), site, { renders: false });
+      writeSiteFiles(work, keepSiteVolume(cfg.dataDir, this.host.blobs, site), site);
       const entry = src.entry;
       const values = entry.values && typeof entry.values === 'object' ? (entry.values as Record<string, unknown>) : {};
       const palette = entry.palette;

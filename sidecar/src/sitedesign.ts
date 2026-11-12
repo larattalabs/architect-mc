@@ -15,7 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { KIT, minimalEnv } from './designs.js';
 import { ClientError } from './errors.js';
-import { siteSize, type SiteSpec } from './protocol.js';
+import zlib from 'node:zlib';
+import { siteLotBox, siteSize, type SiteSpec } from './protocol.js';
 
 /** The files of a site in a scratch dir (relative to it: the build's cwd) and in an installed entry's dir. */
 export const SITE_DIR = 'site';
@@ -43,11 +44,36 @@ export function keepSiteVolume(dataDir: string, blobs: { get(id: string): unknow
   const dst = siteVolumeFile(dataDir, spec.volumeSha);
   if (fs.existsSync(dst)) return dst;
   if (!blobs.get(spec.volumeBlobId)) throw new ClientError(`no blob "${spec.volumeBlobId}" (the site's frozen volume ${spec.volumeSha.slice(0, 12)}): upload it first`);
+  const bytes = fs.readFileSync(blobs.file(spec.volumeBlobId));
+  // content-addressed: the bytes must be the volume the spec names (ARVX sha = sha-256 of the raw, gunzipped file), never kept otherwise
+  const sha = arvxSha(bytes);
+  if (sha !== spec.volumeSha) throw new ClientError(`blob "${spec.volumeBlobId}" is not the site's frozen volume: it hashes to ${sha ? sha.slice(0, 12) : 'nothing (not an ARVX volume)'}, the spec names ${spec.volumeSha.slice(0, 12)}`);
   fs.mkdirSync(path.dirname(dst), { recursive: true });
   const tmp = `${dst}.${process.pid}.tmp`;
-  fs.copyFileSync(blobs.file(spec.volumeBlobId), tmp);
+  fs.writeFileSync(tmp, bytes);
   fs.renameSync(tmp, dst);
   return dst;
+}
+
+/** The ARVX sha of a volume file's bytes (gzip or raw): sha-256 of the raw file, as the kit's decodeArvx and the mod's Arvx.sha256. */
+export function arvxSha(bytes: Buffer): string | undefined {
+  try {
+    const raw = bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes) : bytes;
+    if (raw.subarray(0, 4).toString('latin1') !== 'ARVX') return undefined;
+    return crypto.createHash('sha256').update(raw).digest('hex');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The site's files without the analysis (a $0 rebuild: a site variant, a follow): site/site.arvx and site/site.json as `{lot, spec}`
+ * (what kit/lib/site.mjs and entrySite read). No child process.
+ */
+export function writeSiteFiles(scratch: string, volumeFile: string, spec: SiteSpec): void {
+  fs.mkdirSync(path.join(scratch, SITE_DIR), { recursive: true });
+  fs.copyFileSync(volumeFile, path.join(scratch, SITE_ARVX));
+  fs.writeFileSync(path.join(scratch, SITE_JSON), `${JSON.stringify({ lot: siteLotBox(spec), spec }, null, 1)}\n`);
 }
 
 /** A spec's stable hash (the blob id left out: the mod uploads the same volume under new ids). */
