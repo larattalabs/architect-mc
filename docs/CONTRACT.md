@@ -28122,7 +28122,8 @@ The sculpt's record (its `meta.sb`) gives the program its params.
 - **`s5_treehouses`** (`params.grove`, the sculpt's record) puts a `wrap_trunk` site lot on each tree, 17x8x17, centred on the trunk's axis
   at the shared deck floor (the highest site's ground + 4). Each lot is turned so its one walk port faces its pair. A `branch_walk` port link
   joins each pair across the 3-cell gap; the walk is short enough to need no hanger, since the ports' landings carry it. `entrance` is on the
-  ground south of the grove, and `hub` is on the middle pair's walk.
+  ground south of the grove, and `hub` is on the middle pair's walk. Its own cells are paths (the `path` role): a lane on the ground south of the grove and a path
+  up each ramp, because the walker reads a column from its written range or its top, and under a giant crown the top is the leaves.
 - `meta.sb` records the dwellings and the fit each is called for. `plan.mjs` passes `r.meta.sb` through to meta.json (one guarded spread;
   every other plan is unchanged).
 
@@ -28186,7 +28187,33 @@ port on SV's trunk house, so treehouses can form a chain; a suspend lot in S5's 
 | Check | Result |
 |---|---|
 | kit `node --test kit/test/sb.test.mjs` | 5/5: both flat variants offline. S6: 7/7 carved halls clean, Fit 100%, disturbance 0.179, 7/7 doors reached, 0 checker errors. S5: 6/6 trunk houses clean, the 3 walks linked (IR v2, M10:branch_walk ok), Fit 100%, disturbance 0, 6/6 ports reached, 0 errors. Sculpt runs deterministic, /fill-sized |
-| SB_CHECKS_PENDING | |
+| kit `node --test kit/test/*.test.mjs` | 1208/1208 (the gate's `unit-kit`, run 211214, at b6f45c88); `sb.test.mjs` 5/5 and `scenario-goldens.test.mjs` (s5, s6 new) green at the head |
+| sidecar `npm ci && npm run check` | 838/838, 58 files; the bundle built (no sidecar change) |
+| mod `./gradlew build --offline --no-daemon` | pass (no Java change) |
+| lint-structure / lint-look | 68 cases 0 failing / 13 cases 0 failing |
+| `node tools/step-inputs.mjs check` | clean (348 steps; `sb-unit`, `7b-scenario-s6`, `7b-scenario-s5` new, chain `7bsb`, impact rule "7b SB") |
+| **S6 natural** (run 20261112-220630-change, at ee265e30, client, the gallery's cameras) | §16.3, every bar met: checker 0 errors, M1-M4 0; M2 2/2 nodes; **sb-ports 7/7**; M3 0 floating; M4 0, M5 0.00%, M8 100%; palette 1.000 (612/612); buildings 7 entries 0 errors; **Fit 7/7 carve_into (100%)**; **disturbance 0.179** (the worst lot); E-flat 0 (flat run) and E-normal 16, all `growth`, 0 unclassified; realised == virtual 0/612; IR sha the same over 3 plans, 1 = 4 workers; spend $0. Recorded: MSPT own tick max 23.9 ms (flat 37.3 ms); pad 0%. Sculpt: hall floor 86, void cost 12225 (the plateau's caves; the realised bars hold) |
+| **S5 natural** (run 20261112-222529-change, at 729d9d39) | §16.3, every bar met: checker 0 errors; M2 2/2 nodes (the hub on the middle walk); **sb-ports 6/6**; M3 0; M4 0, M5 0.00%, M8 100%; palette 1.000 (363/363); buildings 6 entries 0 errors; **Fit 6/6 wrap_trunk (100%)**; **disturbance 0.000** (no log cut); the 3 branch walks realised (IR v2); E-flat 0 and E-normal 98, all `growth`, 0 unclassified; realised == virtual 0/363; determinism as S6's; $0. Recorded: MSPT own tick max 24.2 ms (the flat run 57.5 ms, 1 tick over 50: a timing bar, recorded per DEV MODE) |
+| goldens | `scenarios/goldens/s6.json` (IR c28b58bd, 2 tiles, from S6's natural run) and `s5.json` (IR 87d0889e, 4 tiles, from S5's natural run): their committed inputs re-plan to the IR sha and every tile sha, with 1 worker = 4 workers |
+| gallery (not awaited; the phase close is PA's) | `artifacts/gate-runs-sb/20261112-220630-change/scenarios/s6/shots/` (cam_hall_w, cam_hall_e, cam_ramp, cam_high, cam_n, cam_s) and `.../20261112-222529-change/scenarios/s5/shots/` (cam_high, cam_deck, cam_n, cam_s, cam_e, cam_w), each with its `before/` |
+
+**The gate runs** (4: one past the 3-run rule, run 4 with the coordinator's after-the-fact OK; a run past 3 now asks first):
+1. **211214** at b6f45c88:
+   - `sb-fit` read 0%: the lot states are lowercase;
+   - `sb-unit` failed only because its step lacked `okLines: false`;
+   - S5 flat: realised == virtual had no region cell to compare (the region wrote only its links);
+   - S5 natural: refused (a camera outside the claim).
+   The rest of S6 passed.
+2. **214746** at 489b8b2b, with per-pair decks, the lane, the cameras clamped and the two fixes: S6 green bar the golden; S5 flat green.
+   S5 natural refused `HEADROOM` at a walk's port: natural leaves. The sculpt's clearing wrote air where the survey alone already reads air,
+   so its /fill never came. `sculptRuns` now reads the sculpt's frozen volumes (sb.test plants a natural tree to hold it).
+3. **220630** at ee265e30: S6 green bar the golden (cut from this run). S5 natural failed two bars:
+   - `sb-ports` 3/6 and M2 1/2: the walker reads a column from its written range or its top, and under a giant crown the top is the
+     leaves, so the sculpted ramps were not walked;
+   - E-normal 6 unclassified: leaves of cleared trees decaying after the snapshot.
+   Run 4's change: the program paves its ramps with the path role (as S6's street), and the clearing takes leaves 6 columns further than
+   logs.
+4. **222529** at 729d9d39 (S5 only): every SB bar met; the golden cut from it.
 
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
