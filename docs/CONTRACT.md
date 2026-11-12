@@ -27514,3 +27514,110 @@ new feature advertised). The kit has no `NEXT` stamp to carry: the kit version i
 | water-lint `node --test kit/lint/*.lint.mjs` | 135/135 |
 | `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the fixture loader is its own module so the build's closure stays off the fixtures) |
 | gate-verifier (review only, DEV MODE) | **PASS** at b8003025: scope against SV's row (no PL/AF/SC/DS work), 7bF's frozen files unchanged, the four examples and every golden unchanged, the frame and rotation math against vanilla's, the examples (geometry from the Site, themed, no randomness) and the ten readings reviewed; sv, f7b-foundation, schem, diff and phase5a re-run (66/66) and `site-fixtures.mjs --check` clean. No blocking defect; minor: SC's composite should also assert a site-bound size equals the lot |
+
+### Slice AF as built (branch `slice/AF` off main 3def22ce, main 592912ca (SV) merged; versions NEXT; $0, no Claude; recorded 2026-11-11)
+
+Affordances and `Survey.site`: §2's rows `Affordance` (the analysis), `Survey.site`, `RegionPlan` affordances (`Regions.affordances`)
+and the plan wire's `affordances[]`; feature `siteSurvey`. 7bF's frozen surface is unchanged (the api diff is javadoc only; api-compat
+clean).
+
+**The analysis, in the kit only** (`kit/lib/region/affordances.mjs`, a leaf over `volume.mjs` and `pack.mjs`): `analyseVolume(decoded
+ARVX, opts)`, `proposeFrame(affordances, lot, fit)`, `analyseSite`, `affordanceId`, `rotationFacing`, `AFFORDANCE_KINDS` (=
+`Affordance.Kind`, a test holds them equal), `AFFORDANCE_DEFAULTS`, `FIT_AFFORDANCES`. One implementation serves both paths, so
+`Survey.site` and a region plan give the same ids for the same land. The detectors of SETTLEMENTS §6 on voxel classes (bearing = ROCK,
+SOIL, ICE; open = AIR, PLANT; terrain adds LOOSE, SNOW):
+
+| Kind | Detector (thresholds est., `AFFORDANCE_DEFAULTS`) | anchors, normal, metrics |
+|---|---|---|
+| `cliff_face` | vertical runs (2+) of bearing cells against open air on one side, joined along the face (drift 1 a step): height >= 6, length >= 4, total drift <= max(2, h/2) | the bearing row nearest mid-height (<= 16); the open side; cells, height, length, drift, planarity, exposure |
+| `ledge` | a level component of standable cells (headroom 3), a drop >= 3 on one side, a wall rising >= 3 on the other: depth >= 2, length >= 3 | the lip cells; the drop side; area, depth, length, drop, walls |
+| `overhang` | bearing cells with >= 4 open cells under them, at least 3x3 | 4 hang points (bbox corners inset 2) + centre; the side open to the sky (null: enclosed); area, extent, clearance, thickness |
+| `cave` | a 6-connected component of open air with no sky over it, >= 64 cells, open faces to sky air <= 20% of its shell, floor >= 4, ceiling >= 3 | the floor cell nearest the centroid; the mouth's side; cells, floorArea, ceiling, openFaces, openShare |
+| `trunk` | LOG columns with a run >= 12, joined 8-connected where the runs overlap | the axis bottom and top; null; height, columns, radius {base, mid, top}, axis |
+| `canopy` | a LEAVES component with a layer >= 16 cells over a log run >= 4 | the trunk tops (<= 4); null; area, layerY, layers, cells, trunks |
+| `spike` | a vertical chain of isolated narrow (<= 5x5) terrain cross-sections, >= 12 tall, mostly ICE or ROCK | base and top; null; height, width, cells, material |
+| `water` | surface water (the first cell under air and foliage is WATER), >= 4 columns at one level | the deepest column's surface; null; area, surfaceY, maxDepth, meanDepth |
+| `gap` | two opposing faces facing each other across 1-48 open cells, overlapping >= 3 in length and height, the midline open | both rims (each face's top at the overlap's middle); null; span, length, height, axis, faces |
+| `pad` | 8x8 squares on the world's 8-grid, ground range <= 2, no water (6a's flatAreas, per volume) | the centre; null; size, range, y |
+
+Every metric is an integer or rounded to 2 decimals, scores to 3; `clipped` marks one that touches the volume's side. Sorted by score,
+then id; at most 16 per kind and 128 in all. **Ids:** `<kind>_<16 hex>` = sha-256 of `{kind, box rounded to the nearest 4, normal}`
+(two alike in one analysis: `_2`, ... in box order); they fit `SiteSpec.ID`.
+
+**The frame** (`proposeFrame`): the best-scored affordance of the fit's kinds (`on_pad` pad; `carve_into` cliff_face, cave;
+`attach_to_cliff` cliff_face; `span` gap; `wrap_trunk` trunk, spike; `suspend` overhang, canopy) whose box meets the lot grown by 1;
+origin = the lot's minimum corner; rotation turns the design's front (south) to its normal (`south` none, `west` clockwise_90, `north`
+clockwise_180, `east` counterclockwise_90), a gap along z clockwise_90, a trunk, spike, canopy or pad none. Each of the six fixtures
+proposes its own `spec.frame`.
+
+**The CLI** `kit/tools/affordances.mjs <volume.bin> [--lot ... --fit f] [--kinds] [--sha]` -> one JSON line `{ok, sha, box,
+affordances, proposed}`; goldens on four fixtures in `kit/test/fixtures/af/<id>.json` (byte for byte).
+
+**Region plans:** `r.affordances(box, opts)` (program.mjs) asks the volume through `needVolume` (the two-plan flow: `[]` on the first
+plan), analyses it and records each one found; `planRegion` returns `affordances` and `kit/tools/region.mjs plan` writes plan.json's
+`affordances[]` (best first, <= 256, `AFFORDANCES_MAX`). The IR carries none (its sha is untouched); a program that never calls it
+writes no member, so every plan before AF is byte-identical.
+
+**The helper:** `site.analyse {volumeBlobId, sha?, lot, fit}` (sidecar `regions.ts siteAnalyse`, feature `site.analyse`) runs the CLI on
+the blob file in a child process (120 s limit) -> `{sha, box, affordances, proposed}`; a missing blob, another sha or a lot outside the
+volume refuse. `region.planned` carries `affordances` when the kit's plan.json has them (zod: <= 256).
+
+**The mod:** `SurveyImpl.site` -> `apiimpl/SiteAnalysis`: the lot grown by 8 (its y clamped to the world), `VolumeSurvey.start` (read only:
+the only file it writes is the frozen `<world>/architect/volumes/<sha>.bin`), `SurveyImpl.upload`, `site.analyse`, the answer read into
+`SiteSample(volume, affordances, proposed)`; the future (or its failure) completes on the server thread. `RegionsImpl.affordances(planId)`
+reads `affordances` from the plan record's `planned` (persisted with the plan, so it answers after a restart): empty list for a plan
+with none, empty Optional for an unknown id. `ApiRules`: `site.analyse` -> `siteSurvey`. DevBridge (`SliceAfDev`, generated headless):
+`dev.af.site`, `dev.af.affordances`.
+
+**Readings chosen:**
+1. **The analysis runs in the helper's kit, not in Java** (one implementation; ids agree by construction). So `Survey.site` needs the helper:
+   `RegionRefused SIDECAR_UNAVAILABLE` without it, or when the volume could not be uploaded (a `local:` blob id); a helper refusal or an
+   answer about another sha is `OTHER`. `siteSurvey` is advertised only when the helper has `site.analyse`.
+2. **Lot cap 96x64x96** (a design's cap; a site volume of at most 112x80x112), else `REGION_LIMIT`; a lot outside the world's height
+   `REGION_LIMIT`; the volume's y is clamped to the world (the "lot + 8" can be shorter at the build limits).
+3. **`r.affordances` is opt-in**; no bundled program calls it yet, so `Regions.affordances` answers empty lists until SL's site lots use it.
+   Accessibility ("route cost from the entrance") is the program's `entrance` option (64 / (64 + distance)); preferences are `prefer`
+   weights; neither changes ids.
+4. **The frame's lot is grown by 1** when matching (a face just outside the lot it fronts counts); the best score wins across the fit's
+   kinds (a cave can beat a face for `carve_into`).
+5. **A pad scores half** (0.5 x flatness), so the rarer kinds rank above the many pads.
+6. **A gap is `clipped` when either face is** (its overlap depends on both faces' extents; found by the S4-S6 window test).
+7. **S4-S6 "surveys" are 64x64 volume windows** at each claim's centre over its y range, cut in game from the pinned seed (af-cut), committed
+   as `kit/test/fixtures/af/{s4_ravine_town,s5_treehouses,s6_cave_city}.bin` (10-17 KB) with `windows.json` (box, sha, counts, the kinds
+   measured). No 2.5D survey of them exists in the repo; the windows give the 3D kinds. Measured: S4 16 cliff faces, 3 gaps, 5 overhangs,
+   1 ledge, 4 water, 2 pads; S5 16 canopies, 1 trunk, 6 caves, 12 faces, 5 overhangs, 2 gaps, 3 pads, 1 water; S6 8 caves, 16 overhangs,
+   16 faces, 11 gaps, 2 ledges, 16 pads (the per-kind cap of 16 reached in places).
+8. **The real cliff is jagged:** on CW's pinned run (wooded badlands, terracotta = ROCK) the lot `[-951,122,-2489,-935,137,-2474]` finds a
+   9x8 face (west) and a 7x6 one (south), not the 48x8 run CW measured with its own 2.5D face bar (the steps of its banding split it at
+   drift 1). The frame proposed is clockwise_90 to the west face. Recorded, not tuned.
+9. **Overlap with SV:** SV's `Site.faces()`/`trunk()`/`ledges()` (kit/lib/site.mjs, merged during AF) are the design-side views of one lot;
+   AF's detectors are the plan-time analysis with stable ids. Not unified in AF (scope frozen); DS may reuse AF's words for its BRIEF.
+
+**Shared files touched (minimal):** `mod/.../client/ArchitectClient.java` and `devserver/.../DevServer.java` (one init line each),
+`devserver/build.gradle` (genHooks list), `kit/lib/region/program.mjs` (`r.affordances`, `affordancesFound`), `kit/lib/region/plan.mjs`
+(the return member), `kit/tools/region.mjs` (plan.json member), sidecar `protocol.ts` / `regions.ts` / `sidecar.ts`, the sidecar fake
+kit (`fake_basic.mjs`, `tools/region.mjs`: an `affordances` param) and the two feature-list tests (`jobs.test.ts`, `bundle.e2e.test.ts`),
+`tools/gate-chains.json`, `tools/step-inputs.json`, docs/DEVBRIDGE.md. Api7bFTest untouched (its stubs test calls the interface defaults,
+still throwing; its feature list names no `site.analyse`).
+
+**Not covered by a unit:** `RegionsImpl.affordances` itself (the plan record read; a restart): only its parser (`ApiAFTest`) and the
+sidecar's `region.planned` member are tested, and no bundled program calls `r.affordances`, so no in-game plan exercises it.
+
+**Checks** (offline, $0):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1144/1144 after merging SV (af-affordances 13/13); 1130 pass + 1 skipped before the merge |
+| mod `./gradlew build --offline --no-daemon` | pass; 1050 tests, 0 failures, 1 skipped (ApiAFTest 4/4, Api7bFTest 12/12) |
+| sidecar `npm ci && npm run check` | 814/814 (site-analyse.test.ts 3/3) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars (932 references each), `--surface` of the 0.57.0 jar (2671 members); the api diff against main is javadoc only |
+| `node tools/step-inputs.mjs check` | clean after `build` (af-unit, af-site, af-nowrite, af-cut entered) |
+
+**In game** (`tools/gate7baf.mjs`; chain `7baf`, `7baf-cut`; headless, ports 8896/8897):
+
+| Step | Result |
+|---|---|
+| af-site | (a) the cliff, overhang and trunk fixtures built cell for cell by /fill in a flat world: `Survey.site` froze the lot + 8 to each fixture's own sha, 0 missing columns; the affordances equal the kit's goldens; the proposed frame is each fixture's own. (b) the real cliff (pinned seed): faces found at the lot, a frame proposed to the best one, the mod's answer equal to the kit's CLI over the same frozen file, a second call the same sha and ids |
+| af-nowrite | the land holds still with no call; three rounds of two calls (one `carve_into`): the volume box's hash unchanged, the journal, all of `<world>/architect` and the regions dir unchanged (no new file), the answers equal; no site placed |
+| af-cut | the three S4-S6 windows frozen, 0 missing columns |
+| lints | lint-structure 205/0, lint-look 14/0, water-lint 135/135, p3-lint 16/16 |
