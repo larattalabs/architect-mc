@@ -79,10 +79,8 @@ test('generators: deterministic, natural materials only (roles or free natural b
   assert.equal(a.floorY, 65);
   assert.ok(a.cavern.ledge.cells > 0 && a.cavern.ledge.y === 65 + LEDGE.rise && a.cavern.box.maxY - a.cavern.box.minY + 1 >= WALL);
   assert.equal(a.cavern.ledge.side, 'north', 'the back wall is opposite the (default south) entrance');
-  // 6b's island: an explicit `edge: null` writes no rail (it read 'rail' before BF)
-  const isl = floatingIsland({ at: [0, 100, 0], r: [12, 12], top: { edge: null } });
-  assert.ok(!JSON.stringify(isl.ops).includes('"rail"'));
-  assert.ok(JSON.stringify(floatingIsland({ at: [0, 100, 0], r: [12, 12] }).ops).includes('"rail"'), 'absent: the rail, as before');
+  // 6b's island generator is unchanged (its rim the rail by default); the plan form leaves the rim op out (bigForms.mjs)
+  assert.ok(JSON.stringify(floatingIsland({ at: [0, 100, 0], r: [12, 12] }).ops).includes('"rail"'), 'the generator as 6b built it');
 });
 
 test('x01 hollow mountain with carved halls: fits; cavern, ledge, 3 halls, the entrance; checks clean (no error, M5 cavern lit); its affordances recorded', async () => {

@@ -9,7 +9,7 @@ import { analyseVolume } from '../region/affordances.mjs';
 import { VC } from '../region/volume.mjs';
 import { hollowMountain, LIGHT_EVERY } from './hollowMountain.mjs';
 import { crater } from './crater.mjs';
-import { islandRule } from './floatingIsland.mjs';
+import { floatingIsland, islandRule } from './floatingIsland.mjs';
 import { bodyId, emitPond, leakCheck, outline, iceFor } from '../fluids/pond.mjs';
 import { fluidRolesOf } from '../fluids/place.mjs';
 
@@ -172,6 +172,14 @@ export function emitBig(K, p, f, id) {
   // the island rule without its coal ore (not a free natural block in survival): the generator's own strata bands
   const rule = islandRule(seed, Math.floor((y - thickness - amp - 8) / 3));
   rule.rule = rule.rule.filter((c) => c.mat !== 'minecraft:coal_ore');
-  const isl = r.floatingIsland(id, { at: [cx, y, cz], r: [R, R], thickness, seed, top: { relief: 1, pads, edge: null, lights: 0 }, underside: { taper: 0.7, roots: 4 }, materials: rule }, { stage, anchor });
+  // 6b's generator (r.floatingIsland's steps, without its rim: 6b reads `edge: null` as the rail, so the rim op is left out here)
+  const isl = floatingIsland({ at: [cx, y, cz], r: [R, R], thickness, seed, top: { relief: 1, pads, lights: 0 }, underside: { taper: 0.7, roots: 4 }, materials: rule });
+  const rim = isl.ops.filter((o) => o.op === 'columns' && o.materials?.[0] === 'rail');
+  isl.ops = isl.ops.filter((o) => !rim.includes(o));
+  isl.params = { ...isl.params, top: { ...isl.params.top, edge: null } };
+  r.form(id, isl, { stage });
+  r.anchor(anchor, isl.anchor);
+  r.floating([id], { anchor });
+  (r.meta.parts[id] ??= {}).island = { at: isl.params.at, r: isl.params.r, pads: isl.pads, anchor: isl.anchor };
   return { geometry: { top: y, anchor: isl.anchor, pads: isl.pads.map((q) => [q.at[0], q.y, q.at[1], q.size[0], q.size[1]]) }, notes };
 }
