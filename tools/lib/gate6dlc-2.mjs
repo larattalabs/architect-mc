@@ -601,15 +601,16 @@ export async function registerLC2(steps, h) {
     await L.tp(cx, gy + 30, cz);
     // mid-build: fed what the stockpile lacks, wave by wave, until a target is built while a later one waits (put down, not fed);
     // then the builder idle (the targets are put down stage by stage: the feed stops before the waiting one is fed)
-    const mixed = (rs) => (rs.targets ?? []).some((t) => t.done) && (rs.targets ?? []).some((t) => !t.done);
+    // (a built target with paid cells: the first stage's target may hold only free and held cells)
+    const mixed = (rs) => (rs.targets ?? []).some((t) => t.done && t.cells - (t.held ?? 0) > 0) && (rs.targets ?? []).some((t) => !t.done);
     let tcH = [];
     const fedT = [];
     for (let k = 0; k < 6; k++) {
-      const f = await G.feed(ctx, region, { until: (st2, rs) => mixed(rs) || st2.view.state === 'PLACED', timeoutMs: 1_800_000 });
+      const f = await G.feed(ctx, region, { fraction: 0.25, until: (st2, rs) => mixed(rs) || st2.view.state === 'PLACED', timeoutMs: 1_800_000 });
       fedT.push(f.waves);
       await idle(region);
       tcH = await targetCells(region);
-      if (tcH.some((t) => t.done) && tcH.some((t) => t.done === false)) break;
+      if (mixed(await G.rsState(ctx, region))) break;
       if (f.last.st.view.state === 'PLACED') break;
     }
     const st0 = await G.regionState(ctx, region);
