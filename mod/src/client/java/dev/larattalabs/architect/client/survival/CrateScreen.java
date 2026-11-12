@@ -403,7 +403,7 @@ public final class CrateScreen extends Screen {
 			Panels.text(g, font, String.valueOf(num(r, "needed")), colNeed, ry + 5, ink);
 			Panels.text(g, font, String.valueOf(num(r, "delivered")), colDel, ry + 5, ink);
 			Panels.text(g, font, String.valueOf(num(r, "placed")), colPl, ry + 5, ink);
-			Panels.text(g, font, missing > 0 ? String.valueOf(missing) : UiBits.CHECK, colMiss, ry + 5, missing > 0 ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.okText());
+			Panels.text(g, font, missing > 0 ? String.valueOf(missing) : UiBits.CHECK, colMiss, ry + 5, missing > 0 ? UiStyle.clayText() : UiBits.okText());
 			ry += ROW;
 		}
 		if (rows.size() > visible) {

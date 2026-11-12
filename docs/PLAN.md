@@ -1578,10 +1578,13 @@ Scope from UI-AUDIT item 14 (Noah, via the parent session). Client UI only: no A
   New ids `set:bible:<id>`, `set:bible:new`, `set:browse`; `set:bible` (the old list popup) stays a DevBridge control.
 - **Options** (`CollapsibleSection` `architect_mc.set.options`, closed, with a summary): massing first + redirects, critique +
   revisions, budget, context. Folded, each stays a zero-size DevBridge control; Tab skips the context field while folded.
-- **Colours**: labels `PaperInk.clay()`; the estimate in ink (no teal); errors `errorText`.
+- **Colours**: labels `UiStyle.clayText()` (lab-ui 0.4.1, below); the estimate in ink (no teal); errors `errorText`.
 - **Gallery**: new state `design/set_dialog_options` (a bible picked, Options open); the two old states unchanged.
 
 Leftovers: the editor's own scroll-body/status overlap (audit item 14) is not touched; a shared lab-ui stepper (Buttons around
 a value: the set dialog and the editor's W/H/D) is a lab-ui PR proposal; the disabled primary button's contrast and the title
 bar's 1-2 px offset are kit-wide. j3-ingame's "the split" check assumes only Steward and Architect spend today; in a run dir
 where sim-sets ran first an `apitest` owner appears and the check fails (gate isolation, not this slice).
+- **lab-ui 0.4.1** (Noah: "Merge and release 0.4.1", 2026-11-12): `lab_ui_version` 0.4.0 -> 0.4.1; polish-1's `PaperInk.clay()`
+  fallback (`semantic.clay_text`) is gone, every call site reads `UiStyle.clayText()` (the same #9A3F27). `semantic.placeholder` needed
+  no swap: lab-ui's `TextFieldView` draws it itself. Every gate slot's `.gradle-home` needs 0.4.1 resolved once (tools/lib/pinned-deps.mjs).

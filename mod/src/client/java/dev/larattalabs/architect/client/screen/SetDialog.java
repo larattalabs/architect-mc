@@ -7,7 +7,6 @@ import dev.larattalabs.architect.client.design.SetFeature;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Focus;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Option;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
-import dev.larattalabs.architect.client.ui.PaperInk;
 import dev.larattalabs.architect.design.CritiqueRules;
 import dev.larattalabs.architect.design.DesignSpec;
 import dev.larattalabs.architect.design.SetSpec;
@@ -124,7 +123,7 @@ final class SetDialog {
 	}
 
 	private void label(GuiGraphicsExtractor g, String text, int x, int y) {
-		g.text(font(), text, x, y + 5, PaperInk.clay(), false);
+		g.text(font(), text, x, y + 5, UiStyle.clayText(), false);
 	}
 
 	private void muted(GuiGraphicsExtractor g, String text, int x, int y, int w) {
@@ -160,7 +159,7 @@ final class SetDialog {
 		// the title row
 		int ty = top - 2;
 		String title = "Design a set";
-		g.text(font, title, x, ty + 5, PaperInk.clay(), false);
+		g.text(font, title, x, ty + 5, UiStyle.clayText(), false);
 		muted(g, "One style bible for every building, several designed at once; landmarks first, the rest see their renders.", x + font.width(title)
 			+ 10, ty + 5, w - font.width(title) - 10);
 		// the body: it scrolls above a rule, the footer's status line below it
@@ -228,7 +227,7 @@ final class SetDialog {
 		}
 		y += 4;
 		// ---- Buildings
-		g.text(font, "Buildings", x, y + 5, PaperInk.clay(), false);
+		g.text(font, "Buildings", x, y + 5, UiStyle.clayText(), false);
 		String count = f.items.size() + " of " + SetSpec.MAX_ITEMS;
 		g.text(font, count, fx, y + 5, UiBits.ink(), false);
 		int cx = fx + font.width(count) + 10;
@@ -443,7 +442,7 @@ final class SetDialog {
 		if (m4c) {
 			Chip c = new Chip(f.massingFirst ? "Massing first: on" : "Massing first: off", mToggle).selected(f.massingFirst);
 			int cx = ox + chip(g, "set:massing_first", c, ox, y, mx, my) + 10;
-			g.text(font, "Redirects", cx, y + 5, f.massingFirst ? PaperInk.clay() : UiStyle.mutedText(), false);
+			g.text(font, "Redirects", cx, y + 5, f.massingFirst ? UiStyle.clayText() : UiStyle.mutedText(), false);
 			cx += font.width("Redirects") + 4;
 			cx = stepper(g, "set:redirects", Integer.toString(f.maxRedirects), font.width("10") + 2, rMinus, rPlus, rDec, rInc, f.massingFirst, cx, y, mx,
 				my) + 10;
@@ -453,7 +452,7 @@ final class SetDialog {
 		if (m5a) {
 			Chip c = new Chip(f.critique ? "Critique and revise: on" : "Critique and revise: off", cToggle).selected(f.critique);
 			int cx = ox + chip(g, "set:critique", c, ox, y, mx, my) + 10;
-			g.text(font, "Revisions", cx, y + 5, f.critique ? PaperInk.clay() : UiStyle.mutedText(), false);
+			g.text(font, "Revisions", cx, y + 5, f.critique ? UiStyle.clayText() : UiStyle.mutedText(), false);
 			cx += font.width("Revisions") + 4;
 			for (int n : CritiqueRules.REVISION_CHOICES) {
 				Chip r = new Chip(Integer.toString(n), () -> f.maxRevisions = n).selected(f.critique && f.maxRevisions == n);
