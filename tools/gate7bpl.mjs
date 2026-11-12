@@ -16,7 +16,9 @@
 //                           house stands) and house first: E-flat 0 both ways, the stack at most 8 (2 at a trunk cell); a player-cut keep cell
 //                           (a natural trunk mined inside the house's box) is put back by Remove
 //     crash    (pl-crash)   kill points K1, K2, K4, K2+save, K4+save during a site placement (KEEP over a natural trunk); after the restart the
-//                           volume is either exactly as before (no site) or the site stands, verifies, keeps the trunk and its Remove is exact
+//                           volume is either exactly as before (no site) or the site stands, keeps the trunk and its Remove is exact (K4 without
+//                           a save: the journal wins, verify recorded); and K5, K8, K6, K8+save during the removal of a host cell site under the
+//                           standing house (the hand-down): the house keeps the trunk inside its box, removing what stands is E-flat 0
 //     report                REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate7b-pl/<step>.json in the main checkout (GATE7BPL_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -430,8 +432,10 @@ steps.undo = async () => {
     check(p.placed, `cut: the trunk house placed over a natural trunk (${p.site})`, p);
     const cut = s.keep[4];
     let how = 'dev.site.mine';
+    await cmd('/gamemode survival'); // (a spectator can't break blocks)
     const mined = await call('dev.site.mine', { pos: cut, pickup: false }).catch((err) => ({ error: String(err?.message ?? err) }));
-    if (mined.error) { how = `/setblock (dev.site.mine: ${mined.error.slice(0, 80)})`; await cmd(`/setblock ${cut[0]} ${cut[1]} ${cut[2]} minecraft:air`); }
+    await cmd('/gamemode spectator');
+    if (mined.error || !mined.mined) { how = `/setblock (dev.site.mine: ${String(mined.error ?? json(mined)).slice(0, 120)})`; await cmd(`/setblock ${cut[0]} ${cut[1]} ${cut[2]} minecraft:air`); }
     const gone = await cellsOf([cut[0], cut[1], cut[2], cut[0], cut[1], cut[2]]);
     check(idOf(gone.get(k3(...cut))) === 'air', `cut: the player cut the keep cell ${cut.join(',')} (${how})`);
     const rm = await call('dev.pl.remove', { site: p.site }, 600_000);
@@ -505,6 +509,54 @@ steps.crash = async () => {
       check(rm.removed && e.n === 0, `${point}: its Remove is exact (E-flat 0)`, e.first);
     }
     out[point] = r;
+    await L.leaveWorld();
+  }
+  // the removal side with keep cells under BOX: the host's cell site removed under the standing house (its hand-down to the house is
+  // in the undo's R2 commit), killed at K5 (before R2), K8 (inside R2), K6 (R2 to R3) and K8+save; after the restart the house still
+  // holds the trunk inside its box, and removing what stands (the house, then the cell site if it stands) is E-flat 0
+  for (const point of ['K5', 'K8', 'K6', 'K8+save']) {
+    const world = `G6B PL Crash rm ${point.replace('+', '_')}`;
+    await freshFlat(world);
+    const gy = await groundY();
+    const s = fitSites(gy)[0];
+    await L.tp(s.origin[0] + 3, gy + 20, s.origin[2] - 12);
+    s.cmds = [];
+    const area = grow(s.box, 10, gy - 3);
+    const c0 = await cellsOf(area);
+    const trunk = []; for (let y = s.origin[1]; y <= s.origin[1] + 9; y++) trunk.push([s.origin[0] + 3, y, s.origin[2] + 3, 'minecraft:oak_log[axis=y]']);
+    const cs = await call('dev.cells.place', { kind: 'test:pl_host', cells: trunk, naturalOnly: false }, 600_000);
+    await prepare(s, gy, K);
+    await call('dev.pl.reload', {}, 60_000);
+    const p = await call('dev.pl.place', { blueprint: s.id, site: s.wire, overlap: 'layer' }, 300_000);
+    check(cs.placed && p.placed, `rm ${point}: the cell site ${cs.siteId} and the house ${p.site} over it`, { cs, p });
+    await cmd('/save-all flush');
+    await L.settle(1000);
+    await call('dev.journal.killAt', { point }, 10_000);
+    call('dev.pl.remove', { site: cs.siteId, covered: 'keep' }, 120_000).catch(() => null);
+    let down = false;
+    for (let i = 0; i < 90 && !down; i++) {
+      await sleep(2000);
+      const st = await call('dev.state', {}, 10_000).catch(() => null);
+      down = !!st && st.inWorld === false;
+    }
+    check(down, `rm ${point}: the kill point halted the server`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
+    await L.openWorld(world);
+    await L.tp(s.origin[0] + 3, gy + 20, s.origin[2] - 12);
+    await L.settle(3000);
+    const st = await call('dev.sites.state', {}, 60_000);
+    const house = (st.sites ?? []).some((x) => x.id === p.site);
+    const cellSite = (st.infra ?? []).some((x) => x.id === cs.siteId && x.pendingSince === undefined);
+    const keepNow = await cellsOf([s.origin[0] + 3, s.origin[1], s.origin[2] + 3, s.origin[0] + 3, s.origin[1] + 5, s.origin[2] + 3]);
+    const logs = [...keepNow.values()].filter((v) => idOf(v) === 'oak_log').length;
+    check(house && logs === 6, `rm ${point}: after the restart the house stands with the trunk inside its box (${logs}/6 logs); the cell site ${cellSite ? 'stands' : 'is gone'}`, { house, cellSite, logs });
+    const r1 = await call('dev.pl.remove', { site: p.site }, 600_000);
+    let r2 = null;
+    if (cellSite) r2 = await call('dev.pl.remove', { site: cs.siteId }, 600_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    await L.settle(1500);
+    const e = diff(c0, await cellsOf(area));
+    check(r1.removed && (!r2 || r2.removed) && e.n === 0, `rm ${point}: removing what stands is exact (E-flat 0 over ${c0.size} cells)`, { r1, r2, first: e.first });
+    out[`rm ${point}`] = { house, cellSite, logs, eflat: e.n };
     await L.leaveWorld();
   }
   return out;
