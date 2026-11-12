@@ -23,8 +23,8 @@ export function fieldDefs(order, okClass, zoneLots) {
 
 /**
  * Records each asked lot's field on the IR's lot (`lots`: the region's lots, each {id, box, front, floorY, irrigation?}). A frame cell off
- * the lot is dropped; so is one IRR keeps open above (a source or its bed: the cell over it is an irrigation cell); a side shell's farmland
- * stays a field cell (its crop cell is the lot's). Returns `{lots: [lot ids], notes: Map(zone -> [note])}`.
+ * the lot is dropped; so is one that is an irrigation cell (a source, its bed, its 4 farmland sides) or under one (the cell over a source):
+ * IRR's cells are the region's, masked out of the lot's site. Returns `{lots: [lot ids], notes: Map(zone -> [note])}`.
  */
 export function emitFields(lots, defs) {
   const out = { lots: [], notes: new Map() };
@@ -35,6 +35,7 @@ export function emitFields(lots, defs) {
     const f = parseField(def.field, `${def.id}.field`);
     const F = lotFrame(lot);
     const [W, D] = F.size;
+    // IRR's irrigation cells (each source, its bed, its 4 farmland sides, the cell over it) are the region's, masked out of the lot's site
     const irr = new Set();
     for (const [x, z, y0, y1] of lot.irrigation?.cells ?? []) for (let y = y0; y <= y1; y++) irr.add(`${x},${y},${z}`);
     const world = [], frame = [];
@@ -42,15 +43,28 @@ export function emitFields(lots, defs) {
     for (const [u, y, v] of f.cells) {
       if (u >= W || v >= D) { off++; continue; }
       const [x, wy, z] = F.toWorld(u, y, v);
-      if (irr.has(`${x},${wy + 1},${z}`)) { open++; continue; }
+      if (irr.has(`${x},${wy},${z}`) || irr.has(`${x},${wy + 1},${z}`)) { open++; continue; }
       world.push([x, wy, z]);
       frame.push([u, y, v]);
     }
     if (off) note(zone, `field: ${def.id}: ${off} cell(s) off the lot dropped`);
-    if (open) note(zone, `field: ${def.id}: ${open} cell(s) under an irrigation cell dropped (the source and its bed stay the region's)`);
+    if (open) note(zone, `field: ${def.id}: ${open} cell(s) on or under an irrigation cell dropped (IRR's cells stay the region's)`);
     if (!world.length) { note(zone, `field: ${def.id} has no field cell on the lot (no field)`); continue; }
     lot.field = { crops: f.crops, cells: toRuns(world), frame: [W, D], lotCells: toRuns(frame.map(([u, y, v]) => [u, y, v])) };
     out.lots.push(lot.id);
   }
   return out;
+}
+
+/**
+ * A growth's fields (grow.mjs emitGrowth): each grown lot whose spec carries `field`, recorded on the IR's lot as emitFields does. A bad
+ * field refuses the growth `NOT_ALLOWED: [call] ...`.
+ */
+export function emitGrowthFields(lots, grown, pre) {
+  const defs = grown.filter((l) => l.spec?.field !== undefined).map((l) => ({ zone: `${pre}pads`, def: l.spec }));
+  if (!defs.length) return;
+  for (const d of defs) {
+    try { parseField(d.def.field, `grow.lots ${d.def.id}.field`); } catch (e) { throw new Error(`NOT_ALLOWED: [call] ${e.message}`); }
+  }
+  emitFields(lots, defs);
 }

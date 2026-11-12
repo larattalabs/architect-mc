@@ -59,6 +59,20 @@ class FieldCellsTest {
 	}
 
 	@Test
+	void irrigationCellsAreNeverFieldCells() {
+		// a source at (11, 64, 5) (its bed at 63, the cell over it at 65) and its side shell (12, 64, 5): the region's (LotMask)
+		java.util.Set<Long> irr = java.util.Set.of(Journal.pos(11, 63, 5), Journal.pos(11, 64, 5), Journal.pos(11, 65, 5), Journal.pos(12, 64, 5));
+		JsonArray runs = JsonParser.parseString("[[10,5,64,64],[11,5,63,64],[12,5,64,64]]").getAsJsonArray();
+		JsonObject f = FieldCells.extOf(runs, JsonParser.parseString("[\"minecraft:wheat\"]").getAsJsonArray(), irr::contains);
+		assertEquals("[10,5,64,64]", f.get("cells").toString(), "the source, its bed and its side shell left out; (10, 64, 5) kept");
+		JsonObject e = new JsonObject();
+		e.add(FieldCells.EXT, f);
+		FieldCells fc = FieldCells.of(e);
+		assertFalse(fc.cropCell(Journal.pos(11, 65, 5)), "the air over the source is no crop cell");
+		assertTrue(fc.cropCell(Journal.pos(10, 65, 5)));
+	}
+
+	@Test
 	void theFieldRuleReadsAirAnyAgeAndDriedFarmlandAsUnchanged() {
 		FieldCells f = FieldCells.of(ext());
 		assertNotNull(f);

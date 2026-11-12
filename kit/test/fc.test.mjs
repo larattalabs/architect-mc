@@ -45,18 +45,18 @@ test('emitFields: frame to world for every front; a cell off the lot or under an
     assert.deepEqual(lot.field.crops, ['minecraft:potatoes']);
     assert.ok(out.notes.get('z').some((n) => /1 cell\(s\) off the lot/.test(n)));
   }
-  // a source at (101, 65, 201): its cell over its bed and over itself are irrigation cells, so the farmland at the bed's cell and the
-  // source's own cell are dropped; the side shell's farmland (102, 65, 201) stays
+  // IRR's cells are the region's: a source at (101, 65, 201) (its bed at 64, the cell over it at 66) and its east side shell (102, 65, 201):
+  // the source's cell, its bed's and the side shell's are dropped as field cells; a farmland cell beside them (103, 65, 201) stays
   const lot = { id: 'f', front: 'south', floorY: 65, box: { minX: 100, minY: 65, minZ: 200, maxX: 104, maxY: 90, maxZ: 206 },
     irrigation: { cells: [[101, 201, 64, 66], [102, 201, 65, 65]] } };
-  const out = emitFields([lot], [{ zone: 'z', def: { id: 'f', field: { cells: [[1, 0, 1], [1, -1, 1], [2, 0, 1]], crops: ['minecraft:wheat'] } } }]);
-  assert.deepEqual(cellsOf(lot.field.cells), [[102, 65, 201]]);
-  assert.ok(out.notes.get('z').some((n) => /2 cell\(s\) under an irrigation cell/.test(n)));
+  const out = emitFields([lot], [{ zone: 'z', def: { id: 'f', field: { cells: [[1, 0, 1], [1, -1, 1], [2, 0, 1], [3, 0, 1]], crops: ['minecraft:wheat'] } } }]);
+  assert.deepEqual(cellsOf(lot.field.cells), [[103, 65, 201]]);
+  assert.ok(out.notes.get('z').some((n) => /3 cell\(s\) on or under an irrigation cell/.test(n)));
   const none = emitFields([], [{ zone: 'z', def: { id: 'q', field: FIELD } }]);
   assert.ok(none.notes.get('z').some((n) => /q was not placed/.test(n)));
 });
 
-test('v62 with a field on f1: the IR lot carries it (77 cells less the 2 sources\' and their beds\'), the same lots and irrigation; without one no member', async () => {
+test('v62 with a field on f1: the IR lot carries it (77 cells less the 2 sources and their 8 farmland sides), the same lots and irrigation; without one no member', async () => {
   const base = load('valid/v62_irr_farm.json').plan;
   const withField = structuredClone(base);
   withField.zones[0].program.lots[0].field = FIELD;
@@ -66,7 +66,9 @@ test('v62 with a field on f1: the IR lot carries it (77 cells less the 2 sources
   assert.deepEqual(f1.field.crops, ['minecraft:wheat', 'minecraft:carrots']);
   assert.deepEqual(f1.field.frame, [13, 11]);
   const world = cellsOf(f1.field.cells);
-  assert.equal(world.length, 77 - 2, 'the two sources\' cells dropped (their cell above is kept open)');
+  const irr = new Set(cellsOf(f1.irrigation.cells).map((c) => c.join(',')));
+  assert.equal(world.length, 77 - 2 - 8, 'the two sources and their 8 farmland sides dropped (IRR\'s cells are the region\'s)');
+  assert.ok(world.every(([x, y, z]) => !irr.has(`${x},${y},${z}`) && !irr.has(`${x},${y + 1},${z}`)), 'no field cell on or under an irrigation cell');
   const F = lotFrame(f1);
   assert.ok(world.every(([x, y, z]) => { const [u, fy, v] = F.toFrame(x, y, z); return fy === 0 && u >= 1 && u <= 11 && v >= 1 && v <= 7; }));
   assert.ok(!r0.res.ir.lots.some((l) => 'field' in l), 'no field asked: no member');
@@ -93,5 +95,5 @@ test('planRevision growth: a grown lot with a field carries it on the revision I
   assert.ok(Number.isInteger(lot.floorY) && cellsOf(lot.field.cells).every(([, y]) => y === lot.floorY), 'at the lot\'s floor');
   assert.ok(!('field' in r.ir.lots.find((l) => l.id === 'bakery')));
   const bad = { grow: { lots: [{ id: 'crop_farm', type: 'farm', size: [9, 11], field: { cells: [[1, 0, 1]], crops: ['minecraft:stone'] } }] } };
-  await assert.rejects(reviseIR(eff, bad, ctx), /NOT_ALLOWED: \[call\] grow\.lots\[0\] crop_farm\.field\.crops/);
+  await assert.rejects(reviseIR(eff, bad, ctx), /NOT_ALLOWED: \[call\] grow\.lots crop_farm\.field\.crops/);
 });

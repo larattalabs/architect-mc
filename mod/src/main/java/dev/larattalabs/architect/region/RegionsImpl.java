@@ -2184,7 +2184,7 @@ public final class RegionsImpl implements Regions {
 		}
 		// (M5 FC, S-M5-4) a module lot's field (its farmland cells, the crop kinds): on the site's ext, so LC, the standing score and the
 		// deconstruct judge its crop cells by the field rule (FieldCells)
-		JsonObject field = lotField(ir, lot.id());
+		JsonObject field = lotField(ir, lot.id(), dev.larattalabs.architect.site.LotMask.of(ext)); // (IRR's cells left out)
 		if (field != null) {
 			ext.add(dev.larattalabs.architect.site.FieldCells.EXT, field);
 		}
@@ -2367,14 +2367,15 @@ public final class RegionsImpl implements Regions {
 
 	/**
 	 * (M5 FC) A lot's field in the IR ({@code lots[].field {cells: world column runs [x, z, y0, y1] of its farmland, crops}}) as the site's
-	 * ext value ({@link dev.larattalabs.architect.site.FieldCells#extOf}), or null: none, or no cell or known crop (never throws).
+	 * ext value ({@link dev.larattalabs.architect.site.FieldCells#extOf}) less any cell on or under the lot's mask (IRR's irrigation cells,
+	 * the region's), or null: none, or no cell or known crop left (never throws).
 	 */
-	static @Nullable JsonObject lotField(Ir ir, String lotId) {
+	static @Nullable JsonObject lotField(Ir ir, String lotId, java.util.function.@Nullable LongPredicate mask) {
 		if (ir.json().get("lots") instanceof JsonArray lots) {
 			for (JsonElement e : lots) {
 				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("field") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
 					&& !c.isEmpty()) {
-					JsonObject v = dev.larattalabs.architect.site.FieldCells.extOf(c, g.get("crops") instanceof JsonArray cr ? cr : null);
+					JsonObject v = dev.larattalabs.architect.site.FieldCells.extOf(c, g.get("crops") instanceof JsonArray cr ? cr : null, mask);
 					return v.getAsJsonArray("cells").isEmpty() || v.getAsJsonArray("crops").isEmpty() ? null : v;
 				}
 			}

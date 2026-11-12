@@ -85,7 +85,30 @@ public final class FieldCells {
 
 	/** The ext value from IR column runs ({@code [[x, z, y0, y1], ...]} or flat) and crop ids: {@code {cells: [flat runs], crops}}. */
 	public static JsonObject extOf(@Nullable JsonArray runs, @Nullable JsonArray crops) {
+		return extOf(runs, crops, null);
+	}
+
+	/**
+	 * {@link #extOf(JsonArray, JsonArray)} less the cells the lot's mask holds ({@link LotMask}: IRR's irrigation cells, the region's: each
+	 * source, its bed, its 4 farmland sides and the cell over it): a farmland cell on or under a masked cell is never a field cell.
+	 */
+	public static JsonObject extOf(@Nullable JsonArray runs, @Nullable JsonArray crops, java.util.function.@Nullable LongPredicate mask) {
 		JsonObject o = LotMask.extOfAny(runs);
+		if (mask != null) {
+			int[] flat = LotMask.flatRuns(o.getAsJsonArray("cells"));
+			JsonArray kept = new JsonArray();
+			for (int i = 0; i + 3 < flat.length; i += 4) {
+				for (int y = flat[i + 2]; y <= flat[i + 3]; y++) {
+					if (!mask.test(Journal.pos(flat[i], y, flat[i + 1])) && !mask.test(Journal.pos(flat[i], y + 1, flat[i + 1]))) {
+						kept.add(flat[i]);
+						kept.add(flat[i + 1]);
+						kept.add(y);
+						kept.add(y);
+					}
+				}
+			}
+			o.add("cells", kept);
+		}
 		JsonArray c = new JsonArray();
 		if (crops != null) {
 			for (JsonElement e : crops) {
