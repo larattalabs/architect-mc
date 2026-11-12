@@ -281,6 +281,59 @@ public final class SliceP0Dev {
 					return o;
 				}));
 			});
+		// (M5 QT) Regions.quote / quoteApproved: the whole survival bill of a plan with its lot entries, read-only
+		DevBridge.register("dev.region.quote", 120_000, "{planId | sha, lotEntries?: {lot: entry}} - (M5 QT) Regions.quote (planId) or Regions.quoteApproved (sha) "
+			+ "-> {planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, thread, ms} or {refused, reason}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String planId = f.optStr("planId", null);
+				String sha = f.optStr("sha", null);
+				Map<String, String> lots = new LinkedHashMap<>();
+				if (req.get("lotEntries") instanceof JsonObject le) {
+					le.entrySet().forEach(e -> lots.put(e.getKey(), e.getValue().getAsString()));
+				}
+				long[] t0 = new long[1];
+				String[] thread = new String[1];
+				return ServerTasks.callOnServer(s -> {
+					t0[0] = System.nanoTime();
+					thread[0] = Thread.currentThread().getName();
+					return sha != null ? ArchitectApi.get().regions().quoteApproved(sha, lots) : ArchitectApi.get().regions().quote(planId, lots);
+				}).thenCompose(x -> wrap(x, q -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("planId", q.planId());
+					o.addProperty("artifactSha", q.artifactSha());
+					o.addProperty("region", q.region());
+					o.addProperty("survival", q.survival());
+					o.add("bom", q.bom());
+					o.add("bomParts", q.bomParts());
+					JsonObject le = new JsonObject();
+					q.lotEntries().forEach(le::addProperty);
+					o.add("lotEntries", le);
+					o.addProperty("exact", q.exact());
+					JsonArray n = new JsonArray();
+					q.notes().forEach(n::add);
+					o.add("notes", n);
+					o.addProperty("thread", thread[0]);
+					o.addProperty("ms", (System.nanoTime() - t0[0]) / 1e6);
+					return o;
+				}));
+			});
+		DevBridge.register("dev.qt.templateBom", 30_000, "{entry} - (M5 QT gate) an entry's template bill (Builder.templateBom: its template's cells only, the plan "
+			+ "check's lot bill) -> {entry, bom} or {missing}", (req, mc) -> {
+				String entry = Fields.of(req).nonBlank("entry");
+				return ServerTasks.callOnServer(s -> {
+					JsonObject o = new JsonObject();
+					var grid = dev.larattalabs.architect.placement.TemplateGrid.of(entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry);
+					if (grid == null) {
+						o.addProperty("missing", entry);
+						return o;
+					}
+					o.addProperty("entry", entry);
+					JsonObject b = new JsonObject();
+					new TreeMap<>(dev.larattalabs.architect.site.Builder.templateBom(grid)).forEach(b::addProperty);
+					o.add("bom", b);
+					return o;
+				});
+			});
 		DevBridge.register("dev.region.realiseByKey", 10_000, "{owner?, opKey} - (6c X C20 / P0 item 6) Regions.realiseByKey -> {region: {id, state, irSha, planId}} "
 			+ "(null when none)", (req, mc) -> {
 				Fields f = Fields.of(req);

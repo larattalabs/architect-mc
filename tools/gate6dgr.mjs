@@ -961,6 +961,13 @@ steps.look = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (M5 QT) qtunit, qtgrowth, qtapproved: tools/lib/gatem5qt.mjs
+
+{
+  const { registerQT } = await import('./lib/gatem5qt.mjs');
+  await registerQT(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, P0_TOWN, P0_LOT, P0_CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);

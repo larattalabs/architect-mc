@@ -774,6 +774,8 @@ export class Regions {
         ...(planCheck ? { planCheck } : {}),
         // (7b AF) the program's affordances (plan.json's affordances[]; only a program that called r.affordances has them)
         ...(Array.isArray(kitPlan.affordances) && kitPlan.affordances.length ? { affordances: kitPlan.affordances } : {}),
+        // (M5 QT) a survival plan's paid cells' bill per target group (plan.json's survivalBom): what Regions.quote bills the region's cells by
+        ...(kitPlan.survivalBom && typeof kitPlan.survivalBom === 'object' ? { survivalBom: kitPlan.survivalBom } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);

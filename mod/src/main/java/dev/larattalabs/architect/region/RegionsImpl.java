@@ -529,6 +529,16 @@ public final class RegionsImpl implements Regions {
 	}
 
 	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Quote> quote(String planId, java.util.Map<String, String> lotEntries) {
+		return Quotes.quote(planId, lotEntries);
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Quote> quoteApproved(String artifactSha, java.util.Map<String, String> lotEntries) {
+		return Quotes.quoteApproved(artifactSha, lotEntries);
+	}
+
+	@Override
 	public void pinArtifact(String artifactSha, String owner) {
 		PlanChecks.pin(artifactSha, owner, true);
 	}

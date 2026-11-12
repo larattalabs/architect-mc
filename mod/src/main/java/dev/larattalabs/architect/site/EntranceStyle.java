@@ -60,7 +60,15 @@ public record EntranceStyle(String path, @Nullable String foundation, @Nullable 
 		if (r == null) {
 			return null;
 		}
-		JsonElement roles = r.irJson().get("roles");
+		return ofIr(r.irJson(), group == null || group.isEmpty() ? r.rec().groupId : group);
+	}
+
+	/**
+	 * The entrance style a region's IR gives its lots (its {@code roles}' path and foundation), with that site group; null when the IR names
+	 * no path. {@link #region} reads a live region's; (M5 QT) a quote reads a plan's before it is a region.
+	 */
+	public static @Nullable EntranceStyle ofIr(JsonObject irJson, @Nullable String group) {
+		JsonElement roles = irJson.get("roles");
 		if (roles == null || !roles.isJsonObject()) {
 			return null;
 		}
@@ -68,9 +76,6 @@ public record EntranceStyle(String path, @Nullable String foundation, @Nullable 
 		String path = role(o, "path");
 		if (path == null) {
 			return null;
-		}
-		if (group == null || group.isEmpty()) {
-			group = r.rec().groupId;
 		}
 		return new EntranceStyle(path, role(o, "foundation"), group == null || group.isEmpty() ? null : group);
 	}

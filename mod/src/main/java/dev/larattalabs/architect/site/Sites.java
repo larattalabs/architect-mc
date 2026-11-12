@@ -999,6 +999,45 @@ public final class Sites {
 		return r == null ? null : new BomFull(r.items(), r.exact() && v.refusals().isEmpty(), r.driftCells(), r.inexactBecause());
 	}
 
+	/**
+	 * (M5 QT) What a construction placement behind a dry-run {@link Verdict} takes from a stockpile, as the builder pays it: C26's full bill
+	 * ({@link FullBom}: template, foundation and approach at their last write), less the cells in {@code masked} (a region lot's LotMask: never
+	 * the site's), less the cells whose block the world holds already (the builder marks them built and pays nothing, {@code Run.matches}),
+	 * each cell costed dry as the run costs it. Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
+	 */
+	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
+		if (v.plan() == null || !v.construction()) {
+			return null;
+		}
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		if (r == null) {
+			return null;
+		}
+		Map<String, Integer> items = new java.util.TreeMap<>();
+		List<String> why = new ArrayList<>(r.inexactBecause());
+		for (var e : r.states().entrySet()) {
+			long p = e.getKey();
+			if (masked != null && masked.contains(p)) {
+				continue;
+			}
+			BlockState target = RegionTargets.dry(e.getValue());
+			net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(BlockPos.getX(p) >> 4, BlockPos.getZ(p) >> 4);
+			BlockState now = c == null ? null : c.getBlockState(BlockPos.of(p));
+			if (now == null) {
+				if (!why.contains("a cell is not loaded")) {
+					why.add("a cell is not loaded");
+				}
+			} else if (dev.larattalabs.architect.journal.Copper.is(now, target.getBlock())) {
+				continue;
+			}
+			for (dev.larattalabs.architect.survival.SurvivalItems.Cost k : Cells.cost(target)) {
+				items.merge(k.item(), k.count(), Integer::sum);
+			}
+		}
+		boolean exact = r.exact() && v.refusals().isEmpty() && why.size() == r.inexactBecause().size();
+		return new BomFull(items, exact, r.driftCells(), List.copyOf(why));
+	}
+
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId) {
 		return verdict(level, bp, origin, rotation, force, movingId, true);

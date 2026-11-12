@@ -593,8 +593,9 @@ export async function planRegion(o) {
         const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
         if (sv) for (const [g, x] of Object.entries(e.notes.survival ?? {})) {
-          const t = (sv[g] ??= { free: 0, held: 0, paid: 0, creativeOnly: {} });
+          const t = (sv[g] ??= { free: 0, held: 0, paid: 0, creativeOnly: {}, bom: {} });
           t.free += x.free; t.held += x.held; t.paid += x.paid;
+          for (const [it, n] of Object.entries(x.bom ?? {})) t.bom[it] = (t.bom[it] ?? 0) + n;
           for (const [b, n] of Object.entries(x.creativeOnly ?? {})) t.creativeOnly[b] = (t.creativeOnly[b] ?? 0) + n;
         }
         if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
@@ -735,5 +736,8 @@ export async function planRegion(o) {
   // ((6c D3) a reach plan's evaluation survey (the reach frame's): the plan check's artifact evaluates its tiles over it)
   // (7b AF) the affordances the program asked for (r.affordances): plan.json's `affordances[]`, outside the IR (its sha is unchanged)
   const affordances = r.affordancesFound();
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}) };
+  // (M5 QT) a survival plan's paid cells' bill per target group, over the survey (the plan check's cost.bom of the regions' cells, kept for
+  // every survival plan so Regions.quote can read it): plan.json's `survivalBom`, outside the IR (its sha is unchanged)
+  const survivalBom = sv ? Object.fromEntries(Object.keys(sv).sort().map((g) => [g, Object.fromEntries(Object.entries(sv[g].bom).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}) };
 }

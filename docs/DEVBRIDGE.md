@@ -435,6 +435,10 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   takes `onSite: true` (a site-bound design on its site's frame, as Library › Place on its site; a plain start of one is refused) and
   `dev.build.state` gains `site`. `dev.library.state`'s cards carry `pinnedFit` (the pin badge's fit; `badge` is `PINNED`). Driven by
   `tools/gate7bst.mjs`.
+- **2026-11-12 (M5 slice QT):** new (in `SliceP0Dev`, generated headless too) `dev.region.quote {planId | sha, lotEntries?: {lot: entry}}`
+  (`Regions.quote` of a plan, or `Regions.quoteApproved` of an artifact with `sha`) -> `{planId, artifactSha, region, survival, bom, bomParts,
+  lotEntries, exact, notes, thread, ms}` or `{refused, reason}`; and (TEST) `dev.qt.templateBom {entry}` -> `{entry, bom}` (`Builder.templateBom`:
+  the template's cells only, the plan check's lot bill). Driven by `tools/lib/gatem5qt.mjs` (steps of `tools/gate6dgr.mjs`).
 
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
