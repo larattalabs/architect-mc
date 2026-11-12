@@ -56,6 +56,9 @@ final class PlacementHud implements HudZones.Element {
 		BuildPlacement.View v = BuildPlacement.view();
 		String status = BuildPlacement.status();
 		boolean fresh = status != null && Util.getMillis() - BuildPlacement.statusAt < STATUS_MS;
+		// with no ghost the panel is only the last result's line, and an open chat already shows it (the "Placed" line with its [Undo]): drawn
+		// there it sat under the chat's own lines, garbling both (UI polish 1, Minecraft/UI-AUDIT.md item 8)
+		if (v == null && mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen) fresh = false;
 		if (v == null && !fresh) {
 			lastRect = null;
 			lastRows = List.of();
@@ -284,7 +287,8 @@ final class PlacementHud implements HudZones.Element {
 		if (dev.larattalabs.architect.client.hud.Keys.undoLast != null) {
 			all.addAll(List.of(dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast), "undo last placement"));
 		}
-		all.addAll(List.of(dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+", "blocks: Enter twice"));
+		// a real key in the keycap: "1,000+" drawn as one read as a key to press (UI polish 1)
+		all.addAll(List.of("Enter ×2", dev.larattalabs.architect.placement.PlaceConfirm.count(BuildPlacement.confirmThreshold()) + "+ blocks"));
 		all.addAll(List.of("?", "hide"));
 		List<String[]> out = new ArrayList<>();
 		List<String> row = new ArrayList<>();

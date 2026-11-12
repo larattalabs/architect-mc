@@ -99,18 +99,18 @@ package dev.larattalabs.architect.api;
  * that the street's own run explains also says what stopped it: {@code blockedBy} {@code wall} (with {@code wall}, the wall's id),
  * {@code slope} or {@code reach} (the claim's edge), in the message ("the street is stopped by wall curtain"), in the refusal's evidence
  * and on each {@code unplaced} entry; every other answer keeps its shape.</li>
- * <li>{@code SITE_DRIFTED} (7b, since NEXT): a site-bound placement's frozen volume no longer matches the world: cells of the lot
+ * <li>{@code SITE_DRIFTED} (7b, since 1.53.0): a site-bound placement's frozen volume no longer matches the world: cells of the lot
  * volume drifted since the survey (the message names the count and the first cells). Survey the site again.</li>
- * <li>{@code KEEP_LOST} (7b, since NEXT): a keep-critical cell of the site ({@link SiteSpec#keepCritical()}: a host trunk, a hang
+ * <li>{@code KEEP_LOST} (7b, since 1.53.0): a keep-critical cell of the site ({@link SiteSpec#keepCritical()}: a host trunk, a hang
  * point, the rock a bracket bears on) is gone; {@link ArchitectRefused#detail()} is the first such cell {@code x,y,z}.</li>
- * <li>{@code SITE_UNSUPPORTED} (7b, since NEXT): the live support scan of the design over its site fails (a cell connects to no
+ * <li>{@code SITE_UNSUPPORTED} (7b, since 1.53.0): the live support scan of the design over its site fails (a cell connects to no
  * site-solid within its fit's limits); or {@link Designs#siteVariant} of a source with no program to re-run.</li>
- * <li>{@code SITE_MISMATCH} (7b, since NEXT): an entry bound to another volume sha ({@link SiteBinding}) is placed or fitted on this
+ * <li>{@code SITE_MISMATCH} (7b, since 1.53.0): an entry bound to another volume sha ({@link SiteBinding}) is placed or fitted on this
  * site; {@link ArchitectRefused#detail()} is the entry's bound sha.</li>
- * <li>{@code SITE_UNFIT} (7b, since NEXT): {@link Designs#siteVariant}: the source's program re-run on the new site fails a site
+ * <li>{@code SITE_UNFIT} (7b, since 1.53.0): {@link Designs#siteVariant}: the source's program re-run on the new site fails a site
  * check; {@link ArchitectRefused#detail()} names the failing check (a checker rule id such as {@code site_keep} or
  * {@code fit:wrap_trunk}), never free text only. Fall back to a paid adaptation or an original.</li>
- * <li>{@code NO_LINK} (7b, since NEXT): {@link Regions#realiseApproved} of a plan with site lots: a link can't reach a design's port;
+ * <li>{@code NO_LINK} (7b, since 1.53.0): {@link Regions#realiseApproved} of a plan with site lots: a link can't reach a design's port;
  * checked before any write, so nothing was placed. {@link ArchitectRefused#detail()} is {@code {lot, port}} as JSON.</li>
  * </ul>
  * New values are only ever appended.

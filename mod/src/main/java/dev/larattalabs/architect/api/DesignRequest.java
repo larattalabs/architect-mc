@@ -50,13 +50,13 @@ import org.jspecify.annotations.Nullable;
  *     mod uploads them again on a retry; the first design's files win). The key stays bound to its design after it finishes; a
  *     keyed design is kept at least 30 days after it is final. See {@link Designs#designByKey}. A helper without
  *     {@code design.opKeys} refuses a keyed request (it would drop the key). Null = none
- * @param site (since NEXT, 7b) the lot's site ({@link SiteSpec}): the design is site-aware, of the site's fit, in its frame. Null (every
+ * @param site (since 1.53.0, 7b) the lot's site ({@link SiteSpec}): the design is site-aware, of the site's fit, in its frame. Null (every
  *     older constructor) = a plain design. With a site (slice DS, feature {@code "siteDesign"}) the template is exactly the lot box
  *     (maxSize is not used), it is built and checked on the composite (the kit's site rules), the designer's scratch gets the site
  *     (the frozen volume, site.json, four renders of the empty site) and BRIEF.md a "Site" section, and the installed entry carries
  *     its {@link SiteBinding} in {@code ext}. The volume is sent from this world's frozen file (architect/volumes/&lt;sha&gt;.bin), else
  *     by the spec's blob id. With {@link #versionOf()}: a paid adaptation of that entry to the site. A group item with a site is
- *     designed in one pass with no massing of its own (since NEXT, 7b SL: in a massingFirst group it waits for the group's massing step,
+ *     designed in one pass with no massing of its own (since 1.53.0, 7b SL: in a massingFirst group it waits for the group's massing step,
  *     then designs in the same group), and it has no count or copyOf (its site variants are
  *     {@link Designs#siteVariant}). A versionOf of a site-bound entry without a site is built into the entry's own site
  *
@@ -138,7 +138,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 
 	/**
 	 * (7b) A copy designed for {@code s}: a site-aware design of the site's fit, in its frame, leaving its keep cells (null = a plain
-	 * design, as before). Built by slice DS: until then a request with a site is refused, never designed as a plain one. Since NEXT.
+	 * design, as before). Built by slice DS: until then a request with a site is refused, never designed as a plain one. Since 1.53.0.
 	 */
 	public DesignRequest withSite(@Nullable SiteSpec s) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,

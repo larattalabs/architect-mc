@@ -83,7 +83,7 @@ final class SetDialog {
 		Font font = font();
 		Map<String, String> errors = f.errors();
 		int y = top - 3;
-		g.text(font, "Design a set", x, y + 1, UiStyle.CLAY_DARK, false);
+		g.text(font, "Design a set", x, y + 1, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		String sub = "One style bible for every building, several designed at once; landmarks first, the rest see their renders.";
 		g.text(font, TextUtil.ellipsize(font, sub, w - font.width("Design a set") - 10), x + font.width("Design a set") + 10, y + 1, UiBits.muted(), false);
 		y += 13;
@@ -118,7 +118,7 @@ final class SetDialog {
 		if (f.newBible) {
 			String go = f.bibleJob == null ? "Draft bible" : "Drafting…";
 			int gw = s.bw(go);
-			s.textField(g, Focus.SET_PROMPT, promptView, f.prompt, x, y, w - gw - 6, new TextFieldView.Style("Prompt ", UiStyle.CLAY_DARK,
+			s.textField(g, Focus.SET_PROMPT, promptView, f.prompt, x, y, w - gw - 6, new TextFieldView.Style("Prompt ", dev.larattalabs.architect.client.ui.PaperInk.clay(),
 				"what the place is, e.g. hellish evil lair, mining facility", null, null, 0, 1));
 			s.button(g, "set:draft_bible", go, x + w - gw, y - 1, gw, false, f.bibleJob == null && !f.sending && SetFeature.has("bibles"), mx, my,
 				SetFeature::draftBible);
@@ -130,7 +130,7 @@ final class SetDialog {
 			y += 11;
 		}
 		// the buildings
-		g.text(font, "Buildings (" + f.items.size() + "/" + SetSpec.MAX_ITEMS + ")", x, y, UiStyle.CLAY_DARK, false);
+		g.text(font, "Buildings (" + f.items.size() + "/" + SetSpec.MAX_ITEMS + ")", x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		String err = errors.get("items");
 		if (err != null) {
 			g.text(font, TextUtil.ellipsize(font, err, w / 2), x + 110, y, UiBits.errorText(), false);
@@ -202,14 +202,14 @@ final class SetDialog {
 				10);
 			g.text(font, ml, mx0 + 13, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
 			mx0 += hw + 8;
-			g.text(font, "Redirects", mx0, y + 5, on ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+			g.text(font, "Redirects", mx0, y + 5, on ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
 			mx0 += font.width("Redirects") + 4;
 			mx0 += s.chip(g, "set:redirects-", "−", mx0, y + 2, false, on && f.maxRedirects > 0, mx, my, () -> f.maxRedirects--) + 2;
 			g.text(font, Integer.toString(f.maxRedirects), mx0 + 2, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
 			mx0 += font.width("10") + 6;
 			mx0 += s.chip(g, "set:redirects+", "+", mx0, y + 2, false, on && f.maxRedirects < SetSpec.MAX_REDIRECTS, mx, my, () -> f.maxRedirects++) + 12;
 			String ce = errors.get("context");
-			TextFieldView.Style cs = new TextFieldView.Style("Context ", UiStyle.CLAY_DARK, ce != null ? ce
+			TextFieldView.Style cs = new TextFieldView.Style("Context ", dev.larattalabs.architect.client.ui.PaperInk.clay(), ce != null ? ce
 				: "the site, its purpose, the neighbours, the street side: it goes into every brief", null, f.context.length() > 200 ? f.context.length() + "/"
 					+ SetSpec.MAX_CONTEXT : null, UiBits.muted(), compact ? 1 : 2);
 			if (compact) {
@@ -229,14 +229,14 @@ final class SetDialog {
 		}
 		// concurrency, budget, estimate
 		int cx = x;
-		g.text(font, "At once", cx, y + 3, UiStyle.CLAY_DARK, false);
+		g.text(font, "At once", cx, y + 3, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		cx += font.width("At once") + 4;
 		cx += s.chip(g, "set:concurrency-", "−", cx, y, false, f.concurrency > SetSpec.MIN_CONCURRENCY, mx, my, () -> f.concurrency--) + 2;
 		String cv = Integer.toString(f.concurrency);
 		g.text(font, cv, cx + 2, y + 3, UiBits.ink(), false);
 		cx += font.width("0") + 6;
 		cx += s.chip(g, "set:concurrency+", "+", cx, y, false, f.concurrency < SetSpec.MAX_CONCURRENCY, mx, my, () -> f.concurrency++) + 12;
-		g.text(font, "Budget", cx, y + 3, UiStyle.CLAY_DARK, false);
+		g.text(font, "Budget", cx, y + 3, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		cx += font.width("Budget") + 4;
 		cx += s.chip(g, "set:budget-", "−", cx, y, false, f.budgetUsd != null, mx, my, () -> f.budgetUsd = budgetStep(f.budgetUsd, -1)) + 2;
 		String bv = f.budgetUsd == null ? "none" : String.format(Locale.ROOT, "$%.0f", f.budgetUsd);
@@ -288,7 +288,7 @@ final class SetDialog {
 
 	private void label(GuiGraphicsExtractor g, String text, @Nullable String err, int x, int y, int w) {
 		Font font = font();
-		g.text(font, text, x, y, UiStyle.CLAY_DARK, false);
+		g.text(font, text, x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		if (err != null) {
 			int ex = x + font.width(text) + 6;
 			g.text(font, TextUtil.ellipsize(font, err, Math.max(10, x + w - ex)), ex, y, UiBits.errorText(), false);
@@ -314,7 +314,7 @@ final class SetDialog {
 		Panels.sprite(g, on ? dev.larattalabs.labui.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.labui.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
 		g.text(font, cl, cx + 13, y + 2, on ? UiBits.ink() : UiBits.muted(), false);
 		cx += hw + 8;
-		g.text(font, "Revisions", cx, y + 2, on ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+		g.text(font, "Revisions", cx, y + 2, on ? dev.larattalabs.architect.client.ui.PaperInk.clay() : UiBits.muted(), false);
 		cx += font.width("Revisions") + 4;
 		for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
 			cx += s.chip(g, "set:revisions:" + n, Integer.toString(n), cx, y - 1, on && f.maxRevisions == n, on, mx, my, () -> f.maxRevisions = n) + 3;

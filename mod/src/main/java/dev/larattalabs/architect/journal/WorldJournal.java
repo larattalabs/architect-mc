@@ -58,6 +58,11 @@ public final class WorldJournal {
 	public static final String CRATE = "crate";
 	/** Held leaves (CELL, written quietly). */
 	public static final String LEAVES = "leaves";
+	/**
+	 * (7b slice SO) A site-aware building's cosmetic scaffolding while it is built (CELL, in the site's undo group): it costs no items and
+	 * refunds nothing; taken down (undone, released) when the site completes; a removal before that undoes it with the site.
+	 */
+	public static final String SCAFFOLD = "architect:scaffold";
 	/** A delta of a placed site to another version of its entry (BOX, phase 5b), in the site's undo group. */
 	public static final String DELTA = "delta";
 	/**

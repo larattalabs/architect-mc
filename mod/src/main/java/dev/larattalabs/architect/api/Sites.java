@@ -167,10 +167,10 @@ public interface Sites {
 	 * site's own frame ({@link SiteSpec#frame()}), and the verdict runs the site checks: {@link Reason#SITE_MISMATCH} (the entry is
 	 * bound to another volume sha), {@link Reason#SITE_DRIFTED}, {@link Reason#KEEP_LOST}, {@link Reason#SITE_UNSUPPORTED}. Pass the
 	 * answer's origin and rotation with the site into a {@link PlaceRequest#withSite}. An {@code on_pad} site lot keeps
-	 * {@link #fitToLot}. Nothing is placed. Built by slice PL (feature {@code "siteDesign"}); until then it throws. Since NEXT.
+	 * {@link #fitToLot}. Nothing is placed. Built by slice PL (feature {@code "siteDesign"}); until then it throws. Since 1.53.0.
 	 */
 	default LotFit fitToSite(String blueprintId, SiteSpec site, FitOptions options) {
-		throw new UnsupportedOperationException("Sites.fitToSite needs the Architect API since NEXT (slice PL)");
+		throw new UnsupportedOperationException("Sites.fitToSite needs the Architect API since 1.53.0 (slice PL)");
 	}
 
 	/**

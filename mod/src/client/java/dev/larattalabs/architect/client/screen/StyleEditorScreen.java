@@ -218,13 +218,13 @@ final class StyleEditorScreen extends U3Screen {
 		int labelW = 46;
 		int mY = my >= top && my < bottom ? my : -1000;
 		// name
-		g.text(font, "Name", x, y + 5, UiStyle.CLAY_DARK, false);
+		g.text(font, "Name", x, y + 5, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		if (visible(y, 18, top, bottom)) {
 			drawField(g, nameField, x + labelW, y, w - labelW);
 		}
 		y += 22;
 		// tags: chips with ×, then the "+ tag" field
-		g.text(font, "Tags", x, y + 5, UiStyle.CLAY_DARK, false);
+		g.text(font, "Tags", x, y + 5, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		int tx = x + labelW;
 		for (String t : draft.tags()) {
 			Chip c = new Chip(t + " ×", () -> draft.removeTag(t)).selected(true);
@@ -246,7 +246,7 @@ final class StyleEditorScreen extends U3Screen {
 		}
 		y += Chip.H + 6;
 		// the four main rows
-		g.text(font, "Main materials", x, y + 2, UiStyle.CLAY_DARK, false);
+		g.text(font, "Main materials", x, y + 2, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		y += 13;
 		StyleForm m = draft.materials();
 		for (String field : StyleRoles.MAIN_FIELDS) {
@@ -376,7 +376,7 @@ final class StyleEditorScreen extends U3Screen {
 		}
 		y += bh + 6;
 		// suggested features
-		g.text(font, "Suggested features", x, y, UiStyle.CLAY_DARK, false);
+		g.text(font, "Suggested features", x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 		g.text(font, "(max " + StyleForm.MAX_FEATURES + ")", x + font.width("Suggested features") + 4, y, UiStyle.mutedText(), false);
 		y += 11;
 		int fx = x;
@@ -406,7 +406,7 @@ final class StyleEditorScreen extends U3Screen {
 		y += Chip.H + 6;
 		// (U5b) the Style's own parts
 		if (y + 10 < bottom) {
-			g.text(font, "Parts", x, y, UiStyle.CLAY_DARK, false);
+			g.text(font, "Parts", x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			y += 11;
 			g.text(font, TextUtil.ellipsize(font, partsLine(), w), x, y, source.hasParts() && draft.mode() == StyleDraft.Mode.EDIT ? UiBits.ink() : UiStyle
 				.mutedText(), false);
@@ -422,7 +422,7 @@ final class StyleEditorScreen extends U3Screen {
 		// shape hints (read-only: they ride along unchanged)
 		List<String> hints = draft.shapeHints();
 		if (y + 10 < bottom) {
-			g.text(font, "Shape hints", x, y, UiStyle.CLAY_DARK, false);
+			g.text(font, "Shape hints", x, y, dev.larattalabs.architect.client.ui.PaperInk.clay(), false);
 			y += 11;
 		}
 		if (hints.isEmpty() && y + 10 < bottom) {

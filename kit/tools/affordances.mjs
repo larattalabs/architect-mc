@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 // (7b AF) The site analysis CLI (kit/lib/region/affordances.mjs): the affordances of a frozen ARVX volume and, with a lot and a fit,
 // the frame proposed for it. The helper's `site.analyse` (api.Survey.site) runs this; gates run it on the mod's frozen volume file.
-//   node kit/tools/affordances.mjs <volume.bin> [--lot minX,minY,minZ,maxX,maxY,maxZ --fit <fit>] [--kinds a,b] [--sha <hex>]
+//   node kit/tools/affordances.mjs <volume.bin> [--lot minX,minY,minZ,maxX,maxY,maxZ --fit <fit> [--standalone]] [--kinds a,b] [--sha <hex>]
 // The last stdout line is one JSON object: {ok: true, sha, box, affordances, proposed} or {ok: false, error}. Exit 0 ok, 1 failure,
-// 2 usage. `--sha`: refuse a volume whose ARVX bytes hash to anything else.
+// 2 usage. `--sha`: refuse a volume whose ARVX bytes hash to anything else. (7b ST) `--standalone` adds `standalone`: the player path's
+// whole site spec for the lot and fit (lib/siteStandalone.mjs: `{ok, spec, affordance}` or `{ok: false, reason}`); without it the
+// output is AF's, byte for byte.
 import fs from 'node:fs';
 import { decodeArvx } from '../lib/region/volume.mjs';
 import { analyseVolume, proposeFrame, AFFORDANCE_KINDS, FIT_AFFORDANCES } from '../lib/region/affordances.mjs';
+import { standaloneSite } from '../lib/siteStandalone.mjs';
 
 function main(argv) {
   const pos = [], opts = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) {
+    if (a === '--standalone') {
+      opts.standalone = true;
+    } else if (a.startsWith('--')) {
       const k = a.slice(2);
       if (!['lot', 'fit', 'kinds', 'sha'].includes(k)) return usage(`unknown option --${k}`);
       if (i + 1 >= argv.length) return usage(`--${k} needs a value`);
@@ -21,6 +26,7 @@ function main(argv) {
   }
   if (pos.length !== 1) return usage('one volume file');
   if (!!opts.lot !== !!opts.fit) return usage('--lot and --fit go together');
+  if (opts.standalone && !opts.lot) return usage('--standalone needs --lot and --fit');
   let lot = null;
   if (opts.lot) {
     const n = opts.lot.split(',').map(Number);
@@ -38,7 +44,13 @@ function main(argv) {
     if (lot && (lot.minX < b.minX || lot.minY < b.minY || lot.minZ < b.minZ || lot.maxX > b.maxX || lot.maxY > b.maxY || lot.maxZ > b.maxZ)) throw new Error('the lot is not inside the volume');
     const affordances = analyseVolume(v, kinds ? { kinds } : {});
     const proposed = lot ? proposeFrame(affordances, lot, opts.fit) : null;
-    console.log(JSON.stringify({ ok: true, sha: v.sha, box: b, affordances, proposed }));
+    const out = { ok: true, sha: v.sha, box: b, affordances, proposed };
+    // (7b ST) the standalone spec, built on the frame just proposed (the same analysis: one implementation)
+    if (opts.standalone) {
+      out.standalone = proposed ? standaloneSite(v, { lot, fit: opts.fit, frame: proposed.frame, affordances }) : standaloneSite(v, { lot, fit: opts.fit, affordances });
+      if (out.standalone.ok && proposed) out.standalone.affordance = proposed.affordance;
+    }
+    console.log(JSON.stringify(out));
     return 0;
   } catch (e) {
     console.log(JSON.stringify({ ok: false, error: e.message }));
@@ -47,7 +59,7 @@ function main(argv) {
 }
 
 function usage(msg) {
-  console.error(`affordances: ${msg}\nusage: node kit/tools/affordances.mjs <volume.bin> [--lot minX,minY,minZ,maxX,maxY,maxZ --fit <fit>] [--kinds a,b] [--sha <hex>]`);
+  console.error(`affordances: ${msg}\nusage: node kit/tools/affordances.mjs <volume.bin> [--lot minX,minY,minZ,maxX,maxY,maxZ --fit <fit> [--standalone]] [--kinds a,b] [--sha <hex>]`);
   console.log(JSON.stringify({ ok: false, error: msg }));
   return 2;
 }

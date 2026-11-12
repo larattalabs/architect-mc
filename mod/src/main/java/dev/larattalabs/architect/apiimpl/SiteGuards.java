@@ -20,7 +20,7 @@ public final class SiteGuards {
 	 */
 	public static void place(PlaceRequest r) {
 		if (r != null && r.site() != null) {
-			throw new UnsupportedOperationException("PlaceRequest.site needs the Architect API since NEXT (slice PL)");
+			throw new UnsupportedOperationException("PlaceRequest.site needs the Architect API since 1.53.0 (slice PL)");
 		}
 	}
 

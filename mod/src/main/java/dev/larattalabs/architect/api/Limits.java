@@ -91,7 +91,7 @@ public final class Limits {
 	public static final int PALETTE_BLOCK_MAX = 64;
 	/**
 	 * (7b DS) {@link DesignRequest#site}: the most keep-critical cells and ports a site spec carries (equal to
-	 * {@link SiteSpec#MAX_KEEP_CRITICAL} and {@link SiteSpec#MAX_PORTS}, which the spec's own {@code problems()} check). Since NEXT.
+	 * {@link SiteSpec#MAX_KEEP_CRITICAL} and {@link SiteSpec#MAX_PORTS}, which the spec's own {@code problems()} check). Since 1.53.0.
 	 */
 	public static final int SITE_KEEP_CRITICAL_MAX = 65536;
 	public static final int SITE_PORTS_MAX = 16;

@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  *     {@code softBudgetFraction} (0.8) nothing new starts: {@link Group.Status#PAUSED_BUDGET}), or null
  * @param massingFirst (since 1.3.0, a helper with {@code "massing"}) every item gets a massing first (in waves); then the
  *     group is {@link Group.Status#AWAITING_APPROVAL} and {@link SiteEvents#GROUP_AWAITING_APPROVAL} fires; approve, redirect
- *     or cancel items with {@link Designs#approveGroup}. Massings and redirects count toward the budget. (Since NEXT, 7b SL) a
+ *     or cancel items with {@link Designs#approveGroup}. Massings and redirects count toward the budget. (Since 1.53.0, 7b SL) a
  *     site-aware item ({@link DesignRequest#site()}) has no massing: it waits until no massing of the group is designing or
  *     awaiting approval, then designs in one pass in the same group
  * @param approvalUi (since 1.3.0) who approves: {@link ApprovalUi#ARCHITECT} (Architect's UI shows the massings and an

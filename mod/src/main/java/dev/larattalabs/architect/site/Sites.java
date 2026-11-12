@@ -693,6 +693,10 @@ public final class Sites {
 			}
 			tr.mark("siteChecks");
 			layerNotes.addAll(SiteFit.notes(siteSpec));
+			// (7b ST) a standalone port that meets no standable ground: a warning, never a refusal
+			int dsx = turns % 2 == 0 ? model.sizeX : model.sizeZ;
+			int dsz = turns % 2 == 0 ? model.sizeZ : model.sizeX;
+			layerNotes.addAll(SiteFit.drops(siteSpec, dsx, dsz, world));
 		}
 		if (approach.metRoad()) {
 			int[] r = approach.road();
@@ -2589,7 +2593,8 @@ public final class Sites {
 		JournalStore.Meta main = null;
 		for (JournalStore.Meta m : SiteJournal.undone(siteId, group)) {
 			// the site's own entry decides (a group undo with deltas: their cells lie inside or next to it)
-			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && (main == null || !main.kind().equals(WorldJournal.SITE))) {
+			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && !m.kind().equals(WorldJournal.SCAFFOLD)
+				&& (main == null || !main.kind().equals(WorldJournal.SITE))) {
 				main = m;
 			}
 		}
@@ -2804,7 +2809,7 @@ public final class Sites {
 			}
 			boolean placing = e.getValue().stream().anyMatch(m -> m.status() == Journal.Status.PLACING);
 			JournalStore.Meta main = e.getValue().stream().filter(m -> !m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)
-				&& !m.kind().equals(WorldJournal.DELTA)).findFirst().orElse(null);
+				&& !m.kind().equals(WorldJournal.DELTA) && !m.kind().equals(WorldJournal.SCAFFOLD)).findFirst().orElse(null);
 			if (placing || main == null) {
 				// K2: committed before its record, never written (or only guard entries left): released, nothing written
 				e.getValue().forEach(m -> releaseNow.add(m.id()));

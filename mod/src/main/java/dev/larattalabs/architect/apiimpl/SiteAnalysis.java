@@ -48,6 +48,30 @@ public final class SiteAnalysis {
 	}
 
 	public static CompletableFuture<SiteSample> site(ServerLevel level, BoundingBox lot, FitMode fit, @Nullable LoadPolicy load) {
+		return analyse(level, lot, fit, load, false).thenApply(Standalone::sample);
+	}
+
+	/** The helper's feature of the standalone spec (7b ST). */
+	public static final String STANDALONE_FEATURE = "site.standalone";
+
+	/**
+	 * (7b ST) The standalone player path's sample: {@link #site}'s sample plus the whole {@link SiteSpec} for the lot and fit (the kit's
+	 * {@code standaloneSite}: the proposed frame, the ports and keep-critical cells per fit; no lot id; its blob id the uploaded volume's),
+	 * or the reason in player words when the land has no such site. {@code spec} and {@code reason} are never both set.
+	 */
+	public record Standalone(SiteSample sample, @Nullable SiteSpec spec, @Nullable String reason) {
+	}
+
+	/** (7b ST) {@link #site} with the helper's standalone spec ({@code site.analyse {standalone: true}}, feature {@value #STANDALONE_FEATURE}). */
+	public static CompletableFuture<Standalone> standalone(ServerLevel level, BoundingBox lot, FitMode fit, @Nullable LoadPolicy load) {
+		if (RegionBridge.INSTANCE.connected() && !ApiImpl.bridge().sidecarFeatures().contains(STANDALONE_FEATURE)) {
+			return CompletableFuture.failedFuture(new RegionRefused(Reason.SIDECAR_UNAVAILABLE, "the design helper is too old for site plots (no "
+				+ STANDALONE_FEATURE + "): update it"));
+		}
+		return analyse(level, lot, fit, load, true);
+	}
+
+	private static CompletableFuture<Standalone> analyse(ServerLevel level, BoundingBox lot, FitMode fit, @Nullable LoadPolicy load, boolean standalone) {
 		if (level == null || lot == null || fit == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Survey.site needs a level, a lot box and a fit"));
 		}
@@ -64,15 +88,19 @@ public final class SiteAnalysis {
 		}
 		MinecraftServer s = level.getServer();
 		BoundingBox vb = volumeBox(level, lot);
-		CompletableFuture<SiteSample> chain = VolumeSurvey.start(level, vb, load == null ? LoadPolicy.LOADED_ONLY : load, null).thenCompose(SurveyImpl::upload)
+		CompletableFuture<Standalone> chain = VolumeSurvey.start(level, vb, load == null ? LoadPolicy.LOADED_ONLY : load, null).thenCompose(SurveyImpl::upload)
 			.thenCompose(v -> {
 			if (v.blobId().startsWith("local:")) {
 				throw new RegionRefused(Reason.SIDECAR_UNAVAILABLE, "the volume could not be sent to the helper (sidecar)");
 			}
-			return RegionBridge.INSTANCE.send(message(v, lot, fit)).thenApply(ack -> sample(v, ack));
+			JsonObject m = message(v, lot, fit);
+			if (standalone) {
+				m.addProperty("standalone", true);
+			}
+			return RegionBridge.INSTANCE.send(m).thenApply(ack -> standalone ? standaloneOf(v, ack) : new Standalone(sample(v, ack), null, null));
 		});
 		// the answer, or the failure, on the server thread
-		CompletableFuture<SiteSample> out = new CompletableFuture<>();
+		CompletableFuture<Standalone> out = new CompletableFuture<>();
 		chain.whenComplete((x, e) -> {
 			Runnable r = () -> {
 				if (e != null) {
@@ -88,6 +116,30 @@ public final class SiteAnalysis {
 			}
 		});
 		return out;
+	}
+
+	/**
+	 * (7b ST) The helper's answer with its {@code standalone} member: the sample, and the spec (its blob id replaced by the uploaded
+	 * volume's) or the reason. A missing member (an older kit) is a reason; a spec of another volume or that {@link SiteSpec#fromWire}
+	 * refuses fails. Pure.
+	 */
+	public static Standalone standaloneOf(Volume v, JsonObject ack) {
+		SiteSample sample = sample(v, ack);
+		JsonObject r = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
+		if (!(r.get("standalone") instanceof JsonObject st)) {
+			return new Standalone(sample, null, "the design helper's kit can't build a site plot (no standalone spec): update it");
+		}
+		if (!st.has("ok") || !st.get("ok").getAsBoolean()) {
+			String why = st.has("reason") && st.get("reason").isJsonPrimitive() ? st.get("reason").getAsString() : "the land has no such site";
+			return new Standalone(sample, null, why);
+		}
+		JsonObject w = st.getAsJsonObject("spec").deepCopy();
+		w.addProperty("volumeBlobId", v.blobId());
+		SiteSpec spec = SiteSpec.fromWire(w);
+		if (!spec.volumeSha().equals(v.sha())) {
+			throw new RegionRefused(Reason.OTHER, "the helper's site spec is of another volume");
+		}
+		return new Standalone(sample, spec, null);
 	}
 
 	/** The {@code site.analyse} message. */

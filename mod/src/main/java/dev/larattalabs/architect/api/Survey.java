@@ -41,9 +41,9 @@ public interface Survey {
 	 * the helper ({@link Reason#SIDECAR_UNAVAILABLE} without it). A lot over 96x64x96 or outside the world's height fails
 	 * {@link RegionRefused} {@link Reason#REGION_LIMIT}; the volume's y is clamped to the world. The future completes on the server thread.
 	 * The proposed frame's origin is the lot's minimum corner, its rotation turns the design's front (south) to the chosen affordance's
-	 * normal (kit/lib/region/affordances.mjs {@code proposeFrame}). Built by slice AF (feature {@code "siteSurvey"}). Since NEXT.
+	 * normal (kit/lib/region/affordances.mjs {@code proposeFrame}). Built by slice AF (feature {@code "siteSurvey"}). Since 1.53.0.
 	 */
 	default CompletableFuture<SiteSample> site(ServerLevel level, BoundingBox lot, FitMode fit, LoadPolicy load) {
-		throw new UnsupportedOperationException("Survey.site needs the Architect API since NEXT (slice AF)");
+		throw new UnsupportedOperationException("Survey.site needs the Architect API since 1.53.0 (slice AF)");
 	}
 }
