@@ -28051,7 +28051,7 @@ three asks that waited on `layout.elevated` now answer `refused NO_FEATURE` on f
 | kit `node --test kit/test/*.test.mjs` | 1167/1167 at 50a143b5 (sl.test.mjs 8/8); the catalogue-diff tests of CL, GM-c and the 7a foundation leave the flip to sl.test.mjs |
 | sidecar `npm ci && npm run check` | 834/834 (site-design.test.ts 20/20 with the three massingFirst cases); system-refs' compact plan/0 under 100,000 characters after shortening the entry's text |
 | mod `./gradlew build --offline --no-daemon` | pass; 1074 tests, 0 failures, 1 skipped (ApiSLTest 9/9, Api7bFTest 12/12 untouched) |
-| api-compat | clean (the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar); the API package diff is javadoc only (DesignRequest.site, GroupRequest.massingFirst) |
+| api-compat | clean before the DS merge (the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar); SL's own API package diff is javadoc only (DesignRequest.site, GroupRequest.massingFirst), so not re-run after the merge |
 | lint-structure / lint-look / water-lint / p3-lint | 68/0 / 13/0 / 135/135 / in the mod build |
 | `node tools/step-inputs.mjs check` | clean after `build` (336 steps) |
 | in game, run 20261112-050741-change at 979b3e10 | pl-ingame 86/0 and pl-undo 16/0 PASS (PL's steps over the changed `SiteFit`/`Batches`); sl-unit and sl-ingame failed on two gate bugs (e15 named but not moved; the survey box sent as an object), fixed |
