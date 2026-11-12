@@ -5,13 +5,17 @@
 // class the game's survey gives a block (lib/region/volume.mjs VOXEL_CLASSES), for the kit's own land models (kit/test/sb-world.mjs).
 // Pure, deterministic: the runs are sorted by state, then y0, x0, z0.
 import { buildVirtual } from './vworld.mjs';
+import { decodeArvx } from './volume.mjs';
 
 /**
  * The sculpt's cells as boxes of one state: [{state, x0, y0, z0, x1, y1, z1}] (inclusive). `ir`, `survey` (the plan's survey bytes)
  * and `blobs(sha)` as buildVirtual takes them. Every written cell is covered exactly once.
  */
 export function sculptRuns(ir, survey, blobs) {
-  const { vw } = buildVirtual({ ir, survey, blobs });
+  // the frozen volumes the sculpt read are its base where they cover (a clearing writes air over the volume's leaves: over the survey
+  // alone those cells read air, so the write would be no change and no /fill would clear them)
+  const volumes = Object.values(ir.volumes ?? {}).map((u) => { const b = blobs(ir.blobs?.[u.blob]?.sha); return b ? decodeArvx(b) : null; }).filter(Boolean); // (decodeArvx takes gzip or raw)
+  const { vw } = buildVirtual({ ir, survey, blobs, volumes });
   const cells = new Map(); // "x,z" -> [[y, state]]
   vw.eachWritten((x, y, z, idx) => {
     const k = `${x},${z}`;

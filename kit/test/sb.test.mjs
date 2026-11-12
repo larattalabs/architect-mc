@@ -13,14 +13,16 @@ import { checkRegion, walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { buildVirtual } from '../lib/region/vworld.mjs';
 import { lotPortsWorld } from '../lib/region/links.mjs';
 import { sculptRuns, stateClass } from '../lib/region/sculpt.mjs';
+import { VC } from '../lib/region/volume.mjs';
 import { splitBox } from '../../tools/lib/scenario-sb.mjs';
 
 const S5 = { claim: { minX: 3328, minZ: -1600, maxX: 3519, maxZ: -1409 }, minY: 22, maxY: 156 };
 const S6 = { claim: { minX: 3672, minZ: -1780, maxX: 3863, maxZ: -1589 }, minY: 22, maxY: 173 };
 
 /** The scenario offline: sculpt, plan, build the lots, replay the links; the plan's world with the lots as obstacles. */
-async function scenario(spec, groundAt, sculptId, programId, paramsOf) {
+async function scenario(spec, groundAt, sculptId, programId, paramsOf, edit = null) {
   const land = makeLand({ claim: spec.claim, minY: spec.minY, maxY: spec.maxY, groundAt });
+  if (edit) edit(land);
   const sculpt = await plan2(land, sculptId);
   const runs = applySculpt(land, sculpt);
   const params = paramsOf(sculpt.meta.sb);
@@ -48,7 +50,14 @@ function fitBars(S) {
 
 const results = {};
 const s6 = () => (results.s6 ??= scenario(S6, (x, z) => 64 + hillAt((S6.claim.minX + S6.claim.maxX) >> 1, (S6.claim.minZ + S6.claim.maxZ) >> 1, 88, 60, x, z), 's6_cavern_sculpt', 's6_cave_city', (sb) => ({ floorY: sb.floorY })));
-const s5 = () => (results.s5 ??= scenario(S5, () => 64, 's5_grove_sculpt', 's5_treehouses', (sb) => ({ grove: sb })));
+// a natural tree where the middle pair's walk runs (the grove's centre on this land): the sculpt's clearing must take it
+const NATURAL = [3424, -1504];
+const naturalTree = (land) => {
+  const [x, z] = NATURAL;
+  for (let y = 65; y <= 69; y++) land.set(x, y, z, VC.LOG);
+  for (let u = -2; u <= 2; u++) for (let v = -2; v <= 2; v++) for (let y = 68; y <= 71; y++) if (u || v || y > 69) land.set(x + u, y, z + v, VC.LEAVES);
+};
+const s5 = () => (results.s5 ??= scenario(S5, () => 64, 's5_grove_sculpt', 's5_treehouses', (sb) => ({ grove: sb }), naturalTree));
 
 test('S6 flat: the cavern sculpt (6b cavern, edge rows, the ramp) gives seven carve_into lots that each build their fit example clean', async () => {
   const S = await s6();
@@ -76,6 +85,8 @@ test('S5 flat: the grove sculpt (six straight-trunk giant oaks, the ramps) gives
   assert.equal(sb.trees.length, 6);
   assert.ok(sb.trees.every((t) => t.straight), 'every trunk straight through its house');
   assert.equal(sb.ramps.length, 3);
+  const [nx, nz] = NATURAL;
+  for (let y = 65; y <= 71; y++) assert.equal(S.land.cls(nx, y, nz), VC.AIR, `the natural tree's cell ${nx},${y},${nz} cleared`);
   assert.equal(S.plan.ir.lots.length, 6);
   assert.ok(S.plan.ir.lots.every((l) => l.site?.fit === 'wrap_trunk' && l.site.keepCritical.length > 0), 'each lot wraps its tree (its logs keep-critical)');
   for (const b of S.built) assert.deepEqual([b.lot, b.ok, b.errors, b.siteFindings.map((f) => f.rule)], [b.lot, true, [], []], `${b.lot}: the trunk house builds into its site with no finding`);
@@ -101,7 +112,9 @@ test('the sculpt runs are deterministic, cover every written cell once and fit /
   const seen = new Set();
   for (const r of S.runs) for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) for (let z = r.z0; z <= r.z1; z++) { const k = `${x},${y},${z}`; assert.ok(!seen.has(k), `${k} twice`); seen.add(k); }
   const s5r = (await s5()).sculpt;
-  const p = await plan2(makeLand({ claim: S5.claim, minY: S5.minY, maxY: S5.maxY, groundAt: () => 64 }), 's5_grove_sculpt');
+  const L5 = makeLand({ claim: S5.claim, minY: S5.minY, maxY: S5.maxY, groundAt: () => 64 });
+  naturalTree(L5);
+  const p = await plan2(L5, 's5_grove_sculpt');
   assert.equal(p.irSha, s5r.irSha, 'the grove sculpt plans the same twice');
   // /fill's 32768-cell limit: a box over it splits into boxes under it covering it exactly
   const big = { state: 'minecraft:air', x0: 0, y0: 0, z0: 0, x1: 99, y1: 9, z1: 49 };

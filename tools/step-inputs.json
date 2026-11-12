@@ -95745,7 +95745,11 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "tools/lib/scenario-sb.mjs"
-   ]
+   ],
+   "data": [
+    "kit/regions/**"
+   ],
+   "verified": "20261112-214746-change sb-unit"
   },
   "7b-scenario-s6": {
    "classes": [
@@ -96092,6 +96096,9 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "7b-scenario-s5": {
@@ -96439,6 +96446,9 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "slb-ingame": {
