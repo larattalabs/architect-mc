@@ -27539,8 +27539,8 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
   so palette, parts, survival, metrics, doors and the vocabulary rules never see the site; `at`, `cls`, `free`, `floor`, the outside flood
   (over the window plus a ring, seeded in the ring), light (unwritten site solids opaque), the walker (anywhere in the window), the
   enclosure's cover (the site above, to the window's top), `sturdyFace` and `wallish` see the composite. Every no-site path is unchanged
-  (`lightLevels` reads `g.terrain`, which is the old `y < groundY` for a plain grid; the full kit suite passed before the site rules' tests
-  were added).
+  (`lightLevels` reads `g.terrain`, which is the old `y < groundY` for a plain grid; the full kit suite run on the grid change failed only
+  fit_suspend's re-cut schem golden and SV's `templateOnlyWarnings` assertion, both expected).
 - **The rules**, all warnings but the first two:
   - `site_bound` (error): the template is the lot box (size), of this volume (the sidecar's `site.volumeSha`, `lotId`), with this fit (the SV
     verifier's note).
@@ -27601,3 +27601,15 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
 paths unchanged), `kit/build.mjs` and `kit/check.mjs` (pass and print the site), `kit/tools/examples.mjs`, `kit/designs/site/*` (one
 comment line each, fit_suspend's hatch), `kit/test/sv.test.mjs`, the goldens named above, `tools/step-inputs.json` (rebuilt by the tool)
 and this file. Neither PL nor AF touches any of them but step-inputs and CONTRACT.md (a textual merge at the coordinator).
+
+**Checks** ($0, no client; SC's gate column has no in-game items, so no gate run and no lane):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1144/1144 (sc.test.mjs 13/13; sv.test.mjs 13/13 with the stand-ins moved to the checker) |
+| sidecar `npm ci && npm run check` | 811/811 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1046 tests, 0 failures, 1 skipped (SchematicTest with fit_suspend's mod golden re-cut; LedgerLint/RegionFluidsLint = p3-lint) |
+| lint-structure / lint-look | 68 cases, 0 failing / 13 cases, 0 failing |
+| water-lint `node --test kit/lint/*.lint.mjs` | 135/135 |
+| `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the closures that reach lib/check.mjs gain lib/siteCheck.mjs) |
+| api-compat | not run: no Java change |
