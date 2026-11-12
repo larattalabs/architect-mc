@@ -168,7 +168,11 @@ sat idle in its world, the step's end went unrecorded and the slot stayed taken 
 - **Repro and proof** (`artifacts/gate-runs-robust/`, local): a scratch `--config` with a step on client 6b that prints `ok`, then
   `FAIL`, then `exec sleep 100000`, followed by a client-less step.
   - On main's runner the client sat idle (38% CPU) with the step RUNNING for minutes, and only a SIGTERM ended it.
-  - With the watch, the step was killed about 5 minutes after its FAIL, the client was stopped and the next step ran.
+  - On main's runner (`20261112-063259-zzrepro`), the client (pid 87817) sat idle at 25-38% CPU with the step RUNNING for 5 min after
+    its FAIL. Its timeout would have been 45 min; my own SIGTERM ended it.
+  - With the watch (`20261112-064633-zzrepro`), the step logged `STALLED: no output for 5m00s` and was killed at 06:52:33. The client
+    (pid 16909) was stopped at 06:52:34, and the next step passed at 06:52:39. `summary.json` has the step's `stalledAfterFail`.
+  - The same run proved the load-aware start live: queued at load 80-85 beside 3 other runs, it waited 315 s and started at load 33.4.
 
 ## Affected-only releases: the step cache and the nightly (Noah, 2026-10-22)
 
