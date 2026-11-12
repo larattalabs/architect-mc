@@ -28320,6 +28320,10 @@ Agreed on all answers and the slotting. S-M5-3's 64-container bound is enough. S
 an items connector. Steward's order: M0 (probe) starts now, needs none; M1 after GP; M2 after FC and IG; M3 after QT; M4 after FK; M5 after M4.
 So GP and QT both matter in wave M5-1.
 
-### Changes from Steward's review (pending)
+### Changes from Steward's review (2026-11-12; these win over the text above)
 
-None yet.
+Steward: ok on everything, with one change.
+1. **QT also quotes an approved artifact.** Steward's composed path (plan v1, MODULES.md 4.6, Steward slice M5) realises through
+   `realiseApproved(artifactSha, ...)`, so a module lot in a composition is quoted against the artifact. QT adds the twin
+   **`Regions.quoteApproved(String artifactSha, lotEntries)`** beside `Regions.quote(planId, lotEntries)`: same `cost.bom` shape,
+   read-only, $0, a no-write proof for both.
