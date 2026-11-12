@@ -6,8 +6,8 @@
 //                                                      lots: Regions.quote twice between two hashes of the claim box, two listings of the
 //                                                      journal, <world>/architect and the regions dir and two stockpile states (nothing
 //                                                      written, nothing consumed, the answers equal); realised with those entries and fed:
-//                                                      the stockpile's consumed delta equals the quote's bom item for item; the town's qt_hut piece
-//                                                      is more than its template's bill (its approach: C26's full bill)
+//                                                      the stockpile's consumed delta equals the quote's bom item for item; the lots' pieces against
+//                                                      their templates recorded (every lot faces a plan road: approach 0)
 //   node tools/gate6dgr.mjs qtapproved  (qt-approved)  a plan/0 town checked in survival: Regions.quoteApproved with two lot entries over the
 //                                                      artifact (the same no-write proof; quote of the artifact's plan id with the merged
 //                                                      entries equals it), realiseApproved with them, fed: consumed equals the quote
@@ -108,8 +108,8 @@ export async function registerQT(steps, h) {
     const out = {};
     out.kit = h.nodeTest(['kit/test/qt.test.mjs']);
     check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 3, `kit qt.test (a survival plan's survivalBom per group equals the plan check's cells bill; a creative plan has none; the IR and its sha unchanged): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-    out.java = await h.javaTests(['*QuotesTest*', '*ApiQTTest*'], 5);
-    check(out.java.ok, `QuotesTest, ApiQTTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
+    out.java = await h.javaTests(['*QuotesTest*', '*ApiQTTest*', '*QuoteRoadsTest*'], 9);
+    check(out.java.ok, `QuotesTest, ApiQTTest, QuoteRoadsTest (a lot facing a plan road has no approach, one with none in front bills its 18 cells over the template; a quote never seeds the check cache): ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
     const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
     const J = h.apiJars();
     out.apicompat = [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
@@ -144,11 +144,9 @@ export async function registerQT(steps, h) {
     check(!q0.refused && q0.survival === true && q0.region === null, `the town's plan quoted (a first realise, survival): ${q0.refused ?? `bom ${json(q0.bom)}`}`);
     const ps00 = await pile();
     const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'qt_hut' } });
-    // the put-down's bill, not the template's (the plan check's lot bill): qt_hut's generated approach is in its piece
-    const tq0 = await tmplBom('qt_hut');
-    const d0 = G.minus(q0.bomParts?.['lot:cottage_1'] ?? {}, tq0);
-    out.town.template = { qt_hut: tq0, diff: d0 };
-    check(Object.values(d0).some((n) => n > 0), `lot cottage_1 (qt_hut)'s piece is more than its template's bill: + ${json(d0)} (its approach, C26's full bill)`);
+    // (recorded, not judged: every lot of these fixtures faces a plan road, so its approach is 0 and its piece is its template's bill; the
+    // approach model is QuoteRoadsTest's, in qt-unit)
+    out.town.template = { diff: G.minus(q0.bomParts?.['lot:cottage_1'] ?? {}, await tmplBom('qt_hut')) };
     const t = await consumedEquals(region, q0, ps00, 'the town (a first realise, quote(planId) with a bound lot)', (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
     out.town.paid = t.paid;
     // a growth by planRevision with two bound lots: quoted, nothing written; realised with those entries, fed; consumed = quote
