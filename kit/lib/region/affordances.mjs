@@ -691,7 +691,8 @@ export function analyseVolume(volume, opts = {}) {
     return { id: a.id ?? affordanceId(a.kind, a.box, a.normal), kind: a.kind, box: a.box, anchors: a.anchors, normal: a.normal ?? null, metrics: a.metrics, score: r3(Math.max(0, s)) };
   });
   // two affordances of one kind quantized alike: the later (in box order) gets a suffix
-  found.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) || canonicalJson(a.box).localeCompare(canonicalJson(b.box)) || String(a.normal).localeCompare(String(b.normal)));
+  const cmp = (x, y) => (x < y ? -1 : x > y ? 1 : 0); // code-unit order: locale-independent
+  found.sort((a, b) => cmp(a.id, b.id) || cmp(canonicalJson(a.box), canonicalJson(b.box)) || cmp(String(a.normal), String(b.normal)));
   const ids = new Map();
   for (const a of found) {
     const n = ids.get(a.id) ?? 0;
