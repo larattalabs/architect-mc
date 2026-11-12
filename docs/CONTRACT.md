@@ -27870,9 +27870,7 @@ checks do) at conversion and on the record's `ext["architect_mc:site"]` binding 
    (or no port) falls back to today's rule. The three gate houses all find their landing.
 9. **Only `Sites.place`** (one request, synchronous: `SiteFit.now()` is set) converts a site placement; PL keeps batches refusing a site, so
    the ticked `PlaceJob` conversion never sees one.
-10. **Mining a standing scaffolding block** gives vanilla's drop (a player's own action, outside the site's accounting); the Deconstruct
-   and completion paths never drop one. `removeScaffold` logs and carries on if the undo fails (the site still completes; Remove then
-   undoes the entry with the group).
+10. **Superseded by SO-b** (below): mined, blown up or pushed, the scaffolding gives no item.
 
 **Checks** ($0; no API change):
 
@@ -27888,3 +27886,27 @@ checks do) at conversion and on the record's `ext["architect_mc:site"]` binding 
 | gate-verifier (strict) | **PASS** at 6144bc99: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-052903-change, 48 ok / 0 FAIL), the three unit classes, and reviewed the diff (BuildOrder.order untouched, the golden recorded before the change, the dispatch only for non-pad sites, the gate read from the record, SCAFFOLD excluded where CRATE/DELTA are, removeScaffold first in complete). Minor: the golden did not drive the dispatch (fixed after: `Builder.supportOrdered`, asserted in the golden test; an expression extract, no behaviour change); a mined scaffolding block drops (reading 10); the attach gate also counts the player's hopper chain as solid (outside the box; not seen); removeScaffold swallows errors (reading 10) |
 
 **For the Steward RC (with PL)**, the areas for its `--only` filter: the survival flow of a site-bound house (`Sites.place` with `PlaceRequest.site` and `Mode.CONSTRUCTION`, or AUTO in a survival world): the crate at the first port's landing (not in front of a door; S-7b-7: Steward assumes no crate position and no bottom-up order), the build progressing in support order from a hopper or Insert, Pause/Deconstruct/Remove mid-build with scaffolding standing (refunds = paid + crate stock, no scaffolding item, land exact), completion (scaffolding gone, the `built` event), and a plain or `on_pad` construction site unchanged. No API member, feature or Reason changes in SO.
+
+### Slice SO-b as built (branch `slice/SO-b` off `origin/slice/SO` a9897362; versions NEXT; $0; recorded 2026-11-12)
+
+The coordinator's follow-up on SO's reading 10: free scaffolding that drops vanilla's item when mined is a dupe. **Fix: the cosmetic
+scaffolding is Architect's own block, `architect_mc:scaffold`** (`survival/ScaffoldBlock`, registered beside the crate in `CrateBlocks`):
+vanilla scaffolding's look (its blockstate is `minecraft:block/scaffolding_stable`; no client code: 26.3 takes the chunk layer from the
+sprite), **no loot table** (mined by hand, blown up, broken by anything: no drop), **immovable** (`PushReaction.IMMOVEABLE`: a piston can't
+move it out of its `architect:scaffold` entry, where it would stand for good, nor break it), **one state, no tick, not a gravity block** (vanilla
+scaffolding collapses and drops when the block under it goes, which a block-by-block drop rule could not have caught), no item. Its lang
+name "Construction Scaffolding". Everything else in SO is unchanged: the same columns, entry, completion, Deconstruct tally and anchors
+(`Builder.isScaffold`; `anchorState` now checks the identity of scaffolding and the crate before the site-solid flags). No API change.
+
+**Readings:** 1. A block of its own rather than drop hooks (player, explosion, piston, collapse and falling-block paths each need one, and a
+falling vanilla scaffold carries no cell identity). 2. Instabreak, no tool needed (as vanilla's); a mined cell just goes (the entry's CELL
+undo then skips it). 3. Not climbable (it is look, not a working scaffold; nobody needs to stand on it: SETTLEMENTS §7.7).
+
+**Known items (the SO verifier's minor notes, not fixed):**
+- **The attach gate counts any site-solid world block a player put down as support**, the hopper chain and chest included
+  (`Builder.anchorState` excludes only scaffolding and the crate). The crate stands outside the snapshot box, so a cell hanging on the chain
+  is unlikely; every independent scan in `so-survival` passed.
+- **`removeScaffold` logs and carries on if its undo fails** (`Builder.removeScaffold`): the site completes with the scaffolding standing
+  (immovable, drops nothing); a later Remove undoes the entry with the site's group. No test drives that failure.
+
+**Checks:** see the table below once filled.
