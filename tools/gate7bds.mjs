@@ -204,17 +204,18 @@ steps.sim = async () => {
   const scratchSite = path.join(L.SIDECAR_DATA, 'designs', r1.designId, 'site');
   const files = fs.existsSync(scratchSite) ? fs.readdirSync(scratchSite).sort() : [];
   check(['site-composite.png', 'site-iso.png', 'site-section.png', 'site-top.png', 'site.arvx', 'site.json'].every((f) => files.includes(f)), `the scratch's site/: ${files.join(', ')}`);
-  // site variants
-  const v1 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_east.spec, opKey: 'ds-gate-east' }, 600_000);
+  // site variants (the run worktree keeps the helper's data between runs: the keys are this run's own)
+  const nonce = Date.now().toString(36);
+  const v1 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_east.spec, opKey: `ds-gate-east-${nonce}` }, 600_000);
   check(!!v1.entryId && !v1.refused, `Designs.siteVariant onto cliff_east: installed ${v1.entryId} in ${v1.ms} ms ($0)${v1.refused ? ` refused ${v1.refused}` : ''}`);
   const ve = v1.entryId ? await call('dev.ds.entry', { entryId: v1.entryId }, 30_000) : {};
   check(ve.known && ve.derivation?.kind === 'SITE' && ve.derivation?.source === d1.entryId && ve.binding?.volumeSha === fx.cliff_east.s.spec.volumeSha && json(ve.size) === json({ x: 18, y: 24, z: 12 }),
     `the variant is a SITE derivation of ${d1.entryId} bound to cliff_east (${json(ve.derivation && { kind: ve.derivation.kind, source: ve.derivation.source, sourceVersion: ve.derivation.sourceVersion })}, ${json(ve.size)})`);
-  const v2 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_east.spec, opKey: 'ds-gate-east' }, 600_000);
+  const v2 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_east.spec, opKey: `ds-gate-east-${nonce}` }, 600_000);
   check(v2.entryId === v1.entryId, `the same opKey answers the same entry (${v2.entryId})`);
-  const v3 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_owned.spec, opKey: 'ds-gate-owned' }, 600_000);
+  const v3 = await call('dev.ds.variant', { entryId: d1.entryId, site: fx.cliff_owned.spec, opKey: `ds-gate-owned-${nonce}` }, 600_000);
   check(/^SITE_UNFIT/.test(v3.refused ?? '') && v3.detail === 'site_keep', `onto cliff_owned (a player's pillar where the house goes): refused ${v3.refused?.split(':')[0]} detail ${v3.detail}`);
-  const v4 = await call('dev.ds.variant', { entryId: 'cabin', site: fx.cliff_east.spec, opKey: 'ds-gate-cabin' }, 600_000);
+  const v4 = await call('dev.ds.variant', { entryId: 'cabin', site: fx.cliff_east.spec, opKey: `ds-gate-cabin-${nonce}` }, 600_000);
   check(/^SITE_UNSUPPORTED/.test(v4.refused ?? '') && v4.detail === 'not_site_aware', `of the plain kit example cabin: refused ${v4.refused?.split(':')[0]} detail ${v4.detail}`);
   out.design = { designId: r1.designId, entryId: d1.entryId, binding: e1.binding, plainDesignId: p1.designId };
   out.variants = { east: v1, owned: v3, cabin: v4, replay: v2 };
