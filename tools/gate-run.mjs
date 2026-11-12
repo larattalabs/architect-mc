@@ -1705,6 +1705,7 @@ function runProcess(sh, step, logFile) {
         stalled = st;
         log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
         killGroup(child.pid, 'SIGTERM');
+        clearTimeout(killTimer);
         killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
       }
     }, Number(process.env.GATE_STALL_POLL_MS ?? 10_000)) : null;
@@ -1712,6 +1713,7 @@ function runProcess(sh, step, logFile) {
       timedOut = true;
       log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
       killGroup(child.pid, 'SIGTERM');
+      clearTimeout(killTimer); // a stall kill's timer, if both fired: one pending SIGKILL, cleared on exit
       killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
     }, step.effTimeoutMin * 60_000);
     child.on('error', (e) => {
@@ -1836,7 +1838,8 @@ async function runStep(sh, step, rec) {
   // a step with timing bars passing in record mode that also missed none still lists nothing; a recorded miss on a loaded box says so
   if (rec.timingRecorded) rec.timingLoad1 = { start: rec.load1.start, end: rec.load1.end };
   // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
-  if (rec.noisy && !recordsTiming(step) && ['PASS', 'FAIL'].includes(rec.status)) {
+  // a stalled step is a functional failure whatever the load: it stays FAIL
+  if (rec.noisy && !recordsTiming(step) && !r.stalled && ['PASS', 'FAIL'].includes(rec.status)) {
     rec.noisyOutcome = rec.status;
     rec.status = 'NOISY';
   }
