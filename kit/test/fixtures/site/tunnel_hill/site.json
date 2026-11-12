@@ -1,0 +1,62 @@
+{
+ "id": "tunnel_hill",
+ "fit": "carve_into",
+ "purpose": "a hill of rock under 3 of soil with a steep south face: a carved room keeps the rock as its walls (SV fit_carve_into)",
+ "after": "scenarios/sites/tunnel_hill.json",
+ "from": "synthesized by kit/tools/site-fixtures.mjs (no client in the 7bF gate)",
+ "lot": {
+  "minX": 1536,
+  "minY": 66,
+  "minZ": 574,
+  "maxX": 1551,
+  "maxY": 77,
+  "maxZ": 589
+ },
+ "maxSize": [
+  16,
+  12,
+  16
+ ],
+ "counts": {
+  "AIR": 7566,
+  "ROCK": 16850,
+  "SOIL": 4256
+ },
+ "spec": {
+  "volumeSha": "bd6f140eeb82df968f7213b6e4abc272ecdc1c516f2562877b778a417edb0466",
+  "volumeBlobId": "local:bd6f140eeb82df968f7213b6e4abc272ecdc1c516f2562877b778a417edb0466",
+  "volume": {
+   "minX": 1528,
+   "minY": 58,
+   "minZ": 566,
+   "maxX": 1559,
+   "maxY": 85,
+   "maxZ": 597
+  },
+  "fit": "carve_into",
+  "frame": {
+   "origin": [
+    1536,
+    66,
+    574
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [
+   {
+    "name": "door_s",
+    "kind": "door",
+    "at": [
+     7,
+     0,
+     14
+    ],
+    "facing": "south",
+    "width": 1,
+    "height": 2
+   }
+  ],
+  "lotId": "lot_tunnel_hill"
+ }
+}

@@ -278,4 +278,17 @@ public interface Designs {
 	record FollowResult(String entryId, boolean followed, int fromVersion, int newVersion, int sourceVersion, @Nullable String refused,
 		boolean alreadyFollowed, String message) {
 	}
+
+	/**
+	 * (7b) A site variant (docs/CONTRACT.md "Phase 7b", Steward's review change 1): the source entry's kit program re-run on another
+	 * site, $0, deterministic, written as a {@code Derivation.Kind.SITE} entry bound to {@code site} ({@link SiteBinding}), and
+	 * installed directly in the library (no group, no approval: its approval is the source's). Idempotent per {@code opKey}: the same
+	 * key and body answers the first variant's entry id. Completes with the new entry's id, or exceptionally with
+	 * {@link ArchitectRefused}: {@link Reason#SITE_UNFIT} when the re-run fails a site check ({@link ArchitectRefused#detail()} names the
+	 * check), {@link Reason#SITE_UNSUPPORTED} when the source has no program to re-run (an original Claude design). Built by slice DS
+	 * (feature {@code "siteDesign"}); until then it throws. Since NEXT.
+	 */
+	default CompletableFuture<String> siteVariant(String entryId, SiteSpec site, String opKey) {
+		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since NEXT (slice DS)");
+	}
 }

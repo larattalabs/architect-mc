@@ -1,0 +1,220 @@
+{
+  "id": "fit_span",
+  "name": "Span House",
+  "description": "A gabled house across a rift: its floor bears on both rims and a door at each end meets the walk.",
+  "type": "cabin",
+  "tags": [
+    "site",
+    "bridge",
+    "small"
+  ],
+  "size": {
+    "x": 16,
+    "y": 10,
+    "z": 16
+  },
+  "groundY": 3,
+  "front": "west",
+  "frame": {
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:dark_oak_stairs",
+    "minecraft:spruce_log",
+    "minecraft:dark_oak_planks",
+    "minecraft:dirt_path",
+    "minecraft:glass_pane",
+    "minecraft:spruce_door",
+    "minecraft:lantern",
+    "minecraft:red_bed",
+    "minecraft:spruce_stairs"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 0,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 3,
+    "minY": 3,
+    "minZ": 5,
+    "maxX": 12,
+    "maxY": 5,
+    "maxZ": 9
+  },
+  "anchors": {
+    "entrance": {
+      "x": 1.5,
+      "y": 3,
+      "z": 7.5,
+      "yaw": -90,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 14.5,
+      "y": 3,
+      "z": 7.5,
+      "yaw": 90,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -4,
+      "y": 12,
+      "z": 22,
+      "yaw": -142.524,
+      "pitch": 27.882
+    }
+  },
+  "source": "fit_span.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "ports": [
+    {
+      "name": "walk_w",
+      "kind": "architect:walk",
+      "x": 0,
+      "y": 3,
+      "z": 7,
+      "facing": "west"
+    },
+    {
+      "name": "walk_e",
+      "kind": "architect:walk",
+      "x": 15,
+      "y": 3,
+      "z": 7,
+      "facing": "east"
+    }
+  ],
+  "parts": {
+    "frame": {
+      "box": [
+        2,
+        1,
+        4,
+        12,
+        1,
+        10
+      ],
+      "cells": 33
+    },
+    "main": {
+      "box": [
+        2,
+        2,
+        4,
+        13,
+        6,
+        10
+      ],
+      "cells": 371
+    },
+    "roof": {
+      "box": [
+        2,
+        6,
+        4,
+        13,
+        9,
+        10
+      ],
+      "cells": 132,
+      "roof": "gable"
+    },
+    "openings": {
+      "box": [
+        2,
+        3,
+        4,
+        13,
+        4,
+        10
+      ],
+      "cells": 10
+    },
+    "landings": {
+      "box": [
+        0,
+        2,
+        6,
+        15,
+        2,
+        8
+      ],
+      "cells": 12
+    },
+    "furnishings": {
+      "box": [
+        3,
+        3,
+        5,
+        12,
+        5,
+        9
+      ],
+      "cells": 5
+    }
+  },
+  "fit": "span",
+  "site": {
+    "volumeSha": "c8c2991c5c27f1b21b36f868f397dc185e32575a94cbb724c6f1ec92602d4ad2",
+    "volumeBlobId": "local:c8c2991c5c27f1b21b36f868f397dc185e32575a94cbb724c6f1ec92602d4ad2",
+    "volume": {
+      "minX": -1032,
+      "minY": 52,
+      "minZ": -16,
+      "maxX": -1001,
+      "maxY": 77,
+      "maxZ": 15
+    },
+    "fit": "span",
+    "frame": {
+      "origin": [
+        -1024,
+        60,
+        -8
+      ],
+      "rotation": "none"
+    },
+    "keepCritical": [],
+    "ports": [
+      {
+        "name": "walk_w",
+        "kind": "architect:walk",
+        "at": [
+          0,
+          3,
+          7
+        ],
+        "facing": "west",
+        "width": 2,
+        "height": 3
+      },
+      {
+        "name": "walk_e",
+        "kind": "architect:walk",
+        "at": [
+          15,
+          3,
+          7
+        ],
+        "facing": "east",
+        "width": 2,
+        "height": 3
+      }
+    ],
+    "lotId": "lot_rift_site"
+  }
+}

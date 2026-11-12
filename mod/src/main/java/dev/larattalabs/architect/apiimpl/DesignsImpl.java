@@ -340,6 +340,7 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> request(DesignRequest r) {
+		SiteGuards.design(r); // 7b: until slice DS
 		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.design("", r)); // 6c 0c §5: FIELD_LIMIT, nothing sent
 		if (limit != null) {
 			return limit;
@@ -856,6 +857,7 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> requestGroup(GroupRequest r) {
+		SiteGuards.group(r); // 7b: until slice DS
 		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.group(r)); // 6c 0c §5: FIELD_LIMIT, no group created
 		if (limit != null) {
 			return limit;
@@ -1055,6 +1057,7 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Estimate> estimate(GroupRequest r) {
+		SiteGuards.group(r); // 7b: until slice DS
 		JsonObject m = msg("design.estimate");
 		try {
 			m.add("group", Wire4b.group(r));
@@ -1070,6 +1073,7 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Estimate> estimate(DesignRequest r) {
+		SiteGuards.design(r); // 7b: until slice DS
 		ClientBridge cb = ApiImpl.bridge();
 		String why5a = cb == null ? null : refusal5a(r.critique(), cb.protocol(), cb.sidecarFeatures());
 		if (why5a != null) {

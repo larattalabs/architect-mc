@@ -1555,3 +1555,9 @@ the safeguards and the measurements are in docs/GATES.md "Speed set A (slice SP)
 - junit-reuse could match method-pattern filters (`*IrStale*`) on testcase names.
 - The stale committed asks tables (coa, h-a, hy, vocc, f3) are a fix-forward for the nightly's owner.
 - The kit tests now import `tools/lib/corpus-plan.mjs`, so a change there invalidates unit-kit (step inputs).
+## Queued fix-forward (coordinator, 2026-11-11)
+
+- **LC: a missing trigger block reads `removed`** (LCi finding 2; Steward yes, 2026-11-11). `LandCheck.classifyCell` judges a mechanism's
+  `triggers[].at` cells like the rest of the mechanism: their state (powered, facing) stays excused, a missing lever or button reads
+  `removed` in `mech:<lot>`. Lanes and rungs stay as they are (an empty lane can't be told from an open gate). Read-only; extend
+  `LandCheckTest` and `lc-castle` (break the lever). LCi's other notes: only one lane cell exercised; a piston pushing a player block untested.

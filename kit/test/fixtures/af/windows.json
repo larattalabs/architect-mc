@@ -1,0 +1,118 @@
+{
+ "note": "7b AF: S4-S6 windows cut by tools/gate7baf.mjs cut (gate run 20261112-020726-change, head 38cec4eb) from the pinned seed: a 64x64 window at each scenario claim centre over its y range; kinds = the kit analysis at the cut (AFFORDANCE_DEFAULTS)",
+ "windows": {
+  "s4_ravine_town": {
+   "seed": "2026100906",
+   "claim": [
+    -640,
+    -80,
+    -385,
+    79
+   ],
+   "box": [
+    -545,
+    22,
+    -33,
+    -482,
+    224,
+    30
+   ],
+   "sha": "ceb66b3d451df457b860c4c05afe61628b2c37636d8142e35123067a72659fff",
+   "bytes": 10236,
+   "counts": {
+    "AIR": 629552,
+    "ROCK": 176432,
+    "SOIL": 6693,
+    "LOOSE": 14055,
+    "WATER": 4544,
+    "LAVA": 72,
+    "PLANT": 140
+   },
+   "kinds": {
+    "cliff_face": 16,
+    "water": 4,
+    "overhang": 5,
+    "ledge": 1,
+    "gap": 3,
+    "pad": 2
+   }
+  },
+  "s5_treehouses": {
+   "seed": "2026100906",
+   "claim": [
+    3328,
+    -1600,
+    3519,
+    -1409
+   ],
+   "box": [
+    3391,
+    22,
+    -1537,
+    3454,
+    156,
+    -1474
+   ],
+   "sha": "6b6138b4d50632af080578c0f2d654ed02156737e53976eff820b4907af8c54f",
+   "bytes": 15210,
+   "counts": {
+    "AIR": 354484,
+    "ROCK": 158386,
+    "SOIL": 11960,
+    "LOOSE": 3421,
+    "WATER": 19088,
+    "LAVA": 57,
+    "LOG": 355,
+    "LEAVES": 3760,
+    "PLANT": 1378,
+    "PLAYER": 70,
+    "BLOCK_ENTITY": 1
+   },
+   "kinds": {
+    "water": 1,
+    "cave": 6,
+    "gap": 2,
+    "cliff_face": 12,
+    "overhang": 5,
+    "canopy": 16,
+    "pad": 3,
+    "trunk": 1
+   }
+  },
+  "s6_cave_city": {
+   "seed": "2026100906",
+   "claim": [
+    3672,
+    -1780,
+    3863,
+    -1589
+   ],
+   "box": [
+    3735,
+    22,
+    -1717,
+    3798,
+    173,
+    -1654
+   ],
+   "sha": "306dc3f08059045eba09f7f9b6eaf42d964ad00b3279e4b36fe739fa9c1a6e84",
+   "bytes": 16891,
+   "counts": {
+    "AIR": 242106,
+    "ROCK": 354642,
+    "SOIL": 18435,
+    "LOOSE": 5783,
+    "WATER": 20,
+    "PLANT": 1606
+   },
+   "kinds": {
+    "cave": 8,
+    "cliff_face": 16,
+    "gap": 11,
+    "overhang": 16,
+    "ledge": 2,
+    "pad": 16
+   }
+  }
+ }
+}

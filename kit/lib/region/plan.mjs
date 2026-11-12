@@ -720,5 +720,7 @@ export async function planRegion(o) {
     reviseGuard({ ir: irObj, cells, standing: withStandingIds(o.revision.standing ?? {}, o.revision.effective), unsafe: u && typeof u === 'object' ? u : {} });
   }
   // ((6c D3) a reach plan's evaluation survey (the reach frame's): the plan check's artifact evaluates its tiles over it)
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}) };
+  // (7b AF) the affordances the program asked for (r.affordances): plan.json's `affordances[]`, outside the IR (its sha is unchanged)
+  const affordances = r.affordancesFound();
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}) };
 }

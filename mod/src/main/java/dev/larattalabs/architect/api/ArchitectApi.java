@@ -209,6 +209,13 @@ public interface ArchitectApi {
 	 * {@code reach.gate}. The realise re-check refuses {@code ARTIFACT_STALE} naming the gate when it no longer stands as planned; removing
 	 * the wall region first sets the district's {@code dangling} (with {@code gateRemoved}). {@link BesideJoin} is unchanged (its kind is the
 	 * junction the join ends at). No new record, method or reason.
+	 * (7b, since NEXT) Names reserved for phase 7b, advertised only by the slice that makes each work (never by the foundation, whose
+	 * members are stubs: {@link Sites#fitToSite}, {@link Survey#site}, {@link Designs#siteVariant} and {@link Regions#affordances} throw,
+	 * and a request carrying a {@link SiteSpec} is refused, until then): {@code "siteDesign"} (site-aware design and placement:
+	 * {@link DesignRequest#site()}, {@link PlaceRequest#site()}, fitToSite, siteVariant), {@code "siteSurvey"} (Survey.site and a
+	 * plan's affordances), {@code "siteLots"} ({@link LotSpec#site()}) and {@code "linkPass"} (links to design ports at realise).
+	 * (7b AF, since NEXT) {@code "siteSurvey"} is advertised when the helper has the site analysis (its {@code site.analyse}):
+	 * {@link Survey#site} and {@link Regions#affordances} work.
 	 */
 	Set<String> features();
 }

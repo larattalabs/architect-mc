@@ -333,4 +333,14 @@ public interface Regions {
 	default CompletableFuture<UnadoptResult> unadopt(String regionId) {
 		throw new UnsupportedOperationException("Regions.unadopt needs Architect API NEXT");
 	}
+
+	/**
+	 * (7b) The affordances a region plan found in its land ({@code affordances[]} in its plan JSON; docs/CONTRACT.md "Phase 7b" §2):
+	 * read by this accessor, so {@link RegionPlan} gains no component. An empty list for a plan with none (every plan before slice
+	 * AF, and every plan whose program never calls {@code r.affordances(box)}); empty (no list) for an unknown plan id. Kept with the plan
+	 * record, so it answers after a world restart. Server thread. Built by slice AF (feature {@code "siteSurvey"}). Since NEXT.
+	 */
+	default Optional<java.util.List<Affordance>> affordances(String planId) {
+		throw new UnsupportedOperationException("Regions.affordances needs the Architect API since NEXT (slice AF)");
+	}
 }

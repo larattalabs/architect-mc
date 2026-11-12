@@ -40,7 +40,8 @@ test('catalogue 16: connector.drawbridge flips reserved -> supported (schemaVers
   assert.deepEqual(d.reservedToSupported, ['connector.drawbridge']);
   assert.deepEqual(d.schemaVersionBumps, [{ id: 'connector.drawbridge', from: 0, to: 1 }]);
   assert.deepEqual([d.added, d.removed, d.retired, d.otherStateChanges], [[], [], [], []]);
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
+  // ((7bF, N-7b-1) form.hidden_room and rule.suspended re-reserved until 7c are f7b-foundation.test.mjs's)
+  const changed = golden.entries.filter((e) => !['form.hidden_room', 'rule.suspended'].includes(e.id) && JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
   assert.deepEqual(changed, ['connector.drawbridge']);
   const e = golden.entries.find((x) => x.id === 'connector.drawbridge');
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);

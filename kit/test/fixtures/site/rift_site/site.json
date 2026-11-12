@@ -1,0 +1,75 @@
+{
+ "id": "rift_site",
+ "fit": "span",
+ "purpose": "two rock faces 9 apart across a rift (6b's carved rift on the pinned desert): a span house bears on both rims (SV fit_span)",
+ "after": "scenarios/sites/rift_site.json",
+ "from": "synthesized by kit/tools/site-fixtures.mjs (no client in the 7bF gate)",
+ "lot": {
+  "minX": -1024,
+  "minY": 60,
+  "minZ": -8,
+  "maxX": -1009,
+  "maxY": 69,
+  "maxZ": 7
+ },
+ "maxSize": [
+  16,
+  10,
+  16
+ ],
+ "counts": {
+  "AIR": 17088,
+  "ROCK": 7488,
+  "SOIL": 1472,
+  "WATER": 576
+ },
+ "spec": {
+  "volumeSha": "c8c2991c5c27f1b21b36f868f397dc185e32575a94cbb724c6f1ec92602d4ad2",
+  "volumeBlobId": "local:c8c2991c5c27f1b21b36f868f397dc185e32575a94cbb724c6f1ec92602d4ad2",
+  "volume": {
+   "minX": -1032,
+   "minY": 52,
+   "minZ": -16,
+   "maxX": -1001,
+   "maxY": 77,
+   "maxZ": 15
+  },
+  "fit": "span",
+  "frame": {
+   "origin": [
+    -1024,
+    60,
+    -8
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [
+   {
+    "name": "walk_w",
+    "kind": "architect:walk",
+    "at": [
+     0,
+     3,
+     7
+    ],
+    "facing": "west",
+    "width": 2,
+    "height": 3
+   },
+   {
+    "name": "walk_e",
+    "kind": "architect:walk",
+    "at": [
+     15,
+     3,
+     7
+    ],
+    "facing": "east",
+    "width": 2,
+    "height": 3
+   }
+  ],
+  "lotId": "lot_rift_site"
+ }
+}

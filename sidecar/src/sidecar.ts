@@ -671,6 +671,9 @@ export class Sidecar {
         return this.regions.preview(msg.planId, msg.views, msg.axes);
       case 'region.design':
         return { designId: this.regionDesigns.request(msg).id };
+      // ---- 7b AF (no Claude)
+      case 'site.analyse':
+        return this.regions.siteAnalyse(msg);
     }
   }
 

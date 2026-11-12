@@ -10,6 +10,8 @@
 // while the template keeps a margin for overhangs, porches and paths.
 import { nbt } from './nbt.mjs';
 import { BLOCKS, normalize, qualify, isCube, familyOf, info } from './blocks.mjs';
+import { fitOf } from './siteFits.mjs';
+import { SITE_HELPERS } from './siteHelpers.mjs';
 
 /** DataVersion of Minecraft 26.3 (version.json world_version in the 26.3 jar). */
 export const DATA_VERSION = 5023;
@@ -500,13 +502,26 @@ export class Blueprint {
     /** open types (R4): the checker rules this building wants (see PROFILE_RULES); ignored for preset types */
     this.profile = o.profile === undefined ? undefined : parseProfile(o.profile).list;
     this.tags = [...(o.tags ?? [])];
+    // (7b SV) a site-aware design: `fit` (lib/siteFits.mjs FIT_IDS; the request's) and `site` (lib/site.mjs: the lot it is built into).
+    // A site-bound template is exactly the lot box (its size defaults to the site's) with origin 0, its fit is the site's, and the
+    // site's keep-critical cells inside the box are keep cells from the start. A non-pad fit has no ground approach strip.
+    this.site = o.site ?? null;
+    this.fit = o.fit ?? this.site?.fit ?? null;
+    if (this.fit !== null) fitOf(this.fit);
+    if (this.site && this.fit !== this.site.fit) throw new Error(`${this.id}: fit '${this.fit}' but the site is a '${this.site.fit}' lot`);
+    if (this.site && o.size === undefined) o = { ...o, size: [this.site.size.x, this.site.size.y, this.site.size.z] };
     const s = Array.isArray(o.size) ? o.size : [o.size.x, o.size.y, o.size.z];
+    if (this.site && (s[0] !== this.site.size.x || s[1] !== this.site.size.y || s[2] !== this.site.size.z)) {
+      throw new Error(`${this.id}: size ${s.join('x')} is not the site's lot ${this.site.size.x}x${this.site.size.y}x${this.site.size.z} (a site-bound template is the lot box)`);
+    }
+    if (this.site && o.origin && o.origin.some((v) => v !== 0)) throw new Error(`${this.id}: a site-bound design keeps origin [0, 0, 0] (its coordinates are the site's)`);
     this.size = { x: s[0], y: s[1], z: s[2] };
     this.groundY = o.groundY ?? 1;
     this.front = o.front ?? 'south';
     this.p = o.palette ?? palette();
     this.foundationBlock = qualify(o.foundationBlock ?? this.p.foundation);
-    this.approach = o.approach === false ? { length: 0, width: 3, block: this.p.path, slab: this.p.stoneSlab }
+    const noStrip = o.approach === false || (o.approach === undefined && this.fit !== null && fitOf(this.fit).approach !== 'ground');
+    this.approach = noStrip ? { length: 0, width: 3, block: this.p.path, slab: this.p.stoneSlab }
       : { length: 4, width: 3, block: this.p.path, slab: this.p.stoneSlab, ...(o.approach ?? {}) };
     this.createdAt = o.createdAt;
     this.request = o.request;
@@ -533,7 +548,37 @@ export class Blueprint {
     this.partInfo = new Map();
     /** phase 4c: a massing (coarse volumes, lib/massing.mjs): the sidecar records `massing: true`, checked with the massing profile */
     this.massing = !!o.massing;
+    /** (7b SV) keep cells (template keys): cells the template must not write (bp.keep); keepCritical: those that must stand */
+    this.keepCells = new Set();
+    this.keepCritical = new Set();
+    if (this.site) this.keep(this.site.keepCritical);
   }
+
+  /**
+   * (7b SV, SETTLEMENTS §7.1) Keep cells: cells the template leaves out, so placement under a keep fit leaves the site there (a trunk,
+   * the rock round a carved room, hang points). `cells`: [[x, y, z], ...] (or {x, y, z}) in design coordinates; cells outside the
+   * template are ignored, a cell written before is dropped. Keep-critical by default (the sidecar's `keep.critical`: placement refuses
+   * KEEP_LOST when one is gone); `critical: false` only keeps the cell unwritten. Writing a keep cell later throws (the helpers skip
+   * them). Returns the number of cells kept.
+   */
+  keep(cells, { critical = true } = {}) {
+    let n = 0;
+    for (const c of cells ?? []) {
+      const [x, y, z] = Array.isArray(c) ? c : [c.x, c.y, c.z];
+      if (![x, y, z].every(Number.isInteger)) throw new Error(`${this.id}: keep: a cell must be [x, y, z] integers (got ${JSON.stringify(c)})`);
+      if (!this.inBounds(x, y, z)) continue;
+      const k = key(x + this.ox, y + this.oy, z + this.oz);
+      this.cells.delete(k);
+      this.cellPart.delete(k);
+      this.keepCells.add(k);
+      if (critical) this.keepCritical.add(k);
+      n++;
+    }
+    return n;
+  }
+
+  /** (7b SV) Is the design cell a keep cell? */
+  isKeep(x, y, z) { return this.keepCells.size > 0 && this.keepCells.has(key(x + this.ox, y + this.oy, z + this.oz)); }
 
   /**
    * A named part (R3): every cell written while `fn(bp)` runs belongs to `name` (the innermost part when nested; a later
@@ -623,6 +668,7 @@ export class Blueprint {
   set(x, y, z, block, props = {}, nbtData = null) {
     if (!this.inBounds(x, y, z)) throw new Error(`${this.id}: set(${x},${y},${z}) outside size ${this.size.x}x${this.size.y}x${this.size.z} (origin ${this.ox},${this.oy},${this.oz})`);
     const k = key(x + this.ox, y + this.oy, z + this.oz);
+    if (this.keepCells.size && this.keepCells.has(k)) throw new Error(`${this.id}: set(${x},${y},${z}) writes a keep cell (bp.keep: the site stays there)`);
     this.cells.set(k, { state: normalize(block, props), nbt: nbtData });
     const part = this.partStack[this.partStack.length - 1];
     if (part) this.cellPart.set(k, part);
@@ -637,6 +683,7 @@ export class Blueprint {
   setRaw(x, y, z, state, tag = null) {
     if (!this.inBounds(x, y, z)) throw new Error(`${this.id}: setRaw(${x},${y},${z}) outside size ${this.size.x}x${this.size.y}x${this.size.z}`);
     const k = key(x + this.ox, y + this.oy, z + this.oz);
+    if (this.keepCells.size && this.keepCells.has(k)) throw new Error(`${this.id}: setRaw(${x},${y},${z}) writes a keep cell`);
     this.cells.set(k, { state: { name: qualify(state.name), props: { ...(state.props ?? {}) } }, nbt: tag, raw: true });
     const part = this.partStack[this.partStack.length - 1];
     if (part) this.cellPart.set(k, part);
@@ -1190,6 +1237,14 @@ export class Blueprint {
     if (this.mirrored) s.mirrored = this.mirrored;
     // (6c PT2) a captured source (lib/adopt.mjs): an adopted build's cells as the world held them
     if (this.captured) s.sourceKind = 'captured';
+    // (7b SV) a site-aware design: its fit; the site it was built into (the site spec's wire form, as api.SiteSpec.fromWire reads it);
+    // its keep-critical cells in template coordinates (sorted x, y, z). Absent for every other design, so their bytes do not move.
+    if (this.fit !== null) s.fit = this.fit;
+    if (this.site) s.site = structuredClone(this.site.spec);
+    if (this.keepCritical.size) s.keep = { critical: [...this.keepCritical].map((k) => k.split(',').map(Number)).sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) };
     return s;
   }
 }
+
+// (7b SV) the terrain-merged helpers (lib/siteHelpers.mjs): ringDeck, bracket, hangChain, beamInto, carveRoom, facadeOnFace, stilts
+Object.assign(Blueprint.prototype, SITE_HELPERS);

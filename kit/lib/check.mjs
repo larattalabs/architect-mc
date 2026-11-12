@@ -195,7 +195,8 @@ export function parseMax(s) {
  */
 /**
  * Ports (docs/CONTRACT.md phase 4a, R5): a list of {name, kind, x, y, z, facing}; unique names, a known kind or
- * `<modid>:<kind>`, an integer cell inside the template, a horizontal facing. Returns the error lines.
+ * `<modid>:<kind>`, an integer cell inside the template, a horizontal facing (or up/down for an `architect:walk` port, 7b SV). Returns the
+ * error lines.
  */
 export function checkPorts(ports, size) {
   if (ports === undefined) return [];
@@ -211,7 +212,9 @@ export function checkPorts(ports, size) {
     if (!(PORT_KINDS.includes(p.kind) || /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(p.kind ?? ''))) {
       out.push(`${at}: kind '${p.kind}' must be one of ${PORT_KINDS.join(', ')} or <modid>:<kind>`);
     }
-    if (!['north', 'south', 'east', 'west'].includes(p.facing)) out.push(`${at}: facing '${p.facing}' must be horizontal (north, south, east, west)`);
+    // ((7b SV) a site's walk port may face up or down: a vertical walk port, lib/siteFits.mjs SITE_PORT_FACINGS)
+    const vertical = p.kind === 'architect:walk' && (p.facing === 'up' || p.facing === 'down');
+    if (!vertical && !['north', 'south', 'east', 'west'].includes(p.facing)) out.push(`${at}: facing '${p.facing}' must be horizontal (north, south, east, west)${p.kind === 'architect:walk' ? ' or, for a walk port, up or down' : ''}`);
     const xyz = [p.x, p.y, p.z];
     if (!xyz.every(Number.isInteger)) out.push(`${at}: x, y, z must be integers`);
     else if (Array.isArray(size) && xyz.some((v, a) => v < 0 || v >= size[a])) out.push(`${at}: cell ${xyz.join(',')} is outside the template (${size.join('x')})`);
@@ -291,7 +294,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
   }
   if (cells.size) {
     const extent = max.map((m, a) => m - min[a] + 1);
-    if (min.some((m) => m !== 0) || extent.some((e, a) => e !== size[a])) {
+    // ((7b SV) a site-bound template is the lot box (SETTLEMENTS §7.2): its blocks need only lie inside it)
+    const siteBound = !!sidecar?.site && min.every((m) => m >= 0) && max.every((m, a) => m < size[a]);
+    if (!siteBound && (min.some((m) => m !== 0) || extent.some((e, a) => e !== size[a]))) {
       (imported && min.every((m) => m >= 0) && max.every((m, a) => m < size[a]) ? warn : err)(`size ${size.join('x')} does not match block extents ${extent.join('x')} (min ${min.join(',')})`);
     }
   } else err('no blocks');

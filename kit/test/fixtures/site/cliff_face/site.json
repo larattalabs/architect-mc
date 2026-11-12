@@ -1,0 +1,62 @@
+{
+ "id": "cliff_face",
+ "fit": "attach_to_cliff",
+ "purpose": "a rock face 22 above the ground (normal south): a cliff house on brackets bears on the face (SV fit_attach_to_cliff)",
+ "after": "scenarios/sites/cliff_face.json",
+ "from": "synthesized by kit/tools/site-fixtures.mjs (no client in the 7bF gate)",
+ "lot": {
+  "minX": -943,
+  "minY": 120,
+  "minZ": -2489,
+  "maxX": -928,
+  "maxY": 141,
+  "maxZ": -2478
+ },
+ "maxSize": [
+  16,
+  22,
+  12
+ ],
+ "counts": {
+  "AIR": 22528,
+  "ROCK": 9728,
+  "SOIL": 1792
+ },
+ "spec": {
+  "volumeSha": "7a55e26566b409969632b43f77c6a4fafa442b0ed8435e72fc5e2024b2fdde14",
+  "volumeBlobId": "local:7a55e26566b409969632b43f77c6a4fafa442b0ed8435e72fc5e2024b2fdde14",
+  "volume": {
+   "minX": -951,
+   "minY": 112,
+   "minZ": -2497,
+   "maxX": -920,
+   "maxY": 149,
+   "maxZ": -2470
+  },
+  "fit": "attach_to_cliff",
+  "frame": {
+   "origin": [
+    -943,
+    120,
+    -2489
+   ],
+   "rotation": "none"
+  },
+  "keepCritical": [],
+  "ports": [
+   {
+    "name": "walk_top",
+    "kind": "architect:walk",
+    "at": [
+     7,
+     19,
+     1
+    ],
+    "facing": "north",
+    "width": 2,
+    "height": 2
+   }
+  ],
+  "lotId": "lot_cliff_face"
+ }
+}

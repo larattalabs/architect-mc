@@ -1,0 +1,209 @@
+{
+  "id": "fit_attach_to_cliff",
+  "name": "Cliff House",
+  "description": "A one-room house hung on a rock face: a roof deck at the clifftop, an outside stair down to a balcony and the front door.",
+  "type": "cabin",
+  "tags": [
+    "site",
+    "cliff",
+    "small"
+  ],
+  "size": {
+    "x": 16,
+    "y": 22,
+    "z": 12
+  },
+  "groundY": 15,
+  "front": "south",
+  "frame": {
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:spruce_log",
+    "minecraft:spruce_fence",
+    "minecraft:spruce_stairs",
+    "minecraft:glass_pane",
+    "minecraft:lantern",
+    "minecraft:red_bed",
+    "minecraft:spruce_door"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 0,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 3,
+    "minY": 15,
+    "minZ": 3,
+    "maxX": 10,
+    "maxY": 17,
+    "maxZ": 7
+  },
+  "anchors": {
+    "entrance": {
+      "x": 6.5,
+      "y": 15,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 7.5,
+      "y": 19,
+      "z": 3.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -10,
+      "y": 24,
+      "z": 24,
+      "yaw": -139.028,
+      "pitch": 21.672
+    }
+  },
+  "source": "fit_attach_to_cliff.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "ports": [
+    {
+      "name": "walk_top",
+      "kind": "architect:walk",
+      "x": 7,
+      "y": 19,
+      "z": 1,
+      "facing": "north"
+    }
+  ],
+  "parts": {
+    "frame": {
+      "box": [
+        2,
+        11,
+        1,
+        13,
+        13,
+        9
+      ],
+      "cells": 42
+    },
+    "main": {
+      "box": [
+        2,
+        14,
+        2,
+        11,
+        17,
+        8
+      ],
+      "cells": 269
+    },
+    "openings": {
+      "box": [
+        2,
+        15,
+        5,
+        11,
+        16,
+        8
+      ],
+      "cells": 6
+    },
+    "roof_deck": {
+      "box": [
+        2,
+        18,
+        2,
+        13,
+        19,
+        8
+      ],
+      "cells": 92,
+      "roof": "flat"
+    },
+    "stair": {
+      "box": [
+        12,
+        14,
+        2,
+        13,
+        17,
+        8
+      ],
+      "cells": 19
+    },
+    "balcony": {
+      "box": [
+        2,
+        14,
+        9,
+        13,
+        16,
+        10
+      ],
+      "cells": 38
+    },
+    "furnishings": {
+      "box": [
+        3,
+        15,
+        3,
+        10,
+        17,
+        5
+      ],
+      "cells": 5
+    }
+  },
+  "fit": "attach_to_cliff",
+  "site": {
+    "volumeSha": "7a55e26566b409969632b43f77c6a4fafa442b0ed8435e72fc5e2024b2fdde14",
+    "volumeBlobId": "local:7a55e26566b409969632b43f77c6a4fafa442b0ed8435e72fc5e2024b2fdde14",
+    "volume": {
+      "minX": -951,
+      "minY": 112,
+      "minZ": -2497,
+      "maxX": -920,
+      "maxY": 149,
+      "maxZ": -2470
+    },
+    "fit": "attach_to_cliff",
+    "frame": {
+      "origin": [
+        -943,
+        120,
+        -2489
+      ],
+      "rotation": "none"
+    },
+    "keepCritical": [],
+    "ports": [
+      {
+        "name": "walk_top",
+        "kind": "architect:walk",
+        "at": [
+          7,
+          19,
+          1
+        ],
+        "facing": "north",
+        "width": 2,
+        "height": 2
+      }
+    ],
+    "lotId": "lot_cliff_face"
+  }
+}

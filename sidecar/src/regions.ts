@@ -768,6 +768,8 @@ export class Regions {
         ...(checked.renderMs !== undefined ? { renderMs: checked.renderMs } : {}),
         ...(checked.checkError ? { checkError: truncate(checked.checkError, 4000) } : {}),
         ...(planCheck ? { planCheck } : {}),
+        // (7b AF) the program's affordances (plan.json's affordances[]; only a program that called r.affordances has them)
+        ...(Array.isArray(kitPlan.affordances) && kitPlan.affordances.length ? { affordances: kitPlan.affordances } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);
@@ -1175,6 +1177,23 @@ export class Regions {
     const existed = fs.existsSync(d);
     if (existed) fs.rmSync(d, { recursive: true, force: true });
     return { planId, existed };
+  }
+
+  /**
+   * (7b AF) site.analyse {volumeBlobId, sha?, lot, fit} -> {sha, box, affordances, proposed}: the kit's site analysis
+   * (tools/affordances.mjs) over a frozen volume blob, in a child process (a lot volume of up to ~1M cells takes about a second).
+   */
+  async siteAnalyse(msg: { volumeBlobId: string; sha?: string; lot: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number }; fit: string }): Promise<Record<string, unknown>> {
+    const script = path.join(this.host.config.kitDir, 'tools', 'affordances.mjs');
+    if (!fs.existsSync(script)) throw new ClientError('the kit has no tools/affordances.mjs (an older kit)');
+    if (!this.host.blobs.get(msg.volumeBlobId)) throw new ClientError(`no blob "${msg.volumeBlobId}"`);
+    const l = msg.lot;
+    const args = [this.host.blobs.file(msg.volumeBlobId), '--lot', [l.minX, l.minY, l.minZ, l.maxX, l.maxY, l.maxZ].join(','), '--fit', msg.fit, ...(msg.sha ? ['--sha', msg.sha] : [])];
+    const r = await run(process.execPath, [script, ...args], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
+    const out = lastJson(r.stdout);
+    if (r.timedOut) throw new ClientError('the site analysis took longer than 120 s and was stopped');
+    if (!out || out.ok !== true) throw new ClientError(`the site analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
+    return { sha: out.sha, box: out.box, affordances: out.affordances, proposed: out.proposed ?? null };
   }
 
   clientGone(client: ClientHandle): void {
