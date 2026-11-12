@@ -391,6 +391,14 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `<world>/architect/volumes/<sha>.bin`, the helper's `site.analyse`, the proposed frame) -> `{sha, blobId, box, file, counts,
   missingColumns, affordances: [{id, kind, box, anchors, normal, metrics, score}], proposed: {origin, rotation} | null, ms}` or
   `{refused: "<REASON>: message"}`; `dev.af.affordances {plan}`: `Regions.affordances` -> `{known, affordances}`.
+- **2026-11-11 (7b slice PL):** new (`SlicePlDev`, generated headless too) `dev.pl.fit {blueprint, site, owner?, mode?}` (`Sites.fitToSite`
+  -> `{origin, rotation, box, restoreBox, clean, refusals: [{reason, message}], notes}`), `dev.pl.place {blueprint, site?, origin?, rotation?,
+  check?, overlap?: refuse|layer, owner?, force?, mode?}` (`Sites.place`, or `Sites.check` with `check`, of a `PlaceRequest` carrying the
+  site; origin and rotation default to the site's frame), `dev.pl.remove {site, covered?: keep|cascade|refuse, requester?, force?}`
+  (`Sites.remove`, a site or a cell site), `dev.pl.reload {}` (the library), `dev.pl.record {site}` (the record's blueprint, boxes, ext
+  and whether it is site-bound) and `dev.pl.move {site, by: [dx, dy, dz]}` (the internal move: refused for a site-bound placement). `site`
+  is a `SiteSpec` in its wire form (`kit/schemas/site-spec.json`). Driven by `tools/gate7bpl.mjs`.
+
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
   feet at `y0 + 1`; a down ride in its open top, feet at `yT + 1`; `yT` is the column's top cell, level with the face's top) in creative

@@ -83,14 +83,31 @@ public final class TerrainFit {
 	}
 
 	/**
+	 * (7b PL) What placement does to the cells the template does not write (docs/CONTRACT.md "Phase 7b" §2, SETTLEMENTS §7.5):
+	 * {@link #CLEAR} is today's (clear natural terrain above the ground row, clear leaves, fill the foundation); {@link #KEEP}, a
+	 * site-aware design's (every fit but {@code on_pad}), touches none of them: no clearing, no foundation fill, no leaf clearing. The
+	 * fluid scan is the same under both.
+	 */
+	public enum Policy {
+		CLEAR, KEEP
+	}
+
+	/**
 	 * The plan for {@code m} with its rotated box minimum at (ox, oy, oz). Cells the template writes count as
 	 * what it writes (a template's own foundation rows stop the fill; its air does not), others as the world is.
 	 */
 	public static Plan plan(GhostModel m, int ox, int oy, int oz, World w) {
+		return plan(m, ox, oy, oz, w, Policy.CLEAR);
+	}
+
+	/**
+	 * What the template writes per rotated cell, indexed {@code (y * sizeZ + z) * sizeX + x}: 0 = nothing (a keep cell under
+	 * {@link Policy#KEEP}), 1 = air, 2 = a block.
+	 */
+	public static byte[] writes(GhostModel m) {
 		int sx = m.sizeX;
 		int sy = m.sizeY;
 		int sz = m.sizeZ;
-		// what the template writes per rotated cell: 0 = nothing, 1 = air, 2 = a block
 		byte[] writes = new byte[sx * sy * sz];
 		for (int i = 0; i < m.count(); i++) {
 			int x = m.x(i);
@@ -100,12 +117,26 @@ public final class TerrainFit {
 				writes[(y * sz + z) * sx + x] = (byte) (m.visible(i) ? 2 : 1);
 			}
 		}
+		return writes;
+	}
+
+	/**
+	 * {@link #plan} under {@code policy}: {@link Policy#CLEAR} is exactly the plan above; {@link Policy#KEEP} has no fill and no
+	 * clearing ({@code minY} is the box's), only the fluids.
+	 */
+	public static Plan plan(GhostModel m, int ox, int oy, int oz, World w, Policy policy) {
+		int sx = m.sizeX;
+		int sy = m.sizeY;
+		int sz = m.sizeZ;
+		// what the template writes per rotated cell: 0 = nothing, 1 = air, 2 = a block
+		byte[] writes = writes(m);
+		boolean keep = policy == Policy.KEEP;
 		Cells fill = new Cells();
 		Cells water = new Cells();
 		Cells lava = new Cells();
 		int floor = m.groundY - 1;
 		int minY = oy;
-		if (floor >= 0 && floor < sy) {
+		if (!keep && floor >= 0 && floor < sy) {
 			for (int z = 0; z < sz; z++) {
 				for (int x = 0; x < sx; x++) {
 					if (writes[(floor * sz + z) * sx + x] != 2) {
@@ -140,7 +171,7 @@ public final class TerrainFit {
 			}
 		}
 		Cells clear = new Cells();
-		for (int y = 0; y < sy; y++) {
+		for (int y = 0; !keep && y < sy; y++) { // KEEP: no clearing
 			boolean aboveGround = y >= m.groundY;
 			for (int z = 0; z < sz; z++) {
 				for (int x = 0; x < sx; x++) {

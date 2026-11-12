@@ -27629,3 +27629,80 @@ nowrite evidence), ids and determinism, unchanged plans without `r.affordances`,
 the nine readings reviewed; af-affordances + f7b-foundation (18/18) and site-analyse (3/3) re-run. No blocking defect; minor: the
 duplicate-id tie-break used `localeCompare` (now plain code-unit order, 35f63556); `Regions.affordances` has no in-game plan using it
 until SL.
+### Slice PL as built (branch `slice/PL` off main f5b235fe; versions NEXT; $0; recorded 2026-11-11)
+
+Placement with a site: a `PlaceRequest` carrying a `SiteSpec` is checked and placed by `Sites.check` and `Sites.place`, and
+`Sites.fitToSite` answers a site-bound design's fit in its site's frame. No 7bF signature changed; no API member was added (the API
+package is untouched: PL implements 7bF's `fitToSite` default and lifts its guard). No feature is advertised: `siteDesign` is PL+DS
+(§2), and `DesignRequest.site` still refuses until DS, which adds the feature.
+
+**What placement does with a site** (`site/SiteFit`, the request's site seen by the placement's checks and writes as `Placed`'s consent
+is):
+
+| Fit | TerrainFit | Approach | Site checks |
+|---|---|---|---|
+| `on_pad` | `CLEAR` (today's: fill, clearing, leaves) | `GROUND` (today's strip) | shape, mismatch, keep, drift |
+| every other | `KEEP`: no fill, no clearing, no leaf clearing; the fluid scan as today (lava refuses, water notes) | `PORT` (no strip; a verdict note names the ports: "the door port faces a graph edge; the link pass joins it" under a lot, "the way in is the player's to build" standalone), `NONE` for a site with no port | shape, mismatch, keep, drift, support |
+
+- `TerrainFit.plan(model, ox, oy, oz, world, Policy)`: `CLEAR` is exactly the old plan (the old signature delegates; the ghost and
+  `delta/SitePlanner` still call it); `KEEP` has no fill and no clearing, `minY` the box's. `TerrainFit.writes(model)` exposes the 0/1/2
+  write grid. `Approach.Mode {GROUND, PORT, NONE}` with `Mode.of(fit, hasPorts)`. Under `PORT`/`NONE` the approach plan is
+  `Approach.Plan.EMPTY` and `SiteWarnings` is `Result.NONE`, so the restore box is the template box and the row under it.
+- The snapshot (restore) box is today's rule over the KEEP plan: the template box plus the row under it. Keep cells (absent from the
+  template) are inside it, captured in the BOX entry's `before` and restored by Remove; nothing new in the journal (SETTLEMENTS §7.6).
+- `checkKey` (the one-tick verdict-to-place plan cache) includes the site, so a cached plain plan is never used for a site placement.
+
+**The site checks** (in `Sites.checkSite`, so the dry-run verdict, `fitToSite` and the placement itself run the same ones, every one
+found):
+1. Shape: `SiteSpec.problems()` (`OTHER`); the request's origin and rotation equal the site's frame (`OTHER`: no rotation search, no
+   other origin); the template box inside `site.volume` (`LOT_TOO_SMALL`).
+2. `SITE_MISMATCH`: the entry's binding (`SiteBinding.ofExt(entry ext)`) names another volume sha. The message starts with the bound
+   sha (`<sha>: ...`, the detail). An unbound entry may be fitted.
+3. `KEEP_LOST`: the template writes a keep-critical cell (the checker's `site_keep`, also refused here), or a keep-critical cell is gone:
+   its live class is air, a fluid or a plant where the frozen one was not, or (frozen terrain, a log or leaves) not the frozen class.
+   The message starts with the first cell `x,y,z`.
+4. `SITE_DRIFTED`: a cell of `site.volume` changed class since the frozen survey; or the frozen volume can't be read in this world
+   (fail closed).
+5. `SITE_UNSUPPORTED` (not `on_pad`): the live support scan: every block the template writes connects, through written blocks (faces),
+   to a site-solid cell (a world cell the template doesn't write that is not air, a fluid, replaceable or leaves) or a keep-critical
+   cell. The message starts with the first unsupported cell.
+
+**A placed site-bound record** carries its binding: `ext["architect_mc:site"]` = `SiteBinding.of(site, null).wire()` (the request's own
+ext copied, the key added), so `SiteView.ext` shows it and `SiteBinding.ofExt` reads it. Move, `applyDelta`/`checkDelta` and `revert`
+refuse such a site (`NOT_ALLOWED`, "site-bound ... remove it and place it again"): each would re-plan today's `CLEAR` terrain over its
+keep cells.
+
+**Readings chosen** (the contract silent, the smallest reading):
+1. **Batches still refuse a site.** `SiteGuards.batch` stays: a queued item is persisted and placed over ticks (`QBatch`), and carrying
+   the site through the queue (its persistence and crash recovery) is not in PL's row. `Sites.place`/`check`/`fitToSite` take one.
+   SL or LP lifts it if a region realise or Steward's batch needs it.
+2. **The frozen volume is this world's** `architect/volumes/<sha>.bin` (`Survey.volume` always freezes there, whatever the blob id), read
+   and sha-checked, cached two deep. Not there: `SITE_DRIFTED` (fail closed). A region plan's own volumes are SL's to add.
+3. **Drift is by class:** air and plants count as one; cells the survey froze as OWNED, PLAYER, BLOCK_ENTITY or MISSING are not compared;
+   keep-critical cells are left out (they are `KEEP_LOST`'s), so each Reason can be provoked alone. Tolerance 0 otherwise.
+4. **The support scan is connectivity only.** The fit's numbers (cantilever, chain run, span, bracket bearing) are the checker's (SC)
+   and the bible's.
+5. **"Region first, house first"** is tested with a cell site (`placeCells`, the CELL entry kind a region's ops write) as the host
+   trunk's region; the region path itself is SL/LP's.
+6. **"Detail"** for verdict refusals is the message's first token (`Refusal` has no detail member); `ArchitectRefused` is not thrown on
+   these paths.
+7. **The opens-onto-a-drop warning** for a standalone port is ST's (slice table row 8); PL's note only says the way in is the player's.
+
+**Gate** (DEV MODE: units, the instant lints, the slice's own in-game steps; strict re-runs by the verifier for undo, journal, crash):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass; 1055 tests, 0 failures, 1 skipped (SiteFitTest 7/7: policy and approach per fit, the context and cache key, shape, mismatch from the ext binding and from SV's sidecar `site` (and its frame), drift, keep lost, the support scan; TerrainFitTest 10/10 with KEEP and CLEAR-unchanged) |
+| kit `node --test kit/test/*.test.mjs` | 1131/1131 (after merging SV) |
+| sidecar `npm ci && npm run check` | 811/811 before the SV merge (quiet); after it 810/811, the one miss simcosts' 120 s wall bar at 123.7 s under load average 56 (timing only; PL touches no sidecar file) |
+| api-compat | clean: `--surface` of the 0.57.0 jar (2671 members); the 0.47.0 and 0.45.0 apitest jars. The API package is untouched |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / pass (p3-lint is in the mod build's tests) |
+| `node tools/step-inputs.mjs check` | clean after `build` (328 steps) |
+| in game, run 20261112-022428-change at 6cd63939 | **PASS** 3/3: `pl-ingame` 86 ok (SV's five non-pad examples on their fixtures' land, built from the frozen volumes by `dev.pl.terrain`, placed by `fitToSite` with the sidecar's `site`: KEEP, every unwritten cell unchanged, Remove E-flat 0; five hand-built sites, one per non-pad fit, the same plus the binding, move refused, verify 0; `KEEP_LOST`, `SITE_DRIFTED`, `SITE_MISMATCH`, `SITE_UNSUPPORTED` each alone; `on_pad` byte-identical to the plain placement over 12834 cells, fill, clearing and approach included), `pl-undo` 16 ok (region first and house first E-flat 0 over 14580 cells, a trunk cell's stack 2, the player-cut keep cell restored), `pl-crash` 42 ok (K1, K2, K2+save rolled back exactly; K4, K4+save the journal wins and Remove is exact (K4 without a save: verify 71/343 recorded, as gate4e's K4 judges only the record and the final removal); removal K5, K8, K6, K7, K6+save under the standing house: the trunk kept, removing what stands E-flat 0) |
+| gate-verifier (strict) | **PASS** at 6cd63939: re-ran `pl-undo` (16 ok) and `pl-crash` (42 ok) on its own ports 8906/8907 (run 20261112-023530-change); reviewed the diff: no CLEAR plan can reach a site placement (checkKey, the batch guard, move/update/revert refused), plain and `on_pad` paths unchanged, API package untouched, the readings fail closed. Minor: `SiteFit.with` is a server-thread context as `Placed.withConsent` is (`Sites.check` keeps main's server-thread assumption) |
+
+**For the Steward RC (with SO)**, the areas for its `--only` filter: `fitToSite` on a site-bound entry (the frame, the verdict's site
+Reasons and their message-first details), `place`/`check` with `PlaceRequest.site` (KEEP, the port note, the restore box), the record's
+`ext["architect_mc:site"]` in `SiteView`, move/`applyDelta`/`revert` refused for it, Remove and removal orders over a site placement
+layered on Steward's own cell or region sites, a batch item with a site still refused (`UnsupportedOperationException`), and (with SO)
+the survival flows of a site-bound house. No feature flag changes in PL.
