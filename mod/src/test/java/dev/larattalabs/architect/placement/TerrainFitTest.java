@@ -105,6 +105,44 @@ class TerrainFitTest {
 	}
 
 	@Test
+	void keepTouchesNoUnwrittenCellAndClearIsUnchanged() {
+		// (7b PL) a floor-only template over a gap below (fill under CLEAR) under a hill and a canopy (cleared under CLEAR)
+		GhostModel.Cells floorOnly = new GhostModel.Cells(3, 3, 3, 1, floorXyz(), solid(9));
+		GhostModel m = GhostModel.of(floorOnly, 0);
+		TerrainFit.World w = (x, y, z) -> y <= 6 ? TerrainFit.NATURAL : y >= 11 && y <= 12 ? (x == 1 ? TerrainFit.TREE | TerrainFit.LEAVES : TerrainFit.NATURAL)
+			: y == 10 && x == 4 ? TerrainFit.WATER | TerrainFit.FILLABLE : TerrainFit.FILLABLE;
+		TerrainFit.Plan clear = TerrainFit.plan(m, 0, 10, 0, w);
+		TerrainFit.Plan clear2 = TerrainFit.plan(m, 0, 10, 0, w, TerrainFit.Policy.CLEAR);
+		org.junit.jupiter.api.Assertions.assertArrayEquals(clear.fill(), clear2.fill());
+		org.junit.jupiter.api.Assertions.assertArrayEquals(clear.clear(), clear2.clear());
+		org.junit.jupiter.api.Assertions.assertArrayEquals(clear.water(), clear2.water());
+		assertEquals(clear.minY(), clear2.minY());
+		org.junit.jupiter.api.Assertions.assertTrue(clear.fillCount() > 0 && clear.clearCount() > 0, "the fixture fills and clears under CLEAR");
+		TerrainFit.Plan keep = TerrainFit.plan(m, 0, 10, 0, w, TerrainFit.Policy.KEEP);
+		assertEquals(0, keep.fillCount());
+		assertEquals(0, keep.clearCount());
+		assertEquals(10, keep.minY());
+		assertEquals(clear.waterCount(), keep.waterCount(), "the fluid scan is the same under KEEP");
+		// the written cells per rotated cell: the floor row only (2), nothing elsewhere (0)
+		byte[] wr = TerrainFit.writes(m);
+		assertEquals(27, wr.length);
+		int floor = 0;
+		for (byte b : wr) {
+			floor += b == 2 ? 1 : 0;
+		}
+		assertEquals(9, floor);
+	}
+
+	@Test
+	void approachModePerFit() {
+		for (dev.larattalabs.architect.api.FitMode f : dev.larattalabs.architect.api.FitMode.values()) {
+			Approach.Mode m = Approach.Mode.of(f, true);
+			assertEquals(f == dev.larattalabs.architect.api.FitMode.ON_PAD ? Approach.Mode.GROUND : Approach.Mode.PORT, m, f.wire());
+			assertEquals(f == dev.larattalabs.architect.api.FitMode.ON_PAD ? Approach.Mode.GROUND : Approach.Mode.NONE, Approach.Mode.of(f, false), f.wire());
+		}
+	}
+
+	@Test
 	void medianSurfaceIgnoresMissingColumns() {
 		assertEquals(64, TerrainFit.medianSurface(new int[] {63, 64, 64, 70, Integer.MIN_VALUE}, 0));
 		assertEquals(5, TerrainFit.medianSurface(new int[] {Integer.MIN_VALUE}, 5));

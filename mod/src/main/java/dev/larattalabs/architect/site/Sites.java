@@ -652,11 +652,15 @@ public final class Sites {
 			}
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		};
-		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
+		// (7b PL) a site placement (SiteFit.now): TerrainFit KEEP and a port approach for every fit but on_pad
+		dev.larattalabs.architect.api.SiteSpec siteSpec = SiteFit.now();
+		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world, SiteFit.policy(siteSpec));
 		tr.mark("terrain");
-		Approach.Plan approach = Approach.forBlueprint(bp, turns, box, world, style == null ? null : style.resolve(level, roads, dryRun));
+		boolean ground = SiteFit.approach(siteSpec) == Approach.Mode.GROUND;
+		Approach.Plan approach = ground ? Approach.forBlueprint(bp, turns, box, world, style == null ? null : style.resolve(level, roads, dryRun))
+			: Approach.Plan.EMPTY;
 		tr.mark("approach");
-		SiteWarnings.Result site = SiteWarnings.forBlueprint(bp, turns, box, approach, world);
+		SiteWarnings.Result site = ground ? SiteWarnings.forBlueprint(bp, turns, box, approach, world) : SiteWarnings.Result.NONE;
 		tr.mark("warnings");
 		Anchors.Bounds snapBox = snapshotBox(box, plan, approach);
 		if (dryRun && (unloaded[0] || !loaded(level, snapBox))) {
@@ -667,6 +671,29 @@ public final class Sites {
 			out.add(Reason.BUILD_HEIGHT, "Box " + Anchors.str(snapBox) + " leaves the build height (" + level.getMinY() + ".." + level.getMaxY() + ")");
 		}
 		List<String> layerNotes = new ArrayList<>();
+		if (siteSpec != null) {
+			// (7b PL) the site checks (SiteFit's order), every one found
+			dev.larattalabs.architect.api.Refusal shape = SiteFit.shape(siteSpec, origin, rotation, box);
+			if (shape != null) {
+				out.add(shape.reason(), shape.message());
+			} else {
+				byte[] writes = TerrainFit.writes(model);
+				java.util.function.Function<BlockPos, @Nullable BlockState> states = p -> {
+					if (p.getY() < level.getMinY() || p.getY() > level.getMaxY()) {
+						return Blocks.AIR.defaultBlockState();
+					}
+					net.minecraft.world.level.chunk.LevelChunk c = dryRun ? level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4)
+						: level.getChunk(p.getX() >> 4, p.getZ() >> 4);
+					return c == null ? null : c.getBlockState(p);
+				};
+				for (dev.larattalabs.architect.api.Refusal r : SiteFit.check(level.getServer(), siteSpec, entry.json(), model.sizeX, model.sizeY, model.sizeZ,
+					writes, box.minX(), box.minY(), box.minZ(), states, world)) {
+					out.add(r.reason(), r.message());
+				}
+			}
+			tr.mark("siteChecks");
+			layerNotes.addAll(SiteFit.notes(siteSpec));
+		}
 		if (approach.metRoad()) {
 			int[] r = approach.road();
 			String road = SiteJournal.ownerSite(dimensionId(level), BlockPos.asLong(r[0], r[1], r[2]));
@@ -1954,6 +1981,9 @@ public final class Sites {
 		if (SiteJournal.above(b.id()) != null || SiteJournal.below(b.id()) != null) {
 			return b.id() + " has sites layered over or under it: remove it and place it again";
 		}
+		if (SiteFit.bound(b.ext())) {
+			return SiteFit.fixedMessage(b.id(), "a move"); // (7b PL)
+		}
 		return null;
 	}
 
@@ -2142,7 +2172,7 @@ public final class Sites {
 	private static String checkKey(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, boolean survival, boolean layer,
 		@Nullable String owner, @Nullable EntranceStyle style) {
 		return dimensionId(level) + "|" + bp.id() + "|" + origin.asLong() + "|" + rotation + "|" + force + "|" + survival + "|" + layer + "|" + owner + "|"
-			+ EntranceStyle.key(style);
+			+ EntranceStyle.key(style) + SiteFit.key(SiteFit.now());
 	}
 
 	/** P4 of a ticked placement (its PLACING commit is durable): the record, placing. */

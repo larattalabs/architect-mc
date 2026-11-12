@@ -49,6 +49,23 @@ public final class Approach {
 	public static final String DEFAULT_SLAB = "minecraft:stone_brick_slab";
 
 	/**
+	 * (7b PL) How a placement is approached (docs/CONTRACT.md "Phase 7b" §2, SETTLEMENTS §7.5): {@link #GROUND} is today's strip out of
+	 * the front face; {@link #PORT} has no strip (the site's door or walk port meets a graph edge: under a region the link pass makes
+	 * it, on the standalone path the player does); {@link #NONE} has no strip and no port (a site with no ports).
+	 */
+	public enum Mode {
+		GROUND, PORT, NONE;
+
+		/** The mode of a site placement: {@code on_pad} keeps the ground strip; every other fit a port, or none without one. */
+		public static Mode of(dev.larattalabs.architect.api.FitMode fit, boolean hasPorts) {
+			if (fit == dev.larattalabs.architect.api.FitMode.ON_PAD) {
+				return GROUND;
+			}
+			return hasPorts ? PORT : NONE;
+		}
+	}
+
+	/**
 	 * A blueprint's {@code approach} (sidecar): rows out from the box (0 = no approach), cells across, the path block
 	 * and the half-step slab.
 	 */

@@ -618,6 +618,11 @@ public final class SiteDeltas {
 				: b.versioning().updating() > 0 ? "an update is running" : "being removed or reverted") + ")", true));
 			return empty(out, r.siteId(), from, to, notes);
 		}
+		// (7b PL) a site-bound placement keeps its site's terrain (TerrainFit KEEP): an update would plan today's CLEAR over it
+		if (SiteFit.bound(b.ext())) {
+			out.add(new Refusal(Reason.NOT_ALLOWED, SiteFit.fixedMessage(r.siteId(), "an update"), false));
+			return empty(out, r.siteId(), from, to, notes);
+		}
 		// the owner rule (Steward SHOULD 4)
 		if (b.owner() != null && !b.owner().equals(r.owner()) && !r.force()) {
 			out.add(new Refusal(Reason.OVERLAP_OWNED, r.siteId() + " is owned by " + b.owner() + "; updating it needs force", false));
@@ -1293,6 +1298,9 @@ public final class SiteDeltas {
 		Site b = Sites.get(siteId);
 		if (b == null) {
 			throw new Sites.SiteException("No site " + siteId);
+		}
+		if (SiteFit.bound(b.ext())) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, SiteFit.fixedMessage(siteId, "a revert")); // (7b PL)
 		}
 		MinecraftServer server = level.getServer();
 		int from = versionOf(server, b);

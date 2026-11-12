@@ -30,14 +30,18 @@ public final class SiteGuards {
 		}
 	}
 
-	/** A placement with a site: until slice PL. */
+	/**
+	 * A placement with a site, as a batch item sees it: slice PL places a site through {@code Sites.place}, {@code check} and
+	 * {@code fitToSite}; a batch (whose items are persisted and placed over ticks) still refuses one until a later slice carries the
+	 * site through the queue.
+	 */
 	public static void place(PlaceRequest r) {
 		if (r != null && r.site() != null) {
 			throw new UnsupportedOperationException("PlaceRequest.site needs the Architect API since NEXT (slice PL)");
 		}
 	}
 
-	/** A batch with an item whose placement carries a site: until slice PL. */
+	/** A batch with an item whose placement carries a site: still refused after slice PL (the queue does not persist a site yet). */
 	public static void batch(Batch b) {
 		if (b != null) {
 			for (Batch.Item i : b.items()) {

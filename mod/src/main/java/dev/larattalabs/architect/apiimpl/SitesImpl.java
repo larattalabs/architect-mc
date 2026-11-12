@@ -133,8 +133,12 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<PlaceResult> place(PlaceRequest r) {
-		SiteGuards.place(r); // 7b: until slice PL
-		return onServer(() -> dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> {
+		// (7b PL) a site placement: its checks and writes see the site (SiteFit.now: TerrainFit KEEP, the port approach, the site checks)
+		return onServer(() -> dev.larattalabs.architect.site.SiteFit.with(r.site(), () -> placeNow(r)));
+	}
+
+	private PlaceResult placeNow(PlaceRequest r) {
+		return dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> {
 			boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 			Blueprint bp = Blueprints.get(r.blueprintId());
 			List<Refusal> refused = precheck(r, construction, bp, new Sites.Verdict[1]);
@@ -143,19 +147,24 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				return new PlaceResult(false, Optional.empty(), refused, List.of());
 			}
 			try {
+				// (7b PL) a site placement's record carries its binding (ext architect_mc:site): move, update and revert refuse it
+				com.google.gson.JsonObject ext = r.site() == null ? r.ext() : dev.larattalabs.architect.site.SiteFit.withBinding(r.ext(), r.site());
 				Site s = Sites.place(r.level(), bp, r.origin(), r.rotation(), r.force(), r.actor() == null ? null : r.actor().getStringUUID(),
-					construction, r.owner(), r.ext(), r.actor(), null, layer(r), dev.larattalabs.architect.site.EntranceStyle.plain(r.pathStyle()));
+					construction, r.owner(), ext, r.actor(), null, layer(r), dev.larattalabs.architect.site.EntranceStyle.plain(r.pathStyle()));
 				String note = Sites.lastNote();
 				return new PlaceResult(true, Optional.of(s.id()), List.of(), note == null ? List.of() : Arrays.asList(note.split("; ")));
 			} catch (Sites.SiteException e) {
 				return new PlaceResult(false, Optional.empty(), List.of(new Refusal(e.reason(), e.getMessage(), e.builds())), List.of());
 			}
-		}));
+		});
 	}
 
 	@Override
 	public Verdict check(PlaceRequest r) {
-		SiteGuards.place(r); // 7b: until slice PL
+		return dev.larattalabs.architect.site.SiteFit.with(r.site(), () -> checkNow(r));
+	}
+
+	private Verdict checkNow(PlaceRequest r) {
 		boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 		Blueprint bp = Blueprints.get(r.blueprintId());
 		Sites.Verdict[] v = new Sites.Verdict[1];
@@ -301,7 +310,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<String> queue(Batch batch) {
-		SiteGuards.batch(batch); // 7b: until slice PL
+		SiteGuards.batch(batch); // 7b: PL places a site through place/check only; a batch item with one still refuses
 		return onServer(() -> Batches.queue(server, batch));
 	}
 
@@ -479,6 +488,35 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		}
 		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(avoidBuilds(level, LotFitting.recommended(f, lb, streetSide
 			.getName()), streetSide, consentOf(opt.consent()))));
+	}
+
+	/**
+	 * (7b PL) {@link #fitToLot}'s answer for a site-bound design on its site: no rotation search, the site's frame is the origin and
+	 * rotation, and the verdict is {@link #check} of a placement with the site (the site checks included). {@code recommendedLot} is the
+	 * template box. Nothing is placed.
+	 */
+	@Override
+	public LotFit fitToSite(String blueprintId, dev.larattalabs.architect.api.SiteSpec site, FitOptions o) {
+		java.util.Objects.requireNonNull(site, "site");
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		ServerLevel level = opt.level() != null ? opt.level() : server.overworld();
+		BlockPos origin = site.frame().origin();
+		Rotation rot = site.frame().rotation();
+		Blueprint bp = Blueprints.get(blueprintId);
+		if (bp == null) {
+			Verdict v = new Verdict(List.of(new Refusal(Reason.UNKNOWN_BLUEPRINT, "No design " + blueprintId + " in the library")), List.of(), false, Map.of(),
+				Optional.empty(), Optional.empty());
+			BoundingBox at = new BoundingBox(origin.getX(), origin.getY(), origin.getZ(), origin.getX(), origin.getY(), origin.getZ());
+			return new LotFit(origin, rot, at, Optional.empty(), v, at);
+		}
+		Verdict v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), opt.owner(), new JsonObject(), opt.force(), opt.actor(), null, null,
+			opt.consent()).withSite(site));
+		int turns = rot.ordinal();
+		int sx = dev.larattalabs.architect.placement.BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), turns);
+		int sz = dev.larattalabs.architect.placement.BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), turns);
+		BoundingBox box = v.box().orElse(new BoundingBox(origin.getX(), origin.getY(), origin.getZ(), origin.getX() + sx - 1, origin.getY() + bp.sizeY() - 1,
+			origin.getZ() + sz - 1));
+		return new LotFit(origin, rot, box, v.restoreBox(), v, box);
 	}
 
 	/**
