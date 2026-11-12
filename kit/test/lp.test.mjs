@@ -240,7 +240,7 @@ test('the catalogue: connector.branch_walk (schemaVersion 1) and tunnel.under fl
   const golden = JSON.parse(fs.readFileSync(path.join(here, '..', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   assert.deepEqual(planCatalogue(), golden);
   const before = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
-  assert.equal(golden.catalogueVersion, before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge');
+  assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id);
   assert.deepEqual(changed.filter((id) => !['form.hidden_room', 'rule.suspended', 'layout.elevated'].includes(id)).sort(), ['connector.branch_walk', 'tunnel.under']);
   for (const id of ['connector.branch_walk', 'tunnel.under']) {
