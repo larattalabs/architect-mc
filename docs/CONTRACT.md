@@ -27805,6 +27805,110 @@ and this file. Neither PL nor AF touches any of them but step-inputs and CONTRAC
 | `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the closures that reach lib/check.mjs gain lib/siteCheck.mjs) |
 | api-compat | not run: no Java change |
 | gate-verifier (review only, DEV MODE) | **PASS** at 61b6d615: scope (no Java, no PL/AF/DS work, no versions), no-site byte identity (every check.mjs change guarded by `g.window` but lightLevels' `g.terrain`, equal for a plain grid), each rule against §7.4/§11, the eight readings, fit_suspend's one-block change and re-cut goldens, the variants not vacuous; sc, sv, schem, check, phase5a and f7b-foundation re-run (78/78), step-inputs clean. Minor, fixed after: the neck message named an unused `neckContact` limit (dropped: a neck is one cell of contact); a stray blank line. Noted: span, chain and the cliff cantilever stay unjudged until a bible sets them (DS and the bible work own that) |
+### Slice DS as built (branch `slice/DS` off main bcd9eddb, main b1ee8dcc (SP) merged; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+The designer's site inputs, site variants and the rest of DS's row (§3 row 7, change 1): `DesignRequest.site` designed, `Designs.siteVariant`,
+SITE follows, the estimate kinds `site` and `adapted`, the PLAYBOOK's "Building into a site", the sim's site-aware stub. No 7bF signature
+changed. API (all `NEXT`, additive): `Estimate.Kind.SITE` appended; `Limits.SITE_KEEP_CRITICAL_MAX`, `Limits.SITE_PORTS_MAX` (= the
+spec's caps, for the sidecar's zod-bounds test); `Designs.siteVariant` implemented (7bF's default still throws); feature `siteDesign`
+advertised from the helper's `site.design`. `SiteGuards.design`/`group` removed (DS's guards); `SiteGuards.place`/`batch` stay (PL's).
+
+**The designer's inputs** (sidecar `sitedesign.ts`, kit `lib/siteBrief.mjs`, `tools/site-brief.mjs`):
+- At request time the frozen volume is checked (gunzipped, sha-256 equal to `volumeSha`) and kept by sha in `<data>/sites/<sha>.arvx`, so
+  no later step depends on the blob store. A missing blob or one of another volume refuses the request (nothing designed).
+- The scratch gets `site/`: `site.arvx`, `spec.json`, `site.json` (`{lot, size, fit, fitRow, spec, ports, keepCritical, affordances,
+  proposed}`: what the kit's `Site` reads plus AF's analysis) and four renders of the empty site (`site-iso` from the side most open to the
+  air, `site-section` through the lot's middle z, `site-top`, `site-composite` the gallery's iso of the window), written by the scratch kit's
+  `tools/site-brief.mjs` in one child process (0.67 s on a 96x64x96 lot, 0.23 s without renders; cached per spec).
+- BRIEF.md gains `## Site (binding: you build INTO this land)`, words from the analysis in the design frame: the lot's size and makeup,
+  up to 8 affordances (cliff face with its facing, height and length; ledge, overhang, cave, trunk with its radius, canopy, spike, water,
+  gap with its span, at most 2 pads on a non-pad site) with design boxes ("outside your lot" when in the margin), the fit in words with its
+  terrain, support and keep rows (the trunk's logs, the hang points), the ports (name, kind, cell, facing, size; "the approach is a port"),
+  the renders, and the build and render commands with `--site site/site.arvx --lot site/site.json`. The size line becomes "exactly the
+  lot"; a non-pad fit's groundY/foundation/approach line says nothing is filled. The six fixtures' sections are a committed golden
+  (`kit/test/fixtures/ds/brief-sections.json`). Not tuned against S5/S6: written over the six 7bF fixtures only.
+- `sc.checkPlan` (every designer's check: Claude's rounds and revisions, the sim) adds `--site site/site.arvx --lot site/site.json` and
+  sets the size cap to the lot, so every round checks on SC's composite.
+- The entry keeps `site/site.arvx` and `site/site.json` beside its source and its binding (`SiteBinding` wire) in
+  `ext["architect_mc:site"]` beside the caller's ext. A new version's site files and binding reach the entry's top level (`replaceTop`;
+  a revert past them drops both).
+- **PLAYBOOK §7 "Building into a site"**: plan in the site's frame from the `Site` helpers, look at the land first (renders, slices with
+  the land), keep what you don't change, bear on rock (the helpers named), the door at the port, judge the composite, the site rules,
+  and a symptom table. (The PLAYBOOK's upstream is Steward's skill: this change is reported to Steward.)
+
+**Site variants** (`Designs.siteVariant(entryId, site, opKey)`, sidecar `sitevariants.ts`, mod `apiimpl/SiteDesigns`): the source's head
+`.mjs` re-run on the new site with its recorded values and palette (and its own bible files), checked on the composite, rendered and
+installed directly as `<source>_site_<lot id or sha>`: `derivation {source, sourceVersion, kind: 'site', recipe {lotId, volumeSha, fit,
+frame, values}}`, the binding in ext (the source's ext kept), the source's request with the new site, the site's files. One persisted
+operation per (owner, opKey) (`<data>/sitevariants/`), body `{entryId, site}` without the blob id; a restart resumes it; an install
+before a kill is found by its op id. Refusals: before the ack `VERSION_REFUSED no_entry` (`UNKNOWN_BLUEPRINT` on the mod side),
+`SITE_UNSUPPORTED` `no_program` (an import, no source) or `not_site_aware` (no `fit` export); as the operation's result `SITE_UNFIT`
+with the first site finding's rule id, or `site_bound` when the program can't be built into the site (another fit, it throws on the
+site's shape). The mod sends `site.variant`, the helper acks with the operation and reports it done through `follow.upsert` (FS's
+channel: `WireFS.awaitOp`), the library reloads, then the future completes on the server thread.
+
+**The mod sends sites** (`SiteDesigns.resolve`, for `request`, `requestGroup`, a paid adaptation and `siteVariant`): each site's frozen
+file in this world (`architect/volumes/<sha>.bin`) is uploaded and its blob id replaces the spec's; a volume not in this world keeps the
+spec's id, which must not be `local:` (refused). Estimates send the spec as is (no volume needed).
+
+**Also in the row:**
+- Paid adaptation = `versionOf` + `site` (wired, not run for real): the scratch gets the versionOf context and `site/`, the section
+  says the version is built into the site (no frame check), the version is bound to the new site. A `versionOf` without a site of a
+  site-bound entry is built into the entry's own site.
+- Palette and param variants of a site-bound entry re-run on its own site (SV's note; a bundled fit example on its 7bF fixture).
+- SITE follows (the §1 ledger's "SITE follows its source through FS"): the source's version re-run on the follower's own site, the new
+  version's values, the follower's palette; a site rule failing answers `check` naming the rule; no variation bar, no frame check;
+  `followAll` and `followers().behind` include SITE (Java and sidecar). The `until_7b` refusal is gone.
+- Estimates: `site` (a site-aware design: the design seed x1.3-2, SETTLEMENTS §17.3, until measured; recorded from Claude designs with a
+  site) and `adapted` (a paid adaptation: the REPAIR seed until measured; the mix's `adapted` line reads it). `design.estimate` of a request
+  with a site answers its kind; a group's site items are a `site` line in a mix (`EstimateRequest.group`) and the site figure in a group
+  estimate.
+- The sim's site-aware stub: a request with a site installs the kit's `fit_<fit>` example re-run on the request's site (also for an
+  adaptation of a design that is not site-aware).
+- Config `siteRenders` (default true): false is the A/B's "images off" arm (P4).
+
+**Readings chosen** (the contract silent or the code disagreeing; the smallest reading):
+1. **Change 2 (one item per lot)**: the minimal reading (asked of the coordinator; no answer by the end of the slice). Steward calls
+   `siteVariant` per variant lot and binds the entry itself; `Item.ext` (`architect_mc:site {archetype}`) passes through untouched. The
+   group machinery has no variant item kind (no approval inheritance inside a group).
+2. **A site item has no massing pass**: a group with `massingFirst` and a site item is refused (`ClientError`); a site item has no
+   `count` and nothing may `copyOf` it. Steward's GroupPlanner is massing-first: when SL ships, Steward's site lots go in a group
+   without massingFirst or as single designs (or SL revisits this).
+3. **`SITE_UNFIT` on any site finding**, warnings included ("$0 when it checks clean"): a design installed with site warnings refuses
+   its own variant on the same site. Non-site build failures are `site_bound`.
+4. **`siteRenders: false`** removes only the empty-site PNGs; the brief still tells the agent to render the composite and section.
+5. **`follow.upsert` is the operation channel** for site variants (the API's only consumer of it is the pending-op map); the
+   `siteVariant` key is scoped by no owner (the API has no owner argument).
+6. **Polish of a site-bound entry is refused** (`VERSION_REFUSED site_bound`, and `critique.mode polish` on a site request): polish
+   builds without a site; such an entry changes by `versionOf`.
+7. **The frame guard is skipped for site versions** (a site-bound entry places only in its frame; PL refuses deltas on it).
+8. **The site analysis words run in a synchronous child process** at a design's start (0.7 s worst measured); variants and follows never
+   run it (`writeSiteFiles`: the spec and lot only).
+9. **DS's own fixtures** (`kit/test/fixtures/ds/`, `tools/ds-fixtures.mjs --check`): `cliff_east` (another cliff, 4 taller) and
+   `cliff_owned` (cliff_face's shape with a player's pillar where the house goes), beside 7bF's six (f7b-foundation holds that dir).
+
+**Not covered by a unit or the gate:** a real Claude design into a site (PA's P0/P1; no paid call in DS), the volume upload when the helper
+already lost the spec's blob and the world lacks the frozen file (refused by design), and a SITE follow through the mod (sidecar units
+only).
+
+**Checks** ($0, sim only; branch head 72d59e22 plus this as-built):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1166/1166 after merging main b1ee8dcc (ds.test.mjs 7/7) |
+| sidecar `npm ci && npm run check` | 831/831, 57 files (site-design.test.ts 17/17); the bundle built |
+| mod `./gradlew build --offline --no-daemon` | pass after the merge; 1065 tests, 0 failures, 1 skipped (ApiDSTest 6/6, Api7bFTest, WireFSTest) |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 135/135 |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, `--surface` of the 0.57.0 jar |
+| `node tools/step-inputs.mjs check` | clean (334 steps; ds-unit, ds-sim entered) |
+| `node kit/tools/ds-fixtures.mjs --check` | clean |
+| in game, run 20261112-045654-change at 72d59e22 (ports 8904/8905, `--out artifacts/gate-runs-ds`) | **PASS** 2/2: `ds-unit`; `ds-sim` 14 ok (the three cliffs built and frozen to their own shas; a site-aware design sent with a `local:` blob id, designed by the sim, installed bound and lot-sized; its BRIEF +21/-4 against the plain request's, every removed line an expected one; the scratch's site/; a site variant onto cliff_east, a SITE derivation bound to it, the opKey replayed; cliff_owned SITE_UNFIT site_keep; cabin SITE_UNSUPPORTED not_site_aware). Earlier runs 044453 (a hook read the DevBridge message's own `type`), 044920 (the BRIEF diff counted the plain design's `_2` id), 045344 (fixed opKeys met the previous run's in the kept helper data) were harness fixes |
+| gate-verifier (review only, DEV MODE) | **PASS** at 72d59e22: scope, 7bF signatures unchanged (javadoc only), additive API, SITE_UNFIT details within SC's rule ids, refusals against the javadoc, opKey bodies without the blob id, the sha-checked kept volume, `--site` on every check path and polish refused, the Site section from the analysis and not tuned to S5/S6, the in-game evidence, readings 1-9; ds/sc/sv/f7b-foundation (38/38), site-design/follow/limits (29/29), ds-fixtures and step-inputs re-run. No blocking defect; minor: readings 1, 3 and 5 as recorded |
+
+**For the PL/SO RC** (DS rides in that jar), the areas for Steward's `--only`: `Designs.request`/`requestGroup` with `DesignRequest.site`
+(the feature `siteDesign`, the volume sent from the world's frozen file, the entry's `SiteBinding`), `Designs.siteVariant` (the new entry, its
+SITE derivation and binding; `SITE_UNFIT` with a rule id, `SITE_UNSUPPORTED`; the opKey replay), `Designs.follow` of a SITE entry, the
+estimate kinds `site` and `adapted`, a massingFirst group with a site item refused. The PLAYBOOK's §7 is new (Steward's skill is its upstream).
 
 ### Slice SL as built (branch `slice/SL` off main b1ee8dcc; versions NEXT; $0; IN PROGRESS, recorded 2026-11-11)
 

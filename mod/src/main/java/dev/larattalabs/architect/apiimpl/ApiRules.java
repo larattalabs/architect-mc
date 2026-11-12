@@ -112,6 +112,7 @@ public final class ApiRules {
 					case "region.grow" -> "growDistrict"; // 6d GR: the revise program's spec.grow (frontage, street extension; towns and districts; since 1.43.0)
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
 					case "site.analyse" -> "siteSurvey"; // 7b AF: Survey.site (the helper's kit analyses the frozen volume) and Regions.affordances
+					case "site.design" -> "siteDesign"; // 7b DS: DesignRequest.site, Designs.siteVariant, SITE follows (with PL's fitToSite and PlaceRequest.site)
 					case "region.siteLots" -> "siteLots"; // 7b SL: site lots (r.siteLot, LotSpec.site, $.lots[].site) and plan/0's layout.elevated
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)

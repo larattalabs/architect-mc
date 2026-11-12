@@ -70,7 +70,8 @@ public final class WireFS {
 			}
 			Derivation.Kind kind = d.get().kind();
 			int sv = d.get().sourceVersion();
-			out.add(new Follower(e.id(), kind, sv, e.version(), sourceHead, kind == Derivation.Kind.COPY && sourceHead > 0 && sv < sourceHead));
+			out.add(new Follower(e.id(), kind, sv, e.version(), sourceHead, (kind == Derivation.Kind.COPY || kind == Derivation.Kind.SITE) && sourceHead > 0
+				&& sv < sourceHead));
 		}
 		out.sort(Comparator.comparing(Follower::entryId));
 		return List.copyOf(out);
@@ -156,12 +157,7 @@ public final class WireFS {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new ArchitectRefused(Reason.UNKNOWN_BLUEPRINT, "no library entry " + copyEntryId,
 				"no_entry")));
 		}
-		// a SITE entry follows in 7b (answered here, also without a helper)
-		Optional<Derivation> d = e.get().derivation();
-		if (d.isPresent() && d.get().kind() == Derivation.Kind.SITE) {
-			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new ArchitectRefused(Reason.NOT_ALLOWED, copyEntryId
-				+ " is a site-adapted entry: it follows its source in 7b, with its fit parameters", "until_7b")));
-		}
+		// (7b DS) a SITE entry follows its source too: the helper re-runs the source's new version on the entry's own site
 		JsonObject m = DesignsImpl.msg("entry.follow");
 		m.addProperty("entryId", copyEntryId);
 		m.addProperty("toSourceVersion", Math.max(0, toSourceVersion));
@@ -220,6 +216,24 @@ public final class WireFS {
 			}
 			return ApiImpl.onServerFuture(done.thenCompose(WireFS::reloaded));
 		});
+	}
+
+	/**
+	 * (7b DS) Waits for another operation the helper reports through {@code follow.upsert} (a site variant): completes with the
+	 * finished operation (its {@code status: "done"} upsert), fails when the link drops (as a follow does) or after the backstop.
+	 */
+	static CompletableFuture<JsonObject> awaitOp(String id, String what) {
+		if (id == null || id.isEmpty()) {
+			return CompletableFuture.failedFuture(new IllegalStateException("the helper's " + what + " ack names no operation"));
+		}
+		CompletableFuture<JsonObject> done = PENDING.computeIfAbsent(id, k -> new CompletableFuture<>());
+		JsonObject raced = DONE.get(id);
+		if (raced != null) {
+			PENDING.remove(id);
+			done.complete(raced);
+		}
+		done.orTimeout(TIMEOUT_MIN, TimeUnit.MINUTES).whenComplete((v, t) -> PENDING.remove(id, done));
+		return done;
 	}
 
 	/** The library reloads (the new versions), on the server thread, before the future completes. */

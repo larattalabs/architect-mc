@@ -18,6 +18,7 @@
 // State: DesignWork.polish (persisted), so a polish resumes after a restart (a step's interrupted turn runs again, a
 // critic call waits for its job or runs again). It runs in the design pool like a design (designer.run delegates here
 // through a PolishBackend: the Claude designer's turn runner, or the sim's scripted edits).
+import { entrySite } from './sitedesign.js';
 import { setModePin } from './styles.js';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -286,6 +287,8 @@ export class Polishes {
     const sc = this.sc;
     // (6c PT2) an adopted entry (a player's build) gets versions by versionOf only: polish is refused (before the login check)
     if (sc.versions.top(entryId)?.adopted !== undefined) throw new VersionRefused('adopted_polish', `${entryId} is a player's adopted build: change it with versionOf, not polish`);
+    // (7b DS) a site-bound entry is changed by versionOf (built into its site); polish's own build has no site
+    if (entrySite(sc.versions.dir(entryId))) throw new VersionRefused('site_bound', `${entryId} is built into a site: change it with versionOf (its own site), not polish`);
     sc.ensureClaudeAvailable();
     const json = sc.versions.checkChangeable(entryId);
     const r = this.resolve(entryId, spec, json);

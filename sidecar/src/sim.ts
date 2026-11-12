@@ -31,12 +31,20 @@ import { runNode } from './designs.js';
 import { simToken, type PolishBackend, type PolishTurnResult } from './polish.js';
 import { designRounds, SMALL_PASS } from './claude/brief.js';
 import { fitsSmall } from './copies.js';
+import { normalizeKitImports } from './variants.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'reading the brief' },
   { status: 'designing', step: 'sketching the floor plan' },
   { status: 'designing', step: 'raising the walls and the roof' },
 ];
+
+/** (7b DS) The sim's site-aware stand-in: the kit's example for a fit (kit/designs/site/fit_<fit>.mjs). Throws when the kit has none. */
+export function simSiteSource(kitDir: string, fit: string): string {
+  const f = path.join(kitDir, 'designs', 'site', `fit_${fit}.mjs`);
+  if (!fs.existsSync(f)) throw new Error(`the sim builds a site-aware design from the kit's site example, but ${f} is missing`);
+  return f;
+}
 
 /** A request asks the sim to hit a usage limit (once). */
 export const SIM_LIMIT_MARK = 'sim:usage_limit';
@@ -674,6 +682,13 @@ export class SimDesigner implements Designer {
       }
       // the massing profile has no type rules: the requested type is written in
       source = source.replace(/type:\s*'(?!(?:int|bool|enum)')[a-z0-9_]+'/, `type: '${req.type}'`);
+    } else if (req.site && (!req.versionOf || !/export\s+const\s+fit\s*=/.test(fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8')))) {
+      // (7b DS) the site-aware stub: the kit's example for the site's fit (kit/designs/site/fit_<fit>.mjs) under the new id, re-run on
+      // the request's site (each example reads its geometry from the Site). A paid adaptation (versionOf + site) of a design that is
+      // not site-aware yet becomes that example too (the sim's "adapted" version).
+      source = withDesignId(normalizeKitImports(fs.readFileSync(simSiteSource(cfg.kitDir, req.site.fit), 'utf8')), bp);
+      what = `the kit's site example fit_${req.site.fit} on site ${req.site.volumeSha.slice(0, 12)}${req.versionOf ? ` (adapting ${bp} v${req.versionOf.baseVersion ?? 1})` : ''}`;
+      note = `a site-aware stand-in (fit ${req.site.fit})`;
     } else if (req.versionOf) {
       // (0b, C13) the head changed as a sim redirect changes a massing (an int param's default up by one, else gable -> hip)
       const base = fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8');
@@ -741,7 +756,8 @@ export class SimDesigner implements Designer {
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
     const smallSrc = !d.massing && !req.versionOf && !wallLot && req.effort === 'small' && fitsSmall(req.maxSize);
-    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+    // (7b DS) a site stand-in is checked as what it is (its own type and profile), on the composite
+    const limits = d.massing ? plan.limits : req.site ? { ...plan.limits, type: undefined, profile: undefined } : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     // ((6c IRR) the sim's stand-in honours a lot's reserved cells: the kit drops the copied example's blocks there before the check)
     const leave = req.reserved && plan.extra.includes('--reserved') ? ['--leave-reserved'] : [];
     const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, [...plan.extra, ...leave]);

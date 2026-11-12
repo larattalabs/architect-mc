@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { ClientError } from './errors.js';
 import type { Store } from './store.js';
 
-export type OpKind = 'bible' | 'group' | 'design';
+export type OpKind = 'bible' | 'group' | 'design' | 'siteVariant';
 export interface OpKeyEntry {
   id: string;
   hash: string;
@@ -45,13 +45,32 @@ export function bodyHash(req: Record<string, unknown>): string {
  * mod uploads them again on every send, under new ids) and without `baseVersion` (the sidecar's). The first design's site files win.
  */
 export function designKeyBody(req: Record<string, unknown>): Record<string, unknown> {
-  const v = req.versionOf;
-  if (!v || typeof v !== 'object') return req;
+  const out = siteKeyBody(req);
+  const v = out.versionOf;
+  if (!v || typeof v !== 'object') return out;
   const { siteNow: _n, siteEdits: _e, baseVersion: _b, ...keep } = v as Record<string, unknown>;
-  return { ...req, versionOf: keep };
+  return { ...out, versionOf: keep };
 }
 
-const KIND_NOUN: Record<OpKind, string> = { bible: 'bible request', group: 'group', design: 'design request' };
+/**
+ * (7b DS) A body with a `site` for its key: the site without its `volumeBlobId` (the mod uploads the same frozen volume again under
+ * a new id when the helper has lost it; the volume is named by its sha).
+ */
+export function siteKeyBody(body: Record<string, unknown>): Record<string, unknown> {
+  const site = body.site;
+  if (!site || typeof site !== 'object' || Array.isArray(site)) return body;
+  const { volumeBlobId: _v, ...keep } = site as Record<string, unknown>;
+  return { ...body, site: keep };
+}
+
+/** (7b DS) A group's body for its key: every item's site without its blob id (siteKeyBody). */
+export function groupKeyBody(g: Record<string, unknown>): Record<string, unknown> {
+  const items = g.items;
+  if (!Array.isArray(items) || !items.some((it) => it && typeof it === 'object' && 'site' in it)) return g;
+  return { ...g, items: items.map((it) => (it && typeof it === 'object' ? siteKeyBody(it as Record<string, unknown>) : it)) };
+}
+
+const KIND_NOUN: Record<OpKind, string> = { bible: 'bible request', group: 'group', design: 'design request', siteVariant: 'site variant' };
 
 const slot = (kind: OpKind, owner: string | undefined, key: string) => `${kind}|${owner ?? ''}|${key}`;
 

@@ -82,6 +82,9 @@ function constantOf(p: string): string | null {
     [/\.extraCriteria$/, 'EXTRA_CRITERIA_MAX'],
     [/\.extraCriteria\[\]$/, 'EXTRA_CRITERION_MAX'],
     [/^DesignRequest\.reserved\.cells$/, 'RESERVED_CELLS_MAX'],
+    // (7b DS) a site spec's caps (7bF's SiteSpec.MAX_*)
+    [/\.site\.keepCritical$/, 'SITE_KEEP_CRITICAL_MAX'],
+    [/\.site\.ports$/, 'SITE_PORTS_MAX'],
     // (Style unification U1) a palette: a preset name, inputs, or roles inline (each a block id)
     [/\.palette\|0$|\.palette\|2\.preset$/, 'PALETTE_PRESET_MAX'],
     [/\.palette\|1\.bible\.roles\{\}$|\.palette\|2\.(wood|stone|roof|accent)$/, 'PALETTE_BLOCK_MAX'],
