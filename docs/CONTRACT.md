@@ -28292,3 +28292,34 @@ checks do) at conversion and on the record's `ext["architect_mc:site"]` binding 
 | gate-verifier (strict) | **PASS** at 6144bc99: re-ran `so-survival` on its own ports 8908/8909 (run 20261112-052903-change, 48 ok / 0 FAIL), the three unit classes, and reviewed the diff (BuildOrder.order untouched, the golden recorded before the change, the dispatch only for non-pad sites, the gate read from the record, SCAFFOLD excluded where CRATE/DELTA are, removeScaffold first in complete). Minor: the golden did not drive the dispatch (fixed after: `Builder.supportOrdered`, asserted in the golden test; an expression extract, no behaviour change); a mined scaffolding block drops (reading 10); the attach gate also counts the player's hopper chain as solid (outside the box; not seen); removeScaffold swallows errors (reading 10) |
 
 **For the Steward RC (with PL)**, the areas for its `--only` filter: the survival flow of a site-bound house (`Sites.place` with `PlaceRequest.site` and `Mode.CONSTRUCTION`, or AUTO in a survival world): the crate at the first port's landing (not in front of a door; S-7b-7: Steward assumes no crate position and no bottom-up order), the build progressing in support order from a hopper or Insert, Pause/Deconstruct/Remove mid-build with scaffolding standing (refunds = paid + crate stock, no scaffolding item, land exact), completion (scaffolding gone, the `built` event), and a plain or `on_pad` construction site unchanged. No API member, feature or Reason changes in SO.
+
+## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
+
+Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
+farm, a sorting storage hall) as additions on growth A/A2/B and as plan v1 lots. Each module is a Steward-owned kit program run at $0. The
+asks are steward-mc `docs/ARCHITECT-ASKS.md` "Phase 5: functional modules (S-M5...)"; this section is Architect's answer, agreed with
+Steward on 2026-11-12 (answers and slotting below). Order (**Noah via parent session, 2026-11-12: "Alongside 7c (A)"**): one of the three
+gate lanes is reserved for M5, alongside 7c. All slices DEV MODE, **$0**, versions `NEXT`, API additive (AGENTS "Keep the API binary
+compatible"). Names below are proposals: each slice confirms them against the code in its as-built.
+
+### Slices
+
+| Wave | Slice | Ask | Builds | Strict? | Steward RC | Steward slice it unblocks |
+|---|---|---|---|---|---|---|
+| M5-1 | **GP** given programs | S-M5-1 | `Designs.fromProgram(source, params, bible, opKey)`: a caller's kit program (source + params + param schema) run through the same sandbox, plan limits, checker and renders as Claude-written programs; installs an entry recording the program sha (the 7c AU rule), $0. Keyed `Designs.variant(entryId, params, bible, reserved, opKey)` with `DesignRequest.Reserved` cells in the lot's frame, and `variantByKey(opKey)` that finds it again after a restart. Refusals carry the checker's typed errors. `Library.makeVariant` stays as is. | no (review) | yes (with QT) | M1 catalog |
+| M5-1 | **QT** quote | S-M5-7 | `Regions.quote(planId, lotEntries)`: read-only, $0, the per-item bill of the whole operation (parts, every bound entry, S-M5-3 fills once FK lands, placement costs) in the plan check's `cost.bom` shape. No consumption, no write (a no-write proof as LC's). | no (review) | yes (with GP) | M3 offer and place |
+| M5-2 | **FC** field cells | S-M5-4 | A lot member `field {cells, crops}` (the farmland cells and the cell above each, crop kinds). For that lot only: LC and the standing/reconcile score read a field crop of any age, or air over our farmland, as unchanged; at undo a player's crop on a field cell goes with the lot, is not a removal blocker, and its planting item is refunded once as cargo (never as the construction seed). Other player blocks on the field stay as PT says. | **yes** (refunds, removal) | yes (with IG) | M2 crop farm |
+| M5-2 | **IG** irrigated growth | S-M5-2 | `irrigate` on `planRevision` grow lots through IRR's whole lifecycle: bodies emitted (`grow.mjs` forwards it); the revision plan reports `irrigation {cells, lotCells, sources, bodies}` on the lot; mask → shell → lot → fluids stage in IRR's order (`revise.mjs` adds the fluids stage for irrigation, not only ponds); survival waits and billing (shells in the revision's `cost.bom`, as A2 bills a growth); restart recovery; drain-first `undoRevision`, incl. an undo interrupted by a restart. Gate: a V town with no irrigation grows by an irrigated farm lot, instantly and from materials (fed partly, then the rest), and is undone, one undo interrupted. | **yes** (survival, undo) | yes (with FC) | M2 crop farm |
+| M5-3 | **FK** filled containers | S-M5-3 | Opt-in per cell on a given-program entry: declared containers (cell → inventory), **at most 64 per entry** (Steward: the largest hall needs ~16 + a few lock/filler cells). Built locked (declared lock cells), filled once after every core cell stands (one keyed, journaled step, never repeated after a crash), then unlocked. Fill items billed and delivered in survival before the fill; a cancel before the fill writes and refunds no filter items. At removal each declared container's inventory is captured in the same tick, with no transfer and no vanilla drop, refunded as construction; a container is ours while it holds exactly its declared contents (more is cargo and blocks removal). Captured contents and credits are in the journal's durable replay: a crash anywhere refunds once and mints nothing. | **yes** (journal, billing, crash replay) | yes | M4 storage hall |
+| 5b | **CI** `connector.items` | S-M5-5 | Phase 5b only (Noah 2026-11-12), after 7b LP: a hopper chain (≤ 16 cells) from a lot's `item_out` to another's `item_in`; full sink backs up, nothing drops; unload/restart lose or dupe nothing; end-lot removal refuses or takes the connector (CI decides); items in it are cargo; routed as T2, billed in survival; in a revision's realise **a links stage is added only when the revision carries an items connector** (otherwise byte-identical, as 7b change 4). Sketch only: CI gets its own contract row when 5b is scheduled. | yes | yes | M8 (5b) |
+
+Not built: **S-M5-6** (move cargo to the stockpile on removal): not needed, Noah chose "refuse until emptied".
+
+### Steward's answers (2026-11-12)
+Agreed on all answers and the slotting. S-M5-3's 64-container bound is enough. S-M5-5: a revision gets a links stage only when it carries
+an items connector. Steward's order: M0 (probe) starts now, needs none; M1 after GP; M2 after FC and IG; M3 after QT; M4 after FK; M5 after M4.
+So GP and QT both matter in wave M5-1.
+
+### Changes from Steward's review (pending)
+
+None yet.
