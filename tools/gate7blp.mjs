@@ -185,14 +185,15 @@ const linkedPlan = () => ({ schemaVersion: 'plan/0', planId: 'lp_canopy', zones:
   program: { layout: 'elevated', lots: ['hut_a', 'hut_b'].map((id) => ({ id, type: 'cabin', role: 'canopy_hut', size: [17, 17], villager: 'dwelling', brief: 'A small home on its tree\'s platform.' })) } }],
   connectors: [{ id: 'walk', kind: 'branch_walk', from: { part: 'hut_a' }, to: { part: 'hut_b' } }] });
 
-/** A fresh flat world with two giant trees 24 apart (3x3 oak trunks 20 tall, 23x23 persistent leaf layers 5 thick, one column apart: two canopies):
+/** A fresh flat world with two giant trees 26 apart (each site volume, its lot box + 8, clear of the other lot's box: a neighbour's house
+ * inside a site volume drifts that site, SL's SITE_DRIFTED) (3x3 oak trunks 20 tall, 23x23 persistent leaf layers 5 thick, one column apart: two canopies):
  * a 17-wide hut (SV's trunk house's size) on each, the walk round hut_a under the leaves. */
 async function twoTrees(world) {
   await L.fresh(world, FLAT);
   await L.setRules('exact');
   await L.tp(TX - 20, 0, TZ - 30);
   const gy = await groundY();
-  for (const x of [TX - 12, TX + 12]) {
+  for (const x of [TX - 13, TX + 13]) {
     await cmd(`/fill ${x - 1} ${gy + 1} ${TZ - 1} ${x + 1} ${gy + 20} ${TZ + 1} minecraft:oak_log`);
     await cmd(`/fill ${x - 11} ${gy + 21} ${TZ - 11} ${x + 11} ${gy + 25} ${TZ + 11} minecraft:oak_leaves[persistent=true]`);
   }
@@ -330,7 +331,10 @@ steps.remove = async () => {
   if (!P.entries.hut_a || !P.entries.hut_b) return out;
   const B0 = await cellsOf(W.claimBox);
   const realise = async (tag) => {
-    const rr = await call('dev.region.realiseApproved', { sha: P.ck.check.artifactSha, lotEntries: { hut_a: 'lp_hut_a', hut_b: 'lp_hut_b' } }, 600_000);
+    // (a removed region's artifact is tombstoned: each realise checks the plan again, as Steward's retry does)
+    const ck = await call('dev.region.checkPlan', { plan: linkedPlan(), claim: W.claim, owner: OWNER, anchors: { grove: W.anchor }, load: 'generate' }, 1_800_000);
+    check(ck.check?.overall === 'READY', `${tag}: the plan checked again: ${ck.check?.overall}`);
+    const rr = await call('dev.region.realiseApproved', { sha: ck.check.artifactSha, lotEntries: { hut_a: 'lp_hut_a', hut_b: 'lp_hut_b' } }, 600_000);
     if (!rr.region) throw new Error(`${tag}: realiseApproved refused (${json(rr)})`);
     const st = await L.waitRegion(rr.region, 3_600_000);
     await L.settle(3000);
