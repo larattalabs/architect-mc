@@ -261,6 +261,16 @@ public final class LandCheck {
 	}
 
 	/**
+	 * A region cell's class with the gate mechanism's rule: a moving or trigger cell of a mechanism ({@code mechMoving}, {@link
+	 * #mechVolatile}) is never judged for its state (open, closed, mid-move: GM §4 item 4), but a block a player placed there is still the
+	 * player's (§2: a PT record is {@link Cls#PLAYER}; LCi, a player's block in an open lane), judged as {@link #classify} does.
+	 */
+	public static Cls classifyCell(BlockState now, Supplier<@Nullable CompoundTag> nowNbt, boolean playerRecord, Journal.Value after, boolean mech,
+		boolean mechMoving) {
+		return mechMoving && !playerRecord ? Cls.SAME : classify(now, nowNbt, playerRecord, after, mech);
+	}
+
+	/**
 	 * (GM, PG rule 6) Every gate mechanism's moving and trigger cells in an IR (any {@code mechanism} object's {@code states} runs
 	 * [x, z, y0, y1]... and {@code triggers[].at} / {@code rungs}): a player who flips its lever has not changed the land.
 	 */
@@ -521,7 +531,7 @@ public final class LandCheck {
 			BlockState now = c.getBlockState(bp);
 			boolean pt = Placed.record(c, x, y, z) != null;
 			boolean mech = o.mech;
-			Cls cls = mech && j.mechVol.contains(pos) ? Cls.SAME : classify(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech);
+			Cls cls = classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos));
 			if (lot != null) {
 				long[] a = j.lots.computeIfAbsent(lot, q -> new long[2]);
 				if (cls == Cls.PLAYER) {

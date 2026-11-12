@@ -16,6 +16,9 @@
 //                                      every file of the region's dir and the journal unchanged; two calls equal)
 //     nowrite   (lc-nowrite)           the write-nothing proof alone (the verifier's re-run): a fresh town, damaged, then landCheck x3 with
 //                                      the hash and file listings before and after each
+//     castle    (lc-castle)            (LCi) items 1 and 2 on gm_castle_13x7: the gate's states, a player's lane block, a mined piston,
+//                                      the wall's and a tower's cells (tools/lib/gate6dlc-2.mjs)
+//     survival  (lc-survival)          (LCi) item 3 on rs02_walled: mid-build and fully built, a waiting cell, paid blocks, a lot cell
 //     report                            REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6d-lc/<step>.json in the main checkout (GATE6DLC_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -132,7 +135,10 @@ async function partsOracle(ir, snapshot, gy) {
   const { Palette } = await imp('lib/region/vworld.mjs');
   const C = R.compileIR(ir);
   const pal = new Palette();
-  const exp = new Map(snapshot);
+  // (LCi) `snapshot`: a Map of the box, or a getter (a decoded dump's lookup); `exp` holds the written cells over it
+  const base = typeof snapshot === 'function' ? snapshot : (k) => snapshot.get(k);
+  const exp = typeof snapshot === 'function' ? new Map() : new Map(snapshot);
+  const at = (k) => (exp.has(k) ? exp.get(k) : base(k));
   const ours = new Set();
   const part = new Map();
   const air = 'minecraft:air';
@@ -143,7 +149,7 @@ async function partsOracle(ir, snapshot, gy) {
     const cells = unpack(e.payload).cells;
     cells.forEach((c, i) => {
       const k = `${c.x},${c.y},${c.z}`;
-      const cur = pal.of(exp.get(k) ?? air);
+      const cur = pal.of(at(k) ?? air);
       let ok;
       switch (c.cond) {
         case 1: ok = pal.natural[cur] && !pal.air[cur] && !pal.fluid[cur] && pal.solid[cur]; break;
@@ -151,7 +157,7 @@ async function partsOracle(ir, snapshot, gy) {
         case 3: ok = ours.has(k) || pal.natural[cur]; break;
         default: ok = pal.natural[cur];
       }
-      if (!ok || norm(exp.get(k) ?? air) === norm(c.state)) return;
+      if (!ok || norm(at(k) ?? air) === norm(c.state)) return;
       exp.set(k, norm(c.state));
       ours.add(k);
       part.set(k, String(C.parts[C.ops[e.cellOps[i]].part].id));
@@ -457,9 +463,16 @@ steps.nowrite = async () => {
   return { reports: r.map(strip) };
 };
 
+// ------------------------------------------------------------------ (LCi) castle (lc-castle) and survival (lc-survival): tools/lib/gate6dlc-2.mjs
+
+{
+  const { registerLC2 } = await import('./lib/gate6dlc-2.mjs');
+  await registerLC2(steps, { L, call, check, cmd, log, OUT, json, imp, norm, idOf, AIRS, partsOracle, landCheck, noWrite, strip, listing, listDiff, spendZero, ensure });
+}
+
 steps.report = async () => {
   const lines = ['# Slice 6d LC gate', ''];
-  for (const s of ['unit', 'ingame', 'nowrite']) {
+  for (const s of ['unit', 'ingame', 'nowrite', 'castle', 'survival']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
