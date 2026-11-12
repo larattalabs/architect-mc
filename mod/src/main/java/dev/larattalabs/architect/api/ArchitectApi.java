@@ -218,6 +218,13 @@ public interface ArchitectApi {
 	 * {@link Survey#site} and {@link Regions#affordances} work. (7b DS, since 1.53.0) {@code "siteDesign"} is advertised when the helper
 	 * designs into sites (its {@code site.design}): {@link DesignRequest#site()} on a design, a group item or an estimate,
 	 * {@link Designs#siteVariant}, SITE entries following their source, and the estimate kind {@link Estimate.Kind#SITE}.
+	 * (7c, since NEXT) Names reserved for phase 7c (composition), advertised only by the slice that makes each work, never by the
+	 * foundation (docs/CONTRACT.md "Phase 7c" §2): {@code "bigForms"} (BF: form.hollow_mountain, form.crater, form.floating_island),
+	 * {@code "hiddenRooms"} (HR: form.hidden_room and the artifact's secrets), {@code "suspendedBuilds"} (US: rule.suspended),
+	 * {@code "aqueduct"} (AQ: channel.aqueduct), {@code "regionM15"} (RM), {@code "styleFormat3"} (SF), {@code "scenarioTemplates"}
+	 * (TC), {@code "compose"} (CO: {@link Regions#compose}), {@code "programAuthoring"} (AU: {@link Regions#authorProgram}),
+	 * {@code "shapePromotion"} (PM), {@code "composites"} (CM-b: {@link CompositeInfo}) and {@code "placeConnector"} (CX:
+	 * {@link Sites#placeConnector}). {@link Regions#planCatalogue(Set)} has no feature name: it works from API NEXT on.
 	 */
 	Set<String> features();
 }

@@ -499,4 +499,13 @@ public interface Sites {
 	default Optional<String> adoptedSite(String buildId) {
 		throw new UnsupportedOperationException("Sites.adoptedSite needs Architect API 1.26.0");
 	}
+
+	/**
+	 * (7c) Places a single connector outside any region (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1): a 7a connector (rope
+	 * bridge, ladder, catwalk, rock stair, spiral) between two marked points, or from a site house's port to ground, as one site group.
+	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since NEXT.
+	 */
+	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
+		throw new UnsupportedOperationException("Sites.placeConnector needs Architect API NEXT (slice CX)");
+	}
 }

@@ -51,7 +51,8 @@ class ApiLPTest {
 		assertFalse(ApiRules.features(1, List.of("region.link")).contains("linkPass"));
 		assertFalse(ApiRules.features(2, List.of("region.plan", "region.siteLots")).contains("linkPass"));
 		Reason[] all = Reason.values();
-		assertEquals(Reason.NO_LINK, all[all.length - 1], "NO_LINK is appended last (7bF)");
+		assertEquals(Reason.SITE_UNFIT.ordinal() + 1, Reason.NO_LINK.ordinal(), "NO_LINK is 7bF's last; 7c appends after it");
+		assertTrue(all.length - 1 >= Reason.NO_LINK.ordinal());
 	}
 
 	@Test

@@ -112,6 +112,12 @@ package dev.larattalabs.architect.api;
  * {@code fit:wrap_trunk}), never free text only. Fall back to a paid adaptation or an original.</li>
  * <li>{@code NO_LINK} (7b, since 1.53.0): {@link Regions#realiseApproved} of a plan with site lots: a link can't reach a design's port;
  * checked before any write, so nothing was placed. {@link ArchitectRefused#detail()} is {@code {lot, port}} as JSON.</li>
+ * <li>{@code JOINT_MISMATCH} (7c, since NEXT): placing a composite entry ({@link CompositeInfo}): a joint is unmatched (a joint port
+ * with no partner) or mismatched (not the same cell boundary, not opposite facings, or another width or height); the message names the
+ * module and the port. Nothing is placed. Answered from slice CM-b.</li>
+ * <li>{@code AUTHORED_STALE} (7c, since NEXT): an approved artifact names an authored program ({@code program.authored {id, sha}})
+ * whose installed source no longer has the approved sha; {@link ArchitectRefused#detail()} is the program id. Answered from slice
+ * AU.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -138,5 +144,7 @@ public enum Reason {
 	// NEXT (6d slice GR): a growth with no lot that fits (the message names the kind: frontage, street, claim, held, body, layout)
 	NO_ROOM,
 	// NEXT (7b foundation): the site-aware design reasons, in the contract's order
-	SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK
+	SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK,
+	// NEXT (7c foundation): composition's reasons, in the contract's order
+	JOINT_MISMATCH, AUTHORED_STALE
 }
