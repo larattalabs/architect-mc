@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderStructure } from '../render.mjs';
-import { Site } from '../lib/site.mjs';
+import { siteFixture } from '../lib/siteFixture.mjs';
 import { importDesign, SITE_DESIGNS } from '../build.mjs';
 import { listSiteDesigns } from './examples.mjs';
 
@@ -18,7 +18,7 @@ const out = i > 0 ? path.resolve(process.argv[i + 1]) : fs.mkdtempSync(path.join
 const renders = {};
 for (const id of listSiteDesigns().sort()) {
   const mod = await importDesign(id, SITE_DESIGNS);
-  const r = renderStructure(path.join(KIT, 'examples', id, `${id}.nbt`), { out, site: Site.fixture(mod.exampleSite), views: ['composite', 'section'] });
+  const r = renderStructure(path.join(KIT, 'examples', id, `${id}.nbt`), { out, site: siteFixture(mod.exampleSite), views: ['composite', 'section'] });
   for (const v of ['composite', 'section']) renders[`${id}.${v}`] = crypto.createHash('sha256').update(fs.readFileSync(r.files[v])).digest('hex');
 }
 const sorted = Object.fromEntries(Object.entries(renders).sort(([a], [b]) => (a < b ? -1 : 1)));

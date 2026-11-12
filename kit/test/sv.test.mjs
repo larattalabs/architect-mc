@@ -12,6 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Site, compositeStructure, turnFacing } from '../lib/site.mjs';
+import { siteFixture } from '../lib/siteFixture.mjs';
 import { Blueprint, PALETTES, rolesOfPalette } from '../lib/kit.mjs';
 import { encodeArvx, VC } from '../lib/region/volume.mjs';
 import { gzipPinned, sha256Hex } from '../lib/region/pack.mjs';
@@ -37,7 +38,7 @@ const EXAMPLES = { fit_on_pad: 'grove', fit_carve_into: 'tunnel_hill', fit_attac
 
 test('Site: the six fixtures load in their own frame (the lot is the template box; the window reaches the margin)', () => {
   for (const id of Object.values(EXAMPLES)) {
-    const s = Site.fixture(id);
+    const s = siteFixture(id);
     const fx = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'site', id, 'site.json'), 'utf8'));
     assert.deepEqual([s.size.x, s.size.y, s.size.z], fx.maxSize, id);
     assert.equal(s.fit, fx.fit);
@@ -55,7 +56,7 @@ test('Site: refuses a volume that is not the spec\'s, and a frame whose origin i
   const moved = structuredClone(spec);
   moved.frame.origin[0] += 1;
   assert.throws(() => new Site(fs.readFileSync(path.join(dir, 'grove', 'volume.bin')), moved), /minimum corner/);
-  assert.throws(() => Site.fixture('nope'), /no site fixture/);
+  assert.throws(() => siteFixture('nope'), /no site fixture/);
 });
 
 /** A small synthetic site with a rotated frame: a 5x3x7 lot (world), margin 8, one ROCK marker per lot corner column. */
@@ -102,7 +103,7 @@ test('Site: rotated frames turn as the template does (size swaps, design and wor
 });
 
 test('Site: the shapes a design reads (faces, the surface, the ceiling, the trunk, ledges, ports, hang points)', () => {
-  const cliff = Site.fixture('cliff_face');
+  const cliff = siteFixture('cliff_face');
   assert.deepEqual([cliff.face('south').at, cliff.face('south').y0, cliff.face('south').y1], [1, 0, 18]);
   assert.equal(cliff.surface(7, 1), 18);
   assert.equal(cliff.surface(7, 6), -4);
@@ -110,16 +111,16 @@ test('Site: the shapes a design reads (faces, the surface, the ceiling, the trun
   assert.deepEqual(cliff.portHint('walk_top'), [7, 19, 1]);
   assert.throws(() => cliff.port('w'), /no port "w"/);
   assert.ok(cliff.ledges()[0].y === 19);
-  const rift = Site.fixture('rift_site');
+  const rift = siteFixture('rift_site');
   assert.deepEqual([rift.face('east').at, rift.face('west').at], [2, 12]);
   assert.throws(() => rift.trunk(), /no trunk/);
-  const tr = Site.fixture('trunk').trunk();
+  const tr = siteFixture('trunk').trunk();
   assert.deepEqual([tr.cx, tr.cz, tr.y0, tr.y1, tr.radiusAt(5), tr.radiusAt(40)], [8, 8, 0, 19, 2, -1]);
-  const over = Site.fixture('overhang');
+  const over = siteFixture('overhang');
   assert.deepEqual(over.hangPoints(), [[2, 14, 3], [13, 14, 3], [2, 14, 8], [13, 14, 8]]);
   assert.equal(over.ceiling(5, 5), 14);
   assert.equal(over.port('down').name, 'hatch');
-  const hill = Site.fixture('tunnel_hill');
+  const hill = siteFixture('tunnel_hill');
   assert.equal(hill.face('south').at, 14);
   assert.equal(hill.cellsOf('ROCK').length + hill.cellsOf(['AIR', 'SOIL']).length, 16 * 12 * 16);
   assert.throws(() => hill.cellsOf('STONE'), /unknown class/);
@@ -128,7 +129,7 @@ test('Site: the shapes a design reads (faces, the surface, the ceiling, the trun
 // ---------------------------------------------------------------- Blueprint: fit, site, keep
 
 test('Blueprint: a site-bound design is the lot box in the site\'s frame; keep cells are never written; the sidecar records fit, site and keep', () => {
-  const site = Site.fixture('trunk');
+  const site = siteFixture('trunk');
   const bp = new Blueprint({ id: 'sv_t', type: 'custom', site, palette: PALETTES.rustic });
   assert.deepEqual(bp.size, site.size);
   assert.equal(bp.fit, 'wrap_trunk');
@@ -164,7 +165,7 @@ test('Blueprint: a site-bound design is the lot box in the site\'s frame; keep c
 });
 
 test('helpers: beamInto ends 1 cell inside the solid; carveRoom carves only the solid and lines soil; stilts stop on the site', () => {
-  const rift = Site.fixture('rift_site');
+  const rift = siteFixture('rift_site');
   const bp = new Blueprint({ id: 'sv_h', type: 'custom', site: rift, palette: PALETTES.rustic });
   const b = bp.beamInto(7, 1, 7, 'west');
   assert.deepEqual(b.end, [2, 1, 7]);
@@ -173,7 +174,7 @@ test('helpers: beamInto ends 1 cell inside the solid; carveRoom carves only the 
   assert.throws(() => bp.beamInto(7, 8, 7, 'north'), /leaves the template/);
   const br = bp.bracket(3, 0, 5, 'east', { len: 2 });
   assert.equal(br.bears, 2, 'the post bears on two rim cells');
-  const cliff = Site.fixture('cliff_face');
+  const cliff = siteFixture('cliff_face');
   const h = new Blueprint({ id: 'sv_c', type: 'custom', site: cliff, palette: PALETTES.rustic });
   // a box cut into the cliff just under its soil cap (rock up to row 16, soil on rows 17-18): carved where solid (and the open cells in
   // front left alone), the soil over it lined, the rock round it left
@@ -183,7 +184,7 @@ test('helpers: beamInto ends 1 cell inside the solid; carveRoom carves only the 
   for (let x = 4; x <= 6; x++) assert.equal(h.nameAt(x, 17, 1), PALETTES.rustic.foundation, 'the soil over the room is lined');
   assert.equal(h.get(5, 15, 2), null, 'an open cell in the box is not written');
   assert.equal(h.get(3, 15, 1), null, 'the rock beside it stays');
-  const grove = Site.fixture('grove');
+  const grove = siteFixture('grove');
   const g = new Blueprint({ id: 'sv_s', type: 'custom', site: grove, palette: PALETTES.rustic });
   const posts = g.stilts([[6, 12], [6, 3]], 4);
   assert.deepEqual(posts.map((p) => [p.y0, p.footing]), [[0, 'box'], [2, 'site']], 'through the pond to the floor row; on the bank to the soil');
@@ -231,14 +232,14 @@ test('the six fit examples: one per fit, each built into its fixture, clean but 
     const sc = JSON.parse(fs.readFileSync(path.join(KIT, 'examples', id, `${id}.blueprint.json`), 'utf8'));
     assert.equal(sc.fit, mod.fit);
     assert.deepEqual(siteSpecProblems(sc.site), []);
-    assert.equal(sc.site.volumeSha, Site.fixture(fx).sha);
+    assert.equal(sc.site.volumeSha, siteFixture(fx).sha);
     assert.ok(sc.interior && sc.anchors.entrance && sc.anchors.spawn, `${id}: the bundled library needs an interior, an entrance and a spawn`);
   }
 });
 
 test('the six fit examples meet their sites on the composite (no keep cell written, every port met, every block connected to the site)', async () => {
   for (const [id, fx] of Object.entries(EXAMPLES)) {
-    const site = Site.fixture(fx);
+    const site = siteFixture(fx);
     const r = await built(id);
     const s = readStructure(path.join(tmp, 'ex', id, `${id}.nbt`));
     const sc = JSON.parse(fs.readFileSync(path.join(tmp, 'ex', id, `${id}.blueprint.json`), 'utf8'));
@@ -313,7 +314,7 @@ test('the six fit examples are themed: every block traces to a role of the palet
   const palettes = [undefined, { bible: builtinBible('fortress') }, { bible: builtinBible('cherry') }];
   for (const [id, fx] of Object.entries(EXAMPLES)) {
     for (const palette of palettes) {
-      const bp = await loadDesign(id, { palette, dir: SITE_DESIGNS, site: Site.fixture(fx) });
+      const bp = await loadDesign(id, { palette, dir: SITE_DESIGNS, site: siteFixture(fx) });
       const roles = rolesOfPalette(bp.p);
       const bad = [...new Set([...bp.cells.values()].map((c) => c.state.name))].filter((n) => !traceRole(n, roles, { lightFixture: bp.p.light }));
       assert.deepEqual(bad, [], `${id} (${palette ? palette.bible.id : 'default'}): blocks no role gives`);
@@ -329,7 +330,7 @@ test('composite and section renders of the six examples are byte-stable (sha gol
   for (const [id, fx] of Object.entries(EXAMPLES)) {
     await built(id);
     const nbt = path.join(tmp, 'ex', id, `${id}.nbt`);
-    const a = renderStructure(nbt, { out: path.join(tmp, 'ra', id), site: Site.fixture(fx), views: ['composite', 'section'] });
+    const a = renderStructure(nbt, { out: path.join(tmp, 'ra', id), site: siteFixture(fx), views: ['composite', 'section'] });
     const b = renderStructure(nbt, { out: path.join(tmp, 'rb', id), sitePath: path.join(KIT, 'test', 'fixtures', 'site', fx, 'volume.bin'), views: ['composite', 'section'] });
     for (const v of ['composite', 'section']) {
       const x = fs.readFileSync(a.files[v]);
@@ -347,12 +348,12 @@ test('render: the site views need a site; slices --site shows the land the desig
   assert.throws(() => renderStructure(nbt, { out: path.join(tmp, 'rx'), views: ['section'] }), /need.? a site/);
   const s = readStructure(nbt);
   const sc = JSON.parse(fs.readFileSync(path.join(tmp, 'ex', 'fit_carve_into', 'fit_carve_into.blueprint.json'), 'utf8'));
-  const txt = slices(s, sc, { y: [2, 2], site: Site.fixture('tunnel_hill') });
+  const txt = slices(s, sc, { y: [2, 2], site: siteFixture('tunnel_hill') });
   assert.match(txt, /site \(carve_into, [0-9a-f]{12}; cells the design leaves\): #=rock/);
   const row = txt.split('\n').find((l) => /^ {2}8 /.test(l));
   assert.ok(row.startsWith('  8 ###'), row);
   assert.ok(!/[#:~T%]=minecraft/.test(txt), 'no block letter takes a site glyph');
-  const comp = compositeStructure(s, Site.fixture('tunnel_hill'));
+  const comp = compositeStructure(s, siteFixture('tunnel_hill'));
   assert.deepEqual(comp.structure.size, [32, 28, 32]);
   assert.deepEqual(comp.offset, [8, 8, 8]);
 });

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDesign, importDesign, listDesigns, DESIGNS, SITE_DESIGNS } from '../build.mjs';
 import { renderStructure } from '../render.mjs';
-import { Site } from '../lib/site.mjs';
+import { siteFixture } from '../lib/siteFixture.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, '../examples');
@@ -26,7 +26,7 @@ export async function buildExample(id, { out = path.join(OUT, id) } = {}) {
   const isSite = listSiteDesigns().includes(id);
   const dir = isSite ? SITE_DESIGNS : DESIGNS;
   const mod = await importDesign(id, dir);
-  const site = isSite ? Site.fixture(mod.exampleSite) : undefined;
+  const site = isSite ? siteFixture(mod.exampleSite) : undefined;
   const { result } = await buildDesign(id, { out, dir, site });
   fs.copyFileSync(path.join(dir, `${id}.mjs`), path.join(out, `${id}.mjs`));
   renderStructure(path.join(out, `${id}.nbt`), { out });

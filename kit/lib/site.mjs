@@ -12,16 +12,10 @@
 // the volume. Ports and keep-critical cells come from the spec: `SitePort.at` is in design cells (with a design-frame facing), the spec's
 // `keepCritical` in world cells (7bF reading 5), returned here in design cells.
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { decodeArvx, VOXEL_CLASSES } from './region/volume.mjs';
 import { rotateBlock } from './reserved.mjs';
 import { fitOf, SITE_MARGIN, SITE_ROTATIONS } from './siteFits.mjs';
 import { siteSpecProblems } from './siteSpec.mjs';
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-/** The six 7bF site fixtures (kit/test/fixtures/site/<id>/{volume.bin, site.json}). */
-export const SITE_FIXTURES = path.resolve(HERE, '..', 'test', 'fixtures', 'site');
 
 /** The classes a building can bear on: the land's own solids (rock, soil, loose, ice, snow) and a host trunk's logs. */
 export const SITE_SOLID = Object.freeze(['ROCK', 'SOIL', 'LOOSE', 'ICE', 'SNOW', 'LOG']);
@@ -93,14 +87,6 @@ export class Site {
   /** A Site from files: `volumePath` the ARVX file (gzip or raw), `lotPath` the site spec JSON (a bare spec or a fixture's site.json). */
   static fromFiles(volumePath, lotPath) {
     return new Site(fs.readFileSync(volumePath), JSON.parse(fs.readFileSync(lotPath, 'utf8')));
-  }
-
-  /** One of the six 7bF fixtures by id (cliff_face, tunnel_hill, rift_site, grove, overhang, trunk). */
-  static fixture(id) {
-    if (!/^[a-z0-9_]+$/.test(id)) throw new Error(`Site.fixture: bad id ${JSON.stringify(id)}`);
-    const dir = path.join(SITE_FIXTURES, id);
-    if (!fs.existsSync(path.join(dir, 'site.json'))) throw new Error(`Site.fixture: no site fixture '${id}' (${dir})`);
-    return Site.fromFiles(path.join(dir, 'volume.bin'), path.join(dir, 'site.json'));
   }
 
   // ------------------------------------------------------------------ frames
