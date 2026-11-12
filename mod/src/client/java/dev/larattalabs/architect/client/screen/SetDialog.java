@@ -176,7 +176,7 @@ final class SetDialog {
 		int y = body(g, f, errors, x, y0, iw, mx, my);
 		g.disableScissor();
 		s.clipControls(null);
-		contentH = y - y0 + 4;
+		contentH = y - y0 + 8;
 		s.setScrollArea(x, by, w - 8, bh, contentH, 24);
 		s.scrollbarAt(g, x + w - 6, by, bh);
 		g.fill(x, bottom + 1, x + w, bottom + 2, UiStyle.rule());
@@ -221,9 +221,10 @@ final class SetDialog {
 			g.text(font, TextUtil.ellipsize(font, be, fw), fx, y, UiBits.errorText(), false);
 			y += 12;
 		} else if (picked != null) {
-			int sw = RolesSwatch.draw(g, picked, fx, y - 1, Math.min(180, fw));
-			muted(g, "every building uses " + picked.name() + "'s roles and look", fx + sw + 6, y, fw - sw - 6);
-			y += 12;
+			// RolesSwatch draws 16 px item icons, 17 px apart, and returns how many
+			int sw = RolesSwatch.draw(g, picked, fx, y, Math.min(180, fw)) * 17;
+			muted(g, "every building uses " + picked.name() + "'s roles and look", fx + sw + 6, y + 4, fw - sw - 6);
+			y += 18;
 		}
 		y += 4;
 		// ---- Buildings
@@ -308,7 +309,7 @@ final class SetDialog {
 		boolean armed = filled && f.items.size() > 1 && removeArm.armed(key, net.minecraft.util.Util.getMillis());
 		if (!armed) {
 			s.textField(g, Focus.SET_NOTES, i, v[2], it.notes, notesX, y, notesW, new TextFieldView.Style(null, 0, rowErr != null ? rowErr
-				: "anything the designer should know", null, null, 0, 1));
+				: "notes for the designer", null, null, 0, 1));
 		}
 		if (filled && f.items.size() > 1) {
 			// armed, it takes the notes' place so "Press again to remove (N)" reads whole
@@ -516,9 +517,10 @@ final class SetDialog {
 			bad = true;
 		} else {
 			Bible picked = f.bible == null ? null : SetFeature.bible(f.bible).orElse(null);
-			status = "Ready: " + f.items.size() + " buildings with " + (picked == null ? f.bible : picked.name()) + ", " + f.concurrency + " at a time"
-				+ (f.budgetUsd == null ? "" : String.format(Locale.ROOT, ", at most $%.0f", f.budgetUsd)) + (f.draft().massingFirst()
-					? "; massings first, you approve each shape" : "") + ".";
+			// short enough to read whole at GUI scale 4
+			status = "Ready: " + f.items.size() + " buildings, " + (picked == null ? f.bible : picked.name()) + ", " + f.concurrency + " at once"
+				+ (f.budgetUsd == null ? "" : String.format(Locale.ROOT, ", max $%.0f", f.budgetUsd)) + (f.draft().massingFirst()
+					? "; you approve each massing" : "") + ".";
 			bad = false;
 		}
 		s.statusLineAt(g, status, bad, x, footerY - 13, w);
