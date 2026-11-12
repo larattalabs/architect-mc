@@ -17,7 +17,7 @@
 //                           (a natural trunk mined inside the house's box) is put back by Remove
 //     crash    (pl-crash)   kill points K1, K2, K4, K2+save, K4+save during a site placement (KEEP over a natural trunk); after the restart the
 //                           volume is either exactly as before (no site) or the site stands, keeps the trunk and its Remove is exact (K4 without
-//                           a save: the journal wins, verify recorded); and K5, K8, K6, K8+save during the removal of a host cell site under the
+//                           a save: the journal wins, verify recorded); and K5, K8, K6, K7, K6+save during the removal of a host cell site under the
 //                           standing house (the hand-down): the house keeps the trunk inside its box, removing what stands is E-flat 0
 //     report                REPORT.md over the step JSONs
 //
@@ -339,6 +339,7 @@ steps.ingame = async () => {
   await call('dev.pl.reload', {}, 60_000);
   const plain = await call('dev.pl.place', { blueprint: 'pl_pad_cottage', origin: po }, 300_000);
   check(plain.placed, `on_pad: the plain placement placed ${plain.site} (${(plain.notes ?? []).join('; ')})`, plain);
+  await L.settle(3000); // (the world's own scheduled ticks first: a path under the approach's slab fades to dirt a tick later)
   const h1 = await hashOf(area);
   const c1 = await cellsOf(area);
   await call('dev.pl.remove', { site: plain.site }, 600_000);
@@ -349,6 +350,7 @@ steps.ingame = async () => {
   const pw = siteWire({ sha: pv.sha, vol: pvol, fit: 'on_pad', origin: po });
   const viaSite = await call('dev.pl.place', { blueprint: 'pl_pad_cottage', site: pw }, 300_000);
   check(viaSite.placed, `on_pad: the placement with an on_pad site placed ${viaSite.site}`, viaSite);
+  await L.settle(3000);
   const h2 = await hashOf(area);
   const c2 = await cellsOf(area);
   const pd = diff(c1, c2);
@@ -433,7 +435,7 @@ steps.undo = async () => {
     const cut = s.keep[4];
     let how = 'dev.site.mine';
     await cmd('/gamemode survival'); // (a spectator can't break blocks)
-    const mined = await call('dev.site.mine', { pos: cut, pickup: false }).catch((err) => ({ error: String(err?.message ?? err) }));
+    const mined = await call('dev.site.mine', { pos: cut, pickup: true }).catch((err) => ({ error: String(err?.message ?? err) }));
     await cmd('/gamemode spectator');
     if (mined.error || !mined.mined) { how = `/setblock (dev.site.mine: ${String(mined.error ?? json(mined)).slice(0, 120)})`; await cmd(`/setblock ${cut[0]} ${cut[1]} ${cut[2]} minecraft:air`); }
     const gone = await cellsOf([cut[0], cut[1], cut[2], cut[0], cut[1], cut[2]]);
@@ -512,9 +514,9 @@ steps.crash = async () => {
     await L.leaveWorld();
   }
   // the removal side with keep cells under BOX: the host's cell site removed under the standing house (its hand-down to the house is
-  // in the undo's R2 commit), killed at K5 (before R2), K8 (inside R2), K6 (R2 to R3) and K8+save; after the restart the house still
+  // in the undo's R2 commit), killed at K5 (before R2), K8 (inside R2), K6 (R2 to R3), K7 (during R4) and K6+save (K8 is inside a commit: no +save form); after the restart the house still
   // holds the trunk inside its box, and removing what stands (the house, then the cell site if it stands) is E-flat 0
-  for (const point of ['K5', 'K8', 'K6', 'K8+save']) {
+  for (const point of ['K5', 'K8', 'K6', 'K7', 'K6+save']) {
     const world = `G6B PL Crash rm ${point.replace('+', '_')}`;
     await freshFlat(world);
     const gy = await groundY();
