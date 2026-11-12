@@ -1019,6 +1019,12 @@ public final class Batches {
 				fail(b, i, Reason.OTHER, "Site lot " + i.key.substring(4) + ": the plan's site is malformed: " + e.getMessage());
 				return;
 			}
+			// a site lot item (its ext carries the binding) whose site can't be read again (its region not live): fail closed, never a pad
+			if (site == null && RegionItems.isRegion(b) && i.ext != null && i.ext.has(dev.larattalabs.architect.api.SiteBinding.EXT_KEY)) {
+				fail(b, i, Reason.OTHER, "Site lot " + (i.key != null && i.key.startsWith("lot:") ? i.key.substring(4) : i.key)
+					+ ": its region's site can't be read (the region is not live): not placed");
+				return;
+			}
 			SiteFit.with(site, () -> {
 				tryStart0(server, b, i);
 				return null;
