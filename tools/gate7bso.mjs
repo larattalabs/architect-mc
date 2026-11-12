@@ -45,6 +45,9 @@ const FLAT = 'G6B Flat Base';
 /** The three survival gate houses (§5) and their fixtures. */
 const HOUSES = [['fit_attach_to_cliff', 'cliff_face'], ['fit_span', 'rift_site'], ['fit_suspend', 'overhang']];
 const EVERY = 100;
+/** (SO-b) Architect's cosmetic scaffolding block, and whether a tally holds any scaffolding item (vanilla's, or one of Architect's). */
+const SCAF = 'architect_mc:scaffold';
+const scafItems = (m) => (m?.['minecraft:scaffolding'] ?? 0) + (m?.['architect_mc:scaffold'] ?? 0);
 /** How far under the volume the scaffolding may reach (Builder.SCAFFOLD_MAX_HEIGHT plus the row under the box). */
 const BELOW = 26;
 
@@ -273,18 +276,18 @@ steps.survival = async () => {
     const pre = await cellsOf(ctx.area);
     const sa = await placeConstruction(ctx);
     if (!sa) continue;
-    const scafA = count(await cellsOf(ctx.area), 'scaffolding');
+    const scafA = count(await cellsOf(ctx.area), SCAF);
     const feedA = await hopperChain(sa);
     const intoA = {};
     const stA = await feedUntil(sa, feedA, intoA, (s) => s.state === 'built' || (s.built ?? 0) * 100 >= (s.queue ?? 1) * 30, { minutes: 15 });
-    const scafMid = count(await cellsOf(ctx.area), 'scaffolding');
+    const scafMid = count(await cellsOf(ctx.area), SCAF);
     const dA = await call('dev.site.deconstruct', { site: sa }, 120_000);
     await L.settle(3000);
     const backA = plus(await itemsNear(feedA.crate), await containerItems(feedA.chest), await containerItems(feedA.hop));
     const lostA = sub(intoA, backA);
     const feedKeys = new Set([feedA.hop, feedA.chest].map((c) => k3(...c)));
     const eA = diff(pre, await cellsOf(ctx.area), feedKeys);
-    check(dA.removed && Object.keys(lostA).length === 0 && !backA['minecraft:scaffolding'] && eA.n === 0,
+    check(dA.removed && Object.keys(lostA).length === 0 && !scafItems(backA) && eA.n === 0,
       `${id} a: deconstructed at ${stA?.built}/${stA?.queue} with ${scafMid} scaffolding cells standing: every item fed (${tot(intoA)}) back (refunds + the crate's stock), no scaffolding item, the land exact (E-flat 0)`,
       { lost: lostA, back: tot(backA), eflat: eA.first, tally: dA.tally });
     r.partial = { built: stA?.built, queue: stA?.queue, scaffold: scafA, fed: tot(intoA), eflat: eA.n, lost: lostA };
@@ -304,10 +307,10 @@ steps.survival = async () => {
     const pd = Math.max(Math.abs(cr[0] - ctx.portWorld[0]), Math.abs(cr[2] - ctx.portWorld[2]));
     const cells0 = await cellsOf(ctx.area);
     const under = cells0.get(k3(cr[0], cr[1] - 1, cr[2]));
-    check(!inBox && pd <= 4 && idOf(under) !== 'air' && idOf(under) !== 'scaffolding',
+    check(!inBox && pd <= 4 && idOf(under) !== 'air' && idOf(under) !== SCAF,
       `${id}: the crate ${json(cr)} at the first port's (${ctx.port0.name}, ${ctx.port0.facing}) landing: outside the box, ${pd} from the port, on ${idOf(under)}`, { crate: cr, port: ctx.portWorld });
     const scaf = await call('dev.so.scaffold', { site: s }, 30_000);
-    const scafCells = count(cells0, 'scaffolding');
+    const scafCells = count(cells0, SCAF);
     const e0 = scaf.entries ?? [];
     const okScaf = scafCells === 0 ? e0.length === 0 : e0.length === 1 && e0[0].policy === 'CELL' && e0[0].status === 'ACTIVE' && e0[0].cells === scafCells;
     check(okScaf, `${id}: scaffolding ${scafCells} cells, ${scafCells ? 'one architect:scaffold CELL entry of as many cells in the site\'s group' : 'none (no column finds ground within reach)'}`, e0);
@@ -351,12 +354,12 @@ steps.survival = async () => {
     await L.settle(2000);
     const built = await cellsOf(ctx.area);
     const scafAfter = (await call('dev.so.scaffold', { site: s }, 30_000)).entries ?? [];
-    check(count(built, 'scaffolding') === 0 && !scafAfter.some((x) => x.status === 'ACTIVE'),
-      `${id}: built: the scaffolding came down (${count(built, 'scaffolding')} cells left) and its entry is released (${scafAfter.length} left)`, scafAfter);
+    check(count(built, SCAF) === 0 && !scafAfter.some((x) => x.status === 'ACTIVE'),
+      `${id}: built: the scaffolding came down (${count(built, SCAF)} cells left) and its entry is released (${scafAfter.length} left)`, scafAfter);
     const bom = st0.bom ?? {};
     const left = plus(await itemsNear(feed.crate), await containerItems(feed.chest), await containerItems(feed.hop));
     const book = sub(into, plus(bom, left));
-    check(Object.keys(book).length === 0 && !left['minecraft:scaffolding'], `${id}: items in = items out: fed ${tot(into)} = paid standing ${tot(bom)} + crate leftovers and the chain's ${tot(left)}`, { book });
+    check(Object.keys(book).length === 0 && !scafItems(left), `${id}: items in = items out: fed ${tot(into)} = paid standing ${tot(bom)} + crate leftovers and the chain's ${tot(left)}`, { book });
     // c) identical to its instant placement, after the deconstruct (all back, land exact)
     const d = await call('dev.site.deconstruct', { site: s }, 120_000);
     await L.settle(3000);
@@ -386,8 +389,84 @@ steps.survival = async () => {
     await call('dev.so.watch', { every: 0 }, 30_000);
     await L.leaveWorld();
   }
+  // (SO-b) the scaffolding never becomes items: mined, pushed, blown up
+  {
+    const ctx = await siteCtx(...HOUSES[0]);
+    await noDupe(ctx, (out[HOUSES[0][0]] ??= {}));
+  }
   return out;
 };
+
+/**
+ * (SO-b) The scaffolding gives nothing back, however it goes: on the cliff house under construction (nothing fed), a player mines one
+ * scaffold cell (no drop, the cell air), a piston pushes another (it stays: immovable), TNT blows up a third (no scaffolding item);
+ * then the deconstruct: no scaffolding item anywhere near.
+ */
+async function noDupe(ctx, out) {
+  await freshHouse(ctx, `G6B SO ${ctx.id} d`);
+  const s = await placeConstruction(ctx);
+  if (!s) return;
+  const cells = await cellsOf(ctx.area);
+  const scaf = [...cells].filter(([, v]) => idOf(v) === SCAF).map(([k]) => k.split(',').map(Number));
+  check(scaf.length > 0, `${ctx.id} d: ${scaf.length} scaffold cells (${SCAF}) stand under the house`);
+  if (!scaf.length) return;
+  const st = (c) => idOf(cells.get(k3(...c)) ?? 'minecraft:air');
+  const open = (c) => ['air', 'cave_air'].includes(st(c));
+  const H = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // a piston beside one (an open cell beside it, and one beyond for the redstone block)
+  let push = null;
+  for (const c of scaf) {
+    for (const [dx, dz] of H) {
+      const p = [c[0] + dx, c[1], c[2] + dz];
+      const r = [c[0] + 2 * dx, c[1], c[2] + 2 * dz];
+      if (open(p) && open(r)) { push = { c, p, r, facing: dx === 1 ? 'west' : dx === -1 ? 'east' : dz === 1 ? 'north' : 'south' }; break; }
+    }
+    if (push) break;
+  }
+  const mineAt = scaf.find((c) => !push || k3(...c) !== k3(...push.c));
+  const boomAt = [...scaf].reverse().find((c) => k3(...c) !== k3(...mineAt) && (!push || k3(...c) !== k3(...push.c)));
+  // mined by hand
+  await cmd('/gamemode survival');
+  await cmd(`/tp @s ${mineAt[0] + 0.5} ${mineAt[1] + 1} ${mineAt[2] + 2.5}`);
+  const m = await call('dev.site.mine', { pos: mineAt, pickup: true }, 30_000);
+  await L.settle(1000);
+  const near1 = await itemsNear(mineAt, 6);
+  const after1 = await cellsOf([mineAt[0], mineAt[1], mineAt[2], mineAt[0], mineAt[1], mineAt[2]]);
+  check(m.mined && (m.drops ?? []).length === 0 && !scafItems(near1) && idOf(after1.get(k3(...mineAt))) === 'air',
+    `${ctx.id} d: a scaffold cell mined by hand drops nothing (no item picked up or lying near) and is gone`, { m, near1 });
+  // pushed by a piston
+  if (push) {
+    await cmd(`/setblock ${push.p.join(' ')} minecraft:piston[facing=${push.facing}]`);
+    await cmd(`/setblock ${push.r.join(' ')} minecraft:redstone_block`);
+    await L.settle(1500);
+    const pc = await cellsOf([push.c[0], push.c[1], push.c[2], push.c[0], push.c[1], push.c[2]]);
+    const pp = await cellsOf([push.p[0], push.p[1], push.p[2], push.p[0], push.p[1], push.p[2]]);
+    const near2 = await itemsNear(push.c, 6);
+    check(idOf(pc.get(k3(...push.c))) === SCAF && /extended=false/.test(pp.get(k3(...push.p)) ?? '') && !scafItems(near2),
+      `${ctx.id} d: a powered piston against a scaffold cell can't move it (it stands, the piston stays retracted, no item)`, { cell: pc.get(k3(...push.c)), piston: pp.get(k3(...push.p)) });
+    await cmd(`/setblock ${push.r.join(' ')} minecraft:air`);
+    await cmd(`/setblock ${push.p.join(' ')} minecraft:air`);
+  } else {
+    check(false, `${ctx.id} d: no scaffold cell with room for a piston beside it`);
+  }
+  // blown up
+  await L.tp(ctx.o[0] + 8, ctx.volBox[4] + 10, ctx.o[2] - 16);
+  await cmd(`/summon minecraft:tnt ${boomAt[0] + 0.5} ${boomAt[1]} ${boomAt[2] + 0.5} {fuse:1}`);
+  await L.settle(3000);
+  const ab = await cellsOf([boomAt[0], boomAt[1], boomAt[2], boomAt[0], boomAt[1], boomAt[2]]);
+  const near3 = await itemsNear(boomAt, 10);
+  check(idOf(ab.get(k3(...boomAt))) !== SCAF && !scafItems(near3), `${ctx.id} d: TNT at a scaffold cell destroys it and drops no scaffolding item (${tot(near3)} other items from the blast)`, { cell: ab.get(k3(...boomAt)), near3 });
+  // the deconstruct: still no scaffolding item anywhere near
+  const d = await call('dev.site.deconstruct', { site: s, force: true }, 120_000);
+  await L.settle(3000);
+  const v = ctx.volBox;
+  const all = await itemsNear([Math.floor((v[0] + v[3]) / 2), Math.floor((v[1] + v[4]) / 2), Math.floor((v[2] + v[5]) / 2)], 40);
+  const left = count(await cellsOf(ctx.area), SCAF);
+  check(d.removed && !scafItems(all) && left === 0, `${ctx.id} d: deconstructed: no scaffolding item over the whole site (${tot(all)} items lie there, none scaffolding) and no scaffold cell left`, { all, left });
+  out.noDupe = { scaffold: scaf.length, mined: mineAt, pushed: push?.c ?? null, blown: boomAt, items: all };
+  await call('dev.survival.set', { on: false }, 30_000);
+  await L.leaveWorld();
+}
 
 steps.report = async () => {
   const files = fs.readdirSync(OUT).filter((f) => /^survival\.json$/.test(f));

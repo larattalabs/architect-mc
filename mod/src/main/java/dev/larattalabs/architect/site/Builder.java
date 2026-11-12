@@ -1081,10 +1081,10 @@ public final class Builder {
 		return out;
 	}
 
-	/** (7b slice SO) A world block a site-aware building may hang its first cells on: site-solid, never scaffolding or a crate. */
+	/** (7b slice SO) A world block a site-aware building may hang its first cells on: site-solid, never scaffolding (vanilla or Architect's) or a crate. */
 	static boolean anchorState(BlockState st) {
-		return SiteFit.siteSolid(TerrainFit.flags(st)) && !st.is(Blocks.SCAFFOLDING)
-			&& !(st.getBlock() instanceof dev.larattalabs.architect.survival.CrateBlock);
+		return !isScaffold(st) && !(st.getBlock() instanceof dev.larattalabs.architect.survival.CrateBlock) && !st.is(Blocks.SCAFFOLDING)
+			&& SiteFit.siteSolid(TerrainFit.flags(st));
 	}
 
 	/** (7b slice SO) A block that falls when nothing is under it (sand, gravel, concrete powder, anvils) or scaffolding. */
@@ -1134,15 +1134,25 @@ public final class Builder {
 		}
 		try {
 			Site rec = Sites.get(p.id());
-			SiteJournal.scaffoldEntry(t, level, p.id(), rec == null ? null : rec.group(), p.scaffold(), WorldJournal.value(SCAFFOLD));
+			SiteJournal.scaffoldEntry(t, level, p.id(), rec == null ? null : rec.group(), p.scaffold(), WorldJournal.value(scaffoldState()));
 		} catch (Sites.SiteException e) {
 			err[0] = e;
 		}
 	}
 
-	/** (7b slice SO) A scaffolding block standing on a sturdy cell or on scaffolding below (vanilla's settled state of a column). */
-	static final BlockState SCAFFOLD = Blocks.SCAFFOLDING.defaultBlockState().setValue(net.minecraft.world.level.block.ScaffoldingBlock.DISTANCE, 0)
-		.setValue(net.minecraft.world.level.block.ScaffoldingBlock.BOTTOM, false);
+	/**
+	 * (7b slice SO-b) The scaffolding block: Architect's {@code architect_mc:scaffold} ({@link dev.larattalabs.architect.survival.ScaffoldBlock}:
+	 * vanilla scaffolding's look, no loot, immovable, never falls), so mining, an explosion or a piston never turns the free scaffolding into
+	 * items. A method, not a constant: the block registers with the mod (unit tests load Builder without it).
+	 */
+	static BlockState scaffoldState() {
+		return CrateBlocks.SCAFFOLD.defaultBlockState();
+	}
+
+	/** (7b slice SO-b) Whether a block is Architect's cosmetic scaffolding. */
+	static boolean isScaffold(BlockState st) {
+		return st.getBlock() instanceof dev.larattalabs.architect.survival.ScaffoldBlock;
+	}
 	/** (7b slice SO) Columns stand under every {@value}th bottom cell along x and z (world coordinates). */
 	static final int SCAFFOLD_SPACING = 3;
 	/** (7b slice SO) The tallest column; a column that finds no sturdy ground within it is left out. */
@@ -1153,7 +1163,7 @@ public final class Builder {
 	/** After P7: the scaffolding goes up (its entry is committed), bottom-up, with the cell sites' flags (no side effects, no drops). */
 	static void placeScaffold(ServerLevel level, ConvertPlan p) {
 		for (BlockPos q : p.scaffold()) {
-			dev.larattalabs.architect.placed.Placed.set(level, q, SCAFFOLD, Sites.CELL_FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, q, scaffoldState(), Sites.CELL_FLAGS);
 		}
 	}
 
@@ -2411,7 +2421,7 @@ public final class Builder {
 						continue; // a cell of the restore box no entry of the site recorded (between versions' boxes): not the site's
 					}
 					BlockState now = level.getBlockState(m);
-					if (qi0 < 0 && !scaffold.isEmpty() && scaffold.contains(m.asLong()) && now.is(Blocks.SCAFFOLDING)) {
+					if (qi0 < 0 && !scaffold.isEmpty() && scaffold.contains(m.asLong()) && isScaffold(now)) {
 						continue;
 					}
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
