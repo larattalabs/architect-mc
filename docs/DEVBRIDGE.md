@@ -398,6 +398,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   (`Sites.remove`, a site or a cell site), `dev.pl.reload {}` (the library), `dev.pl.record {site}` (the record's blueprint, boxes, ext
   and whether it is site-bound) and `dev.pl.move {site, by: [dx, dy, dz]}` (the internal move: refused for a site-bound placement). `site`
   is a `SiteSpec` in its wire form (`kit/schemas/site-spec.json`). Driven by `tools/gate7bpl.mjs`.
+- **2026-11-11 (7b slice SO):** new (`SliceSoDev`, generated headless too, TEST) `dev.so.watch {every?: 100}` (0: off; the records
+  cleared): a support-order construction site (a site-bound placement with a fit other than `on_pad`) records its built set each time its
+  built count crosses a multiple of `every`; `dev.so.snapshots {site}` -> `{every, bySupport?, queued?, built?, snapshots: [{built, cells:
+  [[x, y, z]...]}]}`; `dev.so.scaffold {site}` -> `{entries: [{id, policy, status, cells, group, box}]}` (the site's `architect:scaffold`
+  journal entries). Construction mode of a site placement is `dev.pl.place {..., mode: "construction"}`. Driven by `tools/gate7bso.mjs`.
 
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,

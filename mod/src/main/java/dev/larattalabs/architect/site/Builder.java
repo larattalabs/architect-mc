@@ -1621,6 +1621,9 @@ public final class Builder {
 			}
 			budget--;
 			placed++;
+			if (soWatchEvery > 0 && r.bySupport) {
+				soWatch(s.id(), r);
+			}
 		}
 		if (placed > 0) {
 			purse.changed();
@@ -1633,6 +1636,92 @@ public final class Builder {
 		if (s != null && r.built.cardinality() == r.size()) {
 			complete(srv, level, s, r, crate);
 		}
+	}
+
+	/**
+	 * (7b slice SO, TEST: {@code dev.so.watch}) Every how many built cells a support-order run records its built set (0: off), and the
+	 * records per site: [built count, then each built cell's {@link BlockPos#asLong}].
+	 */
+	static volatile int soWatchEvery;
+	static final Map<String, List<long[]>> SO_SNAPSHOTS = new ConcurrentHashMap<>();
+
+	/** Records the run's built set when its count crossed a multiple of {@link #soWatchEvery} since the last record. */
+	private static void soWatch(String id, Run r) {
+		int every = soWatchEvery;
+		int n = r.built.cardinality();
+		List<long[]> l = SO_SNAPSHOTS.computeIfAbsent(id, k -> java.util.Collections.synchronizedList(new ArrayList<>()));
+		long last = l.isEmpty() ? 0 : l.get(l.size() - 1)[0];
+		if (n / every <= last / every) {
+			return;
+		}
+		long[] snap = new long[n + 1];
+		snap[0] = n;
+		int k = 1;
+		for (int i = r.built.nextSetBit(0); i >= 0 && k <= n; i = r.built.nextSetBit(i + 1)) {
+			snap[k++] = r.pos(i).asLong();
+		}
+		l.add(snap);
+	}
+
+	/** (TEST) Turns the support-order watch on ({@code every} > 0) or off, clearing the records. */
+	public static void soWatch(int every) {
+		soWatchEvery = Math.max(0, every);
+		SO_SNAPSHOTS.clear();
+	}
+
+	/** (TEST) A site's watch records: {every, snapshots: [{built, cells: [[x,y,z]...]}]}, plus whether its run is in support order. */
+	public static JsonObject soSnapshots(MinecraftServer srv, String id) {
+		JsonObject o = new JsonObject();
+		o.addProperty("every", soWatchEvery);
+		Site s = Sites.get(id);
+		Run r = s == null || s.construction() == null || !s.building() ? null : RUNS.get(id);
+		if (r != null) {
+			o.addProperty("bySupport", r.bySupport);
+			o.addProperty("queued", r.size());
+			o.addProperty("built", r.built.cardinality());
+		}
+		JsonArray a = new JsonArray();
+		for (long[] snap : List.copyOf(SO_SNAPSHOTS.getOrDefault(id, List.of()))) {
+			JsonObject e = new JsonObject();
+			e.addProperty("built", snap[0]);
+			JsonArray cells = new JsonArray();
+			for (int k = 1; k < snap.length; k++) {
+				JsonArray c = new JsonArray();
+				c.add(BlockPos.getX(snap[k]));
+				c.add(BlockPos.getY(snap[k]));
+				c.add(BlockPos.getZ(snap[k]));
+				cells.add(c);
+			}
+			e.add("cells", cells);
+			a.add(e);
+		}
+		o.add("snapshots", a);
+		return o;
+	}
+
+	/** (TEST) A site's {@code architect:scaffold} entries: [{id, policy, status, cells, box}], active ones and released ones gone. */
+	public static JsonArray soScaffold(String id) {
+		JsonArray a = new JsonArray();
+		for (JournalStore.Meta m : SiteJournal.entries(id)) {
+			if (!m.kind().equals(WorldJournal.SCAFFOLD)) {
+				continue;
+			}
+			JsonObject e = new JsonObject();
+			e.addProperty("id", m.id());
+			e.addProperty("policy", m.policy().name());
+			e.addProperty("status", m.status().name());
+			e.addProperty("cells", m.cells());
+			e.addProperty("group", m.group());
+			if (m.box() != null) {
+				JsonArray b = new JsonArray();
+				for (int v : m.box()) {
+					b.add(v);
+				}
+				e.add("box", b);
+			}
+			a.add(e);
+		}
+		return a;
 	}
 
 	private static void pay(Ledger ledger, List<SurvivalItems.Cost> costs) {
