@@ -214,6 +214,8 @@ public interface ArchitectApi {
 	 * and a request carrying a {@link SiteSpec} is refused, until then): {@code "siteDesign"} (site-aware design and placement:
 	 * {@link DesignRequest#site()}, {@link PlaceRequest#site()}, fitToSite, siteVariant), {@code "siteSurvey"} (Survey.site and a
 	 * plan's affordances), {@code "siteLots"} ({@link LotSpec#site()}) and {@code "linkPass"} (links to design ports at realise).
+	 * (7b AF, since NEXT) {@code "siteSurvey"} is advertised when the helper has the site analysis (its {@code site.analyse}):
+	 * {@link Survey#site} and {@link Regions#affordances} work.
 	 */
 	Set<String> features();
 }

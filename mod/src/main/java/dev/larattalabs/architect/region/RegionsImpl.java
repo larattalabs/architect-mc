@@ -376,6 +376,19 @@ public final class RegionsImpl implements Regions {
 		}
 	}
 
+	/**
+	 * (7b AF) The plan's {@code affordances[]} (the program's r.affordances, from {@code region.planned}, kept in the plan record and so
+	 * across a world restart): empty for a plan with none, {@link Optional#empty()} for an unknown plan.
+	 */
+	@Override
+	public Optional<List<dev.larattalabs.architect.api.Affordance>> affordances(String planId) {
+		PlanRec p = planId == null ? null : planRec(planId);
+		if (p == null) {
+			return Optional.empty();
+		}
+		return Optional.of(List.copyOf(dev.larattalabs.architect.apiimpl.SiteAnalysis.affordances(p.planned().get("affordances"))));
+	}
+
 	// ------------------------------------------------------------------ plan
 
 	@Override

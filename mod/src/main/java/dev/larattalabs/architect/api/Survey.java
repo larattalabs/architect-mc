@@ -36,8 +36,12 @@ public interface Survey {
 	/**
 	 * (7b) A lot's site, sampled and analysed (docs/CONTRACT.md "Phase 7b" §2): the {@link #volume} of {@code lot} grown by 8 cells on
 	 * every side, frozen, its affordances found ({@link Affordance}) and, when the analysis finds one for {@code fit}, a proposed
-	 * {@link SiteFrame}. {@code load} as {@link #volume}. Built by slice AF (feature {@code "siteSurvey"}); until then it throws.
-	 * Since NEXT.
+	 * {@link SiteFrame}. {@code load} as {@link #volume}. Read only on the world: it writes no block (only the frozen volume file, as
+	 * {@link #volume}). The analysis runs in the helper's kit (the same as a region plan's {@code affordances[]}, so the ids agree): it needs
+	 * the helper ({@link Reason#SIDECAR_UNAVAILABLE} without it). A lot over 96x64x96 or outside the world's height fails
+	 * {@link RegionRefused} {@link Reason#REGION_LIMIT}; the volume's y is clamped to the world. The future completes on the server thread.
+	 * The proposed frame's origin is the lot's minimum corner, its rotation turns the design's front (south) to the chosen affordance's
+	 * normal (kit/lib/region/affordances.mjs {@code proposeFrame}). Built by slice AF (feature {@code "siteSurvey"}). Since NEXT.
 	 */
 	default CompletableFuture<SiteSample> site(ServerLevel level, BoundingBox lot, FitMode fit, LoadPolicy load) {
 		throw new UnsupportedOperationException("Survey.site needs the Architect API since NEXT (slice AF)");

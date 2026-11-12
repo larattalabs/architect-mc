@@ -35,6 +35,7 @@ import { giantTree } from '../forms/giantTree.mjs';
 import { giantMushroom } from '../forms/giantMushroom.mjs';
 import { lintStates } from '../forms/states.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
+import { analyseVolume } from './affordances.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
 import * as CONNECTOR_WALL from '../connectors/wall.mjs';
@@ -162,6 +163,9 @@ function stairProfile(n, checkpoints, landingEvery, what) {
 // ------------------------------------------------------------------ the region builder
 
 /** Create the region builder for a program's ctx. */
+/** (7b AF) At most this many affordances in a plan's `affordances[]`. */
+export const AFFORDANCES_MAX = 256;
+
 export function region(ctx) {
   // ((7a K3) a plan compiled once more (a wall lot sent back to its zone: compile.mjs runCheck) takes a fresh region: `__regionAgain`)
   if (ctx.__region && !ctx.__regionAgain) throw new Error('region(ctx) may be called once per plan');
@@ -973,6 +977,29 @@ export class Region {
     this.volumesUsed[name] = { blob: name, ...(v.decoded?.blocks ? { blocks: true } : {}), box: b, ...(v.decoded?.fluids ? { fluids: true } : {}), sha: v.sha };
     (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
+  }
+
+  /**
+   * (7b AF, docs/CONTRACT.md "Phase 7b" §2) The affordances of the land in `box`: the site analysis (lib/region/affordances.mjs
+   * analyseVolume; `opts` as there: kinds, thresholds, prefer, entrance) over the frozen volume of `box`, asked through needVolume (so
+   * the first plan answers [] and the two-plan flow plans again with the volume). Each one found is recorded for plan.json's
+   * `affordances[]` (api.Regions.affordances; deduplicated by id, best first, at most AFFORDANCES_MAX); a plan that never calls this
+   * writes no member, so every other plan is unchanged.
+   */
+  affordances(box, opts = {}) {
+    const v = this.needVolume(box);
+    if (!v) return [];
+    const list = analyseVolume(v, opts);
+    const seen = (this._affordances ??= new Map());
+    for (const a of list) if (!seen.has(a.id)) seen.set(a.id, a);
+    return list.map((a) => JSON.parse(JSON.stringify(a)));
+  }
+
+  /** (7b AF) The affordances recorded by r.affordances, best first (score, then id), at most AFFORDANCES_MAX. */
+  affordancesFound() {
+    const all = [...(this._affordances?.values() ?? [])];
+    all.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return all.slice(0, AFFORDANCES_MAX);
   }
 
   /**

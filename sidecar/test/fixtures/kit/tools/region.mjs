@@ -110,7 +110,7 @@ try {
   const mod = await import(pathToFileURL(path.resolve(program)).href);
   const ctx = { claim, survey: { bytes: survey.length }, bible, volumes, blobsOut: flags['blobs-out'] ?? null, seed: flags.seed !== undefined ? String(flags.seed) : String(BigInt('0x' + crypto.createHash('sha256').update(path.basename(program) + JSON.stringify(params) + flags.claim).digest('hex').slice(0, 16))), params, kitVersion: 'fake' };
   const got = await mod.default(ctx);
-  const { sideBlobs, needVolumes, ...fields } = got;
+  const { sideBlobs, needVolumes, affordances, ...fields } = got;
   let blobs;
   if (sideBlobs) {
     if (!flags['blobs-out']) throw new Error('side blobs need --blobs-out');
@@ -125,7 +125,8 @@ try {
   const ir = { format: 1, id: path.basename(program, '.mjs'), programSha: sha(fs.readFileSync(program)), kitVersion: 'fake', node: 'any', params, seed: ctx.seed, claim, roles: bible.roles ?? {}, stages: ['ground'], parts: [], lots: [], roads: [], paths: [], anchors: { entrance: [claim.minX, 64, claim.minZ], spawn: [claim.minX, 64, claim.minZ] }, rules: {}, budget: { cells: 100, removed: 50, added: 50 }, tiles: { ground: { terrain: ['0,0'], path: [] } }, ...fields, ...(blobs ? { format: 2, requires: ['blobs:side'], blobs } : {}) };
   const json = canonical(ir);
   fs.writeFileSync(path.join(flags.out, 'ir.json'), json);
-  if (needVolumes) fs.writeFileSync(path.join(flags.out, 'plan.json'), JSON.stringify({ ok: true, needVolumes, irFormat: ir.format, requires: ir.requires ?? [] }));
+  // ((7b AF) a program's `affordances` go to plan.json, as the real kit's r.affordances)
+  if (needVolumes || affordances) fs.writeFileSync(path.join(flags.out, 'plan.json'), JSON.stringify({ ok: true, ...(needVolumes ? { needVolumes } : {}), ...(affordances ? { affordances } : {}), irFormat: ir.format, requires: ir.requires ?? [] }));
   const irSha = sha(json);
   console.log(JSON.stringify({ ok: true, irSha, notes: [`fake plan of ${ir.id}`, ...(got.notes ?? [])] }));
 } catch (e) {

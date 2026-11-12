@@ -386,6 +386,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-11-11 (7b slice AF):** new (`SliceAfDev`, generated headless too) `dev.af.site {lot: [x0,y0,z0,x1,y1,z1], fit, load?:
+  loaded|generated:<n>|bounded:<n>}`: `Survey.site` in the player's level through the public API (the lot plus 8 frozen to
+  `<world>/architect/volumes/<sha>.bin`, the helper's `site.analyse`, the proposed frame) -> `{sha, blobId, box, file, counts,
+  missingColumns, affordances: [{id, kind, box, anchors, normal, metrics, score}], proposed: {origin, rotation} | null, ms}` or
+  `{refused: "<REASON>: message"}`; `dev.af.affordances {plan}`: `Regions.affordances` -> `{known, affordances}`.
 - **2026-10-26 (7a slice LF):** new (`SliceLfDev`, generated headless too) `dev.lift.ride {x, z, y0, yT, drag, face: [dx, dz],
   exit: [x, y, z], doors?: [[x, y, z]], maxTicks?: 600}`: the ride probe. The player is put in a bubble column (an up ride on its base,
   feet at `y0 + 1`; a down ride in its open top, feet at `yT + 1`; `yT` is the column's top cell, level with the face's top) in creative

@@ -20,6 +20,7 @@ export default async function plan(ctx) {
     ...(p.tileGrid ? { tiles: { ground: { terrain: Array.from({ length: p.tileGrid * p.tileGrid }, (_, i) => `${i % p.tileGrid},${Math.floor(i / p.tileGrid)}`), path: [] } } } : {}),
     ...(p.sideBlobs ? { sideBlobs: p.sideBlobs } : {}),
     ...(p.needVolumes ? { needVolumes: p.needVolumes } : {}),
+    ...(p.affordances ? { affordances: p.affordances } : {}), // (7b AF) plan.json's affordances[]
     ...(p.fakeCheck ? { fakeCheck: p.fakeCheck } : {}),
     ...(p.parts ? { parts: p.parts } : {}),
     lots: [{ id: 'L1', stage: 'ground', at: [ctx.claim.minX + 4, ctx.claim.minZ + 4], size: [8, 8] }],

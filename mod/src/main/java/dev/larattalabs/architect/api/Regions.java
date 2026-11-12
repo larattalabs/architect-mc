@@ -337,8 +337,8 @@ public interface Regions {
 	/**
 	 * (7b) The affordances a region plan found in its land ({@code affordances[]} in its plan JSON; docs/CONTRACT.md "Phase 7b" §2):
 	 * read by this accessor, so {@link RegionPlan} gains no component. An empty list for a plan with none (every plan before slice
-	 * AF); empty (no list) for an unknown plan id. Server thread. Built by slice AF (feature {@code "siteSurvey"}); until then it
-	 * throws. Since NEXT.
+	 * AF, and every plan whose program never calls {@code r.affordances(box)}); empty (no list) for an unknown plan id. Kept with the plan
+	 * record, so it answers after a world restart. Server thread. Built by slice AF (feature {@code "siteSurvey"}). Since NEXT.
 	 */
 	default Optional<java.util.List<Affordance>> affordances(String planId) {
 		throw new UnsupportedOperationException("Regions.affordances needs the Architect API since NEXT (slice AF)");

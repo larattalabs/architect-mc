@@ -85,6 +85,13 @@ public final class SurveyImpl implements Survey {
 			v.box(), id, v.counts(), v.missingColumns(), v.stats(), v.ground()));
 	}
 
+	/** (7b AF) {@link SiteAnalysis}: the lot plus 8, frozen, uploaded and analysed by the helper's kit. Needs the helper. */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.SiteSample> site(ServerLevel level, BoundingBox lot, dev.larattalabs.architect.api.FitMode fit,
+		LoadPolicy load) {
+		return SiteAnalysis.site(level, lot, fit, load);
+	}
+
 	private static void tick(MinecraftServer server) {
 		if (TASKS.isEmpty()) {
 			if (dev.larattalabs.architect.region.volume.VolumeSurvey.busy()) {

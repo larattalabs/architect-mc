@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1014,6 +1014,7 @@ export const RegionPlannedMsg = z
     checkMs: z.number().int().nonnegative().optional().describe('(6b) the check run\'s wall time'),
     renderMs: z.number().int().nonnegative().optional().describe('(6b) the preview run\'s wall time'),
     checkError: z.string().optional().describe('(6b addition) the check or the previews failed (the plan itself is good): why'),
+    affordances: z.array(z.record(z.string(), z.unknown())).max(256).optional().describe("(7b AF) the affordances the program found (r.affordances; plan.json's affordances[]), best first; absent when it asked for none"),
     planCheck: z.record(z.string(), z.unknown()).optional().describe("(6c P0) a plan check's answer (the kit's plancheck.json: overall, parts, cost, catalogue, preview with the class map's absolute path), with `artifact` (its canonical JSON) when it made one"),
   })
   .refine((m) => (m.ir === undefined) !== (m.irBlobId === undefined), 'exactly one of ir and irBlobId');
@@ -1346,6 +1347,17 @@ export const RegionPreviewMsg = z.object({
   views: z.array(PreviewView).min(1).max(4).optional().describe('default all four'),
   axes: SectionAxes.optional().describe('section axes (default: the kit picks)'),
 });
+/**
+ * (7b AF) The site analysis of a frozen volume (api.Survey.site): kit/tools/affordances.mjs over the volume blob -> {sha, box,
+ * affordances, proposed: {frame: {origin, rotation}, affordance} | null}. No Claude, no plan dir.
+ */
+export const SiteAnalyseMsg = z.object({
+  ...envelope('site.analyse'),
+  volumeBlobId: BlobId.describe('the frozen volume (gzip ARVX), as Survey.volume uploaded it (kind region.volume)'),
+  sha: Sha256Hex.optional().describe('the volume\'s sha (of the uncompressed ARVX bytes): refused when the blob hashes to another'),
+  lot: VolumeBox.describe('the lot box (inside the volume): the frame is proposed for it'),
+  fit: z.enum(['on_pad', 'carve_into', 'attach_to_cliff', 'span', 'wrap_trunk', 'suspend']).describe('api.FitMode wire name'),
+});
 export const RegionDesignCard = z.object({
   site: z.string().trim().min(1).max(200).optional(),
   purpose: z.string().trim().min(1).max(200).optional(),
@@ -1422,6 +1434,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionPlanDiscardMsg,
   RegionPreviewMsg,
   RegionDesignMsg,
+  SiteAnalyseMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
