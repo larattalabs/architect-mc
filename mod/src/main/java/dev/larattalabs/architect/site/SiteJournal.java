@@ -492,6 +492,33 @@ public final class SiteJournal {
 		return id;
 	}
 
+	/** (7b slice SO) The cells of a site's active entries of {@code kind} (its scaffolding), as {@link BlockPos#asLong}; empty when none. */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet cellsOfKind(String siteId, String kind) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			return out;
+		}
+		try {
+			for (JournalStore.Meta m : active(siteId)) {
+				if (!m.kind().equals(kind)) {
+					continue;
+				}
+				for (long k : m.sections()) {
+					SectionCells sc = s.section(m.id(), k);
+					if (sc != null) {
+						for (int i = 0; i < sc.size(); i++) {
+							out.add(sc.pos(i));
+						}
+					}
+				}
+			}
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Could not read the {} entries of {}", kind, siteId, e);
+		}
+		return out;
+	}
+
 	/** 6c Y: releases one entry (a stockpile crate that went: its cell is the ground again). */
 	static void releaseEntry(String entryId) {
 		JournalStore s = WorldJournal.storeOrNull();

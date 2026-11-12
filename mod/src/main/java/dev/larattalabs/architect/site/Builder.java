@@ -975,7 +975,7 @@ public final class Builder {
 		if (stockpiled) {
 			Architect.LOGGER.info("Construction site {} ({}): {} cells queued; it draws from the stockpile of {}", id, bp.id(), n, siteOwner);
 			return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, null, new BitSet(), false, owner), target, sb, false,
-				null, bySupport ? scaffoldPlan(level, r, built, sb, spec, null) : List.of());
+				null, bySupport ? scaffoldPlan(level, r, built, id, spec, null) : List.of());
 		}
 		if (grp != null && grp.crate() != null) {
 			Construction.Crate gc = grp.crate();
@@ -995,7 +995,7 @@ public final class Builder {
 		}
 		Architect.LOGGER.info("Construction site {} ({}): {} cells queued, crate at {}{}", id, bp.id(), n, crate.x() + "," + crate.y() + "," + crate.z(),
 			r.waterlogged > 0 ? ", " + r.waterlogged + " waterlogged cell(s) built dry" : "");
-		List<BlockPos> scaffold = bySupport ? scaffoldPlan(level, r, built, sb, spec, new BlockPos(crate.x(), crate.y(), crate.z())) : List.of();
+		List<BlockPos> scaffold = bySupport ? scaffoldPlan(level, r, built, id, spec, new BlockPos(crate.x(), crate.y(), crate.z())) : List.of();
 		if (!scaffold.isEmpty()) {
 			Architect.LOGGER.info("Construction site {}: {} scaffolding cell(s) under it (cosmetic: no items, no refund)", id, scaffold.size());
 		}
@@ -1154,15 +1154,18 @@ public final class Builder {
 
 	/**
 	 * (7b slice SO, N-7b-5) Cosmetic scaffolding of a site-aware building (SETTLEMENTS §7.7): vanilla scaffolding columns under the
-	 * building's bottom cells that have open air under them, every {@link #SCAFFOLD_SPACING}th cell along x and z. A column starts under
-	 * the snapshot box (the row under the template box is the site entry's: a block there would count as the player's at a deconstruct),
-	 * runs down through air no entry owns and no other site's box holds, and stands on a sturdy site-solid cell within
-	 * {@link #SCAFFOLD_MAX_HEIGHT}; else it is left out. Never at the crate (and the two cells over it, the hopper chain's), nor within one
-	 * column of a port or its landing. Bottom-up per column. Reads the world; writes nothing.
+	 * building, every {@link #SCAFFOLD_SPACING}th column along world x and z: under the lowest queued cell of the column, when the cell under
+	 * it is open air, down through air the template does not write, no other site owns and no other site's box holds, to a sturdy site-solid
+	 * cell within {@link #SCAFFOLD_MAX_HEIGHT}; else (water, a queued cell, nothing within reach) it is left out. Inside the site's own
+	 * restore box too (a Deconstruct leaves it out of its tally: {@link #prepareDeconstruct}). Never at the crate (and the two cells over it,
+	 * the hopper chain's), nor within one column of a port or its landing (the way in stays open). Bottom-up per column. Reads the world
+	 * (the instant placement standing); writes nothing.
 	 */
-	static List<BlockPos> scaffoldPlan(ServerLevel level, Run r, Sites.Built built, Anchors.Bounds sb, dev.larattalabs.architect.api.SiteSpec spec,
+	static List<BlockPos> scaffoldPlan(ServerLevel level, Run r, Sites.Built built, String id, dev.larattalabs.architect.api.SiteSpec spec,
 		@Nullable BlockPos crate) {
 		Anchors.Bounds box = built.box();
+		GhostModel m = built.grid().ghost(built.turns());
+		byte[] writes = TerrainFit.writes(m);
 		Set<Long> skip = new HashSet<>();
 		GhostModel m0 = built.grid().ghost(0);
 		for (dev.larattalabs.architect.api.SitePort port : spec.ports()) {
@@ -1179,27 +1182,40 @@ public final class Builder {
 		if (crate != null) {
 			skip.add(BlockPos.asLong(crate.getX(), 0, crate.getZ()));
 		}
-		String dim = Sites.dimensionId(level);
-		List<BlockPos> out = new ArrayList<>();
-		for (int i = 0; i < r.size() && out.size() < SCAFFOLD_MAX_CELLS; i++) {
+		// the lowest queued cell of every lattice column
+		java.util.TreeMap<Long, Integer> lowest = new java.util.TreeMap<>();
+		for (int i = 0; i < r.size(); i++) {
 			BlockPos p = r.pos(i);
-			if (p.getY() != box.minY() || Math.floorMod(p.getX(), SCAFFOLD_SPACING) != 0 || Math.floorMod(p.getZ(), SCAFFOLD_SPACING) != 0
-				|| skip.contains(BlockPos.asLong(p.getX(), 0, p.getZ()))) {
+			if (Math.floorMod(p.getX(), SCAFFOLD_SPACING) != 0 || Math.floorMod(p.getZ(), SCAFFOLD_SPACING) != 0) {
 				continue;
 			}
-			BlockPos under = p.below();
-			if (r.queuePos(under) >= 0 || !level.getBlockState(under).isAir()) {
-				continue; // something is under it already
+			long col = BlockPos.asLong(p.getX(), 0, p.getZ());
+			Integer j = lowest.get(col);
+			if (!skip.contains(col) && (j == null || r.pos(j).getY() > p.getY())) {
+				lowest.put(col, i);
 			}
+		}
+		String dim = Sites.dimensionId(level);
+		List<BlockPos> out = new ArrayList<>();
+		for (int i : lowest.values()) {
+			BlockPos p = r.pos(i);
 			List<BlockPos> col = new ArrayList<>();
 			boolean grounded = false;
-			for (BlockPos q = under.below(); col.size() <= SCAFFOLD_MAX_HEIGHT && q.getY() >= level.getMinY(); q = q.below()) {
+			for (BlockPos q = p.below(); col.size() <= SCAFFOLD_MAX_HEIGHT && q.getY() >= level.getMinY(); q = q.below()) {
 				BlockState st = level.getBlockState(q);
+				int x = q.getX() - box.minX();
+				int y = q.getY() - box.minY();
+				int z = q.getZ() - box.minZ();
+				boolean inBox = x >= 0 && y >= 0 && z >= 0 && x < m.sizeX && y < m.sizeY && z < m.sizeZ;
+				if (r.queuePos(q) >= 0 || inBox && writes[(y * m.sizeZ + z) * m.sizeX + x] == 2) {
+					break; // the building itself (its cells stand here now): never ground for a column
+				}
 				if (!st.isAir()) {
 					grounded = !col.isEmpty() && anchorState(st) && st.isFaceSturdy(level, q, Direction.UP);
 					break;
 				}
-				if (sb.contains(q.getX(), q.getY(), q.getZ()) || SiteJournal.owned(dim, q.asLong()) || inOtherSite(level, q)) {
+				String owner = SiteJournal.ownerSite(dim, q.asLong());
+				if (owner != null && !owner.equals(id) || crate != null && q.getX() == crate.getX() && q.getZ() == crate.getZ() || inOtherSite(level, q, id)) {
 					break;
 				}
 				col.add(q);
@@ -1409,6 +1425,17 @@ public final class Builder {
 			p = p.offset(out[0], 0, out[1]);
 		}
 		return p;
+	}
+
+	/** Whether {@code p} is in the restore box of a site of this level other than {@code self}. */
+	private static boolean inOtherSite(ServerLevel level, BlockPos p, String self) {
+		String dim = Sites.dimensionId(level);
+		for (Site o : Sites.all()) {
+			if (!o.id().equals(self) && o.dimension().equals(dim) && o.restoreBox().contains(p.getX(), p.getY(), p.getZ())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean inOtherSite(ServerLevel level, BlockPos p) {
@@ -2346,6 +2373,9 @@ public final class Builder {
 		}
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet shadow = writers.isEmpty() || r == null ? null : RegionOverwrites.shadowedCells(srv, level, s.group(), s.id(),
 			s.placedAt(), r, true);
+		// (7b SO) the site's scaffolding standing in its restore box is cosmetic: never the player's block, never a refund (its entry's undo
+		// takes it down with the site's group)
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet scaffold = SiteJournal.cellsOfKind(s.id(), WorldJournal.SCAFFOLD);
 		for (int y = b.minY(); y <= b.maxY(); y++) {
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
@@ -2376,6 +2406,9 @@ public final class Builder {
 						continue; // a cell of the restore box no entry of the site recorded (between versions' boxes): not the site's
 					}
 					BlockState now = level.getBlockState(m);
+					if (qi0 < 0 && !scaffold.isEmpty() && scaffold.contains(m.asLong()) && now.is(Blocks.SCAFFOLDING)) {
+						continue;
+					}
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);

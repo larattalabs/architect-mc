@@ -364,15 +364,21 @@ steps.survival = async () => {
     const lost = sub(into, back);
     const e = diff(pre2, await cellsOf(ctx.area), feedSet);
     check(d.removed && Object.keys(lost).length === 0 && e.n === 0, `${id}: deconstructed: every item fed (${tot(into)}) back, the land exact (E-flat 0)`, { lost, eflat: e.first });
+    // the hopper chain stands in the site's volume (two block entities): emptied and cleared, else the instant placement is SITE_DRIFTED
+    for (const c of [feed.chest, feed.hop]) {
+      await cmd(`/data remove block ${c.join(' ')} Items`);
+      await cmd(`/setblock ${c.join(' ')} minecraft:air`);
+    }
     await cmd(`/kill @e[type=minecraft:item]`);
     await call('dev.survival.set', { on: false }, 30_000);
     const ip = await call('dev.pl.place', { blueprint: id, site: ctx.site, mode: 'instant' }, 300_000);
+    check(ip.placed, `${id}: the instant reference placed with the same site`, ip.refusals);
     await L.settle(2000);
     const inst = await cellsOf(ctx.area);
     const same = diff(built, inst, feedSet);
     const sameB = diff(inst, built, feedSet);
     check(ip.placed && same.n === 0 && sameB.n === 0, `${id}: the survival build is identical to its instant placement over ${built.size} cells (the hopper chain's two cells left out)`, { first: same.first, firstB: sameB.first });
-    const rm = await call('dev.pl.remove', { site: ip.site }, 600_000);
+    const rm = ip.placed ? await call('dev.pl.remove', { site: ip.site }, 600_000) : { removed: false };
     await L.settle(1500);
     const e2 = diff(pre2, await cellsOf(ctx.area), feedSet);
     check(rm.removed && e2.n === 0, `${id}: the instant placement's Remove is exact (E-flat 0)`, e2.first);
