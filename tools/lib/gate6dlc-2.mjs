@@ -233,6 +233,29 @@ export async function registerLC2(steps, h) {
     box[4] = Math.max(box[4], s.W.maxY + 48);
     const cx = Math.round((s.W.claim[0] + s.W.claim[2]) / 2), cz = Math.round((s.W.claim[1] + s.W.claim[3]) / 2);
     const gy = s.W.maxY; // the flat terrain's top (grass)
+    // a wall gap the region writes: on flat ground the wall's air cells (its crenels) are written over air, so nothing is written there;
+    // a stone set by the console (natural, no PT record) in one of them before the realise makes the wall clear it: a written-air cell
+    const seeded = await (async () => {
+      const ir0 = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', ck.check.checkId, 'ir.json'), 'utf8'));
+      const R = await imp('lib/realise.mjs');
+      const { unpack } = await imp('lib/region/pack.mjs');
+      const { synthColumns } = await imp('lib/region/synth.mjs');
+      const C = R.compileIR(ir0);
+      for (const stage of ir0.stages) for (const set of ['terrain', 'path']) for (const tk of ir0.tiles?.[stage]?.[set] ?? []) {
+        const [tx, tz] = tk.split(',').map(Number);
+        const win = synthColumns({ minX: tx * 64 - 8, minZ: tz * 64 - 8, width: 80, depth: 80, world: () => ({ g: gy, h: gy, f: gy, flags: 0 }) });
+        const e = R.evalTile(ir0, tk, win, { stage, set, writers: true });
+        const cells = unpack(e.payload).cells;
+        for (let i = 0; i < cells.length; i++) {
+          const c = cells[i];
+          const part = String(C.parts[C.ops[e.cellOps[i]].part].id);
+          if (/^w_/.test(part) && /air$/.test(c.state) && c.y > gy + 2) return [c.x, c.y, c.z, part];
+        }
+      }
+      return null;
+    })();
+    if (seeded) await cmd(`/setblock ${seeded[0]} ${seeded[1]} ${seeded[2]} minecraft:stone`);
+    out.seededGap = seeded;
     const pre = await dumpOf(box, 'lc-castle-pre');
     const ids = await writeDesigns(lots, { tag: 'c', roof: 10 });
     const region = await G.realise(ctx, sha, { ...fx.lotEntries, ...ids });
@@ -368,7 +391,11 @@ export async function registerLC2(steps, h) {
     }
     // a gap the region wrote (its top entry a tile of the group, written air): a player's block there is playerPlaced
     let gap = null;
-    for (const [k, p] of own.part) {
+    if (seeded && own.part.get(key(seeded)) && isAir(own.exp.get(key(seeded))) && isAir(wallDump.get(key(seeded)))) {
+      const t = await topOf(seeded, group);
+      if (t.ours && tileSites.has(t.top.site)) gap = [...seeded.slice(0, 3), own.part.get(key(seeded))];
+    }
+    for (const [k, p] of gap ? [] : own.part) {
       if (!isAir(own.exp.get(k))) continue;
       const c = k.split(',').map(Number);
       const t = tp0.get(k);
@@ -407,7 +434,7 @@ export async function registerLC2(steps, h) {
     const [okW, dW] = plusDelta(lcWall, base, delta);
     check(okW && stray.length === 0, `item 2: the wall's report: ${json(wallParts.map((p) => [p, row(lcWall, p) && counts(row(lcWall, p))]))} = before + the world's change attributed by the kit's writers (${json(delta.parts)}); ${never ? `the block on the never-written cell ${json(never)} not reported; ` : ''}${stray.length} changed cells the kit does not attribute`, { dW, stray });
     if (!never) log('  item 2: no never-written cell above the picked wall cells (each holds a group entry): that case not shown');
-    if (!gap) log('  item 2: no written-air cell of the region standing open: the written-gap case not shown');
+    check(!!gap, `item 2: a wall gap the region wrote (air; the console's stone at ${json(seeded)} cleared by the wall's ${seeded?.[3]}), held on top by a tile: ${json(gap)}`);
     base = lcWall;
 
     // a tower lot: two of its cells broken by the player, one re-filled: its LotLand row (changed 1, playerPlaced 1), its standing lower
