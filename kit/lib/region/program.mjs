@@ -36,6 +36,7 @@ import { giantMushroom } from '../forms/giantMushroom.mjs';
 import { lintStates } from '../forms/states.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { analyseVolume } from './affordances.mjs';
+import { portLinkOf } from './links.mjs';
 import { siteLot as siteLotOf } from './siteLots.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
@@ -1004,6 +1005,15 @@ export class Region {
    */
   siteLot(id, opts = {}) {
     return siteLotOf(this, id, opts);
+  }
+
+  /**
+   * (7b LP) A link between two site lots' ports: `{kind: 'catwalk' | 'branch_walk' | 'tunnel', from: {lot, port?}, to: {lot, port?},
+   * width?}` (lib/region/links.mjs portLinkOf). Plan time records it (the IR's portLinks), the realise's link pass writes it in the stage
+   * `site_links` after the lots. Throws a LinkError (`code`, `lot`, `port`) when it can't reach a port.
+   */
+  portLink(id, spec = {}) {
+    return portLinkOf(this, id, spec);
   }
 
   /** (7b AF) The affordances recorded by r.affordances, best first (score, then id), at most AFFORDANCES_MAX. */
