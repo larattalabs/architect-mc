@@ -106,14 +106,15 @@ export async function registerFC(steps, h) {
     const g = await growPlan(region, { lots: [spec] });
     check(!g.refused && g.revisionOf?.rid >= 1, `a growth planned (planRevision, a farm lot with field {49 cells, wheat and carrots}): ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
     const rid = g.revisionOf.rid;
+    const ps0 = await pile();
+    const r = await call('dev.region.realise', { planId: g.planId, lots: { fc_farm: 'fc_field' } }, 300_000);
+    check(!r.refused, `the growth realised with fc_farm: fc_field: ${r.refused ?? r.region}`);
     const ir = await rvIr(region, rid);
     const irLot = ir?.lots?.find((l) => l.id === 'fc_farm');
     const farm = (irLot?.field?.cells ?? []).flatMap(([x, z, y0, y1]) => Array.from({ length: y1 - y0 + 1 }, (_, i) => [x, y0 + i, z]));
     out.lot = { box: irLot?.box, front: irLot?.front, floorY: irLot?.floorY, field: irLot?.field && { crops: irLot.field.crops, frame: irLot.field.frame, cells: farm.length } };
-    check(farm.length === 49 && json(irLot.field.crops) === json(['minecraft:wheat', 'minecraft:carrots']) && farm.every((c) => c[1] === irLot.floorY), `the revision IR's lot fc_farm carries its field: ${farm.length} farmland cells at its floor ${irLot?.floorY} (front ${irLot?.front}), crops ${json(irLot?.field?.crops)}`);
-    const ps0 = await pile();
-    const r = await call('dev.region.realise', { planId: g.planId, lots: { fc_farm: 'fc_field' } }, 300_000);
-    check(!r.refused, `the growth realised with fc_farm: fc_field: ${r.refused ?? r.region}`);
+    check(farm.length === 49 && json(irLot.field.crops) === json(['minecraft:wheat', 'minecraft:carrots']) && farm.every((c) => c[1] === irLot.floorY), `the revision IR (read once the realise accepted it)'s lot fc_farm carries its field: ${farm.length} farmland cells at its floor ${irLot?.floorY} (front ${irLot?.front}), crops ${json(irLot?.field?.crops)}`);
+    if (farm.length !== 49) throw new Error(`fc_farm has no field in the revision IR (${farm.length} cells): the rest of the step needs it`);
     for (let i = 0; i < 90; i++) {
       const rs = await G.rsState(ctx, region);
       const sv = await rvState(region);
@@ -130,7 +131,7 @@ export async function registerFC(steps, h) {
     const site = (sv.sites ?? sv.revisions?.find((x) => x.rid === rid)?.sites ?? []).find?.((s) => String(s.id ?? s).includes('fc_farm'));
     out.site = site ?? null;
     let F = await fieldNow(BOX, farm);
-    check(F.every((q) => q.soil === 'minecraft:farmland' && idOf(q.crop) === 'minecraft:wheat'), `the field stands: ${F.filter((q) => q.soil === 'minecraft:farmland').length} farmland, ${F.filter((q) => idOf(q.crop) === 'minecraft:wheat').length} wheat`);
+    check(F.length === 49 && F.every((q) => q.soil === 'minecraft:farmland' && idOf(q.crop) === 'minecraft:wheat'), `the field stands: ${F.filter((q) => q.soil === 'minecraft:farmland').length} farmland, ${F.filter((q) => idOf(q.crop) === 'minecraft:wheat').length} wheat`);
     const rep0 = await land(region);
     const row0 = lotRow(rep0, 'fc_farm');
     out.land0 = { lot: row0, parts: partsKey(rep0) };
