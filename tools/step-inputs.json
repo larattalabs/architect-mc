@@ -89829,7 +89829,8 @@
    ],
    "globs": [
     "kit/bibles/**",
-    "kit/designs/**"
+    "kit/designs/**",
+    "kit/lib/**"
    ],
    "dynamic": [
     {
@@ -90109,6 +90110,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/examples/cabin/**",
+    "kit/lib/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
     "mod/src/test/resources/stub-sidecar/**",
