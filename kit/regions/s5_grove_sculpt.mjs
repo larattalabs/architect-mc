@@ -138,5 +138,33 @@ export default function s5GroveSculpt(ctx) {
     const gen = r.giantTree(t.id, { at: t.at, preset: TREE.preset, height: pick.h, seed: pick.seed }, { stage: 'trees' });
     Object.assign(t, { height: pick.h, seed: pick.k, axis: pick.axis ?? axisAt(gen.cells, G.deckY + 1, t.at), straight: pick.straight });
   }
+  // the ramps: the land's way up (as S6's ramp is). Each pair's houses face each other across a gap TREE.pairGap - box wide, where the
+  // village's branch walk runs at the houses' feet row (deckY + 2). An earthen ramp meets it from the east: a tongue between the two
+  // house boxes whose top is the walk's feet row (a solid cell beside the deck: the walk rails every open side, so a ramp is a cell the
+  // walk leaves open and a player steps down from), then a mound falling one row per column east and sideways to the ground (no drop
+  // over 1). Grass on top, dirt under (the surface and subsurface roles). Recorded in meta.sb.ramps.
+  const fy = G.deckY + 2;
+  const ramp = r.part('ramps', { stage: 'trees' });
+  G.ramps = [];
+  for (let i = 0; i < TREE.cols; i++) {
+    const n = G.trees[i], s = G.trees[TREE.cols + i];
+    const zg0 = n.axis[1] - (D >> 1) + D, zg1 = s.axis[1] - (D >> 1) - 1; // the gap's rows between the boxes
+    const zc = (zg0 + zg1) >> 1, hw = (zg1 - zg0) >> 1;
+    const x0 = Math.max(n.axis[0], s.axis[0]) + 1, xe = Math.max(n.axis[0], s.axis[0]) + (W >> 1); // the tongue: east of the deck to the boxes' east edge
+    const cells = [];
+    for (let x = x0; x <= xe + (fy - 0) && x <= claim.maxX - 1; x++) {
+      for (let z = zc - hw - (fy - G.trees[i].at[1]) - 2; z <= zc + hw + (fy - G.trees[i].at[1]) + 2; z++) {
+        if (x <= xe && (z < zg0 || z > zg1)) continue; // (beside the boxes only the gap)
+        const top = fy - Math.max(0, x - xe) - Math.max(0, Math.abs(z - zc) - hw);
+        const g = survey.heightAt(x, z);
+        if (top <= g) continue;
+        if (g + 1 <= top - 1) ramp.fill({ kind: 'box', min: [x, { abs: g + 1 }, z], max: [x, { abs: top - 1 }, z] }, 'subsurface', { cond: 0 });
+        ramp.fill({ kind: 'box', min: [x, { abs: top }, z], max: [x, { abs: top }, z] }, 'surface', { cond: 0 });
+        cells.push([x, z, top]);
+      }
+    }
+    G.ramps.push({ pair: [n.id, s.id], x0, xe, gap: [zg0, zg1], top: fy, columns: cells.length });
+  }
+  r.meta.sb.ramps = G.ramps;
   return r;
 }

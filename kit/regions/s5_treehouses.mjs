@@ -35,11 +35,12 @@ export default function s5Treehouses(ctx) {
   // a house's box: centred on its tree's trunk axis at the deck (the sculpt's record), on the shared floor
   const boxOn = ([ax, az]) => [ax - (W >> 1), G.deckY, az - (D >> 1), ax - (W >> 1) + W - 1, G.deckY + H - 1, az - (D >> 1) + D - 1];
   const lots = G.trees.map((t, i) => ({ id: `tree_${i + 1}`, tree: t.id, row: Math.floor(i / TREE.cols), box: boxOn(t.axis ?? [t.at[0], t.at[2]]) }));
-  r.meta.sb = { scenario: 's5', deckY: G.deckY, centre: G.centre, trees: G.trees.map((t) => t.id), dwellings: lots.map((l) => l.id), fitCalledFor: { wrap_trunk: lots.map((l) => l.id), suspend: [] } };
+  r.meta.sb = { scenario: 's5', deckY: G.deckY, ramps: G.ramps ?? [], centre: G.centre, trees: G.trees.map((t) => t.id), dwellings: lots.map((l) => l.id), fitCalledFor: { wrap_trunk: lots.map((l) => l.id), suspend: [] } };
+  // the way in: on the ground south of the grove (the ramps climb from the east to each pair's walk)
   const [gx, gz] = G.centre;
-  const gy = survey.heightAt(gx, gz) + 1;
-  r.anchor('entrance', [gx, gy, gz]);
-  r.anchor('spawn', [gx + 2, survey.heightAt(gx + 2, gz) + 1, gz]);
+  const ez = gz + TREE.pairGap + 4;
+  r.anchor('entrance', [gx, survey.heightAt(gx, ez) + 1, ez]);
+  r.anchor('spawn', [gx + 2, survey.heightAt(gx + 2, ez) + 1, ez]);
   r.anchor('cam_high', [gx, G.deckY + 40, gz + 70]);
   r.anchor('cam_n', [gx, G.deckY + 14, gz - 60]);
   r.anchor('cam_s', [gx, G.deckY + 14, gz + 60]);
