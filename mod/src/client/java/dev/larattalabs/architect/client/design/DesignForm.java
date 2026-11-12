@@ -48,6 +48,8 @@ public final class DesignForm {
 	public int customY = 14;
 	public int customZ = 21;
 	public DesignSpec.@Nullable Plot plot;
+	/** (7b ST) The plot's confirmed site (a site fit picked while marking it), null for an on_pad plot: the request carries it. */
+	public dev.larattalabs.architect.api.@Nullable SiteSpec site;
 	public @Nullable String remix;
 	public final TextModel name = new TextModel(DesignSpec.MAX_NAME + 20);
 	public final TextModel notes = new TextModel(DesignSpec.MAX_NOTES + 200);
@@ -101,6 +103,9 @@ public final class DesignForm {
 	public boolean massingFirst() {
 		if (remix != null) {
 			return false;
+		}
+		if (sited()) {
+			return false; // (7b ST) a site-aware design has no massing pass (DS reading 2)
 		}
 		return massingFirst != null ? massingFirst : dev.larattalabs.architect.design.MassingRules.massingFirstByDefault(size);
 	}
@@ -208,7 +213,20 @@ public final class DesignForm {
 	/** A marked plot sets the size to it (and keeps it for a design sent with it). */
 	public void setPlot(DesignSpec.Plot p) {
 		plot = p;
+		site = null;
 		size = PLOT;
+	}
+
+	/** (7b ST) A site plot: the plot and its confirmed site (the request carries the {@code SiteSpec}). */
+	public void setSitePlot(DesignSpec.Plot p, dev.larattalabs.architect.api.SiteSpec s) {
+		plot = p;
+		site = s;
+		size = PLOT;
+	}
+
+	/** (7b ST) Whether the request carries a site: the plot size with a site plot marked. */
+	public boolean sited() {
+		return PLOT.equals(size) && plot != null && site != null;
 	}
 
 	public void toggleFeature(String id) {
@@ -256,6 +274,10 @@ public final class DesignForm {
 		if (p != null && SetFeature.has("palette.roles")) {
 			r.add("palette", p.deepCopy());
 		}
+		// (7b ST) the site plot's SiteSpec (DesignRequest.site's wire): the helper designs into it, sized to the lot
+		if (sited()) {
+			r.add("site", site.wire());
+		}
 		return r;
 	}
 
@@ -288,6 +310,7 @@ public final class DesignForm {
 		o.addProperty("maxSize", m[0] + "x" + m[1] + "x" + m[2]);
 		o.addProperty("plot", plot == null ? null : plot.dx() + "x" + plot.dz() + " at " + plot.minX() + "," + plot.y() + "," + plot.minZ() + " front "
 			+ plot.front());
+		o.add("site", sited() ? site.wire() : null);
 		o.addProperty("remix", remix);
 		o.addProperty("name", name.value());
 		o.addProperty("notes", notes.value());

@@ -771,6 +771,7 @@ public final class LibraryFeature {
 		c.userTags().forEach(ut::add);
 		j.add("userTags", ut);
 		j.addProperty("badge", c.badge());
+		j.addProperty("pinnedFit", c.pinnedFit()); // (7b ST)
 		j.addProperty("bundled", c.bundled());
 		j.addProperty("canVariant", c.canVariant());
 		if (detail) {

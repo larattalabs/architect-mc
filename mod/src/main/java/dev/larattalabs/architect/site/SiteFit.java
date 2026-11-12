@@ -543,6 +543,45 @@ public final class SiteFit {
 		return out;
 	}
 
+	/** (7b ST) The start of the "opens onto a drop" warning (SETTLEMENTS §7.8): one per port that meets no standable cell. */
+	public static final String DROP = "the entrance opens onto a drop";
+
+	/**
+	 * (7b ST) The "opens onto a drop" warnings of a standalone site (no lot id; a site under a lot is the link pass's): for each port
+	 * facing a side, the world cell just outside its first cell (the frame's rotation applied to the port's cell and facing) must be
+	 * standable: that cell and the one above open (fillable, not a fluid), the one below solid ({@link #siteSolid}). A port facing up or
+	 * down has no such cell. Warnings only, never a refusal. {@code sx, sz}: the template's size in the design frame. Pure.
+	 */
+	public static List<String> drops(SiteSpec s, int sx, int sz, TerrainFit.World w) {
+		List<String> out = new ArrayList<>();
+		if (s == null || s.lotId() != null || s.fit() == FitMode.ON_PAD) {
+			return out;
+		}
+		int turns = s.frame().rotation().ordinal();
+		BlockPos o = s.frame().origin();
+		for (dev.larattalabs.architect.api.SitePort p : s.ports()) {
+			if (!p.facing().getAxis().isHorizontal()) {
+				continue;
+			}
+			int[] r = dev.larattalabs.architect.placement.BlueprintTransform.rotateBlock(p.atDesign().getX(), p.atDesign().getZ(), sx, sz, turns);
+			net.minecraft.core.Direction f = p.facing();
+			for (int i = 0; i < turns; i++) {
+				f = f.getClockWise();
+			}
+			int x = o.getX() + r[0] + f.getStepX();
+			int y = o.getY() + p.atDesign().getY();
+			int z = o.getZ() + r[1] + f.getStepZ();
+			if (!open(w.flags(x, y, z)) || !open(w.flags(x, y + 1, z)) || !siteSolid(w.flags(x, y - 1, z))) {
+				out.add(DROP + ": port " + p.name() + " faces " + f.getName() + " at " + x + "," + y + "," + z + " with no ground to stand on (build the way in)");
+			}
+		}
+		return out;
+	}
+
+	private static boolean open(int flags) {
+		return (flags & TerrainFit.FILLABLE) != 0 && (flags & (TerrainFit.WATER | TerrainFit.LAVA)) == 0;
+	}
+
 	/** The verdict notes of a site placement's approach. */
 	static List<String> notes(SiteSpec s) {
 		Approach.Mode m = approach(s);

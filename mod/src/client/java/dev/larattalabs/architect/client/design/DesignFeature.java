@@ -136,6 +136,10 @@ public final class DesignFeature {
 		}
 		DesignSpec.Plot plot = DesignForm.PLOT.equals(f.size) ? f.plot : null;
 		JsonObject request = f.requestJson();
+		if (request.has("site") && !SetFeature.has(dev.larattalabs.architect.apiimpl.SiteDesigns.FEATURE)) {
+			f.sendError = "This design helper can't design into a site (no " + dev.larattalabs.architect.apiimpl.SiteDesigns.FEATURE + "): update it, or mark an on-pad plot";
+			return CompletableFuture.completedFuture(new Sent(null, f.sendError));
+		}
 		// (4c) "Massing first": a massing job; its massing opens the review (MassingReview) when it is installed
 		boolean massing = f.massingFirst() && SetFeature.has("massing");
 		// (Style unification U2) a massing has no materials: the Style's palette goes with its detail pass (MassingReview approve)
@@ -149,7 +153,7 @@ public final class DesignFeature {
 			request.add("critique", critique);
 		}
 		sending = true;
-		return Sidecar.designRequest(request).handle((ack, err) -> {
+		return resolveSite(request).thenCompose(Sidecar::designRequest).handle((ack, err) -> {
 			sending = false;
 			if (err != null) {
 				Throwable c = err instanceof CompletionException && err.getCause() != null ? err.getCause() : err;
@@ -177,6 +181,33 @@ public final class DesignFeature {
 					"maxRevisions") + ")" : "");
 			return new Sent(id, null);
 		});
+	}
+
+	/**
+	 * (7b ST) A request with a site: its volume's blob resolved first (this world's frozen file uploaded, DS's {@code SiteDesigns.resolve},
+	 * on the integrated server), so a helper that lost the sample's blob still gets the volume. Without a site, the request as is.
+	 */
+	static CompletableFuture<JsonObject> resolveSite(JsonObject request) {
+		if (!request.has("site")) {
+			return CompletableFuture.completedFuture(request);
+		}
+		var srv = Minecraft.getInstance().getSingleplayerServer();
+		if (srv == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("site plots need the integrated server (singleplayer)"));
+		}
+		JsonObject wrap = new JsonObject();
+		wrap.add("request", request);
+		CompletableFuture<JsonObject> out = new CompletableFuture<>();
+		Minecraft mc = Minecraft.getInstance();
+		srv.execute(() -> dev.larattalabs.architect.apiimpl.SiteDesigns.resolve(wrap).whenComplete((m, e) -> mc.execute(() -> {
+			// back on the client thread: the helper link is the client's
+			if (e != null) {
+				out.completeExceptionally(e instanceof CompletionException && e.getCause() != null ? e.getCause() : e);
+			} else {
+				out.complete(m.getAsJsonObject("request"));
+			}
+		})));
+		return out;
 	}
 
 	private static @Nullable String designId(SidecarLink.Ack ack) {
@@ -257,8 +288,12 @@ public final class DesignFeature {
 	/** "Mark a plot…": closes the screen, marks a plot, comes back to the Design tab (with the size filled, unless cancelled). */
 	public static void startPlot() {
 		DesignSpec.Plot had = form.plot;
-		PlotMarker.start(had != null ? had.height() : DesignSpec.DEFAULT_PLOT_HEIGHT, p -> {
+		// (7b ST) the fit picker: an on_pad plot as before; a site fit's plot comes with its confirmed SiteSpec
+		PlotMarker.start(had != null ? had.height() : DesignSpec.DEFAULT_PLOT_HEIGHT, null, p -> {
 			form.setPlot(p);
+			back();
+		}, (p, site) -> {
+			form.setSitePlot(p, site);
 			back();
 		}, DesignFeature::back);
 	}
@@ -278,8 +313,14 @@ public final class DesignFeature {
 		return PLOT_BY_DESIGN.get(designId);
 	}
 
-	/** "Place on the plot": placement mode locked on the plot. Returns why not, or null when the ghost is up. */
+	/**
+	 * "Place on the plot": placement mode locked on the plot. Returns why not, or null when the ghost is up. (7b ST) A site-bound design
+	 * goes on its site's frame instead ({@link PlacementFeature#placeOnSite}).
+	 */
 	public static @Nullable String placeOnPlot(String blueprintId) {
+		if (PlacementFeature.siteOf(blueprintId) != null) {
+			return PlacementFeature.placeOnSite(blueprintId);
+		}
 		DesignSpec.Plot p = PLOT_BY_BLUEPRINT.get(blueprintId);
 		Blueprint bp = Blueprints.get(blueprintId);
 		Minecraft mc = Minecraft.getInstance();

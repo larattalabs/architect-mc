@@ -352,7 +352,10 @@ Outside placement, <kbd>Z</kbd> (**Undo last placement**, rebindable under Contr
 newest site you placed this session, never one another mod owns.
 
 **While marking a plot:** <kbd>Enter</kbd> sets a corner, <kbd>PgUp</kbd>/<kbd>PgDn</kbd> change the height
-(<kbd>Shift</kbd> for 4 at a time), <kbd>Backspace</kbd> goes back a corner, <kbd>Esc</kbd> cancels.
+(<kbd>Shift</kbd> for 4 at a time), <kbd>F</kbd> picks the fit (on a pad, attach to a cliff, carve into rock, span a gap, wrap a
+trunk, hang from an overhang), <kbd>Backspace</kbd> goes back a corner, <kbd>Esc</kbd> cancels. With any fit but a pad, the second
+corner samples the land and shows the frame (its entrance and ports) for <kbd>Enter</kbd> to confirm; the design is then built into
+that land and pinned to it (a **PINNED** badge in the Library: it places on its own site, or elsewhere as **Site variant here…**).
 
 **Construction crate:** right-click it to open the crate screen: **Insert from inventory**, **Pause**/**Resume**, and
 **Deconstruct** (press it twice). Hoppers and droppers feed it from any side.
