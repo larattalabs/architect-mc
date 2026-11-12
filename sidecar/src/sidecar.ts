@@ -89,7 +89,7 @@ import { checkPaletteSpec } from './styles.js';
 import { hintsOf, type StyleHints } from './claude/brief.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 import { SiteVariants, siteVariantView } from './sitevariants.js';
-import { keepSiteVolume, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
+import { entrySite, keepSiteVolume, siteVolumeFile, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
 import { siteSize } from './protocol.js';
 
 /**
@@ -818,6 +818,12 @@ export class Sidecar {
     let req = request;
     // (0b, C13) versionOf: refusals, the base pinned to the head
     if (req.versionOf) req = prepareVersionOf(this, req);
+    // (7b DS) the next version of a site-bound entry is built into its site (its own site/ files) unless the request names another
+    // (a paid adaptation: versionOf + site)
+    if (req.versionOf && !req.site) {
+      const own = entrySite(this.versions.dir(req.versionOf.entryId));
+      if (own) req = { ...req, site: own.spec };
+    }
     // (4c) the detail pass of a massing: pin its version; it inherits the massing's bible
     if (req.fromMassing) {
       const m = this.massings.get(req.fromMassing, req.massingVersion);
@@ -828,7 +834,7 @@ export class Sidecar {
     // (Style unification U1) materials only: a palette the kit cannot build is refused now, not after a design round
     if (req.palette !== undefined) checkPaletteSpec(this.config.kitDir, req.palette);
     // (7b DS) a site-aware design: the kit must build into a site, and the frozen volume is kept now (the blob may be GC'd later)
-    if (req.site) this.acceptSite(req.site);
+    if (req.site) this.acceptSite(req.site, req.versionOf?.entryId);
     if (req.bible) {
       const pin = this.bibleIndex.resolve(req.bibleVersion ? { id: req.bible, version: req.bibleVersion } : req.bible).pin;
       req = { ...req, bible: pin.id, bibleVersion: pin.version };
@@ -1036,8 +1042,15 @@ export class Sidecar {
   }
 
   /** (7b DS) A request's site: a kit that builds into sites, and the frozen volume kept (<data>/sites/<sha>.arvx). Throws ClientError. */
-  acceptSite(site: import('./protocol.js').SiteSpec): void {
+  acceptSite(site: import('./protocol.js').SiteSpec, entryId?: string): void {
     if (!this.kitHas('--site')) throw new ClientError('this helper\'s kit cannot build into a site (no build.mjs --site)');
+    // an entry's own site: its kept volume file stands in for the blob (the same sha)
+    const own = entryId ? entrySite(this.versions.dir(entryId)) : undefined;
+    const kept = siteVolumeFile(this.config.dataDir, site.volumeSha);
+    if (own && own.spec.volumeSha === site.volumeSha && !fs.existsSync(kept)) {
+      fs.mkdirSync(path.dirname(kept), { recursive: true });
+      fs.copyFileSync(own.arvx, kept);
+    }
     keepSiteVolume(this.config.dataDir, this.blobs, site);
   }
 
@@ -1185,6 +1198,8 @@ export class Sidecar {
     const json: Record<string, unknown> = { ...(res.sidecar as Record<string, unknown>) };
     // (6c PT2) `adopted`: an adopted entry stays one at every version (never placed elsewhere, never polished, capturedChanged)
     for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation', 'fromMassing', 'adopted']) if (baseJson[k] !== undefined) json[k] = baseJson[k];
+    // (7b DS) a version built into a site (the entry's own, or a paid adaptation's new one) is bound to it
+    if (d.request.site) json.ext = { ...((json.ext as Record<string, unknown> | undefined) ?? {}), [SITE_BINDING_KEY]: siteBinding(d.request.site) };
     const parts = res.nbt!.replace(/\.nbt$/, '.parts.nbt');
     const version = this.versions.install(
       v.entryId,
@@ -1285,7 +1300,7 @@ export class Sidecar {
     const c = this.designs.get(id)?.critique;
     const loopUsd = c ? c.cost.critic.usd + c.cost.revise.usd : 0;
     const loopMs = c ? c.rounds.reduce((a, r) => a + r.ms, 0) : 0;
-    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, Math.max(0, (d.cost?.usd ?? 0) - loopUsd), Math.max(1, this.now() - started - loopMs));
+    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record(d.request.site ? (d.request.versionOf ? 'adapted' : 'site') : 'design', d.request.model ?? this.config.claude.designModel, Math.max(0, (d.cost?.usd ?? 0) - loopUsd), Math.max(1, this.now() - started - loopMs));
     this.estimates.forget(id);
     // on disk at once: a crash right after an install must not run the design (and install it) again
     this.store.flush();

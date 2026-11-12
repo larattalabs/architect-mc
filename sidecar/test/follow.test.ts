@@ -2,7 +2,7 @@
 // follows its source's new version by its recipe (byte-identical to an independent rebuild of that recipe on the new version), each
 // refusal (frame, check, bar, fit, source_gone, bible_gone, head_moved), the opKey replay and conflict, followAll's frozen set (a copy
 // made mid-operation is not followed; the source versioned again mid-operation: the frozen version is used), the already-followed
-// no-op, the kinds that don't follow (NOT_ALLOWED not_copy, until_7b), and a kill mid-followAll and its resume.
+// no-op, the kinds that don't follow (NOT_ALLOWED not_copy; a SITE entry follows since 7b DS), and a kill mid-followAll and its resume.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -190,8 +190,11 @@ describe.skipIf(!hasKit)('6d FS: copies follow their source (sim backend, real k
     fs.cpSync(path.join(lib(h), copies[1]!), path.join(lib(h), site), { recursive: true });
     for (const f of fs.readdirSync(path.join(lib(h), site))) if (f.startsWith(copies[1]!)) fs.renameSync(path.join(lib(h), site, f), path.join(lib(h), site, f.replace(copies[1]!, site)));
     writeTop(h, site, { ...top(h, site), id: site, derivation: { ...(top(h, site).derivation as object), kind: 'site' } });
-    expect(refusalOf(() => h!.sc.follows.follow(site, 0))).toEqual(['NOT_ALLOWED', 'until_7b']);
-    expect(h.sc.follows.followers(arch).find((f) => f.entryId === site)).toMatchObject({ kind: 'site', behind: false });
+    // (7b DS) a SITE entry is no longer refused up front (it follows its source on its own site): this one (a copy relabelled) already
+    // derives from the head, a no-op; site-design.test.ts follows a real one
+    const siteOp = await run(h, h.sc.follows.follow(site, 0));
+    expect(siteOp.members[0]!.result).toMatchObject({ followed: false, refused: null, alreadyFollowed: true });
+    expect(h.sc.follows.followers(arch).find((f) => f.entryId === site)).toMatchObject({ kind: 'site' });
   }, 1_800_000);
 
   it('FS-b (S-FS-6): a copy grown past its standing lot is refused up front, nothing installed; the other copy of followAll still follows', async () => {

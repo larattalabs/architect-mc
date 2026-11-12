@@ -708,6 +708,7 @@ export const EstimateMix = z.object({
   model: z.string().max(100).optional().describe("the originals' detail model (default: the ordinary model)"),
   smallOriginals: z.number().int().min(0).max(1000).default(0).describe('(0b, C8) SMALL originals (the bounded pass)'),
   changes: z.number().int().min(0).max(1000).default(0).describe('(0b, C13) changes (versionOf)'),
+  site: z.number().int().min(0).max(1000).default(0).describe('(7b DS) site-aware originals of the default model (a group item with a site counts here too): the `site` line'),
 });
 export type EstimateMix = z.infer<typeof EstimateMix>;
 

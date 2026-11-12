@@ -16,7 +16,7 @@ export interface Sample {
   at: number;
 }
 
-export type EstimateKind = 'design' | 'bible' | 'massing' | 'critic' | 'revise' | 'polish' | 'scope' | 'scoping';
+export type EstimateKind = 'design' | 'bible' | 'massing' | 'critic' | 'revise' | 'polish' | 'scope' | 'scoping' | 'site' | 'adapted';
 export interface EstimateData {
   design: Record<string, Sample[]>;
   bible: Record<string, Sample[]>;
@@ -30,6 +30,9 @@ export interface EstimateData {
   polish?: Record<string, Sample[]>;
   scope?: Record<string, Sample[]>;
   scoping?: Record<string, Sample[]>;
+  /** (7b DS) a site-aware design (DesignRequest.site), and a paid adaptation (versionOf + site), by the design's model */
+  site?: Record<string, Sample[]>;
+  adapted?: Record<string, Sample[]>;
 }
 
 const KEEP = 20;
@@ -47,6 +50,11 @@ export const SEED_BASIS = 'seed (Steward phase 1, 2026-10-09)';
 const OPUS: Seed = { usd: [2.5, 4.6], ms: [8 * MIN, 15 * MIN] };
 /** (6c 0a) One repair-sized turn: a repair round, and the seed of an "adapted" building (unmeasured until 7b). */
 export const REPAIR_SEED: Seed = { usd: [0.3, 0.9], ms: [1 * MIN, 3 * MIN] };
+/** (7b DS) A site-aware design: 1.3-2x a design of the model (SETTLEMENTS §17.3, est.) until 7b's paid batch measures it. */
+export const SITE_MULTIPLIER: [number, number] = [1.3, 2];
+export const SITE_BASIS = 'a site-aware design: 1.3-2x the design seed (SETTLEMENTS §17.3, est.), unmeasured until 7b PA';
+/** (7b DS) A paid adaptation (versionOf + site): one repair-sized turn, the REPAIR seed until 7b's paid batch measures it. */
+export const ADAPTED_BASIS = 'a paid adaptation (versionOf + site): one repair-sized turn ($0.3-0.9, 1-3 min), unmeasured until 7b PA';
 /** (0b, C8) A SMALL detail pass (2 rounds, 40 turns, medium, $1.50): seeded at $0.6-1.5 and 3-6 min, unmeasured until §6. */
 export const SMALL_SEED: Seed = { usd: [0.6, 1.5], ms: [3 * MIN, 6 * MIN] };
 export const SMALL_BASIS = 'SMALL pass (config small: 2 rounds, 40 turns, effort medium, $1.50): seed $0.6-1.5, 3-6 min, unmeasured until §6';
@@ -116,6 +124,8 @@ export class Estimates {
     d.polish ??= {};
     d.scope ??= {};
     d.scoping ??= {};
+    d.site ??= {};
+    d.adapted ??= {};
     d.design ??= {};
     d.bible ??= {};
     d.massing ??= {};
@@ -169,6 +179,11 @@ export class Estimates {
       if (kind === 'scope') return { usd: SCOPE_FIX_SEED.usd, ms: SCOPE_FIX_SEED.ms, basis: `fix turn ${model}: seed ($0.1-0.4, 1-2 min)` };
       if (kind === 'scoping') return { usd: SCOPING_SEED.usd, ms: SCOPING_SEED.ms, basis: `scoping call ${model}: seed ($0.01-0.03, < 0.3 min)` };
       if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: a massing ($0.12-0.30, 1-3 min), ${SEED_BASIS}` };
+      if (kind === 'adapted') return { usd: REPAIR_SEED.usd, ms: REPAIR_SEED.ms, basis: `${model}: ${ADAPTED_BASIS}` };
+      if (kind === 'site') {
+        const { seed } = seedFor(model);
+        return { usd: [seed.usd[0] * SITE_MULTIPLIER[0], seed.usd[1] * SITE_MULTIPLIER[1]], ms: [seed.ms[0] * SITE_MULTIPLIER[0], seed.ms[1] * SITE_MULTIPLIER[1]], basis: `${model}: ${SITE_BASIS}` };
+      }
       if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($${CRITIC_SEED.usd[0]}-${CRITIC_SEED.usd[1]}, ${CRITIC_SEED.ms[0] / MIN}-${CRITIC_SEED.ms[1] / MIN} min per call, smoke 2026-10-06)` };
       if (kind === 'revise') {
         const opus = !model.toLowerCase().includes('sonnet') && !model.toLowerCase().includes('haiku');
@@ -184,7 +199,7 @@ export class Estimates {
     const mt = mean(list.map((s) => s.ms));
     const du = Math.max(0.25 * mu, sd(list.map((s) => s.usd), mu));
     const dt = Math.max(0.25 * mt, sd(list.map((s) => s.ms), mt));
-    const label = kind === 'critic' ? `critic ${model}` : kind === 'revise' ? `revision ${model}` : kind === 'polish' ? `polish step ${model}` : kind === 'scope' ? `fix turn ${model}` : kind === 'scoping' ? `scoping call ${model}` : model;
+    const label = kind === 'site' ? `site-aware ${model}` : kind === 'adapted' ? `adaptation ${model}` : kind === 'critic' ? `critic ${model}` : kind === 'revise' ? `revision ${model}` : kind === 'polish' ? `polish step ${model}` : kind === 'scope' ? `fix turn ${model}` : kind === 'scoping' ? `scoping call ${model}` : model;
     const minMs = kind === 'critic' || kind === 'scoping' ? 5_000 : MIN / 2;
     return { usd: [Math.max(0, mu - du), mu + du], ms: [Math.max(minMs, mt - dt), mt + dt], basis: `${label}: ${list.length} measured (avg $${mu.toFixed(2)}, ${(mt / MIN).toFixed(1)} min)` };
   }
@@ -303,6 +318,13 @@ export class Estimates {
 
   /** One design's estimate (a massing job's when the request is one). */
   design(req: DesignRequest, ctx: EstimateCtx): Estimate {
+    // (7b DS) a site-aware design ('site') or a paid adaptation (versionOf + site: 'adapted'), by the design's model
+    if (req.site && !req.massing) {
+      const model = req.model ?? ctx.designModel;
+      const pj = this.perJob(req.versionOf ? 'adapted' : 'site', model);
+      const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
+      return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
+    }
     // (0b, C13) a change of an entry (versionOf): the CHANGE seed
     if (req.versionOf) {
       const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
@@ -330,7 +352,7 @@ export class Estimates {
    * variant build time). A line per kind; the totals are the sums of the lines. Time: the bible, then the massing pass and
    * the detail pass in batches of the concurrency, then the adapted turns in batches; copies take seconds.
    */
-  mix(m0: { group?: Pick<GroupRequest, 'items' | 'massingFirst' | 'critique' | 'concurrency' | 'copyCap' | 'smallBySize'> | undefined; originals: number; adapted: number; copies: number; newBible: boolean; massingFirst: boolean; reportCritique: boolean; model?: string | undefined; smallOriginals?: number | undefined; changes?: number | undefined }, ctx: EstimateCtx): Estimate & { byKind: Partial<Record<MixKind, MixLine>> } {
+  mix(m0: { group?: Pick<GroupRequest, 'items' | 'massingFirst' | 'critique' | 'concurrency' | 'copyCap' | 'smallBySize'> | undefined; originals: number; adapted: number; copies: number; newBible: boolean; massingFirst: boolean; reportCritique: boolean; model?: string | undefined; smallOriginals?: number | undefined; changes?: number | undefined; site?: number | undefined }, ctx: EstimateCtx): Estimate & { byKind: Partial<Record<MixKind, MixLine>> } {
     // (0b) a group's placements: copies count as COPY, small originals as SMALL, the rest as ORIGINAL
     let m = m0;
     let smallModels = m0.smallOriginals ?? 0;
@@ -351,8 +373,24 @@ export class Estimates {
       const b = this.bible({}, ctx);
       line('bible', [b.usdLow, b.usdHigh], [b.minutesLow * MIN, b.minutesHigh * MIN], 1, b.basis);
     }
+    // (7b DS) site-aware items (their own line, `site`: one pass, no massing) and `site` more of the default model
+    const siteModels: string[] = [...(m.group?.items ?? []).filter((it) => it.site).map((it) => itemModel(it, ctx)), ...Array.from({ length: m.site ?? 0 }, () => m.model ?? ctx.ordinaryModel)];
+    if (siteModels.length) {
+      const usd: [number, number] = [0, 0];
+      let ms: [number, number] = [0, 0];
+      const lb = new Set<string>();
+      for (const model of siteModels) {
+        const d = this.perJob('site', model);
+        lb.add(d.basis);
+        usd[0] += d.usd[0];
+        usd[1] += d.usd[1];
+        ms = [Math.max(ms[0], d.ms[0]), Math.max(ms[1], d.ms[1])];
+      }
+      const b = Math.ceil(siteModels.length / slots);
+      line('site', usd, [b * ms[0], b * ms[1]], siteModels.length, [...lb].join('; '));
+    }
     // originals: the group's items (their own models) plus `originals` more of the default model
-    const models: string[] = [...(m.group?.items ?? []).map((it) => itemModel(it, ctx)), ...Array.from({ length: m.originals }, () => m.model ?? ctx.ordinaryModel)];
+    const models: string[] = [...(m.group?.items ?? []).filter((it) => !it.site).map((it) => itemModel(it, ctx)), ...Array.from({ length: m.originals }, () => m.model ?? ctx.ordinaryModel)];
     if (models.length) {
       const massingFirst = m.massingFirst || !!m.group?.massingFirst;
       const report = m.reportCritique || m.group?.critique?.mode === 'report';
@@ -386,7 +424,9 @@ export class Estimates {
     }
     if (m.adapted > 0) {
       const b = Math.ceil(m.adapted / slots);
-      line('adapted', [m.adapted * REPAIR_SEED.usd[0], m.adapted * REPAIR_SEED.usd[1]], [b * REPAIR_SEED.ms[0], b * REPAIR_SEED.ms[1]], m.adapted, 'one repair-sized turn ($0.3-0.9, 1-3 min), unmeasured until 7b');
+      // (7b DS) measured as 'adapted' (a paid adaptation: versionOf + site) once samples exist; the REPAIR seed until then
+      const a = this.perJob('adapted', m.model ?? ctx.ordinaryModel);
+      line('adapted', [m.adapted * a.usd[0], m.adapted * a.usd[1]], [b * a.ms[0], b * a.ms[1]], m.adapted, this.samples('adapted', m.model ?? ctx.ordinaryModel).length ? a.basis : 'one repair-sized turn ($0.3-0.9, 1-3 min), unmeasured until 7b');
     }
     if (smallModels > 0) {
       // a SMALL item still gets its massing under massingFirst; it never gets the default report critique
@@ -432,7 +472,7 @@ export class Estimates {
   }
 }
 
-export type MixKind = 'bible' | 'original' | 'adapted' | 'copy' | 'small' | 'change';
+export type MixKind = 'bible' | 'original' | 'adapted' | 'copy' | 'small' | 'change' | 'site';
 export interface MixLine {
   usdLow: number;
   usdHigh: number;

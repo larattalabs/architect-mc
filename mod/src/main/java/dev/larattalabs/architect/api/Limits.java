@@ -89,6 +89,12 @@ public final class Limits {
 	/** (since 1.41.0, Style unification U1) {@link DesignRequest#palette}: a preset name at most 32; an input or a role's block at most 64. */
 	public static final int PALETTE_PRESET_MAX = 32;
 	public static final int PALETTE_BLOCK_MAX = 64;
+	/**
+	 * (7b DS) {@link DesignRequest#site}: the most keep-critical cells and ports a site spec carries (equal to
+	 * {@link SiteSpec#MAX_KEEP_CRITICAL} and {@link SiteSpec#MAX_PORTS}, which the spec's own {@code problems()} check). Since NEXT.
+	 */
+	public static final int SITE_KEEP_CRITICAL_MAX = 65536;
+	public static final int SITE_PORTS_MAX = 16;
 	/** (since 1.41.0) The most roles a palette carries inline ({@code {bible: {id, version, roles}}}). */
 	public static final int PALETTE_ROLES_MAX = 64;
 

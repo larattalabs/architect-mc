@@ -214,6 +214,77 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
     expect(none).toMatchObject({ ok: false, code: 'VERSION_REFUSED', detail: 'no_entry' });
   });
 
+  it("a palette variant of a site-bound entry re-runs on the entry's own site (its files and binding kept)", async () => {
+    const v = h.sc.requestVariant(entryId, 'cherry');
+    await until(() => ['done', 'failed'].includes(h.sc.variants.get(v.id)!.status), 300_000);
+    const done = h.sc.variants.get(v.id)!;
+    expect(done.status, done.error).toBe('done');
+    const id = done.blueprintId!;
+    const j = JSON.parse(fs.readFileSync(path.join(h.cfg.libraryDir, id, `${id}.blueprint.json`), 'utf8')) as Record<string, any>;
+    expect(j.site.volumeSha).toBe(CLIFF.spec.volumeSha);
+    expect(j.ext['architect_mc:site'].volumeSha).toBe(CLIFF.spec.volumeSha);
+    expect(fs.existsSync(path.join(h.cfg.libraryDir, id, 'site', 'site.arvx'))).toBe(true);
+  });
+
+  it('a SITE entry follows its source: the new version re-run on its own site; a paid adaptation (versionOf + site) rebinds the entry (sim)', async () => {
+    // the source's next version: a paid adaptation of the archetype to cliff_east would rebind it, so the source's v2 here is a
+    // versionOf on its own site (the sim keeps the program: a site stand-in re-run)
+    const a = await call(h, { type: 'design.request', request: req({ notes: 'add a lantern', versionOf: { entryId } }) });
+    expect(a.error).toBeUndefined();
+    const did = a.result!.designId as string;
+    await until(() => ['done', 'failed'].includes(h.sc.designs.get(did)!.status), 300_000);
+    expect(h.sc.designs.get(did)!.status, h.sc.designs.get(did)!.step).toBe('done');
+    expect(h.sc.designs.get(did)!.request.site?.volumeSha).toBe(CLIFF.spec.volumeSha); // inherited from the entry's own site
+    expect(h.sc.versions.head(entryId)).toBe(2);
+    const follower = h.sc.follows.followers(entryId).find((f) => f.kind === 'site')!;
+    expect(follower).toMatchObject({ kind: 'site', sourceVersion: 1, behind: true });
+    const op = h.sc.follows.follow(follower.entryId, 0);
+    await until(() => h.sc.follows.get(op.id)?.status === 'done', 300_000);
+    const r = h.sc.follows.get(op.id)!.members[0]!.result!;
+    expect(r, r.message).toMatchObject({ followed: true, newVersion: 2, sourceVersion: 2 });
+    const top = h.sc.versions.top(follower.entryId)! as Record<string, any>;
+    expect(top.derivation).toMatchObject({ kind: 'site', sourceVersion: 2 });
+    expect(top.ext['architect_mc:site'].volumeSha).toBe(EAST.spec.volumeSha);
+    expect(top.size).toEqual({ x: 18, y: 24, z: 12 });
+  });
+
+  it('a paid adaptation (versionOf + site) of a plain entry: the scratch gets site/, checked on the composite, the version bound (sim)', async () => {
+    const p0 = await call(h, { type: 'design.request', request: req({ name: 'Plain Cabin', maxSize: { x: 40, y: 20, z: 40 } }) });
+    const pid = p0.result!.designId as string;
+    await until(() => ['done', 'failed'].includes(h.sc.designs.get(pid)!.status), 300_000);
+    const plain = h.sc.designs.get(pid)!.blueprintId!;
+    const a = await call(h, { type: 'design.request', request: req({ notes: 'adapt it to the cliff', versionOf: { entryId: plain }, site: { ...EAST.spec, volumeBlobId: put(h, EAST.bytes) } }) });
+    expect(a.error).toBeUndefined();
+    const did = a.result!.designId as string;
+    await until(() => ['done', 'failed'].includes(h.sc.designs.get(did)!.status), 300_000);
+    expect(h.sc.designs.get(did)!.status, h.sc.designs.get(did)!.step).toBe('done');
+    const scratch = scratchDirFor(h.cfg.dataDir, did);
+    expect(fs.readFileSync(path.join(scratch, 'BRIEF.md'), 'utf8')).toMatch(/## Site \(binding/);
+    const top = h.sc.versions.top(plain)! as Record<string, any>;
+    expect(h.sc.versions.head(plain)).toBe(2);
+    expect(top.ext['architect_mc:site'].volumeSha).toBe(EAST.spec.volumeSha);
+    expect(top.size).toEqual({ x: 18, y: 24, z: 12 });
+  });
+
+  it("estimates: a site-aware design is the 'site' kind (1.3-2x the design seed), a paid adaptation 'adapted', a group's site items their own line", () => {
+    const ctx = (h.sc as unknown as { estimateCtx(): Parameters<typeof h.sc.estimates.design>[1] }).estimateCtx();
+    const plain = h.sc.estimates.design(DesignRequest.parse(req({ model: 'claude-opus-5-5' })), ctx);
+    const site = h.sc.estimates.design(DesignRequest.parse(req({ model: 'claude-opus-5-5', site: CLIFF.spec })), ctx);
+    expect(site.basis).toMatch(/site-aware design: 1\.3-2x/);
+    expect(site.usdLow).toBeCloseTo(2.5 * 1.3, 2);
+    expect(site.usdHigh).toBeCloseTo(4.6 * 2, 2);
+    expect(plain.basis).not.toMatch(/site-aware/);
+    const adapted = h.sc.estimates.design(DesignRequest.parse(req({ site: CLIFF.spec, versionOf: { entryId: 'x' } })), ctx);
+    expect(adapted).toMatchObject({ usdLow: 0.3, usdHigh: 0.9 });
+    expect(adapted.basis).toMatch(/paid adaptation/);
+    const mix = h.sc.estimates.mix({ group: { items: [req({ itemKey: 'a' }), req({ itemKey: 'b', site: CLIFF.spec })] } as never, originals: 0, adapted: 2, copies: 0, newBible: false, massingFirst: false, reportCritique: false, site: 1 }, ctx);
+    expect(mix.byKind.site).toMatchObject({ count: 2 });
+    expect(mix.byKind.original).toMatchObject({ count: 1 });
+    expect(mix.byKind.adapted).toMatchObject({ count: 2, usdLow: 0.6, usdHigh: 1.8 });
+    h.sc.estimates.record('adapted', 'claude-sonnet-5-5', 0.5, 120_000);
+    expect(h.sc.estimates.perJob('adapted', 'claude-sonnet-5-5').basis).toMatch(/adaptation claude-sonnet-5-5: 1 measured/);
+  });
+
   it('the kit and the sidecar agree on the site rule ids', async () => {
     const { SITE_RULE_IDS: kitIds } = (await import(path.join(KIT, 'lib', 'siteCheck.mjs'))) as { SITE_RULE_IDS: string[] };
     expect([...SITE_RULE_IDS]).toEqual(kitIds);
