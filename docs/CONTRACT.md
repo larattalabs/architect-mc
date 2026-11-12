@@ -27443,3 +27443,73 @@ example), `overhang` (suspend, four hang points, a `down` walk port) and `trunk`
 | api-compat | clean: `--surface` of main 228f775b's own jar (2753 members) and of the 0.57.0 jar (2671); the 0.47.0 and 0.45.0 apitest jars (932 references each) |
 | `node tools/step-inputs.mjs check` | clean after `build` (unit-kit's closure gains f7b-foundation, the site fixtures and FitMode.java) |
 | gate-verifier (review only, DEV MODE) | **PASS** at 28d5f573: surface, additive compatibility, guards and the null-site hash, catalogue, the fit table against SETTLEMENTS §7.1, versions and the nine readings reviewed; f7b-foundation 5/5 and `site-fixtures.mjs --check` re-run. No blocking defect; minor: the two catalogue entries' `sinceApi` moves to NEXT (a consumer diffing the catalogue sees it), and the site caps live on SiteSpec, not `Limits` (DS may move them) |
+
+### Slice SV as built (branch `slice/SV` off main f5b235fe, main c57e42f1 merged; versions NEXT; $0, no client; recorded 2026-11-11)
+
+The site in the kit and the six hand-written fit examples, on 7bF's frozen surface (no 7bF signature changed; no Java API change; no
+new feature advertised). The kit has no `NEXT` stamp to carry: the kit version is the coordinator's at merge.
+
+**Built:**
+- **`kit/lib/site.mjs` `Site`** (volume + site spec, in the design's frame): `new Site(volume, lot)` (a decoded ARVX volume or its bytes;
+  a bare SiteSpec wire or a 7bF fixture's site.json), `Site.fromFiles`; `toWorld`/`toDesign` (vanilla's rotation, as `reserved.mjs`
+  `rotateBlock`), `worldFacing`, `inLot`, `inWindow`, `at` (class name, MISSING outside), `classIndex`, `solid` (`SITE_SOLID`: rock,
+  soil, loose, ice, snow, log), `surface(x, z, {below})`, `ceiling(x, z, {above})`, `cellsOf(cls, {window})`, `faces()`/`face(normal)`,
+  `trunk()` (`{cx, cz, y0, y1, cells, radiusAt(y)}`, throws without logs), `ledges()`, `hangPoints()`, `port(name|side)`, `portHint`,
+  `size`, `bounds`, `ports`, `keepCritical` (design cells), `summary()`. `compositeStructure(structure, site, {cut})` and
+  `SITE_STAND_IN` (render-only stand-in blocks per class). `kit/lib/siteFixture.mjs` `siteFixture(id)` loads a 7bF fixture.
+- **Blueprint** (`lib/kit.mjs`): `fit` and `site` options; `keep(cells, {critical})`, `isKeep`; `set`/`setRaw` into a keep cell throw;
+  the sidecar gains `fit`, `site` (the spec's wire, readable by `api.SiteSpec.fromWire`) and `keep: {critical: [[x, y, z]]}` (template
+  cells, sorted), only when the design has a fit or a site (every other design's bytes are unchanged: the four examples and every
+  golden rebuild identical).
+- **Helpers** (`lib/siteHelpers.mjs`, installed on Blueprint): `put` (keep-skipping set), `ringDeck`, `bracket`, `hangChain`
+  (`minecraft:iron_chain`), `beamInto`, `carveRoom`, `facadeOnFace`, `stilts`. Role blocks only; a prop a role's block lacks (an axis
+  on a non-log frame) is dropped (`propsFor`), as `Blueprint.beam` does.
+- **CLI:** `build.mjs --site <volume> --lot <site.json>` (a fit design without them exits 2 naming its example site; a fit mismatch
+  exits 2; mirroring a site build is refused); `render.mjs --site <volume> [--lot]` adds the views `composite` (iso of the template in
+  the whole window) and `section` (the composite cut at the lot's middle z, seen from the south), `SITE_VIEWS`, valid only with a site
+  (VIEWS and the default views unchanged); `tools/slices.mjs --site <volume> [--lot]` shows the site in the cells the design leaves
+  (`SITE_GLYPHS`: `#` rock, `:` soil, `~` water, `T` log, `%` leaves, ...; block letters skip them). `--lot` defaults to the sidecar's `site`.
+- **The six examples** (`kit/designs/site/fit_*.mjs`, built by `tools/examples.mjs` into `kit/examples/fit_*` over their fixture,
+  `exampleSite`): `fit_on_pad` (stilt house over grove's pond), `fit_carve_into` (carved hall in tunnel_hill), `fit_attach_to_cliff`
+  (cliff house on cliff_face, roof deck at the clifftop port), `fit_span` (house across rift_site, a door at each walk port),
+  `fit_wrap_trunk` (round room on a ring deck round the trunk), `fit_suspend` (house on four chains from overhang's hang points, a ladder
+  to the down hatch). Each reads its geometry from the Site (faces, the surface, the trunk, ports, hang points), not constants.
+  Bundled into the mod's library like the other examples (PL's in-game steps place them by `fitToSite`).
+
+**Readings chosen** (the contract was silent or the code disagreed):
+1. **Sources in `kit/designs/site/`**, found by id (`importDesign` falls back to it). Tools that build every design without a site
+   (`delta-fixtures`, `mirror-fit-fixture`, the lot-fit tests) keep listing `kit/designs/` only; a site design built without a site exits 2.
+2. **The sidecar's `frame` stays the 5b design origin** (`TemplateDelta` reads `frame.origin`); the site frame lives in `site.frame`.
+   §7.2's "the sidecar records `fit` and `frame`" is read as `fit` plus the whole `site` spec.
+3. **A site-bound template is exactly the lot box** (size = the site's, origin 0) and its frame is the spec's. The checker accepts block
+   extents inside the box when the sidecar has a `site` (`lib/check.mjs`: the size-vs-extents rule; a shared-file touch, two lines).
+4. **Walk ports may face up or down** (`checkPorts`, kind `architect:walk` only; a shared-file touch). Java `Views.ports` already skips
+   vertical ports.
+5. **The check stays template-only until SC.** Errors must be 0; `groundY` of a non-pad example is its main floor's feet row (no
+   placement meaning; the template-only rules then read the floor as the plane it bears on). Four examples check clean; two keep the
+   warnings only SC's composite can clear, named exactly in their `templateOnlyWarnings` and held by `examples.mjs`: `fit_carve_into`
+   (enclosure x2: the rock is its walls and ceiling) and `fit_wrap_trunk` (enclosure, interior: the trunk's cells in its room).
+   SV's units stand in for the composite meanwhile: no keep cell or host log written, each site port met (same name, kind and facing,
+   within 2 of the hint), every written block connected through written blocks to site-solid (or the ground row for on_pad), and per
+   fit: chains under every hang point, both span ends bearing on the rims (>= 4 cells each), carved air only where the site was solid,
+   beams ending inside the cliff face, the deck bearing on the trunk, stilts standing in the pond. SC replaces them with its rules.
+6. **The site's keep-critical cells inside the box are keep cells from the start**; cells outside the box (the overhang's hang points sit
+   on the underside above it) are ignored by `keep` and so absent from `keep.critical`.
+7. **A port fit has no ground approach** (`approach.length` 0 unless the design sets one), from the fit table's `approach` column.
+8. **Themed:** every block of each example traces (`connectors/style.mjs` `traceRole`) to a role of its palette under the default
+   palette and the `fortress` and `cherry` bibles; the only unthemed blocks are UNTHEMED_OK's (ladder, iron chain) and the bed.
+9. **`MinLotSizeTest` skips site-bound examples** (they are placed in their site's frame, never fitted to a lot); `goldens.json`
+   (schem, kit and mod halves) gains the six; the render goldens live in `kit/test/fixtures/sv-renders.json` (not in the fixture dir,
+   which f7b-foundation holds to the six fixtures).
+10. **For DS:** a palette or param variant of a fit entry re-runs its program, which needs the site (`variants.ts` passes none today).
+
+**Checks** ($0, no client; the SV gate column has no in-game items, so no gate run and no lane):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1131/1131 (sv.test.mjs 13/13: Site frames, rotations (all four, margin cells), shapes, keep, helpers, ports, the six examples built, current in kit/examples, byte-identical twice, composite invariants, themed under three palettes, render goldens, CLI) |
+| sidecar `npm ci && npm run check` | 811/811 (a first run beside the kit and gradle builds timed out critique's real-kit budget test at 64 s, machine load; alone it passes) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1046 tests, 0 failures, 1 skipped (SidecarJsonTest's kit examples, SchematicTest's goldens, LedgerLint/RegionFluidsLint = p3-lint) |
+| lint-structure / lint-look | 68 cases, 0 failing / 13 cases, 0 failing |
+| water-lint `node --test kit/lint/*.lint.mjs` | 135/135 |
+| `node tools/step-inputs.mjs check` | clean after `build` (325 steps; the fixture loader is its own module so the build's closure stays off the fixtures) |
