@@ -379,4 +379,32 @@ public interface Regions {
 	default CompletableFuture<String> authorProgram(AuthorRequest request) {
 		throw new UnsupportedOperationException("Regions.authorProgram needs Architect API NEXT (slice AU)");
 	}
+
+	/**
+	 * (M5 QT, Steward's S-M5-7) A read-only, $0 quote of a plan's whole survival bill with these lot entries: what {@link #realise} of
+	 * {@code planId} with {@code lotEntries} ({@code lot -> id} or {@code id@version}) would take from the owner's stockpile, per item, in the
+	 * plan check's {@code cost.bom} shape ({@link Quote}): the region's paid cells, every bound lot entry (its construction bill at the fit the
+	 * realise places it), the 4e roads, a first realise's gate mechanisms and the fluids' charge. A revision plan ({@link #planRevision}) is
+	 * quoted against its standing region: its own parts, its lots and its refills (each refill lot needs its entry here, as the realise
+	 * does). Nothing is consumed, reserved, journaled or written, no chunk is loaded and no helper is asked: the bill is measured over the land
+	 * as it is now (loaded chunks; a lot in unloaded ones is not {@link Quote#exact() exact}). A creative (INSTANT) plan answers an empty bill
+	 * with {@code survival} false. Refusals: an unknown or discarded plan {@link Reason#PLAN_STALE}; a survival plan planned before this
+	 * API (no tile bill kept) {@link Reason#PLAN_STALE} (detail {@code no_bill}: plan it again); an entry not in the library
+	 * {@link Reason#UNKNOWN_BLUEPRINT}; an entry too big for its lot {@link Reason#LOT_TOO_SMALL}; a site lot's entry that does not bind
+	 * {@link Reason#SITE_MISMATCH}; a revision whose region is gone {@link Reason#OTHER}. Server thread; the future completes on it. Since
+	 * NEXT, feature {@code "quote"}.
+	 */
+	default CompletableFuture<Quote> quote(String planId, java.util.Map<String, String> lotEntries) {
+		throw new UnsupportedOperationException("Regions.quote needs Architect API NEXT");
+	}
+
+	/**
+	 * (M5 QT, Steward's review change 1) {@link #quote} of an approved artifact, as {@link #realiseApproved} would realise it: its own plan,
+	 * with the artifact's lot entries and then {@code lotEntries} over them ({@link #checkPalette}'s merge). The same {@link Quote}, read-only,
+	 * $0: no pin, no retention touch, no key. An unknown or removed artifact refuses {@link Reason#ARTIFACT_UNAPPROVED}; otherwise as
+	 * {@link #quote}. Server thread. Since NEXT, feature {@code "quote"}.
+	 */
+	default CompletableFuture<Quote> quoteApproved(String artifactSha, java.util.Map<String, String> lotEntries) {
+		throw new UnsupportedOperationException("Regions.quoteApproved needs Architect API NEXT");
+	}
 }

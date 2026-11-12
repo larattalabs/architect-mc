@@ -33,7 +33,9 @@ public final class ApiRules {
 		// (6d LC) Regions.landCheck: the land-change report of a standing region (read-only)
 		"landCheck",
 		// (6d AD) Regions.adopt and Regions.unadopt: a VillageLayout settlement as a region, no cell written
-		"regionAdopt");
+		"regionAdopt",
+		// (M5 QT) Regions.quote and Regions.quoteApproved: a plan's whole survival bill with its lot entries (read-only, $0)
+		"quote");
 
 	private ApiRules() {
 	}

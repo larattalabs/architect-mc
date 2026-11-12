@@ -626,7 +626,7 @@ public final class Sites {
 		boolean[] unloaded = {false};
 		// phase 4e: standing roads' surface cells near the box (the approach stops at a road)
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
-		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = approachRoads(dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach)));
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
 		dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
 		// the chunk of the last column read (a size-cap box reads 600k cells: no per-cell chunk lookup)
@@ -980,6 +980,34 @@ public final class Sites {
 		return o;
 	}
 
+	/**
+	 * (M5 QT) Set while a quote ({@code region.Quotes}) runs a lot's dry-run verdict on this thread: the surface cells of the plan's own 4e
+	 * roads, which stand when the realise puts the lot down (the approach stops at them, as at a standing road). A quote's verdict never seeds
+	 * the placement's check cache. Null otherwise.
+	 */
+	public static final ThreadLocal<it.unimi.dsi.fastutil.longs.@Nullable LongSet> QUOTE_ROADS = new ThreadLocal<>();
+
+	/**
+	 * The road cells an approach stops at: the standing roads' ({@code standing}, Roads.roadCells) and, (M5 QT) while a quote runs on this
+	 * thread, its plan's own ({@link #QUOTE_ROADS}: they stand by the time the realise puts its lots down, a lot's item waits for its stage's
+	 * roads). Returns {@code standing}, widened.
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet approachRoads(it.unimi.dsi.fastutil.longs.LongOpenHashSet standing) {
+		it.unimi.dsi.fastutil.longs.LongSet quote = QUOTE_ROADS.get();
+		if (quote != null) {
+			standing.addAll(quote);
+		}
+		return standing;
+	}
+
+	/**
+	 * Whether a verdict seeds the placement's one-tick check cache ({@code checked}, a large item's start a tick later): a site with no
+	 * refusal, not a move, the library's own entry, and (M5 QT) never a quote's verdict (its roads are the plan's, not the world's).
+	 */
+	static boolean seedsCheck(boolean hasSite, boolean noRefusal, boolean notMoving, boolean libraryEntry) {
+		return hasSite && noRefusal && notMoving && libraryEntry && QUOTE_ROADS.get() == null;
+	}
+
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
@@ -997,6 +1025,36 @@ public final class Sites {
 		}
 		FullBom.Result r = FullBom.of(level, bp, v.plan());
 		return r == null ? null : new BomFull(r.items(), r.exact() && v.refusals().isEmpty(), r.driftCells(), r.inexactBecause());
+	}
+
+	/**
+	 * (M5 QT) What a construction placement behind a dry-run {@link Verdict} takes from a stockpile, as the builder pays it: C26's full bill
+	 * ({@link FullBom}: template, foundation and approach at their last write), less the cells in {@code masked} (a region lot's LotMask: never
+	 * the site's), each cell costed dry as the run costs it (the conversion clears every queued cell to air, so each is paid). Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
+	 */
+	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
+		if (v.plan() == null || !v.construction()) {
+			return null;
+		}
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		if (r == null) {
+			return null;
+		}
+		Map<String, Integer> items = new java.util.TreeMap<>();
+		List<String> why = new ArrayList<>(r.inexactBecause());
+		for (var e : r.states().entrySet()) {
+			long p = e.getKey();
+			if (masked != null && masked.contains(p)) {
+				continue;
+			}
+			// (every queued cell is cleared to air at the conversion, Builder.clear: none is found built, each is paid)
+			BlockState target = RegionTargets.dry(e.getValue());
+			for (dev.larattalabs.architect.survival.SurvivalItems.Cost k : Cells.cost(target)) {
+				items.merge(k.item(), k.count(), Integer::sum);
+			}
+		}
+		boolean exact = r.exact() && v.refusals().isEmpty();
+		return new BomFull(items, exact, r.driftCells(), List.copyOf(why));
 	}
 
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */
@@ -1102,7 +1160,7 @@ public final class Sites {
 					out.add(Reason.PROTECTED, Protected.message(moving != null ? "Moving " + movingId : "Placing " + bp.id(), pa));
 				}
 			}
-			if (site != null && typed.isEmpty() && moving == null && given == null) {
+			if (seedsCheck(site != null, typed.isEmpty(), moving == null, given == null)) {
 				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}
 			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));

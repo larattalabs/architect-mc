@@ -28897,3 +28897,72 @@ the helper's new messages `design.fromProgram`, `design.variant`, `design.varian
 | `node tools/step-inputs.mjs check` | clean (347 steps; gp-unit and gp-ingame added) |
 | in game, run 20261112-213724-change at d71af1b4 (ports 8906/8907, headless) | **PASS** gp-unit 2/0, **gp-ingame 16/0**: fromProgram installed `gp_crop_field` in 1.9 s (sha = sha256 of the source, program/source.mjs exact; values, the program's own type `crop_field`, 11x3x11); the key replayed, another body OP_KEY_CONFLICT; params outside the schema PROGRAM_REFUSED params; a keyed variant (crop wheat, Style fortress v1, 2 reserved cells) `gp_crop_field_kv` in 1.9 s with a VARIANT derivation and its recipe; a program ignoring the reserved cells PROGRAM_REFUSED reserved; a variant of `cabin` not_given; the server restarted, variantByKey(steward:gate, steward.gate.module.lot_3) found it (unknown key and the player's scope: empty), the replayed call answered it, one variant in the library; placed on flat ground: the reserved cells keep grass and air, the field round them farmland and wheat, lantern lamps from the Style; Remove exact (the 2601-cell box's hash as before). The first run (20261112-213221) failed only the placement check: the driver misread `dev.box.hash`'s `{id:...}` lines and placed at y 250; fixed in the driver |
 | gate-verifier (review only: GP touches no undo, journal, removal or accounting) | **PASS** at 582c9731: the sandbox flags confine the build to its scratch dir (no child processes, the NO_NETWORK preload, the heap cap), the renderer reads only our NBT; op keys, resume and the install-before-record kill sound; the sha is of the caller's exact source; API additive. Minor notes (not fixed): a source with lone UTF-16 surrogates would not round-trip through UTF-8 (a false `program_stale` later); NO_NETWORK is the plan's monkey-patch, not a hard switch (parity with the plan sandbox); a replay does not re-validate the source; new checker lines map to `check` until `findingRule` learns them |
+
+### Slice QT as built (branch `slice/QT` off `origin/main` f1c78b06, v0.61.0; versions NEXT; $0; DEV MODE; recorded 2026-11-12)
+
+Steward's S-M5-7 and review change 1: read-only quotes of a plan's whole survival bill with its lot entries.
+
+**API** (additive, defaults that throw, `Since NEXT`, feature `"quote"` on the Java side):
+- `CompletableFuture<Quote> Regions.quote(String planId, Map<String, String> lotEntries)`
+- `CompletableFuture<Quote> Regions.quoteApproved(String artifactSha, Map<String, String> lotEntries)`
+- `record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
+  Map<String, String> lotEntries, boolean exact, List<String> notes)`
+
+The `bom` is the plan check's `cost.bom` shape (item -> count, sorted). `bomParts` names each piece, as `cost.bomParts` does:
+
+| Piece | Source (what the realise charges) |
+|---|---|
+| `tiles:<group>` | The region's paid cells per target group, over the plan survey: the kit's own bill. **The kit now keeps it on every survival plan**: `planRegion` returns `survivalBom` (plan.json, `region.planned.survivalBom`, the mod's plan record), outside the IR, so no IR sha or golden moves. |
+| `lot:<id>` | `RegionsImpl.lotItemOf` (the realise's own fit, LotMask and site binding), then the put-down's dry-run verdict (construction, LAYER, the region's entrance style via the new `EntranceStyle.ofIr`, no protected-area check, a site lot under `SiteFit.with`), then the new `Sites.quoteBill`: C26's full bill less the LotMask cells, each cell costed dry. **The plan's own 4e roads count as standing** (`Sites.QUOTE_ROADS`, read by `Sites.approachRoads`): a lot's item waits for its stage's roads, so its approach stops at them. Every queued cell is paid, because the conversion clears them to air (`Builder.clear`). |
+| `road:<id>` | `checkRoad` over the land now, then `RoadBuilder.bom` (the plan check's call). |
+| `mech:<lot>`, `mech:<gate>` | A first realise only (`PlanChecks.mechanismBill`, `GateMech`). A revision queues no mechanism item. |
+| `fluids` | A lava bucket per lava source and an iron bars per grate cell, once per region (`survival.chargedAt`): a revision of a region charged already has none. Over every body, so an upper bound (`exact` false). |
+| `fill:<lot>` | Not built: FK's hook (a comment in `Quotes.lot`). |
+
+- **Revisions** are quoted against their standing region (`region` is set). Refills come from the effective IR; each needs its entry, else `NOT_ALLOWED`, as the realise refuses.
+- **`quoteApproved`** reads the artifact's own plan and merges the entries as `realiseApproved` does (`PaletteRules.bound`). It refuses `ARTIFACT_STALE` for an IR or mode mismatch.
+- **Refusals:** an unknown or discarded plan refuses `PLAN_STALE`, and so does a survival plan planned before this build (`no_bill`); an unknown or removed artifact `ARTIFACT_UNAPPROVED`; a lot item's own failure carries its reason (`UNKNOWN_BLUEPRINT`, `LOT_TOO_SMALL`, `SITE_MISMATCH`).
+- **Creative plans:** a creative (INSTANT) plan answers an empty bill with `survival` false.
+- **Nothing is written:** no journal, record, pin, retention touch, key or world change, and no chunk is loaded.
+- **The check cache:** a quote's verdict never seeds the placement's one-tick check cache (`Sites.seedsCheck`).
+- **Dev hooks:** `dev.region.quote {planId | sha, lotEntries}` and (TEST) `dev.qt.templateBom {entry}`, in `SliceP0Dev`, generated headless too (docs/DEVBRIDGE.md).
+
+**Gate evidence** (the coordinator's ruling 2026-11-12: run 4's three passing steps' checks, less the dropped discriminator). Run
+`artifacts/gate-runs-qt/20261112-214537-change` at 5fef6d96, $0, ports 8908/8909, steps from `tools/lib/gatem5qt.mjs` registered into
+`tools/gate6dgr.mjs`:
+
+| Step | Result |
+|---|---|
+| qt-unit | PASS 3/0: kit `qt.test` 3/3; QuotesTest, ApiQTTest; api-compat clean against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 surface. |
+| qt-growth | 12 ok, 1 FAIL (the dropped discriminator, below). A survival `flat_village` town with `cottage_1: qt_hut` is quoted with `quote(planId)`, realised and fed: **consumed equals the quote item for item**. A growth by `planRevision` with `qa: qt_hut`, `qb: rs_shed` is quoted three rounds of two (box hash, the journal, `<world>/architect`, the regions dir (64 files) and the stockpile's stock, ledger and outstanding all unchanged; the answers equal), then realised with those entries and fed: **consumed equals the quote**. Revision 1 PLACED. |
+| qt-approved | PASS 11/0. A plan/0 town checked in survival is quoted with `quoteApproved` and `h1: qt_hut`, `h2: rs_hut` under the same no-write proof (14 files). `quote(planId)` with the merged entries equals it. It is realised with `realiseApproved` and fed: **consumed equals the quote**. Unknown artifact `ARTIFACT_UNAPPROVED`, unknown plan `PLAN_STALE`. |
+
+- **Dropped from the gate:** the in-game check "qt_hut's piece is more than its template's bill". **No in-game fixture has an approach above zero**: every bound lot in these towns faces one of the plan's own 4e roads, so its approach stops at once and its piece equals its template bill. The diff is recorded (`out.town.template`, `out.growth.template`, `out.template`: `{}` in run 4).
+- **The approach model is proven by `QuoteRoadsTest`** (JUnit, added after run 4 at the coordinator's ask, no gate run): with no road in front, the default approach (6 rows, 18 path cells) bills `{oak_planks 3, dirt 18}`, 21 cells over a 3-cell template; with a plan road on the first row and `QUOTE_ROADS` set, the approach has 0 rows and the bill is the template's 3 cells; the same land has its 18 cells again once the quote ends; a quote's verdict never seeds the check cache.
+
+**Runs 1-3 (the lessons):**
+1. The quote measured a lot's approach over the land now. At put-down the plan's own roads already stand, and an approach stops at a road, so consumed was 12 cells under the quote. Fixed with `QUOTE_ROADS`. (Run 1 also failed "answers equal": the gate's strip kept the bridge's `id`, `type` and `ok`.)
+2. Exact everywhere. It failed only the discriminator, which assumed an approach adds cells; next to a road it adds none.
+3. A tried rule, "cells the land holds already are not paid", was wrong: the conversion clears every queued cell to air, so all are paid (+35 dirt). It was removed in run 4.
+4. Lesson for the next briefs: an exact-bill gate needs its fixtures built from what actually consumes (put-down after the stage's roads, clear to air), and a discriminator needs a fixture where the difference exists.
+
+**Readings:**
+1. Tiles are billed over the plan survey, as the plan check's cost.bom is: a cell the land already holds as its target is still in the kit's bill. This was exact on the flat fixtures; on built-up land a tile cell that is "already so" could make the quote high, never low.
+2. A lot is measured over the land now, before the plan's own tiles write. Pads under a lot on rough land could differ; `notes` says so. `exact` is C26's (drift cells, unloaded cells, refusals) and the fluids' upper bound.
+3. A lava bucket's empty bucket comes back to the stockpile (StockLedger). The quote names the full bucket.
+4. `realiseApproved`'s `fill` (provisional lots, the first entry that fits) is not quoted: pass the chosen entries.
+5. Quotes ran 2.6 to 47 ms on the server thread (the first call on a cold plan cache is the slowest).
+
+**Steward RC areas** (with GP): the two methods and `Quote` (shapes, refusals, the `no_bill` case for plans made before this build); `bomParts` names and Steward's bound compare against `bom`; a revision quote's `region` and its refills needing entries; mechanisms absent for a revision; the fluids once-per-region rule and `exact` false with fluids; `region.planned.survivalBom` (a new optional protocol member); the quote's approach stopping at the plan's own roads.
+
+**Checks** ($0):
+
+| Check | Result |
+|---|---|
+| mod `./gradlew build --offline --no-daemon` | pass: 1107 tests, 0 failures, 1 skipped (QuotesTest 3, ApiQTTest 2, QuoteRoadsTest 4; ApiRulesTest's feature list gains `quote`) |
+| kit `node --test kit/test/*.test.mjs` | 1206/1206 (`qt.test` 3: survivalBom per group equals the tiles' paid bill; none for a creative plan; outside the IR). An earlier loaded run had one `gate-corpus-plan` failure that passed alone, a flake. |
+| sidecar `npm ci && npm run check` | 838/838, 58 files; the bundle built |
+| lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0; p3-lint is inside unit-mod |
+| api-compat | clean against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface (2605 members) |
+| `node tools/step-inputs.mjs check` | clean, 348 steps (rebuilt for qt-unit, qt-growth, qt-approved) |
+| gate-verifier (review only) | **PASS** at 482ae378, no blocking findings. It re-ran QuoteRoadsTest, QuotesTest, ApiQTTest and ApiRulesTest (`--rerun-tasks`) and kit `qt.test` 3/0. It reviewed run 4 and the diff 5fef6d96..482ae378: behaviour-identical extraction, so run 4 holds. Minor: (1) the in-game fixtures prove the approach only at its zero case; (2) QuoteRoadsTest drives `approachRoads`, `seedsCheck`, `Approach.plan` and `FullBom.compute`, but not `checkSite`/`quoteBill` end to end (those rest on run 4's exact equality and on inspection); (3) the no-write proof covers the world dirs and the claim box, not in-memory state (read-only by code); (4) on built-up land the quote can be high (readings 1 and 2). |
