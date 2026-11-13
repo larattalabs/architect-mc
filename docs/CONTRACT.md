@@ -29097,3 +29097,95 @@ The `bom` is the plan check's `cost.bom` shape (item -> count, sorted). `bomPart
 | api-compat | clean against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface (2605 members) |
 | `node tools/step-inputs.mjs check` | clean, 348 steps (rebuilt for qt-unit, qt-growth, qt-approved) |
 | gate-verifier (review only) | **PASS** at 482ae378, no blocking findings. It re-ran QuoteRoadsTest, QuotesTest, ApiQTTest and ApiRulesTest (`--rerun-tasks`) and kit `qt.test` 3/0. It reviewed run 4 and the diff 5fef6d96..482ae378: behaviour-identical extraction, so run 4 holds. Minor: (1) the in-game fixtures prove the approach only at its zero case; (2) QuoteRoadsTest drives `approachRoads`, `seedsCheck`, `Approach.plan` and `FullBom.compute`, but not `checkSite`/`quoteBill` end to end (those rest on run 4's exact equality and on inspection); (3) the no-write proof covers the world dirs and the claim box, not in-memory state (read-only by code); (4) on built-up land the quote can be high (readings 1 and 2). |
+
+### Slice IG as built (branch `slice/IG` off `origin/main` 0cdb1869, v0.62.0+11; versions NEXT; $0; DEV MODE, strict: survival and undo; recorded 2026-11-12)
+
+Steward's S-M5-2: `irrigate` on a `planRevision` grow lot runs IRR's whole lifecycle. No API type changes: the grow lot is JSON,
+and the report is a new `LotSpec.ext` member.
+
+**What a caller sends and reads:**
+- **The ask:** a grow lot `{id, type, size [along, deep], villager?, ext?, irrigate: true}` in
+  `planRevision(region, (program, {grow: {lots}}))`. `irrigate` must be a boolean (`false` = absent); anything else is
+  `NOT_ALLOWED: [call] grow lot <id>: irrigate must be true or false`.
+- **The report:** `RegionPlan.lots[i].ext["architect_mc:lotIrrigation"]` (`RegionsImpl.EXT_IRRIGATION`, on an irrigated lot only) =
+  IRR's record `{sources, bodies, field: [x0, z0, x1, z1], cells: world column runs [x, z, y0, y1], frame: [W, D], lotCells: runs [u, v, y0,
+  y1] in the lot's frame}`. It is the same object as the revision IR's `lots[].irrigation`.
+  - Steward builds `DesignRequest.Reserved(front, W, D, cells)` (or GP's `reserved`) from `frame` and `lotCells`.
+  - **`frame` is the grow size `[along, deep]`** for every front, as Steward's geometry needs (W = F + 2, D = F + 3).
+  - **lotCells' y is from the lot's floor:** the source at y 0, its bed at -1, the cell over it at +1. The farmland level is the
+    floor; a module program that writes its farmland one row below the floor (GP's test fixture does) sits under IRR's sources.
+  - The key is not `architect_mc:irrigation`: that is the lot site's own `LotMask.EXT` (`{cells}`), and FC's `architect_mc:field`
+    sits beside it.
+  - A plan/0 irrigated lot's `LotSpec.ext` gains the same member.
+- **Refusals:** a lot that asks and can't be irrigated refuses the revision with `NOT_ALLOWED: [irrigate] ...`, never with a note
+  (plan/0 notes). Steward reserves the cells from the report, so silent "no irrigation" would leave a hole with no water.
+  - The cases: not a farm lot (villager or type: `crop_farm` is a farm); a field side under 3; a freezing biome; IRR's emit failing.
+  - A region whose stages have none between the pads' and the lots' (an adopted street town's single `adopted` stage) refuses
+    `[irrigate] region stages (...) have no stage between ...`. V's flat_village has `street`.
+
+**How it is built:**
+- **The kit:** `kit/lib/fluids/irrigate.mjs` `irrigateLot(r, ctx, lot, opts)` is IRR's per-lot emit pulled out of `emitIrrigation`, so
+  plan/0 and revisions share one body.
+  - `kit/regions/revise.mjs`, for every grown lot with `irrigate: true`, emits the bodies `rv<rid>_<lot>_irr_<i>_<j>` (kind
+    `irrigation`, the revision's prefix as every revision body) after `emitGrowth`.
+  - Their shells (`<body>_shell`, a bed and four `farmland[moisture=7]` sides) go in `street`, after the pads' `ground` and before
+    `lots`. The water goes in a `fluids` stage the revision now adds for irrigation too (it was ponds only). The lot keeps IRR's record.
+  - `revision.grow.irrigated: [lot ids]`, only when there are any.
+  - `kit/lib/region/grow.mjs` is untouched: `specOf` already carries the whole lot spec.
+- **The realise and the mask:** unchanged code. The revision's lot item reads its own IR (`Revisions.java`'s `lotItemOf(..., ir, ...)`),
+  so `LotMask` and `irrigationDropped` apply. A revision's fluids record (`<region>#rv<rid>`) reads its irrigation lots from the
+  revision IR, so the breach sweep applies.
+- **Lot removal alone (S-IRR-4), fixed:** `RegionFluids.drainLot` looked the lot's bodies up in the effective IR but drained through
+  the region's own record, where a grown lot's bodies are not. Removing a grown irrigated lot alone would have left its sources. It
+  now finds the lot's revision (`lotRid`: Revisions.merge stamps each added lot with its `rid`) and drains through
+  `Revisions.liveFor(l, rv<rid>:fluids)`. Test: `IgLotDrainTest`; in game, ig-instant.
+- **Survival order, fixed (found by run 1):** `RegionTargets.stageWait` makes a survival lot item wait for its earlier stages' targets
+  under its box + 8 (§6.3). Its `roi()` read the lot from the region's realised IR only, so **a grown lot never waited**: its item was
+  put down before its irrigation shells (paid `street` targets) were built.
+  - The crop over each farmland side broke on its settling tick and was never queued: run 1 consumed 304 wheat seeds against a quote
+    of 320, 16 fewer, one per side.
+  - `roi()` now reads a lot item from its revision's IR (`Revisions.liveFor(l, i.stage)`). Every grown lot in survival now waits as
+    §6.3 says (the coordinator approved this; ig-survival covers a plain grown lot too).
+  - **Revision roads have the same lookup and are not changed here** (a leftover, logged by the coordinator).
+- **Billing:** the shells are paid tile cells, so each source's bed and four farmland sides are in the revision's survival bill. They
+  show as QT's `bomParts["tiles:rv<rid>_<lot>_irr_<i>_<j>_shell"]`, 5 items each (farmland is priced as dirt; the bed is the bible's
+  `fluids.bed` chain's first block that differs from the pad's top, dirt on the gate's grass). Water is free.
+  - Cells masked out of the lot's entry are not billed: `irrigationDropped`, QT's lot piece.
+- **Undo:** `undoRevision` drains a revision's bodies first (`drainRevisions`, the breach sweep on), then undoes its stages top first.
+  Nothing here changed it; the gate runs it plain, killed at RVU1, and killed at RVU2+save in survival.
+- **Dev:** `dev.rv.plan` now answers the plan's `lots: [{id, front, floorY, box, ext}]` (docs/DEVBRIDGE.md unchanged otherwise).
+
+**Byte identity:**
+- **plan/0:** the 12 committed plan/0 fixtures with `irrigate` (irr/*, valid/v62, v63, rs/rs03) are byte-identical through the
+  two-plan flow, here and on origin/main's kit (answers, overall, IR, first plan).
+- **Revisions:**
+  - A revision with no irrigation is identical to today's **except `programSha`** (sha256 of `revise.mjs`'s source), and with it
+    `irSha`. Six revision IRs (two frontage lots, a six-lot extension, a count of 3, a crop_farm without `irrigate`, a pond, a fill),
+    planned here and with origin/main's kit, are equal once `programSha` is set aside.
+  - GR's `kit/test/fixtures/gr/land.json` and RV's `fixtures/rv/merge.json` were re-cut with their own scripts: a structural diff
+    shows only `irSha`/`programSha` changed (GR-b's precedent).
+  - `irrigate: false` plans the same IR as an absent member (ig.test).
+
+**Readings:**
+1. A grow lot that can't be irrigated refuses rather than notes (above).
+2. The shells' stage is the region's own `street`; a base without one refuses.
+3. The report's key is `architect_mc:lotIrrigation`, not `architect_mc:irrigation` (that is the site's mask key; FC's field key sits
+   beside it).
+4. The survival fix applies to every grown lot, not only irrigated ones: the wait was missing for all of them.
+5. The gate's field entry is IRR's `g6c_irr_field` at 20 x 21 (wheat, a fence, a composter). It ignores the reserved cells and the mask
+   drops 28 of its blocks. Steward's own module leaves them (GP's `reserved`); the mask is the guarantee either way.
+
+**Known open issue (not IG's; the coordinator's safety triage):** an undo halted at RVU2 with **nothing saved**, resumed after a
+restart, refunded by the journal items whose consumption the rewound stockpile ledger no longer records. The exact repro is in the
+notes folder: `architect-IG-rvu2-refund.md`. IG's gate saves first (`/save-all flush`, `RVU2+save`), which judges the saved case only;
+the unsaved case stays open.
+
+**Steward RC areas** (with FC):
+- `irrigate` on a grow lot and its refusals (`[irrigate]`, `[call]`).
+- `LotSpec.ext["architect_mc:lotIrrigation"]` (its shape, frame and floor-relative y).
+- Revision stages: `street` and `fluids` now appear on irrigated growths.
+- The survival stage wait now applies to every grown lot: its item waits (ITEM_WAITING, `architect_mc:waitsFor`) for the earlier
+  stages' targets; Steward's growth A2 build order and wait messages.
+- QT's quote of an irrigated growth (the shells' `tiles:` pieces).
+- Lot removal alone of a grown irrigated lot (drained).
+- `undoRevision` of an irrigated growth.
