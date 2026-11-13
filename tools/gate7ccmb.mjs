@@ -168,7 +168,7 @@ async function verifyAll(sites) {
 const PATH_UNDER_TOWERS = 28;
 function vanillaOnly(v) {
   return Object.values(v).every((x) => x.mismatches === 0 || (x.mismatches <= PATH_UNDER_TOWERS && x.first.length === x.mismatches
-    && x.first.every((l) => /after Block\{minecraft:dirt_path\}.* now Block\{minecraft:dirt\}/.test(l))));
+    && x.first.every((l) => /after \{id:"minecraft:dirt_path"\}.* now \{id:"minecraft:dirt"\}/.test(l))));
 }
 
 // ------------------------------------------------------------------ ingame
@@ -191,9 +191,10 @@ steps.ingame = async () => {
   const bound = [];
   for (const id of all) {
     const j = path.join(LIBRARY, id, `${id}.blueprint.json`);
-    if (fs.existsSync(j) && JSON.parse(fs.readFileSync(j, 'utf8')).groupItem === 'lot_keep') bound.push(id);
+    // Steward's binding is (group, itemKey): an earlier run's castle in the shared library is bound to its own group's lot_keep
+    if (fs.existsSync(j)) { const b = JSON.parse(fs.readFileSync(j, 'utf8')); if (b.group === inst.gid && b.groupItem === 'lot_keep') bound.push(id); }
   }
-  check(e?.groupItem === 'lot_keep' && e?.size === `${U.x}x${U.y}x${U.z}` && bound.length === 1 && bound[0] === E, `itemKey == lotId: the composite ${E} (${e?.size}) is the one entry bound to item lot_keep`, { groupItem: e?.groupItem, bound });
+  check(e?.groupItem === 'lot_keep' && e?.group === inst.gid && e?.size === `${U.x}x${U.y}x${U.z}` && bound.length === 1 && bound[0] === E, `itemKey == lotId: the composite ${E} (${e?.size}) is the one entry bound to group ${inst.gid}'s item lot_keep`, { groupItem: e?.groupItem, bound });
   const listed = mods.filter((m) => all.includes(m));
   const readable = [];
   for (const m of mods) if ((await api(`entry ${m}`))?.id === m) readable.push(m);
