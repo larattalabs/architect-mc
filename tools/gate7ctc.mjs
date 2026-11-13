@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,9 +87,18 @@ steps.unit = async () => {
 // ------------------------------------------------------------------ in game
 
 const CLAIM = [0, 0, 159, 159];
-/** The flat base's top block is y -61; the hill stands on it. */
-const HILL = { x0: 40, x1: 119, y0: -60, y1: -45, z0: 60, z1: 99 };
-const HALL = { x0: 50, x1: 109, y0: -58, y1: -51, z0: 74, z1: 85 };
+/** The hill and its hall over the flat base's ground `g` (measured: the top solid cell of the claim's middle column). */
+const HILL = (g) => ({ x0: 40, x1: 119, y0: g + 1, y1: g + 16, z0: 60, z1: 99 });
+const HALL = (g) => ({ x0: 50, x1: 109, y0: g + 3, y1: g + 10, z0: 74, z1: 85 });
+/** The top ROCK or SOIL cell of column (80, 80), read from a frozen volume of it (Survey.volume). */
+async function groundY() {
+  const v = await call('dev.survey.volume', { box: [80, -64, 80, 80, 200, 80], load: 'loaded' }, 600_000);
+  if (v.refused) throw new Error(`Survey.volume refused: ${v.refused}`);
+  const { decodeArvx, VC } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'volume.mjs')).href);
+  const d = decodeArvx(fs.readFileSync(path.resolve(L.GAME_DIR, v.file)));
+  for (let j = d.height - 1; j >= 0; j--) if ([VC.ROCK, VC.SOIL].includes(d.classes[j])) return d.box.minY + j;
+  throw new Error('no ground in column 80,80');
+}
 
 async function design(tag, b, over = {}) {
   const d = await call('dev.region.design', { brief: b, claim: CLAIM, wait: true, ...over }, 1_800_000);
@@ -111,9 +120,12 @@ steps.pick = async () => {
   out.a = { status: a.status, result: a.result, refused: a.refused };
   check(a.status === 'DONE' && a.result?.outcome === 'NO_TEMPLATE' && a.result?.program === 's6_cave_city' && /s6_cave_city needs 1 cave \(floorArea >= 400, ceiling >= 6\) in the claim's land; it has 0/.test(a.result?.reason ?? ''),
     `(a) "a cave city" over the flat land: ${a.result?.outcome} closest ${a.result?.program}; the reason counts the claim's caves (the mod sent its volume, the helper analysed it): ${String(a.result?.reason ?? a.error ?? a.refused).slice(0, 300)}`);
-  // (b) a stone hill with an enclosed hall
-  for (let y = HILL.y0; y <= HILL.y1; y += 8) await cmd(`/fill ${HILL.x0} ${y} ${HILL.z0} ${HILL.x1} ${Math.min(HILL.y1, y + 7)} ${HILL.z1} stone`);
-  await cmd(`/fill ${HALL.x0} ${HALL.y0} ${HALL.z0} ${HALL.x1} ${HALL.y1} ${HALL.z1} air`);
+  // (b) a stone hill with an enclosed hall, on the measured ground
+  const g = await groundY();
+  const hill = HILL(g), hall = HALL(g);
+  out.ground = g;
+  for (let y = hill.y0; y <= hill.y1; y += 8) out.fills = [...(out.fills ?? []), await cmd(`/fill ${hill.x0} ${y} ${hill.z0} ${hill.x1} ${Math.min(hill.y1, y + 7)} ${hill.z1} stone`)];
+  out.fills.push(await cmd(`/fill ${hall.x0} ${hall.y0} ${hall.z0} ${hall.x1} ${hall.y1} ${hall.z1} air`));
   await L.settle(3000);
   const b = await design('b', brief('s6_cave_city'));
   out.b = { status: b.status, result: b.result, error: b.error, refused: b.refused };
