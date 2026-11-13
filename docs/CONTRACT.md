@@ -28444,7 +28444,10 @@ LP's and SL's fixtures, DS's `brief-sections.json`, the six examples' sha golden
 - `set -o pipefail; node tools/step-inputs.mjs check`: clean, 363 steps.
 - api-compat: not applicable (no Java and no API package change); the Gradle build not run (no Java changed).
 - sidecar: untouched.
-- gate-verifier (review): see the report to the coordinator.
+- **gate-verifier (review, no runs): PASS** at f463bb7a, all six items: only the four files changed and no golden; y-only, both ends
+  horizontal walk ports, the error severity and `level` member, check.mjs -> errors -> designer.ts's fix round; the units; every committed
+  site design at its hint (designs/site == examples, the sim's source); step-inputs clean; PLAYBOOK general. Its re-run of sc, sv, lp, sb
+  and ds: 50/50.
 
 **Leftovers:**
 - `siteBrief.mjs` line "put a design port ... within 2 of each hint": add "(a walk port facing a side: the hint's y exactly)". It moves
