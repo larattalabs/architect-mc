@@ -29189,3 +29189,20 @@ the unsaved case stays open.
 - QT's quote of an irrigated growth (the shells' `tiles:` pieces).
 - Lot removal alone of a grown irrigated lot (drained).
 - `undoRevision` of an irrigated growth.
+
+**Checks** ($0; no API type changed):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1224 tests at 167340b9: 1222 pass; 2 failed (`gr-parity` land.json and `rv-a`'s merge.json: the revise program's `programSha` moved). Re-cut at 5197e9aa; `ig.test` + `irr.test` + `gr-parity` + `rv-a` 25/25. New `ig.test.mjs` 5: an irrigated grow lot's sources (prefixed rv1_), its record in the lot frame, the stages (street between ground and lots, fluids last), M25/M29 clean; north and south fronts' frame and field; `irrigate: false` = absent; the three refusals; a survival revision's bill holds the 4 shells once (20 dirt here) |
+| mod `./gradlew build --offline --no-daemon` | BUILD SUCCESSFUL (new `IgLotDrainTest`; RevisionsTest and DistrictLandGrTest pass on the re-cut fixtures) |
+| sidecar | untouched; `npx tsc --noEmit -p .` clean; the full suite at merge |
+| lints | lint-structure 68 cases, 0 failing; lint-look 13, 0 failing; water-lint 135/135 |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface (in ig-unit) |
+| `node tools/step-inputs.mjs check` | clean, 356 steps (ig-unit, ig-instant, ig-survival added) |
+| byte identity | plan/0: 12/12 irrigated fixtures identical to origin/main's kit. Revisions: 6/6 non-irrigated IRs equal but `programSha` (above). The parity fixtures differ in their sha fields only |
+| run 1, 20261113-000905-change at 167340b9 | FAIL. ig-unit PASS. In game every placement, mask, lot-alone, undo and RVU1 check passed. It failed on a gate bug (dev.rv.ir has no candidate IR), a stalled hydration loop, and two findings: the survival stage wait was missing for grown lots (304 seeds consumed against 320 quoted; fixed above), and the refund after an unsaved RVU2 halt (the open issue above) |
+| run 2, 20261113-014744-change at 8542f6df | ig-unit PASS 3/0; **ig-survival PASS 22/0**; ig-instant 21/1 (only hydration: 300/304 at 300 s, random-tick variance over 304 cells; judged differently since 1ccfa0cb). ig-survival: <br>- the plain grown lot (RS hut) waited for `rv1_lanes` (ITEM_WAITING), consumed = quote, undone returning it all; <br>- the irrigated growth quoted with its 4 shells at 5 items each, its lot waited for `rv2_farm_m_irr_0_0_shell`, fed partly with no water, a restart, then fed the rest: PLACED, 4 sources settled, the mask held, irrigationDropped 28 = the kit's, 16/16 crops over the sides, **consumed = quote item for item** (wheat_seeds 320); <br>- `/save-all`, then the undo killed at RVU2+save, resumed: E-flat 0, no water, **the consumption returned exactly once**, a second undo refused |
+| run 3, 20261113-021229-change at 1ccfa0cb | **ig-instant PASS 23/0**: <br>- the plan's lot reports `architect_mc:lotIrrigation` equal to the IR's; PLACED; 4 sources settled, water on exactly the sources; the mask held, irrigationDropped 28; 16/16 crops over the sides; <br>- the lot's site removed alone drained its 4 sources ('lot removed'); undoRevision E-flat 0, no water; <br>- a second growth's undo killed at RVU1 resumed: E-flat 0, no water; <br>- hydration: 296/304 within 240 s at speed 3 (recorded), 304/304 with the ticks sped up |
+| ad-hoc probe (8910/8911; not a gate run) | survival growth then undo, not killed. Before the roi fix: the plain lot was exact; the irrigated lot consumed 304 seeds against 320 quoted, with no crop over the sides. After it: 320 = quote, 16 crops, the refund exact |
+| gate-verifier (strict) | pending |
