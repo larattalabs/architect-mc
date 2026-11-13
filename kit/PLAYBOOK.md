@@ -124,6 +124,10 @@ fit, its ports and the site analysis). The template is exactly the lot box; the 
   size: site.size })`. Read the geometry from it, never from constants: `site.face(normal)`, `site.surface(x, z)`,
   `site.ceiling(x, z)`, `site.trunk()`, `site.ledges()`, `site.hangPoints()`, `site.port(name)`, `site.cellsOf(cls)`,
   `site.at(x, y, z)`. A program that reads the land re-runs on another site of the same kind (a site variant, $0).
+- **Stay inside `site.size` on any land.** A site variant re-runs your program on land of the same fit that is taller, shorter,
+  wider or shaped a little differently. Size storeys and the roof from the lot's height, and clamp every coordinate you derive from
+  the land to the lot (`0 .. site.size.x/y/z - 1`). When the land asks for more than fits, build fewer storeys or a lower roof; never
+  write outside the lot.
 - **Look at the land first:** the empty-site renders (`site/site-*.png`), then slices with the land shown
   (`node kit/tools/slices.mjs <nbt> --site site/site.arvx --lot site/site.json --y A-B`: `#` rock, `:` soil, `~` water,
   `T` log, `%` leaves). Sketch where each mass goes against the face, the rim, the trunk or the overhang before writing code.
@@ -148,3 +152,4 @@ fit, its ports and the site analysis). The template is exactly the lot box; the 
 | `ports_met: no design port ...` | the door moved, renamed or turned | put the port at `site.portHint(name)` with the site's facing |
 | `site_breach: ... beside the site's water` | a carved room next to water | keep a wall of rock (1 cell) between the room and the water |
 | the build exits 2: "declares fit ..., but the site is ..." | the design's `fit` is not the site's | set `fit` to the site's fit (BRIEF.md) |
+| a site variant refuses `site_bound`: the design threw "set(...) outside size" | a height or position derived from the land, unclamped | clamp derived coordinates to `site.size`; fewer storeys or a lower roof on taller land |
