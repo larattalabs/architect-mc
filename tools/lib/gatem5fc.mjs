@@ -199,13 +199,18 @@ export async function registerFC(steps, h) {
     check(json(F2) === json(F) && json(row4) === json(row3) && pt.tracked === true, `after a restart: the field the same (${F2.length} cells), the land check the same (${json(row4)}), a replanted crop still the player's (${json(pt).slice(0, 120)})`);
 
     // undoRevision: not blocked; cargo once at the site, construction credited for our 5 standing crops
+    const lb = irLot.box;
+    const mid = [Math.floor((lb.minX + lb.maxX) / 2), lb.minY + 2, Math.floor((lb.minZ + lb.maxZ) / 2)];
+    await L.tp(CLAIM[0] + 2, gy + 2, CLAIM[1] + 2); // out of the growth's boxes (a removal refuses a player in or next to them)
+    await L.sleep(2000);
     const site0 = await pile();
     await cmd('/kill @e[type=item]');
     const u = await call('dev.rv.undo', { region, toPosition: (await rvState(region)).position - 1 }, 4 * 3_600_000);
     out.undo = u;
     check(u.removed === true && !(u.blockers ?? []).length, `undoRevision of the growth: removed ${u.removed}, blockers ${json(u.blockers ?? [])}${u.refused ? ` (${u.refused})` : ''}`);
-    const lb = irLot.box;
-    const mid = [Math.floor((lb.minX + lb.maxX) / 2), lb.minY + 2, Math.floor((lb.minZ + lb.maxZ) / 2)];
+    // the cargo drops above the lot's box and falls: watched from 10 cells away (no pickup), its chunks loaded
+    await L.tp(mid[0] + 10, irLot.floorY + 2, mid[2]);
+    await L.sleep(6000);
     const near = await call('dev.items.near', { pos: mid, radius: 24 }, 60_000);
     const dropped = near.items ?? {};
     const site1 = await pile();
@@ -224,7 +229,7 @@ export async function registerFC(steps, h) {
     // a restart after the undo gives nothing again
     await L.leaveWorld();
     await L.openWorld(SW);
-    await L.tp(CX + 80, 80, CZ + 56);
+    await L.tp(mid[0] + 10, irLot.floorY + 2, mid[2]);
     await L.sleep(5000);
     const near2 = await call('dev.items.near', { pos: mid, radius: 24 }, 60_000);
     const site2 = await pile();
