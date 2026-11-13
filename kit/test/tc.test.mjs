@@ -133,3 +133,31 @@ test('a picked cave city (no floorY) finds the sculpted hall from the land: the 
   assert.equal(none.meta.sb.floorY, L0.floorY);
   assert.equal(none.ir.lots.length, 7);
 });
+
+test('a picked S5 (no grove) over sculpted oaks finds the grove in the land: the same plan as the sculpt\'s record, every lot on a trunk (flat and uneven land)', async () => {
+  const S5 = LANDS.s5_grove.spec;
+  for (const [name, groundAt] of [['flat', () => 64], ['uneven', (x, z) => 64 + Math.floor(Math.abs(Math.sin(x / 23) * 3 + Math.cos(z / 17) * 3))]]) {
+    const land = makeLand({ claim: S5.claim, minY: S5.minY, maxY: S5.maxY, groundAt });
+    const sculpt = await plan2(land, 's5_grove_sculpt');
+    applySculpt(land, sculpt);
+    const given = await plan2(land, 's5_treehouses', { params: { grove: sculpt.meta.sb } });
+    const auto = await plan2(land, 's5_treehouses', { params: {} });
+    assert.equal(auto.ir.lots.length, 6, name);
+    assert.deepEqual(auto.ir.lots, given.ir.lots, `${name}: the lots`);
+    assert.deepEqual(auto.ir.parts, given.ir.parts, `${name}: the lane and the ramp paths`);
+    assert.deepEqual(auto.ir.anchors, given.ir.anchors, `${name}: the anchors`);
+    assert.deepEqual(auto.ir.portLinks, given.ir.portLinks, `${name}: the branch walks`);
+    // each lot's box is centred on one of the land's trunks (AF's axis within 1), each trunk holding one lot
+    const box = { ...S5.claim, minY: S5.minY, maxY: S5.maxY };
+    const trunks = analyseVolume(land.volume(box).decoded, { kinds: ['trunk'] }).filter((a) => a.metrics.height >= 24);
+    assert.equal(trunks.length, 6, `${name}: six tall trunks`);
+    const used = new Set();
+    for (const l of auto.ir.lots) {
+      const c = [(l.box.minX + l.box.maxX) >> 1, (l.box.minZ + l.box.maxZ) >> 1];
+      const t = trunks.find((a) => Math.abs(a.metrics.axis[0] - c[0]) <= 1 && Math.abs(a.metrics.axis[1] - c[1]) <= 1);
+      assert.ok(t, `${name}: ${l.id} at ${c} stands on a trunk`);
+      used.add(t.id);
+    }
+    assert.equal(used.size, 6);
+  }
+});
