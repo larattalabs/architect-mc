@@ -569,6 +569,67 @@ function sheet(res) {
 }
 subs.sheet = async () => sheet(readJson(path.join(ART, 'P4', `p4-${opt('attempt', 1)}.json`)));
 
+/**
+ * `close` ($0, Noah's ask after the first sheet): closer views of the same four builds, each on its own kept site volume, with the
+ * sheet's side assignment (ab-key.json, unchanged). A composite over a tight window (the lot + 3 around, 3 under, 5 over: the house,
+ * its trunk and the crown's underside) instead of the whole site window, at a higher resolution; per build the same three cameras:
+ * a three-quarter view from the house's front, the straight-on elevation from its walk port's side (the approach) and a three-quarter
+ * view from the back. Within a pair the site, window and cameras are the same, so only the design differs. The kit's renderer is
+ * orthographic: no eye-level shot.
+ */
+subs.close = async () => {
+  const { parse, plain } = await import(path.join(root, 'kit', 'lib', 'nbt.mjs'));
+  const { encodePng } = await import(path.join(root, 'kit', 'lib', 'png.mjs'));
+  const { buildScene, renderIso, renderFront } = await import(path.join(root, 'kit', 'lib', 'render.mjs'));
+  const { Site, compositeStructure } = await import(path.join(root, 'kit', 'lib', 'site.mjs'));
+  const zlib = await import('node:zlib');
+  const keyFile = readJson(path.join(ART, 'P4', 'ab-key.json'));
+  const p4 = readJson(path.join(ART, 'P4', `p4-${opt('attempt', 1)}.json`));
+  const out = path.join(ART, 'P4', 'ab');
+  const BACK = { north: 'south', south: 'north', east: 'west', west: 'east' };
+  const items = [];
+  for (const [i, pr] of keyFile.pairs.entries()) {
+    const n = i + 1;
+    const p = p4.pairs.find((x) => x.key === pr.key);
+    for (const side of ['A', 'B']) {
+      const arm = keyFile.key[pr.key][side];
+      const e = p[arm];
+      const dir = path.join(e.library, e.entryId);
+      const raw = fs.readFileSync(path.join(dir, `${e.entryId}.nbt`));
+      const structure = plain(parse(raw[0] === 0x1f ? zlib.gunzipSync(raw) : raw));
+      const sidecar = readJson(path.join(dir, `${e.entryId}.blueprint.json`), {});
+      const site = new Site(fs.readFileSync(path.join(dir, 'site', 'site.arvx')), readJson(path.join(dir, 'site', 'site.json')));
+      // the tight window: a view of the same Site with smaller bounds (compositeStructure reads bounds, inLot and at)
+      const b = site.bounds;
+      const tight = Object.create(site);
+      tight.bounds = { minX: Math.max(b.minX, -3), minY: Math.max(b.minY, -3), minZ: Math.max(b.minZ, -3), maxX: Math.min(b.maxX, site.size.x + 2), maxY: Math.min(b.maxY, site.size.y + 4), maxZ: Math.min(b.maxZ, site.size.z + 2) };
+      const comp = compositeStructure(structure, tight).structure;
+      const front = sidecar.front ?? 'south';
+      const approach = (sidecar.ports ?? []).find((q) => q.kind === 'architect:walk')?.facing ?? front;
+      // (the straight-on view is the house alone: in its land the ramp's earth hides the facade in an orthographic elevation)
+      const views = [
+        ['three-quarter', renderIso(buildScene(comp, { front }), { width: 1800 })],
+        ['facade', renderFront(buildScene(structure, { front }), { width: 1800 })],
+        ['walkway', renderIso(buildScene(comp, { front: approach }), { width: 1800 })],
+      ];
+      for (const [v, img] of views) {
+        const f = path.join(out, `close-${n}-${side}-${v}.png`);
+        fs.writeFileSync(f, encodePng(img.width, img.height, img.data));
+        // (the elevation renderer caps a cell at 28 px: scaled 3x, nearest neighbour, so the blocks read at the sheet's size)
+        if (v === 'facade') spawnSync('magick', [f, '-filter', 'point', '-resize', '300%', f]);
+      }
+    }
+    items.push(n);
+  }
+  const VIEWS = [['three-quarter', 'Three-quarter view, on its tree'], ['facade', 'The house straight on (front, the house alone)'], ['walkway', 'Three-quarter view from the walkway side, on its tree']];
+  const html = ['<!doctype html><meta charset="utf-8"><title>Treehouse pick sheet (close views)</title>',
+    '<style>body{font:16px system-ui;margin:24px;max-width:1500px}.row{display:flex;gap:12px;margin:8px 0}figure{flex:1;margin:0}img{width:100%;border:1px solid #888}h2{margin-top:36px}h3{margin:16px 0 4px;font-weight:600}</style>',
+    '<h1>Treehouse pick sheet: close views</h1><p>The same two pairs as the first sheet, closer: each design on its own tree, the same cameras for A and B within a pair. For each pair, pick the one you prefer (A or B).</p>',
+    ...items.flatMap((n) => [`<h2>Pair ${n}</h2>`, ...VIEWS.map(([v, label]) => `<h3>${label}</h3><div class="row"><figure><img src="close-${n}-A-${v}.png"><figcaption>A</figcaption></figure><figure><img src="close-${n}-B-${v}.png"><figcaption>B</figcaption></figure></div>`), '<p>Pick: A / B</p>'])];
+  fs.writeFileSync(path.join(out, 'sheet-close.html'), `${html.join('\n')}\n`);
+  log(`P4 close sheet: ${path.join(out, 'sheet-close.html')} (the key unchanged: ${path.join(ART, 'P4', 'ab-key.json')})`);
+};
+
 /** R (paid): P1's cliff design adapted (versionOf + site) into DS's two other cliffs, each after its $0 site variant. */
 subs.r = async () => {
   needP0();
