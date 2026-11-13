@@ -444,7 +444,6 @@ public final class Placement {
 		return srv.getWorldPath(LevelResource.ROOT).resolve(FILE);
 	}
 
-	/** Writes the queue file: batches, jobs with their cursors, group removals. {@code clean}: the server is stopping. */
 	/**
 	 * (Slice PS, audit F6) The queue file could not be read at this world's start: the queue started empty, and nothing is saved over the
 	 * file this session (it holds in-flight removals' refund credits); {@code architect-queue.json.bak} is the last file that loaded.
@@ -457,6 +456,7 @@ public final class Placement {
 		return loadFailed;
 	}
 
+	/** Writes the queue file: batches, jobs with their cursors, group removals. {@code clean}: the server is stopping. */
 	static void save(MinecraftServer srv, boolean clean) {
 		if (loadFailed) {
 			if (!refusedLogged) {

@@ -820,12 +820,6 @@ public final class Stockpiles {
 		return out;
 	}
 
-	/**
-	 * {@code adoptCrates} (§5): every legacy crate of the owner (a building site's own crate, a group's shared crate, a delta's
-	 * crate) joins the stockpile: its ledger is adopted (delivered and placed, so the stock grows by the crate's stock; what doesn't
-	 * fit drops at the first crate, booked as dropped), its cell is restored and its journal kind released, and its targets lose
-	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
-	 */
 	/** (PS, F6) A new stockpile or crate is refused while the file failed to load: it would be lost (never saved) and reuse the file's ids. */
 	private static void requireLoaded() throws Sites.SiteException {
 		if (loadFailed) {
@@ -834,6 +828,12 @@ public final class Stockpiles {
 		}
 	}
 
+	/**
+	 * {@code adoptCrates} (§5): every legacy crate of the owner (a building site's own crate, a group's shared crate, a delta's
+	 * crate) joins the stockpile: its ledger is adopted (delivered and placed, so the stock grows by the crate's stock; what doesn't
+	 * fit drops at the first crate, booked as dropped), its cell is restored and its journal kind released, and its targets lose
+	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
+	 */
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
 		Pile p = get(owner);
 		if (p == null) {

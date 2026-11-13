@@ -31110,6 +31110,13 @@ keeps each flush small; the saves are recorded, not judged (timing bars never bl
 - **Run 2** (1fd50392; the hopper part one line per case, no product change): ps-crash **PASS** 27/0, hf-crash **PASS** 25/0, jr-crash
   **PASS** 24/0, rs-survival-smoke **PASS** 40/0.
 - Then origin/main merged (HF's v0.64.1 release on main: versions and TJ's release table only, no code change).
+- **Strict verifier** (gate-verifier, re-ran ps-crash on 8924/8925 at b2ff6b68, `artifacts/gate-runs-ps-verify/20261113-123101-change`):
+  **PASS**, 27/0. H0 lost 60 of 62, H1 lost 7 (bound 31) with 2 periodic saves (13.7 ms), no mint in either; K5E0 lost 389 of 389, K5E
+  lost 0 (10 saves with the world, max 64.8 ms), the town removed in both. Its review: the save order holds (players, chunks flushed,
+  ledger) for the periodic and the credit saves; `loadFailed` guards every writer of both files (BEFORE_SAVE, SERVER_STOPPING, HF's
+  logout save, the periodic save, the explicit saves; create and addCrate refused); a pile that fails midway leaves nothing loaded; N2
+  covers every booking path (canPlaceItem, the face check, setItem, every `insert` caller). Non-blocking: the dev-only `LOADED` snapshot
+  isn't cleared after a failed load; two Javadocs had slipped off their methods (fixed after the run, docs only).
 - **Other checks:**
   - Gradle `build` (at 58c027ce): 1164 tests, 0 failures (1 skipped).
   - Kit: 1336 pass, 0 fail.
