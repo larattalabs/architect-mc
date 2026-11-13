@@ -167,6 +167,15 @@ public final class Builder {
 
 		/** After this tick's placements. */
 		void changed();
+
+		/**
+		 * (slice RL, audit F7) A swap's old block of target {@code targetId} goes back: a stockpile takes it out of the target's paid record
+		 * (never more than the record, as a retake), a legacy crate drops it as {@link #giveBack}. Returns what went back.
+		 */
+		default Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fallback) {
+			giveBack(items, fallback);
+			return items;
+		}
 	}
 
 	/** A legacy target's purse: its crate's ledger; a swap's refund drops above the crate. */
@@ -463,6 +472,11 @@ public final class Builder {
 		 * places it and pays it as any cell). At most {@code budget} cells; returns the cells paid.
 		 */
 		int settleOwed(ServerLevel level, Purse purse, int budget) {
+			return settleOwed(i -> stateIfLoaded(level, pos(i)), purse, budget);
+		}
+
+		/** {@link #settleOwed}, reading cell {@code i}'s block through {@code stateOf} (null: its chunk is not loaded). */
+		int settleOwed(java.util.function.IntFunction<@Nullable BlockState> stateOf, Purse purse, int budget) {
 			BitSet o = owed;
 			owedShort = false;
 			if (o == null || o.isEmpty()) {
@@ -474,12 +488,12 @@ public final class Builder {
 					o.clear(i);
 					continue;
 				}
-				BlockState now = stateIfLoaded(level, pos(i));
+				BlockState now = stateOf.apply(i);
 				if (now == null) {
 					continue;
 				}
 				if (!matches(now, i)) {
-					o.clear(i);
+					o.clear(i); // mined or replaced before it was charged: it owes nothing (the builder places and pays it as any cell)
 					continue;
 				}
 				Map<String, Integer> need = new HashMap<>();
@@ -2945,8 +2959,9 @@ public final class Builder {
 			}
 			Construction c = s.construction();
 			BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()).above() : dropPos(s);
-			purse.giveBack(items, at); // a legacy crate: dropped above it; a stockpile: credited as it happens (6c Y)
-			items.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
+			// a legacy crate: dropped above it; a stockpile: credited as it happens (6c Y), out of the site's paid record (RL, audit F7)
+			Map<String, Integer> back = purse.giveBackPaid(s.id(), items, at);
+			back.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
 		}
 		free.clear(i);
 	}

@@ -63,4 +63,63 @@ class RunOwedRLTest {
 		assertEquals(1, r.unbuiltCost("minecraft:cobblestone"));
 		assertTrue(r.seen.get(0) && r.seen.get(1) && !r.seen.get(2), "seen: the cells whose state the run has read");
 	}
+
+	/** A purse over a plain stock map: what it was paid. */
+	static final class FakePurse implements Builder.Purse {
+		final Map<String, Integer> stock = new HashMap<>();
+		final Map<String, Integer> paid = new HashMap<>();
+
+		@Override
+		public int stock(String item) {
+			return stock.getOrDefault(item, 0);
+		}
+
+		@Override
+		public void pay(java.util.List<dev.larattalabs.architect.survival.SurvivalItems.Cost> costs) {
+			costs.forEach(c -> {
+				stock.merge(c.item(), -c.count(), Integer::sum);
+				paid.merge(c.item(), c.count(), Integer::sum);
+			});
+		}
+
+		@Override
+		public void giveBack(Map<String, Integer> items, BlockPos fallback) {
+		}
+
+		@Override
+		public void changed() {
+		}
+	}
+
+	@Test
+	void settleChargesWhatStandsAndForgetsWhatWasMined() {
+		Builder.Run r = run();
+		BitSet owed = new BitSet();
+		owed.set(0);
+		owed.set(1);
+		r.attachOwed(owed);
+		net.minecraft.world.level.block.state.BlockState cobble = Blocks.COBBLESTONE.defaultBlockState();
+		net.minecraft.world.level.block.state.BlockState air = Blocks.AIR.defaultBlockState();
+		java.util.function.IntFunction<net.minecraft.world.level.block.state.BlockState> world = i -> i == 1 ? air : cobble; // cell 1 mined
+		FakePurse purse = new FakePurse();
+		assertEquals(0, r.settleOwed(world, purse, 8));
+		assertTrue(r.owedShort, "an owed cell stands and the stock cannot pay it: the target waits for materials");
+		assertTrue(owed.get(0));
+		assertFalse(owed.get(1), "(audit note a) mined before it was charged: it owes nothing");
+		assertTrue(purse.paid.isEmpty(), "and nothing was charged for it");
+		assertFalse(r.built.get(0));
+		purse.stock.put("minecraft:cobblestone", 5);
+		assertEquals(1, r.settleOwed(world, purse, 8));
+		assertFalse(r.owedShort);
+		assertEquals(Map.of("minecraft:cobblestone", 1), purse.paid, "the standing cell charged once, at its target's cost");
+		assertTrue(r.built.get(0) && owed.isEmpty());
+		assertFalse(r.built.get(1), "the mined cell is unbuilt: the builder places it and pays it as any cell");
+		assertEquals(0, r.settleOwed(world, purse, 8), "nothing owed: nothing charged again");
+	}
+
+	@Test
+	void aLegacyPurseGivesASwapBackAsItIs() {
+		FakePurse purse = new FakePurse();
+		assertEquals(Map.of("minecraft:oak_planks", 2), purse.giveBackPaid("s1", Map.of("minecraft:oak_planks", 2), BlockPos.ZERO));
+	}
 }

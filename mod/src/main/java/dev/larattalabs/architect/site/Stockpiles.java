@@ -933,16 +933,28 @@ public final class Stockpiles {
 	 * as they are when none does).
 	 */
 	static Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
+		Pile tracking = null;
 		for (Pile p : PILES.values()) {
 			if (p.ledger.tracks(targetId)) {
-				Map<String, Integer> out = p.ledger.fromPaid(targetId, items);
-				if (!out.equals(items)) {
-					Architect.LOGGER.warn("Stockpile {}: retake of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, out, items);
-				}
-				return out;
+				tracking = p;
+				break;
 			}
 		}
-		return items;
+		if (tracking == null) {
+			// (RL, audit F7) no record: a target a stockpile feeds was fed after the save (or before JR): its pile caps it (the legacy pool,
+			// else nothing); only a target no stockpile feeds (a legacy crate's) gives back as it is
+			Site s = Sites.get(targetId);
+			Infra i = s == null ? Infras.get(targetId) : null;
+			tracking = s != null ? pileOf(s) : i != null ? pileOf(i) : null;
+			if (tracking == null) {
+				return items;
+			}
+		}
+		Map<String, Integer> out = tracking.ledger.fromPaid(targetId, items);
+		if (!out.equals(items)) {
+			Architect.LOGGER.warn("Stockpile {}: retake of {} capped at what the ledger recorded consumed: {} of {}", tracking.owner, targetId, out, items);
+		}
+		return out;
 	}
 
 	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items) {
@@ -1206,6 +1218,20 @@ public final class Stockpiles {
 					@Override
 					public void giveBack(Map<String, Integer> items, BlockPos fb) {
 						Stockpiles.giveBack(srv, p, items, fb);
+					}
+
+					@Override
+					public Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fb) {
+						// (RL, audit F7) a swap's old block: out of the target's paid record, capped by it
+						Map<String, Integer> back = p.ledger.fromPaid(targetId, items);
+						if (!back.equals(items)) {
+							Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back,
+								items);
+						}
+						if (!back.isEmpty()) {
+							Stockpiles.giveBack(srv, p, back, fb);
+						}
+						return back;
 					}
 
 					@Override

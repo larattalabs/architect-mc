@@ -135,4 +135,34 @@ class StockpileReconcileRLTest {
 		assertEquals(8, l.consumed().get(DIRT) - (l.returned().get(DIRT) - 10));
 		assertTrue(l.identityHolds());
 	}
+
+	@Test
+	void anOwedCellIsNotRefundedUntilCharged() {
+		// (audit note b) 3 cells charged (the record), a 4th stands owed: an undo now refunds the record, never the owed cell
+		StockLedger l = new StockLedger();
+		l.giveBack(Map.of(DIRT, 3), CAP, MAX);
+		for (int i = 0; i < 3; i++) {
+			assertTrue(l.consume(DIRT, 1, CAP, MAX, new TreeMap<>()));
+			l.pay(KEY, DIRT, 1);
+		}
+		StockLedger.Credit c = l.credit(KEY, Map.of(DIRT, 4), CAP, MAX);
+		assertEquals(Map.of(DIRT, 3), c.returned());
+		assertEquals(Map.of(DIRT, 1), c.shortfall());
+		assertTrue(l.identityHolds());
+	}
+
+	@Test
+	void aSwapRefundComesOutOfTheRecord() {
+		// (audit F7) a construction delta's swap gives the old block back out of the site's record (Purse.giveBackPaid -> fromPaid)
+		StockLedger l = new StockLedger();
+		l.giveBack(Map.of(PLANKS, 2), CAP, MAX);
+		assertTrue(l.consume(PLANKS, 2, CAP, MAX, new TreeMap<>()));
+		l.pay(KEY, PLANKS, 2);
+		assertEquals(Map.of(PLANKS, 1), l.fromPaid("s1", Map.of(PLANKS, 1)), "the old block, paid: back, once");
+		assertEquals(Map.of(PLANKS, 1), l.paid().get(KEY), "the record no longer holds it: old + new never both");
+		// the old block of a cell built after the save (the record never had it): nothing back
+		assertEquals(Map.of(PLANKS, 1), l.fromPaid("s1", Map.of(PLANKS, 3)));
+		assertTrue(l.fromPaid("s1", Map.of(PLANKS, 1)).isEmpty());
+		assertTrue(l.fromPaid("s2", Map.of(PLANKS, 1)).isEmpty(), "a fed target with no record: nothing (no legacy pool)");
+	}
 }
