@@ -1,5 +1,5 @@
 {
- "about": "(\u00a77.2, N-HY-5) two plateaus 8 over a valley across the whole claim: a level course between them would stand past fill (2): unsupported channel.aqueduct until 7c",
+ "about": "(\u00a77.2, N-HY-5; 7c AQ) two plateaus 8 over a valley across the whole claim: a level course between them stands past fill (2): it was unsupported channel.aqueduct until 7c; since AQ the course is an aqueduct (its span on arches), fits",
  "terrain": {
   "W": 240,
   "D": 160,
@@ -38,9 +38,7 @@
  "volume": {},
  "expect": {
   "part": "canal",
-  "class": "unsupported",
-  "code": "UNSUPPORTED",
-  "until": "7c",
+  "class": "fits",
   "block": "channel.aqueduct"
  },
  "plan": {

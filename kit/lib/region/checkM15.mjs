@@ -30,7 +30,7 @@ import { lotPortsWorld } from './links.mjs';
  */
 export const REGION_M15_LIMITS = Object.freeze({ cantilever: 4, neckMass: 200, span: Object.freeze({}) });
 /** The connector types a span is judged by, and the plan meta's record list for each (the cells a type's records own). */
-export const M15_SPAN_TYPES = Object.freeze({ rope_bridge: 'ropes' });
+export const M15_SPAN_TYPES = Object.freeze({ rope_bridge: 'ropes', aqueduct: 'aqueducts' });
 /** The sub-rules, in report order. */
 export const M15_RULES = Object.freeze(['M15:cantilever', 'M15:joint', 'M15:span', 'M15:neck']);
 
