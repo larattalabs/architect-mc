@@ -29135,6 +29135,97 @@ coordinator's 7c follow-up; sky_monastery's monastery on its island and dwarven_
 carve_into site lots over a standing hollow); Steward's recorded crater params (`diameter`, `depth`, `rim_height`) could be read
 leniently as the size and members in a later slice; a crater's lake shell bills its pond's dirt in survival (H's rule).
 
+### Slice CM-b as built (branch `slice/CM-b` off main 551b7a47, main 2b165279 (v0.63.0) merged; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+Composites in the world: `Sites.place` of a composite entry places CM-a's kit output as ONE site group. Built on CM-a's frozen kit API
+(`Composite`, `c.module`, `c.join`, `c.write`) and 7cF's frozen `CompositeInfo`/`Joint`; no frozen 7b or 7cF signature changed. API diff:
+`"composites"` in `ApiRules.JAVA_FEATURES` (and the sidecar feature `design.composite` maps to it), javadoc. New: `site/Composites.java`,
+`apiimpl/CompositePlace.java`, `CompositesTest`, `kit/test/cm-b.test.mjs`, `sidecar/test/cm-b.test.ts`, `tools/gate7ccmb.mjs`.
+
+**What a placement is:**
+- `Sites.place(PlaceRequest)` of an entry whose ext carries a well-formed CompositeInfo (`Composites.isComposite`) goes to
+  `CompositePlace`. Every check runs for every module before anything is placed: the layout (the CompositeInfo's modules, the offsets from
+  the entry's `<id>.composite.json` manifest, each module entry present and the size the manifest records), the survival rule, the
+  actor rule, the joints (against the module entries' own ports), then each module's ordinary `Sites.verdict` at its own origin with
+  the request's overlap policy. Any refusal: nothing is placed, `placed == false`, PLACE_FAILED, and a module's refusal is prefixed
+  `module <id> (<entry>): `.
+- Then the modules are queued as one batch (`Batches.queue`) in a new site group: one stage per module, named by the module id, in support
+  order, each one item (key = the module id) of its hidden entry, INSTANT, LAYER (the seam layer both neighbours write), autoApprove,
+  stopOnFailure. Batch, group and every module site carry `ext["architect_mc:compositeSite"] = {entry, modules, origin, turns}`.
+- The future completes when every module is placed: `PlaceResult(true, siteId = the group id, notes)`. The group id is the composite
+  placement's handle: `Sites.remove(groupId)` removes the whole (it is `removeGroup`, journaled); `undoStage(groupId, <module>)` removes
+  one module (4d's rule: a later stage still placed refuses without force).
+- A composite batch that ends with a module not placed (a module failed, the batch cancelled or stopped) is rolled back whole by
+  `removeGroup` (journaled), then the place completes `placed == false` with the failed module's reason, named. A group already being
+  removed is left to that removal.
+- `Sites.check` of a composite answers every module's verdict, named, with the boxes joined (no bill: INSTANT only).
+- A composite union is never placed as one plain site: `Sites.verdict` refuses it `NOT_ALLOWED` (the UI, commands, a batch item, a fit).
+
+**Support order** (CompositeInfo's javadoc): a module follows every module it rests on (its min y above the other's and their footprints
+overlap); otherwise the listed order. **Module origins:** the union's template-to-world map applied to each module's box
+(`BlueprintTransform.boxToWorld`), so every module cell lands where the union's template puts it at every rotation (a unit checks it
+cell by cell at the four rotations).
+
+**JOINT_MISMATCH at place time:** each joint's two ends are checked against the module entries' ports: the port exists, is an
+`architect:joint`, sits on its module's boundary face in its facing; both ends at the same union cell, opposite facings, the same width
+and height. The first problem refuses `JOINT_MISMATCH`, e.g. `composite castle: module east port arch_w is 2 wide, module centre port
+arch_e 3`.
+
+**Survival (S-7c-6):** a construction request (survival on, AUTO or CONSTRUCTION) refuses `NOT_ALLOWED` naming the composite; INSTANT
+follows the actor rule (a permission-2 player in a survival world), refused `NOT_ALLOWED` too, also naming it.
+
+**Crash safety:** the batch is in the queue file, each module a journaled placement, a removal a journaled Removal. New TEST kill point
+**CM1** (`dev.journal.killAt`, `+save` too): a composite's module item is placed and the queue file flushed, the next module not
+started. After the restart the batch resumes from the queue file.
+
+**Library:** a design job's program may return a `Composite` (`kit/build.mjs`: `c.write` + `c.check`; the job's max applies to each
+module, not the union). The sidecar's check reads the composite files from the build's JSON line; its install puts each module first
+as `<id>__<m>/` (marked `compositeOf: <id>`, version 1, **no group binding**), then the one entry `<id>` with the manifest and the
+CompositeInfo wire in ext (kept over the request's ext), every module id rewritten to the installed id. The mod hides `compositeOf`
+entries from `Library.list`, the Library tab and its count; `Library.get` still answers them. So a design group item is one entry:
+Steward's `itemKey == lotId` holds. The designer's PLAYBOOK gains §8 "Past the cap". The sim: `sim:composite` returns CM-a's castle.
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **The handle is the group id.** `PlaceResult.siteId` of a composite is its site group's id, and `Sites.remove` takes it for the whole.
+2. **Every module LAYER.** The seam layer is written by both neighbours (the same blocks, CM-a's SEAM_CONFLICT rule); the precheck uses the
+   request's own overlap policy against the world as it is, so only the seams layer.
+3. **One stage per module** gives `undoStage` per module and makes the stages strictly sequential (a stage starts only when the one
+   before has its item PLACED), so CM1 is truly between two modules.
+4. **A composite places INSTANT only** in 7c, also in creative; no bill.
+5. **The kit's max applies per module.** A job's max size is the cap of each module (the union is past the cap by design).
+6. **A composite installs only as a new entry:** a massing or a `versionOf` that returns one is refused (later slice).
+7. **The modules are not the item's entries:** no `group`/`groupItem` on a module entry.
+
+**Finding: CM-a's castle stands its corner towers on path.** Each of the four corner towers (rows 1-13) stands on two rows of the ground's
+`dirt_path` outside the hall floor (union z 0-1 and 23-24 under each tower, 7 x 2 cells): 28 cells in each end module, none in the centre.
+The placement writes them exactly; the game turns a dirt path under a solid block into dirt at once. So `dev.site.verify` of the west and
+east module sites reads exactly those 28 cells as `after dirt_path, now dirt`; removal is exact regardless (the journal restores the
+before). The gate allows exactly these and nothing else (the coordinator's narrow allowance: only that exact pair, only on the tower-footprint cells mapped per rotation, at most 28 per end module, every mismatch listed); a fix is CM-a's castle (stone or
+the tower's own block under each tower), which re-cuts CM-a's sha goldens, so it is left (leftover).
+
+**Checks** ($0, sim only; ports 8916/8917, the verifier 8922/8923):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1249/1249** (cm-b 3/3: a Composite return built, checked clean, the max per module, never mirrored, the CLI's `composite` JSON) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1131 tests, 0 failures, 1 skipped** (CompositesTest 7/7: the castle's layout and joints clean, a missing or resized module refused, every JOINT_MISMATCH kind naming the module and the port (the facing alone isolated), support order, module origins equal to the rotated union at all four rotations, the hidden mark; ApiRulesTest and Api7cFTest with `composites`) |
+| sidecar `npm ci && npm run check` (through `sidecar-check-turn.sh`) | **853/853** (cm-b.test 2/2: the sim group item installs ONE entry, the wire and manifest rewritten to the installed id, modules `compositeOf` with no group binding, exactly one entry bound to the item); the bundle built |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, the 0.47.0 mod surface |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0; `tools/catalogue-since-check.mjs` pass; the catalogue golden unchanged |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (362 steps; cmb-ingame and cmb-crash registered in gate-chains.json, chain `7ccmb`, impact rule "7c CM-b composites, placement") |
+| gate run 1 | stopped before any step (its load wait): the Gradle build had found a duplicate apitest command (`composite` was taken; now `compinfo`) |
+| gate run 2, 20261113-034301-change at cd32c3e5 | FAIL 2: 16 ok, 3 FAIL, all `dev.site.verify` reading 28/0/28 (the castle's path under its towers, below); the crash resumed equal to the clean placement, E-flat 0 both orders |
+| gate run 3, 20261113-035141-change at 24c1d840 | FAIL 2: the driver's own checks (the verify pattern did not match the journal's `{id:...}` form; the binding counted earlier runs' castles bound to their own groups); every product check passes on its evidence |
+| gate run 4 (the coordinator's OK), **20261113-035723-change** at 52ced239 | **PASS 2/2**: cmb-ingame 14/0 (one entry for the item, modules hidden and readable, CompositeInfo.of and the feature, check clean, whole first E-flat 0 with a seam stack 2, module first (rotation 1) undoStage(east) UNDONE then E-flat 0, the fit refusal naming module east with nothing placed, JOINT_MISMATCH `module east port arch_w`, survival NOT_ALLOWED naming the composite); cmb-crash 5/0 (CM1+save halted between modules; after the restart 3 modules PLACED, verify only the tower path, the area's hash equal to the clean placement's; Sites.remove E-flat 0 over 199,665 cells; no "does not match its blueprint" line: slice JR's symptom not seen) |
+| gate-verifier (**strict**, re-run) | **PASS** at 52ced239: its own run 20261113-040515-change on 8922/8923, cmb-ingame 14/0, cmb-crash 5/0; the driver changes judged a fair correction (the allowance exactly the coordinator's narrow one, complete lists, fails closed); the Java reviewed (rollback, CM1, the verdict guard, the remove routing, no change for a non-composite placement); cm-a and cm-b kit tests 13/0. Non-blocking: the rollback of a module that fails mid-batch is covered by units and the precheck, not provoked in game; the allowed cells are union-wide (they cannot fall in the centre module) |
+
+**Leftovers:**
+- CM-a's castle: stone (or the tower's block) under its four corner towers instead of path; re-cuts CM-a's sha goldens; then the gate's verify allowance can go.
+- A composite in a batch item (Steward's design-group placement path) is refused `NOT_ALLOWED` by the verdict guard: a later slice can expand it into the item's modules. The placement UI likewise refuses a composite.
+- The rollback of a module failing mid-batch (after the precheck) is not provoked in game.
+- A composite entry's deletion does not delete its hidden module entries; a massing, `versionOf`, re-skin or follow of a composite is refused or untested.
+- Survival composites (S-7c-6: a later slice).
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
