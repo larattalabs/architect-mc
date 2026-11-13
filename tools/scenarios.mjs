@@ -480,6 +480,7 @@ async function runScenario(id) {
     const se = await (await import('./lib/scenario-sb.mjs')).siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
     sbRun.entries = se;
     sc.lotEntries = se.entries;
+    if (se.pa) sc.paSpendUsd = se.pa.spendUsd; // (7b PA) the paid batch's run: its archetypes' reported cost
     fs.writeFileSync(path.join(out, 'site-entries.json'), `${JSON.stringify(se, null, 2)}\n`);
     T('siteEntries', t0);
     const missing = ir.lots.filter((l) => l.site && !se.entries[l.id]).map((l) => l.id);
@@ -608,7 +609,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: 0, lotStates, mobs, ...(hill ? { hill } : {}), ...(sbRun ? { sb: sbRun } : {}),
+    spendUsd: sc.paSpendUsd ?? 0, lotStates, mobs, ...(hill ? { hill } : {}), ...(sbRun ? { sb: sbRun } : {}),
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
@@ -773,7 +774,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
-  let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: sc.paSpendUsd ?? 0, paid: sc.paSpendUsd !== undefined, approval: 'pending' });
   // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
   let forms = null;
   if (isF1(sc)) {

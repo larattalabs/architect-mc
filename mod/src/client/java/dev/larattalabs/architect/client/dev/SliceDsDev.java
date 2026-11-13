@@ -22,7 +22,8 @@ public final class SliceDsDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.ds.request", 60_000, "{site (a site spec's wire), plain?, buildingType?, style?, name?, notes?, opKey?} - (7b DS) Designs.request with a "
+		DevBridge.register("dev.ds.request", 60_000, "{site (a site spec's wire), plain?, buildingType?, style?, name?, notes?, opKey?, budgetUsd?, bible?, versionOf?} - (7b DS; PA: budgetUsd, bible, "
+				+ "versionOf) Designs.request with a "
 			+ "site (the volume sent from this world's frozen file) -> {designId} or {refused, detail}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				// {plain: true}: the same request without the site (the BRIEF diffed against a plain one)
@@ -30,16 +31,18 @@ public final class SliceDsDev {
 				SiteSpec site = SiteSpec.fromWire(req.getAsJsonObject("site"));
 				// the 26-argument (1.52.0) constructor: type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible,
 				// group, profile, bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite, reserved, palette, opKey
+				// (7b PA) budgetUsd (the job's hard stop), bible (a built-in Style with its parts) and versionOf (a paid adaptation: that entry built
+				// into this site) for the paid batch's driver (tools/gate7bpa.mjs); absent: as DS had them
 				DesignRequest r = new DesignRequest(f.optStr("buildingType", "cabin"), f.optStr("style", "rustic"), null, List.of(), new BlockSize(20, 24, 20), f.optStr(
-					"name", null), f.optStr("notes", null), null, null, null, null, null, null, null, List.of(), null, false, null, null, null, null, null, null, null,
-					null, f.optStr("opKey", null)).withSite(plain ? null : site);
+					"name", null), f.optStr("notes", null), null, null, null, null, f.optNum("budgetUsd"), f.optStr("bible", null), null, List.of(), null, false, null,
+					null, null, null, f.optStr("versionOf", null), null, null, null, f.optStr("opKey", null)).withSite(plain ? null : site);
 				return ServerTasks.callOnServer(s -> ArchitectApi.get().designs().request(r)).thenCompose(x -> x).thenApply(id -> {
 					JsonObject o = new JsonObject();
 					o.addProperty("designId", id);
 					return o;
 				}).exceptionally(SliceDsDev::refused);
 			});
-		DevBridge.register("dev.ds.design", 30_000, "{designId} - (7b DS) Designs.get -> {status, step, entryId?, error?} and, once done, the entry: "
+		DevBridge.register("dev.ds.design", 30_000, "{designId} - (7b DS) Designs.get -> {status, step, cost {usd, turns, inputTokens, outputTokens} (PA), entryId?, error?} and, once done, the entry: "
 			+ "{binding (SiteBinding.of), ext, size}", (req, mc) -> {
 				String id = Fields.of(req).nonBlank("designId");
 				return ServerTasks.callOnServer(s -> {
@@ -51,6 +54,13 @@ public final class SliceDsDev {
 					}
 					o.addProperty("status", d.get().status().name());
 					o.addProperty("step", d.get().step());
+					// (7b PA) the job's own reported usage (the paid batch's ledger reads it)
+					JsonObject cost = new JsonObject();
+					cost.addProperty("usd", d.get().cost().usd());
+					cost.addProperty("turns", d.get().cost().turns());
+					cost.addProperty("inputTokens", d.get().cost().inputTokens());
+					cost.addProperty("outputTokens", d.get().cost().outputTokens());
+					o.add("cost", cost);
 					d.get().error().ifPresent(e -> o.addProperty("error", e));
 					d.get().entryId().ifPresent(e -> {
 						o.addProperty("entryId", e);
