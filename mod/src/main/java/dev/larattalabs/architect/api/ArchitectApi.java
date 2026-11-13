@@ -269,6 +269,11 @@ public interface ArchitectApi {
 	 * {@code NO_TEMPLATE} with that program as the closest. No new record, method or reason.
 	 * (7c CO, since NEXT) {@code "compose"} is advertised when the helper has the standalone composer (its {@code region.compose}):
 	 * {@link Regions#compose} works, and {@link Regions#checkPlan} honours {@link PlanRequest#EXT_PLAN_IMAGES}.
+	 * (7c US, since NEXT) {@code "suspendedBuilds"} is advertised when the helper's kit plans inverted builds (its
+	 * {@code plan.suspendedBuilds}): plan/0's {@code rule.suspended {scope}} is supported. The lots of each elevated lots zone in scope stand
+	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
+	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
+	 * ceiling). An overhang made by the plan's own forms can't host one (the land is read before the plan). No new record, method or reason.
 	 */
 	Set<String> features();
 }

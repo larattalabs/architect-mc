@@ -139,6 +139,7 @@ public final class ApiRules {
 					case "plan.hiddenRooms" -> "hiddenRooms"; // 7c HR: plan/0's form.hidden_room and the artifact's $.secrets[] (since 1.57.0)
 					case "plan.aqueduct" -> "aqueduct"; // 7c AQ: a course past its fill carried on piers or arches (channel.aqueduct; since NEXT)
 					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since 1.57.0)
+					case "plan.suspendedBuilds" -> "suspendedBuilds"; // 7c US: plan/0's rule.suspended (an elevated zone's lots hung inverted from overhang ceilings; since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)

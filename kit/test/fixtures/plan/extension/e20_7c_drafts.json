@@ -1,5 +1,5 @@
 {
-  "about": "(7cF) the 7c flips' parts written in their draft defs' shapes answer unsupported with their own block ids until their slices (BF, HR, US). ((7c BF) moved by name: hold, bowl and isle are supported since BF and answer the class each names: hold adjusted (raised, placed again around the town), bowl and isle fits; (7c HR) vault is supported since HR and answers adjusted: its 8x8 room shrunk to what hold's rock holds)",
+  "about": "(7cF) the 7c flips' parts written in their draft defs' shapes answer unsupported with their own block ids until their slices (BF, HR, US). ((7c BF) moved by name: hold, bowl and isle are supported since BF and answer the class each names: hold adjusted (raised, placed again around the town), bowl and isle fits; (7c HR) vault is supported since HR and answers adjusted: its 8x8 room shrunk to what hold's rock holds; (7c US) hang is supported since US and answers refused NO_FEATURE: its scope, town, is a street zone, not an elevated one)",
   "on": "s7",
   "expect": {
     "all": [
@@ -7,7 +7,7 @@
       { "part": "bowl", "block": "form.crater", "class": "fits" },
       { "part": "isle", "block": "form.floating_island", "class": "fits" },
       { "part": "vault", "block": "form.hidden_room", "class": "adjusted" },
-      { "part": "hang", "block": "rule.suspended" }
+      { "part": "hang", "block": "rule.suspended", "class": "refused", "code": "NO_FEATURE" }
     ]
   },
   "plan": {
