@@ -365,6 +365,15 @@ public interface Regions {
 	 * kind {@code settlement}, whose result holds {@code outcome} ({@code PICKED}, {@code COMPOSED} or {@code NO_PLAN}), {@code plan},
 	 * {@code check} and {@code cost}. For players and tests; Steward keeps its own plan writer. Built by slice CO (feature
 	 * {@code "compose"}); until then it throws. Since 1.55.0.
+	 * <p>
+	 * (7c CO, as built; docs/CONTRACT.md "Slice CO as built") The claim is in the Overworld (as {@link #checkPlan}'s); the design's owner
+	 * is the player (the request has none), and the composed plan may name only the built-in {@code claim_*} anchors. The pick is
+	 * {@link #design}'s (TC's template catalogue and land check); a fit ends {@code PICKED} with {@code program}, {@code params} and, once
+	 * the mod planned it, {@code planId}. Without one, each round's plan is checked by {@link #checkPlan} (the design's Style as the bible),
+	 * and one repair round gets the typed answers: {@code COMPOSED} when a round checks READY ({@code check.artifactSha} is what
+	 * {@link #realiseApproved} takes), else {@code NO_PLAN} with the best round's {@code plan}, {@code check} and {@code waits} (its parts not
+	 * fits or adjusted, each with its {@code block} and the catalogue's {@code until}). {@code images}: the planning images ({@code result.images}
+	 * blob ids) go to the composing job. The same {@code opKey} and body adopt the first design; another body refuses OP_KEY_CONFLICT. Since NEXT.
 	 */
 	default CompletableFuture<String> compose(ComposeRequest request) {
 		throw new UnsupportedOperationException("Regions.compose needs Architect API NEXT (slice CO)");
