@@ -282,17 +282,17 @@ export function sandboxFlags(scratch: string, heapMb: number, noNetwork: string,
 }
 
 /** The kit's `--json` line (`{ ok, errors[], warnings[], nbt, sidecar }`), if it printed one. */
-export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance; metrics?: Record<string, unknown>; raw?: unknown } | undefined {
+export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance; metrics?: Record<string, unknown>; composite?: unknown } | undefined {
   const lines = stdout.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('{') && l.endsWith('}'));
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
-      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown; metrics?: unknown };
+      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown; metrics?: unknown; composite?: unknown };
       const list = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))) : []);
       const c = j.conformance && typeof j.conformance === 'object' ? (j.conformance as Record<string, unknown>) : undefined;
       // (4c) `conformance: { ok, errors[], issues[] }` (warnings is accepted for issues)
       const conformance = c ? { ok: c.ok !== false && !list(c.errors).length, errors: list(c.errors), issues: list(c.issues ?? c.warnings) } : undefined;
       const metrics = j.metrics && typeof j.metrics === 'object' && !Array.isArray(j.metrics) ? (j.metrics as Record<string, unknown>) : undefined;
-      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}), ...(metrics ? { metrics } : {}), raw: j };
+      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}), ...(metrics ? { metrics } : {}), ...(j.composite !== undefined ? { composite: j.composite } : {}) };
     } catch {
       /* not it */
     }
@@ -343,7 +343,7 @@ export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits,
     return { ok: false, problem: `the sidecar is not valid JSON: ${(e as Error).message}`, output: r.output, warnings, ...conf };
   }
   // (7c CM-b) a composite: the size limit was the kit's, per module (`--max`); the union is past the cap by design
-  const composite = compositeFiles(j?.raw, out);
+  const composite = compositeFiles(j, out);
   if (composite && !composite.modules.every((m) => fs.existsSync(m.nbt) && fs.existsSync(m.json)) || composite && !fs.existsSync(composite.manifest)) {
     return { ok: false, problem: `the kit did not write every module of composite ${bp}`, output: r.output, warnings, ...conf };
   }
