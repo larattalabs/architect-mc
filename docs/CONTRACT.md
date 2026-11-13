@@ -30428,6 +30428,12 @@ ledger change costs one flushed world save.
     A client's logout goes through that path, so this was a harness bug, not a product bug.
 - **Run 3** (a9e7c334, the relog through the connection's disconnect path; the file path fixed; no product change since run 2):
   hf-crash **PASS** 25/0.
+- **Strict verifier** (gate-verifier, re-ran hf-crash on 8934/8935 at ed0e5d40, `artifacts/gate-runs-hf-verify/20261113-111538-change`):
+  **PASS**, 25/0, the same per-case numbers (delta 0 in D, L, T and X; the player's file written each time).
+  - Its review found nothing blocking. Low or info notes:
+    - an autosave inside the 2 s baseline window could in theory mask a dupe, but the player-file check would still catch it;
+    - the bot's logout is equivalent to a client's (the same Connection path and Fabric event), but not proven against a real client;
+    - a ledger change that skips `changed()` doesn't arm the logout save. Coverage is unchanged by HF.
 - **Other checks** (at 8d8603e9):
   - Gradle `build`: 1155 tests, 0 failures (1 skipped).
   - Kit: 1303 pass, 0 fail.
