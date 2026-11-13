@@ -542,10 +542,11 @@ function sheet(res) {
       if (f) img[arm] = f;
     }
     const k = key[p.key];
-    for (const side of ['A', 'B']) if (img[k[side]]) fs.copyFileSync(img[k[side]], path.join(out, `pair-${p.key}-${side}.png`));
+    // (files named by the pair's number, never by its archetype key: "A"/"B" are the sides)
+    const n = items.length + 1;
+    for (const side of ['A', 'B']) if (img[k[side]]) fs.copyFileSync(img[k[side]], path.join(out, `pair-${n}-${side}.png`));
     for (const arm of ['on', 'off']) fs.rmSync(path.join(out, `.${p.key}-${arm}.png`), { force: true });
-    items.push({ pair: p.key, A: `pair-${p.key}-${side('A')}.png`, B: `pair-${p.key}-${side('B')}.png` });
-    function side(s) { return s; }
+    items.push({ pair: p.key, n, A: `pair-${n}-A.png`, B: `pair-${n}-B.png` });
   }
   // the key: its own file, never in the sheet (the coordinator keeps it until Noah's picks are recorded)
   writeJson(path.join(ART, 'P4', 'ab-key.json'), { at: new Date().toISOString(), note: 'which arm each side shows (on = site renders on, P2; off = P4). Not for Noah until his picks are recorded.', key, pairs: res.pairs.map((p) => ({ key: p.key, lot: p.lot, on: p.on.entryId, off: p.off.entryId })) });
