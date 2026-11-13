@@ -279,6 +279,9 @@ export async function registerJR(steps, h) {
         await L.sleep(2000);
       }
       if (cabin) await call('dev.stockpile.pause', { site: cabin, paused: true }, 60_000).catch(() => null); // its own crate: not the feed's
+      // (PS) its periodic ledger save off: the halt finds the growth fed after the last save, so it has no paid record (the F3 case)
+      const ps = await call('dev.stockpile.ps', { noPeriodic: true, resetPeriodic: true }, 30_000).catch((e) => ({ refused: String(e?.message ?? e) }));
+      check(!ps?.refused, `${tag}: PS's periodic ledger save off for the halt (the case with no paid record): ${json(ps).slice(0, 160)}`);
       const b0 = await baseline(tag);
       const c = await crash(tag, { ...W }, region, b0, 'RVU2', () => call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000).catch(() => null));
       if (c) {
@@ -289,6 +292,8 @@ export async function registerJR(steps, h) {
         const after = await pile();
         const d = diff(S0, await cellsOf(W.BOX));
         out[tag] = judge(tag, c, after, { worldDiff: d.n, position: st?.position, poolBefore: pool1, poolAfter: after.ledger?.legacy });
+        const grown = Object.keys(c.Ld?.paid ?? {}).filter((k) => !Object.keys(b0.ledger?.paid ?? {}).includes(k));
+        check(c.n.savesAtKill === b0.saves && grown.length === 0, `${tag}: nothing saved between the baseline and the halt (save #${b0.saves} -> #${c.n.savesAtKill}): the post-JR growth had no paid record in the saved ledger (new records ${json(grown)})`, c.n);
         check(c.Ld?.legacy && G.same(c.Ld.legacy, pool1) && total(c.Ld.legacy) > 0, `${tag}: the saved ledger at the halt still held the pool (${total(c.Ld?.legacy)} units): a post-JR refund could have drawn on it`);
         check(G.same(after.ledger?.legacy, pool1), `${tag}: the post-JR crash refund drew nothing from the pool (${total(pool1)} -> ${total(after.ledger?.legacy)} units)`, { before: pool1, after: after.ledger?.legacy });
         check(st?.busy === null && st.position === 0 && d.n === 0, `${tag}: the undo resumed after the restart and finished: position ${st?.position}; the world before the growth (${d.n} differ)`, d.first);
