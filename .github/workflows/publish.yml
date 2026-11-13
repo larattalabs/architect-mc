@@ -39,3 +39,8 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew --no-daemon build publish -Prelease
+      - name: Verify the published package (jar, sources, pom, module and their checksums; TJ PUB-verify)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/pub-verify.mjs "${GITHUB_REF_NAME#v}" --retries 8

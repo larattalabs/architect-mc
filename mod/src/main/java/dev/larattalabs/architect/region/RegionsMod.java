@@ -24,6 +24,7 @@ public final class RegionsMod {
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			ChunkGen.reset();
 			RegionDesigns.reset();
+			Composes.reset();
 		});
 	}
 }

@@ -43,7 +43,9 @@ const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
 
 const FLAT = 'G6B Flat Base';
 /** The three survival gate houses (§5) and their fixtures. */
-const HOUSES = [['fit_attach_to_cliff', 'cliff_face'], ['fit_span', 'rift_site'], ['fit_suspend', 'overhang']];
+const DEFAULT_HOUSES = [['fit_attach_to_cliff', 'cliff_face'], ['fit_span', 'rift_site'], ['fit_suspend', 'overhang']];
+/** ((7c US) GATE7BSO_HOUSES `id:fixture,...` runs the same survival flow over other houses: tools/gate7cus.mjs, the inverted house) */
+const HOUSES = process.env.GATE7BSO_HOUSES ? process.env.GATE7BSO_HOUSES.split(',').map((h) => h.split(':')) : DEFAULT_HOUSES;
 const EVERY = 100;
 /** (SO-b) Architect's cosmetic scaffolding block, and whether a tally holds any scaffolding item (vanilla's, or one of Architect's). */
 const SCAF = 'architect_mc:scaffold';
@@ -389,8 +391,8 @@ steps.survival = async () => {
     await call('dev.so.watch', { every: 0 }, 30_000);
     await L.leaveWorld();
   }
-  // (SO-b) the scaffolding never becomes items: mined, pushed, blown up
-  {
+  // (SO-b) the scaffolding never becomes items: mined, pushed, blown up (on SO's own houses only)
+  if (HOUSES === DEFAULT_HOUSES) {
     const ctx = await siteCtx(...HOUSES[0]);
     await noDupe(ctx, (out[HOUSES[0][0]] ??= {}));
   }

@@ -94,11 +94,12 @@ class PlanCatalogueTest {
 		assertTrue(e.get(1).getAsJsonObject().getAsJsonObject("def").has("properties"), "a supported entry's def");
 		JsonObject crater = null;
 		for (var x : e) {
-			if (x.getAsJsonObject().get("id").getAsString().equals("rule.suspended")) {
+			if (x.getAsJsonObject().get("id").getAsString().equals("program.authored")) {
 				crater = x.getAsJsonObject();
 			}
 		}
-		// ((7c BF) form.crater is supported since BF; (7c HR) form.hidden_room since HR: rule.suspended is the reserved draft here)
+		// ((7c BF) form.crater is supported since BF; (7c HR) form.hidden_room since HR; (7c US) rule.suspended since US: program.authored
+		// (until AU) is the reserved draft here)
 		assertEquals("reserved", crater.getAsJsonObject("def").get("x-state").getAsString(), "a reserved entry's draft");
 		assertTrue(crater.has("note"), "the long text: its note");
 		assertEquals(JsonParser.parseString("[\"aa.nope\", \"zz.nope\"]"), mod.get("unknown"));

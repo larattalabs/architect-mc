@@ -111,11 +111,16 @@ public final class RegionDesigns {
 	 * read or sent.
 	 */
 	static CompletableFuture<dev.larattalabs.architect.api.@Nullable Volume> claimVolume(RegionDesignRequest r, Columns cols) {
-		BoundingBox b = affordanceBox(cols, r.claim(), r.level().getMinY(), r.level().getMaxY());
+		return claimVolume(r.level(), r.claim(), cols);
+	}
+
+	/** (7c CO) {@link #claimVolume(RegionDesignRequest, Columns)} for a level and claim (the composer's: the Overworld). */
+	static CompletableFuture<dev.larattalabs.architect.api.@Nullable Volume> claimVolume(net.minecraft.server.level.ServerLevel level, BoundingBox claim, Columns cols) {
+		BoundingBox b = affordanceBox(cols, claim, level.getMinY(), level.getMaxY());
 		if (b == null) {
 			return CompletableFuture.completedFuture(null);
 		}
-		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(r.level(), b, LoadPolicy.LOADED_ONLY, null).thenCompose(
+		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, b, LoadPolicy.LOADED_ONLY, null).thenCompose(
 			dev.larattalabs.architect.apiimpl.SurveyImpl::upload).<dev.larattalabs.architect.api.@Nullable Volume>thenApply(v -> v.blobId().startsWith(
 				"local:") ? null : v).exceptionally(e -> {
 					Architect.LOGGER.warn("Region design: the claim's volume for the template pick could not be read: {}", e.getMessage());

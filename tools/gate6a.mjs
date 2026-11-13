@@ -800,17 +800,20 @@ steps.heap = async () => {
   return out;
 };
 
-// ------------------------------------------------------------------ gate 9: the unchanged 1.7.0, 1.6.0 and 1.5.0 apitest jars
+// ------------------------------------------------------------------ gate 9: the unchanged apitest jars of main's latest three releases
 
 steps.apijars = async () => {
-  const runs = [
-    // (release v0.43.0, over v0.42.0: main's latest three releases) the unchanged 0.42.0, 0.41.0 and 0.40.1 jars (API 1.39.0, 1.38.0,
-    // 1.37.0), each with its tag's tools/apitest.mjs, each built from its tag (0.42.0 in artifacts/release-0430/, the D3 builder's tag
-    // build with the tag's tools; 0.41.0 close-out A's in gate6c-coa/, 0.40.1 the batch's in gate6c-batch/)
-    { api: '1.39.0', key: '0420', dir: path.join(MAIN, 'artifacts', 'release-0430', 'v0420'), jar: 'architect_apitest-0.42.0.jar', world: 'G6A Jar0420' },
-    { api: '1.38.0', key: '0410', dir: path.join(MAIN, 'artifacts', 'gate6c-coa', 'v0410'), jar: 'architect_apitest-0.41.0.jar', world: 'G6A Jar0410' },
-    { api: '1.37.0', key: '0401', dir: path.join(MAIN, 'artifacts', 'gate6c-batch', 'v0401'), jar: 'architect_apitest-0.40.1.jar', world: 'G6A Jar0401' },
-  ];
+  // (TJ CG) main's latest three releases, from tools/api-baselines.json (rolled by tools/release-version.mjs at every release), each
+  // the unchanged apitest jar built from its tag with the tag's own tools/apitest.mjs (tools/api-baselines-build.mjs build <tag>), in
+  // <main checkout>/artifacts/api-baselines/<dir>/. (Before TJ this list was hand-kept and stopped at 0.42.0, API 1.39.0.)
+  const { readBaselines, artifactsDir, releaseFiles } = await import('./api-baselines.mjs');
+  const art = artifactsDir(root);
+  const runs = readBaselines(root).releases.map((r) => ({ api: r.api, key: r.mod.replace(/\./g, ''), dir: releaseFiles(art, r).dir, jar: path.basename(releaseFiles(art, r).apitest),
+    world: `G6A Jar${r.mod.replace(/\./g, '')}`, tag: r.tag }));
+  for (const r of runs) if (!fs.existsSync(path.join(r.dir, r.jar)) || !fs.existsSync(releaseFiles(art, readBaselines(root).releases.find((x) => x.tag === r.tag)).tools)) {
+    check(false, `apijars: the ${r.tag} baseline is missing in ${r.dir} (build it: node tools/api-baselines-build.mjs build ${r.tag})`);
+    return { missing: r.tag };
+  }
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};
   for (const r of runs) {

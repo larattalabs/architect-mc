@@ -17,8 +17,8 @@
 //                                                  saved (no `paid`: its consumption becomes the legacy pool at the upgrade's load):
 //                                                  a legacy crate site (no stockpile yet) partly fed from its own crate; then the stockpile,
 //                                                  the town realised and built (pre-JR targets); /save-all flush, leave, the ledger stripped of
-//                                                  what JR added (`paid`, `legacy`, `legacySince`: byte for byte the v0.63.0 writer's
-//                                                  fields), reopened on this build: the pool > 0, stamped at this load.
+//                                                  what JR added (`paid`, `legacy`, `legacySince`) and its format set back to 1 (PS made
+//                                                  it 2): the v0.63.0 writer's fields, reopened on this build: the pool > 0, stamped at this load.
 //                                                  RVU2 (a post-JR growth's undo after the halt): what came back equals the saved
 //                                                  consumption (0 minted) and the pool is untouched; a pre-JR target (the town's removal)
 //                                                  still refunds out of the pool; adoptCrates keys the crate's placed counts to its site's
@@ -250,6 +250,8 @@ export async function registerJR(steps, h) {
     const l0 = ledgerOf(root);
     const strippedOf = Object.keys(l0 ?? {}).filter((k) => ['paid', 'legacy', 'legacySince'].includes(k));
     for (const k of ['paid', 'legacy', 'legacySince']) delete l0[k];
+    const fmt0 = root.format;
+    root.format = 1; // (PS) v0.63.0 wrote format 1; this build writes 2 and reads both
     fs.writeFileSync(file, `${JSON.stringify(root, null, 2)}\n`);
     const pool0 = {};
     for (const [k, v] of Object.entries(l0.consumed ?? {})) { const n = v - (l0.returned?.[k] ?? 0); if (n > 0) pool0[k] = n; }
@@ -257,7 +259,7 @@ export async function registerJR(steps, h) {
     await L.openWorld(name);
     await L.tp(CX + 80, 60, CZ + 56);
     const up = await pile();
-    out.upgrade = { strippedOf, pool: up.ledger?.legacy, legacySince: up.ledger?.legacySince, openedAt: t0 };
+    out.upgrade = { strippedOf, formatWas: fmt0, pool: up.ledger?.legacy, legacySince: up.ledger?.legacySince, openedAt: t0 };
     check(total(up.ledger?.legacy) > 0 && G.same(up.ledger?.legacy, pool0), `${tag}: the v0.63.0 ledger (stripped of ${json(strippedOf)}) became the legacy pool at this load: ${total(up.ledger?.legacy)} units ${json(up.ledger?.legacy)}`, out.upgrade);
     check(Number(up.ledger?.legacySince) >= t0 - 1000, `${tag}: the pool stamped at this load (legacySince ${up.ledger?.legacySince} >= ${t0}): every target placed so far is pre-JR`);
     const pool1 = up.ledger?.legacy ?? {};

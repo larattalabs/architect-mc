@@ -1080,7 +1080,10 @@ catalogue golden's header as main has them, and stamp what they add with the pla
 - a new or changed catalogue entry: `"sinceApi": "NEXT"` in `kit/schemas/plan.json`, then the golden regenerated as usual
   (`JSON.stringify(planCatalogue(), null, 1)`);
 - a new API member: `Since NEXT.` (or `since NEXT`, `@since NEXT`) in its javadoc, under `mod/src/main/java` or `mod/src/client/java`.
-  Only uppercase `NEXT` right after "since" counts, so prose and constants named `NEXT` are untouched.
+  (TJ HK-api) Every uppercase `NEXT` word in a Java comment or string literal is a placeholder too (`// (API NEXT)`, a default's
+  `"X needs Architect API NEXT"`): the release stamps them all. A `NEXT` in code (a constant named `NEXT`) or a javadoc reference to
+  one (`{@link #NEXT}`) is not. A `NEXT` word in a resource that ships in the jar (`mod/src/*/resources`) fails `--check` and is
+  never stamped. A reserved stub with no release yet says "throws until slice X ships", not `NEXT`.
 - A slice test never pins the API or kit version: it asserts "at least" its floor (`IrStale.semverCompare(ArchitectApi.VERSION,
   "1.37.0") >= 0`, `semverCompare(KIT_VERSION, '0.38.0') >= 0`) or reads the constant. A stamp it checks is `NEXT` on the slice and
   the released number afterwards, so check it as one of the two, or read the archived catalogue once released.
@@ -1182,6 +1185,42 @@ Before and after, both measured on a shared, busy box:
 - **Scheduler alone, replayed on recorded durations with no contention model:**
   - K1a 196 -> 118 min with s7's timeout as recorded, 144 -> 93 min with s7 at its p50;
   - K1b 160 -> 89 min.
+
+## API compatibility baselines and the release docs (slice TJ, 2026-11-13)
+
+The boundary audit (2026-11-13, finding 2) found `apijars` still on the 0.42.0, 0.41.0 and 0.40.1 jars (API 1.39.0) with main at
+1.57.0, and no check of Steward's real jar. Now one file, `tools/api-baselines.json`, holds main's latest three releases and the
+consumer jars, and everything reads it:
+- **`apijars`** (gate6a, in game, every `slice` tier): each release's unchanged apitest jar with its tag's own `tools/apitest.mjs`.
+- **`api-compat`** (offline, $0, the impact step of any change under `api/**`, `apiimpl/**` or the baselines' tools; about 30 s after
+  unit-mod): `node tools/api-compat.mjs --baselines` checks, against this build's classes, the references of the three apitest jars,
+  the newest release's mod jar's whole surface (`--surface`) and each consumer's references (`--consumer`). A consumer jar that
+  references no api member fails (a wrong jar would pass vacuously); its references into Architect outside `api/` print as WARN.
+- **The roll.** `tools/release-version.mjs` (a set) puts the release being set first and drops the oldest. The new tag does not
+  exist yet then, so the set prints the commands for after the tag.
+
+The files live in the main checkout's `artifacts/api-baselines/` (untracked; `--artifacts` or `$ARCHITECT_ARTIFACTS` override):
+- `node tools/api-baselines.mjs list`: what is there (exit 1 with the fix commands when something is missing).
+- `node tools/api-baselines-build.mjs build <tag>` (or `build --missing`): a detached worktree of the tag in `_work/` with its own
+  `.gradle-home` clone, `./gradlew --offline --no-daemon -PallowNoSidecar jar :apitest:jar` (about 3-4 min), then both jars, the
+  tag's `tools/` (git archive), `SOURCE.txt` and `SHA256SUMS` into `api-baselines/v<mod without dots>/`; the worktree is removed.
+- **Steward's jar (the coordinator, after each Steward pin or before a release):** `git -C ../steward-mc fetch` if you want its
+  newest main, then `node tools/api-baselines-build.mjs steward [--ref origin/main]`: a detached steward-mc worktree with a clone of
+  Steward's own `.gradle-home` (so it compiles against its pinned, released Architect from that cache; `ARCHITECT_JAR` is dropped),
+  `./gradlew --offline --no-daemon jar`, the jar into `api-baselines/steward/steward_mc.jar` with `SOURCE.txt` (the commit and its
+  `architect_version` pin).
+
+**At every release (the coordinator's checklist, printed by the set):**
+1. `node tools/release-version.mjs --api X.Y.Z --mod A.B.C --kit K.L.M [--catalogue N] [--steward-rc pass|pending|none|after-release]`:
+   besides the versions it writes the release row of `docs/RELEASES.json` (mod, API, kit, catalogue, date, the feature names added
+   over the last tag, the Steward RC state, the package state), regenerates the "Architect ships" block of `docs/STEWARD-SYNC.md`
+   and rolls `tools/api-baselines.json`. `--check` (CI's Publish runs it) fails when the three disagree with the tree.
+2. After the tag and Publish: `node tools/api-baselines-build.mjs build vA.B.C`.
+3. `GITHUB_TOKEN=$(gh auth token) node tools/pub-verify.mjs A.B.C`: the jar, sources jar, pom and module all answer 200, the module's
+   sizes and checksums are the downloaded bytes', the pom and the jar's `fabric.mod.json` name the version, and the jar carries the
+   plan/0 schema. The token comes from the environment only and is never printed (it needs read:packages). Publish runs it too,
+   after `publish` (`--retries 8`). Then set the row's `publish` (and later its `stewardRc`) in `docs/RELEASES.json` and run
+   `node tools/release-version.mjs --sync`.
 
 ## Gate waits (2026-10-20): idle time and duplicates out
 

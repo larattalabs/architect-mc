@@ -494,7 +494,7 @@ export interface RegionState {
 }
 
 export class RegionDesigns {
-  private driving = new Set<string>();
+  private driving = new Map<string, Promise<void>>();
 
   constructor(private sc: Sidecar) {}
 
@@ -574,17 +574,23 @@ export class RegionDesigns {
 
   /** The pick, its retry and the outcome; safe to call again after a restart (it carries on from the record). */
   async drive(id: string): Promise<void> {
-    if (this.driving.has(id)) return;
-    this.driving.add(id);
-    try {
-      await this.run(id);
-    } catch (e) {
-      const d = this.sc.designs.get(id);
-      this.sc.log.error(`design ${id}: ${(e as Error).stack ?? e}`);
-      if (d && !isFinalDesign(d)) this.fail(id, this.state(d), `internal error: ${(e as Error).message}`);
-    } finally {
-      this.driving.delete(id);
-    }
+    // ((7c CO) a second call while it runs waits for the same run: the composer awaits its pick this way)
+    const running = this.driving.get(id);
+    if (running) return running;
+    // (`await this.run` always yields once, so the map holds p before its finally runs)
+    const p: Promise<void> = (async () => {
+      try {
+        await this.run(id);
+      } catch (e) {
+        const d = this.sc.designs.get(id);
+        this.sc.log.error(`design ${id}: ${(e as Error).stack ?? e}`);
+        if (d && !isFinalDesign(d)) this.fail(id, this.state(d), `internal error: ${(e as Error).message}`);
+      } finally {
+        this.driving.delete(id);
+      }
+    })();
+    this.driving.set(id, p);
+    return p;
   }
 
   private async run(id: string): Promise<void> {

@@ -30,7 +30,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf' | 'kind' | 'polish' | 'region' | 'result'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf' | 'kind' | 'polish' | 'region' | 'result' | 'settlement'>>;
 
 export interface BookCtx {
   store: Store;
@@ -66,7 +66,7 @@ export class DesignBook {
   }
 
   /** A new queued design; `massing` (4c) marks a massing job and the massing version it makes. */
-  create(request: DesignRequest, massing?: Design['massing'], extra: Pick<Design, 'kind' | 'polish' | 'region'> = {}): Design {
+  create(request: DesignRequest, massing?: Design['massing'], extra: Pick<Design, 'kind' | 'polish' | 'region' | 'settlement'> = {}): Design {
     const now = this.ctx.now();
     const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), ...(massing ? { massing: { ...massing } } : {}), ...structuredClone(extra), createdAt: now, updatedAt: now };
     this.all.push(d);
@@ -167,6 +167,11 @@ export interface Limits {
   type?: string | undefined;
   /** (4b, open types) the checker profile the request asked for (`--profile`) */
   profile?: string[] | undefined;
+  /**
+   * (7c SR) the request allows a Composite return (ext `architect_mc:allowComposite: true`): the max then applies to each module and
+   * the union may pass it. Absent or false: a Composite is checked against the max as a whole, like any design.
+   */
+  allowComposite?: boolean | undefined;
 }
 
 /** Does the built blueprint fit the request? (undefined = yes, else why not) */
@@ -347,7 +352,15 @@ export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits,
   if (composite && !composite.modules.every((m) => fs.existsSync(m.nbt) && fs.existsSync(m.json)) || composite && !fs.existsSync(composite.manifest)) {
     return { ok: false, problem: `the kit did not write every module of composite ${bp}`, output: r.output, warnings, ...conf };
   }
-  const p = sidecarProblem(sc, composite ? { ...limits, maxSize: undefined } : limits);
+  // (7c SR) only a request that allows it: otherwise the union is checked against the max like any design (a check-round error the
+  // designer repairs into one Blueprint), so a lot's design never comes back larger than its lot
+  if (composite && !limits.allowComposite) {
+    const m = limits.maxSize;
+    const s = sc.size;
+    const past = m && s && (s.x > m.x || s.y > m.y || s.z > m.z) ? `size ${s.x}x${s.y}x${s.z} is past maxSize ${m.x}x${m.y}x${m.z}; ` : '';
+    return { ok: false, problem: `${past}a composite needs allowComposite (this request does not allow one): return one Blueprint${m ? ` within ${m.x}x${m.y}x${m.z}` : ''}`, output: r.output, warnings, sidecar: sc, ...conf };
+  }
+  const p = sidecarProblem(sc, composite && limits.allowComposite ? { ...limits, maxSize: undefined } : limits);
   if (p) return { ok: false, problem: p, output: r.output, warnings, sidecar: sc, ...conf };
   return { ok: true, output: r.output, warnings, sidecar: sc, nbt, json, ...conf, ...(composite ? { composite } : {}) };
 }

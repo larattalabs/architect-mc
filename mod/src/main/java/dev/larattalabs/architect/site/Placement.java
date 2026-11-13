@@ -444,8 +444,27 @@ public final class Placement {
 		return srv.getWorldPath(LevelResource.ROOT).resolve(FILE);
 	}
 
+	/**
+	 * (Slice PS, audit F6) The queue file could not be read at this world's start: the queue started empty, and nothing is saved over the
+	 * file this session (it holds in-flight removals' refund credits); {@code architect-queue.json.bak} is the last file that loaded.
+	 */
+	private static volatile boolean loadFailed;
+	private static boolean refusedLogged;
+
+	/** (PS) Whether the queue file failed to load this session. */
+	public static boolean loadFailed() {
+		return loadFailed;
+	}
+
 	/** Writes the queue file: batches, jobs with their cursors, group removals. {@code clean}: the server is stopping. */
 	static void save(MinecraftServer srv, boolean clean) {
+		if (loadFailed) {
+			if (!refusedLogged) {
+				refusedLogged = true;
+				Architect.LOGGER.error("Placement: not saved: {} failed to load this session; the file is kept as it is", FILE);
+			}
+			return;
+		}
 		JsonObject root = new JsonObject();
 		root.addProperty("version", 1);
 		root.addProperty("clean", clean);
@@ -512,13 +531,27 @@ public final class Placement {
 	private static void load(MinecraftServer srv) {
 		server = srv;
 		JOBS.clear();
+		loadFailed = false;
+		refusedLogged = false;
 		Path f = file(srv);
 		JsonObject root = null;
 		if (Files.exists(f)) {
 			try {
 				root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
 			} catch (IOException | RuntimeException e) {
-				Architect.LOGGER.warn("Could not read {}; the queue starts empty (the file is left as is)", f, e);
+				// (PS, F6) the file is kept as it is: no save this session (before PS the next save wrote an empty queue over it)
+				loadFailed = true;
+				String why = "unreadable: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
+				Architect.LOGGER.error("Could not read {} ({}); the queue starts empty and is not saved this session, so the file is kept as it is; fix it or "
+					+ "restore {} and reopen the world", f, why, FILE + ".bak", e);
+				SaveGuards.failed(FILE, why);
+			}
+			if (root != null) {
+				try {
+					Files.copy(f, f.resolveSibling(FILE + ".bak"), StandardCopyOption.REPLACE_EXISTING); // (PS, F6) the last file that loaded
+				} catch (IOException e) {
+					Architect.LOGGER.warn("Could not keep {}.bak", f, e);
+				}
 			}
 		}
 		boolean clean = root != null && root.has("clean") && root.get("clean").getAsBoolean();

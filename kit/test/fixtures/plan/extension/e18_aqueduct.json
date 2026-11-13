@@ -1,5 +1,5 @@
 {
- "about": "(6c HY-b, \u00a77.2, N-HY-5) a canal between two plateaus 8 over a valley across the whole claim: past fill (2), it is the reserved shape channel.aqueduct (until 7c), answered by the compiler only (hy/r03 is the same plan)",
+ "about": "(6c HY-b, \u00a77.2, N-HY-5; 7c AQ) a canal between two plateaus 8 over a valley across the whole claim: past fill (2), it was the reserved shape channel.aqueduct (until 7c), answered by the compiler only (hy/r03 is the same plan); moved by name in 7c AQ: the course is an aqueduct now (fits, block channel.aqueduct)",
  "terrain": {
   "W": 240,
   "D": 160,
@@ -37,6 +37,7 @@
  },
  "expect": {
   "part": "canal",
+  "class": "fits",
   "block": "channel.aqueduct"
  },
  "plan": {

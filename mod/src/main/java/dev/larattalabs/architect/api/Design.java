@@ -22,7 +22,9 @@ import java.util.Optional;
  *     same entry (a new version of it), no new entry
  * @param result (since 1.9.0) a region design's result ({@link Regions#design}, kind {@link Kind#REGION}): {@code {outcome:
  *     "PICKED"|"NO_TEMPLATE", fits, program, params, reason, cost, tries, planId?}} (the closest program is offered also
- *     without a fit); empty for other kinds and while the pick runs
+ *     without a fit); empty for other kinds and while the pick runs. (7c CO) A composed settlement's ({@link Regions#compose}, kind
+ *     {@link Kind#SETTLEMENT}): {@code {outcome: "PICKED"|"COMPOSED"|"NO_PLAN", reason, cost, rounds, pick, plan?, check?, waits?,
+ *     images?, program?, params?, planId?}} (docs/CONTRACT.md "Slice CO as built")
  */
 public record Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, JsonObject request,
 	Optional<String> owner, long createdAt, long updatedAt, Optional<MassingRef> massing, Optional<Conformance> conformance,
@@ -52,16 +54,22 @@ public record Design(String id, Status status, String step, Optional<String> ent
 
 	/**
 	 * What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}; since 1.9.0 a region design
-	 * ({@link Regions#design}) is {@link #REGION}. New values are only ever appended.
+	 * ({@link Regions#design}) is {@link #REGION}; (7c CO) a composed settlement ({@link Regions#compose}) is {@link #SETTLEMENT} (since NEXT).
+	 * New values are only ever appended.
 	 */
 	public enum Kind {
-		DESIGN, MASSING, REPORT, POLISH, REGION
+		DESIGN, MASSING, REPORT, POLISH, REGION,
+		/** (7c CO) {@link Regions#compose}: its {@link Design#result()} holds {@code outcome} (PICKED, COMPOSED or NO_PLAN). Since NEXT. */
+		SETTLEMENT
 	}
 
 	/** This job's kind (since 1.7.0). */
 	public Kind kind() {
 		if (request != null && request.has("kind") && request.get("kind").isJsonPrimitive() && "region".equals(request.get("kind").getAsString())) {
 			return Kind.REGION;
+		}
+		if (request != null && request.has("kind") && request.get("kind").isJsonPrimitive() && "settlement".equals(request.get("kind").getAsString())) {
+			return Kind.SETTLEMENT;
 		}
 		if (polish.isPresent() || request != null && request.has("kind") && "polish".equals(request.get("kind").getAsString())) {
 			return Kind.POLISH;
