@@ -1548,6 +1548,21 @@ public final class Stockpiles {
 					o.addProperty("simulation", ts.getTicketDebugString(key, true));
 					return o;
 				}
+				case "halt" -> {
+					// (RL, TEST) on the next tick the JVM halts with nothing saved (no shutdown hooks); mode "autosave": first the world's chunks
+					// as an autosave saves them (no flush: their writes may still be queued at the halt), so the ledger is on disk and the chunks
+					// may not be
+					boolean autosave = req.has("mode") && "autosave".equals(req.get("mode").getAsString());
+					srv.execute(() -> {
+						if (autosave) {
+							srv.saveAllChunks(true, false, false);
+						}
+						Architect.LOGGER.error("Stockpiles: dev.stockpile.halt{}; halting the JVM", autosave ? " after an autosave" : "");
+						Runtime.getRuntime().halt(7);
+					});
+					o.addProperty("halting", autosave ? "autosave" : "now");
+					return o;
+				}
 				case "saved" -> {
 					JsonObject f = savedJson();
 					o.add("file", f == null ? new JsonObject() : f);

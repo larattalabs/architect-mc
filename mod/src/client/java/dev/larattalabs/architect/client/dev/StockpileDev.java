@@ -38,6 +38,8 @@ public final class StockpileDev {
 			+ "(and per target), retaken (XL: given back as a later target wrote over a paid cell), legacyCrateStock, entities and containers in the box, the player's inventory, gameTime");
 		op("dev.stockpile.pause", "pause", "{site, paused?: true} - (6c Y1; C29: Sites.pause's path) pause or resume a construction site or road (as the crate screen's Pause)");
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
+		op("dev.stockpile.halt", "halt", "{mode?: now|autosave} - (slice RL) TEST: on the next tick the JVM halts with nothing saved; autosave: the chunks "
+			+ "saved first as an autosave saves them (no flush), then the halt");
 		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session");
 	}
 }
