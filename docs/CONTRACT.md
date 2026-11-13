@@ -29412,6 +29412,117 @@ the tower's own block under each tower), which re-cuts CM-a's sha goldens, so it
 - A composite entry's deletion does not delete its hidden module entries; a massing, `versionOf`, re-skin or follow of a composite is refused or untested.
 - Survival composites (S-7c-6: a later slice).
 
+### Slice TC as built (branch `slice/TC` off main f3b870ca; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+The template catalogue (§3 row 7, SETTLEMENTS §10.2): the scenario programs are listed in `Regions.design`'s pick with what land they
+need, the pick sees the claim's land features, and a pick that would land a template on land without them answers `NO_TEMPLATE` with that
+template as the closest. Feature `scenarioTemplates` (the helper's `region.templates`). No new record, method or reason; the plan catalogue
+(plan.json, its golden, `catalogueVersion`) is untouched.
+
+**The catalogue** (`kit/tools/region.mjs catalogue`, read by `sidecar/src/regiondesign.ts`): ten programs, the 6b five plus
+
+| Program (scenario) | Claim (columns) | Pickable params | `needs.affordances` |
+|---|---|---|---|
+| `floating_islands` (S1, already listed) | 200-320 | islands, spread, altitude | none |
+| `ice_outpost` (S2) | 96-256 (its own guard) | huts, farm, routeWidth, gradePct, spikes, scatter, scatterPct, stairs, minLots | none |
+| `terraced_monastery` (S3) | 128-256 | rise, retain, gradePct, fountain, spires, scatter, scatterPct (`unsafe` hidden) | none |
+| `s5_treehouses` (S5) | 160-256 | none (`grove`, the sculpt's record, hidden) | `trunk: {count: 6, min: {height: 24}}` |
+| `s6_cave_city` (S6) | 160-256 | none (`floorY` hidden: the land's) | `cave: {count: 1, min: {floorArea: 400, ceiling: 6}}` |
+| `flat_village` (S7) | 64-192 | houses (new), shared, squareSize, laneWidth, lamps, bell, apronLamps, orientation, requireAll, wellWater (`lots` hidden) | none |
+
+Each entry has a description written for the pick (what it builds, for which site, what land it expects) and the free-text `needs` 6b
+used; the CLI adds `keywords` from `kit/lib/region/pickKeywords.mjs` (read only by the sim's stand-in pick, never shown to the model; kept
+out of the program files so the 6b programs and floating_islands stay byte-identical). S4 has no program. **Densities and sizes:** a pick sets the
+programs' own params (huts, spikes, scatter density, rise, spires, houses...); S5 and S6 are fixed layouts on their land (no pickable
+param).
+
+**`needs.affordances`** = `{kind: count | {count, min: {metric: floor}}}`, kinds from AF (`AFFORDANCE_KINDS`, a sidecar unit holds the two
+lists equal), counts at most 16 (AF's per-kind cap). Only S5 and S6 have them: their land is scenario setup, not generator output (SB
+reading 2), so the template can only fit where that land already is. S1-S3 and S7 build or adapt their own ground; their land is judged from
+the survey summary and the free-text needs, as in 6b.
+
+**The claim's land** (mod `RegionDesigns`, helper `regiondesign.ts`):
+- with the helper's `region.templates`, `Regions.design` also freezes the claim's volume (`VolumeSurvey`, read only, LOADED_ONLY): the
+  claim's columns (a centred 256-column window of a larger claim), from 48 under the surveyed lowest ground or water floor to 24 over the
+  highest top, clamped to the level (`affordanceBox`, unit `ApiTCTest`); uploaded, sent as `region.design`'s new optional `volume {blobId,
+  sha}`. A volume that can't be read or sent is left out (the pick goes on without it);
+- the helper runs the kit's site analysis (`tools/affordances.mjs`, no lot: AF's `analyseVolume`, the same as `site.analyse` and a plan's
+  `affordances[]`) over it **once per design** and keeps the list in the design's record (`region.affordances`, or `affordanceError`), so
+  a restart reuses it. A 192x192x150 claim takes about 2 s;
+- the prompt gains `## Site affordances`: a count per kind and the three largest of each with their sizes (or "not analysed"), and each
+  catalogue entry a `needs land features` line; the answer rule adds "the site affordances hold every land feature it needs";
+- **`validatePick`**: a fit (`fits: true`) on a program with `needs.affordances` the summary does not meet (or with no summary) is invalid,
+  naming what is missing ("s6_cave_city needs 1 cave (floorArea >= 400, ceiling >= 6) in the claim's land; it has 0"). The existing path
+  follows: one retry with the errors, then `NO_TEMPLATE` offering the last answer's program as the closest (`requireFit`: a failed design).
+  A closest offer (`fits: false`) is never refused for land.
+
+**The sim pick** (`simPick`): on the sim backend with no scripted answers, the program whose keywords the brief and card name most (whole
+words; ties to catalogue order), its defaults, `fits` when any matched. It replaces 6b's schema default (the first program). It knows nothing
+of the land, so the validation is what refuses a fit over the wrong land. Scripted answers (`ext architect:simAnswers`) still win.
+
+**The programs, picked:** a pick sends only pickable params, so two programs gained an auto mode (their explicit params, and so every
+golden, unchanged):
+- `flat_village` with no lot list lays the first `houses` (4-10, default 8) of `DEFAULT_LOTS` (S7's ten Steward-shaped lots, the hall
+  first). `houses` is `omitDefault`, so S7's resolved params, seed and golden hold; `kit/lib/params.mjs`'s `omitDefault` now also covers
+  `int` (no other int param uses it);
+- `s6_cave_city` with no `floorY` finds the hall in the land: one read box holding every floor the sculpt can choose and the city over it,
+  AF's caves in it, the largest whose box meets the hall's columns gives the floor (its anchor stands on the floor). On SB's flat land with
+  the sculpt pushed 12 deeper (water in the higher floors' rock) the auto plan equals the sculpt-floor plan (lots and parts). No cave: the
+  old auto floor.
+- `s5_treehouses` with no `params.grove` (the coordinator's ruling (a), 2026-11-13) finds the grove in the land (`groveFromLand`): one read
+  box over the claim (16 under its lowest floor to 72 over its highest top; it also serves the lots, so no third plan); AF's trunks of height >= 24 laid out as the sculpt lays them
+  (two rows of three, 26 apart along x, the rows 20 apart, each within 3), the set nearest the claim's centre; each pair's deck read from
+  its ramp's tongue in the volume (the walk's feet row, deck + 2; in game the surveyed ground under a giant oak's trunk can drop where its
+  roots go, so the deck is not recomputed from the survey unless there is no ramp); each axis the centre of the logs one row over the deck
+  (the sculpt's `axisAt`); the ramps as the sculpt records them. groveLayout(survey) only when the land has no such grove. On SB's flat land
+  and on an uneven variant the auto plan equals the recorded-grove plan (lots, parts, anchors, port links), every lot centred on a trunk
+  (unit). The recorded `params.grove` path is untouched (SB's s5 golden replays).
+
+**Readings chosen:**
+1. **The summary is AF's 3D analysis of a claim volume the mod freezes**, not the ARSV survey: the survey can't see a cave or a trunk. The
+   mod sends it only to a helper with `region.templates`; a request from an older mod, or a volume that failed, has no summary, so S5/S6 can't
+   fit (fail closed).
+2. **Needs only where the land is setup** (S5, S6). The other scenarios build their ground; machine needs for them (relief bands, snow,
+   flat share) would duplicate the survey and the free-text needs. Recorded, not tuned.
+3. **The floors were set between the measured land:** the sculpted grove has 6 trunks of height 34-36 (AF's natural S5 window: 1 trunk of
+   12); the sculpted hall's cave has floorArea 732, ceiling 8, 5568 cells. **AF's natural S6 window holds a natural cave of floorArea 1298,
+   ceiling 38**, so S6's needs hold there too: the pick's check passes, while the program still plans its hall at the claim's middle (SB
+   did not use natural caves). A unit records it.
+4. **The catalogue CLI passes enum `options`** (6b passed `values`, which no program declares, so every enum answer failed validation:
+   sky_isle's `support` could never be set) and leaves out `lots`, `json` and `pick: false` params (a pick can't send a lot list or a sculpt
+   record).
+5. **The pick prompt changed for every claim** (four more programs, the land section, the answer rule): 6b's measured pick accuracy is not
+   re-measured here (no paid run, $0); BR/PAY measure it.
+6. **The sim stand-in is keyword matching**: the units and the gate show the listing, the volume path, the land check and the outcomes, not
+   a model's accuracy.
+
+**Shared files touched (minimal):** sidecar `protocol.ts` (`RegionDesignMsg.volume`, FEATURES appended), `regions.ts`
+(`claimAffordances`), the two feature-list tests (appended); `kit/lib/params.mjs` (int omitDefault); `kit/test/village.test.mjs` (6c V's
+`catalogue === false` assertion flipped); `ApiRules` (one mapping line); `ArchitectApi`/`RegionDesignRequest` javadoc; the 6b programs'
+`tools/gate-chains.json`, `tools/step-inputs.json`. **Goldens re-cut for the moved `programSha` only** (the program files changed:
+release-version's own verifier, tiles, cells and blobs identical): `scenarios/goldens/s3`, `s5`, `s6` (header irSha), and
+`kit/test/fixtures/rv/merge.json` (make-merge.mjs; flat_village's programSha its only change).
+
+**Not covered:** a model's pick accuracy over the new catalogue (reading 5); S6's program on a natural cave (reading 3; SB's own gap); S4 (no
+program). The in-game step drives the pick over a built hall, not over S5/S6's sculpted scenario worlds (their land is the unit fixtures).
+
+**Leftovers:** BR/PAY measure the pick prompt's accuracy over the ten programs (6b's 4-brief accuracy was measured on the old prompt);
+machine-checked land needs for S1-S3/S7 if a pick lands them on wrong land in BR; S6 using a natural cave the land offers.
+
+**Checks** ($0, sim only; ports 8896/8897):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1275/1275** at fbd4a8d6 (tc 7/7: the catalogue, needs, the land fixtures byte for byte, the needs on the sculpted land only, a picked flat village, a picked cave city finding its hall, a picked S5 finding its grove on flat and uneven land) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1140 tests, 0 failures, 1 skipped** (ApiTCTest 4/4: the feature mapping, the affordance window, a large claim's centred window, no loaded column); no Java change after it |
+| sidecar `npm ci && npm run check` (through `sidecar-check-turn.sh`) | **866/866**, the bundle built (regions-tc 13/13 with the real kit; re-run 19/19 with regions-real-kit-6b after the keywords moved to the kit) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, the 0.47.0 mod surface (2605 members) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0; `tools/catalogue-since-check.mjs` pass; the plan catalogue golden untouched |
+| `node tools/release-version.mjs --check --lenient` | consistent (the tracked goldens re-plan byte for byte after the s3/s5/s6 re-cuts; 2 `NEXT` placeholders, TC's javadoc) |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (367 steps; tc-unit and tc-pick registered in gate-chains.json, chain `7ctc`, impact rule "7c TC template catalogue (slice TC)") |
+| gate run 1, 20261113-052621-change at dbd76982 | FAIL 1: tc-unit PASS 2/0; tc-pick (a) and (c) ok, (b) built the hill at y -60 (the flat base's ground is y 64: the hill was underground, outside the volume window) |
+| gate run 2, **20261113-054210-change** at fbd4a8d6 | **PASS 2/2**: tc-unit 2/0; tc-pick 3/0: (a) a cave city over flat land NO_TEMPLATE, s6_cave_city closest, "it has 0 (0 cave of any size)" (the mod's volume analysed); (b) S6's brief over the built hill with its 60x8x12 hall PICKED s6_cave_city and the mod planned it; (c) S5's brief there NO_TEMPLATE, s5_treehouses closest |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
