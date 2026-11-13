@@ -477,7 +477,9 @@ subs.p4 = async () => {
     const ir = readJson(path.join(ART, 'P2', `run-${opt('p2-attempt', 1)}`, 'raw', 'plan', 'ir.json'));
     for (const j of arche) {
       const lot = ir.lots.find((l) => l.id === j.lot);
-      const vol = findVolume(lot.site.volumeSha);
+      // the archetype's own frozen volume: its library entry keeps it (site/site.arvx), whatever later runs did to the world
+      const own = path.join(RUN, 'mod', 'run', 'architect', 'library', j.entryId, 'site', 'site.arvx');
+      const vol = fs.existsSync(own) ? own : findVolume(lot.site.volumeSha);
       if (!vol) throw new Error(`P4: no frozen volume ${lot.site.volumeSha} for ${j.lot} in the run dir's worlds`);
       const bytes = fs.readFileSync(vol);
       const chunks = [];
