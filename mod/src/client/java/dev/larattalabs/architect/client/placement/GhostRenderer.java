@@ -92,6 +92,10 @@ final class GhostRenderer {
 		if (v == null || cam == null) {
 			return;
 		}
+		if (v.connector() != null) {
+			submitLink(ctx, v, cam);
+			return;
+		}
 		dev.larattalabs.architect.design.DesignSpec.Plot p = v.plot(PlotMarker.dimension());
 		boolean single = v.first() == null;
 		float x0 = (float) (p.minX() - cam.x);
@@ -150,6 +154,34 @@ final class GhostRenderer {
 			cube(pose, vc, x0 - ft, top - ft, z1 - ft, x1 + ft, top + ft, z1 + ft, faint, 0x3F, false);
 			cube(pose, vc, x0 - ft, top - ft, z0 - ft, x0 + ft, top + ft, z1 + ft, faint, 0x3F, false);
 			cube(pose, vc, x1 - ft, top - ft, z0 - ft, x1 + ft, top + ft, z1 + ft, faint, 0x3F, false);
+		});
+	}
+
+	/**
+	 * (7c CX) The connector's ends being marked: a brass post on each end (the looked-at one before the first is marked) and a cream dotted
+	 * line between them, a cube every half block.
+	 */
+	private static void submitLink(LevelRenderContext ctx, PlotMarker.View v, Vec3 cam) {
+		int[] b = v.hover();
+		int[] a = v.first() != null ? v.first() : b;
+		int brass = UiStyle.withAlpha(UiStyle.BRASS, 0xFF);
+		int dot = UiStyle.withAlpha(UiStyle.CREAM, 0xC0);
+		ctx.submitNodeCollector().submitCustomGeometry(new PoseStack(), RenderTypes.debugFilledBox(), (pose, vc) -> {
+			for (int[] e : v.first() != null ? new int[][] {a, b} : new int[][] {b}) {
+				float px = (float) (e[0] - cam.x), py = (float) (e[1] - cam.y), pz = (float) (e[2] - cam.z);
+				cube(pose, vc, px + 0.3f, py + 0.02f, pz + 0.3f, px + 0.7f, py + 1.9f, pz + 0.7f, brass, 0x3F, false);
+			}
+			if (v.first() == null) {
+				return;
+			}
+			double ax = a[0] + 0.5, ay = a[1] + 0.5, az = a[2] + 0.5, bx = b[0] + 0.5, by = b[1] + 0.5, bz = b[2] + 0.5;
+			double len = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az));
+			int n = Math.max(1, (int) Math.ceil(len * 2));
+			for (int i = 0; i <= n; i++) {
+				double t = (double) i / n;
+				float x = (float) (ax + (bx - ax) * t - cam.x), y = (float) (ay + (by - ay) * t - cam.y), z = (float) (az + (bz - az) * t - cam.z);
+				cube(pose, vc, x - 0.08f, y - 0.08f, z - 0.08f, x + 0.08f, y + 0.08f, z + 0.08f, dot, 0x3F, false);
+			}
 		});
 	}
 

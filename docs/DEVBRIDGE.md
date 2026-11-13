@@ -758,3 +758,11 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   [[u, y, v]...]}, opKey, owner?}` (`Designs.variant` -> `{entryId, ms}`) and `dev.gp.byKey {opKey, owner?}` (`Designs.variantByKey` ->
   `{found, entryId?}`). A refusal answers `{refused: "<REASON>: message", detail}` and, for a `ProgramRefused`, `findings: [{rule, severity,
   message}]`. Driven by `tools/gatem5gp.mjs`.
+- **2026-11-13 (7c slice CX):** new (`SliceCxDev`, generated headless too) `dev.cx.place {kind, from: [x, y, z], to: [x, y, z], styleId?, params?,
+  mode?: AUTO | INSTANT | CONSTRUCTION, opKey, owner?, dimension?}` (`Sites.placeConnector`; `owner` and `dimension` go in
+  `params["architect_mc:owner"]` and `params["architect_mc:dimension"]` -> `{placed, siteId (the region id), refusals: [{reason, message}], notes,
+  ms}`) and `dev.cx.plan {kind, from, to, params?}` (the one-part plan it checks: `{plan, claim: [x0, z0, x1, z1], anchors: {cx_from, cx_to}}`,
+  for a gate to check the very plan for its bill). Client only (`BuildLinkKey`): `dev.cx.key {press?, kind?}` (the Build a link key, K: `{key,
+  drop: {port, facing, at} | null, marker}`; `press` as the key, starting the plot marker's connector mode; `kind` F's pick). The ends are
+  marked with `dev.plot.corner`; `dev.plot.state` gains `connector` (the kind, in the connector mode), phase `placing` and `lastConnector`
+  (`{kind, from, to, placed, siteId | refused, notes}`). Driven by `tools/gate7ccx.mjs`.

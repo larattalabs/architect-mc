@@ -30235,6 +30235,78 @@ whose land holds a natural overhang, realised with an inverted entry bound to it
 `SiteFit.with(site)`). (4) `tools/gate7bso.mjs` gained `GATE7BSO_HOUSES` (default unchanged; SO-b's scaffold step runs only on the default
 houses); so-survival was not re-run.
 
+### Slice CX as built (branch `slice/CX` off main 40a59368 (v0.64.0); versions NEXT; $0, sim only; recorded 2026-11-13)
+
+One connector for players (§3 row 11, SETTLEMENTS §7.8, N-7b-1): `Sites.placeConnector(ConnectorRequest)` on 7cF's frozen record (no 7b or
+7cF signature changed; the API diff is javadoc only), the plot marker's connector mode, and the drop warning's "build a link here". Feature
+`placeConnector`, advertised with the helper's `region.planCheck` (ApiRules; Api7cFTest no longer lists it as reserved).
+
+**How it works** (`apiimpl/ConnectorPlace`): the connector is a **one-part plan**: plan/0 `{planId: connector, connectors: [{id: link, kind,
+from: {anchor: cx_from}, to: {anchor: cx_to}, ...params}]}` over a claim of the two ends' x/z box plus 16 each side (rope's approach) and the
+level's height, the ends as the caller anchors. It is checked (`Regions.checkPlan`, the world's mode, LOAD_BOUNDED over the claim's chunks)
+and, when READY with the link `fits` or `adjusted`, realised (`Regions.realiseApproved`) under the request's opKey (both keyed: a retry finds
+the same check and region). So it is one region and one site group; every kind is the plan compiler's own (geometry, theming from the Style,
+S-THEME, typed refusals); in survival the link is RS's construction target with the connector's existing survival row (fed from the owner's
+stockpile in runs, refunded on removal). `PlaceResult.siteId` is the region id; `Regions.remove` takes it off.
+
+| Request | Answer |
+|---|---|
+| kinds | `rope_bridge`, `ladder`, `catwalk`, `rock_stair`, `spiral` (= plan/0's `stairs_around`), `stairs_around`; any other `FIELD_LIMIT` |
+| `params` | the kind's plan/0 members, copied onto the part; `id`, `kind`, `from`, `to`, `required` refused `FIELD_LIMIT`; `architect_mc:*` read, never copied |
+| ends | one cell, or more than 96 apart in x or z: `FIELD_LIMIT` |
+| mode | the world's (S-RS-5): AUTO builds INSTANT in creative, CONSTRUCTION in survival; CONSTRUCTION outside survival and INSTANT in survival `NOT_ALLOWED` |
+| a part the plan can't build | `placed: false`, `NO_LINK` with the kit's code first (`NO_LINK: NO_GAP ...`, `NO_CLIMB`, `SCHEMA` ...); nothing asked of the world |
+| the check's or the realise's typed refusal | the same reason as a refusal (never a failed future) |
+
+**The player's path:**
+- **The connector mode** (`client/placement/PlotMarker.startConnector`, `PlotHud`, `GhostRenderer.submitLink`): the plot marker's two marks are
+  the connector's ends (the cells looked at, feet level); F cycles the kind (rope bridge first; Shift+F back); the ghost is a brass post on each
+  end and a dotted line between; Enter on the second end places it on the integrated server (`ConnectorPlace.place` with the player's UUID as
+  the owner and the player as the actor, AUTO, a fresh opKey), phase `placing`; a refusal stays on the second end with the reason in the HUD
+  ("No rock stair here: NO_LINK: NO_CLIMB ..."); placed, the mode ends with a toast naming the region.
+- **The Build a link key** (`client/placement/BuildLinkKey`, `Keys.buildLink`, K by default, "Build a link (a connector)"): starts the connector
+  mode. **"Build a link here"**: the drop warning now ends "(build the way in: build a link here)" (`SiteFit.LINK_HERE`; the text before it
+  unchanged); `SiteFit.dropsOf` gives the same ports as data; when a site house is placed whose verdict had a drop, a toast says so with the K
+  hint, and K then starts the link with its first end at that port's outside cell (used once, forgotten after 10 minutes); the player marks the
+  other end.
+
+**Readings chosen** (the contract silent; the smallest reading each time):
+1. **A one-part plan, not a CELL path site.** SETTLEMENTS §7.8 said "a CELL path site like a 4e road; INSTANT only"; §3 row 11 (the contract)
+   names survival "as a construction site (each connector's existing survival row)", which is RS's region target. Cell sites refuse
+   CONSTRUCTION, and the connectors are compiled only by the plan compiler, so the plan path is the one that has every kind and its survival row.
+2. **The record has no level, owner or actor** (7cF froze it): the API call reads `params["architect_mc:dimension"]` (default the overworld)
+   and `params["architect_mc:owner"]` (default none: in survival a stockpile owner is needed, the region's own refusal says so); the player's
+   path passes the level, the UUID and the player directly (`ConnectorPlace.place(server, request, level, owner, actor)`).
+3. **`NO_LINK` for "the plan can't build it"** (7b's "a link can't reach"), the kit's code and message in the refusal's message; no new Reason.
+4. **The claim is the ends' box plus 16** (ROPE.approach), so a landing's approach fits; a longer approach than 16 would be clipped by the claim.
+5. **The spiral** is plan/0's `stairs_around`, which needs `around` (a part ref); with only two marked points it answers `malformed SCHEMA`
+   (typed): a spiral round a standing spire is not offered by marking points (a later slice could name a host). Ladder, catwalk and rock stair
+   are whatever the compiler answers for the two ends (cx.test: on flat lips catwalk `NO_GAP`, rock stair `NO_CLIMB`, ladder `adjusted`).
+6. **"From a site house's port to ground"** is the drop's first end plus a marked second end (the plan's anchors are x/z points: the compiler
+   finds the levels); no endpoint kind for a placed site was added (plan/0's `{build}` endpoint is a player build's door, not a site).
+7. **Removal** is the region's (`Regions.remove`, or Sites.removeGroup of its group); no player-facing remove was added beyond the region's
+   existing one (leftover).
+
+**Not covered by a unit or the gate:** ladder, catwalk and rock stair placed in game (their rows are RS's, gated in RS/7a; here they are
+plan-checked over the fixture in cx.test only); the drop-to-link path in game (BuildLinkKey's remember/press is driven by dev.cx.key in the
+connector-mode item, without a placed site house); multiplayer (the player path needs the integrated server, as ST's sample does).
+
+**Checks** ($0, sim only; branch head 62e30514 before the as-built):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1307/1307 (cx.test.mjs 4/4: the claim is the ends' box plus 16; the rope bridge READY, only the link's parts write, every cell within 2 of the points, rules clean, the second check byte-identical; survival one target `link`, free 0, its bill the creative bom; catwalk `NO_GAP`, rock_stair `NO_CLIMB`, stairs_around `SCHEMA`, ladder answers) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1158 tests, 0 failures, 1 skipped (ApiCXTest 5/5: the feature follows region.planCheck; the override over the API default; Java's plan, claim and anchors equal fixtures/plan/cx/cx01_ravine.json; the kinds and params; bad requests; Api7cFTest without placeConnector in its reserved list; ApiSTTest unchanged: the warning's start) |
+| sidecar | untouched; `npx tsc --noEmit -p .` clean |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 137/137 |
+| api-compat | clean: the 0.48.0 and 0.47.0 apitest jars; `--surface` of the 0.48.0 mod jar; the API diff against main is javadoc only (Sites.placeConnector) |
+| `node tools/step-inputs.mjs check` | clean (374 steps; cx-unit, cx-ingame, cx-survival entered; chain `7ccx`, impact rule "7c CX one connector") |
+| in game, run 20261113-110146-change at 62e30514 (ports 8906/8907, `--out artifacts/gate-runs-cx`) | **PASS** 3/3: `cx-unit` 2/0; `cx-ingame` 7/0 (dev client, creative: K starts the connector mode; a rock stair on the flat lips refused on the second end, NO_LINK: NO_CLIMB in the HUD, E-flat 0; the rope bridge marked between the two points, placed by the player's path as rg1, PLACED, 199 cells, the realised world equal to the check's virtual world (strict, 0 of 199 differ), Regions.remove E-flat 0); `cx-survival` 11/0 (headless: the INSTANT twin; INSTANT refused NOT_ALLOWED; the plan checked in survival: link fits, free 0, held 80, its bill; placed AUTO as a construction site, fed in 8 waves (199 items), 4 targets (c1-c4, part link) built; the bill put down equal to the check's item for item and the region's whole bill; the conservation sum exact built (199 paid standing) and removed (every item back); the world equal to the twin; E-flat 0). Run 20261113-105032 failed on two harness bugs (region ids are `rg<n>`; the marker's region removed without its owner as the requester, then waited on) |
+| gate-verifier (strict: survival accounting) | **PASS** at c36bce7b: the API diff javadoc only; no INSTANT path in survival; the bill the compiler's own; re-ran `cx-survival` on its own ports 8908/8909 (run 20261113-110622-change): 11/0, the target bills equal the check's item for item, the conservation sum exact built (199 paid) and removed (every item back), the twin 0 differ, E-flat 0. Non-blocking: the other kinds are plan-checked only; the drop-to-link path in game without a placed site house; the player-facing remove is the region's |
+
+**Gallery (glance, not awaited):** `artifacts/gate-runs-cx/20261113-110146-change/gate7c-cx/shots/`: `cx-marker.png` (the ends, the dotted line, the HUD
+with the rock stair's refusal), `cx-placed.png` (the rope bridge).
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
