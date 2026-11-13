@@ -244,7 +244,18 @@ public final class Stockpiles {
 			};
 		});
 		// the world-save callback that saves the chunks (autosave and stop): the ledger and the chunks are saved together
-		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> save());
+		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> {
+			if (!explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
+				save();
+			}
+		});
+		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
+		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
+		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> server.execute(() -> {
+			if (unsaved && server.isRunning()) {
+				saveWithWorld(server);
+			}
+		}));
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
 			if (TRACE_SAVES) {
@@ -892,7 +903,13 @@ public final class Stockpiles {
 	/** Marks a stockpile changed (STOCKPILE_CHANGED, rate-limited, on the next tick). */
 	static void changed(Pile p) {
 		p.dirty = true;
+		unsaved = true;
 	}
+
+	/** (HF) a ledger change since the last save (a logout saves the world when set). */
+	static volatile boolean unsaved;
+	/** (HF) inside saveWithWorld: BEFORE_SAVE leaves the ledger to it. Server thread. */
+	private static boolean explicitSave;
 
 	/**
 	 * Credits refunds into the owner's stockpile once per {@code key} (§4): up to capacity returned, the rest dropped above the first
@@ -1763,22 +1780,26 @@ public final class Stockpiles {
 	 */
 	static void saveWithWorld(MinecraftServer srv) {
 		long t0 = System.nanoTime();
-		int before = saves;
 		if (srv != null && srv.isSameThread()) {
 			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
 			// is never on disk ahead of player.dat, so a crash after it neither dupes nor loses those items. saveAllChunks never saves players
 			// (26.3: level.dat keeps only the singleplayer host's UUID; every player, the host too, is in playerdata/<uuid>.dat).
 			long p0 = System.nanoTime();
-			// REPRO-ONLY: srv.getPlayerList().saveAll();
+			srv.getPlayerList().saveAll();
 			double pms = (System.nanoTime() - p0) / 1e6;
 			playerSaves++;
 			lastPlayerSaveMs = pms;
 			maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
-			srv.saveAllChunks(true, false, false);
+			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
+			// disk ahead of the world's chunks either
+			explicitSave = true;
+			try {
+				srv.saveAllChunks(true, true, false);
+			} finally {
+				explicitSave = false;
+			}
 		}
-		if (saves == before) {
-			save();
-		}
+		save();
 		double ms = (System.nanoTime() - t0) / 1e6;
 		worldSaves++;
 		lastWorldSaveMs = ms;
@@ -1801,6 +1822,7 @@ public final class Stockpiles {
 			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			saves++;
+			unsaved = false;
 			if (TRACE_SAVES) {
 				Architect.LOGGER.info("Stockpiles saved ({} stockpile(s), save #{})", PILES.size(), saves);
 			}

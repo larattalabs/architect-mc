@@ -10,6 +10,10 @@
 //                                                  disk, the world opened again:
 //                                                  D  "Insert from inventory" (the crate screen's path) of an item the town needs, then
 //                                                     dev.stockpile.addcrate (what /steward stockpile <id> add calls): before HF a dupe
+//                                                  L  "Insert from inventory", then a logout (vanilla saves that player) and a new join: before
+//                                                     HF a loss (the player saved without the items, the ledger rewound)
+//                                                  T  the region removed (its stock becomes credit), a Take (withdraw) into the inventory, a
+//                                                     crate added: before HF a loss of the take
 //                                                  X  dissolveStockpile to the player (its own explicit save): before HF a loss of the stock
 //                                                  each: the player's inventory + the stock after the restart equal the totals before the
 //                                                  move, item for item (no mint, no loss); the explicit save saved the players (playerdata's
@@ -114,30 +118,71 @@ export async function registerHF(steps, h) {
     const pickItem = (not) => Object.entries(need).filter(([k]) => !not.includes(k)).sort((a, b) => b[1] - a[1])[0];
     log(`  HF: ${(st0.feedOrder ?? []).length} target(s) paused; outstanding ${json(need)}`);
 
-    // D: Insert from inventory, then an explicit save (a crate added), then the halt
+    const addCrateAt = (k) => [CLAIM[0] + 2 * k, gy + 1, CLAIM[1] - 6];
+    const playerBack = async () => {
+      for (let i = 0; i < 60; i++) {
+        const st = await call('dev.state', {}, 10_000).catch(() => null);
+        if (st?.player) return true;
+        await L.sleep(1000);
+      }
+      return false;
+    };
+
+    // D (F1): Insert from inventory, then an explicit save (a crate added), then the halt
+    const [A, kA] = pickItem([]) ?? [];
     {
-      const [item, k] = pickItem([]) ?? [];
-      const n = Math.min(k ?? 0, 64);
-      check(n > 0, `D: the town needs ${item} x${k}: ${n} given to the player`);
-      await cmd(`/give @s ${item} ${n}`);
-      out.D = await crashCase('D', W, [item], async () => {
+      const n = Math.min(kA ?? 0, 64);
+      check(n > 0, `D: the town needs ${A} x${kA}: ${n} given to the player`);
+      await cmd(`/give @s ${A} ${n}`);
+      out.D = await crashCase('D', W, [A], async () => {
         const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
-        const add = await call('dev.stockpile.addcrate', { owner: G.OWNER, pos: [CLAIM[0] + 2, gy + 1, CLAIM[1] - 6] }, 120_000);
+        const add = await call('dev.stockpile.addcrate', { owner: G.OWNER, pos: addCrateAt(1) }, 120_000);
         check(ins.moved > 0 && !add.refused, `D: ${ins.moved} item(s) moved from the inventory into the stockpile; a crate added (an explicit ledger save): ${json(add.refused ?? 'added')}`);
         return { moved: ins.moved, added: !add.refused };
       });
-      await call('dev.wait', { ms: 1000 }, 30_000);
     }
 
-    // X: the stockpile stocked (as a hopper would), then dissolved to the player (its own explicit save), then the halt
+    // L (F9): Insert from inventory, then a logout (the player saved) and a new join, then the halt
+    // the same item when the town needs only one (what it still accepts: its need less the stock)
+    const [B, kB] = pickItem([A]) ?? [A, kA];
     {
-      const has = (await counts()).stock;
-      const [item, k] = pickItem([]) ?? [];
-      const n = Math.min(Math.max(0, (k ?? 0) - (has[item] ?? 0)), 96);
-      if (n > 0) {
-        const r = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [item]: n }, exact: true }, 120_000);
-        log(`  X: stocked ${json(r.accepted)}`);
+      const n = Math.min(Math.max(0, (kB ?? 0) - ((await counts()).stock[B] ?? 0)), 64);
+      check(n > 0, `L: the town needs ${B} x${kB}: ${n} given to the player`);
+      await cmd(`/give @s ${B} ${n}`);
+      out.L = await crashCase('L', W, [B], async () => {
+        const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+        await call('dev.bot.relog', {}, 10_000);
+        const back = await playerBack();
+        await call('dev.wait', { ms: 2000 }, 30_000);
+        check(ins.moved > 0 && back, `L: ${ins.moved} item(s) moved into the stockpile; the player logged out and joined again (${back})`);
+        return { moved: ins.moved, relogged: back };
+      });
+    }
+
+    // T (F5, Take): the region removed (its stock becomes credit), a withdraw into the inventory, an explicit save (a crate added), the halt
+    {
+      const r = await call('dev.region.remove', { region, requester: G.OWNER }, 600_000).catch((e) => ({ refused: String(e) }));
+      let st;
+      for (let i = 0; i < 300; i++) {
+        st = await call('dev.region.state', { region }, 60_000).catch(() => null);
+        if (!st?.view?.state || ['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state)) break;
+        await L.sleep(2000);
       }
+      const p1 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+      const credit = p1.credit ?? {};
+      const take = Math.floor((credit[A] ?? 0) / 2);
+      check(take > 0, `T: the region removed (${st?.view?.state ?? 'gone'}${r?.refused ? `; ${r.refused}` : ''}); credit ${json(credit)}: take ${take} ${A}`);
+      await cmd('/clear @s');
+      out.T = await crashCase('T', W, [A], async () => {
+        const w = await call('dev.stockpile.withdraw', { owner: G.OWNER, items: { [A]: take } }, 120_000);
+        const add = await call('dev.stockpile.addcrate', { owner: G.OWNER, pos: addCrateAt(2) }, 120_000);
+        check(!w.refused && (w.withdrawn?.[A] ?? 0) === take && !add.refused, `T: withdrew ${json(w.withdrawn ?? w.refused)} into the inventory; a crate added (an explicit ledger save): ${json(add.refused ?? 'added')}`);
+        return { withdrawn: w.withdrawn ?? {}, added: !add.refused };
+      });
+    }
+
+    // X (F5, dissolve): dissolveStockpile to the player (its own explicit save), then the halt
+    {
       const stock = (await counts()).stock;
       const items = Object.keys(stock);
       check(sum(stock) > 0 && sum(stock) <= 30 * 64, `X: the stockpile holds ${sum(stock)} unit(s) (${json(stock)}): fits the inventory`);

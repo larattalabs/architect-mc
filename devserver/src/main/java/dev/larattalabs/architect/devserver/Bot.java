@@ -100,6 +100,22 @@ public final class Bot {
 		});
 	}
 
+	/**
+	 * (HF, dev) A logout and a new join (server thread): vanilla's disconnect path ({@code onDisconnect}: Fabric's DISCONNECT, then
+	 * {@code PlayerList.remove}, which saves the player), then {@link #spawn} again from the saved player file. {@link #player} is null
+	 * until the new join completes.
+	 */
+	public static void relog(MinecraftServer server) {
+		ServerPlayer p = player(server);
+		if (p == null) {
+			throw new IllegalStateException("no bot to log out");
+		}
+		uuid = null;
+		p.connection.onDisconnect(new net.minecraft.network.DisconnectionDetails(net.minecraft.network.chat.Component.literal("dev.bot.relog")));
+		Architect.LOGGER.info("devserver: bot {} logged out (dev.bot.relog); joining again", p.getName().getString());
+		spawn(server);
+	}
+
 	private static Field awaitingPosition;
 	private static Field awaitingTeleport;
 	private static Field keepAlivePending;
