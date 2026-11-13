@@ -89,7 +89,7 @@ public final class Composes {
 				dev.larattalabs.architect.api.Sample::summary).exceptionally(e -> "");
 			return summary.thenCompose(sum -> RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, LoadPolicy.LOADED_ONLY).thenCompose(
 				cols -> BlobPut.put(link, cols.encode(), "survey").thenCompose(blobId -> RegionDesigns.claimVolume(level, c, cols).thenCompose(vol -> link.send(
-					withBuilds(message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol), level, c))))))).thenCompose(ack -> {
+					withBuilds(message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol), level, c)))))).thenCompose(ack -> {
 						if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
 							String err = opt(ack, "error");
 							return CompletableFuture.failedFuture(err != null && err.startsWith("op_key_conflict") ? new RegionsImpl.RegionException(Reason.OP_KEY_CONFLICT,
