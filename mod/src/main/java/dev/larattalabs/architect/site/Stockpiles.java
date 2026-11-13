@@ -76,6 +76,30 @@ public final class Stockpiles {
 	private static final Map<String, Integer> MAX_STACK = new ConcurrentHashMap<>();
 	/** Dev hook: log every save of the file (the clean-stop check). */
 	static volatile int saves;
+	/**
+	 * (PS, F11) The file's format. 2 since PS: the same fields as 1 (JR's {@code paid} and {@code legacy}, RL's {@code books} additively),
+	 * bumped so a later reader can tell a file with JR's paid records from an older one. A format 1 file is read as before (converted
+	 * at its next save); a newer one is refused (loadFailed).
+	 */
+	static final int FORMAT = 2;
+	/** (PS, F4 b) A changed ledger is saved with the world (players, chunks, ledger) at most this often: 10 s (Noah, "safety: defaults"). */
+	static final int PERIODIC_TICKS = 200;
+	/** (PS) The tick of the last ledger save (any: autosave, explicit, periodic). */
+	private static long lastSaveTick;
+	/**
+	 * (PS, F6) The file could not be read (or is newer than this reader): nothing was loaded and nothing is saved for this session, so
+	 * the file stays as it is for the player to fix or restore ({@code stockpiles.json.bak} is the last file that loaded).
+	 */
+	private static volatile boolean loadFailed;
+	private static volatile @Nullable String loadFailedWhy;
+	/** (PS, dev) the periodic saves: count, last and max time (ms), the recent times for a median. */
+	static volatile int periodicSaves;
+	static volatile double lastPeriodicMs, maxPeriodicMs;
+	static final java.util.ArrayDeque<Double> PERIODIC_MS = new java.util.ArrayDeque<>();
+	/** (PS, TEST) the gate's before-the-fix cases: the periodic save off; a finished undo's refund not saved at its credit. */
+	static volatile boolean testNoPeriodic, testNoCreditSave;
+	/** (PS) the next saveWithWorld is the periodic one (not logged at INFO). Server thread. */
+	private static boolean quietSave;
 
 	private Stockpiles() {
 	}
@@ -267,7 +291,9 @@ public final class Stockpiles {
 			PILES.clear();
 			dir = null;
 			ticks = 0;
+			lastSaveTick = 0;
 		});
+		SaveGuards.init();
 	}
 
 	// ------------------------------------------------------------------ lookups
@@ -402,6 +428,7 @@ public final class Stockpiles {
 	/** {@code createStockpile}: idempotent per owner; adds the named crates that aren't crates of it yet. Server thread. */
 	public static Pile create(MinecraftServer srv, String owner, String dimension, List<BlockPos> crates) throws Sites.SiteException {
 		requireOwner(owner);
+		requireLoaded();
 		if (!SurvivalWorld.on()) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, "a stockpile needs the survival toggle on (instant placements use none)");
 		}
@@ -447,6 +474,7 @@ public final class Stockpiles {
 
 	/** {@code addStockpileCrate}. */
 	public static Pile addCrate(MinecraftServer srv, String owner, String dimension, BlockPos at) throws Sites.SiteException {
+		requireLoaded();
 		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile (createStockpile first)");
@@ -798,6 +826,14 @@ public final class Stockpiles {
 	 * fit drops at the first crate, booked as dropped), its cell is restored and its journal kind released, and its targets lose
 	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
 	 */
+	/** (PS, F6) A new stockpile or crate is refused while the file failed to load: it would be lost (never saved) and reuse the file's ids. */
+	private static void requireLoaded() throws Sites.SiteException {
+		if (loadFailed) {
+			throw new Sites.SiteException(Reason.NOT_ALLOWED, FILE + " could not be loaded (" + loadFailedWhy + "); stockpiles are off until it is fixed or "
+				+ FILE + ".bak is restored and the world reopened");
+		}
+	}
+
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
 		Pile p = get(owner);
 		if (p == null) {
@@ -1164,6 +1200,42 @@ public final class Stockpiles {
 				dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, p.owner);
 			}
 		}
+		periodicSave(srv);
+	}
+
+	/**
+	 * (PS, F4 b) A ledger changed since its last save (a hopper's or a player's delivery, a feed's consumption, a refund) is saved with
+	 * the world at most every {@link #PERIODIC_TICKS}: a crash then loses at most about 10 s of deliveries (the hopper's chunk saves
+	 * eagerly in about 10 s too, so a delivery's source and the ledger drift apart by that much at most), never the 5 minutes to the next
+	 * autosave. The same save as the explicit ones (players, chunks flushed, ledger), so the ledger is never on disk ahead of them.
+	 */
+	static void periodicSave(MinecraftServer srv) {
+		if (!unsaved || testNoPeriodic || loadFailed || ticks - lastSaveTick < PERIODIC_TICKS) {
+			return;
+		}
+		long t0 = System.nanoTime();
+		quietSave = true; // logged with ARCHITECT_TRACE_STOCKPILE only: it runs every 10 s while a build feeds
+		saveWithWorld(srv);
+		double ms = (System.nanoTime() - t0) / 1e6;
+		periodicSaves++;
+		lastPeriodicMs = ms;
+		maxPeriodicMs = Math.max(maxPeriodicMs, ms);
+		synchronized (PERIODIC_MS) {
+			PERIODIC_MS.addLast(ms);
+			while (PERIODIC_MS.size() > 512) {
+				PERIODIC_MS.removeFirst();
+			}
+		}
+		lastSaveTick = ticks; // also when the save was refused, so a failing disk is retried every 10 s, not every tick
+	}
+
+	/** (PS, dev) the median of the recent periodic saves (ms); -1 before the first. */
+	static double periodicMedianMs() {
+		double[] a;
+		synchronized (PERIODIC_MS) {
+			a = PERIODIC_MS.stream().mapToDouble(Double::doubleValue).sorted().toArray();
+		}
+		return a.length == 0 ? -1 : a[a.length / 2];
 	}
 
 	private static void feed(MinecraftServer srv, ServerLevel level, Pile p) {
@@ -1576,6 +1648,36 @@ public final class Stockpiles {
 					o.addProperty("playerSaves", playerSaves);
 					o.addProperty("lastPlayerSaveMs", lastPlayerSaveMs);
 					o.addProperty("maxPlayerSaveMs", maxPlayerSaveMs);
+					o.addProperty("periodicSaves", periodicSaves); // (PS)
+					o.addProperty("lastPeriodicMs", lastPeriodicMs);
+					o.addProperty("maxPeriodicMs", maxPeriodicMs);
+					o.addProperty("medianPeriodicMs", periodicMedianMs());
+					o.addProperty("unsaved", unsaved);
+					o.addProperty("loadFailed", loadFailed);
+					if (loadFailedWhy != null) {
+						o.addProperty("loadFailedWhy", loadFailedWhy);
+					}
+					o.addProperty("format", FORMAT);
+					return o;
+				}
+				case "ps" -> {
+					// (PS, TEST) the gate's before-the-fix cases
+					if (req.has("noPeriodic")) {
+						testNoPeriodic = req.get("noPeriodic").getAsBoolean();
+					}
+					if (req.has("noCreditSave")) {
+						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
+					}
+					if (req.has("resetPeriodic") && req.get("resetPeriodic").getAsBoolean()) {
+						periodicSaves = 0;
+						lastPeriodicMs = 0;
+						maxPeriodicMs = 0;
+						synchronized (PERIODIC_MS) {
+							PERIODIC_MS.clear();
+						}
+					}
+					o.addProperty("noPeriodic", testNoPeriodic);
+					o.addProperty("noCreditSave", testNoCreditSave);
 					return o;
 				}
 				case "state" -> {
@@ -1757,7 +1859,7 @@ public final class Stockpiles {
 
 	static JsonObject toJson() {
 		JsonObject root = new JsonObject();
-		root.addProperty("format", 1);
+		root.addProperty("format", FORMAT);
 		root.addProperty("nextId", nextId);
 		JsonArray a = new JsonArray();
 		PILES.values().forEach(p -> a.add(p.toJson()));
@@ -1779,6 +1881,12 @@ public final class Stockpiles {
 	 * the ledger ahead of the world (consumption recorded for blocks the saved world lost). Server thread.
 	 */
 	static void saveWithWorld(MinecraftServer srv) {
+		boolean quiet = quietSave;
+		quietSave = false;
+		if (loadFailed) {
+			refusedSave();
+			return; // (PS, F6) nothing of the stockpiles is written this session
+		}
 		long t0 = System.nanoTime();
 		if (srv != null && srv.isSameThread()) {
 			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
@@ -1804,13 +1912,19 @@ public final class Stockpiles {
 		worldSaves++;
 		lastWorldSaveMs = ms;
 		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
-		Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms", String.format(java.util.Locale.ROOT, "%.1f", ms));
+		if (!quiet || TRACE_SAVES) {
+			Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms{}", String.format(java.util.Locale.ROOT, "%.1f", ms), quiet ? " (periodic)" : "");
+		}
 	}
 
 	static void save() {
 		Path d = dir;
 		if (d == null) {
 			return;
+		}
+		if (loadFailed) {
+			refusedSave();
+			return; // (PS, F6) the unreadable file is never overwritten (with an empty registry or anything else)
 		}
 		Path f = d.resolve(FILE);
 		try {
@@ -1823,6 +1937,7 @@ public final class Stockpiles {
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 			saves++;
 			unsaved = false;
+			lastSaveTick = ticks;
 			if (TRACE_SAVES) {
 				Architect.LOGGER.info("Stockpiles saved ({} stockpile(s), save #{})", PILES.size(), saves);
 			}
@@ -1835,20 +1950,88 @@ public final class Stockpiles {
 	static final boolean TRACE_SAVES = System.getenv("ARCHITECT_TRACE_STOCKPILE") != null;
 
 	private static void load(MinecraftServer server) {
-		dir = server.getWorldPath(LevelResource.ROOT).resolve("architect");
+		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
+	}
+
+	/** (PS) The registry from {@code <d>/stockpiles.json} (the world's architect dir); the save guard set when it can't be read. Tests call it. */
+	static void loadFrom(Path d) {
+		dir = d;
 		PILES.clear();
 		nextId = 1;
+		loadFailed = false;
+		loadFailedWhy = null;
+		refusedLogged = false;
 		Path f = dir.resolve(FILE);
 		if (!Files.isRegularFile(f)) {
 			return;
 		}
+		String why = loadFile(f);
+		if (why != null) {
+			// (PS, F6, F11) nothing loaded, nothing saved: the file stays as it is
+			PILES.clear();
+			nextId = 1;
+			loadFailed = true;
+			loadFailedWhy = why;
+			Architect.LOGGER.error("Stockpiles: could not load {} ({}). No stockpile is loaded and none is saved this session, so the file is kept as it"
+				+ " is; fix it or restore {} and reopen the world", f, why, FILE + ".bak");
+			SaveGuards.failed(FILE, why);
+		}
+	}
+
+	/** (PS) Loads the file into the registry; null when it loaded (then it is kept as {@code .bak}), else why not (the registry unchanged or partial). */
+	static @Nullable String loadFile(Path f) {
+		JsonObject root;
 		try {
-			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
-			readInto(root);
-			LOADED = root.deepCopy();
-			Architect.LOGGER.info("Stockpiles: {} loaded", PILES.size());
+			root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
 		} catch (IOException | RuntimeException e) {
-			Architect.LOGGER.warn("Could not read {}; no stockpiles loaded", f, e);
+			Architect.LOGGER.warn("Could not read {}", f, e);
+			return "unreadable: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
+		}
+		String newer = newerFormat(root);
+		if (newer != null) {
+			return newer;
+		}
+		try {
+			readInto(root); // a pile that fails midway fails the whole file (the caller clears what was read)
+		} catch (RuntimeException e) {
+			Architect.LOGGER.warn("Could not read {}", f, e);
+			return "a stockpile could not be read: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
+		}
+		LOADED = root.deepCopy();
+		Architect.LOGGER.info("Stockpiles: {} loaded (format {})", PILES.size(), root.has("format") ? root.get("format").getAsString() : "none");
+		try {
+			Files.copy(f, f.resolveSibling(FILE + ".bak"), StandardCopyOption.REPLACE_EXISTING); // (PS, F6) the last file that loaded
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Could not keep {}.bak", f, e);
+		}
+		return null;
+	}
+
+	/** (PS, F11) Why a file's format is refused (newer than {@link #FORMAT}, or not a number); null when this reader reads it. */
+	static @Nullable String newerFormat(JsonObject root) {
+		if (!root.has("format")) {
+			return null; // a pre-release file (Y1): read as format 1
+		}
+		int fmt;
+		try {
+			fmt = root.get("format").getAsInt();
+		} catch (RuntimeException e) {
+			return "format " + root.get("format") + " is not a number";
+		}
+		return fmt > FORMAT ? "format " + fmt + " was written by a newer Architect (this one reads up to " + FORMAT + ")" : null;
+	}
+
+	/** (PS) Whether the file failed to load this session (dev, status). */
+	public static boolean loadFailed() {
+		return loadFailed;
+	}
+
+	private static boolean refusedLogged;
+
+	private static void refusedSave() {
+		if (!refusedLogged) {
+			refusedLogged = true;
+			Architect.LOGGER.error("Stockpiles: not saved: {} failed to load this session ({}); the file is kept as it is", FILE, loadFailedWhy);
 		}
 	}
 

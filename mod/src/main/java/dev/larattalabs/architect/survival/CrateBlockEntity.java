@@ -55,9 +55,24 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 		return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
 	}
 
+	/**
+	 * (Slice PS, audit N2) Whether a stack can be booked at all: only a plain one (no components beyond its item's defaults). The ledger
+	 * counts items by id, so a filled shulker box's contents, an enchantment, a name, damage, a written book's pages or a block entity's
+	 * data would be destroyed by a deposit; such a stack is refused (it stays where it is: in the inventory, the hopper or the dropper).
+	 * Carrying them exactly would need per-stack storage in the ledger; no building target needs them.
+	 */
+	public static boolean plain(ItemStack stack) {
+		return plainPatch(stack.getComponentsPatch());
+	}
+
+	/** A stack's component patch (its differences from the item's defaults) holds nothing. */
+	public static boolean plainPatch(net.minecraft.core.component.DataComponentPatch patch) {
+		return patch.isEmpty();
+	}
+
 	/** Whether one unit of {@code stack} would go in. Server side only (false on the client). */
 	public boolean wouldAccept(ItemStack stack) {
-		return !stack.isEmpty() && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
+		return !stack.isEmpty() && plain(stack) && level != null && !level.isClientSide() && Builder.accepts(siteId, this, itemId(stack), false) != null;
 	}
 
 	/**
@@ -65,8 +80,8 @@ public final class CrateBlockEntity extends BlockEntity implements WorldlyContai
 	 * the units taken. Server thread.
 	 */
 	public int insert(ItemStack stack) {
-		if (stack.isEmpty() || level == null || level.isClientSide()) {
-			return 0;
+		if (stack.isEmpty() || !plain(stack) || level == null || level.isClientSide()) {
+			return 0; // (PS, N2) a stack with components is never booked
 		}
 		String item = itemId(stack);
 		int n = 0;
