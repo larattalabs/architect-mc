@@ -11,6 +11,7 @@ import { planCatalogue, planCatalogueKinds } from '../lib/plan/catalogue.mjs';
 import { PLAN_SCHEMA, validatePlan } from '../lib/plan/schema.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { buildVirtual } from '../lib/region/vworld.mjs';
+import { themeOffenders } from '../lib/lint/theme.mjs';
 import { hollowMountain, LEDGE, WALL } from '../lib/forms/hollowMountain.mjs';
 import { crater } from '../lib/forms/crater.mjs';
 import { floatingIsland } from '../lib/forms/floatingIsland.mjs';
@@ -157,6 +158,13 @@ test('x03 floating-island hamlet: the island floats on its anchor (M3 clean), it
   const pid = r.res.ir.parts.findIndex((p) => p.id === 'f_isle');
   vw.eachWritten((x, y, z, idx, f, part) => { if (part === pid) seen.add(vw.pal.states[idx].replace(/\[.*$/, '')); });
   for (const b of seen) assert.ok(FREE_NATURAL.has(b), `${b} is a free natural block`);
+});
+
+test('S-THEME: every block x01-x03 write outside their lots traces to a role or is natural (the structure lint\'s theme rule)', async () => {
+  for (const n of ['x01_hollow_mountain', 'x02_crater_lake', 'x03_island_hamlet']) {
+    const r = await planFx(fixture(n));
+    assert.deepEqual(themeOffenders(r.res.ir, r.world()).offenders, [], n);
+  }
 });
 
 test('survival: the three forms bill nothing (natural cut and fill, free); a lake\'s shell is its pond\'s (H)', async () => {
