@@ -433,7 +433,9 @@ async function scenarioItem(scn) {
   log(`${item} (${scn}): estimate $${est}, cap $${cap} ($${P.jobShare(item)} per job), committed $${L.committedUsd}`);
   const attempt = Number(opt('attempt', 1));
   const reuse = opt('reuse') ? JSON.parse(String(opt('reuse'))) : undefined;
-  const plan = scenarioPlan(scn, 'claude', { attempt, ...(reuse ? { reuse } : {}) });
+  // --variants '{"lot": "key"}': another lot map's variants for a $0 re-run of paid designs (--reuse); recorded in the plan file
+  const variants = opt('variants') ? JSON.parse(String(opt('variants'))) : undefined;
+  const plan = scenarioPlan(scn, 'claude', { attempt, ...(reuse ? { reuse } : {}), ...(variants ? { variants } : {}) });
   const pf = path.join(ART, item, `plan-${attempt}.json`);
   writeJson(pf, plan);
   const env = envCheck(`${item}:client`);
