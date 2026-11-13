@@ -30388,3 +30388,24 @@ defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as 
   - The fixture is "a world saved by v0.63.0": a world built on this build, stopped cleanly, its ledger stripped of what JR added
     (`paid`, `legacy`, `legacySince`), then reopened. Between v0.63.0 and main, `stockpiles.json`'s format differs only in those fields.
   - It runs RVU2 (a post-JR growth's undo after the halt), the pre-JR town's removal and an adoption of a legacy crate site.
+
+### Coordinator decisions (2026-11-13, these win)
+
+- **Q1, the v0.64.0 fallback: approved.** `StockLedger.JR_RELEASED_MS = 1_794_550_525_000L` is the committer time (`git log -1
+  --format=%ct 40a59368` = 1794550525, 2026-11-12 23:15:25 -0700) of commit 40a59368, the commit tag `v0.64.0` points at ("Release
+  v0.64.0"). The design leans towards a narrow loss over a mint.
+- **Q2, the stripped-file fixture: approved.** Evidence that v0.63.0 (tag commit 2b165279) and main e04dd6d6 write `stockpiles.json`
+  alike except for JR's ledger fields:
+  - `site/Stockpiles.java`: the file root `toJson()` (v0.63.0 and main both at line 1710, `format: 1`) and `Pile.toJson()` (both at line
+    158) are identical. The method bodies were diffed (`diff <(git show v0.63.0:… | sed -n '/toJson() {/,/^\t}/p') <(git show origin/main:…)`).
+  - `survival/StockLedger.java`: `toJson()` (v0.63.0 line 295, main line 452) differs only in the 7 lines JR added (main 463-469), which
+    write `paid` and, when non-empty, `legacy`. JR-b adds `legacySince`, so the fixture strips `paid`, `legacy` and `legacySince` from the
+    owner's ledger.
+- **The adopt split: approved** as built (rule 3).
+- **RL's `Stockpiles.fromPaid` (slice/RL a338b546):**
+  - RL caps a stockpile-fed target with no record by its pile's ledger, `p.ledger.fromPaid(targetId, items)`, for XR's retake and retakeOnce.
+  - Through the 2-argument call, JR-b's rule gives such a target nothing from the pool (its `placedAt` is unknown).
+  - JR-b adds `StockLedger.fromPaid(targetId, items, placedAt)`: with no record, the pool only for a target placed before
+    `legacySince`, else nothing. With a record, the record key's `placedAt` decides.
+  - When RL is on main, JR-b's merge passes the target's `placedAt` (`Site.placedAt()` / `Infra.placedAt()`) at RL's no-record call and at
+    the swap's `giveBackPaid`. So a pre-JR target keeps its pool share, and a post-JR one draws none.

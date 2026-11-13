@@ -286,9 +286,18 @@ public final class StockLedger {
 	 * record (same rule as {@link #credit}) and taken out of the record. A target with no record: {@code items} as they are.
 	 */
 	public Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
+		return fromPaid(targetId, items, -1);
+	}
+
+	/**
+	 * (JR-b) {@link #fromPaid(String, Map)} for a target placed at {@code placedAt} (wall-clock ms; &lt; 0 unknown): with no record, what
+	 * goes back is the legacy pool's only for a target placed before {@link #legacySince}, else nothing. With a record, its key's
+	 * {@code placedAt} decides.
+	 */
+	public Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items, long placedAt) {
 		String k = keyOf(targetId);
 		if (k == null) {
-			return capRecordThenLegacy(items, new TreeMap<>(), -1); // (JR-b) no record, so no placedAt known: never the pool
+			return capRecordThenLegacy(items, new TreeMap<>(), placedAt); // (JR-b) no record: the caller's placedAt (unknown: never the pool)
 		}
 		Map<String, Integer> left = paid.get(k);
 		Map<String, Integer> out = capRecordThenLegacy(items, left, placedAtOf(k));

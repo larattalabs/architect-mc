@@ -77,7 +77,10 @@ class StockpileLegacyJRbTest {
 		assertEquals(Map.of(COBBLE, 4), l.fromPaid("old", Map.of(COBBLE, 4)), "a pre-JR target's retake: record, then pool");
 		assertEquals(Map.of(COBBLE, 1), l.fromPaid("new", Map.of(COBBLE, 4)), "a post-JR target's retake: its record only");
 		assertTrue(l.fromPaid("none", Map.of(COBBLE, 4)).isEmpty(), "no record: no placedAt known, never the pool");
-		assertEquals(Map.of(COBBLE, 9), l.legacy());
+		// (RL's no-record path, the caller's placedAt) a pre-JR target with no record: the pool; a post-JR one: nothing
+		assertTrue(l.fromPaid("none", Map.of(COBBLE, 2), T + 10).isEmpty(), "post-JR, no record: nothing");
+		assertEquals(Map.of(COBBLE, 2), l.fromPaid("none", Map.of(COBBLE, 2), T - 10), "pre-JR, no record: the pool");
+		assertEquals(Map.of(COBBLE, 7), l.legacy(), "12 less 3 (old's retake) less 2 (the pre-JR no-record retake)");
 		StockLedger d = StockLedger.fromJson(v063(), T);
 		d.pay("site:s9@" + (T + 1), COBBLE, 1);
 		assertEquals(Map.of(COBBLE, 1), d.credit("delta:e1:s9", Map.of(COBBLE, 5), CAP, MAX).returned(), "a post-JR site's delta: its record only");
