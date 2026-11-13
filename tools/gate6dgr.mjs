@@ -19,8 +19,10 @@
 //     plan0     (gr-plan0)             item 6: a revision plan whose zone gains 2 lots through checkPlan (fits standing grown) and realiseApproved,
 //                                      one stale retry under a second key across a restart; undo exact; removal E-flat 0
 //     survival  (gr-survival)          item 13: a survival town (checkPlan/realiseApproved, fed), a frontage growth checked in survival: its
-//                                      bills equal the check's BOM per part; undo refused survival_building while it builds; built; undo refunds
-//                                      once per key (Steward's RC rows 2, 3)
+//                                      bills equal the check's BOM per part; its targets waiting before the feed (slice RU: an undo then
+//                                      cancels, ru-cancel); built; undo refunds once per key (Steward's RC row 2)
+//     rucancel  (ru-cancel)            slice RU: survival growths cancelled by undoRevision (never fed, fed in part), then QT's quote again
+//     rucrash   (ru-crash)             slice RU: the cancel halted at RVU1, RVC1 and RVC2 with nothing saved: resumed once, no mint, no loss
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery
@@ -786,19 +788,19 @@ steps.survival = async () => {
   check(r1.region === region, `item 13: realiseApproved of the survival growth answers the region: ${json(r1)}`);
   const stv = await rvState(region);
   const rid = stv.revisions.at(-1)?.rid;
-  // the growth's targets put down and waiting for their items (nothing fed yet): undoRevision refuses survival_building
-  let rsb = null;
-  for (let i = 0; i < 60; i++) {
-    rsb = await call('dev.rs.state', { region }, 120_000);
-    if ((rsb.targets ?? []).some((t) => !targets0.has(t.id) && !t.done)) break;
-    await sleep(2000);
+  // the growth's targets put down and waiting for their items (nothing fed yet): new ids in the owner's feed order, the revision still
+  // writing. (slice RU, RV §8: Steward's RC row 3 changed; undoRevision now cancels them, ru-cancel and ru-crash judge that; here the
+  // growth is fed and built as before)
+  const feed0 = ps0.feedOrder ?? [];
+  let waiting = [], busy = null;
+  for (let i = 0; i < 60 && !waiting.length; i++) {
+    const p = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    waiting = (p.feedOrder ?? []).filter((id) => !feed0.includes(id));
+    busy = (await rvState(region)).busy;
+    if (!waiting.length) await sleep(2000);
   }
-  out.beforeFeed = { build: rsb?.build && { done: rsb.build.done, percent: rsb.build.percent }, waiting: (rsb?.targets ?? []).filter((t) => !targets0.has(t.id)).map((t) => [t.id, t.done]) };
-  const h0 = await hashOf(BOX);
-  const ub = await call('dev.rv.undo', { region, toPosition: 0 }, 600_000);
-  const h1 = await hashOf(BOX);
-  out.building = { refused: ub.refused, same: h0 === h1 };
-  check(String(ub.refused ?? '').startsWith('NOT_ALLOWED') && /survival_building/.test(ub.refused) && h0 === h1, `Steward RC row 3: undoRevision while the growth's targets build refuses ${ub.refused}; nothing written (hash)`);
+  out.beforeFeed = { waiting, busy };
+  check(waiting.length > 0, `item 13: the growth's targets put down and waiting for their items before the feed (${waiting.length} in the feed order; busy ${busy})`, out.beforeFeed);
   // fed until built: the growth's targets' bills equal the check's bill (the region's own cells; lots without entries are pads)
   const f1 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
   const rs1 = await call('dev.rs.state', { region }, 120_000);
@@ -987,6 +989,13 @@ steps.look = async () => {
 {
   const { registerJR } = await import('./lib/gatem5jr.mjs');
   await registerJR(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, haltWait, cellsOf, diff });
+}
+
+// ------------------------------------------------------------------ (slice RU) rucancel, rucrash: tools/lib/gatem5ru.mjs
+
+{
+  const { registerRU } = await import('./lib/gatem5ru.mjs');
+  await registerRU(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, haltWait, cellsOf, diff });
 }
 
 // ------------------------------------------------------------------ (slice HF) hfcrash: tools/lib/gatemhf.mjs
