@@ -357,7 +357,7 @@ is durable, the halt comes before any later queue save (4e-crash).
 `dev.journal.killAt` also takes CM1 (7c CM-b, `+save` too): a composite's module item is placed (its site's record committed) and the
 queue file is written (flushed), the next module not started: the crash between two modules of a composite placement. After the
 restart the composite's batch resumes from the queue file (gate step cmb-crash). It fires only for a composite's batch, and not
-after its last module. The apitest mod's `composite <entry>` answers `CompositeInfo.of(entry)`'s wire and whether the feature
+after its last module. The apitest mod's `compinfo <entry>` answers `CompositeInfo.of(entry)`'s wire and whether the feature
 `composites` is advertised.
 
 ### Regions (phase 6b)

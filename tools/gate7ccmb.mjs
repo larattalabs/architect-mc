@@ -98,8 +98,9 @@ async function groundY() {
   for (const l of h.cells ?? []) { const [k, ...rest] = l.split(' '); const y = Number(k.split(',')[1]); if (asId(rest.join(' ')) !== 'air' && y > g) g = y; }
   return g;
 }
-/** The area every placement here may touch (both rotations, the approach and the foundation): the union's box grown by 12. */
-const areaOf = (gy) => [X0 - 12, gy - 8, Z0 - 12, X0 + U.x + 12, gy + U.y + 12, Z0 + U.x + 12];
+/** The area a placement at rotation `turns` may touch (the approach and the foundation included): the union's box grown by 12, rows gy-6..gy+20. */
+const areaOf = (gy, turns = 0) => (turns % 2 === 0 ? [X0 - 12, gy - 6, Z0 - 12, X0 + U.x + 11, gy + U.y + 5, Z0 + U.z + 11]
+  : [X0 - 12, gy - 6, Z0 - 12, X0 + U.z + 11, gy + U.y + 5, Z0 + U.x + 11]);
 const hashOf = async (b) => (await call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]] }, 600_000)).sha256;
 /** The cells that differ (a few named) between the world now and a cell map taken before. */
 async function cellsOf(b) {
@@ -122,6 +123,7 @@ async function freshFlat(name) {
   await L.fresh(name, FLAT);
   await L.setRules('exact');
   await L.tp(X0 + 60, 0, Z0 + 60);
+  await L.settle(3000);
   const gy = await groundY();
   await L.tp(X0 + 60, gy + 40, Z0 + 60, 0, 90);
   await L.settle(3000);
@@ -185,15 +187,18 @@ steps.ingame = async () => {
   const readable = [];
   for (const m of mods) if ((await api(`entry ${m}`))?.id === m) readable.push(m);
   check(all.includes(E) && listed.length === 0 && readable.length === 3, `Library.list shows ${E} and hides its 3 module entries (each still readable by id)`, { listed, readable });
-  const ci = await api(`composite ${E}`);
+  const ci = await api(`compinfo ${E}`);
   check(ci.feature === true && JSON.stringify(ci.info?.modules) === JSON.stringify(mods) && ci.info?.joints?.length === 2 && ci.info?.union?.maxX === U.x - 1,
     'CompositeInfo.of(entry): the modules in support order, 2 joints, the union; the feature "composites" is advertised', ci);
   out.entry = { id: E, size: e?.size, info: ci.info };
 
-  const area = areaOf(gy);
+  const area = areaOf(gy, 0);
   const c0 = await cellsOf(area);
   const h0 = await hashOf(area);
-  out.area = { box: area, cells: c0.size };
+  const area1 = areaOf(gy, 1);
+  const c1 = await cellsOf(area1);
+  const h1 = await hashOf(area1);
+  out.area = { rot0: area, cells0: c0.size, rot1: area1, cells1: c1.size };
 
   // whole first (rotation 0): Sites.place -> one group; Sites.remove(handle)
   const chk = await api(`check ${placeArgs(E, X0, gy, Z0, 'INSTANT', 'actor', 0)}`);
@@ -229,17 +234,17 @@ steps.ingame = async () => {
     'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back)', { u, stages: grp2b?.stages, vLeft });
   const r2 = g2 ? await result(await api(`remove ${g2} ${OWNER} noforce`), 600_000) : null;
   await L.settle(1500);
-  const e2 = await eflat(area, h0, c0);
+  const e2 = await eflat(area1, h1, c1);
   check(!!r2?.removed && e2.n === 0, `module first: Sites.remove(${g2}) removes the rest; E-flat 0`, { r2, first: e2.first });
   out.moduleFirst = { group: g2, eflat: e2.n };
 
   // a module refused at fit: a chest in the east module's box; nothing placed
-  const groupsBefore = (await api('sgroups -')).length + (await api('sgroups ' + 'apitest')).length;
+  const groupsBefore = (await api(`sgroups ${OWNER}`)).length;
   const chest = [X0 + 100, gy + 2, Z0 + 12];
   await cmd(`/setblock ${chest[0]} ${chest[1]} ${chest[2]} minecraft:chest`);
   const h0chest = await hashOf(area);
   const p3 = await place(E, X0, gy, Z0);
-  const groupsAfter = (await api('sgroups -')).length + (await api('sgroups ' + 'apitest')).length;
+  const groupsAfter = (await api(`sgroups ${OWNER}`)).length;
   const names = (p3.refusals ?? []).map((x) => `${x.reason}: ${x.message}`);
   check(!p3.placed && names.length > 0 && names.every((n) => /module east \(/.test(n)) && groupsAfter === groupsBefore && (await hashOf(area)) === h0chest,
     'a module refused at fit names it (module east), and nothing is placed (no group, the area unchanged)', { names, groupsBefore, groupsAfter });
@@ -336,7 +341,7 @@ steps.crash = async () => {
   const groups = [...new Set(sites.map((s) => s.group ?? s.member?.group).filter(Boolean))];
   let g = groups[0] ?? null;
   if (!g) {
-    const all = [...(await api('sgroups -')), ...(await api('sgroups apitest'))];
+    const all = await api(`sgroups ${OWNER}`);
     g = all.find((x) => x.ext?.['architect_mc:compositeSite']?.entry === E && x.state === 'ACTIVE')?.group ?? null;
   }
   const grp = g ? await groupOf(g) : null;
