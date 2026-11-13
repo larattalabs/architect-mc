@@ -11,7 +11,8 @@
 //                                                      drains its sources (the revision's own record); undoRevision: the world before the
 //                                                      growth. A second growth's undo killed at RVU1, resumed after the restart: the world
 //                                                      before it, no water. A third world: hydration at default rules (recorded bound 300 s)
-//   node tools/gate6dgr.mjs igsurvival  (ig-survival)  a survival V town, fed until built; the irrigated growth quoted (the shells' pieces
+//   node tools/gate6dgr.mjs igsurvival  (ig-survival)  a survival V town, fed until built; a plain grown lot (RS hut): it waits for
+//                                                      its earlier stage, consumed = quote, undo returns it all; the irrigated growth quoted (the shells' pieces
 //                                                      in the bill), realised with the field entry, fed partly (the sources wait: no water),
 //                                                      the server restarted, fed the rest: PLACED, every source settled, consumed equals the
 //                                                      quote item for item; undoRevision killed at RVU2 (drained, nothing removed), resumed
@@ -39,6 +40,15 @@ export async function registerIG(steps, h) {
   const count = async (cells, block) => { let n = 0; for (const c of cells) if (await isBlock(c, block)) n++; return n; };
   const fluidsIn = async (box) => (await call('dev.fluid.census', { box }, 600_000)).fluids ?? [];
   const waterIn = async (box) => (await fluidsIn(box)).filter((f) => /water/.test(String(f[3])));
+
+  /** The apitest event log's ITEM_WAITING events of a lot item (`lot:<id>`) of the region: [{say, target, part}]. */
+  async function lotWaits(region, lotId) {
+    const r = await L.cmd('/apitest events 0');
+    const line = (r?.messages ?? []).find((m) => m.startsWith('[') || m.startsWith('{'));
+    const ev = line ? JSON.parse(line) : [];
+    return ev.filter((e) => e.event === 'ITEM_WAITING' && (e.key ?? e.itemKey) === `lot:${lotId}` && (e.ext?.['architect_mc:region'] ?? region) === region)
+      .map((e) => e.ext?.['architect_mc:waitsFor'] ?? {}).map((w) => ({ target: w.target, part: w.part, say: w.say }));
+  }
 
   /** IRR's field entry (kit/test/fixtures/designs/g6c_irr_field.mjs: farmland, wheat, a fence, a composter) at the lot's size. */
   async function installField() {
@@ -243,61 +253,6 @@ export async function registerIG(steps, h) {
     return out;
   };
 
-  // (diagnostic, not a gate step: GATE6DGR_PROBE) a survival growth's consumption against its undo's refund: A a plain grown lot with an
-  // RS entry, B the irrigated farm lot; no kill. Records the ledger's consumed and returned deltas and the side cells' blocks.
-  steps.igprobe = async () => {
-    await ensure();
-    const out = {};
-    const SW = 'G6B IG Probe';
-    await G.survivalBase(ctx);
-    await L.fresh(SW, G.SURV);
-    await L.setRules('exact');
-    await L.tp(CX + 80, 80, CZ + 56);
-    const gy = await groundY();
-    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
-    await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
-    await G.designs(ctx);
-    await installField();
-    const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
-    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN_LOTS }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: {} });
-    await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
-    for (const [tag, lot, entry] of [['A', { id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' }, 'rs_hut'], ['B', FARM, FIELD]]) {
-      const g = await growPlan(region, { lots: [lot] });
-      if (g.refused) { out[tag] = { refused: g.refused }; continue; }
-      const q = await call('dev.region.quote', { planId: g.planId, lotEntries: { [lot.id]: entry } }, 300_000);
-      const a0 = await pile();
-      await call('dev.region.realise', { planId: g.planId, lots: { [lot.id]: entry } }, 300_000);
-      await sleep(8000);
-      const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
-      const w = await rvWait(region, g.revisionOf.rid, 1_800_000);
-      const a1 = await pile();
-      const o = { quote: q.bom, consumed: G.minus(a1.ledger?.consumed ?? {}, a0.ledger?.consumed ?? {}), state: w.r.state, waves: f.waves };
-      if (tag === 'B') {
-        const rows = (await call('dev.region.state', { region }, 60_000)).view.ext?.['architect_mc:fluids'] ?? [];
-        const ir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', g.planId, 'ir.json'), 'utf8'));
-        const il = ir.lots.find((l) => l.id === FARM.id);
-        const R = roles(il.irrigation, il.floorY);
-        o.sides = { farmland: await count(R.sides, 'minecraft:farmland'), dirt: await count(R.sides, 'minecraft:dirt'), n: R.sides.length };
-        o.overSides = { wheat: await count(R.sides.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat'), air: await count(R.sides.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:air') };
-        o.rows = rows.map((r) => [r.body, r.state]);
-      }
-      const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
-      await L.settle(5000);
-      const a2 = await pile();
-      o.undo = { removed: u.removed, refused: u.refused, refund: u.refund };
-      o.returned = G.minus(a2.ledger?.returned ?? {}, a1.ledger?.returned ?? {});
-      o.consumedAfter = G.minus(a2.ledger?.consumed ?? {}, a0.ledger?.consumed ?? {});
-      o.stock = G.minus(a2.stock ?? {}, a1.stock ?? {});
-      o.ledger2 = a2.ledger;
-      out[tag] = o;
-      log(`  probe ${tag}: ${json(o)}`);
-    }
-    await L.leaveWorld();
-    spendZero();
-    return out;
-  };
-
   steps.igsurvival = async () => {
     await ensure();
     const out = {};
@@ -320,6 +275,35 @@ export async function registerIG(steps, h) {
     const f0 = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
     check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `the survival V town built: ${f0.last.st.view.state} (${f0.waves} feed waves)`);
     const targets0 = new Set((f0.last.rs?.targets ?? []).map((x) => x.id));
+    // ---- a plain grown lot (no irrigation) with RS's hut, the coordinator's ask: RegionTargets.roi now reads a revision lot from its
+    // revision's IR, so every grown lot in survival waits for its earlier stages' targets (§6.3). It waits; items in equal items out;
+    // QT's quote equals what is consumed; undone, the refund equals the consumption.
+    {
+      await G.designs(ctx);
+      const plain = { id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' };
+      const g = await growPlan(region, { lots: [plain] });
+      check(!g.refused, `plain: a growth by a plain lot (no irrigation) planned: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
+      if (!g.refused) {
+        const q0 = await call('dev.region.quote', { planId: g.planId, lotEntries: { hb: 'rs_hut' } }, 300_000);
+        const a0 = await pile();
+        await call('dev.region.realise', { planId: g.planId, lots: { hb: 'rs_hut' } }, 300_000);
+        await sleep(10_000); // (nothing fed: the lane's target is unbuilt, so the lot's item must wait for it)
+        const waits = await lotWaits(region, 'hb');
+        const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+        const w = await rvWait(region, g.revisionOf.rid, 1_800_000);
+        const a1 = await pile();
+        const used = G.minus(a1.ledger?.consumed ?? {}, a0.ledger?.consumed ?? {});
+        out.plain = { waits, quote: q0.bom, consumed: used, state: w.r.state, waves: f.waves };
+        check(waits.length >= 1 && waits.every((x) => x.target), `plain: the grown lot's item waited for its earlier stage's targets before its put-down (${waits.length} ITEM_WAITING; ${json(waits[0])})`, out.plain);
+        check(w.r.state === 'PLACED' && !q0.refused && G.same(q0.bom, used), `plain: built (${w.r.state}, ${f.waves} waves); consumed equals the quote item for item: quote ${json(q0.bom)}, consumed ${json(used)}`, out.plain);
+        const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+        await L.settle(3000);
+        const a2 = await pile();
+        const back = G.minus(a2.ledger?.returned ?? {}, a1.ledger?.returned ?? {});
+        out.plain.undo = { removed: u.removed, refund: u.refund, returned: back };
+        check(u.removed === true && G.same(back, used), `plain: undone; items in equal items out: consumed ${json(used)}, returned ${json(back)}`, out.plain.undo);
+      }
+    }
     const S0 = await cellsOf(BOX);
     // the irrigated growth: planned, quoted (its shells among the pieces), realised with the field entry
     const P = await planGrowth(region, 'survival');
@@ -348,7 +332,9 @@ export async function registerIG(steps, h) {
     const mid = await rvState(region);
     const midR = mid.revisions.find((x) => x.rid === rid);
     const midWater = await waterIn(BOX);
-    out.partly = { fed: acc, outstanding: ps.outstanding, revision: midR?.state, water: midWater.length };
+    const fwaits = await lotWaits(region, FARM.id);
+    out.partly = { fed: acc, outstanding: ps.outstanding, revision: midR?.state, water: midWater.length, lotWaits: fwaits };
+    check(fwaits.length >= 1, `survival: IRR's order: the farm lot's item waited for its shells (the street stage's targets) before its put-down (${fwaits.length} ITEM_WAITING; ${json(fwaits[0])})`, fwaits);
     check(Object.keys(acc).length > 0 && midR?.state !== 'PLACED' && midWater.length === 0, `survival: fed partly (${json(acc)}): the growth waits (revision ${midR?.state}), no source written yet (${midWater.length} water cells)`, out.partly);
     // a restart while it waits, then the rest
     await L.leaveWorld();
