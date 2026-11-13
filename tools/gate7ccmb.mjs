@@ -166,9 +166,35 @@ async function verifyAll(sites) {
  * mismatch listed. (A design leftover of CM-a's castle; the placement writes the template exactly, the game changes it.)
  */
 const PATH_UNDER_TOWERS = 28;
-function vanillaOnly(v) {
+/** BlueprintTransform.rotateBlock: a template-local (x, z) in the rotated footprint. */
+function rotateBlock(x, z, sx, sz, turns) {
+  switch (((turns % 4) + 4) % 4) {
+    case 1: return [sz - 1 - z, x];
+    case 2: return [sx - 1 - x, sz - 1 - z];
+    case 3: return [z, sx - 1 - x];
+    default: return [x, z];
+  }
+}
+/**
+ * The world cells of the path under CM-a's four corner towers for a castle placed at (ox, oy, oz) with `turns`: union row 0, x 0..6 and
+ * 114..120 (the towers' x), z 0..1 and 23..24 (the towers' z outside the hall's stone floor, z 2..22): 7 x 2 x 2 = 28 per end module.
+ */
+function towerPathCells(ox, oy, oz, turns) {
+  const out = new Set();
+  for (const ux of [0, 1, 2, 3, 4, 5, 6, 114, 115, 116, 117, 118, 119, 120]) {
+    for (const uz of [0, 1, 23, 24]) {
+      const [rx, rz] = rotateBlock(ux, uz, U.x, U.z, turns);
+      out.add(`${ox + rx},${oy},${oz + rz}`);
+    }
+  }
+  return out;
+}
+const PAIR = /^(-?\d+), (-?\d+), (-?\d+) entry \S+ after \{id:"minecraft:dirt_path"\} null now \{id:"minecraft:dirt"\} null$/;
+/** Only that exact pair, only on those cells, at most 28 per module, every mismatch listed; anything else is a mismatch. */
+function vanillaOnly(v, ox, oy, oz, turns) {
+  const allowed = towerPathCells(ox, oy, oz, turns);
   return Object.values(v).every((x) => x.mismatches === 0 || (x.mismatches <= PATH_UNDER_TOWERS && x.first.length === x.mismatches
-    && x.first.every((l) => /after \{id:"minecraft:dirt_path"\}.* now \{id:"minecraft:dirt"\}/.test(l))));
+    && x.first.every((l) => { const m = PAIR.exec(l); return !!m && allowed.has(`${m[1]},${m[2]},${m[3]}`); })));
 }
 
 // ------------------------------------------------------------------ ingame
@@ -223,7 +249,7 @@ steps.ingame = async () => {
   if (grp1) {
     const v = await verifyAll(grp1.sites);
     const seam = await api(`stack ${X0 + 40} ${gy + 3} ${Z0 + 2}`);
-    check(vanillaOnly(v) && seam.length === 2, `every module verifies (mismatches ${Object.values(v).map((x) => x.mismatches).join('/')}: only vanilla's dirt_path -> dirt under CM-a's corner towers) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
+    check(vanillaOnly(v, X0, gy, Z0, 0) && seam.length === 2, `every module verifies (mismatches ${Object.values(v).map((x) => x.mismatches).join('/')}: only vanilla's dirt_path -> dirt under CM-a's corner towers) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
     out.wholeFirst = { group: g1, verify: v, seam };
   }
   const r1 = g1 ? await result(await api(`remove ${g1} ${OWNER} noforce`), 600_000) : null;
@@ -242,7 +268,7 @@ steps.ingame = async () => {
   const grp2b = g2 ? await groupOf(g2) : null;
   const left = (grp2b?.stages ?? []).filter((s) => s.name !== 'east').flatMap((s) => s.sites ?? []);
   const vLeft = await verifyAll(left.length ? left : (grp2b?.sites ?? []).slice(0, 2));
-  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && vanillaOnly(vLeft) && Object.keys(vLeft).length === 2,
+  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && vanillaOnly(vLeft, X0, gy, Z0, 1) && Object.keys(vLeft).length === 2,
     'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back; vanilla\'s path under the towers only)', { u, stages: grp2b?.stages, vLeft });
   const r2 = g2 ? await result(await api(`remove ${g2} ${OWNER} noforce`), 600_000) : null;
   await L.settle(1500);
@@ -359,7 +385,7 @@ steps.crash = async () => {
   const grp = g ? await groupOf(g) : null;
   const v = await verifyAll(grp?.sites ?? sites.map((s) => s.id));
   const h1 = await hashOf(area);
-  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && vanillaOnly(v) && h1 === hC,
+  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && vanillaOnly(v, X0, gy, Z0, 0) && h1 === hC,
     `after the restart the composite's batch resumed: 3 modules stand in group ${g} (${(grp?.stages ?? []).map((s) => `${s.name}:${s.state}`).join(' ')}), each verifies, and the area equals the clean placement's hash`, { sites: sites.map((s) => [s.id, s.blueprint]), v, same: h1 === hC });
   out.resumed = { group: g, verify: v, sameAsClean: h1 === hC };
   const r = g ? await result(await api(`remove ${g} ${OWNER} noforce`), 600_000) : null;
