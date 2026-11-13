@@ -7,7 +7,7 @@
       { "part": "bowl", "block": "form.crater", "class": "fits" },
       { "part": "isle", "block": "form.floating_island", "class": "fits" },
       { "part": "vault", "block": "form.hidden_room", "class": "adjusted" },
-      { "part": "hang", "block": "rule.suspended", "class": "refused" }
+      { "part": "hang", "block": "rule.suspended", "class": "refused", "code": "NO_FEATURE" }
     ]
   },
   "plan": {
