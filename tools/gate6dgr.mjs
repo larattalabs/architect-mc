@@ -968,6 +968,13 @@ steps.look = async () => {
   await registerQT(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, P0_TOWN, P0_LOT, P0_CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest });
 }
 
+// ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs
+
+{
+  const { registerJR } = await import('./lib/gatem5jr.mjs');
+  await registerJR(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, haltWait, cellsOf, diff });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);
