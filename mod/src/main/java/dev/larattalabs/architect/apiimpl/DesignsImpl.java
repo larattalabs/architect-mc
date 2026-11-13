@@ -597,6 +597,19 @@ final class DesignsImpl implements Designs {
 				res.addProperty("planError", planError);
 			}
 			result = Optional.ofNullable(res);
+		} else if ("settlement".equals(str(raw, "kind")) || "settlement".equals(str(req, "kind"))) {
+			// (7c CO) a composed settlement (kind "settlement") carries its outcome; a PICKED one the plan the mod ran for the pick
+			req.addProperty("kind", "settlement");
+			JsonObject res = raw.has("result") && raw.get("result").isJsonObject() ? raw.getAsJsonObject("result").deepCopy() : null;
+			String planId = id == null ? null : dev.larattalabs.architect.region.Composes.planIdOf(id);
+			if (res != null && planId != null && !res.has("planId")) {
+				res.addProperty("planId", planId);
+			}
+			String planError = id == null ? null : dev.larattalabs.architect.region.Composes.planErrorOf(id);
+			if (res != null && planError != null) {
+				res.addProperty("planError", planError);
+			}
+			result = Optional.ofNullable(res);
 		}
 		return new Design(id == null ? "?" : id, Design.Status.of(str(raw, "status")), str(raw, "step") == null ? "" : str(raw, "step"),
 			Optional.ofNullable(str(raw, "blueprintId")), raw.has("cost") && raw.get("cost").isJsonObject() ? Cost.fromJson(raw.getAsJsonObject("cost"))
@@ -620,6 +633,9 @@ final class DesignsImpl implements Designs {
 		fireCritiqued(d);
 		if (d.kind() == Design.Kind.REGION) {
 			dev.larattalabs.architect.region.RegionDesigns.changed(server, d); // phase 6b: a fit plans the picked program
+		}
+		if (d.kind() == Design.Kind.SETTLEMENT) {
+			dev.larattalabs.architect.region.Composes.changed(server, d, raw); // 7c CO: a round's plan is checked; a pick is planned
 		}
 		if (!d.status().isFinal()) {
 			return;

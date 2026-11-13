@@ -98,6 +98,13 @@ public final class CoreHooks {
 		});
 		DevBridge.register("dev.camera", 20_000, "{x,y,z, yaw,pitch | lookAt:{x,y,z}, mode?:spectator|creative|keep, feet?:false} - headless: puts "
 			+ "the player there (eye at x,y,z unless feet), which loads the chunks around it; there is no view", (req, mc) -> camera(req));
+		DevBridge.register("dev.bot.relog", 10_000, "{} - (HF) headless: the bot logs out (vanilla's disconnect: Fabric DISCONNECT, the player saved) and "
+			+ "joins again from its saved file; poll dev.state's player until it is back", (req, mc) -> ServerTasks.callOnServer(server -> {
+				Bot.relog(server);
+				JsonObject o = new JsonObject();
+				o.addProperty("relogging", true);
+				return o;
+			}));
 		DevBridge.register("dev.release", 10_000, "{mode?:creative|keep} - give the view back to the player: spectator -> creative (flying)",
 			(req, mc) -> {
 				String mode = Fields.of(req).optStr("mode", "creative");

@@ -1668,3 +1668,16 @@ cells, IRR's sources):
 - rivers through settlements; waterfalls off cliffs and islands;
 - later water mechanics (item streams; Steward's 5b spine, with its own row).
 - Depends on: 8a (staged terrain under water); the hardest of the three (fluid physics and exact undo).
+
+## Status and parked items (2026-11-13, Noah via parent session: "docs: default")
+
+- **Status:** phases 0-6c and 6d's revision work, 7a and 7b are built and closed (7b phase close 2026-11-13). 7c (composition) is in
+  progress: waves 1-2 released (v0.63.0, v0.64.0), wave 3 building (CO, AQ, US, CX), then AU, PM, BR and PAY. Phases 8a-8c are planned
+  after 7c (below). The per-slice record is CONTRACT.md's as-builts; the deferred list is `../LEFTOVERS.md`.
+- **Unscheduled catalogue kinds:** `rule.*` (until RC), `connector.tube` (until UW), `connector.rail` (until CR) and `revision.change`
+  (until RV2) stay reserved and are **unscheduled**: no slice plans them.
+- **The player-ready pass** (first-run guidance, the accessibility pack, rebindable keys, the glossary, the undo hotkey, Preview on ghost)
+  is ordered **after 7c**.
+- **Next safety work:** RL (reconcile at load), HF (players saved with the ledger), RU (survival revision cancel), then a strict
+  "safety-follow" slice before more 7c features.
+- **Nightlies** resumed 2026-11-14 (the 01:30-03:30 blackout applies); triage is fix-forward.

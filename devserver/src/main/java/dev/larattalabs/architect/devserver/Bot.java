@@ -37,6 +37,8 @@ public final class Bot {
 	/** The dev client's render distance (mod/run-template/options.txt); the server's view distance is the same. */
 	static final int VIEW_DISTANCE = intEnv("ARCHITECT_BOT_VIEW_DISTANCE", 16);
 	private static volatile @Nullable UUID uuid;
+	/** (HF) the bot's connection (dev.bot.relog closes it the way a client's logout does). */
+	private static volatile @Nullable Connection conn;
 
 	public static int viewDistance() {
 		return VIEW_DISTANCE;
@@ -92,12 +94,41 @@ public final class Bot {
 			if (!task.tick()) {
 				return false;
 			}
-			ServerPlayer p = task.spawnPlayer(new NoConnection(), new CommonListenerCookie(profile, 0, info, false));
+			NoConnection nc = new NoConnection();
+			ServerPlayer p = task.spawnPlayer(nc, new CommonListenerCookie(profile, 0, info, false));
+			conn = nc;
 			uuid = profile.id();
 			Architect.LOGGER.info("devserver: bot {} ({}) joined at {} {} {} in {}", name, profile.id(), p.getX(), p.getY(), p.getZ(),
 				p.level().dimension().identifier());
 			return true;
 		});
+	}
+
+	/**
+	 * (HF, dev) A logout and a new join (server thread): vanilla's disconnect path ({@code onDisconnect}: Fabric's DISCONNECT, then
+	 * {@code PlayerList.remove}, which saves the player), then {@link #spawn} again from the saved player file. {@link #player} is null
+	 * until the new join completes.
+	 */
+	public static void relog(MinecraftServer server) {
+		ServerPlayer p = player(server);
+		if (p == null) {
+			throw new IllegalStateException("no bot to log out");
+		}
+		uuid = null;
+		// a client's logout path: the connection closes, then Connection.handleDisconnection (Fabric's DISCONNECT fires there), then the
+		// listener's onDisconnect (PlayerList.remove saves the player)
+		var why = new net.minecraft.network.DisconnectionDetails(net.minecraft.network.chat.Component.literal("dev.bot.relog"));
+		Connection c = conn;
+		if (c != null) {
+			c.disconnect(why);
+			c.handleDisconnection();
+		}
+		if (server.getPlayerList().getPlayer(p.getUUID()) != null) {
+			Architect.LOGGER.warn("devserver: dev.bot.relog: the connection path did not remove the bot; calling onDisconnect directly (no Fabric DISCONNECT)");
+			p.connection.onDisconnect(why);
+		}
+		Architect.LOGGER.info("devserver: bot {} logged out (dev.bot.relog); joining again", p.getName().getString());
+		spawn(server);
 	}
 
 	private static Field awaitingPosition;

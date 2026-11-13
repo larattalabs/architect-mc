@@ -1,67 +1,150 @@
 # Architect ↔ Steward sync
 
-The shared view of what Architect ships, what Steward has adopted, and the agreed order. The coordinator keeps it current at each
-release and after each sync. Contracts and as-builts stay in `docs/CONTRACT.md`; Steward's design stays in steward-mc
-`docs/COMPOSITION.md`.
+The shared view of what Architect ships, what Steward has adopted, and the agreed order. Contracts and as-builts stay in
+`docs/CONTRACT.md`; Steward's design stays in steward-mc `docs/COMPOSITION.md`; the asks either way in steward-mc
+`docs/ARCHITECT-ASKS.md`.
 
-## Last sync: 2026-10-20 (Steward at steward-mc main f7acef1, on v0.37.1)
+- **"Architect ships"** is generated: `tools/release-version.mjs` writes a row of `docs/RELEASES.json` at every release (mod, API,
+  kit, catalogue, the feature names added over the last release, the Steward RC state, the package state) and rewrites the block
+  below. After a hand edit of `docs/RELEASES.json` (an RC passed, `tools/pub-verify.mjs` ran) run
+  `node tools/release-version.mjs --sync`. `--check` fails when the block and the file disagree.
+- **"Steward's side"** is kept by hand by the coordinator after each Steward pin or sync.
 
-### Steward has shipped against Architect
-- **Plan v0 (composition).** Claude writes a plan on describe (systemRef `plan/0#compact`), runs checkPlan, makes up to 2 repairs
-  within $1, and keeps the plan with its pending parts.
-- **Plan v1 (whole build).**
-  - At Start: re-check with pending parts `required:false`, every street zone `orientation: "ew"` with rotate off, and lot ext.
-  - Then: pin, design within the fitBox height, and the C37b `Entry.cells()` pre-check.
-  - Then `realiseApproved`, with one stale retry under a second key that survives a restart.
-- **PT / PT2.** Builds on the settlement screen, `/steward builds` (list, claim, release, adopt), and "add a floor" via `versionOf`.
-- **C38 + K1-target.** The waiting-part offer: `planCatalogue()` at world start, then a one-part plan `wall.around {feature:
-  {region}}`, realised and undone alone.
-- **T3.** `load` bounded (512) whenever a plan holds a tunnel (composition, Start, stale re-check, offer); past the caps, the
-  player is told where to stand.
-- **H.** `farmPond` on homely farms; drained bodies reported from `architect_mc:fluids`.
-- **Strange asks (2026-10-20).** The plan writer has rules for the 20 non-fitting parts (6 patterns): zones always have lots,
-  terraces sit beside zones, bridges only over a real gap (treetop huts as `layout.elevated`), gates on their wall, water only
-  where the land has it, reserved layouts written as such. It knows the live catalogue. Recorded plans are not re-recorded yet
-  (paid; Noah's call).
-- **D1 districts through plan v1** (a `program.districts` plan's lots are read, tagged, designed and realised).
-- **North-south lots.** Front gains EAST/WEST, and plan v1 no longer falls back for east/west-facing lots. The town's own
-  zone keeps `ew` with rotate off.
-- **T3 `crossing.span` / `length` / `lands` on the card** (from the check's preview siteplan edges).
+## Architect ships
 
-### Not started on Steward's side (none blocked on Architect)
-- Steward's own districts on Architect's region districts and boundary districts (D2). Waits on D3 (D-S1, D-S3). Known limit: additions after a D1 build
-  don't recognise `road:<district>_street_*` keys as a street, so they lay a fresh one.
-- Plan v1 for Supplied builds (waits for RS); the offer in survival (RS).
-- VOC: `BibleRequest.Rarity`, and `vocab/1` for the plan writer once VOC-c lands.
+The feature names are those `ArchitectApi.features()` can advertise (ApiRules); a sidecar-backed name appears only when the helper
+has it. "Package ok" means `tools/pub-verify.mjs` found the jar, the sources jar, the pom and the module with matching checksums.
+Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ): their Steward state is in ARCHITECT-ASKS.
 
-### Agreed order (Architect)
-1. **Released 2026-10-19:** v0.37.1 patch (kit 0.35.1): even-width rope bridges and tunnels; malformed guards answer
-   ARTIFACT_STALE. Old IRs go PLAN_STALE, so Steward re-checks. Steward checks it after release.
-2. **Released 2026-10-20:** VOC, v0.38.0 (API 1.35.0, no RC): `BibleRequest.Rarity`, `vocab/1`, `VOCAB`, `cost.rarity` / `cost.creativeOnly`.
-3. **Released 2026-10-20:** HY, v0.39.0, API 1.36.0 (Steward RC passed): channel.course / race / ditch, wall.water_gate, per-reach `architect_mc:fluids` rows.
-3b. **Released 2026-10-20:** v0.39.1 patch (kit 0.37.1): KC, parts keep clear of fluid bodies (OVERLAP {kind: body}, M25:clear), plus the
-   relief undo fix (restored flowing water gets a fluid tick). Old IRs go PLAN_STALE.
-4. **Released 2026-10-20:** v0.40.0 (API 1.37.0, kit 0.38.0, catalogue 9, Steward RC passed): CU copper undo, IRR farm irrigation
-   (`irrigate`, `$.lots[].irrigation`, `DesignRequest.reserved`), VOC-c `rule.palette` (`Regions.checkPalette`, `Reason.PALETTE`).
-5. **Integrated 2026-10-21 as the batch v0.41.0** (branch `integrate/batch-6c`; API 1.38.0, mod 0.41.0, kit 0.39.0, catalogue 11;
-   not yet released): FL (free layouts), F3 (forms II: giant trees and mushrooms, stalactites, roots, coral), S3 (terraced zones, the
-   terraced monastery), RS (regions in survival: RS-a terrain, RS-b tunnels, ice, lava, brushes), plus RS's realised provenance
-   (RP §5). Steward RC passed on F3 and on RS-a and RS-b. **Noah approved every look on 2026-10-21:** N-F3-2 (F3's forms and coral,
-   their scale), S3 bar 16 (the monastery gallery: S3 v1 is green), N-FL-1 (organic irregularity as shown, v69's straight-run share
-   0.639) and N-FL-2 (ring lots facing inward). For Steward after release: plan v1 for Supplied builds and the offer in survival
-   (RS), the four layouts and `locator.around` (FL), the grown forms (F3), `terraces` (S3).
-6. D3, districts beside a standing region town (Steward round 11: D-S1 join inside the town's claim to its street network,
-   D-S3 land taken in the view ext, D-S4 dry beside check). Contract drafting; builds after FL merges. D-S2 (grow a district) is
-   with 6d.
-7. The 6c close-out.
-8. D3 and 7a-1 (CL, K2, CW). 7a is frozen; Steward accepted every default.
-9. 6d growth first (Noah, 2026-10-20, from Steward's ask): RV v3, additive-only revisions (add parts, lots, street extensions,
-   new bodies; LIFO undo; never remove or change what stands), plus GR (towns and districts, D-S2). Full revisions (RV2) come
-   later, with a better design.
-10. 7a-2 (RK, LF, SA) and 7a-3 (K3, GJ, FB).
-11. The rest of 6d: FS, LC (report), AD.
-12. 7b, 7c.
+<!-- architect-ships:begin (generated by tools/release-version.mjs from docs/RELEASES.json; do not edit by hand) -->
+
+| Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
+|---|---|---|---|---|---|---|---|
+| v0.64.1 | 2026-11-13 | 1.57.0 | 0.59.0 | 21 |  | RC pending | ok |
+| v0.64.0 | 2026-11-12 | 1.57.0 | 0.59.0 | 21 | `composites`, `hiddenRooms`, `regionM15`, `scenarioTemplates` | RC pending | ok |
+| v0.63.0 | 2026-11-12 | 1.56.0 | 0.58.0 | 20 | `bigForms`, `styleFormat3` | pin run after release (DEV MODE) | ok |
+| v0.62.0 | 2026-11-12 | 1.55.0 | 0.57.0 | 19 | `givenPrograms`, `quote` | pin run after release (DEV MODE) | ok |
+| v0.61.0 | 2026-11-12 | 1.54.0 | 0.56.0 | 18 | `linkPass` | pin run after release (DEV MODE) | ok |
+| v0.60.0 | 2026-11-12 | 1.53.0 | 0.55.0 | 17 | `siteDesign`, `siteLots`, `siteSurvey` | pin run after release (DEV MODE) | ok |
+| v0.59.0 | 2026-11-11 | 1.52.0 | 0.54.0 | 16 | `regionAdopt` | RC passed | unverified |
+| v0.58.0 | 2026-11-11 | 1.51.0 | 0.53.0 | 16 | `followSource`, `landCheck` | no RC | unverified |
+| v0.57.0 | 2026-11-10 | 1.50.0 | 0.53.0 | 16 | `passageJoins` | RC passed | unverified |
+| v0.56.0 | 2026-11-06 | 1.49.0 | 0.52.0 | 16 |  | RC passed | unverified |
+| v0.55.0 | 2026-11-05 | 1.49.0 | 0.51.0 | 16 |  | see ARCHITECT-ASKS | unverified |
+| v0.54.0 | 2026-11-04 | 1.48.0 | 0.50.0 | 15 |  | see ARCHITECT-ASKS | unverified |
+| v0.53.1 | 2026-11-04 | 1.47.0 | 0.49.1 | 15 |  | see ARCHITECT-ASKS | unverified |
+| v0.53.0 | 2026-11-04 | 1.47.0 | 0.49.0 | 15 |  | see ARCHITECT-ASKS | partial |
+| v0.52.0 | 2026-11-03 | 1.46.0 | 0.48.0 | 15 |  | see ARCHITECT-ASKS | unverified |
+| v0.51.0 | 2026-11-03 | 1.46.0 | 0.47.0 | 15 |  | see ARCHITECT-ASKS | unverified |
+| v0.50.0 | 2026-11-03 | 1.45.0 | 0.46.0 | 15 | `gateMechanisms` | see ARCHITECT-ASKS | unverified |
+| v0.49.0 | 2026-11-01 | 1.44.0 | 0.45.0 | 15 | `gateJoins` | see ARCHITECT-ASKS | unverified |
+| v0.48.0 | 2026-10-28 | 1.43.0 | 0.44.0 | 15 | `design.opKeys`, `growDistrict`, `liftConnectors`, `planRevisionGrow`, `planRevisions`, `regionRevisions`, `rockStairs`, `spiralStairs`, `wallLots`, `wallLots.exactMassing` | see ARCHITECT-ASKS | unverified |
+| v0.47.0 | 2026-10-26 | 1.42.0 | 0.43.0 | 14 |  | see ARCHITECT-ASKS | unverified |
+| v0.46.0 | 2026-10-25 | 1.42.0 | 0.43.0 | 14 |  | see ARCHITECT-ASKS | unverified |
+| v0.45.0 | 2026-10-25 | 1.42.0 | 0.43.0 | 14 |  | see ARCHITECT-ASKS | unverified |
+| v0.44.0 | 2026-10-24 | 1.41.0 | 0.42.0 | 14 | `climbConnectors`, `wallAlong`, `wallWalks` | see ARCHITECT-ASKS | unverified |
+| v0.43.0 | 2026-10-23 | 1.40.0 | 0.41.0 | 13 | `besideCheck`, `besideReach`, `catwalks`, `districtLand` | see ARCHITECT-ASKS | unverified |
+| v0.42.0 | 2026-10-23 | 1.39.0 | 0.40.0 | 12 | `keyedPins`, `planDiscard`, `planSweep`, `regionWaitParts` | RC passed | unverified |
+| v0.41.0 | 2026-10-22 | 1.38.0 | 0.39.0 | 11 | `formsCave`, `formsTrees`, `formsWater`, `freeLayouts`, `regionSurvival`, `scenarioS3`, `terracedZones` | see ARCHITECT-ASKS | unverified |
+| v0.40.1 | 2026-10-21 | 1.37.0 | 0.38.0 | 9 |  | see ARCHITECT-ASKS | unverified |
+| v0.40.0 | 2026-10-20 | 1.37.0 | 0.38.0 | 9 | `designReserved`, `farmIrrigation`, `rulePalette`, `weatheringOurs` | RC passed | unverified |
+| v0.39.1 | 2026-10-20 | 1.36.0 | 0.37.1 | 8 |  | see ARCHITECT-ASKS | unverified |
+| v0.39.0 | 2026-10-20 | 1.36.0 | 0.37.0 | 8 | `hydrologyPass`, `regionCourses`, `waterGates` | see ARCHITECT-ASKS | unverified |
+| v0.38.0 | 2026-10-19 | 1.35.0 | 0.36.0 | 7 | `rarityBudgets`, `vocabulary` | see ARCHITECT-ASKS | unverified |
+| v0.37.1 | 2026-10-19 | 1.34.0 | 0.35.1 | 7 |  | see ARCHITECT-ASKS | unverified |
+| v0.37.0 | 2026-10-19 | 1.34.0 | 0.35.0 | 7 | `fluidVolumes`, `regionFluids`, `wetWrites` | see ARCHITECT-ASKS | unverified |
+| v0.36.1 | 2026-10-18 | 1.33.0 | 0.34.0 | 6 |  | see ARCHITECT-ASKS | unverified |
+| v0.36.0 | 2026-10-18 | 1.33.0 | 0.34.0 | 6 | `bridgeConnectors`, `planCheckVolumes`, `tunnelConnectors` | see ARCHITECT-ASKS | unverified |
+| v0.35.0 | 2026-10-14 | 1.32.0 | 0.33.0 | 5 | `autoConnector`, `ropeBridges`, `wallConnectors` | see ARCHITECT-ASKS | unverified |
+| v0.34.0 | 2026-10-14 | 1.31.0 | 0.32.0 | 4 | `planCatalogueView` | see ARCHITECT-ASKS | unverified |
+| v0.33.0 | 2026-10-14 | 1.30.0 | 0.31.0 | 4 |  | see ARCHITECT-ASKS | unverified |
+| v0.32.0 | 2026-10-14 | 1.29.0 | 0.30.0 | 3 | `boundaryDistricts`, `outposts` | see ARCHITECT-ASKS | unverified |
+| v0.31.1 | 2026-10-13 | 1.28.0 | 0.29.0 | 2 |  | see ARCHITECT-ASKS | unverified |
+| v0.31.0 | 2026-10-13 | 1.28.0 | 0.29.0 | 2 | `scenarioS2` | see ARCHITECT-ASKS | unverified |
+| v0.30.0 | 2026-10-13 | 1.27.0 | 0.28.0 | 2 | `besideRegion`, `districtsPass` | see ARCHITECT-ASKS | unverified |
+| v0.29.3 | 2026-10-13 | 1.26.0 | 0.27.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.29.2 | 2026-10-13 | 1.26.0 | 0.27.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.29.1 | 2026-10-13 | 1.26.0 | 0.27.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.29.0 | 2026-10-13 | 1.26.0 | 0.27.0 | 1 | `adopt` | see ARCHITECT-ASKS | unverified |
+| v0.28.0 | 2026-10-13 | 1.25.0 | 0.26.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.27.0 | 2026-10-13 | 1.24.0 | 0.26.0 | 1 | `builds`, `playerPlaced` | see ARCHITECT-ASKS | unverified |
+| v0.26.0 | 2026-10-13 | 1.23.0 | 0.25.0 | 1 | `planCatalogue`, `planCheck` | see ARCHITECT-ASKS | unverified |
+| v0.25.0 | 2026-10-13 | 1.22.0 | 0.24.0 | 1 | `routePass` | see ARCHITECT-ASKS | unverified |
+| v0.24.1 | 2026-10-13 | 1.21.0 | 0.23.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.24.0 | 2026-10-12 | 1.21.0 | 0.23.0 | 1 | `brushes` | see ARCHITECT-ASKS | unverified |
+| v0.23.1 | 2026-10-12 | 1.20.0 | 0.22.0 | 1 |  | see ARCHITECT-ASKS | unverified |
+| v0.23.0 | 2026-10-12 | 1.20.0 | 0.22.0 | 1 | `scatterOp`, `stampOp` | see ARCHITECT-ASKS | unverified |
+| v0.22.0 | 2026-10-12 | 1.19.0 | 0.20.0 | 1 | `removalLeavesFeed`, `targetPause` | see ARCHITECT-ASKS | unverified |
+| v0.21.0 | 2026-10-12 | 1.18.0 | 0.20.0 |  | `planPasses`, `reliefOp`, `schematics` | see ARCHITECT-ASKS | unverified |
+| v0.20.0 | 2026-10-12 | 1.17.0 | 0.19.0 |  | `stockpile` | see ARCHITECT-ASKS | unverified |
+| v0.19.0 | 2026-10-12 | 1.16.0 | 0.19.0 |  | `formsIce`, `formsRock`, `voxelsOp` | see ARCHITECT-ASKS | unverified |
+| v0.18.0 | 2026-10-11 | 1.15.0 | 0.18.0 |  | `apronLights`, `frozenWater`, `fullBom`, `siteWaiting` | see ARCHITECT-ASKS | unverified |
+| v0.17.1 | 2026-10-11 | 1.14.0 | 0.16.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.17.0 | 2026-10-11 | 1.14.0 | 0.16.0 |  | `lotExt`, `regionOpKeys` | see ARCHITECT-ASKS | unverified |
+| v0.16.0 | 2026-10-11 | 1.13.0 | 0.16.0 |  | `flatVillage`, `planKeepOut`, `regionGraph`, `villagerMover` | see ARCHITECT-ASKS | unverified |
+| v0.15.0 | 2026-10-11 | 1.12.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.14.0 | 2026-10-10 | 1.11.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.13.0 | 2026-10-10 | 1.10.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.12.4 | 2026-10-10 | 1.9.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.12.3 | 2026-10-10 | 1.9.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.12.2 | 2026-10-10 | 1.9.0 | 0.12.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.12.0 | 2026-10-10 | 1.9.0 | 0.12.0 |  | `irFormat2`, `regionBlobs`, `regionCheck`, `regionDesign`, `regionGhost`, `regionNudge`, `regionPreview`, `surveyVolume` | see ARCHITECT-ASKS | unverified |
+| v0.11.2 | 2026-10-09 | 1.8.0 | 0.11.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.11.1 | 2026-10-09 | 1.8.0 | 0.11.0 |  |  | see ARCHITECT-ASKS | unverified |
+| v0.11.0 | 2026-10-09 | 1.8.0 | 0.11.0 |  | `cellConditions`, `chunkBound`, `generatedOnly`, `regionPrepare`, `regions` | see ARCHITECT-ASKS | unverified |
+| v0.10.1 | 2026-10-08 | 1.7.0 |  |  |  | see ARCHITECT-ASKS | unverified |
+| v0.10.0 | 2026-10-08 | 1.7.0 |  |  | `blueprintDelta`, `deltaApply`, `deltaPreview`, `entryVersions`, `polish`, `siteRevert` | see ARCHITECT-ASKS | unverified |
+| v0.9.0 | 2026-10-07 | 1.6.0 |  |  |  | see ARCHITECT-ASKS | unverified |
+| v0.8.0 | 2026-10-06 | 1.5.0 |  |  | `cellSites`, `journal`, `overlapLayer`, `roads`, `stackQuery` | see ARCHITECT-ASKS | unverified |
+| v0.7.0 | 2026-10-05 | 1.4.0 |  |  | `batchPlacement`, `groupCrate`, `siteGroups`, `stages` | see ARCHITECT-ASKS | unverified |
+| v0.6.0 | 2026-10-05 | 1.3.0 |  |  | `compositePreview` | see ARCHITECT-ASKS | unverified |
+| v0.5.0 | 2026-10-05 | 1.2.0 |  |  | `survivalInfo` | see ARCHITECT-ASKS | unverified |
+| v0.4.1 | 2026-10-05 | 1.1.0 |  |  |  | see ARCHITECT-ASKS | unverified |
+| v0.4.0 | 2026-10-05 | 1.0.0 |  |  |  | see ARCHITECT-ASKS | unverified |
+
+<!-- architect-ships:end -->
+
+## Steward's side (last sync 2026-11-13: steward-mc main 0c610dc, pinned to Architect 0.63.0, `pin-064` held)
+
+Source: the boundary audit (`audits/boundary.md`, 2026-11-13) and Steward's ARCHITECT-ASKS pin sections.
+
+### Steward uses on main
+- **Plan v0 and v1** (composition and the whole build): `checkPlan` with up to 2 repairs within $1, the pins, `realiseApproved`
+  with one stale retry, `planCatalogue()` at world start, `discardPlan`, `checkPalette`, `keys`, `nudge`, `remove`.
+- **Districts and growth:** `checkBeside` (D3), `planRevision` and `undoRevision` (6d RV, GR), `landCheck` (LC), `adopt` and
+  `unadopt` (AD).
+- **Designs:** groups, massing, keys, `followAll` (FS), given programs (GP: M1).
+- **Bibles:** request, get, job. **Sites:** batches, stages, `fitToLot`, roads, deltas, revert, protect, waiting, the stockpile, pause,
+  builds, adopt. **Survey:** `sample`.
+- The 59 strange-ask plans were re-recorded on 2026-11-10 under a $6 cap with the plan-writer rules (Noah's go).
+
+### In flight on Steward's branches
+- **M2** (`m2-crop-farm`): FC's lot `field {cells, crops}` and IG's grow-lot `irrigate`.
+- **M3** (`m3-offer-place`): QT's `Regions.quote` for the module bill bound (`quoteApproved` not yet; see below).
+- **pin-guard:** the runtime version check moves to `ArchitectApi.apiVersion()` (TJ AV) and the Fabric range; mavenLocal no longer
+  serves `architect_mc`.
+- **schema-from-jar:** Steward reads plan/0's schema from Architect's jar (`Regions.planSchema()`, resource
+  `/architect_mc/schemas/plan.json`; TJ SCH-res) instead of its hand copy `schema/plan-0.json` (at catalogue 9; Architect is at 21).
+
+### Shipped for Steward, not called yet (ranked by value; audit finding 5)
+1. QT `quoteApproved` (0.62.0): the bill bound of a module placed through the composed path.
+2. LP link pass and design ports (0.61.0): 5b's spine.
+3. SL site lots, `LotSpec.site` (0.61.0), with DS `Designs.siteVariant` and AF `Survey.site` / `Regions.affordances` (0.60.0): one
+   Steward slice (S7b; plan-writer prompt work, paid, needs Noah's OK).
+4. `planCatalogue(Set kinds)` (1.55.0): the catalogue on demand under the system cap.
+5. SF Style format 3 (0.63.0); CM, BF, HR, TC, RM (0.63.0, 0.64.0): plan-writer vocabulary.
+6. `Designs.follow` and `Library.followers` (1.51.0): per-building "update to the new Style".
 
 ### Open asks either way
-- None blocking.
-- For Noah: re-record Steward's recorded plans with the new plan-writer rules (paid). Steward is waiting on his go.
+- **A2-1** (Steward, 2026-11-11): a cancellable survival revision. CONTRACT RV §8 says unbuilt targets are cancelled first; the code
+  refuses `survival_building`. For Noah: build `cancelRevision` (or RV §8 as written), or amend RV §8 to the refusal.
+- **CO's scope** (for Noah, before CO freezes its harness): does Steward move onto `Regions.compose`, or is CO for players without
+  Steward with one shared set of plan-writer rules?
+- **AU and PM:** reserved feature names with no slice (`programAuthoring`, `shapePromotion`); schedule or drop (Noah).
+- **Steward's Architect range:** open-ended `>=0.63.0`, or an upper bound (Noah).
+
+### Agreed order (Architect)
+1. 7c: SF, BF, CM, HR, TC and RM released (0.63.0, 0.64.0); CO, US, CX and AQ in flight. M5 support alongside (GP and QT released;
+   FC and IG released; FK next).
+2. After 7c: 8a (survival construction for forms and relief), 8b (settlement data APIs; Steward owns the player settlement UI),
+   8c (flowing water) (Noah, 2026-11-13; docs/PLAN.md "Planned after 7c").

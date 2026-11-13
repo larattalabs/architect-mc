@@ -23,6 +23,31 @@ import org.jspecify.annotations.Nullable;
  * when a region resumes at world load, before any tile is requested.
  */
 public interface Regions {
+	/**
+	 * (TJ SCH-res) Where the mod jar carries Architect's plan/0 JSON Schema (kit/schemas/plan.json, byte for byte; the build fails when
+	 * the jar's copy differs from the tree's): a consumer reads it from the classpath ({@link #planSchema()}) or, in a Node tool, from the
+	 * pinned jar's entry {@code architect_mc/schemas/plan.json}, instead of keeping a hand copy. Architect owns this schema; its
+	 * {@code x-catalogue} is what {@link #planCatalogue()} answers. Since NEXT.
+	 */
+	String PLAN_SCHEMA_RESOURCE = "/architect_mc/schemas/plan.json";
+
+	/**
+	 * (TJ SCH-res) The loaded Architect's plan/0 JSON Schema (the {@link #PLAN_SCHEMA_RESOURCE} resource) as UTF-8 text. Any thread.
+	 * Since NEXT.
+	 *
+	 * @throws IllegalStateException when the resource is missing (not an Architect jar)
+	 */
+	static String planSchema() {
+		try (java.io.InputStream in = Regions.class.getResourceAsStream(PLAN_SCHEMA_RESOURCE)) {
+			if (in == null) {
+				throw new IllegalStateException("the Architect jar has no " + PLAN_SCHEMA_RESOURCE);
+			}
+			return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+	}
+
 	/** Surveys the claim (sliced), plans it in the sidecar, and answers the plan (the IR's identity, lots, stages, budget). */
 	CompletableFuture<RegionPlan> plan(RegionPlanRequest r);
 
@@ -272,7 +297,7 @@ public interface Regions {
 	 * STALE. Since 1.43.0.
 	 */
 	default CompletableFuture<RegionPlan> planRevision(String regionId, RevisionRequest r) {
-		throw new UnsupportedOperationException("Regions.planRevision needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.planRevision needs Architect API 1.43.0");
 	}
 
 	/**
@@ -289,7 +314,7 @@ public interface Regions {
 	 * stay in the stock (a target's reservation ends with it), and the land comes back as before the revision.
 	 */
 	default CompletableFuture<RemoveResult> undoRevision(String regionId, int toPosition, String actor) {
-		throw new UnsupportedOperationException("Regions.undoRevision needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.undoRevision needs Architect API 1.43.0");
 	}
 
 	/**
@@ -306,7 +331,7 @@ public interface Regions {
 	 * {@code "landCheck"}.
 	 */
 	default CompletableFuture<LandReport> landCheck(String regionId, @Nullable String part) {
-		throw new UnsupportedOperationException("Regions.landCheck needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.landCheck needs Architect API 1.51.0");
 	}
 
 	/**
@@ -326,7 +351,7 @@ public interface Regions {
 	 * Since 1.52.0, feature {@code "regionAdopt"}.
 	 */
 	default CompletableFuture<RegionView> adopt(AdoptRegionRequest r) {
-		throw new UnsupportedOperationException("Regions.adopt needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.adopt needs Architect API 1.52.0");
 	}
 
 	/**
@@ -336,7 +361,7 @@ public interface Regions {
 	 * the region record is deleted. Crash safe as adoption. Since 1.52.0, feature {@code "regionAdopt"}.
 	 */
 	default CompletableFuture<UnadoptResult> unadopt(String regionId) {
-		throw new UnsupportedOperationException("Regions.unadopt needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.unadopt needs Architect API 1.52.0");
 	}
 
 	/**
@@ -361,18 +386,29 @@ public interface Regions {
 	 * jar like {@link #planCatalogue()} (no sidecar, no claim); any thread; a fresh copy each call. Since 1.55.0.
 	 */
 	default com.google.gson.JsonObject planCatalogue(Set<String> kinds) {
-		throw new UnsupportedOperationException("Regions.planCatalogue(kinds) needs Architect API NEXT (slice 7cF)");
+		throw new UnsupportedOperationException("Regions.planCatalogue(kinds) needs Architect API 1.55.0 (slice 7cF)");
 	}
 
 	/**
 	 * (7c) The standalone composer (docs/CONTRACT.md "Phase 7c" §2, slice CO, S-7c-2): a template pick first; without a fit, a
 	 * structured job writes plan/0 parts from the brief, then {@link #checkPlan} and one repair round. Completes with a design id of
 	 * kind {@code settlement}, whose result holds {@code outcome} ({@code PICKED}, {@code COMPOSED} or {@code NO_PLAN}), {@code plan},
-	 * {@code check} and {@code cost}. For players and tests; Steward keeps its own plan writer. Built by slice CO (feature
+	 * {@code check} and {@code cost}. For players and tests; (Noah, 2026-11-13) Architect owns the composer engine and Steward moves its plan
+	 * writing onto this call later, with its card as the brief and {@link ComposeRequest}'s ext keys. Built by slice CO (feature
 	 * {@code "compose"}); until then it throws. Since 1.55.0.
+	 * <p>
+	 * (7c CO, as built; docs/CONTRACT.md "Slice CO as built") The claim is in the Overworld (as {@link #checkPlan}'s); the design's owner
+	 * is the player (the request has none), and the composed plan may name the built-in {@code claim_*} anchors and the caller's own
+	 * ({@link ComposeRequest#EXT_HINTS}'s {@code anchors}). The pick is
+	 * {@link #design}'s (TC's template catalogue and land check); a fit ends {@code PICKED} with {@code program}, {@code params} and, once
+	 * the mod planned it, {@code planId}. Without one, each round's plan is checked by {@link #checkPlan} (the design's Style as the bible),
+	 * and one repair round gets the typed answers: {@code COMPOSED} when a round checks READY ({@code check.artifactSha} is what
+	 * {@link #realiseApproved} takes), else {@code NO_PLAN} with the best round's {@code plan}, {@code check} and {@code waits} (its parts not
+	 * fits or adjusted, each with its {@code block} and the catalogue's {@code until}). {@code images}: the planning images ({@code result.images}
+	 * blob ids) go to the composing job. The same {@code opKey} and body adopt the first design; another body refuses OP_KEY_CONFLICT. Since NEXT.
 	 */
 	default CompletableFuture<String> compose(ComposeRequest request) {
-		throw new UnsupportedOperationException("Regions.compose needs Architect API NEXT (slice CO)");
+		throw new UnsupportedOperationException("Regions.compose is reserved: it throws until slice CO ships (feature compose)");
 	}
 
 	/**
@@ -382,7 +418,7 @@ public interface Regions {
 	 * player's approval. Built by slice AU (feature {@code "programAuthoring"}); until then it throws. Since 1.55.0.
 	 */
 	default CompletableFuture<String> authorProgram(AuthorRequest request) {
-		throw new UnsupportedOperationException("Regions.authorProgram needs Architect API NEXT (slice AU)");
+		throw new UnsupportedOperationException("Regions.authorProgram is reserved: it throws until slice AU ships (feature programAuthoring)");
 	}
 
 	/**
@@ -397,10 +433,10 @@ public interface Regions {
 	 * API (no tile bill kept) {@link Reason#PLAN_STALE} (detail {@code no_bill}: plan it again); an entry not in the library
 	 * {@link Reason#UNKNOWN_BLUEPRINT}; an entry too big for its lot {@link Reason#LOT_TOO_SMALL}; a site lot's entry that does not bind
 	 * {@link Reason#SITE_MISMATCH}; a revision whose region is gone {@link Reason#OTHER}. Server thread; the future completes on it. Since
-	 * NEXT, feature {@code "quote"}.
+	 * 1.55.0, feature {@code "quote"}.
 	 */
 	default CompletableFuture<Quote> quote(String planId, java.util.Map<String, String> lotEntries) {
-		throw new UnsupportedOperationException("Regions.quote needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.quote needs Architect API 1.55.0");
 	}
 
 	/**
@@ -410,6 +446,6 @@ public interface Regions {
 	 * {@link #quote}. Server thread. Since 1.55.0, feature {@code "quote"}.
 	 */
 	default CompletableFuture<Quote> quoteApproved(String artifactSha, java.util.Map<String, String> lotEntries) {
-		throw new UnsupportedOperationException("Regions.quoteApproved needs Architect API NEXT");
+		throw new UnsupportedOperationException("Regions.quoteApproved needs Architect API 1.55.0");
 	}
 }

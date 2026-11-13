@@ -39,7 +39,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * (7b slice SO) The support order over slice SV's five non-pad fit examples on their fixtures' land (the frozen volumes, each class as
+ * (7b slice SO) The support order over slice SV's five non-pad fit examples (and (7c US) the inverted house) on their fixtures' land (the frozen volumes, each class as
  * {@code dev.pl.terrain} builds it): planConvert's own anchors and queue ({@link Builder#anchors}, {@link Builder#queueOrder}) give an
  * order whose every prefix is connected to the site (checked against the volume's classes, not Architect's predicate), with gravity
  * blocks after their support; and the builder's runtime gate ({@link Builder.Run#attached}) keeps every built set connected however the
@@ -47,7 +47,9 @@ import org.junit.jupiter.api.Test;
  */
 class SupportOrderFixtureTest {
 	static final List<String[]> EXAMPLES = List.of(new String[] {"fit_wrap_trunk", "trunk"}, new String[] {"fit_attach_to_cliff", "cliff_face"},
-		new String[] {"fit_suspend", "overhang"}, new String[] {"fit_carve_into", "tunnel_hill"}, new String[] {"fit_span", "rift_site"});
+		new String[] {"fit_suspend", "overhang"}, new String[] {"fit_carve_into", "tunnel_hill"}, new String[] {"fit_span", "rift_site"},
+		// (7c US) the inverted house (bp.invert()): built from its ceiling anchors down
+		new String[] {"fit_suspend_inverted", "overhang"});
 
 	@BeforeAll
 	static void boot() {
@@ -196,7 +198,7 @@ class SupportOrderFixtureTest {
 	void theBottomUpOrderWouldFloat() throws Exception {
 		// fit_suspend bottom-up: its floor comes first, under nothing it touches (why the support order exists; fit_span's bottom row
 		// bears on both rims, so bottom-up happens to hold there)
-		for (String id : List.of("fit_suspend")) {
+		for (String id : List.of("fit_suspend", "fit_suspend_inverted")) {
 			String fixture = "overhang";
 			Case k = load(id, fixture);
 			Builder.Run r = k.run();

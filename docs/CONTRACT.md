@@ -29632,7 +29632,7 @@ tests f7b-foundation and gm-c leave `form.hidden_room` to hr.test.mjs (as BF's t
 | gate run 3, **20261113-044913-change** at 9fbf3944 (hr-ingame only: since run 2 only its driver path changed) | **PASS 1/1: hr-ingame 18/0**: x01 READY, vault fits (no geometry), the secret (wall) in the artifact only, asked: preview and siteplan carry it, the artifact the same; PLACED 32,257 cells, realised == virtual 0 of 32,257 differ (forms), the doorway stone over stone; E-flat 0. x02 READY, hollow fits; the same secret rows; PLACED, 0 of 353 differ (fluids 31, forms 48, walls 274), the 3 curtain cells the bodies' predicted flow; the doorway air over air; E-flat 0. x03 READY, cellar fits; the same secret rows; PLACED, 0 of 266 differ (forms, props, street, lanterns 2/2); a spruce trapdoor (top, shut) over a ladder; E-flat 0 |
 | gate-verifier (strict: survival accounting) | **PASS** at c600444e: re-ran hr-survival on its own run, **20261113-052115-change** (ports 8920/8921), **16/0**: s01 the hollow free 76, held 0, `vault:entrance` {stone: 2} built 2/2, bills equal, the conservation sum exact built and removed (refund 2 stone), twin 0 differ, E-flat 0; s03 the hollow free 73, `cellar:entrance` {ladder: 4, spruce_trapdoor: 1} built 5/5, 13 waves (301 items), the same rows. hr.test.mjs re-run 11/11; the API diff javadoc plus the ApiRules mapping, no frozen signature changed, stamps NEXT; the driver not vacuous; x02's predicted-flow allowance sound (any other fluid cell fails); x03 planned with and without the cellar: the hamlet part identical (its dirt 49 independent of the cellar). Non-blocking: the hamlet's pad dirt 49 billed in the check but not put down (pre-existing, worth a follow-up); the waterfall host is free whole, so survival gates two of the three hosts |
 
-**Leftovers:** the in-game ghost shows a hidden room (reading 5); a hatch into a 7a tunnel waits on LP's site lots with cellar doors
+**Leftovers:** the in-game ghost shows a hidden room (reading 5; **closed by slice SR**: the ghost draws the room as unwritten); a hatch into a 7a tunnel waits on LP's site lots with cellar doors
 (reading 1); a room inside a standing building or form (S-7c-8); the waterfall's default drop gives a 2-high hollow (a plan wanting 3 high
 asks drop 7); a zone's pads' held dirt is billed in a survival check but not put down on its targets (x03's hamlet: 49 dirt, the same
 without the cellar; pre-existing, RS's: the verifier's follow-up).
@@ -29822,6 +29822,490 @@ machine-checked land needs for S1-S3/S7 if a pick lands them on wrong land in BR
 | gate run 1, 20261113-052621-change at dbd76982 | FAIL 1: tc-unit PASS 2/0; tc-pick (a) and (c) ok, (b) built the hill at y -60 (the flat base's ground is y 64: the hill was underground, outside the volume window) |
 | gate run 2, **20261113-054210-change** at fbd4a8d6 | **PASS 2/2**: tc-unit 2/0; tc-pick 3/0: (a) a cave city over flat land NO_TEMPLATE, s6_cave_city closest, "it has 0 (0 cave of any size)" (the mod's volume analysed); (b) S6's brief over the built hill with its 60x8x12 hall PICKED s6_cave_city and the mod planned it; (c) S5's brief there NO_TEMPLATE, s5_treehouses closest |
 | gate-verifier (review only, DEV MODE) | **PASS** at 5a401f2f (fbd4a8d6 + this as-built only): the land check fails closed and spares a closest offer, the surface purely additive (the wire's optional `volume`, javadoc), the s3/s5/s6 ir.json and rv/merge.json differ from main in programSha only, the recorded grove and floorY paths untouched, groveFromLand and the S6 floor pure and deterministic, the units compared against the sculpt's own plan; re-ran tc 7/7, regions-tc 13/13, release-version --check, step-inputs check. Non-blocking: S5 over real oaks is a kit unit, not an in-game step; the deck read is unit-tested on flat and one uneven land; pick accuracy is BR/PAY's |
+
+### Slice AQ as built (branch `slice/AQ` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+§3 row 9: `channel.aqueduct` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi NEXT, as BF's and HR's);
+the helper advertises `plan.aqueduct`, the mod `aqueduct`. No 7b or 7cF signature changed: the API gains javadoc only
+(`ArchitectApi.features`). The aqueduct is not a kind of its own (7cF's reading 4): a `connector.channel` course is one where it must be.
+
+**Built** (`kit/lib/fluids/course.mjs`; `AQUEDUCT`, `aqueductSpan`, `aqueductEvery`):
+- **Where:** exactly where HY answered `unsupported channel.aqueduct` (the router fails `level` or `blocked` and its deep probe, fill 64,
+  succeeds). There the leg is re-routed with fill `AQUEDUCT.rise` (24): the course's level held up to 24 over the ground. Past it:
+  refused UNREACHABLE `{kind: fill, block: channel.aqueduct, limit: 24}`. Every other answer is HY's, unchanged.
+- **The span:** every index of the course whose level stands more than its `fill` (2) over its lanes' and banks' lowest ground (- 1) is a
+  span index; its cross-section's columns (the lanes, the side walls, the bank course outside them) are span columns. There HY's raised
+  fill (`geo.banks`) is dropped under the trough's floor and kept over it as the span's **wall** (the side walls stay 2 thick at the top:
+  HY's single breach rule), never on a cell the shell, lining, weir or a step holds. A **pier** (the full cross-section, from the ground to
+  the trough, 1 thick) stands every `every` span indexes, both ends of each run included (a pier is counted when it stands at least 1
+  high). `arches` (the default) turns each run between two piers into a round arch: at distance d from the nearer pier the soffit is
+  `1 + round(R - sqrt(R^2 - (R - d + 0.5)^2))` under the floor (R = half the clear run: 3, 2, 1, 1, 1, 2, 3 for a clear 7), never reaching
+  the ground (a clear cell kept over it). `params.span` picks `piers` or `arches`; another value is noted and the default used; HY's
+  lenient "params.span not read" note stays on every course that needs no aqueduct.
+- **Spacing:** arches every 8 (clear 7), piers every 6 (clear 5): RM's cantilever 4 holds every trough cell within reach of a support.
+  `aqueductEvery(span, regionM15Limits(m15LookOf(ctx.connectorLook.look)))` caps the clear run at a Style's `aqueduct.maxSpan` when set.
+- **Roles (S-THEME):** the span part `<id>_span` (kind `add`, stage forms): walls in the built course's lining (the bible's
+  `fluids.lining`, else `structure`), piers in `foundation`, arches in `structure`. The trough's shell and lining in span columns take the
+  **built** look's chains whatever the course's look (a stone trough on its supports); the rest of the course keeps its look.
+- **Records:** the answer's block is `channel.aqueduct` (`p.block` and `spec.block`), its geometry `aqueduct {span, every, length, rise,
+  piers}` (length: span indexes; rise: the most clear cells under the floor), a note. The plan meta's **`aqueducts`** (RM's record list:
+  `M15_SPAN_TYPES` gains `aqueduct: 'aqueducts'`): one row per part it judges, the span part and the shells of the reaches over it,
+  `{part, course, span, every, length, rise, piers}`; written only by an aqueduct, rolled back with its part (compile.mjs's checkpoint
+  and emit's catch). The siteplan's courses row is unchanged.
+- **Bill and survival:** the span's blocks join the part's `cost.bom` (as a bridge's piers do). In survival the span part is in the
+  course's group: the piers, arches, walls and the trough's lining and shell are its construction target, the water free (RS §7.3's
+  course row); the part's `cost.survival.bom` equals its `cost.bom` item for item.
+- **Examples** (builder-written, $0, `kit/test/fixtures/plan/aq/`): x01 a built canal on arches over a valley 8 deep and 32 wide (the
+  example, in game and survival); d03 a valley 3 deep with `params.cut 0` (the trough on the valley floor: no clear cell, no pier); d08
+  piers every 6; d16 a valley 16 deep (arches, piers 12 high). `valid/v7c_aq_valley` copies x01 (plan-p0-valid's item 9).
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **"Depth" is the valley's depth under the plateaus.** A valley up to about 7 deep is crossed by HY's own course (it cuts a trench of up
+   to 6 into the plateau instead), so the depth 3 crossing keeps its level with `params.cut 0`, the only way a 3 deep valley needs an
+   aqueduct; d03 without it is HY's course (a unit holds both).
+2. **An aqueduct answers `fits`**, not `adjusted`: the plan asked for a course and got one; the block and the note name the aqueduct.
+3. **The rise limit is 24** (§3's 16 with room); a valley deeper than that refuses UNREACHABLE fill, never unsupported.
+4. **Arches are the default**, piers by `params.span` (the draft's enum).
+5. **No Style can set `aqueduct.maxSpan` yet:** SF's format 3 `connectors` look params list `rope_bridge` only (style3.mjs
+   `LOOK_PARAMS`), so `M15:span` for aqueducts is reachable only through `regionM15Limits` overrides (a unit), as RM's own leftover.
+
+**Tests moved by name**: `hy/r03_aqueduct` and `extension/e18_aqueduct` (the same plan) answer fits as an aqueduct (their `expect`
+updated); rm.test's frozen span types read `aqueduct` appended; hy-core reads the archived catalogue 8 (unchanged).
+
+**Readings (measured):** compact plan/0 (`compactOf`) **82,038** characters (the merge base 81,873: +165; the 90,000 spare line). The 59 asks:
+none has a course past its fill; the tables before and after (fixtures/plan/aq/asks-{before,after}.txt) are identical (fits 67, adjusted
+18, blocked 20, unsupported 9, refused 14, 0 malformed). x01: 32 span indexes, 5 piers, up to 4 clear under the floor; its bill 1,423
+items (stone bricks 1,151, mossy cobblestone 132, cobblestone 140; the span 817 of them).
+
+**Checks** ($0, sim only; ports 8896/8897; verifier 8904/8905; machine load 30-130):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1313 tests at 6dc8fb5e: 1306 pass, 7 fail: six catalogue tests that diff against an archived catalogue (cl, f7a-foundation, f7b-foundation, gm-c, lp, sl) now leave `channel.aqueduct`'s flip to aq.test.mjs (moved by name at a9fe5e07, 7ae81c04), and forms-island's recorded cost under load 100+; those files re-run 63/0 alone; aq.test.mjs 10/10 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1155 tests, 0 failures, 1 skipped (ApiAQTest 2/2) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | 866/866 (62 files; jobs.test and bundle.e2e feature lists appended `plan.aqueduct`), the bundle built |
+| api-compat | clean against the 0.47.0 and 0.45.0 apitest jars; the API package's diff is javadoc only (`ArchitectApi.features`) |
+| catalogue golden | the diff is exactly `channel.aqueduct` (reserved -> supported, schemaVersion 1, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 142/0 |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (374 steps; aq-unit, aq-ingame, aq-survival in gate-chains.json, chain `7caq`, impact rule "7c AQ aqueducts") |
+| gate run 1, **20261113-095059-change** at 7ae81c04 | **PASS 3/3**: aq-unit 451/0 (aq.test and the touched tests; ApiAQTest, Api7cFTest, PlanCatalogueTest; every committed fixture byte-identical to the merge base but the 2 named movers, hy/r03 and extension/e18; the 59 asks tables identical); **aq-ingame 7/0**: x01 READY, fits, block channel.aqueduct `{span: arches, every: 8, length: 32, rise: 4, piers: 5}`; PLACED, canal_r1 settled, its census equal to its prediction (396 sources, 0 outside); every solid cell as the virtual world says (0 of 1,423 differ: the span 0 of 817, the shell 0 of 606); Remove E-flat 0. **aq-survival 8/0**: s01 checked in survival (free 396, held 408), its bill 1,423 items equal to its cost.bom; fed in 12 waves, PLACED and built (2 targets, 1,423 items, equal to the check's); every part's bill equal to its targets'; the conservation sum exact built and removed (refund every item); the world equal to its INSTANT twin (0 differ); Remove E-flat 0 |
+| gate-verifier (strict: survival accounting) | **PASS** at c0569c5b: re-ran aq-survival on its own run, **20261113-101123-change** (ports 8904/8905), **8/0**: s01 READY, canal fits channel.aqueduct (arches, every 8, 5 piers), its bill 1,423 items equal to cost.bom; fed in 12 waves, PLACED, 2 targets built (731 and 1,001 cells) billing the check's 1,423; every part's bill equal to its targets'; the conservation sum exact built and removed (the full refund); the twin 0 differ; E-flat 0. aq.test.mjs re-run 10/10. Review: the aqueduct path entered only where HY's deep probe answered (only the named movers move), the API diff javadoc plus the ApiRules mapping, stamps NEXT, feature lists appended. Non-blocking: none for the code (aq-unit, aq-ingame and the Java tests taken from the builder's run) |
+
+**Leftovers:** (1) a Style can't yet set `aqueduct.maxSpan` (SF's `LOOK_PARAMS` lists rope_bridge only; reading 5), so `M15:span` never judges an aqueduct outside a unit; (2) `r.course` (a program's course) builds no aqueduct (the plan router only); (3) a course that needs an aqueduct only past HY's trench (valleys under about 7 deep) cuts the trench as before; `params.cut 0` asks for the level held.
+
+### Slice SR as built (branch `slice/SR` off main 3a5bd96d; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+Two fixes Steward asked for at the v0.64.0 RC (no Architect fault found). API diff: one additive `String` constant,
+`DesignRequest.EXT_ALLOW_COMPOSITE = "architect_mc:allowComposite"` (javadoc, `Since NEXT.`); no record, constructor or signature changed.
+
+**Fix 1: a design returns a Composite only when asked.** CM-b checked a Composite return without the request's maxSize, so any design
+job, a design-group item for a lot among them (Steward's street-town path), could come back larger than its lot and then fail at placement
+with NOT_ALLOWED. Now opt-in:
+- the request flag is the `DesignRequest` ext key **`architect_mc:allowComposite`**, exactly `true` (the sidecar's `EXT_ALLOW_COMPOSITE`
+  and `allowsComposite(req)`), **off by default**;
+- `Sidecar.checkPlan` puts `allowComposite` into the check's `Limits` only for a request with the flag that is neither a massing nor a
+  site-bound (7b DS) design; `finishCheck` refuses a Composite return whenever the limits do not allow it, as a check-round error like any
+  oversize design: `size 121x15x27 is past maxSize 96x64x96; a composite needs allowComposite (this request does not allow one): return
+  one Blueprint within 96x64x96`, so the designer repairs it into one Blueprint (the sim, which cannot repair, fails the job);
+- with the flag, CM-b's behaviour: the kit's `--max` per module, the union past it;
+- a design group item carries the flag only in its own ext (the group's ext never reaches an item: groups.ts already copied only the
+  item's); the plan path (`realiseApproved`) never runs a design check and is unaffected;
+- the designer's brief gains one line only with the flag ("past the cap: this request allows a Composite ... the maximum size above is
+  then each module's"); PLAYBOOK §8 "Past the cap" says a Composite is only for a request that allows it, and why it fails otherwise.
+
+**Fix 2: the placement ghost hides a hidden room** (S-7c-4; HR's reading 5 and its leftover). The region ghost (`RegionGhost`,
+`previewRegion`) draws ghost tiles the sidecar's tile worker evaluates over the plan survey; it had no plan meta, so it drew the room. Now
+`region.tiles.request {preview: true}` reads the plan dir's `meta.json` (`Regions.planSecretParts`, cached by mtime; a meta that cannot
+be read refuses the ghost rather than show a secret) and hands the worker the parts marked `secret` (`hide`, a hidden room's hollow
+`f_<id>` and its entrance `f_<id>_door`); the worker evaluates them with **no ops**, exactly as `renderPreviews` draws them (the host as
+before the room: the room's cells and the entrance's concealment as the host's own blocks), cached with its stage cut. The realise path
+(heights, not preview) is untouched, so the placed result is unchanged. For the gate, `TileStream.PreviewTile.sha` keeps each preview
+payload's (checked) sha and `dev.region.ghost {}` reports `shown: {key: {cells, sha}}` (dev evidence only).
+
+**Readings chosen** (the brief was silent; the smallest reading each time):
+1. **Any Composite return needs the flag**, not only one past maxSize ("only when asked"); one whose union fits is refused too, naming
+   allowComposite.
+2. **Never for a massing or a site-bound design**, flag or not: a site design is exactly the lot box (a composite there is the bug).
+3. **The other design checks** (variants, site variants, polish, follows, versionOf) build their own limits without the flag, so a
+   Composite rebuilt through any of them is refused: CM-b's "refused or untested" leftovers, now refused in the check.
+4. **The flag stays in the entry's ext** like any request ext (CM-b keeps the request's ext beside the CompositeInfo wire).
+5. **The ghost hides by part**, the plan meta's `secret` mark, not by the artifact's `$.secrets[]` (the worker sees plans, not artifacts).
+
+**Checks** ($0, sim only; ports 8920/8921):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1303/1303** (at 2932acf5; PLAYBOOK §8's text moved no golden) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1153 tests, 0 failures, 1 skipped** |
+| sidecar `npm run check` | **872/872** in 63 files, tsc clean, the bundle built: cm-b.test 4/4 (the castle installs with the flag, its design's limits allow it; without it the item fails `size 121x15x27 is past maxSize 96x64x96; a composite needs allowComposite`, nothing installs, the group's own ext never reaches the item; `allowsComposite` only on exactly `true`), sr-ghost.test 2/2 (x01 planned by the real kit: the meta's secret parts `f_vault`, `f_vault_door` are IR part ids with ops; every ghost tile from the real `TilePool` worker, every stage and up to `forms`, equals the kit's evalTile with them unwritten, and differs from the un-hidden one on the room's tiles), regions-real-kit-6b 8/8 (a plan meta's secret part re-read by mtime, its ghost tiles as if unwritten; `secretPartsOf`) |
+| api-compat | clean: the 0.48.0 apitest jar (932 references) and the 0.64.0 mod jar's surface (2964 members) |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (372 steps; `hr-ghost` registered in gate-chains.json, host client, chain `7chr`, impact rule "7c SR the ghost hides a hidden room (slice SR)") |
+| gate run 1, 20261113-095301-change at 2932acf5 | FAIL 1: **hr-ingame PASS 18/0** (x01-x03 realised == virtual, entrances, E-flat 0: the placed result unchanged); hr-ghost 2/2: ran on the headless server, and the ghost is client-only (`refused: client-only`); fixed by moving the step to the client host and failing fast on a refusal |
+| gate run 2, **20261113-103758-change** at f6dce937 (hr-ghost only: since run 1 only its driver and host changed) | **PASS 1/1: hr-ghost 5/0**: x01 READY; the meta's secret parts `f_vault`, `f_vault_door`, the room [9598,69,9077,9602,71,9081]; the ghost on the check's plan, 4/4 tiles shown (32,332 cells), each tile's sha and count equal the kit's evalTile with the room unwritten; the room's tile 150,141 (20,516 cells) and 149,141 differ from the plan with the room (the same cells, different contents: the host's rock where the room and its doorway were), 149,142 and 150,142 equal both |
+| gate-verifier (review only, DEV MODE) | **PASS** at b4e23294 (f6dce937 + this as-built only): Fix 1 refuses any Composite without the flag as a check-round error, the flag only on exactly `true` and never a massing or site design, the API diff one additive constant; Fix 2 fails closed on an unreadable meta, the realise tile path and the cache keys without `hide` unchanged; hr-ghost non-vacuous and fail-closed; re-ran cm-b, sr-ghost and regions-real-kit-6b 14/14 and step-inputs check clean. Non-blocking: the ghost evidence compares against the same hide rule the previews use (the room tile differing from the plan with the room covers that the room is gone); Fix 1's sidecar paths are unit-covered, not in the SR impact rule |
+
+**Leftovers:**
+- A Composite rebuilt by a variant, site variant, polish, follow or versionOf is refused in the check (reading 3); a later slice can pass
+  the original request's flag through if Steward needs it.
+- A composite in a batch item and the placement UI are still refused `NOT_ALLOWED` (CM-b's leftover); with this slice a lot's design
+  group item no longer comes back as one unless the item asks.
+
+### Slice CO as built (branch `slice/CO` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+The standalone composer (§3 row 12, S-7c-2): `Regions.compose(ComposeRequest)` on 7cF's frozen record, and the planning images, also
+returned by `checkPlan` on request. Feature `compose` (the helper's `region.compose`; it also has `region.planImages`). No frozen 7b or
+7cF signature changed; the API delta is `Design.Kind.SETTLEMENT` (appended, `Since NEXT`) and javadoc.
+
+**The flow** (sidecar `compose.ts`, mod `region/Composes.java`):
+1. **The mod** surveys the claim as `Regions.design` does (the ARSV columns, the survey summary, TC's frozen claim volume via
+   `RegionDesigns.claimVolume(level, claim, cols)`, the overload factored out; `region.design`'s bytes unchanged) and sends
+   `region.compose {brief, claim, surveyBlobId, volume?, style?, builds?, images, budgetUsd?, opKey?, ext?}`; `builds`: the players'
+   builds meeting the claim (6c PT's `BuildViews.planJson`, at most 64), which the prompt lists ("keep every part clear of them; name one
+   as a feature, target or endpoint") and the check keeps clear of as it always did. The ack is the design id; the design
+   is kind `settlement`, its record `settlement` (ComposeState) and its result `result`.
+2. **The template pick first:** the helper starts a `region.design` itself (same brief, claim, volume, Style, owner, budget and ext;
+   `requireFit: false`, `plan: false`), so TC's catalogue, land check, retry and sim stand-in are the pick, unchanged. A fit ends the
+   design `PICKED {program, params, reason, rounds: 0, pick}`; the mod plans the program over the claim (as 6b's `RegionDesigns`) and its
+   `planId` (or `planError`) joins the result.
+3. **The inputs, once, kept in the record:** the claim's affordances (`claimAffordances` over the volume, TC's), and with `images` the
+   planning images (below) as blobs (kind `region.planImage`).
+4. **Round 1:** a structured job: system = `plan/0#compact` (systemRefs; the one-line catalogue) + the composer's text (`kit/prompts/composer.md`'s `## system`: supported kinds only,
+   a reserved one as `required: false`; the only anchors are `claim_*`; keep parts inside the claim; keep the parts that fit on a
+   repair) + a caller's rules (below). **Measured: 86,669 characters** without a caller's rules (plan/0#compact 81,873 + the composer's own text 4,794; the bound 120,000), at most about 116,700 with the largest allowed rules (30,000); a unit holds both. The prompt: the brief, the claim,
+   the Style's roles, the survey summary, the top 60 affordances numbered (`n. kind id: box (metrics)`), the pick's closest program; with
+   images, the four PNGs go before the prompt as image blocks (`planning image top` ...) and the prompt names them.
+5. **The check:** the design goes `checking` with `settlement.awaiting {round, plan}`. The mod (`DesignsImpl.changed` ->
+   `Composes.changed`) runs `Regions.checkPlan` over that plan (the Overworld, the claim, no caller anchors, owner null, the design's
+   Style and pinned version as the bible, no key) and answers `region.compose.checked {designId, round, check}` (the PlanCheck without its
+   catalogue and light preview; `malformed` kept) or `{refused}` (the refusal's reason and message). Once per (design, round) per session;
+   after a restart the snapshot re-asks.
+6. **One repair round** (`REPAIR_ROUNDS = 1`; a caller may ask 0-2) unless round 1 checked READY with an artifact: round 1's prompt, its plan, the check's
+   typed answers (each part not fits/adjusted: class, block, required, reasons with code, path and message, wouldFit, blockedBy,
+   deviations; the notes; malformed), and the catalogue's long text (`planCatalogueKinds`, the kit's) of the kinds the plan used and the
+   check answered (at most 60,000 characters). Its plan is checked the same way.
+7. **The outcome:** `COMPOSED` when the last round checked READY with an artifact (`check.artifactSha` is what `realiseApproved` takes);
+   else `NO_PLAN` with the best round (READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED, refused last; a tie to the later
+   round): its `plan`, `check`, `round` and `waits` (its parts not fits/adjusted: part, class, block, the catalogue's `until`, required).
+   Every result: `{outcome, reason, cost (usd), rounds, history [{round, overall | refused, planSha?}], pick {designId, outcome, program,
+   fits, reason}, images? [{name, blobId}]}`.
+
+Cost: the pick's and every round's, summed; `budgetUsd` caps them together (a round gets what is left; none left: failed `budget`).
+`opKey` (kind `compose`): the same key and body (the request without its key and blob ids, the volume by its sha) adopt the first
+design; another body (`images` included) refuses `op_key_conflict`, which the mod maps to OP_KEY_CONFLICT. Cancel cancels the pick's
+design and the running round's job. Sim: `ext["architect:simCompose"]` scripts the rounds (`{plan, reason}` each, a later round reusing
+the last); else the stand-in answers `SIM_PLAN` (three 9x9 houses near `claim_center`, a path from `claim_s`).
+
+**The caller's ext keys** (constants on `ComposeRequest`, `Since NEXT`, additive; the helper reads them, validates them at
+`region.compose` and refuses `FIELD_LIMIT: ...` naming the key), so a card-driven caller such as Steward could later call `compose`
+(**Noah's decision, 2026-11-13, "boundary: defaults": Architect owns the composer engine**, the harness, catalogue, affordances, images and repair loop; Steward later moves onto `Regions.compose` with its card-derived brief and hints, in a Steward slice after CO ships). **These keys are the contract Steward calls:**
+- `EXT_HINTS = "architect_mc:composeHints"`: a JSON object of structured hints (zones, wanted parts, ...), at most 16,000 characters,
+  shown to every round under "## The caller's hints" as JSON. Its **`anchors`** member is not a hint but the caller's named places:
+  `{name: [x, y, z]}` (names `[a-z][a-z0-9_]{0,31}`, not a built-in `claim_*` one, at most 64, integer blocks; Steward's `stone` and
+  `player`). The helper validates them into the design's record (`settlement.anchors`), the prompt's Claim section lists them, and the
+  mod checks every round with them (`Composes.checkRequest` -> `PlanRequest.anchors`);
+- `EXT_SYSTEM = "architect_mc:composeSystem"`: the caller's rules, at most 30,000 characters, appended to the system under "## The
+  caller's rules (they add to the rules above)" (so plan/0#compact and the composer's text stay the cached prefix);
+- `EXT_REPAIR_ROUNDS = "architect_mc:repairRounds"`: repair rounds after the first, 0 to 2 (default 1).
+The prompt text lives in the kit, `kit/prompts/composer.md` (`## system`, `## answer`, `## repair`; read once per kit dir), not inline.
+
+**Plan-writing rules taken from Steward's `prompts/plan-writer.md`** into `kit/prompts/composer.md` (the general ones; the wording is
+CO's own): no world coordinates (locators, anchors, features only); zones (one standard zone with lots or `flat_village`; districts with
+`label`, `size`, `levelBand`, `prefer`; `where.along` for a quarter that follows the land; an `outpost` zone with its own road); lots
+(`type_n` ids, S-XL footprints, at least one lot a zone); `terraces: {}` for a hillside town, `form.terrace` beside zones only; walls and
+gates (round, line, edge, along; gates where routes cross; wall `lots` at gate/corner/run; a gatehouse at least 13x7; the drawbridge's
+limits); water (ponds, fountains, moats, quays, `channel.course`/race/`channel.ditch`, `farmPond` vs `irrigate`); palette rules (`family`,
+`share`, `over: "lots"`, `exempt`; a loose taste is the Style's); the "shapes Architect builds" list (bridges over real gaps; climbs only
+across drops; roads end on the zone; zones placed by anchor, land or zone; one zone per shore; water only where the land shows it; reserved
+layouts as their reserved kind); `required` on every part; `notes`; keep the plan small; on a repair keep what fits and use `wouldFit`.
+**Left to Steward's extension** (`composeSystem`/`composeHints`): the concept card's mapping (one lot per card building and its count,
+`label` in the card's words, `landmark`/`placement`/`brief` from its notes), `style: {pending}`, the `stone`/`player` anchors (sent as `composeHints.anchors`), Steward's portcullis default and `gateMech`/`mech` choices, the
+`waits`/`summary` answer in player words, and the "write a reserved kind anyway so it waits" policy for required asks (CO writes a
+needed reserved part as `required: false`). **Not taken:** `vocab/1#compact` (plan/0#compact + vocab/1#compact is 112,772 characters,
+which would leave no room for a caller's rules), so a palette rule's family names come from the model or a caller's rules; a wrong one
+answers malformed and the repair round names it.
+
+**Steward's PlanWriter, compared** (steward-mc `service/Composer.java`, `gateway/PlanWriterJob.java`, `prompts/plan-writer.md`, read
+2026-11-13). What Steward's does that CO's does not:
+- **Input:** a concept card (program with counts, footprints S-XL, notes, landmark/placement), a land line round the Founding Stone, the
+  caller's anchors (`stone`, `player`) and the player's own builds (PT); CO gets a one-line brief, the survey summary and the
+  affordances, and only `claim_*` anchors.
+- **Domain rules** (about 9 KB): one lot per card building, ids `type_n`, the flat_village / street / districts / outpost zone choices,
+  `terraces: {}` on a hillside town, `style: {pending}`, wall lots (gatehouse/corner/run, sizes for a portcullis, `gateMech`, the
+  drawbridge's limits), farmPond vs irrigate, courses/ditches, palette rules (`over`, `exempt`), the player's builds kept clear, and the
+  "shapes Architect builds" list (bridges over real gaps, stairs only across drops, zones placed by anchors or land, one zone per shore);
+  reserved kinds are **written anyway** so they wait (CO tells the model to leave them out unless needed, `required: false`).
+- **Answer:** `{plan, waits (player words), summary}`; CO answers `{plan, reason}` and computes `waits` from the check.
+- **System refs:** `plan/0#compact` + `vocab/1#compact` (for palette rules); CO sends `plan/0#compact` only.
+- **Model and budget:** Sonnet at medium effort, $0.50 a call, $1 a plan; CO uses the request's model (default the region design
+  model), the request's `budgetUsd` for the pick and every round.
+- **Repair:** up to 2 Claude repairs, only while a part is refused or malformed (an unsupported part waits, never repaired), stopping
+  when the check's answers repeat (an oscillation), and **before** each Claude repair a $0 street fix (a free layout's `NO_ROOM` with a
+  `wouldFit` street fragment applied directly). CO: 1 repair by default (0-2 with the key), whenever the last check is not READY, no
+  oscillation stop, no $0 wouldFit fix.
+- **No template pick** first and no planning images.
+With the keys, Steward's adoption (a Steward slice after CO ships) sends its card as the brief plus `composeHints` (the card's
+structured program and `anchors: {stone, player}`), its card rules as `composeSystem` and `repairRounds: 2`; the player's builds come
+from the world (the mod sends them). What `compose` still lacks against the PlanWriter, for the coordinator's next Architect slice if
+Steward needs them: `vocab/1#compact` (no system room beside a caller's rules), Steward's `{plan, waits, summary}` answer (CO's waits
+come from the check, with no player-worded summary), repairing only when a part is refused or malformed, the oscillation stop, and the
+$0 `wouldFit` street fix before a paid repair.
+
+**The planning images** (`kit/lib/region/planImages.mjs`, CLI `kit/tools/planimages.mjs`): `top` (a hillshade of the survey columns,
+north up, each affordance's x/z box framed in its kind's colour and labelled with its number), `section-1` (west to east through the
+claim's middle row), `section-2` (north to south through the middle column; both with the surface, water, trees, a y grid and the
+affordance boxes the cut crosses) and `iso` (the land from the south-west, the numbers over the boxes). The numbers are
+`rankAffordances` (score descending, then id; the first 60), the same order the prompt lists them in (the sidecar's own copy of the
+ranking is unit-held equal to the kit's). Integer pixel maths and the kit's pinned PNG encoder: byte-stable, with committed pixel shas
+(`kit/test/fixtures/co/planimages.json`: S6's sculpted cavern land and a plain flat land).
+
+**`checkPlan` with `ext["architect_mc:planImages"]: true`** (S-7c-2): the region.plan message carries `planImages: true`; after the
+check the helper renders the four images over the check's own survey with the plan's affordances (those the plan read; none for a plan
+that read no volume) and `planCheck.planImages {images: [{name, blobId, pixelSha, width, height}], labels: [{n, id, kind, box}]}` (or
+`planImagesError`) reaches `PlanCheck.preview.planImages`. Nothing else changes: plancheck.json, the artifact, the plan and every sha are
+as without (a unit and the gate hold the artifact sha equal).
+
+**The rounds harness, frozen for AU** (`sidecar/src/jobs/rounds.ts`):
+- `RoundJob {kind, system, systemRefs?, schema, model, maxTurns, owner, what}`: every round's job.
+- `RoundRecord {n, jobId, answer?, cost?, error?, check?, refused?}`: what a design keeps per round, in its record.
+- `startRound(sc, job, {designId, n, prompt, budgetUsd?, images?, simAnswer?}) -> RoundRecord`: `sc.jobs.runInternal`, tag
+  `design <id> <what> round <n>`.
+- `finishRound(sc, designId, rec) -> 'done' | 'error' | 'gone'`: waits for the job, fills answer (or error, "budget" for a budget stop)
+  and cost; `gone` when the design ended meanwhile.
+- `roundsCost(rounds)`.
+
+The record is the state: a restart re-enters at the first round without an answer or a check. The harness never reads an answer. CO's
+outside check (`awaiting` / `region.compose.checked`) is compose's own; AU brings its own checker and round count (at most 4).
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **`Design.Kind.SETTLEMENT` appended** (§2: "a design id of kind `settlement`"); `Design.kind()` reads `request.kind: "settlement"`.
+   The sidecar's design kind enum gains `settlement` and the record member `settlement` (a protocol-1 client never sees one).
+2. **The Overworld, owner null, built-in anchors only:** `ComposeRequest` has no level, owner or anchors, so the claim is the
+   Overworld's (as `checkPlan`'s), the owner the player, and the composer is told the only anchors are `claim_*`. The request's `ext` is
+   passed through but never read by the mod; the helper reads `architect:simCompose` and `architect:simAnswers` on the sim backend only
+   (6b's precedent).
+3. **The pick is a `region.design` of its own** (not TC's loop refactored): it shows as a REGION design with the same owner and ext,
+   named in `pick.designId`. `RegionDesigns.drive` now returns the running drive's promise to a second caller (the composer awaits it).
+4. **The catalogue on demand:** round 1 sees the one-line catalogue only; the repair round gets the long text of the kinds its plan used
+   and its check answered. It goes in the prompt, not the system, so the system stays one stable cache prefix.
+5. **Affordance ids are orientation:** plan/0 has no member naming an affordance, so the ids the composer sees cannot mismatch a check's.
+   The images print numbers (the ids are 21 characters); the prompt maps number -> id.
+6. **The images render the survey, not the volume** (the 2.5D columns plus the affordances' 3D boxes), so a cave shows as its framed box
+   in the top view and the sections, not as a cut. `checkPlan`'s images number the plan's own affordances.
+7. **COMPOSED means READY:** a NEEDS_REPAIR check after the repair round is NO_PLAN (its artifact exists and the caller may still approve
+   it: `result.check.artifactSha`).
+8. **A refused check is a typed answer** for the repair round (`the check did not run: <reason>`), and ranks last for the best plan.
+9. **Keys and images:** a round's check has no key (its artifact is kept by sha). `checkPlan`'s images ride a fresh check; a keyed
+   re-ask returns the kept check as it was, and the in-flight twin's body hash is unchanged by the flag.
+
+**Shared files touched (minimal, appended):** mod `ComposeRequest` (three `EXT_*` constants, javadoc); sidecar `protocol.ts` (the two messages, `RegionPlanMsg.planImages`, the design kind and
+member, FEATURES appended), `sidecar.ts` (routing, resume, cancel), `designs.ts` and `opkeys.ts` (types), `regions.ts` (`planImages`,
+the check's images), `regiondesign.ts` (`drive` returns the running promise); the two feature-list tests (appended); mod `Design.java`
+(the kind), `DesignsImpl` (the settlement view and hook), `PlanChecks` (the flag and the copy), `RegionDesigns` (the overload),
+`RegionsImpl` (`compose`), `RegionsMod` (reset), `ApiRules` (one mapping line), `ArchitectApi`/`Regions`/`PlanRequest` javadoc; the
+DevBridge hook `dev.region.compose` (`SliceCoDev`, also in `devserver`'s generated hooks); `tools/gate-chains.json`,
+`tools/step-inputs.json`.
+
+**Steward RC:** the second 7c RC covers the planning images option (`checkPlan` ext `architect_mc:planImages`, `preview.planImages`)
+and `Design.Kind.SETTLEMENT`; Steward never calls `compose` (S-7c-2).
+
+**Not covered:** a model's plans (no paid run; PAY measures the composer, P1/P4); the images' value to a model (P4's A/B).
+
+**Leftovers:** PAY measures the composer's cost and quality (est. $0.3-1.5 a plan); BR runs S3/S6 through `compose`; the volume's 3D
+cuts in the sections if P4 shows the 2.5D sections mislead.
+
+**Checks** ($0, sim only; ports 8918/8919; branch at 412218fe for the suites and the gate run):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1306 tests: 1305 pass**, 1 fail on a dirty tree (gate-corpus-plan's store test, by design); that file 3/3 on the committed tree. co 3/3 (the four renders byte-stable and equal to the committed pixel shas, the ranking, the CLI) |
+| sidecar `npm ci && npm run check` (through `sidecar-check-turn.sh`) | **883/883**, the bundle built (compose 17/17: the pure parts, the prompt file, the ext keys and their refusals, the system under 120,000 with the largest caller's rules, the rounds through the kit's own plan check: COMPOSED after one repair, NO_PLAN, 2 and 0 repairs, the caller's anchors checked READY, a refused check, PICKED, images on/off byte-identical, opKey, cancel) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1160 tests, 0 failures, 1 skipped** (ApiCOTest 7/7: the feature, the message, the ext key constants, the kind, a round's check request with the record's anchors, Style and owner, the check's wire, the images asked and copied) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, the 0.47.0 mod surface (2605 members) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0; `tools/catalogue-since-check.mjs` pass; the plan catalogue and its golden untouched |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (373 steps; co-unit and co-compose registered in gate-chains.json, chain `7cco`, impact rule "7c CO standalone composer (slice CO)") |
+| gate run 1, **20261113-104151-change** at 412218fe | **PASS 2/2**: co-unit 2/0; co-compose 12/0: (a) the pick NO_TEMPLATE (closest crater_works), the design kind SETTLEMENT, round 1 checked by the mod NEEDS_REPAIR, round 2 READY: COMPOSED, the repaired plan, artifact d8473e5dfbce; (b) images on: the same planShas round by round (a6cd319e, d5e57c9b) and artifact, four images; off, none; (c) realiseApproved PLACED (215 cells), removed: the hash restored (E-flat 0, 391 cells restored); (d) checkPlan with the images: top 640x640, sections 640x68, iso 644x352, the same pixels twice, the same artifact as without and as compose's; (e) a flat village brief PICKED flat_village, planned |
+| gate-verifier (review only, DEV MODE) | **PASS** at d5ecf4b0 (412218fe + the as-built only): the API purely additive (three `ComposeRequest.EXT_*` constants, `Design.Kind.SETTLEMENT` last, javadoc); the images flag adds only `planImages`/`planImagesError` after the artifact is read; the outcomes as written; the round machine record-driven, restart and cancel safe; no trig, random or clock in the renders; the system bound held with the largest caller rules; the gate's assertions real; re-ran co 3/3. Non-blocking: in sim the plan equality with images on/off is by construction (scripted rounds), the real claim being the equal planSha and artifact; the 86,669 figure is logged, not asserted |
+
+### Slice US as built (branch `slice/US` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; strict: survival accounting; recorded 2026-11-13)
+
+§3 row 10: `rule.suspended` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi NEXT, as BF's and HR's);
+the helper advertises `plan.suspendedBuilds`, the mod `suspendedBuilds`; the kit gains `bp.invert()`. No 7b or 7cF signature changed: the
+API package gains javadoc only (`ArchitectApi.features`), and ApiRules one mapping.
+
+**Built:**
+- **`bp.invert()`** (`kit/lib/invert.mjs`, `Blueprint.invert(opts)`): turns what the design has written so far upside down: row y goes to
+  `H - 1 - y`; every cell's state given its flipped twin (`invertProps`); its part; the ports (y flipped, `up` and `down` swapped); the
+  anchors and cameras as points (`y -> H - y`, the pitch negated); the interior box. The floors then run from the ceiling down (the standing
+  build's ground floor hangs first, under the ceiling). The sidecar records `inverted: true` (absent on every other design, so their bytes
+  do not move). A site-bound design's keep cells are the site's and stay (a flipped cell onto one throws); any other design's flip with it.
+  The table (vanilla has no vertical flip, so it is the kit's own, rules on property names and values):
+
+  | Property | Flip |
+  |---|---|
+  | `half` | top <-> bottom (stairs, trapdoors); upper <-> lower (doors and two-high plants: the pair swaps with its cells, so a door stands the right way up again) |
+  | `type` | top <-> bottom (slabs; `double`, a chest's single/left/right and a piston head's normal/sticky stay) |
+  | `hanging` | true <-> false (lanterns, the mangrove propagule) |
+  | `face`, `attachment` | floor <-> ceiling (buttons, levers, the grindstone; the bell) |
+  | `facing` | up <-> down (the six-way blocks) |
+  | `orientation` | `down_<dir>` <-> `up_<dir>` (the crafter, the jigsaw) |
+  | `vertical_direction` | up <-> down (pointed dripstone, sulfur spikes; `thickness` stays: it counts from the tip) |
+  | `up`, `down` | swapped on a block with both (mushroom blocks, the chorus plant, glow lichen, resin clumps); a wall's lone `up` (its post) and every pane, fence and wall connection are finalize()'s |
+
+  **No flipped twin** (`flipOf(...).exact === false`; invert refuses such a cell by default, naming it, so the design writes it after the
+  flip on its new floor; `{unflipped: 'keep'}` keeps it as is): a state whose one-way vertical bearing would stay the same way (floor
+  attachables: torches, carpets, rails, plants, signs, banners, candles, skulls, pots, beds, diodes, redstone wire, pressure plates, cake,
+  snow layers; ceiling ones: hanging signs, pale hanging moss), a hopper facing down, a crafter or jigsaw whose top is up. Measured over
+  every state of every kit block (1286 blocks, 35,723 states): every state an involution inside its domain; 30,117 exact; 5,606 without a
+  twin, by family: redstone_wire 1296, hanging_sign 832, plant 439, sign 416, bed 272, candle 272, banner 256, skull 224, carpet 179, rail 92,
+  diode 80, pressure_plate 62, double_plant 42, cake 41, flower_pot 40, multiface 23 (no face set), block 22 (the hopper facing down, the crafter's
+  and jigsaw's `<dir>_up`), snow_layer 8, ceiling_plant 5, torch 5 (`us.test.mjs` holds the list exactly).
+- **The inverted example** (`kit/designs/site/fit_suspend_inverted.mjs`, built into `kit/examples/fit_suspend_inverted/`, so the
+  bundled library holds it): a gabled cottage built standing and turned over, hung by its old floor slab from the 7bF fixture `overhang`'s
+  rock ceiling. The flip carries the keel's stairs (half top) and lining, the attic hatch (a trapdoor, now top-half in the floor), the door
+  (written under the deck, so its halves swap and it stands on the new floor), the windows, and two lanterns (standing on the old floor,
+  hanging from the new ceiling). Written after the flip: the ladder from the site's walk port `hatch` up through the keel, the balcony on two
+  chains, the bed, a chair, the spots. Its four hang points stay unwritten (above the lot). 680 blocks.
+- **`rule.suspended {scope}`** (`kit/lib/plan/compile.mjs`, `elevated.mjs`): the lots zones with `layout: elevated` in scope (absent: every
+  elevated zone of the plan) take **overhang affordances only** (suspend site lots on the rock ceilings; a canopy, trunk, ledge or water is
+  passed over), and each lot is marked **`inverted: true`** on the IR lot, the plan record's `siteLots` and the artifact's `$.lots[]` (beside
+  `site` and `affordance`, as SL put `affordance`: the SiteSpec wire is frozen). The rule answers `fits` once its zones fit or adjust
+  (they are its dependencies: `blocked DEPENDENCY` when one does not); a scope part that is not an elevated lots zone, or a plan with none,
+  answers the rule `refused NO_FEATURE` and leaves the zones as they are. The zone's NO_FEATURE says "no overhang ceiling to hang from".
+  Catalogue: `limits {scope: 32, layouts: [elevated], affordances: [overhang]}`; the note names the region-made-form limit.
+- **Feature:** the sidecar's `plan.suspendedBuilds` (appended last; `jobs.test` and `bundle.e2e` lists appended), mapped by ApiRules to
+  **`suspendedBuilds`**; `ArchitectApi.features()` javadoc (since NEXT); `ApiUSTest`.
+- **Survival** (Noah's rule: built structures are construction targets): nothing new in the mod. An inverted house is a suspend site lot's
+  design: PL's KEEP placement and SO's support order (`BuildOrder.bySupport` from `Builder.anchors`: its anchors are the top row's cells
+  under the rock) build it from the ceiling down; `SupportOrderFixtureTest` and `BuildOrderGoldenTest` now include it (every queue prefix
+  connected by the fixture volume's classes; bottom-up would float; the runtime gate over 12 seeds of partial stock; the support-order
+  dispatch).
+- **Gate step** `us-survival` (`tools/gate7cus.mjs`: SO's survival flow, `tools/gate7bso.mjs survival`, over the inverted house through
+  `GATE7BSO_HOUSES`; SO's default houses and its SO-b scaffold step unchanged), chain `7cus`, impact rule "7c US inverted builds".
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **The rule scopes elevated zones only.** SL's `layout.elevated` already makes overhang lots `suspend` site lots; the rule restricts a
+   zone to overhangs and marks its lots. A street zone in scope is refused, not turned elevated (upside_down's recorded zone is elevated).
+2. **"Floors from the ceiling down"** is the flip's own order: the standing ground floor hangs first under the rock; no storey is renumbered
+   (`storeys` unchanged).
+3. **States with no twin are refused, not guessed.** A torch has no ceiling form; inverting it would leave a floating cell. The design
+   writes floor furniture after the flip (the example does); `unflipped: 'keep'` exists for a caller who checks it after.
+4. **Anchors flip as points.** A spot's feet row does not survive a flip meaningfully, so designs set spots after it (the example does).
+5. **The designer is not told yet.** The site brief (DS) reads the SiteSpec, which has no `inverted` member (frozen); a design job for an
+   inverted lot learns it from the lot's own brief (upside_down's say "inverted"). Wiring `inverted` into the design request is a
+   leftover (it needs a request member, an API change).
+6. **"M15 necks and SC's fit:suspend on the result"** is the site checker's building-scale pair (`neck`, `cantilever`, `fit:suspend`) on
+   the inverted example's composite: region M15 judges region parts only (a lot's cells have no part: RM reading "judged cells").
+
+**The region-made-form limit, and the gate's overhang.** An OVERHANG made by this region's own forms can't host a site lot: the land is
+read before the plan (SB, BF). The gate uses the 7bF fixture `overhang`'s frozen volume built into the world first (a sculpted overhang),
+and the plan tests use natural (fixture-volume) rock shelves.
+
+**Readings (measured):** compact plan/0 (`plan/0#compact`, the sidecar's `expandSystemRefs`) **82,242** characters (main 40a59368: 81,873;
+the 90,000 spare line). The inverted example: 680 blocks, SC clean (no `fit:suspend`, `neck`, `cantilever`, `ports_met` finding), in game a
+queue of 525 cells. **upside_down re-planned** (the recorded `asks/upside_down.json`, honestly): as recorded on the asks survey (flat, no
+overhang) its hanging village answers **refused NO_FEATURE** (no affordance); with `rule.suspended` scoping it, **still waits**: refused
+NO_FEATURE "no overhang ceiling to hang from", the rule blocked. Over a natural overhang field near its stone (nine rock shelves 13 x 13,
+4 thick, 16 over the ground, in the fixture volume): the zone **fits**, all 9 lots hang inverted (suspend site lots, each `inverted`), the
+rule fits; its `chain_bridge_1` (a rope bridge between two hanging lots) answers **unsupported** (a link at a site lot's port is a catwalk,
+branch walk or tunnel: LP's). No other recorded ask has a `rule.suspended` part.
+
+**Tests moved by name:** e16 drops its bare `r_suspended` (it shipped); e20's `hang` (scope a street zone) answers **refused NO_FEATURE**;
+f7b-foundation and gm-c leave `rule.suspended` to us.test.mjs; sv.test's "six fit examples" leave the inverted house to us.test.mjs;
+PlanCatalogueTest's reserved-draft example is now `program.authored`; the schematic export goldens (kit and mod) gain the inverted house;
+SupportOrderFixtureTest and BuildOrderGoldenTest gain it. `valid/v7c_us_hanging.json` covers `rule.suspended` (two homes under two shelves).
+
+**Checks** ($0, sim only; ports 8900/8901, verifier 8902/8903; machine load 40-130 throughout):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1312/1312** at be9c2e24 (us.test 9/9: the property test over 35,723 states, the named families, invertBlueprint's mapping and its refusal, the example current and clean, the example's flipped states, rule.suspended's lots, its refusals and blocked answer, the catalogue flip, upside_down); first run at 79018555 1298/1303, the 5 named movers moved at f1454d2c/be9c2e24 |
+| mod `./gradlew build --offline --no-daemon` | pass; **1155 tests, 0 failures, 1 skipped** (ApiUSTest 2/2, PlanCatalogueTest 8/8, SupportOrderFixtureTest 3/3 and BuildOrderGoldenTest 1/1 with the inverted house, SchematicTest 6/6) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | tsc clean; **866/866** (62 files; jobs.test and bundle.e2e with `plan.suspendedBuilds` appended) |
+| api-compat | clean against the 0.48.0 and 0.47.0 apitest jars (932 references); the API package's diff is javadoc only |
+| catalogue golden | the diff is exactly `rule.suspended` (reserved -> supported, schemaVersion 1, def, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator; `tools/catalogue-since-check.mjs` pass |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0 |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (372 steps; `us-survival` in gate-chains.json, chain `7cus`, impact rule "7c US inverted builds (slice US)") |
+| gate run 1, **20261113-094450-change** at be9c2e24 | **PASS 1/1: us-survival 16/0**: the overhang fixture's land built (15,488 of 26,880 cells) and frozen; Sites.place in construction mode; a) deconstructed at 162/525 with 137 scaffolding cells standing: all 523 items fed back, no scaffolding item, E-flat 0; b) the crate at the hatch's landing (1 from the port, on dirt, outside the box); 137 scaffolding cells in one `architect:scaffold` CELL entry; save/quit/reload at 265/525 resumed with the gate rebuilt; built 525/525 from the hopper chain; 6 built prefixes recorded (100, 200, 277, 300, 400, 500), each connected to the rock by the independent scan over the fixture volume's classes; scaffolding down and released; items in = items out (fed 523 = paid 523 + 0 left); deconstructed: every item back, E-flat 0; c) identical to the INSTANT placement over 50,176 cells; that placement's Remove exact (E-flat 0) |
+| gate-verifier (strict: survival accounting) | **PASS** at 5f251f66: re-ran us-survival on its own run, **20261113-103950-change** (ports 8902/8903, started after HF's run 2 per the coordinator), **16/0**: queue 525, fed 523 = paid 523, partial deconstruct at 162/525 with 137 scaffold cells (all back, no scaffolding item, E-flat 0), 6 prefixes connected, restart at 265/525, identical to the instant placement over 50,176 cells, Remove exact. us.test 9/9, sl + sv 21/21 re-run. Review: no frozen signature changed, NEXT stamps, `inverted` only when true, the property test not vacuous, gate7bso's default unchanged. Non-blocking: SO-b's scaffold-dupe step is skipped for the inverted house (documented) |
+
+**Leftovers:** (1) a design job for an inverted lot is not told it is one (reading 5: the SiteSpec is frozen; a request member is an API
+change). (2) upside_down's chain bridge between hanging lots waits on a rope-bridge link kind (LP's). (3) The in-game region path (a plan
+whose land holds a natural overhang, realised with an inverted entry bound to its lot) is not gated: the gate places the inverted house by
+`Sites.place` on the sculpted fixture land, which is the same placement a site lot's realise item runs (SL: LAYERed in its frame under
+`SiteFit.with(site)`). (4) `tools/gate7bso.mjs` gained `GATE7BSO_HOUSES` (default unchanged; SO-b's scaffold step runs only on the default
+houses); so-survival was not re-run.
+
+### Slice CX as built (branch `slice/CX` off main 40a59368 (v0.64.0); versions NEXT; $0, sim only; recorded 2026-11-13)
+
+One connector for players (§3 row 11, SETTLEMENTS §7.8, N-7b-1): `Sites.placeConnector(ConnectorRequest)` on 7cF's frozen record (no 7b or
+7cF signature changed; the API diff is javadoc only), the plot marker's connector mode, and the drop warning's "build a link here". Feature
+`placeConnector`, advertised with the helper's `region.planCheck` (ApiRules; Api7cFTest no longer lists it as reserved).
+
+**How it works** (`apiimpl/ConnectorPlace`): the connector is a **one-part plan**: plan/0 `{planId: connector, connectors: [{id: link, kind,
+from: {anchor: cx_from}, to: {anchor: cx_to}, ...params}]}` over a claim of the two ends' x/z box plus 16 each side (rope's approach) and the
+level's height, the ends as the caller anchors. It is checked (`Regions.checkPlan`, the world's mode, LOAD_BOUNDED over the claim's chunks)
+and, when READY with the link `fits` or `adjusted`, realised (`Regions.realiseApproved`) under the request's opKey (both keyed: a retry finds
+the same check and region). So it is one region and one site group; every kind is the plan compiler's own (geometry, theming from the Style,
+S-THEME, typed refusals); in survival the link is RS's construction target with the connector's existing survival row (fed from the owner's
+stockpile in runs, refunded on removal). `PlaceResult.siteId` is the region id; `Regions.remove` takes it off.
+
+| Request | Answer |
+|---|---|
+| kinds | `rope_bridge`, `ladder`, `catwalk`, `rock_stair`, `spiral` (= plan/0's `stairs_around`), `stairs_around`; any other `FIELD_LIMIT` |
+| `params` | the kind's plan/0 members, copied onto the part; `id`, `kind`, `from`, `to`, `required` refused `FIELD_LIMIT`; `architect_mc:*` read, never copied |
+| ends | one cell, or more than 96 apart in x or z: `FIELD_LIMIT` |
+| mode | the world's (S-RS-5): AUTO builds INSTANT in creative, CONSTRUCTION in survival; CONSTRUCTION outside survival and INSTANT in survival `NOT_ALLOWED` |
+| a part the plan can't build | `placed: false`, `NO_LINK` with the kit's code first (`NO_LINK: NO_GAP ...`, `NO_CLIMB`, `SCHEMA` ...); nothing asked of the world |
+| the check's or the realise's typed refusal | the same reason as a refusal (never a failed future) |
+
+**The player's path:**
+- **The connector mode** (`client/placement/PlotMarker.startConnector`, `PlotHud`, `GhostRenderer.submitLink`): the plot marker's two marks are
+  the connector's ends (the cells looked at, feet level); F cycles the kind (rope bridge first; Shift+F back); the ghost is a brass post on each
+  end and a dotted line between; Enter on the second end places it on the integrated server (`ConnectorPlace.place` with the player's UUID as
+  the owner and the player as the actor, AUTO, a fresh opKey), phase `placing`; a refusal stays on the second end with the reason in the HUD
+  ("No rock stair here: NO_LINK: NO_CLIMB ..."); placed, the mode ends with a toast naming the region.
+- **The Build a link key** (`client/placement/BuildLinkKey`, `Keys.buildLink`, K by default, "Build a link (a connector)"): starts the connector
+  mode. **"Build a link here"**: the drop warning now ends "(build the way in: build a link here)" (`SiteFit.LINK_HERE`; the text before it
+  unchanged); `SiteFit.dropsOf` gives the same ports as data; when a site house is placed whose verdict had a drop, a toast says so with the K
+  hint, and K then starts the link with its first end at that port's outside cell (used once, forgotten after 10 minutes); the player marks the
+  other end.
+
+**Readings chosen** (the contract silent; the smallest reading each time):
+1. **A one-part plan, not a CELL path site.** SETTLEMENTS §7.8 said "a CELL path site like a 4e road; INSTANT only"; §3 row 11 (the contract)
+   names survival "as a construction site (each connector's existing survival row)", which is RS's region target. Cell sites refuse
+   CONSTRUCTION, and the connectors are compiled only by the plan compiler, so the plan path is the one that has every kind and its survival row.
+2. **The record has no level, owner or actor** (7cF froze it): the API call reads `params["architect_mc:dimension"]` (default the overworld)
+   and `params["architect_mc:owner"]` (default none: in survival a stockpile owner is needed, the region's own refusal says so); the player's
+   path passes the level, the UUID and the player directly (`ConnectorPlace.place(server, request, level, owner, actor)`).
+3. **`NO_LINK` for "the plan can't build it"** (7b's "a link can't reach"), the kit's code and message in the refusal's message; no new Reason.
+4. **The claim is the ends' box plus 16** (ROPE.approach), so a landing's approach fits; a longer approach than 16 would be clipped by the claim.
+5. **The spiral** is plan/0's `stairs_around`, which needs `around` (a part ref); with only two marked points it answers `malformed SCHEMA`
+   (typed): a spiral round a standing spire is not offered by marking points (a later slice could name a host). Ladder, catwalk and rock stair
+   are whatever the compiler answers for the two ends (cx.test: on flat lips catwalk `NO_GAP`, rock stair `NO_CLIMB`, ladder `adjusted`).
+6. **"From a site house's port to ground"** is the drop's first end plus a marked second end (the plan's anchors are x/z points: the compiler
+   finds the levels); no endpoint kind for a placed site was added (plan/0's `{build}` endpoint is a player build's door, not a site).
+7. **Removal** is the region's (`Regions.remove`, or Sites.removeGroup of its group); no player-facing remove was added beyond the region's
+   existing one (leftover).
+
+**Not covered by a unit or the gate:** ladder, catwalk and rock stair placed in game (their rows are RS's, gated in RS/7a; here they are
+plan-checked over the fixture in cx.test only); the drop-to-link path in game (BuildLinkKey's remember/press is driven by dev.cx.key in the
+connector-mode item, without a placed site house); multiplayer (the player path needs the integrated server, as ST's sample does).
+
+**Checks** ($0, sim only; branch head 62e30514 before the as-built):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1307/1307 (cx.test.mjs 4/4: the claim is the ends' box plus 16; the rope bridge READY, only the link's parts write, every cell within 2 of the points, rules clean, the second check byte-identical; survival one target `link`, free 0, its bill the creative bom; catwalk `NO_GAP`, rock_stair `NO_CLIMB`, stairs_around `SCHEMA`, ladder answers) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1158 tests, 0 failures, 1 skipped (ApiCXTest 5/5: the feature follows region.planCheck; the override over the API default; Java's plan, claim and anchors equal fixtures/plan/cx/cx01_ravine.json; the kinds and params; bad requests; Api7cFTest without placeConnector in its reserved list; ApiSTTest unchanged: the warning's start) |
+| sidecar | untouched; `npx tsc --noEmit -p .` clean |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 137/137 |
+| api-compat | clean: the 0.48.0 and 0.47.0 apitest jars; `--surface` of the 0.48.0 mod jar; the API diff against main is javadoc only (Sites.placeConnector) |
+| `node tools/step-inputs.mjs check` | clean (374 steps; cx-unit, cx-ingame, cx-survival entered; chain `7ccx`, impact rule "7c CX one connector") |
+| in game, run 20261113-110146-change at 62e30514 (ports 8906/8907, `--out artifacts/gate-runs-cx`) | **PASS** 3/3: `cx-unit` 2/0; `cx-ingame` 7/0 (dev client, creative: K starts the connector mode; a rock stair on the flat lips refused on the second end, NO_LINK: NO_CLIMB in the HUD, E-flat 0; the rope bridge marked between the two points, placed by the player's path as rg1, PLACED, 199 cells, the realised world equal to the check's virtual world (strict, 0 of 199 differ), Regions.remove E-flat 0); `cx-survival` 11/0 (headless: the INSTANT twin; INSTANT refused NOT_ALLOWED; the plan checked in survival: link fits, free 0, held 80, its bill; placed AUTO as a construction site, fed in 8 waves (199 items), 4 targets (c1-c4, part link) built; the bill put down equal to the check's item for item and the region's whole bill; the conservation sum exact built (199 paid standing) and removed (every item back); the world equal to the twin; E-flat 0). Run 20261113-105032 failed on two harness bugs (region ids are `rg<n>`; the marker's region removed without its owner as the requester, then waited on) |
+| gate-verifier (strict: survival accounting) | **PASS** at c36bce7b: the API diff javadoc only; no INSTANT path in survival; the bill the compiler's own; re-ran `cx-survival` on its own ports 8908/8909 (run 20261113-110622-change): 11/0, the target bills equal the check's item for item, the conservation sum exact built (199 paid) and removed (every item back), the twin 0 differ, E-flat 0. Non-blocking: the other kinds are plan-checked only; the drop-to-link path in game without a placed site house; the player-facing remove is the region's |
+
+**Gallery (glance, not awaited):** `artifacts/gate-runs-cx/20261113-110146-change/gate7c-cx/shots/`: `cx-marker.png` (the ends, the dotted line, the HUD
+with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
@@ -30326,3 +30810,455 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
 **The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
 before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
 charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.
+
+## Slice TJ, API and release hygiene (branch `slice/TJ` off main 3a5bd96d / v0.64.0; 2026-11-13; DEV MODE; tooling and docs; $0)
+
+From the boundary audit (`audits/boundary.md` §2, §3, §6, §7, §8, §9; `audits/ui.md` F10). Noah via parent session, 2026-11-13:
+"boundary: defaults". Additive API (Since NEXT); no behaviour change in game. Versions untouched.
+
+### As built
+1. **CG, compat roll and consumer jar.**
+   - **Finding.** The `apijars` step still ran the 0.42.0/0.41.0/0.40.1 jars (API 1.39.0), so the 18 minors 1.40.0-1.57.0 had no
+     old-jar check, and Steward's jar was never compared.
+   - **One file.** `tools/api-baselines.json` now holds main's latest three releases (v0.64.0, v0.63.0, v0.62.0: API 1.57.0, 1.56.0,
+     1.55.0) and the consumer jar (Steward). `gate6a apijars`, `api-compat --baselines` and `release-version.mjs` all read it.
+   - **The roll.** A release-version set puts the release being set first and drops the oldest; it prints the post-tag build command.
+   - **Building the files.** `tools/api-baselines-build.mjs build <tag> | build --missing | steward [--ref R]` builds them into the
+     main checkout's `artifacts/api-baselines/` (untracked). It uses detached `_work/` worktrees with their own Gradle-home clones,
+     `-PallowNoSidecar jar :apitest:jar` for a tag, and Steward's own cache for Steward. `tools/api-baselines.mjs list` shows what
+     is there. The builder is a separate module so the gate drivers' step-inputs never reach a Gradle call.
+   - **`--consumer <jar>`** checks the jar's api references. It fails on zero references and prints references into Architect
+     outside `api/` as WARN. Steward main 0c610dc9 (pinned 0.63.0): 347 classes, 539 api references, all present, none outside
+     `api/`. A jar with none (lab_ui 0.4.1) fails MISSING.
+   - **New gate step `api-compat`** (offline, about 30 s after unit-mod): the impact step of `api/**`, `apiimpl/**` and the baselines'
+     tools. It runs the 3 apitest jars' references, the 0.64.0 mod jar's whole surface and Steward's jar: 5 of 5 clean on this
+     branch.
+   - **How the coordinator gets Steward's jar:** docs/GATES.md "API compatibility baselines".
+2. **PUB-verify.**
+   - `tools/pub-verify.mjs <version>` checks the published package. The token comes from `GITHUB_TOKEN`/`GH_TOKEN` only and is never
+     printed.
+   - It checks that the jar, sources jar, pom and module answer 200, that the module's size, sha256 and sha1 match the downloaded
+     bytes, that the pom and the jar's fabric.mod.json name the version, and that the jar carries the plan/0 schema.
+   - Live: 0.60.0-0.64.0 complete. 0.53.0 INCOMPLETE (sources jar and module 404), exit 1, as the audit found by hand.
+   - Publish runs it after `publish` (`--retries 8`).
+3. **HK-api.**
+   - **Re-stamped by hand.** The 27 NEXT strings that shipped in released tags under `api/` and `apiimpl/` now carry their true
+     version: the first tag containing each line, cross-checked with the member's own Since:
+     - 1.43.0: designByKey, cancelDesign, planRevision, undoRevision, Reason's GR comment;
+     - 1.51.0: FS's follow, followAll, followers, landCheck;
+     - 1.52.0: adopt, unadopt;
+     - 1.53.0: the 7b comments, SiteGuards;
+     - 1.55.0: GP, QT, planCatalogue(kinds), the 7cF comments.
+   - **Reserved stubs.** The three reserved stubs (`Regions.compose`, `Regions.authorProgram`, `Sites.placeConnector`) now say
+     "is reserved: it throws until slice X ships (feature …)". Their javadoc already said "until then it throws".
+   - **The stamper and `--check`.** They now take every `NEXT` word in a Java comment or string literal (a small lexer; a code
+     identifier `NEXT` or `{@link #NEXT}` is untouched). A `NEXT` in a shipped resource fails `--check` and is never stamped.
+     Publish's `--check` therefore stops a tag carrying NEXT.
+   - **AU and PM are left reserved.** Scheduling them is Noah's open decision.
+4. **AV.**
+   - `ArchitectApi.apiVersion()` is a default returning `VERSION`. Its body compiles into Architect's own interface class, so it
+     answers the loaded version, not the consumer's inlined constant.
+   - The always-on feature `"apiVersion"` lets a consumer check before calling it (a pre-AV Architect throws NoSuchMethodError).
+   - api-compat passes.
+5. **SCH-res.**
+   - `kit/schemas/plan.json` was already in the jar at `/architect_mc/schemas/plan.json` (since C38, for PlanCatalogue); the audit
+     missed it.
+   - New: `Regions.PLAN_SCHEMA_RESOURCE` (that path, now a public contract) and the static `Regions.planSchema()` (the text).
+   - A Gradle task `checkJarPlanSchema` (part of `check`) reads the built jar and fails unless its copy equals the tree's byte for
+     byte: 131012 bytes, equal.
+6. **REL-table + SYNC.**
+   - A release-version set now writes the release row of `docs/RELEASES.json`: mod, API, kit, catalogue, date, the feature names
+     added over the last tag (parsed from ApiRules), the Steward RC state (`--steward-rc`) and the package state.
+   - It regenerates `docs/STEWARD-SYNC.md`'s "Architect ships" block between markers and rolls the baselines, all inside the set's
+     rollback. `--check` fails when the three disagree with the tree. `--sync` rewrites the block after a hand edit.
+   - `docs/RELEASES.json` was back-filled from the 80 v* tags. RC states come from Steward's ARCHITECT-ASKS for 0.40.0, 0.42.0 and
+     0.56.0-0.64.0; the rest read "see ARCHITECT-ASKS". The package state is verified for 0.60.0-0.64.0 and 0.53.0 (partial).
+   - STEWARD-SYNC's hand half was rewritten for 2026-11-13: Steward main 0c610dc, pinned 0.63.0, pin-064 held; what Steward uses;
+     what is in flight; shipped-but-unused ranked; the open asks (A2-1, CO's scope, AU/PM, the range); the agreed order through 8a-8c.
+   - **camelCase aliases.** `designOpKeys`, `wallLotsExactMassing` and `jobSystemRefs` are advertised beside the dotted names, which
+     are kept (`ApiRules.CAMEL_ALIASES`).
+7. **F10.** `fabric.mod.json` now declares lab_ui `>=0.4.1 <0.5.0`; `gradle.properties`' stale comment is fixed.
+
+### For Steward (RC areas)
+No runtime behaviour changes. The new surface:
+- `apiVersion()` and the feature `"apiVersion"`, for pin-guard;
+- `Regions.planSchema()` and `PLAN_SCHEMA_RESOURCE`, for schema-from-jar;
+- the camelCase feature aliases;
+- the three stubs' messages, which now say "throws until slice X ships".
+
+The lab_ui floor `0.4.1` matches Steward's `lab_ui_version`.
+
+### Leftovers
+- **Conflict risk.** The CO and CX sessions edit `Regions.compose` and `Sites.placeConnector`; TJ changed only their throw messages.
+- **Baselines need building at each release.** The post-tag `api-baselines-build.mjs build vX` is the coordinator's step. The files
+  are untracked in the main checkout.
+- **Per-gate flags.** The old per-gate `--gate…` flags of api-compat are kept (historical); new slices use `--baselines`.
+
+## Slice HF, player saves with the ledger (branch `slice/HF` off main 3a5bd96d, v0.64.0 + docs; 2026-11-13; DEV MODE, survival accounting strict; a patch release)
+
+An urgent hotfix from the survival-safety audit (`Minecraft/audits/safety.md` F1, F5, F9, N3). Scope: the player-save class only.
+F3, F4, F6, F7, F11, N1, N2 and N4 are out (the follow-up slice PS and others).
+
+### The finding (measured before the fix: gate run 1, `artifacts/gate-runs-hf/20261113-090018-change`, head 592613da)
+
+Five save cadences, not four: the journal (synchronous), chunks (about 10 s, eager), the stockpile ledger (autosave, stop, explicit
+`saveWithWorld`) and **player data** (`playerdata/<uuid>.dat`), saved only at autosave (`PlayerList.saveAll`), at stop and at each
+player's logout. JR's `saveWithWorld` called `saveAllChunks(true, false, false)`, which saves the scoreboard, the levels, `level.dat`
+and SavedData but never the players (checked with `javap` on 26.3). An explicit ledger save could therefore get ahead of the players.
+
+| case | the move | before | after the halt and restart | verdict |
+|---|---|---|---|---|
+| **D** (F1) | Insert from inventory (the crate screen's path) of 64 gravel, then a crate added (`addStockpileCrate`, the call `/steward stockpile <id> add` makes) | inventory 64, stock 0 | inventory 64, stock 64 | **mint 64** |
+| **X** (F5) | `dissolveStockpile` to the player (its own explicit save) | inventory 0, stock 149 | inventory 0, stock 0 (the pile gone) | **loss 149** |
+
+- In both cases, the halt (`dev.stockpile.halt`, nothing saved) came within 2 s of the explicit save. Neither case saw an autosave
+  (one ledger save each, the explicit one), and `playerdata` was not written.
+- **v0.63.0 has the same flaw.** Its explicit savers (create, removeCrate, dissolve, setFeedOrder, adopt, charge, scoop) call a plain
+  `save()`: ledger only, with no players and no chunks. Read from the code; no comparison run was made.
+- **How far back:** explicit ledger saves came in with the stockpile (Y1, v0.20.0), so every release since v0.20.0 has it.
+- **Singleplayer is the same case.** In 26.3 `level.dat` keeps only the host's UUID (`saveDataTag(worldData, UUID)`), and the host's
+  data is in `playerdata` like any player's. The headless gate's bot (a real `ServerPlayer`, saved to `playerdata`) represents it.
+- **The audit's other members of the class:**
+  - **F5, Take:** `withdraw`, then any later explicit save: a loss of the take (case T).
+  - **F9:** a deposit, then a logout (vanilla saves that player), then a crash: the ledger rewinds, so the deposit is lost (case L).
+  - **N3:** `BEFORE_SAVE` runs at `saveAllChunks`' head (Fabric's `MinecraftServerMixin`), and the chunk writes were queued, not
+    flushed. The ledger file therefore reached disk before the chunks did.
+
+### The fix (site/Stockpiles.java only, plus dev hooks)
+
+1. **`saveWithWorld`, server thread:**
+   1. `srv.getPlayerList().saveAll()`;
+   2. `srv.saveAllChunks(true, true, false)` (flushed), with the ledger write in `BEFORE_SAVE` suppressed for it (`explicitSave`);
+   3. then `save()` (the ledger).
+
+   The ledger is now never on disk ahead of the players or the chunks. Off the server thread the ledger alone is saved, as before; every
+   caller is on the server thread.
+2. **F9:** `ServerPlayConnectionEvents.DISCONNECT` queues `saveWithWorld` (`server.execute`, so it runs after `PlayerList.remove`
+   has saved the leaving player). It runs only when the ledger changed since its last save (`unsaved`, set by `changed()`, cleared by
+   `save()`).
+3. **Everything else unchanged.** Every explicit saver still calls `saveWithWorld`: create, removeCrate, dissolve, setFeedOrder,
+   adopt, charge and scoop. JR's behaviour is kept. No API change.
+
+Order inside one save: players, then chunks, then ledger. A crash between the player write and the ledger write (milliseconds) loses
+the move rather than duping it.
+
+**Cost** (measured in hf-crash run 3, one bot; `dev.stockpile.saved` reports `playerSaves`, `lastPlayerSaveMs` and `maxPlayerSaveMs`
+beside JR's world numbers):
+- **The players:** 0.01-3.9 ms per save.
+- **The whole explicit save** (players + flushed chunks + ledger): 17.9-76.7 ms. Before HF (unflushed, no players) it was 4.4-5.4 ms
+  in run 1. The difference is N3's flush: the save now waits for the chunk writes.
+- It stays under JR's 250 ms bound. These saves are rare (a crate, the feed order, a dissolve, an adoption, RS charge and scoop, and a
+  logout with an unsaved ledger).
+
+**Steward-visible:** none in normal play. After a crash the player's inventory and the stock now agree. A logout with an unsaved
+ledger change costs one flushed world save.
+
+### Gate
+
+- **hf-crash** (tools/lib/gatemhf.mjs, registered in tools/gate6dgr.mjs; chain `hf`; headless, $0).
+  - One survival world, a stockpile of 4 crates, a town realised with every target paused (a paused target still counts as
+    outstanding, so the accept rule takes its items, and nothing is consumed).
+  - Each case: `/save-all flush` (the baseline), the move, the explicit save, `dev.stockpile.halt`, the disk read, the restart.
+  - **D:** Insert from inventory, then a crate added.
+  - **L:** Insert from inventory, then `dev.bot.relog` (vanilla's disconnect path, then a new join from the saved file).
+  - **T:** the region removed (its stock becomes credit), a Take of half of it, then a crate added.
+  - **X:** dissolve to the player.
+  - Each asserts that the player's inventory + the stock after the restart equal the totals before the move, item for item, and that
+    the save wrote the player's file (`players/data/<uuid>.dat` in 26.3; its mtime moved).
+- **Units:** `StockpileSaveHFTest` (2), a source guard:
+  - `saveWithWorld` saves the players, then the chunks flushed, then the ledger;
+  - `BEFORE_SAVE` defers to it;
+  - DISCONNECT is registered;
+  - no plain `save()` of the ledger outside `BEFORE_SAVE`, `SERVER_STOPPING` and `saveWithWorld`;
+  - at least 7 `saveWithWorld` callers.
+- **New dev hooks:** `dev.stockpile.halt` (a crash with nothing saved, at a moment the driver picks) and `dev.bot.relog` (headless
+  only).
+
+### Results
+
+| case | the move | before (inventory + stock) | after the halt and restart | mint / loss |
+|---|---|---|---|---|
+| **D** | Insert from inventory 64 gravel, crate added | 64 + 0 | 0 + 64 | **0 / 0** (before HF: 64 / 0) |
+| **L** | Insert from inventory 64 gravel, logout and join | 64 + 64 | 0 + 128 | **0 / 0** |
+| **T** | region removed, Take 64, crate added | 0 + 128 | 64 + 64 | **0 / 0** |
+| **X** | dissolve to the player | 0 + 64 | 64 + 0 | **0 / 0** (before HF: 0 / 149) |
+
+**Gate runs** (`--out artifacts/gate-runs-hf`):
+- **Run 1** (592613da, the fix not in, 8922/8923): hf-crash D and X only.
+  - It reproduced the finding: D minted 64, X lost 149.
+  - It also showed that `playerdata` was not written; the check then looked in the wrong place (see run 2).
+- A run on 8922/8923 aborted in setup: slice TJ held the ports, and nothing ran. Then 8932/8933 (the coordinator's reassignment).
+- **Run 2** (8d8603e9): rs-survival-smoke **PASS** 40/0, jr-crash **PASS** 24/0; hf-crash FAIL 19/6.
+  - D, T and X already held (0 / 0).
+  - The playerdata check looked in `playerdata/`, but 26.3 writes `players/data/`.
+  - L lost 64: the bot's relog hook called `onDisconnect` directly, but Fabric fires DISCONNECT in `Connection.handleDisconnection`.
+    A client's logout goes through that path, so this was a harness bug, not a product bug.
+- **Run 3** (a9e7c334, the relog through the connection's disconnect path; the file path fixed; no product change since run 2):
+  hf-crash **PASS** 25/0.
+- **Strict verifier** (gate-verifier, re-ran hf-crash on 8934/8935 at ed0e5d40, `artifacts/gate-runs-hf-verify/20261113-111538-change`):
+  **PASS**, 25/0, the same per-case numbers (delta 0 in D, L, T and X; the player's file written each time).
+  - Its review found nothing blocking. Low or info notes:
+    - an autosave inside the 2 s baseline window could in theory mask a dupe, but the player-file check would still catch it;
+    - the bot's logout is equivalent to a client's (the same Connection path and Fabric event), but not proven against a real client;
+    - a ledger change that skips `changed()` doesn't arm the logout save. Coverage is unchanged by HF.
+- **Other checks** (at 8d8603e9):
+  - Gradle `build`: 1155 tests, 0 failures (1 skipped).
+  - Kit: 1303 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 372 steps clean.
+  - Sidecar `tsc --noEmit`: clean.
+  - api-compat against the 0.64.0 and 0.63.0 apitest jars and the 0.64.0 surface (2964 members): pass.
+
+### Left over (not HF)
+
+- From the audit, for the follow-up slice PS: F3 (the legacy pool), F4 (hopper deliveries are lost on a crash), F6 and F11 (an
+  unreadable file, `.bak`, `format`), F7, N1 (a finished undo's refund credit), N2 (filled shulker boxes) and N4.
+- A crash between the player write and the ledger write inside one explicit save (milliseconds) still loses that move. Closing it
+  would need a journal.
+
+## Slice PS, ledger saves (branch `slice/PS` off main 6e3e7223 with HF 423c506c merged; 2026-11-13; DEV MODE, survival accounting strict)
+
+The rest of the save-ordering class from the survival-safety audit (`Minecraft/audits/safety.md` F4, F6, F11, N1, N2), after HF.
+Noah's decision ("safety: defaults", via the parent session): F4 depth **(b)**, a changed ledger saved with the world at most every 10 s;
+no per-crate delivery journal. The coordinator's answers: `stockpiles.json` goes to **format 2**; the queue file's guard is in scope;
+start before RL.
+
+### The finding (measured before the fix: ps-crash's before-cases, the new saves switched off by `dev.stockpile.ps`)
+
+Two more members of JR's and HF's save-cadence class, both losses (no dupe):
+
+| case | the moves | before PS (the new saves off) | rule |
+|---|---|---|---|
+| **H0** (F4) | `/save-all flush`, a hopper line delivering 62 items into a stockpile crate in 25 s, a halt | **lost 55 of 62** (22.2 s of deliveries): the chest's and hopper's chunk saved eagerly, the ledger rewound to the flush | a hopper's source saves with its chunk (about 10 s); the stockpile ledger waited for the next autosave, up to 5 min (about 750 items per line) |
+| **K5E0** (N1) | a survival town built, `/save-all flush` (the ledger with its consumption), the region removed to REMOVED, 12 s, a halt | **lost 389 of 389** refunded items; the town stays removed | the refund is credited in memory; the queue file drops the removal and its `decCredit`, and the restored chunks save eagerly, while the ledger waits for autosave |
+
+Also read from the code and not reproduced (units instead): F6, F11 and N2 as the audit describes them.
+
+### The fix
+
+1. **F4 (b), the periodic ledger save** (`Stockpiles.periodicSave`, from the stockpile tick): when the ledger changed since its last
+   save (`unsaved`, HF's flag, set by `changed()`), and 200 ticks (10 s) have passed since the last ledger save of any kind (autosave,
+   explicit, periodic), `saveWithWorld` runs: HF's players, then the chunks flushed, then the ledger. It is logged only with
+   ARCHITECT_TRACE_STOCKPILE. A crash then loses at most about 10 s of deliveries: the ledger is saved with the chunks, and the vanilla
+   eager chunk saves (about 10 s) only move the source containers further ahead, the loss direction, never a dupe.
+   - It is the flushed save, not an unflushed one: an unflushed chunk save puts the ledger on disk before the queued chunk writes, and a
+     crash in that gap leaves a hopper's source saved full while the ledger counts the delivery (a dupe, N3's shape).
+   - A feed's consumption also sets `unsaved`, so every survival build that feeds gets one such save every 10 s, not only hopper chains.
+     Its cost is in the results.
+2. **F6, an unreadable file is never saved over:**
+   - `stockpiles.json`: the whole file is read before anything counts (a bad JSON, a stockpile that fails midway, a non-numeric or newer
+     format: the registry is cleared). Then `loadFailed`: `save()` and `saveWithWorld` refuse (logged once at ERROR), a new stockpile
+     or crate is refused (`create`, `addCrate`: it would never be saved and would reuse the file's ids), and the load is logged at
+     ERROR with the way back. HF's logout save and the periodic save go through the same guard.
+   - `architect-queue.json` (Placement): an unreadable file starts the queue empty as before, and now no queue save runs this session
+     (before PS the next save wrote an empty queue over it, dropping in-flight removals' refund credits, `decCredit`).
+   - **The status line:** `SaveGuards`. Each player who joins gets a red chat line naming the file, why, and the way back (fix it, or
+     restore its `.bak`, and reopen the world). `dev.stockpile.saved` reports `loadFailed` and why.
+   - **`.bak`:** after a good load each file is copied to `<file>.bak` (the last file that loaded; for `stockpiles.json` a format 1 file
+     stays format 1 there, for a downgrade).
+3. **F11, format 2:** `stockpiles.json` is written as `format: 2`, the same fields as 1 (JR's `paid` and `legacy`; RL's `books` join it
+   additively). Format 1 (and a file with no format) reads as before and is written back as 2; anything above 2 is refused through
+   `loadFailed`. A bump can't stop readers already released (they ignore `format`): it lets every reader from PS on tell a file with JR's
+   paid records from an older one and refuse a newer one. **For RL and JR-b:** write format 2; a later incompatible change bumps to 3.
+4. **N1, a finished undo's refund** (`Groups.credit`): when a member's refund credit books (not already credited by key), the ledger is
+   saved with the world (`saveWithWorld`) right there, before the caller drops the member from the saved removal and before `end`
+   drops the removal and its `decCredit`. A crash before that save resumes the removal and credits the key again (the saved ledger
+   lacks it); after it, the refund is on disk with the restored chunks.
+5. **N2, stacks with components are refused** (`CrateBlockEntity.plain`, in `wouldAccept` and `insert`, the one path for Insert from
+   inventory, hoppers, droppers and the dev feeds): a stack whose component patch is not empty (a filled shulker box, an enchantment, a
+   name, damage, a written book, block entity data) is never booked; it stays in the inventory, hopper or dropper. **Refused, not
+   carried:** the ledger counts items by id, so carrying components exactly would need per-stack storage, and no building target needs
+   such a stack. Edge cases: a shulker box emptied but still carrying an empty `container` component is refused too (the patch is not
+   empty); a pick-block item with block entity data is refused. Steward-delivered items are plain unless Steward builds them otherwise.
+
+No API change. Dev hooks: `dev.stockpile.ps` (TEST: `noPeriodic`, `noCreditSave`, `resetPeriodic`) and the periodic-save numbers in
+`dev.stockpile.saved`.
+
+### Gate
+
+- **ps-crash** (tools/lib/gatemps.mjs, registered in tools/gate6dgr.mjs; chain `ps`; headless, $0):
+  - **hopper:** a survival town with every target paused (nothing consumed; the paused town's first wave caps the need at about 150),
+    a chest over a hopper over a stockpile crate, one line per case (about 2.5 items/s). Each case: `/save-all flush`, 25 s of
+    deliveries, `dev.stockpile.halt`, the restart; chest + hopper + stock counted. **H0** (the periodic save off): the loss before PS,
+    recorded, never a dupe. **H1** (as built): at least 2 periodic saves in the 25 s, lost at most 12.5 s of deliveries at the measured
+    rate, never a dupe.
+  - **k5end:** a survival town fed until built, `/save-all flush` (the ledger saved with the consumption, as an autosave would), the
+    region removed to REMOVED, 12 s for the restored chunks' eager saves, the halt. **K5E0** (the credit's save and the periodic save
+    off): the refund is lost (the repro). **K5E** (the periodic save off, N1's save on): the stock after the restart equals the stock
+    before the halt; the town stays removed (0 cells differ); identity holds.
+- **Units:** `StockpileSavePSTest` (7): an unreadable file, a pile that fails midway and format 3 load nothing and are kept byte for
+  byte after `save()`; format 1 → 2 and 2 → 2; the `.bak`; N2's patch check (named, damaged, a container component, a removed default);
+  source guards for the periodic save, the refund credit's save and the queue file's guard.
+
+### Results
+
+| case | the moves | as built (PS) | mint / loss |
+|---|---|---|---|
+| **H1** | as H0, the periodic save on | 2 periodic saves in 25 s (12.5 ms each); **lost 8 of 63** (3.2 s of deliveries, bound 32 = 12.5 s at 2.52/s) | **0 / 8** (before: 0 / 55 of 62) |
+| **K5E** | as K5E0, the refund credit's save on (the periodic save off, to isolate N1) | 10 saves with the world during the removal (last 8.4 ms, max 52.0 ms); the stock after the restart equals the stock before the halt; identity holds; the town stays removed | **0 / 0** (before: 0 / 389) |
+
+**The cost of a save with the world** (players + chunks flushed + ledger; the periodic save is the same call, logged only with the trace).
+Every logged one in gate run 2, 159 saves across rs-survival-smoke, jr-crash, hf-crash and ps-crash: **p50 17.5 ms, p90 49.8 ms, max 714 ms**.
+Per world: rs-survival-smoke's six worlds p50 8.9-38.4 ms (max 165.5 ms, rs02c); jr-crash's K5 p50 21.4 ms with a 714 ms spike (RVU2
+493 ms, RVU2s 431 ms: the first flush after a long build, many dirty chunks). The p50 is under the coordinator's 50 ms; the spikes are
+above JR's 250 ms bound and come from flushing a whole build's chunks at once. A feeding build now pays one such save every 10 s, which
+keeps each flush small; the saves are recorded, not judged (timing bars never block a slice).
+
+**Gate runs** (`--out artifacts/gate-runs-ps`):
+- **Run 1** (58c027ce, 8922/8923): ps-crash only, FAIL 25/3. K5E0 lost 389 of 389 and K5E kept all of it. H0 lost 148 of 148, but the
+  paused town's first wave needs only about 150 items (149 gravel), so H0 took them all and H1 had nothing to deliver (a harness limit,
+  not a product failure).
+- **Run 2** (1fd50392; the hopper part one line per case, no product change): ps-crash **PASS** 27/0, hf-crash **PASS** 25/0, jr-crash
+  **PASS** 24/0, rs-survival-smoke **PASS** 40/0.
+- Then origin/main merged (HF's v0.64.1 release on main: versions and TJ's release table only, no code change).
+- **Strict verifier** (gate-verifier, re-ran ps-crash on 8924/8925 at b2ff6b68, `artifacts/gate-runs-ps-verify/20261113-123101-change`):
+  **PASS**, 27/0. H0 lost 60 of 62, H1 lost 7 (bound 31) with 2 periodic saves (13.7 ms), no mint in either; K5E0 lost 389 of 389, K5E
+  lost 0 (10 saves with the world, max 64.8 ms), the town removed in both. Its review: the save order holds (players, chunks flushed,
+  ledger) for the periodic and the credit saves; `loadFailed` guards every writer of both files (BEFORE_SAVE, SERVER_STOPPING, HF's
+  logout save, the periodic save, the explicit saves; create and addCrate refused); a pile that fails midway leaves nothing loaded; N2
+  covers every booking path (canPlaceItem, the face check, setItem, every `insert` caller). Non-blocking: the dev-only `LOADED` snapshot
+  isn't cleared after a failed load; two Javadocs had slipped off their methods (fixed after the run, docs only).
+- **Other checks:**
+  - Gradle `build` (at 58c027ce): 1164 tests, 0 failures (1 skipped).
+  - Kit: 1336 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 384 steps clean.
+  - Sidecar `tsc --noEmit`: clean.
+  - `node tools/api-compat.mjs --baselines`: all 5 clean (0.64.0, 0.63.0 and 0.62.0 apitest jars, the 1.57.0 surface, Steward's jar).
+
+**Steward-visible:** none in normal play. A deposit of a stack with components (a named or enchanted item, a filled shulker box) is now
+refused (it stays in the player's inventory or the hopper). After a crash, a settlement's stock is at most about 10 s behind. A world whose
+`stockpiles.json` is unreadable now keeps it and refuses stockpile writes (`createStockpile`, adding a crate: NOT_ALLOWED with the
+reason) instead of starting empty.
+
+**Steward RC areas:** the crate screen's Insert from inventory (components refused), Steward's stockpile create/add/adopt on a world
+whose file failed to load (NOT_ALLOWED), and survival builds' timing with the 10-s save.
+
+### Left over (not PS)
+
+- **Other refund credits of N1's shape**, not in the brief: a standalone road's restore (`RestoreJob`, C29), a standalone site's
+  deconstruct (`Builder.dropDeconstruction`), delta refunds and region overwrites credit the ledger in memory while their source record
+  goes away. The periodic save now bounds each to about 10 s; an explicit save at each credit (as in `Groups.credit`) would close them.
+- **Autosave's ledger write** still runs in `BEFORE_SAVE`, at `saveAllChunks`' head, before the chunk writes (HF reordered only the
+  explicit saves). A crash in the milliseconds of an autosave's chunk IO can leave the ledger ahead (N3's shape, a small dupe).
+  ps-crash didn't hit it.
+- **The window inside one save** (HF's leftover): between the player write and the ledger write a crash still loses that move.
+- `Stockpiles.fromPaid` takes from a target's paid record without `changed()`; its callers credit right after (which marks the ledger),
+  so nothing is lost today. RL edits it (F7).
+- **RL:** when it lands, merge it and re-run rl-crash. RL's `save()` refreshes the targets' cell books on every save, so with the 10-s
+  save it runs every 10 s while a build feeds: measure that refresh then.
+- F3 (JR-b), F7 (RL), F8, F10, F12, F13 and N4 stay with their owners in the audit.
+
+## Slice JR-b, the legacy pool (branch `slice/JR-b` off main e04dd6d6; 2026-11-13; DEV MODE, survival accounting strict)
+
+Audit `Minecraft/audits/safety.md` F3 (MINT, live) and F10 (LOSS), both GPT-confirmed. Noah's rule (via the parent session, "safety:
+defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as now; post-JR crash refunds stop drawing on it.**
+
+### The finding
+
+- JR's pool (`StockLedger.legacy`) is a file without `paid` turned into all-time `consumed - returned` at load, plus every adopted crate's
+  `placed`. A target key's refund, a delta's and a retake took what their record did not cover out of it, whoever the target was.
+- So in any world with survival builds before v0.64.0, and after any adoption (Steward adopts at every build), JR's measured crash
+  mints (K5, RVU2) still minted, up to the pool's size. The pool also went to whichever target refunded first.
+- F10: `Builder.step` (and every rescan) marks a queued cell that already holds its target as built, charging nothing (the player placed
+  it). At undo `tallyCell` classified it REFUND; JR caps that out of the target's record (or took it from the pool, F3). The undo still
+  writes the cell's before back, so the player's block went and nothing came back.
+
+### The rule (as built)
+
+1. **`legacySince`** (additive in `stockpiles.json`'s ledger, written while the pool is non-empty): when the pool was made, in
+   **wall-clock ms**, the clock of a target's `placedAt` (`System.currentTimeMillis()` at placement; a moved site keeps its own). The
+   brief said "world tick/time"; a game tick against a ms `placedAt` would be a silent bug, so it is ms.
+   - A file without `paid` (written before v0.64.0): converted at load, stamped with that load's time. Never restamped.
+   - A file with `paid` and a pool but no stamp (converted by v0.64.0, which did not stamp): `StockLedger.JR_RELEASED_MS`, the v0.64.0
+     release commit's time (40a59368, 2026-11-12 23:15:25 -0700). No v0.64.0 conversion predates it. The cost: a target placed after
+     that instant in a world still on 0.63 can't draw the pool (a narrow loss, never a mint).
+   - An empty pool has no stamp.
+2. **Only a target placed before `legacySince` draws on the pool**, after its own record: a target key's refund (`placedAt` from the
+   key's `@<placedAt>`), a retake through `fromPaid` (from its record's key) and a delta (`delta:<entry>:<site>`, from its site's
+   record's key). With no `placedAt` known (no record), never. A post-JR target's refund is its record only, as JR's.
+3. **An adoption never grows the pool.** `adopt` keys the crate's `placed` counts to the credit keys of the targets it fed, into their
+   paid records, so an adopted target's normal undo still refunds what its crate paid:
+   - a crate of one target (a site's own crate, a group crate with one member left): all of its placed counts;
+   - a shared crate: each target its built, non-free paid cost (`Builder.paidStanding`; a road its built, non-free cells), in placement
+     order, capped per item by the crate's placed count;
+   - what no target is given (a shared crate's placed counts for blocks no longer standing) goes nowhere and is logged: those blocks are
+     gone, so nothing refunds them. A pool fed by it would be a mint for any pre-JR target.
+   The old 5-argument `adopt` keys nothing (kept for callers and tests).
+4. **F10:** at a deconstruct, a queued cell that holds its target **and has a PT record** is the player's block: Architect's own writes
+   clear a cell's record, so a record there means the builder found the block standing and charged nothing, or the player replaced a
+   block they mined. It drops as PLAYER_DROP (its item back to the player) instead of a REFUND out of the record or pool. This applies only
+   when the cell's before is another block (else the undo writes the same block back and it stays) and not for an adopted site (PT2's own
+   rule). A block that holds the target only through CU's equivalence (another copper stage, farmland for dirt, coral, a turned path) with
+   a record is NONE: the undo's `holdsOurs` leaves it standing as the player's, so it neither drops nor refunds (the strict verifier's
+   case: a PLAYER_DROP there was a one-block dupe). `tallyCell` gains an overload taking the record; the old signature passes "no record".
+
+### What changes (Steward RC areas)
+
+- After a crash in a world upgraded from before v0.64.0: a post-JR target's undo, Remove or deconstruct refunds its paid record only,
+  no longer topped up from the pool (`Stock.returned` and the refund smaller in the mint case). Pre-JR targets: unchanged.
+- `adoptCrates`: the pool no longer grows; the adopted targets get paid records instead. An adopted target's undo refunds what its crate
+  paid for it (was: from the shared pool, first come first served).
+- A player's own block in a queued cell: at undo it drops at the site as the player's (`tally.playerBlocks`), not credited to the
+  stockpile. Steward's Refund views see it as player blocks.
+- No API change: no new method, record or enum. `stockpiles.json` gains `legacySince` (additive; older builds ignore it).
+
+### Gate
+
+- Units: `StockpileLegacyJRbTest` (the stamp and its save; a post-JR target never draws; a pre-JR one does; retakes and deltas by
+  `placedAt`; the v0.64.0 fallback; adoption keyed and capped, the pool untouched), `StockpilePaidJRTest` (the adopted crate no longer
+  pools), `LedgerLintTest.f10_aPlayersMatchingBlockDropsAsTheirsAtUndo` (the LedgerLint seam; fails without the fix).
+- In game: `jr-crash-v063` (tools/lib/gatem5jr.mjs, `node tools/gate6dgr.mjs jrcrashv063`), on the 6b client, $0.
+  - The fixture is "a world saved by v0.63.0": a world built on this build, stopped cleanly, its ledger stripped of what JR added
+    (`paid`, `legacy`, `legacySince`), then reopened. Between v0.63.0 and main, `stockpiles.json`'s format differs only in those fields.
+  - It runs RVU2 (a post-JR growth's undo after the halt), the pre-JR town's removal and an adoption of a legacy crate site.
+
+### Coordinator decisions (2026-11-13, these win)
+
+- **Q1, the v0.64.0 fallback: approved.** `StockLedger.JR_RELEASED_MS = 1_794_550_525_000L` is the committer time (`git log -1
+  --format=%ct 40a59368` = 1794550525, 2026-11-12 23:15:25 -0700) of commit 40a59368, the commit tag `v0.64.0` points at ("Release
+  v0.64.0"). The design leans towards a narrow loss over a mint.
+- **Q2, the stripped-file fixture: approved.** Evidence that v0.63.0 (tag commit 2b165279) and main e04dd6d6 write `stockpiles.json`
+  alike except for JR's ledger fields:
+  - `site/Stockpiles.java`: the file root `toJson()` (v0.63.0 and main both at line 1710, `format: 1`) and `Pile.toJson()` (both at line
+    158) are identical. The method bodies were diffed (`diff <(git show v0.63.0:… | sed -n '/toJson() {/,/^\t}/p') <(git show origin/main:…)`).
+  - `survival/StockLedger.java`: `toJson()` (v0.63.0 line 295, main line 452) differs only in the 7 lines JR added (main 463-469), which
+    write `paid` and, when non-empty, `legacy`. JR-b adds `legacySince`, so the fixture strips `paid`, `legacy` and `legacySince` from the
+    owner's ledger. After PS (main df77978f) the file root writes `format: 2`, so the fixture also sets it back to 1, as v0.63.0 wrote it
+    (PS reads both and refuses format 3). `legacySince` is additive within format 2: no format bump.
+- **The adopt split: approved** as built (rule 3).
+- **RL's `Stockpiles.fromPaid` (slice/RL a338b546):**
+  - RL caps a stockpile-fed target with no record by its pile's ledger, `p.ledger.fromPaid(targetId, items)`, for XR's retake and retakeOnce.
+  - Through the 2-argument call, JR-b's rule gives such a target nothing from the pool (its `placedAt` is unknown).
+  - JR-b adds `StockLedger.fromPaid(targetId, items, placedAt)`: with no record, the pool only for a target placed before
+    `legacySince`, else nothing. With a record, the record key's `placedAt` decides.
+  - When RL is on main, JR-b's merge passes the target's `placedAt` (`Site.placedAt()` / `Infra.placedAt()`) at RL's no-record call and at
+    the swap's `giveBackPaid`. So a pre-JR target keeps its pool share, and a post-JR one draws none.
+
+### Slice JR-b as built (versions: placeholders; recorded 2026-11-13)
+
+- Commits on `slice/JR-b` (the last adds the CU-equivalent NONE case): 73ac2d50 (the fix, units, the step), 6faf3fd3 (`fromPaid` with `placedAt`, decisions), 85aeae0c (merge of
+  main with HF v0.64.1 and PS df77978f; the fixture writes format 1), 852f74cb (the variant turns PS's periodic save off for the halt).
+- Checks (merged tree): `./gradlew build --offline` 1189 tests, 0 failures; kit 1303/1303; sidecar `tsc --noEmit` clean (sidecar not
+  touched); `node tools/step-inputs.mjs check` 385 steps clean; `node tools/api-compat.mjs --baselines` all 5 checks clean (Steward's jar
+  included). F10's lint case fails with the fix switched off, passes with it.
+- Gate runs (3 of 3, ports 8930/8931, `--only jr-crash-v063,jr-crash`):
+  - run 1 (6faf3fd3, before the merge): PASS, jr-crash 24/0, jr-crash-v063 21/0. RVU2 post-JR: consumed 231 live, 0 in the saved ledger,
+    came back 0 (minted 0, lost 0) with a pool of 389 units (stamped at that load); the pool 389 -> 389.
+  - run 2 (85aeae0c): PASS 24/0, 21/0; PS's 10-s save fell between the baseline and the halt (save #12 -> #13), so the growth had its
+    record: back 231 = saved 231. Not the F3 case: hence run 3.
+  - run 3 (852f74cb): PASS, jr-crash 24/0, jr-crash-v063 23/0. PS's periodic save off; save #12 -> #12, no new records; RVU2 came back 0 =
+    saved 0 (minted 0, live consumed 231), the pool 389 -> 389; the pre-JR town's removal refunded 389 units, all out of the pool
+    (389 -> 0); adoptCrates: the pool unchanged, the crate's placed counts became `site:s1@…`'s paid record.
+  - Evidence: `architect-mc/artifacts/gate-runs-jr-b/` (20261113-100140, -125608, -130525).
+- Strict gate-verifier (independent; diff review, the ledger units 39/0, `jr-crash-v063` re-run on 8936/8937 at 852f74cb: PASS 23/0, the
+  same numbers: pool 389 stamped at the load, save #5 -> #5, RVU2 back 0 = saved 0 with 231 consumed live, the pool 389 -> 389, the
+  pre-JR removal 389 from the pool, the adoption keyed; the fixture's format claim confirmed): **PASS**. It flagged one residual dupe
+  (not a regression): a CU equivalent with a PT record was PLAYER_DROP while the undo keeps it. Fixed after its run (rule 4's NONE case),
+  with the unit `LedgerLintTest.f10_tallyRuleWithARecord` (fails with the guard off); not in game (the gate steps don't place player
+  blocks), so after the 3 gate runs it is covered by the unit and the full build only.
+- Leftovers:
+  - RL's no-record `Stockpiles.fromPaid` and the swap's `giveBackPaid`: pass the target's `placedAt` to
+    `StockLedger.fromPaid(id, items, placedAt)` at RL's merge (the coordinator's merge order: RL, then JR-b).
+  - F10 for roads: `RoadBuilder.refundOf` counts every built cell (no free bit, no PT check), so a player's matching block in a queued
+    road cell still refunds out of the road's record (capped: a loss, never a mint). Same fix shape; not built.
+  - F10 with PT tracking off (the world rule): no record, so the old REFUND (capped) stands.
+  - A PT-recorded player block in a queued cell still counts in `Builder.paidStanding` (Stockpiles' audit; RL's reconcile may charge it).

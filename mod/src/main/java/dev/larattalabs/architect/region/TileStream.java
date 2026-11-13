@@ -328,6 +328,8 @@ public final class TileStream {
 		public volatile Packed.@Nullable Tile cells;
 		public volatile @Nullable String error;
 		public volatile boolean done;
+		/** (7c SR) the payload's sha (the helper's, checked on decode): gate evidence for the ghost's cells ({@code dev.region.ghost}). */
+		public volatile @Nullable String sha;
 		final List<byte[]> frames = new ArrayList<>();
 		int nextSeq;
 		final CompletableFuture<PreviewTile> future = new CompletableFuture<>();
@@ -452,6 +454,7 @@ public final class TileStream {
 		CompletableFuture.runAsync(() -> {
 			try {
 				tt.cells = Packed.decode(Packed.payload(tt.frames, sha));
+				tt.sha = sha;
 			} catch (Exception e) {
 				tt.error = "the preview tile could not be read: " + e.getMessage();
 			}

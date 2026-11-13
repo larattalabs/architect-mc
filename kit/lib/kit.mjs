@@ -12,6 +12,7 @@ import { nbt } from './nbt.mjs';
 import { BLOCKS, normalize, qualify, isCube, familyOf, info } from './blocks.mjs';
 import { fitOf } from './siteFits.mjs';
 import { SITE_HELPERS } from './siteHelpers.mjs';
+import { invertBlueprint } from './invert.mjs';
 
 /** DataVersion of Minecraft 26.3 (version.json world_version in the 26.3 jar). */
 export const DATA_VERSION = 5023;
@@ -1126,6 +1127,13 @@ export class Blueprint {
     return this;
   }
 
+  /**
+   * (7c US) Turn what is written so far upside down (lib/invert.mjs): y flips, with every block state given its flipped twin (stairs,
+   * slabs, trapdoors, doors, lanterns, ...), the ports, anchors and interior mapped; the floors then run from the ceiling down. Write the
+   * site's attachments (ports, chains, ladders, spots, floor furniture) after it. `opts.unflipped`: 'refuse' (default) or 'keep'.
+   */
+  invert(opts) { return invertBlueprint(this, opts); }
+
   /** Written blocks as { x, y, z, state:{name,props}, nbt } sorted by y, z, x. */
   entries() {
     this.finalize();
@@ -1235,6 +1243,8 @@ export class Blueprint {
     if (this.massing) s.massing = true;
     // (0b) a mirrored build (lib/mirror.mjs): the axis that flipped
     if (this.mirrored) s.mirrored = this.mirrored;
+    // (7c US) an inverted build (lib/invert.mjs): absent for every other design, so their bytes do not move
+    if (this.inverted) s.inverted = true;
     // (6c PT2) a captured source (lib/adopt.mjs): an adopted build's cells as the world held them
     if (this.captured) s.sourceKind = 'captured';
     // (7b SV) a site-aware design: its fit; the site it was built into (the site spec's wire form, as api.SiteSpec.fromWire reads it);

@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TARGETS, checkTree, findPlaceholders, readVersions, recutGolden, setVersions, verifyRecut } from '../../tools/release-version.mjs';
+import { TARGETS, checkTree, featureNames, findPlaceholders, javaNextOffsets, readVersions, recutGolden, releaseDocProblems, setVersions, syncBlock, verifyRecut } from '../../tools/release-version.mjs';
+import { rollBaselines } from '../../tools/api-baselines.mjs';
 import { releaseContext } from '../../tools/release-context.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -163,4 +164,80 @@ test('check: a constant out of step, a lagging golden, a version below the last 
     fs.appendFileSync(a, `mod_version=${CUR.mod}\n`);
     assert.match(checkTree(t, { lenient: true, tag: TAG }).problems[0], /2 lines match the mod_version pattern/);
   } finally { fs.rmSync(t, { recursive: true, force: true }); }
+});
+
+test('(TJ HK-api) every NEXT in a Java comment or string is a placeholder; a code NEXT or a {@link #NEXT} is not; the stamper takes them all', async () => {
+  const src = [
+    '/** A reference: {@link #NEXT} and Foo.NEXT stay. Since NEXT. */',
+    'interface X {',
+    '\tint NEXT = 1; // (API NEXT) a trailing comment',
+    '\tdefault void m() { throw new UnsupportedOperationException("X.m needs Architect API NEXT"); }',
+    "\tchar C = 'N'; String T = \"\"\"",
+    '\t\ttext NEXT block\"\"\";',
+    '\tint y = NEXT * 4; /* NEXTER and NEXT_UP are words of their own */',
+    '}',
+  ].join('\n');
+  const offs = javaNextOffsets(src);
+  const lines = offs.map((o) => src.slice(0, o).split('\n').length);
+  assert.deepEqual(lines, [1, 3, 4, 6]);
+  const { t } = tempTree();
+  try {
+    await regenGolden(t);
+    const f = path.join(t, 'mod/src/main/java/dev/larattalabs/architect/api/Planted.java');
+    fs.writeFileSync(f, src);
+    assert.equal(findPlaceholders(t).filter((x) => x.file.endsWith('Planted.java')).length, 4);
+    // a shipped resource with NEXT: reported by the strict check (never stamped)
+    const r = path.join(t, 'mod/src/main/resources/architect/notes.json');
+    fs.mkdirSync(path.dirname(r), { recursive: true });
+    fs.writeFileSync(r, '{ "note": "works from API NEXT on" }\n');
+    assert.ok(findPlaceholders(t).some((x) => x.file.endsWith('notes.json')));
+    fs.rmSync(r);
+    const s = setVersions(t, { ...NEW, tag: TAG, goldens: false });
+    assert.equal(s.stamped.filter((x) => x.file.endsWith('Planted.java')).length, 4);
+    const j = fs.readFileSync(f, 'utf8');
+    assert.ok(j.includes('{@link #NEXT} and Foo.NEXT stay. Since ' + NEW.api + '.') && j.includes('int NEXT = 1; // (API ' + NEW.api + ')') && j.includes('needs Architect API ' + NEW.api + '"')
+      && j.includes('text ' + NEW.api + ' block') && j.includes('int y = NEXT * 4;') && j.includes('NEXTER and NEXT_UP'), j);
+    assert.deepEqual(findPlaceholders(t), []);
+  } finally { fs.rmSync(t, { recursive: true, force: true }); }
+});
+
+test('(TJ REL-table) a set writes the release row, the STEWARD-SYNC block and the api baselines\' roll; --check holds them in step', async () => {
+  const { t } = tempTree();
+  try {
+    await regenGolden(t);
+    for (const f of ['docs/RELEASES.json', 'docs/STEWARD-SYNC.md', 'tools/api-baselines.json', 'tools/api-baselines.mjs', 'mod/src/main/java/dev/larattalabs/architect/apiimpl/ApiRules.java']) {
+      fs.mkdirSync(path.dirname(path.join(t, f)), { recursive: true });
+      fs.copyFileSync(path.join(ROOT, f), path.join(t, f));
+    }
+    assert.deepEqual(releaseDocProblems(t, CUR), [], 'this tree\'s release docs are in step');
+    // a feature name added since the "last tag": the tag here is this tree's, so add one to the temp ApiRules
+    const ar = path.join(t, 'mod/src/main/java/dev/larattalabs/architect/apiimpl/ApiRules.java');
+    fs.writeFileSync(ar, fs.readFileSync(ar, 'utf8').replace('"apiVersion");', '"apiVersion", "tjProbe");'));
+    // (a temp tree has no git: the last tag's names are passed in, as the tool reads them with git show <tag>:ApiRules.java)
+    const featuresBefore = featureNames(fs.readFileSync(path.join(ROOT, 'mod/src/main/java/dev/larattalabs/architect/apiimpl/ApiRules.java'), 'utf8'));
+    const s = setVersions(t, { ...NEW, tag: TAG, goldens: false, stewardRc: 'pass', date: '2099-01-02', featuresBefore });
+    assert.deepEqual(s.docs, ['docs/RELEASES.json', 'docs/STEWARD-SYNC.md', 'tools/api-baselines.json']);
+    const doc = JSON.parse(fs.readFileSync(path.join(t, 'docs/RELEASES.json'), 'utf8'));
+    assert.deepEqual(doc.releases[0], { tag: `v${NEW.mod}`, mod: NEW.mod, api: NEW.api, kit: NEW.kit, catalogue: Number(NEW.catalogue), date: '2099-01-02', featuresAdded: ['tjProbe'], stewardRc: 'pass', publish: 'unverified' });
+    assert.equal(doc.releases[1].mod, CUR.mod);
+    const sync = fs.readFileSync(path.join(t, 'docs/STEWARD-SYNC.md'), 'utf8');
+    assert.ok(sync.includes(syncBlock(doc)) && sync.includes(`| v${NEW.mod} | 2099-01-02 | ${NEW.api} |`) && sync.includes("## Steward's side"), 'the block is regenerated, the hand half kept');
+    const b = JSON.parse(fs.readFileSync(path.join(t, 'tools/api-baselines.json'), 'utf8'));
+    assert.equal(b.releases.length, 3);
+    assert.deepEqual(b.releases[0], { tag: `v${NEW.mod}`, mod: NEW.mod, api: NEW.api, dir: `v${NEW.mod.replace(/\./g, '')}` });
+    assert.equal(b.releases[1].mod, CUR.mod);
+    assert.deepEqual(releaseDocProblems(t, NEW), []);
+    // out of step: a hand edit of the block, a baseline list not rolled
+    fs.writeFileSync(path.join(t, 'docs/STEWARD-SYNC.md'), sync.replace(`| v${NEW.mod} |`, '| v9.9.9 |'));
+    assert.ok(releaseDocProblems(t, NEW).some((x) => x.includes('generated block')));
+    assert.ok(releaseDocProblems(t, { ...NEW, mod: patch(NEW.mod, 1) }).some((x) => x.startsWith('tools/api-baselines.json')));
+  } finally { fs.rmSync(t, { recursive: true, force: true }); }
+});
+
+test('(TJ) featureNames reads JAVA_FEATURES, the sidecar mappings, out.add and the camelCase aliases; rollBaselines keeps three', () => {
+  const src = 'JAVA_FEATURES = java.util.Set.of("a", // c\n "b");\n case "x.y" -> "c";\n out.add("d");\n CAMEL_ALIASES = java.util.Map.of("e.f", "eF");';
+  assert.deepEqual(featureNames(src), ['a', 'b', 'c', 'd', 'eF']);
+  const b = { releases: [{ mod: '0.3.0' }, { mod: '0.2.0' }, { mod: '0.1.0' }], consumers: [] };
+  assert.deepEqual(rollBaselines(b, { mod: '0.4.0', api: '1.4.0' }).releases.map((r) => r.mod), ['0.4.0', '0.3.0', '0.2.0']);
+  assert.deepEqual(rollBaselines(b, { mod: '0.3.0', api: '1.3.0' }).releases.map((r) => r.mod), ['0.3.0', '0.2.0', '0.1.0'], 'a re-run replaces, never duplicates');
 });

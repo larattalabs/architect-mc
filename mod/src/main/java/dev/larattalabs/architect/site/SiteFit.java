@@ -629,6 +629,23 @@ public final class SiteFit {
 	 */
 	public static List<String> drops(SiteSpec s, int sx, int sz, TerrainFit.World w) {
 		List<String> out = new ArrayList<>();
+		for (Drop d : dropsOf(s, sx, sz, w)) {
+			out.add(DROP + ": port " + d.port() + " faces " + d.facing() + " at " + d.at().getX() + "," + d.at().getY() + "," + d.at().getZ()
+				+ " with no ground to stand on (build the way in: " + LINK_HERE + ")");
+		}
+		return out;
+	}
+
+	/** (7c CX) The words the drop warning gains (CONTRACT "Phase 7c" §3 row 11): the client's Build a link key starts a connector from it. */
+	public static final String LINK_HERE = "build a link here";
+
+	/** (7c CX) A port that opens onto a drop: its name, the side it faces and the world cell just outside it (a link's first end). */
+	public record Drop(String port, String facing, BlockPos at) {
+	}
+
+	/** (7c CX) {@link #drops}' ports as data, in the same order (the client's "build a link here" starts a connector at {@code at}). Pure. */
+	public static List<Drop> dropsOf(SiteSpec s, int sx, int sz, TerrainFit.World w) {
+		List<Drop> out = new ArrayList<>();
 		if (s == null || s.lotId() != null || s.fit() == FitMode.ON_PAD) {
 			return out;
 		}
@@ -647,7 +664,7 @@ public final class SiteFit {
 			int y = o.getY() + p.atDesign().getY();
 			int z = o.getZ() + r[1] + f.getStepZ();
 			if (!open(w.flags(x, y, z)) || !open(w.flags(x, y + 1, z)) || !siteSolid(w.flags(x, y - 1, z))) {
-				out.add(DROP + ": port " + p.name() + " faces " + f.getName() + " at " + x + "," + y + "," + z + " with no ground to stand on (build the way in)");
+				out.add(new Drop(p.name(), f.getName(), new BlockPos(x, y, z)));
 			}
 		}
 		return out;

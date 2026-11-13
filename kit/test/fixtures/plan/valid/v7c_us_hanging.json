@@ -1,0 +1,90 @@
+{
+ "about": "(7c US) rule.suspended: two hanging homes under two synthetic rock overhangs (slabs of rock 4 thick, 15 x 25, their undersides 16 over the flat claim) read from the fixture volume through the check's two-plan flow: the zone's lots are suspend site lots on the overhangs only, each marked inverted (its design built upside down, bp.invert()), its site and affordance on the artifact's lots[]",
+ "terrain": {},
+ "anchors": {
+  "ceiling": [
+   1108,
+   65,
+   2080
+  ]
+ },
+ "volume": {
+  "edits": [
+   {
+    "box": [
+     1090,
+     81,
+     2068,
+     1104,
+     84,
+     2092
+    ],
+    "class": "ROCK"
+   },
+   {
+    "box": [
+     1112,
+     81,
+     2068,
+     1126,
+     84,
+     2092
+    ],
+    "class": "ROCK"
+   }
+  ]
+ },
+ "covers": [
+  "rule.suspended"
+ ],
+ "plan": {
+  "schemaVersion": "plan/0",
+  "zones": [
+   {
+    "id": "hanging",
+    "kind": "standard",
+    "size": {
+     "preset": "M"
+    },
+    "where": {
+     "near": {
+      "anchor": "ceiling",
+      "within": 8
+     }
+    },
+    "program": {
+     "layout": "elevated",
+     "lots": [
+      {
+       "id": "home_a",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small home hung upside down from the rock."
+      },
+      {
+       "id": "home_b",
+       "type": "cabin",
+       "size": [
+        9,
+        9
+       ],
+       "brief": "A small home hung upside down from the rock."
+      }
+     ]
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "hang_inverted",
+    "kind": "suspended",
+    "scope": [
+     "hanging"
+    ]
+   }
+  ]
+ }
+}

@@ -14,6 +14,9 @@
 //                              realiseApproved: PLACED, the realised world equal to the check's virtual world (strict), the entrance as
 //                              the artifact's secrets say, Remove E-flat 0; the secrets: absent from the check's preview and siteplan
 //                              without the ask, present with PlanRequest ext architect_mc:secrets (the same artifact)
+//     ghost     (hr-ghost)     (slice SR, S-7c-4) creative, on the flat base: x01 checked, its region ghost shown near the room: every
+//                              shown tile's cells (payload sha and count) equal the kit's evalTile of the plan with the meta's secret
+//                              parts unwritten (the host as before the room); the room's tile differs from the plan with the room
 //     survival  (hr-survival)  survival (the RS base), strict (the verifier re-runs it): x01 and x03 (its cottages bound to RS's rs_hut)
 //                              each checked in survival (the hollow free, held 0; the entrance its own target with its bill), an INSTANT
 //                              twin, realised and fed from the owner's stockpile in waves: PLACED and built, the targets' bills equal the
@@ -207,6 +210,71 @@ steps.ingame = async () => {
   out.x01 = await creative('x01', fixture('x01_mountain_room'), 'vault', (b) => base(b.entrance) === base(b.over) && /stone|deepslate/.test(base(b.entrance)));
   out.x02 = await creative('x02', fixture('x02_waterfall_hollow'), 'hollow', (b) => base(b.entrance) === 'minecraft:air' && base(b.over) === 'minecraft:air');
   out.x03 = await creative('x03', fixture('x03_cellar'), 'cellar', (b) => /_trapdoor$/.test(base(b.entrance)) && base(b.under) === 'minecraft:ladder');
+  return out;
+};
+
+// ------------------------------------------------------------------ ghost (slice SR: the region ghost hides the room, S-7c-4)
+
+/**
+ * (7c SR) x01's region ghost (previewRegion) near the hidden room: every shown tile's payload sha equals the kit's own evalTile of the
+ * plan dir's IR over windowFromSurvey with the plan meta's secret parts emptied (the host as before the room, as the previews draw it);
+ * the tile holding the room differs from the un-hidden evaluation (so the check is not vacuous). Nothing is placed.
+ */
+steps.ghost = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  const s = await G.site(ctx, 'hr ghost', fixture('x01_mountain_room'), { creative: true });
+  const ck = await G.check(ctx, 'ghost', s);
+  check(ck.check?.overall === 'READY' && !!ck.check?.checkId && !!ck.check?.artifactSha, `ghost x01: Regions.checkPlan ${ck.check?.overall} (check ${ck.check?.checkId})`);
+  if (!ck.check?.checkId) return out;
+  const art = await call('dev.region.artifact', { sha: ck.check.artifactSha, body: true }, 60_000);
+  const body = art.artifact?.body ? (typeof art.artifact.body === 'string' ? JSON.parse(art.artifact.body) : art.artifact.body) : null;
+  const sec = (body?.secrets ?? []).find((q) => q.part === 'vault');
+  const room = sec?.room;
+  const dir = planDir(ck.check.checkId);
+  const { loadPlanDir } = await imp('lib/lint/vworld-fixtures.mjs');
+  const { evalTile } = await imp('lib/realise.mjs');
+  const { windowFromSurvey } = await imp('lib/region/survey.mjs');
+  const F = loadPlanDir(dir);
+  const hide = Object.entries(F.meta?.parts ?? {}).filter(([, m]) => m?.secret === true).map(([id]) => id).sort();
+  out.hide = hide;
+  out.room = room ?? null;
+  check(!!room && hide.length === 2 && hide.every((id) => F.ir.parts.some((p) => p.id === id && p.ops.length > 0)), `ghost x01: the plan meta marks the room's parts secret (${json(hide)}), the artifact names the room's box ${json(room)}`);
+  if (!room) return out;
+  const roomKey = `${Math.floor(((room[0] + room[3]) / 2) / 64)},${Math.floor(((room[2] + room[5]) / 2) / 64)}`;
+  // stand over the room (the ghost loads the tiles within NEAR = 64)
+  const cx = Math.round((room[0] + room[3]) / 2), cz = Math.round((room[2] + room[5]) / 2);
+  await L.tp(cx, Math.min(310, (s.W.maxY ?? 120) + 40), cz, 0, 90);
+  const g = await call('dev.region.ghost', { planId: ck.check.checkId }, 120_000);
+  out.show = g;
+  // the ghost renders on a client (the step's host is the client, not the headless server)
+  check(!g.refused, `ghost x01: dev.region.ghost shows the check's plan ${ck.check.checkId}${g.refused ? `: refused ${json(g.refused)}` : ` (${g.tiles} tiles)`}`, g.refused ?? null);
+  if (g.refused) { await L.leaveWorld(); return out; }
+  let st = null;
+  const t0 = Date.now();
+  for (;;) {
+    await L.settle(3000);
+    st = await call('dev.region.ghost', {}, 30_000);
+    const shown = Object.keys(st.shown ?? {});
+    if ((shown.length > 0 && shown.length >= (st.tilesRequested ?? 0) && shown.includes(roomKey)) || (st.errors ?? []).length || Date.now() - t0 > 240_000) break;
+  }
+  await call('dev.region.ghost', { off: true }, 30_000).catch(() => null);
+  out.state = { tiles: st?.tiles, tilesRequested: st?.tilesRequested, tilesShown: st?.tilesShown, cellsShown: st?.cellsShown, errors: st?.errors ?? [], shown: st?.shown ?? {} };
+  const hidden = { ...F.ir, parts: F.ir.parts.map((p) => (hide.includes(p.id) ? { ...p, ops: [] } : p)) };
+  const rows = [];
+  for (const [key, t] of Object.entries(st?.shown ?? {})) {
+    const w = windowFromSurvey(F.survey, key);
+    const host = evalTile(hidden, key, w, { blobs: F.blobs });
+    const full = evalTile(F.ir, key, w, { blobs: F.blobs });
+    rows.push({ key, cells: t.cells, sha: t.sha, host: host.sha, hostCount: Number(host.count), full: full.sha, fullCount: Number(full.count) });
+  }
+  out.tiles = rows;
+  const bad = rows.filter((r) => r.sha !== r.host || r.cells !== r.hostCount);
+  const at = rows.find((r) => r.key === roomKey);
+  check(rows.length > 0 && bad.length === 0 && !(st?.errors ?? []).length, `ghost x01: ${rows.length} shown tile(s), each tile's cells (sha and count) equal the host without the room (the kit's evalTile with ${json(hide)} unwritten)${bad.length ? `; differ ${json(bad.map((r) => r.key))}` : ''}${(st?.errors ?? []).length ? `; errors ${json(st.errors)}` : ''}`, { bad, errors: st?.errors });
+  check(!!at && at.full !== at.host && at.sha === at.host, `ghost x01: the room's tile ${roomKey} is shown and differs from the plan with the room (${at ? `${at.cells} cells; with the room ${at.fullCount}` : 'not shown'}): the ghost does not show the room`, at ?? null);
+  await L.leaveWorld();
   return out;
 };
 

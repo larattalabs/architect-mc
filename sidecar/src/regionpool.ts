@@ -35,6 +35,11 @@ export interface TileTask {
   blobs?: () => Record<string, Uint8Array>;
   /** (6b) a ghost tile: the plan survey (windows come from it, in the worker) */
   survey?: { id: string; bytes: () => Uint8Array };
+  /**
+   * (7c SR, S-7c-4) a ghost tile: the parts the plan meta marks `secret` (a hidden room and its entrance), evaluated with no ops, as
+   * the kit's previews draw them (as if unwritten): the ghost never shows a secret
+   */
+  hide?: readonly string[];
 }
 
 export type TileResult =
@@ -293,7 +298,7 @@ export class TilePool {
           // the worker keeps as many (WORKER_SURVEYS)
           while (s.surveys.length > WORKER_SURVEYS) s.surveys.shift();
         }
-        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, preview: true, surveyId: t.survey.id, ...(slow ? { slow: true } : {}) });
+        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, preview: true, surveyId: t.survey.id, ...(t.hide?.length ? { hide: [...t.hide] } : {}), ...(slow ? { slow: true } : {}) });
       } else {
         if (!t.heights) throw new Error('a tile needs heights');
         const heights = new Uint8Array(t.heights.byteLength);

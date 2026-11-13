@@ -34,6 +34,7 @@ import { simFaults as simFaultsOf } from './sim.js';
 import { Follows, view as followView } from './follows.js';
 import { Regions } from './regions.js';
 import { RegionDesigns } from './regiondesign.js';
+import { ComposeDesigns } from './compose.js';
 
 export type { RunOutcome } from './bibles.js';
 
@@ -93,7 +94,7 @@ import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof
 import { SiteVariants, siteVariantView } from './sitevariants.js';
 import { Programs, programView } from './programs.js';
 import { entrySite, keepSiteVolume, siteVolumeFile, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
-import { siteSize } from './protocol.js';
+import { allowsComposite, siteSize } from './protocol.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -167,6 +168,8 @@ export class Sidecar {
   readonly regions: Regions;
   /** (6b) template-first region designs (region.design) */
   readonly regionDesigns: RegionDesigns;
+  /** (7c CO) the standalone composer (region.compose) */
+  readonly composeDesigns: ComposeDesigns;
   /** (6d FS) copies following their source (entry.follow, entry.followAll) */
   readonly follows: Follows;
   /** (7b DS) site variants (Designs.siteVariant): a source's program re-run on another site, $0 */
@@ -212,6 +215,7 @@ export class Sidecar {
     this.polishes = new Polishes(this);
     this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
     this.regionDesigns = new RegionDesigns(this);
+    this.composeDesigns = new ComposeDesigns(this);
     this.follows = new Follows(this);
     this.siteVariants = new SiteVariants(this);
     this.programs = new Programs(this);
@@ -362,7 +366,7 @@ export class Sidecar {
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
       // (6b) a region pick is not the designer's: it carries on below, once jobs run
-      if (d.kind === 'region') continue;
+      if (d.kind === 'region' || d.kind === 'settlement') continue;
       // (5a) a design whose loop waits for its critic needs no slot: the critique module picks it up once jobs run
       if (this.store.data.work?.[d.id]?.critique && !this.critiques.revising(d.id)) {
         critiqued.push(d);
@@ -384,6 +388,7 @@ export class Sidecar {
     this.jobs.start(jobDriver ?? (designer.name === 'sim' ? new SimJobDriver(this.config.simStepMs, this.config.jobs.simStepUsd) : new ClaudeJobDriver(designer as unknown as ClaudeHost, this.log)));
     for (const d of critiqued) this.critiques.resume(d);
     this.regionDesigns.resume();
+    this.composeDesigns.resume();
     // (4c) massing garbage collection: now, then hourly
     this.runGc();
     this.gcTimer = setInterval(() => this.runGc(), GC_INTERVAL_MS);
@@ -691,6 +696,11 @@ export class Sidecar {
         return this.regions.preview(msg.planId, msg.views, msg.axes);
       case 'region.design':
         return { designId: this.regionDesigns.request(msg).id };
+      // ---- 7c CO: the standalone composer (the ack carries the design; the mod answers each round's check)
+      case 'region.compose':
+        return this.composeDesigns.request(msg);
+      case 'region.compose.checked':
+        return this.composeDesigns.checked(msg);
       // ---- 7b AF (no Claude)
       case 'site.analyse':
         return this.regions.siteAnalyse(msg);
@@ -903,6 +913,7 @@ export class Sidecar {
     if (isFinalDesign(d)) throw new ClientError(`design ${id} is already ${d.status}`);
     this.stopDesign(id, 'cancelled', undefined, 'cancelled');
     if (d.kind === 'region') this.regionDesigns.cancelled(d);
+    if (d.kind === 'settlement') this.composeDesigns.cancelled(d);
     this.log.info(`design ${id} cancelled`);
     return d;
   }
@@ -1166,8 +1177,11 @@ export class Sidecar {
     // own default (the entry records it as its palette); never bible set mode (no --restraint, no bible files)
     const pal = d.request.palette !== undefined && !d.request.massing && !extra.includes('--palette') ? ['--palette', typeof d.request.palette === 'string' ? d.request.palette : JSON.stringify(d.request.palette)] : [];
     // (7b DS) a site-aware design: exactly the lot box, built and checked on the composite (site/ in the scratch dir)
+    // (7c SR) a Composite return only when the request allows it (ext architect_mc:allowComposite: true); never a massing or a site lot
+    // (a site-aware design is exactly the lot box)
+    const comp = allowsComposite(d.request) && !d.request.massing && !d.request.site ? { allowComposite: true } : {};
     if (d.request.site && !d.request.massing) return { limits: { ...p.limits, maxSize: siteSize(d.request.site) }, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal, ...SITE_CHECK_ARGS] };
-    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
+    return { limits: { ...p.limits, ...comp }, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
   }
 
   private kitFlags: string | undefined;
