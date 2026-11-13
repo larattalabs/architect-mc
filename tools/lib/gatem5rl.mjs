@@ -46,7 +46,7 @@ export async function registerRL(steps, h) {
     return o;
   }
 
-  async function world(name) {
+  async function world(name, { joinSave = false } = {}) {
     await G.survivalBase(ctx);
     await L.fresh(name, G.SURV);
     await L.setRules('exact');
@@ -62,6 +62,10 @@ export async function registerRL(steps, h) {
     // between the case's save and its halt)
     const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' }, autoApprove: false });
     const group = (await call('dev.region.state', { region }, 60_000)).view?.groupId;
+    // (RL, joinSave) PS's periodic save off before any target joins: every ledger save until the case's own is RL's save when a target
+    // joins the feed (production keeps it; the switch turns both off only from the case's save on)
+    let js0 = null;
+    if (joinSave) { await call('dev.stockpile.ps', { noPeriodic: true, resetPeriodic: true }, 30_000); js0 = await savedNow(); }
     for (const stage of ['ground', 'street', 'lots']) await cmd(`/apitest sapprove ${group} ${stage}`);
     // the targets joined the feed: what they need is outstanding
     let ps;
@@ -71,7 +75,22 @@ export async function registerRL(steps, h) {
       await L.sleep(1000);
     }
     check(sum(ps?.outstanding) > 0, `${name}: the town realised in survival; its targets need ${sum(ps?.outstanding)} units`);
-    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region, group };
+    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region, group, js0 };
+  }
+
+  /**
+   * (RL, joinSave) The save when a target joins the feed, shown on the disk: with the periodic save off since before the approvals, the
+   * file holds the joined lot's book of cells and the paid records of the targets fed before it joined; then the switch is put back on.
+   */
+  async function joinSaved(tag, W, lot) {
+    const s = await savedNow();
+    const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
+    const books = Object.keys(Ld?.cells ?? {});
+    const paid = Object.entries(Ld?.paid ?? {}).filter(([, m]) => sum(m) > 0).map(([k]) => k);
+    check(s.periodicSaves === 0 && s.saves > W.js0.saves && books.some((k) => k.startsWith(`site:${lot}@`)) && paid.length > 0,
+      `${tag}: the save on join wrote the ledger with the periodic save off (saves #${W.js0.saves} -> #${s.saves}, periodic ${s.periodicSaves}): the joined lot's book (${books.filter((k) => k.startsWith(`site:${lot}@`)).join(',') || 'none'}; ${books.length} books) and ${paid.length} paid records on the disk (${json(paid).slice(0, 200)})`,
+      { saves0: W.js0.saves, saves: s.saves, books, paid });
+    await call('dev.stockpile.ps', { noPeriodic: false }, 30_000);
   }
 
   /** Delivers `fraction` of what the targets still lack, in one insert. */
@@ -177,10 +196,11 @@ export async function registerRL(steps, h) {
    * the lot's items are in the saved stock, not consumed), the lot resumed, it builds after the save until built or starved, 12 s for the
    * chunks' eager saves, then the halt (`mode`); the saved ledger off the disk; restarted.
    */
-  async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false } = {}) {
-    const W = await world(`G6B RL ${tag}`);
+  async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false, joinSave = false } = {}) {
+    const W = await world(`G6B RL ${tag}`, { joinSave });
     const lot = await lotPaused(tag);
     if (!lot) { await L.leaveWorld(); return null; }
+    if (joinSave) await joinSaved(tag, W, lot);
     const d = await deliver(fraction);
     // (PS) a changed ledger is saved with the world every 10 s while a build feeds: the crash window is the time before the next such save.
     // The case holds that window open (PS's test switch, this JVM only: the restart runs as shipped)
@@ -220,7 +240,7 @@ export async function registerRL(steps, h) {
     await ensure();
     const out = {};
     // RL1: saved mid-feed: half delivered, the lot builds after the save until it starves (still building at the halt)
-    out.RL1 = await crashCase('RL1', 0.5);
+    out.RL1 = await crashCase('RL1', 0.5, { joinSave: true });
     // RL2: all delivered, the lot built (BUILT recorded) after the save
     out.RL2 = await crashCase('RL2', 1);
     // RL3: the ledger ahead of the chunks: all delivered, the lot built, then a halt straight after an autosave's chunk save without flush
