@@ -367,8 +367,11 @@ function verdict(outDir, scn, item) {
   const shots = fs.existsSync(path.join(outDir, 'shots')) ? fs.readdirSync(path.join(outDir, 'shots')).filter((f) => f.endsWith('.png')).map((f) => path.join(outDir, 'shots', f)) : [];
   // §5's bars: Fit, disturbance, 0 checker errors, reachability (the player's nodes and every site lot's port), safety; all six present
   // ("0 checker errors" is the plan's checker and every lot entry's: rows checker and buildings)
+  // (the buildings row's own threshold adds the bible's restraint; §5 asks 0 checker errors: judged on its "N errors", restraint recorded)
   const gated = ['sb-fit', 'sb-disturbance', 'sb-ports', 'checker', 'buildings', 'reachability', 'safety'];
-  return { item, scenario: scn, outDir, bars, pass: rows.length > 0 && gated.every((k) => by[k] && by[k].pass === true), allRows: rows.map((r) => ({ id: r.id, value: r.value, pass: r.pass, gated: r.gated })), entries: se.rows ?? [], pa: se.pa ?? null, shots };
+  const ok = (k) => (k === 'buildings' ? by[k] && /\b0 errors\b/.test(String(by[k].value)) : by[k] && by[k].pass === true);
+  if (by.buildings) bars.buildings = { ...bars.buildings, judged: '§5: 0 checker errors (restraint warnings recorded, not judged)', pass5: ok('buildings') };
+  return { item, scenario: scn, outDir, bars, pass: rows.length > 0 && gated.every(ok), allRows: rows.map((r) => ({ id: r.id, value: r.value, pass: r.pass, gated: r.gated })), entries: se.rows ?? [], pa: se.pa ?? null, shots };
 }
 
 /** P1 (paid): three site-aware designs on the calibration sites; the $0 variant check; the re-statement. */
