@@ -138,8 +138,9 @@ test('item 8 (§9): the five free zones of the asks answer; none malformed; no l
     assert.notEqual(r.check.overall, 'MALFORMED', f.name);
     for (const a of r.check.parts) { assert.notEqual(a.class, 'malformed', f.name); if (a.class === 'unsupported') gaps[a.block] = (gaps[a.block] ?? 0) + 1; }
     const want = { 'around_my_tree.json': ['grove', 'fits', 'READY'], 'nomad_camp.json': ['camp', 'fits', 'READY'], 'grid_city.json': ['grid_city', 'fits', 'READY'], 'organic_hamlet.json': ['hamlet', 'fits', 'READY'],
-      // (measured: the plan's explicit dependency on crater_lake, form.crater reserved until 7c, holds the ring; §9 predicted fits or adjusted)
-      'ring_city.json': ['ring_town', 'blocked', 'REQUIRED_BLOCKED'] }[f.name];
+      // (measured: the plan's explicit dependency on crater_lake, form.crater reserved until 7c, held the ring; (7c BF) the crater is
+      // supported, resolved first, and the ring is laid round it: fits)
+      'ring_city.json': ['ring_town', 'fits', 'READY'] }[f.name];
     if (!want) continue;
     assert.equal(part(r, want[0]).class, want[1], `${f.name} ${want[0]}: ${part(r, want[0]).class} ${JSON.stringify(part(r, want[0]).reasons)}`);
     assert.equal(r.check.overall, want[2], f.name);

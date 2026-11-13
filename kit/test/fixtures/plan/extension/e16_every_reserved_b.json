@@ -1,5 +1,5 @@
 {
- "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped); VOC-c: rule.palette left the list when it shipped (r_palette stays in the plan: a palette rule with no family answers refused NO_FEATURE); F3: form.giant_tree left the list when it shipped (f_giant_tree stays in the plan: a giant oak near the stone on S7's claim fits)",
+ "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half) (H: form.pond and form.waterfall left it when they shipped); VOC-c: rule.palette left the list when it shipped (r_palette stays in the plan: a palette rule with no family answers refused NO_FEATURE); F3: form.giant_tree left the list when it shipped (f_giant_tree stays in the plan: a giant oak near the stone on S7's claim fits); 7c BF: form.crater and form.hollow_mountain left the list when they shipped (f_crater and f_hollow_mountain removed)",
  "on": "s7",
  "expect": {
   "all": [
@@ -14,14 +14,6 @@
    {
     "part": "f_hidden_room",
     "block": "form.hidden_room"
-   },
-   {
-    "part": "f_crater",
-    "block": "form.crater"
-   },
-   {
-    "part": "f_hollow_mountain",
-    "block": "form.hollow_mountain"
    },
    {
     "part": "f_seabed_site",
@@ -94,24 +86,6 @@
    {
     "id": "f_hidden_room",
     "kind": "hidden_room",
-    "where": {
-     "near": {
-      "anchor": "stone"
-     }
-    }
-   },
-   {
-    "id": "f_crater",
-    "kind": "crater",
-    "where": {
-     "near": {
-      "anchor": "stone"
-     }
-    }
-   },
-   {
-    "id": "f_hollow_mountain",
-    "kind": "hollow_mountain",
     "where": {
      "near": {
       "anchor": "stone"

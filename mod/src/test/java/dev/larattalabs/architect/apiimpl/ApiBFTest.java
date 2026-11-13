@@ -28,7 +28,7 @@ class ApiBFTest {
 	@Test
 	void theThreeFormsAreSupported() throws Exception {
 		JsonObject plan;
-		try (var in = ApiBFTest.class.getClassLoader().getResourceAsStream("plan.json")) {
+		try (var in = ApiBFTest.class.getResourceAsStream("/architect_mc/schemas/plan.json")) {
 			plan = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
 		}
 		JsonArray entries = plan.getAsJsonObject("x-catalogue").getAsJsonArray("entries");
