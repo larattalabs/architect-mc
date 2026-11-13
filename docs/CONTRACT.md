@@ -28890,6 +28890,80 @@ about 8 kinds under 90,000.
 | `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
 | gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
 
+### Slice SF as built (branch `slice/SF` off main 0cdb1869; versions NEXT; $0, sim only, no client, no gate run; recorded 2026-11-12)
+
+Style format 3 over Styles (§3 row 4), related Styles for zones (S-7c-3) and connector.auto's preferred moves. It changes nothing for a
+format 1 or 2 Style: every committed Style normalises byte for byte as on main, and every committed plan fixture plans as on main.
+
+**Format 3** (`kit/lib/style3.mjs`, read by `validateBible`; `format: 3` is format 2 with its restraint, limits and members, plus):
+
+| Member | Shape | Read by |
+|---|---|---|
+| `connectors.prefer` | a list of connector kinds (`PREFER_KINDS`: the catalogue's `connector.*` kinds but auto; a unit holds them equal) | connector.auto (below) |
+| `connectors.<type>.<look>` | beside the type's slots (which stay role names, as K1's): `rope_bridge {maxSpan 8..40, sagRatio 12..64, light: a role or "none"}`, `ladder {landingEvery 8..24}` | the plan check (below); `sagRatio` carried only |
+| `forms` | `{generator: {species?, heightBand?: [lo, hi], strata?: [role or block]}}`, generators those of `kit/lib/forms/` | validated and stored |
+| `scatter` | `{ground?: [block], wall?: [block], density?: sparse/moderate/rich}` | validated and stored |
+| `settlement` | `{verticality, density: low/medium/high, lightEvery 4..32, edges: railed/open, roleShares: {role: [lo, hi]}}`; a settlement Style gets the defaults filled in (`medium, medium, 12, railed, {}`) | `roleShares` by `tools/scenarios.mjs`; the rest stored |
+| `references` | at most 8 `{blob, label?}` (blob ids as the sidecar's) | stored (P5, N-7c-4) |
+| `relatedTo` | `{id, version}`: the settlement Style a zone Style derives from | the sidecar's check (below) |
+
+Below format 3 none of these is read: a format 2 Style with `prefer` is refused as on main (an unknown connectors member); `forms`,
+`settlement` ... on a format 1 or 2 Style are carried as before with a warning ("read only in format 3"). `format3Of(style)` reads **any
+Style as format 3** (Steward's change 1): a format 1 or 2 Style is a settlement Style with no zone Styles, every member at its default.
+
+**Related Styles** (S-7c-3): a zone Style is a format 3 Style with `relatedTo`. It **shares the settlement Style's core roles** (the 11
+`CORE_ROLES`, each the same block) and may differ in every other role, its patterns, connectors, parts, restraint and hints.
+`relatedErrors(zone, target)` checks it (`kit/tools/bible.mjs related`); the target is any settlement Style (a format 1 or 2 Style included,
+a built-in included), never another zone Style. The sidecar: `BibleRequest` ext `architect_mc:relatedTo` (an id) is pinned at the request
+to that Style's latest version (`BibleJob.request.relatedTo`), refused at once when there is no such Style or it is a zone Style; the job
+copies the target's core roles into its draft by code (the prompt never sees them), writes `relatedTo` and format 3, and checks the
+relation again; `bible.save` and `bible.check` refuse a zone Style whose core roles differ; `bible.revise` and "Add parts" keep the pin.
+`BibleInfo` gains `relatedTo`, and `format` reads 3.
+
+**The bible job:** scope `settlement` (or a zone Style) writes format 3; scope `building` writes format 2 exactly as before; a revise or
+"Add parts" of a format 3 Style stays format 3. The Claude draft prompt is **unchanged** (no P0 prompt diff): the settlement defaults are
+filled in by the validator. The sim draft for a settlement Style adds a prefer list, a ladder look and a settlement member (roleShares).
+
+**The plan check** (the Style's `connectors` already reach `planRegion` from the sidecar and `tools/region.mjs`; the slots go on as
+format 2's, and `ctx.connectorLook` holds the prefer list and look parameters **only when the Style has any**):
+- **connector.auto prefers** (a bias, never a filter): when the prefer list names one of auto's span moves (`rope_bridge` -> rope,
+  `bridge`, `tunnel`), each move it can take that the list leaves out costs `PREFER_PENALTY` = 600 more (T2's units; a walk cell is 10),
+  through the edge's `rowExtra` (compile.mjs `legOptions` -> program.mjs's edge keys -> route.mjs's special-move relax). A gap only one
+  move spans keeps that move; a prefer list naming none of auto's moves, or only the one auto takes anyway, is byte-identical.
+- `rope_bridge.maxSpan`: a rope_bridge or auto part's `span.max` when it sets no `span`; `rope_bridge.light`: the rope spans' lamps
+  (a role's fixture, or `none`; a part's own `lamps: none` wins); `ladder.landingEvery`: a ladder part's `rest` when it sets none.
+
+**Readings chosen** (the contract was silent):
+1. **"Shares its core roles" = the 11 `CORE_ROLES` identical.** Steward's docs say only "kept related to the others, so the settlement
+   reads as one"; zones differ in macro and extra roles, patterns, connectors, parts and hints. Steward reviews it at the RC.
+2. **`relatedTo` is pinned** `{id, version}` (the ext gives an id; the job pins the latest), so a later settlement Style version never
+   silently re-relates a zone. U1's ownership and version rules are unchanged.
+3. **`prefer` is a bias, not a filter** (a filter could refuse an auto connector that routes today); entries auto never chooses (ladder,
+   branch_walk ...) are validated kinds with no effect yet.
+4. **Look parameters only tighten** the generators' own limits; `light` is a role name or `none`, never a block (connectors hold no
+   blocks). **`sagRatio` is carried, not read:** the rope profile is shared by the route move, the generator and the checker's M10:rope,
+   so changing it is RM's or a later slice's (left over).
+5. **`forms`, `scatter`, `references` and `settlement`'s other members are validated and stored, not read** (BF's forms, CO's composer,
+   P5 read them); `settlement.roleShares` feeds `tools/scenarios.mjs`.
+6. **The role shares row** (`tools/lib/scenario-metrics.mjs roleShares`, over the cells paletteAdherence counts, each block traced to its
+   role with `traceRole`, shape variants as their role) appears only for a run whose fixture Style is format 3 with bands, **recorded, not
+   gated** (BR turns the bars on); every existing run's rows are unchanged.
+7. **Format 3 on any scope**: a zone Style may be a building Style; only a settlement Style gets the `settlement` defaults.
+8. **Feature `bible.format3`** (sidecar, appended last) maps to `styleFormat3` (ApiRules); the Java API gains no member (`Bible.format`'s
+   javadoc names 3; `Wire5a.restraintOf` reads format 3's restraint as format 2's).
+
+**Checks** (offline, $0, no client, no gate run: SF has no in-game step; machine load 80-180 throughout):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` (committed tree be1f4ad2) | 1227 tests: 1226 pass, 1 fail fixed in the next commit (phase5a's "format must be 1 or 2" assertion, which format 3 changes by design: it now refuses format 4); phase5a 24/24 after. sf-format3 8/8: the members and their errors, format 2 byte for byte over the 24 committed Style JSONs (each scope) and the 16 built-ins (64 normalisations against main 0cdb1869's, `kit/test/fixtures/sf/format2-normalised.json`), Steward's change 1, related Styles, the prefer kinds equal the catalogue's, auto's bias (a 14-wide ditch: rope by default, an arch under `prefer: [bridge]`, unchanged under prefer lists naming no auto move or the move it takes, the 35-cell rift a rope under any list), the look parameters each changing only their own plan, roleShares |
+| sidecar `npm run check` | tsc clean; 851 tests: 843 pass, 8 timed out under load (claude-bible, copies, follow, groups, k3-designkeys, site-design, walllot-massing: 350-850 s each), all 7 files then pass alone (74/74). styles-sf 5/5: the feature last, the wire, the sim settlement job writing a valid format 3 (the kit's validate on the installed file), building jobs format 2, revise and "Add parts" keeping 3, a zone Style job over a hand-saved format 2 Style (Steward's change 1) and over a built-in, the refusals, bible.save/check holding a zone to its core roles; jobs and bundle.e2e feature lists appended |
+| mod `./gradlew build --offline --no-daemon` | pass; 1122 tests, 0 failures, 1 skipped (ApiSFTest 2/2: `bible.format3` maps to `styleFormat3` only with the helper's feature, format 3's restraint is format 2's; Api7cFTest 6/6 unchanged) |
+| api-compat | clean against the 0.48.0 and 0.47.0 apitest jars; the API source diff is one javadoc line (`Bible.format`), so the 1.x surface is unchanged by construction (no `--surface` jar of main on disk: the 0.62.0 jars are other slices' builds) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 |
+| catalogue | untouched (no kind, note, limit or `sinceApi` changed): the golden and the compact copy as main; `tools/catalogue-since-check.mjs` pass |
+| `node tools/step-inputs.mjs check` | clean after `build` (353 steps) |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
