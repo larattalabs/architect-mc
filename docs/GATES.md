@@ -119,7 +119,7 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 | Range | Who |
 |---|---|
 | 8890-8895 | the default Architect gate runner (the nightly, a coordinator run without `--ports`) |
-| 8896-8931 (pairs) | slice gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
+| 8896-8939 (pairs) | slice gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
 | 8898/8899 | reserved: the gallery client |
 | 8912-8915 | reserved (infra and UI runners) |
 | 8940-8999 | turbo shards (`gate-chains.json` `turbo.portRange`); nothing else may bind there |
