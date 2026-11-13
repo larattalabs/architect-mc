@@ -28464,6 +28464,76 @@ the BRIEF's Ports line only (5 lines, one per fixture with ports; its `comment` 
 
 **S6 disturbance, Noah via parent session: "2b with the guard".** For `carve_into` lots, the home's own carved interior (enclosed, roofed rooms inside its shell) counts as the building, not as disturbance. Open pits, open cuts and excavation beyond the home's rooms still count. It applies from 7c on, and S6's paid run is re-scored at $0 (slice DM). The S5 walk-height gap is a product fix (slice WL).
 
+### Slice DM as built (branch `slice/DM` off main ef95e914, main f3b870ca merged; versions NEXT; $0, offline, no client, no gate run; recorded 2026-11-13)
+
+Noah's 7b phase-close decision, "2b with the guard" (2026-11-13): on a `carve_into` site lot, the home's own carved volume is the
+building, not disturbance; only its enclosed, roofed interior (and the shell around it) counts so, and open pits, open cuts and excavation
+beyond the home's rooms stay disturbance. Every other fit is unchanged. It applies from 7c on. No API, Java, sidecar, catalogue, prompt or
+playbook change, and no re-design.
+
+**The rule, DM-1** (`tools/lib/scenario-sb.mjs`: `DISTURBANCE_RULE`, `carveBuilding`, `lotDisturbance`). It is judged on the realised world
+alone (the run's before and after dumps), per lot box, deterministically:
+- **cut** is as before (rule SB-1): box cells the site held solid (rock, soil, loose, ice, snow, a log) that the realise changed. **fill**
+  is unchanged.
+- **open**: a cell a body or the air passes freely that is not a door. That is collision `none` or `low` in `kit/lib/blocks.mjs` (air,
+  fluids, torches, lanterns, carpets, plates, signs, rails, flowers) or climbable (ladder, vine, scaffolding). A cell outside the dumps is
+  open. Doors, trapdoors and fence gates (open or closed), glass, panes, bars, fences and every other colliding block seal.
+- **enclosed**: the box's open cells fall into 6-connected components. A component is enclosed when none of its cells touches an open cell
+  outside the box. It is then roofed by construction, since an open top would touch y = maxY + 1. The roof may be the design's blocks or
+  the hill's own rock kept above. The room is closed to the sky and to the outside air except through doors and windows. A doorway with
+  no door, a torch or sign in a gap, or a breach into a cave pocket that reaches outside leaves the component open (as the checker's
+  `enclosure` treats a doorway without a door as a gap).
+- **entered**: an enclosed component counts only when a player reaches it from outside the box through passable cells (open cells, plus
+  doors, trapdoors and gates, which open). Those are the home's rooms. A sealed void nobody can enter is excavation.
+- **interior** = the open cells of enclosed, entered components. **shell** = cut cells that are not open (walls, floors, ceilings, beams,
+  furniture) within one cell (the 26 neighbours) of an interior cell.
+- Per lot: `cutInterior` and `cutShell` (cut cells that are building), `cutCounted` = cut - both, and disturbance = (cutCounted + fill) /
+  the lot volume. A non-carve_into lot has `cutInterior` = `cutShell` = 0, which is SB-1 exactly.
+- The row keeps its id `sb-disturbance` (gate7bpa reads it). Its value and label name the rule ("0.008 (DM-1)"), and the row and every
+  per-lot entry in `sb-metrics.json` carry `rule: 'DM-1'`. Records from SB and PA carry no `rule`: they are SB-1.
+- **Why the realised world and not the checker's interior box.** `check.mjs` `enclosure` judges a design's declared `interior` box in
+  template space, and a run's evidence does not keep the library entries (their nbt and sidecars). The paid entries are gone from disk, so
+  re-scoring needs a rule that reads only the dumps. The flood is the checker's notion (covered above, no gap but doors), applied to
+  what was built.
+- **Not changed:** `kit/test/sb.test.mjs` `fitBars` (the offline flat variants, the composite's `siteMetrics.cut`, already under 0.3) keeps
+  counting every cut.
+- **Known limit:** one large sealed, roofed room with a door counts as building whatever its size. A design could hollow a hill into one
+  hall and call it a house; no size cap was asked for, and the checker and the gallery judge the room.
+
+**Re-scoring** (`node tools/sb-rescore.mjs <scenario run dir>...`, $0, offline). It reads the run's `raw/plan/ir.json`, its dumps and its
+recorded `sb-metrics.json`. The raw cut is recomputed and must equal the record (it exits 1 on a mismatch). Fill comes from the record,
+because the library entries are not evidence and the rule never touches fill. Every lot below reproduced its recorded cut exactly.
+
+| Run | Lot (fit) | SB-1 (recorded) | DM-1 | cut: interior / shell / counted |
+|---|---|---|---|---|
+| **S6 paid (PA P3 run-1)** | hall_n1 (carve_into) | 0.4833 | **0.0021** | 1392: 762 / 624 / 6 |
+| | hall_s1 | 0.4580 | **0.0007** | 1319: 806 / 511 / 2 |
+| | hall_n2 | 0.5122 | **0.0021** | 1475: 833 / 636 / 6 |
+| | hall_s2 | 0.4583 | **0.0007** | 1320: 806 / 512 / 2 |
+| | hall_n3 | 0.5142 | **0.0021** | 1481: 829 / 646 / 6 |
+| | hall_s3 | 0.4583 | **0.0007** | 1320: 806 / 512 / 2 |
+| | hall_w (landmark) | 0.2753 | **0.0083** | 793: 469 / 300 / 24 |
+| | **worst** | **0.514 (miss)** | **0.008 (meets 0.3)** | |
+| **S6 $0 (SB run 20261112-220630-change)** | hall_n1 | 0.1649 | 0.1649 | 475: 0 / 0 / 475 |
+| | hall_s1, hall_n2, hall_s2, hall_s3 | 0.1792 each | 0.0000 each | 516: 306 / 210 / 0 each |
+| | hall_n3 | 0.1778 | 0.1778 | 512: 0 / 0 / 512 |
+| | hall_w | 0.1691 | 0.1691 | 486: 0 / 0 / 486 (fill 1) |
+| | **worst** | **0.179** | **0.178** | |
+| S5 $0 (SB run 20261112-222529-change) | tree_1..6 (wrap_trunk) | 0.0000-0.0004 | the same, every lot | 0 cut (fill 0-1) |
+| S5 paid (PA P2 run-2) | tree_1..6 (wrap_trunk) | 0.0000-0.0004 | the same, every lot | 0 cut (fill 0-1) |
+
+- **S6 paid:** the PA homes carve their rooms and a one-block shell and little else. What still counts is facade pieces in the front wall
+  line that touch no room: hall_n1's 6 are 2 stone-brick plinth cells and 4 log posts; hall_w's 24 are a plank apron under its front.
+- **S6 $0:** three of SB's sim halls (n1, n3, w) are not enclosed. The plateau's natural cave pocket runs through their front walls (air
+  before and after), which joins the room to the hall, so they score as before. That is the guard working: a breach to the outside is an
+  open cut.
+- **S5:** wrap_trunk, unchanged (no cut).
+
+**Units** (`kit/test/sb-disturbance.test.mjs`, 6). A carved room behind a door is interior and shell, and only its open entrance cut
+counts; an open door still seals. An open pit in a carve_into lot counts, also when walled in planks. A doorway with no door, or with only
+a torch, carpet or sign in it, leaves the room open, while a glass pane window seals. A sealed void with no entrance counts. A wrap_trunk
+lot counts every cut (SB-1). `carveBuilding` is deterministic and judges only the box.
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6

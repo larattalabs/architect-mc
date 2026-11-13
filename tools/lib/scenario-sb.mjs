@@ -251,18 +251,177 @@ async function templateCells(L, entry, lot) {
   return out;
 }
 
+// ---- (7b DM, docs/CONTRACT.md "Slice DM as built") the disturbance rule
+/** The disturbance rule's version, recorded in the sb-disturbance row and every per-lot entry (SB/PA's numbers are rule 'SB-1'). */
+export const DISTURBANCE_RULE = 'DM-1';
+const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const blockMemo = new Map();
+/** A state string's blocks.mjs entry and parsed state ({info, state}); an unknown id (or an unparsable string) has info null. */
+async function blockOf(s) {
+  let r = blockMemo.get(s);
+  if (r) return r;
+  const { parseState } = await imp('lib/schem.mjs');
+  const { BLOCKS } = await imp('lib/blocks.mjs');
+  let state = null;
+  try { state = parseState(s); } catch { state = null; }
+  r = { state, info: state ? BLOCKS[state.name] ?? null : null };
+  blockMemo.set(s, r);
+  return r;
+}
+
+/**
+ * (7b DM) A carve_into lot's building cells among its cut cells: the home's enclosed interior and its shell (Noah 2026-11-13, "2b with
+ * the guard"), from the realised world alone (`stBefore`, `stAfter`: (x, y, z) => state string, or null outside the dumps), deterministic.
+ * - **open**: a cell a body or the air passes through freely that is not a door: collision none or low (air, fluids, torches, carpets,
+ *   plates, signs, rails, flowers) or climbable (ladder, vine, scaffolding). A cell outside the dumps counts as open. Doors, trapdoors and
+ *   fence gates (open or closed), glass, panes, bars, fences and every other colliding block seal.
+ * - **enclosed**: the open cells inside the lot box fall into 6-connected components; a component is enclosed when none of its cells
+ *   touches an open cell outside the box. So it is roofed by construction (an open top would touch y = maxY + 1), by the design's blocks
+ *   or the hill's own rock kept above it, and it is not open to the sky or to the outside air except through doors and windows (sealing
+ *   blocks). A doorway with no door, a torch or a sign in a gap, a breach into a cave pocket that reaches the outside: open.
+ * - **entered**: an enclosed component counts only when a player reaches it from outside the box through passable cells (open, plus
+ *   doors, trapdoors and gates, which open): the home's rooms. A sealed void nobody can enter is excavation, not a room.
+ * - **interior** = the open cells of enclosed, entered components; **shell** = cut cells that are not open (walls, floors, ceilings,
+ *   beams, furniture) within one cell (the 26 neighbours) of an interior cell.
+ * Returns {kind(x, y, z): 'interior' | 'shell' | null} for the box's cells.
+ */
+export async function carveBuilding({ box: b, stBefore, stAfter }) {
+  const { isClimbable } = await imp('lib/blocks.mjs');
+  const W = b.maxX - b.minX + 1, H = b.maxY - b.minY + 1, D = b.maxZ - b.minZ + 1;
+  const ix = (x, y, z) => ((x - b.minX) * D + (z - b.minZ)) * H + (y - b.minY);
+  const inB = (x, y, z) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
+  // per state: 1 open, 2 passable but sealing (a door, trapdoor, gate), 0 sealing
+  const memo = new Map();
+  const kindOf = async (s) => {
+    if (s === null) return 1;
+    let k = memo.get(s);
+    if (k !== undefined) return k;
+    const { state, info } = await blockOf(s);
+    if (!info) k = 0;
+    else if (info.collision === 'door') k = 2;
+    else k = info.collision === 'none' || info.collision === 'low' || isClimbable(state) ? 1 : 0;
+    memo.set(s, k);
+    return k;
+  };
+  // the box and a one-cell rim, pre-classed (async lookups once per state)
+  const RW = W + 2, RH = H + 2, RD = D + 2;
+  const rim = new Uint8Array(RW * RH * RD);
+  const ri = (x, y, z) => ((x - b.minX + 1) * RD + (z - b.minZ + 1)) * RH + (y - b.minY + 1);
+  for (let x = b.minX - 1; x <= b.maxX + 1; x++) for (let z = b.minZ - 1; z <= b.maxZ + 1; z++) for (let y = b.minY - 1; y <= b.maxY + 1; y++) rim[ri(x, y, z)] = await kindOf(stAfter(x, y, z));
+  const cl = (x, y, z) => rim[ri(x, y, z)];
+  // the enclosed components
+  const comp = new Int32Array(W * H * D).fill(-1);
+  const leaky = [], entered = [];
+  for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY; y <= b.maxY; y++) {
+    if (comp[ix(x, y, z)] >= 0 || cl(x, y, z) !== 1) continue;
+    const id = leaky.length;
+    let leak = false;
+    const q = [[x, y, z]];
+    comp[ix(x, y, z)] = id;
+    while (q.length) {
+      const [a, c, e] = q.pop();
+      for (const [dx, dy, dz] of N6) {
+        const p = [a + dx, c + dy, e + dz];
+        if (cl(...p) !== 1) continue;
+        if (!inB(...p)) { leak = true; continue; }
+        if (comp[ix(...p)] < 0) { comp[ix(...p)] = id; q.push(p); }
+      }
+    }
+    leaky.push(leak);
+    entered.push(false);
+  }
+  // entered: a player's flood from outside the box through passable cells (open, doors)
+  const seen = new Uint8Array(W * H * D);
+  const q = [];
+  for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY; y <= b.maxY; y++) {
+    if (!cl(x, y, z)) continue;
+    if (N6.some(([dx, dy, dz]) => !inB(x + dx, y + dy, z + dz) && cl(x + dx, y + dy, z + dz) === 1)) { seen[ix(x, y, z)] = 1; q.push([x, y, z]); }
+  }
+  while (q.length) {
+    const [a, c, e] = q.pop();
+    if (cl(a, c, e) === 1) entered[comp[ix(a, c, e)]] = true;
+    for (const [dx, dy, dz] of N6) {
+      const p = [a + dx, c + dy, e + dz];
+      if (!inB(...p) || seen[ix(...p)] || !cl(...p)) continue;
+      seen[ix(...p)] = 1;
+      q.push(p);
+    }
+  }
+  const interior = (x, y, z) => inB(x, y, z) && cl(x, y, z) === 1 && !leaky[comp[ix(x, y, z)]] && entered[comp[ix(x, y, z)]];
+  return {
+    kind(x, y, z) {
+      if (!inB(x, y, z)) return null;
+      if (interior(x, y, z)) return 'interior';
+      if (cl(x, y, z) === 1) return null;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) if ((dx || dy || dz) && interior(x + dx, y + dy, z + dz)) return 'shell';
+      return null;
+    },
+  };
+}
+
+/**
+ * One site lot's disturbance (rule DM-1): cut = box cells the site held solid that the realise changed; for a carve_into lot the cut cells
+ * of the home's interior and shell (carveBuilding) are building, the rest counted; every other fit counts all its cut (SB-1 unchanged).
+ * fill = cells of the box and the 16 under it that changed but the entry's template (`inTemplate(x, y, z)`, or null: no template) does not
+ * write; `fill` given instead (a re-score from recorded data: the rule never touches fill) skips that count.
+ */
+export async function lotDisturbance({ lot, stBefore, stAfter, cls, inTemplate = null, fill: givenFill = null, template = null }) {
+  const b = lot.box, vol = (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1) * (b.maxZ - b.minZ + 1);
+  const carve = lot.site?.fit === 'carve_into' ? await carveBuilding({ box: b, stBefore, stAfter }) : null;
+  let cut = 0, fill = 0, cutLogs = 0, cutInterior = 0, cutShell = 0;
+  for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY - 16; y <= b.maxY; y++) {
+    const s0 = stBefore(x, y, z), s1 = stAfter(x, y, z);
+    if (s0 === null || s1 === null || s0 === s1) continue;
+    const inBox = y >= b.minY;
+    if (inBox && SOLID.has(cls(s0))) {
+      cut++;
+      if (cls(s0) === 'LOG') cutLogs++;
+      const k = carve ? carve.kind(x, y, z) : null;
+      if (k === 'interior') cutInterior++;
+      else if (k === 'shell') cutShell++;
+      continue;
+    }
+    if (givenFill === null && (!inTemplate || !inTemplate(x, y, z))) fill++;
+  }
+  if (givenFill !== null) fill = givenFill;
+  const cutCounted = cut - cutInterior - cutShell;
+  return { lot: lot.id, fit: lot.site?.fit ?? null, rule: DISTURBANCE_RULE, volume: vol, cut, cutLogs, cutInterior, cutShell, cutCounted, fill, template, disturbance: Math.round(((cutCounted + fill) / vol) * 1e4) / 1e4 };
+}
+
+/** A decoded arwd's state at a cell (null outside its box). */
+export const stateAt = (d, x, y, z) => (x < d.box.minX || x > d.box.maxX || y < d.box.minY || y > d.box.maxY || z < d.box.minZ || z > d.box.maxZ ? null : d.palette[d.cells[d.at(x, y, z)]]);
+
+/**
+ * (7b DM) Re-score a recorded run's disturbance under the current rule, $0 and offline: the plan's ir, the run's dumps, and its recorded
+ * sb-metrics.json `disturbance` (the old rule's per-lot numbers). The library entries are not part of a run's evidence, so fill is taken
+ * from the record (the rule never touches fill); the raw cut is recomputed and must equal the record's, or the lot reports `mismatch`.
+ * Returns {rule, lots: [{lot, fit, old, new, ...lotDisturbance}], oldWorst, newWorst}.
+ */
+export async function rescoreDisturbance({ ir, before, after, recorded }) {
+  const cls = await classer();
+  const lots = [];
+  for (const l of ir.lots.filter((q) => q.site)) {
+    const rec = recorded.find((r) => r.lot === l.id);
+    if (!rec) throw new Error(`${l.id}: no recorded disturbance`);
+    const d = await lotDisturbance({ lot: l, stBefore: (x, y, z) => stateAt(before, x, y, z), stAfter: (x, y, z) => stateAt(after, x, y, z), cls, fill: rec.fill, template: rec.template ?? null });
+    lots.push({ ...d, old: rec.disturbance, oldRule: rec.rule ?? 'SB-1', ...(d.cut !== rec.cut || d.cutLogs !== rec.cutLogs ? { mismatch: { cut: rec.cut, cutLogs: rec.cutLogs } } : {}) });
+  }
+  const worst = (k) => (lots.length ? Math.max(...lots.map((p) => p[k])) : 0);
+  return { rule: DISTURBANCE_RULE, lots, oldWorst: worst('old'), newWorst: worst('disturbance') };
+}
+
 /**
  * The Fit and disturbance rows (SETTLEMENTS §16.3) and the ports' reach, over the run's dumps (`before`, `after`: decoded arwd), the
  * realised world (`world`, dumpWorld's), the plan's meta.sb (dwellings, the fit called for), the lot states and the lots' entries.
- * Disturbance per site lot = (cut + fill) / the lot box's volume: cut = box cells the site held solid (rock, soil, loose, ice, snow, a
- * log) that the realise changed; fill = cells of the box and its columns down to 16 under it that changed but the entry's template does
+ * Disturbance per site lot (rule DM-1, lotDisturbance) = (counted cut + fill) / the lot box's volume: cut = box cells the site held solid
+ * (rock, soil, loose, ice, snow, a log) that the realise changed, less, on a carve_into lot, the cut cells of the home's enclosed interior
+ * and shell (carveBuilding); fill = cells of the box and its columns down to 16 under it that changed but the entry's template does
  * not write (placement's own terrain work: TerrainFit's foundation fill and clearing; KEEP, every fit but on_pad, does none). Building
  * cells are neither (the house in the air is not fill).
  */
 export async function sbRows({ L, ir, meta, before, after, world, lotStates, entries }) {
   const sb = meta.sb ?? {};
   const cls = await classer();
-  const stAt = (d, x, y, z) => (x < d.box.minX || x > d.box.maxX || y < d.box.minY || y > d.box.maxY || z < d.box.minZ || z > d.box.maxZ ? null : d.palette[d.cells[d.at(x, y, z)]]);
   const placed = new Map((lotStates ?? []).map((l) => [l.id, l.state]));
   const site = ir.lots.filter((l) => l.site);
   // ---- Fit: the share of the dwellings with the fit the scenario calls for, placed
@@ -274,17 +433,8 @@ export async function sbRows({ L, ir, meta, before, after, world, lotStates, ent
   // ---- disturbance per site lot
   const per = [];
   for (const l of site) {
-    const b = l.box, vol = (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1) * (b.maxZ - b.minZ + 1);
     const T = entries[l.id] ? await templateCells(L, entries[l.id], l) : null;
-    let cut = 0, fill = 0, cutLogs = 0;
-    for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) for (let y = b.minY - 16; y <= b.maxY; y++) {
-      const s0 = stAt(before, x, y, z), s1 = stAt(after, x, y, z);
-      if (s0 === null || s1 === null || s0 === s1) continue;
-      const inBox = y >= b.minY;
-      if (inBox && SOLID.has(cls(s0))) { cut++; if (cls(s0) === 'LOG') cutLogs++; continue; }
-      if (!T || !T.has(`${x},${y},${z}`)) fill++;
-    }
-    per.push({ lot: l.id, fit: l.site.fit, volume: vol, cut, cutLogs, fill, template: T ? T.size : null, disturbance: Math.round(((cut + fill) / vol) * 1e4) / 1e4 });
+    per.push(await lotDisturbance({ lot: l, stBefore: (x, y, z) => stateAt(before, x, y, z), stAfter: (x, y, z) => stateAt(after, x, y, z), cls, inTemplate: T ? (x, y, z) => T.has(`${x},${y},${z}`) : null, template: T ? T.size : null }));
   }
   const dmax = per.length ? Math.max(...per.map((p) => p.disturbance)) : 0;
   // ---- the ports, reached on the realised world from the entrance (the player mover; the houses' real blocks, no box obstacles)
@@ -302,7 +452,7 @@ export async function sbRows({ L, ir, meta, before, after, world, lotStates, ent
   const claimArea = (ir.claim.maxX - ir.claim.minX + 1) * (ir.claim.maxZ - ir.claim.minZ + 1);
   const rows = [
     row('sb-fit', `Fit: dwellings with the fit called for (${fits.join('/')}), placed`, `${okFit.length}/${dwell.length} (${(share * 100).toFixed(0)}%)`, '>= 75%', share >= 0.75),
-    row('sb-disturbance', 'Fit: disturbance (cut + fill) / lot volume, the worst site lot', dmax.toFixed(3), '<= 0.3', per.length > 0 && dmax <= 0.3),
+    { ...row('sb-disturbance', `Fit: disturbance (cut + fill) / lot volume, the worst site lot (rule ${DISTURBANCE_RULE}: a carve_into home's enclosed interior and shell are building)`, `${dmax.toFixed(3)} (${DISTURBANCE_RULE})`, '<= 0.3', per.length > 0 && dmax <= 0.3), rule: DISTURBANCE_RULE },
     row('sb-ports', 'Reachability: site lots\' ports reached from the entrance (realised world)', `${ports.length - un.length}/${ports.length}${un.length ? ` (unreached ${un.map((p) => `${p.lot}.${p.port}`).join(', ')})` : ''}`, '0 unreachable', ports.length > 0 && un.length === 0),
     row('sb-pad', 'Fit: pad area as a share of the claim', `${((pad / claimArea) * 100).toFixed(2)}%`, 'recorded', null, false),
   ];
