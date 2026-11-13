@@ -3,5 +3,24 @@
  "claim": 240,
  "seed": "fixture",
  "errors": 0,
- "findings": []
+ "findings": [
+  {
+   "rule": "M15:cantilever",
+   "severity": "warning",
+   "part": "lots",
+   "reason": "(7c RM) lot pads on the isle's rim stand on rock that overhangs the outermost pillars by more than 4"
+  },
+  {
+   "rule": "M15:cantilever",
+   "severity": "warning",
+   "part": "mass",
+   "reason": "(7c RM) the rock disc's rim overhangs its outermost pillars by up to 10 (M15's limit 4): a real overhang; pillars nearer the rim are an RM leftover"
+  },
+  {
+   "rule": "M15:cantilever",
+   "severity": "warning",
+   "part": "wall",
+   "reason": "(7c RM) the citadel wall stands on that overhanging rim, so it inherits the rim's distance from a pillar"
+  }
+ ]
 }
