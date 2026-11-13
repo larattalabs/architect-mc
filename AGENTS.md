@@ -21,7 +21,10 @@ gate anything:
 - `docs/PLAN.md`: status per phase, decisions, queued asks, process. Read its latest sections first.
 - `docs/CONTRACT.md`: the binding contract per phase. Each has a "Changes from Steward's review" section, which wins over the
   text above it, and an "as built" section.
-- `docs/SETTLEMENTS.md`: the roadmap after 6a (6b, 6c slices, 7a, 6d, 7b, 7c).
+- `docs/SETTLEMENTS.md`: the roadmap after 6a (6b, 6c slices, 7a, 6d, 7b, 7c; 8a-8c are planned in PLAN.md "Planned after 7c").
+- `../LEFTOVERS.md` (outside the repo): every deferred item across both mods; the coordinator and the managers write it, slices report
+  leftovers to their manager.
+- `kit/PLAYBOOK.md`: the design agent's playbook; Steward's structure-design skill points to it as the source of truth.
 - `docs/GATES.md`: how to test. `docs/DEVBRIDGE.md`: in-game test hooks.
 - `docs/HANDOFF-<phase>.md` (on phase branches): resume notes. Keep it current; delete it when the gate passes.
 
@@ -33,7 +36,7 @@ gate anything:
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
   per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
-  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 3 gate runs at once.
+  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 3 gate runs at once (`slots.max` 3; docs/GATES.md "Slot lock").
 - **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
   as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
   "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod
@@ -76,9 +79,8 @@ gate anything:
 
 ## Ports (don't collide with other sessions)
 
-- Architect gate runner: 8890-8895 by default; extra runners pass `--ports/--run-dir/--out/--lock`.
-- Steward dev client: 8490/8491. AgentCraft Foreman: 7880 and 7890-7909.
-- Ad-hoc agent runs: ask the coordinator, or use a free pair of 8896-8905 and say which in your report.
+- One table: docs/GATES.md "Ports". Use the pair your brief names; for anything else ask the coordinator. Extra runners pass
+  `--ports/--run-dir/--out/--lock`.
 
 ## Hard rules
 
