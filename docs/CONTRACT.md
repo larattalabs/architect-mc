@@ -28377,6 +28377,18 @@ wrap_trunk dwelling, a woodcutter's lodge; P4 runs on those two).**
   2. 20261113-013729: ds-sim PASS 14/14; pa-p0-s6 3/7, because opKeys reused across runs met OP_KEY_CONFLICT (P0's keys are now per run).
   3. 20261113-014424: PASS, pa-p0-s6 and pa-p0-s5.
 - The paid items are the driver's runs, not gate runs.
+- **gate-verifier (review only, DEV MODE; nothing paid re-run): PASS** at 67ebe12d. It checked:
+  - the ledger rules in code, with `pa-ledger` 10/10 and `plan`/`status`;
+  - spend.json: 13 jobs summing to $29.49, all on the claude login, all under their budgetUsd, the as-built table matching;
+  - SB's $0 path unchanged without PA_PLAN; replays only for $0 untyped variant refusals; paid requests never replayed;
+  - the §5 bars against the verdicts and metrics, and the honest "designer not shown" wording;
+  - the blind sheets carrying no arm hints; the PLAYBOOK change general; the hooks additive; step-inputs clean; nothing generated
+    committed.
+- Verifier minor notes:
+  - The S5 and S6 bars are not met on the paid run, as recorded.
+  - The playbook clamp is not validated by a paid re-run.
+  - A per-job stop inside the in-game run throws without writing STOP.json; the item-level guard writes it first.
+  - The nightly window is judged on local time, while the ledger's timestamps are UTC.
 
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
