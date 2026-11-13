@@ -139,6 +139,7 @@ public final class Builder {
 		SiteWaits.init(); // 6c Y2 (C25): waiting status
 		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
+		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -430,7 +431,80 @@ public final class Builder {
 			return frontier;
 		}
 
+		/**
+		 * (slice RL) The cells this target owes: they stand, but the saved ledger never paid them (a crash left the world ahead of the
+		 * ledger). The live bits of the target's {@link dev.larattalabs.architect.survival.StockLedger.Book}, attached by the feed
+		 * ({@link #attachOwed}): an owed cell is never built until {@link #settleOwed} charges it. Null: owes nothing.
+		 */
+		@Nullable BitSet owed;
+
+		/** (RL) The last {@link #settleOwed} left a standing owed cell the stock could not pay. */
+		boolean owedShort;
+
+		/** (RL) The cells whose state this run has read (a rescan, a placement): what a save's book may say of them. */
+		final BitSet seen = new BitSet();
+
+		/** (RL) Attaches the target's owed cells: any of them marked built (a rescan before the attach) is unbuilt again. */
+		void attachOwed(@Nullable BitSet bits) {
+			if (bits == owed) {
+				return;
+			}
+			owed = bits;
+			if (bits != null) {
+				for (int i = bits.nextSetBit(0); i >= 0 && i < size(); i = bits.nextSetBit(i + 1)) {
+					markBuilt(i, false);
+				}
+			}
+		}
+
+		/**
+		 * (RL) The feed's charge of owed cells, before the builder's step: an owed cell that still holds its block and that {@code purse}
+		 * affords is paid (its target's cost, as the builder pays a cell) and built; one that no longer holds it owes nothing (the builder
+		 * places it and pays it as any cell). At most {@code budget} cells; returns the cells paid.
+		 */
+		int settleOwed(ServerLevel level, Purse purse, int budget) {
+			BitSet o = owed;
+			owedShort = false;
+			if (o == null || o.isEmpty()) {
+				return 0;
+			}
+			int paid = 0;
+			for (int i = o.nextSetBit(0); i >= 0 && budget > 0; i = o.nextSetBit(i + 1)) {
+				if (i >= size()) {
+					o.clear(i);
+					continue;
+				}
+				BlockState now = stateIfLoaded(level, pos(i));
+				if (now == null) {
+					continue;
+				}
+				if (!matches(now, i)) {
+					o.clear(i);
+					continue;
+				}
+				Map<String, Integer> need = new HashMap<>();
+				cost.get(i).forEach(c -> need.merge(c.item(), c.count(), Integer::sum));
+				if (need.entrySet().stream().anyMatch(e -> purse.stock(e.getKey()) < e.getValue())) {
+					owedShort = true; // it stands, the stock cannot pay it: the target waits for materials
+					continue;
+				}
+				purse.pay(cost.get(i));
+				o.clear(i);
+				markBuilt(i, true);
+				paid++;
+				budget--;
+			}
+			if (paid > 0) {
+				purse.changed();
+			}
+			return paid;
+		}
+
 		void markBuilt(int i, boolean on) {
+			if (on && owed != null && owed.get(i)) {
+				return; // (RL) owed: built only once paid
+			}
+			seen.set(i);
 			if (built.get(i) == on) {
 				return;
 			}
@@ -528,6 +602,7 @@ public final class Builder {
 					}
 					st = level.getBlockState(m);
 				}
+				seen.set(i); // (RL) its state read since the run was made
 				boolean b = matches(st, i);
 				if (b != built.get(i)) {
 					markBuilt(i, b);

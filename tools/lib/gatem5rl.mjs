@@ -2,19 +2,23 @@
 // saved world and the items in the saved ledger never both exist (no dupe), and the builder never charges a cell the saved ledger already
 // paid (no double charge). Registered into tools/gate6dgr.mjs (GR's survival town and feed helpers). Headless server, the sim sidecar: $0.
 //
-//   node tools/gate6dgr.mjs rlcrash   (rl-crash)   three survival towns (a flat_village region of a hall and a cottage), each realised, then:
-//                                                  RL1  half of what it needs delivered, the ledger saved at once (/save-all flush, as an
-//                                                       autosave) while the builder consumes it, the builder starved, 12 s for the chunks'
-//                                                       eager saves, a halt with nothing saved; restarted, then fed until built
-//                                                  RL2  all of it delivered and saved at once, built (BUILT recorded) after the save, 12 s,
-//                                                       a halt with nothing saved; restarted
-//                                                  RL3  all of it delivered, 1.5 s of building, then a halt straight after an autosave's
-//                                                       chunk save without flush (the ledger on disk, the chunks maybe not); restarted, fed
-//                                                       until built
-//                                                  each: <world>/architect/stockpiles.json read off the disk before the restart; after it
-//                                                  the paid cells standing equal the targets' paid records, item for item (no dupe, no
-//                                                  double charge), what the targets consumed since the baseline equals what their records
-//                                                  gained, and a second restart changes nothing (idempotent)
+//   node tools/gate6dgr.mjs rlcrash   (rl-crash)   four survival towns (a flat_village region of a hall and a cottage; stages approved by
+//                                                  hand: ground, street and lots now, props only after the restart, so no target joins
+//                                                  the feed between a case's save and its halt). Each: fed until the lot site builds, the
+//                                                  lot paused, items delivered, the ledger saved (/save-all flush, as an autosave) with
+//                                                  the lot's items in the saved stock, the lot resumed (it builds after the save), then:
+//                                                  RL1  half delivered: the lot starves; 12 s for the chunks' eager saves; a halt
+//                                                  RL2  all delivered: the lot built (BUILT recorded); 12 s; a halt
+//                                                  RL3  all delivered: the lot built; a halt straight after an autosave's chunk save
+//                                                       without flush (the ledger on disk, the chunks maybe not)
+//                                                  RL4  half delivered before the save, the rest after it: the lot built; 12 s; a halt
+//                                                       (the saved stock is short: the lot owes and builds again)
+//                                                  each: no ledger save between the case's save and the halt; the saved ledger read off
+//                                                  the disk; after the restart the reconcile found the lot's unpaid cells (RL1, RL2, RL4)
+//                                                  and no cell stands unpaid; a second halt at once and load change nothing
+//                                                  (idempotent); then fed until built: the paid cells standing equal the targets' paid
+//                                                  records item for item (no dupe, no double charge), and what the targets took from the
+//                                                  stock since the save equals what their records gained
 //
 // Evidence: artifacts/gate6d-gr/rlcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -53,7 +57,11 @@ export async function registerRL(steps, h) {
     const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
     check(!cr.refused, `${name}: a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    // no auto approval: ground, street and lots approved now, props only after the restart (no target joins the feed, so nothing saves,
+    // between the case's save and its halt)
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' }, autoApprove: false });
+    const group = (await call('dev.region.state', { region }, 60_000)).view?.groupId;
+    for (const stage of ['ground', 'street', 'lots']) await cmd(`/apitest sapprove ${group} ${stage}`);
     // the targets joined the feed: what they need is outstanding
     let ps;
     for (let i = 0; i < 60; i++) {
@@ -62,14 +70,20 @@ export async function registerRL(steps, h) {
       await L.sleep(1000);
     }
     check(sum(ps?.outstanding) > 0, `${name}: the town realised in survival; its targets need ${sum(ps?.outstanding)} units`);
-    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region };
+    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region, group };
   }
 
   /** Delivers `fraction` of what the targets still lack, in one insert. */
-  async function deliver(fraction) {
+  async function deliver(fraction, skip = null) {
     const ps = await G.pileState(ctx);
     const need = {};
-    for (const [it, n] of Object.entries(ps.outstanding ?? {})) {
+    let want = ps.outstanding ?? {};
+    if (skip) {
+      // only what the targets other than those `skip` matches lack (a lot that joins meanwhile gets none of it first)
+      want = {};
+      for (const [k, x] of Object.entries((await pile()).targets ?? {})) if (!skip(k, x)) want = G.plus(want, x.outstanding ?? {});
+    }
+    for (const [it, n] of Object.entries(want)) {
       const lack = n - (ps.stock?.[it] ?? 0);
       if (lack > 0) need[it] = fraction >= 1 ? lack : Math.max(1, Math.floor(lack * fraction));
     }
@@ -113,99 +127,102 @@ export async function registerRL(steps, h) {
   }
 
   /** After the restart: the first audit (the reconcile's result), the build finished, the final audit, and a second restart. */
-  async function after(tag, W, c, { feedAfter }) {
+  async function after(tag, W, c, { lot }) {
     const a1 = await audit();
     const b1 = balance(a1);
-    log(`  ${tag}: after the restart: standing ${b1.standing}, paid records ${b1.paid}; standing unpaid ${json(b1.dupe)}; paid not standing ${json(b1.double)}; stock ${sum(b1.stock)}`);
-    let f = null;
-    if (feedAfter) {
-      f = await G.feed({ L }, W.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
-      check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `${tag}: fed until built after the restart (${f.waves} waves): ${f.last.st.view.state}`);
-    } else {
-      // (RL) a reconciled target that owes items its stock holds charges them and is built again
-      f = await G.feed({ L }, W.region, { fraction: 1, timeoutMs: 600_000, every: 2500 });
-    }
+    log(`  ${tag}: after the restart (unclean ${a1.uncleanStart}): standing ${b1.standing}, paid records ${b1.paid}; standing unpaid ${json(b1.dupe)}; paid not standing ${json(b1.double)}; stock ${sum(b1.stock)}; reconciled ${json(a1.reconciled ?? null)}`);
+    check(a1.uncleanStart === true && b1.dupeUnits === 0, `${tag}: after the unclean restart no cell stands unpaid (standing ${b1.standing}, paid ${b1.paid}; dupe ${b1.dupeUnits}: ${json(b1.dupe)})`, b1);
+    // idempotent: halted again at once (nothing saved after the reconcile's own save): the second reconcile charges and gives back nothing
+    if (!(await halt(`${tag} (second)`))) return { a1, b1 };
+    await restart(W);
+    const a1b = await audit();
+    const r1 = a1.reconciled?.[lot] ?? {}, r2 = a1b.reconciled?.[lot] ?? {};
+    check(G.same(a1b.ledger?.consumed, a1.ledger?.consumed) && G.same(a1b.stock, a1.stock) && sum(r2.charged) === 0 && sum(r2.creditedBack) === 0
+      && (r2.owedCells ?? 0) === (r1.owedCells ?? 0), `${tag}: a second unclean load changes nothing (consumed ${sum(a1b.ledger?.consumed)} = ${sum(a1.ledger?.consumed)}, stock ${sum(a1b.stock)} = ${sum(a1.stock)}; charged ${sum(r2.charged)}, given back ${sum(r2.creditedBack)}, still owed ${r2.owedCells ?? 0} = ${r1.owedCells ?? 0})`, { r1, r2 });
+    await cmd(`/apitest sapprove ${W.group} props`);
+    const f = await G.feed({ L }, W.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `${tag}: fed until built after the restart (${f.waves} waves): ${f.last.st.view.state}`);
     await quiet();
     const a2 = await audit();
     const b2 = balance(a2);
-    const consumed = G.minus(a2.ledger?.consumed, c.b0.ledger.consumed);
+    // net: what the targets took from the stock since the baseline (consumed, less what the reconcile gave back for lost cells)
+    const consumed = G.minus(G.minus(a2.ledger?.consumed, c.b0.ledger.consumed), G.minus(a2.ledger?.returned, c.b0.ledger.returned));
     const gained = G.minus(paidSum(a2.ledger), paidSum(c.b0.ledger));
-    log(`  ${tag}: built: standing ${b2.standing}, paid records ${b2.paid}; standing unpaid ${json(b2.dupe)}; paid not standing ${json(b2.double)}; consumed since the baseline ${sum(consumed)}, records gained ${sum(gained)}`);
+    log(`  ${tag}: built: standing ${b2.standing}, paid records ${b2.paid}; standing unpaid ${json(b2.dupe)}; paid not standing ${json(b2.double)}; taken since the baseline ${sum(consumed)}, records gained ${sum(gained)}`);
     check(b2.dupeUnits === 0 && b2.doubleUnits === 0 && a2.identity !== false, `${tag}: built after the restart, the paid cells standing equal the targets' paid records item for item (standing ${b2.standing}, paid ${b2.paid}; dupe ${b2.dupeUnits}: ${json(b2.dupe)}; double charge ${b2.doubleUnits}: ${json(b2.double)}; identity ${a2.identity})`, { b1, b2 });
-    check(G.same(consumed, gained), `${tag}: what the targets consumed since the baseline (${sum(consumed)}) is what their records gained (${sum(gained)}), item for item`, { consumed, gained });
-    // idempotent: a clean stop and a second load change nothing
-    await L.leaveWorld();
-    await restart(W);
+    check(G.same(consumed, gained), `${tag}: what the targets took from the stock since the baseline (${sum(consumed)}: consumed less given back) is what their records gained (${sum(gained)}), item for item`, { consumed, gained });
+    return { a1, b1, r2, b2, consumed, gained, waves: f.waves };
+  }
+
+  /** Fed (all it lacks, in waves) until the region's lot site builds; then it is paused and the rest settles. Returns its id. */
+  async function lotPaused(tag) {
+    let id = null;
+    const isLot = (k, x) => /^s\d+$/.test(k) && (x.queued ?? 0) >= 50;
+    for (let i = 0; i < 120 && !id; i++) {
+      const ps = await pile();
+      id = Object.entries(ps.targets ?? {}).find(([k, x]) => isLot(k, x) && (x.built ?? 0) < x.queued)?.[0] ?? null;
+      if (!id) { await deliver(1, isLot); await L.sleep(2500); }
+    }
+    check(!!id, `${tag}: the region's lot site joined the feed (${id})`);
+    if (!id) return null;
+    const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+    check(!pr.refused, `${tag}: ${id} paused: ${json(pr.refused ?? 'paused')}`);
     await quiet();
-    const a3 = await audit();
-    const b3 = balance(a3);
-    check(G.same(a3.ledger?.consumed, a2.ledger?.consumed) && G.same(a3.stock, a2.stock) && b3.dupeUnits === 0 && b3.doubleUnits === 0, `${tag}: a second load changes nothing (consumed ${sum(a3.ledger?.consumed)} = ${sum(a2.ledger?.consumed)}, stock ${sum(a3.stock)} = ${sum(a2.stock)})`, { b3 });
-    return { b1, b2, b3, consumed, gained, waves: f?.waves };
+    return id;
+  }
+
+  /**
+   * One case: the lot paused, `fraction` of what the targets lack delivered, the ledger saved at once (/save-all flush, as an autosave:
+   * the lot's items are in the saved stock, not consumed), the lot resumed, it builds after the save until built or starved, 12 s for the
+   * chunks' eager saves, then the halt (`mode`); the saved ledger off the disk; restarted.
+   */
+  async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false } = {}) {
+    const W = await world(`G6B RL ${tag}`);
+    const lot = await lotPaused(tag);
+    if (!lot) { await L.leaveWorld(); return null; }
+    const d = await deliver(fraction);
+    await cmd('/save-all flush');
+    const s0 = await savedNow();
+    const b0 = { ledger: ledgerOf(s0.file) };
+    const lot0 = (await pile()).targets?.[lot] ?? {};
+    check(sum(d.acc) > 0 && G.same(d.acc, d.need) && b0.ledger, `${tag}: ${fraction >= 1 ? 'all' : 'half'} of what the targets lack delivered (${sum(d.acc)} of ${sum(d.need)} units accepted) and the ledger saved (/save-all flush, save #${s0.saves}) with ${lot} paused at ${lot0.built}/${lot0.queued} built`);
+    let late = null;
+    if (restAfterSave) late = await deliver(1); // delivered after the save: the saved stock is short of it
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
+    check(await quiet(), `${tag}: ${lot} resumed and built from that stock until ${fraction >= 1 || restAfterSave ? 'built' : 'starved'}`);
+    const lot1 = (await pile()).targets?.[lot] ?? null;
+    if (waitMs) await call('dev.wait', { ms: waitMs }, 60_000);
+    const live = balance(await audit());
+    const s1 = await savedNow();
+    check(s1.saves === s0.saves, `${tag}: nothing saved the ledger between the case's save and the halt (save #${s1.saves})`);
+    check(!lot1 || (lot1.built ?? 0) > (lot0.built ?? 0), `${tag}: ${lot} built after the save: ${lot0.built} -> ${lot1 ? lot1.built + '/' + lot1.queued : 'BUILT'}`);
+    if (!(await halt(tag, mode))) return null;
+    const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
+    const n = { lot, lotAtSave: lot0, lotAtHalt: lot1 ?? 'built', late: late ? sum(late.acc) : 0, live, savedConsumed: sum(G.minus(Ld.consumed, b0.ledger.consumed)), savedPaid: sum(paidSum(Ld)), savedStock: sum(stockOf(Ld)) };
+    log(`  ${tag}: live before the halt: standing ${live.standing}, paid ${live.paid}; saved ledger: consumed since the save ${n.savedConsumed}, paid ${n.savedPaid}, stock ${n.savedStock}`);
+    await restart(W);
+    const r = await after(tag, W, { b0 }, { lot });
+    const rc = r.a1?.reconciled?.[lot] ?? null;
+    // what the code before RL would have left free: the cells that stood unpaid at the load (charged now or owed)
+    const unpaidAtLoad = rc ? sum(rc.charged) + sum(rc.owes) : null;
+    if (mode === 'now') check(rc && rc.aheadCells > 0, `${tag}: the reconcile found ${lot}'s cells built after the save standing unpaid: ${rc ? `${rc.aheadCells} cell(s), charged ${sum(rc.charged)}, owes ${sum(rc.owes)} (${rc.owedCells} cell(s)), reopened ${rc.reopened}` : 'none'} (before RL: ${unpaidAtLoad ?? 0} units free)`, rc);
+    if (restAfterSave) check(rc && rc.owedCells > 0 && rc.reopened, `${tag}: the saved stock was short: ${rc?.owedCells} cell(s) owed and the built lot builds again (reopened ${rc?.reopened})`, rc);
+    await L.leaveWorld();
+    const { a1, ...rest } = r;
+    return { ...n, reconciled: rc, unpaidAtLoad, ...rest };
   }
 
   steps.rlcrash = async () => {
     await ensure();
     const out = {};
-
-    // RL1: the ledger saved mid-feed (half delivered and being consumed), starved, then a halt with nothing saved
-    {
-      const tag = 'RL1';
-      const W = await world('G6B RL RL1');
-      const d = await deliver(0.5);
-      await cmd('/save-all flush');
-      const b0 = { ledger: ledgerOf((await savedNow()).file) };
-      check(sum(d.acc) > 0 && b0.ledger, `${tag}: half delivered (${sum(d.acc)} units) and the ledger saved at once (/save-all flush) while the builder consumes it`);
-      check(await quiet(), `${tag}: the builder starved`);
-      await call('dev.wait', { ms: 12_000 }, 60_000);
-      const live = balance(await audit());
-      if (await halt(tag)) {
-        const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
-        const n = { live, savedPaid: sum(paidSum(Ld)), savedStock: sum(stockOf(Ld)) };
-        await restart(W);
-        out[tag] = { ...n, ...(await after(tag, W, { b0 }, { feedAfter: true })) };
-      }
-      await L.leaveWorld();
-    }
-
-    // RL2: all delivered and saved at once, built after the save, then a halt
-    {
-      const tag = 'RL2';
-      const W = await world('G6B RL RL2');
-      const d = await deliver(1);
-      await cmd('/save-all flush');
-      const b0 = { ledger: ledgerOf((await savedNow()).file) };
-      check(sum(d.acc) > 0 && b0.ledger, `${tag}: all delivered (${sum(d.acc)} units) and the ledger saved at once`);
-      const f = await G.feed({ L }, W.region, { fraction: 1, timeoutMs: 900_000, every: 2500 });
-      check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && f.waves === 0, `${tag}: built from that delivery (${f.waves} more waves): ${f.last.st.view.state}`);
-      await call('dev.wait', { ms: 12_000 }, 60_000);
-      const live = balance(await audit());
-      if (await halt(tag)) {
-        const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
-        const n = { live, savedPaid: sum(paidSum(Ld)), savedStock: sum(stockOf(Ld)) };
-        await restart(W);
-        out[tag] = { ...n, ...(await after(tag, W, { b0 }, { feedAfter: false })) };
-      }
-      await L.leaveWorld();
-    }
-
-    // RL3: the ledger ahead of the chunks: an autosave's chunk save without flush, then the halt at once
-    {
-      const tag = 'RL3';
-      const W = await world('G6B RL RL3');
-      await cmd('/save-all flush');
-      const b0 = { ledger: ledgerOf((await savedNow()).file) };
-      const d = await deliver(1);
-      check(sum(d.acc) > 0, `${tag}: all delivered (${sum(d.acc)} units)`);
-      await L.sleep(1500);
-      const live = balance(await audit());
-      if (await halt(tag, 'autosave')) {
-        const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
-        const n = { live, savedPaid: sum(paidSum(Ld)), savedStock: sum(stockOf(Ld)) };
-        await restart(W);
-        out[tag] = { ...n, ...(await after(tag, W, { b0 }, { feedAfter: true })) };
-      }
-      await L.leaveWorld();
-    }
+    // RL1: saved mid-feed: half delivered, the lot builds after the save until it starves (still building at the halt)
+    out.RL1 = await crashCase('RL1', 0.5);
+    // RL2: all delivered, the lot built (BUILT recorded) after the save
+    out.RL2 = await crashCase('RL2', 1);
+    // RL3: the ledger ahead of the chunks: all delivered, the lot built, then a halt straight after an autosave's chunk save without flush
+    out.RL3 = await crashCase('RL3', 1, { mode: 'autosave', waitMs: 0 });
+    // RL4: half delivered before the save, the rest after it, the lot built: the saved stock is short, the lot owes and builds again
+    out.RL4 = await crashCase('RL4', 0.5, { restAfterSave: true });
     spendZero();
     return out;
   };

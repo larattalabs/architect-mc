@@ -118,6 +118,8 @@ public final class Stockpiles {
 		/** C25's saved waits (slice Y2): kept as they are. */
 		JsonObject waits = new JsonObject();
 		boolean dirty;
+		/** (RL) A target joined the feed this pass: the ledger is saved after it. */
+		boolean joined;
 		long lastEvent = Long.MIN_VALUE / 2;
 
 		Pile(String id, String owner, String dimension, StockLedger ledger) {
@@ -253,6 +255,7 @@ public final class Stockpiles {
 			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			SERVER = null;
 			PILES.clear();
 			dir = null;
 			ticks = 0;
@@ -1110,6 +1113,7 @@ public final class Stockpiles {
 		for (Object t : fresh) {
 			FeedOrder.insert(p.order, idOf(t), origin(idOf(t)), Stockpiles::origin);
 			changed = true;
+			p.joined = true;
 		}
 		if (changed) {
 			p.dirty = true;
@@ -1190,7 +1194,7 @@ public final class Stockpiles {
 					@Override
 					public void pay(List<SurvivalItems.Cost> costs) {
 						Map<String, Integer> over = new TreeMap<>();
-						String key = t instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) t);
+						String key = keyOf(t);
 						for (SurvivalItems.Cost c : costs) {
 							if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over)) {
 								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
@@ -1209,10 +1213,19 @@ public final class Stockpiles {
 						Stockpiles.changed(p);
 					}
 				};
+				// (RL) what it owes after a crash is charged first: an owed cell is built only once paid
+				r.attachOwed(owedOf(p, keyOf(t), r));
+				r.settleOwed(level, purse, SurvivalWorld.blocksPerTick() * 4);
+				int before = r.built.cardinality();
 				if (t instanceof Site s) {
 					Builder.stepFed(srv, level, s, r, purse);
 				} else {
 					RoadBuilder.stepFed(srv, level, (Infra) t, r, purse);
+				}
+				if (r.owedShort && r.built.cardinality() == before) {
+					// (RL, C25) nothing built this turn and an owed cell waits on the stock: it waits for materials (its step saw the owed
+					// cell's block and moved on: IDLE)
+					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
 				}
 			}
 
@@ -1233,6 +1246,12 @@ public final class Stockpiles {
 			}
 		});
 		LAST_RESERVED.put(p.id, reserved);
+		if (p.joined) {
+			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
+			// the next autosave finds the target in the saved ledger
+			p.joined = false;
+			saveWithWorld(srv);
+		}
 	}
 
 	/**
@@ -1571,6 +1590,9 @@ public final class Stockpiles {
 					o.addProperty("worldSaves", worldSaves);
 					o.addProperty("lastWorldSaveMs", lastWorldSaveMs);
 					o.addProperty("maxWorldSaveMs", maxWorldSaveMs);
+					o.addProperty("bookRefreshes", bookRefreshes);
+					o.addProperty("lastBookMs", lastBookMs);
+					o.addProperty("maxBookMs", maxBookMs);
 					return o;
 				}
 				case "state" -> {
@@ -1690,6 +1712,10 @@ public final class Stockpiles {
 		}
 		o.add("paidStanding", Builder.counts(paid));
 		o.add("paidByTarget", byTarget);
+		JsonObject rc = new JsonObject(); // (RL, dev) what this world's start reconciled, per target
+		LAST_RECONCILE.forEach(rc::add);
+		o.add("reconciled", rc);
+		o.addProperty("uncleanStart", SiteDeltas.lastStartUnclean);
 		o.add("retaken", Builder.counts(retaken)); // (XL, dev) items given back this session as later targets wrote over paid cells
 		o.add("legacyCrateStock", Builder.counts(crateStock));
 		Map<String, Integer> ents = new TreeMap<>();
@@ -1762,6 +1788,241 @@ public final class Stockpiles {
 
 	/** Writes the file now (a temp file, then a rename). */
 	/** (JR, dev) explicit saves with the world: count, last and max time (ms). */
+	// ------------------------------------------------------------------ (slice RL) the targets' cell books and the reconcile at load
+
+	/** (RL) The server of the loaded world (the books are refreshed on its thread at each save). */
+	static volatile @Nullable MinecraftServer SERVER;
+
+	/** (RL) A feed target's credit key (its paid record's key). */
+	static String keyOf(Object t) {
+		return t instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) t);
+	}
+
+	private static Construction constructionOf(Object t) {
+		return t instanceof Site s ? s.construction() : ((Infra) t).construction();
+	}
+
+	/** (RL) The target's owed cells (its book's live bits) when its book indexes this run's queue, else null. */
+	static java.util.@Nullable BitSet owedOf(Pile p, String key, Builder.Run r) {
+		StockLedger.Book b = p.ledger.book(key);
+		return b != null && b.fits(r.queue) ? b.owed() : null;
+	}
+
+	/** (RL) The owner's construction sites and roads this stockpile feeds or fed (crate-less, not placing), BUILT ones too. */
+	private static List<Object> bookTargets(Pile p) {
+		List<Object> out = new ArrayList<>();
+		for (Site s : Sites.all()) {
+			if (!s.placing() && pileOf(s) == p) {
+				out.add(s);
+			}
+		}
+		for (Infra i : Infras.all()) {
+			if (!i.placing() && pileOf(i) == p) {
+				out.add(i);
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (RL) Before each save of the file: every building target's book from its run (a quiet rescan first, so a cell a player mined or placed
+	 * a moment ago is as it stands): the cells the run has read become known, and stand paid when built and not placed free. A cell the run
+	 * has not read keeps what the last book said. A target no longer building has no book (its records are all paid). Server thread.
+	 */
+	static int refreshBooks(MinecraftServer srv) {
+		int n = 0;
+		for (Pile p : PILES.values()) {
+			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			java.util.Set<String> keep = new java.util.HashSet<>();
+			if (level != null) {
+				for (Object t : bookTargets(p)) {
+					if (!(t instanceof Site s ? s.building() : ((Infra) t).building())) {
+						continue;
+					}
+					Builder.Run r = run(srv, t);
+					if (r == null) {
+						continue;
+					}
+					String key = keyOf(t);
+					StockLedger.Book old = p.ledger.book(key);
+					boolean fits = old != null && old.fits(r.queue);
+					java.util.BitSet owed = fits ? old.owed() : new java.util.BitSet();
+					r.attachOwed(owed);
+					r.rescan(level, false, true);
+					r.newlyCount = 0;
+					java.util.BitSet known = fits ? (java.util.BitSet) old.known().clone() : new java.util.BitSet();
+					java.util.BitSet standing = fits ? (java.util.BitSet) old.standing().clone() : new java.util.BitSet();
+					java.util.BitSet free = constructionOf(t).free();
+					for (int i = r.seen.nextSetBit(0); i >= 0 && i < r.size(); i = r.seen.nextSetBit(i + 1)) {
+						known.set(i);
+						standing.set(i, r.built.get(i) && !free.get(i));
+					}
+					p.ledger.book(key, new StockLedger.Book(java.util.Arrays.hashCode(r.queue), r.size(), known, standing, owed));
+					keep.add(key);
+					n++;
+				}
+			}
+			p.ledger.retainBooks(keep);
+		}
+		return n;
+	}
+
+	/** (RL, dev) The books' refresh before each save: how many this session, the last and the longest (the coordinator's bound). */
+	static volatile int bookRefreshes;
+	static volatile double lastBookMs, maxBookMs;
+
+	/** (RL, dev/state) What the last reconcile did, per target id. */
+	static final Map<String, JsonObject> LAST_RECONCILE = new ConcurrentHashMap<>();
+
+	/**
+	 * (RL) At the world's start, after the sites, the stockpiles and the region targets loaded: every target's owed cells are attached to
+	 * its run; after an unclean stop (the running marker was there) each target with a book is reconciled with the loaded world
+	 * ({@link #reconcile}). Then the file is saved once (the books now say what stands). Server thread.
+	 */
+	static void reconcileAtStart(MinecraftServer srv) {
+		LAST_RECONCILE.clear();
+		long t0 = System.nanoTime();
+		boolean unclean = SiteDeltas.lastStartUnclean;
+		boolean any = false;
+		for (Pile p : List.copyOf(PILES.values())) {
+			ServerLevel level = Sites.levelOf(srv, p.dimension);
+			if (level == null) {
+				continue;
+			}
+			boolean moved = false;
+			for (Object t : bookTargets(p)) {
+				String key = keyOf(t);
+				StockLedger.Book b = p.ledger.book(key);
+				if (b == null) {
+					continue;
+				}
+				Builder.Run r = run(srv, t);
+				if (r == null || !b.fits(r.queue)) {
+					Architect.LOGGER.warn("Stockpile {}: {}'s cell book indexes another queue; not reconciled", p.owner, idOf(t));
+					p.ledger.book(key, null);
+					continue;
+				}
+				r.attachOwed(b.owed());
+				if (unclean) {
+					try {
+						moved |= reconcile(srv, level, p, t, key, r, b);
+						any = true;
+					} catch (RuntimeException e) {
+						Architect.LOGGER.error("Stockpile {}: the reconcile of {} failed", p.owner, idOf(t), e);
+					}
+				}
+			}
+			if (moved) {
+				changed(p);
+			}
+		}
+		if (any) {
+			save();
+			Architect.LOGGER.info("Stockpiles: the reconcile after an unclean stop took {} ms ({} target(s))", String.format(java.util.Locale.ROOT, "%.1f",
+				(System.nanoTime() - t0) / 1e6), LAST_RECONCILE.size());
+		}
+	}
+
+	/**
+	 * (RL) One target after an unclean stop: the loaded world (its chunks loaded) against its book, cell by cell, over the cells the book
+	 * knows, less the cells placed free and the cells another writer of its region owns (XR):
+	 * <ul>
+	 * <li>a cell that stands now but did not stand paid at the save (the world ahead of the ledger: built after the save and the ledger
+	 * never charged it) is charged now from the stock, at its target's cost, in queue order while the stock affords it; the rest is owed
+	 * (the feed charges it before it counts as built);</li>
+	 * <li>a cell that stood paid at the save and is gone (the ledger ahead of the world: its chunk never reached the disk) gives its cost
+	 * back to the stock, capped by the target's paid record and taken out of it, so the builder's new charge when it places the cell again is
+	 * the only one.</li>
+	 * </ul>
+	 * A target that was built and now owes or lost cells builds again. The book then says what stands, so a second load changes nothing.
+	 */
+	static boolean reconcile(MinecraftServer srv, ServerLevel level, Pile p, Object t, String key, Builder.Run r, StockLedger.Book b) {
+		String id = idOf(t);
+		r.rescan(level, true); // every cell, its chunk loaded (as the sites check at the start)
+		r.newlyCount = 0;
+		Construction c = constructionOf(t);
+		java.util.BitSet free = c.free();
+		var shadow = t instanceof Site s ? RegionOverwrites.shadowedCells(srv, level, s.group(), s.id(), s.placedAt(), r, true)
+			: RegionOverwrites.shadowedCells(srv, level, ((Infra) t).group(), id, ((Infra) t).placedAt(), r, true);
+		java.util.BitSet stands = new java.util.BitSet();
+		for (int i = 0; i < r.size(); i++) {
+			if (!free.get(i) && !shadow.contains(r.pos(i).asLong()) && r.matches(level.getBlockState(r.pos(i)), i)) {
+				stands.set(i);
+			}
+		}
+		StockLedger.Plan plan = StockLedger.plan(b, stands, i -> free.get(i) || shadow.contains(r.pos(i).asLong()));
+		java.util.BitSet ahead = plan.ahead();
+		java.util.BitSet lost = plan.lost();
+		int cap = capacity(srv, p);
+		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		// the ledger ahead: what the lost cells cost goes back (capped by the record), the builder charges them again as it places them
+		Map<String, Integer> lostCost = new TreeMap<>();
+		for (int i = lost.nextSetBit(0); i >= 0; i = lost.nextSetBit(i + 1)) {
+			r.cost.get(i).forEach(x -> lostCost.merge(x.item(), x.count(), Integer::sum));
+		}
+		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost);
+		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
+		dropOverflow(srv, p, cr.overflow(), fallback);
+		// the world ahead: charged now while the stock affords it, the rest owed
+		java.util.BitSet owed = b.owed();
+		owed.clear();
+		Map<String, Integer> charged = new TreeMap<>();
+		Map<String, Integer> owes = new TreeMap<>();
+		Map<String, Integer> over = new TreeMap<>();
+		for (int i = ahead.nextSetBit(0); i >= 0; i = ahead.nextSetBit(i + 1)) {
+			List<SurvivalItems.Cost> cost = r.cost.get(i);
+			Map<String, Integer> need = new TreeMap<>();
+			cost.forEach(x -> need.merge(x.item(), x.count(), Integer::sum));
+			if (need.entrySet().stream().allMatch(e -> p.ledger.stock(e.getKey()) >= e.getValue())) {
+				for (SurvivalItems.Cost x : cost) {
+					if (p.ledger.consume(x.item(), x.count(), cap, Stockpiles::maxStack, over)) {
+						p.ledger.pay(key, x.item(), x.count());
+					}
+				}
+				need.forEach((k, v) -> charged.merge(k, v, Integer::sum));
+				r.markBuilt(i, true);
+			} else {
+				owed.set(i);
+				r.markBuilt(i, false);
+				need.forEach((k, v) -> owes.merge(k, v, Integer::sum));
+			}
+		}
+		dropOverflow(srv, p, over, fallback);
+		java.util.BitSet standing = (java.util.BitSet) stands.clone();
+		standing.andNot(owed);
+		java.util.BitSet known = new java.util.BitSet();
+		known.set(0, r.size());
+		p.ledger.book(key, new StockLedger.Book(b.queueHash(), b.size(), known, standing, owed));
+		// a target being removed is not reopened (its removal takes its blocks; its refund is capped by the record, JR)
+		boolean reopen = !c.building() && (!owed.isEmpty() || !lost.isEmpty()) && !Groups.leaving(id);
+		if (reopen) {
+			Construction nc = c.withState(Construction.BUILDING, c.crate());
+			if (t instanceof Site s) {
+				Sites.replace(srv, s.withConstruction(nc));
+			} else {
+				Infras.put(srv, ((Infra) t).withConstruction(nc));
+			}
+		}
+		JsonObject o = new JsonObject();
+		o.addProperty("key", key);
+		o.addProperty("aheadCells", ahead.cardinality());
+		o.addProperty("owedCells", owed.cardinality());
+		o.addProperty("lostCells", lost.cardinality());
+		o.add("charged", Builder.counts(charged));
+		o.add("owes", Builder.counts(owes));
+		o.add("creditedBack", Builder.counts(cr.returned()));
+		o.add("overflow", Builder.counts(cr.overflow()));
+		o.addProperty("reopened", reopen);
+		LAST_RECONCILE.put(id, o);
+		boolean moved = !ahead.isEmpty() || !lost.isEmpty();
+		if (moved) {
+			Architect.LOGGER.warn("Stockpile {}: reconciled {} after an unclean stop: {} cell(s) stood unpaid, charged {} and owes {} ({} cell(s)); {} paid "
+				+ "cell(s) lost, credited back {}{}", p.owner, key, ahead.cardinality(), charged, owes, owed.cardinality(), lost.cardinality(), cr.returned(),
+				reopen ? "; it builds again" : "");
+		}
+		return moved;
+	}
+
 	static volatile int worldSaves;
 	static volatile double lastWorldSaveMs, maxWorldSaveMs;
 
@@ -1791,6 +2052,22 @@ public final class Stockpiles {
 		if (d == null) {
 			return;
 		}
+		MinecraftServer sv = SERVER;
+		if (sv != null && sv.isSameThread()) {
+			try {
+				long t0 = System.nanoTime();
+				int n = refreshBooks(sv);
+				double ms = (System.nanoTime() - t0) / 1e6;
+				bookRefreshes++;
+				lastBookMs = ms;
+				maxBookMs = Math.max(maxBookMs, ms);
+				if (n > 0) {
+					Architect.LOGGER.info("Stockpiles: cell books of {} target(s) refreshed in {} ms", n, String.format(java.util.Locale.ROOT, "%.1f", ms));
+				}
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Stockpiles: the targets' cell books could not be refreshed; the last ones are saved", e);
+			}
+		}
 		Path f = d.resolve(FILE);
 		try {
 			if (PILES.isEmpty() && !Files.exists(f)) {
@@ -1813,6 +2090,7 @@ public final class Stockpiles {
 	static final boolean TRACE_SAVES = System.getenv("ARCHITECT_TRACE_STOCKPILE") != null;
 
 	private static void load(MinecraftServer server) {
+		SERVER = server;
 		dir = server.getWorldPath(LevelResource.ROOT).resolve("architect");
 		PILES.clear();
 		nextId = 1;

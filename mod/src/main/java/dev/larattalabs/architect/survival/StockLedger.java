@@ -51,6 +51,103 @@ public final class StockLedger {
 	 * adopted crate's placed counts. A target key with no record draws its cap from this pool (spent as it is used).
 	 */
 	private final Map<String, Integer> legacy = new TreeMap<>();
+	/**
+	 * (slice RL) Per building target (its credit key), its cells as this ledger knew them: {@link Book#standing} the paid cells standing at
+	 * the ledger's last save (refreshed just before each save, so it is saved with the records it matches), and {@link Book#owed} the cells
+	 * that stand but were never paid (a crash's world ahead of the ledger), which the feed charges before they count as built. The reconcile
+	 * at an unclean start compares the loaded world with it (docs/CONTRACT.md "Slice RL").
+	 */
+	private final Map<String, Book> books = new TreeMap<>();
+
+	/**
+	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
+	 * chunk never loaded since the world started is not known: the reconcile leaves it alone), {@code standing} the known cells that stood
+	 * paid at the save, {@code owed} the cells that stand unpaid (live: the feed clears a bit as it charges the cell). {@code queueHash} and
+	 * {@code size} identify the queue the bits index (a construction delta re-queues: a book of another queue is not used).
+	 */
+	public record Book(int queueHash, int size, java.util.BitSet known, java.util.BitSet standing, java.util.BitSet owed) {
+		public Book {
+			known = (java.util.BitSet) known.clone();
+			standing = (java.util.BitSet) standing.clone();
+			owed = owed == null ? new java.util.BitSet() : owed;
+		}
+
+		public boolean fits(int[] queue) {
+			return size == queue.length && queueHash == java.util.Arrays.hashCode(queue);
+		}
+
+		JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("q", queueHash);
+			o.addProperty("n", size);
+			o.addProperty("k", CellBits.base64(known));
+			o.addProperty("s", CellBits.base64(standing));
+			if (!owed.isEmpty()) {
+				o.addProperty("o", CellBits.base64(owed));
+			}
+			return o;
+		}
+
+		static @Nullable Book fromJson(JsonObject o) {
+			try {
+				return new Book(o.get("q").getAsInt(), o.get("n").getAsInt(), CellBits.fromBase64(o.get("k").getAsString()),
+					CellBits.fromBase64(o.get("s").getAsString()), o.has("o") ? CellBits.fromBase64(o.get("o").getAsString()) : new java.util.BitSet());
+			} catch (RuntimeException e) {
+				return null;
+			}
+		}
+	}
+
+	/** (RL) What a reconcile finds: {@code ahead} cells stand but never stood paid; {@code lost} cells stood paid and are gone. */
+	public record Plan(java.util.BitSet ahead, java.util.BitSet lost) {
+	}
+
+	/**
+	 * (RL) The reconcile's comparison, pure: {@code stands} the cells that hold their block in the loaded world (placed free and other writers'
+	 * cells already left out), {@code excluded} the cells to leave alone (placed free since, another writer's now). Over the cells the book
+	 * knows only: a cell it never saw is neither ahead nor lost. An owed cell still standing is ahead again (it is still owed).
+	 */
+	public static Plan plan(Book b, java.util.BitSet stands, java.util.function.IntPredicate excluded) {
+		java.util.BitSet ahead = (java.util.BitSet) stands.clone();
+		ahead.and(b.known());
+		ahead.andNot(b.standing());
+		java.util.BitSet lost = (java.util.BitSet) b.standing().clone();
+		lost.andNot(stands);
+		for (int i = ahead.nextSetBit(0); i >= 0; i = ahead.nextSetBit(i + 1)) {
+			if (excluded.test(i)) {
+				ahead.clear(i);
+			}
+		}
+		for (int i = lost.nextSetBit(0); i >= 0; i = lost.nextSetBit(i + 1)) {
+			if (excluded.test(i)) {
+				lost.clear(i);
+			}
+		}
+		return new Plan(ahead, lost);
+	}
+
+	/** (RL) A target's book, or null. */
+	public @Nullable Book book(String key) {
+		return books.get(key);
+	}
+
+	/** (RL) Sets (or, null, drops) a target's book. */
+	public void book(String key, @Nullable Book b) {
+		if (b == null) {
+			books.remove(key);
+		} else {
+			books.put(key, b);
+		}
+	}
+
+	public Map<String, Book> books() {
+		return Map.copyOf(books);
+	}
+
+	/** (RL) Keeps only the books of these keys (the targets still building). */
+	public void retainBooks(Set<String> keys) {
+		books.keySet().retainAll(keys);
+	}
 
 	/** What crediting items did: what entered the stock and what did not fit (to drop as items, booked as refundOverflow). */
 	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already, Map<String, Integer> shortfall) {
@@ -467,6 +564,12 @@ public final class StockLedger {
 		if (!legacy.isEmpty()) {
 			o.add("legacy", counts(legacy));
 		}
+		if (!books.isEmpty()) {
+			// (RL) additive: the building targets' cells as of this save (an older file has none: nothing to reconcile)
+			JsonObject bk = new JsonObject();
+			books.forEach((key, b) -> bk.add(key, b.toJson()));
+			o.add("cells", bk);
+		}
 		return o;
 	}
 
@@ -504,6 +607,14 @@ public final class StockLedger {
 					if (!m.isEmpty()) {
 						l.paid.put(e.getKey(), m);
 					}
+				}
+			});
+		}
+		if (o.has("cells") && o.get("cells").isJsonObject()) {
+			o.getAsJsonObject("cells").entrySet().forEach(e -> {
+				Book b = e.getValue().isJsonObject() ? Book.fromJson(e.getValue().getAsJsonObject()) : null;
+				if (b != null) {
+					l.books.put(e.getKey(), b);
 				}
 			});
 		}

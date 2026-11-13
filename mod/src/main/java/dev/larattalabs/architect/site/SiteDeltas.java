@@ -96,6 +96,7 @@ public final class SiteDeltas {
 		// lost writes are possible only after an unclean stop: the marker written here is deleted by a clean stop
 		java.nio.file.Path marker = sv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(RUNNING_MARKER);
 		boolean unclean = java.nio.file.Files.exists(marker);
+		lastStartUnclean = unclean;
 		settle(sv, unclean);
 		try {
 			java.nio.file.Files.writeString(marker, Long.toString(System.currentTimeMillis()));
@@ -107,6 +108,9 @@ public final class SiteDeltas {
 	public static @Nullable MinecraftServer serverOrNull() {
 		return server;
 	}
+
+	/** (slice RL) Whether this world's start found the running marker (its last stop was not clean): read by the stockpiles' reconcile. */
+	static volatile boolean lastStartUnclean;
 
 	/** The world-start marker of a running world (an unclean stop leaves it behind). */
 	static final String RUNNING_MARKER = "architect-running.marker";
