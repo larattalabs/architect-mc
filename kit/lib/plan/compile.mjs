@@ -40,6 +40,7 @@ import { eachColumn } from '../forms/states.mjs';
 import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
 import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
+import { AUTO_ROWS, PREFER_PENALTY } from '../style3.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
 // (6c T3) bridges (T3a) and tunnels (T3b): the compiler's hooks for connector.bridge and connector.tunnel, auto's bridge and tunnel
@@ -2386,8 +2387,21 @@ function legOptions(K, p) {
     spans = [...(spans ?? []), ...x.spans];
     if (x.t3) t3 = { ...(t3 ?? {}), ...x.t3 };
   }
-  if (!spans || (o.spans && spans.length === o.spans.length)) return o;
-  return { ...o, spans, ...(t3 ? { t3 } : {}) };
+  // ((7c SF) a format 3 Style's prefer list naming one of auto's moves: every other move it can take costs PREFER_PENALTY more, a bias,
+  // never a filter (a gap only a tunnel spans still takes the tunnel); no prefer list, or none of auto's moves in it: unchanged)
+  const rowExtra = autoRowExtra(K, spans ?? o.spans ?? []);
+  if (!spans || (o.spans && spans.length === o.spans.length)) return rowExtra ? { ...o, rowExtra } : o;
+  return { ...o, spans, ...(t3 ? { t3 } : {}), ...(rowExtra ? { rowExtra } : {}) };
+}
+
+/** (7c SF) The extra cost of each auto span row the Style's prefer list leaves out ({row: PREFER_PENALTY}), or null. */
+function autoRowExtra(K, spans) {
+  const prefer = K.ctx.connectorLook?.prefer ?? [];
+  const rows = prefer.map((k) => AUTO_ROWS[k]).filter(Boolean);
+  if (!rows.length || !spans.length) return null;
+  const out = {};
+  for (const r of spans) if (!rows.includes(r)) out[r] = PREFER_PENALTY;
+  return Object.keys(out).length ? out : null;
 }
 
 /**

@@ -11,14 +11,19 @@
 //   Prints { ok, errors[] }.
 // node kit/tools/bible.mjs roles
 //   Prints { core, macro, fields }: the role names and which palette fields each role sets.
+// node kit/tools/bible.mjs related <zone.json> <settlement.json>
+//   (7c SF) A zone Style checked against the settlement Style it relates to (lib/style3.mjs relatedErrors: the target is a settlement
+//   Style, a format 1 or 2 Style reading as one; the zone shares its core roles). Prints { ok, errors[], shared } (shared: the target's
+//   core roles, which a bible job copies into the zone Style). `--fill`: check the zone with the shared roles put in first.
 // Exit code 0 = valid / printed, 1 = invalid, 2 = bad usage.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILTIN_BIBLES, builtinBible, builtinComponentsFile, validateBible } from '../lib/bible.mjs';
 import { CORE_ROLES, MACRO_ROLES, ROLE_FIELDS, resolvePalette } from '../lib/kit.mjs';
+import { relatedErrors, sharedCoreRoles } from '../lib/style3.mjs';
 
-const USAGE = 'usage: node kit/tools/bible.mjs validate <bible.json> [--scope building|settlement] [--write <out.json>] | builtin [<name>] | palette <json> | roles';
+const USAGE = 'usage: node kit/tools/bible.mjs validate <bible.json> [--scope building|settlement] [--write <out.json>] | builtin [<name>] | palette <json> | roles | related <zone.json> <settlement.json> [--fill]';
 
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -68,6 +73,15 @@ function main() {
         errors.push(...v.errors);
       }
       out({ ok: errors.length === 0, errors });
+      process.exitCode = errors.length ? 1 : 0;
+    } else if (cmd === 'related') {
+      const files = rest.filter((a) => a !== '--fill');
+      if (files.length !== 2) throw new Error('related needs <zone.json> <settlement.json>');
+      const [zone, target] = files.map((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
+      const shared = sharedCoreRoles(target);
+      const z = rest.includes('--fill') ? { ...zone, roles: { ...(zone.roles ?? {}), ...shared } } : zone;
+      const errors = relatedErrors(z, target);
+      out({ ok: errors.length === 0, errors, shared });
       process.exitCode = errors.length ? 1 : 0;
     } else if (cmd === 'roles') {
       out({ core: CORE_ROLES, macro: MACRO_ROLES, fields: ROLE_FIELDS });

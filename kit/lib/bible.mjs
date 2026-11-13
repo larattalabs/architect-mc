@@ -9,6 +9,8 @@
 //   detailDensity (sparse|moderate|rich, moderate), windowsPerFacadeMin (int, 2) }` (defaults filled in by validateBible),
 //   at most 6 motifs, the 5 required components plus at most 3. Format 1 (no `format`) keeps its limits; restraintOf()
 //   gives it the default restraint with its first 3 motifs as hero motifs.
+//   Format 3 (7c SF, lib/style3.mjs): format 2 (its restraint, limits and members) plus connectors' `prefer` and look parameters,
+//   `forms`, `scatter`, `settlement`, `references` and `relatedTo`; a settlement Style's `settlement` gets its defaults filled in.
 //   bible.md        prose for designers
 //   components.mjs  the component library (lib/components.mjs)
 //   sheet.png       the rendered sample sheet (tools/components.mjs)
@@ -27,6 +29,8 @@ import { validateRarity } from './vocab/rarity.mjs';
 import { fitsRole } from './vocab.mjs';
 // (Style unification U0/U1) the optional Style fields and the built-in Styles' metadata
 import { FEATURE_IDS, MAX_SUGGESTED_FEATURES, ORIGINS, styleMeta } from './styles.mjs';
+// (7c SF) Style format 3's members
+import { format3Errors, format3Only, settlementOf, splitConnectors } from './style3.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Built-in bibles that ship a reference component library (kit/bibles/<name>/components.mjs). */
@@ -144,7 +148,7 @@ export const RESTRAINT_DEFAULTS = Object.freeze({ accentShareMax: 0.12, detailDe
 export function restraintOf(bible) {
   const motifs = Array.isArray(bible?.motifs) ? bible.motifs.filter((m) => typeof m === 'string') : [];
   const base = { heroMotifs: motifs.slice(0, MAX_HERO_MOTIFS), ...RESTRAINT_DEFAULTS };
-  const r = bible?.format === 2 && bible.restraint && typeof bible.restraint === 'object' ? bible.restraint : {};
+  const r = (bible?.format === 2 || bible?.format === 3) && bible.restraint && typeof bible.restraint === 'object' ? bible.restraint : {};
   const out = { ...base };
   if (Array.isArray(r.heroMotifs)) out.heroMotifs = r.heroMotifs.slice(0, MAX_HERO_MOTIFS);
   if (typeof r.accentShareMax === 'number') out.accentShareMax = r.accentShareMax;
@@ -221,8 +225,10 @@ export function validateBible(j, opts = {}) {
   b.proportions = { ...DEFAULT_PROPORTIONS, ...(b.proportions && typeof b.proportions === 'object' ? b.proportions : {}) };
   for (const k of ['prompt', 'roofLanguage', 'silhouette', 'lighting']) if (b[k] !== undefined && (typeof b[k] !== 'string' || b[k].length > 2000)) err(`${k} must be a string`);
   // format (phase 5a): 1 (absent) or 2; format 2 adds `restraint` and tighter limits on motifs and components
-  if (b.format !== undefined && b.format !== 1 && b.format !== 2) err(`format must be 1 or 2 (got ${JSON.stringify(b.format)})`);
-  const f2 = b.format === 2;
+  // (7c SF) or 3: format 2 and the format 3 members (lib/style3.mjs)
+  if (b.format !== undefined && b.format !== 1 && b.format !== 2 && b.format !== 3) err(`format must be 1, 2 or 3 (got ${JSON.stringify(b.format)})`);
+  const f3 = b.format === 3;
+  const f2 = b.format === 2 || f3;
   const maxMotifs = f2 ? FORMAT2_MAX_MOTIFS : 16;
   if (b.avoid !== undefined && !isStrList(b.avoid, 16)) err('avoid must be a list of at most 16 strings');
   if (b.motifs !== undefined && !isStrList(b.motifs, maxMotifs)) err(`motifs must be a list of at most ${maxMotifs} strings${f2 ? ' (format 2)' : ''}`);
@@ -268,7 +274,8 @@ export function validateBible(j, opts = {}) {
   // (7a K1) connectors: {wall?, gate?, rope_bridge?}, each slot a role this bible names (format 2; lib/connectors/style.mjs)
   if (b.connectors !== undefined) {
     if (!f2) err('connectors needs format: 2');
-    else { const ce = connectorsError(b.connectors, b.roles ?? {}); if (ce) err(ce); }
+    // ((7c SF) format 3: the slots as format 2's; prefer and the look parameters in format3Errors below)
+    else { const ce = connectorsError(f3 ? splitConnectors(b.connectors).slots : b.connectors, b.roles ?? {}); if (ce) err(ce); }
   }
   // (6c H) fluids: {bed?, rim?, coping?, spout?, quay?, mooring?}, each slot a role this bible names (format 2; lib/fluids/place.mjs)
   if (b.fluids !== undefined) {
@@ -282,6 +289,11 @@ export function validateBible(j, opts = {}) {
   }
   // (Style unification U1) tags, suggestedFeatures, blurb, basedOn, origin: optional, typed
   for (const e of styleFieldsErrors(b)) err(e);
+  // (7c SF) format 3's members; a settlement Style's settlement member with its defaults
+  if (f3) {
+    for (const e of format3Errors(b)) err(e);
+    if (scope === 'settlement' || b.settlement !== undefined) b.settlement = settlementOf(b.settlement);
+  }
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');
   b.components = [...new Set([...REQUIRED_COMPONENTS, ...(Array.isArray(b.components) ? b.components.filter((c) => typeof c === 'string') : [])])];
   if (f2 && b.components.length > REQUIRED_COMPONENTS.length + FORMAT2_MAX_EXTRA_COMPONENTS) err(`components: format 2 allows the ${REQUIRED_COMPONENTS.length} required components plus at most ${FORMAT2_MAX_EXTRA_COMPONENTS} (got ${b.components.length - REQUIRED_COMPONENTS.length} more: ${b.components.filter((c) => !REQUIRED_COMPONENTS.includes(c)).join(', ')})`);
@@ -292,5 +304,7 @@ export function validateBible(j, opts = {}) {
     const f = fitsRole(role, block);
     if (!f.ok) warnings.push(`roles.${role}: ${block} fails ${f.failed.join(', ')} (kit/vocab/roles.json)`);
   }
+  // (7c SF) format 3's members below format 3 are not read (a warning; stored Styles stay valid)
+  if (!f3) for (const k of format3Only(b)) warnings.push(`${k}: read only in format 3 (this Style is format ${b.format ?? 1})`);
   return { ok: errors.length === 0, errors, warnings, bible: b };
 }

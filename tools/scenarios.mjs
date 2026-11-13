@@ -643,6 +643,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) || isS2(sc) || isS3(sc) || isSB(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
+  // ((7c SF) a format 3 fixture Style's settlement.roleShares bands: the role shares row, recorded)
+  const style = sc.bibleFixture ? JSON.parse(fs.readFileSync(path.join(SCEN, sc.bibleFixture), 'utf8')) : null;
+  const bands = style?.format === 3 && style.settlement?.roleShares && Object.keys(style.settlement.roleShares).length ? style.settlement.roleShares : null;
+  const roleShares = bands ? M.roleShares(ir, world, bands) : null;
   const organic = M.axisRunShare(ir, vw);
   const lib6 = L ?? await lib();
   const buildings = [];
@@ -773,7 +777,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
-  let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  let rows = M.bars({ plan, realised, palette, ...(roleShares ? { roleShares } : {}), organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
   // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
   let forms = null;
   if (isF1(sc)) {

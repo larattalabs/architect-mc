@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { BibleInfo, BibleJob, BibleJobStatus, BibleRef, BibleRequest, BiblePin, Cost, Outbound } from './protocol.js';
-import { BibleInfo as BibleInfoSchema } from './protocol.js';
+import { BibleInfo as BibleInfoSchema, EXT_RELATED_TO } from './protocol.js';
 import { KIT, minimalEnv, outputTail, refreshKit, runNode, slugify } from './designs.js';
 import { copyBible } from './scratch.js';
 import { zeroCost } from './jobs/cost.js';
@@ -77,7 +77,7 @@ export const DEFAULT_RESTRAINT = { accentShareMax: 0.12, detailDensity: 'moderat
 /** (5a) A bible's effective restraint: format 2's own (defaults filled in); format 1: the defaults, hero motifs = its first 3 motifs. */
 export function restraintOf(j: Record<string, unknown>): { heroMotifs: string[]; accentShareMax: number; detailDensity: 'sparse' | 'moderate' | 'rich'; windowsPerFacadeMin: number } {
   const motifs = (Array.isArray(j.motifs) ? j.motifs : []).map((m) => (typeof m === 'string' ? m : typeof (m as { name?: unknown })?.name === 'string' ? (m as { name: string }).name : JSON.stringify(m)));
-  const r = (j.format === 2 && j.restraint && typeof j.restraint === 'object' ? j.restraint : {}) as Record<string, unknown>;
+  const r = ((j.format === 2 || j.format === 3) && j.restraint && typeof j.restraint === 'object' ? j.restraint : {}) as Record<string, unknown>;
   const hero = Array.isArray(r.heroMotifs) ? (r.heroMotifs as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 3) : motifs.slice(0, 3);
   const asm = typeof r.accentShareMax === 'number' && r.accentShareMax >= 0.04 && r.accentShareMax <= 0.2 ? r.accentShareMax : DEFAULT_RESTRAINT.accentShareMax;
   const dd = r.detailDensity === 'sparse' || r.detailDensity === 'moderate' || r.detailDensity === 'rich' ? r.detailDensity : DEFAULT_RESTRAINT.detailDensity;
@@ -246,8 +246,10 @@ export class BibleIndex {
       ...(j.ext && typeof j.ext === 'object' ? { ext: j.ext } : {}),
       ...(typeof j.createdAt === 'number' ? { createdAt: j.createdAt } : {}),
       ...(j.cost && typeof j.cost === 'object' ? { cost: j.cost } : {}),
-      format: j.format === 2 ? 2 : 1,
+      format: formatOf(j),
       restraint: restraintOf(j),
+      // (7c SF) a zone Style's settlement Style (format 3)
+      ...(relatedOf(j) ? { relatedTo: relatedOf(j)! } : {}),
       ...(this.archived(id) ? { archived: true } : {}),
       ...(j.critique && typeof j.critique === 'object' ? { critique: j.critique } : {}),
       // (6c VOC) the rarity budget as stored
@@ -413,6 +415,61 @@ export class BibleIndex {
     return removed;
   }
 
+  /** (7c SF) A pinned Style's JSON: its installed bible.json, or a built-in's record. ClientError when there is none. */
+  styleJson(pin: BiblePin): Record<string, unknown> {
+    const r = this.resolve(pin);
+    const j = readJson(r.files.json);
+    if (!j) throw new ClientError(`bible ${pin.id} v${pin.version}: its bible.json is unreadable`);
+    return { ...j, id: pin.id, version: r.pin.version };
+  }
+
+  /**
+   * (7c SF, S-7c-3) The settlement Style a zone Style relates to (BibleRequest ext `architect_mc:relatedTo`: an id, pinned to its latest
+   * version here): it must exist and be a settlement Style. A format 1 or 2 Style reads as one with no zone Styles (Steward's change 1);
+   * a zone Style (format 3 with its own relatedTo) is not one. ClientError otherwise.
+   */
+  relatedTarget(id: unknown): BiblePin {
+    if (typeof id !== 'string' || !/^[a-z0-9_]{1,64}$/.test(id)) throw new ClientError(`ext ${EXT_RELATED_TO} must be a Style id (got ${JSON.stringify(id)})`);
+    const info = this.get(id);
+    if (!info) throw new ClientError(`ext ${EXT_RELATED_TO}: no Style "${id}"`);
+    const pin = { id, version: info.version };
+    const j = this.styleJson(pin);
+    const up = relatedOf(j);
+    if (up) throw new ClientError(`ext ${EXT_RELATED_TO}: ${id} is itself a zone Style (it relates to ${up.id} v${up.version}); relate to the settlement Style`);
+    return pin;
+  }
+
+  /**
+   * (7c SF) A zone Style checked against its settlement Style (kit/tools/bible.mjs related: the target a settlement Style, the core
+   * roles shared). `fill`: check it with the target's core roles put in first. Returns the errors and the target's core roles.
+   */
+  relatedCheck(zone: Record<string, unknown>, pin: BiblePin, fill = false): { errors: string[]; shared: Record<string, string> } {
+    let target: Record<string, unknown>;
+    try {
+      target = this.styleJson(pin);
+    } catch (e) {
+      return { errors: [`relatedTo: ${(e as Error).message}`], shared: {} };
+    }
+    const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-related-'));
+    try {
+      const zf = path.join(stage, 'zone.json'), tf = path.join(stage, 'settlement.json');
+      fs.writeFileSync(zf, JSON.stringify(zone));
+      fs.writeFileSync(tf, JSON.stringify(target));
+      const tool = path.join(this.sc.config.kitDir, 'tools', 'bible.mjs');
+      const r = spawnSync(process.execPath, [tool, 'related', zf, tf, ...(fill ? ['--fill'] : [])], { cwd: this.sc.config.kitDir, env: minimalEnv(), encoding: 'utf8', timeout: 60_000 });
+      let v: { ok?: boolean; errors?: string[]; shared?: Record<string, string> } = {};
+      try {
+        v = JSON.parse(r.stdout.trim().split('\n').pop() ?? '{}') as typeof v;
+      } catch {
+        /* below */
+      }
+      const errors = v.ok === true && r.status === 0 ? [] : v.errors?.length ? v.errors : [truncate(`${r.stdout}${r.stderr}`, 300) || 'the kit gave no verdict on relatedTo'];
+      return { errors, shared: v.shared ?? {} };
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+  }
+
   /** Copy a bible's files into <scratch>/bible/ (bible.json, bible.md, components.mjs), replacing what is there. */
   copyInto(files: BibleFiles, scratch: string): void {
     copyBible(files, scratch);
@@ -459,6 +516,12 @@ export class BibleIndex {
       const out = path.join(stage, 'bible.json');
       const v = this.validateStyle(bible, stage, out);
       if (!v.ok || !fs.existsSync(out)) throw new ClientError(`bible.save: the kit refused the Style: ${v.errors.slice(0, 6).join('; ')}`);
+      // (7c SF) a zone Style shares its settlement Style's core roles
+      const rel = relatedOf(bible);
+      if (rel) {
+        const rc = this.relatedCheck(bible, rel);
+        if (rc.errors.length) throw new ClientError(`bible.save: ${rc.errors.slice(0, 4).join('; ')}`);
+      }
       // (U5) no other Style's components: a hand-made Style has parts only when they were added to it (and a hand edit keeps them)
       if (carry) {
         fs.copyFileSync(path.join(carry.dir, 'components.mjs'), path.join(stage, 'components.mjs'));
@@ -489,7 +552,14 @@ export class BibleIndex {
     const bible: Record<string, unknown> = { ...given, name, ...(req.scope ? { scope: req.scope } : {}) };
     const stage = fs.mkdtempSync(path.join(this.sc.config.dataDir, 'bible-check-'));
     try {
-      return this.validateStyle(bible, stage, null);
+      const v = this.validateStyle(bible, stage, null);
+      // (7c SF) a zone Style checked against its settlement Style, as bible.save does
+      const rel = v.ok ? relatedOf(bible) : undefined;
+      if (rel) {
+        const rc = this.relatedCheck(bible, rel);
+        if (rc.errors.length) return { ok: false, errors: rc.errors, warnings: v.warnings };
+      }
+      return v;
     } finally {
       fs.rmSync(stage, { recursive: true, force: true });
     }
@@ -673,10 +743,13 @@ export class Bibles {
     this.sc.ensureClaudeAvailable();
     if (req.seedPreset && !this.sc.bibleIndex.isBuiltin(req.seedPreset)) throw new ClientError(`seedPreset "${req.seedPreset}" is not a built-in bible (${this.sc.bibleIndex.list().filter((b) => b.builtin).map((b) => b.id).join(', ')})`);
     for (const r of req.references ?? []) if (!fs.existsSync(path.join(this.sc.config.libraryDir, r, `${r}.blueprint.json`))) throw new ClientError(`reference "${r}" is not in the library`);
+    // (7c SF) a zone Style: its settlement Style pinned now (its latest version), the job copies its core roles in
+    const relId = req.ext?.[EXT_RELATED_TO];
+    const relatedTo = relId !== undefined ? this.sc.bibleIndex.relatedTarget(relId) : undefined;
     const base = `bib_${slugify(req.name ?? req.prompt.split(/\s+/).slice(0, 4).join(' '), 28) || 'bible'}`;
     let id = base;
     for (let n = 2; this.sc.bibleIndex.taken(id); n++) id = `${base}_${n}`;
-    const j = this.create('request', id, 1, req);
+    const j = this.create('request', id, 1, { ...req, ...(relatedTo ? { relatedTo } : {}) });
     this.sc.log.info(`bible job ${j.id} requested: ${id} ("${truncate(req.prompt, 80)}")`);
     return j;
   }
@@ -688,7 +761,7 @@ export class Bibles {
     if (!vs.length) throw new ClientError(this.sc.bibleIndex.isBuiltin(id) ? `${id} is a built-in bible: request a new bible with seedPreset "${id}" instead` : `no bible "${id}"`);
     if (this.active().some((j) => j.bibleId === id)) throw new ClientError(`bible ${id} is being made or revised already`);
     const info = this.sc.bibleIndex.get(id)!;
-    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(critique ? { critique } : {}), ...(info.rarity ? { rarity: structuredClone(info.rarity) } : {}) };
+    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(critique ? { critique } : {}), ...(info.rarity ? { rarity: structuredClone(info.rarity) } : {}), ...(info.relatedTo ? { relatedTo: { ...info.relatedTo } } : {}) };
     const j = this.create('revise', id, vs[vs.length - 1]! + 1, req);
     this.sc.log.info(`bible job ${j.id}: revise ${id} -> v${j.version}`);
     return j;
@@ -746,17 +819,19 @@ export class Bibles {
     const copy = src.info.builtin;
     const draft: Record<string, unknown> = {
       ...kept,
-      // format 2 like every new version; the source's restraint when it had one (a format-1 or hand-made Style: the defaults)
-      ...(json.format === 2 && json.restraint ? { restraint: json.restraint } : {}),
+      // format 2 like every new version (7c SF: a format 3 Style's stays 3); the source's restraint when it had one
+      ...((json.format === 2 || json.format === 3) && json.restraint ? { restraint: json.restraint } : {}),
       components: src.info.parts?.length ? [...src.info.parts] : [...REQUIRED_COMPONENTS],
     };
-    const v = await this.validate(scratch, { ...draft, format: 2, id: j.bibleId, version: j.version, name: j.request.name ?? src.info.name }, scope);
+    // ((7c SF) a format 3 Style keeps format 3; every other version is format 2, as since 5a)
+    const fmt = json.format === 3 ? 3 : 2;
+    const v = await this.validate(scratch, { ...draft, format: fmt, id: j.bibleId, version: j.version, name: j.request.name ?? src.info.name }, scope);
     if (!v.ok) return { ok: false, error: `the Style does not validate as a bible: ${truncate(v.errors.join('; '), 1000)}` };
-    const restraint = restraintOf({ ...v.bible, format: 2, ...(draft.restraint ? { restraint: draft.restraint } : {}) });
+    const restraint = restraintOf({ ...v.bible, format: fmt, ...(draft.restraint ? { restraint: draft.restraint } : {}) });
     const motifs = Array.isArray(v.bible.motifs) ? (v.bible.motifs as unknown[]) : [];
     w.bible = {
       ...v.bible,
-      format: 2,
+      format: fmt,
       motifs,
       restraint: { ...restraint, heroMotifs: heroesOf(restraint.heroMotifs, motifs) },
       id: j.bibleId,
@@ -980,8 +1055,19 @@ export class Bibles {
         const r = await backend.draft({ job: j, work: w, scratch, budgetLeft: left, retryErrors });
         this.sc.store.markDirty();
         if (!r.ok) return this.passEnded(id, r);
-        // (5a) every new version is format 2 (the kit validates its restraint and limits)
-        const v = await this.validate(scratch, { ...r.bible, format: 2, id: j.bibleId, version: j.version }, scope);
+        // (7c SF) a zone Style: its settlement Style's core roles, copied in by code (the draft's own for every other role)
+        const related = j.request.relatedTo;
+        if (related) {
+          const rc = this.sc.bibleIndex.relatedCheck({ roles: r.bible.roles ?? {} }, related, true);
+          if (rc.errors.length) {
+            this.fail(id, `relatedTo ${related.id} v${related.version}: ${truncate(rc.errors.join('; '), 1000)}`);
+            return 'finished';
+          }
+          r.bible = { ...r.bible, roles: { ...((r.bible.roles as Record<string, string> | undefined) ?? {}), ...rc.shared } };
+        }
+        // (5a) every new version is format 2 (the kit validates its restraint and limits); (7c SF) a settlement or zone Style format 3
+        const fmt = jobFormat(scope, !!related);
+        const v = await this.validate(scratch, { ...r.bible, format: fmt, id: j.bibleId, version: j.version, ...(related ? { relatedTo: { ...related } } : {}) }, scope);
         if (!v.ok) {
           if (w.draftRetries < 1) {
             w.draftRetries++;
@@ -993,11 +1079,11 @@ export class Bibles {
           return 'finished';
         }
         // (5a) format 2: the restraint (the draft's own, else the defaults with its first 3 motifs as heroes)
-        const restraint = restraintOf({ ...v.bible, format: 2, ...(r.bible.restraint ? { restraint: r.bible.restraint } : {}) });
+        const restraint = restraintOf({ ...v.bible, format: fmt, ...(r.bible.restraint ? { restraint: r.bible.restraint } : {}) });
         const motifs = Array.isArray(v.bible.motifs) ? (v.bible.motifs as unknown[]) : [];
         w.bible = {
           ...v.bible,
-          format: 2,
+          format: fmt,
           motifs,
           restraint: { ...restraint, heroMotifs: heroesOf(restraint.heroMotifs, motifs) },
           id: j.bibleId,
@@ -1046,7 +1132,7 @@ export class Bibles {
         this.update(id, { status: 'rendering', step: 'installing the bible and its sheet' });
         // (5a) format 2: the drafted list (the 5 required plus at most 3) is the library; extra exports are not listed
         const drafted = (w.bible!.components as string[] | undefined) ?? [];
-        const comps = w.bible!.format === 2 && drafted.length ? [...new Set(drafted)] : [...new Set([...drafted, ...c.components])];
+        const comps = (w.bible!.format === 2 || w.bible!.format === 3) && drafted.length ? [...new Set(drafted)] : [...new Set([...drafted, ...c.components])];
         // (U5) the job drafted them: they are the Style's own parts
         w.bible = { ...w.bible!, components: comps, parts: comps, cost: w.cost };
         const stage = path.join(scratch, 'install');
@@ -1135,6 +1221,10 @@ export class SimBibleBackend implements BibleBackend {
         proportions: { storey: 4, roofPitch: 1, overhang: 1, windowRhythm: 3, plinth: 1 },
         roofLanguage: 'steep gable', silhouette: 'tall and narrow', motifs: ['chain lanterns'], tiers: { humble: ['wall_alt'], important: ['wall', 'trim'] },
         lighting: 'low and warm', avoid: ['white'], components: [...REQUIRED_COMPONENTS],
+        // (7c SF) a settlement Style's format 3 members (the job fills the settlement member's defaults; a building Style has none)
+        ...((p.job.request.scope ?? 'building') === 'settlement'
+          ? { connectors: { prefer: ['rope_bridge', 'ladder'], ladder: { landingEvery: 16 } }, settlement: { verticality: 'high', density: 'low', roleShares: { wall: [0.05, 0.6], frame: [0.02, 0.3] } } }
+          : {}),
       },
       prose: `# ${p.job.request.name ?? 'Sim Ashfall'}\n\nA simulated style bible (no Claude) for: ${p.job.request.prompt}${p.job.request.notes ? `\n\nRevised: ${p.job.request.notes}` : ''}\n`,
     };
@@ -1194,4 +1284,20 @@ export const PLAYER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
  */
 export function isModOwned(owner: string | undefined | null): boolean {
   return typeof owner === 'string' && owner.length > 0 && !PLAYER_UUID.test(owner);
+}
+
+/** (7c SF) A Style's format: 1 (none), 2 or 3. */
+export function formatOf(j: Record<string, unknown>): 1 | 2 | 3 {
+  return j.format === 3 ? 3 : j.format === 2 ? 2 : 1;
+}
+
+/** (7c SF) A format 3 zone Style's settlement Style (its `relatedTo` pin), or undefined. */
+export function relatedOf(j: Record<string, unknown>): BiblePin | undefined {
+  const r = j.relatedTo as { id?: unknown; version?: unknown } | undefined;
+  return j.format === 3 && r && typeof r.id === 'string' && Number.isInteger(r.version) ? { id: r.id, version: r.version as number } : undefined;
+}
+
+/** (7c SF) The format a bible job writes: 3 for a settlement Style or a zone Style (relatedTo), else 2 (as since 5a). */
+export function jobFormat(scope: string, related: boolean): 2 | 3 {
+  return scope === 'settlement' || related ? 3 : 2;
 }

@@ -365,5 +365,6 @@ test('bible format 2: validated restraint with defaults; at most 6 motifs and 3 
   assert.match(errs({ restraint: { detailDensity: 'lots' } }), /detailDensity must be one of sparse, moderate, rich/);
   assert.match(errs({ restraint: { windowsPerFacadeMin: 1.5 } }), /windowsPerFacadeMin must be an integer/);
   assert.match(errs({ restraint: { colour: 1 } }), /unknown field 'colour'/);
-  assert.match(validateBible({ ...F1, format: 3 }, { frame: false }).errors.join(), /format must be 1 or 2/);
+  // ((7c SF) format 3 is Style format 3 now: 4 is the first refused)
+  assert.match(validateBible({ ...F1, format: 4 }, { frame: false }).errors.join(), /format must be 1, 2 or 3/);
 });

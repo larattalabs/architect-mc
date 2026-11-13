@@ -423,7 +423,7 @@ public final class Wire5a {
 	// ------------------------------------------------------------------ bibles
 
 	/**
-	 * A bible's effective restraint (sidecar bibles.ts {@code restraintOf}): format 2's own with the defaults filled in; format 1:
+	 * A bible's effective restraint (sidecar bibles.ts {@code restraintOf}): format 2's (or 3's) own with the defaults filled in; format 1:
 	 * the defaults, hero motifs = its first 3 motifs (strings or {@code {name}} objects).
 	 */
 	public static Bible.Restraint restraintOf(JsonObject bibleJson) {
@@ -440,7 +440,9 @@ public final class Wire5a {
 				}
 			}
 		}
-		boolean f2 = Wire4b.num(bibleJson, "format") == 2;
+		// (7c SF) format 3 carries format 2's restraint
+		long fmt = Wire4b.num(bibleJson, "format");
+		boolean f2 = fmt == 2 || fmt == 3;
 		JsonObject r = f2 ? Wire4b.obj(bibleJson, "restraint") : new JsonObject();
 		List<String> hero = r.has("heroMotifs") && r.get("heroMotifs").isJsonArray() ? Wire4b.strings(r, "heroMotifs") : motifs;
 		hero = hero.size() > 3 ? hero.subList(0, 3) : hero;

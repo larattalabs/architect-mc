@@ -23,7 +23,9 @@ import java.util.Optional;
  *     roof_trim, chimney} plus what it adds)
  * @param owner who asked for it ({@code <modid>:<thing>}), absent = the player
  * @param ext the request's namespaced extra data (a copy)
- * @param format (since 1.6.0) the bible format: 1 (4b) or 2 (5a, with restraint)
+ * @param format (since 1.6.0) the bible format: 1 (4b) or 2 (5a, with restraint); (since NEXT, 7c SF) 3: a settlement or zone Style
+ *     (format 2 plus connectors' prefer and look parameters, forms, scatter, settlement, references and relatedTo; the Style JSON is
+ *     the wire, kit/lib/style3.mjs)
  * @param restraint (since 1.6.0) its effective restraint (a format-1 bible: the defaults, its first 3 motifs as heroes)
  * @param archived (since 1.6.0) hidden from the pickers ({@link Bibles#archive}); its entries and re-skins are unaffected
  * @param critique (since 1.6.0) the sheet critique ({@code bible.json critique}: overall, scores, issues), when the bible job had

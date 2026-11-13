@@ -115,6 +115,7 @@ public final class ApiRules {
 					case "plan.revision" -> "planRevisions"; // 6d RV-d: plan/0's revision mode (revision.parentArtifact: keep, add, refill), checkPlan sends the parent
 					case "site.analyse" -> "siteSurvey"; // 7b AF: Survey.site (the helper's kit analyses the frozen volume) and Regions.affordances
 					case "design.program" -> "givenPrograms"; // M5 GP: Designs.fromProgram, variant, variantByKey (since 1.55.0)
+					case "bible.format3" -> "styleFormat3"; // 7c SF: Style format 3 (connectors prefer and look, forms, scatter, settlement, references) and related Styles (BibleRequest ext architect_mc:relatedTo; since NEXT)
 					case "site.design" -> "siteDesign"; // 7b DS: DesignRequest.site, Designs.siteVariant, SITE follows (with PL's fitToSite and PlaceRequest.site)
 					case "region.siteLots" -> "siteLots"; // 7b SL: site lots (r.siteLot, LotSpec.site, $.lots[].site) and plan/0's layout.elevated
 					case "region.link" -> "linkPass"; // 7b LP: the link pass at realise (port links between site lots, IR v2, NO_LINK)

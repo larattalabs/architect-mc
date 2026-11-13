@@ -269,6 +269,8 @@ function search(env, ctx) {
   const TC = C.tree ?? CLIMB_TREE_COST, treeN = (k) => (treeC && treeC[k] ? TC : 0);
   // (7a K1) the special moves this edge searches with, the flag bit (F = 2 when a row may set it) and whether the goal needs it
   const special = ctx.special ?? [], F = special.some((x) => x.m.flag) ? 2 : 1, needFlag = !!ctx.needFlag;
+  // ((7c SF) a format 3 Style's preferred auto moves: the extra cost of each row it does not prefer, {row: cost}; absent, none)
+  const rowExtra = ctx.rowExtra ?? null;
   const free0 = ctx.free ?? blockedW;
   const goalH = isInt(ctx.goalH) ? ctx.goalH : -1, goalLead = ctx.goalLead ?? 0;
   const ND = maxCut + maxFill + 1, SPC = 32 * ND * F;
@@ -454,7 +456,7 @@ function search(env, ctx) {
     for (const x of special) {
       const code = x.m.code, f0 = curF;
       x.m.expand(x.st, { i, j, k, h, kk, y, q, f: f0, W, D, r: env.r, G, inS, free: (c) => (!corridor || corridor[c]) && !free0[c], dOf, builtY, latLo, latHi, w, nearEnd,
-        relax: (k2, h2, kk2, q2, cost, a2, f2 = f0) => relax(s, k2, h2, kk2, q2, cost, code, a2, false, f2) });
+        relax: (k2, h2, kk2, q2, cost, a2, f2 = f0) => relax(s, k2, h2, kk2, q2, rowExtra ? cost + (rowExtra[x.m.name] ?? 0) : cost, code, a2, false, f2) });
     }
   }
   if (found < 0) return { moves: null, expanded };
@@ -787,7 +789,9 @@ export function routePass(survey, volumes, intent) {
      
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: (e.stairs ?? stairs) && !coarse && (!prof || prof.stairs), ladders: ladders && (!prof || prof.ladders), nearEnd, // ((6c S3) an edge's own `stairs: false`)
       ...(prof ? { cost: { ...COST, ...prof.cost }, ladderMax: prof.ladderMax } : {}),
-      ...(sp.length ? { special: sp, needFlag } : {}) };
+      ...(sp.length ? { special: sp, needFlag } : {}),
+      // ((7c SF) an auto edge's span rows its Style does not prefer: their extra cost (compile.mjs legOptions))
+      ...(sp.length && e.rowExtra ? { rowExtra: e.rowExtra } : {}) };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {
     const P = [], landings = [], ladderCols = [];

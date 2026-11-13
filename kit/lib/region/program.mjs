@@ -441,7 +441,7 @@ export class Region {
       const k1 = {};
       // ((6c T3) and the bridge and tunnel rows': `once` and the opaque per-edge `t3` options)
       // ((7a foundation) and the 7a rows' opaque per-edge `t7` options and the edge's `profile` over the built-in moves)
-      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial', 'keepEnds']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role)
+      for (const key of ['spans', 'spanOnce', 'span', 'approach', 'once', 't3', 't7', 'profile', 'hairpinLanding', 'stairMaterial', 'keepEnds', 'rowExtra']) if (e[key] !== undefined) k1[key] = e[key]; // ((7a CL) and a switchback's own landing depth, a climb's tread role; (7c SF) an auto edge's rowExtra)
       // ((6c D3) a reach join: its own `frame` (rects), its `to` end's `lead`, `graded` (no 4e road: its columns are exactly its
       // footprint) and its own `part`; absent: as before)
       const d3 = {};
