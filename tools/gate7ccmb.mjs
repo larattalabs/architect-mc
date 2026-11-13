@@ -154,10 +154,21 @@ const groupOf = (g) => api(`sgroup ${g}`);
 async function verifyAll(sites) {
   const out = {};
   for (const s of sites) {
-    const v = await call('dev.site.verify', { site: s }, 300_000);
-    out[s] = { owned: v.owned, mismatches: v.mismatches };
+    const v = await call('dev.site.verify', { site: s, max: 200 }, 300_000);
+    out[s] = { owned: v.owned, mismatches: v.mismatches, first: (v.first ?? []).slice(0, 200) };
   }
   return out;
+}
+/**
+ * Every module verifies, but for vanilla's own physics: CM-a's castle stands its four corner towers on two rows of the ground's dirt_path
+ * outside the hall floor (7 x 2 cells under each tower, 28 in each end module, 0 in the centre), and the game turns a dirt path under a solid
+ * block into dirt. Those cells, and only those, may differ: each listed mismatch names dirt_path and dirt, at most 28 per module, every
+ * mismatch listed. (A design leftover of CM-a's castle; the placement writes the template exactly, the game changes it.)
+ */
+const PATH_UNDER_TOWERS = 28;
+function vanillaOnly(v) {
+  return Object.values(v).every((x) => x.mismatches === 0 || (x.mismatches <= PATH_UNDER_TOWERS && x.first.length === x.mismatches
+    && x.first.every((l) => /after Block\{minecraft:dirt_path\}.* now Block\{minecraft:dirt\}/.test(l))));
 }
 
 // ------------------------------------------------------------------ ingame
@@ -211,7 +222,7 @@ steps.ingame = async () => {
   if (grp1) {
     const v = await verifyAll(grp1.sites);
     const seam = await api(`stack ${X0 + 40} ${gy + 3} ${Z0 + 2}`);
-    check(Object.values(v).every((x) => x.mismatches === 0) && seam.length === 2, `every module verifies (0 mismatches) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
+    check(vanillaOnly(v) && seam.length === 2, `every module verifies (mismatches ${Object.values(v).map((x) => x.mismatches).join('/')}: only vanilla's dirt_path -> dirt under CM-a's corner towers) and the west/centre seam cell's stack is ${seam.length} (LAYER)`, { v, seam });
     out.wholeFirst = { group: g1, verify: v, seam };
   }
   const r1 = g1 ? await result(await api(`remove ${g1} ${OWNER} noforce`), 600_000) : null;
@@ -230,8 +241,8 @@ steps.ingame = async () => {
   const grp2b = g2 ? await groupOf(g2) : null;
   const left = (grp2b?.stages ?? []).filter((s) => s.name !== 'east').flatMap((s) => s.sites ?? []);
   const vLeft = await verifyAll(left.length ? left : (grp2b?.sites ?? []).slice(0, 2));
-  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && Object.values(vLeft).every((x) => x.mismatches === 0),
-    'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back)', { u, stages: grp2b?.stages, vLeft });
+  check(!!u?.removed && (grp2b?.stages ?? []).find((s) => s.name === 'east')?.state === 'UNDONE' && vanillaOnly(vLeft) && Object.keys(vLeft).length === 2,
+    'module first: undoStage(east) removes the east module; its stage is UNDONE and the two modules left still verify (the seam handed back; vanilla\'s path under the towers only)', { u, stages: grp2b?.stages, vLeft });
   const r2 = g2 ? await result(await api(`remove ${g2} ${OWNER} noforce`), 600_000) : null;
   await L.settle(1500);
   const e2 = await eflat(area1, h1, c1);
@@ -347,7 +358,7 @@ steps.crash = async () => {
   const grp = g ? await groupOf(g) : null;
   const v = await verifyAll(grp?.sites ?? sites.map((s) => s.id));
   const h1 = await hashOf(area);
-  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && Object.values(v).every((x) => x.mismatches === 0) && h1 === hC,
+  check(sites.length === 3 && !!grp && (grp.stages ?? []).every((s) => s.state === 'PLACED') && vanillaOnly(v) && h1 === hC,
     `after the restart the composite's batch resumed: 3 modules stand in group ${g} (${(grp?.stages ?? []).map((s) => `${s.name}:${s.state}`).join(' ')}), each verifies, and the area equals the clean placement's hash`, { sites: sites.map((s) => [s.id, s.blueprint]), v, same: h1 === hC });
   out.resumed = { group: g, verify: v, sameAsClean: h1 === hC };
   const r = g ? await result(await api(`remove ${g} ${OWNER} noforce`), 600_000) : null;
