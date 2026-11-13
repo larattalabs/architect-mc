@@ -28,8 +28,8 @@ import org.jspecify.annotations.Nullable;
  * it changes:
  * <ul>
  * <li>a round waits for its check ({@code settlement.awaiting {round, plan}}, status CHECKING): the mod runs {@link
- * dev.larattalabs.architect.api.Regions#checkPlan} over the plan (the Overworld, the claim, no caller anchors: only the built-in
- * {@code claim_*} ones, owner null (the player), the design's Style as the bible) and answers {@code region.compose.checked {designId,
+ * dev.larattalabs.architect.api.Regions#checkPlan} over the plan (the Overworld, the claim, the built-in {@code claim_*} anchors and the
+ * caller's own from {@code ComposeRequest.EXT_HINTS}'s {@code anchors}, owner null (the player), the design's Style as the bible) and answers {@code region.compose.checked {designId,
  * round, check}} (or {@code refused} with the reason), once per round per session; after a restart the next snapshot asks again;</li>
  * <li>a PICKED design (a template fits) has its program planned over the claim ({@code Regions.plan}, as 6b's {@link RegionDesigns}), and
  * its {@code planId} joins the result.</li>
@@ -89,7 +89,7 @@ public final class Composes {
 				dev.larattalabs.architect.api.Sample::summary).exceptionally(e -> "");
 			return summary.thenCompose(sum -> RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, LoadPolicy.LOADED_ONLY).thenCompose(
 				cols -> BlobPut.put(link, cols.encode(), "survey").thenCompose(blobId -> RegionDesigns.claimVolume(level, c, cols).thenCompose(vol -> link.send(
-					message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol)))))).thenCompose(ack -> {
+					withBuilds(message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol), level, c))))))).thenCompose(ack -> {
 						if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
 							String err = opt(ack, "error");
 							return CompletableFuture.failedFuture(err != null && err.startsWith("op_key_conflict") ? new RegionsImpl.RegionException(Reason.OP_KEY_CONFLICT,
@@ -142,6 +142,24 @@ public final class Composes {
 		return m;
 	}
 
+	/**
+	 * The message with the players' builds meeting the claim (6c PT: {@code BuildViews.planJson}, what {@link
+	 * dev.larattalabs.architect.api.Regions#checkPlan} keeps every part clear of), at most 64, so the composer can build round them; nothing
+	 * when there are none.
+	 */
+	static JsonObject withBuilds(JsonObject m, ServerLevel level, BoundingBox c) {
+		JsonArray b = dev.larattalabs.architect.placed.BuildViews.planJson(dev.larattalabs.architect.site.Sites.dimensionId(level), new int[] {c.minX(), level
+			.getMinY(), c.minZ(), c.maxX(), level.getMaxY(), c.maxZ()});
+		if (!b.isEmpty()) {
+			JsonArray keep = new JsonArray();
+			for (int i = 0; i < Math.min(64, b.size()); i++) {
+				keep.add(b.get(i));
+			}
+			m.add("builds", keep);
+		}
+		return m;
+	}
+
 	/** A settlement design changed (server thread): a round's plan is checked; a PICKED design is planned once. */
 	public static void changed(MinecraftServer server, Design d, JsonObject raw) {
 		JsonObject st = raw.get("settlement") instanceof JsonObject o ? o : null;
@@ -171,7 +189,7 @@ public final class Composes {
 		}
 	}
 
-	/** The PlanRequest a round's plan is checked with (the Overworld, the claim, no anchors, the record's Style). Pure. */
+	/** The PlanRequest a round's plan is checked with (the Overworld, the claim, the record's anchors and Style). Pure. */
 	static PlanRequest checkRequest(JsonObject plan, ServerLevel level, BoundingBox claim, JsonObject st) {
 		String bible = null;
 		Integer version = null;
@@ -179,7 +197,16 @@ public final class Composes {
 			bible = opt(sty, "id");
 			version = sty.get("version") instanceof JsonElement v && v.isJsonPrimitive() ? v.getAsInt() : null;
 		}
-		return new PlanRequest(plan.deepCopy(), level, claim, Map.of(), opt(st, "owner"), bible, version, null, null, new JsonObject(), null);
+		// the caller's anchors (ComposeRequest.EXT_HINTS's {anchors: {name: [x, y, z]}}, the helper validated them into the record)
+		Map<String, net.minecraft.core.BlockPos> anchors = new java.util.TreeMap<>();
+		if (st.get("anchors") instanceof JsonObject an) {
+			for (Map.Entry<String, JsonElement> e : an.entrySet()) {
+				if (e.getValue() instanceof JsonArray a && a.size() == 3) {
+					anchors.put(e.getKey(), new net.minecraft.core.BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
+				}
+			}
+		}
+		return new PlanRequest(plan.deepCopy(), level, claim, anchors, opt(st, "owner"), bible, version, null, null, new JsonObject(), null);
 	}
 
 	/** A check as {@code region.compose.checked} carries it: the PlanCheck's members without the catalogue and the light preview. Pure. */

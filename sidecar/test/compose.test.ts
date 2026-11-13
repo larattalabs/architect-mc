@@ -128,6 +128,16 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(callerOptions(undefined)).toEqual({ repairs: 1 });
     expect(callerOptions({ 'architect_mc:composeHints': { zones: [{ id: 'harbour' }] }, 'architect_mc:composeSystem': ' Keep a wall. ', 'architect_mc:repairRounds': 2 })).toEqual({ hints: { zones: [{ id: 'harbour' }] }, system: 'Keep a wall.', repairs: 2 });
     expect(() => callerOptions({ 'architect_mc:repairRounds': 3 })).toThrow(/FIELD_LIMIT.*repairRounds/);
+    // composeHints.anchors: the caller's named places, validated and kept apart from the other hints
+    expect(callerOptions({ 'architect_mc:composeHints': { anchors: { stone: [1, 64, 2], player: [3, 64, 4] }, zones: [] } })).toEqual({ anchors: { player: [3, 64, 4], stone: [1, 64, 2] }, hints: { zones: [] }, repairs: 1 });
+    expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: { claim_n: [0, 0, 0] } } })).toThrow(/not built in/);
+    expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: { stone: [0, 1.5, 0] } } })).toThrow(/integer blocks/);
+    expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: [] } })).toThrow(/anchors is an object/);
+    const withA = composePrompt({ brief: 'b', claim, summary: '', roles: [], images: [], anchors: { stone: [1, 64, 2] }, answer: TEXT.answer });
+    expect(withA).toContain("the caller's: stone at 1 64 2; none other");
+    const withB = composePrompt({ brief: 'b', claim, summary: '', roles: [], images: [], builds: [{ id: 'b_1', kind: 'HOUSE', bounds: [1, 64, 1, 9, 70, 9], entrances: [{ pos: [5, 64, 1], facing: 'north' }] }], answer: TEXT.answer });
+    expect(withB).toContain("## The player's own builds in the claim");
+    expect(withB).toContain('- b_1 (HOUSE): bounds [1,64,1,9,70,9], doors [{"pos":[5,64,1],"facing":"north"}]');
     expect(() => callerOptions({ 'architect_mc:composeHints': [1] })).toThrow(/composeHints/);
     expect(() => callerOptions({ 'architect_mc:composeSystem': 'x'.repeat(CALLER_SYSTEM_MAX + 1) })).toThrow(/composeSystem/);
     const p = composePrompt({ brief: 'b', claim, summary: '', roles: [], images: [], hints: { zones: [{ id: 'harbour' }] }, answer: TEXT.answer });
@@ -289,6 +299,20 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     const bad = await ask({ type: 'region.compose', brief: 'b', claim, surveyBlobId: sc.blobs.putBytes(survey, 'survey', 'bin'), ext: { 'architect_mc:repairRounds': 5 } });
     expect(bad.ok).toBe(false);
     expect(bad.error).toMatch(/FIELD_LIMIT/);
+  }, 600_000);
+
+  it('the caller\'s anchors (composeHints.anchors) are in the record the mod checks with: a plan naming "stone" checks READY', async () => {
+    const { designId } = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: BAD, reason: 'r1' }], 'architect_mc:composeHints': { anchors: { stone: [96, 64, 180] } } } });
+    await until(() => st(designId).awaiting?.round === 1, 600_000);
+    expect(st(designId).anchors).toEqual({ stone: [96, 64, 180] });
+    // the mod checks with the record's anchors (Composes.checkRequest); here the kit's check with the same
+    const aw = st(designId).awaiting!;
+    const r = await kitCheck(aw.plan, { survey, claim, anchors: st(designId).anchors });
+    expect(r.check.overall).toBe('READY');
+    await ask({ type: 'region.compose.checked', designId, round: 1, check: { checkId: 'c1', ...r.check, artifactSha: r.artifactSha } });
+    await until(() => final(designId), 60_000);
+    expect((sc.designs.get(designId)!.result as Record<string, unknown>).outcome).toBe('COMPOSED');
+    expect(queries(st(designId).rounds[0]!.jobId)[0]!.prompt).toContain("the caller's: stone at 96 64 180");
   }, 600_000);
 
   it('the sim stand-in composes a plan that checks READY at once (no repair round)', async () => {

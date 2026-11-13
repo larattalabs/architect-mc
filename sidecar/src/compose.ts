@@ -62,7 +62,7 @@ export const COMPOSE_REFS = ['plan/0#compact'];
 export const COMPOSE_AFFORDANCES = 60;
 /** A repair prompt's catalogue long text is at most this many characters. */
 export const KINDS_TEXT_MAX = 60_000;
-/** The built-in anchors: the only ones a composed plan may name (a compose request has none of its own). */
+/** The built-in anchors (with a caller's own, composeHints.anchors, the only ones a composed plan may name). */
 export const BUILTIN_ANCHORS = ['claim_center', 'claim_n', 'claim_e', 'claim_s', 'claim_w'];
 
 /** The kit file holding the composer's prompt text (its `## system`, `## answer` and `## repair` sections). */
@@ -119,16 +119,50 @@ export const CALLER_SYSTEM_MAX = 30_000;
 /** At most this many repair rounds (Steward's PlanWriter repairs up to 2). */
 export const MAX_REPAIR_ROUNDS = 2;
 
+/** At most this many caller anchors (PlanRequest's ANCHORS_MAX). */
+export const ANCHORS_MAX = 64;
+const ANCHOR_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+
+/** The caller's options (callerOptions). */
+export interface CallerOptions {
+  hints?: Record<string, unknown>;
+  /** composeHints.anchors: the caller's named positions, checked with every round's plan (PlanRequest.anchors) */
+  anchors?: Record<string, [number, number, number]>;
+  system?: string;
+  repairs: number;
+}
+
+/**
+ * `composeHints.anchors`: {name: [x, y, z]} (names [a-z][a-z0-9_]{0,31}, not a built-in one, at most 64; integer block positions), the
+ * caller's named places (Steward's `stone`, `player`): the composer may name them, and the mod checks each round with them. Throws.
+ */
+export function hintAnchors(raw: unknown): Record<string, [number, number, number]> {
+  const bad = (why: string) => new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"].anchors ${why}`);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw bad('is an object {name: [x, y, z]}');
+  const out: Record<string, [number, number, number]> = {};
+  const names = Object.keys(raw).sort();
+  if (names.length > ANCHORS_MAX) throw bad(`has ${names.length} anchors (at most ${ANCHORS_MAX})`);
+  for (const n of names) {
+    const v = (raw as Record<string, unknown>)[n];
+    if (!ANCHOR_NAME.test(n) || BUILTIN_ANCHORS.includes(n)) throw bad(`"${n}": a name is [a-z][a-z0-9_]{0,31} and not built in`);
+    if (!Array.isArray(v) || v.length !== 3 || !v.every((c) => Number.isInteger(c) && Math.abs(c as number) <= 30_000_000)) throw bad(`"${n}" is [x, y, z] in integer blocks`);
+    out[n] = [v[0] as number, v[1] as number, v[2] as number];
+  }
+  return out;
+}
+
 /** The caller's ext members the composer reads, validated: {hints?, system?, repairs}. Throws a ClientError (FIELD_LIMIT) naming the key. */
-export function callerOptions(ext: Record<string, unknown> | undefined): { hints?: Record<string, unknown>; system?: string; repairs: number } {
+export function callerOptions(ext: Record<string, unknown> | undefined): CallerOptions {
   const e = ext ?? {};
-  const out: { hints?: Record<string, unknown>; system?: string; repairs: number } = { repairs: REPAIR_ROUNDS };
+  const out: CallerOptions = { repairs: REPAIR_ROUNDS };
   const h = e[EXT_HINTS];
   if (h !== undefined) {
     if (!h || typeof h !== 'object' || Array.isArray(h)) throw new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"] is an object ({zones, parts, ...})`);
     const n = JSON.stringify(h).length;
     if (n > HINTS_MAX) throw new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"] is ${n} characters as JSON (at most ${HINTS_MAX})`);
-    out.hints = h as Record<string, unknown>;
+    const { anchors: an, ...rest } = h as Record<string, unknown>;
+    if (an !== undefined) out.anchors = hintAnchors(an);
+    if (Object.keys(rest).length) out.hints = rest;
   }
   const sy = e[EXT_SYSTEM];
   if (sy !== undefined) {
@@ -200,6 +234,10 @@ export interface ComposeState {
   rounds: ComposeRound[];
   /** repair rounds after the first (ext architect_mc:repairRounds; default REPAIR_ROUNDS) */
   repairs?: number;
+  /** the caller's anchors (composeHints.anchors): the mod checks every round with them */
+  anchors?: Record<string, [number, number, number]>;
+  /** the players' builds meeting the claim, as the mod sent them (id, kind, bounds, entrances) */
+  builds?: Array<Record<string, unknown>>;
   /** while the mod checks a round's plan */
   awaiting?: { round: number; plan: Record<string, unknown> };
 }
@@ -245,8 +283,12 @@ export interface ComposeInput {
   affordanceNote?: string | undefined;
   images: string[];
   pick?: ComposeState['pick'];
-  /** the caller's structured hints (ext architect_mc:composeHints) */
+  /** the caller's structured hints (ext architect_mc:composeHints, without its anchors) */
   hints?: Record<string, unknown> | undefined;
+  /** the caller's anchors (composeHints.anchors) */
+  anchors?: Record<string, [number, number, number]> | undefined;
+  /** the players' builds in the claim (the mod's) */
+  builds?: Array<Record<string, unknown>> | undefined;
   /** the closing "How to answer" text (composer.md's `answer`) */
   answer: string;
 }
@@ -264,7 +306,7 @@ export function composePrompt(i: ComposeInput): string {
     '',
     '## Claim',
     `x ${c.minX}..${c.maxX}, z ${c.minZ}..${c.maxZ} (${w}x${d} columns), y ${c.minY}..${c.maxY}; north is -z`,
-    `anchors: ${BUILTIN_ANCHORS.join(', ')} (built in; none other)`,
+    `anchors: ${BUILTIN_ANCHORS.join(', ')} (built in)${i.anchors && Object.keys(i.anchors).length ? `; the caller's: ${Object.entries(i.anchors).map(([n, p]) => `${n} at ${p.join(' ')}`).join(', ')}` : ''}; none other`,
     '',
     '## Style',
     i.style ? `${i.style}; roles: ${i.roles.join(', ') || 'none'}` : `none (the default roles: ${i.roles.join(', ')})`,
@@ -275,6 +317,7 @@ export function composePrompt(i: ComposeInput): string {
     `## Site affordances (the land features found in the claim's 3D volume, the best ${COMPOSE_AFFORDANCES} by score${i.images.length ? '; the images number them the same way' : ''})`,
     affordanceList(i.affordances, i.affordanceNote),
     '',
+    ...(i.builds?.length ? ['## The player\'s own builds in the claim (keep every part clear of them and their doors; name one as a feature {build: {id}}, a target {build: id} or an endpoint {build: id, port: "door"})', ...i.builds.map((b) => `- ${String(b.id)} (${String(b.kind ?? 'build')}): bounds ${JSON.stringify(b.bounds ?? null)}${Array.isArray(b.entrances) && b.entrances.length ? `, doors ${JSON.stringify(b.entrances)}` : ''}`), ''] : []),
     ...(i.images.length ? ['## Planning images', `${i.images.length} images come before this text: ${i.images.join(', ')}. top: a hillshade, north up, each affordance framed and numbered; section-1: a cut west to east through the claim's middle; section-2: north to south; iso: the land from the south-west.`, ''] : []),
     '## The template pick',
     pick?.program ? `no bundled template fits (the closest: ${pick.program}${pick.reason ? `; ${pick.reason}` : ''}), so compose the settlement from plan/0's parts.` : 'no bundled template fits, so compose the settlement from plan/0\'s parts.',
@@ -480,6 +523,8 @@ export class ComposeDesigns {
       ...(key ? { opKey: key } : {}),
       rounds: [],
       repairs: opts.repairs,
+      ...(opts.anchors && Object.keys(opts.anchors).length ? { anchors: opts.anchors } : {}),
+      ...(msg.builds?.length ? { builds: msg.builds.map((b) => Object.fromEntries(['id', 'kind', 'bounds', 'entrances'].filter((k) => b[k] !== undefined).map((k) => [k, b[k]]))) } : {}),
     };
     const d = sc.designs.create(req, undefined, { kind: 'settlement', settlement: st as unknown as Record<string, unknown> });
     if (key) sc.opKeys.record('compose', msg.owner, key, body, d.id);
@@ -681,7 +726,7 @@ export class ComposeDesigns {
     const first = composePrompt({
       brief: st.brief, claim: st.claim, summary, style: st.style ? `${st.style.id} v${st.style.version}` : undefined, roles,
       affordances: st.affordances, affordanceNote: st.affordanceError ?? (st.volume ? undefined : 'the mod sent no volume of the claim'),
-      images: images.map((im) => im.name), pick: st.pick, hints: opts.hints, answer: text.answer,
+      images: images.map((im) => im.name), pick: st.pick, hints: opts.hints, anchors: st.anchors, builds: st.builds, answer: text.answer,
     });
     const scripted = ext['architect:simCompose'];
     const sim = sc.designerName() === 'sim' ? (Array.isArray(scripted) && scripted.length ? scripted : [simCompose()]) : undefined;

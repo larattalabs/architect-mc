@@ -78,6 +78,9 @@ class ApiCOTest {
 		assertNull(pr.budget());
 		assertEquals(plan, pr.plan());
 		assertFalse(PlanChecks.planImagesAsked(pr));
+		JsonObject withAnchors = JsonParser.parseString("{\"anchors\":{\"player\":[1,64,2],\"stone\":[5,65,5]}}").getAsJsonObject();
+		PlanRequest an = Composes.checkRequest(plan, null, new BoundingBox(0, -64, 0, 9, 319, 9), withAnchors);
+		assertEquals(java.util.Map.of("player", new net.minecraft.core.BlockPos(1, 64, 2), "stone", new net.minecraft.core.BlockPos(5, 65, 5)), an.anchors());
 		PlanRequest bare = Composes.checkRequest(plan, null, new BoundingBox(0, -64, 0, 9, 319, 9), JsonParser.parseString("{}").getAsJsonObject());
 		assertNull(bare.bible());
 		assertNull(bare.owner());

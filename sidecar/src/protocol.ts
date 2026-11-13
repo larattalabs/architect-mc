@@ -1523,6 +1523,7 @@ export const RegionComposeMsg = z.object({
     .optional()
     .describe("the claim's frozen ARVX volume (TC's window): the pick's land check and the composer's affordances"),
   style: BibleId.optional().describe('the Style (bible) to compose with: the pick and the check use it; its role names reach the composer'),
+  builds: z.array(z.record(z.string(), z.unknown())).max(64).optional().describe("(6c PT) the players' builds meeting the claim (the mod's BuildViews: id, kind, bounds, footprint, entrances), shown to the composer; the check keeps every part clear of them"),
   images: z.boolean().optional().describe('send the planning images to the composing jobs (default false)'),
   model: ModelId.optional().describe('default config regionDesignModel, else jobModel'),
   budgetUsd: BudgetUsd.optional().describe('hard stop on the estimated cost of the pick and every round together'),
