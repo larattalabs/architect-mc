@@ -38,12 +38,13 @@ const L = await import('./lib/run6b.mjs');
 const { OUT, call, check, connect, fails, log, results, root, state } = L;
 const B = await import('./lib/gate6chy-b.mjs');
 const G = await import('./lib/gate6crs-game.mjs');
+const core = await import('./lib/gate6chy-core.mjs');
 
 L.refuseKeys();
 const KIT = path.join(root, 'kit');
 const imp = (p) => import(pathToFileURL(path.join(KIT, p)).href);
 const json = (o) => String(JSON.stringify(o ?? null)).replaceAll(' ', '');
-const ctx = { L, OUT, KIT, imp, json, root, check, log, B };
+const ctx = { L, OUT, KIT, imp, json, root, check, log, core, B };
 const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
 
 /** The recorded asks whose parts waited on the three forms (byte identity's named movers). */
@@ -52,6 +53,8 @@ export const BF_MOVED = Object.freeze({
   'asks/ring_city.json': 'BF: crater_lake (form.crater, params.lake read as lake) answers fits (was unsupported until 7c)',
   'asks/sky_monastery.json': 'BF: sky_island (form.floating_island) answers adjusted (placed again around the cloister; was unsupported until N-P0-1)',
   'asks/crater_mine.json': 'BF: crater (form.crater) answers fits (was unsupported until 7c)',
+  'extension/e13_floating_island.json': 'BF: a bare form.floating_island answers fits (supported, no locator: nearest the claim\'s centre; was unsupported until N-P0-1)',
+  'extension/e20_7c_drafts.json': 'BF: hold adjusted, bowl and isle fits (supported since BF; were unsupported until 7c); vault and hang unchanged',
 });
 // (and ring_city's ring_town, blocked DEPENDENCY on its crater lake before: the dependency lifted, it fits)
 const ASKS_MOVE = /^(dwarven_hold\/mountain_hollow|ring_city\/crater_lake|ring_city\/ring_town|sky_monastery\/sky_island|crater_mine\/crater) /;
