@@ -28420,6 +28420,9 @@ hint's y). No API change, no catalogue change, no Java, no sidecar change.
   or follow refuses `SITE_UNFIT ports_met` before anything is placed (`unfitRule`, as for every site finding).
 - **PLAYBOOK §7** (Steward's skill points to it; the coordinator tells Steward): a new bullet "A walk port sits at its hint's height
   exactly" (general, naming no scenario) and a symptom row for the new message.
+- **The BRIEF's Site section** (`kit/lib/siteBrief.mjs`, the coordinator's ask before merge): its Ports line keeps "within 2 of each
+  hint" and adds "(a walk port facing a side at the hint's y exactly: the walkways between lots are level; the checker's `ports_met`
+  error)", so the designer is told up front and does not spend a check-fix round on it.
 
 **Why not LP stepping a 1-block difference** (the alternative in the brief): a stair at the deck end would only mend run 1 (two decks 1
 apart). It would not mend attempt 2, where the design's port was 2 rows under the ramp the land's sculpting cut for the hint's y: no
@@ -28429,13 +28432,14 @@ already agree on the hint's y, so holding the design to it fixes both readings a
 
 **Byte identity.** Every committed site design puts its walk ports at `site.port(...).at` exactly (`kit/designs/site/fit_*.mjs`, the
 examples, which the sim designer and SB's lots use), so no committed walk port moves and no fixture or golden changed: S5/S6 goldens,
-LP's and SL's fixtures, DS's `brief-sections.json`, the six examples' sha goldens.
+LP's and SL's fixtures, the six examples' sha goldens. The one golden that moves is DS's `kit/test/fixtures/ds/brief-sections.json`, for
+the BRIEF's Ports line only (5 lines, one per fixture with ports; its `comment` and every other line byte-identical).
 
 **Readings chosen:**
 1. Both ends must be walk ports facing a side (site and design); a design port of another kind or facing already fails `ports_met`'s
    kind/facing reason.
-2. The BRIEF's Site section (`kit/lib/siteBrief.mjs`) still says "within 2 of each hint": changing it moves DS's golden with no walk port
-   moving. Left for the coordinator (leftover below); the PLAYBOOK and the check's own message carry the rule.
+2. The BRIEF's Ports line is shared by every port site, so it carries the walk-port clause on sites without a walk port too (one line,
+   no per-site branch).
 
 **Checks** ($0; no gate run: kit only, nothing in game changed):
 - kit `node --test kit/test/*.test.mjs`: **1266/1266** at the WL kit commit (sc.test 14/14, with the new WL test: y +1 and -1 refused
@@ -28450,8 +28454,6 @@ LP's and SL's fixtures, DS's `brief-sections.json`, the six examples' sha golden
   and ds: 50/50.
 
 **Leftovers:**
-- `siteBrief.mjs` line "put a design port ... within 2 of each hint": add "(a walk port facing a side: the hint's y exactly)". It moves
-  `kit/test/fixtures/ds/brief-sections.json` (UPDATE_GOLDEN=1), the coordinator's call.
 - Installed entries designed before WL keep their off-level ports; their realise still refuses `NO_LINK LEVEL` (typed, nothing written).
 - The CONTRACT's 7b SC table (`SITE_CHECK_LIMITS`, the `ports_met` row) is not edited; this as-built is the record.
 
