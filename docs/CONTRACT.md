@@ -28446,6 +28446,7 @@ the BRIEF's Ports line only (5 lines, one per fixture with ports; its `comment` 
   with `level` and a checker error; exact passes; x/z off by 2 pass; a door and a hatch off by 1 in y keep the window; `walkLevel`
   overridable). No golden or fixture rewritten (the tree clean after the run).
 - `set -o pipefail; node tools/step-inputs.mjs check`: clean, 363 steps.
+- After the BRIEF line (eed104ac): kit 1266/1266 again (ds.test 7/7 on the re-cut golden), step-inputs clean, 363 steps.
 - api-compat: not applicable (no Java and no API package change); the Gradle build not run (no Java changed).
 - sidecar: untouched.
 - **gate-verifier (review, no runs): PASS** at f463bb7a, all six items: only the four files changed and no golden; y-only, both ends
