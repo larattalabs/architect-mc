@@ -12,7 +12,7 @@
    "dynamic": [],
    "env": [],
    "eager": [],
-   "verified": "20261103-093331-slice unit-mod"
+   "verified": "20261113-100918-change unit-mod"
   },
   "umt": {
    "classes": [
@@ -1552,9 +1552,11 @@
    "data": [
     "cherry",
     "dark",
+    "eval/fixtures/bibles/mosswater/**",
     "nope",
     "rustic",
     "tools",
+    "tools/api-baselines-build.mjs",
     "tools/apitest.mjs",
     "tools/bench6c0b.mjs",
     "tools/builtin-parts.mjs",
@@ -1609,7 +1611,10 @@
     "tools/gate6cx.mjs",
     "tools/gate6cy.mjs",
     "tools/gate6cy2.mjs",
+    "tools/gate6dad.mjs",
+    "tools/gate6dfs.mjs",
     "tools/gate6dgr.mjs",
+    "tools/gate6dlc.mjs",
     "tools/gate6drv.mjs",
     "tools/gate7acl.mjs",
     "tools/gate7acw.mjs",
@@ -1622,9 +1627,23 @@
     "tools/gate7ak2.mjs",
     "tools/gate7ak3.mjs",
     "tools/gate7alf.mjs",
+    "tools/gate7apg.mjs",
     "tools/gate7ark.mjs",
     "tools/gate7asa.mjs",
+    "tools/gate7baf.mjs",
+    "tools/gate7bds.mjs",
+    "tools/gate7blp.mjs",
+    "tools/gate7bpa.mjs",
+    "tools/gate7bpl.mjs",
+    "tools/gate7bsl.mjs",
+    "tools/gate7bso.mjs",
+    "tools/gate7bst.mjs",
+    "tools/gate7cbf.mjs",
+    "tools/gate7ccmb.mjs",
+    "tools/gate7chr.mjs",
+    "tools/gate7ctc.mjs",
     "tools/gatej3.mjs",
+    "tools/gatem5gp.mjs",
     "tools/gatesafety.mjs",
     "tools/gateu1.mjs",
     "tools/gateu2.mjs",
@@ -1645,13 +1664,14 @@
     "tools/partsab.mjs",
     "tools/readme-images.mjs",
     "tools/readme-survival.mjs",
+    "tools/sb-rescore.mjs",
     "tools/shoot.mjs",
     "tools/split-proof.mjs",
     "tools/sprint-proof.mjs",
     "tools/step-cache.mjs",
     "tools/step-inputs.mjs"
    ],
-   "verified": "20261103-093331-slice unit-kit"
+   "verified": "20261113-100918-change unit-kit"
   },
   "unit-sidecar": {
    "classes": [
@@ -1942,7 +1962,7 @@
     "kit/lint/**",
     "kit/test/**"
    ],
-   "verified": "20261103-093331-slice apijars"
+   "verified": "20261113-100918-change apijars"
   },
   "0a-stub": {
    "classes": [
@@ -8769,7 +8789,11 @@
    ],
    "eager": [
     "tools/api-compat.mjs"
-   ]
+   ],
+   "derived": [
+    "mod/build/**"
+   ],
+   "verified": "20261113-100918-change api-compat"
   },
   "pt-ingame": {
    "classes": [
