@@ -237,6 +237,12 @@ public interface ArchitectApi {
 	 * artifact's {@code $.secrets[]} ({@link Regions#artifact}): never in a part's answer, the check's preview or its siteplan, unless the
 	 * request asks with {@code ext[}{@link PlanRequest#EXT_SECRETS}{@code ]: true} (then {@code preview.secrets} and
 	 * {@code preview.siteplan.secrets}). In survival the hollow is free and the entrance a construction target. No new record, method or reason.
+	 * (7c AQ, since NEXT) {@code "aqueduct"} is advertised when the helper's kit plans aqueducts (its {@code plan.aqueduct}): a plan/0
+	 * course ({@code connector.channel} from/to) whose level must stand more than its fill over low ground is carried over it on arches
+	 * (the default) or piers ({@code params.span}), its trough's side walls 2 thick, in the Style's roles (where it answered
+	 * {@code unsupported channel.aqueduct} before); the part's answer has the block {@code channel.aqueduct} and
+	 * {@code aqueduct {span, every, length, rise, piers}}. In survival the piers, arches, walls and lining are construction targets and the
+	 * water is free. No new record, method or reason.
 	 * (7c RM, since 1.57.0) {@code "regionM15"} is advertised when the helper's kit checks region M15 (its {@code region.m15}): the region
 	 * check's warnings {@code M15:cantilever}, {@code M15:joint} (a port link's end, at a site lot's port), {@code M15:span} (over a Style
 	 * format 3 connector type's {@code maxSpan}) and {@code M15:neck}. Warnings only: no plan answer, record, method or reason changes.

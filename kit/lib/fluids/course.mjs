@@ -43,6 +43,8 @@ import { bodyAnswer, bodyId, naturalOf, shellCheck, outline, rimColumns, shellSt
 import { ringColumns } from './moat.mjs';
 import { registerOverflow, overflowsOn, crossingsOf, channelBlockOf } from './hooks.mjs';
 import { localWorld } from './body.mjs';
+import { m15LookOf, regionM15Limits } from '../region/checkM15.mjs';
+import { bomOf } from '../connectors/bom.mjs';
 import { waterGate } from './gate.mjs';
 
 export const acceptsOverflow = true;
@@ -54,6 +56,14 @@ export const COURSE = Object.freeze({
   drop: 6, riffle: 4, cut: 6, fill: 2, length: 512, spring: 3, pool: 3, maxNodes: 600000,
   limits: { width: [1, 5], depth: [1, 3], length: [4, 512], drop: [1, 8], riffle: [2, 6], cut: [0, 6], fill: [0, 2] },
 });
+
+/**
+ * (7c AQ) An aqueduct (channel.aqueduct): a course whose level must stand more than its fill over low ground is carried over it on piers
+ * or arches. `rise`: the most its level may stand over the ground (- 1) there (past it the course answers UNREACHABLE fill); `span`: the
+ * default support (params.span: piers or arches); `every`: the supports' spacing in course cells (a pier every 6, clear 5; an arch's
+ * piers every 8, clear 7: RM's cantilever limit 4 holds every trough cell within reach of one).
+ */
+export const AQUEDUCT = Object.freeze({ rise: 24, span: 'arches', spans: Object.freeze(['piers', 'arches']), every: Object.freeze({ piers: 6, arches: 8 }) });
 
 const k2 = (x, z) => `${x},${z}`;
 const k3 = (x, y, z) => `${x},${y},${z}`;
@@ -489,7 +499,115 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
       }
     }
   }
-  return { path, dirs, levels: prof.levels, prof, reaches, steps, carve, banks: [...banks.values()], offs, nR };
+  const out = { path, dirs, levels: prof.levels, prof, reaches, steps, carve, banks: [...banks.values()], offs, nR };
+  // (7c AQ) an aqueduct: the indexes standing more than `fill` over their ground are the span, carried on piers or arches
+  if (o.aqueduct) {
+    out.span = aqueductSpan(S, out, spec, o.aqueduct, { colsOf, bankOf, pcols, shells, stepCells });
+  }
+  return out;
+}
+
+/**
+ * (7c AQ) The span of an aqueduct (§3 row 9): every index of the course whose level stands more than `fill` over its ground (its lanes'
+ * and banks' lowest, - 1) is a span index; the columns of its cross-section (the lanes, the side walls beside them, the bank course
+ * outside those) are span columns. In a span column nothing stands under the trough's floor but the supports: the course's raised fill
+ * there (geo.banks) is dropped under the floor and kept over it (the bank course: the side walls stay 2 thick at the top, HY's single
+ * breach rule) as the span's wall; a pier (a full cross-section from the ground to the trough, 1 thick) stands every `every` indexes
+ * (both span ends included); `arches` turns the run between two piers into a round arch (its soffit 1 under the floor at the crown, the
+ * springing down at the piers, never touching the ground). Returns {cells: [[x, y, z, 'wall' | 'pier' | 'arch']], cols: Set "x,z",
+ * span, every, length (span indexes), rise (the most clear cells under the floor), piers (those standing at least 1 high)}.
+ */
+export function aqueductSpan(S, geo, spec, aq, { colsOf, bankOf, pcols, shells, stepCells }) {
+  const { reaches, offs, nR, dirs, path } = geo;
+  const levels = geo.levels;
+  const isSpan = [];
+  for (let i = 0; i < nR; i++) isSpan.push(levels[i] - (pcols[i].g - 1) > spec.fill);
+  const water = new Map(); // column -> its lowest water cell
+  for (const R of reaches) for (const [x, y, z] of R.cells) { const kk = k2(x, z); if (!water.has(kk) || y < water.get(kk)) water.set(kk, y); }
+  for (const st of geo.steps) for (const [x, y, z] of st.cells) { const kk = k2(x, z); if (!water.has(kk) || y < water.get(kk)) water.set(kk, y); }
+  // each span index's cross-section and its floor (the shell under its lowest water)
+  const outerOf = (i) => {
+    const set = new Map();
+    for (const d of [dirs[i].din, dirs[i].dout]) for (const c of lanesAt(path[i][0], path[i][1], DIRS[d], [offs[0] - 2, offs[offs.length - 1] + 2])) set.set(k2(...c), c);
+    return [...set.values()];
+  };
+  const crossOf = new Map(); // index -> [[x, z]]
+  const floorOf = new Map(); // column -> the lowest floor of its span indexes
+  for (let i = 0; i < nR; i++) {
+    if (!isSpan[i]) continue;
+    const L = colsOf(i);
+    let floor = Infinity;
+    for (const [x, z] of L) if (water.has(k2(x, z))) floor = Math.min(floor, water.get(k2(x, z)) - 1);
+    if (floor === Infinity) floor = levels[i] - spec.depth;
+    const cs = new Map();
+    for (const c of [...L, ...bankOf(i), ...outerOf(i)]) cs.set(k2(...c), c);
+    crossOf.set(i, [...cs.values()]);
+    for (const kk of cs.keys()) floorOf.set(kk, Math.min(floorOf.get(kk) ?? Infinity, floor));
+  }
+  const cols = new Set(floorOf.keys());
+  const cells = new Map();
+  if (!cols.size) return { cells: [], cols, span: aq.span, every: aq.every, length: 0, rise: 0, piers: 0 };
+  // the raised fill in span columns: under the floor dropped, over it the span's wall
+  // (HY's fill may name a cell its shell or lining holds, which their part writes over it; the span's wall never does: one writer a cell)
+  const lined = new Set(reaches.flatMap((R) => [...R.lining, ...R.weir].map((c) => k3(...c))));
+  const kept = [];
+  for (const c of geo.banks) {
+    const kk = k2(c[0], c[2]);
+    if (!cols.has(kk)) { kept.push(c); continue; }
+    if (c[1] >= floorOf.get(kk) && !shells.has(k3(...c)) && !lined.has(k3(...c)) && !stepCells.has(k3(...c))) cells.set(k3(...c), [c[0], c[1], c[2], 'wall']);
+  }
+  geo.banks = kept;
+  // every solid of the trough by column (its lowest): the shells, linings, weirs and the span's wall
+  const low = new Map();
+  const solid = (x, y, z) => { const kk = k2(x, z); if (cols.has(kk) && (!low.has(kk) || y < low.get(kk))) low.set(kk, y); };
+  for (const kk of shells) { const [x, y, z] = un3(kk); solid(x, y, z); }
+  for (const R of reaches) for (const c of [...R.lining, ...R.weir]) solid(...c);
+  for (const c of cells.values()) solid(c[0], c[1], c[2]);
+  const busy = (x, y, z) => { const kk = k3(x, y, z); return shells.has(kk) || stepCells.has(kk) || cells.has(kk); };
+  const under = (x, z) => (low.has(k2(x, z)) ? low.get(k2(x, z)) : floorOf.get(k2(x, z)) + 1);
+  // the supports: a pier every `every` span indexes of each run (its ends included), an arch between two piers
+  let piers = 0, rise = 0, length = 0;
+  for (let i = 0; i < nR; i++) {
+    if (!isSpan[i]) continue;
+    let j = i;
+    while (j + 1 < nR && isSpan[j + 1]) j++;
+    length += j - i + 1;
+    const at = [];
+    for (let k = i; k <= j; k += aq.every) at.push(k);
+    if (at[at.length - 1] !== j) at.push(j);
+    for (const k of at) {
+      let wrote = false;
+      for (const [x, z] of crossOf.get(k)) for (let y = S.groundAt(x, z) + 1; y < under(x, z); y++) if (!busy(x, y, z)) { cells.set(k3(x, y, z), [x, y, z, 'pier']); wrote = true; }
+      if (wrote) piers++;
+    }
+    for (let k = i; k <= j; k++) for (const [x, z] of crossOf.get(k)) rise = Math.max(rise, under(x, z) - S.groundAt(x, z) - 1);
+    if (aq.span === 'arches') {
+      for (let q = 0; q + 1 < at.length; q++) {
+        const a = at[q], b = at[q + 1], n = b - a - 1;
+        if (n < 1) continue;
+        const R = (n + 1) / 2;
+        for (let t = 1; t <= n; t++) {
+          const d = Math.min(t, n + 1 - t) - 0.5;
+          const thick = 1 + Math.round(R - Math.sqrt(Math.max(0, R * R - (R - d) * (R - d))));
+          for (const [x, z] of crossOf.get(a + t)) {
+            const top = under(x, z) - 1, g = S.groundAt(x, z);
+            // (the soffit never reaches the ground: at least one clear cell under it, else the run is left open)
+            for (let y = top; y > top - thick && y > g + 1; y--) if (!busy(x, y, z)) cells.set(k3(x, y, z), [x, y, z, 'arch']);
+          }
+        }
+      }
+    }
+    i = j;
+  }
+  const list = [...cells.values()].sort((p, q) => p[1] - q[1] || p[0] - q[0] || p[2] - q[2]);
+  return { cells: list, cols, span: aq.span, every: aq.every, length, rise, piers };
+}
+
+/** (7c AQ) An aqueduct's support spacing: AQUEDUCT.every by span, its clear run (every - 1) at most RM's `span.aqueduct` when a Style sets one. */
+export function aqueductEvery(span, limits = null) {
+  const e = AQUEDUCT.every[span] ?? AQUEDUCT.every.piers;
+  const lim = limits?.span?.aqueduct ?? null;
+  return Number.isInteger(lim) ? Math.max(2, Math.min(e, lim + 1)) : e;
 }
 
 /** The columns of a side x side square centred on p (odd side), with `cols` kept. */
@@ -555,7 +673,12 @@ export function layCourse(r, geo, o) {
   const all = geo.reaches.flatMap((R) => [...R.cells, ...R.lining, ...R.weir]);
   const xs = all.map((c) => c[0]), ys = all.map((c) => c[1]), zs = all.map((c) => c[2]);
   const natural = naturalOf(r, { minX: Math.min(...xs) - 1, maxX: Math.max(...xs) + 1, minZ: Math.min(...zs) - 1, maxZ: Math.max(...zs) + 1 }, Math.min(...ys) - 2, Math.max(...ys) + 3);
-  const shellRole0 = shellRoleOf(M, natural, S);
+  // ((7c AQ) an aqueduct's span columns take the built look's chains whatever the course's look: a stone trough on its supports)
+  const span = geo.span?.cells?.length ? geo.span : null;
+  const MB = span ? courseMaterials(r.ctx, 'built') : null;
+  const shellRoleN = shellRoleOf(M, natural, S);
+  const shellRoleB = span ? shellRoleOf(MB, natural, S) : null;
+  const shellRole0 = span ? (x, y, z, w) => (span.cols.has(k2(x, z)) ? shellRoleB : shellRoleN)(x, y, z, w) : shellRoleN;
   const unsafe = o.unsafe ?? {};
   const shellRole = (x, y, z, w) => (unsafe.sandLining && w === 'lining' && unsafe.sandLining[0] === x && unsafe.sandLining[1] === y && unsafe.sandLining[2] === z ? 'minecraft:sand' : shellRole0(x, y, z, w));
   // the exits: notches in the rim, never beside a step, a weir or a landing, never under another reach's shell
@@ -591,6 +714,20 @@ export function layCourse(r, geo, o) {
     bp.columns({ abs: 0 }, { abs: 0 }, cols, [M.bank], { cond: 0 });
     (r.meta.parts[bp.id] ??= {}).kind = 'add';
     notes.push(`raised banks: ${geo.banks.length} cell(s) of fill (the reach stands over a dip of at most ${o.fill ?? COURSE.fill})`);
+  }
+  // (7c AQ) the span: its walls (the bank course over the floor) in the lining's role, the piers in the foundation's, the arches in the
+  // structure's; one part, a construction target in survival
+  if (span) {
+    const all = r.ctx.roles ?? {};
+    const pal = [MB.lining[0], shellBlock(all, 'foundation'), shellBlock(all, 'structure')];
+    const idx = { wall: 0, pier: 1, arch: 2 };
+    const sp = r.part(`${o.id}_span`.slice(0, 48), { stage });
+    const cols = [];
+    for (const [x, y, z, role] of span.cells) cols.push(x, z, y, y, idx[role]);
+    span.states = span.cells.map((c) => pal[idx[c[3]]]);
+    sp.columns({ abs: 0 }, { abs: 0 }, cols, pal, { cond: 0 });
+    (r.meta.parts[sp.id] ??= {}).kind = 'add';
+    span.part = sp.id;
   }
   // (the batch, HY-b's item 2 of "for the batch") one frozen volume per course: the union of its reaches' own volume boxes (each reach's
   // cells, shell and lining grown by 2, by 9 when raised, as r.fluidBody grows its own), shared by every reach's guard; a union past the
@@ -967,16 +1104,25 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   const legs = [...(via ?? ownVia)];
   let cur = starts;
   const full = { path: [], levels: [] };
+  let aqueduct = false;
   for (let li = 0; li <= legs.length; li++) {
     const g = li < legs.length ? legs[li] : goal;
-    const rr = route(G, cur, g, ro);
+    let rr = route(G, cur, g, ro);
+    if (rr.fail === 'level' || rr.fail === 'blocked') {
+      // (7c AQ) a valley past fill: the course is an aqueduct, its level held up to AQUEDUCT.rise over the ground (the span on piers or
+      // arches); only where HY answered the reserved channel.aqueduct (the deep probe), so every other answer is HY's
+      const deep = route(G, cur, g, { ...ro, fill: 64, maxNodes: 200000 });
+      if (!deep.fail) {
+        p.block = 'channel.aqueduct';
+        const aq = route(G, cur, g, { ...ro, fill: AQUEDUCT.rise });
+        if (aq.fail) return refuse('UNREACHABLE', `the course crosses low ground deeper than an aqueduct carries it (its level at most ${AQUEDUCT.rise} over the ground)`, { kind: 'fill', block: 'channel.aqueduct', limit: AQUEDUCT.rise });
+        rr = aq;
+        aqueduct = true;
+      }
+    }
     if (rr.fail) {
-      // why: a valley past fill (an aqueduct), a cut too deep, a wall, else unreachable
+      // why: a cut too deep, a wall, else unreachable
       if (rr.fail === 'level' || rr.fail === 'blocked') {
-        const deep = route(G, cur, g, { ...ro, fill: 64, maxNodes: 200000 });
-        // ((S-T3-4's way, as tunnel.under) the answer names the shape it needs: channel.aqueduct, reserved until 7c)
-        if (!deep.fail) p.block = 'channel.aqueduct';
-        if (!deep.fail) return refuse('UNSUPPORTED', `the course crosses low ground deeper than its fill (${spec.fill}): it needs an aqueduct (channel.aqueduct, reserved until 7c)`, { kind: 'fill', block: 'channel.aqueduct', until: '7c' }, { until: '7c', block: 'channel.aqueduct' });
         const cutAny = route(G, cur, g, { ...ro, cut: 64, maxNodes: 200000 });
         if (!cutAny.fail) return refuse('UNREACHABLE', `the course would cut deeper than ${spec.cut} under the ground to reach its end`, { kind: 'cut', limit: spec.cut });
         if (tail.kind === 'join' && li === legs.length) return refuse('WATER', `the course reaches ${part.to.feature ? 'the water' : 'its end'} with no drop left and no bank for a weir`, { kind: 'join' });
@@ -1024,8 +1170,20 @@ export function planCourse(C, p, { block = 'channel.course', via = null, race = 
   if (adjust) { const a = adjust(full); if (a?.refused) return refuse(a.refused.code, a.refused.message, a.refused.evidence ?? {}, a.refused.extra ?? {}); }
   const frozen = surfaceFreezesAlong(C.ctx, full.path, full.levels);
   const rng = C.ctx.rng ? C.ctx.rng(`course:${p.id}`) : null;
-  const geo = courseGeometry(env.S, full.path, full.levels, spec, { head, tail }, { id: p.id, rng, frozen, okCol: (x, z) => x >= G.box.minX && x <= G.box.maxX && z >= G.box.minZ && z <= G.box.maxZ && G.ok(x, z) });
+  // (7c AQ) the span's support (params.span, read only by an aqueduct: a course without one keeps HY's note) and its spacing (RM's limits)
+  let aq = null;
+  if (aqueduct) {
+    const want = part.params?.span;
+    const span = AQUEDUCT.spans.includes(want) ? want : AQUEDUCT.span;
+    for (let k = notes.length - 1; k >= 0; k--) if (/^params\.span not read/.test(notes[k])) notes.splice(k, 1);
+    if (want !== undefined && want !== span) notes.push(`params.span ${JSON.stringify(want)} not read (not piers or arches): ${span}`);
+    aq = { span, every: aqueductEvery(span, regionM15Limits(m15LookOf(C.ctx?.connectorLook?.look ?? null))) };
+    spec.block = 'channel.aqueduct';
+    spec.aqueduct = aq;
+  }
+  const geo = courseGeometry(env.S, full.path, full.levels, spec, { head, tail }, { id: p.id, rng, frozen, aqueduct: aq, okCol: (x, z) => x >= G.box.minX && x <= G.box.maxX && z >= G.box.minZ && z <= G.box.maxZ && G.ok(x, z) });
   if (geo.refused) return refuse(geo.refused.code, geo.refused.message, geo.refused.evidence ?? {});
+  if (aq) notes.push(`an aqueduct (channel.aqueduct): ${geo.span.length} cell(s) of the course on ${geo.span.span} over low ground (${geo.span.piers} piers every ${geo.span.every}, up to ${geo.span.rise} clear under its floor); the side walls 2 thick, in the Style's roles`);
   // the head's overflow from X: X's side shell cell at its level opened, its spillway's lining X's own (less the head's shell)
   if (head.kind === 'overflow') {
     const s = starts.find((q) => q.x === full.path[0][0] && q.z === full.path[0][1])?.site;
@@ -1120,6 +1278,13 @@ export function emit(K, p, res) {
     // (§1.6) the head's or the tail's reach beside natural water
     if (res.ends.head.kind === 'weir') flowingCheck(r, out.bodies[0]);
     if (['weir', 'join'].includes(res.ends.tail.kind)) flowingCheck(r, out.bodies[out.bodies.length - 1]);
+    // (7c AQ) the span's record (RM's M15_SPAN_TYPES.aqueduct: its parts judged as one connector type's spans): the span part and the
+    // shells of the reaches over it
+    if (geo.span?.part) {
+      const row = { course: p.id, span: geo.span.span, every: geo.span.every, length: geo.span.length, rise: geo.span.rise, piers: geo.span.piers };
+      const shellParts = geo.reaches.filter((R) => [...R.cols.keys()].some((kk) => geo.span.cols.has(kk))).map((R) => `${R.id}_shell`.slice(0, 48));
+      (r.meta.aqueducts ??= []).push(...[geo.span.part, ...shellParts].map((part) => ({ part, ...row })));
+    }
     const gates = crossingsOf(K).filter((x) => x.course === p.id);
     res.emitted = { bodies: out.bodies, notes: out.notes, waterGates: gates.map((x) => ({ wall: x.wall, cells: x.cells.length, lintel: x.lintel, grate: x.grate.length })) };
     const kind = res.race ? 'race' : 'course';
@@ -1129,6 +1294,7 @@ export function emit(K, p, res) {
   } catch (e) {
     bodiesRollback(r, m);
     if (r.meta.courses) { r.meta.courses = r.meta.courses.filter((c) => c.part !== p.id); if (!r.meta.courses.length) delete r.meta.courses; }
+    if (r.meta.aqueducts) { r.meta.aqueducts = r.meta.aqueducts.filter((c) => c.course !== p.id); if (!r.meta.aqueducts.length) delete r.meta.aqueducts; }
     throw e;
   }
 }
@@ -1160,10 +1326,18 @@ export function answer(K, p, res) {
   const geo = res.geo;
   const extra = { block: res.spec.block, look: res.spec.look, flow: res.spec.flow, width: res.spec.width, depth: res.spec.depth,
     steps: geo.steps.map((s) => ({ kind: s.kind, from: s.from, to: s.to, drop: s.drop })), ends: endsRow(res), length: geo.path.length,
-    ...(res.race ? { serves: res.race.serves } : {}), ...(e.waterGates?.length ? { waterGates: e.waterGates } : {}) };
+    ...(res.race ? { serves: res.race.serves } : {}), ...(e.waterGates?.length ? { waterGates: e.waterGates } : {}),
+    ...(geo.span ? { aqueduct: { span: geo.span.span, every: geo.span.every, length: geo.span.length, rise: geo.span.rise, piers: geo.span.piers } } : {}) };
   const notes = [...(res.notes ?? []), ...e.notes];
   if (res.race) notes.push(res.race.note);
-  return bodyAnswer(K, p, e.bodies, { rect: res.rect, notes, extra });
+  const a = bodyAnswer(K, p, e.bodies, { rect: res.rect, notes, extra });
+  // ((7c AQ) the span's blocks join the part's bill, as a bridge's piers do)
+  if (geo.span?.states?.length) {
+    const bom = { ...(K.record.bom[p.id] ?? {}) };
+    for (const [item, n] of Object.entries(bomOf(geo.span.states))) bom[item] = (bom[item] ?? 0) + n;
+    K.record.bom[p.id] = Object.fromEntries(Object.entries(bom).sort(([u], [v]) => (u < v ? -1 : u > v ? 1 : 0)));
+  }
+  return a;
 }
 
 void meets; void rectArr; void channelBlockOf; void sortCells; void un3;

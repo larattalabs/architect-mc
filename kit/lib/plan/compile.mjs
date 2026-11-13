@@ -872,7 +872,7 @@ function checkpoint(r) {
     paths: r.paths.length, nodes: r.graph.nodes.length, edges: r.graph.edges.length, graphIds: new Set(r.graphIds), forms: r.forms.length, opCount: r.opCount,
     notes: r.notes.length, passRuns: r.passRuns.length, blend: r.blendLots.length, relief: new Set(r.reliefLots), fields: { ...r.fields }, sideBlobs: { ...r.sideBlobs },
     pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
-    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null, climbs: r.meta.climbs ?? null, rockStairs: r.meta.rockStairs ?? null, lifts: r.meta.lifts ?? null, catwalks: r.meta.catwalks ?? null, spirals: r.meta.spirals ?? null }),
+    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null, bridges: r.meta.bridges ?? null, tunnels: r.meta.tunnels ?? null, climbs: r.meta.climbs ?? null, rockStairs: r.meta.rockStairs ?? null, lifts: r.meta.lifts ?? null, catwalks: r.meta.catwalks ?? null, spirals: r.meta.spirals ?? null, aqueducts: r.meta.aqueducts ?? null }),
     anchors: { ...r.anchors },
     // ((6c H) the fluid records, by length (their objects are referenced elsewhere: the bodies by the moat's pass input, the wet records
     // by their guards): a part that rolls back leaves no body, water, quay or wet record behind (null: the key was absent)
@@ -898,7 +898,7 @@ function rollback(r, c) {
   r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = { ...c.sideBlobs, ...volBlobs };
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
-  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels', 'climbs', 'rockStairs', 'lifts', 'catwalks', 'spirals']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
+  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes', 'bridges', 'tunnels', 'climbs', 'rockStairs', 'lifts', 'catwalks', 'spirals', 'aqueducts']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
   r.anchors = c.anchors;
   // ((6c H) meta.wetAsked is not restored: a wet write that asked a volume it did not hold keeps the two-plan flow's ask (finish.mjs))
   if (c.fluid) { restoreList(r, '_fluidBodies', c.fluid.bodies); for (const k of ['waters', 'quays', 'wet']) restoreList(r.meta, k, c.fluid[k]); }

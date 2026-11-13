@@ -125,6 +125,7 @@ public final class ApiRules {
 					case "region.templates" -> "scenarioTemplates"; // 7c TC: the template catalogue (the scenario programs, their land needs, the pick's affordances)
 					case "plan.bigForms" -> "bigForms"; // 7c BF: plan/0's form.hollow_mountain, form.crater and form.floating_island (since 1.56.0)
 					case "plan.hiddenRooms" -> "hiddenRooms"; // 7c HR: plan/0's form.hidden_room and the artifact's $.secrets[] (since 1.57.0)
+					case "plan.aqueduct" -> "aqueduct"; // 7c AQ: a course past its fill carried on piers or arches (channel.aqueduct; since NEXT)
 					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since 1.57.0)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)

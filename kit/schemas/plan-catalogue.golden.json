@@ -661,11 +661,24 @@
   },
   {
    "id": "channel.aqueduct",
-   "sinceApi": "1.36.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7c",
-   "note": "A course carried over low ground on piers or arches: what a course needing more than its fill answers (unsupported, with the shape it needs)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "rise": [
+     3,
+     24
+    ],
+    "spans": [
+     "piers",
+     "arches"
+    ],
+    "every": {
+     "piers": 6,
+     "arches": 8
+    }
+   },
+   "note": "AQ: a course (a connector.channel from/to) that must stand more than its fill over low ground is carried over it instead: the span on arches (default) or piers (params.span), a support every 8 or 6, the trough built (whatever the look) with its side walls 2 thick, in the Style's roles; its level at most 24 over the ground (else refused UNREACHABLE fill). The answer's block is channel.aqueduct, with aqueduct {span, every, length, rise, piers}. Survival: the piers, arches, walls and lining are construction targets; the water is free."
   },
   {
    "id": "form.relief",
