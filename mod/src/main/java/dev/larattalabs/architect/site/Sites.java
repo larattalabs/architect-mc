@@ -1125,6 +1125,11 @@ public final class Sites {
 			if (loadFailed) {
 				out.add(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 			}
+			// (7c CM-b) a composite union is never one plain site: Sites.place of its entry places its modules
+			String composite = given == null ? Composites.unionRefusal(bp.id()) : null;
+			if (composite != null) {
+				return verdictOf(List.of(new Refusal(Reason.NOT_ALLOWED, composite)), List.of(), null, survival);
+			}
 			if (movingId != null) {
 				moving = get(movingId);
 				if (moving == null) {
