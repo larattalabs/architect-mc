@@ -28324,6 +28324,12 @@ wrap_trunk dwelling, a woodcutter's lodge; P4 runs on those two).**
 - Sides are randomised per pair, and neither page nor any file name names an arm.
 - **The key:** `artifacts/7b/P4/ab-key.json`, kept apart and unchanged since the sheet. The coordinator sends the sheet; Noah's picks are
   recorded before the labels.
+- **Noah's picks (2026-11-13, via the parent session):** "Yes, prefer A on both", made on `sheet-close.html`. The close views decided
+  it: the first sheet's whole-window views read as too subtle.
+  - Unblinded with the key: pair 1 (tree_1) A = **off**; pair 2 (tree_6) A = **on**.
+  - **A 1-1 split, no majority**, so the site renders are not adopted by default (§16.5). They stay on as configured today
+    (`siteRenders` default true); the question carries to 7c's picks.
+  - Recorded in `artifacts/7b/P4/ab-picks.json`.
 
 **R (2 paid adaptations, `versionOf` + `site`, each after its $0 site variant: Steward's adapt-first order).**
 - P1's cliff design into DS's cliff_owned: the variant refused `SITE_UNFIT site_keep` (a player's pillar); the adaptation is shown ($0.89).
