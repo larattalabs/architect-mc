@@ -180,7 +180,9 @@ export function bars(x) {
   const d = x.determinism;
   out.push(row('determinism', 'Determinism', d ? `IR sha ${d.irShas.length} plans ${new Set(d.irShas).size === 1 ? 'identical' : 'DIFFER'}; tiles 1 vs 4 workers ${d.workersSame ? 'identical' : 'DIFFER'}; golden ${d.golden}` : 'n/a',
     'identical; committed golden scenarios/goldens/s1.json', d && new Set(d.irShas).size === 1 && d.workersSame && String(d.golden).startsWith('match')));
-  out.push(row('spend', 'Spend', `$${(x.spendUsd ?? 0).toFixed(2)}`, '$0.00 (S1 is a $0 run)', (x.spendUsd ?? 0) === 0));
+  // (7b PA) a paid batch run's spend is the PA ledger's (docs/CONTRACT.md "Phase 7b" §4): recorded, not a $0 bar
+  if (x.paid) out.push(row('spend', 'Spend', `$${(x.spendUsd ?? 0).toFixed(2)}`, 'the PA ledger (CONTRACT 7b §4; a paid run)', null, false));
+  else out.push(row('spend', 'Spend', `$${(x.spendUsd ?? 0).toFixed(2)}`, '$0.00 (S1 is a $0 run)', (x.spendUsd ?? 0) === 0));
   out.push(row('gallery', 'Gallery', x.approval ?? 'pending', "Noah's approval for this run's evidence.sha", x.approval === 'approved'));
   return out;
 }

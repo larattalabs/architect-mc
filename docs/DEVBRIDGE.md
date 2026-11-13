@@ -419,6 +419,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   entry: `{known, binding (SiteBinding.of), derivation {source, sourceVersion, kind, recipe}, ext, size}`) and `dev.ds.variant {entryId,
   site, opKey}` (`Designs.siteVariant` -> `{entryId, ms}`). A refusal answers `{refused: "<REASON>: message", detail}`. Driven by
   `tools/gate7bds.mjs`.
+- **2026-11-12 (7b slice PA):** `dev.ds.request` also takes `budgetUsd` (the job's hard stop), `bible` (a built-in Style with its parts) and
+  `versionOf` (an entry id: a paid adaptation of it into the site); `dev.ds.design` also answers `cost {usd, turns, inputTokens, outputTokens}`
+  (the job's own reported usage). Absent fields behave as DS's. Driven by `tools/gate7bpa.mjs` (the paid batch's ledger).
 - **2026-11-11 (7b slice SO):** new (`SliceSoDev`, generated headless too, TEST) `dev.so.watch {every?: 100}` (0: off; the records
   cleared): a support-order construction site (a site-bound placement with a fit other than `on_pad`) records its built set each time its
   built count crosses a multiple of `every`; `dev.so.snapshots {site}` -> `{every, bySupport?, queued?, built?, snapshots: [{built, cells:

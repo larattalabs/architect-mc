@@ -28216,6 +28216,180 @@ port on SV's trunk house, so treehouses can form a chain; a suspend lot in S5's 
    logs.
 4. **222529** at 729d9d39 (S5 only): every SB bar met; the golden cut from it.
 
+### Slice PA as built (branch `slice/PA` off main 0cdb1869; versions NEXT; paid, claude login only; recorded 2026-11-12)
+
+The phase's only paid batch (§3 row 12, §4, §5), through one driver, `tools/gate7bpa.mjs`, and one ledger, `tools/lib/pa-ledger.mjs`.
+Noah approved it on 2026-11-12 (via the parent session: "Pa may start"), with a $60 budget and a $90 hard cap. **Total spent: $29.49.**
+No $60 stop was reached. Every paid job ran on the claude login (`authSource` "claude login (personal use)", logged per job). The env
+of every child was scrubbed of `ANTHROPIC_*` and `CLAUDE*`, so `env | rg -i anthropic` reads empty (artifacts/7b/auth.log). No Discord.
+No API change and no catalogue change.
+
+**The driver and its rules.**
+- The ledger is `artifacts/7b/spend.json` (main checkout), with a copy per item at `artifacts/7b/<item>/spend.json`. Costs come from each
+  job's own reported usage.
+- **Committed vs spent.** "Committed" counts a running job, and a job that ended with no reported cost, at its full cap. A crash mid-job
+  can therefore never let the next step pass a line unseen.
+- **Before each paid job:**
+  - committed + the job's cap > $90 refuses;
+  - committed + the job's cap > $60 stops with exit 3 and writes `artifacts/7b/STOP.json` (spent per item, the step, its estimate and
+    cap, what is left, what is skipped on a no). Only `answer --step <step> --yes` recorded in the ledger passes that exact step;
+  - a key in the env, or an auth that is not the claude login, refuses;
+  - so does the nightly window, 01:30-03:30, including a step whose expected length would reach it.
+- **Each job's cap.** Its `budgetUsd` is its share of the item's cap (P1 $5, P2 and P3 $5.67, P4 $5, R $3.50).
+- **Retries.** At most one retry per item, charged to R. None was used.
+- **Re-statement.** After P1, the estimates are re-stated from P1's measured cost per design.
+- **Units.** `kit/test/pa-ledger.test.mjs`, 10/10 (gate step `pa-unit`).
+- **The DS hooks.** `dev.ds.request` gains `budgetUsd`, `bible` and `versionOf`; `dev.ds.design` reports `cost`
+  (client dev code; DEVBRIDGE.md).
+- **PA mode in `tools/lib/scenario-sb.mjs`.** The mode is guarded on `PA_PLAN`; without it, SB's $0 lots are exactly as before
+  (`sb-unit` green). It does the following:
+  - designs the archetypes and the landmark of a lot map, each paid job guarded by the ledger;
+  - makes every other lot a `Designs.siteVariant` of its archetype;
+  - takes `--reuse` (paid entries re-used as $0 variants on a re-run) and `--variants` (another lot map's variants).
+- **Run spend.** `scenarios.mjs` records a paid run's spend (`run.json`, the `spend` row, which is ungated for a paid run).
+
+**The ledger** (all estimates after P1 are the re-stated ones; none is over its estimate by more than 50%):
+
+| Item | Est. ($) | Cap ($) | Spent ($) | Jobs |
+|---|---|---|---|---|
+| P0 sim dry runs | 0 | 0 | 0 | sim only |
+| P1 calibration | 12 | 15 | 8.89 | cliff 3.26, span 3.23, suspend 2.40 |
+| P2 S5 treehouses | 9.63 (was 13) | 17 | 7.66 | A 1.92, B 2.46, landmark 3.28 |
+| P3 S6 cave city | 9.63 (was 13) | 17 | 6.44 | A 2.09, B 2.12, landmark 2.23 |
+| P4 images A/B (renders off) | 5.93 (was 8) | 10 | 4.76 | A 2.55, B 2.22 |
+| P5 S4 stretch | 3.70 (was 5) | 7 | 0 | not run (reading 2) |
+| R reserve: 2 adaptations | 5.19 (was 7) | 7 | 1.73 | owned 0.89, east 0.84 |
+| **Total** | | | **29.49** | 13 paid jobs, all `done` |
+
+**Measured.**
+- **Site multiplier 1.02.** P1's mean is $2.96 per STANDARD site-aware design (47-51 turns), against $2.9 for a plain STANDARD M
+  design (§4's mid). Re-statement factor 0.74 against §4's assumed $4 per design.
+- **`adapted`: $0.86 mean** (2 runs, $0.89 and $0.84, 31 and 30 turns, about 2.7 min each). The sidecar's `adapted` estimate is still
+  seeded at one repair turn (DS); updating that seed is a leftover.
+- The archetypes and landmarks cost $1.92-3.28 each.
+
+**P0 (sim, $0, passed before P1).**
+- **Standalone:** `artifacts/7b/P0/standalone.json`, 24/24.
+  - The three P1 requests and R's adaptations ran on the sim designer, each design with its 4 scratch renders.
+  - BRIEF site vs plain: +26/-9, +30/-9 and +27/-9 (the Site section in), `brief-diff-*-site-vs-plain.json`.
+  - Images on vs off: the 4 renders absent and the brief -1 line (DS reading 4), `brief-diff-*-images-on-vs-off.json`.
+  - The sim's adaptation into cliff_owned fails `site_keep` (the sim makes no change), as its variant did.
+- **In game:** the P2/P3 lot maps on the sim, run 20261113-014424-change, PASS. Every §5 bar met:
+  - S6: Fit 7/7, disturbance 0.179, ports 7/7, 0 errors;
+  - S5: Fit 6/6, disturbance 0.001, ports 6/6, 0 errors.
+
+**P1 (calibration, non-scenario sites, built-in Style rustic).**
+- All three are shown, each declares its fit (attach_to_cliff, span, suspend), and each installs bound to its fixture site.
+- **The finding.** The $0 site variant of the cliff design onto DS's cliff_east refused `SITE_UNFIT site_bound`. The program derived its
+  roof from the land and wrote `set(5,24,2)` outside the 18x24x12 lot.
+- **The fix (P1 only, as §4 allows).** PLAYBOOK §7 gains "Stay inside `site.size` on any land" (clamp land-derived coordinates; fewer
+  storeys or a lower roof), plus a symptom row. It is general and names no scenario. The playbook was then frozen through P4.
+- It was not validated by a paid P1 re-run: R could not absorb one. P2/P3's variants were its first test, and all 7 installed (below).
+  The PLAYBOOK's upstream is Steward's skill: this change is reported to Steward.
+
+**P2 (S5 treehouses, in game, rustic; the coordinator's reading: S5 has wrap_trunk lots only, so the second archetype is another
+wrap_trunk dwelling, a woodcutter's lodge; P4 runs on those two).**
+- **Lot map:** A tree_1 (a family home), B tree_6 (the lodge), the landmark tree_2 (the grove's meeting hall). tree_3 is a variant of A;
+  tree_4 and tree_5 are variants of B. All 3 designs and all 3 $0 variants installed.
+- **Run 1, the natural lot map (the primary result).** The realise refused before any write: "NO_LINK: lot tree_5 port walk_w: LEVEL:
+  port tree_2.walk_w is at feet y 87, tree_5.walk_w at 86".
+  - The site hint for `walk_w` is design y 2. A and B put the port at y 1 (within `ports_met`'s ±2); the landmark put it at y 2.
+  - Pairs (1,4) and (3,6) are A with B and level. Pair (2,5) is L with B, a 1-block step that a branch walk refuses.
+  - Run 1 has no realised bars.
+- **Attempt 2 ($0, a secondary measurement approved by the coordinator).** The lot map was re-paired after run 1 so linked ports come
+  from the same design (tree_5 = a variant of L). No new paid design, and no design or playbook touched.
+  - Realised. Met: Fit 6/6 wrap_trunk (100%), disturbance 0.000, checker 0 errors, reachability 2/2 nodes, safety (M4 0, M5 0%, M8 100%),
+    structure 0 floating; buildings 0 errors (§5's "0 checker errors").
+  - **sb-ports 5/6, a miss:** tree_1.walk_w was unreached. The pair (1,4) deck (feet y85, the designs' port at y 1) sits 2 rows under its
+    sculpted ramp's top (feet y87, cut for the hint's y 2); a player can't climb 2. It is the design's port against the land's ramp, not
+    the walker.
+  - A recorded reading, not a miss: 2 restraint warnings (the grove hall's detail noise 0.505). The scenarios' buildings row judges a
+    stricter restraint threshold than §5.
+- **Verdict: "mechanism green ($0 lots, SB), designer not shown"** for S5's paid run (the port height). There was no attempt 3.
+
+**P3 (S6 cave city, in game, medieval).**
+- **Lot map:** A hall_n1, B hall_s1 (a smith's home), the landmark hall_w (the great hall). n2 and n3 are variants of A; s2 and s3 of B.
+  All 3 designs and all 4 $0 variants installed.
+- Met: Fit 7/7 carve_into (100%), ports 7/7, checker and buildings 0 errors, reachability 2/2, safety, structure.
+- **Disturbance 0.514, a miss** against the bar of 0.3. Per lot: n1 0.48, s1 0.46, n2 0.51, s2 0.46, n3 0.51, s3 0.46, w 0.28. It is all
+  cut and no fill: the carved homes cut 1,319-1,481 of the 2,880 lot cells. SB's $0 example scored 0.179.
+- **Verdict: "mechanism green ($0 lots, SB), designer not shown" on disturbance**, with no retune (AGENTS: never against S5/S6).
+
+**P4 (images A/B).**
+- S5's A and B requests were replayed exactly (P2 run 1's bodies on their own kept site volumes, shas checked) on the claude login with
+  `siteRenders: false`. Both are shown.
+- **The blind sheet:** `artifacts/7b/P4/ab/sheet.html` (pair-<n>-A/B.png). Noah asked for closer views, and `sheet-close.html` ($0) has
+  three matched kit views per build: a three-quarter view on its tree over a tight window, the house straight on, and a three-quarter
+  view from the walkway side.
+- Sides are randomised per pair, and neither page nor any file name names an arm.
+- **The key:** `artifacts/7b/P4/ab-key.json`, kept apart and unchanged since the sheet. The coordinator sends the sheet; Noah's picks are
+  recorded before the labels.
+
+**R (2 paid adaptations, `versionOf` + `site`, each after its $0 site variant: Steward's adapt-first order).**
+- P1's cliff design into DS's cliff_owned: the variant refused `SITE_UNFIT site_keep` (a player's pillar); the adaptation is shown ($0.89).
+- Into cliff_east: the variant refused `site_bound` (the same program throws outside its size); the adaptation is shown ($0.84).
+- Each adaptation is a new version of the source entry, bound to its new site (DS).
+
+**Gallery** (Noah's approval at the phase close):
+- `artifacts/7b/P2/run-2/shots/` (cam_high, cam_deck, cam_n, cam_s, cam_e, cam_w): attempt 2. Run 1 never realised.
+- `artifacts/7b/P3/run-1/shots/` (cam_hall_w, cam_hall_e, cam_ramp, cam_high, cam_n, cam_s).
+- The P4 sheets above.
+- S3 v2's gallery item (site variants of P1's cliff design on S3's fixture, §5) was not made. It is not one of §4's items, and it was not
+  tried. A leftover, $0.
+
+**Readings chosen** (the contract silent; confirmed by the coordinator on 2026-11-12):
+1. **The lot maps.** The landmarks reuse existing lots (tree_2, hall_w), and no program changes. Variants come from the archetype of their
+   own row (the same frame rotation).
+2. **P5 not run.** SB built no S4 program ("S4 (the stretch) is not built"), and PA builds none. Recorded as "not run: no S4 program",
+   not as a fail.
+3. **The paid runs are natural only.** No flat run, so nothing is designed twice. E-flat for S5/S6 comes from SB's $0 runs. A
+   natural-only run's own `exactness` row (it wants a flat sibling) and `mspt` (a timing bar) are recorded, not judged.
+4. **Built-in Styles** (bibles cost $0): rustic for P1, P2 and P4; medieval for P3.
+5. **R's sites:** P1's cliff design into DS's cliff_owned and cliff_east, each after its $0 variant.
+6. **P0 judges §5's bars** from metrics.json (Fit, disturbance, ports, checker and buildings errors, reachability, safety). The
+   scenario's own output goes to its log.
+7. **Variant replays.** A site variant's untyped refusal ("null") is replayed by the same opKey ($0; DS's replay returns the installed
+   entry). A typed refusal is final. A paid request is never replayed: an untyped refusal keeps that job open at its cap.
+8. **P2 attempt 2** as above, labelled as a secondary measurement after run 1.
+
+**Leftovers.**
+- **The helper's `site.variant` ack can pass the mod's 20 s ack timeout under load** (`SidecarLink.ACK_TIMEOUT_MS`). The mod then answers
+  an untyped refusal ("null") while the helper installs the variant; it hit P0 run 1 (load 80-150) and ds-sim. The coordinator logged the
+  fix: the helper acks before the kit build, and the mod maps a timeout to a typed refusal.
+- **`ports_met` accepts a walk port within 2 of the hint, but a branch walk needs both ends level** and the sculpted ramps assume the
+  hint's height. Walk ports joined by a branch walk should be held to the hint's y, or LP should step a 1-block difference
+  (coordinator item).
+- **The sidecar's `adapted` estimate seed:** update it from R's measurement ($0.86, about 30 turns).
+- **S6 disturbance:** the designer carves about half of a 16x12x15 carve_into lot. Whether the bar, the brief's words or the designer
+  moves is Noah's call; there was no retune.
+
+**Checks.**
+- kit: `node --test kit/test/*.test.mjs` 1229 tests: 1227 pass, 1 fail. The fail is `gate-corpus-plan.test.mjs` "the store wrote entries",
+  a load timeout: that file passes 3/3 alone, and PA touches nothing it reads.
+- `pa-ledger.test.mjs` 10/10.
+- sidecar: untouched, `tsc --noEmit` clean; the full suite runs at merge (the coordinator's rule).
+- mod: `./gradlew build --offline --no-daemon` pass (SliceDsDev only).
+- api-compat clean: the 0.47.0 and 0.45.0 apitest jars, and `--surface` of the 0.57.0 jar.
+- `node tools/step-inputs.mjs check` clean (356 steps; `pa-unit`, `pa-p0-s6`, `pa-p0-s5` entered, chain `7bpa`, impact rule "7b PA").
+- **Gate runs (3, ports 8896/8897, `artifacts/gate-runs-pa/`):**
+  1. 20261113-000414: ds-sim 12/14 (the two expected refusals answered "null": the ack timeout above, load p90 83); pa-p0-s6 Fit 5/7 (the
+     same); pa-p0-s5 met its bars (the step printed the scenario's non-§5 FAIL lines); pa-unit and sb-unit PASS.
+  2. 20261113-013729: ds-sim PASS 14/14; pa-p0-s6 3/7, because opKeys reused across runs met OP_KEY_CONFLICT (P0's keys are now per run).
+  3. 20261113-014424: PASS, pa-p0-s6 and pa-p0-s5.
+- The paid items are the driver's runs, not gate runs.
+- **gate-verifier (review only, DEV MODE; nothing paid re-run): PASS** at 67ebe12d. It checked:
+  - the ledger rules in code, with `pa-ledger` 10/10 and `plan`/`status`;
+  - spend.json: 13 jobs summing to $29.49, all on the claude login, all under their budgetUsd, the as-built table matching;
+  - SB's $0 path unchanged without PA_PLAN; replays only for $0 untyped variant refusals; paid requests never replayed;
+  - the §5 bars against the verdicts and metrics, and the honest "designer not shown" wording;
+  - the blind sheets carrying no arm hints; the PLAYBOOK change general; the hooks additive; step-inputs clean; nothing generated
+    committed.
+- Verifier minor notes:
+  - The S5 and S6 bars are not met on the paid run, as recorded.
+  - The playbook clamp is not validated by a paid re-run.
+  - A per-job stop inside the in-game run throws without writing STOP.json; the item-level guard writes it first.
+  - The nightly window is judged on local time, while the ledger's timestamps are UTC.
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6

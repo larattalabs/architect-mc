@@ -83,6 +83,8 @@ async function waitDesign(L, id, ms = 600_000) {
  * volume of each lot is frozen into the world first (Survey.volume of its volume box: the plan's sha, as LP's gate checks).
  */
 export async function siteEntries(L, sc, ir, tag) {
+  // (7b PA) the paid batch's lots: PA_PLAN names a plan (tools/gate7bpa.mjs writes it); without it, SB's $0 lots exactly as before
+  if (process.env.PA_PLAN) return paSiteEntries(L, sc, ir, JSON.parse(fs.readFileSync(process.env.PA_PLAN, 'utf8')));
   const entries = {}, rows = [];
   const archetype = {};
   for (const lot of ir.lots.filter((l) => l.site)) {
@@ -108,6 +110,120 @@ export async function siteEntries(L, sc, ir, tag) {
     rows.push({ lot: lot.id, fit: s.fit, entry: v.entryId, how: `site variant of ${archetype[s.fit]}`, ms: v.ms ?? Date.now() - t0 });
   }
   return { entries, rows, archetypes: archetype };
+}
+
+/**
+ * (7b PA, docs/CONTRACT.md "Phase 7b" §4 P2/P3) The paid batch's lots of a scenario run: per the plan, archetypes and a landmark designed
+ * by the run's designer (the claude login, or the sim for P0) into their own site lots, each paid job guarded by the PA ledger
+ * (tools/lib/pa-ledger.mjs: $60 stop, $90 refusal, the nightly window, budgetUsd = the job's share of the item's cap), then
+ * Designs.siteVariant of its archetype for every other lot ($0). A plan's `reuse` maps an archetype key to an entry already paid for
+ * (a re-run after a harness failure): its own lot then gets a $0 site variant of that entry, never a second paid design.
+ * plan = {item, opPrefix, ledger, backend, capUsd, timeoutMin, archetypes: [{key, lot, landmark?, request {buildingType, bible, name,
+ * notes}}], variants {lot: key}, reuse? {key: entryId}}. Returns siteEntries' shape plus {pa: {item, jobs, spendUsd, notShown}}.
+ */
+async function paSiteEntries(L, sc, ir, plan) {
+  const P = await import('./pa-ledger.mjs');
+  const entries = {}, rows = [], archetype = {}, jobs = [];
+  const lots = new Map(ir.lots.filter((l) => l.site).map((l) => [l.id, l]));
+  for (const lot of lots.values()) {
+    const s = lot.site;
+    if (volumeFile(L, s.volumeSha)) continue;
+    const sv = await L.call('dev.survey.volume', { box: arr(s.volume), load: 'loaded' }, 600_000);
+    if (sv.sha !== s.volumeSha) throw new Error(`${lot.id}: Survey.volume of the site volume has sha ${sv.sha}, the plan's ${s.volumeSha} (the land moved between the plan and the freeze)`);
+  }
+  const paid = plan.backend === 'claude';
+  // the archetypes and the landmark: each guarded and opened at its full cap, then all started, then awaited
+  const started = [];
+  for (const a of plan.archetypes) {
+    const lot = lots.get(a.lot);
+    if (!lot) throw new Error(`PA plan: no site lot ${a.lot}`);
+    const t0 = Date.now();
+    if (plan.reuse?.[a.key]) {
+      const src = plan.reuse[a.key];
+      const v = await variantCall(L, { entryId: src, site: lot.site, opKey: `${plan.opPrefix}-reuse-${a.lot}` });
+      if (v.entryId) { archetype[a.key] = v.entryId; entries[a.lot] = v.entryId; }
+      rows.push({ lot: a.lot, fit: lot.site.fit, entry: v.entryId ?? null, how: `site variant of the paid ${a.key} ${src} (reused: a re-run pays nothing twice)`, ...(v.entryId ? {} : { refused: v.refused, detail: v.detail ?? null }), ms: Date.now() - t0 });
+      continue;
+    }
+    const step = `${plan.item}:${a.key}:${a.lot}`;
+    const cap = plan.capUsd;
+    if (paid) {
+      const st = await L.call('dev.sidecar.state', {}, 30_000).catch(() => ({}));
+      const authSource = st.status?.authSource ?? 'unknown';
+      const envKeys = P.KEY_VARS.filter((k) => process.env[k]?.trim());
+      P.withLedger(plan.ledger, (Lg) => {
+        const g = P.guard(Lg, { item: plan.item, step, capUsd: cap, minutes: plan.timeoutMin ?? 45, authSource, envKeys });
+        if (!g.ok) throw Object.assign(new Error(g.message), { pa: g });
+        P.openJob(Lg, { item: plan.item, step, capUsd: cap, authSource });
+      });
+      L.log(`  PA ${step}: paid design opened (cap $${cap}, auth ${authSource})`);
+    }
+    const body = { site: lot.site, ...a.request, notes: [a.request.notes, lot.brief].filter(Boolean).join(' '), opKey: `${plan.opPrefix}-${a.lot}`, ...(paid ? { budgetUsd: cap } : {}) };
+    const r = await L.call('dev.ds.request', body, 60_000);
+    if (!r.designId) {
+      // a typed refusal ends the job at $0; an untyped one (the helper's ack past the mod's 20 s timeout) may hide a design that still
+      // runs and spends, so the job stays open at its full cap and the item reports it. A paid request is never replayed automatically
+      const typed = r.refused && r.refused !== 'null' && /^[A-Z_]+/.test(r.refused);
+      if (paid) P.withLedger(plan.ledger, (Lg) => P.updateJob(Lg, step, { usd: 0, ended: !!typed, status: typed ? 'refused' : 'untyped_refusal_open_at_cap', error: r.refused ?? JSON.stringify(r) }));
+      rows.push({ lot: a.lot, fit: lot.site.fit, entry: null, how: a.landmark ? 'landmark' : `archetype ${a.key}`, refused: r.refused ?? JSON.stringify(r), detail: r.detail ?? null, ms: Date.now() - t0 });
+      continue;
+    }
+    started.push({ a, lot, step, t0, designId: r.designId, body });
+  }
+  for (const x of started) {
+    const d = await waitPaid(L, x.designId, (plan.timeoutMin ?? 45) * 60_000, (dd) => { if (paid) P.withLedger(plan.ledger, (Lg) => P.updateJob(Lg, x.step, { usd: dd.cost?.usd ?? 0, designId: x.designId })); });
+    const usd = d.cost?.usd ?? 0;
+    const ok = d.status === 'DONE' && !!d.entryId;
+    // (a TIMEOUT leaves the job open: it may still spend up to its budget, so the ledger keeps it at its cap)
+    if (paid) P.withLedger(plan.ledger, (Lg) => P.updateJob(Lg, x.step, { usd, ended: d.status !== 'TIMEOUT', status: ok ? 'done' : String(d.status).toLowerCase(), designId: x.designId, entryId: d.entryId ?? undefined, error: ok ? undefined : d.error ?? d.step }));
+    const job = { key: x.a.key, lot: x.a.lot, landmark: !!x.a.landmark, designId: x.designId, status: d.status, step: d.step, error: d.error ?? null, entryId: d.entryId ?? null, usd, turns: d.cost?.turns ?? null, ms: Date.now() - x.t0, request: { ...x.body, site: { volumeSha: x.body.site.volumeSha, fit: x.body.site.fit, lotId: x.body.site.lotId ?? x.a.lot } }, binding: d.entry?.binding ?? null };
+    jobs.push(job);
+    if (ok) { archetype[x.a.key] = d.entryId; entries[x.a.lot] = d.entryId; }
+    rows.push({ lot: x.a.lot, fit: x.lot.site.fit, entry: d.entryId ?? null, how: `${x.a.landmark ? 'landmark' : `archetype ${x.a.key}`} (${paid ? 'paid: the claude login' : 'P0: the sim designer'})`, ...(ok ? {} : { refused: `not shown: ${d.status} ${d.error ?? d.step}` }), usd, ms: job.ms });
+    L.log(`  PA ${x.step}: ${d.status} $${usd.toFixed(4)} in ${Math.round(job.ms / 1000)} s ${d.entryId ?? d.error ?? ''}`);
+  }
+  // the other lots: Designs.siteVariant of their archetype ($0)
+  for (const [lotId, key] of Object.entries(plan.variants ?? {})) {
+    const lot = lots.get(lotId);
+    if (!lot) throw new Error(`PA plan: no site lot ${lotId}`);
+    const t0 = Date.now();
+    if (!archetype[key]) { rows.push({ lot: lotId, fit: lot.site.fit, entry: null, how: `site variant of ${key}`, refused: `no ${key} (its design is not shown)`, ms: 0 }); continue; }
+    const v = await variantCall(L, { entryId: archetype[key], site: lot.site, opKey: `${plan.opPrefix}-v-${lotId}` });
+    if (!v.entryId) { rows.push({ lot: lotId, fit: lot.site.fit, entry: null, how: `site variant of ${archetype[key]} (${key})`, refused: v.refused ?? JSON.stringify(v), detail: v.detail ?? null, ms: Date.now() - t0 }); continue; }
+    entries[lotId] = v.entryId;
+    rows.push({ lot: lotId, fit: lot.site.fit, entry: v.entryId, how: `site variant of ${archetype[key]} (${key})${v.replays ? ` (${v.replays} opKey replay(s): the ack passed the mod's 20 s timeout)` : ''}`, ms: v.ms ?? Date.now() - t0 });
+  }
+  const spendUsd = Math.round(jobs.reduce((a, j) => a + (j.usd ?? 0), 0) * 1e6) / 1e6;
+  return { entries, rows, archetypes: archetype, pa: { item: plan.item, backend: plan.backend, jobs, spendUsd, notShown: rows.filter((r) => !r.entry).map((r) => r.lot) } };
+}
+
+/**
+ * Designs.siteVariant through the DevBridge, replaying the same opKey when the answer is an untyped refusal. Under load the helper can ack
+ * `site.variant` after the mod's 20 s ack timeout (SidecarLink.ACK_TIMEOUT_MS): the mod then answers a refusal with no reason ("null")
+ * while the helper finishes and installs the variant; DS's opKey replay returns that entry ($0, no second build). A typed refusal
+ * (SITE_UNFIT, SITE_UNSUPPORTED, ...) is final.
+ */
+async function variantCall(L, body, tries = 4) {
+  let v;
+  for (let i = 0; i < tries; i++) {
+    v = await L.call('dev.ds.variant', body, 600_000);
+    if (v.entryId || (v.refused && v.refused !== 'null' && /^[A-Z_]+/.test(v.refused))) return { ...v, replays: i };
+    L.log(`  PA variant ${body.opKey}: untyped refusal ${JSON.stringify(v.refused ?? v)} (the helper's ack past the mod's 20 s timeout): replaying the opKey`);
+    await L.call('dev.wait', { ms: 15_000 }, 40_000);
+  }
+  return { ...v, replays: tries };
+}
+
+/** A design's state until it ends, `onPoll` with each answer (the ledger's running cost). */
+async function waitPaid(L, id, ms, onPoll) {
+  const t0 = Date.now();
+  for (;;) {
+    const d = await L.call('dev.ds.design', { designId: id }, 30_000);
+    if (onPoll) onPoll(d);
+    if (['DONE', 'FAILED', 'CANCELLED'].includes(d.status)) return d;
+    if (Date.now() - t0 > ms) return { ...d, status: 'TIMEOUT', error: `still ${d.status} after ${Math.round(ms / 60000)} min: ${d.step}` };
+    await L.call('dev.wait', { ms: 10_000 }, 40_000);
+  }
 }
 
 /** The kit's model of the game's survey classes, for a state string. */
