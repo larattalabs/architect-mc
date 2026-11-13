@@ -33,9 +33,11 @@ import { FLUID_OP, fromRuns } from '../fluids/body.mjs';
 // (6c VOC-b) the vocabulary rules: M26 rarity, M27 vocabulary misuse, M20 widened (checkVocab.mjs)
 import { vocabRules } from './checkVocab.mjs';
 import { formRulesVw } from './checkForms.mjs';
+// (7c RM) region M15: cantilever, necks and spans over the region's mass, the port links' joints (warnings; checkM15.mjs)
+import { regionM15 } from './checkM15.mjs';
 
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28', 'M29', 'M16'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17', 'M20', 'M25', 'M26', 'M27', 'M18', 'M19', 'M28', 'M29', 'M15', 'M16'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 // (6c H) M25 (containment) and M20 (fire, run for lava bodies only) are errors
@@ -566,6 +568,12 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   });
   // ---- (6c F3 §4) M18 leaf decay, M19 dead coral (warnings; checkForms.mjs)
   if (want.has('M18') || want.has('M19')) time('M18', () => formRulesVw({ vw, ir, want, findings, metrics, finding, partStage }));
+  // ---- (7c RM) M15 at region scale (warnings): the mass the region writes, its supports, the port links' joints
+  if (want.has('M15')) time('M15', () => {
+    const r = regionM15({ ir, vw, meta, finding });
+    metrics.M15 = r.metrics;
+    findings.push(...r.findings);
+  });
 
   // ---- the walk area: reached cells whose floor the region wrote (or walk-marked cells)
   const walkArea = [];

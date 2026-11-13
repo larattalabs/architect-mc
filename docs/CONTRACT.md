@@ -29637,6 +29637,80 @@ tests f7b-foundation and gm-c leave `form.hidden_room` to hr.test.mjs (as BF's t
 asks drop 7); a zone's pads' held dirt is billed in a survival check but not put down on its targets (x03's hamlet: 49 dirt, the same
 without the cellar; pre-existing, RS's: the verifier's follow-up).
 
+### Slice RM as built (branch `slice/RM` off main f3b870ca; versions NEXT; $0, kit only, no client, no gate run; recorded 2026-11-12)
+
+Region M15 (§3 row 8): SETTLEMENTS §11's structural sense (cantilever, necks, spans) on the region's virtual world, the joints where a
+port link lands on a site lot's port included (the column `kit/lib/siteCheck.mjs` leaves to 7c), **as warnings**. No plan answer, IR,
+tile, catalogue entry or API record changes; no frozen 7b or 7cF signature changed.
+
+**The rule** (`kit/lib/region/checkM15.mjs` `regionM15`, called by `checkRegion` on every check, virtual or realised):
+
+| Member | What |
+|---|---|
+| `RULES` | `'M15'` inserted just before `'M16'` (FB's test keeps M16 last; every other rule's report order unchanged); never in `ERRORS` or `SUB_SEVERITY`, so every finding is a warning |
+| the mass | every written cell that holds itself up (blocks.mjs `supportOf` null; not air, a fluid or fire) |
+| supports (distance 0) | a mass cell touching the pre-region world's unwritten solid on any of its 6 sides (rock, soil, logs, leaves), and every cell of a declared floating group or a generated form (`ir.floating`, `ir.forms`: M3 and `M3:overhang` judge those) |
+| distance | SC's 0-1 flood, unchanged: resting on the cell below, hanging from the one above and a stair stepping diagonally up carry it; a horizontal step (8 ways, Chebyshev) adds 1 |
+| `M15:cantilever` | a cell more than 4 from a support, held on one side only. Held = its run along x or z reaches a cell within 4 (or a port's landing) both ways; the run follows a deck's profile (one step down or up per cell: a rope deck's sag, a ramp) |
+| `M15:joint` | the same on a port link's end column (the port's width through its height, the floor row included, just outside the lot's box; ports from `ir.linked` on IR v2, else the site's) |
+| `M15:span` | a held run whose clear length between its supports (distance 0, or a landing) is over its connector type's `maxSpan`, when the plan's Style sets one |
+| `M15:neck` | an articulation point (a virtual ground joined to every support) holding more than 200 cells |
+| judged cells | the region's own parts only: a cell with no part (a design's, in a lot, on a realised world) is mass and holds what leans on it, never a finding |
+| metrics `M15` | `{mass, supports, cantileverMax, cantileverLimit, heldMax, spans: [{part, type, length, limit}], necks, joints: [{link, lot, port, end, cells, written, dist, held}]}` (`dist`: the end column's farthest written cell) |
+
+**Frozen limit names (AQ and US build on these):** `REGION_M15_LIMITS = {cantilever: 4, neckMass: 200, span: {}}` (frozen);
+`M15_SPAN_TYPES = {rope_bridge: 'ropes'}` (a connector type and the plan meta's record list whose `part`s it judges; AQ appends
+`aqueduct` with its own record list); `regionM15Limits(look, overrides)` (span per type from the look's `<type>.maxSpan`, else unbounded);
+`m15LookOf(look)`; the plan meta's **`m15: {look: {<type>: {maxSpan}}}`**, written by `planRegion` only when a format 3 Style sets a span
+limit RM reads (today `connectors.rope_bridge.maxSpan`), so every other plan's meta is unchanged.
+
+**Feature:** the sidecar's `region.m15` (appended last; `jobs.test` and `bundle.e2e` lists appended), mapped by ApiRules to
+**`regionM15`**; `ArchitectApi.features()` javadoc (since NEXT); `ApiRMTest`.
+
+**Readings chosen** (the contract was silent):
+1. **The landing holds a span's end, never a cantilever.** SC lets a walk port's column stand one step past its own support, so a link
+   may rest on the landing (a deck between a landing and a post is a span) but not hang off it. A link end that is over the limit and not
+   held is `M15:joint`; the design-side distance is not sent (LP's `region.link` input is unchanged).
+2. **Floating groups and generated forms are supports, not judged:** M3 and `M3:overhang` (F1's ledge rule) already judge them; a bridge
+   or deck leaving one is judged from its edge.
+3. **Spans are unbounded until a Style sets them** (SC's leftover): measured and recorded for every part, judged only for a part a meta
+   record of a typed connector names (`meta.ropes` -> rope_bridge). Bridges keep their own `maxSpan` under M10 (no double report).
+4. **Joints exist only where links are written** (IR v2 and realised worlds). At plan time the links have no cells, so a joint row reads
+   `written: 0`.
+5. **Performance:** a dense index grid over the mass's box (a map past 16M cells); crater_toolbox's 160k mass cells take about 75 ms warm
+   (its whole check about 1.1 s), up to 0.8 s cold at machine load 100+.
+
+**Findings** (no new error anywhere):
+
+| Where | Findings |
+|---|---|
+| family fixture `sky_isle` (6b, default params) | `M15:cantilever` on `mass` (2390 cells, farthest 10), `wall` (944, farthest 9), `lots` (10, farthest 6): the rock disc overhangs its outer pillars by up to 10, with the wall and pads on that rim. **`sky_isle.expected.json` re-cut with these three rows (the coordinator's OK, 2026-11-12)**; no IR or tile sha moved |
+| family fixtures crater_works, rift_city, walled_hill | none |
+| scenario goldens S1, S2, S3, S5, S6, S7 (`scenarios/goldens/*`, IR byte-identical) | S1: `M15:cantilever` on `links` (4 cells, farthest 5): a walkway end 5 off a floating island; the rest none |
+| other goldens (crater_toolbox, crossings_demo_flat, districts_demo, forms_demo, grove_demo(+flat), links_demo(+flat), relief_demo, route_demo, scatter_demo) | none (recorded spans, support to support: links_demo 32 and links_demo_flat 40 on their rope `links`, crossings_demo_flat 16, crater_toolbox 13; unbounded without a Style) |
+| sb.test S5/S6 (IR v2, links written) | none; S5's six joints all `held`, each end on a support (`dist` 0) |
+| lp.test branch_walk (IR v2) | `M15:cantilever` on `link_ab`, 1 cell: a rail post standing diagonally off the deck's turn at lot b's landing, 8 from the hanger |
+| region-6b floating_islands (virtual and realised) | `M15:cantilever` on `links`, 5 cells (S1's program) |
+| broken variants | 6b `ends_in_air` (deck, 84 cells, farthest 16); SA `u01_floating` (links_s2, 8 cells) |
+| every other connector fixture (ropes, bridges, catwalks, climbs, rock stairs, spirals, lifts, walls, tunnels, fluids, K1/T3 batches) | none |
+
+**Checks** ($0, offline, no client, no gate run: RM has no in-game step; machine load 40-116 throughout):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1278/1278** (rm.test 10/10: the interface and frozen names, cantilever over a pit, a bracket post, spans held and judged only by a Style limit, a sagging deck, necks, floating groups and forms as supports, the joint (landing holds a span, an L-shaped end is `M15:joint`), part-less cells unjudged, the grid/map fallback; fb.test's M16-last; region-fixtures with the re-cut sky_isle) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1137 tests, 0 failures, 1 skipped (ApiRMTest 1/1) |
+| sidecar `npm ci` + `npm run check` (the turn script) | 853/853 (61 files; jobs.test and bundle.e2e with `region.m15` appended), the bundle built |
+| api-compat | clean against the 0.48.0 and 0.47.0 apitest jars |
+| instant lints | lint-structure 68/0 (M15 is recorded, not in the lint's GATED set), lint-look 13/0, water-lint 135/0 |
+| `node tools/step-inputs.mjs check` | clean after `build` (365 steps; unit-kit gains rm.test) |
+| gate-verifier (review only, DEV MODE) | **PASS** at 7cf3b29c: M15 never an error (ERRORS and SUB_SEVERITY untouched; no refusal or replan path), meta `m15` only with a Style span limit, checkM15.mjs read in full (SC's flood, held/span, joints, the iterative necks, the grid/map fallback, deterministic), the only golden change sky_isle's three rows, feature lists appended, API javadoc only; re-ran rm 10/10, region-fixtures 15/15, fb 6/6, lp 11/11, step-inputs clean. Non-blocking: Gradle, sidecar, api-compat and lints taken from the builder's logs; `M15:span` exercised by rm.test only (no committed Style sets a maxSpan) |
+
+**Leftovers:** (1) **sky_isle's pillars nearer the rim** (its overhang is real; the fix moves its IR, so not in RM). (2) The LP
+branch walk's corner rail post stands diagonally off its deck; a branch walk slice can put it on the deck.
+(3) S1's walkway end 5 off its island (the S1 owner). (4) `sagRatio` stays carried, not read (SF's leftover). (5) Only rope bridges have a
+typed span limit; AQ adds `aqueduct` to `M15_SPAN_TYPES` with its own meta record list.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
