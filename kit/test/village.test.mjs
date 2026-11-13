@@ -224,7 +224,8 @@ test('the lots param type: region programs only; bad id, duplicate, size, over 4
   assert.throws(() => validateLots([{ ...ok, extra: 1 }]), /unknown member 'extra'/);
   // variant enumeration never walks it
   assert.ok(cornerValues(flatVillage.params).every((v) => !('lots' in v)));
-  assert.equal(flatVillage.catalogue, false);
+  // (7c TC) listed in Regions.design's pick (the template catalogue); its lot list is not pickable (`houses` lays default lots)
+  assert.equal(typeof flatVillage.catalogue, 'object');
 });
 
 // ------------------------------------------------------------------ item 2: the broken variants

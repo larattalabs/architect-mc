@@ -1262,6 +1262,21 @@ export class Regions {
     return { sha: out.sha, box: out.box, affordances: out.affordances, proposed: out.proposed ?? null, ...(msg.standalone ? { standalone: out.standalone ?? null } : {}) };
   }
 
+  /**
+   * (7c TC) The affordances of a whole frozen volume (the claim's, for region.design's pick): the kit's site analysis
+   * (tools/affordances.mjs, no lot) over the blob, in a child process (a 192x192x150 claim takes about 2 s); `sha` must match.
+   */
+  async claimAffordances(volumeBlobId: string, sha: string): Promise<{ sha: string; box: unknown; affordances: unknown[] }> {
+    const script = path.join(this.host.config.kitDir, 'tools', 'affordances.mjs');
+    if (!fs.existsSync(script)) throw new Error('the kit has no tools/affordances.mjs (an older kit)');
+    if (!this.host.blobs.get(volumeBlobId)) throw new Error(`no blob "${volumeBlobId}"`);
+    const r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
+    const out = lastJson(r.stdout);
+    if (r.timedOut) throw new Error('the land analysis took longer than 120 s and was stopped');
+    if (!out || out.ok !== true) throw new Error(`the land analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
+    return { sha: out.sha as string, box: out.box, affordances: Array.isArray(out.affordances) ? (out.affordances as unknown[]) : [] };
+  }
+
   clientGone(client: ClientHandle): void {
     for (const [k, s] of this.sessions) {
       if (s.client.id !== client.id) continue;

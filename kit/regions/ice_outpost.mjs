@@ -27,7 +27,12 @@ import { formCells } from '../lib/forms/rules.mjs';
 import { fnv64 } from '../lib/noise.mjs';
 
 export const id = 'ice_outpost';
-export const catalogue = false;
+/** (7c TC) In Regions.design's pick (the template catalogue). */
+export const catalogue = {
+  description: 'A frontier outpost among ice spikes: a watch tower (the landmark), a longhouse, a smithy, a store, a farm and 0-4 huts on pads blended into snowy land, routes from a gate to every door, generated ice-spike clusters between the natural ones (which are kept), snow scatter and soul-lantern light. For an outpost, camp or small frozen settlement on snowy land, ice spikes or tundra beside a frozen sea; the lots stand on dry land only.',
+  needs: { minDryLand: 'a connected band of dry snowy land holding 6+ lots', water: 'ok (frozen sea is left untouched)', relief: 'low to moderate (up to ~60)' },
+  claim: { min: [96, 96], max: [256, 256] },
+};
 export const passes = ['relief', 'route'];
 /** The outpost's look when no bible is given (S2's fixture bible "frontier outpost" wins): spruce, stone bricks, packed snow. */
 export const roles = { surface: 'minecraft:snow_block', path: 'minecraft:spruce_planks', foundation: 'minecraft:stone_bricks', light: 'minecraft:soul_lantern', rail: 'minecraft:spruce_fence', structure: 'minecraft:stone_bricks' };

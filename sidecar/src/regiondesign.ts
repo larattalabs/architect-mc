@@ -17,7 +17,15 @@
 // any 4a budget (a try gets what is left; nothing left: the design fails "budget").
 //
 // Sim backend: ext["architect:simAnswers"] = [answer for try 1, answer for try 2] scripts the pick ({simFail} fails a
-// try's job); otherwise the sim answers from the schema (fits, the first program, no params).
+// try's job); otherwise (7c TC) the sim's stand-in pick answers (`simPick`: the program whose catalogue keywords the brief
+// and card name most, its defaults, fits when any keyword matched; deterministic, never a model).
+//
+// (7c TC, docs/CONTRACT.md "Phase 7c" §3 row 7, feature region.templates) The template catalogue: the scenario programs are
+// listed too, each with `needs.affordances` ({kind: count | {count, min: {metric: floor}}}: AF kinds, counted in the claim).
+// The mod sends the claim's frozen volume (`volume {blobId, sha}`); the kit's site analysis (tools/affordances.mjs, the same
+// as AF's site.analyse and a plan's affordances[]) runs over it once per design (kept in the record, so a restart reuses it)
+// and the prompt gets the summary. A fit whose program needs land features the summary lacks (or with no summary at all) is
+// invalid: one retry with the reason, then NO_TEMPLATE offering that program as the closest.
 import type { z } from 'zod';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { isFinalJob } from './jobs/book.js';
@@ -55,6 +63,125 @@ export interface CatalogueProgram {
   params: Record<string, CatalogueParam>;
   needs?: Record<string, unknown>;
   claim?: { min?: [number, number]; max?: [number, number] };
+  /** (7c TC) words the sim's stand-in pick matches against the brief (never shown to the model) */
+  keywords?: string[];
+}
+
+// ---- (7c TC) land features: AF's affordances --------------------------------------------------------
+
+/** AF's kinds (kit/lib/region/affordances.mjs AFFORDANCE_KINDS; a unit holds them equal). */
+export const AFFORDANCE_KINDS = ['cliff_face', 'ledge', 'overhang', 'cave', 'trunk', 'canopy', 'spike', 'water', 'gap', 'pad'] as const;
+/** AF's caps: at most 16 of a kind and 128 in all, so a need above 16 could never be met. */
+export const AFFORDANCE_KIND_CAP = 16;
+
+/** An affordance as the kit writes it (only what the pick reads). */
+export interface PickAffordance {
+  id: string;
+  kind: string;
+  metrics: Record<string, unknown>;
+  score?: number;
+}
+/** A program's need of one kind: at least `count` of it, each with every `min` metric at or over its floor. */
+export interface AffordanceNeed {
+  kind: string;
+  count: number;
+  min: Record<string, number>;
+}
+
+/** `needs.affordances` -> the needs (a bare number is a count; malformed entries are dropped). */
+export function affordanceNeeds(p: CatalogueProgram): AffordanceNeed[] {
+  const a = p.needs?.affordances;
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return [];
+  const out: AffordanceNeed[] = [];
+  for (const [kind, v] of Object.entries(a as Record<string, unknown>)) {
+    if (!(AFFORDANCE_KINDS as readonly string[]).includes(kind)) continue;
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 1) out.push({ kind, count: v, min: {} });
+    else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      const count = typeof o.count === 'number' && Number.isInteger(o.count) && o.count >= 1 ? o.count : 1;
+      const min: Record<string, number> = {};
+      if (o.min && typeof o.min === 'object' && !Array.isArray(o.min)) for (const [m, f] of Object.entries(o.min as Record<string, unknown>)) if (typeof f === 'number' && Number.isFinite(f)) min[m] = f;
+      out.push({ kind, count, min });
+    }
+  }
+  return out;
+}
+
+/** A need in words: "6 trunk (height >= 24)". */
+export function describeNeed(n: AffordanceNeed): string {
+  const m = Object.entries(n.min).map(([k, v]) => `${k} >= ${v}`);
+  return `${n.count} ${n.kind}${m.length ? ` (${m.join(', ')})` : ''}`;
+}
+
+/** The affordances that meet a need's metric floors. */
+function meeting(n: AffordanceNeed, list: PickAffordance[]): PickAffordance[] {
+  return list.filter((a) => a.kind === n.kind && Object.entries(n.min).every(([m, f]) => typeof a.metrics?.[m] === 'number' && (a.metrics[m] as number) >= f));
+}
+
+/**
+ * Why the claim's land does not have what `p` needs ([] = it does, or `p` needs nothing). `list` undefined: no summary (the mod
+ * sent no volume, or its analysis failed), so a program with needs can't be shown to fit.
+ */
+export function missingLand(p: CatalogueProgram, list: PickAffordance[] | undefined): string[] {
+  const needs = affordanceNeeds(p);
+  if (!needs.length) return [];
+  if (!list) return [`${p.id} needs land features (${needs.map(describeNeed).join(', ')}) and this claim's land was not analysed (no affordance summary), so it can't be shown to fit`];
+  const out: string[] = [];
+  for (const n of needs) {
+    const got = meeting(n, list).length;
+    if (got < n.count) out.push(`${p.id} needs ${describeNeed(n)} in the claim's land; it has ${got}${got ? '' : ` (${list.filter((a) => a.kind === n.kind).length} ${n.kind} of any size)`}`);
+  }
+  return out;
+}
+
+/** The metrics the summary shows per kind (the ones a need can name). */
+const SUMMARY_METRICS: Record<string, string[]> = {
+  cliff_face: ['height', 'length'], ledge: ['area', 'drop'], overhang: ['area', 'clearance'], cave: ['floorArea', 'ceiling', 'cells'],
+  trunk: ['height', 'columns'], canopy: ['area', 'trunks'], spike: ['height', 'width'], water: ['area', 'maxDepth'], gap: ['span', 'length'], pad: ['size', 'range'],
+};
+
+/** The claim's land features for the prompt: a count per kind and the best few of each with their sizes. */
+export function affordanceSummary(list: PickAffordance[] | undefined, note?: string): string {
+  if (!list) return `not analysed${note ? ` (${note})` : ''}: no land feature can be shown, so no program that needs one fits`;
+  if (!list.length) return 'none found (no cliff face, ledge, overhang, cave, tall trunk, canopy, spike, surface water, gap or flat pad)';
+  const lines: string[] = [];
+  for (const k of AFFORDANCE_KINDS) {
+    const of = list.filter((a) => a.kind === k);
+    if (!of.length) continue;
+    const best = of.slice(0, 3).map((a) => (SUMMARY_METRICS[k] ?? []).filter((m) => a.metrics?.[m] !== undefined).map((m) => `${m} ${String(a.metrics[m])}`).join(', '));
+    lines.push(`- ${k}: ${of.length}${of.length >= AFFORDANCE_KIND_CAP ? ' (or more)' : ''}; the largest: ${best.map((b) => `[${b}]`).join(' ')}`);
+  }
+  return lines.join('\n');
+}
+
+/** The kit's affordance list -> what the record keeps (id, kind, metrics, score; at most 128). */
+export function keepAffordances(raw: unknown): PickAffordance[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PickAffordance[] = [];
+  for (const a of raw.slice(0, 128)) {
+    if (!a || typeof a !== 'object') continue;
+    const o = a as Record<string, unknown>;
+    if (typeof o.id !== 'string' || typeof o.kind !== 'string') continue;
+    out.push({ id: o.id, kind: o.kind, metrics: o.metrics && typeof o.metrics === 'object' ? (o.metrics as Record<string, unknown>) : {}, ...(typeof o.score === 'number' ? { score: o.score } : {}) });
+  }
+  return out;
+}
+
+/**
+ * (7c TC) The sim backend's stand-in for the model: the program whose `keywords` the brief and card name most (whole words,
+ * any case; ties to the catalogue's order), with its defaults; fits when any keyword matched. Deterministic. It knows nothing of
+ * the land: the validation is what refuses a fit over the wrong land.
+ */
+export function simPick(brief: string, card: Record<string, unknown> | undefined, programs: CatalogueProgram[]): PickAnswer {
+  const text = [brief, ...Object.values(card ?? {}).filter((v): v is string => typeof v === 'string')].join(' ').toLowerCase();
+  const words = new Set(text.split(/[^a-z0-9]+/).filter(Boolean));
+  let best: { p: CatalogueProgram; hits: string[] } | undefined;
+  for (const p of programs) {
+    const hits = [...new Set(p.keywords ?? [])].filter((k) => words.has(k.toLowerCase()));
+    if (!best || hits.length > best.hits.length) best = { p, hits };
+  }
+  if (!best || !best.hits.length) return { fits: false, program: programs[0]?.id ?? '', params: {}, reason: 'sim pick: no catalogue keyword in the brief' };
+  return { fits: true, program: best.p.id, params: {}, reason: `sim pick: the brief names ${best.hits.join(', ')}` };
 }
 
 /** The `catalogue --json` output -> programs (malformed entries are dropped). */
@@ -78,6 +205,7 @@ export function parseCatalogue(out: Record<string, unknown>): CatalogueProgram[]
       params,
       ...(o.needs && typeof o.needs === 'object' && !Array.isArray(o.needs) ? { needs: o.needs as Record<string, unknown> } : {}),
       ...(min || max ? { claim: { ...(min ? { min } : {}), ...(max ? { max } : {}) } } : {}),
+      ...(Array.isArray(o.keywords) && o.keywords.every((k) => typeof k === 'string') ? { keywords: o.keywords as string[] } : {}),
     });
   }
   return progs;
@@ -96,7 +224,10 @@ export function describeProgram(p: CatalogueProgram): string {
   const lines = [`- ${p.id}: ${p.description || '(no description)'}`];
   const params = Object.entries(p.params);
   lines.push(`  params: ${params.length ? params.map(([k, v]) => describeParam(k, v)).join('; ') : 'none'}`);
-  if (p.needs) lines.push(`  needs: ${Object.entries(p.needs).map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(', ')}`);
+  const site = p.needs ? Object.entries(p.needs).filter(([k]) => k !== 'affordances') : [];
+  if (site.length) lines.push(`  needs: ${site.map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(', ')}`);
+  const land = affordanceNeeds(p);
+  if (land.length) lines.push(`  needs land features (in the claim's "Site affordances"): ${land.map(describeNeed).join(', ')}`);
   if (p.claim) lines.push(`  claim: ${p.claim.min ? `${p.claim.min[0]}x${p.claim.min[1]}` : 'any'} to ${p.claim.max ? `${p.claim.max[0]}x${p.claim.max[1]}` : 'any'} columns (x by z)`);
   return lines.join('\n');
 }
@@ -114,7 +245,7 @@ export interface PickAnswer {
  * Why an answer is not a valid pick for this catalogue and claim ([] = valid). A fit must also hold the claim: its sides
  * within the program's claim range either way round (the catalogue's [w, d] read as unordered sides).
  */
-export function validatePick(answer: unknown, programs: CatalogueProgram[], claimSize: [number, number]): string[] {
+export function validatePick(answer: unknown, programs: CatalogueProgram[], claimSize: [number, number], land?: { affordances: PickAffordance[] | undefined }): string[] {
   const errors: string[] = [];
   if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return ['the answer is not an object'];
   const a = answer as Record<string, unknown>;
@@ -157,6 +288,8 @@ export function validatePick(answer: unknown, programs: CatalogueProgram[], clai
     if ((lo && !fitsIn(lo, (c, x) => c >= x)) || (hi && !fitsIn(hi, (c, x) => c <= x)))
       errors.push(`${prog.id} takes a claim of ${lo ? `${lo[0]}x${lo[1]}` : 'any'} to ${hi ? `${hi[0]}x${hi[1]}` : 'any'} columns; this claim is ${w}x${d}, so it does not fit`);
   }
+  // (7c TC) a fit needs the land features the program needs (`land` absent: a caller from before TC, unchecked)
+  if (a.fits === true && land) errors.push(...missingLand(prog, land.affordances));
   return errors;
 }
 
@@ -288,6 +421,8 @@ export interface PickInput {
   bible?: string | undefined;
   mustPass: string[];
   programs: CatalogueProgram[];
+  /** (7c TC) the claim's affordance summary (affordanceSummary); absent: no section (a caller from before TC) */
+  affordances?: string;
 }
 
 export function pickPrompt(i: PickInput): string {
@@ -312,11 +447,12 @@ export function pickPrompt(i: PickInput): string {
     '## Site survey',
     i.summary.trimEnd(),
     '',
+    ...(i.affordances !== undefined ? ['## Site affordances (land features found in the claim\'s 3D volume)', i.affordances.trimEnd(), ''] : []),
     '## Catalogue (the only programs there are)',
     ...i.programs.map(describeProgram),
     '',
     '## How to answer',
-    "- fits: true only when the program builds what the request asks for (its kind of site, not just a word in common), and the site and the claim are within the program's needs and claim range. A single building, or anything no program builds, does not fit.",
+    `- fits: true only when the program builds what the request asks for (its kind of site, not just a word in common), and the site and the claim are within the program's needs and claim range${i.affordances !== undefined ? ', and the site affordances hold every land feature it needs (a program that builds on land features does not make them)' : ''}. A single building, or anything no program builds, does not fit.`,
     '- program: the best program; when none fits, still the closest one.',
     "- params: only that program's params, each within its range; leave a param out to use its default. Size them to the claim and the site.",
     '- reason: one or two sentences.',
@@ -350,6 +486,11 @@ export interface RegionState {
   model: string;
   budgetUsd?: number;
   tries: Try[];
+  /** (7c TC) the claim's frozen volume the mod sent */
+  volume?: { blobId: string; sha: string };
+  /** (7c TC) the kit's affordances of that volume (analysed once), or why there are none */
+  affordances?: PickAffordance[];
+  affordanceError?: string;
 }
 
 export class RegionDesigns {
@@ -361,6 +502,7 @@ export class RegionDesigns {
   request(msg: DesignMsg): Design {
     const sc = this.sc;
     if (msg.bibleVersion !== undefined && !msg.bible) throw new ClientError('bibleVersion needs bible');
+    if (msg.volume && !sc.blobs.get(msg.volume.blobId)) throw new ClientError(`volume: no blob "${msg.volume.blobId}"`);
     sc.ensureClaudeAvailable();
     const survey = sc.blobs.read(msg.surveyBlobId);
     try {
@@ -397,6 +539,7 @@ export class RegionDesigns {
       model,
       ...(msg.budgetUsd !== undefined ? { budgetUsd: msg.budgetUsd } : {}),
       tries: [],
+      ...(msg.volume ? { volume: { blobId: msg.volume.blobId, sha: msg.volume.sha } } : {}),
     };
     const d = sc.designs.create(req, undefined, { kind: 'region', region: region as unknown as Record<string, unknown> });
     sc.designs.update(d.id, { status: 'designing', step: 'picking a region template' });
@@ -473,10 +616,27 @@ export class RegionDesigns {
       }
     }
     const claimSize: [number, number] = [st.claim.maxX - st.claim.minX + 1, st.claim.maxZ - st.claim.minZ + 1];
-    const first = pickPrompt({ brief: st.brief, card: st.card, claim: st.claim, summary, roles, bible: st.bible ? `${st.bible.id} v${st.bible.version}` : undefined, mustPass: st.mustPass, programs });
+    // (7c TC) the claim's land features: the kit's analysis of the mod's volume, once per design (a restart reuses the record)
+    if (st.volume && st.affordances === undefined && st.affordanceError === undefined) {
+      sc.designs.update(id, { status: 'designing', step: 'reading the claim\'s land features' });
+      try {
+        const r = await sc.regions.claimAffordances(st.volume.blobId, st.volume.sha);
+        st.affordances = keepAffordances(r.affordances);
+      } catch (e) {
+        st.affordanceError = truncate((e as Error).message, 500);
+        sc.log.warn(`design ${id}: the claim's land features could not be read: ${st.affordanceError}`);
+      }
+      this.save(id, st);
+    }
+    const templates = programs.some((p) => affordanceNeeds(p).length > 0);
+    const land = { affordances: st.affordances };
+    const first = pickPrompt({
+      brief: st.brief, card: st.card, claim: st.claim, summary, roles, bible: st.bible ? `${st.bible.id} v${st.bible.version}` : undefined, mustPass: st.mustPass, programs,
+      ...(templates || st.volume ? { affordances: affordanceSummary(st.affordances, st.affordanceError ?? (st.volume ? undefined : 'the mod sent no volume of the claim')) } : {}),
+    });
     const schema = pickSchema(programs);
     const sim = sc.designs.get(id)?.request.ext?.['architect:simAnswers'];
-    const simAnswers = Array.isArray(sim) ? sim : undefined;
+    const simAnswers = Array.isArray(sim) ? sim : sc.designerName() === 'sim' ? [simPick(st.brief, st.card as Record<string, unknown> | undefined, programs)] : undefined;
 
     let valid: PickAnswer | undefined;
     for (let i = 0; i < MAX_TRIES && !valid; i++) {
@@ -511,7 +671,7 @@ export class RegionDesigns {
           return this.fail(id, st, t.error === 'budget' ? 'budget' : `the pick failed: ${t.error}`);
         }
         t.answer = job.result ?? null;
-        t.errors = validatePick(t.answer, programs, claimSize);
+        t.errors = validatePick(t.answer, programs, claimSize, land);
         this.save(id, st, { cost: this.cost(st) });
         if (t.errors.length) sc.log.warn(`design ${id}: pick try ${i + 1} is not valid: ${truncate(t.errors.join('; '), 300)}`);
       } else if (t.error !== undefined) return this.fail(id, st, t.error === 'budget' ? 'budget' : `the pick failed: ${t.error}`);

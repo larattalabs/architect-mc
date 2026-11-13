@@ -8,6 +8,7 @@
 //   node kit/tools/region.mjs synth --box minX,minZ,maxX,maxZ [--res 1|4] [--seed s] --out file      (a synthetic ARSV, for tests)
 // Exit 0 ok, 1 failure, 2 usage. With --json the last stdout line is one JSON object. `plan` writes only into --out.
 import fs from 'node:fs';
+import { PICK_KEYWORDS } from '../lib/region/pickKeywords.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -271,8 +272,13 @@ async function catalogue(argv) {
     const m = await import(pathToFileURL(path.join(dir, f)).href);
     if (!m.catalogue || typeof m.catalogue !== 'object') continue;
     const params = {};
-    for (const [k, v] of Object.entries(m.params ?? {})) params[k] = { type: v.type, ...(v.min !== undefined ? { min: v.min } : {}), ...(v.max !== undefined ? { max: v.max } : {}), ...(v.default !== undefined ? { default: v.default } : {}), ...(v.values ? { values: v.values } : {}) };
-    programs.push({ id: m.id, description: m.catalogue.description, params, needs: m.catalogue.needs, claim: m.catalogue.claim, ...(Array.isArray(m.passes) && m.passes.length ? { passes: [...m.passes] } : {}) });
+    // (7c TC) a param the pick can't set (the caller's lot list, a sculpt's json record, `pick: false`) is left out; an enum's
+    // `options` go through (6b passed only `values`, which no program declares, so every enum answer failed validation)
+    for (const [k, v] of Object.entries(m.params ?? {})) {
+      if (v.pick === false || v.type === 'lots' || v.type === 'json') continue;
+      params[k] = { type: v.type, ...(v.min !== undefined ? { min: v.min } : {}), ...(v.max !== undefined ? { max: v.max } : {}), ...(v.default !== undefined ? { default: v.default } : {}), ...(v.values ? { values: v.values } : {}), ...(v.options ? { options: [...v.options] } : {}) };
+    }
+    programs.push({ id: m.id, description: m.catalogue.description, params, needs: m.catalogue.needs, claim: m.catalogue.claim, ...(Array.isArray(m.passes) && m.passes.length ? { passes: [...m.passes] } : {}), ...(PICK_KEYWORDS[m.id] ? { keywords: [...PICK_KEYWORDS[m.id]] } : {}) });
   }
   const out = { programs };
   if (opts.json) console.log(JSON.stringify(out));

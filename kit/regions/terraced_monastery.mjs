@@ -31,7 +31,12 @@ import { voxelClassOf } from '../lib/blocks.mjs';
 
 export const id = 'terraced_monastery';
 export const description = 'S3\'s monastery: three terraced districts down the mountainside, a garden fountain, spires and a lookout (6c S3).';
-export const catalogue = false;
+/** (7c TC) In Regions.design's pick (the template catalogue); `unsafe` (the gate's broken variant) is not pickable. */
+export const catalogue = {
+  description: 'A terraced monastery down a mountainside: three districts at the land\'s level bands (a gate court low, gardens with a fountain in the middle, a church and cloister with monks\' cells high), each lot on its own terrace with retaining walls, routes between the terraces, 0-3 rock spires on the shoulders, a lookout on the highest ground, scatter and lanterns. For a monastery, abbey, temple or hermitage that climbs a steep slope, cliff or mountainside.',
+  needs: { minFlat: 0, water: 'ok (springs are kept clear)', relief: 'steep (about 40-200 blocks over the claim)' },
+  claim: { min: [128, 128], max: [256, 256] },
+};
 export const passes = ['relief', 'route', 'districts', 'hydrology'];
 /** The monastery's look when no bible is given (S3's fixture bible "mountain monastery" wins). */
 export const roles = { surface: 'minecraft:grass_block', path: 'minecraft:stone_bricks', foundation: 'minecraft:stone_bricks', structure: 'minecraft:stone_bricks', light: 'minecraft:soul_lantern', rail: 'minecraft:spruce_fence', frame: 'minecraft:spruce_log', rubble: 'minecraft:cobblestone', rock: 'minecraft:stone' };
@@ -45,7 +50,7 @@ export const params = {
   scatter: { type: 'bool', default: true, label: 'Ground scatter' },
   scatterPct: { type: 'int', min: 5, max: 90, default: 30, label: 'Scatter density (%)' },
   // (the gate's broken variant: a fill over the spring's columns, which the program's own check catches)
-  unsafe: { type: 'enum', options: ['none', 'spring_buried'], default: 'none', omitDefault: true, label: 'Broken variant (gate)' },
+  unsafe: { type: 'enum', options: ['none', 'spring_buried'], default: 'none', omitDefault: true, pick: false, label: 'Broken variant (gate)' },
 };
 
 /** S3's spring stream (CONTRACT S3 §0): its columns, and the protected rect (its columns with a buffer of 3) no writer may touch. */

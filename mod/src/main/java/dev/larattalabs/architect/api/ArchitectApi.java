@@ -240,6 +240,12 @@ public interface ArchitectApi {
 	 * (7c RM, since NEXT) {@code "regionM15"} is advertised when the helper's kit checks region M15 (its {@code region.m15}): the region
 	 * check's warnings {@code M15:cantilever}, {@code M15:joint} (a port link's end, at a site lot's port), {@code M15:span} (over a Style
 	 * format 3 connector type's {@code maxSpan}) and {@code M15:neck}. Warnings only: no plan answer, record, method or reason changes.
+	 * (7c TC, since NEXT) {@code "scenarioTemplates"} is advertised when the helper has the template catalogue (its
+	 * {@code region.templates}): {@link Regions#design}'s pick also lists the scenario programs ({@code flat_village}, {@code ice_outpost},
+	 * {@code terraced_monastery}, {@code s5_treehouses}, {@code s6_cave_city}; {@code floating_islands} already was), each with the land
+	 * features it needs ({@code needs.affordances}: AF kinds, counts and metric floors); the mod freezes the claim's volume (read only) so
+	 * the pick sees the claim's affordance summary, and a pick that would land a template on land without its features answers
+	 * {@code NO_TEMPLATE} with that program as the closest. No new record, method or reason.
 	 */
 	Set<String> features();
 }
