@@ -20,6 +20,7 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
+| v0.64.1 | 2026-11-13 | 1.57.0 | 0.59.0 | 21 |  | RC pending | ok |
 | v0.64.0 | 2026-11-12 | 1.57.0 | 0.59.0 | 21 | `composites`, `hiddenRooms`, `regionM15`, `scenarioTemplates` | RC pending | ok |
 | v0.63.0 | 2026-11-12 | 1.56.0 | 0.58.0 | 20 | `bigForms`, `styleFormat3` | pin run after release (DEV MODE) | ok |
 | v0.62.0 | 2026-11-12 | 1.55.0 | 0.57.0 | 19 | `givenPrograms`, `quote` | pin run after release (DEV MODE) | ok |

@@ -1,9 +1,9 @@
 {
  "$comment": "(TJ CG) The binary-compatibility baselines: main's latest three releases and the consumer jars, read by tools/gate6a.mjs apijars (the unchanged apitest jars in game), tools/api-compat.mjs --baselines (their references, the newest mod jar's whole surface, each consumer's references) and rolled by tools/release-version.mjs at every release. Each release's files live in <main checkout>/artifacts/api-baselines/<dir>/ (untracked), built from its tag by `node tools/api-baselines-build.mjs build <tag>`; a consumer's by `node tools/api-baselines-build.mjs steward`. docs/GATES.md \"API compatibility baselines\".",
  "releases": [
+  { "tag": "v0.64.1", "mod": "0.64.1", "api": "1.57.0", "dir": "v0641" },
   { "tag": "v0.64.0", "mod": "0.64.0", "api": "1.57.0", "dir": "v0640" },
-  { "tag": "v0.63.0", "mod": "0.63.0", "api": "1.56.0", "dir": "v0630" },
-  { "tag": "v0.62.0", "mod": "0.62.0", "api": "1.55.0", "dir": "v0620" }
+  { "tag": "v0.63.0", "mod": "0.63.0", "api": "1.56.0", "dir": "v0630" }
  ],
  "consumers": [
   { "name": "steward", "dir": "steward", "jar": "steward_mc.jar", "repo": "steward-mc", "ref": "origin/main" }

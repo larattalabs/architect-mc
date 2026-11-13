@@ -1,6 +1,7 @@
 {
  "$comment": "(TJ REL-table) Every release: mod, API, kit and catalogue versions, its date, the feature names added over the previous release (ApiRules), the Steward RC state (pass, pending, none, after-release: a pin run after release under DEV MODE, not-needed, unrecorded: see steward-mc docs/ARCHITECT-ASKS.md) and the package state (ok: tools/pub-verify.mjs passed; partial; unverified). Newest first. tools/release-version.mjs writes a row at every release and regenerates docs/STEWARD-SYNC.md's generated block from this file; history back-filled from the git tags on 2026-11-13 by slice TJ.",
  "releases": [
+  {"tag":"v0.64.1","mod":"0.64.1","api":"1.57.0","kit":"0.59.0","catalogue":21,"date":"2026-11-13","featuresAdded":[],"stewardRc":"pending","publish":"ok"},
   {"tag":"v0.64.0","mod":"0.64.0","api":"1.57.0","kit":"0.59.0","catalogue":21,"date":"2026-11-12","featuresAdded":["composites","hiddenRooms","regionM15","scenarioTemplates"],"stewardRc":"pending","publish":"ok"},
   {"tag":"v0.63.0","mod":"0.63.0","api":"1.56.0","kit":"0.58.0","catalogue":20,"date":"2026-11-12","featuresAdded":["bigForms","styleFormat3"],"stewardRc":"after-release","publish":"ok"},
   {"tag":"v0.62.0","mod":"0.62.0","api":"1.55.0","kit":"0.57.0","catalogue":19,"date":"2026-11-12","featuresAdded":["givenPrograms","quote"],"stewardRc":"after-release","publish":"ok"},
