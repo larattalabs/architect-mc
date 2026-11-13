@@ -123,7 +123,7 @@ public final class SliceP0Dev {
 
 	public static void init() {
 		DevBridge.register("dev.region.checkPlan", 900_000, "{plan, claim: [x0,z0,x1,z1], anchors?: {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?: {maxNodes, maxEdges, "
-			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?, withCatalogue?, load?: \"loaded\" | \"generate\"} (C38: withCatalogue adds check.catalogue, the answer's whole catalogue; 6c T3: load \"generate\" "
+			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?, withCatalogue?, load?: \"loaded\" | \"generate\", ext?: {...}} (7c HR: ext is PlanRequest.ext, e.g. architect_mc:secrets; C38: withCatalogue adds check.catalogue, the answer's whole catalogue; 6c T3: load \"generate\" "
 			+ "lets the survey and the tunnels' volume pass load and generate their chunks, LoadPolicy.LOAD_BOUNDED) - (6c P0) Regions.checkPlan -> {check: {checkId, overall, parts, cost, preview, artifactSha, ...}, ms, "
 			+ "volumePass (6c T3: the two-plan flow's asked boxes, cells, sample and plan times; null without one)} or {refused, reason}; cancelAfterMs cancels the future that long after the call (the answer is then CANCELLED)", (req, mc) -> {
 				Fields f = Fields.of(req);
@@ -158,7 +158,7 @@ public final class SliceP0Dev {
 				long t0 = System.nanoTime();
 				return ServerTasks.callAsPlayer((level, player) -> {
 					CompletableFuture<PlanCheck> fut = ArchitectApi.get().regions().checkPlan(new PlanRequest(plan, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c
-						.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3).getAsInt()), anchors, owner, bible, bibleVersion, bud, key, new JsonObject(), load));
+						.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3).getAsInt()), anchors, owner, bible, bibleVersion, bud, key, req.get("ext") instanceof JsonObject ex ? ex.deepCopy() : new JsonObject(), load));
 					if (cancelAfter >= 0) {
 						CompletableFuture.delayedExecutor(cancelAfter, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> fut.cancel(true));
 					}

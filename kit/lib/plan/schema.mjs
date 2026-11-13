@@ -290,6 +290,8 @@ function refsOf(family, part) {
       if (typeof part.crossing === 'string') parts.push({ id: part.crossing, path: '$.crossing', as: 'crossing' });
     }
   }
+  // ((7c HR) a hidden room's host is a dependency (R3): a part of this plan or one of its lots (a host outside the plan is refused at compile)
+  if (family === 'form' && part.kind === 'hidden_room' && typeof part.host === 'string' && !part.host.includes('#')) parts.push({ id: part.host, path: '$.host', as: 'host' });
   if (family === 'form' && Array.isArray(part.around)) part.around.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.around[${i}]`, as: 'around' }); });
   if (family === 'rule' && Array.isArray(part.scope)) part.scope.forEach((id, i) => { if (typeof id === 'string') parts.push({ id, path: `$.scope[${i}]`, as: 'scope' }); });
   return { parts, anchors };
@@ -386,8 +388,8 @@ function kindError(family, kind, part) {
       if (lo < hr[0] || hi > hr[1]) return { path: '$.height', message: `${JSON.stringify(part.height)}: a ${kind} is ${hr[0]}..${hr[1]} ${lim.height ? 'high' : 'long'}` };
     }
   }
-  // (7c BF) a big form's size within its entry's limits.size (each side)
-  if (family === 'form' && ['hollow_mountain', 'crater', 'floating_island'].includes(kind) && part.size?.w !== undefined) {
+  // (7c BF) a big form's size within its entry's limits.size (each side); ((7c HR) a hidden room's too)
+  if (family === 'form' && ['hollow_mountain', 'crater', 'floating_island', 'hidden_room'].includes(kind) && (part.size?.w !== undefined || (kind === 'hidden_room' && part.size?.d !== undefined))) {
     const lim = entryOf(`form.${kind}`)?.limits?.size;
     if (lim) for (const k of ['w', 'd']) {
       const v = part.size[k], lo = Array.isArray(v) ? v[0] : v, hi = Array.isArray(v) ? v[1] : v;

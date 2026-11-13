@@ -37,6 +37,7 @@ import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 import { eachColumn } from '../forms/states.mjs';
 import { BIG_KINDS, bigNotes, bigSide, bigWantsFluids, emitBig } from '../forms/bigForms.mjs';
+import { emitHidden, resolveHidden } from '../forms/hiddenRoom.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
 import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
@@ -1225,6 +1226,13 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes, cached: z.cached || undefined, provisional: undefined });
       continue;
     }
+    if (p.family === 'form' && p.kind === 'hidden_room') {
+      // (7c HR) a hidden room: its host supported and its entrance one the host gives; placed at emit, after the H parts (forms/hiddenRoom.mjs)
+      const f = resolveHidden({ V, byId }, p);
+      res.set(p.id, f);
+      ans(p, { class: f.klass, reasons: f.reasons, wouldFit: f.wouldFit, notes: f.notes });
+      continue;
+    }
     if (p.family === 'form' && isF3(p)) {
       // (6c F3) a grown form: its locator checked here, its sites picked at emit on the zones' real layouts (forms/hooks.mjs)
       const f = f3Resolve({ env, geomOf, locatorOf, byId, res, channelBlockOf: (q) => channelBlockOf({ plan: P.plan }, q) }, p);
@@ -1575,7 +1583,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   // terrace and spikes; (6c F3) the grown forms, placed here on the zones' layouts (forms/hooks.mjs)
   const f3C = () => ({ env, r, ctx, geom, geomOf, byId, res, partOf, zones: zonesAccepted, keep, keepBy: (x, y, z) => keptBy(keep, x, y, z), stageOf, checkpoint: () => checkpoint(r), rollback: (c) => rollback(r, c), addedSince: (c) => addedSince(r, c), mark, ans, tolOf, judge, locatorOf, rectStats });
   for (const p of order) {
-    if (p.family !== 'form' || p.kind === 'relief' || isHPart(p) || !emitOk(p.id)) continue;
+    if (p.family !== 'form' || p.kind === 'relief' || p.kind === 'hidden_room' || isHPart(p) || !emitOk(p.id)) continue;
     if (isF3(p)) { if (p.kind in GROWN) f3Emit(f3C(), p); else if (p.kind in CAVE) f3CaveEmit(f3C(), p); continue; }
     const f = res.get(p.id);
     const cp = checkpoint(r);
@@ -1676,6 +1684,27 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // ((H-a) a generator's refusal may carry its evidence and a wouldFit on the error)
       ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message), ...(e.evidence ? { evidence: e.evidence } : {}) }], ...(e.wouldFit ? { wouldFit: e.wouldFit } : {}) });
       geom.delete(p.id);
+    }
+  }
+
+  // ---- (7c HR) the hidden rooms, after their hosts (forms, H parts, zones' lots) stand: each under a checkpoint; the hollow its part's,
+  // the entrance its own survival target (`<part>:entrance`); where each is goes to the artifact's secrets only (no answer geometry)
+  const secrets = [];
+  for (const p of order) {
+    if (p.family !== 'form' || p.kind !== 'hidden_room' || !emitOk(p.id)) continue;
+    const cp = checkpoint(r);
+    try {
+      const out = emitHidden({ env, r, ctx, res, stageOf, judge, tolOf }, p, res.get(p.id));
+      if (out.klass === 'refused') { rollback(r, cp); ans(p, { class: 'refused', reasons: out.reasons, notes: out.notes }); continue; }
+      mark(p.id, addedSince(r, cp));
+      if (out.doorPart) partOf[out.doorPart] = `${p.id}:entrance`;
+      secrets.push(out.secret);
+      const a0 = answers.get(p.id);
+      ans(p, { class: out.klass, reasons: out.reasons, deviations: out.deviations, notes: [...(a0?.notes ?? []), ...out.notes] });
+    } catch (e) {
+      rollback(r, cp);
+      const m = /^([A-Z_]{3,20}): /.exec(String(e.message));
+      ans(p, { class: 'refused', reasons: [{ code: m ? m[1] : 'NO_ROOM', message: String(e.message).replace(/^[A-Z_]{3,20}: /, '') }] });
     }
   }
 
@@ -2039,6 +2068,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   }
   return { ...(backOut.size ? { k3Back: backOut } : {}), ...(ringOut.size ? { k3Ring: ringOut } : {}), region: r, record: {
     ...record, malformed: null, answers: V.parts.map((p) => answers.get(p.id)).filter(Boolean), order: V.order, partOf, notes, hit,
+    // ((7c HR) the hidden rooms' entrances and boxes: the artifact's $.secrets[], only in a plan with one)
+    ...(secrets.length ? { secrets } : {}),
     zones: Object.fromEntries([...zoneEmit.entries()].map(([id, e]) => [id, { prefix: e.prefix }])),
     lotZone: Object.fromEntries(lotZone), lotMeta: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, { role: l.lot?.role ?? null, label: l.lot?.label ?? null, ext: l.lot?.ext ?? null }]))), lotEntries: Object.fromEntries(V.parts.filter((p) => p.family === 'zone').flatMap((p) => zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]))),
     styles: Object.fromEntries(V.parts.filter((p) => p.family === 'zone' || p.family === 'connector').map((p) => [p.id, styleOf(P.plan, p.part) ?? null])),

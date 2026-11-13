@@ -119,7 +119,8 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   paths.sort((a, b) => a.id.localeCompare(b.id));
   const out = {
     format: 1, planId, irSha, claim: { ...ir.claim }, stages: [...ir.stages], lots, paths, utility, anchors,
-    parts: partKinds(ir, meta),
+    // ((7c HR, S-7c-4) a hidden room's parts are never listed)
+    parts: partKinds(ir, meta).filter((q) => !meta?.parts?.[q.id]?.secret),
     graph: ir.graph ? irGraph(ir, meta, vw) : { derived: true, nodes, edges },
   };
   // (6c P0) a plan check's site plan: each lot, path, node and edge names the plan part it came from (`part`), and the parts' rects

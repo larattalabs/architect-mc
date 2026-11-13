@@ -895,11 +895,27 @@
   },
   {
    "id": "form.hidden_room",
-   "sinceApi": "1.53.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7c",
-   "note": "Re-reserved for 7c (N-7b-1)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "size": [
+     3,
+     15
+    ],
+    "hosts": [
+     "form.hollow_mountain",
+     "form.waterfall",
+     "lot"
+    ],
+    "entrances": [
+     "wall",
+     "bookshelf",
+     "waterfall",
+     "trapdoor"
+    ]
+   },
+   "note": "HR: a room carved behind a concealed entrance in its host: a hollow mountain (off its cavern's wall: wall or bookshelf), a waterfall (the hollow behind the curtain: waterfall) or a lot of this plan (a cellar under the building, a hatch beside it: trapdoor); lit, shrunk to fit its host's rock (adjusted). Where it is (the entrance cell, the room) goes to the artifact's secrets only: never in an answer, a preview or siteplan.json unless the check asks (PlanRequest ext architect_mc:secrets). Survival: the hollow is free; the entrance is a construction target."
   },
   {
    "id": "form.crater",

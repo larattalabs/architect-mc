@@ -286,6 +286,9 @@ function drawSvg(d) {
  */
 export function renderPreviews({ ir, survey, blobs, volumes = [], meta = null, world = null, views = VIEWS, axes = null, outDir, planId = null, irSha = null }) {
   const t0 = performance.now();
+  // (7c HR, S-7c-4) a hidden room's parts (the plan meta's `secret`) are left out of every view and siteplan.json: rendered as if unwritten
+  const secret = new Set(Object.entries(meta?.parts ?? {}).filter(([, m]) => m?.secret).map(([id]) => id));
+  if (secret.size && ir.parts.some((q) => secret.has(q.id))) { ir = { ...ir, parts: ir.parts.map((q) => (secret.has(q.id) ? { ...q, ops: [] } : q)) }; world = null; }
   const vw = world ?? buildVirtual({ ir, survey, filled: fillMissing(survey).columns, blobs, volumes }).vw;
   const dir = path.join(outDir, 'previews');
   fs.mkdirSync(dir, { recursive: true });
