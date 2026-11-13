@@ -1805,7 +1805,13 @@ public final class RegionFluids {
 		if (l == null) {
 			return -1;
 		}
-		java.util.Set<String> ids = lotBodies(Revisions.effective(l), lotId); // (6d RV, §4.5)
+		JsonObject eff = Revisions.effective(l);
+		java.util.Set<String> ids = lotBodies(eff, lotId); // (6d RV, §4.5)
+		// ((M5 IG) a grown lot's sources are its revision's bodies: that revision's own record ({@code <region>#rv<rid>}), not the region's)
+		int rid = lotRid(eff, lotId);
+		if (rid > 0) {
+			l = Revisions.liveFor(l, Revisions.stageName(rid, STAGE));
+		}
 		Regional st = ids.isEmpty() ? null : of(l);
 		if (st == null) {
 			return -1;
@@ -1841,6 +1847,18 @@ public final class RegionFluids {
 			WorldJournal.kill("FL6"); // (6c IRR) the lot's sources drained, its site not restored yet
 		}
 		return n;
+	}
+
+	/** (M5 IG) The revision that added a lot of an effective IR (its {@code rid}, Revisions.merge's), or 0 for the realised plan's. */
+	static int lotRid(JsonObject eff, String lotId) {
+		if (eff.get("lots") instanceof JsonArray lots) {
+			for (var e : lots) {
+				if (e instanceof JsonObject lo && lo.get("id") instanceof com.google.gson.JsonElement id && lotId.equals(id.getAsString())) {
+					return lo.get("rid") instanceof com.google.gson.JsonPrimitive p && p.isNumber() ? p.getAsInt() : 0;
+				}
+			}
+		}
+		return 0;
 	}
 
 	/** (6c IRR) The irrigation body ids of a lot in an IR ({@code lots[].irrigation.bodies}). */

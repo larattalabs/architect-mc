@@ -2602,6 +2602,7 @@ public final class Sites {
 		int total = 0;
 		int match = 0;
 		java.util.function.LongPredicate mask = LotMask.of(b.ext()); // (6c IRR) the region's irrigation cells were never this site's
+		FieldCells field = FieldCells.of(b.ext()); // (M5 FC) a worked field is judged by the field rule, not block by block
 		for (int i = 0; i < m.count(); i++) {
 			BlockState want = grid.states()[i];
 			if (want.isAir()) {
@@ -2612,8 +2613,13 @@ public final class Sites {
 				continue;
 			}
 			total++;
+			BlockState now = level.getBlockState(p);
+			if (field != null && field.unchanged(p.asLong(), now)) {
+				match++; // (M5 FC) a crop cell: air (harvested) or a field crop at any age, ours or the player's
+				continue;
+			}
 			// by block, not state: players open doors (6c CU: and copper weathers)
-			if (dev.larattalabs.architect.journal.Copper.is(level.getBlockState(p), want.getBlock())) {
+			if (dev.larattalabs.architect.journal.Copper.is(now, want.getBlock())) {
 				match++;
 			}
 		}

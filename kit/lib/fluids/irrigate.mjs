@@ -11,6 +11,7 @@
 //   irrigationCells(lot, sources) -> [[x, y, z]]  what the lot's design leaves: each source, its bed, its 4 sides and the cell over it
 //   lotFrame(lot) -> {toFrame, toWorld, size}    the lot seen with its front to the south (the design's frame for `reserved`)
 //   emitIrrigation(K) -> {lots: [{lot, zone, bodies}], notes: Map(zone -> [note])}   compile step 3, after the farm ponds
+//   irrigateLot(r, ctx, lot, opts) -> {ok, bodies?, why?, note}   one lot's sources and record (plan/0's step 3 and a revision's grown lot, M5 IG)
 //   fieldWorld(fields) -> (x, y, z) -> 'stop' | null    the flow's model of a field: its farmland at floorY (the design's, §5)
 //
 // The shells are written in the `street` stage (the one after `ground`): the pads write the pad's top in `ground`, and a shell write
@@ -202,76 +203,94 @@ export function emitIrrigation(K) {
   const zones = irrigateZones(K.order, K.okClass);
   if (!zones.length) return out;
   const r = K.r;
-  const roles = fluidRolesOf(K.ctx);
   for (const z of zones) {
     for (const n of z.notes) note(z.zone.id, n);
     const unsafe = z.zone.part?.ext?.['architect_mc:unsafe'] ?? {};
     for (const def of z.lots) {
       const lot = r.lots.find((l) => l.id === def.id) ?? r.lots.find((l) => l.id.endsWith(`_${def.id}`));
       if (!lot) { note(z.zone.id, `irrigate: ${def.id} was not placed (no irrigation)`); continue; }
-      let grid = gridOf(lot);
-      if (!grid.length) { note(z.zone.id, `irrigate: ${def.id}'s field is too small (a side under ${MIN_SIDE})`); continue; }
-      const fy = lot.floorY;
-      const fr = grid.map(([x, zz]) => freezesAt(K.ctx, x, fy, zz)).find((q) => q.freezes);
-      if (fr) { note(z.zone.id, `irrigate: the biome freezes the sources (${fr.biome}): ${def.id} is not irrigated`); continue; }
-      if (unsafe.irrBreachOut === true) {
-        // (the broken variant: the first source on the field's edge row against the border, its outer side in the border column)
-        const F = lotFrame(lot), f = fieldFrame(lot);
-        const w = F.toWorld(f[0], 0, F.toFrame(grid[0][0], fy, grid[0][1])[2]);
-        grid = [[w[0], w[2], 0, 0], ...grid.slice(1)];
-      }
-      const field = fieldOf(lot);
-      const cellsAll = irrigationCells(lot, grid);
-      const cellSet = new Set(cellsAll.map((c) => k3(...c)));
-      const world = fieldWorld([{ field, floorY: fy, cells: cellSet }]);
-      const b = lot.box;
-      const volumeBox = { minX: b.minX - 1, minY: fy - 3, minZ: b.minZ - 1, maxX: b.maxX + 1, maxY: fy + 2, maxZ: b.maxZ + 1 };
-      const natural = naturalOf(r, { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ }, fy - 2, fy + 2);
-      const bedChain = [roles.bed.block, 'minecraft:clay', 'minecraft:mud'].filter((q) => linesBody(q));
-      const bed = (x, y, zz) => { const n = natural(x, y, zz); return bedChain.find((q) => nameOfState(q) !== n) ?? bedChain[bedChain.length - 1] ?? shellBlock(r.ctx.roles, 'structure'); };
-      const m = bodiesMark(r);
-      const cp = K.checkpoint();
-      const bodies = [];
-      try {
-        for (const [x, zz, i, j] of grid) {
-          const id = irrBodyId(lot.id, i, j);
-          // (the broken variant irrNoBed: the first source's bed written as air, a hole under the water: M25:shell)
-          const shellRole = (sx, sy, sz, where) => (where === 'floor' ? (unsafe.irrNoBed === true && !bodies.length ? null : bed(sx, sy, sz)) : EDGE_STATE);
-          const rec = r.fluidBody([[x, fy, zz]], {
-            id, part: z.zone.id, kind: 'irrigation', fluid: 'water', stage: K.stageOf('street'), level: fy, rim: false, raised: false, world, volumeBox, shellRole,
-          });
-          rec.shellStates = shellStatesOf(rec, shellRole); // (§7: the bill: the beds and the farmland sides, farmland priced as dirt)
-          bodies.push(rec);
-        }
-        K.mark(z.zone.id, K.addedSince(cp));
-      } catch (e) {
-        K.rollback(cp);
-        bodiesRollback(r, m);
-        note(z.zone.id, `irrigate: ${def.id} is not irrigated (${e.message})`);
-        continue;
-      }
-      // the lot's record: the world cells and the same cells in the lot's frame (front to the south: the design's)
-      const F = lotFrame(lot);
-      const lotCells = cellsAll.map((c) => F.toFrame(...c)).sort((a, c) => a[1] - c[1] || a[0] - c[0] || a[2] - c[2]);
-      lot.irrigation = { sources: bodies.length, bodies: bodies.map((q) => q.id), field: [field.x0, field.z0, field.x1, field.z1], cells: toRuns(cellsAll), frame: [...F.size], lotCells: toRuns(lotCells) };
-      if (unsafe.irrUnmasked === true || unsafe.irrUnmasked === 'plan') {
-        // (the broken variant: the mod is told not to mask this lot, so its design writes over the sides; 'plan' also writes one side
-        // here, a part of no plan part standing in for the design: M25:clear at plan time)
-        lot.irrigation.unmasked = true;
-        if (unsafe.irrUnmasked === 'plan') {
-          const [x, zz] = grid[0];
-          const dp = r.part(`${lot.id}_irr_design`.slice(0, 48), { stage: K.stageOf('lots') });
-          dp.columns({ abs: 0 }, { abs: 0 }, [x + 1, zz, fy, fy, 0], ['minecraft:oak_planks'], { cond: 3 });
-        }
-      }
+      const res = irrigateLot(r, K.ctx, lot, {
+        name: def.id, part: z.zone.id, stage: K.stageOf('street'), lotsStage: K.stageOf('lots'), unsafe,
+        checkpoint: () => K.checkpoint(), rollback: (cp) => K.rollback(cp), mark: (cp) => K.mark(z.zone.id, K.addedSince(cp)),
+      });
+      if (!res.ok) { note(z.zone.id, res.note); continue; }
       // (§7, survival: the zone's cost.bom gains the sources' shells (water is free, N-H-1; farmland costs dirt, the vocab's survival map))
       const bom = (K.record.bom ??= {})[z.zone.id] ??= {};
-      for (const [item, n] of Object.entries(bodyBom(bodies))) bom[item] = (bom[item] ?? 0) + n;
-      out.lots.push({ lot: lot.id, def: def.id, zone: z.zone.id, bodies });
-      note(z.zone.id, `irrigate: ${def.id} gets ${bodies.length} source${bodies.length === 1 ? '' : 's'} (${new Set(grid.map((g) => g[2])).size} x ${new Set(grid.map((g) => g[3])).size}), every field column within ${HYDRATE} of one`);
+      for (const [item, n] of Object.entries(bodyBom(res.bodies))) bom[item] = (bom[item] ?? 0) + n;
+      out.lots.push({ lot: lot.id, def: def.id, zone: z.zone.id, bodies: res.bodies });
+      note(z.zone.id, res.note);
     }
   }
   return out;
+}
+
+/**
+ * (6c IRR; M5 IG) One farm lot's irrigation, written into `r` (plan/0's compile step 3 and a revision's grown lot share it): the grid in
+ * its field, each source an H body (`bodyPrefix` + `<lot>_irr_<i>_<j>`, kind irrigation) whose shell (the bed and the four farmland
+ * sides) is written in `stage` (after the pads' stage, before the lot's), its water in the fluids stage; the lot's `irrigation` record.
+ * `opts`: {name (the lot as the caller names it, for the notes), part (the body's plan part, or null), stage, lotsStage, unsafe,
+ * bodyPrefix, checkpoint, rollback, mark (the compile's part bookkeeping; absent outside the compile)}. Returns {ok: true, bodies,
+ * note} or {ok: false, why: small | freezes | failed, note}; on a failure nothing of it stays in `r`.
+ */
+export function irrigateLot(r, ctx, lot, opts = {}) {
+  const name = opts.name ?? lot.id;
+  const unsafe = opts.unsafe ?? {};
+  const roles = fluidRolesOf(ctx);
+  let grid = gridOf(lot);
+  if (!grid.length) return { ok: false, why: 'small', note: `irrigate: ${name}'s field is too small (a side under ${MIN_SIDE})` };
+  const fy = lot.floorY;
+  const fr = grid.map(([x, zz]) => freezesAt(ctx, x, fy, zz)).find((q) => q.freezes);
+  if (fr) return { ok: false, why: 'freezes', note: `irrigate: the biome freezes the sources (${fr.biome}): ${name} is not irrigated` };
+  if (unsafe.irrBreachOut === true) {
+    // (the broken variant: the first source on the field's edge row against the border, its outer side in the border column)
+    const F = lotFrame(lot), f = fieldFrame(lot);
+    const w = F.toWorld(f[0], 0, F.toFrame(grid[0][0], fy, grid[0][1])[2]);
+    grid = [[w[0], w[2], 0, 0], ...grid.slice(1)];
+  }
+  const field = fieldOf(lot);
+  const cellsAll = irrigationCells(lot, grid);
+  const cellSet = new Set(cellsAll.map((c) => k3(...c)));
+  const world = fieldWorld([{ field, floorY: fy, cells: cellSet }]);
+  const b = lot.box;
+  const volumeBox = { minX: b.minX - 1, minY: fy - 3, minZ: b.minZ - 1, maxX: b.maxX + 1, maxY: fy + 2, maxZ: b.maxZ + 1 };
+  const natural = naturalOf(r, { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ }, fy - 2, fy + 2);
+  const bedChain = [roles.bed.block, 'minecraft:clay', 'minecraft:mud'].filter((q) => linesBody(q));
+  const bed = (x, y, zz) => { const n = natural(x, y, zz); return bedChain.find((q) => nameOfState(q) !== n) ?? bedChain[bedChain.length - 1] ?? shellBlock(r.ctx.roles, 'structure'); };
+  const m = bodiesMark(r);
+  const cp = opts.checkpoint ? opts.checkpoint() : null;
+  const bodies = [];
+  try {
+    for (const [x, zz, i, j] of grid) {
+      const id = irrBodyId(`${opts.bodyPrefix ?? ''}${lot.id}`, i, j);
+      // (the broken variant irrNoBed: the first source's bed written as air, a hole under the water: M25:shell)
+      const shellRole = (sx, sy, sz, where) => (where === 'floor' ? (unsafe.irrNoBed === true && !bodies.length ? null : bed(sx, sy, sz)) : EDGE_STATE);
+      const rec = r.fluidBody([[x, fy, zz]], {
+        id, part: opts.part ?? null, kind: 'irrigation', fluid: 'water', stage: opts.stage, level: fy, rim: false, raised: false, world, volumeBox, shellRole,
+      });
+      rec.shellStates = shellStatesOf(rec, shellRole); // (§7: the bill: the beds and the farmland sides, farmland priced as dirt)
+      bodies.push(rec);
+    }
+    if (opts.mark) opts.mark(cp);
+  } catch (e) {
+    if (opts.rollback) opts.rollback(cp);
+    bodiesRollback(r, m);
+    return { ok: false, why: 'failed', note: `irrigate: ${name} is not irrigated (${e.message})` };
+  }
+  // the lot's record: the world cells and the same cells in the lot's frame (front to the south: the design's)
+  const F = lotFrame(lot);
+  const lotCells = cellsAll.map((c) => F.toFrame(...c)).sort((a, c) => a[1] - c[1] || a[0] - c[0] || a[2] - c[2]);
+  lot.irrigation = { sources: bodies.length, bodies: bodies.map((q) => q.id), field: [field.x0, field.z0, field.x1, field.z1], cells: toRuns(cellsAll), frame: [...F.size], lotCells: toRuns(lotCells) };
+  if (unsafe.irrUnmasked === true || unsafe.irrUnmasked === 'plan') {
+    // (the broken variant: the mod is told not to mask this lot, so its design writes over the sides; 'plan' also writes one side
+    // here, a part of no plan part standing in for the design: M25:clear at plan time)
+    lot.irrigation.unmasked = true;
+    if (unsafe.irrUnmasked === 'plan') {
+      const [x, zz] = grid[0];
+      const dp = r.part(`${lot.id}_irr_design`.slice(0, 48), { stage: opts.lotsStage });
+      dp.columns({ abs: 0 }, { abs: 0 }, [x + 1, zz, fy, fy, 0], ['minecraft:oak_planks'], { cond: 3 });
+    }
+  }
+  return { ok: true, bodies, note: `irrigate: ${name} gets ${bodies.length} source${bodies.length === 1 ? '' : 's'} (${new Set(grid.map((g) => g[2])).size} x ${new Set(grid.map((g) => g[3])).size}), every field column within ${HYDRATE} of one` };
 }
 
 /** A block state's name (no properties, the minecraft: namespace kept). */

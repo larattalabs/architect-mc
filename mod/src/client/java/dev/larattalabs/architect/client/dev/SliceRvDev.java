@@ -1,5 +1,6 @@
 package dev.larattalabs.architect.client.dev;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.api.ArchitectApi;
 import dev.larattalabs.architect.api.RevisionRequest;
@@ -27,7 +28,7 @@ public final class SliceRvDev {
 
 	public static void init() {
 		DevBridge.register("dev.rv.plan", 900_000, "{region, spec: {parts: [{id, call}], refill?: [lotId], unsafe?, grow?} | params: {grow: {lots, district?, prefer?, "
-			+ "extend?}}, opKey?, program?: revise | the region's program (a growth), ext?} - (6d RV, GR) Regions.planRevision -> {planId, irSha, revisionOf: {region, rid, "
+			+ "extend?}}, opKey?, program?: revise | the region's program (a growth), ext?} - (6d RV, GR) Regions.planRevision -> {planId, irSha, lots: [{id, front, floorY, box, ext}] (M5 IG), revisionOf: {region, rid, "
 			+ "position, parentRid, parentIrSha}, stages, ms} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
@@ -51,6 +52,23 @@ public final class SliceRvDev {
 							o.addProperty("planId", p.planId());
 							o.addProperty("irSha", p.irSha());
 							o.add("stages", new com.google.gson.Gson().toJsonTree(p.stages()));
+							// ((M5 IG) the plan's lots as the API gives them: id, front, floorY, box and ext (an irrigated lot's
+							// architect_mc:lotIrrigation among it))
+							JsonArray lots = new JsonArray();
+							for (dev.larattalabs.architect.api.LotSpec l : p.lots()) {
+								JsonObject lo = new JsonObject();
+								lo.addProperty("id", l.id());
+								lo.addProperty("front", l.front().getSerializedName());
+								lo.addProperty("floorY", l.floorY());
+								JsonArray b = new JsonArray();
+								for (int v : new int[] {l.lot().minX(), l.lot().minY(), l.lot().minZ(), l.lot().maxX(), l.lot().maxY(), l.lot().maxZ()}) {
+									b.add(v);
+								}
+								lo.add("box", b);
+								lo.add("ext", l.ext().deepCopy());
+								lots.add(lo);
+							}
+							o.add("lots", lots);
 							if (p.revisionOf() != null) {
 								o.add("revisionOf", new com.google.gson.Gson().toJsonTree(p.revisionOf()));
 							}

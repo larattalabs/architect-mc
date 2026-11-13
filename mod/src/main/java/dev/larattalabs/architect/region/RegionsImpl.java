@@ -914,6 +914,11 @@ public final class RegionsImpl implements Regions {
 	public static final String EXT_CHECK = "architect_mc:check";
 	/** RegionPlanRequest ext (any value): the first plan stands even when the program asks for volumes (no two-plan flow). */
 	public static final String EXT_NO_VOLUMES = "architect_mc:noVolumes";
+	/**
+	 * (M5 IG) A plan lot's ({@code LotSpec.ext}) irrigation record, on an irrigated lot only: IRR's {@code {sources, bodies, field, cells,
+	 * frame, lotCells}} (a revision's grown farm lot with {@code irrigate}, or a plan/0 farm lot). Not the lot site's {@code LotMask.EXT}. Since 1.56.0.
+	 */
+	public static final String EXT_IRRIGATION = "architect_mc:lotIrrigation";
 
 	static boolean checkOf(RegionPlanRequest r) {
 		JsonElement e = r.ext().get(EXT_CHECK);
@@ -1257,6 +1262,11 @@ public final class RegionsImpl implements Regions {
 			// 6c V: the program's lot data (e.g. "architect_mc:village" = {role, type, villager, entrance, lane, water, bellDistance})
 			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("ext") instanceof JsonObject le) {
 				le.entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
+			}
+			// (M5 IG, S-M5-2) an irrigated lot's record (IRR's lots[].irrigation {sources, bodies, field, cells, frame, lotCells}), so the
+			// caller makes the lot's design with the cells reserved before the realise; only on an irrigated lot (every other ext unchanged)
+			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("irrigation") instanceof JsonObject irr) {
+				ext.add(EXT_IRRIGATION, irr.deepCopy());
 			}
 			// (7b SL) a site lot: LotSpec.site from its `site` (the SiteSpec wire); a malformed one leaves the lot without (logged), never a throw
 			dev.larattalabs.architect.api.SiteSpec site = null;
@@ -2182,6 +2192,12 @@ public final class RegionsImpl implements Regions {
 			ext.addProperty(dev.larattalabs.architect.site.LotMask.EXT_MECHANISM_DROPPED, droppedBlocks(bpId, f, dev.larattalabs.architect.site.LotMask.of(only)));
 			ext.add(GateMech.EXT_REPORT, gm.report(GateMech.kindOf(ir, lot.id())));
 		}
+		// (M5 FC, S-M5-4) a module lot's field (its farmland cells, the crop kinds): on the site's ext, so LC, the standing score and the
+		// deconstruct judge its crop cells by the field rule (FieldCells)
+		JsonObject field = lotField(ir, lot.id(), dev.larattalabs.architect.site.LotMask.of(ext)); // (IRR's cells left out)
+		if (field != null) {
+			ext.add(dev.larattalabs.architect.site.FieldCells.EXT, field);
+		}
 		// (6c RS, §5) a survival region's lot is a construction site (Y1: the owner's stockpile, no crate)
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, actorUuid, rec.survival(),
 			dev.larattalabs.architect.survival.SurvivalWorld.on());
@@ -2353,6 +2369,24 @@ public final class RegionsImpl implements Regions {
 				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("irrigation") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
 					&& !c.isEmpty()) {
 					return g.get("unmasked") instanceof JsonElement u && u.isJsonPrimitive() && u.getAsBoolean() ? null : c;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (M5 FC) A lot's field in the IR ({@code lots[].field {cells: world column runs [x, z, y0, y1] of its farmland, crops}}) as the site's
+	 * ext value ({@link dev.larattalabs.architect.site.FieldCells#extOf}) less any cell on or under the lot's mask (IRR's irrigation cells,
+	 * the region's), or null: none, or no cell or known crop left (never throws).
+	 */
+	static @Nullable JsonObject lotField(Ir ir, String lotId, java.util.function.@Nullable LongPredicate mask) {
+		if (ir.json().get("lots") instanceof JsonArray lots) {
+			for (JsonElement e : lots) {
+				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("field") instanceof JsonObject g && g.get("cells") instanceof JsonArray c
+					&& !c.isEmpty()) {
+					JsonObject v = dev.larattalabs.architect.site.FieldCells.extOf(c, g.get("crops") instanceof JsonArray cr ? cr : null, mask);
+					return v.getAsJsonArray("cells").isEmpty() || v.getAsJsonArray("crops").isEmpty() ? null : v;
 				}
 			}
 		}

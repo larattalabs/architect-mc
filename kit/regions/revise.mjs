@@ -18,6 +18,7 @@ import { emitPond } from '../lib/fluids/pond.mjs';
 import { fluidRolesOf } from '../lib/fluids/place.mjs';
 import { columnProblem, ridPrefix, standingClasses } from '../lib/region/revise.mjs';
 import { growPlan, emitGrowth, growObstacles } from '../lib/region/grow.mjs';
+import { irrigateLot, isFarm } from '../lib/fluids/irrigate.mjs';
 
 export const id = 'revise';
 export const description = 'An additive revision of a standing region (6d RV): new parts, lots, refills and bodies over it.';
@@ -69,6 +70,21 @@ export default function revise(ctx) {
     used.add(growStages.ground); used.add(growStages.lots);
     if (growth.extension) used.add(growStages.street);
     used.add(growStages.props);
+  }
+  // (M5 IG, S-M5-2) irrigated grow lots (`irrigate: true` on a farm lot, IRR's member): the shells in the stage after the pads' (`street`,
+  // as plan/0 writes them: a shell write passes only natural cells and the region's earlier stages), the sources in the fluids stage.
+  // A lot that asks and can't be irrigated refuses the revision (NOT_ALLOWED [irrigate]), never a note: the caller reserves the cells.
+  const irrigated = growth ? growth.lots.filter((l) => l.spec.irrigate === true) : [];
+  for (const l of growth ? growth.lots : []) {
+    const v = l.spec.irrigate;
+    if (v !== undefined && typeof v !== 'boolean') throw new Error(`NOT_ALLOWED: [call] grow lot ${l.spec.id}: irrigate must be true or false`);
+  }
+  if (irrigated.length) {
+    for (const l of irrigated) if (!isFarm(l.spec)) throw new Error(`NOT_ALLOWED: [irrigate] grow lot ${l.spec.id} is not a farm lot (villager '${l.spec.villager ?? ''}', type '${l.spec.type}')`);
+    const iG = baseStages.indexOf(growStages.ground), iS = baseStages.indexOf(growStages.street), iL = baseStages.indexOf(growStages.lots);
+    if (!(iG < iS && iS < iL)) throw new Error(`NOT_ALLOWED: [irrigate] region stages (${baseStages.join(', ')}) have no stage between the pads' and the lots' for the sources' shells`);
+    used.add(growStages.street);
+    used.add('fluids');
   }
   // (a body needs the region's `fluids` stage, last: H's settle and census run in it, §7)
   if (parts.some((p) => p?.call?.fn === 'pond')) used.add('fluids');
@@ -122,6 +138,15 @@ export default function revise(ctx) {
       }
     }
   }
+  // (M5 IG) each irrigated grow lot's sources and record (IRR's helper, the bodies prefixed rv<rid>_ as every revision body)
+  const irrOut = [];
+  for (const l of irrigated) {
+    const lot = r.lots.find((q) => q.id === l.spec.id);
+    const res = irrigateLot(r, ctx, lot, { name: l.spec.id, part: null, stage: growStages.street, lotsStage: growStages.lots, bodyPrefix: pre });
+    if (!res.ok) throw new Error(`NOT_ALLOWED: [irrigate] ${res.note.replace(/^irrigate: /, '')}`);
+    r.note(res.note);
+    irrOut.push(l.spec.id);
+  }
   // the broken variants (the checker's tests): each writes the forbidden thing the guard then lets through
   const y = (x, z) => ctx.survey.groundAt(x, z) + 1;
   const one = (name, at, mat = 'structure') => {
@@ -155,6 +180,7 @@ export default function revise(ctx) {
       extension: growth.extension ? { ...(growth.extension.kind ? { kind: growth.extension.kind } : {}), from: growth.extension.from, road: growth.extension.newRoad, along: growth.extension.road, run: [...growth.extension.run],
         lots: growth.lots.filter((l) => l.slot.kind === 'extension').map((l) => l.spec.id) } : null,
       unplaced: growth.unplaced, lamps: grown.lamps.length,
+      ...(irrOut.length ? { irrigated: irrOut } : {}),
     } } : {}),
   };
   return r;

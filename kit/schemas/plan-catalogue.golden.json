@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 19,
- "api": "1.55.0",
- "kitVersion": "0.57.0",
+ "catalogueVersion": 20,
+ "api": "1.56.0",
+ "kitVersion": "0.58.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -693,7 +693,7 @@
   },
   {
    "id": "form.floating_island",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.56.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -903,7 +903,7 @@
   },
   {
    "id": "form.crater",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.56.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {
@@ -928,7 +928,7 @@
   },
   {
    "id": "form.hollow_mountain",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.56.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {

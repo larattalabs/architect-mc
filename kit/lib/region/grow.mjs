@@ -21,6 +21,7 @@ import { fixtureFor, fixtureCells, roadLamp } from './fixtures.mjs';
 import { traceBoundary, normalAt } from './boundary.mjs';
 import { followLots, smoothLine, maskRuns, FOLLOW_PAD } from './followEmit.mjs';
 import { FLAG_WATER, FLAG_LAVA, FLAG_MISSING } from './pack.mjs';
+import { emitGrowthFields } from './field.mjs';
 
 export const GROW_FORMAT = 'grow/1';
 /** A frontage lot's lane length (the rows between the verge row and its front edge): the pad's batter (PAD_MAX) plus one stays off the verge. */
@@ -767,6 +768,7 @@ export function emitGrowth(r, plan, { rid, eff, stages = {}, laneWidth = 2, keep
     props._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
     (r.meta.parts[props.id] ??= {}).kind = 'add';
   }
+  emitGrowthFields(r.lots, plan.lots, pre); // (M5 FC) a grown lot's field {cells, crops} on the IR's lot (field.mjs)
   return { nodes, edges, roads, lamps, lots: lotsOut.map((l) => l.spec.id) };
 }
 
