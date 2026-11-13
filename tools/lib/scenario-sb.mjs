@@ -161,7 +161,10 @@ async function paSiteEntries(L, sc, ir, plan) {
     const body = { site: lot.site, ...a.request, notes: [a.request.notes, lot.brief].filter(Boolean).join(' '), opKey: `${plan.opPrefix}-${a.lot}`, ...(paid ? { budgetUsd: cap } : {}) };
     const r = await L.call('dev.ds.request', body, 60_000);
     if (!r.designId) {
-      if (paid) P.withLedger(plan.ledger, (Lg) => P.updateJob(Lg, step, { usd: 0, ended: true, status: 'refused', error: r.refused ?? JSON.stringify(r) }));
+      // a typed refusal ends the job at $0; an untyped one (the helper's ack past the mod's 20 s timeout) may hide a design that still
+      // runs and spends, so the job stays open at its full cap and the item reports it. A paid request is never replayed automatically
+      const typed = r.refused && r.refused !== 'null' && /^[A-Z_]+/.test(r.refused);
+      if (paid) P.withLedger(plan.ledger, (Lg) => P.updateJob(Lg, step, { usd: 0, ended: !!typed, status: typed ? 'refused' : 'untyped_refusal_open_at_cap', error: r.refused ?? JSON.stringify(r) }));
       rows.push({ lot: a.lot, fit: lot.site.fit, entry: null, how: a.landmark ? 'landmark' : `archetype ${a.key}`, refused: r.refused ?? JSON.stringify(r), detail: r.detail ?? null, ms: Date.now() - t0 });
       continue;
     }
