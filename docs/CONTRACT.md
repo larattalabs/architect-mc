@@ -29823,6 +29823,115 @@ machine-checked land needs for S1-S3/S7 if a pick lands them on wrong land in BR
 | gate run 2, **20261113-054210-change** at fbd4a8d6 | **PASS 2/2**: tc-unit 2/0; tc-pick 3/0: (a) a cave city over flat land NO_TEMPLATE, s6_cave_city closest, "it has 0 (0 cave of any size)" (the mod's volume analysed); (b) S6's brief over the built hill with its 60x8x12 hall PICKED s6_cave_city and the mod planned it; (c) S5's brief there NO_TEMPLATE, s5_treehouses closest |
 | gate-verifier (review only, DEV MODE) | **PASS** at 5a401f2f (fbd4a8d6 + this as-built only): the land check fails closed and spares a closest offer, the surface purely additive (the wire's optional `volume`, javadoc), the s3/s5/s6 ir.json and rv/merge.json differ from main in programSha only, the recorded grove and floorY paths untouched, groveFromLand and the S6 floor pure and deterministic, the units compared against the sculpt's own plan; re-ran tc 7/7, regions-tc 13/13, release-version --check, step-inputs check. Non-blocking: S5 over real oaks is a kit unit, not an in-game step; the deck read is unit-tested on flat and one uneven land; pick accuracy is BR/PAY's |
 
+### Slice US as built (branch `slice/US` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; strict: survival accounting; recorded 2026-11-13)
+
+§3 row 10: `rule.suspended` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi NEXT, as BF's and HR's);
+the helper advertises `plan.suspendedBuilds`, the mod `suspendedBuilds`; the kit gains `bp.invert()`. No 7b or 7cF signature changed: the
+API package gains javadoc only (`ArchitectApi.features`), and ApiRules one mapping.
+
+**Built:**
+- **`bp.invert()`** (`kit/lib/invert.mjs`, `Blueprint.invert(opts)`): turns what the design has written so far upside down: row y goes to
+  `H - 1 - y`; every cell's state given its flipped twin (`invertProps`); its part; the ports (y flipped, `up` and `down` swapped); the
+  anchors and cameras as points (`y -> H - y`, the pitch negated); the interior box. The floors then run from the ceiling down (the standing
+  build's ground floor hangs first, under the ceiling). The sidecar records `inverted: true` (absent on every other design, so their bytes
+  do not move). A site-bound design's keep cells are the site's and stay (a flipped cell onto one throws); any other design's flip with it.
+  The table (vanilla has no vertical flip, so it is the kit's own, rules on property names and values):
+
+  | Property | Flip |
+  |---|---|
+  | `half` | top <-> bottom (stairs, trapdoors); upper <-> lower (doors and two-high plants: the pair swaps with its cells, so a door stands the right way up again) |
+  | `type` | top <-> bottom (slabs; `double`, a chest's single/left/right and a piston head's normal/sticky stay) |
+  | `hanging` | true <-> false (lanterns, the mangrove propagule) |
+  | `face`, `attachment` | floor <-> ceiling (buttons, levers, the grindstone; the bell) |
+  | `facing` | up <-> down (the six-way blocks) |
+  | `orientation` | `down_<dir>` <-> `up_<dir>` (the crafter, the jigsaw) |
+  | `vertical_direction` | up <-> down (pointed dripstone, sulfur spikes; `thickness` stays: it counts from the tip) |
+  | `up`, `down` | swapped on a block with both (mushroom blocks, the chorus plant, glow lichen, resin clumps); a wall's lone `up` (its post) and every pane, fence and wall connection are finalize()'s |
+
+  **No flipped twin** (`flipOf(...).exact === false`; invert refuses such a cell by default, naming it, so the design writes it after the
+  flip on its new floor; `{unflipped: 'keep'}` keeps it as is): a state whose one-way vertical bearing would stay the same way (floor
+  attachables: torches, carpets, rails, plants, signs, banners, candles, skulls, pots, beds, diodes, redstone wire, pressure plates, cake,
+  snow layers; ceiling ones: hanging signs, pale hanging moss), a hopper facing down, a crafter or jigsaw whose top is up. Measured over
+  every state of every kit block (1286 blocks, 35,723 states): every state an involution inside its domain; 30,117 exact; 5,606 without a
+  twin, by family: redstone_wire 1296, hanging_sign 832, plant 439, sign 416, bed 272, candle 272, banner 256, skull 224, carpet 179, rail 92,
+  diode 80, pressure_plate 62, double_plant 42, cake 41, flower_pot 40, multiface 23 (no face set), block 22 (the hopper facing down, the crafter's
+  and jigsaw's `<dir>_up`), snow_layer 8, ceiling_plant 5, torch 5 (`us.test.mjs` holds the list exactly).
+- **The inverted example** (`kit/designs/site/fit_suspend_inverted.mjs`, built into `kit/examples/fit_suspend_inverted/`, so the
+  bundled library holds it): a gabled cottage built standing and turned over, hung by its old floor slab from the 7bF fixture `overhang`'s
+  rock ceiling. The flip carries the keel's stairs (half top) and lining, the attic hatch (a trapdoor, now top-half in the floor), the door
+  (written under the deck, so its halves swap and it stands on the new floor), the windows, and two lanterns (standing on the old floor,
+  hanging from the new ceiling). Written after the flip: the ladder from the site's walk port `hatch` up through the keel, the balcony on two
+  chains, the bed, a chair, the spots. Its four hang points stay unwritten (above the lot). 680 blocks.
+- **`rule.suspended {scope}`** (`kit/lib/plan/compile.mjs`, `elevated.mjs`): the lots zones with `layout: elevated` in scope (absent: every
+  elevated zone of the plan) take **overhang affordances only** (suspend site lots on the rock ceilings; a canopy, trunk, ledge or water is
+  passed over), and each lot is marked **`inverted: true`** on the IR lot, the plan record's `siteLots` and the artifact's `$.lots[]` (beside
+  `site` and `affordance`, as SL put `affordance`: the SiteSpec wire is frozen). The rule answers `fits` once its zones fit or adjust
+  (they are its dependencies: `blocked DEPENDENCY` when one does not); a scope part that is not an elevated lots zone, or a plan with none,
+  answers the rule `refused NO_FEATURE` and leaves the zones as they are. The zone's NO_FEATURE says "no overhang ceiling to hang from".
+  Catalogue: `limits {scope: 32, layouts: [elevated], affordances: [overhang]}`; the note names the region-made-form limit.
+- **Feature:** the sidecar's `plan.suspendedBuilds` (appended last; `jobs.test` and `bundle.e2e` lists appended), mapped by ApiRules to
+  **`suspendedBuilds`**; `ArchitectApi.features()` javadoc (since NEXT); `ApiUSTest`.
+- **Survival** (Noah's rule: built structures are construction targets): nothing new in the mod. An inverted house is a suspend site lot's
+  design: PL's KEEP placement and SO's support order (`BuildOrder.bySupport` from `Builder.anchors`: its anchors are the top row's cells
+  under the rock) build it from the ceiling down; `SupportOrderFixtureTest` and `BuildOrderGoldenTest` now include it (every queue prefix
+  connected by the fixture volume's classes; bottom-up would float; the runtime gate over 12 seeds of partial stock; the support-order
+  dispatch).
+- **Gate step** `us-survival` (`tools/gate7cus.mjs`: SO's survival flow, `tools/gate7bso.mjs survival`, over the inverted house through
+  `GATE7BSO_HOUSES`; SO's default houses and its SO-b scaffold step unchanged), chain `7cus`, impact rule "7c US inverted builds".
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **The rule scopes elevated zones only.** SL's `layout.elevated` already makes overhang lots `suspend` site lots; the rule restricts a
+   zone to overhangs and marks its lots. A street zone in scope is refused, not turned elevated (upside_down's recorded zone is elevated).
+2. **"Floors from the ceiling down"** is the flip's own order: the standing ground floor hangs first under the rock; no storey is renumbered
+   (`storeys` unchanged).
+3. **States with no twin are refused, not guessed.** A torch has no ceiling form; inverting it would leave a floating cell. The design
+   writes floor furniture after the flip (the example does); `unflipped: 'keep'` exists for a caller who checks it after.
+4. **Anchors flip as points.** A spot's feet row does not survive a flip meaningfully, so designs set spots after it (the example does).
+5. **The designer is not told yet.** The site brief (DS) reads the SiteSpec, which has no `inverted` member (frozen); a design job for an
+   inverted lot learns it from the lot's own brief (upside_down's say "inverted"). Wiring `inverted` into the design request is a
+   leftover (it needs a request member, an API change).
+6. **"M15 necks and SC's fit:suspend on the result"** is the site checker's building-scale pair (`neck`, `cantilever`, `fit:suspend`) on
+   the inverted example's composite: region M15 judges region parts only (a lot's cells have no part: RM reading "judged cells").
+
+**The region-made-form limit, and the gate's overhang.** An OVERHANG made by this region's own forms can't host a site lot: the land is
+read before the plan (SB, BF). The gate uses the 7bF fixture `overhang`'s frozen volume built into the world first (a sculpted overhang),
+and the plan tests use natural (fixture-volume) rock shelves.
+
+**Readings (measured):** compact plan/0 (`plan/0#compact`, the sidecar's `expandSystemRefs`) **82,242** characters (main 40a59368: 81,873;
+the 90,000 spare line). The inverted example: 680 blocks, SC clean (no `fit:suspend`, `neck`, `cantilever`, `ports_met` finding), in game a
+queue of 525 cells. **upside_down re-planned** (the recorded `asks/upside_down.json`, honestly): as recorded on the asks survey (flat, no
+overhang) its hanging village answers **refused NO_FEATURE** (no affordance); with `rule.suspended` scoping it, **still waits**: refused
+NO_FEATURE "no overhang ceiling to hang from", the rule blocked. Over a natural overhang field near its stone (nine rock shelves 13 x 13,
+4 thick, 16 over the ground, in the fixture volume): the zone **fits**, all 9 lots hang inverted (suspend site lots, each `inverted`), the
+rule fits; its `chain_bridge_1` (a rope bridge between two hanging lots) answers **unsupported** (a link at a site lot's port is a catwalk,
+branch walk or tunnel: LP's). No other recorded ask has a `rule.suspended` part.
+
+**Tests moved by name:** e16 drops its bare `r_suspended` (it shipped); e20's `hang` (scope a street zone) answers **refused NO_FEATURE**;
+f7b-foundation and gm-c leave `rule.suspended` to us.test.mjs; sv.test's "six fit examples" leave the inverted house to us.test.mjs;
+PlanCatalogueTest's reserved-draft example is now `program.authored`; the schematic export goldens (kit and mod) gain the inverted house;
+SupportOrderFixtureTest and BuildOrderGoldenTest gain it. `valid/v7c_us_hanging.json` covers `rule.suspended` (two homes under two shelves).
+
+**Checks** ($0, sim only; ports 8900/8901, verifier 8902/8903; machine load 40-130 throughout):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1312/1312** at be9c2e24 (us.test 9/9: the property test over 35,723 states, the named families, invertBlueprint's mapping and its refusal, the example current and clean, the example's flipped states, rule.suspended's lots, its refusals and blocked answer, the catalogue flip, upside_down); first run at 79018555 1298/1303, the 5 named movers moved at f1454d2c/be9c2e24 |
+| mod `./gradlew build --offline --no-daemon` | pass; **1155 tests, 0 failures, 1 skipped** (ApiUSTest 2/2, PlanCatalogueTest 8/8, SupportOrderFixtureTest 3/3 and BuildOrderGoldenTest 1/1 with the inverted house, SchematicTest 6/6) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | tsc clean; **866/866** (62 files; jobs.test and bundle.e2e with `plan.suspendedBuilds` appended) |
+| api-compat | clean against the 0.48.0 and 0.47.0 apitest jars (932 references); the API package's diff is javadoc only |
+| catalogue golden | the diff is exactly `rule.suspended` (reserved -> supported, schemaVersion 1, def, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator; `tools/catalogue-since-check.mjs` pass |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0 |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (372 steps; `us-survival` in gate-chains.json, chain `7cus`, impact rule "7c US inverted builds (slice US)") |
+| gate run 1, **20261113-094450-change** at be9c2e24 | **PASS 1/1: us-survival 16/0**: the overhang fixture's land built (15,488 of 26,880 cells) and frozen; Sites.place in construction mode; a) deconstructed at 162/525 with 137 scaffolding cells standing: all 523 items fed back, no scaffolding item, E-flat 0; b) the crate at the hatch's landing (1 from the port, on dirt, outside the box); 137 scaffolding cells in one `architect:scaffold` CELL entry; save/quit/reload at 265/525 resumed with the gate rebuilt; built 525/525 from the hopper chain; 6 built prefixes recorded (100, 200, 277, 300, 400, 500), each connected to the rock by the independent scan over the fixture volume's classes; scaffolding down and released; items in = items out (fed 523 = paid 523 + 0 left); deconstructed: every item back, E-flat 0; c) identical to the INSTANT placement over 50,176 cells; that placement's Remove exact (E-flat 0) |
+| gate-verifier (strict: survival accounting) | VERIFIER |
+
+**Leftovers:** (1) a design job for an inverted lot is not told it is one (reading 5: the SiteSpec is frozen; a request member is an API
+change). (2) upside_down's chain bridge between hanging lots waits on a rope-bridge link kind (LP's). (3) The in-game region path (a plan
+whose land holds a natural overhang, realised with an inverted entry bound to its lot) is not gated: the gate places the inverted house by
+`Sites.place` on the sculpted fixture land, which is the same placement a site lot's realise item runs (SL: LAYERed in its frame under
+`SiteFit.with(site)`). (4) `tools/gate7bso.mjs` gained `GATE7BSO_HOUSES` (default unchanged; SO-b's scaffold step runs only on the default
+houses); so-survival was not re-run.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
