@@ -185,8 +185,9 @@ public final class RegionOverwrites {
 			return Map.of();
 		}
 		Live o = who.get(t);
-		Map<String, Integer> items = new TreeMap<>();
-		o.run().refundCost(was, qs.get(t)).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+		Map<String, Integer> cost = new TreeMap<>();
+		o.run().refundCost(was, qs.get(t)).forEach(c -> cost.merge(c.item(), c.count(), Integer::sum));
+		Map<String, Integer> items = cost.isEmpty() ? cost : new TreeMap<>(Stockpiles.fromPaid(o.id(), cost)); // (JR) never more than its paid record
 		if (items.isEmpty()) {
 			return items;
 		}
@@ -228,6 +229,16 @@ public final class RegionOverwrites {
 				all.merge(c.item(), c.count(), Integer::sum);
 				byOwner.computeIfAbsent(who.get(t).id(), x -> new TreeMap<>()).merge(c.item(), c.count(), Integer::sum);
 			});
+		}
+		if (all.isEmpty() || pile.ledger.credited(key)) {
+			return all.isEmpty() ? all : Map.of();
+		}
+		// (JR) each owner's share never more than its paid record (taken out of it)
+		all.clear();
+		for (var e : byOwner.entrySet()) {
+			Map<String, Integer> capped = Stockpiles.fromPaid(e.getKey(), e.getValue());
+			e.setValue(capped);
+			capped.forEach((k, v) -> all.merge(k, v, Integer::sum));
 		}
 		if (all.isEmpty()) {
 			return all;

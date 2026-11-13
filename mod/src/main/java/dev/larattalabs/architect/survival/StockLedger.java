@@ -38,10 +38,21 @@ public final class StockLedger {
 	private final Map<String, Integer> dropped = new TreeMap<>();
 	private final Map<String, Integer> refundOverflow = new TreeMap<>();
 	private final Set<String> credited = new LinkedHashSet<>();
+	/**
+	 * (slice JR) Per target (its credit key: {@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}), what the feed consumed for it and
+	 * no refund or retake has given back yet. Booked with {@link #consumed} and saved with it, so after a crash it is what the saved
+	 * ledger says that target took: a keyed refund never credits more ({@link #credit}). A key with no record (consumption before JR,
+	 * fluids, mechanisms) is not capped.
+	 */
+	private final Map<String, Map<String, Integer>> paid = new TreeMap<>();
 
 	/** What crediting items did: what entered the stock and what did not fit (to drop as items, booked as refundOverflow). */
-	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already) {
+	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already, Map<String, Integer> shortfall) {
 		public static final Credit NONE = new Credit(Map.of(), Map.of(), false);
+
+		public Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already) {
+			this(returned, overflow, already, Map.of());
+		}
 
 		public boolean isEmpty() {
 			return returned.isEmpty() && overflow.isEmpty();
@@ -220,7 +231,111 @@ public final class StockLedger {
 			return new Credit(Map.of(), Map.of(), true);
 		}
 		credited.add(key);
-		return giveBack(items, capacityStacks, maxStack);
+		Map<String, Integer> rec = paid.remove(key);
+		if (rec == null) {
+			return giveBack(items, capacityStacks, maxStack);
+		}
+		// (JR) never more than the saved ledger says this target consumed; the record is spent with its refund
+		Map<String, Integer> left = new TreeMap<>(rec);
+		Map<String, Integer> in = capTo(items, left);
+		Credit c = giveBack(in, capacityStacks, maxStack);
+		return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
+	}
+
+	/** (JR) Books what the feed consumed for a target under its credit key (with {@link #consume}). */
+	public void pay(String key, String item, int n) {
+		if (n > 0) {
+			paid.computeIfAbsent(key, k -> new TreeMap<>()).merge(item, n, Integer::sum);
+		}
+	}
+
+	/** (JR) Drops a target's paid record (its refund credited nothing: nothing of it stood). */
+	public void dropPaid(String key) {
+		paid.remove(key);
+	}
+
+	/** (JR) Whether a target ({@code site:} or {@code road:} id) has a paid record. */
+	public boolean tracks(String targetId) {
+		return keyOf(targetId) != null;
+	}
+
+	/**
+	 * (JR) A retake: another writer took up {@code items} of the target {@code targetId}'s paid blocks; what goes back is capped by its paid
+	 * record (same rule as {@link #credit}) and taken out of the record. A target with no record: {@code items} as they are.
+	 */
+	public Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
+		String k = keyOf(targetId);
+		if (k == null) {
+			return items;
+		}
+		Map<String, Integer> left = paid.get(k);
+		Map<String, Integer> out = capTo(items, left);
+		left.values().removeIf(v -> v <= 0);
+		if (left.isEmpty()) {
+			paid.remove(k);
+		}
+		return out;
+	}
+
+	public Map<String, Map<String, Integer>> paid() {
+		Map<String, Map<String, Integer>> o = new TreeMap<>();
+		paid.forEach((k, v) -> o.put(k, Map.copyOf(v)));
+		return o;
+	}
+
+	private @Nullable String keyOf(String targetId) {
+		for (String k : paid.keySet()) {
+			if (k.startsWith("site:" + targetId + "@") || k.startsWith("road:" + targetId + "@")) {
+				return k;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (JR) {@code items} capped by {@code left} (spent from it): the same item first, then, unit for unit, any item still left (a weathered
+	 * copper block refunds for the copper block paid, a soil variant for its soil). Pure but for {@code left}; deterministic (item order).
+	 */
+	static Map<String, Integer> capTo(Map<String, Integer> items, Map<String, Integer> left) {
+		Map<String, Integer> out = new TreeMap<>();
+		Map<String, Integer> rest = new TreeMap<>();
+		for (var e : new TreeMap<>(items).entrySet()) {
+			int want = Math.max(0, e.getValue());
+			int t = Math.min(want, Math.max(0, left.getOrDefault(e.getKey(), 0)));
+			if (t > 0) {
+				out.merge(e.getKey(), t, Integer::sum);
+				left.merge(e.getKey(), -t, Integer::sum);
+			}
+			if (want - t > 0) {
+				rest.put(e.getKey(), want - t);
+			}
+		}
+		for (var e : rest.entrySet()) {
+			int want = e.getValue();
+			for (var l : left.entrySet()) {
+				if (want == 0) {
+					break;
+				}
+				int t = Math.min(want, Math.max(0, l.getValue()));
+				if (t > 0) {
+					l.setValue(l.getValue() - t);
+					out.merge(e.getKey(), t, Integer::sum);
+					want -= t;
+				}
+			}
+		}
+		return out;
+	}
+
+	private static Map<String, Integer> shortfall(Map<String, Integer> items, Map<String, Integer> in) {
+		Map<String, Integer> s = new TreeMap<>();
+		items.forEach((k, v) -> {
+			int d = v - in.getOrDefault(k, 0);
+			if (d > 0) {
+				s.put(k, d);
+			}
+		});
+		return s;
 	}
 
 	/** Credits items with no key (a swap's old block as it happens, a bucket's container): up to capacity, the rest overflow. */
@@ -303,6 +418,11 @@ public final class StockLedger {
 		JsonArray k = new JsonArray();
 		credited.forEach(k::add);
 		o.add("credited", k);
+		if (!paid.isEmpty()) {
+			JsonObject pd = new JsonObject();
+			paid.forEach((key, m) -> pd.add(key, counts(m)));
+			o.add("paid", pd); // (JR) additive: a file without it loads with no records
+		}
 		return o;
 	}
 
@@ -320,6 +440,17 @@ public final class StockLedger {
 		if (o.has("credited") && o.get("credited").isJsonArray()) {
 			o.getAsJsonArray("credited").forEach(e -> l.credited.add(e.getAsString()));
 		}
+		if (o.has("paid") && o.get("paid").isJsonObject()) {
+			o.getAsJsonObject("paid").entrySet().forEach(e -> {
+				if (e.getValue().isJsonObject()) {
+					Map<String, Integer> m = new TreeMap<>();
+					read(e.getValue().getAsJsonObject(), m);
+					if (!m.isEmpty()) {
+						l.paid.put(e.getKey(), m);
+					}
+				}
+			});
+		}
 		return l;
 	}
 
@@ -327,6 +458,15 @@ public final class StockLedger {
 		JsonObject o = new JsonObject();
 		m.forEach(o::addProperty);
 		return o;
+	}
+
+	private static void read(JsonObject counts, Map<String, Integer> into) {
+		counts.entrySet().forEach(e -> {
+			int v = e.getValue().getAsInt();
+			if (v != 0) {
+				into.put(e.getKey(), v);
+			}
+		});
 	}
 
 	private static void read(JsonObject o, String k, Map<String, Integer> into) {

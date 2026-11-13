@@ -8,8 +8,8 @@
 //                                                  restart (the saved ledger), the undo resumed after it:
 //                                                  K5    a plain survival region removal (no revision): the removal's commit point
 //                                                  RVU2  a survival growth's undo: drained, nothing removed
-//                                                  RVU2s the same, with the ledger saved just before the kill (a feed-order change): the
-//                                                        ledger ahead of the chunks (the opposite risk)
+//                                                  RVU2s the same, with the ledger saved just before the kill (a feed-order change): before
+//                                                        JR the ledger ran ahead of the chunks (a loss); now that save saves the chunks too
 //                                                  each: what came back into the stock (with overflow) equals what the saved ledger says the
 //                                                  undone targets consumed, item for item; the ledger's identity holds; the world as before
 //
@@ -58,7 +58,7 @@ export async function registerJR(steps, h) {
     await call('dev.wait', { ms: 2000 }, 30_000);
     const s = await savedNow();
     const live = await pile();
-    const l = ledgerOf(s.saved);
+    const l = ledgerOf(s.file);
     check(l && G.same(l.consumed, live.ledger?.consumed) && G.same(l.delivered, live.ledger?.delivered), `${tag}: the ledger saved by /save-all flush (the baseline) equals the live one (save #${s.saves})`, { saved: l, live: live.ledger });
     return { ledger: l, saves: s.saves };
   }
@@ -76,7 +76,10 @@ export async function registerJR(steps, h) {
     if (saveLedger) await call('dev.stockpile.order', { owner: G.OWNER, ids: [] }, 60_000);
     const s2 = await savedNow();
     const autosaved = s1.saves !== b0.saves;
-    const n = { tag, point, saveLedger, autosaved, savesAtBaseline: b0.saves, savesBeforeKill: s1.saves, savesAtKill: s2.saves };
+    const n = { tag, point, saveLedger, autosaved, savesAtBaseline: b0.saves, savesBeforeKill: s1.saves, savesAtKill: s2.saves, worldSaves: s2.worldSaves,
+      worldSaveMs: saveLedger ? s2.lastWorldSaveMs : null };
+    // (JR) an explicit ledger save also saves the world's chunks: its cost, once (the coordinator's 250 ms bound)
+    if (saveLedger) check(s2.saves > s1.saves && s2.worldSaves > s1.worldSaves, `${tag}: the feed-order change saved the ledger with the world's chunks (save #${s2.saves}; ${Number(s2.lastWorldSaveMs).toFixed(1)} ms; max this session ${Number(s2.maxWorldSaveMs).toFixed(1)} ms)`, n);
     await call('dev.journal.killAt', { point }, 10_000);
     go();
     const down = await haltWait();
