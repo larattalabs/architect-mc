@@ -123,6 +123,7 @@ public final class ApiRules {
 					case "region.link" -> "linkPass"; // 7b LP: the link pass at realise (port links between site lots, IR v2, NO_LINK)
 					case "design.composite" -> "composites"; // 7c CM-b: a design job may return a Composite (Java's own "composites" places it)
 					case "plan.bigForms" -> "bigForms"; // 7c BF: plan/0's form.hollow_mountain, form.crater and form.floating_island (since 1.56.0)
+					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)

@@ -231,6 +231,9 @@ public interface ArchitectApi {
 	 * {@code form.hollow_mountain}, {@code form.crater} (its lake an H pond body) and {@code form.floating_island} are supported, each
 	 * natural cut and fill (free in survival); a hollow mountain's cavern, ledge and halls are recorded in the plan's affordances
 	 * ({@link Regions#affordances}: cliff_face, cave, ledge). No new record, method or reason.
+	 * (7c RM, since NEXT) {@code "regionM15"} is advertised when the helper's kit checks region M15 (its {@code region.m15}): the region
+	 * check's warnings {@code M15:cantilever}, {@code M15:joint} (a port link's end, at a site lot's port), {@code M15:span} (over a Style
+	 * format 3 connector type's {@code maxSpan}) and {@code M15:neck}. Warnings only: no plan answer, record, method or reason changes.
 	 */
 	Set<String> features();
 }

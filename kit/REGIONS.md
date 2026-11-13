@@ -1058,3 +1058,26 @@ a village mid, fields low) on S3's pinned claim (scenario `districts_demo`, phas
 - **The checker**: M25 (leak, convert, mix, shell, keep with the single breach, wet, trap, exit, model) and M20 (lava's fire reach),
   errors, run only for an IR with a fluid op or meta `wet` records (lib/region/checkFluids.mjs).
 - **siteplan/1**: `waters` (counts per body) and `quays`.
+
+# Phase 7c slice RM additions (region M15; CONTRACT "Phase 7c" §3 row 8, "Slice RM as built")
+
+- **The checker:** `M15` (warnings only; in `RULES` just before M16, which FB keeps last, so every other rule's report order is unchanged), run on every
+  check by `lib/region/checkM15.mjs` `regionM15` over the mass the region's own parts write: SETTLEMENTS §11's structural sense at region
+  scale, beside SC's building-scale M15 (`lib/siteCheck.mjs`). The mass is every written cell that holds itself up (blocks.mjs
+  `supportOf` null); a support is a mass cell touching the pre-region world's solid on any side, or a cell of a declared floating group
+  or a generated form (M3 and `M3:overhang` judge those). SC's 0-1 flood measures each cell's distance from a support.
+  - `M15:cantilever`: a cell more than 4 (Chebyshev) from a support, held on one side only. A cell whose run of the mass along x or z
+    (following a deck's profile, one step down or up per cell) reaches a cell within 4, or a port's landing, both ways is a span.
+  - `M15:joint`: the same on a port link's end (the column just outside a site lot's box at its port): the link leans on the design's
+    landing for a span's end, never for a cantilever (SC lets the landing stand one step past its own support).
+  - `M15:span`: a held run whose clear length between its supports is over its connector type's `maxSpan`, when the plan's Style sets
+    one (format 3 `connectors.rope_bridge.maxSpan`, recorded in the plan meta as `m15: {look: {rope_bridge: {maxSpan}}}` only then).
+    Unbounded otherwise.
+  - `M15:neck`: a mass of more than 200 cells reaching every support through one cell.
+  - Judged: cells of the region's parts only. A cell with no part (a design's, inside a lot, on a realised world) is mass and holds
+    what leans on it.
+- **Limits** (frozen names): `REGION_M15_LIMITS {cantilever: 4, neckMass: 200, span: {}}`, `M15_SPAN_TYPES {rope_bridge: 'ropes'}`
+  (a type and the plan meta's record list whose parts it judges), `regionM15Limits(look, overrides)`, `m15LookOf(look)`.
+- **Metrics** `M15`: `{mass, supports, cantileverMax, cantileverLimit, heldMax, spans: [{part, type, length, limit}], necks, joints:
+  [{link, lot, port, end, cells, written, dist, held}]}`.
+- **Feature:** the sidecar's `region.m15` (appended last), advertised by the mod as `regionM15`.
