@@ -1045,7 +1045,7 @@ Sizes are relative to 6a (6a = 1.0). Versions follow the phase 6 rules: one mino
 
 **6d: region evolution** stays as specified in the phase 6 contract, deferred to Steward's phase 3, and gains section 14.
 
-**After 7c (planned 2026-11-13, Noah via parent session):** 8a construction mode for forms and relief, 8b a settlement UI for players, 8c flowing rivers and waterfalls; see PLAN.md "Planned after 7c". Each needs its own contract and a Steward review first.
+**After 7c (planned 2026-11-13, Noah via parent session):** 8a construction mode for forms and relief, 8b settlement data APIs (the player UI is Steward's), 8c flowing rivers and waterfalls; see PLAN.md "Planned after 7c". Each needs its own contract and a Steward review first.
 
 ### 17.3 Spend per scenario run (what a player or Steward pays)
 
@@ -1135,7 +1135,7 @@ cost nothing.
 - Redstone lifts (piston elevators) as connectors: fragile across versions; bubble columns only.
 - ~~Region-scale survival (N4 above), and construction mode for forms and relief~~ → most of region-scale survival has shipped (RS, the connector rows, XR, A2/IG billing, QT, JR, RL); construction mode for forms and relief is planned as **8a** (PLAN.md, 2026-11-13).
 - Writing under standing lots (6d's pad delta under a BOX cover).
-- ~~A Terrain tab or settlement UI in Architect for players~~ → planned as **8b** (PLAN.md, 2026-11-13).
+- ~~A Terrain tab or settlement UI in Architect for players~~ → Steward owns the player settlement UI; Architect's **8b** is the settlement data APIs for it, plus an optional read-only Regions view (PLAN.md, Noah via parent session, 2026-11-13).
 
 ## Noah's decisions (2026-10-08)
 

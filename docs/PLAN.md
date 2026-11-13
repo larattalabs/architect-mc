@@ -1637,7 +1637,7 @@ other callers are unchanged.
 
 ## Planned after 7c: phases 8a, 8b, 8c (Noah via parent session, 2026-11-13: "let's add all of it to plans")
 
-Three items move from SETTLEMENTS §21 "Deferred" into the plan, in this order (hardest last). Each gets its **own contract and a Steward
+Three items move from SETTLEMENTS §21 "Deferred" into the plan (8b reshaped the same day: Steward owns the player UI), in this order (hardest last). Each gets its **own contract and a Steward
 review before any building**, and none starts until 7c closes unless Noah says otherwise. Names are working names; versions are set at merge.
 
 **8a: construction mode for forms and relief (the rest of region-scale survival).**
@@ -1651,10 +1651,14 @@ review before any building**, and none starts until 7c closes unless Noah says o
 - Question for Noah in 8a's contract: does terrain stay **free** and only take time, or does it **cost** something (and if so, what)?
 - Depends on: 7c closed (BF's forms in place); JR and RL merged.
 
-**8b: a settlement UI for players.** An in-game Settlement/Terrain tab on lab-ui:
-- a map of the lots, districts and connectors; each lot's status; the survival bill or what is owed (QT's quote);
-- actions: preview or approve a plan, grow a district, swap a lot's design, undo a part, mark points for a connector (CX), pick a template (TC).
-- Steward likely shares the screens (its settlement cards): a Steward review is required, and the shared parts go into lab-ui.
+**8b: settlement data APIs (Steward owns the player settlement UI; Noah via parent session, 2026-11-13: "sounds good").** Steward
+already has `SettlementScreen`, `SettlementBoardBlock` and `StewardLedger`, and its PLAN "Interface" section designs the
+Buildings/History/Claim/Settings tabs and the building panel; it grows those screens. Architect's part:
+- **settlement data APIs** for that screen: per-lot and per-connector state (built, building, waiting on items, blocked); the bill and
+  what is owed (on top of QT's `Regions.quote`); and any missing action as an API call (e.g. marking a connector's points, CX);
+- **optionally** a small read-only "Regions" view in Architect's own panel for players without Steward (status and the bill; commands for
+  the rest): a nice-to-have.
+- Both use lab-ui. Steward reviews the API contract (it is the consumer).
 - Depends on: 7c (TC, CX, CO), 8a for the survival status of forms.
 
 **8c: flowing rivers and waterfalls** beyond today's declared water (H's contained bodies, HY's courses, the waterfall's declared curtain
