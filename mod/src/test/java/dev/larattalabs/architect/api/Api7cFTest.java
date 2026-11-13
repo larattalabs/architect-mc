@@ -118,7 +118,10 @@ class Api7cFTest {
 		} catch (InvocationTargetException e) {
 			Throwable t = e.getCause() instanceof java.lang.reflect.UndeclaredThrowableException u ? u.getCause() : e.getCause();
 			assertTrue(t instanceof UnsupportedOperationException, api.getSimpleName() + "." + name + ": " + t);
-			assertTrue(t.getMessage().contains("NEXT") && t.getMessage().contains(slice), t.getMessage());
+			// (TJ HK-api) a reserved stub "throws until slice X ships"; a shipped member's default names its release ("needs Architect API
+			// 1.55.0 (slice 7cF)"); the 7cF form "needs Architect API NEXT (slice X)" is still accepted
+			String msg = t.getMessage();
+			assertTrue(msg.contains(slice) && (msg.contains("throws until " + slice) || msg.contains("NEXT") || msg.matches(".*needs Architect API \\d+\\.\\d+\\.\\d+.*")), msg);
 			return;
 		}
 		throw new AssertionError(api.getSimpleName() + "." + name + " did not throw");

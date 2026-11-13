@@ -47,7 +47,8 @@ gate anything:
   `com.laratta.ci-container-autoscale` and `com.laratta.tart-yardpaint-runner`). Noah allowed this when needed. Never pause
   them yourself.
 - **Keep the API binary compatible:** keep old record constructors, add new methods as defaults that throw, and append enum
-  values at the end. Check with `tools/api-compat.mjs` against the archived apitest jars.
+  values at the end. Check with `node tools/api-compat.mjs --baselines` (main's latest three releases from `tools/api-baselines.json`,
+  the newest mod jar's surface and Steward's real jar; docs/GATES.md "API compatibility baselines").
 
 ## Build and test
 
