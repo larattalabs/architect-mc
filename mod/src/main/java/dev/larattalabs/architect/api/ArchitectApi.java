@@ -267,6 +267,8 @@ public interface ArchitectApi {
 	 * features it needs ({@code needs.affordances}: AF kinds, counts and metric floors); the mod freezes the claim's volume (read only) so
 	 * the pick sees the claim's affordance summary, and a pick that would land a template on land without its features answers
 	 * {@code NO_TEMPLATE} with that program as the closest. No new record, method or reason.
+	 * (7c CO, since NEXT) {@code "compose"} is advertised when the helper has the standalone composer (its {@code region.compose}):
+	 * {@link Regions#compose} works, and {@link Regions#checkPlan} honours {@link PlanRequest#EXT_PLAN_IMAGES}.
 	 */
 	Set<String> features();
 }

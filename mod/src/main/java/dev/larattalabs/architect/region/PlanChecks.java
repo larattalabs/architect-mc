@@ -377,6 +377,10 @@ public final class PlanChecks {
 		extra.add("previewViews", views);
 		extra.addProperty("timeoutMs", Math.min(600_000, budget.maxMs() + GRACE_MS));
 		extra.addProperty("heapMb", Math.max(64, budget.maxHeapMb()));
+		// (7c CO, S-7c-2) the planning images on request: the helper renders them over the check's survey (an older helper ignores the flag)
+		if (planImagesAsked(r)) {
+			extra.addProperty("planImages", true);
+		}
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a zone along a biome edge reads it
 		extra.add("biomes", BiomeGrid.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		// (6c VOC-c) a plan with a palette rule: the block histograms of the lots whose entry it names (the kit measures them at check time)
@@ -760,6 +764,11 @@ public final class PlanChecks {
 			PlanCheck.Overall.INCOMPLETE, parts, new JsonObject(), new JsonObject(), new JsonObject(), null, List.of("the check stopped: " + why));
 	}
 
+	/** (7c CO, S-7c-2) Whether the request asks for the planning images ({@code ext[PlanRequest.EXT_PLAN_IMAGES]: true}). */
+	static boolean planImagesAsked(PlanRequest r) {
+		return r.ext().get(PlanRequest.EXT_PLAN_IMAGES) instanceof JsonElement e && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() && e.getAsBoolean();
+	}
+
 	/** (7c HR, S-7c-4) Whether the request asks for the hidden rooms' secrets ({@code ext[PlanRequest.EXT_SECRETS]: true}). */
 	static boolean secretsAsked(PlanRequest r) {
 		return r.ext().get(PlanRequest.EXT_SECRETS) instanceof JsonElement e && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() && e.getAsBoolean();
@@ -802,6 +811,14 @@ public final class PlanChecks {
 		}
 		if (planned.get("previews") instanceof JsonObject pv && pv.get("siteplan") instanceof JsonArray files) {
 			preview.add("siteplanImages", files.deepCopy());
+		}
+		// (7c CO, S-7c-2) the planning images asked for (PlanRequest ext architect_mc:planImages): {images: [{name, blobId, pixelSha, width,
+		// height}], labels: [{n, id, kind, box}]}, or why they failed; nothing else in the check changes with them
+		if (k.get("planImages") instanceof JsonObject pi) {
+			preview.add("planImages", pi.deepCopy());
+		}
+		if (k.get("planImagesError") instanceof JsonElement pe && pe.isJsonPrimitive()) {
+			preview.addProperty("planImagesError", pe.getAsString());
 		}
 		List<String> notes = new ArrayList<>();
 		if (k.get("notes") instanceof JsonArray n) {
