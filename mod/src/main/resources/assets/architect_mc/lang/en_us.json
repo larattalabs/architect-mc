@@ -3,6 +3,7 @@
 	"key.architect_mc.screen": "Open Architect",
 	"key.architect_mc.site_hud": "Construction HUD: full / one line / hidden",
 	"key.architect_mc.undo_last": "Undo last placement",
+	"key.architect_mc.build_link": "Build a link (a connector)",
 	"block.architect_mc.construction_crate": "Construction Crate",
 	"block.architect_mc.scaffold": "Construction Scaffolding"
 }

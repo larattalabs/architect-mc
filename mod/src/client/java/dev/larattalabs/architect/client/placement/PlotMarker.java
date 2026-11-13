@@ -32,11 +32,16 @@ import org.jspecify.annotations.Nullable;
  * ({@link dev.larattalabs.architect.apiimpl.SiteAnalysis#standalone}, Survey.site's path with the kit's standalone spec), then the
  * <b>frame</b> is shown on the plot (its entrance side, its ports) for the player to confirm (Enter) or go back (Backspace: to the second
  * corner). A refusal (no such land at the plot, the helper missing) goes back to the second corner with the reason.
+ *
+ * <p>(7c CX) <b>The connector mode</b> ({@link #startConnector}): the two marks are a connector's two ends (the cells looked at, feet level),
+ * F cycles the kind ({@code rope_bridge}, the default, {@code ladder}, {@code catwalk}, {@code rock_stair}, {@code spiral}; Shift+F back),
+ * and Enter on the second end places it on the integrated server ({@code Sites.placeConnector}'s path for the player: the player's UUID as
+ * the owner, so in survival the player's stockpile feeds it). A refusal stays on the second end with its reason; placed, the mode ends.
  */
 public final class PlotMarker {
 	/** What the renderer and HUD draw this frame. {@code first} null = still choosing the first corner. */
 	record View(int @Nullable [] first, int[] hover, int height, String front, boolean pinned, FitMode fit, boolean fitLocked, Phase phase,
-		@Nullable SiteSpec site) {
+		@Nullable SiteSpec site, @Nullable String connector) {
 		DesignSpec.Plot plot(String dimension) {
 			int[] a = first != null ? first : hover;
 			return DesignSpec.Plot.of(a[0], a[1], a[2], hover[0], hover[1], hover[2], height, front, dimension);
@@ -45,8 +50,13 @@ public final class PlotMarker {
 
 	/** (7b ST) Where the marking is: the two corners, then (a site fit) the sample on the server and the frame to confirm. */
 	public enum Phase {
-		FIRST, SECOND, SAMPLING, FRAME
+		FIRST, SECOND, SAMPLING, FRAME,
+		/** (7c CX) The connector asked of the integrated server, its answer awaited. */
+		PLACING
 	}
+
+	/** (7c CX) The connector kinds in picker order (rope_bridge first: the default); ConnectorPlace.KINDS's player words. */
+	public static final String[] CONNECTORS = {"rope_bridge", "ladder", "catwalk", "rock_stair", "spiral"};
 
 	/** (7b ST) The fits in picker order (on_pad first: the default). */
 	static final FitMode[] FITS = {FitMode.ON_PAD, FitMode.ATTACH_TO_CLIFF, FitMode.CARVE_INTO, FitMode.SPAN, FitMode.WRAP_TRUNK, FitMode.SUSPEND};
@@ -71,6 +81,12 @@ public final class PlotMarker {
 	private static @Nullable Consumer<DesignSpec.Plot> onDone;
 	private static @Nullable Runnable onCancel;
 	private static @Nullable View view;
+	/** (7c CX) Marking a connector's two ends (not a plot), the kind picked, its callback and the last answer. */
+	private static boolean connector;
+	private static int connectorKind;
+	private static @Nullable Consumer<dev.larattalabs.architect.api.PlaceResult> onPlaced;
+	private static @Nullable JsonObject lastConnector;
+	private static int placeGen;
 	private static DesignSpec.@Nullable Plot last;
 	private static @Nullable String status;
 	static long statusAt;
@@ -117,6 +133,56 @@ public final class PlotMarker {
 		update(mc);
 	}
 
+	/**
+	 * (7c CX) Enters the connector mode: mark the two ends (Enter each), F picks the kind, Enter on the second places it. {@code from} non-null:
+	 * the first end is already marked (the drop warning's "build a link here": the port's outside cell). {@code done} gets each placed answer
+	 * (the mode ends then); {@code cancel} runs on Esc. Throws IllegalArgumentException when not in a world.
+	 */
+	public static void startConnector(int @Nullable [] from, Consumer<dev.larattalabs.architect.api.PlaceResult> done, Runnable cancel) {
+		Minecraft mc = Minecraft.getInstance();
+		if (mc.player == null || mc.level == null) {
+			throw new IllegalArgumentException("Not in a world");
+		}
+		BuildPlacement.cancel();
+		reset();
+		active = true;
+		connector = true;
+		level = mc.level;
+		dimension = mc.level.dimension().identifier().toString();
+		onPlaced = done;
+		onCancel = cancel;
+		if (from != null) {
+			first = from.clone();
+			phase = Phase.SECOND;
+		}
+		status = null;
+		mc.gui.setScreen(null);
+		update(mc);
+	}
+
+	/** (7c CX) Whether the marking is a connector's ends. */
+	public static boolean connectorMode() {
+		return active && connector;
+	}
+
+	/** (7c CX) The connector kind picked (the default rope_bridge when not marking one). */
+	public static String connectorKind() {
+		return CONNECTORS[connectorKind];
+	}
+
+	/** (7c CX) DevBridge: pick the connector kind. Throws IllegalStateException when not marking a connector's ends. */
+	public static void setConnectorKind(String kind) {
+		if (!connectorMode() || !cornerPhase()) {
+			throw new IllegalStateException("not marking a connector's ends");
+		}
+		int i = java.util.Arrays.asList(CONNECTORS).indexOf(kind);
+		if (i < 0) {
+			throw new IllegalArgumentException("kind: one of " + String.join(", ", CONNECTORS));
+		}
+		connectorKind = i;
+		update(Minecraft.getInstance());
+	}
+
 	private static void reset() {
 		active = false;
 		level = null;
@@ -131,6 +197,9 @@ public final class PlotMarker {
 		frameSpec = null;
 		framePlot = null;
 		sampleGen++;
+		connector = false;
+		onPlaced = null;
+		placeGen++;
 		if (fitLocked) {
 			fitLocked = false;
 			fit = FitMode.ON_PAD; // a locked fit was the entry's, not the player's pick
@@ -148,8 +217,9 @@ public final class PlotMarker {
 			return;
 		}
 		Runnable c = onCancel;
+		boolean link = connector;
 		reset();
-		setStatus("Plot marking cancelled");
+		setStatus(link ? "Connector cancelled" : "Plot marking cancelled");
 		if (c != null) {
 			c.run();
 		}
@@ -159,6 +229,9 @@ public final class PlotMarker {
 	static void back() {
 		if (!active) {
 			return;
+		}
+		if (phase == Phase.PLACING) {
+			return; // (7c CX) the server has the connector: wait for its answer
 		}
 		if (phase == Phase.SAMPLING || phase == Phase.FRAME) {
 			// (7b ST) back to the second corner (the sample is dropped)
@@ -181,7 +254,7 @@ public final class PlotMarker {
 	}
 
 	public static void adjustHeight(int delta) {
-		if (active && cornerPhase()) {
+		if (active && !connector && cornerPhase()) {
 			height = DesignSpec.clampY(height + delta);
 			update(Minecraft.getInstance());
 		}
@@ -200,6 +273,11 @@ public final class PlotMarker {
 
 	/** (7b ST) F: the next fit (Shift: the previous); not while sampling or confirming the frame, nor when the fit is locked. */
 	static void cycleFit(int step) {
+		if (active && connector && cornerPhase()) {
+			connectorKind = Math.floorMod(connectorKind + step, CONNECTORS.length); // (7c CX) F picks the connector kind
+			update(Minecraft.getInstance());
+			return;
+		}
 		if (!active || fitLocked || !cornerPhase()) {
 			return;
 		}
@@ -243,8 +321,8 @@ public final class PlotMarker {
 		if (!active || mc.player == null) {
 			return;
 		}
-		if (phase == Phase.SAMPLING) {
-			return; // wait for the sample
+		if (phase == Phase.SAMPLING || phase == Phase.PLACING) {
+			return; // wait for the sample (or the connector's answer)
 		}
 		if (phase == Phase.FRAME) {
 			SiteSpec site = frameSpec;
@@ -272,6 +350,10 @@ public final class PlotMarker {
 			pinned = null;
 			phase = Phase.SECOND;
 			update(mc);
+			return;
+		}
+		if (connector) {
+			placeConnector(mc, first, v.hover());
 			return;
 		}
 		DesignSpec.Plot p = v.plot(dimension);
@@ -351,6 +433,82 @@ public final class PlotMarker {
 		update(Minecraft.getInstance());
 	}
 
+	/**
+	 * (7c CX) The second end confirmed: the connector asked of the integrated server ({@code ConnectorPlace.place} for the player: the
+	 * player's UUID as the owner, the player as the actor, AUTO: the world's mode), under a fresh operation key.
+	 */
+	private static void placeConnector(Minecraft mc, int[] a, int[] b) {
+		net.minecraft.client.server.IntegratedServer srv = mc.getSingleplayerServer();
+		if (srv == null || mc.player == null) {
+			setStatus("Connectors need the integrated server (singleplayer)");
+			return;
+		}
+		String kind = CONNECTORS[connectorKind];
+		var from = new net.minecraft.core.BlockPos(a[0], a[1], a[2]);
+		var to = new net.minecraft.core.BlockPos(b[0], b[1], b[2]);
+		java.util.UUID uuid = mc.player.getUUID();
+		var dim = mc.player.level().dimension();
+		String key = "player.cx." + Long.toString(System.currentTimeMillis(), 36);
+		pinned = b.clone();
+		phase = Phase.PLACING;
+		int gen = ++placeGen;
+		setStatus("Placing the " + kindWords(kind) + "…");
+		update(mc);
+		srv.execute(() -> {
+			var sl = srv.getLevel(dim);
+			if (sl == null) {
+				mc.execute(() -> placed(gen, kind, null, "that dimension is not loaded"));
+				return;
+			}
+			var req = new dev.larattalabs.architect.api.ConnectorRequest(kind, from, to, null, new JsonObject(), dev.larattalabs.architect.api.Mode.AUTO, key);
+			dev.larattalabs.architect.apiimpl.ConnectorPlace.place(srv, req, sl, uuid.toString(), srv.getPlayerList().getPlayer(uuid)).whenComplete((r, e) -> mc.execute(
+				() -> placed(gen, kind, r, e == null ? null : e.getMessage() == null ? e.toString() : e.getMessage())));
+		});
+	}
+
+	private static void placed(int gen, String kind, dev.larattalabs.architect.api.@Nullable PlaceResult r, @Nullable String error) {
+		if (!active || !connector || gen != placeGen || phase != Phase.PLACING) {
+			return;
+		}
+		JsonObject j = new JsonObject();
+		j.addProperty("kind", kind);
+		j.add("from", first == null ? null : xyz(first));
+		j.add("to", pinned == null ? null : xyz(pinned));
+		if (r == null || !r.placed()) {
+			String why = r == null ? error : r.refusals().isEmpty() ? "refused" : r.refusals().get(0).reason().name() + ": " + r.refusals().get(0).message();
+			j.addProperty("placed", false);
+			j.addProperty("refused", why);
+			lastConnector = j;
+			phase = Phase.SECOND; // stay on the second end with the reason
+			pinned = null;
+			setStatus("No " + kindWords(kind) + " here: " + why);
+			update(Minecraft.getInstance());
+			return;
+		}
+		j.addProperty("placed", true);
+		j.addProperty("siteId", r.siteId().orElse(null));
+		JsonArray ns = new JsonArray();
+		r.notes().forEach(ns::add);
+		j.add("notes", ns);
+		lastConnector = j;
+		Consumer<dev.larattalabs.architect.api.PlaceResult> done = onPlaced;
+		reset();
+		setStatus("Placed the " + kindWords(kind) + " (" + r.siteId().orElse("?") + ")");
+		if (done != null) {
+			done.accept(r);
+		}
+	}
+
+	/** (7c CX) A connector kind in the HUD's words. */
+	static String kindWords(String kind) {
+		return switch (kind) {
+			case "rope_bridge" -> "rope bridge";
+			case "rock_stair" -> "rock stair";
+			case "spiral" -> "spiral stair";
+			default -> kind;
+		};
+	}
+
 	/** (7b ST) The ports of the frame being confirmed as world cells (x, y, z triples), or empty. */
 	static int[] framePorts() {
 		SiteSpec s = frameSpec;
@@ -421,7 +579,7 @@ public final class PlotMarker {
 			front = framePlot.front(); // the frame's entrance, not the player's facing
 		}
 		view = new View(first == null ? null : first.clone(), hover, height, front, pinned != null, fit, fitLocked, phase, phase == Phase.FRAME ? frameSpec
-			: null);
+			: null, connector ? CONNECTORS[connectorKind] : null);
 	}
 
 	private static int[] lookCorner(Minecraft mc, Player p) {
@@ -476,7 +634,11 @@ public final class PlotMarker {
 				case SECOND -> "second_corner";
 				case SAMPLING -> "sampling";
 				case FRAME -> "frame";
+				case PLACING -> "placing";
 			});
+			if (v.connector() != null) {
+				o.addProperty("connector", v.connector());
+			}
 			if (v.site() != null) {
 				o.add("site", v.site().wire());
 				o.add("ports", portsJson(framePorts()));
@@ -492,6 +654,7 @@ public final class PlotMarker {
 		}
 		o.add("last", last == null ? null : plotJson(last));
 		o.add("lastSite", lastSite == null ? null : lastSite.wire());
+		o.add("lastConnector", lastConnector == null ? null : lastConnector.deepCopy());
 		return o;
 	}
 

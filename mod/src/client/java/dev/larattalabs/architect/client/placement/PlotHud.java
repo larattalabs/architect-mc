@@ -53,7 +53,31 @@ final class PlotHud implements HudZones.Element {
 			int brassInk = dev.larattalabs.architect.client.hud.HudInk.ok();
 			// (7b ST) the fit picker's line: what the plot will be built into (F changes it)
 			String fitLine = "fit " + fitWords(v.fit()) + (v.fitLocked() ? " (the design's own)" : "");
-			if (v.phase() == PlotMarker.Phase.SAMPLING) {
+			if (v.connector() != null) {
+				// (7c CX) the connector mode: the two ends and the kind (F changes it)
+				String kind = PlotMarker.kindWords(v.connector());
+				if (v.phase() == PlotMarker.Phase.PLACING) {
+					lines.add(new String[] {"Placing the " + kind + "…", Integer.toString(cream)});
+					lines.add(new String[] {"planning it between the two ends, then building it" + (dev.larattalabs.architect.survival.SurvivalWorld.on()
+						? " from your stockpile" : ""), Integer.toString(soft)});
+					hints = new String[0];
+				} else if (v.first() == null) {
+					lines.add(new String[] {"Build a link: look at the first end, Enter · " + kind, Integer.toString(cream)});
+					lines.add(new String[] {"end " + h[0] + ", " + h[1] + ", " + h[2], Integer.toString(soft)});
+					hints = new String[] {"Enter", "first end", "F", "kind", "Esc", "cancel"};
+				} else {
+					int[] a = v.first();
+					int dx = Math.abs(h[0] - a[0]), dy = h[1] - a[1], dz = Math.abs(h[2] - a[2]);
+					lines.add(new String[] {"Build a " + kind + " to here: Enter", Integer.toString(cream)});
+					lines.add(new String[] {"from " + a[0] + ", " + a[1] + ", " + a[2] + " · " + Math.max(dx, dz) + " across, " + (dy >= 0 ? "+" : "") + dy + " up",
+						Integer.toString(brassInk)});
+					hints = new String[] {"Enter", "build", "F", "kind", "Bksp", "first end", "Esc", "cancel"};
+				}
+				String st = PlotMarker.status();
+				if (fresh && st != null && st.startsWith("No ") && v.phase() == PlotMarker.Phase.SECOND) {
+					lines.add(new String[] {st, Integer.toString(dev.larattalabs.architect.client.hud.HudInk.warn())});
+				}
+			} else if (v.phase() == PlotMarker.Phase.SAMPLING) {
 				lines.add(new String[] {"Sampling the site… (" + fitWords(v.fit()) + ")", Integer.toString(cream)});
 				lines.add(new String[] {"freezing the plot and 8 around it, finding its " + kindWords(v.fit()), Integer.toString(soft)});
 				hints = new String[] {"Backspace", "back", "Esc", "cancel"};
@@ -87,7 +111,7 @@ final class PlotHud implements HudZones.Element {
 					: new String[] {"Enter", "done", "F", "fit", "PgUp/Dn", "height", "Bksp", "corner", "Esc", "back"};
 			}
 			String st = PlotMarker.status();
-			if (fresh && st != null && st.startsWith("Not a ") && v.phase() == PlotMarker.Phase.SECOND) {
+			if (v.connector() == null && fresh && st != null && st.startsWith("Not a ") && v.phase() == PlotMarker.Phase.SECOND) {
 				lines.add(new String[] {st, Integer.toString(dev.larattalabs.architect.client.hud.HudInk.warn())});
 			}
 		} else {
@@ -96,7 +120,8 @@ final class PlotHud implements HudZones.Element {
 		}
 		if (hints.length > 0 && UiBits.hintsWidth(font, hints) > inner) {
 			// 426x240 (4K at auto GUI scale): the row was dropped altogether; keep the keys that finish the plot
-			hints = v != null && v.phase() == PlotMarker.Phase.FRAME ? new String[] {"Enter", "confirm", "Esc", "back"}
+			hints = v != null && v.connector() != null ? new String[] {"Enter", "end", "F", "kind", "Esc", "cancel"}
+				: v != null && v.phase() == PlotMarker.Phase.FRAME ? new String[] {"Enter", "confirm", "Esc", "back"}
 				: v != null && v.phase() == PlotMarker.Phase.SAMPLING ? new String[] {"Esc", "cancel"}
 				: v != null && v.first() == null ? new String[] {"Enter", "corner", "F", "fit", "Esc", "back"}
 				: new String[] {"Enter", "done", "F", "fit", "Esc", "back"};

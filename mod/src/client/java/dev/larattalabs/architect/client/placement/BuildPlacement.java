@@ -166,6 +166,8 @@ public final class BuildPlacement {
 	/** The key of the verdict request in flight, or null: at most one at a time, a reply for an old key is dropped. */
 	private static @Nullable String verdictAsked;
 	private static long ticks;
+	/** (7c CX) The standalone ports over a drop in the last ghost's verdict ({@code SiteFit.dropsOf}). */
+	private static List<dev.larattalabs.architect.site.SiteFit.Drop> viewDrops = List.of();
 	/** UI-2b: the HUD's key legend and the refusals' detail, toggled by "?" (or H); kept across placements this session. */
 	private static boolean legend;
 	/**
@@ -471,6 +473,7 @@ public final class BuildPlacement {
 		String moveId = moving;
 		String owner = mc.player.getUUID().toString();
 		dev.larattalabs.architect.api.SiteSpec onSite = site;
+		List<dev.larattalabs.architect.site.SiteFit.Drop> drops = onSite == null || moving != null ? List.of() : viewDrops;
 		CompletableFuture<Result> f = new CompletableFuture<>();
 		pending = true;
 		inFlight = f;
@@ -529,6 +532,9 @@ public final class BuildPlacement {
 					verdictTick = ticks;
 				}
 				onResult(result, v);
+				if (result.placed()) {
+					BuildLinkKey.remember(drops); // (7c CX) "build a link here": the key starts a connector from the port over the drop
+				}
 				f.complete(result);
 			});
 		});
@@ -1084,6 +1090,9 @@ public final class BuildPlacement {
 				notes.add(w);
 				noteInk.add(GhostRenderer.HAZARD);
 			}
+			viewDrops = dev.larattalabs.architect.site.SiteFit.dropsOf(onSite, dsx, dsz, world); // (7c CX) the Build a link key's first end
+		} else {
+			viewDrops = List.of();
 		}
 		String front = BlueprintTransform.rotateDirection(b.front(), turns);
 		return new View(b, m, ox, oy, oz, turns, front, obstructed, obstructedCount, blocked, blockedCount, List.copyOf(refusals), inside, locked,
