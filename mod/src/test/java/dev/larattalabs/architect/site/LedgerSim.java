@@ -557,6 +557,8 @@ final class LedgerSim {
 		for (SurvivalItems.Cost c : costs) {
 			if (!ledger.consume(c.item(), c.count(), cap(), LedgerSim::maxStack, over)) {
 				violation("consume", t.id + ": consume " + c + " refused after affordable said yes");
+			} else {
+				ledger.pay(t.key(), c.item(), c.count()); // (JR) as the feed's purse books it
 			}
 			add(t.consumed, c.item(), c.count());
 			add(t.consumedSince, c.item(), c.count());

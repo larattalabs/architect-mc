@@ -114,6 +114,8 @@ class StockpileTest {
 	@Test
 	void refundsAreCreditedOncePerKey() {
 		StockLedger l = new StockLedger();
+		l.pay("site:s1@5", COBBLE, 10); // (JR) what the feed consumed for each placement (the cap)
+		l.pay("site:s1@6", COBBLE, 1);
 		StockLedger.Credit a = l.credit("site:s1@5", Map.of(COBBLE, 10), 27, MAX);
 		assertFalse(a.already());
 		assertEquals(Map.of(COBBLE, 10), a.returned());
@@ -137,6 +139,8 @@ class StockpileTest {
 	void refundOverflowIsOutsideTheIdentity() {
 		StockLedger l = new StockLedger();
 		l.giveBack(Map.of(COBBLE, 60), 1, MAX);
+		l.pay("site:s2@1", COBBLE, 10); // (JR) the delta's site paid for them (the cap)
+		l.pay("site:s2@1", DOOR, 2);
 		StockLedger.Credit c = l.credit("delta:e1:s2", Map.of(COBBLE, 10, DOOR, 2), 1, MAX);
 		assertEquals(Map.of(COBBLE, 4), c.returned(), "the partial stack fills");
 		assertEquals(Map.of(COBBLE, 6, DOOR, 2), c.overflow());
