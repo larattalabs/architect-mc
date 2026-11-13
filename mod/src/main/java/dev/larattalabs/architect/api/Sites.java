@@ -504,6 +504,16 @@ public interface Sites {
 	 * (7c) Places a single connector outside any region (docs/CONTRACT.md "Phase 7c" §2, slice CX, §7.8, N-7b-1): a 7a connector (rope
 	 * bridge, ladder, catwalk, rock stair, spiral) between two marked points, or from a site house's port to ground, as one site group.
 	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
+	 *
+	 * <p>(CX, since NEXT) The connector is a one-part plan/0 (part {@code link} from anchor {@code cx_from} to {@code cx_to}) over a claim of
+	 * the ends' x/z box plus 16 each side, checked in the world's mode and realised as one region: {@code siteId} is the region id, and
+	 * {@link Regions#remove} takes it off exactly. In survival it is a construction site fed from the owner's stockpile (RS's target). Kinds:
+	 * {@code rope_bridge}, {@code ladder}, {@code catwalk}, {@code rock_stair}, {@code spiral} (plan/0's {@code stairs_around}). The request
+	 * has no level or owner: {@code params["architect_mc:dimension"]} names the dimension (default the overworld) and
+	 * {@code params["architect_mc:owner"]} the owner; other {@code architect_mc:*} keys are ignored, the rest are the kind's plan/0 members.
+	 * The mode is the world's (AUTO; CONSTRUCTION outside survival and INSTANT in survival refuse {@link Reason#NOT_ALLOWED}). A connector the
+	 * plan can't build answers {@code placed: false} with {@link Reason#NO_LINK} (the message starts with the kit's code, such as
+	 * {@code NO_GAP}); a bad request {@link Reason#FIELD_LIMIT}; the check's and the realise's typed refusals come back as refusals too.
 	 */
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.placeConnector needs Architect API NEXT (slice CX)");

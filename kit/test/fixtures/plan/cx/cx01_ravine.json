@@ -1,0 +1,11 @@
+{
+  "about": "(7c CX) Sites.placeConnector's one-part plan: a rope bridge between two marked points on the lips of a dry ravine 20 wide and 20 deep (x 1028-1047, floor 44, the whole depth of the terrain). `plan`, `claim` and `anchors` are what ConnectorPlace.planOf makes of ConnectorRequest(rope_bridge, cx_from, cx_to) (ApiCXTest holds Java's answer equal to them; the claim is the ends' x/z box plus 16 each side): the kit test plans it, the gate builds the terrain and places the connector through Sites.placeConnector",
+  "terrain": { "W": 80, "D": 48, "x0": 1000, "z0": 2000, "y": 64, "bands": [{ "x0": 1028, "z0": 2000, "x1": 1047, "z1": 2047, "y": 44 }] },
+  "anchors": { "cx_from": [1027, 65, 2024], "cx_to": [1048, 65, 2024] },
+  "claim": [1011, 2008, 1064, 2040],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "connector",
+    "connectors": [{ "id": "link", "kind": "rope_bridge", "from": { "anchor": "cx_from" }, "to": { "anchor": "cx_to" } }]
+  }
+}

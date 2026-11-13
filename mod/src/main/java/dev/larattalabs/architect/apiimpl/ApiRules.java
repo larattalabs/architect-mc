@@ -135,6 +135,9 @@ public final class ApiRules {
 			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
 				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved
 			}
+			if (sidecarFeatures.contains("region.planCheck")) {
+				out.add("placeConnector"); // 7c CX: Sites.placeConnector (a one-part plan through Regions.checkPlan and realiseApproved; since NEXT)
+			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
 			}
