@@ -26,8 +26,8 @@ const MEDIEVAL = {
 const MACRO = { rock: 'minecraft:stone', surface: 'minecraft:grass_block', subsurface: 'minecraft:dirt', rubble: 'minecraft:cobblestone', rail: 'minecraft:oak_fence', structure: 'minecraft:oak_planks' };
 
 describe('Style format 3 (wire, pure)', () => {
-  it('advertises bible.format3 last; the ext key is the Java one; BibleInfo and BibleJob carry format 3 and relatedTo', () => {
-    expect(FEATURES[FEATURES.length - 1]).toBe('bible.format3');
+  it('advertises bible.format3 (appended after design.program; later slices append after it); the ext key is the Java one; BibleInfo and BibleJob carry format 3 and relatedTo', () => {
+    expect(FEATURES.indexOf('bible.format3')).toBe(FEATURES.indexOf('design.program') + 1); // (merge with BF) later features append after it
     expect(EXT_RELATED_TO).toBe('architect_mc:relatedTo');
     const info = { id: 'bib_h', name: 'H', version: 1, versions: [1], builtin: false, scope: 'building', roles: {}, components: [], format: 3, relatedTo: { id: 'bib_t', version: 2 } };
     expect(BibleInfo.parse(info).relatedTo).toEqual({ id: 'bib_t', version: 2 });
