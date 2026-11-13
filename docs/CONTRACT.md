@@ -29097,3 +29097,67 @@ The `bom` is the plan check's `cost.bom` shape (item -> count, sorted). `bomPart
 | api-compat | clean against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface (2605 members) |
 | `node tools/step-inputs.mjs check` | clean, 348 steps (rebuilt for qt-unit, qt-growth, qt-approved) |
 | gate-verifier (review only) | **PASS** at 482ae378, no blocking findings. It re-ran QuoteRoadsTest, QuotesTest, ApiQTTest and ApiRulesTest (`--rerun-tasks`) and kit `qt.test` 3/0. It reviewed run 4 and the diff 5fef6d96..482ae378: behaviour-identical extraction, so run 4 holds. Minor: (1) the in-game fixtures prove the approach only at its zero case; (2) QuoteRoadsTest drives `approachRoads`, `seedsCheck`, `Approach.plan` and `FullBom.compute`, but not `checkSite`/`quoteBill` end to end (those rest on run 4's exact equality and on inspection); (3) the no-write proof covers the world dirs and the claim box, not in-memory state (read-only by code); (4) on built-up land the quote can be high (readings 1 and 2). |
+
+### Slice FC as built (branch `slice/FC` off `origin/main` 0cdb1869, main c87a4c3d merged; versions NEXT; $0; DEV MODE, strict: refunds, removal; recorded 2026-11-12)
+
+Steward's S-M5-4: a module lot's field cells. A worked field (harvested cells, the player's replants) reads as built, and at undo a
+player's crop on the field goes with the lot and gives back its planting item once, as cargo. **No API change** (no Java type, method,
+Reason or feature): the member rides on the plan's lot, as `irrigate` does.
+
+**The member** (plan/0 `$defs.lot`, `validateLots`, and a `planRevision` growth's lots; `kit/lib/region/fieldSpec.mjs`, `field.mjs`):
+
+    field: { cells: [[u, y, v], ...], crops: ["minecraft:wheat", ...] }
+
+- `cells`: the **farmland** cells in the lot's frame (IRR's `lotFrame`, GP's `Reserved` frame: the lot seen with its front to the south,
+  u across, v from the back, y from the floor), 1..4096, duplicates dropped. The cell above each is its **crop cell** (Architect derives it).
+- `crops`: 1..5 of `minecraft:wheat`, `carrots`, `potatoes`, `beetroots`, `torchflower_crop` (single-block crops on farmland whose block's
+  item is the planting item). A bad field refuses the plan (schema) or the growth (`NOT_ALLOWED: [call] grow.lots[i] <id>.field...`).
+- **The IR's lot** gets `field {crops, cells: world column runs [x, z, y0, y1] of the farmland, frame: [W, D], lotCells: the same in the frame
+  as runs [u, v, y0, y1]}`, only when asked: plan/0's compiler after the irrigation step (`emitFields`), a growth in `emitGrowth`
+  (`emitGrowthFields`; a lib file: no revision program sha moves). A plan with no field is unchanged (no golden moved).
+- **IRR's irrigation cells are never field cells** (the coordinator's overlap rule with IG): a cell off the lot, or one that is an
+  irrigation cell (a source, its bed, its 4 farmland sides) or under one (the air over a source), is dropped with a zone note; and again at
+  the lot fit against the site's LotMask (`FieldCells.extOf(runs, crops, mask)`), so a grown lot whose irrigation IG adds later is covered.
+- **The lot's site** carries it as ext `architect_mc:field {cells: flat runs, crops}` (`RegionsImpl.lotField`, beside LotMask), so it
+  persists with the queue item, the site record and the journal head. The key is distinct from LotMask's `architect_mc:irrigation`
+  and IG's `architect_mc:lotIrrigation`.
+
+**The field rule** (`site/FieldCells`, only for a site with that ext): a crop cell holding air or a field crop at any age (a PT record or
+not), or a farmland cell holding farmland or dirt, reads unchanged.
+- **LC** (`LandCheck`, lot rows): such a cell is SAME (not `changed`, not `playerPlaced`).
+- **Standing / reconcile** (`Sites.standing`, so `standingScore`, LC's `standing` and the world-start Reconcile): such a cell matches.
+- **Undo, survival** (`Builder.prepareDeconstruct` -> `Builder.fieldCell`, before `tallyCell`): a crop cell holding a field crop **with a
+  PT record** books its planting item (one, `Cells.cost` of the crop's default state: wheat_seeds, carrot, potato, beetroot_seeds,
+  torchflower_seeds) as **the player's blocks** (PLAYER_DROP: dropped at the site, carried in the group removal's durable `dec` items,
+  never credited to the stockpile), whatever the template wrote there (a same-kind replant is not our construction seed). Our crop (no
+  record) at any age refunds as construction, as before; air (harvested) gives nothing (the player had vanilla's drops).
+- **Not a removal blocker:** crops are no block entity, container or entity, so `removalBlockers` never named them; unchanged.
+- **Any other player block** on a field cell (a cobblestone, a torch) is judged as before: LC `playerPlaced`, dropped as the player's at undo.
+
+**Readings:**
+1. **A lot member, not an entry member** (the contract's word). Steward knows the field in the module's frame before it binds a variant.
+2. **The cell above is derived**, not listed: a field is farmland and its crop cell, always.
+3. **Creative undo needs nothing:** a lot site's entry is BOX, so every cell of it, crops included, goes back to its before.
+4. **The crop list is fixed** (single-block crops on farmland). Cane, melons and stems are M7's question (MODULES.md "Open for later").
+5. **A worked field becomes a PT build:** 41 replants were promoted to a FARM build (ACTIVE) in the gate; undo, LC and the cargo were
+   unaffected (builds refuse placements, not removals).
+
+**Steward RC areas** (with IG): the `field` member's shape (plan/0 lots and `planRevision` grow lots; the schema's description), its
+refusals, the IR's `lots[].field` (not on the plan-check artifact's lots), the site ext `architect_mc:field`; LC lot rows and `standing` for a worked field; a survival
+undo's cargo (`RemoveResult.refund` includes the dropped planting items; the stockpile is credited only for our standing crops).
+
+**Checks** ($0; no API change):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1223/1223 at 28e368d6 (new `fc.test` 4: parseField and validateLots; emitFields on every front, IRR's cells dropped; v62 with a field on f1 (77 - 2 sources - 8 sides = 67 cells, the same lots and irrigation; none asked: no member); a planRevision growth's lot carries it, a bad one refuses NOT_ALLOWED [call]). An earlier loaded run (load ~155) failed `gate-corpus-plan` once, 3/3 alone: QT's recorded flake |
+| mod `./gradlew build --offline --no-daemon` | BUILD SUCCESSFUL: 1124 tests, 0 failures, 1 skipped (new `FieldCellsTest` 4: the ext's shape, IRR's cells left out, the field rule incl. dried farmland, the deconstruct's cargo seam with a same-kind replant) |
+| sidecar | untouched, tsc clean; the full suite at merge (the coordinator's rule, 2026-11-12) |
+| lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 |
+| api-compat | clean (fc-unit: the apitest jars and the mod surface) |
+| `node tools/step-inputs.mjs check` | clean, 355 steps (fc-unit, fc-field added) |
+| in game, run `artifacts/gate-runs-fc/20261113-020615-change` at 28e368d6 (ports 8906/8907, headless) | **PASS** fc-unit 3/0, **fc-field 19/0**: a survival flat_village town grown by planRevision with `fc_farm` (field 49 cells, wheat and carrots) bound to `fc_field` (7x7 wheat), fed: consumed 49 wheat seeds (one per crop); the revision IR's lot carries the field at its floor; built: LC fc_farm changed 0, playerPlaced 0, standing 1; grown by random ticks (ages 5 x2, 7 x47): unchanged; 44 harvested by a fake player (destroyBlock): unchanged; 30 replanted with wheat and 10 with carrots through useItemOn (41 of 41 PT records with the cobblestone), 15 bone-mealed to ages 0, 2, 3, 4, 5, a cobblestone on a field cell: changed 0, playerPlaced 1 (the cobblestone), standing 100/101; the town's and growth's parts as built at each turn; a restart: field, report and records the same; **undoRevision removed, no blockers**; at the site exactly 30 wheat seeds, 10 carrots and the cobblestone; the stockpile credited 5 wheat seeds (our 5 standing crops), never a replant; **items in = items out** (49 consumed = 5 credited + 44 harvested; the player's 30 + 10 = the cargo); the field gone with the lot; a restart after the undo: nothing given twice (the items and the stockpile's ledger and stock unchanged) |
+
+Runs 1 and 2 (`20261112-233703`, `20261113-012134`) failed only on the driver: it read the revision IR before the realise wrote it; then
+`/gamerule randomTickSpeed` (26.3's is `random_tick_speed`), bone meal clicked on the farmland, and vanilla's farmland under the cobblestone
+drying to dirt on the reload read as a change. Run 2 already showed every FC behaviour above (16 ok).
