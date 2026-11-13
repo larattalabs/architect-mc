@@ -1,6 +1,8 @@
 # Settlements in any terrain and theme: architecture and roadmap
 
-Status: **draft for Noah and Steward review**, 2026-10-08. Nothing here is built, and nothing here reopens a frozen contract.
+Status (2026-11-13): 6a-7b are built and closed, 7c is in progress, and 8a-8c are planned (PLAN.md "Planned after 7c"); the as-builts are in CONTRACT.md. The text below is the 2026-10-08 design; it reopens no frozen contract.
+
+*Original status:* **draft for Noah and Steward review**, 2026-10-08.
 Phase 6a is still running its gate chain on `phase/6a` (megaA passed its bars on 2026-10-08; the final megaA, megaB, E-flat,
 forest, crash and regression steps are in progress per `docs/HANDOFF-6a.md`). This document builds on 6a as built and
 **replaces the 6b and 6c rows** of the phase 6 contract with a new 6b, a new 6c and a phase 7. 6d (region evolution) stays
