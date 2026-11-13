@@ -28963,6 +28963,14 @@ format 2's, and `ctx.connectorLook` holds the prefer list and look parameters **
 | instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 |
 | catalogue | untouched (no kind, note, limit or `sinceApi` changed): the golden and the compact copy as main; `tools/catalogue-since-check.mjs` pass |
 | `node tools/step-inputs.mjs check` | clean after `build` (353 steps) |
+| gate-verifier (review only, DEV MODE) | **PASS** at 5b7b0de1: the format 1/2 paths unchanged (format 3 branches only when `format: 3`, the one addition a warning), `connectorLook` and `rowExtra` only when present, roles never in connectors, Steward's change 1, the job's format choice and the zone pin; re-ran sf-format3 8/8, phase5a 24/24, styles-sf + jobs 26/26, step-inputs. Non-blocking notes below |
+
+**Left over:** (1) `sagRatio` is carried, not read (reading 4). (2) A bible **revise** job writes format 3 only for a settlement or zone
+Style: revising a hand-saved, building-scope, unrelated format 3 Style gives format 2, and a Claude revise of any format 3 Style carries
+its `forms`, `scatter`, `references` and `settlement` only as far as the draft writes them (the draft prompt is unchanged); carrying them by
+code belongs with BF/CO/P5, which read them. (3) `planRegion` reads a plan's connectors without the Style's format, so look parameters
+refused on main are accepted there (an error becoming acceptance; a Style's format is checked at validate). (4) N-7c-4: the coordinator
+asks Noah for the S3 and S5 references when SF merges.
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
