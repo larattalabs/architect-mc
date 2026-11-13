@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.55.0";
+	String VERSION = "1.56.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -227,7 +227,7 @@ public interface ArchitectApi {
 	 * (TC), {@code "compose"} (CO: {@link Regions#compose}), {@code "programAuthoring"} (AU: {@link Regions#authorProgram}),
 	 * {@code "shapePromotion"} (PM), {@code "composites"} (CM-b: {@link CompositeInfo}) and {@code "placeConnector"} (CX:
 	 * {@link Sites#placeConnector}). {@link Regions#planCatalogue(Set)} has no feature name: it works from API NEXT on.
-	 * (7c BF, since NEXT) {@code "bigForms"} is advertised when the helper's kit plans the big forms (its {@code plan.bigForms}): plan/0's
+	 * (7c BF, since 1.56.0) {@code "bigForms"} is advertised when the helper's kit plans the big forms (its {@code plan.bigForms}): plan/0's
 	 * {@code form.hollow_mountain}, {@code form.crater} (its lake an H pond body) and {@code form.floating_island} are supported, each
 	 * natural cut and fill (free in survival); a hollow mountain's cavern, ledge and halls are recorded in the plan's affordances
 	 * ({@link Regions#affordances}: cliff_face, cave, ledge). No new record, method or reason.

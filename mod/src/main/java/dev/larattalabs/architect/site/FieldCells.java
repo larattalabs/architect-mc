@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * Any other player block on a field cell stays as PT says.
  *
  * <p>Carried on the lot site's ext as {@link #EXT} {@code {cells: [x, z, y0, y1, ...] (the farmland, flat column runs), crops: [block
- * ids]}}, from the IR's {@code lots[].field}, so it persists with the queue item, the site record and the journal head. Since NEXT.
+ * ids]}}, from the IR's {@code lots[].field}, so it persists with the queue item, the site record and the journal head. Since 1.56.0.
  */
 public final class FieldCells {
 	/** The site ext key holding the field. */

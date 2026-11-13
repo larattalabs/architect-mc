@@ -916,7 +916,7 @@ public final class RegionsImpl implements Regions {
 	public static final String EXT_NO_VOLUMES = "architect_mc:noVolumes";
 	/**
 	 * (M5 IG) A plan lot's ({@code LotSpec.ext}) irrigation record, on an irrigated lot only: IRR's {@code {sources, bodies, field, cells,
-	 * frame, lotCells}} (a revision's grown farm lot with {@code irrigate}, or a plan/0 farm lot). Not the lot site's {@code LotMask.EXT}. Since NEXT.
+	 * frame, lotCells}} (a revision's grown farm lot with {@code irrigate}, or a plan/0 farm lot). Not the lot site's {@code LotMask.EXT}. Since 1.56.0.
 	 */
 	public static final String EXT_IRRIGATION = "architect_mc:lotIrrigation";
 
