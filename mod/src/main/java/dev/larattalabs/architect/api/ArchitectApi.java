@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.56.0";
+	String VERSION = "1.57.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -231,16 +231,16 @@ public interface ArchitectApi {
 	 * {@code form.hollow_mountain}, {@code form.crater} (its lake an H pond body) and {@code form.floating_island} are supported, each
 	 * natural cut and fill (free in survival); a hollow mountain's cavern, ledge and halls are recorded in the plan's affordances
 	 * ({@link Regions#affordances}: cliff_face, cave, ledge). No new record, method or reason.
-	 * (7c HR, since NEXT) {@code "hiddenRooms"} is advertised when the helper's kit plans hidden rooms (its {@code plan.hiddenRooms}): plan/0's
+	 * (7c HR, since 1.57.0) {@code "hiddenRooms"} is advertised when the helper's kit plans hidden rooms (its {@code plan.hiddenRooms}): plan/0's
 	 * {@code form.hidden_room {host, size, entrance}} is supported (a room behind a concealed entrance in a form.hollow_mountain, a
 	 * form.waterfall or a lot of the plan). Where each stands (its entrance cell and kind, its host, its room's box) is only in the
 	 * artifact's {@code $.secrets[]} ({@link Regions#artifact}): never in a part's answer, the check's preview or its siteplan, unless the
 	 * request asks with {@code ext[}{@link PlanRequest#EXT_SECRETS}{@code ]: true} (then {@code preview.secrets} and
 	 * {@code preview.siteplan.secrets}). In survival the hollow is free and the entrance a construction target. No new record, method or reason.
-	 * (7c RM, since NEXT) {@code "regionM15"} is advertised when the helper's kit checks region M15 (its {@code region.m15}): the region
+	 * (7c RM, since 1.57.0) {@code "regionM15"} is advertised when the helper's kit checks region M15 (its {@code region.m15}): the region
 	 * check's warnings {@code M15:cantilever}, {@code M15:joint} (a port link's end, at a site lot's port), {@code M15:span} (over a Style
 	 * format 3 connector type's {@code maxSpan}) and {@code M15:neck}. Warnings only: no plan answer, record, method or reason changes.
-	 * (7c TC, since NEXT) {@code "scenarioTemplates"} is advertised when the helper has the template catalogue (its
+	 * (7c TC, since 1.57.0) {@code "scenarioTemplates"} is advertised when the helper has the template catalogue (its
 	 * {@code region.templates}): {@link Regions#design}'s pick also lists the scenario programs ({@code flat_village}, {@code ice_outpost},
 	 * {@code terraced_monastery}, {@code s5_treehouses}, {@code s6_cave_city}; {@code floating_islands} already was), each with the land
 	 * features it needs ({@code needs.affordances}: AF kinds, counts and metric floors); the mod freezes the claim's volume (read only) so

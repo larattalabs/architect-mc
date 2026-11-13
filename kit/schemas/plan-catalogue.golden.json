@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 20,
- "api": "1.56.0",
- "kitVersion": "0.58.0",
+ "catalogueVersion": 21,
+ "api": "1.57.0",
+ "kitVersion": "0.59.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -895,7 +895,7 @@
   },
   {
    "id": "form.hidden_room",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.57.0",
    "schemaVersion": 1,
    "state": "supported",
    "limits": {

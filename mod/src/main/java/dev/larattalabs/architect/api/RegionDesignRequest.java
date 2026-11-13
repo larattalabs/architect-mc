@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  * bundled region programs (the catalogue: {@code crater_works}, {@code rift_city}, {@code walled_hill}, {@code sky_isle},
  * {@code floating_islands}) against the brief, the claim's survey summary and the bible's roles. With a fit the plan runs with
  * no further model call; without one the result still offers the closest program ({@code fits: false}, Steward S-6b-3).
- * There is no authoring fallback in 6b and no {@code designLots} (Steward S7). Since 1.9.0. (7c TC, since NEXT, feature
+ * There is no authoring fallback in 6b and no {@code designLots} (Steward S7). Since 1.9.0. (7c TC, since 1.57.0, feature
  * {@code scenarioTemplates}) The catalogue also holds the scenario programs, each with the land features it needs; the pick sees the
  * claim's affordances, and a fit over land without a template's features is refused ({@code NO_TEMPLATE}, that template the closest).
  *
