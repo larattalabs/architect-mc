@@ -1251,6 +1251,17 @@ public final class Revisions {
 		if (rv == null) {
 			return;
 		}
+		if ("UNDOING".equals(rv.state) || rv.state.equals("UNDONE")) {
+			// (slice RU) an undo cancelled this batch: the undo owns the region (busy, manifest); it takes the batch's sites and goes on
+			String b0 = l.rec().busy;
+			JsonObject op = b0 != null && b0.startsWith("undoing ") ? readUndo(l, b0.substring(8).trim()) : null;
+			if (op != null) {
+				cancelEnded(l, op);
+			}
+			RegionsImpl.save(l);
+			Architect.LOGGER.info("Region {}: revision {}'s batch {} ended {} under its undo", l.rec().id, rid, b.id, b.status);
+			return;
+		}
 		// (§7) an added body not written or drained by its escape guard ends the revision PARTIAL (H's rule, the revision's own)
 		RegionsImpl.Live fl = liveFor(l, stageName(rid, RegionFluids.STAGE));
 		boolean drained = fl.rid() == rid && RegionFluids.anyDrained(fl);
@@ -1321,8 +1332,11 @@ public final class Revisions {
 	 * Regions.undoRevision (§4.4). The preflight over the whole suffix (positions toPosition + 1 .. head), before anything is written,
 	 * refusing with every reason found: busy with another operation (OVERLAP_BUSY), a toPosition not below the head (NOT_ALLOWED), a
 	 * standing beside region joined to or reaching over what the suffix added (NOT_ALLOWED joined), a player in a member's box (OCCUPIED),
-	 * the owner's things in a suffix lot (NOT_ALLOWED blockers), survival targets still building (NOT_ALLOWED survival_building). Then the
-	 * manifest {@code rev/op-<opId>.json} and region.json (the suffix UNDOING, busy {@code undoing <opId>}) in one save: the commit point.
+	 * the owner's things in a suffix lot (NOT_ALLOWED blockers). Then the manifest {@code rev/op-<opId>.json} and region.json (the suffix
+	 * UNDOING, busy {@code undoing <opId>}) in one save: the commit point. (Slice RU, RV §8) A survival revision still writing (busy
+	 * {@code revising <rid>}, its targets waiting for items) is not refused: the manifest starts in phase {@code cancel}, its batch is
+	 * cancelled and ended first, and its unbuilt targets and lots are then undone with the suffix's stages (each refunded what of it stands
+	 * paid, at most its paid record; nothing it never consumed is charged or kept from the stock).
 	 * After it the operation is never abandoned: the suffix's bodies drain, its stages are undone top first ({@code Covered.KEEP}: a later
 	 * site over a suffix cell gets the before handed down), and only when every one ended removed are the revisions UNDONE and the head
 	 * moved. A call with the same target joins the running operation.
@@ -1357,15 +1371,11 @@ public final class Revisions {
 		}
 		List<String> no = new ArrayList<>();
 		Reason why = null;
-		// (6d GR, Steward's RC row 3) a survival revision still building its targets: say so (survival_building), not merely busy
-		if (rec.busy != null && rec.busy.startsWith("revising ") && rec.survival()) {
-			String[] building = dev.larattalabs.architect.site.RegionTargets.firstBuilding(rec.groupId);
-			if (building != null) {
-				throw RegionsImpl.refusal(Reason.NOT_ALLOWED, "undo of region " + regionId + " refused, nothing written: " + rec.busy + " is still building "
-					+ (building[1] != null ? building[1] : "target " + building[0]) + " (survival_building): let it finish or cancel it first");
-			}
-		}
-		if (rec.busy != null || rec.state == RegionState.PLACING || rec.state == RegionState.REMOVING || rec.state == RegionState.PREPARING) {
+		// (slice RU, RV §8, Steward's A2-1) a survival revision still writing (its batch running: items waiting for its targets' items) is
+		// not refused: the undo cancels its batch first (phase "cancel", after the commit point), then its unbuilt targets are removed
+		// with the rest of the suffix (refunded by what they paid, their reservations gone with them). A creative region's stays busy.
+		Rev cancelling = writingToCancel(rec);
+		if (cancelling == null && (rec.busy != null || rec.state == RegionState.PLACING || rec.state == RegionState.REMOVING || rec.state == RegionState.PREPARING)) {
 			throw RegionsImpl.refusal(Reason.OVERLAP_BUSY, "region " + regionId + " is busy (" + (rec.busy != null ? rec.busy : rec.state.name().toLowerCase(java.util.Locale.ROOT)) + ")");
 		}
 		if (toPosition < 0 || toPosition >= rec.position) {
@@ -1428,20 +1438,12 @@ public final class Revisions {
 						}
 					}
 				}
-				var inf = dev.larattalabs.architect.site.Infras.get(sid);
-				if (inf != null && inf.building()) {
-					no.add("target " + sid + " of revision " + r.rid + " is still building (survival_building): let it finish or cancel it first");
-					why = why == null ? Reason.NOT_ALLOWED : why;
-				}
+				// (slice RU) a target or lot still building is no refusal: the stage undo cancels it (its paid cells standing refunded)
 				var site = Sites.get(sid);
 				if (site != null) {
 					List<String> blockers = Sites.removalBlockers(level, site, rec.owner);
 					if (!blockers.isEmpty()) {
 						no.add(Sites.blockersMessage(sid, blockers) + " (blockers)");
-						why = why == null ? Reason.NOT_ALLOWED : why;
-					}
-					if (site.construction() != null && !dev.larattalabs.architect.site.Construction.BUILT.equals(site.construction().state())) {
-						no.add("site " + sid + " of revision " + r.rid + " is still building (survival_building): cancel it first");
 						why = why == null ? Reason.NOT_ALLOWED : why;
 					}
 				}
@@ -1466,7 +1468,11 @@ public final class Revisions {
 		}
 		op.add("rids", rids);
 		op.add("stages", stages);
-		op.addProperty("phase", "drain");
+		// (slice RU) a survival revision still writing: its batch is cancelled first (phase cancel), then the drain
+		op.addProperty("phase", cancelling != null ? "cancel" : "drain");
+		if (cancelling != null) {
+			op.addProperty("cancel", cancelling.rid);
+		}
 		if (actor != null) {
 			op.addProperty("actor", actor);
 		}
@@ -1645,6 +1651,23 @@ public final class Revisions {
 		}
 		RegionRec rec = l.rec();
 		String phase = op.get("phase").getAsString();
+		if (phase.equals("cancel")) {
+			// (slice RU, RV §8) the suffix's running revision batch cancelled (its waiting items fail CANCELLED, a placing item rolls back);
+			// the driver comes back until it has ended. Idempotent: a restart finds the batch running (or cancelling) again and goes on.
+			int[] c = cancelBatches(s, l, op);
+			if (c[0] > 0) {
+				WorldJournal.kill("RVC1"); // the cancel asked for (the queue file's save in flight), the undo still in phase cancel
+			}
+			if (c[1] > 0) {
+				return;
+			}
+			cancelEnded(l, op);
+			op.addProperty("phase", "drain");
+			writeUndo(l, op);
+			RegionsImpl.save(l);
+			WorldJournal.kill("RVC2"); // the batch cancelled and ended, nothing drained or removed
+			phase = "drain";
+		}
 		if (phase.equals("drain")) {
 			List<Integer> rids = new ArrayList<>();
 			op.getAsJsonArray("rids").forEach(e -> rids.add(e.getAsInt()));
@@ -1731,6 +1754,87 @@ public final class Revisions {
 		}
 		if (phase.equals("removed")) {
 			finishUndo(s, l, op);
+		}
+	}
+
+	/**
+	 * (slice RU) The revision an undo of a busy region cancels first, or null (the undo refuses OVERLAP_BUSY as before): only a survival
+	 * region's head revision still writing (busy {@code revising <rid>}, the region PLACING). A creative revision, an undo, a removal or a
+	 * busy naming no standing head revision stay busy.
+	 */
+	static @Nullable Rev writingToCancel(RegionRec rec) {
+		if (rec.busy == null || !rec.busy.startsWith("revising ") || !rec.survival() || rec.state != RegionState.PLACING) {
+			return null;
+		}
+		Rev rr = rev(rec, parseRid(rec.busy.substring("revising ".length())));
+		return rr != null && rr.standing() && rr.position == rec.position ? rr : null;
+	}
+
+	/** A {@code revising <rid>} busy's rid (0 when it can't be read). */
+	static int parseRid(String s) {
+		try {
+			return Integer.parseInt(s.trim());
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	/**
+	 * (slice RU) The undo's phase cancel: every batch of a suffix revision still running is cancelled (once: a cancelling one finishes in
+	 * the batch tick). Answers {cancels asked now, batches still running}.
+	 */
+	static int[] cancelBatches(MinecraftServer s, RegionsImpl.Live l, JsonObject op) {
+		java.util.Set<Integer> rids = new java.util.HashSet<>();
+		op.getAsJsonArray("rids").forEach(e -> rids.add(e.getAsInt()));
+		int asked = 0, running = 0;
+		for (QBatch b : Batches.ofGroup(l.rec().groupId)) {
+			if (!(b.ext.get(EXT_REVISION) instanceof JsonObject x) || !rids.contains(x.get("rid").getAsInt()) || !b.running()) {
+				continue;
+			}
+			if (!b.cancelling) {
+				Architect.LOGGER.info("Region {}: undo {} cancels revision {}'s batch {} (its unbuilt targets go with the undo)", l.rec().id, op.get("opId")
+					.getAsString(), x.get("rid").getAsInt(), b.id);
+				Batches.cancel(s, b.id);
+				asked++;
+			}
+			if (b.running()) {
+				running++;
+			}
+		}
+		return new int[] {asked, running};
+	}
+
+	/**
+	 * (slice RU) The cancelled revisions' batches have ended: each UNDOING revision takes its sites from its batch (as {@link #batchDone}
+	 * does), its manifest is closed, and the region reads its state before the revision again (PLACING no longer). Idempotent.
+	 */
+	static void cancelEnded(RegionsImpl.Live l, JsonObject op) {
+		RegionRec rec = l.rec();
+		int rid = op.has("cancel") ? op.get("cancel").getAsInt() : 0;
+		Rev rv = rid == 0 ? null : rev(rec, rid);
+		if (rv == null) {
+			return;
+		}
+		QBatch b = rv.batchId == null ? null : Batches.get(rv.batchId);
+		if (b != null) {
+			for (QItem i : b.items) {
+				if (i.status == QItem.Status.PLACED && i.siteId != null && !rv.sites.contains(i.siteId)) {
+					rv.sites.add(i.siteId);
+				}
+			}
+		}
+		if (rec.state == RegionState.PLACING && rv.regionStateBefore != null) {
+			rec.state = RegionState.valueOf(rv.regionStateBefore);
+		}
+		Path opf = dir(l.world(), rec.id, rv.rid).resolve("op.json");
+		try {
+			JsonObject rop = RegionStore.readJson(opf);
+			if (rop != null && !"done".equals(rop.has("state") ? rop.get("state").getAsString() : null)) {
+				rop.addProperty("state", "done");
+				RegionStore.writeJson(opf, rop);
+			}
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region {}: revision {}'s manifest could not be closed: {}", rec.id, rv.rid, e.toString());
 		}
 	}
 
