@@ -67,7 +67,8 @@ gate anything:
   - Tiers: `change` while iterating; `slice` before a slice merges; `release` (all steps, overnight) plus the full
     gate-verifier once per release.
   - Commit first, because clients run HEAD.
-  - Wait with ONE long until-loop on the run's `summary.json`, then read `SUMMARY.md` once. Never poll every few minutes:
+  - Wait with ONE long until-loop on this run's own `summary.json` until its `state` is no longer `running` (the file exists
+    from the run's start, so its existence means nothing), then read `SUMMARY.md` once. Never poll every few minutes:
     each wake costs Noah's subscription.
 - Set `enableVsync:false` in `mod/run/options.txt`, or a hidden client stalls at the loading screen.
 - **Tick bars judge Architect's own per-tick time.** The vanilla tick and GC are recorded, not judged.
