@@ -56,7 +56,7 @@ export const SIM_EXT = 'architect:sim';
  * (6c 0a) The sim faults a request asks for: `sim:<name>` tokens in its notes, and the names in ext["architect:sim"] (a
  * string or an array of strings, with or without the `sim:` prefix). Known names: usage_limit (one usage limit), outerdoor ((7a K3) a
  * wall-lot stand-in's round 1 puts its door in an outer face; a versionOf ignores it), fail (the
- * design fails), repair (one repair round).
+ * design fails), repair (one repair round), composite ((7c CM-b) a new design returns the kit's composite castle, past the cap).
  */
 export function simFaults(req: { notes?: string | undefined; ext?: Record<string, unknown> | undefined }): Set<string> {
   const out = new Set<string>();
@@ -645,7 +645,9 @@ export class SimDesigner implements Designer {
     this.check(id, r);
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
     const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
-    const wallLot = d.massing || req.versionOf ? undefined : simWallLot(req);
+    // (7c CM-b) sim:composite: a new entry past the cap (never a massing, a version or a site lot)
+    const composite = faults.has('composite') && !d.massing && !req.versionOf && !req.site;
+    const wallLot = d.massing || req.versionOf || composite ? undefined : simWallLot(req);
     // (since NEXT, 7a K3) a wall lot's massing takes its box: the stand-in massing of the wall-lot stand-in the detail pass builds
     const wallLotMassing = d.massing && !req.redirect ? simWallLot(req) : undefined;
     let source: string;
@@ -689,6 +691,12 @@ export class SimDesigner implements Designer {
       source = withDesignId(normalizeKitImports(fs.readFileSync(simSiteSource(cfg.kitDir, req.site.fit), 'utf8')), bp);
       what = `the kit's site example fit_${req.site.fit} on site ${req.site.volumeSha.slice(0, 12)}${req.versionOf ? ` (adapting ${bp} v${req.versionOf.baseVersion ?? 1})` : ''}`;
       note = `a site-aware stand-in (fit ${req.site.fit})`;
+    } else if (composite) {
+      // (7c CM-b) sim:composite: a design past the cap, the kit's hand-written composite castle (kit/designs/composite/castle.mjs: three
+      // 41-wide modules joined by arches) under the new id; it installs as one entry with hidden module entries
+      source = withDesignId(normalizeKitImports(fs.readFileSync(path.join(cfg.kitDir, 'designs', 'composite', 'castle.mjs'), 'utf8')), bp);
+      what = 'the kit composite castle (3 modules, 121 long: past the cap)';
+      note = 'a composite (sim:composite)';
     } else if (req.versionOf) {
       // (0b, C13) the head changed as a sim redirect changes a massing (an int param's default up by one, else gable -> hip)
       const base = fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8');
@@ -755,9 +763,9 @@ export class SimDesigner implements Designer {
     // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const smallSrc = !d.massing && !req.versionOf && !wallLot && req.effort === 'small' && fitsSmall(req.maxSize);
+    const smallSrc = !d.massing && !req.versionOf && !wallLot && !composite && req.effort === 'small' && fitsSmall(req.maxSize);
     // (7b DS) a site stand-in is checked as what it is (its own type and profile), on the composite
-    const limits = d.massing ? plan.limits : req.site ? { ...plan.limits, type: undefined, profile: undefined } : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+    const limits = d.massing ? plan.limits : req.site || composite ? { ...plan.limits, type: undefined, profile: undefined } : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     // ((6c IRR) the sim's stand-in honours a lot's reserved cells: the kit drops the copied example's blocks there before the check)
     const leave = req.reserved && plan.extra.includes('--reserved') ? ['--leave-reserved'] : [];
     const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, [...plan.extra, ...leave]);
