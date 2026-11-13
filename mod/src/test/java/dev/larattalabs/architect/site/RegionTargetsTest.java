@@ -189,6 +189,7 @@ class RegionTargetsTest {
 		assertEquals(2, l.stock("minecraft:bucket") + l.stock("minecraft:lava_bucket"), "the scoop's sum is the buckets it had");
 		// the broken variant _unsafe.loseCredit: a refund without its key (giveBack twice for one removal) credits twice: caught by the key
 		StockLedger k = new StockLedger();
+		k.pay("road:c5@9", "minecraft:stone_bricks", 4); // (JR) what the road consumed (the cap)
 		k.credit("road:c5@9", Map.of("minecraft:stone_bricks", 4), 81, it -> 64);
 		k.credit("road:c5@9", Map.of("minecraft:stone_bricks", 4), 81, it -> 64);
 		assertEquals(4, k.stock("minecraft:stone_bricks"), "keyed: once");
