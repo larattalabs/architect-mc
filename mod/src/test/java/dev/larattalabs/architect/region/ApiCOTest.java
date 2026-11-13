@@ -48,6 +48,13 @@ class ApiCOTest {
 	}
 
 	@Test
+	void theCallersExtKeysAreTheHelpers() {
+		assertEquals("architect_mc:composeHints", ComposeRequest.EXT_HINTS);
+		assertEquals("architect_mc:composeSystem", ComposeRequest.EXT_SYSTEM);
+		assertEquals("architect_mc:repairRounds", ComposeRequest.EXT_REPAIR_ROUNDS);
+	}
+
+	@Test
 	void aSettlementDesignIsKindSettlement() {
 		JsonObject req = new JsonObject();
 		req.addProperty("kind", "settlement");

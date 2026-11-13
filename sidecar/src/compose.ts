@@ -12,11 +12,12 @@
 //    of them (planImages.mjs's rankAffordances: score, then id), and with `images` the planning images (a top hillshade numbering them,
 //    two sections, an iso; kit/lib/region/planImages.mjs) as blobs.
 // 3. Round 1: a structured job (the rounds harness, jobs/rounds.ts) writes a plan/0 document: system = plan/0#compact (the one-line
-//    catalogue, 7cF) + COMPOSE_SYSTEM; the prompt holds the brief, the claim, the Style's roles, the survey summary, the affordances, the
+//    catalogue, 7cF) + the composer's system text (kit/prompts/composer.md, then a caller's rules); the prompt holds the brief, the claim, the Style's roles, the survey summary, the affordances, the
 //    pick's closest program, and the images come before it as image blocks. The design waits `checking` with `awaiting {round, plan}`;
 //    the mod runs Regions.checkPlan over the plan (the Overworld, no caller anchors, the owner, the Style) and answers
 //    region.compose.checked.
-// 4. A READY check with an artifact ends the design COMPOSED. Otherwise ONE repair round: the first prompt, the round's plan, the check's
+// 4. A READY check with an artifact ends the design COMPOSED. Otherwise ONE repair round (a caller may ask for 0-2: ext
+//    architect_mc:repairRounds): the first prompt, the round's plan, the check's
 //    typed answers (each part not fits/adjusted: class, block, reasons, wouldFit, blockedBy, deviations), and the catalogue's long text
 //    (planCatalogueKinds) of the kinds the plan used and the check answered; its plan is checked the same way.
 // 5. Still not READY: NO_PLAN with the best round's plan and check (READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED, a
@@ -32,6 +33,7 @@
 // otherwise the stand-in (simCompose) answers a small plan (a lots zone at the claim's centre and a path from its south edge), the same
 // every round. ext["architect:simAnswers"] scripts the pick (region.design's). Never a model.
 import path from 'node:path';
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { z } from 'zod';
 import { addCost, zeroCost } from './jobs/cost.js';
@@ -52,7 +54,7 @@ type CheckedMsg = z.infer<typeof RegionComposeCheckedMsg>;
 export const COMPOSE_OWNER = 'architect:region.compose';
 /** Repair rounds after the first (the contract's "one repair round"). */
 export const REPAIR_ROUNDS = 1;
-/** The rounds in all. */
+/** The rounds in all, by default (a caller may ask for 0 to MAX_REPAIR_ROUNDS repairs: ext architect_mc:repairRounds). */
 export const COMPOSE_ROUNDS = 1 + REPAIR_ROUNDS;
 /** The composer's system refs: plan/0's compact form (its catalogue one line per kind). */
 export const COMPOSE_REFS = ['plan/0#compact'];
@@ -63,17 +65,89 @@ export const KINDS_TEXT_MAX = 60_000;
 /** The built-in anchors: the only ones a composed plan may name (a compose request has none of its own). */
 export const BUILTIN_ANCHORS = ['claim_center', 'claim_n', 'claim_e', 'claim_s', 'claim_w'];
 
-export const COMPOSE_SYSTEM = [
-  'You work inside the Architect Minecraft mod as its settlement composer. You write one geometric plan (plan/0, the schema above) for a whole settlement over a claimed piece of land: its zones of building lots, the connectors between them, the landforms and the rules. Architect\'s checker answers every part (fits, adjusted, unsupported, refused, blocked, malformed) and only a plan whose parts fit is built.',
-  '',
-  'Rules:',
-  '- Use only kinds the capability catalogue above lists as supported. A reserved kind waits for a later phase: leave it out unless the request cannot do without it, then mark that part required: false so the rest can still be built.',
-  `- The only anchors are the built-in ${BUILTIN_ANCHORS.join(', ')}; there are no others.`,
-  '- Fit the claim: keep parts inside it, size zones to the land, and read the survey and the affordances (the land features found in the claim\'s 3D volume, listed by number) before you place anything on or in them.',
-  '- Give every part a short unique id. Say nothing outside the plan\'s own `notes` and the answer\'s `reason`.',
-  '- When you answer a check, keep the parts that fit as they were and change only what the check answered.',
-  'Answer with your structured output only, exactly as its schema asks.',
-].join('\n');
+/** The kit file holding the composer's prompt text (its `## system`, `## answer` and `## repair` sections). */
+export const COMPOSER_PROMPTS = path.join('prompts', 'composer.md');
+
+/** The composer's prompt text, from the kit. */
+export interface ComposerText {
+  system: string;
+  answer: string;
+  repair: string;
+}
+
+const textCache = new Map<string, ComposerText>();
+/** Reads `kit/prompts/composer.md` (once per kit dir): its three sections, `{anchors}` filled in. Throws when the kit lacks one. */
+export function composerText(kitDir: string): ComposerText {
+  const file = path.join(kitDir, COMPOSER_PROMPTS);
+  const hit = textCache.get(file);
+  if (hit) return hit;
+  let src: string;
+  try {
+    src = fs.readFileSync(file, 'utf8');
+  } catch {
+    throw new Error(`the kit has no ${COMPOSER_PROMPTS} (an older kit)`);
+  }
+  const out: Record<string, string[]> = {};
+  let cur: string | undefined;
+  for (const line of src.split('\n')) {
+    const m = /^## (system|answer|repair)\s*$/.exec(line);
+    if (m) cur = m[1]!;
+    else if (cur) (out[cur] ??= []).push(line);
+  }
+  const get = (k: string) => {
+    const t = (out[k] ?? []).join('\n').trim().replaceAll('{anchors}', BUILTIN_ANCHORS.join(', '));
+    if (!t) throw new Error(`${COMPOSER_PROMPTS} has no "## ${k}" section`);
+    return t;
+  };
+  const t = { system: get('system'), answer: get('answer'), repair: get('repair') };
+  textCache.set(file, t);
+  return t;
+}
+
+// ---- the caller's ext keys (ComposeRequest.EXT_*; documented in "Slice CO as built") ------------------------------------
+
+/** `ext["architect_mc:composeHints"]`: the caller's structured hints ({zones, parts, ...}), shown to every round as JSON. */
+export const EXT_HINTS = 'architect_mc:composeHints';
+/** `ext["architect_mc:composeSystem"]`: the caller's rules, appended to the composer's system prompt. */
+export const EXT_SYSTEM = 'architect_mc:composeSystem';
+/** `ext["architect_mc:repairRounds"]`: repair rounds after the first, 0 to MAX_REPAIR_ROUNDS (default REPAIR_ROUNDS). */
+export const EXT_REPAIRS = 'architect_mc:repairRounds';
+/** The hints are at most this many characters as JSON. */
+export const HINTS_MAX = 16_000;
+/** The caller's rules are at most this many characters (with plan/0#compact and the composer's own, well under JOB_SYSTEM_MAX). */
+export const CALLER_SYSTEM_MAX = 30_000;
+/** At most this many repair rounds (Steward's PlanWriter repairs up to 2). */
+export const MAX_REPAIR_ROUNDS = 2;
+
+/** The caller's ext members the composer reads, validated: {hints?, system?, repairs}. Throws a ClientError (FIELD_LIMIT) naming the key. */
+export function callerOptions(ext: Record<string, unknown> | undefined): { hints?: Record<string, unknown>; system?: string; repairs: number } {
+  const e = ext ?? {};
+  const out: { hints?: Record<string, unknown>; system?: string; repairs: number } = { repairs: REPAIR_ROUNDS };
+  const h = e[EXT_HINTS];
+  if (h !== undefined) {
+    if (!h || typeof h !== 'object' || Array.isArray(h)) throw new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"] is an object ({zones, parts, ...})`);
+    const n = JSON.stringify(h).length;
+    if (n > HINTS_MAX) throw new ClientError(`FIELD_LIMIT: ext["${EXT_HINTS}"] is ${n} characters as JSON (at most ${HINTS_MAX})`);
+    out.hints = h as Record<string, unknown>;
+  }
+  const sy = e[EXT_SYSTEM];
+  if (sy !== undefined) {
+    if (typeof sy !== 'string') throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is a string`);
+    if (sy.length > CALLER_SYSTEM_MAX) throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is ${sy.length} characters (at most ${CALLER_SYSTEM_MAX})`);
+    if (sy.trim()) out.system = sy.trim();
+  }
+  const r = e[EXT_REPAIRS];
+  if (r !== undefined) {
+    if (typeof r !== 'number' || !Number.isInteger(r) || r < 0 || r > MAX_REPAIR_ROUNDS) throw new ClientError(`FIELD_LIMIT: ext["${EXT_REPAIRS}"] is an integer 0 to ${MAX_REPAIR_ROUNDS}`);
+    out.repairs = r;
+  }
+  return out;
+}
+
+/** A round's system text (after the refs' blocks): the composer's, then the caller's rules under their own heading. */
+export function composeSystemText(text: ComposerText, callerSystem?: string): string {
+  return callerSystem ? `${text.system}\n\n## The caller's rules (they add to the rules above)\n\n${callerSystem}` : text.system;
+}
 
 /** The answer's schema: the plan, and why. */
 export const COMPOSE_SCHEMA: Record<string, unknown> = {
@@ -124,6 +198,8 @@ export interface ComposeState {
   planImages?: { images: Array<{ name: string; blobId: string; pixelSha: string; width: number; height: number }>; labels: PlanImages['labels'] };
   planImagesError?: string;
   rounds: ComposeRound[];
+  /** repair rounds after the first (ext architect_mc:repairRounds; default REPAIR_ROUNDS) */
+  repairs?: number;
   /** while the mod checks a round's plan */
   awaiting?: { round: number; plan: Record<string, unknown> };
 }
@@ -169,6 +245,10 @@ export interface ComposeInput {
   affordanceNote?: string | undefined;
   images: string[];
   pick?: ComposeState['pick'];
+  /** the caller's structured hints (ext architect_mc:composeHints) */
+  hints?: Record<string, unknown> | undefined;
+  /** the closing "How to answer" text (composer.md's `answer`) */
+  answer: string;
 }
 
 /** Round 1's prompt. Pure: the same inputs give the same text (the images are named, never described by content). */
@@ -199,9 +279,8 @@ export function composePrompt(i: ComposeInput): string {
     '## The template pick',
     pick?.program ? `no bundled template fits (the closest: ${pick.program}${pick.reason ? `; ${pick.reason}` : ''}), so compose the settlement from plan/0's parts.` : 'no bundled template fits, so compose the settlement from plan/0\'s parts.',
     '',
-    '## How to answer',
-    '- plan: the whole plan/0 document, schemaVersion "plan/0".',
-    '- reason: one or two sentences.',
+    ...(i.hints ? ['## The caller\'s hints (structured; follow them where the land and the catalogue allow)', JSON.stringify(i.hints), ''] : []),
+    i.answer,
   ].join('\n');
 }
 
@@ -242,7 +321,7 @@ export function repairKinds(plan: unknown, check: Record<string, unknown> | unde
 }
 
 /** The repair round's prompt: round 1's, the plan, the typed answers, the catalogue's long text of `kinds`. Pure. */
-export function repairPrompt(first: string, round: ComposeRound, kindsText: string): string {
+export function repairPrompt(first: string, round: ComposeRound, kindsText: string, closing: string): string {
   const check = round.check;
   const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
   const bad = parts.filter((p) => !GOOD.has(String(p.class)));
@@ -262,7 +341,7 @@ export function repairPrompt(first: string, round: ComposeRound, kindsText: stri
     '## The catalogue\'s long text of the kinds above',
     kindsText || 'none',
     '',
-    'Answer again with the whole plan: keep the parts that fit, fix or drop what the check answered.',
+    closing,
   ].join('\n');
 }
 
@@ -343,8 +422,8 @@ export class ComposeDesigns {
   constructor(private sc: Sidecar) {}
 
   /** The job every round runs (its system and schema; the model the request's). */
-  roundJob(model: string): RoundJob {
-    return { kind: 'structured', system: COMPOSE_SYSTEM, systemRefs: [...COMPOSE_REFS], schema: COMPOSE_SCHEMA, model, maxTurns: 3, owner: COMPOSE_OWNER, what: 'compose' };
+  roundJob(model: string, system: string): RoundJob {
+    return { kind: 'structured', system, systemRefs: [...COMPOSE_REFS], schema: COMPOSE_SCHEMA, model, maxTurns: 3, owner: COMPOSE_OWNER, what: 'compose' };
   }
 
   /** region.compose: refused at once (no Claude, a bad survey, Style or volume), adopted by its key, else a design that runs at once. */
@@ -359,6 +438,12 @@ export class ComposeDesigns {
       return { designId: pd.id, adopted: true };
     }
     if (msg.volume && !sc.blobs.get(msg.volume.blobId)) throw new ClientError(`volume: no blob "${msg.volume.blobId}"`);
+    const opts = callerOptions(msg.ext as Record<string, unknown> | undefined);
+    try {
+      composerText(sc.config.kitDir);
+    } catch (e) {
+      throw new ClientError((e as Error).message);
+    }
     sc.ensureClaudeAvailable();
     try {
       surveySummary(sc.blobs.read(msg.surveyBlobId));
@@ -394,6 +479,7 @@ export class ComposeDesigns {
       ...(msg.owner ? { owner: msg.owner } : {}),
       ...(key ? { opKey: key } : {}),
       rounds: [],
+      repairs: opts.repairs,
     };
     const d = sc.designs.create(req, undefined, { kind: 'settlement', settlement: st as unknown as Record<string, unknown> });
     if (key) sc.opKeys.record('compose', msg.owner, key, body, d.id);
@@ -582,16 +668,26 @@ export class ComposeDesigns {
       }
     }
     const images = (st.planImages?.images ?? []).filter((im) => sc.blobs.get(im.blobId));
+    let text: ComposerText;
+    let opts: ReturnType<typeof callerOptions>;
+    try {
+      text = composerText(sc.config.kitDir);
+      opts = callerOptions(ext);
+    } catch (e) {
+      return this.fail(id, st, (e as Error).message);
+    }
+    const job = this.roundJob(st.model, composeSystemText(text, opts.system));
+    const rounds = 1 + (st.repairs ?? REPAIR_ROUNDS);
     const first = composePrompt({
       brief: st.brief, claim: st.claim, summary, style: st.style ? `${st.style.id} v${st.style.version}` : undefined, roles,
       affordances: st.affordances, affordanceNote: st.affordanceError ?? (st.volume ? undefined : 'the mod sent no volume of the claim'),
-      images: images.map((im) => im.name), pick: st.pick,
+      images: images.map((im) => im.name), pick: st.pick, hints: opts.hints, answer: text.answer,
     });
     const scripted = ext['architect:simCompose'];
     const sim = sc.designerName() === 'sim' ? (Array.isArray(scripted) && scripted.length ? scripted : [simCompose()]) : undefined;
 
     // 3-4. the rounds
-    for (let i = 0; i < COMPOSE_ROUNDS; i++) {
+    for (let i = 0; i < rounds; i++) {
       let r = st.rounds[i];
       if (!r) {
         const prev = st.rounds[i - 1];
@@ -607,10 +703,10 @@ export class ComposeDesigns {
           } catch (e) {
             kindsText = `unavailable (${(e as Error).message})`;
           }
-          prompt = repairPrompt(first, prev, kindsText);
+          prompt = repairPrompt(first, prev, kindsText, text.repair);
         }
         try {
-          r = startRound(sc, this.roundJob(st.model), {
+          r = startRound(sc, job, {
             designId: id, n: i + 1, prompt, budgetUsd: left,
             images: images.map((im) => ({ file: sc.blobs.file(im.blobId), label: `planning image ${im.name}` })),
             ...(sim ? { simAnswer: sim[Math.min(i, sim.length - 1)] } : {}),
@@ -619,7 +715,7 @@ export class ComposeDesigns {
           return this.fail(id, st, `round ${i + 1} did not start: ${(e as Error).message}`);
         }
         st.rounds.push(r);
-        this.save(id, st, { status: 'designing', step: i === 0 ? 'composing the plan' : `repairing the plan (round ${i + 1} of ${COMPOSE_ROUNDS})` });
+        this.save(id, st, { status: 'designing', step: i === 0 ? 'composing the plan' : `repairing the plan (round ${i + 1} of ${rounds})` });
       }
       if (r.answer === undefined && r.error === undefined) {
         const how = await finishRound(sc, id, r);

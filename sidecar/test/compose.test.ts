@@ -18,7 +18,13 @@ import {
   bestRound,
   COMPOSE_REFS,
   COMPOSE_ROUNDS,
-  COMPOSE_SYSTEM,
+  callerOptions,
+  EXT_HINTS,
+  EXT_REPAIRS,
+  EXT_SYSTEM,
+  CALLER_SYSTEM_MAX,
+  composerText,
+  composeSystemText,
   composeKeyBody,
   composePrompt,
   keepComposeAffordances,
@@ -36,6 +42,8 @@ import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
 const LANDS = path.join(KIT, 'test', 'fixtures', 'tc');
+const TEXT = fs.existsSync(path.join(KIT, 'prompts', 'composer.md')) ? composerText(KIT) : { system: 'x', answer: '## How to answer', repair: 'Answer again.' };
+const COMPOSE_SYSTEM = TEXT.system;
 const hasCO = fs.existsSync(path.join(KIT, 'tools', 'planimages.mjs')) && fs.existsSync(path.join(LANDS, 'lands.json'));
 
 const lots = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `h${i + 1}`, type: 'house', size: [9, 9] }));
@@ -60,15 +68,15 @@ describe('the composer\'s pure parts (7c CO)', () => {
       const kit = (await import(pathToFileURL(path.join(KIT, 'lib', 'region', 'planImages.mjs')).href)) as { rankAffordances: (l: unknown[]) => Array<{ id: string }> };
       expect(kit.rankAffordances(aff).map((a) => a.id)).toEqual(rankAffordances(aff).map((a) => a.id));
     }
-    const p = composePrompt({ brief: 'a few homes beside a winding lane', claim, summary: 'flat', roles: ['rock'], affordances: aff, images: ['top', 'section-1', 'section-2', 'iso'] });
+    const p = composePrompt({ brief: 'a few homes beside a winding lane', claim, summary: 'flat', roles: ['rock'], affordances: aff, images: ['top', 'section-1', 'section-2', 'iso'], answer: TEXT.answer });
     expect(p).toContain('brief: a few homes beside a winding lane');
     expect(p).toContain('1. cave cave_b: x 10..40 y 50..60 z 10..20 (floorArea 500, ceiling 8)');
     expect(p).toContain('2. pad pad_0');
     expect(p).toContain('4 images come before this text: top, section-1, section-2, iso');
     expect(p).toContain('claim_center, claim_n, claim_e, claim_s, claim_w');
-    const off = composePrompt({ brief: 'a few homes beside a winding lane', claim, summary: 'flat', roles: ['rock'], affordances: aff, images: [] });
+    const off = composePrompt({ brief: 'a few homes beside a winding lane', claim, summary: 'flat', roles: ['rock'], affordances: aff, images: [], answer: TEXT.answer });
     expect(off).not.toContain('Planning images');
-    expect(composePrompt({ brief: 'x', claim, summary: '', roles: [], images: [], affordanceNote: 'no volume' })).toContain('not analysed (no volume)');
+    expect(composePrompt({ brief: 'x', claim, summary: '', roles: [], images: [], affordanceNote: 'no volume', answer: TEXT.answer })).toContain('not analysed (no volume)');
   });
 
   it('builds the repair prompt from the typed answers and the kinds the plan used and the check answered', () => {
@@ -82,7 +90,7 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(line).toContain('UNKNOWN_REF at $.from: anchor "stone" is neither built in');
     expect(line).toContain('would fit: {"from":{"anchor":"claim_s"}}');
     expect(line).toContain('blocked by: ["x"]');
-    const p = repairPrompt('FIRST', r, '[{"id":"connector.path"}]');
+    const p = repairPrompt('FIRST', r, '[{"id":"connector.path"}]', TEXT.repair);
     expect(p.startsWith('FIRST\n')).toBe(true);
     expect(p).toContain('## Your plan (round 1)');
     expect(p).toContain(JSON.stringify(BAD));
@@ -90,7 +98,7 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(p).not.toContain('- town: fits');
     expect(p).toContain('- isle: unsupported (form.crater)');
     expect(p).toContain('[{"id":"connector.path"}]');
-    expect(repairPrompt('F', { n: 2, jobId: 'k', plan: {}, refused: 'FIELD_LIMIT: too big' }, '')).toContain('the check did not run: FIELD_LIMIT: too big');
+    expect(repairPrompt('F', { n: 2, jobId: 'k', plan: {}, refused: 'FIELD_LIMIT: too big' }, '', TEXT.repair)).toContain('the check did not run: FIELD_LIMIT: too big');
   });
 
   it('picks the best round (READY first, a tie to the later round) and lists what waits with the catalogue\'s until', () => {
@@ -110,6 +118,25 @@ describe('the composer\'s pure parts (7c CO)', () => {
     const b = composeKeyBody({ v: 1, id: 'r', type: 'region.compose', brief: 'b', surveyBlobId: 's2', volume: { blobId: 'v2', sha: 'ab' }, images: true, opKey: 'k' });
     expect(a).toEqual(b);
     expect(a).toEqual({ type: 'region.compose', brief: 'b', volume: { sha: 'ab' }, images: true });
+  });
+
+  it('reads its prompt text from the kit (kit/prompts/composer.md) and the caller\'s ext keys: hints, rules, repair rounds', async () => {
+    expect(TEXT.system).toContain('settlement composer');
+    expect(TEXT.system).toContain('claim_center, claim_n, claim_e, claim_s, claim_w');
+    expect(TEXT.answer).toContain('## How to answer');
+    expect([EXT_HINTS, EXT_SYSTEM, EXT_REPAIRS]).toEqual(['architect_mc:composeHints', 'architect_mc:composeSystem', 'architect_mc:repairRounds']); // = ComposeRequest.EXT_* (ApiCOTest)
+    expect(callerOptions(undefined)).toEqual({ repairs: 1 });
+    expect(callerOptions({ 'architect_mc:composeHints': { zones: [{ id: 'harbour' }] }, 'architect_mc:composeSystem': ' Keep a wall. ', 'architect_mc:repairRounds': 2 })).toEqual({ hints: { zones: [{ id: 'harbour' }] }, system: 'Keep a wall.', repairs: 2 });
+    expect(() => callerOptions({ 'architect_mc:repairRounds': 3 })).toThrow(/FIELD_LIMIT.*repairRounds/);
+    expect(() => callerOptions({ 'architect_mc:composeHints': [1] })).toThrow(/composeHints/);
+    expect(() => callerOptions({ 'architect_mc:composeSystem': 'x'.repeat(CALLER_SYSTEM_MAX + 1) })).toThrow(/composeSystem/);
+    const p = composePrompt({ brief: 'b', claim, summary: '', roles: [], images: [], hints: { zones: [{ id: 'harbour' }] }, answer: TEXT.answer });
+    expect(p).toContain('## The caller\'s hints');
+    expect(p).toContain('{"zones":[{"id":"harbour"}]}');
+    expect(composeSystemText(TEXT, 'Keep a wall.')).toBe(`${TEXT.system}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
+    // the largest caller's rules still keep the whole system under the bound
+    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX)));
+    expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
   });
 
   it('keeps the structured job\'s system prompt under the 120,000 bound (plan/0#compact + the composer\'s)', async () => {
@@ -245,6 +272,23 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(res.round).toBe(2);
     expect(JSON.stringify(res.plan)).toBe(JSON.stringify(BAD));
     expect(res.waits).toEqual([{ part: 'lane', class: 'malformed', block: 'connector.path' }]);
+  }, 600_000);
+
+  it('a caller\'s repair rounds (2, then 0), hints and rules reach the rounds', async () => {
+    const two = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: BAD, reason: 'r1' }], 'architect_mc:repairRounds': 2, 'architect_mc:composeHints': { zones: [{ id: 'town', lots: 3 }] }, 'architect_mc:composeSystem': 'Never build a wall.' } });
+    const d2 = await playMod(two.designId);
+    expect((d2.result as Record<string, unknown>).outcome).toBe('NO_PLAN');
+    expect(st(two.designId).rounds).toHaveLength(3);
+    const q = queries(st(two.designId).rounds[0]!.jobId)[0]!;
+    expect(q.prompt).toContain('{"zones":[{"id":"town","lots":3}]}');
+    expect(q.system.endsWith('## The caller\'s rules (they add to the rules above)\n\nNever build a wall.')).toBe(true);
+    const zero = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: BAD, reason: 'r1' }], 'architect_mc:repairRounds': 0 } });
+    const d0 = await playMod(zero.designId);
+    expect((d0.result as Record<string, unknown>).outcome).toBe('NO_PLAN');
+    expect(st(zero.designId).rounds).toHaveLength(1);
+    const bad = await ask({ type: 'region.compose', brief: 'b', claim, surveyBlobId: sc.blobs.putBytes(survey, 'survey', 'bin'), ext: { 'architect_mc:repairRounds': 5 } });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toMatch(/FIELD_LIMIT/);
   }, 600_000);
 
   it('the sim stand-in composes a plan that checks READY at once (no repair round)', async () => {
