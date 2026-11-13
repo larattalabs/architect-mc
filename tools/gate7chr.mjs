@@ -52,8 +52,6 @@ const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
 /** The committed fixtures whose answers move with HR (byte identity's named movers). */
 export const HR_MOVED = Object.freeze({
   'asks/hidden_village.json': 'HR: waterfall_curtain\'s hollow deviation (asked in its own words) no longer says the hollow waits for 7c: it names the form.hidden_room part that builds it (still adjusted)',
-  'extension/e15_every_reserved_a.json': 'HR: its form.hidden_room part answers as a supported kind (was unsupported until 7c)',
-  'extension/e16_every_reserved_b.json': 'HR: its form.hidden_room part answers as a supported kind (was unsupported until 7c)',
   'extension/e20_7c_drafts.json': 'HR: vault (form.hidden_room in hold, bookshelf) answers fits (was unsupported until 7c)',
 });
 /** The asks lines that may move: a part that waited on form.hidden_room (none of the 59 has one; the table is checked whole). */
