@@ -120,9 +120,9 @@ export async function registerIG(steps, h) {
 
   steps.igunit = async () => {
     const out = {};
-    out.kit = h.nodeTest(['kit/test/ig.test.mjs', 'kit/test/irr.test.mjs']);
-    check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 14, `kit ig.test (an irrigated grow lot's sources, record in the lot frame, stages and M25/M29; the refusals; irrigate false = absent; the survival bill holds the shells once) and irr.test (plan/0's IRR through the shared helper): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-    out.java = await h.javaTests(['*IgLotDrainTest*', '*ApiIrrTest*'], 5);
+    out.kit = h.nodeTest(['kit/test/ig.test.mjs', 'kit/test/irr.test.mjs', 'kit/test/gr-parity.test.mjs', 'kit/test/rv-a.test.mjs']);
+    check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 25, `kit ig.test (an irrigated grow lot's sources, record in the lot frame, stages and M25/M29; the refusals; irrigate false = absent; the survival bill holds the shells once) and irr.test (plan/0's IRR through the shared helper); gr-parity and rv-a (the parity fixtures re-cut: revise.mjs's programSha only): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+    out.java = await h.javaTests(['*IgLotDrainTest*', '*ApiIrrTest*', '*RevisionsTest*'], 10);
     check(out.java.ok, `IgLotDrainTest (a grown lot is its revision's: drainLot drains through that revision's record), ApiIrrTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
     const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
     const J = h.apiJars();
