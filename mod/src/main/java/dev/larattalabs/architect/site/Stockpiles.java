@@ -1556,6 +1556,9 @@ public final class Stockpiles {
 					o.addProperty("worldSaves", worldSaves);
 					o.addProperty("lastWorldSaveMs", lastWorldSaveMs);
 					o.addProperty("maxWorldSaveMs", maxWorldSaveMs);
+					o.addProperty("playerSaves", playerSaves);
+					o.addProperty("lastPlayerSaveMs", lastPlayerSaveMs);
+					o.addProperty("maxPlayerSaveMs", maxPlayerSaveMs);
 					return o;
 				}
 				case "state" -> {
@@ -1749,6 +1752,9 @@ public final class Stockpiles {
 	/** (JR, dev) explicit saves with the world: count, last and max time (ms). */
 	static volatile int worldSaves;
 	static volatile double lastWorldSaveMs, maxWorldSaveMs;
+	/** (HF, dev) the players' share of those saves: count, last and max time (ms). */
+	static volatile int playerSaves;
+	static volatile double lastPlayerSaveMs, maxPlayerSaveMs;
 
 	/**
 	 * (JR) An explicit ledger save outside the world's save (a crate, the feed order, a dissolve, an adoption, a region's bodies' charge or
@@ -1759,6 +1765,15 @@ public final class Stockpiles {
 		long t0 = System.nanoTime();
 		int before = saves;
 		if (srv != null && srv.isSameThread()) {
+			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
+			// is never on disk ahead of player.dat, so a crash after it neither dupes nor loses those items. saveAllChunks never saves players
+			// (26.3: level.dat keeps only the singleplayer host's UUID; every player, the host too, is in playerdata/<uuid>.dat).
+			long p0 = System.nanoTime();
+			// REPRO-ONLY: srv.getPlayerList().saveAll();
+			double pms = (System.nanoTime() - p0) / 1e6;
+			playerSaves++;
+			lastPlayerSaveMs = pms;
+			maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 			srv.saveAllChunks(true, false, false);
 		}
 		if (saves == before) {
