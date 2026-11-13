@@ -30326,3 +30326,124 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
 **The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
 before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
 charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.
+
+## Slice HF, player saves with the ledger (branch `slice/HF` off main 3a5bd96d, v0.64.0 + docs; 2026-11-13; DEV MODE, survival accounting strict; a patch release)
+
+An urgent hotfix from the survival-safety audit (`Minecraft/audits/safety.md` F1, F5, F9, N3). Scope: the player-save class only.
+F3, F4, F6, F7, F11, N1, N2 and N4 are out (the follow-up slice PS and others).
+
+### The finding (measured before the fix: gate run 1, `artifacts/gate-runs-hf/20261113-090018-change`, head 592613da)
+
+Five save cadences, not four: the journal (synchronous), chunks (about 10 s, eager), the stockpile ledger (autosave, stop, explicit
+`saveWithWorld`) and **player data** (`playerdata/<uuid>.dat`), saved only at autosave (`PlayerList.saveAll`), at stop and at each
+player's logout. JR's `saveWithWorld` called `saveAllChunks(true, false, false)`, which saves the scoreboard, the levels, `level.dat`
+and SavedData but never the players (checked with `javap` on 26.3). An explicit ledger save could therefore get ahead of the players.
+
+| case | the move | before | after the halt and restart | verdict |
+|---|---|---|---|---|
+| **D** (F1) | Insert from inventory (the crate screen's path) of 64 gravel, then a crate added (`addStockpileCrate`, the call `/steward stockpile <id> add` makes) | inventory 64, stock 0 | inventory 64, stock 64 | **mint 64** |
+| **X** (F5) | `dissolveStockpile` to the player (its own explicit save) | inventory 0, stock 149 | inventory 0, stock 0 (the pile gone) | **loss 149** |
+
+- In both cases, the halt (`dev.stockpile.halt`, nothing saved) came within 2 s of the explicit save. Neither case saw an autosave
+  (one ledger save each, the explicit one), and `playerdata` was not written.
+- **v0.63.0 has the same flaw.** Its explicit savers (create, removeCrate, dissolve, setFeedOrder, adopt, charge, scoop) call a plain
+  `save()`: ledger only, with no players and no chunks. Read from the code; no comparison run was made.
+- **How far back:** explicit ledger saves came in with the stockpile (Y1, v0.20.0), so every release since v0.20.0 has it.
+- **Singleplayer is the same case.** In 26.3 `level.dat` keeps only the host's UUID (`saveDataTag(worldData, UUID)`), and the host's
+  data is in `playerdata` like any player's. The headless gate's bot (a real `ServerPlayer`, saved to `playerdata`) represents it.
+- **The audit's other members of the class:**
+  - **F5, Take:** `withdraw`, then any later explicit save: a loss of the take (case T).
+  - **F9:** a deposit, then a logout (vanilla saves that player), then a crash: the ledger rewinds, so the deposit is lost (case L).
+  - **N3:** `BEFORE_SAVE` runs at `saveAllChunks`' head (Fabric's `MinecraftServerMixin`), and the chunk writes were queued, not
+    flushed. The ledger file therefore reached disk before the chunks did.
+
+### The fix (site/Stockpiles.java only, plus dev hooks)
+
+1. **`saveWithWorld`, server thread:**
+   1. `srv.getPlayerList().saveAll()`;
+   2. `srv.saveAllChunks(true, true, false)` (flushed), with the ledger write in `BEFORE_SAVE` suppressed for it (`explicitSave`);
+   3. then `save()` (the ledger).
+
+   The ledger is now never on disk ahead of the players or the chunks. Off the server thread the ledger alone is saved, as before; every
+   caller is on the server thread.
+2. **F9:** `ServerPlayConnectionEvents.DISCONNECT` queues `saveWithWorld` (`server.execute`, so it runs after `PlayerList.remove`
+   has saved the leaving player). It runs only when the ledger changed since its last save (`unsaved`, set by `changed()`, cleared by
+   `save()`).
+3. **Everything else unchanged.** Every explicit saver still calls `saveWithWorld`: create, removeCrate, dissolve, setFeedOrder,
+   adopt, charge and scoop. JR's behaviour is kept. No API change.
+
+Order inside one save: players, then chunks, then ledger. A crash between the player write and the ledger write (milliseconds) loses
+the move rather than duping it.
+
+**Cost** (measured in hf-crash run 3, one bot; `dev.stockpile.saved` reports `playerSaves`, `lastPlayerSaveMs` and `maxPlayerSaveMs`
+beside JR's world numbers):
+- **The players:** 0.01-3.9 ms per save.
+- **The whole explicit save** (players + flushed chunks + ledger): 17.9-76.7 ms. Before HF (unflushed, no players) it was 4.4-5.4 ms
+  in run 1. The difference is N3's flush: the save now waits for the chunk writes.
+- It stays under JR's 250 ms bound. These saves are rare (a crate, the feed order, a dissolve, an adoption, RS charge and scoop, and a
+  logout with an unsaved ledger).
+
+**Steward-visible:** none in normal play. After a crash the player's inventory and the stock now agree. A logout with an unsaved
+ledger change costs one flushed world save.
+
+### Gate
+
+- **hf-crash** (tools/lib/gatemhf.mjs, registered in tools/gate6dgr.mjs; chain `hf`; headless, $0).
+  - One survival world, a stockpile of 4 crates, a town realised with every target paused (a paused target still counts as
+    outstanding, so the accept rule takes its items, and nothing is consumed).
+  - Each case: `/save-all flush` (the baseline), the move, the explicit save, `dev.stockpile.halt`, the disk read, the restart.
+  - **D:** Insert from inventory, then a crate added.
+  - **L:** Insert from inventory, then `dev.bot.relog` (vanilla's disconnect path, then a new join from the saved file).
+  - **T:** the region removed (its stock becomes credit), a Take of half of it, then a crate added.
+  - **X:** dissolve to the player.
+  - Each asserts that the player's inventory + the stock after the restart equal the totals before the move, item for item, and that
+    the save wrote the player's file (`players/data/<uuid>.dat` in 26.3; its mtime moved).
+- **Units:** `StockpileSaveHFTest` (2), a source guard:
+  - `saveWithWorld` saves the players, then the chunks flushed, then the ledger;
+  - `BEFORE_SAVE` defers to it;
+  - DISCONNECT is registered;
+  - no plain `save()` of the ledger outside `BEFORE_SAVE`, `SERVER_STOPPING` and `saveWithWorld`;
+  - at least 7 `saveWithWorld` callers.
+- **New dev hooks:** `dev.stockpile.halt` (a crash with nothing saved, at a moment the driver picks) and `dev.bot.relog` (headless
+  only).
+
+### Results
+
+| case | the move | before (inventory + stock) | after the halt and restart | mint / loss |
+|---|---|---|---|---|
+| **D** | Insert from inventory 64 gravel, crate added | 64 + 0 | 0 + 64 | **0 / 0** (before HF: 64 / 0) |
+| **L** | Insert from inventory 64 gravel, logout and join | 64 + 64 | 0 + 128 | **0 / 0** |
+| **T** | region removed, Take 64, crate added | 0 + 128 | 64 + 64 | **0 / 0** |
+| **X** | dissolve to the player | 0 + 64 | 64 + 0 | **0 / 0** (before HF: 0 / 149) |
+
+**Gate runs** (`--out artifacts/gate-runs-hf`):
+- **Run 1** (592613da, the fix not in, 8922/8923): hf-crash D and X only.
+  - It reproduced the finding: D minted 64, X lost 149.
+  - It also showed that `playerdata` was not written; the check then looked in the wrong place (see run 2).
+- A run on 8922/8923 aborted in setup: slice TJ held the ports, and nothing ran. Then 8932/8933 (the coordinator's reassignment).
+- **Run 2** (8d8603e9): rs-survival-smoke **PASS** 40/0, jr-crash **PASS** 24/0; hf-crash FAIL 19/6.
+  - D, T and X already held (0 / 0).
+  - The playerdata check looked in `playerdata/`, but 26.3 writes `players/data/`.
+  - L lost 64: the bot's relog hook called `onDisconnect` directly, but Fabric fires DISCONNECT in `Connection.handleDisconnection`.
+    A client's logout goes through that path, so this was a harness bug, not a product bug.
+- **Run 3** (a9e7c334, the relog through the connection's disconnect path; the file path fixed; no product change since run 2):
+  hf-crash **PASS** 25/0.
+- **Strict verifier** (gate-verifier, re-ran hf-crash on 8934/8935 at ed0e5d40, `artifacts/gate-runs-hf-verify/20261113-111538-change`):
+  **PASS**, 25/0, the same per-case numbers (delta 0 in D, L, T and X; the player's file written each time).
+  - Its review found nothing blocking. Low or info notes:
+    - an autosave inside the 2 s baseline window could in theory mask a dupe, but the player-file check would still catch it;
+    - the bot's logout is equivalent to a client's (the same Connection path and Fabric event), but not proven against a real client;
+    - a ledger change that skips `changed()` doesn't arm the logout save. Coverage is unchanged by HF.
+- **Other checks** (at 8d8603e9):
+  - Gradle `build`: 1155 tests, 0 failures (1 skipped).
+  - Kit: 1303 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 372 steps clean.
+  - Sidecar `tsc --noEmit`: clean.
+  - api-compat against the 0.64.0 and 0.63.0 apitest jars and the 0.64.0 surface (2964 members): pass.
+
+### Left over (not HF)
+
+- From the audit, for the follow-up slice PS: F3 (the legacy pool), F4 (hopper deliveries are lost on a crash), F6 and F11 (an
+  unreadable file, `.bak`, `format`), F7, N1 (a finished undo's refund credit), N2 (filled shulker boxes) and N4.
+- A crash between the player write and the ledger write inside one explicit save (milliseconds) still loses that move. Closing it
+  would need a journal.
