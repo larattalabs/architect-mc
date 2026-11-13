@@ -22375,6 +22375,50 @@ to a standing zone is GR's; changing or removing a built part answers `unsupport
 RV2 (removing and changing standing parts, "6d later" below). The pad delta under standing lots. Folding. Revisions past the claim.
 Survival revisions over paid or unbuilt targets.
 
+### Slice RU as built (survival revision cancel, Steward's A2-1; branch `slice/RU`, 2026-11-13, DEV MODE)
+
+Noah (2026-11-13, via the parent session, "boundary: defaults"): build §8's cancel as written rather than amend it. Base origin/main 3a5bd96d,
+merged with 27019ef8 (HF v0.64.1, PS, JR-b).
+
+- **Before:** `undoRevision` of a survival region refused `NOT_ALLOWED survival_building`, nothing written, while its head revision was
+  still writing (busy `revising <rid>`) or a suffix target or lot was still building (`Revisions.undo0`). Its message said "cancel it first",
+  but no API cancelled a revision's targets. A target waiting for items could only be fed to the end and then refunded.
+- **Now (no API change, `undoRevision` itself, so no `cancelRevision`):** those refusals are gone.
+  - A survival region's head revision still writing (`Revisions.writingToCancel`: busy `revising <rid>`, the region PLACING, that rid the
+    standing head) is cancelled by the undo. The commit point is unchanged (the manifest, then region.json, the suffix UNDOING, busy
+    `undoing <opId>`), but the manifest starts in the new phase `cancel` (`cancel: <rid>`). Phase cancel cancels the revision's running
+    batch (`Batches.cancel`: its waiting items fail CANCELLED, a placing item rolls back, its stages end PARTIAL or SKIPPED), waits for the
+    batch to end, then takes the batch's placed sites into the revision, closes the revision's own manifest and gives the region back its
+    state before the revision (`cancelEnded`). Then the phase moves to `drain` and the undo runs exactly as before.
+  - `batchDone` of an UNDOING revision no longer ends the revision. Before, it cleared busy and the manifest under the running undo; now
+    the undo owns them.
+  - Building targets, construction roads and lots go with their stages through `Groups.undoStage`. Its removal already took a building
+    member: it leaves the feed at once (C29), refunds what of it stands paid (`RoadBuilder.refundOf`, `Builder.prepareDeconstruct`, at most
+    JR's paid record), and drops out of the feed order when its record goes. Reservations are computed per feed pass, so they end with the
+    target. Items delivered but not consumed never left the stock.
+  - Kill points: RVU1 also fires on this path (the commit, the batch running). New: **RVC1** (the cancel asked for, the queue file's save
+    in flight) and **RVC2** (the batch ended, phase drain saved, nothing drained or removed). A restart resumes phase cancel: the batch is
+    loaded running or cancelling, and is cancelled again or finishes. Then the undo goes on and refunds once per key.
+  - A creative region's busy revision still refuses OVERLAP_BUSY.
+- **Repro numbers (ad hoc, 8926/8927, the headless server):**
+
+  | scenario | consumed | refund | put in / back | E-flat |
+  |---|---|---|---|---|
+  | never fed | 0 | 0 | 0 / 0 | 0 |
+  | fed in part (busy `revising 2`, 90.9% built) | 44 (gravel 42, lantern 1, oak fence 1) | the same | 44 / 44 | 0 |
+  | kill RVU1, RVC1, RVC2 (each after `/save-all flush`) | 44 in the saved ledger | 44 back, item for item | 44 / 44 | 0 |
+
+  - **Verdict:** neither mint nor loss, and every restart resumed once. QT after the cancel: the same growth re-planned and quoted at
+    231 units; realised and fed, it consumed exactly the quote.
+- **Gate:** `ru-cancel` and `ru-crash` (`tools/lib/gatem5ru.mjs`, registered in gate6dgr.mjs). `gr-survival`'s row 3 now asserts only that
+  the growth's targets wait before the feed (the refusal is gone). Units: `RevisionCancelRUTest` (which busy region an undo cancels).
+- **Steward-visible:** `undoRevision` of a survival growth that is waiting for or partly fed its materials now succeeds (refund = what it
+  consumed), where it refused `survival_building` before. Steward can drop its plain-words refusal (A2-1). The javadoc of
+  `Regions.undoRevision` says so (Since NEXT); no method, record or enum changed.
+- **Not covered:** a suffix holding a *middle* survival revision with targets still building after its batch ended (an older revision whose
+  last targets wait while a newer one stands) also undoes now (the stage-level refusals are gone). Its path is the stage undo the gate
+  covers, but no gate row builds that order.
+
 ## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (FROZEN 2026-10-20, Steward reviewed)
 
 New lots are added to a standing town or district as a revision (RV): first on free frontage along its standing streets, then on a
