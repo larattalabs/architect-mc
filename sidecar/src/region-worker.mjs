@@ -16,7 +16,9 @@
 //   {type: 'tile', id, irSha, key, stage?, set?, preview: true, surveyId}
 //                                          (6b) a ghost tile: the window is the kit's windowFromSurvey(survey, key); every
 //                                          stage up to `stage` (a copy of the IR with the later stages' parts left out,
-//                                          cached), both sets unless `set`
+//                                          cached), both sets unless `set`; (7c SR) hide: [partId] the plan meta's
+//                                          secret parts (a hidden room), evaluated with no ops (as if unwritten, as the
+//                                          kit's previews draw them), cached with the cut
 // To the pool:
 //   {type: 'ready'} | {type: 'fatal', message}
 //   {type: 'done', id, gz: Uint8Array (transferred), count, sha, ms} | {type: 'fail', id, message}
@@ -105,15 +107,25 @@ parentPort.on('message', async (m) => {
       surveyLib ??= await import(pathToFileURL(path.join(kitDir, 'lib', 'region', 'survey.mjs')).href);
       if (typeof surveyLib.windowFromSurvey !== 'function') throw new Error("the kit's lib/region/survey.mjs has no windowFromSurvey");
       const window = surveyLib.windowFromSurvey(Buffer.from(survey.buffer, survey.byteOffset, survey.byteLength), m.key);
-      if (m.stage !== undefined) {
-        const k = `${m.irSha}|${m.stage}`;
+      const hide = Array.isArray(m.hide) && m.hide.length ? m.hide : null;
+      if (m.stage !== undefined || hide) {
+        const k = `${m.irSha}|${m.stage ?? '*'}${hide ? `|hide:${hide.join(',')}` : ''}`;
         let cut = upTo.get(k);
         if (!cut) {
-          const stages = Array.isArray(ir.stages) ? ir.stages : [];
-          const at = stages.indexOf(m.stage);
-          if (at < 0) throw new Error(`the IR has no stage '${m.stage}'`);
-          const keep = new Set(stages.slice(0, at + 1));
-          cut = { ...ir, parts: (ir.parts ?? []).filter((p) => keep.has(p.stage)) };
+          let parts = ir.parts ?? [];
+          if (m.stage !== undefined) {
+            const stages = Array.isArray(ir.stages) ? ir.stages : [];
+            const at = stages.indexOf(m.stage);
+            if (at < 0) throw new Error(`the IR has no stage '${m.stage}'`);
+            const keep = new Set(stages.slice(0, at + 1));
+            parts = parts.filter((p) => keep.has(p.stage));
+          }
+          // (7c SR, S-7c-4) the secret parts keep their place with no ops: the host is drawn as before the room (kit/lib/region/preview.mjs)
+          if (hide) {
+            const h = new Set(hide);
+            parts = parts.map((p) => (h.has(p.id) ? { ...p, ops: [] } : p));
+          }
+          cut = { ...ir, parts };
           upTo.set(k, cut);
         }
         ir = cut;

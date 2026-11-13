@@ -727,6 +727,17 @@ export const EstimateMix = z.object({
 });
 export type EstimateMix = z.infer<typeof EstimateMix>;
 
+/**
+ * (7c SR) DesignRequest ext: `true` lets the design come back as a Composite (the kit's, past the cap: each module within the
+ * request's maxSize, the union past it; Java DesignRequest.EXT_ALLOW_COMPOSITE). Off by default: without it a Composite return is a
+ * check-round error like any oversize design, so the designer repairs it into one Blueprint. A group item carries it only in its own ext.
+ */
+export const EXT_ALLOW_COMPOSITE = 'architect_mc:allowComposite';
+/** (7c SR) Does this request allow a Composite return (its ext `architect_mc:allowComposite` is exactly `true`)? */
+export function allowsComposite(req: { ext?: Record<string, unknown> | undefined }): boolean {
+  return req.ext?.[EXT_ALLOW_COMPOSITE] === true;
+}
+
 export const BibleScope = z.enum(['building', 'settlement']);
 /** (7c SF, S-7c-3) BibleRequest ext: the settlement Style (its id) a zone Style derives from (Java BibleRequest.EXT_RELATED_TO). */
 export const EXT_RELATED_TO = 'architect_mc:relatedTo';

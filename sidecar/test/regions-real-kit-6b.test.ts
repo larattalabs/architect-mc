@@ -16,7 +16,7 @@ import type { ClientHandle } from '../src/server.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
-import { sha256 } from '../src/regions.js';
+import { secretPartsOf, sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 
@@ -210,6 +210,52 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
       expect(all.sha).toBe(direct(key, null, null, surveyLib.windowFromSurvey(s, key)).sha);
       expect(ground.sha).toBe(direct(key, null, null, surveyLib.windowFromSurvey(s, key), groundOnly).sha);
     }
+  });
+
+  it('(7c SR, S-7c-4) ghost tiles draw the plan meta\'s secret parts as if unwritten: the host without the room', async () => {
+    const sc = sidecars[0]!;
+    const metaFile = path.join(sc.regions.planDir(planned.planId), 'meta.json');
+    const before = fs.readFileSync(metaFile, 'utf8');
+    const meta = JSON.parse(before) as { parts?: Record<string, Record<string, unknown>> };
+    // the egg stands in for a hidden room (hiddenRoom.mjs marks its parts `secret` in the plan meta)
+    meta.parts = { ...(meta.parts ?? {}), egg: { ...(meta.parts?.egg ?? {}), secret: true } };
+    fs.writeFileSync(metaFile, JSON.stringify(meta));
+    const t = new Date(Date.now() + 2000);
+    fs.utimesSync(metaFile, t, t); // a new mtime: the sidecar re-reads the meta
+    try {
+      expect(sc.regions.planSecretParts(planned.planId)).toEqual(['egg']);
+      const keys = [...new Set(tilesOf(planned).map((x) => x.key))];
+      const got: Got = new Map();
+      const req = { type: 'region.tiles.request', planId: planned.planId, irSha: planned.irSha, preview: true, tiles: keys.flatMap((key) => [{ key }, { key, stage: 'top' }]) };
+      expect((await ask(sc, req, client(got))).ok).toBe(true);
+      await until(() => got.size === keys.length * 2, 600_000);
+      const ir = JSON.parse(planned.ir!) as { parts: Array<{ id: string; stage: string; ops: unknown[] }> } & Record<string, unknown>;
+      const hidden = { ...ir, parts: ir.parts.map((p) => (p.id === 'egg' ? { ...p, ops: [] } : p)) };
+      const s = new Uint8Array(survey());
+      let differ = 0;
+      for (const key of keys) {
+        const w = surveyLib.windowFromSurvey(s, key);
+        const all = got.get(`*|*|${key}`) as { sha: string };
+        const top = got.get(`top|*|${key}`) as { sha: string };
+        expect(all.sha).toBe(direct(key, null, null, w, hidden).sha);
+        expect(top.sha).toBe(all.sha); // 'top' is the last stage
+        if (all.sha !== direct(key, null, null, w).sha) differ++;
+      }
+      expect(differ).toBeGreaterThan(0); // the egg was in the ghost before, and is gone now
+    } finally {
+      fs.writeFileSync(metaFile, before);
+      const t2 = new Date(Date.now() + 4000);
+      fs.utimesSync(metaFile, t2, t2);
+    }
+    expect(sc.regions.planSecretParts(planned.planId)).toEqual([]);
+  });
+});
+
+describe('secretPartsOf (7c SR, pure)', () => {
+  it('the parts marked secret: true, sorted; nothing else', () => {
+    expect(secretPartsOf(null)).toEqual([]);
+    expect(secretPartsOf({})).toEqual([]);
+    expect(secretPartsOf({ parts: { b: { secret: true }, a: { secret: true, kind: 'carve' }, c: { secret: 'yes' }, d: {} } })).toEqual(['a', 'b']);
   });
 });
 

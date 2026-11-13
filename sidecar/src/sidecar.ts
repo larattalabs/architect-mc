@@ -93,7 +93,7 @@ import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof
 import { SiteVariants, siteVariantView } from './sitevariants.js';
 import { Programs, programView } from './programs.js';
 import { entrySite, keepSiteVolume, siteVolumeFile, SITE_BINDING_KEY, SITE_CHECK_ARGS, siteBinding, siteEntryFiles } from './sitedesign.js';
-import { siteSize } from './protocol.js';
+import { allowsComposite, siteSize } from './protocol.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -1166,8 +1166,11 @@ export class Sidecar {
     // own default (the entry records it as its palette); never bible set mode (no --restraint, no bible files)
     const pal = d.request.palette !== undefined && !d.request.massing && !extra.includes('--palette') ? ['--palette', typeof d.request.palette === 'string' ? d.request.palette : JSON.stringify(d.request.palette)] : [];
     // (7b DS) a site-aware design: exactly the lot box, built and checked on the composite (site/ in the scratch dir)
+    // (7c SR) a Composite return only when the request allows it (ext architect_mc:allowComposite: true); never a massing or a site lot
+    // (a site-aware design is exactly the lot box)
+    const comp = allowsComposite(d.request) && !d.request.massing && !d.request.site ? { allowComposite: true } : {};
     if (d.request.site && !d.request.massing) return { limits: { ...p.limits, maxSize: siteSize(d.request.site) }, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal, ...SITE_CHECK_ARGS] };
-    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
+    return { limits: { ...p.limits, ...comp }, extra: [...extra, ...p.extra, ...restraint, ...reserved, ...pal] };
   }
 
   private kitFlags: string | undefined;

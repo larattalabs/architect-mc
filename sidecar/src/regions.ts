@@ -108,6 +108,13 @@ export function canonicalJson(v: unknown): string {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
 }
 
+/** (7c SR) The part ids a kit plan meta marks `secret` (`meta.parts[id].secret`, a hidden room's parts), sorted. Pure. */
+export function secretPartsOf(meta: unknown): string[] {
+  const parts = (meta as { parts?: unknown } | null)?.parts;
+  if (!parts || typeof parts !== 'object') return [];
+  return Object.entries(parts as Record<string, unknown>).filter(([, m]) => (m as { secret?: unknown } | null)?.secret === true).map(([id]) => id).sort();
+}
+
 export function sha256(data: string | Uint8Array): string {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
@@ -163,6 +170,8 @@ interface Job {
   blobs: (() => Record<string, Uint8Array>) | undefined;
   /** (6b) a ghost tile: the plan survey */
   survey: { id: string; bytes: () => Uint8Array } | undefined;
+  /** (7c SR) a ghost tile: the plan meta's secret parts, drawn as if unwritten */
+  hide?: readonly string[] | undefined;
 }
 
 interface Session {
@@ -220,6 +229,8 @@ export class Regions {
   private planLocks = new Map<string, Promise<unknown>>();
   /** (6b) plan surveys in shared memory for ghost tiles, by planId (small LRU) */
   private surveys = new Map<string, { id: string; bytes: Uint8Array; mtimeMs: number }>();
+  /** (7c SR) plan id -> the plan meta's secret parts (ghost tiles), re-read when meta.json changed */
+  private secretParts = new Map<string, { parts: string[]; mtimeMs: number }>();
   private info: KitInfo | undefined;
   /** (tests, numbers) the most tiles ever active for one plan and connection */
   peakActive = 0;
@@ -1094,6 +1105,32 @@ export class Regions {
     return out;
   }
 
+  /**
+   * (7c SR, S-7c-4) The parts a plan's meta (`<planDir>/meta.json`, the kit's plan meta) marks `secret`: a hidden room's hollow and its
+   * entrance. Ghost tiles draw them as if unwritten, as the kit's previews and siteplan.json do. Sorted; none without a meta.
+   */
+  planSecretParts(planId: string): string[] {
+    const f = path.join(this.planDir(planId), 'meta.json');
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(f);
+    } catch {
+      return [];
+    }
+    const hit = this.secretParts.get(planId);
+    if (hit && hit.mtimeMs === st.mtimeMs) return hit.parts;
+    let parts: string[] = [];
+    try {
+      parts = secretPartsOf(JSON.parse(fs.readFileSync(f, 'utf8')));
+    } catch (e) {
+      // fail closed: a meta that cannot be read hides no part by mistake, so refuse the ghost rather than show a secret
+      throw new ClientError(`plan ${planId}'s meta.json cannot be read (${(e as Error).message}): ghost tiles need it`);
+    }
+    this.secretParts.set(planId, { parts, mtimeMs: st.mtimeMs });
+    while (this.secretParts.size > 16) this.secretParts.delete(this.secretParts.keys().next().value as string);
+    return parts;
+  }
+
   /** (6b) A plan's survey (ghost tiles), in shared memory, re-read when the file changed. */
   private planSurvey(planId: string): { id: string; bytes: Uint8Array } {
     const f = path.join(this.planDir(planId), 'survey.bin');
@@ -1129,12 +1166,15 @@ export class Regions {
     const irJson = e.json;
     const blobs = e.shas?.length ? () => this.sharedBlobs(e) : undefined;
     let survey: Job['survey'];
+    let hide: string[] = [];
     if (msg.preview) {
       const s = this.planSurvey(msg.planId);
       survey = { id: s.id, bytes: () => s.bytes };
+      // (7c SR, S-7c-4) a hidden room never shows in the ghost: its parts are evaluated as if unwritten
+      hide = this.planSecretParts(msg.planId);
     }
     const jobs: Job[] = msg.tiles.map((t) => {
-      if (msg.preview) return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage, set: t.set, heights: undefined, blobs, survey };
+      if (msg.preview) return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage, set: t.set, heights: undefined, blobs, survey, ...(hide.length ? { hide } : {}) };
       const heights = Buffer.from(t.heights!, 'base64');
       if (heights.length < 28 || heights.toString('latin1', 0, 4) !== 'ARSV') throw new ClientError(`tile ${t.key}: heights are not an ARSV buffer`);
       return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage!, set: t.set!, heights, blobs, survey: undefined };
@@ -1181,6 +1221,7 @@ export class Regions {
           ...(job.heights ? { heights: job.heights } : {}),
           ...(job.blobs ? { blobs: job.blobs } : {}),
           ...(job.survey ? { survey: job.survey } : {}),
+          ...(job.hide?.length ? { hide: job.hide } : {}),
         })
         .then((res) => this.deliver(s, job, res))
         .catch((e) => this.host.log.error(`region tile ${job.key}: ${(e as Error).stack ?? e}`))

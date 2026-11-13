@@ -2,7 +2,7 @@
 // buildings): BRIEF.md from the request, the system prompt, the first / fix / restart prompts, and
 // one line of progress per tool call.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { BUILDING_TYPES, type BuildingType, type Context, type DesignRequest, type Massing } from '../protocol.js';
+import { allowsComposite, BUILDING_TYPES, type BuildingType, type Context, type DesignRequest, type Massing } from '../protocol.js';
 import { isWallLotRequest } from '../massings.js';
 
 /** design agent turns per job (the first + follow-ups after a failed check) */
@@ -448,6 +448,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     site
       ? `- size: exactly the lot, x ${m.x}, y ${m.y}, z ${m.z} (\`size: site.size\`): the Site section below says what is in it.`
       : `- maximum size (the whole template, including roof overhangs, porch, chimney and garden): x <= ${m.x}, y <= ${m.y}, z <= ${m.z}. Use the space well, but never exceed it.`,
+    // (7c SR) only a request that allows it may return a Composite (PLAYBOOK §8); with no line, a Composite fails the check
+    ...(allowsComposite(req) && !site ? ['- past the cap: this request allows a Composite (PLAYBOOK §8 "Past the cap") when the brief does not fit one template; the maximum size above is then each module\'s, not the whole. One Blueprint is always simpler.'] : []),
     site ? '' : plot,
     ...reservedLines(req.reserved),
     req.name ? `- name: "${req.name}" (the sidecar's \`name\`)` : '- name: pick a short, fitting display name for the sidecar\'s `name`',

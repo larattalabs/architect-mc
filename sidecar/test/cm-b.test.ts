@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
 import { COMPOSITE_EXT, rewriteCompositeWire } from '../src/designs.js';
-import { GroupRequest } from '../src/protocol.js';
+import { allowsComposite, EXT_ALLOW_COMPOSITE, GroupRequest } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
@@ -41,6 +41,17 @@ describe('rewriteCompositeWire (pure)', () => {
   });
 });
 
+describe('allowsComposite (7c SR, pure)', () => {
+  it('only ext architect_mc:allowComposite exactly true', () => {
+    expect(EXT_ALLOW_COMPOSITE).toBe('architect_mc:allowComposite');
+    expect(allowsComposite({})).toBe(false);
+    expect(allowsComposite({ ext: {} })).toBe(false);
+    expect(allowsComposite({ ext: { [EXT_ALLOW_COMPOSITE]: 'true' } })).toBe(false);
+    expect(allowsComposite({ ext: { [EXT_ALLOW_COMPOSITE]: false } })).toBe(false);
+    expect(allowsComposite({ ext: { [EXT_ALLOW_COMPOSITE]: true } })).toBe(true);
+  });
+});
+
 describe.skipIf(!hasKit)('a design job returning a Composite (sim backend, real kit)', () => {
   let h: H | undefined;
   afterEach(async () => {
@@ -51,7 +62,7 @@ describe.skipIf(!hasKit)('a design job returning a Composite (sim backend, real 
   it('one group item, one entry: the composite; its modules hidden, unbound, rewritten to the installed id', async () => {
     h = await harness();
     const lib = h.sc.config.libraryDir;
-    const item = { ...request({ type: 'castle', name: 'Keep', notes: undefined, maxSize: { x: 96, y: 64, z: 96 } }), itemKey: 'lot_keep', ext: { 'architect:sim': 'composite', lot: 'keep' } };
+    const item = { ...request({ type: 'castle', name: 'Keep', notes: undefined, maxSize: { x: 96, y: 64, z: 96 } }), itemKey: 'lot_keep', ext: { 'architect:sim': 'composite', lot: 'keep', [EXT_ALLOW_COMPOSITE]: true } };
     const g = h.sc.groups.create(GroupRequest.parse({ name: 'C', bible: 'oak', items: [item] }));
     await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.groups.get(g.id)!.status), 600_000);
     const f = h.sc.groups.get(g.id)!;
@@ -88,5 +99,28 @@ describe.skipIf(!hasKit)('a design job returning a Composite (sim backend, real 
       return fs.existsSync(p) && readJson(p).groupItem === 'lot_keep';
     });
     expect(bound).toEqual([id]);
+    // (7c SR) the flag is the item's own: the design's request carries it, and its check limits allow the composite
+    const d = h.sc.designs.get(it0.designId)!;
+    expect(d.request.ext?.[EXT_ALLOW_COMPOSITE]).toBe(true);
+    expect(h.sc.checkPlan(d).limits.allowComposite).toBe(true);
+  }, 600_000);
+
+  it('(7c SR) without allowComposite a Composite return is refused in the check round: past maxSize, the item fails, nothing installs', async () => {
+    h = await harness();
+    const lib = h.sc.config.libraryDir;
+    const item = { ...request({ type: 'castle', name: 'Keep', notes: undefined, maxSize: { x: 96, y: 64, z: 96 } }), itemKey: 'lot_keep', ext: { 'architect:sim': 'composite', lot: 'keep' } };
+    // the group's own ext never reaches an item
+    const g = h.sc.groups.create(GroupRequest.parse({ name: 'C', bible: 'oak', ext: { [EXT_ALLOW_COMPOSITE]: true }, items: [item] }));
+    const d0 = h.sc.designs.get(h.sc.groups.get(g.id)!.items[0]!.designId)!;
+    expect(d0.request.ext?.[EXT_ALLOW_COMPOSITE]).toBeUndefined();
+    expect(h.sc.checkPlan(d0).limits.allowComposite).toBeUndefined();
+    await until(() => ['done', 'failed', 'cancelled'].includes(h!.sc.groups.get(g.id)!.status), 600_000);
+    const f = h.sc.groups.get(g.id)!;
+    expect(f.done).toBe(0);
+    const err = f.items[0]!.error ?? h.sc.designs.get(f.items[0]!.designId)?.error ?? '';
+    expect(err).toMatch(/size 121x15x27 is past maxSize 96x64x96; a composite needs allowComposite/);
+    expect(f.items[0]!.entryId).toBeFalsy();
+    const bound = fs.existsSync(lib) ? fs.readdirSync(lib).filter((x) => fs.existsSync(path.join(lib, x, `${x}.blueprint.json`))) : [];
+    expect(bound).toEqual([]);
   }, 600_000);
 });

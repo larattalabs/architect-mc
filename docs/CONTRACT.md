@@ -29632,7 +29632,7 @@ tests f7b-foundation and gm-c leave `form.hidden_room` to hr.test.mjs (as BF's t
 | gate run 3, **20261113-044913-change** at 9fbf3944 (hr-ingame only: since run 2 only its driver path changed) | **PASS 1/1: hr-ingame 18/0**: x01 READY, vault fits (no geometry), the secret (wall) in the artifact only, asked: preview and siteplan carry it, the artifact the same; PLACED 32,257 cells, realised == virtual 0 of 32,257 differ (forms), the doorway stone over stone; E-flat 0. x02 READY, hollow fits; the same secret rows; PLACED, 0 of 353 differ (fluids 31, forms 48, walls 274), the 3 curtain cells the bodies' predicted flow; the doorway air over air; E-flat 0. x03 READY, cellar fits; the same secret rows; PLACED, 0 of 266 differ (forms, props, street, lanterns 2/2); a spruce trapdoor (top, shut) over a ladder; E-flat 0 |
 | gate-verifier (strict: survival accounting) | **PASS** at c600444e: re-ran hr-survival on its own run, **20261113-052115-change** (ports 8920/8921), **16/0**: s01 the hollow free 76, held 0, `vault:entrance` {stone: 2} built 2/2, bills equal, the conservation sum exact built and removed (refund 2 stone), twin 0 differ, E-flat 0; s03 the hollow free 73, `cellar:entrance` {ladder: 4, spruce_trapdoor: 1} built 5/5, 13 waves (301 items), the same rows. hr.test.mjs re-run 11/11; the API diff javadoc plus the ApiRules mapping, no frozen signature changed, stamps NEXT; the driver not vacuous; x02's predicted-flow allowance sound (any other fluid cell fails); x03 planned with and without the cellar: the hamlet part identical (its dirt 49 independent of the cellar). Non-blocking: the hamlet's pad dirt 49 billed in the check but not put down (pre-existing, worth a follow-up); the waterfall host is free whole, so survival gates two of the three hosts |
 
-**Leftovers:** the in-game ghost shows a hidden room (reading 5); a hatch into a 7a tunnel waits on LP's site lots with cellar doors
+**Leftovers:** the in-game ghost shows a hidden room (reading 5; **closed by slice SR**: the ghost draws the room as unwritten); a hatch into a 7a tunnel waits on LP's site lots with cellar doors
 (reading 1); a room inside a standing building or form (S-7c-8); the waterfall's default drop gives a 2-high hollow (a plan wanting 3 high
 asks drop 7); a zone's pads' held dirt is billed in a survival check but not put down on its targets (x03's hamlet: 49 dirt, the same
 without the cellar; pre-existing, RS's: the verifier's follow-up).
@@ -29892,6 +29892,63 @@ items (stone bricks 1,151, mossy cobblestone 132, cobblestone 140; the span 817 
 | gate-verifier (strict: survival accounting) | **PASS** at c0569c5b: re-ran aq-survival on its own run, **20261113-101123-change** (ports 8904/8905), **8/0**: s01 READY, canal fits channel.aqueduct (arches, every 8, 5 piers), its bill 1,423 items equal to cost.bom; fed in 12 waves, PLACED, 2 targets built (731 and 1,001 cells) billing the check's 1,423; every part's bill equal to its targets'; the conservation sum exact built and removed (the full refund); the twin 0 differ; E-flat 0. aq.test.mjs re-run 10/10. Review: the aqueduct path entered only where HY's deep probe answered (only the named movers move), the API diff javadoc plus the ApiRules mapping, stamps NEXT, feature lists appended. Non-blocking: none for the code (aq-unit, aq-ingame and the Java tests taken from the builder's run) |
 
 **Leftovers:** (1) a Style can't yet set `aqueduct.maxSpan` (SF's `LOOK_PARAMS` lists rope_bridge only; reading 5), so `M15:span` never judges an aqueduct outside a unit; (2) `r.course` (a program's course) builds no aqueduct (the plan router only); (3) a course that needs an aqueduct only past HY's trench (valleys under about 7 deep) cuts the trench as before; `params.cut 0` asks for the level held.
+
+### Slice SR as built (branch `slice/SR` off main 3a5bd96d; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+Two fixes Steward asked for at the v0.64.0 RC (no Architect fault found). API diff: one additive `String` constant,
+`DesignRequest.EXT_ALLOW_COMPOSITE = "architect_mc:allowComposite"` (javadoc, `Since NEXT.`); no record, constructor or signature changed.
+
+**Fix 1: a design returns a Composite only when asked.** CM-b checked a Composite return without the request's maxSize, so any design
+job, a design-group item for a lot among them (Steward's street-town path), could come back larger than its lot and then fail at placement
+with NOT_ALLOWED. Now opt-in:
+- the request flag is the `DesignRequest` ext key **`architect_mc:allowComposite`**, exactly `true` (the sidecar's `EXT_ALLOW_COMPOSITE`
+  and `allowsComposite(req)`), **off by default**;
+- `Sidecar.checkPlan` puts `allowComposite` into the check's `Limits` only for a request with the flag that is neither a massing nor a
+  site-bound (7b DS) design; `finishCheck` refuses a Composite return whenever the limits do not allow it, as a check-round error like any
+  oversize design: `size 121x15x27 is past maxSize 96x64x96; a composite needs allowComposite (this request does not allow one): return
+  one Blueprint within 96x64x96`, so the designer repairs it into one Blueprint (the sim, which cannot repair, fails the job);
+- with the flag, CM-b's behaviour: the kit's `--max` per module, the union past it;
+- a design group item carries the flag only in its own ext (the group's ext never reaches an item: groups.ts already copied only the
+  item's); the plan path (`realiseApproved`) never runs a design check and is unaffected;
+- the designer's brief gains one line only with the flag ("past the cap: this request allows a Composite ... the maximum size above is
+  then each module's"); PLAYBOOK §8 "Past the cap" says a Composite is only for a request that allows it, and why it fails otherwise.
+
+**Fix 2: the placement ghost hides a hidden room** (S-7c-4; HR's reading 5 and its leftover). The region ghost (`RegionGhost`,
+`previewRegion`) draws ghost tiles the sidecar's tile worker evaluates over the plan survey; it had no plan meta, so it drew the room. Now
+`region.tiles.request {preview: true}` reads the plan dir's `meta.json` (`Regions.planSecretParts`, cached by mtime; a meta that cannot
+be read refuses the ghost rather than show a secret) and hands the worker the parts marked `secret` (`hide`, a hidden room's hollow
+`f_<id>` and its entrance `f_<id>_door`); the worker evaluates them with **no ops**, exactly as `renderPreviews` draws them (the host as
+before the room: the room's cells and the entrance's concealment as the host's own blocks), cached with its stage cut. The realise path
+(heights, not preview) is untouched, so the placed result is unchanged. For the gate, `TileStream.PreviewTile.sha` keeps each preview
+payload's (checked) sha and `dev.region.ghost {}` reports `shown: {key: {cells, sha}}` (dev evidence only).
+
+**Readings chosen** (the brief was silent; the smallest reading each time):
+1. **Any Composite return needs the flag**, not only one past maxSize ("only when asked"); one whose union fits is refused too, naming
+   allowComposite.
+2. **Never for a massing or a site-bound design**, flag or not: a site design is exactly the lot box (a composite there is the bug).
+3. **The other design checks** (variants, site variants, polish, follows, versionOf) build their own limits without the flag, so a
+   Composite rebuilt through any of them is refused: CM-b's "refused or untested" leftovers, now refused in the check.
+4. **The flag stays in the entry's ext** like any request ext (CM-b keeps the request's ext beside the CompositeInfo wire).
+5. **The ghost hides by part**, the plan meta's `secret` mark, not by the artifact's `$.secrets[]` (the worker sees plans, not artifacts).
+
+**Checks** ($0, sim only; ports 8920/8921):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1303/1303** (at 2932acf5; PLAYBOOK §8's text moved no golden) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1153 tests, 0 failures, 1 skipped** |
+| sidecar `npm run check` | **872/872** in 63 files, tsc clean, the bundle built: cm-b.test 4/4 (the castle installs with the flag, its design's limits allow it; without it the item fails `size 121x15x27 is past maxSize 96x64x96; a composite needs allowComposite`, nothing installs, the group's own ext never reaches the item; `allowsComposite` only on exactly `true`), sr-ghost.test 2/2 (x01 planned by the real kit: the meta's secret parts `f_vault`, `f_vault_door` are IR part ids with ops; every ghost tile from the real `TilePool` worker, every stage and up to `forms`, equals the kit's evalTile with them unwritten, and differs from the un-hidden one on the room's tiles), regions-real-kit-6b 8/8 (a plan meta's secret part re-read by mtime, its ghost tiles as if unwritten; `secretPartsOf`) |
+| api-compat | clean: the 0.48.0 apitest jar (932 references) and the 0.64.0 mod jar's surface (2964 members) |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (372 steps; `hr-ghost` registered in gate-chains.json, host client, chain `7chr`, impact rule "7c SR the ghost hides a hidden room (slice SR)") |
+| gate run 1, 20261113-095301-change at 2932acf5 | FAIL 1: **hr-ingame PASS 18/0** (x01-x03 realised == virtual, entrances, E-flat 0: the placed result unchanged); hr-ghost 2/2: ran on the headless server, and the ghost is client-only (`refused: client-only`); fixed by moving the step to the client host and failing fast on a refusal |
+| gate run 2, **20261113-103758-change** at f6dce937 (hr-ghost only: since run 1 only its driver and host changed) | **PASS 1/1: hr-ghost 5/0**: x01 READY; the meta's secret parts `f_vault`, `f_vault_door`, the room [9598,69,9077,9602,71,9081]; the ghost on the check's plan, 4/4 tiles shown (32,332 cells), each tile's sha and count equal the kit's evalTile with the room unwritten; the room's tile 150,141 (20,516 cells) and 149,141 differ from the plan with the room (the same cells, different contents: the host's rock where the room and its doorway were), 149,142 and 150,142 equal both |
+| gate-verifier (review only, DEV MODE) | **PASS** at b4e23294 (f6dce937 + this as-built only): Fix 1 refuses any Composite without the flag as a check-round error, the flag only on exactly `true` and never a massing or site design, the API diff one additive constant; Fix 2 fails closed on an unreadable meta, the realise tile path and the cache keys without `hide` unchanged; hr-ghost non-vacuous and fail-closed; re-ran cm-b, sr-ghost and regions-real-kit-6b 14/14 and step-inputs check clean. Non-blocking: the ghost evidence compares against the same hide rule the previews use (the room tile differing from the plan with the room covers that the room is gone); Fix 1's sidecar paths are unit-covered, not in the SR impact rule |
+
+**Leftovers:**
+- A Composite rebuilt by a variant, site variant, polish, follow or versionOf is refused in the check (reading 3); a later slice can pass
+  the original request's flag through if Steward needs it.
+- A composite in a batch item and the placement UI are still refused `NOT_ALLOWED` (CM-b's leftover); with this slice a lot's design
+  group item no longer comes back as one unless the item asks.
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
