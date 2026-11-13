@@ -226,5 +226,5 @@ test('catalogue: layout.elevated supported (sinceApi NEXT, schemaVersion 1); aga
   assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
   const changed = golden.entries.filter((x) => JSON.stringify(x) !== JSON.stringify(before.entries.find((y) => y.id === x.id))).map((x) => x.id);
   // ((7b LP) connector.branch_walk's and tunnel.under's flips are lp.test.mjs's)
-  assert.deepEqual(changed.filter((id) => !['connector.branch_walk', 'tunnel.under', 'program.authored'].includes(id)).sort(), ['form.hidden_room', 'layout.elevated', 'rule.suspended']);
+  assert.deepEqual(changed.filter((id) => !['connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island'].includes(id)).sort(), ['form.hidden_room', 'layout.elevated', 'rule.suspended']); // ((7c BF) its three flips: bf.test.mjs)
 });

@@ -693,10 +693,28 @@
   },
   {
    "id": "form.floating_island",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "N-P0-1"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "size": [
+     16,
+     96
+    ],
+    "height": [
+     8,
+     96
+    ],
+    "thickness": [
+     6,
+     32
+    ],
+    "pads": [
+     0,
+     6
+    ]
+   },
+   "note": "BF: 6b's floatingIsland generator as a part (N-P0-1's held half): natural rock and soil only (no rail, no lamps), declared floating with its anchor at the top centre; its flat pads are in the answer's geometry. Free in survival (a grown form)."
   },
   {
    "id": "form.brush",
@@ -885,18 +903,56 @@
   },
   {
    "id": "form.crater",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7c",
-   "note": "A free-standing crater form. A whole-region crater is already the crater_works template (program.crater_works)."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "size": [
+     24,
+     96
+    ],
+    "depth": [
+     6,
+     24
+    ],
+    "rim": [
+     0,
+     6
+    ],
+    "lakeDepth": [
+     1,
+     6
+    ]
+   },
+   "note": "BF: a free-standing bowl (crater_works' shape without the works): carved, lined with rock, a raised earth rim; lake: an H pond body in its floor. A whole-region crater facility is the crater_works template (program.crater_works). Free in survival (natural cut and fill); a lake's shell is a pond's (H: its bill holds the crater part until supplied)."
   },
   {
    "id": "form.hollow_mountain",
-   "sinceApi": "1.23.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7c"
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "size": [
+     24,
+     96
+    ],
+    "height": [
+     20,
+     64
+    ],
+    "halls": [
+     0,
+     3
+    ],
+    "entrances": [
+     "auto",
+     "north",
+     "south",
+     "east",
+     "west"
+    ]
+   },
+   "note": "BF: a mountain raised where the land is lower (an existing one is kept) with a lit cavern inside: a vertical-walled domed hall, a ledge along its back wall, up to 3 carved side halls and a tunnel out through the mountainside. Its inner walls, floor and ledge are recorded as cliff_face, cave and ledge affordances (Regions.affordances), so carve_into site lots can go inside once it stands. Free in survival (natural cut and fill; shroomlights light the floor)."
   },
   {
    "id": "form.waterfall",

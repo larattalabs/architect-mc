@@ -119,6 +119,7 @@ public final class ApiRules {
 					case "site.design" -> "siteDesign"; // 7b DS: DesignRequest.site, Designs.siteVariant, SITE follows (with PL's fitToSite and PlaceRequest.site)
 					case "region.siteLots" -> "siteLots"; // 7b SL: site lots (r.siteLot, LotSpec.site, $.lots[].site) and plan/0's layout.elevated
 					case "region.link" -> "linkPass"; // 7b LP: the link pass at realise (port links between site lots, IR v2, NO_LINK)
+					case "plan.bigForms" -> "bigForms"; // 7c BF: plan/0's form.hollow_mountain, form.crater and form.floating_island (since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)

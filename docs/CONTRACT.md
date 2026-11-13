@@ -29032,6 +29032,109 @@ code belongs with BF/CO/P5, which read them. (3) `planRegion` reads a plan's con
 refused on main are accepted there (an error becoming acceptance; a Style's format is checked at validate). (4) N-7c-4: the coordinator
 asks Noah for the S3 and S5 references when SF merges.
 
+### Slice BF as built (branch `slice/BF` off main 0cdb1869; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+§3 row 2: `form.hollow_mountain`, `form.crater` and `form.floating_island` flip from 7cF's draft skeletons to supported kinds with
+`def`s and `limits`; the helper advertises `plan.bigForms`, the mod `bigForms`. No 7b or 7cF signature changed; the API package gains
+javadoc only (no record, method or Reason).
+
+**Built:**
+- **Generators** (plan time, integer maths and `Math.sqrt` only, deterministic; every block natural: the Style's `rock`, `subsurface` and
+  `surface` roles and free natural blocks):
+  - `kit/lib/forms/hollowMountain.mjs`: an elliptical cone over the part's square (its base the median survey ground, a 0-2 lattice bump),
+    written IF_AIR_OR_FLUID so land that already stands higher is kept; a cavern of half its radii (floor flat at base + 1, a vertical wall
+    of 8, a dome up to 16); a ledge 3 deep and 3 high along the back wall; up to 3 side halls (7 wide, 5 high, as deep as leaves 3 of roof,
+    5-9); a 3x4 tunnel out through the entrance side. 6b's lighting rule: a shroomlight set into the floor every 6 (and on any floor cell
+    left more than 3 from one), recorded as the part's `caverns` meta so M5 checks it. 6b's `cavern()` primitive is not called: it carves
+    only under the survey's ground, and this hollow is in rock the same plan raises.
+  - `kit/lib/forms/crater.mjs`: crater_works' bowl without the works: a paraboloid bowl `depth` deep at the centre carved IF_NATURAL, its
+    bottom cell lined with `rock` (IF_SOLID_NATURAL), an earth rim (`subsurface`, `surface` on top) up to `rim` high across a ring 4 wide.
+  - `floatingIsland` (6b) as a part: natural only (no rail, no lamps, the island rule's coal ore left out: it is not a free block in
+    survival); flat 9x9 pads on its top on a ring; declared floating with its anchor `isl_<part>` at the top centre (M3).
+- **Plan compile** (`kit/lib/forms/bigForms.mjs`; `compile.mjs` gains `resolveBig` beside `resolveTerrace` and one emit branch): each form
+  is a square of its size (preset, the larger end of `w`/`d`, else M = 48) from its locator, clear of the zones and forms placed before it
+  (ZONE_GAP), dry but for an island; fits, or adjusted when placed again around earlier parts or moved within the move tolerance (as a
+  terrace). Its answer's geometry adds: hollow mountain `cavern`, `floorY`, `entrance`, `halls` (boxes), `affordances` (ids); crater
+  `centre`, `radius`, `floorY`, `lake {rect, level, depth, body}`; island `top`, `anchor`, `pads` ([x, y, z, w, d]).
+- **The hollow mountain's affordances:** AF's analysis (`analyseVolume`, kinds cliff_face, cave, ledge) over the form's own virtual land
+  (the survey's ground plus its cells), recorded into plan.json's `affordances[]` (api.Regions.affordances) beside any the program
+  asked from a frozen volume. A plan that has no hollow mountain records nothing new.
+- **A crater's lake** is an H pond body (`emitPond`: basin, shell, exits, sources in the fluids stage, `leakCheck`), its surface level with
+  the bowl's bottom at the lake's edge (a third of the radius). Its body asks its frozen volume on the first plan and sets `meta.wetAsked`,
+  so the kit's and the mod's checks plan twice (the existing wet-write path: no new Java trigger). The plan's fluids stage is wanted when a
+  crater with a lake resolves.
+- **Schema:** each def has the part envelope (id, required, label, notes, ext, where (optional: none is nearest the claim's centre), sketch,
+  size, tolerance) and `params` loose (Steward's
+  recorded params are noted, not read); hollow mountain `height` 20-64, `halls` 0-3, `entrance` auto|north|south|east|west (auto: the side
+  facing the claim's centre); crater `depth` 6-24, `rim` 0-6, `lake`, `lakeDepth` 1-6; island `height` 8-96 (top over the land, raised so
+  the underside clears it by 6, noted), `thickness` 6-32, `pads` 0-6. A size side outside the entry's `limits.size` is malformed.
+- **Examples** (builder-written, $0, `kit/test/fixtures/plan/bf/`): x01 a hollow mountain (L) with 3 carved halls; x02 a free crater (M,
+  depth 10) with a lake; x03 a floating island (M, 3 pads) with its hamlet's cottages on the ground beside it.
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **The hamlet's houses stand beside the island, not on it.** Plan lots are a zone's everywhere (validatePlan's lotZone, compile's lot
+   emit, Steward's `itemKey == lotId`), and a lots zone stands on the survey's ground; a zone on a form's top is new plan machinery row 2
+   does not assign. The island carries `pads` (in its geometry with their y) for that later slice. The coordinator approved this reading
+   (2026-11-12) and logged "lots or zones on a region-made form (island top, giant tree), with plan land read after the forms" as a 7c
+   follow-up.
+2. **"Exposed to AF"** is the plan's `affordances[]`: a carve_into site lot inside the hollow is placed by a later plan once the mountain
+   stands (its frozen land then holds the hollow), or by the standalone path (Survey.site). The form's own halls are the example's
+   carved halls. SL's elevated zones keep their fits (no carve_into added: every SL answer byte-identical).
+3. **A mountain on flat land is raised** (dwarven_hold's `terrain: existing_mountain` on the flat asks claim): answered with a note ("no
+   mountain stands here ... raises one"), not refused.
+4. **`params.lake: true` is read as `lake`** (ring_city's recorded shape), with a note; every other params member is noted unread.
+5. **6b's `floatingIsland` is unchanged.** It reads `top.edge: null` as the rail (its `??` default) and its property test's golden IR
+   shas record that, so the plan form calls the generator itself and leaves the rim op out (r.floatingIsland's steps: form, anchor,
+   floating, meta), with the coal ore left out of its rule.
+6. **Survival:** the three forms are terrain-kind writes of natural blocks, so free. A lake's shell is its pond's (H's rule: a
+   construction target), so a crater with a lake is held until its shell's bill (dirt) is supplied; without a lake it bills nothing.
+
+**Readings (measured):** compact plan/0 (`compactOf`) **80,539** characters (7cF 78,821; the 90,000 spare line, the 100,000 bound).
+The 59 asks (fixtures/plan/bf/asks-{before,after}.txt): fits 64 -> 67, adjusted 16 -> 18, blocked 21 -> 20, unsupported 13 -> 9,
+refused 14, 0 malformed. How each moved part re-plans (four asks; five lines):
+- **dwarven_hold/mountain_hollow `adjusted`**: no mountain on the flat claim, so one is raised and hollowed (noted), placed again around
+  the hold zone (the move is the adjustment). The hold's 13 buildings stay a street village **beside** the mountain, not carved inside
+  it: carving them in is carve_into site lots on the hollow's affordances, a later plan once the mountain stands (reading 2).
+- **ring_city/crater_lake `fits`** (`params.lake` read as the lake, noted; `params.rim: "ring_town"` noted unread), and
+  **ring_city/ring_town `fits`** (it was blocked DEPENDENCY on the crater): the crater resolves first (the ring depends on it) at the
+  claim's centre, and FL's ring is laid round it (the ring's rect 61..220 holds the crater's 136..183): the
+  ring stands round the lake on the plain, not on a raised rim (`params.rim` unread). FL's item 8 expectation moves to fits / READY.
+- **sky_monastery/sky_island `adjusted`**: the island stands, placed again around the cloister zone; **the monastery is not on it** (its
+  cloister is a ground zone: lots on a region-made form are the 7c follow-up the coordinator logged), and its long_stair still answers
+  refused NO_CLIMB as on main. So the ask is not a full flip: the island part flips, the monastery-on-the-island intent waits.
+- **crater_mine/crater `fits`** (its params depth 16, diameter 56, rim_height 4, shape, floor noted unread: the bowl is the M preset's,
+  depth 9); the mine zone stays on the plain beside it, not in the pit.
+
+Checker warnings on x01 (not errors): M5 dark walk cells and M8 3 unguarded cells on the mountain's natural outer flanks by the tunnel
+mouth (the rock spire fixture shows the same M5 class). x03's island stands near `claim_e` (every valid/ part fits).
+
+**Tests moved by name** (each earlier slice's catalogue test leaves BF's three flips to bf.test.mjs, as 7cF's `program.authored`): cl,
+f7a-foundation, f7b-foundation, gm-c, sl, lp, f7c-foundation (its reserved-draft checks skip a supported flip; `planCatalogueKinds`'s
+crater is a def now); PlanCatalogueTest's reserved-draft example is `form.hidden_room`; extension fixtures e13 (a bare island, `fits`:
+`where` is optional, no locator = nearest the claim's centre), e20 (hold `adjusted`, bowl and isle `fits`), e15/e16 (the three left the
+every-reserved list), e06 (its oversize carrier `crater` -> `seabed_site`); FL's item 8 (ring_city's ring_town `fits` / READY);
+valid/ gains v7c_bf_hollow_mountain, v7c_bf_crater_lake, v7c_bf_island_hamlet (copies of x01-x03).
+
+**Checks** ($0, sim only; ports 8916/8917):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1227 tests: 1226 pass on the committed tree at e8021deb; the one fail (plan-p0-valid's item 1: x03's island `adjusted`) fixed at 74a129c7 (island near `claim_e`), that file re-run 1/1. bf.test.mjs 9/9 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1122 tests, 0 failures, 1 skipped (ApiBFTest 2/2, Api7cFTest 8/8, PlanCatalogueTest 6/6) |
+| sidecar `npm ci && npm run check` | 846 tests: 843 pass, 3 timed out under load ~100 (eval.e2e x2, polish x1: sim-tier waits, untouched by BF); those two files re-run alone 21/21 (the coordinator's re-run rule) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 (the structure lint's corpus is curated: bf.test.mjs runs its S-THEME rule over x01-x03, 0 offenders) |
+| api-compat | clean: the 0.47.0 apitest jar; the 0.62.0 surface (a sibling run's jar at main 0cdb1869); the API diff from main is 4 javadoc lines |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (355 steps; bf-unit and bf-ingame registered in gate-chains.json, chain `7cbf`, impact rule "7c BF big forms") |
+| catalogue golden, `tools/catalogue-since-check.mjs` | the golden's diff is exactly the three entries (sinceApi NEXT); catalogueVersion left for the coordinator |
+| gate run 1, 20261113-013937-change at 74a129c7 | FAIL 2: bf-unit 436/3 (e13 and e20, two extension fixtures that now answer, not yet named movers), bf-ingame 0/1 (the driver lacked `ctx.core` for the terrain helpers). Both fixed in the driver |
+| gate run 2, **20261113-015607-change** at e2e262f2 | **PASS 2/2**: bf-unit 439/0 (bf.test and the touched tests 28/0; ApiBFTest, Api7cFTest; 434 committed fixtures, 428 byte-identical, the 6 named movers differ as named; the 59 asks: exactly the five lines above move, both tables equal the committed ones). bf-ingame 20/0: x01 READY fits, PLACED 32,078 cells, realised == virtual 0 of 32,078 differ (forms), Regions.affordances answers its 18 affordances, Remove E-flat 0; x02 READY fits, PLACED, 0 of 6,941 differ (fluids 307, forms 5,136, walls 1,498: the pond's shell), the lake body w_crater, E-flat 0; x03 READY fits, PLACED, 0 of 7,487 differ (forms 7,299, street, props, lanterns 2/2), E-flat 0; survival s01 (x01) free 32,078, held 0, bill {}, PLACED from an empty stockpile, 0 consumed, 0 outstanding, E-flat 0; s03 (the island alone) free 9,939, held 0, bill {}, the same |
+| gate-verifier (review only, DEV MODE) | **PASS** at e2e262f2: run 2's evidence read (439/0, 20/0); bf.test.mjs re-run 9/9; the 434-fixture sweep (428 identical, the 6 named movers); the asks diff exactly the five lines; the API diff javadoc plus one ApiRules case, no frozen 7b or 7cF signature changed; floatingIsland.mjs unchanged; each earlier slice's test edit moves only BF's three ids by name; the as-built's account of each moved ask truthful. Non-blocking: the three entries go schemaVersion 0 -> 1, as earlier flips' (the coordinator to confirm the convention) |
+
+**Leftovers:** lots or zones on a region-made form (the island's pads, a giant tree), with the plan's land read after its forms (the
+coordinator's 7c follow-up; sky_monastery's monastery on its island and dwarven_hold's halls carved inside its mountain wait on it and on
+carve_into site lots over a standing hollow); Steward's recorded crater params (`diameter`, `depth`, `rim_height`) could be read
+leniently as the size and members in a later slice; a crater's lake shell bills its pond's dirt in survival (H's rule).
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop

@@ -1,11 +1,11 @@
 {
-  "about": "(7cF) the 7c flips' parts written in their draft defs' shapes answer unsupported with their own block ids until their slices (BF, HR, US)",
+  "about": "(7cF) the 7c flips' parts written in their draft defs' shapes answer unsupported with their own block ids until their slices (BF, HR, US). ((7c BF) moved by name: hold, bowl and isle are supported since BF and answer the class each names: hold adjusted (raised, placed again around the town), bowl and isle fits)",
   "on": "s7",
   "expect": {
     "all": [
-      { "part": "hold", "block": "form.hollow_mountain" },
-      { "part": "bowl", "block": "form.crater" },
-      { "part": "isle", "block": "form.floating_island" },
+      { "part": "hold", "block": "form.hollow_mountain", "class": "adjusted" },
+      { "part": "bowl", "block": "form.crater", "class": "fits" },
+      { "part": "isle", "block": "form.floating_island", "class": "fits" },
       { "part": "vault", "block": "form.hidden_room" },
       { "part": "hang", "block": "rule.suspended" }
     ]

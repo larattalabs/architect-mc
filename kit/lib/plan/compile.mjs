@@ -36,6 +36,7 @@ import { levelBands } from '../region/passes/districts.mjs';
 import { zoneDistricts, channelForm } from './schema.mjs';
 import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, isF3 } from '../forms/hooks.mjs';
 import { eachColumn } from '../forms/states.mjs';
+import { BIG_KINDS, bigNotes, bigSide, bigWantsFluids, emitBig } from '../forms/bigForms.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
 import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
@@ -612,6 +613,26 @@ function resolveTerrace(env, f, geomOf, zoneIds, obstacles) {
   const c = cands[0];
   const j = judge([{ what: 'move', value: c.move, ...tMove }, ...(sk ? [{ what: 'sketch', value: c.sketch, ...tolOf(part, 'sketch') }] : [])]);
   return { klass: j.klass, rect: c.rect, footprints: [rectArr(c.rect)], deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes: part.edge === 'blend' ? ['edge blend: v0 builds the terrace\'s 1:1 batters (edge slope); blending its edges by relief is not compiled'] : [] };
+}
+
+/**
+ * (7c BF) A big form (hollow_mountain, crater, floating_island): a square of its size (default M) from its locator, clear of the zones
+ * and forms placed before it, dry (an island may float over water); fits or adjusted (move) as a terrace (forms/bigForms.mjs emits it).
+ */
+function resolveBig(env, f, geomOf, obstacles) {
+  const part = f.part;
+  const loc = locatorOf(env, part.where, geomOf);
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
+  const [w, d] = bigSide(part);
+  const tMove = tolOf(part, 'move');
+  const sk = sketchPoint(env, part.sketch);
+  const obs = obstacles.map((o) => grow(o, ZONE_GAP));
+  const dry = f.kind !== 'floating_island';
+  const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove: tMove.ceiling, limit: 4096 }).filter((c) => !dry || c.water === 0);
+  if (!cands.length) return { klass: 'refused', reasons: [{ code: obstacles.length ? 'OVERLAP' : 'NO_ROOM', message: `no ${w}x${d} ${dry ? 'dry ' : ''}rect for the ${f.kind} within its locator, clear of the zones, forms and keep-out`, evidence: { size: [w, d], obstacles: obstacles.length } }] };
+  const c = cands[0];
+  const j = judge([{ what: 'move', value: c.move, ...tMove }, ...(sk ? [{ what: 'sketch', value: c.sketch, ...tolOf(part, 'sketch') }] : [])]);
+  return { klass: j.klass, rect: c.rect, footprints: [rectArr(c.rect)], deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes: bigNotes(env, part, c.rect) };
 }
 
 /** Spikes: `count` sites (dry, off zones, forms and keep-out, 8 apart) within the locator's area, best first. */
@@ -1227,9 +1248,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // cached), as zones are
       const taken = [...zonesAccepted.map((o) => o.rect), ...formsAccepted];
       const zoneIds = new Set(V.parts.filter((q) => q.family === 'zone').map((q) => q.id));
-      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : resolveSpikes(env, p, geomOf, obs, keep));
+      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : BIG_KINDS.includes(p.kind) ? resolveBig(env, p, geomOf, obs) : resolveSpikes(env, p, geomOf, obs, keep));
       const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
-      const gapOf = p.kind === 'terrace' ? ZONE_GAP : 2;
+      const gapOf = p.kind === 'terrace' || BIG_KINDS.includes(p.kind) ? ZONE_GAP : 2;
       const clashes = (x) => (x.footprints ?? []).some((fp) => taken.some((o) => meets(grow(arrRect(fp), gapOf), o)));
       const key = cacheKey(env, p, geom);
       const hit = env.cacheIn?.(key);
@@ -1281,7 +1302,8 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   // otherwise: every plan without K1 parts keeps its stages, so its IR); (6c T3) so does one with a bridge or tunnel
   const k1Parts = order.filter((p) => p.family === 'connector' && LINK_KINDS.includes(p.kind) && !answers.has(p.id));
   // (6c H, §3.1) a plan with a body gets the `fluids` stage last (none otherwise: its stage list, so its IR, is unchanged)
-  const fluidsWanted = fluidStageWanted({ env, ctx, plan: P.plan, V, byId, order, answers, okClass });
+  // ((7c BF) a crater part with a lake brings its pond body: the fluids stage, last)
+  const fluidsWanted = fluidStageWanted({ env, ctx, plan: P.plan, V, byId, order, answers, okClass }) || order.some((p) => bigWantsFluids(p) && okClass(p.id));
   // ((7b LP) a plan with a port link gets LINK_STAGE right after `lots`: empty at plan time, the realise's link pass writes the links there)
   const stagesWanted = [...(k1Parts.length ? ['ground', 'street', 'forms', 'routes', 'links', 'lots', 'props'] : ['ground', 'street', 'forms', 'routes', 'lots', 'props']), ...(fluidsWanted ? [FLUIDS_STAGE] : [])];
   if (portLinkParts.length) stagesWanted.splice(stagesWanted.indexOf('lots') + 1, 0, LINK_STAGE);
@@ -1559,7 +1581,12 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     const cp = checkpoint(r);
     const id = `f_${p.id}`.slice(0, 44);
     try {
-      if (p.kind === 'terrace') {
+      if (BIG_KINDS.includes(p.kind)) {
+        // (7c BF) the generator's ops as form part `id` (forms/bigForms.mjs): a crater's lake as an H pond body
+        f.big = emitBig({ env, r, ctx, stageOf }, p, f, id);
+        const a0 = answers.get(p.id);
+        if (a0 && f.big.notes.length) a0.notes = [...(a0.notes ?? []), ...f.big.notes];
+      } else if (p.kind === 'terrace') {
         const a = f.rect;
         const part = r.part(id, { stage: stageOf('forms') });
         part.terrace({ polygon: [[a.minX, a.minZ], [a.maxX + 1, a.minZ], [a.maxX + 1, a.maxZ + 1], [a.minX, a.maxZ + 1]] }, p.part.steps ?? 3, { riser: p.part.rise ?? 2, step: p.part.rise ?? 2, edge: 'slope', stairs: true });
@@ -2001,7 +2028,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       const x = K ? fluidAnswer(K, p, res.get(p.id)) : null;
       if (x) Object.assign(a, x);
       else if (geom.get(p.id)?.rect) a.geometry = { rect: rectArr(geom.get(p.id).rect) };
-    } else if (p.family === 'form' && geom.get(p.id)?.rect) a.geometry = { rect: rectArr(geom.get(p.id).rect), ...(res.get(p.id)?.sites ? { sites: res.get(p.id).sites } : {}) };
+    } else if (p.family === 'form' && geom.get(p.id)?.rect) a.geometry = { rect: rectArr(geom.get(p.id).rect), ...(res.get(p.id)?.sites ? { sites: res.get(p.id).sites } : {}), ...(res.get(p.id)?.big?.geometry ?? {}) };
     else if (p.family === 'form' && p.kind === 'relief') a.geometry = { around: res.get(p.id).zones };
   }
   const hit = env.hitTime ? 'maxMs' : null;

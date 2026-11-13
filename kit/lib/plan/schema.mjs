@@ -386,6 +386,14 @@ function kindError(family, kind, part) {
       if (lo < hr[0] || hi > hr[1]) return { path: '$.height', message: `${JSON.stringify(part.height)}: a ${kind} is ${hr[0]}..${hr[1]} ${lim.height ? 'high' : 'long'}` };
     }
   }
+  // (7c BF) a big form's size within its entry's limits.size (each side)
+  if (family === 'form' && ['hollow_mountain', 'crater', 'floating_island'].includes(kind) && part.size?.w !== undefined) {
+    const lim = entryOf(`form.${kind}`)?.limits?.size;
+    if (lim) for (const k of ['w', 'd']) {
+      const v = part.size[k], lo = Array.isArray(v) ? v[0] : v, hi = Array.isArray(v) ? v[1] : v;
+      if (lo < lim[0] || hi > lim[1]) return { path: `$.size.${k}`, message: `${JSON.stringify(v)}: a ${kind} side is ${lim[0]}..${lim[1]} blocks` };
+    }
+  }
   return null;
 }
 

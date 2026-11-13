@@ -1,9 +1,10 @@
 {
-  "about": "a free-standing floating island form",
+  "about": "a free-standing floating island form ((7c BF) moved by name: supported since BF, it answers fits: no locator places it nearest the claim's centre)",
   "on": "s7",
   "expect": {
     "part": "isle",
-    "block": "form.floating_island"
+    "block": "form.floating_island",
+    "class": "fits"
   },
   "plan": {
     "schemaVersion": "plan/0",
