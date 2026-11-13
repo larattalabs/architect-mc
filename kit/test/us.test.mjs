@@ -255,7 +255,7 @@ test('catalogue: rule.suspended supported (sinceApi NEXT, schemaVersion 1, def, 
   const e = golden.entries.find((x) => x.id === 'rule.suspended');
   assert.equal(e.state, 'supported');
   assert.equal(e.schemaVersion, 1);
-  assert.equal(e.sinceApi, 'NEXT');
+  assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi); // NEXT on a branch; the release stamps it
   assert.equal(e.until, undefined);
   assert.deepEqual(e.limits, { scope: 32, layouts: ['elevated'], affordances: ['overhang'] });
   const pre = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-pre7c.json'), 'utf8'));

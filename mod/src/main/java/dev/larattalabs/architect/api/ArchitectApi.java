@@ -29,14 +29,14 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.57.0";
+	String VERSION = "1.58.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
 	 * inlines it into a consumer's bytecode: a consumer that reads {@code VERSION} sees the version it compiled against, not the one
 	 * running. This default's body is compiled into Architect's own interface class, so it answers the loaded Architect's version.
 	 * An Architect before this method has none ({@link NoSuchMethodError}): check {@code features().contains("apiVersion")} first.
-	 * Since NEXT.
+	 * Since 1.58.0.
 	 */
 	default String apiVersion() {
 		return VERSION;
@@ -188,10 +188,10 @@ public interface ArchitectApi {
 	 * if its design leaves the wall's outer faces open (air, a door, a fence gate or a trapdoor there) or the passage floor is not
 	 * standable; the realise drops the entry's blocks on a gatehouse's passage (IRR's rule) and the lot's site never owns those cells.
 	 * No new record, method or reason.
-	 * (TJ, since NEXT) Every feature name that is a dotted sidecar name also comes as a camelCase alias, and both are advertised (names
+	 * (TJ, since 1.58.0) Every feature name that is a dotted sidecar name also comes as a camelCase alias, and both are advertised (names
 	 * are stable within 1.x): {@code "design.opKeys"} and {@code "designOpKeys"}, {@code "wallLots.exactMassing"} and
 	 * {@code "wallLotsExactMassing"}, {@code "job.systemRefs"} and {@code "jobSystemRefs"}. New consumers should check the camelCase
-	 * name. (TJ AV, since NEXT) {@code "apiVersion"}: {@link #apiVersion()} exists.
+	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists.
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.
@@ -252,7 +252,7 @@ public interface ArchitectApi {
 	 * artifact's {@code $.secrets[]} ({@link Regions#artifact}): never in a part's answer, the check's preview or its siteplan, unless the
 	 * request asks with {@code ext[}{@link PlanRequest#EXT_SECRETS}{@code ]: true} (then {@code preview.secrets} and
 	 * {@code preview.siteplan.secrets}). In survival the hollow is free and the entrance a construction target. No new record, method or reason.
-	 * (7c AQ, since NEXT) {@code "aqueduct"} is advertised when the helper's kit plans aqueducts (its {@code plan.aqueduct}): a plan/0
+	 * (7c AQ, since 1.58.0) {@code "aqueduct"} is advertised when the helper's kit plans aqueducts (its {@code plan.aqueduct}): a plan/0
 	 * course ({@code connector.channel} from/to) whose level must stand more than its fill over low ground is carried over it on arches
 	 * (the default) or piers ({@code params.span}), its trough's side walls 2 thick, in the Style's roles (where it answered
 	 * {@code unsupported channel.aqueduct} before); the part's answer has the block {@code channel.aqueduct} and
@@ -267,9 +267,9 @@ public interface ArchitectApi {
 	 * features it needs ({@code needs.affordances}: AF kinds, counts and metric floors); the mod freezes the claim's volume (read only) so
 	 * the pick sees the claim's affordance summary, and a pick that would land a template on land without its features answers
 	 * {@code NO_TEMPLATE} with that program as the closest. No new record, method or reason.
-	 * (7c CO, since NEXT) {@code "compose"} is advertised when the helper has the standalone composer (its {@code region.compose}):
+	 * (7c CO, since 1.58.0) {@code "compose"} is advertised when the helper has the standalone composer (its {@code region.compose}):
 	 * {@link Regions#compose} works, and {@link Regions#checkPlan} honours {@link PlanRequest#EXT_PLAN_IMAGES}.
-	 * (7c US, since NEXT) {@code "suspendedBuilds"} is advertised when the helper's kit plans inverted builds (its
+	 * (7c US, since 1.58.0) {@code "suspendedBuilds"} is advertised when the helper's kit plans inverted builds (its
 	 * {@code plan.suspendedBuilds}): plan/0's {@code rule.suspended {scope}} is supported. The lots of each elevated lots zone in scope stand
 	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
 	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
