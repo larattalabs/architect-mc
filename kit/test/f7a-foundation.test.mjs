@@ -129,6 +129,8 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   flipped.add('tunnel.under');
   // ((7c BF) its three flips are BF's: bf.test.mjs)
   for (const id of ['form.hollow_mountain', 'form.crater', 'form.floating_island']) flipped.add(id);
+  // ((7c AQ) channel.aqueduct's flip: aq.test.mjs)
+  flipped.add('channel.aqueduct');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
