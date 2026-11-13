@@ -2491,7 +2491,9 @@ public final class Builder {
 	 * only for a queued cell that matches): (JR-b, F10) a queued cell holding its target that a player placed (Architect's own writes clear a
 	 * record, so a record there is the player's block: the builder found it standing and charged nothing, or the player replaced a block they
 	 * mined) is the player's: its block drops (PLAYER_DROP), never a refund out of the target's paid record or the legacy pool. The undo
-	 * still writes the cell's before back (it holds the entry's after), so only when that before is another block (else the block stays: as before).
+	 * still writes the cell's before back (it holds the entry's after), so only when that before is another block (else the block stays: as before);
+	 * a block that holds the target only through CU's equivalence (another copper stage, farmland for dirt, ...) the undo leaves standing as the
+	 * player's ({@link dev.larattalabs.architect.journal.WorldJournal#holdsOurs}): NONE, nothing dropped or refunded.
 	 */
 	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, BlockState now, BlockState was, BitSet free,
 		boolean adopted, java.util.function.BooleanSupplier playerRecord, Refunds.Tally tally) {
@@ -2499,6 +2501,9 @@ public final class Builder {
 		// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
 		boolean asSnapshot = Copper.is(now, was.getBlock());
 		if (asPlaced && !adopted && !asSnapshot && playerRecord.getAsBoolean()) {
+			if (dev.larattalabs.architect.journal.WorldJournal.cuEquivalent(now, r.target[qi])) {
+				return Refunds.Outcome.NONE; // (JR-b verifier) a CU equivalent with a record: the undo keeps it (holdsOurs), so it stays the player's
+			}
 			tally.add(Refunds.Outcome.PLAYER_DROP, Cells.cost(now)); // (JR-b, F10) the before isn't this block: the undo takes it away
 			return Refunds.Outcome.PLAYER_DROP;
 		}

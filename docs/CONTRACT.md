@@ -31187,7 +31187,9 @@ defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as 
    clear a cell's record, so a record there means the builder found the block standing and charged nothing, or the player replaced a
    block they mined. It drops as PLAYER_DROP (its item back to the player) instead of a REFUND out of the record or pool. This applies only
    when the cell's before is another block (else the undo writes the same block back and it stays) and not for an adopted site (PT2's own
-   rule). `tallyCell` gains an overload taking the record; the old signature passes "no record".
+   rule). A block that holds the target only through CU's equivalence (another copper stage, farmland for dirt, coral, a turned path) with
+   a record is NONE: the undo's `holdsOurs` leaves it standing as the player's, so it neither drops nor refunds (the strict verifier's
+   case: a PLAYER_DROP there was a one-block dupe). `tallyCell` gains an overload taking the record; the old signature passes "no record".
 
 ### What changes (Steward RC areas)
 
@@ -31230,3 +31232,33 @@ defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as 
     `legacySince`, else nothing. With a record, the record key's `placedAt` decides.
   - When RL is on main, JR-b's merge passes the target's `placedAt` (`Site.placedAt()` / `Infra.placedAt()`) at RL's no-record call and at
     the swap's `giveBackPaid`. So a pre-JR target keeps its pool share, and a post-JR one draws none.
+
+### Slice JR-b as built (versions: placeholders; recorded 2026-11-13)
+
+- Commits on `slice/JR-b` (the last adds the CU-equivalent NONE case): 73ac2d50 (the fix, units, the step), 6faf3fd3 (`fromPaid` with `placedAt`, decisions), 85aeae0c (merge of
+  main with HF v0.64.1 and PS df77978f; the fixture writes format 1), 852f74cb (the variant turns PS's periodic save off for the halt).
+- Checks (merged tree): `./gradlew build --offline` 1189 tests, 0 failures; kit 1303/1303; sidecar `tsc --noEmit` clean (sidecar not
+  touched); `node tools/step-inputs.mjs check` 385 steps clean; `node tools/api-compat.mjs --baselines` all 5 checks clean (Steward's jar
+  included). F10's lint case fails with the fix switched off, passes with it.
+- Gate runs (3 of 3, ports 8930/8931, `--only jr-crash-v063,jr-crash`):
+  - run 1 (6faf3fd3, before the merge): PASS, jr-crash 24/0, jr-crash-v063 21/0. RVU2 post-JR: consumed 231 live, 0 in the saved ledger,
+    came back 0 (minted 0, lost 0) with a pool of 389 units (stamped at that load); the pool 389 -> 389.
+  - run 2 (85aeae0c): PASS 24/0, 21/0; PS's 10-s save fell between the baseline and the halt (save #12 -> #13), so the growth had its
+    record: back 231 = saved 231. Not the F3 case: hence run 3.
+  - run 3 (852f74cb): PASS, jr-crash 24/0, jr-crash-v063 23/0. PS's periodic save off; save #12 -> #12, no new records; RVU2 came back 0 =
+    saved 0 (minted 0, live consumed 231), the pool 389 -> 389; the pre-JR town's removal refunded 389 units, all out of the pool
+    (389 -> 0); adoptCrates: the pool unchanged, the crate's placed counts became `site:s1@…`'s paid record.
+  - Evidence: `architect-mc/artifacts/gate-runs-jr-b/` (20261113-100140, -125608, -130525).
+- Strict gate-verifier (independent; diff review, the ledger units 39/0, `jr-crash-v063` re-run on 8936/8937 at 852f74cb: PASS 23/0, the
+  same numbers: pool 389 stamped at the load, save #5 -> #5, RVU2 back 0 = saved 0 with 231 consumed live, the pool 389 -> 389, the
+  pre-JR removal 389 from the pool, the adoption keyed; the fixture's format claim confirmed): **PASS**. It flagged one residual dupe
+  (not a regression): a CU equivalent with a PT record was PLAYER_DROP while the undo keeps it. Fixed after its run (rule 4's NONE case),
+  with the unit `LedgerLintTest.f10_tallyRuleWithARecord` (fails with the guard off); not in game (the gate steps don't place player
+  blocks), so after the 3 gate runs it is covered by the unit and the full build only.
+- Leftovers:
+  - RL's no-record `Stockpiles.fromPaid` and the swap's `giveBackPaid`: pass the target's `placedAt` to
+    `StockLedger.fromPaid(id, items, placedAt)` at RL's merge (the coordinator's merge order: RL, then JR-b).
+  - F10 for roads: `RoadBuilder.refundOf` counts every built cell (no free bit, no PT check), so a player's matching block in a queued
+    road cell still refunds out of the road's record (capped: a loss, never a mint). Same fix shape; not built.
+  - F10 with PT tracking off (the world rule): no record, so the old REFUND (capped) stands.
+  - A PT-recorded player block in a queued cell still counts in `Builder.paidStanding` (Stockpiles' audit; RL's reconcile may charge it).
