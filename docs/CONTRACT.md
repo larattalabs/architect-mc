@@ -28396,6 +28396,62 @@ wrap_trunk dwelling, a woodcutter's lodge; P4 runs on those two).**
   - A per-job stop inside the in-game run throws without writing STOP.json; the item-level guard writes it first.
   - The nightly window is judged on local time, while the ledger's timestamps are UTC.
 
+
+### Slice WL as built (branch `slice/WL` off main ef95e914; versions NEXT; $0, kit only; recorded 2026-11-12)
+
+The product fix for PA's leftover "`ports_met` accepts a walk port within 2 of the hint, but a branch walk needs both ends level" (PA P2:
+run 1 refused `NO_LINK ... LEVEL`, feet y 87 vs 86; attempt 2 left tree_1.walk_w unreached, its deck 2 rows under the ramp cut for the
+hint's y). No API change, no catalogue change, no Java, no sidecar change.
+
+**The fix: `ports_met` holds a horizontal walk port to the hint's feet y exactly** (`kit/lib/siteCheck.mjs`):
+- **Which ports.** A site port and its design port both of kind `architect:walk` facing north, south, east or west: the ports a
+  `connector.branch_walk` or a catwalk to a port ends at (`lib/region/links.mjs` `kindsFor`/`VEC`). A door port keeps `portWithin` 2 on
+  every axis (a `tunnel.under` is not level), and so does a hatch (a walk port facing down).
+- **Which axis.** y only, against `SITE_CHECK_LIMITS.walkLevel` (new, 0; overridable through `opts.siteLimits` like the others). x and z
+  keep `portWithin` 2: the link follows the entry's port cell sideways (LP reading 4).
+- **The finding.** A second `ports_met` finding, severity **error** (the rule id is unchanged, so `SITE_RULE_IDS`, the sidecar's union and
+  `unfitRule` are untouched), one per check, `count` = the ports off. It carries **`level: [{port, y, want}]`** (the typed member) and
+  the message `ports_met: walk port '<name>' has its feet at y <y>, not the hint's y <want>: a walk port is held to the hint's y exactly
+  (a branch walk or catwalk between lots is level); move the port, and the floor under it, to y <want>`. Such a port is not counted in
+  `metrics.portsMet`. The other `ports_met` reasons stay one warning finding, as before.
+- **Why an error.** A paid design installs with only warnings: the designer's check-fix round (`designer.ts`: `!res.ok || outcome`)
+  runs on the build's errors, and checker warnings only become a note. As a warning, PA's A and B designs would install again at y 1 and
+  the realise would still refuse `NO_LINK LEVEL`. As an error, the designer gets a fix round with the message above, and a $0 site variant
+  or follow refuses `SITE_UNFIT ports_met` before anything is placed (`unfitRule`, as for every site finding).
+- **PLAYBOOK §7** (Steward's skill points to it; the coordinator tells Steward): a new bullet "A walk port sits at its hint's height
+  exactly" (general, naming no scenario) and a symptom row for the new message.
+
+**Why not LP stepping a 1-block difference** (the alternative in the brief): a stair at the deck end would only mend run 1 (two decks 1
+apart). It would not mend attempt 2, where the design's port was 2 rows under the ramp the land's sculpting cut for the hint's y: no
+1-block step closes that, and a stepped deck would still meet a ramp at the wrong height. The hints, the ramps and the other lot's port
+already agree on the hint's y, so holding the design to it fixes both readings at the source, with no change to LP's level deck, its
+`M10:branch_walk` bars or IR v2.
+
+**Byte identity.** Every committed site design puts its walk ports at `site.port(...).at` exactly (`kit/designs/site/fit_*.mjs`, the
+examples, which the sim designer and SB's lots use), so no committed walk port moves and no fixture or golden changed: S5/S6 goldens,
+LP's and SL's fixtures, DS's `brief-sections.json`, the six examples' sha goldens.
+
+**Readings chosen:**
+1. Both ends must be walk ports facing a side (site and design); a design port of another kind or facing already fails `ports_met`'s
+   kind/facing reason.
+2. The BRIEF's Site section (`kit/lib/siteBrief.mjs`) still says "within 2 of each hint": changing it moves DS's golden with no walk port
+   moving. Left for the coordinator (leftover below); the PLAYBOOK and the check's own message carry the rule.
+
+**Checks** ($0; no gate run: kit only, nothing in game changed):
+- kit `node --test kit/test/*.test.mjs`: **1266/1266** at the WL kit commit (sc.test 14/14, with the new WL test: y +1 and -1 refused
+  with `level` and a checker error; exact passes; x/z off by 2 pass; a door and a hatch off by 1 in y keep the window; `walkLevel`
+  overridable). No golden or fixture rewritten (the tree clean after the run).
+- `set -o pipefail; node tools/step-inputs.mjs check`: clean, 363 steps.
+- api-compat: not applicable (no Java and no API package change); the Gradle build not run (no Java changed).
+- sidecar: untouched.
+- gate-verifier (review): see the report to the coordinator.
+
+**Leftovers:**
+- `siteBrief.mjs` line "put a design port ... within 2 of each hint": add "(a walk port facing a side: the hint's y exactly)". It moves
+  `kit/test/fixtures/ds/brief-sections.json` (UPDATE_GOLDEN=1), the coordinator's call.
+- Installed entries designed before WL keep their off-level ports; their realise still refuses `NO_LINK LEVEL` (typed, nothing written).
+- The CONTRACT's 7b SC table (`SITE_CHECK_LIMITS`, the `ports_met` row) is not edited; this as-built is the record.
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6
