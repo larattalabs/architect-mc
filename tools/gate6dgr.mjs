@@ -788,17 +788,19 @@ steps.survival = async () => {
   check(r1.region === region, `item 13: realiseApproved of the survival growth answers the region: ${json(r1)}`);
   const stv = await rvState(region);
   const rid = stv.revisions.at(-1)?.rid;
-  // the growth's targets put down and waiting for their items (nothing fed yet): undoRevision refuses survival_building
-  let rsb = null;
-  for (let i = 0; i < 60; i++) {
-    rsb = await call('dev.rs.state', { region }, 120_000);
-    if ((rsb.targets ?? []).some((t) => !targets0.has(t.id) && !t.done)) break;
-    await sleep(2000);
+  // the growth's targets put down and waiting for their items (nothing fed yet): new ids in the owner's feed order, the revision still
+  // writing. (slice RU, RV §8: Steward's RC row 3 changed; undoRevision now cancels them, ru-cancel and ru-crash judge that; here the
+  // growth is fed and built as before)
+  const feed0 = ps0.feedOrder ?? [];
+  let waiting = [], busy = null;
+  for (let i = 0; i < 60 && !waiting.length; i++) {
+    const p = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    waiting = (p.feedOrder ?? []).filter((id) => !feed0.includes(id));
+    busy = (await rvState(region)).busy;
+    if (!waiting.length) await sleep(2000);
   }
-  out.beforeFeed = { build: rsb?.build && { done: rsb.build.done, percent: rsb.build.percent }, waiting: (rsb?.targets ?? []).filter((t) => !targets0.has(t.id)).map((t) => [t.id, t.done]) };
-  // (slice RU, RV §8) Steward's RC row 3 changed: undoRevision while the growth's targets build no longer refuses survival_building, it
-  // cancels them (ru-cancel and ru-crash judge that); here the growth is fed and built as before
-  check((rsb?.targets ?? []).some((t) => !targets0.has(t.id) && !t.done), `item 13: the growth's targets put down and waiting for their items before the feed`, out.beforeFeed);
+  out.beforeFeed = { waiting, busy };
+  check(waiting.length > 0, `item 13: the growth's targets put down and waiting for their items before the feed (${waiting.length} in the feed order; busy ${busy})`, out.beforeFeed);
   // fed until built: the growth's targets' bills equal the check's bill (the region's own cells; lots without entries are pads)
   const f1 = await feedUntil(region, (st, rs) => st.view.state === 'PLACED' && rs.build?.done);
   const rs1 = await call('dev.rs.state', { region }, 120_000);
