@@ -30375,8 +30375,13 @@ and SavedData but never the players (checked with `javap` on 26.3). An explicit 
 Order inside one save: players, then chunks, then ledger. A crash between the player write and the ledger write (milliseconds) loses
 the move rather than duping it.
 
-**Cost** (measured in hf-crash; `dev.stockpile.saved` reports `playerSaves`, `lastPlayerSaveMs`, `maxPlayerSaveMs` beside JR's world
-numbers): see Gate below.
+**Cost** (measured in hf-crash run 3, one bot; `dev.stockpile.saved` reports `playerSaves`, `lastPlayerSaveMs` and `maxPlayerSaveMs`
+beside JR's world numbers):
+- **The players:** 0.01-3.9 ms per save.
+- **The whole explicit save** (players + flushed chunks + ledger): 17.9-76.7 ms. Before HF (unflushed, no players) it was 4.4-5.4 ms
+  in run 1. The difference is N3's flush: the save now waits for the chunk writes.
+- It stays under JR's 250 ms bound. These saves are rare (a crate, the feed order, a dissolve, an adoption, RS charge and scoop, and a
+  logout with an unsaved ledger).
 
 **Steward-visible:** none in normal play. After a crash the player's inventory and the stock now agree. A logout with an unsaved
 ledger change costs one flushed world save.
@@ -30392,7 +30397,7 @@ ledger change costs one flushed world save.
   - **T:** the region removed (its stock becomes credit), a Take of half of it, then a crate added.
   - **X:** dissolve to the player.
   - Each asserts that the player's inventory + the stock after the restart equal the totals before the move, item for item, and that
-    the save wrote `playerdata` (its mtime moved).
+    the save wrote the player's file (`players/data/<uuid>.dat` in 26.3; its mtime moved).
 - **Units:** `StockpileSaveHFTest` (2), a source guard:
   - `saveWithWorld` saves the players, then the chunks flushed, then the ledger;
   - `BEFORE_SAVE` defers to it;
@@ -30401,3 +30406,38 @@ ledger change costs one flushed world save.
   - at least 7 `saveWithWorld` callers.
 - **New dev hooks:** `dev.stockpile.halt` (a crash with nothing saved, at a moment the driver picks) and `dev.bot.relog` (headless
   only).
+
+### Results
+
+| case | the move | before (inventory + stock) | after the halt and restart | mint / loss |
+|---|---|---|---|---|
+| **D** | Insert from inventory 64 gravel, crate added | 64 + 0 | 0 + 64 | **0 / 0** (before HF: 64 / 0) |
+| **L** | Insert from inventory 64 gravel, logout and join | 64 + 64 | 0 + 128 | **0 / 0** |
+| **T** | region removed, Take 64, crate added | 0 + 128 | 64 + 64 | **0 / 0** |
+| **X** | dissolve to the player | 0 + 64 | 64 + 0 | **0 / 0** (before HF: 0 / 149) |
+
+**Gate runs** (`--out artifacts/gate-runs-hf`):
+- **Run 1** (592613da, the fix not in, 8922/8923): hf-crash D and X only.
+  - It reproduced the finding: D minted 64, X lost 149.
+  - It also showed that `playerdata` was not written; the check then looked in the wrong place (see run 2).
+- A run on 8922/8923 aborted in setup: slice TJ held the ports, and nothing ran. Then 8932/8933 (the coordinator's reassignment).
+- **Run 2** (8d8603e9): rs-survival-smoke **PASS** 40/0, jr-crash **PASS** 24/0; hf-crash FAIL 19/6.
+  - D, T and X already held (0 / 0).
+  - The playerdata check looked in `playerdata/`, but 26.3 writes `players/data/`.
+  - L lost 64: the bot's relog hook called `onDisconnect` directly, but Fabric fires DISCONNECT in `Connection.handleDisconnection`.
+    A client's logout goes through that path, so this was a harness bug, not a product bug.
+- **Run 3** (a9e7c334, the relog through the connection's disconnect path; the file path fixed; no product change since run 2):
+  hf-crash **PASS** 25/0.
+- **Other checks** (at 8d8603e9):
+  - Gradle `build`: 1155 tests, 0 failures (1 skipped).
+  - Kit: 1303 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 372 steps clean.
+  - Sidecar `tsc --noEmit`: clean.
+  - api-compat against the 0.64.0 and 0.63.0 apitest jars and the 0.64.0 surface (2964 members): pass.
+
+### Left over (not HF)
+
+- From the audit, for the follow-up slice PS: F3 (the legacy pool), F4 (hopper deliveries are lost on a crash), F6 and F11 (an
+  unreadable file, `.bak`, `format`), F7, N1 (a finished undo's refund credit), N2 (filled shulker boxes) and N4.
+- A crash between the player write and the ledger write inside one explicit save (milliseconds) still loses that move. Closing it
+  would need a journal.
