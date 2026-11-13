@@ -475,6 +475,7 @@ class UmtPropertiesTest {
 		Map<String, Integer> items = Map.of("minecraft:cobblestone", 12, "minecraft:oak_planks", 5);
 		for (int crashAt = 0; crashAt <= 3; crashAt++) {
 			StockLedger live = new StockLedger();
+			items.forEach((k, v) -> live.pay("road:r1@1", k, v)); // (JR) the road's paid record, saved before the removal
 			com.google.gson.JsonObject savedLedger = live.toJson();
 			boolean removalSaved = false;
 			// 0: credit in memory, 1: ledger saved, 2: removal moved past the member and saved, 3: no crash

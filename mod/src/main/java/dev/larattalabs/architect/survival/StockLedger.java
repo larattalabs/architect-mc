@@ -38,10 +38,27 @@ public final class StockLedger {
 	private final Map<String, Integer> dropped = new TreeMap<>();
 	private final Map<String, Integer> refundOverflow = new TreeMap<>();
 	private final Set<String> credited = new LinkedHashSet<>();
+	/**
+	 * (slice JR) Per target (its credit key: {@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}), what the feed consumed for it and
+	 * no refund or retake has given back yet. Booked with {@link #consumed} and saved with it, so after a crash it is what the saved
+	 * ledger says that target took: a keyed refund never credits more ({@link #credit}). Only {@code site:} and {@code road:} keys (the
+	 * feed's targets) are capped: fluids', mechanisms' and retakes' own keys are not. A target key with no record took nothing the saved
+	 * ledger knows of (it was fed after the save) except what predates the records: {@link #legacy}.
+	 */
+	private final Map<String, Map<String, Integer>> paid = new TreeMap<>();
+	/**
+	 * (JR) Consumption the per-target records don't cover: a file written before JR (its consumed less its returned, at load) and an
+	 * adopted crate's placed counts. A target key with no record draws its cap from this pool (spent as it is used).
+	 */
+	private final Map<String, Integer> legacy = new TreeMap<>();
 
 	/** What crediting items did: what entered the stock and what did not fit (to drop as items, booked as refundOverflow). */
-	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already) {
+	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already, Map<String, Integer> shortfall) {
 		public static final Credit NONE = new Credit(Map.of(), Map.of(), false);
+
+		public Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already) {
+			this(returned, overflow, already, Map.of());
+		}
 
 		public boolean isEmpty() {
 			return returned.isEmpty() && overflow.isEmpty();
@@ -220,7 +237,146 @@ public final class StockLedger {
 			return new Credit(Map.of(), Map.of(), true);
 		}
 		credited.add(key);
-		return giveBack(items, capacityStacks, maxStack);
+		String deltaOf = deltaSite(key);
+		if (deltaOf != null) {
+			// (JR) a construction delta's refund: from its site's record (taken out of it, as a retake)
+			Map<String, Integer> in = fromPaid(deltaOf, items);
+			Credit c = giveBack(in, capacityStacks, maxStack);
+			return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
+		}
+		if (!targetKey(key)) {
+			return giveBack(items, capacityStacks, maxStack);
+		}
+		// (JR) never more than the saved ledger says this target consumed; the record is spent with its refund (no record: the legacy pool)
+		Map<String, Integer> rec = paid.remove(key);
+		Map<String, Integer> in = capRecordThenLegacy(items, rec == null ? new TreeMap<>() : new TreeMap<>(rec));
+		Credit c = giveBack(in, capacityStacks, maxStack);
+		return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
+	}
+
+	/** (JR) Books what the feed consumed for a target under its credit key (with {@link #consume}). */
+	public void pay(String key, String item, int n) {
+		if (n > 0) {
+			paid.computeIfAbsent(key, k -> new TreeMap<>()).merge(item, n, Integer::sum);
+		}
+	}
+
+	/** (JR) Drops a target's paid record (its refund credited nothing: nothing of it stood). */
+	public void dropPaid(String key) {
+		paid.remove(key);
+	}
+
+	/** (JR) Whether a target ({@code site:} or {@code road:} id) has a paid record. */
+	public boolean tracks(String targetId) {
+		return keyOf(targetId) != null;
+	}
+
+	/**
+	 * (JR) A retake: another writer took up {@code items} of the target {@code targetId}'s paid blocks; what goes back is capped by its paid
+	 * record (same rule as {@link #credit}) and taken out of the record. A target with no record: {@code items} as they are.
+	 */
+	public Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
+		String k = keyOf(targetId);
+		if (k == null) {
+			return capRecordThenLegacy(items, new TreeMap<>());
+		}
+		Map<String, Integer> left = paid.get(k);
+		Map<String, Integer> out = capRecordThenLegacy(items, left);
+		left.values().removeIf(v -> v <= 0);
+		if (left.isEmpty()) {
+			paid.remove(k);
+		}
+		return out;
+	}
+
+	public Map<String, Map<String, Integer>> paid() {
+		Map<String, Map<String, Integer>> o = new TreeMap<>();
+		paid.forEach((k, v) -> o.put(k, Map.copyOf(v)));
+		return o;
+	}
+
+	/** (JR) {@code items} capped by the record {@code left} (spent from it), what is short then by the legacy pool (spent from it). */
+	private Map<String, Integer> capRecordThenLegacy(Map<String, Integer> items, Map<String, Integer> left) {
+		Map<String, Integer> out = capTo(items, left);
+		if (!legacy.isEmpty()) {
+			capTo(shortfall(items, out), legacy).forEach((k, v) -> out.merge(k, v, Integer::sum));
+			legacy.values().removeIf(v -> v <= 0);
+		}
+		return out;
+	}
+
+	/** (JR) What the records don't cover (pre-JR consumption, adopted crates): see {@link #legacy}. */
+	public Map<String, Integer> legacy() {
+		return Map.copyOf(legacy);
+	}
+
+	/** (JR) The site id of a construction delta's credit key ({@code delta:<entry>:<siteId>}), or null. */
+	static @Nullable String deltaSite(String key) {
+		if (!key.startsWith("delta:")) {
+			return null;
+		}
+		int i = key.lastIndexOf(':');
+		return i > "delta:".length() - 1 && i < key.length() - 1 ? key.substring(i + 1) : null;
+	}
+
+	/** A feed target's credit key ({@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}): capped by its record. */
+	static boolean targetKey(String key) {
+		return (key.startsWith("site:") || key.startsWith("road:")) && key.indexOf('@') > 0;
+	}
+
+	private @Nullable String keyOf(String targetId) {
+		for (String k : paid.keySet()) {
+			if (k.startsWith("site:" + targetId + "@") || k.startsWith("road:" + targetId + "@")) {
+				return k;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * (JR) {@code items} capped by {@code left} (spent from it): the same item first, then, unit for unit, any item still left (a weathered
+	 * copper block refunds for the copper block paid, a soil variant for its soil). Pure but for {@code left}; deterministic (item order).
+	 */
+	static Map<String, Integer> capTo(Map<String, Integer> items, Map<String, Integer> left) {
+		Map<String, Integer> out = new TreeMap<>();
+		Map<String, Integer> rest = new TreeMap<>();
+		for (var e : new TreeMap<>(items).entrySet()) {
+			int want = Math.max(0, e.getValue());
+			int t = Math.min(want, Math.max(0, left.getOrDefault(e.getKey(), 0)));
+			if (t > 0) {
+				out.merge(e.getKey(), t, Integer::sum);
+				left.merge(e.getKey(), -t, Integer::sum);
+			}
+			if (want - t > 0) {
+				rest.put(e.getKey(), want - t);
+			}
+		}
+		for (var e : rest.entrySet()) {
+			int want = e.getValue();
+			for (var l : left.entrySet()) {
+				if (want == 0) {
+					break;
+				}
+				int t = Math.min(want, Math.max(0, l.getValue()));
+				if (t > 0) {
+					l.setValue(l.getValue() - t);
+					out.merge(e.getKey(), t, Integer::sum);
+					want -= t;
+				}
+			}
+		}
+		return out;
+	}
+
+	private static Map<String, Integer> shortfall(Map<String, Integer> items, Map<String, Integer> in) {
+		Map<String, Integer> s = new TreeMap<>();
+		items.forEach((k, v) -> {
+			int d = v - in.getOrDefault(k, 0);
+			if (d > 0) {
+				s.put(k, d);
+			}
+		});
+		return s;
 	}
 
 	/** Credits items with no key (a swap's old block as it happens, a bucket's container): up to capacity, the rest overflow. */
@@ -274,6 +430,7 @@ public final class StockLedger {
 		Map<String, Integer> before = stock();
 		crateDelivered.forEach((k, v) -> add(delivered, k, v));
 		cratePlaced.forEach((k, v) -> add(consumed, k, v));
+		cratePlaced.forEach((k, v) -> add(legacy, k, v)); // (JR) the crate's sites were paid outside the records
 		// over capacity: of what came in (by item id, deterministic), the least that frees whole stacks drops: a partial stack first
 		Map<String, Integer> out = new TreeMap<>();
 		for (var e : new TreeMap<>(stock()).entrySet()) {
@@ -303,6 +460,13 @@ public final class StockLedger {
 		JsonArray k = new JsonArray();
 		credited.forEach(k::add);
 		o.add("credited", k);
+		// (JR) additive; its presence marks a ledger that keeps records (a file without it is older: its consumption becomes the legacy pool)
+		JsonObject pd = new JsonObject();
+		paid.forEach((key, m) -> pd.add(key, counts(m)));
+		o.add("paid", pd);
+		if (!legacy.isEmpty()) {
+			o.add("legacy", counts(legacy));
+		}
 		return o;
 	}
 
@@ -320,6 +484,29 @@ public final class StockLedger {
 		if (o.has("credited") && o.get("credited").isJsonArray()) {
 			o.getAsJsonArray("credited").forEach(e -> l.credited.add(e.getAsString()));
 		}
+		if (!o.has("paid")) {
+			// (JR) written before the records: what it consumed and hasn't had back may still be refunded, once, by any target
+			for (var e : l.consumed.entrySet()) {
+				int n = e.getValue() - get(l.returned, e.getKey());
+				if (n > 0) {
+					l.legacy.put(e.getKey(), n);
+				}
+			}
+		}
+		if (o.has("legacy") && o.get("legacy").isJsonObject()) {
+			read(o.getAsJsonObject("legacy"), l.legacy);
+		}
+		if (o.has("paid") && o.get("paid").isJsonObject()) {
+			o.getAsJsonObject("paid").entrySet().forEach(e -> {
+				if (e.getValue().isJsonObject()) {
+					Map<String, Integer> m = new TreeMap<>();
+					read(e.getValue().getAsJsonObject(), m);
+					if (!m.isEmpty()) {
+						l.paid.put(e.getKey(), m);
+					}
+				}
+			});
+		}
 		return l;
 	}
 
@@ -327,6 +514,15 @@ public final class StockLedger {
 		JsonObject o = new JsonObject();
 		m.forEach(o::addProperty);
 		return o;
+	}
+
+	private static void read(JsonObject counts, Map<String, Integer> into) {
+		counts.entrySet().forEach(e -> {
+			int v = e.getValue().getAsInt();
+			if (v != 0) {
+				into.put(e.getKey(), v);
+			}
+		});
 	}
 
 	private static void read(JsonObject o, String k, Map<String, Integer> into) {

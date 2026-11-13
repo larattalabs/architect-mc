@@ -30092,3 +30092,125 @@ undo's cargo (`RemoveResult.refund` includes the dropped planting items; the sto
 Runs 1 and 2 (`20261112-233703`, `20261113-012134`) failed only on the driver: it read the revision IR before the realise wrote it; then
 `/gamerule randomTickSpeed` (26.3's is `random_tick_speed`), bone meal clicked on the farmland, and vanilla's farmland under the cobblestone
 drying to dirt on the reload read as a change. Run 2 already showed every FC behaviour above (16 ok).
+
+## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
+
+A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
+could refund items the saved stockpile ledger had never charged (a mint). The opposite also happened: it could refund less than the
+saved ledger had charged (a loss). No API change. Versions: none set.
+
+### The finding (measured, before the fix; jr-crash ad hoc on 8900/8901, head e185bc9e)
+
+Each world: realised, then `/save-all flush` (the baseline: the ledger on disk equals the live one), then fed until built, then 12 s
+for the chunks' eager saves, then halted at the kill point with nothing saved. The saved ledger was read off the disk before the
+restart; after the restart the undo resumed.
+
+| case | consumed live | consumed in the saved ledger | came back (stock + overflow) | verdict |
+|---|---|---|---|---|
+| K5: a plain survival region removal (no revision), halted at its commit point | 389 units | 0 | 389, item for item | **mint 389** |
+| RVU2: a survival growth's undo, drained, nothing removed | 231 | 0 | 231 | **mint 231** |
+| RVU2s: as RVU2, with the ledger saved by a feed-order change 2 s before the kill | 231 | 231 | 16 (cobblestone 15, gravel 1) | **loss 215** |
+
+The ledger's identity held in every case, and the world came back to its state before the growth (0 cells differ).
+
+### The rule found
+
+There are three save cadences:
+- **Architect's journal and queue file:** written synchronously.
+- **The chunks:** vanilla saves a changed chunk eagerly, 10 s after its last save (`ChunkMap.saveChunksEagerly`,
+  `EAGER_CHUNK_SAVE_COOLDOWN_IN_MILLIS`, 20 a tick). The world on disk is about 10 s behind the live world.
+- **The stockpile ledger:** written at autosave (`BEFORE_SAVE`), at stop, and at explicit `Stockpiles.save()` calls (crate add and
+  remove, feed order, dissolve, adopt, RS charge and scoop). The ledger on disk can be up to an autosave interval behind.
+
+What follows:
+- **After a crash the saved world is usually ahead of the saved ledger.** Blocks built since the ledger's last save stand, but the
+  ledger never charged them.
+- **Every refund pays for the blocks that stand.** That is `Builder.prepareDeconstruct`, `RoadBuilder.refundOf`, the retakes, and a
+  removal's `decCredit` (computed from the live world before its commit, kept in the queue file, so K5 refunds even cells the saved
+  world lost). None of them looks at the ledger.
+- **So the mint is not limited to revisions.** Any survival undo, Remove or deconstruct after an unsaved stop can mint.
+- **The opposite:** an explicit ledger save, then a stop within about 10 s, leaves the ledger ahead of the world. The undo refunds only
+  what stands: a loss. A builder that went on would charge those cells again.
+
+### The fix
+
+1. **A per-target paid record in the ledger** (`StockLedger.paid`, saved in `stockpiles.json` beside `consumed`).
+   - **Booking.** The feed's purse books each cost into `consumed` and into `paid[credit key]` together (`site:<id>@<placedAt>`,
+     `road:<id>@<placedAt>`). The record is therefore always what the saved ledger says that target took.
+   - **The cap.** `credit(key, items)` for a target key credits at most its record: the same item first, then unit for unit from what
+     is left. So a weathered copper block refunds for the copper block paid, and a soil variant for its soil. The rest is not
+     credited: logged as `capped ... not credited {...}` and returned in `Credit.shortfall` (an internal record). The record is spent
+     with its refund. A refund of nothing drops it.
+   - **A target key with no record took nothing the saved ledger knows of** (it was fed after the save): it credits nothing, except
+     what the legacy pool covers.
+   - **The legacy pool** (`StockLedger.legacy`) holds consumption the records don't cover:
+     - a file written before JR (it has no `paid` field): its `consumed` less its `returned`, per item, converted once at load and
+       saved;
+     - an adopted crate's placed counts.
+     A target draws on the pool after its own record.
+   - **Retakes** (XL/XR, both `retake` and `retakeOnce`) and **construction deltas** (`delta:<entry>:<site>`) take out of the record
+     of the target they take back from, with the same cap.
+   - **Keys outside the cap.** Keys that are not a feed target's (a region's fluids, mechanisms, a retake's own key) are not capped.
+2. **Explicit ledger saves save the chunks too.** `Stockpiles.saveWithWorld(srv)` replaces `save()` at every explicit call outside
+   the world's save. It runs `saveAllChunks(true, false, false)`, whose `BEFORE_SAVE` writes the file, as autosave does. The ledger
+   is then never ahead of the world after an explicit save.
+   - **Cost**, measured once on the jr-crash dev world: 2.9 ms per save (max 8.6 ms over the session's saves). The bound was
+     250 ms.
+   - The dev hook `dev.stockpile.saved` reports `worldSaves`, `lastWorldSaveMs` and `maxWorldSaveMs`.
+
+With no crash nothing changes: a standing paid cell never costs more than was paid for it, and the record always covers it. After a
+crash, a target refunds exactly what the saved ledger says it consumed (less what no longer stands).
+
+### What Steward sees (for the coordinator's next Steward RC)
+
+- **`Stock.returned` and the refund amounts after a crash** (an unsaved stop): now the saved ledger's record rather than what
+  stands. Less in the mint case (K5 and RVU2 now refund 0); in full in the loss case.
+- **New WARN lines** `Stockpile <owner>: refund <key> capped ...` and `retake of <id> capped ...`.
+- **`stockpiles.json`:** an additive `paid` object (always written: it marks a ledger that keeps records) and `legacy` when non-empty.
+  A file without `paid` loads, and its consumption becomes the legacy pool.
+- **No API change** (api-compat passes).
+
+### Gate
+
+- **jr-crash** (tools/lib/gatem5jr.mjs, registered in tools/gate6dgr.mjs; chain `jr`): K5, RVU2 and RVU2s as above.
+  - It asserts that what came back equals what the saved ledger says the undone targets consumed, item for item; that the identity
+    holds; that the world is as before; and that the explicit save saved the world (with its time).
+  - The verifier re-runs it strict on 8902/8903.
+  - Ad hoc after the fix (head 218e50ab): K5 minted 0 and lost 0 (live 389, saved 0, back 0); RVU2 0 and 0 (live 231); RVU2s back
+    231 = saved 231.
+- **Gate runs** (`--out artifacts/gate-runs-jr`, 8900/8901):
+  - **Run 1** (e185bc9e): died on a driver field name. The pre-fix numbers above come from the ad-hoc rerun.
+  - **Run 2** (750a98b6), 5 PASS, 2 FAIL:
+    - jr-crash still minted. A target with no record was uncapped, so a target fed after the save escaped. Fixed by the
+      no-record rule and the legacy pool.
+    - rs-survival-smoke item 10 (rs02m2 "reads REMOVING after the reopen") failed. It is a known timing flake: it also failed in 2
+      of 28 earlier runs (gate-runs-spB, spC, 2026-10-24). It passed in run 3.
+  - **Run 3** (6ff51951): **7 PASS**.
+    - jr-crash 24/0: K5 live 389, saved 0, back 0; RVU2 live 231, saved 0, back 0; RVU2s saved 231, back 231. Mint and loss 0 in
+      every case. The explicit save with the world took 3.8 ms.
+    - rs-survival-smoke 40/0, xr-survival 24/0, lc-survival 14/0, so-survival 55/0, gr-survival 12/0 (the undo's refund equals
+      consumed), qt-growth 12/0 (consumed equals the quote).
+- **Strict verifier** (gate-verifier, re-ran jr-crash on 8902/8903 at 59693582,
+  `artifacts/gate-runs-jr-verify/20261113-053109-change`): **PASS**, 24/0, the same numbers.
+  - Its review found nothing that breaks the gate. Low or info notes:
+    - The legacy pool goes to whichever target refunds first. The total stays capped at consumed less returned.
+    - `deltaSite` assumes a site id holds no `:`. Site ids don't.
+    - `saveWithWorld` falls back to a plain save off the server thread.
+- **Units:** `StockpilePaidJRTest` (8): same item first then unit for unit; a partial refund with its shortfall; no record (fed after
+  the save) credits nothing; keys outside the cap; credited once and the record dropped; a delta from its site's record; a retake out
+  of the record; saved with the ledger; an old file's legacy pool; an adopted crate.
+  - Existing units that credit a target key without consuming now book its record first: `StockpileTest` (2), `RegionTargetsTest`
+    (1), `UmtPropertiesTest` P5, and `LedgerSim`'s purse (as the feed's).
+  - The survival ledger lint (`LedgerLintTest`, 14, its fuzz seeds included) stays green.
+- **Other checks:**
+  - Gradle `build`: 1132 tests, 0 failures.
+  - Kit: 1246 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 356 steps clean (rebuilt for jr-crash).
+  - Sidecar `tsc --noEmit`: clean.
+  - api-compat against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface: pass.
+
+### Known open (the next slice, the coordinator's call)
+
+**The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
+before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
+charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.

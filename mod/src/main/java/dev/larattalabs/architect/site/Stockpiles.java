@@ -428,7 +428,7 @@ public final class Stockpiles {
 			p.crates.add(putCrate(level, p, c));
 		}
 		p.dirty = true;
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: {} in {} with {} crate(s){}", owner, created ? "created" : "updated", dimension, p.crates.size(), add.isEmpty() ? ""
 			: " (+" + add.size() + ")");
 		return p;
@@ -559,7 +559,7 @@ public final class Stockpiles {
 			PILES.remove(p.id);
 		}
 		p.dirty = true;
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		Architect.LOGGER.info("Stockpile {}: crate {} removed{}{}", owner, at.toShortString(), drop.isEmpty() ? "" : ", excess dropped " + drop, ended
 			? "; the stockpile ended" : "");
@@ -621,7 +621,7 @@ public final class Stockpiles {
 		}
 		JsonObject last = p.toJson();
 		PILES.remove(p.id);
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
@@ -706,7 +706,7 @@ public final class Stockpiles {
 		} catch (IllegalArgumentException e) {
 			throw new Sites.SiteException(Reason.FIELD_LIMIT, "ids: " + e.getMessage());
 		}
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: feed order {}", owner, p.order);
 		return List.copyOf(p.order);
 	}
@@ -861,7 +861,7 @@ public final class Stockpiles {
 		}
 		Builder.dropItems(level, drop, dropped, null);
 		changed(p);
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
 			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
@@ -901,9 +901,14 @@ public final class Stockpiles {
 	 */
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key)) {
+			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
 			return StockLedger.Credit.NONE;
 		}
 		StockLedger.Credit c = p.ledger.credit(key, items, capacity(srv, p), Stockpiles::maxStack);
+		if (!c.shortfall().isEmpty()) {
+			// (JR) more stands than the ledger says this target consumed (a crash: the world was saved after the ledger): not credited
+			Architect.LOGGER.warn("Stockpile {}: refund {} capped at what the ledger recorded consumed; not credited {}", p.owner, key, c.shortfall());
+		}
 		if (c.already()) {
 			Architect.LOGGER.info("Stockpile {}: refund {} already credited; nothing credited again", p.owner, key);
 			return c;
@@ -920,6 +925,23 @@ public final class Stockpiles {
 	 * owner's stockpile, a lava bucket's empty bucket given back (C24's container rule). Only when every item is available after the feed's
 	 * reservations (the bodies come after every target of the region, so they take what is left); false (nothing taken) otherwise.
 	 */
+	/**
+	 * (JR) A retake of {@code targetId}'s paid blocks: capped by and taken out of its paid record in the stockpile that tracks it (items
+	 * as they are when none does).
+	 */
+	static Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
+		for (Pile p : PILES.values()) {
+			if (p.ledger.tracks(targetId)) {
+				Map<String, Integer> out = p.ledger.fromPaid(targetId, items);
+				if (!out.equals(items)) {
+					Architect.LOGGER.warn("Stockpile {}: retake of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, out, items);
+				}
+				return out;
+			}
+		}
+		return items;
+	}
+
 	public static boolean charge(MinecraftServer srv, @Nullable String owner, Map<String, Integer> items) {
 		Pile p = get(owner);
 		if (p == null) {
@@ -938,7 +960,7 @@ public final class Stockpiles {
 		}
 		dropOverflow(srv, p, over, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		changed(p);
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's bodies took {}", p.owner, items);
 		return true;
 	}
@@ -974,7 +996,7 @@ public final class Stockpiles {
 		dropOverflow(srv, p, over, fb);
 		dropOverflow(srv, p, c.overflow(), fb);
 		changed(p);
-		save();
+		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: a region's removal scooped and refunded {} ({} lava source(s), {} grate(s); {})", p.owner, c.returned(), lavaSources, grates, key);
 		Map<String, Integer> out = new TreeMap<>(c.returned());
 		c.overflow().forEach((k, v) -> out.merge(k, v, Integer::sum));
@@ -1168,8 +1190,11 @@ public final class Stockpiles {
 					@Override
 					public void pay(List<SurvivalItems.Cost> costs) {
 						Map<String, Integer> over = new TreeMap<>();
+						String key = t instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) t);
 						for (SurvivalItems.Cost c : costs) {
-							p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over);
+							if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over)) {
+								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
+							}
 						}
 						dropOverflow(srv, p, over, fallback);
 					}
@@ -1528,6 +1553,9 @@ public final class Stockpiles {
 					o.add("file", f == null ? new JsonObject() : f);
 					o.add("loaded", LOADED == null ? new JsonObject() : LOADED);
 					o.addProperty("saves", saves);
+					o.addProperty("worldSaves", worldSaves);
+					o.addProperty("lastWorldSaveMs", lastWorldSaveMs);
+					o.addProperty("maxWorldSaveMs", maxWorldSaveMs);
 					return o;
 				}
 				case "state" -> {
@@ -1718,6 +1746,31 @@ public final class Stockpiles {
 	}
 
 	/** Writes the file now (a temp file, then a rename). */
+	/** (JR, dev) explicit saves with the world: count, last and max time (ms). */
+	static volatile int worldSaves;
+	static volatile double lastWorldSaveMs, maxWorldSaveMs;
+
+	/**
+	 * (JR) An explicit ledger save outside the world's save (a crate, the feed order, a dissolve, an adoption, a region's bodies' charge or
+	 * scoop): the loaded chunks are saved with it, as autosave saves them (its BEFORE_SAVE writes the file), so a crash after it never finds
+	 * the ledger ahead of the world (consumption recorded for blocks the saved world lost). Server thread.
+	 */
+	static void saveWithWorld(MinecraftServer srv) {
+		long t0 = System.nanoTime();
+		int before = saves;
+		if (srv != null && srv.isSameThread()) {
+			srv.saveAllChunks(true, false, false);
+		}
+		if (saves == before) {
+			save();
+		}
+		double ms = (System.nanoTime() - t0) / 1e6;
+		worldSaves++;
+		lastWorldSaveMs = ms;
+		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
+		Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms", String.format(java.util.Locale.ROOT, "%.1f", ms));
+	}
+
 	static void save() {
 		Path d = dir;
 		if (d == null) {
