@@ -31262,3 +31262,150 @@ defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as 
     road cell still refunds out of the road's record (capped: a loss, never a mint). Same fix shape; not built.
   - F10 with PT tracking off (the world rule): no record, so the old REFUND (capped) stands.
   - A PT-recorded player block in a queued cell still counts in `Builder.paidStanding` (Stockpiles' audit; RL's reconcile may charge it).
+
+## Slice RL, reconcile at load (branch `slice/RL` off main 40a59368, origin/main 27019ef8 merged (HF, PS, JR-b); 2026-11-13; DEV MODE, survival accounting strict)
+
+The follow-up to JR (its "Known open"): after a crash with **no undo**, blocks the feed built after the ledger's last save stand in the
+saved world while the saved stock still holds their items (a dupe with no refund involved); and the opposite, a cell the saved ledger
+paid whose chunk never reached the disk, would be charged again when the builder rebuilds it. No API change. Versions: none set.
+
+### The finding (measured, before the fix)
+
+`rl-crash` (tools/lib/gatem5rl.mjs). Each case:
+- a survival flat_village town; its lot site paused; items delivered; the ledger saved (`/save-all flush`, as an autosave), so the lot's
+  items are in the saved stock;
+- the lot resumed: it builds after the save;
+- a halt with nothing saved (`dev.stockpile.halt`); the saved ledger read off the disk; restarted.
+
+Gate run 1 (454fc401, the code before the fix):
+- **The world ahead of the ledger (a dupe): measured.** The cells built after the save stood in the saved world, the saved paid records
+  had none of them, and the saved stock still held their items. In the run-1 case all the outstanding (149 units) was delivered before
+  the save and built after it. "Before RL" below counts what the old code left free in each case of the fixed gate.
+- **The ledger ahead of the world (a double charge): not reproduced.** RL3 halts straight after an autosave's chunk save without flush.
+  Since JR, every explicit ledger save also saves the chunks, so the ledger did not run ahead (paid 149 = standing 149). The window
+  stays theoretical: an autosave's chunk writes are asynchronous. The reconcile covers it too, as unit-tested below.
+
+### The rule found
+
+`Run.built` is never saved. A site's progress is re-derived from the world at every load (`Run.rescan`), and a standing target block is
+"already there", built and charged nothing. So after a crash, whatever the saved world has beyond the saved ledger is free. That holds
+for any stockpile-fed target (site, road, a survival region's target), whether still building or recorded BUILT after the save. It does
+not involve a refund or an undo.
+
+### The fix
+
+1. **A cell book per target, in the ledger** (`StockLedger.Book`, saved in `stockpiles.json` as an additive `cells` object keyed by
+   credit key, beside JR's `paid`):
+   - `k` known: the queue cells whose state the book has seen;
+   - `s` standing: the known cells that stood paid (built, not placed free) at that save;
+   - `o` owed: the cells that stand but were never paid;
+   - `q` and `n` identify the queue the bits index. A delta's re-queue makes the book unusable: it is dropped and the target is not
+     reconciled.
+   - **Refreshed just before every write of the file** (`Stockpiles.save`: autosave, stop, every explicit `saveWithWorld`, PS's periodic
+     save), on the server thread, with a quiet rescan (no chunk loads). It is therefore always saved atomically with the records it
+     matches. A cell the run has not read this session keeps its last book state.
+   - A target no longer building keeps no book: it is fully paid, and its book goes at the next save.
+   - **A target joining a feed saves the ledger with the world** (`saveWithWorld` after the feed pass). A new target is then in the saved
+     ledger with a book before it can build anything. Cost: 3-6 ms.
+2. **The reconcile at an unclean start** (`Stockpiles.reconcileAtStart`, at SERVER_STARTED after the sites, the stockpiles and the
+   region targets). "Unclean" is the running marker of `SiteDeltas.atStart`.
+   - **Scope:** every crate-less target with a book, BUILT ones too. Its chunks are loaded (as the sites check does). Cells placed free
+     and cells another writer of its region owns (XR's shadow) are left alone.
+   - **Stands, but not standing paid in the book (the world ahead):** charged from the stock at once, in queue order, at the target's
+     cost (`consume` + `pay`, as the builder pays a cell). What the stock cannot pay is **owed**: the cell never counts as built
+     (`Run.markBuilt` refuses it), its cost stays in the target's outstanding, and the feed charges it (`Run.settleOwed`, before the
+     builder's step) once the stock has it. Meanwhile the target waits for materials (STARVED).
+   - An owed cell mined before it is charged owes nothing: it is unbuilt, and the builder places it and pays it as any cell.
+   - **Standing paid in the book, gone now (the ledger ahead):** its cost goes back to the stock, out of the target's record and capped by
+     it (`fromPaid`, with the target's `placedAt`, JR-b). The builder charges it again when it places it. **The net charge is one**
+     (a credit back plus a second consume, not a prepaid rebuild; the coordinator's choice).
+   - **Reopen:** a BUILT target that now owes or lost cells goes back to BUILDING, unless a removal has it (`Groups.leaving`).
+   - The book then says what stands, every cell known, and the file is saved with the world. **A second load changes nothing.**
+   - Logged `Stockpile <owner>: reconciled <key> after an unclean stop: ...` (WARN), and the whole pass as INFO with its ms.
+   - The dev audit (`dev.stockpile.audit`) adds `reconciled` per target and `uncleanStart`.
+3. **Swap refunds out of the record (audit F7).** `refundSwap` gives a construction delta's old block back through
+   `Purse.giveBackPaid(target, items, at)`: a stockpile takes it out of the site's paid record, capped. Before, it was credited unkeyed,
+   so after a swap the record held old + new, and a swap of a block built after the save refunded what the saved ledger never charged.
+   A legacy crate drops it as before.
+4. **`Stockpiles.fromPaid` for a fed target with no record** (XR's take-ups, F7) is capped by its pile (the legacy pool per JR-b's
+   `placedAt`, else nothing) instead of returning the items whole.
+   - Only a target no stockpile feeds gives back its items as they are.
+   - Both paths mark the ledger changed, for PS's periodic save.
+
+Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), which are HF's and PS's.
+- A block a player placed in a queued cell after the save (JR-b's note 4) is charged to the stock at the reconcile. The player's
+  inventory rolls back with the ledger (HF), so the player holds the item again: block plus items stay equal. Leaving it free would be
+  the dupe.
+- A block a player placed before the save is in the book and is not touched.
+
+### What Steward sees (the coordinator's next Steward RC)
+
+1. **A BUILT site, road or region target can go back to BUILDING after a crash.**
+   - The event sequence a listener sees: SITE_BUILT (before the crash), then nothing at load (the reconcile changes the record without an
+     event), then SITE_PROGRESS as the owed or lost cells build, then a second **SITE_BUILT** for the same site id when it completes again.
+   - The site's crate is not re-created (stockpile targets have none).
+   - A survival region already PLACED can show a target building again, and `RegionsImpl.constructionBuilt` runs a second time.
+2. **The stock can drop at load:** the charge for the unpaid standing cells. STOCKPILE_CHANGED follows on the first tick.
+3. **Lost cells** show as `returned` rising at load and a second consume when rebuilt. The net charge is one.
+4. **A site may wait** (STARVED, outstanding) for items it already showed as built: the owed cells.
+5. **A ledger save** (with the players and chunks) when a target joins a stockpile's feed.
+6. **New WARN lines:** `reconciled ... after an unclean stop`, `swap refund of ... capped`.
+7. **`stockpiles.json`:** an additive `cells` object (a format-2 field; an older reader ignores it).
+- **No API change** (api-compat passes).
+
+### Gate
+
+- **rl-crash** (tools/lib/gatem5rl.mjs, in tools/gate6dgr.mjs; chain `rl`). Each case asserts:
+  - nothing saved the ledger between the case's save and its halt;
+  - after the unclean restart, the reconcile found the lot's unpaid cells and none stands unpaid;
+  - a second halt at once and load change nothing (charged 0, given back 0, owed unchanged);
+  - fed until built: the paid cells standing equal the paid records item for item (no dupe, no double charge), and what the stock gave
+    up since the save equals what the records gained.
+  - Stages are approved by hand so no target joins the feed in the crash window. PS's periodic save is held off in that window only
+    (`dev.stockpile.ps {noPeriodic}`); the restart runs as shipped.
+- **Measured (run 2, a338b546).** "Before RL" counts the units the old code left free.
+
+  | case | what happens | before RL | reconcile | built after the restart |
+  |---|---|---|---|---|
+  | RL1 | half delivered; the lot built 71 of 143 after the save and starved | 71 | charged 71 | standing 389 = paid 389 |
+  | RL2 | all delivered; the lot BUILT after the save | 142, plus road r2's 12 | charged them | 389 = 389 |
+  | RL3 | halt straight after an autosave's chunk save without flush | 0 (the ledger did not run ahead) | nothing | 389 = 389 |
+  | RL4 | half delivered before the save, the rest after it | 142 | charged 72, owed 70 cells, BUILT -> BUILDING | owed cells charged; 389 = 389 |
+
+  Every case: identity true; a second unclean load charged and gave back nothing.
+- **Timing:**
+  - Book refresh before a save: at most 4.4 ms over 243 refreshes (run 2, every step, including rs-survival-smoke's 1400 paid items).
+    The coordinator's bounds were 50 ms at autosave and 250 ms explicit.
+  - Reconcile at an unclean start: 15-169 ms per load.
+- **Gate runs** (`--out artifacts/gate-runs-rl`, 8910/8911):
+  - **Run 1** (454fc401): the repro before the fix. rl-crash's first draft: RL2 a dupe; RL1 confounded (the region consumed before the
+    save), so the cases were rebuilt around a paused lot.
+  - **Run 2** (a338b546): 7 PASS, 1 FAIL.
+    - PASS: rl-crash 64/0, jr-crash 24/0, xr-survival 24/0, lc-survival 14/0, so-survival 55/0, gr-survival 12/0, qt-growth 12/0.
+    - FAIL: rs-survival-smoke 39/1, item 10 (rs02m2) "reads REMOVING after the reopen", got REMOVED. This is JR's known timing flake
+      (2 of 28 earlier runs), at load 104. rs02m2 is a clean save, leave and reopen, so the reconcile never runs.
+  - **Run 3** (126e8197, main merged): RUN3_RESULTS.
+- **Strict verifier:** VERIFIER_RESULTS.
+- **Units:**
+  - `StockpileReconcileRLTest` (6): the book saved with the ledger and an older file has none; the plan over known cells only; the plan
+    applied twice is idempotent; the world ahead charged once and the ledger ahead taken once; (audit b) an owed cell not refunded until
+    charged; (F7) a swap refund out of the record.
+  - `RunOwedRLTest` (3): an owed cell built only once paid; (audit a) settle charges what stands and forgets what was mined; a legacy
+    purse gives a swap back as it is.
+  - HF's `StockpileSaveHFTest` holds: the reconcile saves through `saveWithWorld`.
+- **Other checks:**
+  - Gradle `build`: GRADLE_RESULTS.
+  - Kit: 1303 tests, 1301 pass, 2 fail. Neither is RL's: kit/ is untouched. They are the floatingIsland per-cell cost bench, run under
+    gate load, and release-version's s3 golden re-plan, which reads kit/ only.
+  - `node tools/step-inputs.mjs check`: 386 steps clean.
+  - Sidecar `tsc --noEmit`: clean (sidecar untouched).
+  - api-compat: the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface pass.
+
+### Known open
+
+- The reconcile charges, at load, a block a player placed after the save in a queued cell (see above): it is conserved, but it is
+  charged to the stock. A player-placement-aware variant would need PT's record to be saved with the ledger.
+- A crash during a swap's construction delta: unit-tested only (`aSwapRefundComesOutOfTheRecord`; cu-survival covers the swap without a
+  crash). A crash-plus-swap gate case is not built.
+- `rl-crash` reconciles stockpile-fed sites and roads. A survival region's terrain target (RegionTargets) carries a book like any target,
+  but no gate case halts inside one.
