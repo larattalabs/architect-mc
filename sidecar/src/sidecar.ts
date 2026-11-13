@@ -1248,6 +1248,8 @@ export class Sidecar {
     const source = input.source ?? path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
     const s = res.sidecar!.size!;
     const size = { x: s.x, y: s.y, z: s.z };
+    // (7c CM-b) a composite installs only as a new entry (a version of one, or a massing, stays a later slice's)
+    if (res.composite && (d.request.versionOf || d.massing)) throw new Error(`a composite (past the cap) installs only as a new entry, not as ${d.massing ? 'a massing' : 'a new version of an entry'}`);
     // (0b, C13) a new version of an existing entry
     if (d.request.versionOf) {
       this.installVersionOf(d, { scratch: input.scratch, bp: input.bp, res, previews: input.previews, source, ...(input.notes ? { notes: input.notes } : {}) });
@@ -1267,6 +1269,7 @@ export class Sidecar {
       source,
       previews: input.previews,
       files: this.entryFiles(d, input.scratch),
+      ...(res.composite ? { composite: res.composite } : {}),
       meta: { name: input.name, description: input.description, request: d.request, createdAt: this.now(), extra: this.entryExtra(d), designId: d.id },
     });
     // (5a) the critique verdict next to the entry (the input of a later polish)

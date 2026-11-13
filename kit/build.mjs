@@ -49,6 +49,7 @@ import { resolveValues, validateParams } from './lib/params.mjs';
 import { leaveReserved, parseReserved } from './lib/reserved.mjs';
 import { mirrorAxisOf, mirrorBlueprint, mirrorSidecar } from './lib/mirror.mjs';
 import { Site } from './lib/site.mjs';
+import { Composite, MODULE_CAP } from './lib/composite.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DESIGNS = path.join(HERE, 'designs');
@@ -99,7 +100,14 @@ export async function loadDesign(id, { palette, values, dir, mirror, site, reser
   // (M5 GP, S-M5-1) a lot's reserved cells (--reserved, in the lot's frame: kit/lib/reserved.mjs) are given to the program too, so a
   // module program (an irrigated farm) can leave them open; a program that ignores them is still refused by the checker if it writes one
   const bp = await mod.default({ ...(p ? { palette: p } : {}), ...(site ? { site } : {}), ...(reserved ? { reserved: structuredClone(reserved) } : {}), ...v });
-  if (!bp || typeof bp.toStructure !== 'function') throw new Error(`kit/designs/${id}.mjs: the default export must return a Blueprint`);
+  // (7c CM-b) past the cap: a design may return a Composite (kit/lib/composite.mjs): its modules each a Blueprint within the cap
+  if (bp instanceof Composite) {
+    if (bp.id !== id) throw new Error(`kit/designs/${id}.mjs builds composite id '${bp.id}' (must match the file name)`);
+    if (site) throw new Error(`kit/designs/${id}.mjs returns a Composite: a composite is not site-bound`);
+    if (mirror) throw new UsageError(`${id} is a composite: it is never mirrored`);
+    return bp;
+  }
+  if (!bp || typeof bp.toStructure !== 'function') throw new Error(`kit/designs/${id}.mjs: the default export must return a Blueprint (or a Composite past the cap)`);
   if (bp.id !== id) throw new Error(`kit/designs/${id}.mjs builds id '${bp.id}' (must match the file name)`);
   if (site && bp.site !== site) throw new Error(`kit/designs/${id}.mjs ignores the site it is given (pass \`site\` to the Blueprint)`);
   if (p && bp.p !== p) {
@@ -121,6 +129,7 @@ export async function loadDesign(id, { palette, values, dir, mirror, site, reser
 /** Build + check one design. */
 export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values, massing, massingCap, restraint, style, dir, mirror, reserved, leave = false, site } = {}) {
   const bp = await loadDesign(id, { palette, values, dir, mirror, site, ...(reserved ? { reserved } : {}) });
+  if (bp instanceof Composite) return buildComposite(bp, { out, max });
   // ((6c IRR) --leave-reserved: the reserved cells are dropped before the write (the sim's stand-in honours them so))
   if (reserved && leave) leaveReserved(bp, reserved);
   // (0b) the massing a mirrored copy conforms to is the archetype's, mirrored with it
@@ -130,6 +139,35 @@ export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, p
   // (C35) said where a caller reads it: the check's warnings
   if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
+}
+
+/**
+ * (7c CM-b) Build + check a composite: `c.write(out)` (the union entry, each module's hidden entry `<id>__<m>`, the manifest) and
+ * `c.check()` (CM-a's findings, then the union's structure check across the seams). The size limit (`max`) applies to each module, not
+ * to the union: a composite is past the cap by design; a module over the job's max (or the 96x64x96 cap) is an error.
+ */
+export function buildComposite(c, { out = DEFAULT_OUT, max } = {}) {
+  const files = c.write(out);
+  const result = c.check({});
+  const cap = max ?? MODULE_CAP;
+  for (const m of c.modules) {
+    const s = m.bp.size;
+    if (s.x > cap.x || s.y > cap.y || s.z > cap.z) {
+      result.errors.push(`composite: module '${m.id}' is ${s.x}x${s.y}x${s.z}, over the max ${cap.x}x${cap.y}x${cap.z}`);
+      result.ok = false;
+    }
+  }
+  const u = c.union();
+  const nbtPath = files[`${c.id}.nbt`];
+  const written = {
+    nbtPath,
+    jsonPath: files[`${c.id}.blueprint.json`],
+    partsPath: files[`${c.id}.parts.nbt`],
+    blocks: u.cells.size,
+    bytes: fs.statSync(nbtPath).size,
+    composite: { manifest: files[`${c.id}.composite.json`], modules: c.modules.map((m) => ({ id: m.id, entryId: c.moduleEntryId(m.id) })) },
+  };
+  return { bp: u, composite: c, written, result };
 }
 
 /** (C35) "bible birch v1", "palette dark", "palette {...}": what a captured source ignored. */
@@ -220,7 +258,7 @@ async function main() {
   Object.assign(console, saved);
   const { bp, written, result } = r;
   if (o.json) {
-    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, parts: written.partsPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}), ...(result.site ? { site: result.site } : {}) }));
+    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, parts: written.partsPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}), ...(result.site ? { site: result.site } : {}), ...(written.composite ? { composite: written.composite } : {}) }));
   } else {
     const rel = (p) => path.relative(process.cwd(), p) || p;
     console.log(`${id}: ${bp.type}, ${bp.size.x}x${bp.size.y}x${bp.size.z}, ${written.blocks} blocks, ${written.bytes} bytes gz`);

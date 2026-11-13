@@ -1351,7 +1351,7 @@ public final class ArchitectScreen extends Screen {
 		boolean dialog = !showPlaced && LibraryTab.dialog != LibraryTab.Dialog.NONE;
 		int cx = x;
 		if (!dialog) {
-			cx += chip(g, "library:designs", "Designs (" + Blueprints.entries().size() + ")", cx, top, !showPlaced, true, mx, my, () -> {
+			cx += chip(g, "library:designs", "Designs (" + Blueprints.entries().stream().filter(e -> !dev.larattalabs.architect.site.Composites.isModule(e.json())).count() + ")", cx, top, !showPlaced, true, mx, my, () -> {
 				showPlaced = false;
 				listScroll = 0;
 			}) + 3;

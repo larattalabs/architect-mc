@@ -266,6 +266,8 @@ export interface CheckResult {
   timedOut?: boolean;
   /** (M5 GP) the kit's error lines as it printed them (the checker's and the conformance's) */
   errors?: string[];
+  /** (7c CM-b) the design returned a Composite: its manifest and module files (installed with it) */
+  composite?: CompositeFiles;
 }
 
 /**
@@ -280,17 +282,17 @@ export function sandboxFlags(scratch: string, heapMb: number, noNetwork: string,
 }
 
 /** The kit's `--json` line (`{ ok, errors[], warnings[], nbt, sidecar }`), if it printed one. */
-export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance; metrics?: Record<string, unknown> } | undefined {
+export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance; metrics?: Record<string, unknown>; composite?: unknown } | undefined {
   const lines = stdout.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('{') && l.endsWith('}'));
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
-      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown; metrics?: unknown };
+      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown; metrics?: unknown; composite?: unknown };
       const list = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))) : []);
       const c = j.conformance && typeof j.conformance === 'object' ? (j.conformance as Record<string, unknown>) : undefined;
       // (4c) `conformance: { ok, errors[], issues[] }` (warnings is accepted for issues)
       const conformance = c ? { ok: c.ok !== false && !list(c.errors).length, errors: list(c.errors), issues: list(c.issues ?? c.warnings) } : undefined;
       const metrics = j.metrics && typeof j.metrics === 'object' && !Array.isArray(j.metrics) ? (j.metrics as Record<string, unknown>) : undefined;
-      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}), ...(metrics ? { metrics } : {}) };
+      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}), ...(metrics ? { metrics } : {}), ...(j.composite !== undefined ? { composite: j.composite } : {}) };
     } catch {
       /* not it */
     }
@@ -340,9 +342,14 @@ export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits,
   } catch (e) {
     return { ok: false, problem: `the sidecar is not valid JSON: ${(e as Error).message}`, output: r.output, warnings, ...conf };
   }
-  const p = sidecarProblem(sc, limits);
+  // (7c CM-b) a composite: the size limit was the kit's, per module (`--max`); the union is past the cap by design
+  const composite = compositeFiles(j, out);
+  if (composite && !composite.modules.every((m) => fs.existsSync(m.nbt) && fs.existsSync(m.json)) || composite && !fs.existsSync(composite.manifest)) {
+    return { ok: false, problem: `the kit did not write every module of composite ${bp}`, output: r.output, warnings, ...conf };
+  }
+  const p = sidecarProblem(sc, composite ? { ...limits, maxSize: undefined } : limits);
   if (p) return { ok: false, problem: p, output: r.output, warnings, sidecar: sc, ...conf };
-  return { ok: true, output: r.output, warnings, sidecar: sc, nbt, json, ...conf };
+  return { ok: true, output: r.output, warnings, sidecar: sc, nbt, json, ...conf, ...(composite ? { composite } : {}) };
 }
 
 /**
@@ -393,8 +400,46 @@ export interface InstallInput {
   previews: string[];
   /** (4b) more files for the entry folder: `to` relative to it (`bible/components.mjs`: the design's bible files) */
   files?: Array<{ from: string; to: string }> | undefined;
+  /**
+   * (7c CM-b) a composite (the kit's `Composite`, past the cap): its manifest and each module's hidden entry files. The modules install
+   * first as `<id>__<module>` (each marked `compositeOf: <id>`, no group binding), then the one composite entry `<id>` with the manifest
+   * (`<id>.composite.json`) and the CompositeInfo wire in ext, every module id rewritten to the installed id.
+   */
+  composite?: CompositeFiles | undefined;
   /** written into the sidecar JSON (`extra`: variantOf, displayName, imported, ...) */
   meta: { name?: string | undefined; description?: string | undefined; request?: DesignRequest | undefined; createdAt: number; extra?: Record<string, unknown>; designId?: string | undefined };
+}
+
+/** (7c CM-b) The ext key of a composite's CompositeInfo wire (the mod's `CompositeInfo.EXT_KEY`, the kit's `COMPOSITE_EXT`). */
+export const COMPOSITE_EXT = 'architect_mc:composite';
+
+/** (7c CM-b) A built composite's files: the manifest and each module's hidden entry (as the kit wrote them). */
+export interface CompositeFiles {
+  manifest: string;
+  modules: Array<{ id: string; entryId: string; nbt: string; parts?: string | undefined; json: string }>;
+}
+
+/** (7c CM-b) The composite files of a kit build's `--json` line (`composite: {manifest, modules: [{id, entryId}]}`) in `out`, or undefined. */
+export function compositeFiles(j: unknown, out: string): CompositeFiles | undefined {
+  const c = (j as { composite?: { manifest?: unknown; modules?: unknown } } | undefined)?.composite;
+  if (!c || typeof c.manifest !== 'string' || !Array.isArray(c.modules)) return undefined;
+  const modules: CompositeFiles['modules'] = [];
+  for (const m of c.modules as Array<{ id?: unknown; entryId?: unknown }>) {
+    if (typeof m.id !== 'string' || typeof m.entryId !== 'string') return undefined;
+    const parts = path.join(out, `${m.entryId}.parts.nbt`);
+    modules.push({ id: m.id, entryId: m.entryId, nbt: path.join(out, `${m.entryId}.nbt`), parts: fs.existsSync(parts) ? parts : undefined, json: path.join(out, `${m.entryId}.blueprint.json`) });
+  }
+  return { manifest: c.manifest, modules };
+}
+
+/** (7c CM-b) The CompositeInfo wire with its module entry ids rewritten (`<kit id>__<m>` -> `<installed id>__<m>`). */
+export function rewriteCompositeWire(wire: Record<string, unknown>, from: string, to: string): Record<string, unknown> {
+  const re = (v: unknown): unknown => (typeof v === 'string' && v.startsWith(`${from}__`) ? `${to}__${v.slice(from.length + 2)}` : v);
+  const joints = Array.isArray(wire.joints) ? (wire.joints as Array<Record<string, Record<string, unknown>>>).map((j) => ({
+    from: { ...j.from, module: re(j.from?.module) },
+    to: { ...j.to, module: re(j.to?.module) },
+  })) : wire.joints;
+  return { ...wire, modules: Array.isArray(wire.modules) ? wire.modules.map(re) : wire.modules, joints };
 }
 
 export interface Installed {
@@ -418,13 +463,18 @@ export function installDesign(input: InstallInput): Installed {
     const id = freeLibraryId(input.library, input.baseId, tried);
     tried.add(id);
     const dir = path.join(input.library, id);
+    // (7c CM-b) a composite's module folders must be free too (checked before the entry's folder is taken)
+    const comp = input.composite;
+    if (comp && comp.modules.some((m) => fs.existsSync(path.join(input.library, `${id}__${m.id}`)))) continue;
     try {
       fs.mkdirSync(dir); // not recursive: EEXIST if someone made it meanwhile
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'EEXIST') continue;
       throw e;
     }
+    const moduleDirs: string[] = [];
     try {
+      if (comp) installModules(input, comp, id, moduleDirs);
       const nbt = path.join(dir, `${id}.nbt`);
       fs.copyFileSync(input.nbt, nbt, fs.constants.COPYFILE_EXCL);
       // (5b) the per-cell part map travels with the template (none for an import or a pre-5b build)
@@ -463,6 +513,19 @@ export function installDesign(input: InstallInput): Installed {
       };
       if (source) sidecar.source = `${id}.mjs`;
       else delete sidecar.source;
+      if (comp) {
+        // (7c CM-b) the manifest beside the entry, and the CompositeInfo wire in ext (kept over the request's ext), with the installed ids
+        const kitId = String(input.sidecar.id ?? id);
+        const man = JSON.parse(fs.readFileSync(comp.manifest, 'utf8')) as Record<string, unknown> & { modules?: Array<Record<string, unknown>> };
+        man.id = id;
+        man.entryId = id;
+        if (Array.isArray(man.modules)) man.modules = man.modules.map((m) => ({ ...m, entryId: `${id}__${String(m.id)}` }));
+        fs.writeFileSync(path.join(dir, `${id}.composite.json`), `${JSON.stringify(man, null, 2)}\n`, { flag: 'wx' });
+        const ext = (input.sidecar.ext ?? {}) as Record<string, unknown>;
+        const wire = ext[COMPOSITE_EXT] as Record<string, unknown> | undefined;
+        if (!wire) throw new Error(`install: composite ${kitId} has no ${COMPOSITE_EXT} in its sidecar`);
+        sidecar.ext = { ...((sidecar.ext ?? {}) as Record<string, unknown>), [COMPOSITE_EXT]: rewriteCompositeWire(wire, kitId, id) };
+      }
       // (5b) a new entry is version 1 of its own lineage
       sidecar.version = 1;
       sidecar.versions = [{ n: 1, createdAt: m.createdAt, by: 'design', parent: null, ...(m.designId ? { designId: m.designId } : {}), summary: '', nbtSha256: crypto.createHash('sha256').update(fs.readFileSync(nbt)).digest('hex') }];
@@ -474,10 +537,33 @@ export function installDesign(input: InstallInput): Installed {
     } catch (e) {
       // the folder is ours (created exclusively above): take it back out
       fs.rmSync(dir, { recursive: true, force: true });
+      for (const m of moduleDirs) fs.rmSync(m, { recursive: true, force: true });
       throw e;
     }
   }
   throw new Error(`could not find a free library id for ${input.baseId} in ${input.library}`);
+}
+
+/**
+ * (7c CM-b) A composite's module entries, each `<id>__<module>/`: its template, part map and sidecar (id rewritten, `compositeOf: <id>`,
+ * version 1, no group binding: a composite is one entry and one group item, Steward's `itemKey == lotId`). The mod hides them from the
+ * Library. Folders are created exclusively; the created ones are listed in `dirs` (taken back out on a failure).
+ */
+function installModules(input: InstallInput, comp: CompositeFiles, id: string, dirs: string[]): void {
+  for (const m of comp.modules) {
+    const mid = `${id}__${m.id}`;
+    const mdir = path.join(input.library, mid);
+    fs.mkdirSync(mdir);
+    dirs.push(mdir);
+    const nbt = path.join(mdir, `${mid}.nbt`);
+    fs.copyFileSync(m.nbt, nbt, fs.constants.COPYFILE_EXCL);
+    if (m.parts && fs.existsSync(m.parts)) fs.copyFileSync(m.parts, path.join(mdir, `${mid}.parts.nbt`), fs.constants.COPYFILE_EXCL);
+    const sc = JSON.parse(fs.readFileSync(m.json, 'utf8')) as Record<string, unknown>;
+    delete sc.source;
+    const out: Record<string, unknown> = { ...sc, id: mid, compositeOf: id, createdAt: input.meta.createdAt, version: 1 };
+    out.versions = [{ n: 1, createdAt: input.meta.createdAt, by: 'design', parent: null, summary: '', nbtSha256: crypto.createHash('sha256').update(fs.readFileSync(nbt)).digest('hex') }];
+    fs.writeFileSync(path.join(mdir, `${mid}.blueprint.json`), `${JSON.stringify(out, null, 2)}\n`, { flag: 'wx' });
+  }
 }
 
 /** One line describing a request, for the log. */

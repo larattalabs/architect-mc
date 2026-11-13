@@ -94,7 +94,7 @@ class Api7cFTest {
 	@Test
 	void featuresNotAdvertisedByTheFoundation() {
 		List<String> names = List.of("bigForms", "hiddenRooms", "suspendedBuilds", "aqueduct", "regionM15", "styleFormat3", "scenarioTemplates",
-			"compose", "programAuthoring", "shapePromotion", "composites", "placeConnector");
+			"compose", "programAuthoring", "shapePromotion", "placeConnector"); // (7c CM-b) "composites" is advertised by CM-b
 		for (Set<String> f : List.of(ApiRules.JAVA_FEATURES, ApiRules.features(1, List.of()), ApiRules.features(2, List.of("job.run", "region.plan",
 			"region.planCheck", "site.design", "region.link")))) {
 			for (String n : names) {

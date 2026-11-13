@@ -1277,6 +1277,7 @@ public final class Batches {
 			RegionItems.forget(b, i);
 			dev.larattalabs.architect.region.RegionsImpl.itemDone(b, i);
 		}
+		Composites.modulePlaced(b); // (7c CM-b) TEST kill point CM1: between two modules of a composite
 	}
 
 	private static void progress(QBatch b) {
@@ -1301,6 +1302,7 @@ public final class Batches {
 		if (RegionItems.isRegion(b)) {
 			dev.larattalabs.architect.region.RegionsImpl.batchDone(b);
 		}
+		Composites.batchDone(server, b); // (7c CM-b) a composite's batch: done, or its placed modules rolled back
 		Architect.LOGGER.info("Batch {} {}: {} placed, {} failed{}", b.id, status.name().toLowerCase(java.util.Locale.ROOT),
 			b.items.stream().filter(i -> i.status == QItem.Status.PLACED).count(), b.items.stream().filter(i -> i.status == QItem.Status.FAILED).count(),
 			note.isEmpty() ? "" : " (" + note + ")");
@@ -1799,6 +1801,7 @@ public final class Batches {
 		RegionItems.reset();
 		CANCELLED.values().forEach(fs -> fs.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		CANCELLED.clear();
+		Composites.reset();
 		next = 1;
 		tick = 0;
 	}

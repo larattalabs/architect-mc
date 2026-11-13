@@ -132,6 +132,9 @@ public final class LibraryFeature {
 			}
 			List<LibraryCard> out = new ArrayList<>();
 			for (Blueprints.Entry e : Blueprints.entries()) {
+				if (dev.larattalabs.architect.site.Composites.isModule(e.json())) {
+					continue; // (7c CM-b) a composite's module entries are hidden
+				}
 				out.add(LibraryCard.of(e.blueprint(), e.json(), meta(e), e.bundled()));
 			}
 			cards = List.copyOf(out);

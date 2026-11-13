@@ -133,6 +133,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<PlaceResult> place(PlaceRequest r) {
+		// (7c CM-b) a composite entry: its modules as one site group (CompositePlace); siteId is the group's id
+		if (dev.larattalabs.architect.site.Composites.isComposite(r.blueprintId())) {
+			return onServer(() -> CompositePlace.place(server, r)).thenCompose(f -> f);
+		}
 		// (7b PL) a site placement: its checks and writes see the site (SiteFit.now: TerrainFit KEEP, the port approach, the site checks)
 		return onServer(() -> dev.larattalabs.architect.site.SiteFit.with(r.site(), () -> placeNow(r)));
 	}
@@ -161,6 +165,9 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public Verdict check(PlaceRequest r) {
+		if (dev.larattalabs.architect.site.Composites.isComposite(r.blueprintId())) {
+			return CompositePlace.check(r); // (7c CM-b) every module's verdict, named
+		}
 		return dev.larattalabs.architect.site.SiteFit.with(r.site(), () -> checkNow(r));
 	}
 
@@ -226,6 +233,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		String busy = adoptBusySite(siteId);
 		if (busy != null) {
 			return CompletableFuture.completedFuture(refused(busy)); // (6d AD) SITE_BUSY while an adoption moves it
+		}
+		// (7c CM-b) a composite placement's handle is its group's id: Sites.remove takes it for the whole (every module)
+		if (Sites.get(siteId) == null && dev.larattalabs.architect.site.Composites.groupEntry(Sites.group(siteId)) != null) {
+			return removeGroup(siteId, o);
 		}
 		if (Sites.get(siteId) == null && dev.larattalabs.architect.site.Infras.get(siteId) != null) {
 			return onServer(() -> removeInfra(siteId, o)).thenCompose(f -> f);
