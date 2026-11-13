@@ -22417,7 +22417,21 @@ merged with 27019ef8 (HF v0.64.1, PS, JR-b).
   `Regions.undoRevision` says so (Since NEXT); no method, record or enum changed.
 - **Not covered:** a suffix holding a *middle* survival revision with targets still building after its batch ended (an older revision whose
   last targets wait while a newer one stands) also undoes now (the stage-level refusals are gone). Its path is the stage undo the gate
-  covers, but no gate row builds that order.
+  covers, but no gate row builds that order. Creative refusal is unit-checked only.
+- **Checks:**
+  - Gradle build: 1192 tests, 0 failures, 1 skipped.
+  - Kit: 1336/1336.
+  - `step-inputs check`: every closure inside its set.
+  - Sidecar `tsc --noEmit`: clean.
+- **Gate runs:**
+  - Run 1 (`gate-runs-ru/20261113-185833-change`, 9fc840b4): unit-mod, gr-unit (api-compat), jr-crash, qt-unit, ru-cancel 22/0, ru-crash
+    36/0, qt-growth and gr-crash PASS. gr-survival FAILed on the new waiting check, which read `rs.targets`; that list does not name a
+    growth's targets.
+  - Run 2 (6bfa9310): gr-survival PASS, the check reading the feed order.
+- **Strict gate-verifier: PASS** at 6bfa9310. It re-ran ru-cancel, ru-crash, jr-crash and gr-survival on 8928/8929, 4/4 PASS, with the same
+  numbers. Its review found no blocking defect.
+  - It flagged a SKIPPED stage with a building target as uncovered. That can't happen: a cancelled stage that placed anything ends PARTIAL
+    (`StageRules.cancelled`), so a SKIPPED stage has no sites.
 
 ## Phase 6d slice GR: growing a standing region (D-S2, `growDistrict`) (FROZEN 2026-10-20, Steward reviewed)
 
