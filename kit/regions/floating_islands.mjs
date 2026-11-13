@@ -23,7 +23,6 @@ export const catalogue = {
   description: 'Floating islands: 5-9 small separate sky islands (no pillars, nothing under them) around a larger hub island, each with one or two building lots, joined by stone bridges, with a spiral stair up from the ground. For scattered hamlets or outposts on several small islands in the sky, over plains or ocean.',
   needs: { minFlat: 0.6, water: 'ok', relief: 'low' },
   claim: { min: [200, 200], max: [320, 320] },
-  keywords: ['floating', 'islands', 'island', 'sky', 'skies', 'hamlet', 'clouds', 'flying', 'airborne', 'archipelago'],
 };
 
 const LOT = 9; // lot footprint (a 9x9 child)

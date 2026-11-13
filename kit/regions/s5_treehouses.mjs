@@ -18,7 +18,6 @@ export const catalogue = {
   description: 'A treehouse village: six houses wrapped round the trunks of six giant trees in three facing pairs, under their crowns on a shared deck floor, each pair joined by a railed branch walk, with paths up the ramps to the decks. For a village in the treetops or crowns of giant trees. It builds on giant trees that are already standing (it grows none): the land must have them.',
   needs: { water: 'none near the trees', relief: 'low', affordances: { trunk: { count: 6, min: { height: 24 } } } },
   claim: { min: [160, 160], max: [256, 256] },
-  keywords: ['treehouse', 'treehouses', 'tree', 'trees', 'treetop', 'treetops', 'canopy', 'crowns', 'crown', 'giant', 'branches', 'forest', 'grove'],
 };
 export const params = {
   grove: { type: 'json', default: null, pick: false, label: 'The grove (the sculpt\'s record)' },

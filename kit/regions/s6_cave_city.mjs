@@ -18,7 +18,6 @@ export const catalogue = {
   description: 'A cave city: seven homes carved into the walls of a long cavern hall under the mountain (three on each long wall, one at the west end), the hall floor paved as a street, and a ramp up to the surface at its east end. For a city, dwarf hold or settlement carved inside a mountain or underground. It carves into a hall that is already there (it digs none): the land must have a large cave under the claim.',
   needs: { relief: 'a mountain or high ground over the hall', affordances: { cave: { count: 1, min: { floorArea: 400, ceiling: 6 } } } },
   claim: { min: [160, 160], max: [256, 256] },
-  keywords: ['cave', 'caves', 'cavern', 'underground', 'carved', 'mountain', 'dwarf', 'dwarven', 'hold', 'subterranean', 'inside', 'beneath', 'mine'],
 };
 export const params = {
   floorY: { type: 'int', min: -64, max: 300, default: -64, pick: false, label: 'Hall floor y (-64: the land\'s hall)' },

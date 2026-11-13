@@ -36,7 +36,6 @@ export const catalogue = {
   description: 'A terraced monastery down a mountainside: three districts at the land\'s level bands (a gate court low, gardens with a fountain in the middle, a church and cloister with monks\' cells high), each lot on its own terrace with retaining walls, routes between the terraces, 0-3 rock spires on the shoulders, a lookout on the highest ground, scatter and lanterns. For a monastery, abbey, temple or hermitage that climbs a steep slope, cliff or mountainside.',
   needs: { minFlat: 0, water: 'ok (springs are kept clear)', relief: 'steep (about 40-200 blocks over the claim)' },
   claim: { min: [128, 128], max: [256, 256] },
-  keywords: ['monastery', 'abbey', 'temple', 'monks', 'monk', 'cloister', 'hermitage', 'shrine', 'terraced', 'terraces', 'mountainside', 'cliff', 'slope'],
 };
 export const passes = ['relief', 'route', 'districts', 'hydrology'];
 /** The monastery's look when no bible is given (S3's fixture bible "mountain monastery" wins). */

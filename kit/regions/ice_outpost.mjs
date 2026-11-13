@@ -32,7 +32,6 @@ export const catalogue = {
   description: 'A frontier outpost among ice spikes: a watch tower (the landmark), a longhouse, a smithy, a store, a farm and 0-4 huts on pads blended into snowy land, routes from a gate to every door, generated ice-spike clusters between the natural ones (which are kept), snow scatter and soul-lantern light. For an outpost, camp or small frozen settlement on snowy land, ice spikes or tundra beside a frozen sea; the lots stand on dry land only.',
   needs: { minDryLand: 'a connected band of dry snowy land holding 6+ lots', water: 'ok (frozen sea is left untouched)', relief: 'low to moderate (up to ~60)' },
   claim: { min: [96, 96], max: [256, 256] },
-  keywords: ['ice', 'spikes', 'spike', 'frozen', 'snow', 'snowy', 'tundra', 'frontier', 'outpost', 'camp', 'arctic', 'glacier', 'polar'],
 };
 export const passes = ['relief', 'route'];
 /** The outpost's look when no bible is given (S2's fixture bible "frontier outpost" wins): spruce, stone bricks, packed snow. */

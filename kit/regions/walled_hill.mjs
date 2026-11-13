@@ -21,7 +21,6 @@ export const catalogue = {
   description: 'A walled hill town: a hill raised in terraced levels with retaining walls, a ring wall with towers, crenels and a gate round its foot, stairs between the levels and 4-16 lots on the terraces. For a walled town, a fortified hilltop village or a castle town on a hill, on fairly open ground.',
   needs: { minFlat: 0.5, water: false, relief: 'any' },
   claim: { min: [140, 140], max: [320, 320] },
-  keywords: ['walled', 'wall', 'walls', 'hill', 'hilltop', 'fortified', 'castle', 'ramparts', 'town'],
 };
 
 const BRIEFS = ['Town hall', 'Market house', 'Inn', 'Smithy', 'Bakery', 'Weaver', 'Chapel', 'Guard house', 'Merchant house', 'Cooper', 'Tannery', 'Granary', 'Mill house', 'Apothecary', 'Stable', 'Watch house'];

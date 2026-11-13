@@ -24,7 +24,6 @@ export const catalogue = {
   description: 'A flat village: 4-10 house lots (a landmark hall, a trading hall, cottages, workshops, an inn, a farm) along one straight street with a square or a well green at its middle, lanes from every door, lamps and props, and the villager rules. For a plain village, hamlet or farming settlement on flat, open ground (plains, meadow, savanna): it pads lots by at most 2 blocks, so it needs land that is already flat.',
   needs: { minFlat: 0.6, water: 'ok', relief: 'flat (a lot pad cuts or fills at most 2)' },
   claim: { min: [64, 64], max: [192, 192] },
-  keywords: ['village', 'hamlet', 'farm', 'farming', 'street', 'square', 'flat', 'plains', 'meadow', 'cottage', 'cottages', 'villagers', 'town'],
 };
 /** The default look (a bible's roles win): gravel lanes and paving, stone-brick foundations, lanterns. */
 export const roles = { path: 'minecraft:gravel', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
