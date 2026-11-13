@@ -339,7 +339,14 @@ subs['p0-scenario'] = async () => {
   const outDir = path.join(art, `pa-p0-${scn}`);
   const base = spawnSync(process.execPath, [path.join(root, 'tools', 'gate6b.mjs'), 'base'], { stdio: 'inherit', env: process.env });
   if (base.status !== 0) throw new Error('gate6b base failed');
-  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), 'run', scn, '--phase', '7b-pa', '--out', outDir], { stdio: 'inherit', env: { ...process.env, PA_PLAN: pf } });
+  // the scenario's own output goes to its log (its non-§5 rows print FAIL for a natural-only run: exactness wants a flat sibling, mspt is
+  // a timing bar); this step prints P0's verdict on the §5 bars
+  fs.mkdirSync(art, { recursive: true });
+  const slog = path.join(art, `pa-p0-${scn}.scenario.log`);
+  const fd = fs.openSync(slog, 'a');
+  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), 'run', scn, '--phase', '7b-pa', '--out', outDir], { stdio: ['ignore', fd, fd], env: { ...process.env, PA_PLAN: pf } });
+  fs.closeSync(fd);
+  log(`P0 ${scn}: the scenario's log ${slog}`);
   const v = verdict(outDir, scn, 'P0');
   // (the run's own exit is recorded, not judged: a natural-only run's exactness row asks for a flat sibling and its mspt row is a timing
   // bar; P0 judges the §5 bars from metrics.json, and a run that never wrote them fails)

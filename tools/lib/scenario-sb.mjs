@@ -140,7 +140,7 @@ async function paSiteEntries(L, sc, ir, plan) {
     const t0 = Date.now();
     if (plan.reuse?.[a.key]) {
       const src = plan.reuse[a.key];
-      const v = await L.call('dev.ds.variant', { entryId: src, site: lot.site, opKey: `${plan.opPrefix}-reuse-${a.lot}` }, 600_000);
+      const v = await variantCall(L, { entryId: src, site: lot.site, opKey: `${plan.opPrefix}-reuse-${a.lot}` });
       if (v.entryId) { archetype[a.key] = v.entryId; entries[a.lot] = v.entryId; }
       rows.push({ lot: a.lot, fit: lot.site.fit, entry: v.entryId ?? null, how: `site variant of the paid ${a.key} ${src} (reused: a re-run pays nothing twice)`, ...(v.entryId ? {} : { refused: v.refused, detail: v.detail ?? null }), ms: Date.now() - t0 });
       continue;
@@ -185,13 +185,30 @@ async function paSiteEntries(L, sc, ir, plan) {
     if (!lot) throw new Error(`PA plan: no site lot ${lotId}`);
     const t0 = Date.now();
     if (!archetype[key]) { rows.push({ lot: lotId, fit: lot.site.fit, entry: null, how: `site variant of ${key}`, refused: `no ${key} (its design is not shown)`, ms: 0 }); continue; }
-    const v = await L.call('dev.ds.variant', { entryId: archetype[key], site: lot.site, opKey: `${plan.opPrefix}-v-${lotId}` }, 600_000);
+    const v = await variantCall(L, { entryId: archetype[key], site: lot.site, opKey: `${plan.opPrefix}-v-${lotId}` });
     if (!v.entryId) { rows.push({ lot: lotId, fit: lot.site.fit, entry: null, how: `site variant of ${archetype[key]} (${key})`, refused: v.refused ?? JSON.stringify(v), detail: v.detail ?? null, ms: Date.now() - t0 }); continue; }
     entries[lotId] = v.entryId;
-    rows.push({ lot: lotId, fit: lot.site.fit, entry: v.entryId, how: `site variant of ${archetype[key]} (${key})`, ms: v.ms ?? Date.now() - t0 });
+    rows.push({ lot: lotId, fit: lot.site.fit, entry: v.entryId, how: `site variant of ${archetype[key]} (${key})${v.replays ? ` (${v.replays} opKey replay(s): the ack passed the mod's 20 s timeout)` : ''}`, ms: v.ms ?? Date.now() - t0 });
   }
   const spendUsd = Math.round(jobs.reduce((a, j) => a + (j.usd ?? 0), 0) * 1e6) / 1e6;
   return { entries, rows, archetypes: archetype, pa: { item: plan.item, backend: plan.backend, jobs, spendUsd, notShown: rows.filter((r) => !r.entry).map((r) => r.lot) } };
+}
+
+/**
+ * Designs.siteVariant through the DevBridge, replaying the same opKey when the answer is an untyped refusal. Under load the helper can ack
+ * `site.variant` after the mod's 20 s ack timeout (SidecarLink.ACK_TIMEOUT_MS): the mod then answers a refusal with no reason ("null")
+ * while the helper finishes and installs the variant; DS's opKey replay returns that entry ($0, no second build). A typed refusal
+ * (SITE_UNFIT, SITE_UNSUPPORTED, ...) is final.
+ */
+async function variantCall(L, body, tries = 4) {
+  let v;
+  for (let i = 0; i < tries; i++) {
+    v = await L.call('dev.ds.variant', body, 600_000);
+    if (v.entryId || (v.refused && v.refused !== 'null' && /^[A-Z_]+/.test(v.refused))) return { ...v, replays: i };
+    L.log(`  PA variant ${body.opKey}: untyped refusal ${JSON.stringify(v.refused ?? v)} (the helper's ack past the mod's 20 s timeout): replaying the opKey`);
+    await L.call('dev.wait', { ms: 15_000 }, 40_000);
+  }
+  return { ...v, replays: tries };
 }
 
 /** A design's state until it ends, `onPoll` with each answer (the ledger's running cost). */
