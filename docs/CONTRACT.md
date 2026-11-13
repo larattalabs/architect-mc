@@ -28948,6 +28948,7 @@ byte-stable):
 | catalogue golden | unchanged (f7c-foundation, catalogue-c38 pass in the kit suite); `tools/catalogue-since-check.mjs` pass |
 | instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 |
 | `node tools/step-inputs.mjs check` | clean after `build` (353 steps; unit-kit gains cm-a and kit/designs/composite) |
+| gate-verifier (review only, DEV MODE) | **PASS** at 83c811a5: no Java, sidecar, catalogue or version file in the diff; every joint rule enforced as read; `info()` equal to `CompositeInfo.wire()`'s shape; cm-a 10/10 and the CLI castle ok, 0 errors, 0 warnings re-run; the tests not vacuous. Non-blocking: a facing mismatch alone is not isolated in a test (the case also trips JOINT_BOUNDARY); the Linux legs were the builder's |
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
