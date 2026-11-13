@@ -223,6 +223,37 @@ test('ports_met and floors_reachable: a port renamed, moved off its hint, or wal
   assert.match(finding(check(hatch), 'ports_met').message, /port 'hatch': nobody can stand or climb at it/);
 });
 
+test('ports_met (7b WL): a horizontal walk port is held to the hint\'s feet y exactly; x, z, doors and a hatch keep within 2', () => {
+  assert.equal(SITE_CHECK_LIMITS.walkLevel, 0);
+  const moved = (id, name, d) => { const ex = example(id); ex.sidecar.ports = ex.sidecar.ports.map((p) => (p.name === name ? { ...p, x: p.x + d[0], y: p.y + d[1], z: p.z + d[2] } : p)); return check(ex); };
+  const levelErr = (r) => r.site.findings.find((f) => f.rule === 'ports_met' && f.severity === 'error');
+  // exact: the example's walk ports sit at their hints, no ports_met finding
+  const exact = check(example('fit_span'));
+  assert.ok(!rules(exact).includes('ports_met'));
+  assert.deepEqual(exact.site.metrics.portsMet.sort(), ['walk_e', 'walk_w']);
+  // one row up or down: an error finding, typed (`level`), in the checker's errors, the port not met
+  for (const dy of [1, -1]) {
+    const r = moved('fit_span', 'walk_e', [0, dy, 0]);
+    const f = levelErr(r);
+    assert.ok(f, `walk_e off by ${dy}`);
+    const hy = example('fit_span').sidecar.ports.find((p) => p.name === 'walk_e').y;
+    assert.deepEqual(f.level, [{ port: 'walk_e', y: hy + dy, want: hy }]);
+    assert.equal(f.count, 1);
+    assert.match(f.message, new RegExp(`^ports_met: walk port 'walk_e' has its feet at y ${hy + dy}, not the hint's y ${hy}: a walk port is held to the hint's y exactly`));
+    assert.ok(r.errors.includes(f.message), 'the level finding is a checker error (a check-fix round)');
+    assert.equal(r.site.ok, false);
+    assert.ok(!r.site.metrics.portsMet.includes('walk_e'));
+  }
+  // x or z off by 2 (within portWithin), feet y exact: no level error
+  for (const d of [[0, 0, 2], [0, 0, -2], [-2, 0, 0]]) assert.equal(levelErr(moved('fit_span', 'walk_e', d)), undefined, `walk_e moved ${d}`);
+  assert.equal(levelErr(moved('fit_span', 'walk_w', [2, 0, 0])), undefined);
+  // a door port off by 1 in y keeps the +/-2 window (no level error); so does a hatch (a walk port facing down)
+  assert.equal(levelErr(moved('fit_carve_into', 'door_s', [0, 1, 0])), undefined);
+  assert.equal(levelErr(moved('fit_suspend', 'hatch', [0, 1, 0])), undefined);
+  // the limit is overridable like the others
+  assert.equal(levelErr(check((() => { const ex = example('fit_span'); ex.sidecar.ports = ex.sidecar.ports.map((p) => (p.name === 'walk_e' ? { ...p, y: p.y + 1 } : p)); return ex; })(), { siteLimits: { walkLevel: 1 } })), undefined);
+});
+
 test('site_breach: the room opened beside the site\'s water, or into a dark cave bigger than itself', () => {
   const ex = example('fit_carve_into');
   const w = ex.sidecar.interior;
