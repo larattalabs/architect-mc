@@ -460,6 +460,15 @@ async function scenarioItem(scn) {
   log(`${item}: exit ${rc}; bars ${JSON.stringify(v.bars)}; not shown ${JSON.stringify(v.pa?.notShown ?? [])}`);
   report(item);
 }
+/** `verdict P2|P3 <attempt>`: the §5 bars of a finished run again from its metrics.json (no run), kept beside its first verdict. */
+subs.verdict = async () => {
+  const item = args[1], attempt = Number(args[2] ?? 1);
+  const scn = Object.keys(LOT_MAPS).find((k) => LOT_MAPS[k].item === item);
+  const prev = readJson(path.join(ART, item, `verdict-${attempt}.json`), {});
+  const v = verdict(path.join(ART, item, `run-${attempt}`), scn, item);
+  writeJson(path.join(ART, item, `verdict-${attempt}.json`), { exit: prev.exit ?? null, ...v, ...(prev.pa ? { pa: prev.pa } : {}), recomputedAt: new Date().toISOString() });
+  log(`${item} attempt ${attempt}: §5 ${v.pass ? 'PASS' : 'FAIL'} ${JSON.stringify(Object.fromEntries(Object.entries(v.bars).map(([k, b]) => [k, b.pass5 ?? b.pass])))}`);
+};
 subs.p2 = () => scenarioItem('s5');
 subs.p3 = () => scenarioItem('s6');
 
