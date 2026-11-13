@@ -138,7 +138,7 @@ class BuildOrderGoldenTest {
 	void onPadQueuesEqualMainsOrder() throws Exception {
 		TreeMap<String, Path[]> ex = onPadExamples();
 		assertTrue(ex.containsKey("cabin") && ex.containsKey("fit_on_pad") && ex.containsKey("tower_massing"), "the on_pad examples found: " + ex.keySet());
-		Set<String> nonPad = new HashSet<>(List.of("fit_attach_to_cliff", "fit_carve_into", "fit_span", "fit_suspend", "fit_wrap_trunk"));
+		Set<String> nonPad = new HashSet<>(List.of("fit_attach_to_cliff", "fit_carve_into", "fit_span", "fit_suspend", "fit_wrap_trunk", "fit_suspend_inverted")); // ((7c US) the inverted house)
 		assertTrue(ex.keySet().stream().noneMatch(nonPad::contains), "no non-pad example in the golden");
 		TreeMap<String, String> now = new TreeMap<>();
 		for (var e : ex.entrySet()) {

@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 import { ClientError } from './errors.js';
 import type { Store } from './store.js';
 
-export type OpKind = 'bible' | 'group' | 'design' | 'siteVariant';
+export type OpKind = 'bible' | 'group' | 'design' | 'siteVariant' | 'compose';
 export interface OpKeyEntry {
   id: string;
   hash: string;
@@ -70,7 +70,7 @@ export function groupKeyBody(g: Record<string, unknown>): Record<string, unknown
   return { ...g, items: items.map((it) => (it && typeof it === 'object' ? siteKeyBody(it as Record<string, unknown>) : it)) };
 }
 
-const KIND_NOUN: Record<OpKind, string> = { bible: 'bible request', group: 'group', design: 'design request', siteVariant: 'site variant' };
+const KIND_NOUN: Record<OpKind, string> = { bible: 'bible request', group: 'group', design: 'design request', siteVariant: 'site variant', compose: 'compose request' };
 
 const slot = (kind: OpKind, owner: string | undefined, key: string) => `${kind}|${owner ?? ''}|${key}`;
 

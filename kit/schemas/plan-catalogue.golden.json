@@ -1109,11 +1109,19 @@
   },
   {
    "id": "rule.suspended",
-   "sinceApi": "1.53.0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "7c",
-   "note": "Upside-down builds: 7c (N-7b-1); a house hanging from a ceiling is 7b's suspend fit."
+   "sinceApi": "NEXT",
+   "schemaVersion": 1,
+   "state": "supported",
+   "limits": {
+    "scope": 32,
+    "layouts": [
+     "elevated"
+    ],
+    "affordances": [
+     "overhang"
+    ]
+   },
+   "note": "US: an elevated zone's lots hung upside down from overhang ceilings: each a suspend site lot on an overhang of the land, its design built inverted (bp.invert()). An overhang the plan's own forms make can't host one (the land is read before the plan)."
   },
   {
    "id": "locator.inside",

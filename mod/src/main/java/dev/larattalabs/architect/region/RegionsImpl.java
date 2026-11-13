@@ -503,6 +503,12 @@ public final class RegionsImpl implements Regions {
 		return PlanCatalogue.kinds(kinds); // (7cF) the long text by kind, from the same jar copy: synchronous, no helper
 	}
 
+	/** (7c CO) The standalone composer ({@link Composes}). */
+	@Override
+	public CompletableFuture<String> compose(dev.larattalabs.architect.api.ComposeRequest request) {
+		return Composes.start(request);
+	}
+
 	@Override
 	public boolean cancelCheck(@Nullable String owner, String opKey) {
 		return PlanChecks.cancel(owner, opKey);

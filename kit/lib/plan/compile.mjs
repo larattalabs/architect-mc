@@ -1080,6 +1080,21 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     paletteRules.push({ part: p.id, required: p.required, scope: Array.isArray(p.part.scope) ? [...p.part.scope] : null, read: readPaletteRule(p.part) });
     ans(p, { class: 'fits', notes: ['measured after the plan (VOC-c)'] });
   }
+  // (7c US) rule.suspended: the elevated zones it scopes (absent: every elevated zone of the plan) hang their lots inverted from overhang
+  // ceilings (elevated.mjs: overhangs only, each lot `inverted`). A scope part that is not an elevated lots zone, or no zone at all, answers
+  // the rule refused NO_FEATURE (the zones are untouched); else it is answered in step 2 after its zones (its dependencies: blocked when one
+  // does not fit). Only in a plan with one: every other plan is unchanged.
+  const suspendedZones = new Set();
+  for (const p of V.parts) {
+    if (p.verdict !== 'compile' || p.block !== 'rule.suspended' || answers.has(p.id)) continue;
+    const scope = Array.isArray(p.part.scope) ? p.part.scope : V.parts.filter((q) => isElevatedZone(q)).map((q) => q.id);
+    const bad = scope.filter((id) => !isElevatedZone(byId.get(id)));
+    if (!scope.length || bad.length) {
+      ans(p, { class: 'refused', reasons: [{ code: 'NO_FEATURE', message: scope.length ? `${bad.join(', ')} ${bad.length === 1 ? 'is' : 'are'} not a lots zone with layout elevated: suspended lots are an elevated zone's, hung from the overhangs its land holds` : 'the plan has no lots zone with layout elevated to hang from overhang ceilings', evidence: { notElevated: bad } }] });
+      continue;
+    }
+    for (const id of scope) suspendedZones.add(id);
+  }
   // (6c VOC, §5.2) the compile pass's refusals (the second plan): a part whose emitted cells broke M27:state, M27:convert or M20 (a) on
   // the first plan is refused before it resolves, so it writes nothing (kit/lib/region/plan.mjs)
   for (const [id, why] of Object.entries(ctx.vocabRefuse ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
@@ -1120,6 +1135,12 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
     if (timeUp()) { ans(p, budgetHit('maxMs')); continue; }
+    if (p.block === 'rule.suspended') {
+      // (7c US) its zones resolved (fits or adjusted): their lots hang inverted
+      const scope = Array.isArray(p.part.scope) ? p.part.scope : [...suspendedZones];
+      ans(p, { class: 'fits', notes: [`${scope.join(', ')}: ${scope.length === 1 ? 'its' : 'their'} lots hang inverted from overhang ceilings (each design built upside down, bp.invert())`] });
+      continue;
+    }
     if (isHPart(p)) {
       // (6c H) a water body or a wet structure (a moat too, so the route pass sees its water): its generator places it (lib/fluids)
       const C = { env, ctx, plan: P.plan, V, byId, geom, geomOf, res, answers, okClass, tolOf, judge, notes, order, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], overflows };
@@ -1166,7 +1187,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // (7b SL) an elevated zone: its lots placed as site lots on the affordances of its frozen volume (never cached; the first plan
       // asks for the volume and answers incomplete VOLUME)
       const loc = locatorOf(env, p.part.where, geomOf, { within0: 32 });
-      const z = resolveElevatedZone(env, p, { loc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], tol: tolOf(p.part, 'count') });
+      const z = resolveElevatedZone(env, p, { loc, taken: [...zonesAccepted.map((o) => o.rect), ...formsAccepted], tol: tolOf(p.part, 'count'), suspended: suspendedZones.has(p.id) });
       res.set(p.id, { ...z, elevated: true });
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
       ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, wouldFit: z.wouldFit, notes: z.notes });
@@ -2091,7 +2112,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
     // ((7a K3, §6) the lots on walls' lines: each one's onWall record and a gatehouse's ports (the artifact's lots[]), only when there are some)
     ...(K?.walls?.some((W) => W.lots?.length) ? { wallLots: Object.fromEntries(K.walls.filter((W) => okClass(W.id)).flatMap((W) => (W.lots ?? []).map((q) => [q.lot, { onWall: q.onWall, ...(q.ports ? { ports: q.ports } : {}) }]))) } : {}),
     // ((7b SL) the site lots' site (api.SiteSpec's wire) and affordance by lot id: the artifact's lots[].site and .affordance (only when there are some)
-    ...([...zoneEmit.values()].some((e) => e.elevated && e.lots.length) ? { siteLots: Object.fromEntries([...zoneEmit.entries()].filter(([id, e]) => e.elevated && okClass(id)).flatMap(([, e]) => e.lots.map((l) => [l.id, { site: l.site, affordance: l.affordance }]))) } : {}),
+    ...([...zoneEmit.values()].some((e) => e.elevated && e.lots.length) ? { siteLots: Object.fromEntries([...zoneEmit.entries()].filter(([id, e]) => e.elevated && okClass(id)).flatMap(([, e]) => e.lots.map((l) => [l.id, { site: l.site, affordance: l.affordance, ...(l.inverted ? { inverted: true } : {}) }]))) } : {}),
     // ((6c IRR) the irrigated lots' cells by the plan's lot id: the artifact's lots[].irrigation (only when a lot is irrigated)
     ...(irrigationByLot.size ? { irrigation: Object.fromEntries(irrigationByLot) } : {}),
     ...(paletteRules.length ? { palette: paletteRules } : {}),

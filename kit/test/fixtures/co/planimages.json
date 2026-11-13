@@ -1,0 +1,47 @@
+{
+ "note": "7c CO: the planning images' pixel shas (kit/test/co.test.mjs --write)",
+ "cavern": {
+  "top": {
+   "pixelSha": "56e99e2f354a8be76feec0e5f080e587a04357a58d23834ca5b5cbde51da86c5",
+   "width": 768,
+   "height": 768
+  },
+  "section-1": {
+   "pixelSha": "6b7d532a0c11cb9672e298d52afb74dd48d11a69173ad3b3385b5a956ea0d96f",
+   "width": 768,
+   "height": 308
+  },
+  "section-2": {
+   "pixelSha": "20ece5c39d2bce5063ca6a11cc9054d97cfc0eec9a69594e2b7efd3772bc3ef3",
+   "width": 768,
+   "height": 308
+  },
+  "iso": {
+   "pixelSha": "9fd7dee6526f2ff061f614a454f976ac8190df4d34954dad395d593ba9c74c43",
+   "width": 772,
+   "height": 536
+  }
+ },
+ "flat": {
+  "top": {
+   "pixelSha": "b7396a4c715d1978d573797f9558c0f4d732c4d271623e4a334ea1a385961f46",
+   "width": 384,
+   "height": 256
+  },
+  "section-1": {
+   "pixelSha": "98cb3cd44953d1ce70d1f55c212f2d7ee8a6142ee65df91d0681100203e65ee6",
+   "width": 384,
+   "height": 88
+  },
+  "section-2": {
+   "pixelSha": "e333d410f735e44b26ebf2b802b53ee57f36e1f68f3a3ef98c407249414910fa",
+   "width": 256,
+   "height": 88
+  },
+  "iso": {
+   "pixelSha": "1b2e31fab18035d182dd21b114f367f14f36e1270d90c85721e46ce54c41b386",
+   "width": 644,
+   "height": 396
+  }
+ }
+}

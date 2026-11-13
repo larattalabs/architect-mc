@@ -29950,6 +29950,363 @@ payload's (checked) sha and `dev.region.ghost {}` reports `shown: {key: {cells, 
 - A composite in a batch item and the placement UI are still refused `NOT_ALLOWED` (CM-b's leftover); with this slice a lot's design
   group item no longer comes back as one unless the item asks.
 
+### Slice CO as built (branch `slice/CO` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+The standalone composer (§3 row 12, S-7c-2): `Regions.compose(ComposeRequest)` on 7cF's frozen record, and the planning images, also
+returned by `checkPlan` on request. Feature `compose` (the helper's `region.compose`; it also has `region.planImages`). No frozen 7b or
+7cF signature changed; the API delta is `Design.Kind.SETTLEMENT` (appended, `Since NEXT`) and javadoc.
+
+**The flow** (sidecar `compose.ts`, mod `region/Composes.java`):
+1. **The mod** surveys the claim as `Regions.design` does (the ARSV columns, the survey summary, TC's frozen claim volume via
+   `RegionDesigns.claimVolume(level, claim, cols)`, the overload factored out; `region.design`'s bytes unchanged) and sends
+   `region.compose {brief, claim, surveyBlobId, volume?, style?, builds?, images, budgetUsd?, opKey?, ext?}`; `builds`: the players'
+   builds meeting the claim (6c PT's `BuildViews.planJson`, at most 64), which the prompt lists ("keep every part clear of them; name one
+   as a feature, target or endpoint") and the check keeps clear of as it always did. The ack is the design id; the design
+   is kind `settlement`, its record `settlement` (ComposeState) and its result `result`.
+2. **The template pick first:** the helper starts a `region.design` itself (same brief, claim, volume, Style, owner, budget and ext;
+   `requireFit: false`, `plan: false`), so TC's catalogue, land check, retry and sim stand-in are the pick, unchanged. A fit ends the
+   design `PICKED {program, params, reason, rounds: 0, pick}`; the mod plans the program over the claim (as 6b's `RegionDesigns`) and its
+   `planId` (or `planError`) joins the result.
+3. **The inputs, once, kept in the record:** the claim's affordances (`claimAffordances` over the volume, TC's), and with `images` the
+   planning images (below) as blobs (kind `region.planImage`).
+4. **Round 1:** a structured job: system = `plan/0#compact` (systemRefs; the one-line catalogue) + the composer's text (`kit/prompts/composer.md`'s `## system`: supported kinds only,
+   a reserved one as `required: false`; the only anchors are `claim_*`; keep parts inside the claim; keep the parts that fit on a
+   repair) + a caller's rules (below). **Measured: 86,669 characters** without a caller's rules (plan/0#compact 81,873 + the composer's own text 4,794; the bound 120,000), at most about 116,700 with the largest allowed rules (30,000); a unit holds both. The prompt: the brief, the claim,
+   the Style's roles, the survey summary, the top 60 affordances numbered (`n. kind id: box (metrics)`), the pick's closest program; with
+   images, the four PNGs go before the prompt as image blocks (`planning image top` ...) and the prompt names them.
+5. **The check:** the design goes `checking` with `settlement.awaiting {round, plan}`. The mod (`DesignsImpl.changed` ->
+   `Composes.changed`) runs `Regions.checkPlan` over that plan (the Overworld, the claim, no caller anchors, owner null, the design's
+   Style and pinned version as the bible, no key) and answers `region.compose.checked {designId, round, check}` (the PlanCheck without its
+   catalogue and light preview; `malformed` kept) or `{refused}` (the refusal's reason and message). Once per (design, round) per session;
+   after a restart the snapshot re-asks.
+6. **One repair round** (`REPAIR_ROUNDS = 1`; a caller may ask 0-2) unless round 1 checked READY with an artifact: round 1's prompt, its plan, the check's
+   typed answers (each part not fits/adjusted: class, block, required, reasons with code, path and message, wouldFit, blockedBy,
+   deviations; the notes; malformed), and the catalogue's long text (`planCatalogueKinds`, the kit's) of the kinds the plan used and the
+   check answered (at most 60,000 characters). Its plan is checked the same way.
+7. **The outcome:** `COMPOSED` when the last round checked READY with an artifact (`check.artifactSha` is what `realiseApproved` takes);
+   else `NO_PLAN` with the best round (READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED, refused last; a tie to the later
+   round): its `plan`, `check`, `round` and `waits` (its parts not fits/adjusted: part, class, block, the catalogue's `until`, required).
+   Every result: `{outcome, reason, cost (usd), rounds, history [{round, overall | refused, planSha?}], pick {designId, outcome, program,
+   fits, reason}, images? [{name, blobId}]}`.
+
+Cost: the pick's and every round's, summed; `budgetUsd` caps them together (a round gets what is left; none left: failed `budget`).
+`opKey` (kind `compose`): the same key and body (the request without its key and blob ids, the volume by its sha) adopt the first
+design; another body (`images` included) refuses `op_key_conflict`, which the mod maps to OP_KEY_CONFLICT. Cancel cancels the pick's
+design and the running round's job. Sim: `ext["architect:simCompose"]` scripts the rounds (`{plan, reason}` each, a later round reusing
+the last); else the stand-in answers `SIM_PLAN` (three 9x9 houses near `claim_center`, a path from `claim_s`).
+
+**The caller's ext keys** (constants on `ComposeRequest`, `Since NEXT`, additive; the helper reads them, validates them at
+`region.compose` and refuses `FIELD_LIMIT: ...` naming the key), so a card-driven caller such as Steward could later call `compose`
+(**Noah's decision, 2026-11-13, "boundary: defaults": Architect owns the composer engine**, the harness, catalogue, affordances, images and repair loop; Steward later moves onto `Regions.compose` with its card-derived brief and hints, in a Steward slice after CO ships). **These keys are the contract Steward calls:**
+- `EXT_HINTS = "architect_mc:composeHints"`: a JSON object of structured hints (zones, wanted parts, ...), at most 16,000 characters,
+  shown to every round under "## The caller's hints" as JSON. Its **`anchors`** member is not a hint but the caller's named places:
+  `{name: [x, y, z]}` (names `[a-z][a-z0-9_]{0,31}`, not a built-in `claim_*` one, at most 64, integer blocks; Steward's `stone` and
+  `player`). The helper validates them into the design's record (`settlement.anchors`), the prompt's Claim section lists them, and the
+  mod checks every round with them (`Composes.checkRequest` -> `PlanRequest.anchors`);
+- `EXT_SYSTEM = "architect_mc:composeSystem"`: the caller's rules, at most 30,000 characters, appended to the system under "## The
+  caller's rules (they add to the rules above)" (so plan/0#compact and the composer's text stay the cached prefix);
+- `EXT_REPAIR_ROUNDS = "architect_mc:repairRounds"`: repair rounds after the first, 0 to 2 (default 1).
+The prompt text lives in the kit, `kit/prompts/composer.md` (`## system`, `## answer`, `## repair`; read once per kit dir), not inline.
+
+**Plan-writing rules taken from Steward's `prompts/plan-writer.md`** into `kit/prompts/composer.md` (the general ones; the wording is
+CO's own): no world coordinates (locators, anchors, features only); zones (one standard zone with lots or `flat_village`; districts with
+`label`, `size`, `levelBand`, `prefer`; `where.along` for a quarter that follows the land; an `outpost` zone with its own road); lots
+(`type_n` ids, S-XL footprints, at least one lot a zone); `terraces: {}` for a hillside town, `form.terrace` beside zones only; walls and
+gates (round, line, edge, along; gates where routes cross; wall `lots` at gate/corner/run; a gatehouse at least 13x7; the drawbridge's
+limits); water (ponds, fountains, moats, quays, `channel.course`/race/`channel.ditch`, `farmPond` vs `irrigate`); palette rules (`family`,
+`share`, `over: "lots"`, `exempt`; a loose taste is the Style's); the "shapes Architect builds" list (bridges over real gaps; climbs only
+across drops; roads end on the zone; zones placed by anchor, land or zone; one zone per shore; water only where the land shows it; reserved
+layouts as their reserved kind); `required` on every part; `notes`; keep the plan small; on a repair keep what fits and use `wouldFit`.
+**Left to Steward's extension** (`composeSystem`/`composeHints`): the concept card's mapping (one lot per card building and its count,
+`label` in the card's words, `landmark`/`placement`/`brief` from its notes), `style: {pending}`, the `stone`/`player` anchors (sent as `composeHints.anchors`), Steward's portcullis default and `gateMech`/`mech` choices, the
+`waits`/`summary` answer in player words, and the "write a reserved kind anyway so it waits" policy for required asks (CO writes a
+needed reserved part as `required: false`). **Not taken:** `vocab/1#compact` (plan/0#compact + vocab/1#compact is 112,772 characters,
+which would leave no room for a caller's rules), so a palette rule's family names come from the model or a caller's rules; a wrong one
+answers malformed and the repair round names it.
+
+**Steward's PlanWriter, compared** (steward-mc `service/Composer.java`, `gateway/PlanWriterJob.java`, `prompts/plan-writer.md`, read
+2026-11-13). What Steward's does that CO's does not:
+- **Input:** a concept card (program with counts, footprints S-XL, notes, landmark/placement), a land line round the Founding Stone, the
+  caller's anchors (`stone`, `player`) and the player's own builds (PT); CO gets a one-line brief, the survey summary and the
+  affordances, and only `claim_*` anchors.
+- **Domain rules** (about 9 KB): one lot per card building, ids `type_n`, the flat_village / street / districts / outpost zone choices,
+  `terraces: {}` on a hillside town, `style: {pending}`, wall lots (gatehouse/corner/run, sizes for a portcullis, `gateMech`, the
+  drawbridge's limits), farmPond vs irrigate, courses/ditches, palette rules (`over`, `exempt`), the player's builds kept clear, and the
+  "shapes Architect builds" list (bridges over real gaps, stairs only across drops, zones placed by anchors or land, one zone per shore);
+  reserved kinds are **written anyway** so they wait (CO tells the model to leave them out unless needed, `required: false`).
+- **Answer:** `{plan, waits (player words), summary}`; CO answers `{plan, reason}` and computes `waits` from the check.
+- **System refs:** `plan/0#compact` + `vocab/1#compact` (for palette rules); CO sends `plan/0#compact` only.
+- **Model and budget:** Sonnet at medium effort, $0.50 a call, $1 a plan; CO uses the request's model (default the region design
+  model), the request's `budgetUsd` for the pick and every round.
+- **Repair:** up to 2 Claude repairs, only while a part is refused or malformed (an unsupported part waits, never repaired), stopping
+  when the check's answers repeat (an oscillation), and **before** each Claude repair a $0 street fix (a free layout's `NO_ROOM` with a
+  `wouldFit` street fragment applied directly). CO: 1 repair by default (0-2 with the key), whenever the last check is not READY, no
+  oscillation stop, no $0 wouldFit fix.
+- **No template pick** first and no planning images.
+With the keys, Steward's adoption (a Steward slice after CO ships) sends its card as the brief plus `composeHints` (the card's
+structured program and `anchors: {stone, player}`), its card rules as `composeSystem` and `repairRounds: 2`; the player's builds come
+from the world (the mod sends them). What `compose` still lacks against the PlanWriter, for the coordinator's next Architect slice if
+Steward needs them: `vocab/1#compact` (no system room beside a caller's rules), Steward's `{plan, waits, summary}` answer (CO's waits
+come from the check, with no player-worded summary), repairing only when a part is refused or malformed, the oscillation stop, and the
+$0 `wouldFit` street fix before a paid repair.
+
+**The planning images** (`kit/lib/region/planImages.mjs`, CLI `kit/tools/planimages.mjs`): `top` (a hillshade of the survey columns,
+north up, each affordance's x/z box framed in its kind's colour and labelled with its number), `section-1` (west to east through the
+claim's middle row), `section-2` (north to south through the middle column; both with the surface, water, trees, a y grid and the
+affordance boxes the cut crosses) and `iso` (the land from the south-west, the numbers over the boxes). The numbers are
+`rankAffordances` (score descending, then id; the first 60), the same order the prompt lists them in (the sidecar's own copy of the
+ranking is unit-held equal to the kit's). Integer pixel maths and the kit's pinned PNG encoder: byte-stable, with committed pixel shas
+(`kit/test/fixtures/co/planimages.json`: S6's sculpted cavern land and a plain flat land).
+
+**`checkPlan` with `ext["architect_mc:planImages"]: true`** (S-7c-2): the region.plan message carries `planImages: true`; after the
+check the helper renders the four images over the check's own survey with the plan's affordances (those the plan read; none for a plan
+that read no volume) and `planCheck.planImages {images: [{name, blobId, pixelSha, width, height}], labels: [{n, id, kind, box}]}` (or
+`planImagesError`) reaches `PlanCheck.preview.planImages`. Nothing else changes: plancheck.json, the artifact, the plan and every sha are
+as without (a unit and the gate hold the artifact sha equal).
+
+**The rounds harness, frozen for AU** (`sidecar/src/jobs/rounds.ts`):
+- `RoundJob {kind, system, systemRefs?, schema, model, maxTurns, owner, what}`: every round's job.
+- `RoundRecord {n, jobId, answer?, cost?, error?, check?, refused?}`: what a design keeps per round, in its record.
+- `startRound(sc, job, {designId, n, prompt, budgetUsd?, images?, simAnswer?}) -> RoundRecord`: `sc.jobs.runInternal`, tag
+  `design <id> <what> round <n>`.
+- `finishRound(sc, designId, rec) -> 'done' | 'error' | 'gone'`: waits for the job, fills answer (or error, "budget" for a budget stop)
+  and cost; `gone` when the design ended meanwhile.
+- `roundsCost(rounds)`.
+
+The record is the state: a restart re-enters at the first round without an answer or a check. The harness never reads an answer. CO's
+outside check (`awaiting` / `region.compose.checked`) is compose's own; AU brings its own checker and round count (at most 4).
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **`Design.Kind.SETTLEMENT` appended** (§2: "a design id of kind `settlement`"); `Design.kind()` reads `request.kind: "settlement"`.
+   The sidecar's design kind enum gains `settlement` and the record member `settlement` (a protocol-1 client never sees one).
+2. **The Overworld, owner null, built-in anchors only:** `ComposeRequest` has no level, owner or anchors, so the claim is the
+   Overworld's (as `checkPlan`'s), the owner the player, and the composer is told the only anchors are `claim_*`. The request's `ext` is
+   passed through but never read by the mod; the helper reads `architect:simCompose` and `architect:simAnswers` on the sim backend only
+   (6b's precedent).
+3. **The pick is a `region.design` of its own** (not TC's loop refactored): it shows as a REGION design with the same owner and ext,
+   named in `pick.designId`. `RegionDesigns.drive` now returns the running drive's promise to a second caller (the composer awaits it).
+4. **The catalogue on demand:** round 1 sees the one-line catalogue only; the repair round gets the long text of the kinds its plan used
+   and its check answered. It goes in the prompt, not the system, so the system stays one stable cache prefix.
+5. **Affordance ids are orientation:** plan/0 has no member naming an affordance, so the ids the composer sees cannot mismatch a check's.
+   The images print numbers (the ids are 21 characters); the prompt maps number -> id.
+6. **The images render the survey, not the volume** (the 2.5D columns plus the affordances' 3D boxes), so a cave shows as its framed box
+   in the top view and the sections, not as a cut. `checkPlan`'s images number the plan's own affordances.
+7. **COMPOSED means READY:** a NEEDS_REPAIR check after the repair round is NO_PLAN (its artifact exists and the caller may still approve
+   it: `result.check.artifactSha`).
+8. **A refused check is a typed answer** for the repair round (`the check did not run: <reason>`), and ranks last for the best plan.
+9. **Keys and images:** a round's check has no key (its artifact is kept by sha). `checkPlan`'s images ride a fresh check; a keyed
+   re-ask returns the kept check as it was, and the in-flight twin's body hash is unchanged by the flag.
+
+**Shared files touched (minimal, appended):** mod `ComposeRequest` (three `EXT_*` constants, javadoc); sidecar `protocol.ts` (the two messages, `RegionPlanMsg.planImages`, the design kind and
+member, FEATURES appended), `sidecar.ts` (routing, resume, cancel), `designs.ts` and `opkeys.ts` (types), `regions.ts` (`planImages`,
+the check's images), `regiondesign.ts` (`drive` returns the running promise); the two feature-list tests (appended); mod `Design.java`
+(the kind), `DesignsImpl` (the settlement view and hook), `PlanChecks` (the flag and the copy), `RegionDesigns` (the overload),
+`RegionsImpl` (`compose`), `RegionsMod` (reset), `ApiRules` (one mapping line), `ArchitectApi`/`Regions`/`PlanRequest` javadoc; the
+DevBridge hook `dev.region.compose` (`SliceCoDev`, also in `devserver`'s generated hooks); `tools/gate-chains.json`,
+`tools/step-inputs.json`.
+
+**Steward RC:** the second 7c RC covers the planning images option (`checkPlan` ext `architect_mc:planImages`, `preview.planImages`)
+and `Design.Kind.SETTLEMENT`; Steward never calls `compose` (S-7c-2).
+
+**Not covered:** a model's plans (no paid run; PAY measures the composer, P1/P4); the images' value to a model (P4's A/B).
+
+**Leftovers:** PAY measures the composer's cost and quality (est. $0.3-1.5 a plan); BR runs S3/S6 through `compose`; the volume's 3D
+cuts in the sections if P4 shows the 2.5D sections mislead.
+
+**Checks** ($0, sim only; ports 8918/8919; branch at 412218fe for the suites and the gate run):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1306 tests: 1305 pass**, 1 fail on a dirty tree (gate-corpus-plan's store test, by design); that file 3/3 on the committed tree. co 3/3 (the four renders byte-stable and equal to the committed pixel shas, the ranking, the CLI) |
+| sidecar `npm ci && npm run check` (through `sidecar-check-turn.sh`) | **883/883**, the bundle built (compose 17/17: the pure parts, the prompt file, the ext keys and their refusals, the system under 120,000 with the largest caller's rules, the rounds through the kit's own plan check: COMPOSED after one repair, NO_PLAN, 2 and 0 repairs, the caller's anchors checked READY, a refused check, PICKED, images on/off byte-identical, opKey, cancel) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1160 tests, 0 failures, 1 skipped** (ApiCOTest 7/7: the feature, the message, the ext key constants, the kind, a round's check request with the record's anchors, Style and owner, the check's wire, the images asked and copied) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, the 0.47.0 mod surface (2605 members) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0; `tools/catalogue-since-check.mjs` pass; the plan catalogue and its golden untouched |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (373 steps; co-unit and co-compose registered in gate-chains.json, chain `7cco`, impact rule "7c CO standalone composer (slice CO)") |
+| gate run 1, **20261113-104151-change** at 412218fe | **PASS 2/2**: co-unit 2/0; co-compose 12/0: (a) the pick NO_TEMPLATE (closest crater_works), the design kind SETTLEMENT, round 1 checked by the mod NEEDS_REPAIR, round 2 READY: COMPOSED, the repaired plan, artifact d8473e5dfbce; (b) images on: the same planShas round by round (a6cd319e, d5e57c9b) and artifact, four images; off, none; (c) realiseApproved PLACED (215 cells), removed: the hash restored (E-flat 0, 391 cells restored); (d) checkPlan with the images: top 640x640, sections 640x68, iso 644x352, the same pixels twice, the same artifact as without and as compose's; (e) a flat village brief PICKED flat_village, planned |
+| gate-verifier (review only, DEV MODE) | **PASS** at d5ecf4b0 (412218fe + the as-built only): the API purely additive (three `ComposeRequest.EXT_*` constants, `Design.Kind.SETTLEMENT` last, javadoc); the images flag adds only `planImages`/`planImagesError` after the artifact is read; the outcomes as written; the round machine record-driven, restart and cancel safe; no trig, random or clock in the renders; the system bound held with the largest caller rules; the gate's assertions real; re-ran co 3/3. Non-blocking: in sim the plan equality with images on/off is by construction (scripted rounds), the real claim being the equal planSha and artifact; the 86,669 figure is logged, not asserted |
+
+### Slice US as built (branch `slice/US` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; strict: survival accounting; recorded 2026-11-13)
+
+§3 row 10: `rule.suspended` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi NEXT, as BF's and HR's);
+the helper advertises `plan.suspendedBuilds`, the mod `suspendedBuilds`; the kit gains `bp.invert()`. No 7b or 7cF signature changed: the
+API package gains javadoc only (`ArchitectApi.features`), and ApiRules one mapping.
+
+**Built:**
+- **`bp.invert()`** (`kit/lib/invert.mjs`, `Blueprint.invert(opts)`): turns what the design has written so far upside down: row y goes to
+  `H - 1 - y`; every cell's state given its flipped twin (`invertProps`); its part; the ports (y flipped, `up` and `down` swapped); the
+  anchors and cameras as points (`y -> H - y`, the pitch negated); the interior box. The floors then run from the ceiling down (the standing
+  build's ground floor hangs first, under the ceiling). The sidecar records `inverted: true` (absent on every other design, so their bytes
+  do not move). A site-bound design's keep cells are the site's and stay (a flipped cell onto one throws); any other design's flip with it.
+  The table (vanilla has no vertical flip, so it is the kit's own, rules on property names and values):
+
+  | Property | Flip |
+  |---|---|
+  | `half` | top <-> bottom (stairs, trapdoors); upper <-> lower (doors and two-high plants: the pair swaps with its cells, so a door stands the right way up again) |
+  | `type` | top <-> bottom (slabs; `double`, a chest's single/left/right and a piston head's normal/sticky stay) |
+  | `hanging` | true <-> false (lanterns, the mangrove propagule) |
+  | `face`, `attachment` | floor <-> ceiling (buttons, levers, the grindstone; the bell) |
+  | `facing` | up <-> down (the six-way blocks) |
+  | `orientation` | `down_<dir>` <-> `up_<dir>` (the crafter, the jigsaw) |
+  | `vertical_direction` | up <-> down (pointed dripstone, sulfur spikes; `thickness` stays: it counts from the tip) |
+  | `up`, `down` | swapped on a block with both (mushroom blocks, the chorus plant, glow lichen, resin clumps); a wall's lone `up` (its post) and every pane, fence and wall connection are finalize()'s |
+
+  **No flipped twin** (`flipOf(...).exact === false`; invert refuses such a cell by default, naming it, so the design writes it after the
+  flip on its new floor; `{unflipped: 'keep'}` keeps it as is): a state whose one-way vertical bearing would stay the same way (floor
+  attachables: torches, carpets, rails, plants, signs, banners, candles, skulls, pots, beds, diodes, redstone wire, pressure plates, cake,
+  snow layers; ceiling ones: hanging signs, pale hanging moss), a hopper facing down, a crafter or jigsaw whose top is up. Measured over
+  every state of every kit block (1286 blocks, 35,723 states): every state an involution inside its domain; 30,117 exact; 5,606 without a
+  twin, by family: redstone_wire 1296, hanging_sign 832, plant 439, sign 416, bed 272, candle 272, banner 256, skull 224, carpet 179, rail 92,
+  diode 80, pressure_plate 62, double_plant 42, cake 41, flower_pot 40, multiface 23 (no face set), block 22 (the hopper facing down, the crafter's
+  and jigsaw's `<dir>_up`), snow_layer 8, ceiling_plant 5, torch 5 (`us.test.mjs` holds the list exactly).
+- **The inverted example** (`kit/designs/site/fit_suspend_inverted.mjs`, built into `kit/examples/fit_suspend_inverted/`, so the
+  bundled library holds it): a gabled cottage built standing and turned over, hung by its old floor slab from the 7bF fixture `overhang`'s
+  rock ceiling. The flip carries the keel's stairs (half top) and lining, the attic hatch (a trapdoor, now top-half in the floor), the door
+  (written under the deck, so its halves swap and it stands on the new floor), the windows, and two lanterns (standing on the old floor,
+  hanging from the new ceiling). Written after the flip: the ladder from the site's walk port `hatch` up through the keel, the balcony on two
+  chains, the bed, a chair, the spots. Its four hang points stay unwritten (above the lot). 680 blocks.
+- **`rule.suspended {scope}`** (`kit/lib/plan/compile.mjs`, `elevated.mjs`): the lots zones with `layout: elevated` in scope (absent: every
+  elevated zone of the plan) take **overhang affordances only** (suspend site lots on the rock ceilings; a canopy, trunk, ledge or water is
+  passed over), and each lot is marked **`inverted: true`** on the IR lot, the plan record's `siteLots` and the artifact's `$.lots[]` (beside
+  `site` and `affordance`, as SL put `affordance`: the SiteSpec wire is frozen). The rule answers `fits` once its zones fit or adjust
+  (they are its dependencies: `blocked DEPENDENCY` when one does not); a scope part that is not an elevated lots zone, or a plan with none,
+  answers the rule `refused NO_FEATURE` and leaves the zones as they are. The zone's NO_FEATURE says "no overhang ceiling to hang from".
+  Catalogue: `limits {scope: 32, layouts: [elevated], affordances: [overhang]}`; the note names the region-made-form limit.
+- **Feature:** the sidecar's `plan.suspendedBuilds` (appended last; `jobs.test` and `bundle.e2e` lists appended), mapped by ApiRules to
+  **`suspendedBuilds`**; `ArchitectApi.features()` javadoc (since NEXT); `ApiUSTest`.
+- **Survival** (Noah's rule: built structures are construction targets): nothing new in the mod. An inverted house is a suspend site lot's
+  design: PL's KEEP placement and SO's support order (`BuildOrder.bySupport` from `Builder.anchors`: its anchors are the top row's cells
+  under the rock) build it from the ceiling down; `SupportOrderFixtureTest` and `BuildOrderGoldenTest` now include it (every queue prefix
+  connected by the fixture volume's classes; bottom-up would float; the runtime gate over 12 seeds of partial stock; the support-order
+  dispatch).
+- **Gate step** `us-survival` (`tools/gate7cus.mjs`: SO's survival flow, `tools/gate7bso.mjs survival`, over the inverted house through
+  `GATE7BSO_HOUSES`; SO's default houses and its SO-b scaffold step unchanged), chain `7cus`, impact rule "7c US inverted builds".
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **The rule scopes elevated zones only.** SL's `layout.elevated` already makes overhang lots `suspend` site lots; the rule restricts a
+   zone to overhangs and marks its lots. A street zone in scope is refused, not turned elevated (upside_down's recorded zone is elevated).
+2. **"Floors from the ceiling down"** is the flip's own order: the standing ground floor hangs first under the rock; no storey is renumbered
+   (`storeys` unchanged).
+3. **States with no twin are refused, not guessed.** A torch has no ceiling form; inverting it would leave a floating cell. The design
+   writes floor furniture after the flip (the example does); `unflipped: 'keep'` exists for a caller who checks it after.
+4. **Anchors flip as points.** A spot's feet row does not survive a flip meaningfully, so designs set spots after it (the example does).
+5. **The designer is not told yet.** The site brief (DS) reads the SiteSpec, which has no `inverted` member (frozen); a design job for an
+   inverted lot learns it from the lot's own brief (upside_down's say "inverted"). Wiring `inverted` into the design request is a
+   leftover (it needs a request member, an API change).
+6. **"M15 necks and SC's fit:suspend on the result"** is the site checker's building-scale pair (`neck`, `cantilever`, `fit:suspend`) on
+   the inverted example's composite: region M15 judges region parts only (a lot's cells have no part: RM reading "judged cells").
+
+**The region-made-form limit, and the gate's overhang.** An OVERHANG made by this region's own forms can't host a site lot: the land is
+read before the plan (SB, BF). The gate uses the 7bF fixture `overhang`'s frozen volume built into the world first (a sculpted overhang),
+and the plan tests use natural (fixture-volume) rock shelves.
+
+**Readings (measured):** compact plan/0 (`plan/0#compact`, the sidecar's `expandSystemRefs`) **82,242** characters (main 40a59368: 81,873;
+the 90,000 spare line). The inverted example: 680 blocks, SC clean (no `fit:suspend`, `neck`, `cantilever`, `ports_met` finding), in game a
+queue of 525 cells. **upside_down re-planned** (the recorded `asks/upside_down.json`, honestly): as recorded on the asks survey (flat, no
+overhang) its hanging village answers **refused NO_FEATURE** (no affordance); with `rule.suspended` scoping it, **still waits**: refused
+NO_FEATURE "no overhang ceiling to hang from", the rule blocked. Over a natural overhang field near its stone (nine rock shelves 13 x 13,
+4 thick, 16 over the ground, in the fixture volume): the zone **fits**, all 9 lots hang inverted (suspend site lots, each `inverted`), the
+rule fits; its `chain_bridge_1` (a rope bridge between two hanging lots) answers **unsupported** (a link at a site lot's port is a catwalk,
+branch walk or tunnel: LP's). No other recorded ask has a `rule.suspended` part.
+
+**Tests moved by name:** e16 drops its bare `r_suspended` (it shipped); e20's `hang` (scope a street zone) answers **refused NO_FEATURE**;
+f7b-foundation and gm-c leave `rule.suspended` to us.test.mjs; sv.test's "six fit examples" leave the inverted house to us.test.mjs;
+PlanCatalogueTest's reserved-draft example is now `program.authored`; the schematic export goldens (kit and mod) gain the inverted house;
+SupportOrderFixtureTest and BuildOrderGoldenTest gain it. `valid/v7c_us_hanging.json` covers `rule.suspended` (two homes under two shelves).
+
+**Checks** ($0, sim only; ports 8900/8901, verifier 8902/8903; machine load 40-130 throughout):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1312/1312** at be9c2e24 (us.test 9/9: the property test over 35,723 states, the named families, invertBlueprint's mapping and its refusal, the example current and clean, the example's flipped states, rule.suspended's lots, its refusals and blocked answer, the catalogue flip, upside_down); first run at 79018555 1298/1303, the 5 named movers moved at f1454d2c/be9c2e24 |
+| mod `./gradlew build --offline --no-daemon` | pass; **1155 tests, 0 failures, 1 skipped** (ApiUSTest 2/2, PlanCatalogueTest 8/8, SupportOrderFixtureTest 3/3 and BuildOrderGoldenTest 1/1 with the inverted house, SchematicTest 6/6) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | tsc clean; **866/866** (62 files; jobs.test and bundle.e2e with `plan.suspendedBuilds` appended) |
+| api-compat | clean against the 0.48.0 and 0.47.0 apitest jars (932 references); the API package's diff is javadoc only |
+| catalogue golden | the diff is exactly `rule.suspended` (reserved -> supported, schemaVersion 1, def, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator; `tools/catalogue-since-check.mjs` pass |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0 |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (372 steps; `us-survival` in gate-chains.json, chain `7cus`, impact rule "7c US inverted builds (slice US)") |
+| gate run 1, **20261113-094450-change** at be9c2e24 | **PASS 1/1: us-survival 16/0**: the overhang fixture's land built (15,488 of 26,880 cells) and frozen; Sites.place in construction mode; a) deconstructed at 162/525 with 137 scaffolding cells standing: all 523 items fed back, no scaffolding item, E-flat 0; b) the crate at the hatch's landing (1 from the port, on dirt, outside the box); 137 scaffolding cells in one `architect:scaffold` CELL entry; save/quit/reload at 265/525 resumed with the gate rebuilt; built 525/525 from the hopper chain; 6 built prefixes recorded (100, 200, 277, 300, 400, 500), each connected to the rock by the independent scan over the fixture volume's classes; scaffolding down and released; items in = items out (fed 523 = paid 523 + 0 left); deconstructed: every item back, E-flat 0; c) identical to the INSTANT placement over 50,176 cells; that placement's Remove exact (E-flat 0) |
+| gate-verifier (strict: survival accounting) | **PASS** at 5f251f66: re-ran us-survival on its own run, **20261113-103950-change** (ports 8902/8903, started after HF's run 2 per the coordinator), **16/0**: queue 525, fed 523 = paid 523, partial deconstruct at 162/525 with 137 scaffold cells (all back, no scaffolding item, E-flat 0), 6 prefixes connected, restart at 265/525, identical to the instant placement over 50,176 cells, Remove exact. us.test 9/9, sl + sv 21/21 re-run. Review: no frozen signature changed, NEXT stamps, `inverted` only when true, the property test not vacuous, gate7bso's default unchanged. Non-blocking: SO-b's scaffold-dupe step is skipped for the inverted house (documented) |
+
+**Leftovers:** (1) a design job for an inverted lot is not told it is one (reading 5: the SiteSpec is frozen; a request member is an API
+change). (2) upside_down's chain bridge between hanging lots waits on a rope-bridge link kind (LP's). (3) The in-game region path (a plan
+whose land holds a natural overhang, realised with an inverted entry bound to its lot) is not gated: the gate places the inverted house by
+`Sites.place` on the sculpted fixture land, which is the same placement a site lot's realise item runs (SL: LAYERed in its frame under
+`SiteFit.with(site)`). (4) `tools/gate7bso.mjs` gained `GATE7BSO_HOUSES` (default unchanged; SO-b's scaffold step runs only on the default
+houses); so-survival was not re-run.
+
+### Slice CX as built (branch `slice/CX` off main 40a59368 (v0.64.0); versions NEXT; $0, sim only; recorded 2026-11-13)
+
+One connector for players (§3 row 11, SETTLEMENTS §7.8, N-7b-1): `Sites.placeConnector(ConnectorRequest)` on 7cF's frozen record (no 7b or
+7cF signature changed; the API diff is javadoc only), the plot marker's connector mode, and the drop warning's "build a link here". Feature
+`placeConnector`, advertised with the helper's `region.planCheck` (ApiRules; Api7cFTest no longer lists it as reserved).
+
+**How it works** (`apiimpl/ConnectorPlace`): the connector is a **one-part plan**: plan/0 `{planId: connector, connectors: [{id: link, kind,
+from: {anchor: cx_from}, to: {anchor: cx_to}, ...params}]}` over a claim of the two ends' x/z box plus 16 each side (rope's approach) and the
+level's height, the ends as the caller anchors. It is checked (`Regions.checkPlan`, the world's mode, LOAD_BOUNDED over the claim's chunks)
+and, when READY with the link `fits` or `adjusted`, realised (`Regions.realiseApproved`) under the request's opKey (both keyed: a retry finds
+the same check and region). So it is one region and one site group; every kind is the plan compiler's own (geometry, theming from the Style,
+S-THEME, typed refusals); in survival the link is RS's construction target with the connector's existing survival row (fed from the owner's
+stockpile in runs, refunded on removal). `PlaceResult.siteId` is the region id; `Regions.remove` takes it off.
+
+| Request | Answer |
+|---|---|
+| kinds | `rope_bridge`, `ladder`, `catwalk`, `rock_stair`, `spiral` (= plan/0's `stairs_around`), `stairs_around`; any other `FIELD_LIMIT` |
+| `params` | the kind's plan/0 members, copied onto the part; `id`, `kind`, `from`, `to`, `required` refused `FIELD_LIMIT`; `architect_mc:*` read, never copied |
+| ends | one cell, or more than 96 apart in x or z: `FIELD_LIMIT` |
+| mode | the world's (S-RS-5): AUTO builds INSTANT in creative, CONSTRUCTION in survival; CONSTRUCTION outside survival and INSTANT in survival `NOT_ALLOWED` |
+| a part the plan can't build | `placed: false`, `NO_LINK` with the kit's code first (`NO_LINK: NO_GAP ...`, `NO_CLIMB`, `SCHEMA` ...); nothing asked of the world |
+| the check's or the realise's typed refusal | the same reason as a refusal (never a failed future) |
+
+**The player's path:**
+- **The connector mode** (`client/placement/PlotMarker.startConnector`, `PlotHud`, `GhostRenderer.submitLink`): the plot marker's two marks are
+  the connector's ends (the cells looked at, feet level); F cycles the kind (rope bridge first; Shift+F back); the ghost is a brass post on each
+  end and a dotted line between; Enter on the second end places it on the integrated server (`ConnectorPlace.place` with the player's UUID as
+  the owner and the player as the actor, AUTO, a fresh opKey), phase `placing`; a refusal stays on the second end with the reason in the HUD
+  ("No rock stair here: NO_LINK: NO_CLIMB ..."); placed, the mode ends with a toast naming the region.
+- **The Build a link key** (`client/placement/BuildLinkKey`, `Keys.buildLink`, K by default, "Build a link (a connector)"): starts the connector
+  mode. **"Build a link here"**: the drop warning now ends "(build the way in: build a link here)" (`SiteFit.LINK_HERE`; the text before it
+  unchanged); `SiteFit.dropsOf` gives the same ports as data; when a site house is placed whose verdict had a drop, a toast says so with the K
+  hint, and K then starts the link with its first end at that port's outside cell (used once, forgotten after 10 minutes); the player marks the
+  other end.
+
+**Readings chosen** (the contract silent; the smallest reading each time):
+1. **A one-part plan, not a CELL path site.** SETTLEMENTS §7.8 said "a CELL path site like a 4e road; INSTANT only"; §3 row 11 (the contract)
+   names survival "as a construction site (each connector's existing survival row)", which is RS's region target. Cell sites refuse
+   CONSTRUCTION, and the connectors are compiled only by the plan compiler, so the plan path is the one that has every kind and its survival row.
+2. **The record has no level, owner or actor** (7cF froze it): the API call reads `params["architect_mc:dimension"]` (default the overworld)
+   and `params["architect_mc:owner"]` (default none: in survival a stockpile owner is needed, the region's own refusal says so); the player's
+   path passes the level, the UUID and the player directly (`ConnectorPlace.place(server, request, level, owner, actor)`).
+3. **`NO_LINK` for "the plan can't build it"** (7b's "a link can't reach"), the kit's code and message in the refusal's message; no new Reason.
+4. **The claim is the ends' box plus 16** (ROPE.approach), so a landing's approach fits; a longer approach than 16 would be clipped by the claim.
+5. **The spiral** is plan/0's `stairs_around`, which needs `around` (a part ref); with only two marked points it answers `malformed SCHEMA`
+   (typed): a spiral round a standing spire is not offered by marking points (a later slice could name a host). Ladder, catwalk and rock stair
+   are whatever the compiler answers for the two ends (cx.test: on flat lips catwalk `NO_GAP`, rock stair `NO_CLIMB`, ladder `adjusted`).
+6. **"From a site house's port to ground"** is the drop's first end plus a marked second end (the plan's anchors are x/z points: the compiler
+   finds the levels); no endpoint kind for a placed site was added (plan/0's `{build}` endpoint is a player build's door, not a site).
+7. **Removal** is the region's (`Regions.remove`, or Sites.removeGroup of its group); no player-facing remove was added beyond the region's
+   existing one (leftover).
+
+**Not covered by a unit or the gate:** ladder, catwalk and rock stair placed in game (their rows are RS's, gated in RS/7a; here they are
+plan-checked over the fixture in cx.test only); the drop-to-link path in game (BuildLinkKey's remember/press is driven by dev.cx.key in the
+connector-mode item, without a placed site house); multiplayer (the player path needs the integrated server, as ST's sample does).
+
+**Checks** ($0, sim only; branch head 62e30514 before the as-built):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1307/1307 (cx.test.mjs 4/4: the claim is the ends' box plus 16; the rope bridge READY, only the link's parts write, every cell within 2 of the points, rules clean, the second check byte-identical; survival one target `link`, free 0, its bill the creative bom; catwalk `NO_GAP`, rock_stair `NO_CLIMB`, stairs_around `SCHEMA`, ladder answers) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1158 tests, 0 failures, 1 skipped (ApiCXTest 5/5: the feature follows region.planCheck; the override over the API default; Java's plan, claim and anchors equal fixtures/plan/cx/cx01_ravine.json; the kinds and params; bad requests; Api7cFTest without placeConnector in its reserved list; ApiSTTest unchanged: the warning's start) |
+| sidecar | untouched; `npx tsc --noEmit -p .` clean |
+| lint-structure / lint-look / water-lint | 68 cases 0 failing / 13 cases 0 failing / 137/137 |
+| api-compat | clean: the 0.48.0 and 0.47.0 apitest jars; `--surface` of the 0.48.0 mod jar; the API diff against main is javadoc only (Sites.placeConnector) |
+| `node tools/step-inputs.mjs check` | clean (374 steps; cx-unit, cx-ingame, cx-survival entered; chain `7ccx`, impact rule "7c CX one connector") |
+| in game, run 20261113-110146-change at 62e30514 (ports 8906/8907, `--out artifacts/gate-runs-cx`) | **PASS** 3/3: `cx-unit` 2/0; `cx-ingame` 7/0 (dev client, creative: K starts the connector mode; a rock stair on the flat lips refused on the second end, NO_LINK: NO_CLIMB in the HUD, E-flat 0; the rope bridge marked between the two points, placed by the player's path as rg1, PLACED, 199 cells, the realised world equal to the check's virtual world (strict, 0 of 199 differ), Regions.remove E-flat 0); `cx-survival` 11/0 (headless: the INSTANT twin; INSTANT refused NOT_ALLOWED; the plan checked in survival: link fits, free 0, held 80, its bill; placed AUTO as a construction site, fed in 8 waves (199 items), 4 targets (c1-c4, part link) built; the bill put down equal to the check's item for item and the region's whole bill; the conservation sum exact built (199 paid standing) and removed (every item back); the world equal to the twin; E-flat 0). Run 20261113-105032 failed on two harness bugs (region ids are `rg<n>`; the marker's region removed without its owner as the requester, then waited on) |
+| gate-verifier (strict: survival accounting) | **PASS** at c36bce7b: the API diff javadoc only; no INSTANT path in survival; the bill the compiler's own; re-ran `cx-survival` on its own ports 8908/8909 (run 20261113-110622-change): 11/0, the target bills equal the check's item for item, the conservation sum exact built (199 paid) and removed (every item back), the twin 0 differ, E-flat 0. Non-blocking: the other kinds are plan-checked only; the drop-to-link path in game without a placed site house; the player-facing remove is the region's |
+
+**Gallery (glance, not awaited):** `artifacts/gate-runs-cx/20261113-110146-change/gate7c-cx/shots/`: `cx-marker.png` (the ends, the dotted line, the HUD
+with the rock stair's refusal), `cx-placed.png` (the rope bridge).
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
@@ -30453,6 +30810,89 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
 **The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
 before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
 charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.
+
+## Slice TJ, API and release hygiene (branch `slice/TJ` off main 3a5bd96d / v0.64.0; 2026-11-13; DEV MODE; tooling and docs; $0)
+
+From the boundary audit (`audits/boundary.md` §2, §3, §6, §7, §8, §9; `audits/ui.md` F10). Noah via parent session, 2026-11-13:
+"boundary: defaults". Additive API (Since NEXT); no behaviour change in game. Versions untouched.
+
+### As built
+1. **CG, compat roll and consumer jar.**
+   - **Finding.** The `apijars` step still ran the 0.42.0/0.41.0/0.40.1 jars (API 1.39.0), so the 18 minors 1.40.0-1.57.0 had no
+     old-jar check, and Steward's jar was never compared.
+   - **One file.** `tools/api-baselines.json` now holds main's latest three releases (v0.64.0, v0.63.0, v0.62.0: API 1.57.0, 1.56.0,
+     1.55.0) and the consumer jar (Steward). `gate6a apijars`, `api-compat --baselines` and `release-version.mjs` all read it.
+   - **The roll.** A release-version set puts the release being set first and drops the oldest; it prints the post-tag build command.
+   - **Building the files.** `tools/api-baselines-build.mjs build <tag> | build --missing | steward [--ref R]` builds them into the
+     main checkout's `artifacts/api-baselines/` (untracked). It uses detached `_work/` worktrees with their own Gradle-home clones,
+     `-PallowNoSidecar jar :apitest:jar` for a tag, and Steward's own cache for Steward. `tools/api-baselines.mjs list` shows what
+     is there. The builder is a separate module so the gate drivers' step-inputs never reach a Gradle call.
+   - **`--consumer <jar>`** checks the jar's api references. It fails on zero references and prints references into Architect
+     outside `api/` as WARN. Steward main 0c610dc9 (pinned 0.63.0): 347 classes, 539 api references, all present, none outside
+     `api/`. A jar with none (lab_ui 0.4.1) fails MISSING.
+   - **New gate step `api-compat`** (offline, about 30 s after unit-mod): the impact step of `api/**`, `apiimpl/**` and the baselines'
+     tools. It runs the 3 apitest jars' references, the 0.64.0 mod jar's whole surface and Steward's jar: 5 of 5 clean on this
+     branch.
+   - **How the coordinator gets Steward's jar:** docs/GATES.md "API compatibility baselines".
+2. **PUB-verify.**
+   - `tools/pub-verify.mjs <version>` checks the published package. The token comes from `GITHUB_TOKEN`/`GH_TOKEN` only and is never
+     printed.
+   - It checks that the jar, sources jar, pom and module answer 200, that the module's size, sha256 and sha1 match the downloaded
+     bytes, that the pom and the jar's fabric.mod.json name the version, and that the jar carries the plan/0 schema.
+   - Live: 0.60.0-0.64.0 complete. 0.53.0 INCOMPLETE (sources jar and module 404), exit 1, as the audit found by hand.
+   - Publish runs it after `publish` (`--retries 8`).
+3. **HK-api.**
+   - **Re-stamped by hand.** The 27 NEXT strings that shipped in released tags under `api/` and `apiimpl/` now carry their true
+     version: the first tag containing each line, cross-checked with the member's own Since:
+     - 1.43.0: designByKey, cancelDesign, planRevision, undoRevision, Reason's GR comment;
+     - 1.51.0: FS's follow, followAll, followers, landCheck;
+     - 1.52.0: adopt, unadopt;
+     - 1.53.0: the 7b comments, SiteGuards;
+     - 1.55.0: GP, QT, planCatalogue(kinds), the 7cF comments.
+   - **Reserved stubs.** The three reserved stubs (`Regions.compose`, `Regions.authorProgram`, `Sites.placeConnector`) now say
+     "is reserved: it throws until slice X ships (feature …)". Their javadoc already said "until then it throws".
+   - **The stamper and `--check`.** They now take every `NEXT` word in a Java comment or string literal (a small lexer; a code
+     identifier `NEXT` or `{@link #NEXT}` is untouched). A `NEXT` in a shipped resource fails `--check` and is never stamped.
+     Publish's `--check` therefore stops a tag carrying NEXT.
+   - **AU and PM are left reserved.** Scheduling them is Noah's open decision.
+4. **AV.**
+   - `ArchitectApi.apiVersion()` is a default returning `VERSION`. Its body compiles into Architect's own interface class, so it
+     answers the loaded version, not the consumer's inlined constant.
+   - The always-on feature `"apiVersion"` lets a consumer check before calling it (a pre-AV Architect throws NoSuchMethodError).
+   - api-compat passes.
+5. **SCH-res.**
+   - `kit/schemas/plan.json` was already in the jar at `/architect_mc/schemas/plan.json` (since C38, for PlanCatalogue); the audit
+     missed it.
+   - New: `Regions.PLAN_SCHEMA_RESOURCE` (that path, now a public contract) and the static `Regions.planSchema()` (the text).
+   - A Gradle task `checkJarPlanSchema` (part of `check`) reads the built jar and fails unless its copy equals the tree's byte for
+     byte: 131012 bytes, equal.
+6. **REL-table + SYNC.**
+   - A release-version set now writes the release row of `docs/RELEASES.json`: mod, API, kit, catalogue, date, the feature names
+     added over the last tag (parsed from ApiRules), the Steward RC state (`--steward-rc`) and the package state.
+   - It regenerates `docs/STEWARD-SYNC.md`'s "Architect ships" block between markers and rolls the baselines, all inside the set's
+     rollback. `--check` fails when the three disagree with the tree. `--sync` rewrites the block after a hand edit.
+   - `docs/RELEASES.json` was back-filled from the 80 v* tags. RC states come from Steward's ARCHITECT-ASKS for 0.40.0, 0.42.0 and
+     0.56.0-0.64.0; the rest read "see ARCHITECT-ASKS". The package state is verified for 0.60.0-0.64.0 and 0.53.0 (partial).
+   - STEWARD-SYNC's hand half was rewritten for 2026-11-13: Steward main 0c610dc, pinned 0.63.0, pin-064 held; what Steward uses;
+     what is in flight; shipped-but-unused ranked; the open asks (A2-1, CO's scope, AU/PM, the range); the agreed order through 8a-8c.
+   - **camelCase aliases.** `designOpKeys`, `wallLotsExactMassing` and `jobSystemRefs` are advertised beside the dotted names, which
+     are kept (`ApiRules.CAMEL_ALIASES`).
+7. **F10.** `fabric.mod.json` now declares lab_ui `>=0.4.1 <0.5.0`; `gradle.properties`' stale comment is fixed.
+
+### For Steward (RC areas)
+No runtime behaviour changes. The new surface:
+- `apiVersion()` and the feature `"apiVersion"`, for pin-guard;
+- `Regions.planSchema()` and `PLAN_SCHEMA_RESOURCE`, for schema-from-jar;
+- the camelCase feature aliases;
+- the three stubs' messages, which now say "throws until slice X ships".
+
+The lab_ui floor `0.4.1` matches Steward's `lab_ui_version`.
+
+### Leftovers
+- **Conflict risk.** The CO and CX sessions edit `Regions.compose` and `Sites.placeConnector`; TJ changed only their throw messages.
+- **Baselines need building at each release.** The post-tag `api-baselines-build.mjs build vX` is the coordinator's step. The files
+  are untracked in the main checkout.
+- **Per-gate flags.** The old per-gate `--gate…` flags of api-compat are kept (historical); new slices use `--baselines`.
 
 ## Slice HF, player saves with the ledger (branch `slice/HF` off main 3a5bd96d, v0.64.0 + docs; 2026-11-13; DEV MODE, survival accounting strict; a patch release)
 

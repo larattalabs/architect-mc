@@ -6,6 +6,8 @@
 //   adjusted  some lots found none and the zone's count tolerance allows leaving them out (soft: up to its ceiling; hard: its max; the
 //             deviation names them);
 //   refused   NO_FEATURE: no lot found one, or more were left out than a hard count tolerance allows (wouldFit: the lots that fit).
+// (7c US) A zone a `rule.suspended` scopes (`suspended`): its lots stand on overhangs only (suspend site lots on the rock ceilings) and
+// each is marked `inverted` (its design is built upside down, bp.invert(): IR lot, artifact lot and record); every other zone as before.
 // Joining the lots (rope bridges, branch walks, ladders to their ports) is the link pass's (LP): a connector with an end on an elevated
 // zone's lot answers unsupported until LP. Deterministic: integers, the survey and the volume only.
 import { analyseVolume } from '../region/affordances.mjs';
@@ -63,7 +65,7 @@ export function elevatedVolumeBox(env, rect) {
  * Resolve an elevated zone (step 2). `loc` is the zone's locator (compile's locatorOf), `taken` the rects placed before it, `tol` its count
  * tolerance ({max}). Returns `{klass, rect, volBox, picks: [{spec, a, fit, max}], unplaced, reasons, deviations, notes, wouldFit}`.
  */
-export function resolveElevatedZone(env, p, { loc, taken = [], tol = { max: 0 } }) {
+export function resolveElevatedZone(env, p, { loc, taken = [], tol = { max: 0 }, suspended = false }) {
   const part = p.part;
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] };
   const aim = Array.isArray(loc.aim) ? [loc.aim[0], loc.aim[loc.aim.length - 1]] : [Math.floor((env.claim.minX + env.claim.maxX) / 2), Math.floor((env.claim.minZ + env.claim.maxZ) / 2)];
@@ -74,7 +76,8 @@ export function resolveElevatedZone(env, p, { loc, taken = [], tol = { max: 0 } 
   if (cells > ELEVATED_MAX_CELLS) return { klass: 'incomplete', rect, reasons: [{ code: 'VOLUME', message: `the zone's volume is ${cells} cells, past the cap (${ELEVATED_MAX_CELLS})`, evidence: { ...ev, cap: 'cells', limit: ELEVATED_MAX_CELLS } }] };
   const vol = (env.ctx.volumes ?? []).find((v) => v.decoded && sameBox(v.box, volBox))?.decoded ?? null;
   if (!vol) return { klass: 'incomplete', rect, volBox, reasons: [{ code: 'VOLUME', message: 'the land the lots stand on was not read yet (the two-plan flow reads it): prepare (or check with load: "generate"), then check again', evidence: { ...ev, missing: true } }] };
-  const affs = analyseVolume(vol, { kinds: Object.keys(ELEVATED_FITS) });
+  const kinds = suspended ? ['overhang'] : Object.keys(ELEVATED_FITS);
+  const affs = analyseVolume(vol, { kinds });
   const used = new Set();
   const boxes = [];
   const picks = [], unplaced = [];
@@ -99,16 +102,17 @@ export function resolveElevatedZone(env, p, { loc, taken = [], tol = { max: 0 } 
     }
     if (got) { used.add(got.a.id); boxes.push(got.box); picks.push(got); } else unplaced.push(l.id);
   }
-  const notes = [`${affs.length} affordance(s) in the zone's volume (${Object.keys(ELEVATED_FITS).join(', ')}); ${picks.length} of ${lots.length} lot(s) placed`];
-  if (!unplaced.length) return { klass: 'fits', rect, volBox, picks, unplaced, notes };
+  const notes = [`${affs.length} affordance(s) in the zone's volume (${kinds.join(', ')}); ${picks.length} of ${lots.length} lot(s) placed`];
+  if (suspended) notes.push(`suspended (rule.suspended): the lots hang inverted from overhang ceilings`);
+  if (!unplaced.length) return { klass: 'fits', rect, volBox, picks, unplaced, notes, ...(suspended ? { suspended } : {}) };
   const fragment = { program: { ...part.program, lots: lots.filter((l) => !unplaced.includes(l.id)) } };
   // (the count tolerance as every lots zone reads it: a soft one adjusts up to its ceiling; a hard one refuses past its max)
   if (picks.length && unplaced.length <= (tol.hard ? (tol.max ?? 0) : (tol.ceiling ?? Infinity))) {
-    return { klass: 'adjusted', rect, volBox, picks, unplaced, deviations: [{ what: 'count', value: unplaced.length, max: tol.max ?? 0, ...(unplaced.length > (tol.max ?? 0) ? { exceeds: true } : {}) }], notes: [...notes, `unplaced: ${unplaced.join(', ')} (no affordance left for ${unplaced.length === 1 ? 'it' : 'them'})`] };
+    return { klass: 'adjusted', rect, volBox, picks, unplaced, ...(suspended ? { suspended } : {}), deviations: [{ what: 'count', value: unplaced.length, max: tol.max ?? 0, ...(unplaced.length > (tol.max ?? 0) ? { exceeds: true } : {}) }], notes: [...notes, `unplaced: ${unplaced.join(', ')} (no affordance left for ${unplaced.length === 1 ? 'it' : 'them'})`] };
   }
   return {
     klass: 'refused', rect, volBox, picks: [], unplaced, notes,
-    reasons: [{ code: 'NO_FEATURE', message: `${unplaced.length} of ${lots.length} lot(s) found no canopy, trunk, overhang, ledge or water to stand on in the zone (the frozen volume shows ${affs.length} affordance(s) of those kinds)`, evidence: { ...ev, affordances: affs.length, unplaced } }],
+    reasons: [{ code: 'NO_FEATURE', message: suspended ? `${unplaced.length} of ${lots.length} lot(s) found no overhang ceiling to hang from in the zone (rule.suspended; the frozen volume shows ${affs.length} overhang(s))` : `${unplaced.length} of ${lots.length} lot(s) found no canopy, trunk, overhang, ledge or water to stand on in the zone (the frozen volume shows ${affs.length} affordance(s) of those kinds)`, evidence: { ...ev, affordances: affs.length, unplaced } }],
     ...(picks.length ? { wouldFit: [{ part: p.id, fragment, geometry: { rect: ev.rect } }] } : {}),
   };
 }
@@ -118,10 +122,10 @@ export function emitElevatedZone(r, p, z, { stage }) {
   const out = [];
   for (const g of z.picks) {
     const l = g.spec;
-    const lot = r.siteLot(l.id, { affordance: g.a, fit: g.fit, max: g.max, stage, ...(l.brief !== undefined ? { brief: l.brief } : {}), ...(l.ext !== undefined ? { ext: l.ext } : {}) });
+    const lot = r.siteLot(l.id, { affordance: g.a, fit: g.fit, max: g.max, stage, ...(l.brief !== undefined ? { brief: l.brief } : {}), ...(l.ext !== undefined ? { ext: l.ext } : {}), ...(z.suspended ? { inverted: true } : {}) });
     if (!lot) throw new Error(`site lot ${l.id}: its volume was not read`);
     const b = lot.box;
-    out.push({ id: l.id, box: [b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ], entrance: null, front: lot.front, size: [b.maxX - b.minX + 1, b.maxZ - b.minZ + 1], site: lot.site, affordance: lot.affordance });
+    out.push({ id: l.id, box: [b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ], entrance: null, front: lot.front, size: [b.maxX - b.minX + 1, b.maxZ - b.minZ + 1], site: lot.site, affordance: lot.affordance, ...(lot.inverted ? { inverted: true } : {}) });
   }
   return out;
 }

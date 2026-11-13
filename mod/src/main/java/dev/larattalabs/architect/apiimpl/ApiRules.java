@@ -37,7 +37,18 @@ public final class ApiRules {
 		// (M5 QT) Regions.quote and Regions.quoteApproved: a plan's whole survival bill with its lot entries (read-only, $0)
 		"quote",
 		// (7c CM-b) Sites.place of a composite entry: its modules as one site group; CompositeInfo.of(entry); JOINT_MISMATCH
-		"composites");
+		"composites",
+		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
+		"apiVersion");
+
+	/**
+	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:
+	 * names are stable within 1.x, so the dotted ones stay. Since NEXT.
+	 */
+	public static final java.util.Map<String, String> CAMEL_ALIASES = java.util.Map.of(
+		"design.opKeys", "designOpKeys",
+		"wallLots.exactMassing", "wallLotsExactMassing",
+		"job.systemRefs", "jobSystemRefs");
 
 	private ApiRules() {
 	}
@@ -123,10 +134,12 @@ public final class ApiRules {
 					case "region.link" -> "linkPass"; // 7b LP: the link pass at realise (port links between site lots, IR v2, NO_LINK)
 					case "design.composite" -> "composites"; // 7c CM-b: a design job may return a Composite (Java's own "composites" places it)
 					case "region.templates" -> "scenarioTemplates"; // 7c TC: the template catalogue (the scenario programs, their land needs, the pick's affordances)
+					case "region.compose" -> "compose"; // 7c CO: Regions.compose, the standalone composer (pick, compose, check, one repair)
 					case "plan.bigForms" -> "bigForms"; // 7c BF: plan/0's form.hollow_mountain, form.crater and form.floating_island (since 1.56.0)
 					case "plan.hiddenRooms" -> "hiddenRooms"; // 7c HR: plan/0's form.hidden_room and the artifact's $.secrets[] (since 1.57.0)
 					case "plan.aqueduct" -> "aqueduct"; // 7c AQ: a course past its fill carried on piers or arches (channel.aqueduct; since NEXT)
 					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since 1.57.0)
+					case "plan.suspendedBuilds" -> "suspendedBuilds"; // 7c US: plan/0's rule.suspended (an elevated zone's lots hung inverted from overhang ceilings; since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)
@@ -135,6 +148,9 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.grow") && sidecarFeatures.contains("plan.revision")) {
 				out.add("planRevisionGrow"); // 6d GR §8: plan/0's revision.grow (a zone's lots only gain lots) through checkPlan and realiseApproved
+			}
+			if (sidecarFeatures.contains("region.planCheck")) {
+				out.add("placeConnector"); // 7c CX: Sites.placeConnector (a one-part plan through Regions.checkPlan and realiseApproved; since NEXT)
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
@@ -175,6 +191,12 @@ public final class ApiRules {
 				out.add("flatVillage");
 				out.add("regionGraph");
 				out.add("villagerMover");
+			}
+		}
+		// (TJ) the camelCase alias beside each dotted name advertised
+		for (var e : CAMEL_ALIASES.entrySet()) {
+			if (out.contains(e.getKey())) {
+				out.add(e.getValue());
 			}
 		}
 		return java.util.Set.copyOf(out);

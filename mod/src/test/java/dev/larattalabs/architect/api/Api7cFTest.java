@@ -94,7 +94,7 @@ class Api7cFTest {
 	@Test
 	void featuresNotAdvertisedByTheFoundation() {
 		List<String> names = List.of("bigForms", "hiddenRooms", "suspendedBuilds", "aqueduct", "regionM15", "styleFormat3", "scenarioTemplates",
-			"compose", "programAuthoring", "shapePromotion", "placeConnector"); // (7c CM-b) "composites" is advertised by CM-b
+			"compose", "programAuthoring", "shapePromotion"); // (7c CM-b) "composites" is advertised by CM-b; (7c CX) "placeConnector" by CX (ApiCXTest)
 		for (Set<String> f : List.of(ApiRules.JAVA_FEATURES, ApiRules.features(1, List.of()), ApiRules.features(2, List.of("job.run", "region.plan",
 			"region.planCheck", "site.design", "region.link")))) {
 			for (String n : names) {
@@ -118,7 +118,10 @@ class Api7cFTest {
 		} catch (InvocationTargetException e) {
 			Throwable t = e.getCause() instanceof java.lang.reflect.UndeclaredThrowableException u ? u.getCause() : e.getCause();
 			assertTrue(t instanceof UnsupportedOperationException, api.getSimpleName() + "." + name + ": " + t);
-			assertTrue(t.getMessage().contains("NEXT") && t.getMessage().contains(slice), t.getMessage());
+			// (TJ HK-api) a reserved stub "throws until slice X ships"; a shipped member's default names its release ("needs Architect API
+			// 1.55.0 (slice 7cF)"); the 7cF form "needs Architect API NEXT (slice X)" is still accepted
+			String msg = t.getMessage();
+			assertTrue(msg.contains(slice) && (msg.contains("throws until " + slice) || msg.contains("NEXT") || msg.matches(".*needs Architect API \\d+\\.\\d+\\.\\d+.*")), msg);
 			return;
 		}
 		throw new AssertionError(api.getSimpleName() + "." + name + " did not throw");
