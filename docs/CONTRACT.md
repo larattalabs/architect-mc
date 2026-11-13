@@ -29428,12 +29428,36 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
   - The verifier re-runs it strict on 8902/8903.
   - Ad hoc after the fix (head 218e50ab): K5 minted 0 and lost 0 (live 389, saved 0, back 0); RVU2 0 and 0 (live 231); RVU2s back
     231 = saved 231.
+- **Gate runs** (`--out artifacts/gate-runs-jr`, 8900/8901):
+  - **Run 1** (e185bc9e): died on a driver field name. The pre-fix numbers above come from the ad-hoc rerun.
+  - **Run 2** (750a98b6), 5 PASS, 2 FAIL:
+    - jr-crash still minted. A target with no record was uncapped, so a target fed after the save escaped. Fixed by the
+      no-record rule and the legacy pool.
+    - rs-survival-smoke item 10 (rs02m2 "reads REMOVING after the reopen") failed. It is a known timing flake: it also failed in 2
+      of 28 earlier runs (gate-runs-spB, spC, 2026-10-24). It passed in run 3.
+  - **Run 3** (6ff51951): **7 PASS**.
+    - jr-crash 24/0: K5 live 389, saved 0, back 0; RVU2 live 231, saved 0, back 0; RVU2s saved 231, back 231. Mint and loss 0 in
+      every case. The explicit save with the world took 3.8 ms.
+    - rs-survival-smoke 40/0, xr-survival 24/0, lc-survival 14/0, so-survival 55/0, gr-survival 12/0 (the undo's refund equals
+      consumed), qt-growth 12/0 (consumed equals the quote).
+- **Strict verifier** (gate-verifier, re-ran jr-crash on 8902/8903 at 59693582,
+  `artifacts/gate-runs-jr-verify/20261113-053109-change`): **PASS**, 24/0, the same numbers.
+  - Its review found nothing that breaks the gate. Low or info notes:
+    - The legacy pool goes to whichever target refunds first. The total stays capped at consumed less returned.
+    - `deltaSite` assumes a site id holds no `:`. Site ids don't.
+    - `saveWithWorld` falls back to a plain save off the server thread.
 - **Units:** `StockpilePaidJRTest` (8): same item first then unit for unit; a partial refund with its shortfall; no record (fed after
   the save) credits nothing; keys outside the cap; credited once and the record dropped; a delta from its site's record; a retake out
   of the record; saved with the ledger; an old file's legacy pool; an adopted crate.
   - Existing units that credit a target key without consuming now book its record first: `StockpileTest` (2), `RegionTargetsTest`
     (1), `UmtPropertiesTest` P5, and `LedgerSim`'s purse (as the feed's).
   - The survival ledger lint (`LedgerLintTest`, 14, its fuzz seeds included) stays green.
+- **Other checks:**
+  - Gradle `build`: 1132 tests, 0 failures.
+  - Kit: 1246 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 356 steps clean (rebuilt for jr-crash).
+  - Sidecar `tsc --noEmit`: clean.
+  - api-compat against the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface: pass.
 
 ### Known open (the next slice, the coordinator's call)
 
