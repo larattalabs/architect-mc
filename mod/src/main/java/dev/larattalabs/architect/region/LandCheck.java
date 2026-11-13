@@ -347,7 +347,11 @@ public final class LandCheck {
 	// ------------------------------------------------------------------ the call
 
 	/** Who holds a cell on top: a part (tiles: per cell), a lot, or nothing to count yet (a writer still building). */
-	private record Owner(int kind, @Nullable String name, @Nullable Map<Long, String> parts, boolean mech) {
+	private record Owner(int kind, @Nullable String name, @Nullable Map<Long, String> parts, boolean mech,
+		dev.larattalabs.architect.site.@Nullable FieldCells field) {
+		Owner(int kind, @Nullable String name, @Nullable Map<Long, String> parts, boolean mech) {
+			this(kind, name, parts, mech, null);
+		}
 		static final int PART = 0, TILE = 1, LOT = 2, SKIP = 3;
 	}
 
@@ -531,7 +535,8 @@ public final class LandCheck {
 			BlockState now = c.getBlockState(bp);
 			boolean pt = Placed.record(c, x, y, z) != null;
 			boolean mech = o.mech;
-			Cls cls = classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos));
+			Cls cls = o.field != null && o.field.unchanged(pos, now) ? Cls.SAME // (M5 FC) air or a field crop over our farmland
+				: classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos));
 			if (lot != null) {
 				long[] a = j.lots.computeIfAbsent(lot, q -> new long[2]);
 				if (cls == Cls.PLAYER) {
@@ -579,7 +584,8 @@ public final class LandCheck {
 		if (lot != null) {
 			Site s = Sites.get(site);
 			boolean building = s != null && s.construction() != null && s.construction().building();
-			return new Owner(building ? Owner.SKIP : Owner.LOT, lot, null, false);
+			// (M5 FC) a lot with a field: its crop cells are judged by the field rule
+			return new Owner(building ? Owner.SKIP : Owner.LOT, lot, null, false, dev.larattalabs.architect.site.FieldCells.of(s));
 		}
 		Infra inf = Infras.get(site);
 		if (inf != null && inf.building()) {

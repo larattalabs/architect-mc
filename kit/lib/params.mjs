@@ -7,6 +7,8 @@
 const NAME = /^[a-z][a-zA-Z0-9_]{0,31}$/;
 const OPTION = /^[a-z0-9_]{1,32}$/;
 
+import { parseField } from './region/fieldSpec.mjs';
+
 /** (6c V) At most this many lots in a `lots` param (a region program's lot list). */
 export const LOTS_MAX = 40;
 const LOT_ID_RE = /^[a-z][a-z0-9_]{0,47}$/;
@@ -33,9 +35,11 @@ export function validateLots(v, where = 'lots') {
     if (!l || typeof l !== 'object' || Array.isArray(l)) throw new Error(`${w} must be an object`);
     // (6c H, S-H-2) farmPond is the compiler's (a farm lot's pond, read from the plan part): accepted here, never in the layout's lot;
     // ((6c IRR) irrigate likewise: the compiler's, a farm lot's sources)
-    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief', 'ext', 'farmPond', 'irrigate', 'refill'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
+    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief', 'ext', 'farmPond', 'irrigate', 'refill', 'field'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
     if (l.farmPond !== undefined && typeof l.farmPond !== 'boolean') throw new Error(`${w}.farmPond must be true or false`);
     if (l.irrigate !== undefined && typeof l.irrigate !== 'boolean') throw new Error(`${w}.irrigate must be true or false`);
+    // ((M5 FC, S-M5-4) a module lot's field: the farmland cells in the lot's frame and the crop kinds; the compiler records it on the IR lot)
+    const field = l.field === undefined ? undefined : parseField(l.field, `${w}.field`);
     if (typeof l.id !== 'string' || !LOT_ID_RE.test(l.id)) throw new Error(`${w}.id must match ${LOT_ID_RE}`);
     if (seen.has(l.id)) throw new Error(`${w}.id '${l.id}' is used twice`);
     seen.add(l.id);
@@ -48,7 +52,7 @@ export function validateLots(v, where = 'lots') {
     if (l.brief !== undefined && l.brief !== null && (typeof l.brief !== 'string' || l.brief.length > 500)) throw new Error(`${w}.brief must be a string (<= 500)`);
     const ext = l.ext === undefined || l.ext === null ? undefined : validateLotExt(l.ext, `${w}.ext`);
     return { id: l.id, type: l.type, role: l.role ?? l.type, size: [...l.size], landmark: !!l.landmark, placement: l.placement ?? null,
-      villager: l.villager ?? inferVillager(l.type), ...(l.brief ? { brief: l.brief } : {}), ...(ext && Object.keys(ext).length ? { ext } : {}) };
+      villager: l.villager ?? inferVillager(l.type), ...(l.brief ? { brief: l.brief } : {}), ...(ext && Object.keys(ext).length ? { ext } : {}), ...(field ? { field } : {}) };
   });
 }
 

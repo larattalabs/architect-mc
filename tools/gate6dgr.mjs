@@ -975,6 +975,13 @@ steps.look = async () => {
   await registerIG(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest, cellsOf, diff, haltWait, removeRegion, OWNER });
 }
 
+// ------------------------------------------------------------------ (M5 FC) fcunit, fcfield: tools/lib/gatem5fc.mjs
+
+{
+  const { registerFC } = await import('./lib/gatem5fc.mjs');
+  await registerFC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, rvIr, cellsOf, root, javaTests, apiJars, nodeTest });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);
