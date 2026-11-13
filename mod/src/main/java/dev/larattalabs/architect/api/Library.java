@@ -166,7 +166,7 @@ public interface Library {
 		throw new UnsupportedOperationException("Library.exportSchematic needs Architect API 1.18.0");
 	}
 
-	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API NEXT)
+	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API 1.51.0)
 
 	/**
 	 * Every entry whose head derives from {@code sourceEntryId} ({@code derivation.source}), any kind, sorted by id (docs/CONTRACT.md
@@ -177,7 +177,7 @@ public interface Library {
 	 * Since 1.51.0.
 	 */
 	default List<Follower> followers(String sourceEntryId) {
-		throw new UnsupportedOperationException("Library.followers needs Architect API NEXT");
+		throw new UnsupportedOperationException("Library.followers needs Architect API 1.51.0");
 	}
 
 	/**

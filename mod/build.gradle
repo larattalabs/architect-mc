@@ -244,6 +244,34 @@ tasks.matching { it.name.startsWith("publish") }.configureEach {
 	dependsOn(checkSidecarBundle)
 }
 
+// (TJ SCH-res) the jar's plan/0 schema must be the tree's kit/schemas/plan.json byte for byte (Regions.PLAN_SCHEMA_RESOURCE: Steward
+// reads it from the classpath and its Node tools from the pinned jar). Reads the built jar itself, not build/resources; part of check.
+def checkJarPlanSchema = tasks.register('checkJarPlanSchema') {
+	description = 'The mod jar carries kit/schemas/plan.json byte for byte at architect_mc/schemas/plan.json'
+	def jarFile = tasks.named('jar').flatMap { it.archiveFile }
+	def tree = file('../kit/schemas/plan.json')
+	inputs.file(jarFile)
+	inputs.file(tree)
+	dependsOn tasks.named('jar')
+	doLast {
+		def zf = new java.util.zip.ZipFile(jarFile.get().asFile)
+		try {
+			def e = zf.getEntry('architect_mc/schemas/plan.json')
+			if (e == null) {
+				throw new GradleException("checkJarPlanSchema: ${jarFile.get().asFile.name} has no architect_mc/schemas/plan.json")
+			}
+			byte[] inJar = zf.getInputStream(e).readAllBytes()
+			if (!java.util.Arrays.equals(inJar, tree.bytes)) {
+				throw new GradleException("checkJarPlanSchema: the jar's architect_mc/schemas/plan.json (${inJar.length} bytes) is not kit/schemas/plan.json (${tree.bytes.length} bytes)")
+			}
+			logger.lifecycle("checkJarPlanSchema: the jar's plan.json equals kit/schemas/plan.json (${inJar.length} bytes)")
+		} finally {
+			zf.close()
+		}
+	}
+}
+tasks.named('check') { dependsOn checkJarPlanSchema }
+
 jar {
 	manifest {
 		attributes("Architect-Sidecar-Bundle": sidecarBundled ? "present" : "missing")

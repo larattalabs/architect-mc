@@ -37,7 +37,18 @@ public final class ApiRules {
 		// (M5 QT) Regions.quote and Regions.quoteApproved: a plan's whole survival bill with its lot entries (read-only, $0)
 		"quote",
 		// (7c CM-b) Sites.place of a composite entry: its modules as one site group; CompositeInfo.of(entry); JOINT_MISMATCH
-		"composites");
+		"composites",
+		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
+		"apiVersion");
+
+	/**
+	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:
+	 * names are stable within 1.x, so the dotted ones stay. Since NEXT.
+	 */
+	public static final java.util.Map<String, String> CAMEL_ALIASES = java.util.Map.of(
+		"design.opKeys", "designOpKeys",
+		"wallLots.exactMassing", "wallLotsExactMassing",
+		"job.systemRefs", "jobSystemRefs");
 
 	private ApiRules() {
 	}
@@ -175,6 +186,12 @@ public final class ApiRules {
 				out.add("flatVillage");
 				out.add("regionGraph");
 				out.add("villagerMover");
+			}
+		}
+		// (TJ) the camelCase alias beside each dotted name advertised
+		for (var e : CAMEL_ALIASES.entrySet()) {
+			if (out.contains(e.getKey())) {
+				out.add(e.getValue());
 			}
 		}
 		return java.util.Set.copyOf(out);

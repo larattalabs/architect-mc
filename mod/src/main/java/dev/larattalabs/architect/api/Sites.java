@@ -506,6 +506,6 @@ public interface Sites {
 	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
 	 */
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
-		throw new UnsupportedOperationException("Sites.placeConnector needs Architect API NEXT (slice CX)");
+		throw new UnsupportedOperationException("Sites.placeConnector is reserved: it throws until slice CX ships (feature placeConnector)");
 	}
 }

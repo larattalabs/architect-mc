@@ -192,7 +192,7 @@ public interface Designs {
 	 * reported first, then answered). Since 1.43.0.
 	 */
 	default CompletableFuture<Optional<Design>> designByKey(@Nullable String owner, String opKey) {
-		throw new UnsupportedOperationException("Designs.designByKey needs Architect API NEXT");
+		throw new UnsupportedOperationException("Designs.designByKey needs Architect API 1.43.0");
 	}
 
 	/**
@@ -208,7 +208,7 @@ public interface Designs {
 	 * {@link #cancel} is unchanged. Since 1.43.0.
 	 */
 	default CompletableFuture<CancelOutcome> cancelDesign(String designId) {
-		throw new UnsupportedOperationException("Designs.cancelDesign needs Architect API NEXT");
+		throw new UnsupportedOperationException("Designs.cancelDesign needs Architect API 1.43.0");
 	}
 
 	/**
@@ -222,7 +222,7 @@ public interface Designs {
 		throw new UnsupportedOperationException("Designs.promoteCopy needs Architect API 1.11.0");
 	}
 
-	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API NEXT)
+	// ------------------------------------------------------------------ 6d slice FS: updates follow the source (API 1.51.0)
 
 	/**
 	 * A COPY follows its source (docs/CONTRACT.md "Phase 6d slice FS" §3): its own recorded recipe (the bible pin and roles, the
@@ -246,10 +246,10 @@ public interface Designs {
 	 * {@code entry.follow} (feature {@code "followSource"}). Completes on the server thread once the library has reloaded the new
 	 * version. Since 1.51.0. (7b DS, since 1.53.0) A SITE entry follows too: the source's version re-run on the entry's own site, checked
 	 * on the composite (a site rule failing answers {@code check}, its message naming the rule); no variation bar and no frame check
-	 * (a site-bound entry places only in its site's frame). Before NEXT a SITE entry was refused {@code until_7b}.
+	 * (a site-bound entry places only in its site's frame). Before 1.53.0 a SITE entry was refused {@code until_7b}.
 	 */
 	default CompletableFuture<FollowResult> follow(String copyEntryId, int toSourceVersion, @Nullable String opKey) {
-		throw new UnsupportedOperationException("Designs.follow needs Architect API NEXT");
+		throw new UnsupportedOperationException("Designs.follow needs Architect API 1.51.0");
 	}
 
 	/**
@@ -260,7 +260,7 @@ public interface Designs {
 	 * whole operation. Completes with one result per frozen follower (empty when none is behind). Since 1.51.0.
 	 */
 	default CompletableFuture<java.util.List<FollowResult>> followAll(String sourceEntryId, int toSourceVersion, @Nullable String opKey) {
-		throw new UnsupportedOperationException("Designs.followAll needs Architect API NEXT");
+		throw new UnsupportedOperationException("Designs.followAll needs Architect API 1.51.0");
 	}
 
 	/**
@@ -298,7 +298,7 @@ public interface Designs {
 		throw new UnsupportedOperationException("Designs.siteVariant needs the Architect API since 1.53.0 (slice DS)");
 	}
 
-	// ------------------------------------------------------------------ M5 GP: given programs (API NEXT)
+	// ------------------------------------------------------------------ M5 GP: given programs (API 1.55.0)
 
 	/**
 	 * (M5 GP, Steward's S-M5-1; docs/CONTRACT.md "M5 support") A design from the caller's own kit program, at $0 with no Claude call: the
@@ -328,7 +328,7 @@ public interface Designs {
 
 	/** {@link #fromProgram(String, com.google.gson.JsonObject, BiblePin, String)} under an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<String> fromProgram(String source, com.google.gson.JsonObject params, @Nullable BiblePin bible, String opKey, @Nullable String owner) {
-		throw new UnsupportedOperationException("Designs.fromProgram needs Architect API NEXT (slice GP)");
+		throw new UnsupportedOperationException("Designs.fromProgram needs Architect API 1.55.0 (slice GP)");
 	}
 
 	/**
@@ -357,7 +357,7 @@ public interface Designs {
 	/** {@link #variant(String, com.google.gson.JsonObject, BiblePin, DesignRequest.Reserved, String)} under an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<String> variant(String entryId, com.google.gson.JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved,
 		String opKey, @Nullable String owner) {
-		throw new UnsupportedOperationException("Designs.variant needs Architect API NEXT (slice GP)");
+		throw new UnsupportedOperationException("Designs.variant needs Architect API 1.55.0 (slice GP)");
 	}
 
 	/**
@@ -372,6 +372,6 @@ public interface Designs {
 
 	/** {@link #variantByKey(String)} in an owner's key scope. Since 1.55.0. */
 	default CompletableFuture<Optional<String>> variantByKey(@Nullable String owner, String opKey) {
-		throw new UnsupportedOperationException("Designs.variantByKey needs Architect API NEXT (slice GP)");
+		throw new UnsupportedOperationException("Designs.variantByKey needs Architect API 1.55.0 (slice GP)");
 	}
 }
