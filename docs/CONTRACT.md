@@ -28890,6 +28890,65 @@ about 8 kinds under 90,000.
 | `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
 | gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
 
+### Slice CM-a as built (branch `slice/CM-a` off main 0cdb1869; versions NEXT; $0, kit only, no client; recorded 2026-11-12)
+
+Composites in the kit: `kit/lib/composite.mjs`, the hand-written castle `kit/designs/composite/castle.mjs` (121x15x27, three 41-wide
+modules, two arch joints; checks clean), the CLI `kit/tools/composite.mjs`, kit/README "Composites (7c CM-a)", and
+`kit/test/cm-a.test.mjs` (10 tests, sha goldens in `kit/test/fixtures/cm-a.json`). No Java, no sidecar, no API member, no feature
+(`composites` stays CM-b's), no catalogue or plan/0 change. 7cF's `CompositeInfo`/`Joint` are untouched; the kit's output maps onto them.
+
+**Frozen kit API for CM-b** (`kit/lib/composite.mjs`; additive later, never changed):
+
+| Member | Shape |
+|---|---|
+| constants | `JOINT_KIND = 'architect:joint'`, `MODULE_CAP = {x: 96, y: 64, z: 96}`, `COMPOSITE_EXT = 'architect_mc:composite'` (7cF's `EXT_KEY`), `FINDING_CODES` |
+| `joint(bp, name, x, y, z, facing, {width = 1, height = 1})` | adds a port `{name, kind: 'architect:joint', x, y, z, facing, width, height}` to a Blueprint (design coordinates, as `bp.port`); `jointCells(port)` its rectangle |
+| `new Composite({id, name?, description?, type?, tags?, front?, groundY?, palette?, profile?, interior?, approach?, ext?})` | `interior` and anchors set on the composite are union coordinates |
+| `c.module(id, bp, {at: [x, y, z]})` | `id` matches `[a-z][a-z0-9_]{0,15}`; `bp` a Blueprint, not site-bound; `at` its template's min corner in the union (whole numbers >= 0); chainable |
+| `c.join(a, b)` | each end `'<module>.<port>'` or `{module, port}`; chainable. `c.anchor(name, x, y, z, yaw, pitch)` a union-coordinate anchor |
+| `c.entryId()`, `c.moduleEntryId(m)` | the one library entry is the composite's id; a module's hidden entry is `<id>__<m>` |
+| `c.size()`, `c.info()`, `c.manifest()` | the union's size; **7cF's CompositeInfo wire** `{modules: [entryId...], joints: [{from: {module: entryId, port}, to: {...}}], union: {minX: 0 .. maxZ: size-1}}` (joints in `c.join` order, `from` its first end); the manifest `{id, entryId, size, modules: [{id, entryId, at, size}], joints: [{from: {module, port}, to}]}` (module ids, not entry ids) |
+| `c.findings()` | `[{code, message, module?, joint?}]`, each an error: `NO_MODULES`, `MODULE_CAP`, `MODULE_PORTS` (checkPorts), `MODULE_OVERLAP`, `SEAM_CONFLICT`, `JOINT_UNKNOWN`, `JOINT_KIND`, `JOINT_REUSED`, `JOINT_UNMATCHED`, `JOINT_BOUNDARY`, `JOINT_CELL`, `JOINT_FACING`, `JOINT_WIDTH`, `JOINT_HEIGHT` |
+| `c.check(opts)` | `{ok, errors, warnings, findings, metrics}`: errors are `composite: <CODE> <message>` for each finding, then checkStructure's on the union (`opts` are checkStructure's) |
+| `c.union()` | the union as one Blueprint (finalized; cached until a module or anchor is added) |
+| `c.moduleOutput(m)` | `{structure, sidecar, partMap}`: the module's box cut from the finalized union; the sidecar is the module Blueprint's own with `id` = its hidden entry id |
+| `c.write(dir)` | `<id>.nbt`, `<id>.parts.nbt`, `<id>.blueprint.json` (ext carries the CompositeInfo wire), per module `<id>__<m>.nbt/.parts.nbt/.blueprint.json`, and `<id>.composite.json` (the manifest); byte-stable |
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **A joint is one opening, named from both sides.** "Same boundary cell" is read as: both ports' min corners are the same union
+   cell, each port on its own module's boundary face in its facing (the opening's cells inside the template), so neighbouring modules
+   **share one seam layer** (the layer CM-b places as LAYER). The min corner (lowest x or z along the face, lowest row) makes the cell
+   independent of which side names it. Joint ports face north, south, east or west only (stacking is a seam without a joint).
+2. **Boxes may share one seam layer, no more** (`MODULE_OVERLAP` otherwise), and a cell two modules both write must be the same block,
+   state and data (`SEAM_CONFLICT`); modules may also sit apart. A seam needs no joint (a plain shared wall is fine).
+3. **The union check is checkStructure on the union**, with the composite's type and profile: the anchors from the composite or the
+   first module with entrance/spawn, the interior given or the box round the modules' interiors. So light, doors, floating, enclosure,
+   reachability and the vocabulary rules judge across the seams; the castle declares `door, roof_closed, floors_reachable, lit,
+   interior, no_floating` and checks with 0 errors and 0 warnings.
+4. **Modules are cut from the finalized union.** Fences, walls and panes connect across a seam only in the union, so each module's
+   template is the union's cells in its box (marked raw so no module-only finalize cuts the connections): placing the modules writes
+   exactly the union's blocks (a test places the three castle modules back and compares every cell).
+5. **One entry, one item (Steward's change 4).** The union is the library entry and the design-group item (its id, `itemKey == lotId`);
+   modules are hidden entries only `ext["architect_mc:composite"].modules` names, and no module sidecar carries the composite ext. CM-b
+   asserts the binding on `c.entryId()`/`c.info()`.
+6. **The module offsets live in the manifest** (`<id>.composite.json`), not in the CompositeInfo wire, which stays exactly 7cF's.
+7. **Composite designs live in `kit/designs/composite/`** (not scanned by `listDesigns`, whose designs return a Blueprint); the default
+   export returns a Composite. The union's parts are `<module>_<part>`, its ports the modules' non-joint ports as `<module>.<port>`.
+
+**Checks** (offline, $0, no client, no gate run: CM-a's gate column is kit units, the castle clean, a broken joint caught, renders
+byte-stable):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1229/1229** (cm-a 10/10: the castle clean, one entry, modules = the union, the union check across seams (light, reachability), unmatched and every mismatch kind caught, unknown/kind/reused/boundary, cap/overlap/seam conflict, sha goldens, the CLI) |
+| renders and files byte-stable | sha goldens (`kit/test/fixtures/cm-a.json`: 13 written files, 5 views iso, iso_back, top, front, cutaway) reproduced on macOS arm64 (Node 24), **Linux aarch64 (docker node:24-slim)** and **Linux x86_64 (docker node:22, emulated)**: cm-a 10/10 each |
+| sidecar | untouched, tsc clean; the full suite at merge (coordinator's rule, 2026-11-12; an earlier full run under load average ~140 had 9 timeouts in untouched tests) |
+| mod `./gradlew build --offline --no-daemon` | pass; 1120 tests, 0 failures, 1 skipped (no Java change) |
+| api-compat | clean: the 0.48.0 and 0.47.0 apitest jars, `--surface` of the 0.62.0 mod jar |
+| catalogue golden | unchanged (f7c-foundation, catalogue-c38 pass in the kit suite); `tools/catalogue-since-check.mjs` pass |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 135/0 |
+| `node tools/step-inputs.mjs check` | clean after `build` (353 steps; unit-kit gains cm-a and kit/designs/composite) |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
