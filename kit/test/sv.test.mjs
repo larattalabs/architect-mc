@@ -213,7 +213,8 @@ const cellsOf = (structure) => {
 };
 
 test('the six fit examples: one per fit, each built into its fixture, clean on the composite (7b SC), and current in kit/examples', async () => {
-  assert.deepEqual(listSiteDesigns().sort(), Object.keys(EXAMPLES).sort());
+  // ((7c US) the inverted house fit_suspend_inverted, a second suspend example, is us.test.mjs's)
+  assert.deepEqual(listSiteDesigns().filter((id) => id !== 'fit_suspend_inverted').sort(), Object.keys(EXAMPLES).sort());
   for (const [id, fx] of Object.entries(EXAMPLES)) {
     const mod = await importDesign(id, SITE_DESIGNS);
     assert.equal(mod.exampleSite, fx);
