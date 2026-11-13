@@ -70,6 +70,13 @@ export async function registerQT(steps, h) {
   async function noWrite(worldDir, box, req, label) {
     const dirs = [path.join(worldDir, 'architect-journal'), path.join(worldDir, 'architect'), path.join(worldDir, 'architect-regions')];
     await call('dev.wait', { ms: 3000 }, 30_000);
+    // (RL) the ledger's own background saves (PS's periodic save of a changed ledger, RL's save when a target joins the feed) land first:
+    // the hold-still check is of the calls, not of a save the build before them still owed
+    for (let i = 0; i < 30; i++) {
+      const sv = await call('dev.stockpile.saved', {}, 30_000).catch(() => null);
+      if (!sv || sv.unsaved !== true) break;
+      await call('dev.wait', { ms: 1000 }, 30_000);
+    }
     const d0 = await hashOf(box), f0 = dirs.map(listing);
     await call('dev.wait', { ms: 3000 }, 30_000);
     const d1 = await hashOf(box), f1 = dirs.map(listing);

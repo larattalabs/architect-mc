@@ -1425,9 +1425,12 @@ public final class Stockpiles {
 		LAST_RESERVED.put(p.id, reserved);
 		if (p.joined) {
 			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
-			// the next autosave finds the target in the saved ledger
+			// the next autosave finds the target in the saved ledger. TEST: dev.stockpile.ps noPeriodic turns it off with the periodic save
+			// (the before-the-fix cases: nothing saved between lifecycle saves)
 			p.joined = false;
-			saveWithWorld(srv);
+			if (!testNoPeriodic) {
+				saveWithWorld(srv);
+			}
 		}
 	}
 
