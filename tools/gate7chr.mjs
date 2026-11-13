@@ -248,6 +248,9 @@ steps.ghost = async () => {
   await L.tp(cx, Math.min(310, (s.W.maxY ?? 120) + 40), cz, 0, 90);
   const g = await call('dev.region.ghost', { planId: ck.check.checkId }, 120_000);
   out.show = g;
+  // the ghost renders on a client (the step's host is the client, not the headless server)
+  check(!g.refused, `ghost x01: dev.region.ghost shows the check's plan ${ck.check.checkId}${g.refused ? `: refused ${json(g.refused)}` : ` (${g.tiles} tiles)`}`, g.refused ?? null);
+  if (g.refused) { await L.leaveWorld(); return out; }
   let st = null;
   const t0 = Date.now();
   for (;;) {
