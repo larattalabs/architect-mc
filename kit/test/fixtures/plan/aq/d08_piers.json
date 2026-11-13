@@ -1,0 +1,62 @@
+{
+ "about": "(7c AQ) a valley 8 under the plateaus, params.span piers: a pier every 6 (clear 5) from the ground to the trough",
+ "covers": [
+  "channel.aqueduct"
+ ],
+ "terrain": {
+  "W": 80,
+  "D": 40,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1023,
+    "z0": 2000,
+    "z1": 2039,
+    "y": 72
+   },
+   {
+    "x0": 1056,
+    "x1": 1079,
+    "z0": 2000,
+    "z1": 2039,
+    "y": 72
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1008,
+   72,
+   2020
+  ],
+  "b": [
+   1071,
+   72,
+   2020
+  ]
+ },
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "aq_d08",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    },
+    "params": {
+     "span": "piers"
+    }
+   }
+  ]
+ }
+}

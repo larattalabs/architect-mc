@@ -168,7 +168,7 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       const mc = pc.wallLots?.[l.id]?.onWall?.passage?.mechanism?.cost?.cells;
       const band = [cols * PROVISIONAL_BAND[0] + (mc?.[0] ?? 0), cols * PROVISIONAL_BAND[1] + (mc?.[1] ?? 0)];
       const m = pc.lotMeta?.[l.id] ?? {};
-      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}), ...(pc.wallLots?.[l.id] ? pc.wallLots[l.id] : {}), ...(pc.siteLots?.[l.id] ? { fitBox: l.box, site: pc.siteLots[l.id].site, affordance: pc.siteLots[l.id].affordance } : {}) });
+      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}), ...(pc.irrigation?.[l.id] ? { irrigation: pc.irrigation[l.id] } : {}), ...(pc.wallLots?.[l.id] ? pc.wallLots[l.id] : {}), ...(pc.siteLots?.[l.id] ? { fitBox: l.box, site: pc.siteLots[l.id].site, affordance: pc.siteLots[l.id].affordance, ...(pc.siteLots[l.id].inverted ? { inverted: true } : {}) } : {}) });
       if (prov) { lo += band[0]; hi += band[1]; }
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };

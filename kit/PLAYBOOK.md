@@ -165,7 +165,10 @@ A template is at most 96x64x96. Something larger (a castle wall 120 long, a towe
 (`kit/lib/composite.mjs`, kit/README "Composites"): modules, each an ordinary `Blueprint` within the cap, joined at
 `architect:joint` ports. The default export returns the `Composite` instead of a Blueprint; it installs as ONE entry (the union,
 what the player and Steward see) with hidden module entries, and the mod places the modules as one site group, the module that
-others rest on first. Use it only when the brief's size does not fit one template: one Blueprint is always simpler.
+others rest on first. **Only for a request that allows it:** the brief then says "past the cap: this request allows a Composite"
+(the request's ext `architect_mc:allowComposite: true`). Without that line a Composite fails the check like any design past the
+maximum size, so return one Blueprint. Even when allowed, use it only when the brief's size does not fit one template: one
+Blueprint is always simpler.
 
 - **Plan the cut first.** Split along walls, never through a room's middle: neighbouring modules **share one seam layer** (the
   wall between them), and every cell both write must be the same block, so lay every pattern out in union coordinates

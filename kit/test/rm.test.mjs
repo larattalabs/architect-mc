@@ -35,7 +35,8 @@ test('the interface: the rule before M16, the frozen limit names, the sub-rules,
   assert.deepEqual(M15_RULES, ['M15:cantilever', 'M15:joint', 'M15:span', 'M15:neck']);
   assert.deepEqual({ ...REGION_M15_LIMITS, span: { ...REGION_M15_LIMITS.span } }, { cantilever: 4, neckMass: 200, span: {} });
   assert.ok(Object.isFrozen(REGION_M15_LIMITS) && Object.isFrozen(REGION_M15_LIMITS.span) && Object.isFrozen(M15_SPAN_TYPES));
-  assert.deepEqual(M15_SPAN_TYPES, { rope_bridge: 'ropes' });
+  // ((7c AQ) appended aqueduct with its own record list, meta.aqueducts: aq.test.mjs)
+  assert.deepEqual(M15_SPAN_TYPES, { rope_bridge: 'ropes', aqueduct: 'aqueducts' });
   assert.deepEqual(regionM15Limits(), { cantilever: 4, neckMass: 200, span: {} }, 'no Style: spans unbounded');
   assert.deepEqual(regionM15Limits({ rope_bridge: { maxSpan: 12, sagRatio: 20 }, ladder: { landingEvery: 10 } }).span, { rope_bridge: 12 });
   assert.equal(m15LookOf(null), null);

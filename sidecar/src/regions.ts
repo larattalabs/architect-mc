@@ -63,6 +63,14 @@ export const PLAN_CACHE_MS = 24 * 3600_000;
 export const IR_CACHE_SIZE = 8;
 /** (6b) The blob store kind of a region side blob (kit/REGIONS.md "Protocol (2, additive)"). */
 export const REGION_BLOB_KIND = 'region.blob';
+/** (7c CO) The blob kind of a planning image (a PNG). */
+export const PLAN_IMAGE_BLOB_KIND = 'region.planImage';
+
+/** (7c CO) Planning images as published: one blob per render, and the affordances they number. */
+export interface PlanImages {
+  images: Array<{ name: string; blobId: string; file: string; pixelSha: string; width: number; height: number }>;
+  labels: Array<{ n: number; id: string; kind: string; box: Record<string, number> }>;
+}
 /** (6b) A frozen ARVX volume decompresses to at most this (the mod's 268M-cell limit is about 0.2 bytes of runs per natural cell). */
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
@@ -106,6 +114,13 @@ export function canonicalJson(v: unknown): string {
     .filter((k) => o[k] !== undefined)
     .sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
+}
+
+/** (7c SR) The part ids a kit plan meta marks `secret` (`meta.parts[id].secret`, a hidden room's parts), sorted. Pure. */
+export function secretPartsOf(meta: unknown): string[] {
+  const parts = (meta as { parts?: unknown } | null)?.parts;
+  if (!parts || typeof parts !== 'object') return [];
+  return Object.entries(parts as Record<string, unknown>).filter(([, m]) => (m as { secret?: unknown } | null)?.secret === true).map(([id]) => id).sort();
 }
 
 export function sha256(data: string | Uint8Array): string {
@@ -163,6 +178,8 @@ interface Job {
   blobs: (() => Record<string, Uint8Array>) | undefined;
   /** (6b) a ghost tile: the plan survey */
   survey: { id: string; bytes: () => Uint8Array } | undefined;
+  /** (7c SR) a ghost tile: the plan meta's secret parts, drawn as if unwritten */
+  hide?: readonly string[] | undefined;
 }
 
 interface Session {
@@ -220,6 +237,8 @@ export class Regions {
   private planLocks = new Map<string, Promise<unknown>>();
   /** (6b) plan surveys in shared memory for ghost tiles, by planId (small LRU) */
   private surveys = new Map<string, { id: string; bytes: Uint8Array; mtimeMs: number }>();
+  /** (7c SR) plan id -> the plan meta's secret parts (ghost tiles), re-read when meta.json changed */
+  private secretParts = new Map<string, { parts: string[]; mtimeMs: number }>();
   private info: KitInfo | undefined;
   /** (tests, numbers) the most tiles ever active for one plan and connection */
   peakActive = 0;
@@ -438,7 +457,7 @@ export class Regions {
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb }))
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb, ...(msg.planImages === true ? { planImages: true } : {}) }))
       .finally(() => {
         this.planning.delete(planId);
         // (6c D3, §7.1) a dry plan keeps nothing: its directory goes, success or failure
@@ -637,7 +656,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number; planImages?: boolean },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
@@ -733,6 +752,16 @@ export class Regions {
           const cm = obj(pv.classMap);
           if (typeof cm.file === 'string' && fs.existsSync(path.join(dir, cm.file))) pv.classMap = { ...cm, path: path.join(dir, cm.file) };
           if (fs.existsSync(path.join(dir, 'artifact.json'))) planCheck.artifact = fs.readFileSync(path.join(dir, 'artifact.json'), 'utf8');
+          // (7c CO, S-7c-2) the planning images on request: the check's land (its survey) with the plan's affordances (when the plan read
+          // any); only the emitted answer gains them (plancheck.json, the artifact and every sha are as without)
+          if (o.planImages && !o.dry) {
+            try {
+              const pi = await this.planImages(path.join(dir, 'survey.bin'), Array.isArray(kitPlan.affordances) ? kitPlan.affordances : [], path.join(dir, 'planimages'));
+              planCheck.planImages = { images: pi.images.map(({ file: _f, ...im }) => im), labels: pi.labels };
+            } catch (e) {
+              planCheck.planImagesError = truncate((e as Error).message, 1000);
+            }
+          }
           const n = this.storePlanCache(dir, o.planCache, planId);
           this.host.log.info(`region plan ${planId}: plan check ${String(planCheck.overall)}${planCheck.artifactSha ? `, artifact ${String(planCheck.artifactSha).slice(0, 12)}` : ''}, ${n} cache entr${n === 1 ? 'y' : 'ies'}`);
         } catch (e) {
@@ -1094,6 +1123,32 @@ export class Regions {
     return out;
   }
 
+  /**
+   * (7c SR, S-7c-4) The parts a plan's meta (`<planDir>/meta.json`, the kit's plan meta) marks `secret`: a hidden room's hollow and its
+   * entrance. Ghost tiles draw them as if unwritten, as the kit's previews and siteplan.json do. Sorted; none without a meta.
+   */
+  planSecretParts(planId: string): string[] {
+    const f = path.join(this.planDir(planId), 'meta.json');
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(f);
+    } catch {
+      return [];
+    }
+    const hit = this.secretParts.get(planId);
+    if (hit && hit.mtimeMs === st.mtimeMs) return hit.parts;
+    let parts: string[] = [];
+    try {
+      parts = secretPartsOf(JSON.parse(fs.readFileSync(f, 'utf8')));
+    } catch (e) {
+      // fail closed: a meta that cannot be read hides no part by mistake, so refuse the ghost rather than show a secret
+      throw new ClientError(`plan ${planId}'s meta.json cannot be read (${(e as Error).message}): ghost tiles need it`);
+    }
+    this.secretParts.set(planId, { parts, mtimeMs: st.mtimeMs });
+    while (this.secretParts.size > 16) this.secretParts.delete(this.secretParts.keys().next().value as string);
+    return parts;
+  }
+
   /** (6b) A plan's survey (ghost tiles), in shared memory, re-read when the file changed. */
   private planSurvey(planId: string): { id: string; bytes: Uint8Array } {
     const f = path.join(this.planDir(planId), 'survey.bin');
@@ -1129,12 +1184,15 @@ export class Regions {
     const irJson = e.json;
     const blobs = e.shas?.length ? () => this.sharedBlobs(e) : undefined;
     let survey: Job['survey'];
+    let hide: string[] = [];
     if (msg.preview) {
       const s = this.planSurvey(msg.planId);
       survey = { id: s.id, bytes: () => s.bytes };
+      // (7c SR, S-7c-4) a hidden room never shows in the ghost: its parts are evaluated as if unwritten
+      hide = this.planSecretParts(msg.planId);
     }
     const jobs: Job[] = msg.tiles.map((t) => {
-      if (msg.preview) return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage, set: t.set, heights: undefined, blobs, survey };
+      if (msg.preview) return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage, set: t.set, heights: undefined, blobs, survey, ...(hide.length ? { hide } : {}) };
       const heights = Buffer.from(t.heights!, 'base64');
       if (heights.length < 28 || heights.toString('latin1', 0, 4) !== 'ARSV') throw new ClientError(`tile ${t.key}: heights are not an ARSV buffer`);
       return { irSha: msg.irSha, irJson, key: t.key, stage: t.stage!, set: t.set!, heights, blobs, survey: undefined };
@@ -1181,6 +1239,7 @@ export class Regions {
           ...(job.heights ? { heights: job.heights } : {}),
           ...(job.blobs ? { blobs: job.blobs } : {}),
           ...(job.survey ? { survey: job.survey } : {}),
+          ...(job.hide?.length ? { hide: job.hide } : {}),
         })
         .then((res) => this.deliver(s, job, res))
         .catch((e) => this.host.log.error(`region tile ${job.key}: ${(e as Error).stack ?? e}`))
@@ -1275,6 +1334,30 @@ export class Regions {
     if (r.timedOut) throw new Error('the land analysis took longer than 120 s and was stopped');
     if (!out || out.ok !== true) throw new Error(`the land analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
     return { sha: out.sha as string, box: out.box, affordances: Array.isArray(out.affordances) ? (out.affordances as unknown[]) : [] };
+  }
+
+  /**
+   * (7c CO) The planning images (kit/tools/planimages.mjs, lib/region/planImages.mjs) of an ARSV survey file with an affordance list,
+   * rendered into `outDir` in a child process and published as blobs (kind `region.planImage`): {images: [{name, blobId, file,
+   * pixelSha, width, height}], labels: [{n, id, kind, box}]}. The same survey and list give the same pixels (the kit's renders are
+   * byte-stable); a kit without the tool throws.
+   */
+  async planImages(surveyFile: string, affordances: unknown[], outDir: string): Promise<PlanImages> {
+    const script = path.join(this.host.config.kitDir, 'tools', 'planimages.mjs');
+    if (!fs.existsSync(script)) throw new Error('the kit has no tools/planimages.mjs (an older kit)');
+    fs.mkdirSync(outDir, { recursive: true });
+    const aff = path.join(outDir, 'affordances.json');
+    fs.writeFileSync(aff, JSON.stringify(affordances));
+    const r = await run(process.execPath, [script, surveyFile, '--out', outDir, '--affordances', aff], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
+    const out = lastJson(r.stdout);
+    if (r.timedOut) throw new Error('the planning images took longer than 120 s and were stopped');
+    if (!out || out.ok !== true || !Array.isArray(out.images)) throw new Error(`the planning images failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
+    const images = (out.images as Array<Record<string, unknown>>).map((im) => {
+      const file = String(im.file);
+      const blobId = this.host.blobs.putBytes(fs.readFileSync(file), PLAN_IMAGE_BLOB_KIND, 'png');
+      return { name: String(im.name), blobId, file: this.host.blobs.file(blobId), pixelSha: String(im.pixelSha), width: Number(im.width), height: Number(im.height) };
+    });
+    return { images, labels: Array.isArray(out.labels) ? (out.labels as PlanImages['labels']) : [] };
   }
 
   clientGone(client: ClientHandle): void {

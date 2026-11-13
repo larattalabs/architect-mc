@@ -105,7 +105,7 @@ export function siteLot(r, id, opts = {}) {
   const what = `site lot ${id}`;
   if (typeof id !== 'string' || !SITE_LOT_ID.test(id)) throw new Error(`site lot id '${id}' must match ${SITE_LOT_ID}`);
   if (r.lotIds.has(id)) throw new Error(`lot id '${id}' is used twice`);
-  const { fit, max, ports, brief, stage, box: given, host = null, ext, part = null, y = null } = opts;
+  const { fit, max, ports, brief, stage, box: given, host = null, ext, part = null, y = null, inverted = false } = opts;
   if (!FIT_IDS.includes(fit)) throw new Error(`${what}: fit must be one of ${FIT_IDS.join(', ')}`);
   let a = opts.affordance ?? null;
   if (typeof a === 'string') {
@@ -199,6 +199,8 @@ export function siteLot(r, id, opts = {}) {
   };
   if (brief !== undefined) lot.brief = String(brief).slice(0, 500);
   if (ext !== undefined) lot.ext = JSON.parse(JSON.stringify(ext));
+  // ((7c US) a rule.suspended zone's lot: its design is built inverted (bp.invert()); absent on every other lot)
+  if (inverted === true) { if (fit !== 'suspend') throw new Error(`${what}: only a suspend lot is built inverted`); lot.inverted = true; }
   if (a && typeof opts.affordance === 'object') (r._affordances ??= new Map()).has(a.id) || r._affordances.set(a.id, JSON.parse(JSON.stringify(a)));
   r.lotIds.add(id);
   r._addLot(lot);

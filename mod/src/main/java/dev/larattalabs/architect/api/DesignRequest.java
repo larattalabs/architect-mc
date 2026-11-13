@@ -70,6 +70,14 @@ public record DesignRequest(String type, String style, @Nullable String material
 	@Nullable String versionOfSite, @Nullable Reserved reserved, @Nullable JsonElement palette, @Nullable String opKey, @Nullable SiteSpec site) {
 	/** The most characters of a context (text, or JSON as text). */
 	public static final int MAX_CONTEXT = 4000;
+	/**
+	 * (7c, slice SR) {@code ext[EXT_ALLOW_COMPOSITE] = true}: the design may come back as a composite (past the 96x64x96 cap; each
+	 * module within {@code maxSize}, the union past it; one entry with a {@link CompositeInfo}). Off by default: without it the
+	 * sidecar refuses a composite return in the check round, like any design past {@code maxSize}, so the designer returns one
+	 * blueprint and a lot's design is never larger than its lot. Never for a massing or a site-bound request. A design group item
+	 * carries it only in its own ext. Since NEXT.
+	 */
+	public static final String EXT_ALLOW_COMPOSITE = "architect_mc:allowComposite";
 
 	public DesignRequest {
 		features = features == null ? List.of() : List.copyOf(features);

@@ -51,6 +51,8 @@ public final class RegionGhost {
 	private static long gen;
 	private static final Set<String> REQUESTED = new HashSet<>();
 	private static final Map<String, Integer> SHOWN = new HashMap<>();
+	/** (7c SR) tile key -> the shown preview payload's sha (gate evidence: the ghost's cells, {@code dev.region.ghost}). */
+	private static final Map<String, String> SHAS = new HashMap<>();
 	private static final List<String> ERRORS = new ArrayList<>();
 	/** When a tile's preview last failed: asked again only after {@link #RETRY_MS}. */
 	private static final Map<String, Long> FAILED_AT = new HashMap<>();
@@ -100,6 +102,7 @@ public final class RegionGhost {
 		}
 		REQUESTED.clear();
 		SHOWN.clear();
+		SHAS.clear();
 		ERRORS.clear();
 		FAILED_AT.clear();
 		if (p != null) {
@@ -133,6 +136,17 @@ public final class RegionGhost {
 		o.addProperty("tilesShown", SHOWN.size());
 		o.addProperty("cellsShown", SHOWN.values().stream().mapToInt(Integer::intValue).sum());
 		o.addProperty("verdict", p.verdict());
+		// (7c SR) each shown tile's cells (count) and payload sha: a gate compares them with the kit's own evaluation
+		JsonObject shown = new JsonObject();
+		SHOWN.keySet().stream().sorted().forEach(k -> {
+			JsonObject t = new JsonObject();
+			t.addProperty("cells", SHOWN.get(k));
+			if (SHAS.containsKey(k)) {
+				t.addProperty("sha", SHAS.get(k));
+			}
+			shown.add(k, t);
+		});
+		o.add("shown", shown);
 		com.google.gson.JsonArray e = new com.google.gson.JsonArray();
 		ERRORS.stream().limit(10).forEach(e::add);
 		o.add("errors", e);
@@ -163,6 +177,7 @@ public final class RegionGhost {
 			if (!keep.contains(k)) {
 				REQUESTED.remove(k);
 				SHOWN.remove(k);
+				SHAS.remove(k);
 				CompositePreview.clear(KEY + k);
 			}
 		}
@@ -189,6 +204,9 @@ public final class RegionGhost {
 						return;
 					}
 					SHOWN.put(k, t.cells.size());
+					if (t.sha != null) {
+						SHAS.put(k, t.sha);
+					}
 					CompositePreview.showCells(KEY + k, layers);
 				});
 			});

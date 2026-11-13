@@ -245,6 +245,13 @@ public final class Groups {
 		Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);
 		if (!already) {
 			c.items().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			// (slice PS, audit N1) the credit is saved with the world (players, the restored chunks flushed, the ledger) before the caller
+			// drops the member from the saved removal (and end() drops the removal, its decCredit with it): a crash after that point finds the
+			// refund in the saved ledger, never the building gone and its refund gone. Before it, the removal resumes and credits the key
+			// again (once per key: the saved ledger hasn't it).
+			if (!Stockpiles.testNoCreditSave) {
+				Stockpiles.saveWithWorld(server);
+			}
 		}
 	}
 

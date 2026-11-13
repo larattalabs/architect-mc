@@ -63,6 +63,7 @@ public final class PlacementFeature {
 		HudZones.add(Architect.id("hud/placement"), HudZone.BOTTOM_CENTER, new PlacementHud()).priority(70).whileScreenOpen(true);
 		HudZones.add(Architect.id("hud/plot_marker"), HudZone.BOTTOM_CENTER, new PlotHud()).priority(65).whileScreenOpen(true);
 		UndoLastKey.init();
+		BuildLinkKey.init(); // (7c CX) the Build a link key: the plot marker's connector mode
 		registerDev();
 	}
 

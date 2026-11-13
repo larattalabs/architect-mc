@@ -993,4 +993,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	public Optional<String> adoptedSite(String buildId) {
 		return Optional.ofNullable(dev.larattalabs.architect.placed.Builds.adoptedSite(buildId));
 	}
+
+	/** (7c CX) A single connector as a one-part plan, checked and realised as one region ({@link ConnectorPlace}). Since NEXT. */
+	@Override
+	public CompletableFuture<PlaceResult> placeConnector(dev.larattalabs.architect.api.ConnectorRequest r) {
+		return ConnectorPlace.place(server, r);
+	}
 }

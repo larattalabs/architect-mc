@@ -1,0 +1,59 @@
+{
+ "about": "(7c AQ) a copy of aq/x01_valley_aqueduct (plan-p0-valid's item 9: channel.aqueduct supported): a built canal on arches over a valley 8 deep between two plateaus",
+ "covers": [
+  "channel.aqueduct"
+ ],
+ "terrain": {
+  "W": 80,
+  "D": 40,
+  "x0": 1000,
+  "z0": 2000,
+  "y": 64,
+  "bands": [
+   {
+    "x0": 1000,
+    "x1": 1023,
+    "z0": 2000,
+    "z1": 2039,
+    "y": 72
+   },
+   {
+    "x0": 1056,
+    "x1": 1079,
+    "z0": 2000,
+    "z1": 2039,
+    "y": 72
+   }
+  ]
+ },
+ "anchors": {
+  "a": [
+   1008,
+   72,
+   2020
+  ],
+  "b": [
+   1071,
+   72,
+   2020
+  ]
+ },
+ "volume": {},
+ "plan": {
+  "schemaVersion": "plan/0",
+  "planId": "aq_x01",
+  "connectors": [
+   {
+    "id": "canal",
+    "kind": "channel",
+    "look": "built",
+    "from": {
+     "anchor": "a"
+    },
+    "to": {
+     "anchor": "b"
+    }
+   }
+  ]
+ }
+}

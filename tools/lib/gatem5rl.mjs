@@ -5,7 +5,8 @@
 //   node tools/gate6dgr.mjs rlcrash   (rl-crash)   four survival towns (a flat_village region of a hall and a cottage; stages approved by
 //                                                  hand: ground, street and lots now, props only after the restart, so no target joins
 //                                                  the feed between a case's save and its halt). Each: fed until the lot site builds, the
-//                                                  lot paused, items delivered, the ledger saved (/save-all flush, as an autosave) with
+//                                                  lot paused, items delivered, PS's periodic save held off (the crash window: it saves a changed
+//                                                  ledger with the world every 10 s), the ledger saved (/save-all flush, as an autosave) with
 //                                                  the lot's items in the saved stock, the lot resumed (it builds after the save), then:
 //                                                  RL1  half delivered: the lot starves; 12 s for the chunks' eager saves; a halt
 //                                                  RL2  all delivered: the lot built (BUILT recorded); 12 s; a halt
@@ -181,6 +182,9 @@ export async function registerRL(steps, h) {
     const lot = await lotPaused(tag);
     if (!lot) { await L.leaveWorld(); return null; }
     const d = await deliver(fraction);
+    // (PS) a changed ledger is saved with the world every 10 s while a build feeds: the crash window is the time before the next such save.
+    // The case holds that window open (PS's test switch, this JVM only: the restart runs as shipped)
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/save-all flush');
     const s0 = await savedNow();
     const b0 = { ledger: ledgerOf(s0.file) };

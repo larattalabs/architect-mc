@@ -144,12 +144,12 @@ public enum Reason {
 	ADOPT_REFUSED,
 	// 1.37.0 (6c slice VOC-c; the CU/IRR/VOC-c batch, v0.40.0)
 	PALETTE,
-	// NEXT (6d slice GR): a growth with no lot that fits (the message names the kind: frontage, street, claim, held, body, layout)
+	// 1.43.0 (6d slice GR): a growth with no lot that fits (the message names the kind: frontage, street, claim, held, body, layout)
 	NO_ROOM,
-	// NEXT (7b foundation): the site-aware design reasons, in the contract's order
+	// 1.53.0 (7b foundation): the site-aware design reasons, in the contract's order
 	SITE_DRIFTED, KEEP_LOST, SITE_UNSUPPORTED, SITE_MISMATCH, SITE_UNFIT, NO_LINK,
-	// NEXT (M5 GP): a given program refused (Designs.fromProgram, Designs.variant)
+	// 1.55.0 (M5 GP): a given program refused (Designs.fromProgram, Designs.variant)
 	PROGRAM_REFUSED,
-	// NEXT (7c foundation): composition's reasons, in the contract's order
+	// 1.55.0 (7c foundation): composition's reasons, in the contract's order
 	JOINT_MISMATCH, AUTHORED_STALE
 }

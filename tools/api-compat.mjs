@@ -8,6 +8,17 @@
 //                     every public or protected member of every class under dev/larattalabs/architect/api in the old MOD jar
 //                     (its whole 1.x surface, not only what one jar calls) must still exist with the same descriptor.
 //
+//   node tools/api-compat.mjs --consumer <consumer.jar> [classesDir]
+//                     (TJ CG) a consumer's real jar (Steward's, built from steward-mc main: tools/api-baselines-build.mjs steward): every api
+//                     member its classes reference must exist, as for an apitest jar; it also fails when the jar references no api member
+//                     at all (a wrong jar would pass vacuously) and lists, as WARN, its references into Architect outside the api package
+//                     (a boundary break: such a class may change in any release).
+//
+//   node tools/api-compat.mjs --baselines [--artifacts <dir>] [classesDir]
+//                     (TJ CG) the baselines of tools/api-baselines.json, side by side: each release's unchanged apitest jar, the newest
+//                     release's mod jar's whole surface (--surface) and each consumer's jar (--consumer). A missing file fails with the
+//                     command that builds it (tools/api-baselines-build.mjs). This is the gate step api-compat (any change under api/**).
+//
 //   node tools/api-compat.mjs --gate6c0a [--artifacts <dir>] [classesDir]
 //                     phase 6c slice 0a: the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0
 //                     mod jar's 1.9.0 surface (artifacts/gate6c0a/v0120/).
@@ -153,6 +164,37 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[2] === '--baselines') {
+  const { readBaselines, artifactsDir, releaseFiles, consumerFile } = await import('./api-baselines.mjs');
+  const rest = process.argv.slice(3);
+  const ai = rest.indexOf('--artifacts');
+  let override = null;
+  if (ai >= 0) { override = rest[ai + 1]; rest.splice(ai, 2); }
+  const art = artifactsDir(root, override);
+  const b = readBaselines(root);
+  const checks = [];
+  for (const r of b.releases) checks.push([`${r.mod} apitest (API ${r.api})`, [releaseFiles(art, r).apitest], `node tools/api-baselines-build.mjs build ${r.tag}`]);
+  if (b.releases.length) checks.push([`${b.releases[0].api} surface (${b.releases[0].mod})`, ['--surface', releaseFiles(art, b.releases[0]).mod], `node tools/api-baselines-build.mjs build ${b.releases[0].tag}`]);
+  for (const c of b.consumers) checks.push([`consumer ${c.name}`, ['--consumer', consumerFile(art, c)], `node tools/api-baselines-build.mjs ${c.name}`]);
+  const { execFile } = await import('node:child_process');
+  const results = await Promise.all(checks.map(([, a]) => {
+    const jarPath = a[a.length - 1];
+    if (!fs.existsSync(jarPath)) return { missing: jarPath };
+    return new Promise((resolve) => execFile(process.execPath, [fileURLToPath(import.meta.url), ...a, ...rest], { encoding: 'utf8', maxBuffer: 64 << 20 }, (err, stdout, stderr) => resolve({ err, stdout, stderr })));
+  }));
+  let failed = 0;
+  for (const [i, [name, , fix]] of checks.entries()) {
+    const r = results[i];
+    if (r.missing) { failed++; console.log(`FAIL ${name}: ${r.missing} is missing (build it: ${fix})`); continue; }
+    const src = path.join(path.dirname(checks[i][1][checks[i][1].length - 1]), 'SOURCE.txt');
+    const from = fs.existsSync(src) ? ` [${fs.readFileSync(src, 'utf8').split(':')[0].trim()}]` : '';
+    const warns = r.stdout.split('\n').filter((l) => l.startsWith('WARN'));
+    if (!r.err) console.log(`ok   ${name}${from}: ${r.stdout.trim().split('\n').filter((l) => !l.startsWith('WARN') && !l.startsWith('  ')).pop()}${warns.length ? `\n${r.stdout.trim().split('\n').filter((l) => l.startsWith('WARN') || l.startsWith('  ')).join('\n')}` : ''}`);
+    else { failed++; console.log(`FAIL ${name}${from}:\n${(r.stdout || '') + (r.stderr || '')}`); }
+  }
+  console.log(failed ? `${failed} of ${checks.length} checks failed` : `all ${checks.length} checks clean`);
+  process.exit(failed ? 1 : 0);
+}
 if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cmp' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1' || process.argv[2] === '--gate6ct1' || process.argv[2] === '--gate6csch' || process.argv[2] === '--gate6cf2' || process.argv[2] === '--gate6cb' || process.argv[2] === '--gate6ct2' || process.argv[2] === '--gate6cpt' || process.argv[2] === '--gate6cpt2' || process.argv[2] === '--gate6cp0' || process.argv[2] === '--gate6cc33' || process.argv[2] === '--gate6cd' || process.argv[2] === '--gate6cs2' || process.argv[2] === '--gate7ak1' || process.argv[2] === '--gate6ct3' || process.argv[2] === '--gate6ch' || process.argv[2] === '--gate6cvoc' || process.argv[2] === '--gate6chy' || process.argv[2] === '--gate6ckc' || process.argv[2] === '--gate6ccu' || process.argv[2] === '--gate6cirr' || process.argv[2] === '--gate6cvocc' || process.argv[2] === '--gate6cbatchcu' || process.argv[2] === '--gate6cf3' || process.argv[2] === '--gate6cs3' || process.argv[2] === '--gate6cfl' || process.argv[2] === '--gate6cbatch' || process.argv[2] === '--gate6ccoa' || process.argv[2] === '--gate7acl') {
   const bcu = process.argv[2] === '--gate6cbatchcu';
   const cs3 = process.argv[2] === '--gate6cs3';
@@ -397,12 +439,13 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
   process.exit(failed ? 1 : 0);
 }
 const surface = process.argv[2] === '--surface';
-const args = surface ? process.argv.slice(3) : process.argv.slice(2);
+const consumer = process.argv[2] === '--consumer';
+const args = surface || consumer ? process.argv.slice(3) : process.argv.slice(2);
 const jar = args[0];
 // a classesDir may list several dirs (path.delimiter-separated: main and client)
 const classDirs = args[1] ? args[1].split(path.delimiter).map((d) => path.resolve(d)) : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
 if (!jar) {
-  console.error('usage: node tools/api-compat.mjs [--surface] <old.jar> [classesDir]');
+  console.error('usage: node tools/api-compat.mjs [--surface | --consumer] <old.jar> [classesDir] | --baselines [--artifacts dir]');
   process.exit(2);
 }
 const javap = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'javap') : 'javap';
@@ -417,7 +460,7 @@ const memoLines = [];
 if (MEMO_DIR && fs.existsSync(path.resolve(jar))) {
   try {
     const h = crypto.createHash('sha256');
-    h.update(JSON.stringify([surface, path.basename(jar), classDirs.map((d) => path.relative(root, d)), process.env.JAVA_HOME ?? '', process.version]));
+    h.update(JSON.stringify([surface, consumer, path.basename(jar), classDirs.map((d) => path.relative(root, d)), process.env.JAVA_HOME ?? '', process.version]));
     h.update(fs.readFileSync(path.resolve(jar)));
     h.update(fs.readFileSync(fileURLToPath(import.meta.url)));
     const files = [];
@@ -472,6 +515,8 @@ walk(tmp);
 
 // ---- 1. the references (or, with --surface, the old api's public and protected members)
 const refs = new Map(); // "owner.name:desc" -> kind
+const ARCH = 'dev/larattalabs/architect/';
+const internal = new Set(); // (TJ --consumer) references into Architect outside the api package
 let patternSwitch = false;
 const switchMaps = new Set();
 for (const f of surface ? [] : classFiles) {
@@ -479,6 +524,8 @@ for (const f of surface ? [] : classFiles) {
   for (const line of out.split('\n')) {
     const m = /=\s+(Methodref|InterfaceMethodref|Fieldref)\s+#\d+\.#\d+\s+\/\/\s+(\S+)\.("?[^:"]+"?):(\S+)/.exec(line);
     if (m && m[2].startsWith(API)) refs.set(`${m[2]}.${m[3].replace(/"/g, '')}:${m[4]}`, m[1]);
+    else if (m && consumer && m[2].startsWith(ARCH) && !m[2].startsWith(API)) internal.add(`${m[2].replace(/\//g, '.')}.${m[3].replace(/"/g, '')}`);
+    if (consumer) for (const c of line.matchAll(/=\s+Class\s+#\d+\s+\/\/\s+"?\[*L?(dev\/larattalabs\/architect\/[\w/$]+)/g)) if (!c[1].startsWith(API)) internal.add(c[1].replace(/\//g, '.'));
     if (/java\/lang\/MatchException/.test(line)) patternSwitch = true;
     const sm = /\$SwitchMap\$(dev\$larattalabs\$architect\$api\$[A-Za-z0-9$]+)/.exec(line);
     if (sm) switchMaps.add(sm[1].replace(/\$/g, '.'));
@@ -560,6 +607,18 @@ const has = (cls, member, seen = new Set()) => {
   return (supers.get(cls) ?? []).some((s) => (s.startsWith(API) || s.startsWith('java/')) && has(s, member, seen));
 };
 
+if (consumer) {
+  // the consumer's own classes only: a jar-in-jar (META-INF/jars/*.jar) is another mod, not read
+  if (refs.size === 0) {
+    console.log(`MISSING: ${path.basename(jar)} references no dev.larattalabs.architect.api member: not a consumer jar (or a nested one)`);
+    process.exit(1);
+  }
+  console.log(`${path.basename(jar)}: ${classFiles.length} classes, ${refs.size} api member references`);
+  if (internal.size) {
+    console.log(`WARN ${internal.size} reference(s) into Architect outside its api package (not covered by binary compatibility):`);
+    for (const x of [...internal].sort()) console.log(`  ${x}`);
+  }
+}
 const missing = [];
 for (const [ref, kind] of [...refs].sort()) {
   const dot = ref.indexOf('.', API.length + 1) >= 0 ? ref.lastIndexOf('.', ref.indexOf(':')) : -1;

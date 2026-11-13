@@ -7,7 +7,7 @@ import dev.larattalabs.architect.api.PlaceRequest;
  * (7b foundation) The site members ({@link PlaceRequest#site()}) exist before the slices that act on them. Until then a request
  * carrying a site is refused with {@link UnsupportedOperationException}, as the site methods' defaults throw: it is never placed as a
  * plain one. Each slice removes its own guard: DS removed the design and group guards ({@code DesignRequest.site} is designed since
- * NEXT); the batch guard stays (PL). Pure. Internal.
+ * 1.53.0); the batch guard stays (PL). Pure. Internal.
  */
 public final class SiteGuards {
 	private SiteGuards() {

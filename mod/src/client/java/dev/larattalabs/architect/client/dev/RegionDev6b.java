@@ -194,7 +194,7 @@ public final class RegionDev6b {
 					});
 			});
 		DevBridge.register("dev.region.ghost", 120_000, "{planId, stage?} | {off: true} | {} - phase 6b: the region ghost (previewRegion) on or off; "
-			+ "{} reports it -> {on, planId, stage, tiles, tilesRequested, tilesShown, cellsShown, verdict, errors}; take shots with dev.screenshot",
+			+ "{} reports it -> {on, planId, stage, tiles, tilesRequested, tilesShown, cellsShown, verdict, shown: {key: {cells, sha}} (7c SR), errors}; take shots with dev.screenshot",
 			(req, mc) -> {
 				Fields f = Fields.of(req);
 				if (f.optBool("off", false)) {

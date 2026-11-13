@@ -38,8 +38,21 @@ public final class StockpileDev {
 			+ "(and per target), retaken (XL: given back as a later target wrote over a paid cell), legacyCrateStock, entities and containers in the box, the player's inventory, gameTime");
 		op("dev.stockpile.pause", "pause", "{site, paused?: true} - (6c Y1; C29: Sites.pause's path) pause or resume a construction site or road (as the crate screen's Pause)");
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
-		op("dev.stockpile.halt", "halt", "{mode?: now|autosave} - (slice RL) TEST: on the next tick the JVM halts with nothing saved; autosave: the chunks "
-			+ "saved first as an autosave saves them (no flush), then the halt");
-		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session");
+		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session; (PS) the "
+			+ "periodic saves (count, last, max, median ms), unsaved, loadFailed (and why), the format this build writes");
+		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, noCreditSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases: the "
+			+ "periodic ledger save off; a finished undo's refund not saved at its credit; reset the periodic save counters");
+		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the
+		// JVM after the work queued before it; no answer comes back (poll dev.state until inWorld is false)
+		DevBridge.register("dev.stockpile.halt", 10_000, "{mode?: now|autosave} - (HF) TEST: halts the JVM on the server thread at once (no shutdown "
+			+ "hooks, nothing saved): a crash; no answer. (RL) mode autosave: the chunks saved first as an autosave saves them (no flush: their writes "
+			+ "may still be queued at the halt), then the halt", (req, mc) -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+				if (req.has("mode") && "autosave".equals(req.get("mode").getAsString())) {
+					level.getServer().saveAllChunks(true, false, false);
+				}
+				dev.larattalabs.architect.Architect.LOGGER.error("dev.stockpile.halt: halting the JVM (nothing saved)");
+				Runtime.getRuntime().halt(7);
+				return new JsonObject();
+			})).thenCompose(x -> x));
 	}
 }

@@ -20,7 +20,7 @@ node tools/nightly.mjs                                           # the nightly: 
 node tools/nightly.mjs --megab-full                              # the nightly with megaB's full walk on demand (else weekly)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
-node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
+node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 3)
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
@@ -48,7 +48,7 @@ the journal, removal, crash recovery or survival accounting. Those stay strict, 
 **No new test-tooling projects** unless something is actually broken.
 
 **Keep the machine for product:**
-- at most 3-4 agents running gates at once;
+- at most 3 gate runs on the machine at once (`slots.max` 3, below; the one number every doc and brief uses);
 - no duplicate before/after runs: compare against recorded history instead;
 - commit before running (the runner tests a frozen snapshot).
 
@@ -77,7 +77,7 @@ from each slice's own focused items, the verifier's code review and Steward's re
 5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
    merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
-   *Implemented:* see "Slot lock" below. (Since raised to `slots.max` 4; a run's shard count now follows the machine's load,
+   *Implemented:* see "Slot lock" below. (Raised to 4 on 10-17, set back to `slots.max` 3 on 2026-11-13 so the tool, AGENTS.md and every brief agree; a run's shard count now follows the machine's load,
    "Adaptive shards".)
 7. **Bench isolation only where timing is judged (Noah, 2026-10-17).** A bench step runs alone only at `release`, in the named
    chains and with `--judge-timing`. In `change` and `slice` it schedules like any other step (same client, host and
@@ -114,15 +114,29 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
     the nightly. The nightly judges them, isolated.
 - A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
 
-### Slot lock: at most N gate runs on the machine (`slots.max`, 4)
+### Ports (one table; the coordinator assigns slice pairs)
+
+| Range | Who |
+|---|---|
+| 8890-8895 | the default Architect gate runner (the nightly, a coordinator run without `--ports`) |
+| 8896-8939 (pairs) | slice gate runs, verifiers and ad-hoc agent servers: **the coordinator assigns each pair in the brief**; never pick one yourself |
+| 8898/8899 | reserved: the gallery client |
+| 8912-8915 | reserved (infra and UI runners) |
+| 8940-8999 | turbo shards (`gate-chains.json` `turbo.portRange`); nothing else may bind there |
+| 8490/8491, 8590/8591, 8592/8593, 8600/8601 | Steward (dev client, e2e, slices); never use them from Architect |
+| 7880, 7890-7909 | AgentCraft Foreman |
+
+Steward's own agent range (its AGENTS.md "8960-8989") overlaps the turbo range above and is Steward's to move.
+
+### Slot lock: at most N gate runs on the machine (`slots.max`, 3)
 
 Every gate run (not `--plan`) takes one of N slot files, `slot-1.json` .. `slot-N.json`, in `<LarattaLabs>/.gate-slots/` before
 anything else: pid, worktree, chain and start time, and (since "Adaptive shards") the run's shard count and ports. **One slot per
 run, whatever its shard count**: the slot caps how many agents' runs share the box; the shard budget below caps how much they
 load it. With none free it logs the wait (the holders, repeated every 5 minutes) and
 polls every 15 s. The slot is released on exit, on SIGINT/SIGTERM (also while waiting), and a slot whose pid is dead counts as
-free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (default 3, `slots.max` in
-`gate-chains.json`, 4), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
+free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (`slots.max` in
+`gate-chains.json`, 3), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
@@ -1066,7 +1080,10 @@ catalogue golden's header as main has them, and stamp what they add with the pla
 - a new or changed catalogue entry: `"sinceApi": "NEXT"` in `kit/schemas/plan.json`, then the golden regenerated as usual
   (`JSON.stringify(planCatalogue(), null, 1)`);
 - a new API member: `Since NEXT.` (or `since NEXT`, `@since NEXT`) in its javadoc, under `mod/src/main/java` or `mod/src/client/java`.
-  Only uppercase `NEXT` right after "since" counts, so prose and constants named `NEXT` are untouched.
+  (TJ HK-api) Every uppercase `NEXT` word in a Java comment or string literal is a placeholder too (`// (API NEXT)`, a default's
+  `"X needs Architect API NEXT"`): the release stamps them all. A `NEXT` in code (a constant named `NEXT`) or a javadoc reference to
+  one (`{@link #NEXT}`) is not. A `NEXT` word in a resource that ships in the jar (`mod/src/*/resources`) fails `--check` and is
+  never stamped. A reserved stub with no release yet says "throws until slice X ships", not `NEXT`.
 - A slice test never pins the API or kit version: it asserts "at least" its floor (`IrStale.semverCompare(ArchitectApi.VERSION,
   "1.37.0") >= 0`, `semverCompare(KIT_VERSION, '0.38.0') >= 0`) or reads the constant. A stamp it checks is `NEXT` on the slice and
   the released number afterwards, so check it as one of the two, or read the archived catalogue once released.
@@ -1168,6 +1185,42 @@ Before and after, both measured on a shared, busy box:
 - **Scheduler alone, replayed on recorded durations with no contention model:**
   - K1a 196 -> 118 min with s7's timeout as recorded, 144 -> 93 min with s7 at its p50;
   - K1b 160 -> 89 min.
+
+## API compatibility baselines and the release docs (slice TJ, 2026-11-13)
+
+The boundary audit (2026-11-13, finding 2) found `apijars` still on the 0.42.0, 0.41.0 and 0.40.1 jars (API 1.39.0) with main at
+1.57.0, and no check of Steward's real jar. Now one file, `tools/api-baselines.json`, holds main's latest three releases and the
+consumer jars, and everything reads it:
+- **`apijars`** (gate6a, in game, every `slice` tier): each release's unchanged apitest jar with its tag's own `tools/apitest.mjs`.
+- **`api-compat`** (offline, $0, the impact step of any change under `api/**`, `apiimpl/**` or the baselines' tools; about 30 s after
+  unit-mod): `node tools/api-compat.mjs --baselines` checks, against this build's classes, the references of the three apitest jars,
+  the newest release's mod jar's whole surface (`--surface`) and each consumer's references (`--consumer`). A consumer jar that
+  references no api member fails (a wrong jar would pass vacuously); its references into Architect outside `api/` print as WARN.
+- **The roll.** `tools/release-version.mjs` (a set) puts the release being set first and drops the oldest. The new tag does not
+  exist yet then, so the set prints the commands for after the tag.
+
+The files live in the main checkout's `artifacts/api-baselines/` (untracked; `--artifacts` or `$ARCHITECT_ARTIFACTS` override):
+- `node tools/api-baselines.mjs list`: what is there (exit 1 with the fix commands when something is missing).
+- `node tools/api-baselines-build.mjs build <tag>` (or `build --missing`): a detached worktree of the tag in `_work/` with its own
+  `.gradle-home` clone, `./gradlew --offline --no-daemon -PallowNoSidecar jar :apitest:jar` (about 3-4 min), then both jars, the
+  tag's `tools/` (git archive), `SOURCE.txt` and `SHA256SUMS` into `api-baselines/v<mod without dots>/`; the worktree is removed.
+- **Steward's jar (the coordinator, after each Steward pin or before a release):** `git -C ../steward-mc fetch` if you want its
+  newest main, then `node tools/api-baselines-build.mjs steward [--ref origin/main]`: a detached steward-mc worktree with a clone of
+  Steward's own `.gradle-home` (so it compiles against its pinned, released Architect from that cache; `ARCHITECT_JAR` is dropped),
+  `./gradlew --offline --no-daemon jar`, the jar into `api-baselines/steward/steward_mc.jar` with `SOURCE.txt` (the commit and its
+  `architect_version` pin).
+
+**At every release (the coordinator's checklist, printed by the set):**
+1. `node tools/release-version.mjs --api X.Y.Z --mod A.B.C --kit K.L.M [--catalogue N] [--steward-rc pass|pending|none|after-release]`:
+   besides the versions it writes the release row of `docs/RELEASES.json` (mod, API, kit, catalogue, date, the feature names added
+   over the last tag, the Steward RC state, the package state), regenerates the "Architect ships" block of `docs/STEWARD-SYNC.md`
+   and rolls `tools/api-baselines.json`. `--check` (CI's Publish runs it) fails when the three disagree with the tree.
+2. After the tag and Publish: `node tools/api-baselines-build.mjs build vA.B.C`.
+3. `GITHUB_TOKEN=$(gh auth token) node tools/pub-verify.mjs A.B.C`: the jar, sources jar, pom and module all answer 200, the module's
+   sizes and checksums are the downloaded bytes', the pom and the jar's `fabric.mod.json` name the version, and the jar carries the
+   plan/0 schema. The token comes from the environment only and is never printed (it needs read:packages). Publish runs it too,
+   after `publish` (`--retries 8`). Then set the row's `publish` (and later its `stewardRc`) in `docs/RELEASES.json` and run
+   `node tools/release-version.mjs --sync`.
 
 ## Gate waits (2026-10-20): idle time and duplicates out
 

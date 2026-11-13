@@ -21,6 +21,8 @@ public final class Keys {
 	 * while placing) and in Steward (Y, I, U, and K for the jobs panel).
 	 */
 	public static KeyMapping undoLast;
+	/** (7c CX) Build a link: the plot marker's connector mode (K by default; from a site house's drop when one was just placed). */
+	public static KeyMapping buildLink;
 	private static boolean registered;
 
 	private Keys() {
@@ -43,6 +45,8 @@ public final class Keys {
 			2));
 		undoLast = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.undo_last", InputConstants.Type.KEYBOARD, InputConstants.KEY_Z,
 			cat, 3));
+		buildLink = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.architect_mc.build_link", InputConstants.Type.KEYBOARD, InputConstants.KEY_K,
+			cat, 4));
 	}
 
 	/**

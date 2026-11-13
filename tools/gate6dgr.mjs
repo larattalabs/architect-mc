@@ -996,6 +996,20 @@ steps.look = async () => {
   await registerRL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait });
 }
 
+// ------------------------------------------------------------------ (slice HF) hfcrash: tools/lib/gatemhf.mjs
+
+{
+  const { registerHF } = await import('./lib/gatemhf.mjs');
+  await registerHF(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait });
+}
+
+// ------------------------------------------------------------------ (slice PS) pscrash: tools/lib/gatemps.mjs
+
+{
+  const { registerPS } = await import('./lib/gatemps.mjs');
+  await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);
