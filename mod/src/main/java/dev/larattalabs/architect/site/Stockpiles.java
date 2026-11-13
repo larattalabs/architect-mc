@@ -821,8 +821,21 @@ public final class Stockpiles {
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
 				Ledger l = be.ledger();
-				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), capacity(srv, p),
+				Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());
+				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), byTarget, capacity(srv, p),
 					Stockpiles::maxStack);
+				Map<String, Integer> keyed = new TreeMap<>();
+				byTarget.values().forEach(m -> m.forEach((k, v) -> keyed.merge(k, v, Integer::sum)));
+				Map<String, Integer> unkeyed = new TreeMap<>();
+				l.placed().forEach((k, v) -> {
+					if (v - keyed.getOrDefault(k, 0) > 0) {
+						unkeyed.put(k, v - keyed.getOrDefault(k, 0));
+					}
+				});
+				if (!unkeyed.isEmpty()) {
+					Architect.LOGGER.info("Stockpile {}: adopted crate {}: placed {} keyed to no target (none of its targets stands on it; never refundable)", owner,
+						e.getKey(), unkeyed);
+				}
 				over.forEach((k, v) -> dropped.merge(k, v, Integer::sum));
 				l.takeStock(); // the crate's ledger now holds nothing (its block goes next)
 				be.ledgerChanged();
@@ -865,6 +878,52 @@ public final class Stockpiles {
 		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
 			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
+	}
+
+	/**
+	 * (JR-b, F3) An adopted crate's placed counts by the credit keys of the targets it fed, in placement order, for their paid records: a crate
+	 * of one target gives it all; a shared crate gives each what of its paid cost stands (capped by the crate in {@link StockLedger#adopt}).
+	 */
+	private static Map<String, Map<String, Integer>> adoptedPaid(MinecraftServer srv, ServerLevel level, String crateKey, List<Site> sites, List<Infra> roads,
+		Map<String, Integer> placed) {
+		List<Object> fed = new ArrayList<>();
+		for (Site s : sites) {
+			if (crateKey.equals(Builder.crateOwner(s))) {
+				fed.add(s);
+			}
+		}
+		for (Infra i : roads) {
+			if (i.group() != null && crateKey.equals(SiteGroupRec.CRATE_PREFIX + i.group())) {
+				fed.add(i);
+			}
+		}
+		fed.sort(java.util.Comparator.comparingLong(Stockpiles::placedAt));
+		Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
+		if (fed.size() == 1) {
+			out.put(fed.get(0) instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) fed.get(0)), new TreeMap<>(placed));
+			return out;
+		}
+		for (Object t : fed) {
+			if (t instanceof Site s) {
+				Builder.Run r = Builder.run(srv, s);
+				out.put(Builder.creditKey(s), r == null ? new TreeMap<>() : Builder.paidStanding(level, s, r));
+			} else {
+				Infra i = (Infra) t;
+				Map<String, Integer> one = new TreeMap<>();
+				Builder.Run r = RoadBuilder.run(srv, i);
+				if (r != null) {
+					r.rescan(level, false, true); // never loads a chunk
+					java.util.BitSet free = i.construction().free();
+					for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+						if (!free.get(q)) {
+							r.cost.get(q).forEach(x -> one.merge(x.item(), x.count(), Integer::sum));
+						}
+					}
+				}
+				out.put(RoadBuilder.creditKey(i), one);
+			}
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ inserting and refunds

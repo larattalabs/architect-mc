@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * Slice JR: the stockpile ledger's per-target paid record. A keyed refund never credits more than the record (the saved ledger's
  * consumption for that target): the same item first, then unit for unit (copper and soil variants); a partial refund reports its
  * shortfall; the record goes with its refund; a retake takes out of it; a target key with no record credits nothing (it was fed after
- * the save) but what the legacy pool covers (a file written before JR, an adopted crate); other keys are not capped; the record is saved
+ * the save) but what the legacy pool covers (a file written before JR; JR-b: for a target placed before the conversion); other keys are not capped; the record is saved
  * with the ledger.
  */
 class StockpilePaidJRTest {
@@ -94,11 +94,11 @@ class StockpilePaidJRTest {
 		assertEquals(Map.of(COBBLE, 2, DIRT, 2), o.legacy());
 		StockLedger back = StockLedger.fromJson(JsonParser.parseString(o.toJson().toString()).getAsJsonObject());
 		assertEquals(o.legacy(), back.legacy(), "the pool is saved: the conversion happens once");
-		// an adopted crate's placed counts join the pool
+		// (JR-b) an adopted crate's placed counts no longer join the pool (StockpileLegacyJRbTest: they are keyed to its targets)
 		StockLedger a = new StockLedger();
 		a.adopt("adopt:x", Map.of(COBBLE, 5), Map.of(COBBLE, 3), CAP, MAX);
-		assertEquals(Map.of(COBBLE, 3), a.legacy());
-		assertEquals(Map.of(COBBLE, 3), a.credit("site:old@1", Map.of(COBBLE, 3), CAP, MAX).returned());
+		assertEquals(Map.of(), a.legacy());
+		assertTrue(a.credit("site:old@1", Map.of(COBBLE, 3), CAP, MAX).returned().isEmpty());
 	}
 
 	@Test

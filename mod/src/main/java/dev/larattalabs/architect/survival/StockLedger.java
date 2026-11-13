@@ -47,10 +47,20 @@ public final class StockLedger {
 	 */
 	private final Map<String, Map<String, Integer>> paid = new TreeMap<>();
 	/**
-	 * (JR) Consumption the per-target records don't cover: a file written before JR (its consumed less its returned, at load) and an
-	 * adopted crate's placed counts. A target key with no record draws its cap from this pool (spent as it is used).
+	 * (JR) Consumption the per-target records don't cover: a file written before JR (its consumed less its returned, at load). (JR-b) Only a
+	 * target placed before {@link #legacySince} draws on it, after its own record (spent as it is used); an adopted crate no longer adds to it.
 	 */
 	private final Map<String, Integer> legacy = new TreeMap<>();
+	/**
+	 * (JR-b) When this ledger's pre-JR consumption became {@link #legacy}: wall-clock ms, the clock of a target's {@code placedAt}. A target placed
+	 * at or after it was fed only under the records, so it never draws on the pool (else a crash refund mints out of it, F3). 0: no pool.
+	 */
+	private long legacySince;
+	/**
+	 * (JR-b) A file that has the records and a pool but no {@link #legacySince} was converted by v0.64.0, at a load no later than its release
+	 * (commit 40a59368, 2026-11-12 23:15:25 -0700): every target placed before it is pre-JR; one placed after it may be post-JR, so it never draws.
+	 */
+	public static final long JR_RELEASED_MS = 1_794_550_525_000L;
 
 	/** What crediting items did: what entered the stock and what did not fit (to drop as items, booked as refundOverflow). */
 	public record Credit(Map<String, Integer> returned, Map<String, Integer> overflow, boolean already, Map<String, Integer> shortfall) {
@@ -249,7 +259,7 @@ public final class StockLedger {
 		}
 		// (JR) never more than the saved ledger says this target consumed; the record is spent with its refund (no record: the legacy pool)
 		Map<String, Integer> rec = paid.remove(key);
-		Map<String, Integer> in = capRecordThenLegacy(items, rec == null ? new TreeMap<>() : new TreeMap<>(rec));
+		Map<String, Integer> in = capRecordThenLegacy(items, rec == null ? new TreeMap<>() : new TreeMap<>(rec), placedAtOf(key));
 		Credit c = giveBack(in, capacityStacks, maxStack);
 		return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
 	}
@@ -278,10 +288,10 @@ public final class StockLedger {
 	public Map<String, Integer> fromPaid(String targetId, Map<String, Integer> items) {
 		String k = keyOf(targetId);
 		if (k == null) {
-			return capRecordThenLegacy(items, new TreeMap<>());
+			return capRecordThenLegacy(items, new TreeMap<>(), -1); // (JR-b) no record, so no placedAt known: never the pool
 		}
 		Map<String, Integer> left = paid.get(k);
-		Map<String, Integer> out = capRecordThenLegacy(items, left);
+		Map<String, Integer> out = capRecordThenLegacy(items, left, placedAtOf(k));
 		left.values().removeIf(v -> v <= 0);
 		if (left.isEmpty()) {
 			paid.remove(k);
@@ -295,19 +305,45 @@ public final class StockLedger {
 		return o;
 	}
 
-	/** (JR) {@code items} capped by the record {@code left} (spent from it), what is short then by the legacy pool (spent from it). */
-	private Map<String, Integer> capRecordThenLegacy(Map<String, Integer> items, Map<String, Integer> left) {
+	/**
+	 * (JR) {@code items} capped by the record {@code left} (spent from it), what is short then by the legacy pool (spent from it): (JR-b) only for
+	 * a target placed before {@link #legacySince} ({@code placedAt} &lt; 0: unknown, never).
+	 */
+	private Map<String, Integer> capRecordThenLegacy(Map<String, Integer> items, Map<String, Integer> left, long placedAt) {
 		Map<String, Integer> out = capTo(items, left);
-		if (!legacy.isEmpty()) {
+		if (!legacy.isEmpty() && mayDrawLegacy(placedAt)) {
 			capTo(shortfall(items, out), legacy).forEach((k, v) -> out.merge(k, v, Integer::sum));
 			legacy.values().removeIf(v -> v <= 0);
 		}
 		return out;
 	}
 
-	/** (JR) What the records don't cover (pre-JR consumption, adopted crates): see {@link #legacy}. */
+	/** (JR) What the records don't cover (pre-JR consumption): see {@link #legacy}. */
 	public Map<String, Integer> legacy() {
 		return Map.copyOf(legacy);
+	}
+
+	/** (JR-b) When the pool was made (wall-clock ms; 0: none): see {@link #legacySince}. */
+	public long legacySince() {
+		return legacySince;
+	}
+
+	/** (JR-b) Whether a target placed at {@code placedAt} (wall-clock ms; &lt; 0 unknown) predates the records, so it may draw on the pool. */
+	public boolean mayDrawLegacy(long placedAt) {
+		return placedAt >= 0 && placedAt < legacySince;
+	}
+
+	/** (JR-b) The {@code placedAt} of a target credit key ({@code site:<id>@<placedAt>}, {@code road:<id>@<placedAt>}), or -1. */
+	static long placedAtOf(String key) {
+		int i = key.lastIndexOf('@');
+		if (i < 0 || i == key.length() - 1) {
+			return -1;
+		}
+		try {
+			return Long.parseLong(key.substring(i + 1));
+		} catch (NumberFormatException e) {
+			return -1;
+		}
 	}
 
 	/** (JR) The site id of a construction delta's credit key ({@code delta:<entry>:<siteId>}), or null. */
@@ -419,10 +455,21 @@ public final class StockLedger {
 	 * Adoption of a legacy crate (§5): its ledger joins this one. Its delivered counts are added to {@code delivered} and its
 	 * placed counts to {@code consumed}, so the stock grows by exactly the crate's stock and the identity holds; what then does
 	 * not fit in {@code capacityStacks} is dropped (booked in {@code dropped}) and returned for the caller to drop as items.
-	 * Credited once per {@code key}.
+	 * Credited once per {@code key}. (JR-b) The crate's placed counts join no shared pool: none is keyed by this overload (see the other).
 	 */
 	public Map<String, Integer> adopt(String key, Map<String, Integer> crateDelivered, Map<String, Integer> cratePlaced, int capacityStacks,
 		ToIntFunction<String> maxStack) {
+		return adopt(key, crateDelivered, cratePlaced, Map.of(), capacityStacks, maxStack);
+	}
+
+	/**
+	 * (JR-b) {@link #adopt(String, Map, Map, int, ToIntFunction)}, with the crate's placed counts keyed by the credit keys of the targets it fed
+	 * ({@code byTarget}: credit key to items, added to that target's paid record, so its refund is capped by what it really took). Each item is
+	 * capped at the crate's own placed count of it, in the map's order (the caller's placement order); what no target is given goes nowhere: an
+	 * adopted crate never grows {@link #legacy} (F3), whose pool any pre-JR target could draw a crash refund from.
+	 */
+	public Map<String, Integer> adopt(String key, Map<String, Integer> crateDelivered, Map<String, Integer> cratePlaced,
+		Map<String, Map<String, Integer>> byTarget, int capacityStacks, ToIntFunction<String> maxStack) {
 		if (credited.contains(key)) {
 			return Map.of();
 		}
@@ -430,7 +477,16 @@ public final class StockLedger {
 		Map<String, Integer> before = stock();
 		crateDelivered.forEach((k, v) -> add(delivered, k, v));
 		cratePlaced.forEach((k, v) -> add(consumed, k, v));
-		cratePlaced.forEach((k, v) -> add(legacy, k, v)); // (JR) the crate's sites were paid outside the records
+		Map<String, Integer> left = new TreeMap<>(cratePlaced);
+		for (var t : byTarget.entrySet()) {
+			for (var e : new TreeMap<>(t.getValue()).entrySet()) {
+				int n = Math.min(Math.max(0, e.getValue()), Math.max(0, left.getOrDefault(e.getKey(), 0)));
+				if (n > 0) {
+					pay(t.getKey(), e.getKey(), n);
+					left.merge(e.getKey(), -n, Integer::sum);
+				}
+			}
+		}
 		// over capacity: of what came in (by item id, deterministic), the least that frees whole stacks drops: a partial stack first
 		Map<String, Integer> out = new TreeMap<>();
 		for (var e : new TreeMap<>(stock()).entrySet()) {
@@ -467,10 +523,18 @@ public final class StockLedger {
 		if (!legacy.isEmpty()) {
 			o.add("legacy", counts(legacy));
 		}
+		if (legacySince > 0) {
+			o.addProperty("legacySince", legacySince); // (JR-b) additive
+		}
 		return o;
 	}
 
 	public static StockLedger fromJson(@Nullable JsonObject o) {
+		return fromJson(o, System.currentTimeMillis());
+	}
+
+	/** {@link #fromJson(JsonObject)} at wall-clock {@code now} (ms): (JR-b) a file written before the records is converted, stamped {@code now}. */
+	public static StockLedger fromJson(@Nullable JsonObject o, long now) {
 		StockLedger l = new StockLedger();
 		if (o == null) {
 			return l;
@@ -492,9 +556,20 @@ public final class StockLedger {
 					l.legacy.put(e.getKey(), n);
 				}
 			}
+			if (!l.legacy.isEmpty()) {
+				l.legacySince = now; // (JR-b) every target placed before this load is pre-JR; one placed from now on is fed under the records
+			}
 		}
 		if (o.has("legacy") && o.get("legacy").isJsonObject()) {
 			read(o.getAsJsonObject("legacy"), l.legacy);
+		}
+		if (o.has("legacySince") && o.get("legacySince").isJsonPrimitive()) {
+			l.legacySince = o.get("legacySince").getAsLong();
+		} else if (o.has("paid") && !l.legacy.isEmpty()) {
+			l.legacySince = JR_RELEASED_MS; // (JR-b) converted by v0.64.0, which did not stamp it
+		}
+		if (l.legacy.isEmpty()) {
+			l.legacySince = 0;
 		}
 		if (o.has("paid") && o.get("paid").isJsonObject()) {
 			o.getAsJsonObject("paid").entrySet().forEach(e -> {

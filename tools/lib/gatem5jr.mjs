@@ -13,7 +13,18 @@
 //                                                  each: what came back into the stock (with overflow) equals what the saved ledger says the
 //                                                  undone targets consumed, item for item; the ledger's identity holds; the world as before
 //
-// Evidence: artifacts/gate6d-gr/jrcrash.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
+//   node tools/gate6dgr.mjs jrcrashv063 (jr-crash-v063) slice JR-b (audit F3): the same crash on a world whose stockpile ledger v0.63.0
+//                                                  saved (no `paid`: its consumption becomes the legacy pool at the upgrade's load):
+//                                                  a legacy crate site (no stockpile yet) partly fed from its own crate; then the stockpile,
+//                                                  the town realised and built (pre-JR targets); /save-all flush, leave, the ledger stripped of
+//                                                  what JR added (`paid`, `legacy`, `legacySince`: byte for byte the v0.63.0 writer's
+//                                                  fields), reopened on this build: the pool > 0, stamped at this load.
+//                                                  RVU2 (a post-JR growth's undo after the halt): what came back equals the saved
+//                                                  consumption (0 minted) and the pool is untouched; a pre-JR target (the town's removal)
+//                                                  still refunds out of the pool; adoptCrates keys the crate's placed counts to its site's
+//                                                  paid record and the pool does not grow
+//
+// Evidence: artifacts/gate6d-gr/jrcrash.json, jrcrashv063.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -171,6 +182,148 @@ export async function registerJR(steps, h) {
       }
       await L.leaveWorld();
     }
+    spendZero();
+    return out;
+  };
+
+  // (JR-b) the v0.63.0-saved ledger: the legacy pool, then a post-JR crash, a pre-JR refund and an adoption
+  const api = async (args) => {
+    const r = await cmd(`/apitest ${args}`);
+    const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null');
+    if (line === undefined) throw new Error(`/apitest ${args.slice(0, 120)}: no JSON answer: ${JSON.stringify(r).slice(0, 400)}`);
+    return JSON.parse(line);
+  };
+  const later = async (args, timeoutMs = 120_000) => {
+    const p = await api(args);
+    if (!p?.pending) return p;
+    for (const end = Date.now() + timeoutMs; Date.now() < end; await L.sleep(500)) {
+      const r = await api(`get ${p.pending}`);
+      if (r && r.value !== undefined && r.value !== null) return r.value;
+    }
+    throw new Error(`no result for ${p.pending}`);
+  };
+  const siteState = (id) => call('dev.site.state', { site: id }, 60_000);
+  const total = (m) => sum(Object.fromEntries(Object.entries(m ?? {}).filter(([, v]) => v > 0)));
+
+  steps.jrcrashv063 = async () => {
+    await ensure();
+    const out = {};
+    const name = 'G6B JRB v063';
+    const tag = 'RVU2-v063';
+    // the world before the stockpile: a legacy crate site of the owner (its own crate), partly fed
+    await G.survivalBase(ctx);
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await G.designs(ctx);
+    await L.tp(CX + 80, 80, CZ + 56);
+    const gy = await groundY();
+    const cx = CX + 80, cz = CZ - 26;
+    const cy = await groundY(cx, cz);
+    const placed = await later(`place cabin ${cx} ${cy + 1} ${cz} CONSTRUCTION unowned noactor 0 owner=${G.OWNER}`);
+    const cabin = placed?.siteId;
+    check(!!cabin, `${tag}: a legacy crate site for ${G.OWNER} before any stockpile: ${json(placed).slice(0, 200)}`);
+    let cs = cabin ? await siteState(cabin) : null;
+    check(cs?.crate?.present === true && cs?.stockpile === undefined, `${tag}: it builds from its own crate (no stockpile)`, cs?.crate);
+    if (cabin) {
+      const want = Object.fromEntries((cs.rows ?? []).map((r) => [r.item, Math.ceil(r.missing / 3)]).filter(([, n]) => n > 0));
+      await call('dev.crate.insert', { site: cabin, items: want, exact: true }, 120_000);
+      for (let i = 0; i < 60; i++) { cs = await siteState(cabin); if (total(cs.ledger?.placed) > 0 && total(cs.ledger?.stock) === 0) break; await L.sleep(2000); }
+      check(total(cs.ledger?.placed) > 0, `${tag}: the crate site built a part from its crate: placed ${json(cs.ledger?.placed)}`);
+    }
+    // the stockpile and the town: pre-JR targets, built in survival
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+    check(!cr.refused, `${tag}: a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
+    const W = { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name) };
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const f0 = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+    check(f0.last.st.view.state === 'PLACED' && f0.last.rs.build?.done, `${tag}: the town built in survival (${f0.waves} waves)`);
+    const S0 = await cellsOf(W.BOX);
+    // saved as v0.63.0 saves it: the ledger without JR's fields, then the upgrade's load on this build
+    await cmd('/save-all flush');
+    await call('dev.wait', { ms: 2000 }, 30_000);
+    await L.leaveWorld();
+    const file = path.join(W.dir, 'architect', 'stockpiles.json');
+    const root = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const l0 = ledgerOf(root);
+    const strippedOf = Object.keys(l0 ?? {}).filter((k) => ['paid', 'legacy', 'legacySince'].includes(k));
+    for (const k of ['paid', 'legacy', 'legacySince']) delete l0[k];
+    fs.writeFileSync(file, `${JSON.stringify(root, null, 2)}\n`);
+    const pool0 = {};
+    for (const [k, v] of Object.entries(l0.consumed ?? {})) { const n = v - (l0.returned?.[k] ?? 0); if (n > 0) pool0[k] = n; }
+    const t0 = Date.now();
+    await L.openWorld(name);
+    await L.tp(CX + 80, 60, CZ + 56);
+    const up = await pile();
+    out.upgrade = { strippedOf, pool: up.ledger?.legacy, legacySince: up.ledger?.legacySince, openedAt: t0 };
+    check(total(up.ledger?.legacy) > 0 && G.same(up.ledger?.legacy, pool0), `${tag}: the v0.63.0 ledger (stripped of ${json(strippedOf)}) became the legacy pool at this load: ${total(up.ledger?.legacy)} units ${json(up.ledger?.legacy)}`, out.upgrade);
+    check(Number(up.ledger?.legacySince) >= t0 - 1000, `${tag}: the pool stamped at this load (legacySince ${up.ledger?.legacySince} >= ${t0}): every target placed so far is pre-JR`);
+    const pool1 = up.ledger?.legacy ?? {};
+
+    // RVU2 on a post-JR growth: the halt with nothing saved, the undo after the restart: no mint, the pool untouched
+    const g = await growPlan(region, { lots: [{ id: 'qa', type: 'house', size: [9, 9], villager: 'dwelling' }] });
+    check(!g.refused && g.revisionOf?.rid >= 1, `${tag}: a growth planned: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
+    if (!g.refused) {
+      const r = await call('dev.region.realise', { planId: g.planId, lots: { qa: 'rs_hut' } }, 300_000);
+      check(!r.refused, `${tag}: the growth realised after the upgrade (post-JR, qa: rs_hut): ${r.refused ?? r.region}`);
+      const rid = g.revisionOf.rid;
+      const tt = new Set((f0.last.rs?.targets ?? []).map((x) => x.id));
+      for (let i = 0; i < 90; i++) {
+        const sv = await rvState(region);
+        const rs = await G.rsState(ctx, region);
+        if ((rs.targets ?? []).some((x) => !tt.has(x.id)) || sv.revisions?.find((x) => x.rid === rid)?.state !== 'ACCEPTED') break;
+        await L.sleep(2000);
+      }
+      if (cabin) await call('dev.stockpile.pause', { site: cabin, paused: true }, 60_000).catch(() => null); // its own crate: not the feed's
+      const b0 = await baseline(tag);
+      const c = await crash(tag, { ...W }, region, b0, 'RVU2', () => call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000).catch(() => null));
+      if (c) {
+        let st;
+        const t1 = Date.now();
+        for (; Date.now() - t1 < 1_800_000;) { st = await rvState(region); if (st.busy === null) break; await L.sleep(L.pollDelayMs(Date.now() - t1)); }
+        await L.settle(3000);
+        const after = await pile();
+        const d = diff(S0, await cellsOf(W.BOX));
+        out[tag] = judge(tag, c, after, { worldDiff: d.n, position: st?.position, poolBefore: pool1, poolAfter: after.ledger?.legacy });
+        check(c.Ld?.legacy && G.same(c.Ld.legacy, pool1) && total(c.Ld.legacy) > 0, `${tag}: the saved ledger at the halt still held the pool (${total(c.Ld?.legacy)} units): a post-JR refund could have drawn on it`);
+        check(G.same(after.ledger?.legacy, pool1), `${tag}: the post-JR crash refund drew nothing from the pool (${total(pool1)} -> ${total(after.ledger?.legacy)} units)`, { before: pool1, after: after.ledger?.legacy });
+        check(st?.busy === null && st.position === 0 && d.n === 0, `${tag}: the undo resumed after the restart and finished: position ${st?.position}; the world before the growth (${d.n} differ)`, d.first);
+      }
+    }
+
+    // a pre-JR target still refunds out of the pool: the town's removal (no crash)
+    {
+      const a = await pile();
+      const rm = await call('dev.region.remove', { region, requester: G.OWNER }, 3_600_000).catch((e) => ({ refused: String(e?.message ?? e) }));
+      for (let i = 0; i < 900; i++) {
+        const st = await call('dev.region.state', { region }, 60_000).catch(() => null);
+        if (!st?.view?.state || ['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state)) break;
+        await L.sleep(2000);
+      }
+      await L.settle(3000);
+      const b = await pile();
+      const refund = G.minus(G.plus(b.ledger?.returned, b.ledger?.refundOverflow), G.plus(a.ledger?.returned, a.ledger?.refundOverflow));
+      const drawn = G.minus(a.ledger?.legacy, b.ledger?.legacy);
+      out.preJR = { refused: rm?.refused ?? null, refund, poolBefore: a.ledger?.legacy, poolAfter: b.ledger?.legacy, drawn };
+      check(total(refund) > 0 && total(drawn) === total(refund), `${tag}: the pre-JR town's removal refunded ${total(refund)} units, all out of the legacy pool (drawn ${total(drawn)}; pool ${total(a.ledger?.legacy)} -> ${total(b.ledger?.legacy)})`, out.preJR);
+      check(b.identity !== false, `${tag}: identity after the removal`);
+    }
+
+    // adoptCrates: the crate's placed counts keyed to its site, never the pool
+    if (cabin) {
+      const a = await pile();
+      const s0 = await siteState(cabin);
+      const ad = await call('dev.stockpile.adopt', { owner: G.OWNER }, 120_000);
+      const b = await pile();
+      const key = Object.keys(b.ledger?.paid ?? {}).find((k) => k.startsWith(`site:${cabin}@`));
+      out.adopt = { refused: ad?.refused ?? null, cratePlaced: s0.ledger?.placed, key, record: key ? b.ledger.paid[key] : null, poolBefore: a.ledger?.legacy, poolAfter: b.ledger?.legacy };
+      check(G.same(b.ledger?.legacy ?? {}, a.ledger?.legacy ?? {}), `${tag}: adoptCrates did not grow the pool (${total(a.ledger?.legacy)} -> ${total(b.ledger?.legacy)} units)`, out.adopt);
+      check(!!key && G.same(b.ledger.paid[key], s0.ledger?.placed), `${tag}: the adopted crate's placed counts are its site's paid record (${key}: ${json(key ? b.ledger.paid[key] : null)} = placed ${json(s0.ledger?.placed)})`, out.adopt);
+      check(b.identity !== false, `${tag}: identity after the adoption`);
+    }
+    await L.leaveWorld();
     spendZero();
     return out;
   };

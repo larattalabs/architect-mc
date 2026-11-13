@@ -2432,7 +2432,8 @@ public final class Builder {
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
 					int qi = r == null ? -1 : r.queuePos(m);
-					Refunds.Outcome o = tallyCell(r, qi, now, was, free, only != null, tally);
+					Refunds.Outcome o = tallyCell(r, qi, now, was, free, only != null, () -> dev.larattalabs.architect.placed.Placed.record(level, m) != null,
+						tally);
 					if (o == null) {
 						missing++;
 					}
@@ -2482,9 +2483,25 @@ public final class Builder {
 	 */
 	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, BlockState now, BlockState was, BitSet free,
 		boolean adopted, Refunds.Tally tally) {
+		return tallyCell(r, qi, now, was, free, adopted, () -> false, tally);
+	}
+
+	/**
+	 * {@link #tallyCell(Run, int, BlockState, BlockState, BitSet, boolean, Refunds.Tally)} with the cell's PT record ({@code playerRecord}, asked
+	 * only for a queued cell that matches): (JR-b, F10) a queued cell holding its target that a player placed (Architect's own writes clear a
+	 * record, so a record there is the player's block: the builder found it standing and charged nothing, or the player replaced a block they
+	 * mined) is the player's: its block drops (PLAYER_DROP), never a refund out of the target's paid record or the legacy pool. The undo
+	 * still writes the cell's before back (it holds the entry's after), so only when that before is another block (else the block stays: as before).
+	 */
+	static Refunds.@Nullable Outcome tallyCell(@Nullable Run r, int qi, BlockState now, BlockState was, BitSet free,
+		boolean adopted, java.util.function.BooleanSupplier playerRecord, Refunds.Tally tally) {
 		boolean asPlaced = qi >= 0 && r.matches(now, qi);
 		// (6c CU) the snapshot's block at any copper stage is still the snapshot's (an adopted copper roof that weathered)
 		boolean asSnapshot = Copper.is(now, was.getBlock());
+		if (asPlaced && !adopted && !asSnapshot && playerRecord.getAsBoolean()) {
+			tally.add(Refunds.Outcome.PLAYER_DROP, Cells.cost(now)); // (JR-b, F10) the before isn't this block: the undo takes it away
+			return Refunds.Outcome.PLAYER_DROP;
+		}
 		Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), asSnapshot,
 			Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
 		if (adopted && o == Refunds.Outcome.REFUND && asSnapshot) {

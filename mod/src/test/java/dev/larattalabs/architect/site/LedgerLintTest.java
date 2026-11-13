@@ -449,6 +449,33 @@ class LedgerLintTest {
 	}
 
 	/**
+	 * (JR-b, audit F10) A player's block matching a queued cell, then the undo: the builder charged nothing for it, so the deconstruct never
+	 * refunds it (out of the target's record or the legacy pool); the undo takes it away, so it drops as the player's block. Before JR-b it was
+	 * a REFUND the record capped out: the block went and nothing came back.
+	 */
+	@Test
+	void f10_aPlayersMatchingBlockDropsAsTheirsAtUndo() {
+		LedgerSim s = new LedgerSim();
+		LedgerSim.Tgt t = s.place("t", "hut");
+		long p = s.matchingBlock(t, 3);
+		assertTrue(p != -1);
+		s.checkpoint("matching");
+		fill(s);
+		feedUntilQuiet(s, 40);
+		assertEquals(t.run.size(), t.run.built.cardinality());
+		assertFalse(t.paid.contains(p), "never charged");
+		Map<String, Integer> ground = new TreeMap<>(s.ground);
+		s.removeStart(t);
+		s.removeEnd(t, false);
+		s.checkpoint("undo");
+		clean(s);
+		Map<String, Integer> dropped = new TreeMap<>(s.ground);
+		ground.forEach((k, v) -> dropped.merge(k, -v, Integer::sum));
+		dropped.values().removeIf(v -> v == 0);
+		assertTrue(dropped.values().stream().mapToInt(Integer::intValue).sum() >= 1, "the player's block dropped: " + dropped);
+	}
+
+	/**
 	 * Y1 overflow and gone: a refund into a full stockpile overflows to the ground (refundOverflow, outside the identity), never past capacity;
 	 * a crate gone drops the least whole stacks that bring the stock within the new capacity.
 	 */

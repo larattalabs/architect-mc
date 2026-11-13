@@ -657,6 +657,35 @@ final class LedgerSim {
 		return true;
 	}
 
+	/**
+	 * (JR-b, F10) A player puts the target's own block into an unbuilt cell of a target (its PT record: {@link #foreign}): the builder reads it as
+	 * built and charges nothing. Returns the cell, or -1 when there is none.
+	 */
+	long matchingBlock(Tgt t, int nth) {
+		Builder.Run r = t.run;
+		if (r == null) {
+			return -1;
+		}
+		List<Integer> open = new ArrayList<>();
+		for (int i = r.built.nextClearBit(0); i < r.size(); i = r.built.nextClearBit(i + 1)) {
+			if (!r.isSecond[i] && r.second[i] < 0 && at(r.pos(i)).isAir() && Builder.kind(r.target[i]) == BuildOrder.FULL) {
+				open.add(i);
+			}
+		}
+		if (open.isEmpty()) {
+			return -1;
+		}
+		int i = open.get(Math.floorMod(nth, open.size()));
+		BlockState mine = r.target[i];
+		long p = r.pos(i).asLong();
+		world.put(p, mine);
+		foreign.put(p, mine);
+		t.deltaBill = null;
+		addAll(in, costs(mine), 1);
+		rescan(t);
+		return p;
+	}
+
 	/** V6: a copper block weathers a stage, is waxed or scraped, in place (UmtVanilla V6). Returns whether a cell changed. */
 	boolean weather(Tgt t, int nth, int how) {
 		List<Long> cs = new ArrayList<>();
@@ -767,7 +796,7 @@ final class LedgerSim {
 			BlockState now = at(p);
 			BlockState was = t.adopted ? t.adoptedState.getOrDefault(p, t.before.getOrDefault(p, AIR)) : t.before.getOrDefault(p, AIR);
 			int qi = r == null ? -1 : r.queuePos(BlockPos.of(p));
-			Builder.tallyCell(r, qi, now, was, t.free, t.adopted, tally);
+			Builder.tallyCell(r, qi, now, was, t.free, t.adopted, () -> foreign.containsKey(p), tally); // (JR-b) PT: the player's blocks
 			if (t.paid.contains(p) && !(t.adopted && Copper.is(now, was.getBlock()))) {
 				addAll(want, costs(now), 1);
 			}

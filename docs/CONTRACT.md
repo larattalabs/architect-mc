@@ -30326,3 +30326,65 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
 **The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
 before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
 charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.
+
+## Slice JR-b, the legacy pool (branch `slice/JR-b` off main e04dd6d6; 2026-11-13; DEV MODE, survival accounting strict)
+
+Audit `Minecraft/audits/safety.md` F3 (MINT, live) and F10 (LOSS), both GPT-confirmed. Noah's rule (via the parent session, "safety:
+defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as now; post-JR crash refunds stop drawing on it.**
+
+### The finding
+
+- JR's pool (`StockLedger.legacy`) is a file without `paid` turned into all-time `consumed - returned` at load, plus every adopted crate's
+  `placed`. A target key's refund, a delta's and a retake took what their record did not cover out of it, whoever the target was.
+- So in any world with survival builds before v0.64.0, and after any adoption (Steward adopts at every build), JR's measured crash
+  mints (K5, RVU2) still minted, up to the pool's size. The pool also went to whichever target refunded first.
+- F10: `Builder.step` (and every rescan) marks a queued cell that already holds its target as built, charging nothing (the player placed
+  it). At undo `tallyCell` classified it REFUND; JR caps that out of the target's record (or took it from the pool, F3). The undo still
+  writes the cell's before back, so the player's block went and nothing came back.
+
+### The rule (as built)
+
+1. **`legacySince`** (additive in `stockpiles.json`'s ledger, written while the pool is non-empty): when the pool was made, in
+   **wall-clock ms**, the clock of a target's `placedAt` (`System.currentTimeMillis()` at placement; a moved site keeps its own). The
+   brief said "world tick/time"; a game tick against a ms `placedAt` would be a silent bug, so it is ms.
+   - A file without `paid` (written before v0.64.0): converted at load, stamped with that load's time. Never restamped.
+   - A file with `paid` and a pool but no stamp (converted by v0.64.0, which did not stamp): `StockLedger.JR_RELEASED_MS`, the v0.64.0
+     release commit's time (40a59368, 2026-11-12 23:15:25 -0700). No v0.64.0 conversion predates it. The cost: a target placed after
+     that instant in a world still on 0.63 can't draw the pool (a narrow loss, never a mint).
+   - An empty pool has no stamp.
+2. **Only a target placed before `legacySince` draws on the pool**, after its own record: a target key's refund (`placedAt` from the
+   key's `@<placedAt>`), a retake through `fromPaid` (from its record's key) and a delta (`delta:<entry>:<site>`, from its site's
+   record's key). With no `placedAt` known (no record), never. A post-JR target's refund is its record only, as JR's.
+3. **An adoption never grows the pool.** `adopt` keys the crate's `placed` counts to the credit keys of the targets it fed, into their
+   paid records, so an adopted target's normal undo still refunds what its crate paid:
+   - a crate of one target (a site's own crate, a group crate with one member left): all of its placed counts;
+   - a shared crate: each target its built, non-free paid cost (`Builder.paidStanding`; a road its built, non-free cells), in placement
+     order, capped per item by the crate's placed count;
+   - what no target is given (a shared crate's placed counts for blocks no longer standing) goes nowhere and is logged: those blocks are
+     gone, so nothing refunds them. A pool fed by it would be a mint for any pre-JR target.
+   The old 5-argument `adopt` keys nothing (kept for callers and tests).
+4. **F10:** at a deconstruct, a queued cell that holds its target **and has a PT record** is the player's block: Architect's own writes
+   clear a cell's record, so a record there means the builder found the block standing and charged nothing, or the player replaced a
+   block they mined. It drops as PLAYER_DROP (its item back to the player) instead of a REFUND out of the record or pool. This applies only
+   when the cell's before is another block (else the undo writes the same block back and it stays) and not for an adopted site (PT2's own
+   rule). `tallyCell` gains an overload taking the record; the old signature passes "no record".
+
+### What changes (Steward RC areas)
+
+- After a crash in a world upgraded from before v0.64.0: a post-JR target's undo, Remove or deconstruct refunds its paid record only,
+  no longer topped up from the pool (`Stock.returned` and the refund smaller in the mint case). Pre-JR targets: unchanged.
+- `adoptCrates`: the pool no longer grows; the adopted targets get paid records instead. An adopted target's undo refunds what its crate
+  paid for it (was: from the shared pool, first come first served).
+- A player's own block in a queued cell: at undo it drops at the site as the player's (`tally.playerBlocks`), not credited to the
+  stockpile. Steward's Refund views see it as player blocks.
+- No API change: no new method, record or enum. `stockpiles.json` gains `legacySince` (additive; older builds ignore it).
+
+### Gate
+
+- Units: `StockpileLegacyJRbTest` (the stamp and its save; a post-JR target never draws; a pre-JR one does; retakes and deltas by
+  `placedAt`; the v0.64.0 fallback; adoption keyed and capped, the pool untouched), `StockpilePaidJRTest` (the adopted crate no longer
+  pools), `LedgerLintTest.f10_aPlayersMatchingBlockDropsAsTheirsAtUndo` (the LedgerLint seam; fails without the fix).
+- In game: `jr-crash-v063` (tools/lib/gatem5jr.mjs, `node tools/gate6dgr.mjs jrcrashv063`), on the 6b client, $0.
+  - The fixture is "a world saved by v0.63.0": a world built on this build, stopped cleanly, its ledger stripped of what JR added
+    (`paid`, `legacy`, `legacySince`), then reopened. Between v0.63.0 and main, `stockpiles.json`'s format differs only in those fields.
+  - It runs RVU2 (a post-JR growth's undo after the halt), the pre-JR town's removal and an adoption of a legacy crate site.
