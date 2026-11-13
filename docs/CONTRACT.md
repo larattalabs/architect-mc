@@ -31014,3 +31014,128 @@ ledger change costs one flushed world save.
   unreadable file, `.bak`, `format`), F7, N1 (a finished undo's refund credit), N2 (filled shulker boxes) and N4.
 - A crash between the player write and the ledger write inside one explicit save (milliseconds) still loses that move. Closing it
   would need a journal.
+
+## Slice PS, ledger saves (branch `slice/PS` off main 6e3e7223 with HF 423c506c merged; 2026-11-13; DEV MODE, survival accounting strict)
+
+The rest of the save-ordering class from the survival-safety audit (`Minecraft/audits/safety.md` F4, F6, F11, N1, N2), after HF.
+Noah's decision ("safety: defaults", via the parent session): F4 depth **(b)**, a changed ledger saved with the world at most every 10 s;
+no per-crate delivery journal. The coordinator's answers: `stockpiles.json` goes to **format 2**; the queue file's guard is in scope;
+start before RL.
+
+### The finding (measured before the fix: ps-crash's before-cases, the new saves switched off by `dev.stockpile.ps`)
+
+Two more members of JR's and HF's save-cadence class, both losses (no dupe):
+
+| case | the moves | before PS (the new saves off) | rule |
+|---|---|---|---|
+| **H0** (F4) | `/save-all flush`, a hopper line delivering 62 items into a stockpile crate in 25 s, a halt | **lost 55 of 62** (22.2 s of deliveries): the chest's and hopper's chunk saved eagerly, the ledger rewound to the flush | a hopper's source saves with its chunk (about 10 s); the stockpile ledger waited for the next autosave, up to 5 min (about 750 items per line) |
+| **K5E0** (N1) | a survival town built, `/save-all flush` (the ledger with its consumption), the region removed to REMOVED, 12 s, a halt | **lost 389 of 389** refunded items; the town stays removed | the refund is credited in memory; the queue file drops the removal and its `decCredit`, and the restored chunks save eagerly, while the ledger waits for autosave |
+
+Also read from the code and not reproduced (units instead): F6, F11 and N2 as the audit describes them.
+
+### The fix
+
+1. **F4 (b), the periodic ledger save** (`Stockpiles.periodicSave`, from the stockpile tick): when the ledger changed since its last
+   save (`unsaved`, HF's flag, set by `changed()`), and 200 ticks (10 s) have passed since the last ledger save of any kind (autosave,
+   explicit, periodic), `saveWithWorld` runs: HF's players, then the chunks flushed, then the ledger. It is logged only with
+   ARCHITECT_TRACE_STOCKPILE. A crash then loses at most about 10 s of deliveries: the ledger is saved with the chunks, and the vanilla
+   eager chunk saves (about 10 s) only move the source containers further ahead, the loss direction, never a dupe.
+   - It is the flushed save, not an unflushed one: an unflushed chunk save puts the ledger on disk before the queued chunk writes, and a
+     crash in that gap leaves a hopper's source saved full while the ledger counts the delivery (a dupe, N3's shape).
+   - A feed's consumption also sets `unsaved`, so every survival build that feeds gets one such save every 10 s, not only hopper chains.
+     Its cost is in the results.
+2. **F6, an unreadable file is never saved over:**
+   - `stockpiles.json`: the whole file is read before anything counts (a bad JSON, a stockpile that fails midway, a non-numeric or newer
+     format: the registry is cleared). Then `loadFailed`: `save()` and `saveWithWorld` refuse (logged once at ERROR), a new stockpile
+     or crate is refused (`create`, `addCrate`: it would never be saved and would reuse the file's ids), and the load is logged at
+     ERROR with the way back. HF's logout save and the periodic save go through the same guard.
+   - `architect-queue.json` (Placement): an unreadable file starts the queue empty as before, and now no queue save runs this session
+     (before PS the next save wrote an empty queue over it, dropping in-flight removals' refund credits, `decCredit`).
+   - **The status line:** `SaveGuards`. Each player who joins gets a red chat line naming the file, why, and the way back (fix it, or
+     restore its `.bak`, and reopen the world). `dev.stockpile.saved` reports `loadFailed` and why.
+   - **`.bak`:** after a good load each file is copied to `<file>.bak` (the last file that loaded; for `stockpiles.json` a format 1 file
+     stays format 1 there, for a downgrade).
+3. **F11, format 2:** `stockpiles.json` is written as `format: 2`, the same fields as 1 (JR's `paid` and `legacy`; RL's `books` join it
+   additively). Format 1 (and a file with no format) reads as before and is written back as 2; anything above 2 is refused through
+   `loadFailed`. A bump can't stop readers already released (they ignore `format`): it lets every reader from PS on tell a file with JR's
+   paid records from an older one and refuse a newer one. **For RL and JR-b:** write format 2; a later incompatible change bumps to 3.
+4. **N1, a finished undo's refund** (`Groups.credit`): when a member's refund credit books (not already credited by key), the ledger is
+   saved with the world (`saveWithWorld`) right there, before the caller drops the member from the saved removal and before `end`
+   drops the removal and its `decCredit`. A crash before that save resumes the removal and credits the key again (the saved ledger
+   lacks it); after it, the refund is on disk with the restored chunks.
+5. **N2, stacks with components are refused** (`CrateBlockEntity.plain`, in `wouldAccept` and `insert`, the one path for Insert from
+   inventory, hoppers, droppers and the dev feeds): a stack whose component patch is not empty (a filled shulker box, an enchantment, a
+   name, damage, a written book, block entity data) is never booked; it stays in the inventory, hopper or dropper. **Refused, not
+   carried:** the ledger counts items by id, so carrying components exactly would need per-stack storage, and no building target needs
+   such a stack. Edge cases: a shulker box emptied but still carrying an empty `container` component is refused too (the patch is not
+   empty); a pick-block item with block entity data is refused. Steward-delivered items are plain unless Steward builds them otherwise.
+
+No API change. Dev hooks: `dev.stockpile.ps` (TEST: `noPeriodic`, `noCreditSave`, `resetPeriodic`) and the periodic-save numbers in
+`dev.stockpile.saved`.
+
+### Gate
+
+- **ps-crash** (tools/lib/gatemps.mjs, registered in tools/gate6dgr.mjs; chain `ps`; headless, $0):
+  - **hopper:** a survival town with every target paused (nothing consumed; the paused town's first wave caps the need at about 150),
+    a chest over a hopper over a stockpile crate, one line per case (about 2.5 items/s). Each case: `/save-all flush`, 25 s of
+    deliveries, `dev.stockpile.halt`, the restart; chest + hopper + stock counted. **H0** (the periodic save off): the loss before PS,
+    recorded, never a dupe. **H1** (as built): at least 2 periodic saves in the 25 s, lost at most 12.5 s of deliveries at the measured
+    rate, never a dupe.
+  - **k5end:** a survival town fed until built, `/save-all flush` (the ledger saved with the consumption, as an autosave would), the
+    region removed to REMOVED, 12 s for the restored chunks' eager saves, the halt. **K5E0** (the credit's save and the periodic save
+    off): the refund is lost (the repro). **K5E** (the periodic save off, N1's save on): the stock after the restart equals the stock
+    before the halt; the town stays removed (0 cells differ); identity holds.
+- **Units:** `StockpileSavePSTest` (7): an unreadable file, a pile that fails midway and format 3 load nothing and are kept byte for
+  byte after `save()`; format 1 → 2 and 2 → 2; the `.bak`; N2's patch check (named, damaged, a container component, a removed default);
+  source guards for the periodic save, the refund credit's save and the queue file's guard.
+
+### Results
+
+| case | the moves | as built (PS) | mint / loss |
+|---|---|---|---|
+| **H1** | as H0, the periodic save on | 2 periodic saves in 25 s (12.5 ms each); **lost 8 of 63** (3.2 s of deliveries, bound 32 = 12.5 s at 2.52/s) | **0 / 8** (before: 0 / 55 of 62) |
+| **K5E** | as K5E0, the refund credit's save on (the periodic save off, to isolate N1) | 10 saves with the world during the removal (last 8.4 ms, max 52.0 ms); the stock after the restart equals the stock before the halt; identity holds; the town stays removed | **0 / 0** (before: 0 / 389) |
+
+**The cost of a save with the world** (players + chunks flushed + ledger; the periodic save is the same call, logged only with the trace).
+Every logged one in gate run 2, 159 saves across rs-survival-smoke, jr-crash, hf-crash and ps-crash: **p50 17.5 ms, p90 49.8 ms, max 714 ms**.
+Per world: rs-survival-smoke's six worlds p50 8.9-38.4 ms (max 165.5 ms, rs02c); jr-crash's K5 p50 21.4 ms with a 714 ms spike (RVU2
+493 ms, RVU2s 431 ms: the first flush after a long build, many dirty chunks). The p50 is under the coordinator's 50 ms; the spikes are
+above JR's 250 ms bound and come from flushing a whole build's chunks at once. A feeding build now pays one such save every 10 s, which
+keeps each flush small; the saves are recorded, not judged (timing bars never block a slice).
+
+**Gate runs** (`--out artifacts/gate-runs-ps`):
+- **Run 1** (58c027ce, 8922/8923): ps-crash only, FAIL 25/3. K5E0 lost 389 of 389 and K5E kept all of it. H0 lost 148 of 148, but the
+  paused town's first wave needs only about 150 items (149 gravel), so H0 took them all and H1 had nothing to deliver (a harness limit,
+  not a product failure).
+- **Run 2** (1fd50392; the hopper part one line per case, no product change): ps-crash **PASS** 27/0, hf-crash **PASS** 25/0, jr-crash
+  **PASS** 24/0, rs-survival-smoke **PASS** 40/0.
+- Then origin/main merged (HF's v0.64.1 release on main: versions and TJ's release table only, no code change).
+- **Other checks:**
+  - Gradle `build` (at 58c027ce): 1164 tests, 0 failures (1 skipped).
+  - Kit: 1336 pass, 0 fail.
+  - `node tools/step-inputs.mjs check`: 384 steps clean.
+  - Sidecar `tsc --noEmit`: clean.
+  - `node tools/api-compat.mjs --baselines`: all 5 clean (0.64.0, 0.63.0 and 0.62.0 apitest jars, the 1.57.0 surface, Steward's jar).
+
+**Steward-visible:** none in normal play. A deposit of a stack with components (a named or enchanted item, a filled shulker box) is now
+refused (it stays in the player's inventory or the hopper). After a crash, a settlement's stock is at most about 10 s behind. A world whose
+`stockpiles.json` is unreadable now keeps it and refuses stockpile writes (`createStockpile`, adding a crate: NOT_ALLOWED with the
+reason) instead of starting empty.
+
+**Steward RC areas:** the crate screen's Insert from inventory (components refused), Steward's stockpile create/add/adopt on a world
+whose file failed to load (NOT_ALLOWED), and survival builds' timing with the 10-s save.
+
+### Left over (not PS)
+
+- **Other refund credits of N1's shape**, not in the brief: a standalone road's restore (`RestoreJob`, C29), a standalone site's
+  deconstruct (`Builder.dropDeconstruction`), delta refunds and region overwrites credit the ledger in memory while their source record
+  goes away. The periodic save now bounds each to about 10 s; an explicit save at each credit (as in `Groups.credit`) would close them.
+- **Autosave's ledger write** still runs in `BEFORE_SAVE`, at `saveAllChunks`' head, before the chunk writes (HF reordered only the
+  explicit saves). A crash in the milliseconds of an autosave's chunk IO can leave the ledger ahead (N3's shape, a small dupe).
+  ps-crash didn't hit it.
+- **The window inside one save** (HF's leftover): between the player write and the ledger write a crash still loses that move.
+- `Stockpiles.fromPaid` takes from a target's paid record without `changed()`; its callers credit right after (which marks the ledger),
+  so nothing is lost today. RL edits it (F7).
+- **RL:** when it lands, merge it and re-run rl-crash. RL's `save()` refreshes the targets' cell books on every save, so with the 10-s
+  save it runs every 10 s while a build feeds: measure that refresh then.
+- F3 (JR-b), F7 (RL), F8, F10, F12, F13 and N4 stay with their owners in the audit.
