@@ -158,8 +158,12 @@ async function creative(tag, fx, partId, probe) {
   const RV = await import('./lib/realised-virtual.mjs');
   const rv = await RV.realisedVsVirtual(planDir(ck.check.checkId), after, before, { lots: true });
   r.virtual = { written: rv.written, differ: rv.differ, byKind: Object.fromEntries(Object.entries(rv.byKind).map(([k, v]) => [k, { written: v.written, differ: v.differ }])), first: rv.first };
-  const ok = RV.realisedOk(rv, ['forms'], { strict: true });
-  check(ok.pass, `${tag}: the realised world equals the check's virtual world (strict, the flat base): ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`, { missing: ok.missing, loose: ok.loose });
+  // (a waterfall's curtain: the cells over its basin the plan clears to air hold the falling water in the world, the body's own predicted
+  // flow (H's spill); a `fluid` cell is accepted only when it is one of the plan's bodies' predicted cells, every other one stays loose)
+  const fl = await fluidCells(planDir(ck.check.checkId), after);
+  r.fluid = fl;
+  const ok = RV.realisedOk({ ...rv, fluid: (rv.fluid ?? 0) - fl.predicted.length }, ['forms'], { strict: true });
+  check(ok.pass && fl.other.length === 0, `${tag}: the realised world equals the check's virtual world (strict, the flat base): ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}${fl.predicted.length ? `; ${fl.predicted.length} cleared cell(s) hold the plan's own bodies' predicted flow (a waterfall's curtain)` : ''}${rv.first.length ? ` first ${json(rv.first.slice(0, 3))}` : ''}`, { missing: ok.missing, loose: ok.loose, fluidOther: fl.other });
   if (probe && cell) {
     const blocks = {};
     // (read off the after dump: the world as realised)
@@ -174,6 +178,25 @@ async function creative(tag, fx, partId, probe) {
   r.eflat = { mismatches: e.mismatches, list: e.list.slice(0, 8) };
   check(e.mismatches === 0, `${tag}: Regions.remove: E-flat ${e.mismatches} over the box`, r.eflat);
   return r;
+}
+
+/** The cells the plan clears to air that hold a fluid in the realised world: those in its bodies' predicted flow, and the rest. */
+async function fluidCells(dir, afterFile) {
+  const { loadPlanDir, virtualOf } = await imp('lib/lint/vworld-fixtures.mjs');
+  const { decodeArwd } = await imp('lib/region/vworld.mjs');
+  const F = loadPlanDir(dir);
+  const { vw } = virtualOf(F);
+  const d = await decodeArwd(fs.readFileSync(afterFile));
+  const b = d.box;
+  const pred = new Set(F.ir.parts.flatMap((q) => q.ops).filter((o) => o.op === 'fluid').flatMap((o) => (o.predicted ?? []).map(([x, y, z]) => `${x},${y},${z}`)));
+  const out = { predicted: [], other: [] };
+  vw.eachWritten((x, y, z, idx) => {
+    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ) return;
+    const want = vw.pal.states[idx], got = d.palette[d.cells[d.at(x, y, z)]];
+    if (!/^minecraft:(air|cave_air)$/.test(want) || !/^minecraft:(water|lava)/.test(String(got))) return;
+    (pred.has(`${x},${y},${z}`) ? out.predicted : out.other).push([x, y, z]);
+  });
+  return out;
 }
 
 steps.ingame = async () => {
