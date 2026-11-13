@@ -29823,6 +29823,181 @@ machine-checked land needs for S1-S3/S7 if a pick lands them on wrong land in BR
 | gate run 2, **20261113-054210-change** at fbd4a8d6 | **PASS 2/2**: tc-unit 2/0; tc-pick 3/0: (a) a cave city over flat land NO_TEMPLATE, s6_cave_city closest, "it has 0 (0 cave of any size)" (the mod's volume analysed); (b) S6's brief over the built hill with its 60x8x12 hall PICKED s6_cave_city and the mod planned it; (c) S5's brief there NO_TEMPLATE, s5_treehouses closest |
 | gate-verifier (review only, DEV MODE) | **PASS** at 5a401f2f (fbd4a8d6 + this as-built only): the land check fails closed and spares a closest offer, the surface purely additive (the wire's optional `volume`, javadoc), the s3/s5/s6 ir.json and rv/merge.json differ from main in programSha only, the recorded grove and floorY paths untouched, groveFromLand and the S6 floor pure and deterministic, the units compared against the sculpt's own plan; re-ran tc 7/7, regions-tc 13/13, release-version --check, step-inputs check. Non-blocking: S5 over real oaks is a kit unit, not an in-game step; the deck read is unit-tested on flat and one uneven land; pick accuracy is BR/PAY's |
 
+### Slice CO as built (branch `slice/CO` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+The standalone composer (§3 row 12, S-7c-2): `Regions.compose(ComposeRequest)` on 7cF's frozen record, and the planning images, also
+returned by `checkPlan` on request. Feature `compose` (the helper's `region.compose`; it also has `region.planImages`). No frozen 7b or
+7cF signature changed; the API delta is `Design.Kind.SETTLEMENT` (appended, `Since NEXT`) and javadoc.
+
+**The flow** (sidecar `compose.ts`, mod `region/Composes.java`):
+1. **The mod** surveys the claim as `Regions.design` does (the ARSV columns, the survey summary, TC's frozen claim volume via
+   `RegionDesigns.claimVolume(level, claim, cols)`, the overload factored out; `region.design`'s bytes unchanged) and sends
+   `region.compose {brief, claim, surveyBlobId, volume?, style?, builds?, images, budgetUsd?, opKey?, ext?}`; `builds`: the players'
+   builds meeting the claim (6c PT's `BuildViews.planJson`, at most 64), which the prompt lists ("keep every part clear of them; name one
+   as a feature, target or endpoint") and the check keeps clear of as it always did. The ack is the design id; the design
+   is kind `settlement`, its record `settlement` (ComposeState) and its result `result`.
+2. **The template pick first:** the helper starts a `region.design` itself (same brief, claim, volume, Style, owner, budget and ext;
+   `requireFit: false`, `plan: false`), so TC's catalogue, land check, retry and sim stand-in are the pick, unchanged. A fit ends the
+   design `PICKED {program, params, reason, rounds: 0, pick}`; the mod plans the program over the claim (as 6b's `RegionDesigns`) and its
+   `planId` (or `planError`) joins the result.
+3. **The inputs, once, kept in the record:** the claim's affordances (`claimAffordances` over the volume, TC's), and with `images` the
+   planning images (below) as blobs (kind `region.planImage`).
+4. **Round 1:** a structured job: system = `plan/0#compact` (systemRefs; the one-line catalogue) + the composer's text (`kit/prompts/composer.md`'s `## system`: supported kinds only,
+   a reserved one as `required: false`; the only anchors are `claim_*`; keep parts inside the claim; keep the parts that fit on a
+   repair) + a caller's rules (below). **Measured: 86,669 characters** without a caller's rules (plan/0#compact 81,873 + the composer's own text 4,794; the bound 120,000), at most about 116,700 with the largest allowed rules (30,000); a unit holds both. The prompt: the brief, the claim,
+   the Style's roles, the survey summary, the top 60 affordances numbered (`n. kind id: box (metrics)`), the pick's closest program; with
+   images, the four PNGs go before the prompt as image blocks (`planning image top` ...) and the prompt names them.
+5. **The check:** the design goes `checking` with `settlement.awaiting {round, plan}`. The mod (`DesignsImpl.changed` ->
+   `Composes.changed`) runs `Regions.checkPlan` over that plan (the Overworld, the claim, no caller anchors, owner null, the design's
+   Style and pinned version as the bible, no key) and answers `region.compose.checked {designId, round, check}` (the PlanCheck without its
+   catalogue and light preview; `malformed` kept) or `{refused}` (the refusal's reason and message). Once per (design, round) per session;
+   after a restart the snapshot re-asks.
+6. **One repair round** (`REPAIR_ROUNDS = 1`; a caller may ask 0-2) unless round 1 checked READY with an artifact: round 1's prompt, its plan, the check's
+   typed answers (each part not fits/adjusted: class, block, required, reasons with code, path and message, wouldFit, blockedBy,
+   deviations; the notes; malformed), and the catalogue's long text (`planCatalogueKinds`, the kit's) of the kinds the plan used and the
+   check answered (at most 60,000 characters). Its plan is checked the same way.
+7. **The outcome:** `COMPOSED` when the last round checked READY with an artifact (`check.artifactSha` is what `realiseApproved` takes);
+   else `NO_PLAN` with the best round (READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED, refused last; a tie to the later
+   round): its `plan`, `check`, `round` and `waits` (its parts not fits/adjusted: part, class, block, the catalogue's `until`, required).
+   Every result: `{outcome, reason, cost (usd), rounds, history [{round, overall | refused, planSha?}], pick {designId, outcome, program,
+   fits, reason}, images? [{name, blobId}]}`.
+
+Cost: the pick's and every round's, summed; `budgetUsd` caps them together (a round gets what is left; none left: failed `budget`).
+`opKey` (kind `compose`): the same key and body (the request without its key and blob ids, the volume by its sha) adopt the first
+design; another body (`images` included) refuses `op_key_conflict`, which the mod maps to OP_KEY_CONFLICT. Cancel cancels the pick's
+design and the running round's job. Sim: `ext["architect:simCompose"]` scripts the rounds (`{plan, reason}` each, a later round reusing
+the last); else the stand-in answers `SIM_PLAN` (three 9x9 houses near `claim_center`, a path from `claim_s`).
+
+**The caller's ext keys** (constants on `ComposeRequest`, `Since NEXT`, additive; the helper reads them, validates them at
+`region.compose` and refuses `FIELD_LIMIT: ...` naming the key), so a card-driven caller such as Steward could later call `compose`
+(**Noah's decision, 2026-11-13, "boundary: defaults": Architect owns the composer engine**, the harness, catalogue, affordances, images and repair loop; Steward later moves onto `Regions.compose` with its card-derived brief and hints, in a Steward slice after CO ships). **These keys are the contract Steward calls:**
+- `EXT_HINTS = "architect_mc:composeHints"`: a JSON object of structured hints (zones, wanted parts, ...), at most 16,000 characters,
+  shown to every round under "## The caller's hints" as JSON. Its **`anchors`** member is not a hint but the caller's named places:
+  `{name: [x, y, z]}` (names `[a-z][a-z0-9_]{0,31}`, not a built-in `claim_*` one, at most 64, integer blocks; Steward's `stone` and
+  `player`). The helper validates them into the design's record (`settlement.anchors`), the prompt's Claim section lists them, and the
+  mod checks every round with them (`Composes.checkRequest` -> `PlanRequest.anchors`);
+- `EXT_SYSTEM = "architect_mc:composeSystem"`: the caller's rules, at most 30,000 characters, appended to the system under "## The
+  caller's rules (they add to the rules above)" (so plan/0#compact and the composer's text stay the cached prefix);
+- `EXT_REPAIR_ROUNDS = "architect_mc:repairRounds"`: repair rounds after the first, 0 to 2 (default 1).
+The prompt text lives in the kit, `kit/prompts/composer.md` (`## system`, `## answer`, `## repair`; read once per kit dir), not inline.
+
+**Plan-writing rules taken from Steward's `prompts/plan-writer.md`** into `kit/prompts/composer.md` (the general ones; the wording is
+CO's own): no world coordinates (locators, anchors, features only); zones (one standard zone with lots or `flat_village`; districts with
+`label`, `size`, `levelBand`, `prefer`; `where.along` for a quarter that follows the land; an `outpost` zone with its own road); lots
+(`type_n` ids, S-XL footprints, at least one lot a zone); `terraces: {}` for a hillside town, `form.terrace` beside zones only; walls and
+gates (round, line, edge, along; gates where routes cross; wall `lots` at gate/corner/run; a gatehouse at least 13x7; the drawbridge's
+limits); water (ponds, fountains, moats, quays, `channel.course`/race/`channel.ditch`, `farmPond` vs `irrigate`); palette rules (`family`,
+`share`, `over: "lots"`, `exempt`; a loose taste is the Style's); the "shapes Architect builds" list (bridges over real gaps; climbs only
+across drops; roads end on the zone; zones placed by anchor, land or zone; one zone per shore; water only where the land shows it; reserved
+layouts as their reserved kind); `required` on every part; `notes`; keep the plan small; on a repair keep what fits and use `wouldFit`.
+**Left to Steward's extension** (`composeSystem`/`composeHints`): the concept card's mapping (one lot per card building and its count,
+`label` in the card's words, `landmark`/`placement`/`brief` from its notes), `style: {pending}`, the `stone`/`player` anchors (sent as `composeHints.anchors`), Steward's portcullis default and `gateMech`/`mech` choices, the
+`waits`/`summary` answer in player words, and the "write a reserved kind anyway so it waits" policy for required asks (CO writes a
+needed reserved part as `required: false`). **Not taken:** `vocab/1#compact` (plan/0#compact + vocab/1#compact is 112,772 characters,
+which would leave no room for a caller's rules), so a palette rule's family names come from the model or a caller's rules; a wrong one
+answers malformed and the repair round names it.
+
+**Steward's PlanWriter, compared** (steward-mc `service/Composer.java`, `gateway/PlanWriterJob.java`, `prompts/plan-writer.md`, read
+2026-11-13). What Steward's does that CO's does not:
+- **Input:** a concept card (program with counts, footprints S-XL, notes, landmark/placement), a land line round the Founding Stone, the
+  caller's anchors (`stone`, `player`) and the player's own builds (PT); CO gets a one-line brief, the survey summary and the
+  affordances, and only `claim_*` anchors.
+- **Domain rules** (about 9 KB): one lot per card building, ids `type_n`, the flat_village / street / districts / outpost zone choices,
+  `terraces: {}` on a hillside town, `style: {pending}`, wall lots (gatehouse/corner/run, sizes for a portcullis, `gateMech`, the
+  drawbridge's limits), farmPond vs irrigate, courses/ditches, palette rules (`over`, `exempt`), the player's builds kept clear, and the
+  "shapes Architect builds" list (bridges over real gaps, stairs only across drops, zones placed by anchors or land, one zone per shore);
+  reserved kinds are **written anyway** so they wait (CO tells the model to leave them out unless needed, `required: false`).
+- **Answer:** `{plan, waits (player words), summary}`; CO answers `{plan, reason}` and computes `waits` from the check.
+- **System refs:** `plan/0#compact` + `vocab/1#compact` (for palette rules); CO sends `plan/0#compact` only.
+- **Model and budget:** Sonnet at medium effort, $0.50 a call, $1 a plan; CO uses the request's model (default the region design
+  model), the request's `budgetUsd` for the pick and every round.
+- **Repair:** up to 2 Claude repairs, only while a part is refused or malformed (an unsupported part waits, never repaired), stopping
+  when the check's answers repeat (an oscillation), and **before** each Claude repair a $0 street fix (a free layout's `NO_ROOM` with a
+  `wouldFit` street fragment applied directly). CO: 1 repair by default (0-2 with the key), whenever the last check is not READY, no
+  oscillation stop, no $0 wouldFit fix.
+- **No template pick** first and no planning images.
+With the keys, Steward's adoption (a Steward slice after CO ships) sends its card as the brief plus `composeHints` (the card's
+structured program and `anchors: {stone, player}`), its card rules as `composeSystem` and `repairRounds: 2`; the player's builds come
+from the world (the mod sends them). What `compose` still lacks against the PlanWriter, for the coordinator's next Architect slice if
+Steward needs them: `vocab/1#compact` (no system room beside a caller's rules), Steward's `{plan, waits, summary}` answer (CO's waits
+come from the check, with no player-worded summary), repairing only when a part is refused or malformed, the oscillation stop, and the
+$0 `wouldFit` street fix before a paid repair.
+
+**The planning images** (`kit/lib/region/planImages.mjs`, CLI `kit/tools/planimages.mjs`): `top` (a hillshade of the survey columns,
+north up, each affordance's x/z box framed in its kind's colour and labelled with its number), `section-1` (west to east through the
+claim's middle row), `section-2` (north to south through the middle column; both with the surface, water, trees, a y grid and the
+affordance boxes the cut crosses) and `iso` (the land from the south-west, the numbers over the boxes). The numbers are
+`rankAffordances` (score descending, then id; the first 60), the same order the prompt lists them in (the sidecar's own copy of the
+ranking is unit-held equal to the kit's). Integer pixel maths and the kit's pinned PNG encoder: byte-stable, with committed pixel shas
+(`kit/test/fixtures/co/planimages.json`: S6's sculpted cavern land and a plain flat land).
+
+**`checkPlan` with `ext["architect_mc:planImages"]: true`** (S-7c-2): the region.plan message carries `planImages: true`; after the
+check the helper renders the four images over the check's own survey with the plan's affordances (those the plan read; none for a plan
+that read no volume) and `planCheck.planImages {images: [{name, blobId, pixelSha, width, height}], labels: [{n, id, kind, box}]}` (or
+`planImagesError`) reaches `PlanCheck.preview.planImages`. Nothing else changes: plancheck.json, the artifact, the plan and every sha are
+as without (a unit and the gate hold the artifact sha equal).
+
+**The rounds harness, frozen for AU** (`sidecar/src/jobs/rounds.ts`):
+- `RoundJob {kind, system, systemRefs?, schema, model, maxTurns, owner, what}`: every round's job.
+- `RoundRecord {n, jobId, answer?, cost?, error?, check?, refused?}`: what a design keeps per round, in its record.
+- `startRound(sc, job, {designId, n, prompt, budgetUsd?, images?, simAnswer?}) -> RoundRecord`: `sc.jobs.runInternal`, tag
+  `design <id> <what> round <n>`.
+- `finishRound(sc, designId, rec) -> 'done' | 'error' | 'gone'`: waits for the job, fills answer (or error, "budget" for a budget stop)
+  and cost; `gone` when the design ended meanwhile.
+- `roundsCost(rounds)`.
+
+The record is the state: a restart re-enters at the first round without an answer or a check. The harness never reads an answer. CO's
+outside check (`awaiting` / `region.compose.checked`) is compose's own; AU brings its own checker and round count (at most 4).
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **`Design.Kind.SETTLEMENT` appended** (§2: "a design id of kind `settlement`"); `Design.kind()` reads `request.kind: "settlement"`.
+   The sidecar's design kind enum gains `settlement` and the record member `settlement` (a protocol-1 client never sees one).
+2. **The Overworld, owner null, built-in anchors only:** `ComposeRequest` has no level, owner or anchors, so the claim is the
+   Overworld's (as `checkPlan`'s), the owner the player, and the composer is told the only anchors are `claim_*`. The request's `ext` is
+   passed through but never read by the mod; the helper reads `architect:simCompose` and `architect:simAnswers` on the sim backend only
+   (6b's precedent).
+3. **The pick is a `region.design` of its own** (not TC's loop refactored): it shows as a REGION design with the same owner and ext,
+   named in `pick.designId`. `RegionDesigns.drive` now returns the running drive's promise to a second caller (the composer awaits it).
+4. **The catalogue on demand:** round 1 sees the one-line catalogue only; the repair round gets the long text of the kinds its plan used
+   and its check answered. It goes in the prompt, not the system, so the system stays one stable cache prefix.
+5. **Affordance ids are orientation:** plan/0 has no member naming an affordance, so the ids the composer sees cannot mismatch a check's.
+   The images print numbers (the ids are 21 characters); the prompt maps number -> id.
+6. **The images render the survey, not the volume** (the 2.5D columns plus the affordances' 3D boxes), so a cave shows as its framed box
+   in the top view and the sections, not as a cut. `checkPlan`'s images number the plan's own affordances.
+7. **COMPOSED means READY:** a NEEDS_REPAIR check after the repair round is NO_PLAN (its artifact exists and the caller may still approve
+   it: `result.check.artifactSha`).
+8. **A refused check is a typed answer** for the repair round (`the check did not run: <reason>`), and ranks last for the best plan.
+9. **Keys and images:** a round's check has no key (its artifact is kept by sha). `checkPlan`'s images ride a fresh check; a keyed
+   re-ask returns the kept check as it was, and the in-flight twin's body hash is unchanged by the flag.
+
+**Shared files touched (minimal, appended):** mod `ComposeRequest` (three `EXT_*` constants, javadoc); sidecar `protocol.ts` (the two messages, `RegionPlanMsg.planImages`, the design kind and
+member, FEATURES appended), `sidecar.ts` (routing, resume, cancel), `designs.ts` and `opkeys.ts` (types), `regions.ts` (`planImages`,
+the check's images), `regiondesign.ts` (`drive` returns the running promise); the two feature-list tests (appended); mod `Design.java`
+(the kind), `DesignsImpl` (the settlement view and hook), `PlanChecks` (the flag and the copy), `RegionDesigns` (the overload),
+`RegionsImpl` (`compose`), `RegionsMod` (reset), `ApiRules` (one mapping line), `ArchitectApi`/`Regions`/`PlanRequest` javadoc; the
+DevBridge hook `dev.region.compose` (`SliceCoDev`, also in `devserver`'s generated hooks); `tools/gate-chains.json`,
+`tools/step-inputs.json`.
+
+**Steward RC:** the second 7c RC covers the planning images option (`checkPlan` ext `architect_mc:planImages`, `preview.planImages`)
+and `Design.Kind.SETTLEMENT`; Steward never calls `compose` (S-7c-2).
+
+**Not covered:** a model's plans (no paid run; PAY measures the composer, P1/P4); the images' value to a model (P4's A/B).
+
+**Leftovers:** PAY measures the composer's cost and quality (est. $0.3-1.5 a plan); BR runs S3/S6 through `compose`; the volume's 3D
+cuts in the sections if P4 shows the 2.5D sections mislead.
+
+**Checks** ($0, sim only; ports 8918/8919; branch at 412218fe for the suites and the gate run):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | **1306 tests: 1305 pass**, 1 fail on a dirty tree (gate-corpus-plan's store test, by design); that file 3/3 on the committed tree. co 3/3 (the four renders byte-stable and equal to the committed pixel shas, the ranking, the CLI) |
+| sidecar `npm ci && npm run check` (through `sidecar-check-turn.sh`) | **883/883**, the bundle built (compose 17/17: the pure parts, the prompt file, the ext keys and their refusals, the system under 120,000 with the largest caller's rules, the rounds through the kit's own plan check: COMPOSED after one repair, NO_PLAN, 2 and 0 repairs, the caller's anchors checked READY, a refused check, PICKED, images on/off byte-identical, opKey, cancel) |
+| mod `./gradlew build --offline --no-daemon` | pass; **1160 tests, 0 failures, 1 skipped** (ApiCOTest 7/7: the feature, the message, the ext key constants, the kind, a round's check request with the record's anchors, Style and owner, the check's wire, the images asked and copied) |
+| api-compat | clean: the 0.47.0 and 0.45.0 apitest jars, the 0.47.0 mod surface (2605 members) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 137/0; `tools/catalogue-since-check.mjs` pass; the plan catalogue and its golden untouched |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (373 steps; co-unit and co-compose registered in gate-chains.json, chain `7cco`, impact rule "7c CO standalone composer (slice CO)") |
+| gate run 1, **20261113-104151-change** at 412218fe | **PASS 2/2**: co-unit 2/0; co-compose 12/0: (a) the pick NO_TEMPLATE (closest crater_works), the design kind SETTLEMENT, round 1 checked by the mod NEEDS_REPAIR, round 2 READY: COMPOSED, the repaired plan, artifact d8473e5dfbce; (b) images on: the same planShas round by round (a6cd319e, d5e57c9b) and artifact, four images; off, none; (c) realiseApproved PLACED (215 cells), removed: the hash restored (E-flat 0, 391 cells restored); (d) checkPlan with the images: top 640x640, sections 640x68, iso 644x352, the same pixels twice, the same artifact as without and as compose's; (e) a flat village brief PICKED flat_village, planned |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
