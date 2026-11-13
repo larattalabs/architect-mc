@@ -28396,6 +28396,12 @@ wrap_trunk dwelling, a woodcutter's lodge; P4 runs on those two).**
   - A per-job stop inside the in-game run throws without writing STOP.json; the item-level guard writes it first.
   - The nightly window is judged on local time, while the ledger's timestamps are UTC.
 
+### 7b phase close (2026-11-13)
+
+**Closed, Noah via parent session: "approved".** 7b closes as "mechanism green; designer shown except the S5 walk-height gap and S6 disturbance". The paid batch spent $29.49 of the $60 budget (hard cap $90), with no stop. The images A/B (site renders on vs off) split 1-1 (Noah via parent session, "Yes, prefer A on both", unblinded: pair 1 A = off, pair 2 A = on), so nothing is adopted and the question carries to 7c.
+
+**S6 disturbance, Noah via parent session: "2b with the guard".** For `carve_into` lots, the home's own carved interior (enclosed, roofed rooms inside its shell) counts as the building, not as disturbance. Open pits, open cuts and excavation beyond the home's rooms still count. It applies from 7c on, and S6's paid run is re-scored at $0 (slice DM). The S5 walk-height gap is a product fix (slice WL).
+
 ## Phase 7c: composition (contract draft, 2026-11-12)
 
 DRAFT for Steward's review and Noah's answers. Nothing here is built or run, and drafting it cost $0. Written over main 7c9179a6
