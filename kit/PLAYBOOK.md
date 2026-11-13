@@ -139,6 +139,10 @@ fit, its ports and the site analysis). The template is exactly the lot box; the 
 - **Put the door where the port is.** Each site port wants a design port of the same name, kind and facing within 2 of its hint,
   facing out and standable (`bp.port(name, kind, ...site.portHint(name), facing)`); every floor is reached from a port. The approach
   is a port, not a ground strip: no foundation fill, no approach path.
+- **A walk port sits at its hint's height exactly.** A walk port that faces a side (`architect:walk`, not a hatch) is where a
+  walkway between lots arrives, and a walkway is level: the other lot's port and the land's ramps are at the hint's y. Put the port's
+  feet at the hint's y (x and z may move within 2), and build the deck or floor under it to that height; never move the port to
+  your floor. One row off is a check error (`ports_met: walk port ...`).
 - **Look at the composite, not the floating template.** Render with `--site site/site.arvx --lot site/site.json --views
   iso,top,composite,section`: judge the composite (the design in its land) and the section (the lot cut through its middle).
 - **Mind the site rules** in the check: `site_keep` (an error), `fit:<mode>`, `ports_met`, `floors_reachable`, `site_breach`
@@ -150,6 +154,7 @@ fit, its ports and the site analysis). The template is exactly the lot box; the 
 | `site_keep: the template writes ... cell(s) the site keeps` | a wall, floor or air box over a log, hang point or player block | `bp.keep(...)` those cells, or move the mass |
 | `fit:attach_to_cliff` / `fit:span` floating cells | a part that only touches air | run a beam into the rock, add a bracket, extend the end onto the rim |
 | `ports_met: no design port ...` | the door moved, renamed or turned | put the port at `site.portHint(name)` with the site's facing |
+| `ports_met: walk port '...' has its feet at y A, not the hint's y B` | the walk port follows a floor one or two rows off the hint | raise or lower that floor (or a landing at the port) to y B and put the port there |
 | `site_breach: ... beside the site's water` | a carved room next to water | keep a wall of rock (1 cell) between the room and the water |
 | the build exits 2: "declares fit ..., but the site is ..." | the design's `fit` is not the site's | set `fit` to the site's fit (BRIEF.md) |
 | a site variant refuses `site_bound`: the design threw "set(...) outside size" | a height or position derived from the land, unclamped | clamp derived coordinates to `site.size`; fewer storeys or a lower roof on taller land |

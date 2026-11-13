@@ -153,7 +153,7 @@ export function siteSection(site, { analysis = siteAnalysis(site), renders = [],
   if (site.keepCritical.length) lines.push(`  - Keep: ${site.keepCritical.length} keep-critical cell${site.keepCritical.length === 1 ? '' : 's'} (\`site.keepCritical\`${site.fit === 'suspend' ? ', the hang points' : site.fit === 'wrap_trunk' ? ', the trunk\'s logs' : ''}): never write one, not even air (\`bp.keep(...)\`; the checker's \`site_keep\` is an error).`);
   const ports = site.ports;
   if (ports.length) {
-    lines.push(`- **Ports (where the paths arrive; the approach is a port, not a ground strip):** ${row.ports > 0 ? `at least ${row.ports} walk or door port${row.ports === 1 ? '' : 's'}; ` : ''}put a design port of the same name, kind and facing within 2 of each hint, facing out, standable (\`bp.port(name, kind, ...site.portHint(name), facing)\`):`);
+    lines.push(`- **Ports (where the paths arrive; the approach is a port, not a ground strip):** ${row.ports > 0 ? `at least ${row.ports} walk or door port${row.ports === 1 ? '' : 's'}; ` : ''}put a design port of the same name, kind and facing within 2 of each hint (a walk port facing a side at the hint's y exactly: the walkways between lots are level; the checker's \`ports_met\` error), facing out, standable (\`bp.port(name, kind, ...site.portHint(name), facing)\`):`);
     for (const p of ports) lines.push(`  - \`${p.name}\` (${p.kind}) at ${p.at.join(', ')}, facing ${SIDE_OF[p.facing] ?? p.facing}, ${p.width} wide and ${p.height} tall${p.edge ? `, to the path \`${p.edge}\`` : ''}`);
     lines.push('  - Every floor level must be reachable from a port (the checker\'s `floors_reachable`).');
   } else if (row.approach === 'port') {

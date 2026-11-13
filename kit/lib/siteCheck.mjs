@@ -23,10 +23,13 @@ import { SITE_SOLID, SITE_STAND_IN } from './site.mjs';
  *   but attach_to_cliff, whose row names the bible's limit;
  * - neckMass 200: M15's necks ("a mass over 200 cells hanging on fewer than 2 cells of contact");
  * - bearCells 2: attach_to_cliff's "brackets bear on at least 2 rock cells each"; endBearing [2, 2]: span's "2x2 cells each";
- * - portWithin 2: ports_met's "at the hinted cell within 2"; breachWithin 1: site_breach's "WATER or LAVA within 1".
+ * - portWithin 2: ports_met's "at the hinted cell within 2"; breachWithin 1: site_breach's "WATER or LAVA within 1";
+ * - walkLevel 0 (7b WL): a horizontal walk port (`architect:walk` facing a side: the ports a branch walk or a catwalk ends at, which are
+ *   level) is at the hint's feet y exactly; x and z keep portWithin. Off by more, ports_met adds an ERROR finding (`level` carries the
+ *   ports), so the designer's check-fix round moves it, and a site variant refuses it, before a realise can refuse NO_LINK LEVEL.
  */
 export const SITE_CHECK_LIMITS = Object.freeze({
-  cantilever: 4, neckMass: 200, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1,
+  cantilever: 4, neckMass: 200, bearCells: 2, endBearing: Object.freeze([2, 2]), portWithin: 2, breachWithin: 1, walkLevel: 0,
 });
 
 /**
@@ -55,6 +58,8 @@ export const SITE_UNCHECKED = 'site_unchecked';
 const fmt = (x, y, z) => `${x},${y},${z}`;
 const unfmt = (k) => k.split(',').map(Number);
 const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+/** A horizontal walk port (7b WL): an `architect:walk` port facing a side, the kind a branch walk or a catwalk ends at (lib/region/links.mjs). */
+const isWalkPort = (p) => p?.kind === 'architect:walk' && ['north', 'south', 'east', 'west'].includes(p.facing);
 const VEC = { north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
 const SOLID = new Set(SITE_SOLID);
 /** Site classes a written cell may never replace (site_keep): a player's block, a block entity, another owner's cell. */
@@ -223,6 +228,7 @@ export function siteFindings(ctx) {
   {
     const bad = [];
     const met = [];
+    const level = [];
     for (const p of site.ports) {
       const d = designPorts.find((q) => q.name === p.name);
       if (!d) { bad.push(`no port '${p.name}' (${p.kind}, facing ${p.facing}, at ${p.at.join(',')})`); continue; }
@@ -231,6 +237,7 @@ export function siteFindings(ctx) {
       if (d.facing !== p.facing) why.push(`facing ${d.facing}, not ${p.facing}`);
       const off = Math.max(Math.abs(d.x - p.at[0]), Math.abs(d.y - p.at[1]), Math.abs(d.z - p.at[2]));
       if (off > L.portWithin) why.push(`${off} from the hinted cell ${p.at.join(',')} (at most ${L.portWithin})`);
+      if (isWalkPort(p) && isWalkPort(d) && Math.abs(d.y - p.at[1]) > L.walkLevel) level.push({ port: p.name, y: d.y, want: p.at[1] });
       const v = VEC[d.facing] ?? [0, 0, 0];
       const out = [d.x + v[0], d.y + v[1], d.z + v[2]];
       const outside = !g.inWindow(...out) || ctx.outside.has(fmt(...out)) || (VEC[d.facing] && v[1] === 0 && ctx.outside.has(fmt(out[0], out[1] + 1, out[2])));
@@ -239,13 +246,19 @@ export function siteFindings(ctx) {
       const vertical = d.facing === 'up' || d.facing === 'down';
       if (!feet || (vertical && !isClimbable(g.at(d.x, d.y, d.z)) && !wk.feet(d.x, d.y, d.z))) why.push(`nobody can stand or climb at it`);
       if (why.length) bad.push(`port '${p.name}': ${why.join(', ')}`);
-      else met.push(p.name);
+      else if (!level.some((l) => l.port === p.name)) met.push(p.name);
       if (feet) starts.push(feet);
     }
     const kinds = designPorts.filter((q) => q.kind === 'architect:walk' || q.kind === 'door');
     if (kinds.length < row.ports) bad.push(`${kinds.length} walk or door port(s); a ${site.fit} design has at least ${row.ports}`);
     metrics.portsMet = met;
     if (bad.length) add('ports_met', 'warning', bad.length, [], bad.join('; '));
+    // (7b WL) walk ports off the hint's feet y: an error of its own (a branch walk or catwalk between lots is level, and the land's ramps
+    // are cut for the hint's y)
+    if (level.length) {
+      add('ports_met', 'error', level.length, [], level.map((l) => `walk port '${l.port}' has its feet at y ${l.y}, not the hint's y ${l.want}: a walk port is held to the hint's y exactly (a branch walk or catwalk between lots is level); move the port, and the floor under it, to y ${l.want}`).join('; '));
+      findings[findings.length - 1].level = level;
+    }
   }
 
   // ---- floors_reachable from the port (a port fit: no ground entrance); on_pad keeps the entrance rule (check.mjs reachability)
