@@ -38,7 +38,7 @@ public record PlanRequest(JsonObject plan, ServerLevel level, BoundingBox claim,
 	 * (7c CO, as built, feature {@code "compose"}) The check's {@code preview.planImages} is {@code {images: [{name, blobId, pixelSha, width,
 	 * height}], labels: [{n, id, kind, box}]}}: {@code top} (a hillshade of the check's survey, the plan's affordances framed and numbered by
 	 * {@code labels}), {@code section-1} (west to east through the claim's middle), {@code section-2} (north to south) and {@code iso}; or
-	 * {@code preview.planImagesError}. The images change nothing else: the plan, the artifact and every sha are as without them. Since NEXT.
+	 * {@code preview.planImagesError}. The images change nothing else: the plan, the artifact and every sha are as without them. Since 1.58.0.
 	 */
 	public static final String EXT_PLAN_IMAGES = "architect_mc:planImages";
 

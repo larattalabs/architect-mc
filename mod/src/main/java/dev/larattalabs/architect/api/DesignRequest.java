@@ -75,7 +75,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	 * module within {@code maxSize}, the union past it; one entry with a {@link CompositeInfo}). Off by default: without it the
 	 * sidecar refuses a composite return in the check round, like any design past {@code maxSize}, so the designer returns one
 	 * blueprint and a lot's design is never larger than its lot. Never for a massing or a site-bound request. A design group item
-	 * carries it only in its own ext. Since NEXT.
+	 * carries it only in its own ext. Since 1.58.0.
 	 */
 	public static final String EXT_ALLOW_COMPOSITE = "architect_mc:allowComposite";
 

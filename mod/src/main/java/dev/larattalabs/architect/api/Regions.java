@@ -27,13 +27,13 @@ public interface Regions {
 	 * (TJ SCH-res) Where the mod jar carries Architect's plan/0 JSON Schema (kit/schemas/plan.json, byte for byte; the build fails when
 	 * the jar's copy differs from the tree's): a consumer reads it from the classpath ({@link #planSchema()}) or, in a Node tool, from the
 	 * pinned jar's entry {@code architect_mc/schemas/plan.json}, instead of keeping a hand copy. Architect owns this schema; its
-	 * {@code x-catalogue} is what {@link #planCatalogue()} answers. Since NEXT.
+	 * {@code x-catalogue} is what {@link #planCatalogue()} answers. Since 1.58.0.
 	 */
 	String PLAN_SCHEMA_RESOURCE = "/architect_mc/schemas/plan.json";
 
 	/**
 	 * (TJ SCH-res) The loaded Architect's plan/0 JSON Schema (the {@link #PLAN_SCHEMA_RESOURCE} resource) as UTF-8 text. Any thread.
-	 * Since NEXT.
+	 * Since 1.58.0.
 	 *
 	 * @throws IllegalStateException when the resource is missing (not an Architect jar)
 	 */
@@ -400,7 +400,7 @@ public interface Regions {
 	 * and one repair round gets the typed answers: {@code COMPOSED} when a round checks READY ({@code check.artifactSha} is what
 	 * {@link #realiseApproved} takes), else {@code NO_PLAN} with the best round's {@code plan}, {@code check} and {@code waits} (its parts not
 	 * fits or adjusted, each with its {@code block} and the catalogue's {@code until}). {@code images}: the planning images ({@code result.images}
-	 * blob ids) go to the composing job. The same {@code opKey} and body adopt the first design; another body refuses OP_KEY_CONFLICT. Since NEXT.
+	 * blob ids) go to the composing job. The same {@code opKey} and body adopt the first design; another body refuses OP_KEY_CONFLICT. Since 1.58.0.
 	 */
 	default CompletableFuture<String> compose(ComposeRequest request) {
 		throw new UnsupportedOperationException("Regions.compose is reserved: it throws until slice CO ships (feature compose)");

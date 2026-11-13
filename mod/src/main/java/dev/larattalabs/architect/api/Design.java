@@ -54,12 +54,12 @@ public record Design(String id, Status status, String step, Optional<String> ent
 
 	/**
 	 * What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}; since 1.9.0 a region design
-	 * ({@link Regions#design}) is {@link #REGION}; (7c CO) a composed settlement ({@link Regions#compose}) is {@link #SETTLEMENT} (since NEXT).
+	 * ({@link Regions#design}) is {@link #REGION}; (7c CO) a composed settlement ({@link Regions#compose}) is {@link #SETTLEMENT} (since 1.58.0).
 	 * New values are only ever appended.
 	 */
 	public enum Kind {
 		DESIGN, MASSING, REPORT, POLISH, REGION,
-		/** (7c CO) {@link Regions#compose}: its {@link Design#result()} holds {@code outcome} (PICKED, COMPOSED or NO_PLAN). Since NEXT. */
+		/** (7c CO) {@link Regions#compose}: its {@link Design#result()} holds {@code outcome} (PICKED, COMPOSED or NO_PLAN). Since 1.58.0. */
 		SETTLEMENT
 	}
 

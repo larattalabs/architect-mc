@@ -25,15 +25,15 @@ public record ComposeRequest(String brief, BoundingBox claim, @Nullable String s
 	 * (7c CO) {@code ext[EXT_HINTS]}: the caller's structured hints, a JSON object (for example {@code {zones: [...], parts: [...]}}: the zones
 	 * and parts it wants), at most 16,000 characters as JSON, shown to every composing round. Its {@code anchors} member, {@code {name: [x, y,
 	 * z]}} (names {@code [a-z][a-z0-9_]{0,31}}, not a built-in {@code claim_*} one, at most 64), is the caller's named places: the composer
-	 * may name them and every round's {@link Regions#checkPlan} gets them as its {@code anchors}. Since NEXT.
+	 * may name them and every round's {@link Regions#checkPlan} gets them as its {@code anchors}. Since 1.58.0.
 	 */
 	public static final String EXT_HINTS = "architect_mc:composeHints";
 	/**
 	 * (7c CO) {@code ext[EXT_SYSTEM]}: the caller's rules, a string of at most 30,000 characters, appended to the composer's system prompt
-	 * under its own heading (the whole system stays under the structured job's 120,000). Since NEXT.
+	 * under its own heading (the whole system stays under the structured job's 120,000). Since 1.58.0.
 	 */
 	public static final String EXT_SYSTEM = "architect_mc:composeSystem";
-	/** (7c CO) {@code ext[EXT_REPAIR_ROUNDS]}: repair rounds after the first, an integer 0 to 2 (default 1). Since NEXT. */
+	/** (7c CO) {@code ext[EXT_REPAIR_ROUNDS]}: repair rounds after the first, an integer 0 to 2 (default 1). Since 1.58.0. */
 	public static final String EXT_REPAIR_ROUNDS = "architect_mc:repairRounds";
 
 	public ComposeRequest {

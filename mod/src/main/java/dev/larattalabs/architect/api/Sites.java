@@ -505,7 +505,7 @@ public interface Sites {
 	 * bridge, ladder, catwalk, rock stair, spiral) between two marked points, or from a site house's port to ground, as one site group.
 	 * For players (Steward does not call it). Built by slice CX (feature {@code "placeConnector"}); until then it throws. Since 1.55.0.
 	 *
-	 * <p>(CX, since NEXT) The connector is a one-part plan/0 (part {@code link} from anchor {@code cx_from} to {@code cx_to}) over a claim of
+	 * <p>(CX, since 1.58.0) The connector is a one-part plan/0 (part {@code link} from anchor {@code cx_from} to {@code cx_to}) over a claim of
 	 * the ends' x/z box plus 16 each side, checked in the world's mode and realised as one region: {@code siteId} is the region id, and
 	 * {@link Regions#remove} takes it off exactly. In survival it is a construction site fed from the owner's stockpile (RS's target). Kinds:
 	 * {@code rope_bridge}, {@code ladder}, {@code catwalk}, {@code rock_stair}, {@code spiral} (plan/0's {@code stairs_around}). The request
