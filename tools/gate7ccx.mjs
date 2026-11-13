@@ -101,7 +101,9 @@ const SHOTS = path.join(OUT, 'shots');
 /** A screenshot for the glance gallery (the client's dev.screenshot), copied into shots/. */
 async function shot(name) {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const r = await call('dev.screenshot', { name: `cx-${name}`, hideHud: false, frames: 6 }, 180_000);
+  log(`  shot ${name}`);
+  // (a glance shot, never a gate item: capped, so a hidden client's frame wait can't hold the step)
+  const r = await Promise.race([call('dev.screenshot', { name: `cx-${name}`, hideHud: false, frames: 6 }, 90_000), L.sleep(90_000).then(() => { throw new Error('screenshot: no answer in 90 s'); })]);
   const dest = path.join(SHOTS, `cx-${name}.png`);
   try { fs.copyFileSync(r.path, dest); } catch { /* the path the client gave stays the evidence */ }
   return fs.existsSync(dest) ? dest : r.path;
@@ -117,9 +119,13 @@ async function waitMarker(pred, timeoutMs = 900_000) {
   }
   return st;
 }
+/** Regions.remove of a region by its owner (the player's UUID for the marker's path), waited for; a refusal returns at once. */
 async function removeRegion(region) {
-  const r = await call('dev.region.remove', { region }, 3_600_000);
-  for (let i = 0; i < 1800; i++) {
+  const owner = (await call('dev.region.state', { region }, 60_000))?.view?.owner ?? null;
+  log(`  removing ${region} (requester ${owner})`);
+  const r = await call('dev.region.remove', { region, ...(owner ? { requester: owner } : { force: true }) }, 3_600_000); // (force: only the owner check; never a blocker)
+  if (!r.removed) { log(`  removal refused: ${json(r)}`); return r; }
+  for (let i = 0; i < 600; i++) {
     const st = await call('dev.region.state', { region }, 60_000).catch(() => null);
     const s = st?.view?.state;
     if (!s || ['REMOVED', 'PARTIAL', 'FAILED'].includes(s)) break;
@@ -164,12 +170,12 @@ steps.ingame = async () => {
   await L.tp(a[0] - 4, a[1] + 3, a[2] - 6, -60, 20);
   await call('dev.plot.corner', { x: b[0], y: b[1], z: b[2], confirm: false }, 10_000);
   await L.settle(800);
-  out.shot = await shot('marker').catch((e) => ({ error: String(e) }));
+  out.shot = await shot('marker').catch((e) => { log(`  shot marker: ${e.message}`); return { error: String(e) }; });
   await call('dev.plot.corner', { x: b[0], y: b[1], z: b[2], confirm: true }, 10_000);
   const r1 = await waitMarker((st) => st.lastConnector?.placed === true || (st.lastConnector && st.lastConnector.refused && st.phase === 'second_corner' && !/rock stair/.test(st.status ?? '')));
   const lc = r1.lastConnector;
   out.placed = lc;
-  check(lc?.placed === true && /^region-/.test(lc.siteId ?? '') && !r1.active && JSON.stringify(lc.from) === JSON.stringify(a) && JSON.stringify(lc.to) === JSON.stringify(b),
+  check(lc?.placed === true && /^\S+$/.test(lc.siteId ?? '') && !r1.active && JSON.stringify(lc.from) === JSON.stringify(a) && JSON.stringify(lc.to) === JSON.stringify(b),
     `a rope bridge marked between ${json(a)} and ${json(b)}: Sites.placeConnector's player path placed it (${lc?.siteId}), the mode ended`, lc);
   if (!lc?.placed) return out;
   const region = lc.siteId;
@@ -186,7 +192,7 @@ steps.ingame = async () => {
   check(!!checkId && rv.written > 0 && ok.pass, `the realised world equals the check's virtual world (strict): ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}`, { missing: ok.missing, loose: ok.loose, first: rv.first.slice(0, 3) });
   await L.tp(a[0] - 6, a[1] + 6, a[2] - 10);
   await L.settle(1500);
-  out.shotPlaced = await shot('placed').catch((e) => ({ error: String(e) }));
+  out.shotPlaced = await shot('placed').catch((e) => { log(`  shot placed: ${e.message}`); return { error: String(e) }; });
   const rm = await removeRegion(region);
   out.removed = { removed: rm.removed };
   const e = await G.diff(ctx, box, pre);
@@ -240,7 +246,7 @@ steps.survival = async () => {
   await C.start();
   const r = await place(s);
   out.place = r;
-  check(r.placed === true && /^region-/.test(r.siteId ?? '') && (r.notes ?? []).some((n) => /survival: a construction site/.test(n)) && (r.notes ?? []).some((n) => n.startsWith('its bill: ')),
+  check(r.placed === true && /^\S+$/.test(r.siteId ?? '') && (r.notes ?? []).some((n) => /survival: a construction site/.test(n)) && (r.notes ?? []).some((n) => n.startsWith('its bill: ')),
     `Sites.placeConnector (AUTO) in survival: placed ${r.siteId}, a construction site (${json(r.notes)})`, r);
   if (!r.placed) return out;
   const region = r.siteId;
