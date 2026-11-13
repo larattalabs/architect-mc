@@ -29823,6 +29823,73 @@ machine-checked land needs for S1-S3/S7 if a pick lands them on wrong land in BR
 | gate run 2, **20261113-054210-change** at fbd4a8d6 | **PASS 2/2**: tc-unit 2/0; tc-pick 3/0: (a) a cave city over flat land NO_TEMPLATE, s6_cave_city closest, "it has 0 (0 cave of any size)" (the mod's volume analysed); (b) S6's brief over the built hill with its 60x8x12 hall PICKED s6_cave_city and the mod planned it; (c) S5's brief there NO_TEMPLATE, s5_treehouses closest |
 | gate-verifier (review only, DEV MODE) | **PASS** at 5a401f2f (fbd4a8d6 + this as-built only): the land check fails closed and spares a closest offer, the surface purely additive (the wire's optional `volume`, javadoc), the s3/s5/s6 ir.json and rv/merge.json differ from main in programSha only, the recorded grove and floorY paths untouched, groveFromLand and the S6 floor pure and deterministic, the units compared against the sculpt's own plan; re-ran tc 7/7, regions-tc 13/13, release-version --check, step-inputs check. Non-blocking: S5 over real oaks is a kit unit, not an in-game step; the deck read is unit-tested on flat and one uneven land; pick accuracy is BR/PAY's |
 
+### Slice AQ as built (branch `slice/AQ` off main 40a59368, v0.64.0; versions NEXT; $0, sim only; recorded 2026-11-13)
+
+§3 row 9: `channel.aqueduct` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi NEXT, as BF's and HR's);
+the helper advertises `plan.aqueduct`, the mod `aqueduct`. No 7b or 7cF signature changed: the API gains javadoc only
+(`ArchitectApi.features`). The aqueduct is not a kind of its own (7cF's reading 4): a `connector.channel` course is one where it must be.
+
+**Built** (`kit/lib/fluids/course.mjs`; `AQUEDUCT`, `aqueductSpan`, `aqueductEvery`):
+- **Where:** exactly where HY answered `unsupported channel.aqueduct` (the router fails `level` or `blocked` and its deep probe, fill 64,
+  succeeds). There the leg is re-routed with fill `AQUEDUCT.rise` (24): the course's level held up to 24 over the ground. Past it:
+  refused UNREACHABLE `{kind: fill, block: channel.aqueduct, limit: 24}`. Every other answer is HY's, unchanged.
+- **The span:** every index of the course whose level stands more than its `fill` (2) over its lanes' and banks' lowest ground (- 1) is a
+  span index; its cross-section's columns (the lanes, the side walls, the bank course outside them) are span columns. There HY's raised
+  fill (`geo.banks`) is dropped under the trough's floor and kept over it as the span's **wall** (the side walls stay 2 thick at the top:
+  HY's single breach rule), never on a cell the shell, lining, weir or a step holds. A **pier** (the full cross-section, from the ground to
+  the trough, 1 thick) stands every `every` span indexes, both ends of each run included (a pier is counted when it stands at least 1
+  high). `arches` (the default) turns each run between two piers into a round arch: at distance d from the nearer pier the soffit is
+  `1 + round(R - sqrt(R^2 - (R - d + 0.5)^2))` under the floor (R = half the clear run: 3, 2, 1, 1, 1, 2, 3 for a clear 7), never reaching
+  the ground (a clear cell kept over it). `params.span` picks `piers` or `arches`; another value is noted and the default used; HY's
+  lenient "params.span not read" note stays on every course that needs no aqueduct.
+- **Spacing:** arches every 8 (clear 7), piers every 6 (clear 5): RM's cantilever 4 holds every trough cell within reach of a support.
+  `aqueductEvery(span, regionM15Limits(m15LookOf(ctx.connectorLook.look)))` caps the clear run at a Style's `aqueduct.maxSpan` when set.
+- **Roles (S-THEME):** the span part `<id>_span` (kind `add`, stage forms): walls in the built course's lining (the bible's
+  `fluids.lining`, else `structure`), piers in `foundation`, arches in `structure`. The trough's shell and lining in span columns take the
+  **built** look's chains whatever the course's look (a stone trough on its supports); the rest of the course keeps its look.
+- **Records:** the answer's block is `channel.aqueduct` (`p.block` and `spec.block`), its geometry `aqueduct {span, every, length, rise,
+  piers}` (length: span indexes; rise: the most clear cells under the floor), a note. The plan meta's **`aqueducts`** (RM's record list:
+  `M15_SPAN_TYPES` gains `aqueduct: 'aqueducts'`): one row per part it judges, the span part and the shells of the reaches over it,
+  `{part, course, span, every, length, rise, piers}`; written only by an aqueduct, rolled back with its part (compile.mjs's checkpoint
+  and emit's catch). The siteplan's courses row is unchanged.
+- **Bill and survival:** the span's blocks join the part's `cost.bom` (as a bridge's piers do). In survival the span part is in the
+  course's group: the piers, arches, walls and the trough's lining and shell are its construction target, the water free (RS §7.3's
+  course row); the part's `cost.survival.bom` equals its `cost.bom` item for item.
+- **Examples** (builder-written, $0, `kit/test/fixtures/plan/aq/`): x01 a built canal on arches over a valley 8 deep and 32 wide (the
+  example, in game and survival); d03 a valley 3 deep with `params.cut 0` (the trough on the valley floor: no clear cell, no pier); d08
+  piers every 6; d16 a valley 16 deep (arches, piers 12 high). `valid/v7c_aq_valley` copies x01 (plan-p0-valid's item 9).
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **"Depth" is the valley's depth under the plateaus.** A valley up to about 7 deep is crossed by HY's own course (it cuts a trench of up
+   to 6 into the plateau instead), so the depth 3 crossing keeps its level with `params.cut 0`, the only way a 3 deep valley needs an
+   aqueduct; d03 without it is HY's course (a unit holds both).
+2. **An aqueduct answers `fits`**, not `adjusted`: the plan asked for a course and got one; the block and the note name the aqueduct.
+3. **The rise limit is 24** (§3's 16 with room); a valley deeper than that refuses UNREACHABLE fill, never unsupported.
+4. **Arches are the default**, piers by `params.span` (the draft's enum).
+5. **No Style can set `aqueduct.maxSpan` yet:** SF's format 3 `connectors` look params list `rope_bridge` only (style3.mjs
+   `LOOK_PARAMS`), so `M15:span` for aqueducts is reachable only through `regionM15Limits` overrides (a unit), as RM's own leftover.
+
+**Tests moved by name**: `hy/r03_aqueduct` and `extension/e18_aqueduct` (the same plan) answer fits as an aqueduct (their `expect`
+updated); rm.test's frozen span types read `aqueduct` appended; hy-core reads the archived catalogue 8 (unchanged).
+
+**Readings (measured):** compact plan/0 (`compactOf`) **82,038** characters (the merge base 81,873: +165; the 90,000 spare line). The 59 asks:
+none has a course past its fill; the tables before and after (fixtures/plan/aq/asks-{before,after}.txt) are identical (fits 67, adjusted
+18, blocked 20, unsupported 9, refused 14, 0 malformed). x01: 32 span indexes, 5 piers, up to 4 clear under the floor; its bill 1,423
+items (stone bricks 1,151, mossy cobblestone 132, cobblestone 140; the span 817 of them).
+
+**Checks** ($0, sim only; ports 8896/8897; verifier 8904/8905; machine load 30-130):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1313 tests at 6dc8fb5e: 1306 pass, 7 fail: six catalogue tests that diff against an archived catalogue (cl, f7a-foundation, f7b-foundation, gm-c, lp, sl) now leave `channel.aqueduct`'s flip to aq.test.mjs (moved by name at a9fe5e07, 7ae81c04), and forms-island's recorded cost under load 100+; those files re-run 63/0 alone; aq.test.mjs 10/10 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1155 tests, 0 failures, 1 skipped (ApiAQTest 2/2) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | 866/866 (62 files; jobs.test and bundle.e2e feature lists appended `plan.aqueduct`), the bundle built |
+| api-compat | clean against the 0.47.0 and 0.45.0 apitest jars; the API package's diff is javadoc only (`ArchitectApi.features`) |
+| catalogue golden | the diff is exactly `channel.aqueduct` (reserved -> supported, schemaVersion 1, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 142/0 |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (374 steps; aq-unit, aq-ingame, aq-survival in gate-chains.json, chain `7caq`, impact rule "7c AQ aqueducts") |
+| gate run 1, **20261113-095059-change** at 7ae81c04 | **PASS 3/3**: aq-unit 451/0 (aq.test and the touched tests; ApiAQTest, Api7cFTest, PlanCatalogueTest; every committed fixture byte-identical to the merge base but the 2 named movers, hy/r03 and extension/e18; the 59 asks tables identical); **aq-ingame 7/0**: x01 READY, fits, block channel.aqueduct `{span: arches, every: 8, length: 32, rise: 4, piers: 5}`; PLACED, canal_r1 settled, its census equal to its prediction (396 sources, 0 outside); every solid cell as the virtual world says (0 of 1,423 differ: the span 0 of 817, the shell 0 of 606); Remove E-flat 0. **aq-survival 8/0**: s01 checked in survival (free 396, held 408), its bill 1,423 items equal to its cost.bom; fed in 12 waves, PLACED and built (2 targets, 1,423 items, equal to the check's); every part's bill equal to its targets'; the conservation sum exact built and removed (refund every item); the world equal to its INSTANT twin (0 differ); Remove E-flat 0 |
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
