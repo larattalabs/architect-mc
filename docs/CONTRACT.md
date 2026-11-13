@@ -30326,3 +30326,86 @@ crash, a target refunds exactly what the saved ledger says it consumed (less wha
 **The no-undo dupe.** After a crash with no undo, blocks built after the ledger's save stand unpaid. If their items were delivered
 before the save, the saved stock still holds them too. JR stops a refund from turning those blocks into stock again; it does not
 charge them. Design sketch, a reconcile at load on JR's records: side note `architect-JR-finding.md`.
+
+## Slice TJ, API and release hygiene (branch `slice/TJ` off main 3a5bd96d / v0.64.0; 2026-11-13; DEV MODE; tooling and docs; $0)
+
+From the boundary audit (`audits/boundary.md` §2, §3, §6, §7, §8, §9; `audits/ui.md` F10). Noah via parent session, 2026-11-13:
+"boundary: defaults". Additive API (Since NEXT); no behaviour change in game. Versions untouched.
+
+### As built
+1. **CG, compat roll and consumer jar.**
+   - **Finding.** The `apijars` step still ran the 0.42.0/0.41.0/0.40.1 jars (API 1.39.0), so the 18 minors 1.40.0-1.57.0 had no
+     old-jar check, and Steward's jar was never compared.
+   - **One file.** `tools/api-baselines.json` now holds main's latest three releases (v0.64.0, v0.63.0, v0.62.0: API 1.57.0, 1.56.0,
+     1.55.0) and the consumer jar (Steward). `gate6a apijars`, `api-compat --baselines` and `release-version.mjs` all read it.
+   - **The roll.** A release-version set puts the release being set first and drops the oldest; it prints the post-tag build command.
+   - **Building the files.** `tools/api-baselines-build.mjs build <tag> | build --missing | steward [--ref R]` builds them into the
+     main checkout's `artifacts/api-baselines/` (untracked). It uses detached `_work/` worktrees with their own Gradle-home clones,
+     `-PallowNoSidecar jar :apitest:jar` for a tag, and Steward's own cache for Steward. `tools/api-baselines.mjs list` shows what
+     is there. The builder is a separate module so the gate drivers' step-inputs never reach a Gradle call.
+   - **`--consumer <jar>`** checks the jar's api references. It fails on zero references and prints references into Architect
+     outside `api/` as WARN. Steward main 0c610dc9 (pinned 0.63.0): 347 classes, 539 api references, all present, none outside
+     `api/`. A jar with none (lab_ui 0.4.1) fails MISSING.
+   - **New gate step `api-compat`** (offline, about 30 s after unit-mod): the impact step of `api/**`, `apiimpl/**` and the baselines'
+     tools. It runs the 3 apitest jars' references, the 0.64.0 mod jar's whole surface and Steward's jar: 5 of 5 clean on this
+     branch.
+   - **How the coordinator gets Steward's jar:** docs/GATES.md "API compatibility baselines".
+2. **PUB-verify.**
+   - `tools/pub-verify.mjs <version>` checks the published package. The token comes from `GITHUB_TOKEN`/`GH_TOKEN` only and is never
+     printed.
+   - It checks that the jar, sources jar, pom and module answer 200, that the module's size, sha256 and sha1 match the downloaded
+     bytes, that the pom and the jar's fabric.mod.json name the version, and that the jar carries the plan/0 schema.
+   - Live: 0.60.0-0.64.0 complete. 0.53.0 INCOMPLETE (sources jar and module 404), exit 1, as the audit found by hand.
+   - Publish runs it after `publish` (`--retries 8`).
+3. **HK-api.**
+   - **Re-stamped by hand.** The 27 NEXT strings that shipped in released tags under `api/` and `apiimpl/` now carry their true
+     version: the first tag containing each line, cross-checked with the member's own Since:
+     - 1.43.0: designByKey, cancelDesign, planRevision, undoRevision, Reason's GR comment;
+     - 1.51.0: FS's follow, followAll, followers, landCheck;
+     - 1.52.0: adopt, unadopt;
+     - 1.53.0: the 7b comments, SiteGuards;
+     - 1.55.0: GP, QT, planCatalogue(kinds), the 7cF comments.
+   - **Reserved stubs.** The three reserved stubs (`Regions.compose`, `Regions.authorProgram`, `Sites.placeConnector`) now say
+     "is reserved: it throws until slice X ships (feature …)". Their javadoc already said "until then it throws".
+   - **The stamper and `--check`.** They now take every `NEXT` word in a Java comment or string literal (a small lexer; a code
+     identifier `NEXT` or `{@link #NEXT}` is untouched). A `NEXT` in a shipped resource fails `--check` and is never stamped.
+     Publish's `--check` therefore stops a tag carrying NEXT.
+   - **AU and PM are left reserved.** Scheduling them is Noah's open decision.
+4. **AV.**
+   - `ArchitectApi.apiVersion()` is a default returning `VERSION`. Its body compiles into Architect's own interface class, so it
+     answers the loaded version, not the consumer's inlined constant.
+   - The always-on feature `"apiVersion"` lets a consumer check before calling it (a pre-AV Architect throws NoSuchMethodError).
+   - api-compat passes.
+5. **SCH-res.**
+   - `kit/schemas/plan.json` was already in the jar at `/architect_mc/schemas/plan.json` (since C38, for PlanCatalogue); the audit
+     missed it.
+   - New: `Regions.PLAN_SCHEMA_RESOURCE` (that path, now a public contract) and the static `Regions.planSchema()` (the text).
+   - A Gradle task `checkJarPlanSchema` (part of `check`) reads the built jar and fails unless its copy equals the tree's byte for
+     byte: 131012 bytes, equal.
+6. **REL-table + SYNC.**
+   - A release-version set now writes the release row of `docs/RELEASES.json`: mod, API, kit, catalogue, date, the feature names
+     added over the last tag (parsed from ApiRules), the Steward RC state (`--steward-rc`) and the package state.
+   - It regenerates `docs/STEWARD-SYNC.md`'s "Architect ships" block between markers and rolls the baselines, all inside the set's
+     rollback. `--check` fails when the three disagree with the tree. `--sync` rewrites the block after a hand edit.
+   - `docs/RELEASES.json` was back-filled from the 80 v* tags. RC states come from Steward's ARCHITECT-ASKS for 0.40.0, 0.42.0 and
+     0.56.0-0.64.0; the rest read "see ARCHITECT-ASKS". The package state is verified for 0.60.0-0.64.0 and 0.53.0 (partial).
+   - STEWARD-SYNC's hand half was rewritten for 2026-11-13: Steward main 0c610dc, pinned 0.63.0, pin-064 held; what Steward uses;
+     what is in flight; shipped-but-unused ranked; the open asks (A2-1, CO's scope, AU/PM, the range); the agreed order through 8a-8c.
+   - **camelCase aliases.** `designOpKeys`, `wallLotsExactMassing` and `jobSystemRefs` are advertised beside the dotted names, which
+     are kept (`ApiRules.CAMEL_ALIASES`).
+7. **F10.** `fabric.mod.json` now declares lab_ui `>=0.4.1 <0.5.0`; `gradle.properties`' stale comment is fixed.
+
+### For Steward (RC areas)
+No runtime behaviour changes. The new surface:
+- `apiVersion()` and the feature `"apiVersion"`, for pin-guard;
+- `Regions.planSchema()` and `PLAN_SCHEMA_RESOURCE`, for schema-from-jar;
+- the camelCase feature aliases;
+- the three stubs' messages, which now say "throws until slice X ships".
+
+The lab_ui floor `0.4.1` matches Steward's `lab_ui_version`.
+
+### Leftovers
+- **Conflict risk.** The CO and CX sessions edit `Regions.compose` and `Sites.placeConnector`; TJ changed only their throw messages.
+- **Baselines need building at each release.** The post-tag `api-baselines-build.mjs build vX` is the coordinator's step. The files
+  are untracked in the main checkout.
+- **Per-gate flags.** The old per-gate `--gate…` flags of api-compat are kept (historical); new slices use `--baselines`.
