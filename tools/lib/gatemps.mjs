@@ -4,9 +4,9 @@
 //
 //   node tools/gate6dgr.mjs pscrash   (ps-crash)   two parts:
 //     hopper  one survival world, a stockpile of 4 crates, a town realised with every target paused (nothing consumed: the stock moves only
-//             by the deliveries), a chest over a hopper over each crate (4 lines, about 10 items/s). Two cases, each: /save-all flush (the
+//             by the deliveries), a chest over a hopper over two of the crates (one line per case, about 2.5 items/s). Two cases, each: /save-all flush (the
 //             baseline: chunks and ledger on disk), the hoppers delivering for 25 s, a halt with nothing else saved (dev.stockpile.halt),
-//             the world opened again, chests + hoppers + stock counted:
+//             the world opened again, chests + hoppers + stock counted (one line per case: the paused town's first wave caps the need):
 //               H0  the periodic save off (dev.stockpile.ps noPeriodic: the code before PS): the measured loss, never a dupe
 //               H1  as built: lost at most the last ~10 s of deliveries (12.5 s at the measured rate), never a dupe; the periodic saves'
 //                   count and cost recorded
@@ -71,43 +71,39 @@ export async function registerPS(steps, h) {
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
     for (const id of st0.feedOrder ?? []) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
     const need = st0.outstanding ?? {};
-    // the most needed items until about 700 units (two cases of 25 s at ~10/s deliver about 500): the need caps what a crate takes
-    const items = [];
-    let n = 0;
-    for (const [k, v] of Object.entries(need).sort((a, b) => b[1] - a[1])) {
-      if (n >= 700 || items.length >= 6) break;
-      items.push(k);
-      n += v;
-    }
+    // the paused town's need (its first wave's items) caps what the crates take: one hopper line per case (~2.5 items/s, ~60 in 25 s),
+    // each case's chest filled with half of the need, so both cases deliver throughout
+    const items = Object.entries(need).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    const n = sum(need);
     const item = items.join('+');
-    log(`  hopper: ${(st0.feedOrder ?? []).length} target(s) paused; the most needed items ${json(Object.fromEntries(items.map((k) => [k, need[k]])))}`);
-    check(items.length > 0 && n >= 500, `hopper: the town needs about 500 units of a few items (${item}: ${n})`);
+    log(`  hopper: ${(st0.feedOrder ?? []).length} target(s) paused; the need ${json(need)}`);
+    check(items.length > 0 && n >= 100, `hopper: the town needs at least 100 units (${n}: two cases of ~60 deliveries each)`);
     if (!items.length) return;
-    // a chest over a hopper over each crate; each chest gets a quarter of each item's need (up to 27 stacks in all)
-    for (const [x, y, z] of W.crates) {
+    const lines = W.crates.slice(0, 2);
+    for (const [x, y, z] of lines) {
       await cmd(`/setblock ${x} ${y + 1} ${z} minecraft:hopper[facing=down]`);
       await cmd(`/setblock ${x} ${y + 2} ${z} minecraft:chest`);
+    }
+    const fill = async ([x, y, z]) => {
       let slot = 0;
       for (const k of items) {
-        for (let left = Math.floor(need[k] / 4); left > 0 && slot < 27; slot++, left -= 64) await cmd(`/item replace block ${x} ${y + 2} ${z} container.${slot} with ${k} ${Math.min(64, left)}`);
+        for (let left = Math.floor(need[k] / 2); left > 0 && slot < 27; slot++, left -= 64) await cmd(`/item replace block ${x} ${y + 2} ${z} container.${slot} with ${k} ${Math.min(64, left)}`);
       }
-    }
-    const xs = W.crates.map((c) => c[0]);
+    };
+    const xs = lines.map((c) => c[0]);
     const box = { min: [Math.min(...xs), W.gy + 2, W.crates[0][2]], max: [Math.max(...xs), W.gy + 3, W.crates[0][2]] };
-    W.box = box;
     const totals = async () => {
       const a = await audit(box);
       const cont = sum(Object.fromEntries(items.map((k) => [k, a.containers?.[k] ?? 0])));
       const stock = sum(Object.fromEntries(items.map((k) => [k, a.stock?.[k] ?? 0])));
       return { cont, stock, total: cont + stock };
     };
-    const t0 = await totals();
-    check(t0.cont > 0, `hopper: ${t0.cont} ${item} in the chests and hoppers, ${t0.stock} in the stock`);
 
-    for (const [tag, noPeriodic] of [['H0', true], ['H1', false]]) {
+    for (const [k, [tag, noPeriodic]] of [['H0', true], ['H1', false]].entries()) {
       await ps({ noPeriodic, resetPeriodic: true });
+      await fill(lines[k]);
+      const cPre = await totals(); // just before the flush: what the flush saves (the line has barely started)
       await cmd('/save-all flush');
-      await call('dev.wait', { ms: 2000 }, 30_000);
       const s0 = await saved();
       const c0 = await totals();
       const tStart = Date.now();
@@ -117,9 +113,9 @@ export async function registerPS(steps, h) {
       const secs = (Date.now() - tStart) / 1000;
       const delivered = c1.stock - c0.stock;
       const rate = delivered / secs;
-      const n1 = { tag, item, noPeriodic, before: c0, live: c1, delivered, secs, rate, ledgerSaves: s1.saves - s0.saves, periodicSaves: s1.periodicSaves,
+      const n1 = { tag, item, noPeriodic, preFlush: cPre, before: c0, live: c1, delivered, secs, rate, ledgerSaves: s1.saves - s0.saves, periodicSaves: s1.periodicSaves,
         lastPeriodicMs: s1.lastPeriodicMs, maxPeriodicMs: s1.maxPeriodicMs, medianPeriodicMs: s1.medianPeriodicMs };
-      check(delivered > 0 && c1.total === c0.total, `${tag}: the hoppers delivered ${delivered} ${item} in ${secs.toFixed(1)} s (${rate.toFixed(2)}/s); live totals conserved (${c0.total} -> ${c1.total})`, n1);
+      check(delivered > 0 && c1.cont > 0 && c1.total === c0.total, `${tag}: the hopper line delivered ${delivered} in ${secs.toFixed(1)} s (${rate.toFixed(2)}/s), still delivering at the halt (${c1.cont} left); live totals conserved (${c0.total} -> ${c1.total})`, n1);
       if (noPeriodic) check(s1.periodicSaves === 0, `${tag}: no periodic save ran (the code before PS): ${s1.periodicSaves}`, n1);
       else check(s1.periodicSaves >= 2, `${tag}: the periodic save ran ${s1.periodicSaves} time(s) in ${secs.toFixed(0)} s (median ${Number(s1.medianPeriodicMs).toFixed(1)} ms, max ${Number(s1.maxPeriodicMs).toFixed(1)} ms)`, n1);
       const hx = await halt(tag, W);
@@ -128,9 +124,9 @@ export async function registerPS(steps, h) {
       const loss = c0.total - c2.total;
       Object.assign(n1, hx, { after: c2, lossUnits: Math.max(0, loss), mintUnits: Math.max(0, -loss), lossSeconds: rate > 0 ? Math.max(0, loss) / rate : null,
         autosaved: n1.ledgerSaves > (noPeriodic ? 0 : s1.periodicSaves) });
-      log(`  ${tag}: baseline ${json(c0)}; live at the halt ${json(c1)}; after the restart ${json(c2)}; lost ${n1.lossUnits} (${n1.lossSeconds?.toFixed(1)} s of deliveries), minted ${n1.mintUnits}`);
-      check(n1.mintUnits === 0, `${tag}: no dupe: chests + hoppers + stock after the restart ${c2.total} <= ${c0.total} at the baseline (minted ${n1.mintUnits})`, n1);
-      if (noPeriodic) check(true, `${tag}: before PS a crash lost ${n1.lossUnits} of the ${delivered} delivered since the baseline (${n1.lossSeconds?.toFixed(1)} s; autosaved: ${n1.autosaved})`, n1);
+      log(`  ${tag}: before the flush ${json(cPre)}; after it ${json(c0)}; live at the halt ${json(c1)}; after the restart ${json(c2)}; lost ${n1.lossUnits} (${n1.lossSeconds?.toFixed(1)} s of deliveries), minted ${n1.mintUnits}`);
+      check(n1.mintUnits === 0, `${tag}: no dupe: chest + hopper + stock after the restart ${c2.total} <= ${c0.total} at the baseline (minted ${n1.mintUnits})`, n1);
+      if (noPeriodic) check(true, `${tag}: before PS a crash lost ${n1.lossUnits} of the ${c1.stock - cPre.stock} delivered since the flush (${n1.lossSeconds?.toFixed(1)} s; autosaved: ${n1.autosaved})`, n1);
       else check(n1.lossUnits <= Math.ceil(rate * 12.5), `${tag}: lost at most the last ~10 s of deliveries: ${n1.lossUnits} <= ${Math.ceil(rate * 12.5)} (12.5 s at ${rate.toFixed(2)}/s; ${n1.lossSeconds?.toFixed(1)} s)`, n1);
       out[tag] = n1;
     }
