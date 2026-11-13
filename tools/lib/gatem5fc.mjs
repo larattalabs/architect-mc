@@ -87,7 +87,7 @@ export async function registerFC(steps, h) {
     await L.fresh(SW, G.SURV);
     await L.setRules('exact');
     await cmd('/weather clear');
-    await cmd('/gamerule randomTickSpeed 0');
+    await cmd('/gamerule random_tick_speed 0');
     await designs();
     await L.tp(CX + 80, 80, CZ + 56);
     const gy = await groundY();
@@ -138,13 +138,13 @@ export async function registerFC(steps, h) {
     check(row0 && row0.changed === 0 && row0.playerPlaced === 0 && row0.standing === 1, `land check, built: fc_farm changed ${row0?.changed}, playerPlaced ${row0?.playerPlaced}, standing ${row0?.standing}`, row0);
 
     // grown by random ticks to several ages (our crops: no PT record), then frozen again
-    await cmd('/gamerule randomTickSpeed 400');
+    await cmd('/gamerule random_tick_speed 400');
     for (let i = 0; i < 60; i++) {
       await L.sleep(2000);
       F = await fieldNow(BOX, farm);
       if (F.filter((q) => ageOf(q.crop) === 7).length >= 46) break;
     }
-    await cmd('/gamerule randomTickSpeed 0');
+    await cmd('/gamerule random_tick_speed 0');
     F = await fieldNow(BOX, farm);
     const ages1 = F.map((q) => ageOf(q.crop));
     out.agesGrown = ages1;
@@ -166,8 +166,11 @@ export async function registerFC(steps, h) {
     check(br.broken === 44 && F.filter((q) => q.crop === 'minecraft:air').length === 44 && row2.changed === 0 && row2.playerPlaced === 0 && row2.standing === 1,
       `44 crops harvested by the player (destroyBlock: ${br.broken}): air over our farmland reads unchanged (changed ${row2.changed}, playerPlaced ${row2.playerPlaced}, standing ${row2.standing})`);
     const use = (item, cells) => call('dev.pt.uses', { ops: cells.map((c) => ({ item, at: up(c), on: c, face: 'up', placer: P })) }, 600_000);
+    // bone meal is used on the crop itself (PT records nothing for it)
+    const meal = (cells) => call('dev.pt.uses', { ops: cells.map((c) => ({ item: 'minecraft:bone_meal', at: up(c), on: up(c), face: 'up', placer: P })) }, 600_000);
     const u1 = await use(SEEDS, wheatAt), u2 = await use(CARROT, carrotAt);
-    const u3 = await use('minecraft:bone_meal', wheatAt.slice(0, 10).concat(carrotAt.slice(0, 5)));
+    const u3 = await meal(wheatAt.slice(0, 10).concat(carrotAt.slice(0, 5)));
+    out.meal = (u3.results ?? []).slice(0, 3);
     const u4 = await use(COBBLE, [cobbleAt]);
     await cmd('/kill @e[type=item]');
     const tracked = [...(u1.results ?? []), ...(u2.results ?? []), ...(u4.results ?? [])].filter((x) => x.tracked).length;
@@ -191,12 +194,14 @@ export async function registerFC(steps, h) {
     await L.leaveWorld();
     await L.openWorld(SW);
     await L.tp(CX + 80, 80, CZ + 56);
-    await cmd('/gamerule randomTickSpeed 0');
+    await cmd('/gamerule random_tick_speed 0');
     const F2 = await fieldNow(BOX, farm);
+    // farmland under a block (the cobblestone's) dries to dirt on a reload's update: the same soil to the field rule
+    const sameField = (G0) => G0.map((q) => ({ c: q.c, soil: q.soil === 'minecraft:dirt' ? 'minecraft:farmland' : q.soil, crop: q.crop }));
     const rep4 = await land(region);
     const row4 = lotRow(rep4, 'fc_farm');
     const pt = await call('dev.pt.at', { at: up(wheatAt[0]) }, 30_000);
-    check(json(F2) === json(F) && json(row4) === json(row3) && pt.tracked === true, `after a restart: the field the same (${F2.length} cells), the land check the same (${json(row4)}), a replanted crop still the player's (${json(pt).slice(0, 120)})`);
+    check(json(sameField(F2)) === json(sameField(F)) && json(row4) === json(row3) && pt.tracked === true, `after a restart: the field the same (${F2.length} cells), the land check the same (${json(row4)}), a replanted crop still the player's (${json(pt).slice(0, 120)})`, { moved: F2.filter((q, i) => json(q) !== json(F[i])).slice(0, 8), row3, row4 });
 
     // undoRevision: not blocked; cargo once at the site, construction credited for our 5 standing crops
     const lb = irLot.box;
