@@ -468,6 +468,14 @@ public class ApiTest implements ModInitializer {
 			case "entry": {
 				return api.library().get(a[1]).map(ApiTest::entry).map(e -> (JsonElement) e).orElse(com.google.gson.JsonNull.INSTANCE);
 			}
+			case "compinfo": {
+				// compinfo <entry>: (7c CM-b) CompositeInfo.of(entry)'s wire (null when the entry is no composite), and the "composites" feature
+				JsonObject o = new JsonObject();
+				o.add("info", api.library().get(a[1]).flatMap(dev.larattalabs.architect.api.CompositeInfo::of).map(c -> (JsonElement) c.wire())
+					.orElse(com.google.gson.JsonNull.INSTANCE));
+				o.addProperty("feature", api.features().contains("composites"));
+				return o;
+			}
 			case "entries": {
 				JsonArray arr = new JsonArray();
 				api.library().list().forEach(e -> arr.add(e.id()));

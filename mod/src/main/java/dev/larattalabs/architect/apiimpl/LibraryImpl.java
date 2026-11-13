@@ -34,6 +34,9 @@ final class LibraryImpl implements Library {
 		LibraryMeta.Overlay overlay = overlay();
 		List<Entry> out = new ArrayList<>();
 		for (Blueprints.Entry e : Blueprints.entries()) {
+			if (dev.larattalabs.architect.site.Composites.isModule(e.json())) {
+				continue; // (7c CM-b) a composite's module entries are hidden: the composite is the one entry (get still answers them)
+			}
 			out.add(view(e, overlay));
 		}
 		return List.copyOf(out);

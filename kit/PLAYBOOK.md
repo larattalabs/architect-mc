@@ -153,3 +153,30 @@ fit, its ports and the site analysis). The template is exactly the lot box; the 
 | `site_breach: ... beside the site's water` | a carved room next to water | keep a wall of rock (1 cell) between the room and the water |
 | the build exits 2: "declares fit ..., but the site is ..." | the design's `fit` is not the site's | set `fit` to the site's fit (BRIEF.md) |
 | a site variant refuses `site_bound`: the design threw "set(...) outside size" | a height or position derived from the land, unclamped | clamp derived coordinates to `site.size`; fewer storeys or a lower roof on taller land |
+
+## 8. Past the cap: composites (7c)
+
+A template is at most 96x64x96. Something larger (a castle wall 120 long, a tower over 64) is a **composite**
+(`kit/lib/composite.mjs`, kit/README "Composites"): modules, each an ordinary `Blueprint` within the cap, joined at
+`architect:joint` ports. The default export returns the `Composite` instead of a Blueprint; it installs as ONE entry (the union,
+what the player and Steward see) with hidden module entries, and the mod places the modules as one site group, the module that
+others rest on first. Use it only when the brief's size does not fit one template: one Blueprint is always simpler.
+
+- **Plan the cut first.** Split along walls, never through a room's middle: neighbouring modules **share one seam layer** (the
+  wall between them), and every cell both write must be the same block, so lay every pattern out in union coordinates
+  (`ox` = the module's union x) and let both modules write the seam wall identically. Each module must stand checked on its own
+  box (`MODULE_CAP`, its ports) and the union must check clean across the seams (light, doors, reachability, floating).
+- **Openings across a seam are joints:** `joint(bp, name, x, y, z, facing, { width, height })` on each side, on the module's boundary
+  face, at the same union cell with opposite facings and the same size; then `c.module(id, bp, { at: [x, y, z] })` for each and
+  `c.join('<a>.<port>', '<b>.<port>')`. Module ids: `[a-z][a-z0-9_]{0,15}`.
+- **Stack by support:** a module on top of another starts at the lower one's top layer (that layer is their seam); it is placed after it.
+- **Check it:** `node kit/tools/composite.mjs <file.mjs> --views iso,top` prints CM-a's findings (`JOINT_*`, `MODULE_OVERLAP`,
+  `SEAM_CONFLICT`, `MODULE_CAP`) and the union check; `kit/designs/composite/castle.mjs` is the worked example (three 41-wide halls,
+  two arches).
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `composite: SEAM_CONFLICT ...` | the two modules write the seam wall differently | build the seam from union coordinates in both |
+| `composite: JOINT_CELL` / `JOINT_FACING` / `JOINT_WIDTH` | the arch's two sides disagree | the same union min corner, opposite facings, the same width and height |
+| `composite: MODULE_OVERLAP` | boxes overlap more than one layer | move `at` so neighbours share exactly one layer |
+| `composite: module 'x' ... over the max` | a module larger than the cap or the job's max | split it again |
