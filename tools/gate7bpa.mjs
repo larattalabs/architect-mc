@@ -332,7 +332,8 @@ subs['p0-standalone'] = async () => {
 subs['p0-scenario'] = async () => {
   const scn = args[1];
   if (!LOT_MAPS[scn]) throw new Error('p0-scenario s5|s6');
-  const plan = scenarioPlan(scn, 'sim');
+  // (each P0 run its own opKeys: the run dir's helper keeps them, and a later run's sites are other bodies: OP_KEY_CONFLICT)
+  const plan = scenarioPlan(scn, 'sim', { attempt: new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14) });
   const pf = path.join(ART, 'P0', `plan-${scn}.json`);
   writeJson(pf, plan);
   const art = process.env.SCENARIOS_ART ?? path.join(ART, 'P0', 'scenarios');
