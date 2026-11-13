@@ -392,7 +392,8 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     expect(h.events.some((e) => e.type === 'bible.index')).toBe(true);
     expect(h.sc.bibleIndex.list().map((b) => b.id)).toEqual(expect.arrayContaining(['bib_ashfall', 'rustic', 'cherry']));
     // the next request with the same name gets the next id; revise makes v2 and keeps v1
-    expect(h.sc.bibles.request({ prompt: 'x', name: 'Ashfall' }).bibleId).toBe('bib_ashfall_2');
+    const second = h.sc.bibles.request({ prompt: 'x', name: 'Ashfall' });
+    expect(second.bibleId).toBe('bib_ashfall_2');
     const r = h.sc.bibles.revise('bib_ashfall', 'more moss, greener glass');
     expect(r).toMatchObject({ kind: 'revise', bibleId: 'bib_ashfall', version: 2 });
     await until(() => h!.sc.bibles.get(r.id)!.status === 'done', 600_000);
@@ -401,6 +402,8 @@ describe.skipIf(!hasKit)('style bibles (sim backend, real kit)', () => {
     expect(h.sc.bibleIndex.resolve({ id: 'bib_ashfall', version: 1 }).pin).toEqual({ id: 'bib_ashfall', version: 1 });
     expect(fs.readFileSync(path.join(dir, 'bible.md'), 'utf8')).toMatch(/more moss/);
     expect(() => h!.sc.bibles.revise('rustic', 'x')).toThrow(/built-in/);
+    // the second request's job still writes into data/bibles/<job>: let it end before the harness deletes the root (an ENOTEMPTY race in CI)
+    await until(() => ['done', 'failed'].includes(h!.sc.bibles.get(second.id)!.status), 600_000);
   }, 1_800_000);
 
   it('seedPreset starts from a built-in bible; scope settlement adds the macro roles; a bible job takes a pool slot', async () => {
