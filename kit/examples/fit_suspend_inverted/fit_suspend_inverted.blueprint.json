@@ -1,0 +1,248 @@
+{
+  "id": "fit_suspend_inverted",
+  "name": "Inverted House",
+  "description": "A gabled cottage hung upside down from a rock overhang: its old floor bears on the rock, its roof points at the drop; in by a ladder through the keel or the balcony.",
+  "type": "cabin",
+  "tags": [
+    "site",
+    "hanging",
+    "inverted",
+    "small"
+  ],
+  "size": {
+    "x": 16,
+    "y": 14,
+    "z": 12
+  },
+  "groundY": 9,
+  "front": "south",
+  "frame": {
+    "origin": [
+      0,
+      0,
+      0
+    ]
+  },
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:dark_oak_stairs",
+    "minecraft:dark_oak_planks",
+    "minecraft:spruce_log",
+    "minecraft:glass_pane",
+    "minecraft:iron_chain",
+    "minecraft:ladder",
+    "minecraft:spruce_fence",
+    "minecraft:lantern",
+    "minecraft:red_bed",
+    "minecraft:spruce_door",
+    "minecraft:spruce_stairs",
+    "minecraft:spruce_trapdoor"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 0,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 3,
+    "minY": 9,
+    "minZ": 4,
+    "maxX": 12,
+    "maxY": 12,
+    "maxZ": 7
+  },
+  "anchors": {
+    "entrance": {
+      "x": 7.5,
+      "y": 9,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 8.5,
+      "y": 9,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -6,
+      "y": 10,
+      "z": 22,
+      "yaw": -140.711,
+      "pitch": 5.359
+    }
+  },
+  "source": "fit_suspend_inverted.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "ports": [
+    {
+      "name": "hatch",
+      "kind": "architect:walk",
+      "x": 8,
+      "y": 0,
+      "z": 6,
+      "facing": "down"
+    }
+  ],
+  "parts": {
+    "main": {
+      "box": [
+        2,
+        8,
+        3,
+        13,
+        13,
+        8
+      ],
+      "cells": 412
+    },
+    "roof": {
+      "box": [
+        1,
+        4,
+        2,
+        14,
+        7,
+        9
+      ],
+      "cells": 204,
+      "roof": "gable"
+    },
+    "openings": {
+      "box": [
+        2,
+        9,
+        5,
+        13,
+        11,
+        8
+      ],
+      "cells": 14
+    },
+    "hatch": {
+      "box": [
+        8,
+        0,
+        6,
+        8,
+        8,
+        7
+      ],
+      "cells": 17
+    },
+    "lights": {
+      "box": [
+        5,
+        12,
+        5,
+        10,
+        12,
+        5
+      ],
+      "cells": 2
+    },
+    "balcony": {
+      "box": [
+        5,
+        8,
+        9,
+        10,
+        9,
+        10
+      ],
+      "cells": 20
+    },
+    "chains": {
+      "box": [
+        5,
+        10,
+        10,
+        10,
+        13,
+        10
+      ],
+      "cells": 8
+    },
+    "furnishings": {
+      "box": [
+        3,
+        9,
+        4,
+        12,
+        9,
+        5
+      ],
+      "cells": 3
+    }
+  },
+  "inverted": true,
+  "fit": "suspend",
+  "site": {
+    "volumeSha": "ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+    "volumeBlobId": "local:ca2371475a1b8f789c16383f675288a4c4bb0ddc999aa9d7b56ce136bd7fe90f",
+    "volume": {
+      "minX": -951,
+      "minY": 112,
+      "minZ": -2441,
+      "maxX": -920,
+      "maxY": 141,
+      "maxZ": -2414
+    },
+    "fit": "suspend",
+    "frame": {
+      "origin": [
+        -943,
+        120,
+        -2433
+      ],
+      "rotation": "none"
+    },
+    "keepCritical": [
+      [
+        -941,
+        134,
+        -2430
+      ],
+      [
+        -930,
+        134,
+        -2430
+      ],
+      [
+        -941,
+        134,
+        -2425
+      ],
+      [
+        -930,
+        134,
+        -2425
+      ]
+    ],
+    "ports": [
+      {
+        "name": "hatch",
+        "kind": "architect:walk",
+        "at": [
+          8,
+          0,
+          6
+        ],
+        "facing": "down",
+        "width": 1,
+        "height": 1
+      }
+    ],
+    "lotId": "lot_overhang"
+  }
+}
