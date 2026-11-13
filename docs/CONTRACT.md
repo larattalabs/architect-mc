@@ -29479,7 +29479,7 @@ limit RM reads (today `connectors.rope_bridge.maxSpan`), so every other plan's m
 | api-compat | clean against the 0.48.0 and 0.47.0 apitest jars |
 | instant lints | lint-structure 68/0 (M15 is recorded, not in the lint's GATED set), lint-look 13/0, water-lint 135/0 |
 | `node tools/step-inputs.mjs check` | clean after `build` (365 steps; unit-kit gains rm.test) |
-| gate-verifier (review only, DEV MODE) | VERIFIER_RESULT |
+| gate-verifier (review only, DEV MODE) | **PASS** at 7cf3b29c: M15 never an error (ERRORS and SUB_SEVERITY untouched; no refusal or replan path), meta `m15` only with a Style span limit, checkM15.mjs read in full (SC's flood, held/span, joints, the iterative necks, the grid/map fallback, deterministic), the only golden change sky_isle's three rows, feature lists appended, API javadoc only; re-ran rm 10/10, region-fixtures 15/15, fb 6/6, lp 11/11, step-inputs clean. Non-blocking: Gradle, sidecar, api-compat and lints taken from the builder's logs; `M15:span` exercised by rm.test only (no committed Style sets a maxSpan) |
 
 **Leftovers:** (1) **sky_isle's pillars nearer the rim** (its overhang is real; the fix moves its IR, so not in RM). (2) The LP
 branch walk's corner rail post stands diagonally off its deck; a branch walk slice can put it on the deck.
