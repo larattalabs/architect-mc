@@ -39,7 +39,8 @@ class RevisionCancelRUTest {
 		rec.busy = "revising  2 ";
 		assertSame(rec.revisions.get(0), Revisions.writingToCancel(rec));
 		// accepted, not yet installed (a stop between): cancelled too, its batch none yet
-		assertSame(rec.revisions.get(0), Revisions.writingToCancel(region(true, "revising 2", RegionState.PLACING, 1, "ACCEPTED")));
+		RegionRec accepted = region(true, "revising 2", RegionState.PLACING, 1, "ACCEPTED");
+		assertSame(accepted.revisions.get(0), Revisions.writingToCancel(accepted));
 	}
 
 	@Test

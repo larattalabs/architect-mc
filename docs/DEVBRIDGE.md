@@ -758,3 +758,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   [[u, y, v]...]}, opKey, owner?}` (`Designs.variant` -> `{entryId, ms}`) and `dev.gp.byKey {opKey, owner?}` (`Designs.variantByKey` ->
   `{found, entryId?}`). A refusal answers `{refused: "<REASON>: message", detail}` and, for a `ProgramRefused`, `findings: [{rule, severity,
   message}]`. Driven by `tools/gatem5gp.mjs`.
+- **2026-11-13 (slice RU, survival revision cancel):** no new hook. `dev.rv.undo` of a survival region whose head revision still writes (busy
+  `revising <rid>`) no longer refuses `survival_building`: it cancels (RV §8). `dev.journal.killAt` takes RVC1 (the undo's cancel asked
+  for its revision's batch, the queue file's save in flight) and RVC2 (the batch cancelled and ended, the manifest in phase drain, nothing
+  drained or removed); RVU1 also fires on the cancel path (the commit, the batch still running). Driven by `tools/lib/gatem5ru.mjs`.
