@@ -69,7 +69,8 @@ export async function registerIG(steps, h) {
     if (g.refused) return { g };
     const lot = (g.lots ?? []).find((l) => l.id === FARM.id);
     const irr = lot?.ext?.['architect_mc:lotIrrigation'];
-    const rvir = (await call('dev.rv.ir', { region, rid: g.revisionOf.rid }, 60_000)).ir;
+    // (the candidate's IR: the plan's own ir.json in the sidecar's data; dev.rv.ir reads accepted revisions only)
+    const rvir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', g.planId, 'ir.json'), 'utf8'));
     const irLot = rvir?.lots?.find((l) => l.id === FARM.id);
     check(!!irr && irr.sources === 4 && json(irr.frame) === json(FARM.size) && Array.isArray(irr.lotCells) && Array.isArray(irr.cells) && irr.bodies?.length === 4 && json(irr) === json(irLot?.irrigation)
       && g.stages.includes('fluids') && g.stages.indexOf('street') < g.stages.indexOf('lots'),
@@ -90,17 +91,20 @@ export async function registerIG(steps, h) {
     const sides = (await count(R.sides, 'minecraft:farmland')) + (await count(R.sides, 'minecraft:dirt'));
     const over = await count(R.over, 'minecraft:air');
     const bedsAir = await count(R.beds, 'minecraft:air');
+    // (the field entry plants wheat over every field cell; the cell over a farmland side is the design's, not reserved: IRR §6)
+    const overSides = await count(R.sides.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat');
     const lv = st.view.lots.find((l) => l.id === FARM.id);
     const sites = await call('dev.sites.state', {}, 30_000);
     const site = [...(sites.sites ?? []), ...(sites.placed ?? [])].find((s) => s.id === lv?.siteId);
     const dropped = site?.ext?.['architect_mc:irrigationDropped'];
     const { expectedDropped } = await import('./gate6cirr-game.mjs');
     const want = await expectedDropped(ctx, bp, { front: P.lot.front, irrigation: P.irr });
-    const out = { rows: rows.map((r) => [r.body, r.state, r.reason ?? null]), water: water.length, srcWater, sides: [sides, R.sides.length], over: [over, R.over.length], bedsAir, lot: lv, dropped, want };
+    const out = { rows: rows.map((r) => [r.body, r.state, r.reason ?? null]), water: water.length, srcWater, sides: [sides, R.sides.length], over: [over, R.over.length], bedsAir, overSides, lot: lv, dropped, want };
     check(rows.length === 4 && rows.every((r) => r.state === 'settled') && water.length === R.sources.length && onSources && srcWater === R.sources.length,
       `${label}: the growth's 4 irrigation sources settled (rows ${json(out.rows.map((r) => r.slice(0, 2)))}); water on exactly its ${R.sources.length} source cells (${water.length} water cells in the lot's box + 2, all on sources: ${onSources})`, out);
     check(sides === R.sides.length && over === R.over.length && bedsAir === 0 && lv?.state === 'placed' && dropped === want && want > 0,
       `${label}: the mask held: ${sides}/${R.sides.length} sides farmland (or dirt), ${over}/${R.over.length} cells over the sources air, no bed air (${bedsAir}); the lot's site ${lv?.siteId} ${lv?.state}, irrigationDropped ${dropped} (the kit's fit: ${want})`, out);
+    check(overSides === R.sides.length, `${label}: IRR's order (mask, shell, lot): the lot's crop over each of the ${R.sides.length} farmland sides stands (${overSides} wheat): the lot was put down over its shells, not before them`, out);
     return out;
   }
 
@@ -225,6 +229,7 @@ export async function registerIG(steps, h) {
         while (Date.now() - t0 < 300_000) {
           await sleep(30_000);
           wet = await count(field, 'minecraft:farmland[moisture=7]');
+          log(`  hydrate: ${wet}/${field.length} moisture=7 after ${Math.round((Date.now() - t0) / 1000)} s`);
           if (wet === field.length) break;
         }
         const farm = await count(field, 'minecraft:farmland');
@@ -234,6 +239,61 @@ export async function registerIG(steps, h) {
       }
       await L.leaveWorld();
     }
+    spendZero();
+    return out;
+  };
+
+  // (diagnostic, not a gate step: GATE6DGR_PROBE) a survival growth's consumption against its undo's refund: A a plain grown lot with an
+  // RS entry, B the irrigated farm lot; no kill. Records the ledger's consumed and returned deltas and the side cells' blocks.
+  steps.igprobe = async () => {
+    await ensure();
+    const out = {};
+    const SW = 'G6B IG Probe';
+    await G.survivalBase(ctx);
+    await L.fresh(SW, G.SURV);
+    await L.setRules('exact');
+    await L.tp(CX + 80, 80, CZ + 56);
+    const gy = await groundY();
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+    await G.designs(ctx);
+    await installField();
+    const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN_LOTS }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: {} });
+    await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+    for (const [tag, lot, entry] of [['A', { id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' }, 'rs_hut'], ['B', FARM, FIELD]]) {
+      const g = await growPlan(region, { lots: [lot] });
+      if (g.refused) { out[tag] = { refused: g.refused }; continue; }
+      const q = await call('dev.region.quote', { planId: g.planId, lotEntries: { [lot.id]: entry } }, 300_000);
+      const a0 = await pile();
+      await call('dev.region.realise', { planId: g.planId, lots: { [lot.id]: entry } }, 300_000);
+      await sleep(8000);
+      const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+      const w = await rvWait(region, g.revisionOf.rid, 1_800_000);
+      const a1 = await pile();
+      const o = { quote: q.bom, consumed: G.minus(a1.ledger?.consumed ?? {}, a0.ledger?.consumed ?? {}), state: w.r.state, waves: f.waves };
+      if (tag === 'B') {
+        const rows = (await call('dev.region.state', { region }, 60_000)).view.ext?.['architect_mc:fluids'] ?? [];
+        const ir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', g.planId, 'ir.json'), 'utf8'));
+        const il = ir.lots.find((l) => l.id === FARM.id);
+        const R = roles(il.irrigation, il.floorY);
+        o.sides = { farmland: await count(R.sides, 'minecraft:farmland'), dirt: await count(R.sides, 'minecraft:dirt'), n: R.sides.length };
+        o.overSides = { wheat: await count(R.sides.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:wheat'), air: await count(R.sides.map(([x, y, z]) => [x, y + 1, z]), 'minecraft:air') };
+        o.rows = rows.map((r) => [r.body, r.state]);
+      }
+      const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+      await L.settle(5000);
+      const a2 = await pile();
+      o.undo = { removed: u.removed, refused: u.refused, refund: u.refund };
+      o.returned = G.minus(a2.ledger?.returned ?? {}, a1.ledger?.returned ?? {});
+      o.consumedAfter = G.minus(a2.ledger?.consumed ?? {}, a0.ledger?.consumed ?? {});
+      o.stock = G.minus(a2.stock ?? {}, a1.stock ?? {});
+      o.ledger2 = a2.ledger;
+      out[tag] = o;
+      log(`  probe ${tag}: ${json(o)}`);
+    }
+    await L.leaveWorld();
     spendZero();
     return out;
   };
@@ -303,11 +363,17 @@ export async function registerIG(steps, h) {
     const paid = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
     out.paid = paid;
     check(Object.keys(q.bom ?? {}).length >= 1 && G.same(q.bom, paid), `survival: the materials consumed equal the quote item for item (across the partial feed and the restart): quote ${json(q.bom)}, consumed ${json(paid)}`, { want: q.bom, paid, diff: G.minus(paid, q.bom ?? {}) });
-    // undoRevision, killed at RVU2 (drained, nothing removed yet), resumed after the restart: the world before it; the refund once
-    await call('dev.journal.killAt', { point: 'RVU2' }, 10_000);
+    // undoRevision, killed at RVU2 after a save (drained, nothing removed yet), resumed after the restart: the world before it; the refund
+    // once. The world is saved first and the stockpile read after it: a halt with nothing saved rewinds the crates and the ledger to the
+    // last autosave (run 1's reading), so only a saved state is a baseline the refund can be judged against.
+    await cmd('/save-all flush');
+    await L.settle(3000);
+    const ps1s = await pile();
+    check(G.same(ps1s.stock ?? {}, ps1.stock ?? {}) && G.same(ps1s.ledger?.consumed ?? {}, ps1.ledger?.consumed ?? {}), 'survival: the stockpile unchanged across the save (the baseline for the refund)');
+    await call('dev.journal.killAt', { point: 'RVU2+save' }, 10_000);
     call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
     const down = await haltWait();
-    check(down, 'survival: RVU2 halted the server during the irrigated growth\'s undo (drained, nothing removed)');
+    check(down, 'survival: RVU2+save halted the server during the irrigated growth\'s undo (drained, saved, nothing removed)');
     if (!down) await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
     else {
       await L.openWorld(SW);
@@ -322,7 +388,7 @@ export async function registerIG(steps, h) {
       const back = G.minus(G.plus(ps2.stock ?? {}, ps2.ledger?.refundOverflow ?? {}), G.plus(ps1.stock ?? {}, ps1.ledger?.refundOverflow ?? {}));
       out.undo = { busy: s.busy, position: s.position, states: s.revisions.map((x) => [x.rid, x.state]), diff: d, water: left.length, back, consumed: paid, ledger: ps2.ledger };
       check(s.busy === null && s.position === 0 && s.revisions.find((x) => x.rid === rid)?.state === 'UNDONE' && d.n === 0 && left.length === 0,
-        `survival: the undo killed at RVU2 resumed after the restart and finished: position ${s.position}, ${json(s.revisions.map((x) => [x.rid, x.state]))}; the world before the growth (${d.n} differ), no water (${left.length})`, d.first);
+        `survival: the undo killed at RVU2+save resumed after the restart and finished: position ${s.position}, ${json(s.revisions.map((x) => [x.rid, x.state]))}; the world before the growth (${d.n} differ), no water (${left.length})`, d.first);
       check(G.same(back, paid), `survival: what the growth consumed came back exactly once across the kill and the restart: consumed ${json(paid)}, the stockpile's stock (with overflow) moved by ${json(back)}`, { back, paid, diff: G.minus(back, paid) });
       const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 60_000);
       check(String(u2.refused ?? '').startsWith('NOT_ALLOWED'), `survival: a second undo has nothing left (refused: ${u2.refused})`);

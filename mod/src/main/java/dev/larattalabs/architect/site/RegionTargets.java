@@ -1666,7 +1666,11 @@ public final class RegionTargets {
 			return new int[] {T * t[0] - T, T * t[1] - T, T * t[0] + 2 * T - 1, T * t[1] + 2 * T - 1};
 		}
 		if (i.key.startsWith("lot:")) {
-			for (var lot : l.ir().lots()) {
+			// ((M5 IG) a revision's lot is in its revision's IR, not the region's: Revisions.liveFor by the item's stage (rv<rid>:<stage>); the
+			// realised plan's stages read the region's own IR as before. Without it a grown lot never waited, and in survival its item was put
+			// down before its irrigation shells stood: the crops over their farmland sides broke and were never queued.)
+			var li = dev.larattalabs.architect.region.Revisions.liveFor(l, i.stage);
+			for (var lot : li.ir().lots()) {
 				if (i.key.equals("lot:" + lot.id())) {
 					int[] bx = lot.box();
 					return new int[] {bx[0] - 8, bx[2] - 8, bx[3] + 8, bx[5] + 8};
