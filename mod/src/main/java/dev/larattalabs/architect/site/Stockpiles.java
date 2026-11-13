@@ -871,8 +871,21 @@ public final class Stockpiles {
 			BlockPos cp = new BlockPos(c.x(), c.y(), c.z());
 			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be && e.getKey().equals(be.siteId())) {
 				Ledger l = be.ledger();
-				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), capacity(srv, p),
+				Map<String, Map<String, Integer>> byTarget = adoptedPaid(srv, level, e.getKey(), sites, roads, l.placed());
+				Map<String, Integer> over = p.ledger.adopt("adopt:" + e.getKey() + "@" + cp.asLong(), l.delivered(), l.placed(), byTarget, capacity(srv, p),
 					Stockpiles::maxStack);
+				Map<String, Integer> keyed = new TreeMap<>();
+				byTarget.values().forEach(m -> m.forEach((k, v) -> keyed.merge(k, v, Integer::sum)));
+				Map<String, Integer> unkeyed = new TreeMap<>();
+				l.placed().forEach((k, v) -> {
+					if (v - keyed.getOrDefault(k, 0) > 0) {
+						unkeyed.put(k, v - keyed.getOrDefault(k, 0));
+					}
+				});
+				if (!unkeyed.isEmpty()) {
+					Architect.LOGGER.info("Stockpile {}: adopted crate {}: placed {} keyed to no target (none of its targets stands on it; never refundable)", owner,
+						e.getKey(), unkeyed);
+				}
 				over.forEach((k, v) -> dropped.merge(k, v, Integer::sum));
 				l.takeStock(); // the crate's ledger now holds nothing (its block goes next)
 				be.ledgerChanged();
@@ -915,6 +928,52 @@ public final class Stockpiles {
 		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
 			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
+	}
+
+	/**
+	 * (JR-b, F3) An adopted crate's placed counts by the credit keys of the targets it fed, in placement order, for their paid records: a crate
+	 * of one target gives it all; a shared crate gives each what of its paid cost stands (capped by the crate in {@link StockLedger#adopt}).
+	 */
+	private static Map<String, Map<String, Integer>> adoptedPaid(MinecraftServer srv, ServerLevel level, String crateKey, List<Site> sites, List<Infra> roads,
+		Map<String, Integer> placed) {
+		List<Object> fed = new ArrayList<>();
+		for (Site s : sites) {
+			if (crateKey.equals(Builder.crateOwner(s))) {
+				fed.add(s);
+			}
+		}
+		for (Infra i : roads) {
+			if (i.group() != null && crateKey.equals(SiteGroupRec.CRATE_PREFIX + i.group())) {
+				fed.add(i);
+			}
+		}
+		fed.sort(java.util.Comparator.comparingLong(Stockpiles::placedAt));
+		Map<String, Map<String, Integer>> out = new LinkedHashMap<>();
+		if (fed.size() == 1) {
+			out.put(fed.get(0) instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) fed.get(0)), new TreeMap<>(placed));
+			return out;
+		}
+		for (Object t : fed) {
+			if (t instanceof Site s) {
+				Builder.Run r = Builder.run(srv, s);
+				out.put(Builder.creditKey(s), r == null ? new TreeMap<>() : Builder.paidStanding(level, s, r));
+			} else {
+				Infra i = (Infra) t;
+				Map<String, Integer> one = new TreeMap<>();
+				Builder.Run r = RoadBuilder.run(srv, i);
+				if (r != null) {
+					r.rescan(level, false, true); // never loads a chunk
+					java.util.BitSet free = i.construction().free();
+					for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+						if (!free.get(q)) {
+							r.cost.get(q).forEach(x -> one.merge(x.item(), x.count(), Integer::sum));
+						}
+					}
+				}
+				out.put(RoadBuilder.creditKey(i), one);
+			}
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ inserting and refunds
@@ -993,17 +1052,18 @@ public final class Stockpiles {
 				break;
 			}
 		}
+		Site s = Sites.get(targetId);
+		Infra i = s == null ? Infras.get(targetId) : null;
+		long placedAt = s != null ? s.placedAt() : i != null ? i.placedAt() : -1; // (JR-b) with no record, the pool only if placed before it
 		if (tracking == null) {
 			// (RL, audit F7) no record: a target a stockpile feeds was fed after the save (or before JR): its pile caps it (the legacy pool,
 			// else nothing); only a target no stockpile feeds (a legacy crate's) gives back as it is
-			Site s = Sites.get(targetId);
-			Infra i = s == null ? Infras.get(targetId) : null;
 			tracking = s != null ? pileOf(s) : i != null ? pileOf(i) : null;
 			if (tracking == null) {
 				return items;
 			}
 		}
-		Map<String, Integer> out = tracking.ledger.fromPaid(targetId, items);
+		Map<String, Integer> out = tracking.ledger.fromPaid(targetId, items, placedAt);
 		changed(tracking); // (PS) the record moved: saved with the world at the next periodic save
 		if (!out.equals(items)) {
 			Architect.LOGGER.warn("Stockpile {}: retake of {} capped at what the ledger recorded consumed: {} of {}", tracking.owner, targetId, out, items);
@@ -1313,7 +1373,7 @@ public final class Stockpiles {
 					@Override
 					public Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fb) {
 						// (RL, audit F7) a swap's old block: out of the target's paid record, capped by it
-						Map<String, Integer> back = p.ledger.fromPaid(targetId, items);
+						Map<String, Integer> back = p.ledger.fromPaid(targetId, items, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt()); // (JR-b)
 						Stockpiles.changed(p); // (PS) the record moved
 						if (!back.equals(items)) {
 							Architect.LOGGER.warn("Stockpile {}: swap refund of {} capped at what the ledger recorded consumed: {} of {}", p.owner, targetId, back,
@@ -2095,7 +2155,7 @@ public final class Stockpiles {
 		for (int i = lost.nextSetBit(0); i >= 0; i = lost.nextSetBit(i + 1)) {
 			r.cost.get(i).forEach(x -> lostCost.merge(x.item(), x.count(), Integer::sum));
 		}
-		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost);
+		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt());
 		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
 		dropOverflow(srv, p, cr.overflow(), fallback);
 		// the world ahead: charged now while the stock affords it, the rest owed

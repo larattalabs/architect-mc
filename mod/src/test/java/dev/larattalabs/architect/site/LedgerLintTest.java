@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.larattalabs.architect.placement.Anchors;
+import dev.larattalabs.architect.survival.Refunds;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -446,6 +447,65 @@ class LedgerLintTest {
 		s.checkpoint("un-adopt");
 		clean(s);
 		assertTrue(returned.isEmpty());
+	}
+
+	/**
+	 * (JR-b, audit F10) A player's block matching a queued cell, then the undo: the builder charged nothing for it, so the deconstruct never
+	 * refunds it (out of the target's record or the legacy pool); the undo takes it away, so it drops as the player's block. Before JR-b it was
+	 * a REFUND the record capped out: the block went and nothing came back.
+	 */
+	@Test
+	void f10_aPlayersMatchingBlockDropsAsTheirsAtUndo() {
+		LedgerSim s = new LedgerSim();
+		LedgerSim.Tgt t = s.place("t", "hut");
+		long p = s.matchingBlock(t, 3);
+		assertTrue(p != -1);
+		s.checkpoint("matching");
+		fill(s);
+		feedUntilQuiet(s, 40);
+		assertEquals(t.run.size(), t.run.built.cardinality());
+		assertFalse(t.paid.contains(p), "never charged");
+		Map<String, Integer> ground = new TreeMap<>(s.ground);
+		s.removeStart(t);
+		s.removeEnd(t, false);
+		s.checkpoint("undo");
+		clean(s);
+		Map<String, Integer> dropped = new TreeMap<>(s.ground);
+		ground.forEach((k, v) -> dropped.merge(k, -v, Integer::sum));
+		dropped.values().removeIf(v -> v == 0);
+		assertTrue(dropped.values().stream().mapToInt(Integer::intValue).sum() >= 1, "the player's block dropped: " + dropped);
+	}
+
+	/**
+	 * (JR-b, the verifier's case) {@link Builder#tallyCell}'s F10 rule with a PT record on a queued cell holding its target: the same block over
+	 * another before drops as the player's; a CU equivalent (the player's weathered copper over our copper) is left standing by the undo
+	 * ({@code holdsOurs}), so nothing drops and nothing is refunded (no dupe); with no record, the old REFUND.
+	 */
+	@Test
+	void f10_tallyRuleWithARecord() {
+		LedgerSim s = new LedgerSim();
+		LedgerSim.Tgt t = s.place("t", "hut");
+		Builder.Run r = t.run;
+		int qi = -1;
+		for (int i = 0; i < r.size(); i++) {
+			if (r.target[i].is(net.minecraft.world.level.block.Blocks.CUT_COPPER.asList().get(0))) {
+				qi = i;
+				break;
+			}
+		}
+		assertTrue(qi >= 0, "the hut has a cut copper cell");
+		var air = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+		var same = r.target[qi];
+		var weathered = net.minecraft.world.level.block.Blocks.CUT_COPPER.asList().get(2).defaultBlockState(); // weathered cut copper
+		java.util.BitSet free = new java.util.BitSet();
+		Refunds.Tally a = new Refunds.Tally();
+		assertEquals(Refunds.Outcome.PLAYER_DROP, Builder.tallyCell(r, qi, same, air, free, false, () -> true, a));
+		assertTrue(a.refund().isEmpty() && !a.playerBlocks().isEmpty());
+		Refunds.Tally b = new Refunds.Tally();
+		assertEquals(Refunds.Outcome.NONE, Builder.tallyCell(r, qi, weathered, air, free, false, () -> true, b));
+		assertTrue(b.refund().isEmpty() && b.playerBlocks().isEmpty(), "the undo keeps it: nothing dropped, nothing refunded");
+		Refunds.Tally c = new Refunds.Tally();
+		assertEquals(Refunds.Outcome.REFUND, Builder.tallyCell(r, qi, weathered, air, free, false, () -> false, c), "no record: as before");
 	}
 
 	/**
