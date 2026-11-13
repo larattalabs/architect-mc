@@ -63,6 +63,7 @@
     "kit/test/cl.test.mjs",
     "kit/test/clear-box.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/cm-a.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/diff.test.mjs",
@@ -201,6 +202,7 @@
     "kit/bibles/rustic/components.mjs",
     "kit/build.mjs",
     "kit/check.mjs",
+    "kit/designs/composite/castle.mjs",
     "kit/designs/tavern.mjs",
     "kit/examples/cabin/cabin.nbt",
     "kit/examples/tavern/tavern.nbt",
@@ -213,6 +215,7 @@
     "kit/lib/check.mjs",
     "kit/lib/colors.mjs",
     "kit/lib/components.mjs",
+    "kit/lib/composite.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -451,6 +454,7 @@
     "kit/test/cl.test.mjs",
     "kit/test/clear-box.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/cm-a.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/d3-helpers.mjs",
@@ -468,6 +472,7 @@
     "kit/test/fb.test.mjs",
     "kit/test/fixtures/af/cliff_face.json",
     "kit/test/fixtures/af/windows.json",
+    "kit/test/fixtures/cm-a.json",
     "kit/test/fixtures/ds/brief-sections.json",
     "kit/test/fixtures/gp/gp_crop_field.mjs",
     "kit/test/fixtures/mirror-oracle.json",
@@ -643,6 +648,7 @@
     "kit/tools/blocks.template.mjs",
     "kit/tools/classify.mjs",
     "kit/tools/components.mjs",
+    "kit/tools/composite.mjs",
     "kit/tools/delta-fixtures.mjs",
     "kit/tools/diff.mjs",
     "kit/tools/ds-fixtures.mjs",
@@ -773,6 +779,7 @@
    "globs": [
     "kit/bibles/**",
     "kit/designs/**",
+    "kit/designs/composite/**",
     "kit/examples/**",
     "kit/examples/cabin/**",
     "kit/examples/fit_suspend/**",
@@ -952,6 +959,10 @@
      "expr": "path.join(KIT, 'designs', `${id}.mjs`))"
     },
     {
+     "from": "kit/tools/composite.mjs",
+     "expr": "pathToFileURL(file).href)"
+    },
+    {
      "from": "kit/tools/preset-builds.mjs",
      "expr": "`../designs/${id}.mjs`)"
     }
@@ -1050,6 +1061,7 @@
    "gradleUse": "tests",
    "eager": [
     "kit/build.mjs",
+    "kit/designs/composite/castle.mjs",
     "kit/lib/adopt.mjs",
     "kit/lib/bible.mjs",
     "kit/lib/blobs.mjs",
@@ -1057,6 +1069,7 @@
     "kit/lib/check.mjs",
     "kit/lib/colors.mjs",
     "kit/lib/components.mjs",
+    "kit/lib/composite.mjs",
     "kit/lib/connectors/bom.mjs",
     "kit/lib/connectors/bridge.mjs",
     "kit/lib/connectors/bridgeGeom.mjs",
@@ -1266,6 +1279,7 @@
     "kit/test/cl.test.mjs",
     "kit/test/clear-box.test.mjs",
     "kit/test/cli.test.mjs",
+    "kit/test/cm-a.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/copies.test.mjs",
     "kit/test/d3-helpers.mjs",

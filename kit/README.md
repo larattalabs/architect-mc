@@ -329,6 +329,44 @@ export default function build({ palette, site }) {
 - The six examples (`designs/site/fit_*.mjs`, one per fit, built into the 7bF fixtures by `tools/examples.mjs`) are the $0 subjects of
   the 7b gates. Until SC the check is the template-only one; each example names the warnings only the composite can clear.
 
+## Composites (7c CM-a)
+
+A composite is one building past the 96x64x96 template cap, made of **modules** (each a Blueprint within the cap) joined at
+**joint ports** (`lib/composite.mjs`). It is one library entry and one design-group item (the union, `c.entryId()` = its id); the
+modules are hidden entries `<id>__<module>` that only the composite's `ext["architect_mc:composite"]` names (7cF's `CompositeInfo`
+wire, `c.info()`). Placement (one site group, modules as BOX sites, LAYER on shared seams, undo per module) is CM-b's.
+
+```js
+import { Composite, joint } from '../../lib/composite.mjs';
+const c = new Composite({ id: 'castle', type: 'castle', front: 'south', palette: p, profile: [...] });
+joint(westBp, 'arch_e', 40, 1, 11, 'east', { width: 3, height: 4 });   // an architect:joint port on the module's east face
+joint(centreBp, 'arch_w', 0, 1, 11, 'west', { width: 3, height: 4 });
+c.module('west', westBp, { at: [0, 0, 0] });         // at = the module template's min corner in the union
+c.module('centre', centreBp, { at: [40, 0, 0] });    // boxes may share ONE seam layer; the cells both write must agree
+c.join('west.arch_e', 'centre.arch_w');
+const r = c.check();                                 // {ok, errors, warnings, findings, metrics}
+c.write(dir);                                        // <id>.nbt/.blueprint.json/.parts.nbt, <id>__<m>.*, <id>.composite.json
+```
+
+- **A joint port** (`joint(bp, name, x, y, z, facing, { width, height })`, kind `architect:joint`, horizontal facings): an opening on the
+  module's boundary face in `facing`; (x, y, z) is its min corner (lowest x or z along the face, lowest row), `width` cells along the face,
+  `height` rows up. Two joined ports are the same opening seen from both sides: the same union cell, opposite facings, the same width and
+  height.
+- **Findings** (`c.findings()`, each an error; `check()` prefixes `composite: <CODE>`): `NO_MODULES`, `MODULE_CAP` (a module over
+  96x64x96), `MODULE_PORTS` (checkPorts), `MODULE_OVERLAP` (boxes overlapping more than one seam layer), `SEAM_CONFLICT` (a cell two
+  modules write differently), `JOINT_UNKNOWN`, `JOINT_KIND` (not an `architect:joint` port), `JOINT_REUSED`, `JOINT_UNMATCHED` (a joint
+  port no join names), `JOINT_BOUNDARY` (the opening is not on the face it faces), `JOINT_CELL`, `JOINT_FACING`, `JOINT_WIDTH`,
+  `JOINT_HEIGHT`.
+- **The union-grid check**: every checker rule (`checkStructure`, with the composite's type and profile) on the union as one template,
+  so light, doors, floating, reachability, enclosure and the vocabulary rules see across the seams. The union's parts are
+  `<module>_<part>`, its ports the modules' non-joint ports as `<module>.<port>`, its anchors the composite's own (`c.anchor`) or entrance
+  and spawn from the first module that has them (every other module anchor as `<module>_<name>`, cameras `cam_<module>_<name>`), its
+  interior the given box or the box round the modules' interiors.
+- **Modules cut from the union**: `c.moduleOutput(m)` is the module's box of the finalized union (fences, walls and panes connected
+  across the seams), so placing the modules writes exactly the union's blocks.
+- **The castle** (`designs/composite/castle.mjs`, 121x15x27: three 41-wide modules, two arch joints) is the $0 subject; it checks clean.
+  `node kit/tools/composite.mjs castle --out <dir> [--views ...] [--json]` builds, checks, writes and renders a composite design.
+
 ## Generated tables
 
 `lib/blocks.mjs` (every vanilla 26.3 block: properties, defaults, collision class, family, light, optics,
