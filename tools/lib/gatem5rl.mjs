@@ -65,7 +65,11 @@ export async function registerRL(steps, h) {
     // (RL, joinSave) PS's periodic save off before any target joins: every ledger save until the case's own is RL's save when a target
     // joins the feed (production keeps it; the switch turns both off only from the case's save on)
     let js0 = null;
-    if (joinSave) { await call('dev.stockpile.ps', { noPeriodic: true, resetPeriodic: true }, 30_000); js0 = await savedNow(); }
+    if (joinSave) {
+      const ps = await call('dev.stockpile.ps', { noPeriodic: true, joinSave: true, resetPeriodic: true }, 30_000);
+      check(ps.noPeriodic === true && ps.joinSave === true, `${name}: the periodic save off, the save on join on (${json(ps)})`);
+      js0 = await savedNow();
+    }
     for (const stage of ['ground', 'street', 'lots']) await cmd(`/apitest sapprove ${group} ${stage}`);
     // the targets joined the feed: what they need is outstanding
     let ps;

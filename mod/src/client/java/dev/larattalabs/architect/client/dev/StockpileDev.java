@@ -40,8 +40,9 @@ public final class StockpileDev {
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
 		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session; (PS) the "
 			+ "periodic saves (count, last, max, median ms), unsaved, loadFailed (and why), the format this build writes");
-		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, noCreditSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases: the "
-			+ "periodic ledger save off; a finished undo's refund not saved at its credit; reset the periodic save counters");
+		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, joinSave?: bool, noCreditSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases: the "
+			+ "periodic ledger save off (RL: with the save when a target joins the feed, unless joinSave: true); a finished undo's refund not "
+			+ "saved at its credit; reset the periodic save counters");
 		// (HF) a crash with nothing saved, at a moment the driver picks (no journal kill point on the deposit path): the server thread halts the
 		// JVM after the work queued before it; no answer comes back (poll dev.state until inWorld is false)
 		DevBridge.register("dev.stockpile.halt", 10_000, "{mode?: now|autosave} - (HF) TEST: halts the JVM on the server thread at once (no shutdown "

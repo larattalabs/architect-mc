@@ -98,6 +98,8 @@ public final class Stockpiles {
 	static final java.util.ArrayDeque<Double> PERIODIC_MS = new java.util.ArrayDeque<>();
 	/** (PS, TEST) the gate's before-the-fix cases: the periodic save off; a finished undo's refund not saved at its credit. */
 	static volatile boolean testNoPeriodic, testNoCreditSave;
+	/** (RL, TEST) RL's save when a target joins the feed off: set with {@code noPeriodic}, unless {@code joinSave} says otherwise. */
+	static volatile boolean testNoJoinSave;
 	/** (PS) the next saveWithWorld is the periodic one (not logged at INFO). Server thread. */
 	private static boolean quietSave;
 
@@ -1426,9 +1428,9 @@ public final class Stockpiles {
 		if (p.joined) {
 			// (RL) a target joined the feed: the ledger (and its book of the target's cells) saved now, with the chunks, so a crash before
 			// the next autosave finds the target in the saved ledger. TEST: dev.stockpile.ps noPeriodic turns it off with the periodic save
-			// (the before-the-fix cases: nothing saved between lifecycle saves)
+			// (the before-the-fix cases: nothing saved between lifecycle saves); joinSave: true keeps it on with the periodic save off
 			p.joined = false;
-			if (!testNoPeriodic) {
+			if (!testNoJoinSave) {
 				saveWithWorld(srv);
 			}
 		}
@@ -1777,6 +1779,10 @@ public final class Stockpiles {
 					// (PS, TEST) the gate's before-the-fix cases
 					if (req.has("noPeriodic")) {
 						testNoPeriodic = req.get("noPeriodic").getAsBoolean();
+						testNoJoinSave = testNoPeriodic;
+					}
+					if (req.has("joinSave")) {
+						testNoJoinSave = !req.get("joinSave").getAsBoolean(); // (RL) the save on join on or off on its own
 					}
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
@@ -1790,6 +1796,7 @@ public final class Stockpiles {
 						}
 					}
 					o.addProperty("noPeriodic", testNoPeriodic);
+					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
 					return o;
 				}
