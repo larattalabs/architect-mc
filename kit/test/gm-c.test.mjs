@@ -38,7 +38,7 @@ test('catalogue 16: connector.drawbridge flips reserved -> supported (schemaVers
   assert.ok(golden.catalogueVersion >= before.catalogueVersion + 1, 'at least one bump past the GM-c snapshot (the coordinator sets it at release)');
   const d = diffCatalogues(before, golden);
   // ((7b SL) layout.elevated's flip is sl.test.mjs's)
-  const sl = (xs) => xs.filter((x) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room'].includes(x.id ?? x)); // ((7b LP) its two flips: lp.test.mjs; (7c BF) its three: bf.test.mjs; (7c HR) its one: hr.test.mjs)
+  const sl = (xs) => xs.filter((x) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'rule.suspended'].includes(x.id ?? x)); // ((7b LP) its two flips: lp.test.mjs; (7c BF) its three: bf.test.mjs; (7c HR) its one: hr.test.mjs; (7c US) its one: us.test.mjs)
   assert.deepEqual(sl(d.reservedToSupported), ['connector.drawbridge']);
   assert.deepEqual(sl(d.schemaVersionBumps), [{ id: 'connector.drawbridge', from: 0, to: 1 }]);
   assert.deepEqual([d.added.filter((x) => x.id !== 'program.authored'), d.removed, d.retired, d.otherStateChanges], [[], [], [], []]); // ((7cF) program.authored: f7c-foundation.test.mjs)
