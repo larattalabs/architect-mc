@@ -231,6 +231,12 @@ public interface ArchitectApi {
 	 * {@code form.hollow_mountain}, {@code form.crater} (its lake an H pond body) and {@code form.floating_island} are supported, each
 	 * natural cut and fill (free in survival); a hollow mountain's cavern, ledge and halls are recorded in the plan's affordances
 	 * ({@link Regions#affordances}: cliff_face, cave, ledge). No new record, method or reason.
+	 * (7c HR, since NEXT) {@code "hiddenRooms"} is advertised when the helper's kit plans hidden rooms (its {@code plan.hiddenRooms}): plan/0's
+	 * {@code form.hidden_room {host, size, entrance}} is supported (a room behind a concealed entrance in a form.hollow_mountain, a
+	 * form.waterfall or a lot of the plan). Where each stands (its entrance cell and kind, its host, its room's box) is only in the
+	 * artifact's {@code $.secrets[]} ({@link Regions#artifact}): never in a part's answer, the check's preview or its siteplan, unless the
+	 * request asks with {@code ext[}{@link PlanRequest#EXT_SECRETS}{@code ]: true} (then {@code preview.secrets} and
+	 * {@code preview.siteplan.secrets}). In survival the hollow is free and the entrance a construction target. No new record, method or reason.
 	 */
 	Set<String> features();
 }

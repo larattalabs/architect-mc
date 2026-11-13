@@ -239,6 +239,11 @@ public final class PlanChecks {
 		if (r.level() != null && RegionSurvival.on(r.level().getServer())) {
 			o.addProperty("survival", true);
 		}
+		// (7c HR) the secrets asked (PlanRequest ext architect_mc:secrets) answer otherwise (the preview carries them): only when asked, so
+		// every other key keeps its hash
+		if (secretsAsked(r)) {
+			o.addProperty("secrets", true);
+		}
 		// (6c T3) the load option only when it is not the default, so the keys of checks without it keep their hash
 		if (r.load() != null && r.load().loads()) {
 			JsonObject l = new JsonObject();
@@ -434,6 +439,9 @@ public final class PlanChecks {
 					}
 				}
 				PlanCheck pc = fromPlanned(plan.planId(), planned);
+				if (secretsAsked(r)) {
+					addSecrets(pc, planned);
+				}
 				if (!out.isCancelled()) {
 					keep(s, pc, planned, r, key, hash);
 				}
@@ -750,6 +758,35 @@ public final class PlanChecks {
 		}
 		return new PlanCheck("check-" + FAILED.incrementAndGet(), BatchKeys.sha256(BatchKeys.canonical(plan)), "", IrStale.KIT_VERSION, "plan/0",
 			PlanCheck.Overall.INCOMPLETE, parts, new JsonObject(), new JsonObject(), new JsonObject(), null, List.of("the check stopped: " + why));
+	}
+
+	/** (7c HR, S-7c-4) Whether the request asks for the hidden rooms' secrets ({@code ext[PlanRequest.EXT_SECRETS]: true}). */
+	static boolean secretsAsked(PlanRequest r) {
+		return r.ext().get(PlanRequest.EXT_SECRETS) instanceof JsonElement e && e.isJsonPrimitive() && e.getAsJsonPrimitive().isBoolean() && e.getAsBoolean();
+	}
+
+	/**
+	 * (7c HR, S-7c-4) The artifact's {@code $.secrets[]} added to the check's preview (as {@code preview.secrets}) and to its siteplan
+	 * ({@code preview.siteplan.secrets}), for a caller that asked. Without the ask they are only in the artifact. Nothing when the plan has no
+	 * hidden room standing (the artifact has no secrets).
+	 */
+	static void addSecrets(PlanCheck pc, JsonObject planned) {
+		if (!(planned.get("planCheck") instanceof JsonObject k) || !(k.get("artifact") instanceof JsonElement a) || !a.isJsonPrimitive()) {
+			return;
+		}
+		JsonObject art;
+		try {
+			art = com.google.gson.JsonParser.parseString(a.getAsString()).getAsJsonObject();
+		} catch (RuntimeException e) {
+			return;
+		}
+		if (!(art.get("secrets") instanceof JsonArray sec) || sec.isEmpty()) {
+			return;
+		}
+		pc.preview().add("secrets", sec.deepCopy());
+		if (pc.preview().get("siteplan") instanceof JsonObject sp) {
+			sp.add("secrets", sec.deepCopy());
+		}
 	}
 
 	/** The kit's answer in {@code region.planned.planCheck} as a PlanCheck. */

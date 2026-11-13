@@ -122,6 +122,8 @@ export function emitBig(K, p, f, id) {
         affordances: affs.map((a) => a.id),
       },
       notes: gen.halls.filter((h) => h.skipped).map((h) => `the ${h.side} hall: no room under the mountain's roof (left out)`),
+      // ((7c HR) the generator, for a hidden room hosted here: never in the answer)
+      gen,
     };
   }
   if (p.kind === 'crater') {

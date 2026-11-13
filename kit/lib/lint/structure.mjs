@@ -139,7 +139,7 @@ export function structureLint(c, { preFix = {}, rules = null } = {}) {
   if (want('S-FARM') && c.plan) farmRule(c, findings);
   // ---- S-THEME (Noah, 2026-10-24): every written block outside the lots traces to a role or the functional allowlist
   if (want('S-THEME')) {
-    const t = themeOffenders(c.ir, vw);
+    const t = themeOffenders(c.ir, vw, { meta: c.meta });
     metrics.theme = { cells: t.cells, offenders: t.offenders.map((o) => `${o.part} ${o.block} x${o.count}`) };
     for (const o of t.offenders) {
       const k = knownTheme(o);

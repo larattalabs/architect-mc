@@ -103,7 +103,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
         gr += rr; gp += pp;
         add(id, { removed: rr, placed: pp });
       });
-    } else if (owner && !owner.startsWith('__')) add(owner, c);
+    } else if (owner && owner.endsWith(':entrance')) add(owner.slice(0, -9), c); // ((7c HR) a hidden room's entrance: its part's cells)
+    else if (owner && !owner.startsWith('__')) add(owner, c);
   }
   const tilesOf = (pid) => {
     // tiles a plan part's IR parts touch: the tiles whose evaluation named them (approximated per IR part from the IR's ops bounds)
@@ -131,7 +132,15 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     // (7a K1) a wall's, gate's or rope bridge's exact bill of materials (its emitted cells by C26's block-to-item rules: kit/lib/connectors/bom.mjs)
     if (pc.links?.bom?.[a.part]) a.cost.bom = { ...pc.links.bom[a.part] };
     // (6c RS, §3) a survival check: the part's free, held and paid cells, and the paid cells' bill (what the mod puts on its targets)
-    if (ev.survival) a.cost.survival = survivalCostOf(ev.survival[a.part]);
+    if (ev.survival) {
+      // ((7c HR) a hidden room's entrance is its own target (group <part>:entrance): its cells and bill counted in the part's, and apart)
+      const eg = ev.survival[`${a.part}:entrance`];
+      if (eg) {
+        const both = { free: 0, held: 0, paid: 0, bom: {}, charged: {}, creativeOnly: {} };
+        for (const g of [ev.survival[a.part], eg]) if (g) addSurvival(both, g);
+        a.cost.survival = { ...survivalCostOf(both), entrance: survivalCostOf(eg) };
+      } else a.cost.survival = survivalCostOf(ev.survival[a.part]);
+    }
     // (6c VOC) cost.rarity: present only when the plan's bible carries `rarity`, or the part writes a precious block that isn't the style's
     // own; cost.creativeOnly: only when the part writes a creative-only block (regions stay INSTANT: information for the caller)
     if (pc.vocabCells) {
@@ -203,6 +212,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       // (6c VOC-c, §4) each palette rule with lots in scope: what realiseApproved measures again (the family's blocks, the unmeasured
       // blocks, the parts' counts, the bound lots' counts at check time). Only in a plan with one
       ...(pc.paletteRows?.length ? { palette: pc.paletteRows } : {}),
+      // (7c HR, S-7c-4) the hidden rooms that stand in the plan: each entrance cell and kind, its host and its room's box. Only here (never in
+      // an answer, a preview or siteplan.json; PlanRequest ext architect_mc:secrets adds them to those as data). Only in a plan with one
+      ...((pc.secrets ?? []).some((q) => answers.some((a) => a.part === q.part && OK.has(a.class))) ? { secrets: pc.secrets.filter((q) => answers.some((a) => a.part === q.part && OK.has(a.class))) } : {}),
     };
     // (6d RV, §9.3) a revision plan's artifact: whose revision it is, the tiles it writes (dirty) with the region's history at each (compared
     // at accept), the held set it was planned against, and the refilled lots beside the added ones. Only in a revision plan

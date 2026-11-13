@@ -19,9 +19,9 @@
 // lip `existing` uses a natural drop: the face row's ground at least `drop` over row 1's (its cells certainly air, 2.5D) with a level
 // top behind it; `sculpt` raises a rock outcrop in stage `ground` (the face `drop` over the basin, at most WATERFALL.sculpt high) and
 // sets the pool in its top; `auto` (the default) is existing where one passes, else sculpt. A waterfall already in the world is never
-// adopted (the survey can't tell one from a pond: `params.existing` reads as auto, noted). The hollow behind the curtain is not built
-// (7c, form.hidden_room; re-reserved from 7b by N-7b-1): a hollow written inside the waterfall's own members (its label, notes or params) makes it answer `adjusted`
-// with a deviation naming it (S-H-7); a separate form.hidden_room part waits on its own.
+// adopted (the survey can't tell one from a pond: `params.existing` reads as auto, noted). The hollow behind the curtain is built by a
+// form.hidden_room part hosted by the waterfall (7c HR, forms/hiddenRoom.mjs); a hollow written only inside the waterfall's own members
+// (its label, notes or params) makes it answer `adjusted` with a deviation naming that kind (S-H-7).
 import { VC, classAt } from '../region/volume.mjs';
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_TREE, FLAG_WATER } from '../region/pack.mjs';
 import { bodiesMark, bodiesRollback, flagsAt, fluidRolesOf, grow, inside, intIn, linesBody, locatorOf, locatorRefusal, meets, protectedMet, reachMeetsKeep,
@@ -223,9 +223,11 @@ export function resolve(C, p) {
   }
   // S-H-7: the hollow behind the curtain is never dropped silently
   const notes = [...sp.notes];
-  const hollowPart = C.order.some((q) => q.family === 'form' && q.kind === 'hidden_room');
-  if (hollowIn(part) && !hollowPart) devs.push({ what: 'count', kind: 'hollow', value: 1, max: 0, block: 'form.hidden_room', until: '7c', note: 'the hollow behind the curtain is not built (form.hidden_room waits for 7c): the fall is built in front of the face' });
-  else if (hollowPart) notes.push('the hollow behind the curtain is its own part (form.hidden_room, until 7c)');
+  // ((7c HR) a form.hidden_room part hosted by this waterfall builds the hollow; a hollow asked only in the waterfall's own words is still
+  // not built (the plan names the room as a part), so the deviation stays, naming the part kind that builds it)
+  const hollowPart = C.order.find((q) => q.family === 'form' && q.kind === 'hidden_room' && q.part?.host === p.id);
+  if (hollowIn(part) && !hollowPart) devs.push({ what: 'count', kind: 'hollow', value: 1, max: 0, block: 'form.hidden_room', note: 'the hollow behind the curtain is not built from the waterfall\'s own words: a form.hidden_room part hosted by this waterfall (entrance waterfall) builds it; the fall is built in front of the face' });
+  else if (hollowPart) notes.push(`the hollow behind the curtain is its own part (form.hidden_room ${hollowPart.id})`);
   else notes.push('the cliff behind the curtain is not hollowed (a hollow is form.hidden_room, 7c)');
   const j = C.judge([{ what: 'move', value: best.move, ...C.tolOf(part, 'move') }, ...(best.sketch ? [{ what: 'sketch', value: best.sketch, ...C.tolOf(part, 'sketch') }] : []), ...devs.filter((d) => d.what !== 'count')]);
   const hollow = devs.find((d) => d.kind === 'hollow');

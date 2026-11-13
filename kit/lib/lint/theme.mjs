@@ -20,7 +20,10 @@ export const knownTheme = (o) => THEME_KNOWN.find((k) => k.part.test(o.part) && 
  * `{offenders: [{part, block, count, sample}], cells}` over `vw`'s written cells outside the lots: a block no role of `ir.roles` (or a
  * role pattern's mats) traces to. `part` is the writing part's id with its trailing ordinal dropped (links_climbs, routes, ...).
  */
-export function themeOffenders(ir, vw) {
+export function themeOffenders(ir, vw, { meta = null } = {}) {
+  // ((7c HR) a hidden room's bookshelf entrance: only its own cells (its door part's `entranceCells` in the plan meta) are the concealment,
+  // judged as functional; a bookshelf anywhere else still traces to no role)
+  const entrance = new Set(Object.values(meta?.parts ?? {}).flatMap((m) => (m?.entranceCells ?? []).map((c) => c.join(','))));
   const roles = { ...(ir.roles ?? {}) };
   for (const [r, pat] of Object.entries(ir.patterns ?? {})) for (const m of JSON.stringify(pat).match(/minecraft:[a-z0-9_]+/g) ?? []) roles[`${r}~${m}`] = m;
   const light = roles.light ? fixtureFor(roles.light, roles.rail).light : null;
@@ -32,6 +35,7 @@ export function themeOffenders(ir, vw) {
     if (lotPart.has(part) || (vw.lotAt && vw.lotAt(x, y, z))) return;
     // (natural material, a form's trees, rock, ice, snow, flowers, sand: the land's own look, not the bible's; vworld's natural flag)
     if (vw.pal.natural[idx] || NATURAL_DECOR.has(nameOf(vw.pal.states[idx]))) return;
+    if (entrance.size && entrance.has(`${x},${y},${z}`)) return;
     cells++;
     const b = nameOf(vw.pal.states[idx]);
     if (!memo.has(b)) memo.set(b, traceRole(b, roles, { lightFixture: light }));

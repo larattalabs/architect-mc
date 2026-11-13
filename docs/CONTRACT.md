@@ -29544,6 +29544,99 @@ the tower's own block under each tower), which re-cuts CM-a's sha goldens, so it
 - A composite entry's deletion does not delete its hidden module entries; a massing, `versionOf`, re-skin or follow of a composite is refused or untested.
 - Survival composites (S-7c-6: a later slice).
 
+### Slice HR as built (branch `slice/HR` off main 551b7a47; versions NEXT; $0, sim only; recorded 2026-11-12)
+
+§3 row 3: `form.hidden_room {host, size, entrance}` flips from 7cF's draft to supported (`def`, `limits`, schemaVersion 0 -> 1, sinceApi
+NEXT, as BF's); the helper advertises `plan.hiddenRooms`, the mod `hiddenRooms`. No 7b or 7cF signature changed: the API gains javadoc
+only (`ArchitectApi.features`), and 7cF's `PlanRequest.EXT_SECRETS` is now read. **LP did not re-reserve `tunnel.under`** (it is supported
+since 1.54.0, between site lots' cellar doors), so §1's contingent cellar-port hatch (+0.5 d) is not HR's.
+
+**Built** (`kit/lib/forms/hiddenRoom.mjs`; compile.mjs resolves the part after its host, `host` being a dependency in schema.mjs's refs,
+and emits it after the H parts, each under a checkpoint):
+- **Hosts and entrances** (the first is the default; any other answers refused NO_FEATURE with a `wouldFit` naming the host's own):
+  - `form.hollow_mountain`: a room in the rock off the cavern's wall (a free side, else a hall's side wall, else a hall's far end),
+    through a doorway 1 wide and 2 high: `wall` (the doorway walled with the very rock it is cut from: from the cavern it is wall) or
+    `bookshelf` (two bookshelves);
+  - `form.waterfall`: the hollow behind the curtain, a room in the face under the header pool, its doorway one over the basin's rim and
+    open behind the falling water (`waterfall`: the curtain is the concealment; nothing is written there);
+  - a lot of the plan (a zone's lot): a cellar under the lot's box (two layers of ground left under its floor), reached by a shaft one
+    past the box's back edge (else a side): `trapdoor` (a wooden trapdoor from the Style's roles, top half, shut, flush with the ground;
+    a ladder down). The hatch never stands in a lot's box or on a cell the region wrote (street, path, apron).
+  A host of another kind, or outside the plan (`<planId>@<n>#<part>`), answers refused NO_FEATURE (S-7c-8: a room in a standing build waits).
+- **Placement**: the room (size: S 5x5, M 7x7, L 9x9, XL 11x11; L and XL 4 high, else 3; `w`/`d` 3..15) is placed where every cell and a
+  shell of 1 round it (a roof of 2) is the host's solid in the region's local virtual world at emit (the forms, the H parts and the pads
+  written so far: `localWorld`); else shrunk (floor area first, then 2 high) with a `size` deviation measured on the floor area (adjusted;
+  past the ceiling 50 refused TOLERANCE); none fits: refused NO_ROOM (a waterfall's names the drop it needs: 6 for 2 high, 7 for 3).
+  Lit: a shroomlight set into the floor every 6 (6b's cavern rule, recorded as the part's `caverns` meta for M5).
+- **Writes**: part `f_<id>` (the hollow: its carve ALWAYS_OURS and its lights, terrain writes) and `f_<id>_door` (the entrance's cells),
+  both marked `secret` in the plan meta.
+- **Secrets** (S-7c-4, Steward's change 2): the artifact's `$.secrets[] = [{part, host, entrance: {cell: [x, y, z], kind}, room:
+  [x0, y0, z0, x1, y1, z1]}]` (only standing parts; only in a plan with one, so every other artifact is byte-identical). The answer has no
+  geometry and its note no coordinates; the preview's `bounds` and the class map (both from answer geometry), siteplan.json's `parts` and
+  every render (top, iso, section, siteplan) leave the secret parts out (rendered as if unwritten). `PlanRequest` ext
+  `architect_mc:secrets: true` adds the artifact's secrets to the check's `preview.secrets` and `preview.siteplan.secrets` (PlanChecks; the
+  key's body carries `secrets: true` only when asked, so every other key keeps its hash); the artifact itself never changes with the ask.
+- **Survival** (Noah's rule): the hollow (carve, lights) is the free pass; the entrance is its own construction target, survival group
+  `<part>:entrance` (markSurvival's partOf), so the hollow is never held. The part's `cost.survival` counts both (free, held, bom) and
+  adds `entrance: {free, held, bom}`. A waterfall's entrance writes nothing, so that room is free whole.
+- **The waterfall's hollow** (`waterfall.mjs:227`): a `form.hidden_room` part hosted by the waterfall builds it (the waterfall's note
+  names the part; no deviation). A hollow asked only in the waterfall's own words still answers adjusted (S-H-7), its deviation now
+  naming the part kind that builds it instead of "waits for 7c" (no `until`).
+- **S-THEME** (the coordinator's ruling): `UNTHEMED_OK` is unchanged; only a bookshelf entrance's own two cells (its door part's
+  `entranceCells` in the plan meta) are exempt in `themeOffenders`, which the structure lint now calls with the plan meta. A bookshelf at
+  any other cell still warns (a unit).
+- **Examples** (builder-written, $0, `kit/test/fixtures/plan/hr/`): x01 a 5x5 room in a hollow mountain (L, 2 halls) behind a wall
+  entrance; x02 a 5x3 hollow behind a sculpted waterfall (drop 8); x03 a 5x5 cellar under a cottage's lot with a trapdoor hatch.
+
+**Readings chosen** (the contract was silent; the smallest reading each time):
+1. **A building host is a lot of the plan**, and the room is a cellar under its box with its hatch outside the box: a region part
+   writing inside a lot's box would be overwritten or skipped by the lot's site (and a room inside a standing building is refused,
+   S-7c-8). "A hidden hatch into a 7a tunnel" is this trapdoor hatch: the recorded tunnels (secret_tunnels) are `tunnel.under` between
+   cellar doors, LP's (still refused NO_FEATURE there: street lots have no cellar door), so no hatch joins a tunnel in HR.
+2. **A cliff host is BF's hollow mountain**: `host` is a partRef, so only a plan part can host; natural cliffs are no part.
+3. **The room's box is a secret too** (`$.secrets[].room`, an additive member of §2's shape): the answer carries no geometry at all.
+4. **Images never draw the secret parts**, asked or not; the ask adds the secrets as data to the preview and the siteplan.
+5. **The in-game ghost is not a preview here**: ghost tiles evaluate the IR for the planning player's own placement preview, and the
+   sidecar's tile worker has no plan meta; they show the room (left over).
+6. **Height may shrink to 2** (walkable) after the floor area, so the default drop 6 waterfall holds a hollow.
+7. **The doorway stands open while its target waits** (survival): the entrance's cells keep the world before the region (on a raised
+   mountain, air) until the stockpile supplies them, as any construction site.
+
+**Readings (measured):** compact plan/0 (`compactOf`) **80,946** characters (BF 80,539; the 90,000 spare line). The 59 asks: none has a
+`form.hidden_room` part. No asks line moves: the tables before and after (fixtures/plan/hr/asks-{before,after}.txt) are identical (fits 67, adjusted 18, blocked 20, unsupported 9, refused 14, 0 malformed, as BF left them); hidden_village is a byte mover only through its waterfall's deviation text. How the two named asks re-plan:
+- **hidden_village**: as recorded, its hollow is a village zone (a cavern behind the falls is lots on a region-made form: BF's follow-up)
+  and its waterfall answers **adjusted** (the hollow asked in its own words; the deviation now names `form.hidden_room`). With a
+  `form.hidden_room` hosted by `waterfall_curtain` (entrance waterfall) added: the hollow **adjusted** (5x3 and 2 high: the default drop
+  6) and the waterfall **fits** (its deviation gone).
+- **secret_tunnels**: its three tunnels stay **refused NO_FEATURE** (`tunnel.under` joins cellar doors; its lots are street lots), so it
+  still waits on LP's site lots. With hidden cellars hosted by `tavern_1` and `cottage_1` added: both **fit** (the hatches beside the
+  houses), the tunnels unchanged.
+
+**Tests moved by name**: e16 drops its bare `f_hidden_room` (a hidden room needs its host; the strict def makes the old part malformed);
+e20's vault answers **adjusted** (host hold, bookshelf); PlanCatalogueTest's reserved-draft example is `rule.suspended`; the earlier catalogue
+tests f7b-foundation and gm-c leave `form.hidden_room` to hr.test.mjs (as BF's three); valid/ gains v7c_hr_mountain_room, v7c_hr_waterfall_hollow, v7c_hr_cellar (copies of x01-x03, plan-p0-valid's item 9).
+
+**Checks** ($0, sim only; ports 8908/8909; verifier 8920/8921):
+
+| Check | Result |
+|---|---|
+| kit `node --test kit/test/*.test.mjs` | 1257 tests at 924233c1 (load 40-55): 1253 pass, 4 fail, each a catalogue or fixture test that names `form.hidden_room` (f7b-foundation, gm-c, plan-p0 item 1 with e20's vault, plan-p0-valid item 9 wanting a valid/ fixture), moved by name at 877e4d87; those four files re-run 27/0; hr.test.mjs 11/11 |
+| mod `./gradlew build --offline --no-daemon` | pass; 1128 tests, 0 failures, 1 skipped (ApiHRTest 2/2, PlanChecksSecretsTest 2/2, PlanCatalogueTest 8/8 with rule.suspended as its reserved draft) |
+| sidecar `npm ci && npm run check` (sidecar-check-turn.sh) | tsc clean; 851/851 (jobs and bundle.e2e feature lists appended `plan.hiddenRooms`) |
+| instant lints | lint-structure 68/0, lint-look 13/0, water-lint 136/0 |
+| api-compat | clean against the 0.47.0 apitest jar (0.48.0's not on disk); the API package's diff is javadoc only (`ArchitectApi.features`) |
+| catalogue golden | the diff is exactly `form.hidden_room` (reserved -> supported, schemaVersion 1, limits, note; sinceApi NEXT); catalogueVersion left for the coordinator |
+| `set -o pipefail; node tools/step-inputs.mjs check` | clean (358 steps; hr-unit, hr-ingame, hr-survival in gate-chains.json, chain `7chr`, impact rule "7c HR hidden rooms") |
+| gate run 1, 20261113-035930-change at 9a9215d2 | FAIL 2: hr-unit 445/0; hr-ingame 12/1 (x02: the waterfall host refused LEAK {kind: unwritable} on the bare flat base, and the room then answered NO_ROOM instead of blocked: both fixed); hr-survival 15/1 (s03's hamlet: its pads' held dirt 49 billed in the check, not on the targets: the same with or without the cellar, not HR's; the item scoped to the room's part, the rest recorded) |
+| gate run 2, 20261113-041831-change at 633ad886 | FAIL 1: **hr-unit PASS 445/0** (hr.test and the touched tests 35/0; ApiHRTest, PlanChecksSecretsTest, Api7cFTest; 440 committed fixtures, 438 byte-identical, the 2 named movers (hidden_village, e20) differ as named; the 59 asks tables identical before and after); **hr-survival PASS 16/0** (s01: the hollow free 76, held 0, the entrance `vault:entrance` 2 stone, fed in 2 waves, PLACED, built, bills equal, the conservation sum exact built and removed (refund 2 stone), equal to its INSTANT twin, E-flat 0; s03: the hollow free 73, the entrance `cellar:entrance` 4 ladders and a spruce trapdoor, 13 waves (301 items, the cottages' rs_hut included), the same rows; the hamlet's pad dirt recorded); hr-ingame 17/1: x02's realised == virtual 0 of 353 differ but 3 `fluid` cells, the curtain's falling water over its basin (the waterfall's own predicted flow, checked offline against the run's plan dir): the driver accepts a cleared cell holding the plan's bodies' predicted flow, any other fluid stays loose |
+| gate run 3, **20261113-044913-change** at 9fbf3944 (hr-ingame only: since run 2 only its driver path changed) | **PASS 1/1: hr-ingame 18/0**: x01 READY, vault fits (no geometry), the secret (wall) in the artifact only, asked: preview and siteplan carry it, the artifact the same; PLACED 32,257 cells, realised == virtual 0 of 32,257 differ (forms), the doorway stone over stone; E-flat 0. x02 READY, hollow fits; the same secret rows; PLACED, 0 of 353 differ (fluids 31, forms 48, walls 274), the 3 curtain cells the bodies' predicted flow; the doorway air over air; E-flat 0. x03 READY, cellar fits; the same secret rows; PLACED, 0 of 266 differ (forms, props, street, lanterns 2/2); a spruce trapdoor (top, shut) over a ladder; E-flat 0 |
+| gate-verifier (strict: survival accounting) | **PASS** at c600444e: re-ran hr-survival on its own run, **20261113-052115-change** (ports 8920/8921), **16/0**: s01 the hollow free 76, held 0, `vault:entrance` {stone: 2} built 2/2, bills equal, the conservation sum exact built and removed (refund 2 stone), twin 0 differ, E-flat 0; s03 the hollow free 73, `cellar:entrance` {ladder: 4, spruce_trapdoor: 1} built 5/5, 13 waves (301 items), the same rows. hr.test.mjs re-run 11/11; the API diff javadoc plus the ApiRules mapping, no frozen signature changed, stamps NEXT; the driver not vacuous; x02's predicted-flow allowance sound (any other fluid cell fails); x03 planned with and without the cellar: the hamlet part identical (its dirt 49 independent of the cellar). Non-blocking: the hamlet's pad dirt 49 billed in the check but not put down (pre-existing, worth a follow-up); the waterfall host is free whole, so survival gates two of the three hosts |
+
+**Leftovers:** the in-game ghost shows a hidden room (reading 5); a hatch into a 7a tunnel waits on LP's site lots with cellar doors
+(reading 1); a room inside a standing building or form (S-7c-8); the waterfall's default drop gives a 2-high hollow (a plan wanting 3 high
+asks drop 7); a zone's pads' held dirt is billed in a survival check but not put down on its targets (x03's hamlet: 49 dirt, the same
+without the cellar; pre-existing, RS's: the verifier's follow-up).
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop

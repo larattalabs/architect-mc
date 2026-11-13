@@ -118,8 +118,8 @@ test('catalogue: form.hidden_room and rule.suspended re-reserved until 7c (N-7b-
   assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
   assert.deepEqual(golden.entries.map((e) => e.id).filter((id) => id !== 'program.authored'), before.entries.map((e) => e.id)); // ((7cF) program.authored added: f7c-foundation.test.mjs)
   // ((7b SL) layout.elevated flipped to supported by its own slice: sl.test.mjs holds that change)
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island'].includes(id)); // ((7b LP) its two flips: lp.test.mjs; (7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs)
-  assert.deepEqual(changed, ['form.hidden_room', 'rule.suspended']);
+  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room'].includes(id)); // ((7b LP) its two flips: lp.test.mjs; (7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs; (7c HR) form.hidden_room's flip: hr.test.mjs)
+  assert.deepEqual(changed, ['rule.suspended']);
   for (const id of changed) {
     const e = golden.entries.find((x) => x.id === id);
     assert.equal(e.state, 'reserved');
