@@ -36,9 +36,10 @@ export async function registerHF(steps, h) {
     const a = await call('dev.stockpile.audit', { owner: G.OWNER }, 60_000);
     return { inv: a.inventory ?? {}, stock: a.stock ?? {}, ledger: a.ledger ?? null };
   }
-  /** The bot's saved player file (the newest playerdata/*.dat): its mtime, ms. */
+  /** The bot's saved player file (the newest players/data/*.dat): its mtime, ms. */
   function playerFile(dir) {
-    const d = path.join(dir, 'playerdata');
+    // 26.3: players/data/<uuid>.dat (older worlds: playerdata/)
+    const d = [path.join(dir, 'players', 'data'), path.join(dir, 'playerdata')].find((x) => fs.existsSync(x)) ?? path.join(dir, 'players', 'data');
     const fs0 = fs.existsSync(d) ? fs.readdirSync(d).filter((f) => f.endsWith('.dat')) : [];
     const best = fs0.map((f) => ({ f, m: fs.statSync(path.join(d, f)).mtimeMs })).sort((a, b) => b.m - a.m)[0];
     return best ?? { f: null, m: 0 };
