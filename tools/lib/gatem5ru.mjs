@@ -70,19 +70,20 @@ export async function registerRU(steps, h) {
 
   /** A growth planned and realised (qa: rs_hut), waited for until its targets are put down. */
   async function grow(tag, region, t0) {
+    const feed0 = (await pile()).feedOrder ?? [];
     const g = await growPlan(region, { lots: GROW });
     check(!g.refused && g.revisionOf?.rid >= 1, `${tag}: a growth planned: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
     if (g.refused) return null;
     const r = await call('dev.region.realise', { planId: g.planId, lots: ENTRIES }, 300_000);
     check(!r.refused, `${tag}: the growth realised (qa: rs_hut): ${r.refused ?? r.region}`);
-    let rs;
-    for (let i = 0; i < 90; i++) {
-      rs = await G.rsState(ctx, region);
-      if ((rs.targets ?? []).some((x) => !t0.has(x.id))) break;
-      await L.sleep(2000);
+    // its targets put down: new ids in the stockpile's feed order (the region's targets the builder feeds)
+    let mine = [];
+    for (let i = 0; i < 90 && !mine.length; i++) {
+      const p = await pile();
+      mine = (p.feedOrder ?? []).filter((id) => !feed0.includes(id));
+      if (!mine.length) await L.sleep(2000);
     }
-    const mine = (rs.targets ?? []).filter((x) => !t0.has(x.id));
-    check(mine.length > 0, `${tag}: the growth's targets put down (${mine.length}), waiting for their items`);
+    check(mine.length > 0, `${tag}: the growth's targets put down (${mine.length} in the feed order: ${json(mine.slice(0, 6))}), waiting for their items`);
     return { g, rid: g.revisionOf.rid };
   }
 
@@ -192,8 +193,7 @@ export async function registerRU(steps, h) {
         const r = await call('dev.region.realise', { planId: g.planId, lots: ENTRIES }, 300_000);
         check(!r.refused, `${tag}: realised: ${r.refused ?? r.region}`);
         for (let i = 0; i < 90; i++) {
-          const rs = await G.rsState(ctx, T.region);
-          if ((rs.targets ?? []).some((x) => !T.t0.has(x.id))) break;
+          if (((await pile()).feedOrder ?? []).some((id) => !(ps0.feedOrder ?? []).includes(id))) break;
           await L.sleep(2000);
         }
         const f = await G.feed({ L }, T.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
