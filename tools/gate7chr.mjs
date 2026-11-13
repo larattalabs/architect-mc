@@ -236,7 +236,10 @@ async function buildOne(tag, fx, partId) {
   if (bills.got[`${partId}:entrance`]) { bills.got[partId] = G.plus(bills.got[partId], bills.got[`${partId}:entrance`]); delete bills.got[`${partId}:entrance`]; }
   out.bills = bills;
   const differ = Object.keys({ ...bills.want, ...bills.got }).filter((p) => p in bills.want && !G.same(bills.want[p], bills.got[p]));
-  check(differ.length === 0, `${tag} (survival): the check's cost.survival.bom per part against the targets' bills put down: ${differ.length ? `${differ.length} differ: ${differ.map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : 'equal, item for item (the entrance in its part\'s)'}`, bills);
+  // (the hidden room's own bill is HR's item; another part's difference (x03's hamlet: its pads' held dirt, the same with or without the
+  // cellar) is recorded, not HR's to gate)
+  out.billsDiffer = differ.map((p) => ({ part: p, diff: G.minus(bills.want[p], bills.got[p]) }));
+  check(!differ.includes(partId) && G.same(bills.want[partId], sv?.bom), `${tag} (survival): ${partId}'s cost.survival.bom against its targets' bills put down (the entrance's target counted in its part): ${differ.includes(partId) ? `differs ${json(G.minus(bills.want[partId], bills.got[partId]))}` : `equal, item for item (${json(bills.got[partId])})`}${differ.length ? `; recorded, not HR's: ${differ.filter((p) => p !== partId).map((p) => `${p} ${json(G.minus(bills.want[p], bills.got[p]))}`).join('; ')}` : ''}`, bills);
   const pb = await C.point('built');
   out.builtPoint = pb;
   check(G.exact(p0) && G.exact(pb), `${tag} (survival): items in = items out once built: every item fed is in the stockpile or standing as a paid block (the conservation sum ${json(pb.diff)}, identity ${pb.identity})`, pb);

@@ -1692,6 +1692,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const secrets = [];
   for (const p of order) {
     if (p.family !== 'form' || p.kind !== 'hidden_room' || !emitOk(p.id)) continue;
+    // (its host may have been refused at its own emit, after this part resolved: blocked, never a room placed in nothing)
+    const dep = depState(p);
+    if (dep) { ans(p, dep); continue; }
     const cp = checkpoint(r);
     try {
       const out = emitHidden({ env, r, ctx, res, stageOf, judge, tolOf }, p, res.get(p.id));
