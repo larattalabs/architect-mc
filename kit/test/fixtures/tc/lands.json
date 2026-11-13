@@ -1,0 +1,96 @@
+{
+ "note": "7c TC: the template pick's land fixtures (kit/test/tc-land.mjs --write); kinds = AF's analysis of each whole volume",
+ "lands": {
+  "s5_grove": {
+   "claim": {
+    "minX": 3328,
+    "minZ": -1600,
+    "maxX": 3519,
+    "maxZ": -1409
+   },
+   "box": {
+    "minX": 3328,
+    "minZ": -1600,
+    "maxX": 3519,
+    "maxZ": -1409,
+    "minY": 22,
+    "maxY": 156
+   },
+   "sha": "90eda5db1ff448108449b839b69ee805bdf2b41059cba608ee2cccdf87cbe026",
+   "bytes": 7544,
+   "kinds": {
+    "canopy": 3,
+    "trunk": 6,
+    "cliff_face": 6,
+    "pad": 16
+   }
+  },
+  "s6_cavern": {
+   "claim": {
+    "minX": 3672,
+    "minZ": -1780,
+    "maxX": 3863,
+    "maxZ": -1589
+   },
+   "box": {
+    "minX": 3672,
+    "minZ": -1780,
+    "maxX": 3863,
+    "maxZ": -1589,
+    "minY": 22,
+    "maxY": 173
+   },
+   "sha": "4cb1929258db927c18b174a8f8b851b7296373956c84c41a903f040204e56672",
+   "bytes": 6422,
+   "kinds": {
+    "cave": 1,
+    "gap": 2,
+    "cliff_face": 6,
+    "overhang": 2,
+    "pad": 16
+   }
+  },
+  "s6_hill": {
+   "claim": {
+    "minX": 3672,
+    "minZ": -1780,
+    "maxX": 3863,
+    "maxZ": -1589
+   },
+   "box": {
+    "minX": 3672,
+    "minZ": -1780,
+    "maxX": 3863,
+    "maxZ": -1589,
+    "minY": 22,
+    "maxY": 173
+   },
+   "sha": "76807fa21f8b301de1e93164e1cc36d87663fca72aec04bdef11387e633eb65b",
+   "bytes": 5898,
+   "kinds": {
+    "pad": 16
+   }
+  },
+  "plains": {
+   "claim": {
+    "minX": 3328,
+    "minZ": -1600,
+    "maxX": 3519,
+    "maxZ": -1409
+   },
+   "box": {
+    "minX": 3328,
+    "minZ": -1600,
+    "maxX": 3519,
+    "maxZ": -1409,
+    "minY": 22,
+    "maxY": 156
+   },
+   "sha": "45e2caec28076428f7d11eb74f8ca528c0856b599c8de0545f31bd2083770cd7",
+   "bytes": 396,
+   "kinds": {
+    "pad": 16
+   }
+  }
+ }
+}

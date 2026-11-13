@@ -8,9 +8,19 @@ import { TREE, groveLayout } from './s5_grove_sculpt.mjs';
 
 export const id = 's5_treehouses';
 export const description = 'S5 treehouse village: houses round the trunks of giant oaks, joined by branch walks (7b SB).';
-export const catalogue = false;
+/**
+ * (7c TC) In Regions.design's pick (the template catalogue). Its land is scenario setup, not generator output (SB reading 2): six giant
+ * oaks with straight trunks, so `needs.affordances` asks AF for six tall trunks and a pick over land without them can't fit. `grove`
+ * (the sculpt's record) is not pickable.
+ */
+export const catalogue = {
+  description: 'A treehouse village: six houses wrapped round the trunks of six giant trees in three facing pairs, under their crowns on a shared deck floor, each pair joined by a railed branch walk, with paths up the ramps to the decks. For a village in the treetops or crowns of giant trees. It builds on giant trees that are already standing (it grows none): the land must have them.',
+  needs: { water: 'none near the trees', relief: 'low', affordances: { trunk: { count: 6, min: { height: 24 } } } },
+  claim: { min: [160, 160], max: [256, 256] },
+  keywords: ['treehouse', 'treehouses', 'tree', 'trees', 'treetop', 'treetops', 'canopy', 'crowns', 'crown', 'giant', 'branches', 'forest', 'grove'],
+};
 export const params = {
-  grove: { type: 'json', default: null, label: 'The grove (the sculpt\'s record)' },
+  grove: { type: 'json', default: null, pick: false, label: 'The grove (the sculpt\'s record)' },
 };
 
 /**

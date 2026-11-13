@@ -16,13 +16,23 @@ import { wetWell } from '../lib/fluids/pond.mjs';
 
 export const id = 'flat_village';
 export const description = 'A flat village: lots on one street, a square or well green, lanes, props, villager rules (6c V).';
-/** Not in Regions.design's pick (that would change the pick prompt and 6b's pick accuracy: a paid re-run, deferred). */
-export const catalogue = false;
+/**
+ * (7c TC) In Regions.design's pick (the template catalogue): a pick sends no lot list, so `houses` (pickable) lays that many of the
+ * default lots (DEFAULT_LOTS, S7's ten Steward-shaped lots) when `lots` is empty. `lots` is the caller's (not pickable).
+ */
+export const catalogue = {
+  description: 'A flat village: 4-10 house lots (a landmark hall, a trading hall, cottages, workshops, an inn, a farm) along one straight street with a square or a well green at its middle, lanes from every door, lamps and props, and the villager rules. For a plain village, hamlet or farming settlement on flat, open ground (plains, meadow, savanna): it pads lots by at most 2 blocks, so it needs land that is already flat.',
+  needs: { minFlat: 0.6, water: 'ok', relief: 'flat (a lot pad cuts or fills at most 2)' },
+  claim: { min: [64, 64], max: [192, 192] },
+  keywords: ['village', 'hamlet', 'farm', 'farming', 'street', 'square', 'flat', 'plains', 'meadow', 'cottage', 'cottages', 'villagers', 'town'],
+};
 /** The default look (a bible's roles win): gravel lanes and paving, stone-brick foundations, lanterns. */
 export const roles = { path: 'minecraft:gravel', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
 
 export const params = {
   lots: { type: 'lots', default: [], label: 'Lots' },
+  // (7c TC) with no lots (a template pick): this many of DEFAULT_LOTS; left out of the resolved params at its default (S7's golden holds)
+  houses: { type: 'int', min: 4, max: 10, default: 8, omitDefault: true, label: 'Houses (with no lot list)' },
   shared: { type: 'enum', options: ['square', 'well'], default: 'square', label: 'Shared space' },
   squareSize: { type: 'int', min: 9, max: 15, default: 11, label: 'Square size' },
   laneWidth: { type: 'int', min: 1, max: 3, default: 2, label: 'Lane width' },
@@ -37,6 +47,20 @@ export const params = {
   wellWater: { type: 'bool', default: false, omitDefault: true, label: 'Well with water' },
 };
 
+/** (7c TC) The lots a template pick lays (S7's ten, in its order: the landmark hall first), `houses` of them. */
+export const DEFAULT_LOTS = Object.freeze([
+  { id: 'hall_1', type: 'hall', role: 'landmark hall', size: [18, 20], landmark: true, villager: 'job', brief: 'The village hall: the landmark on the square.' },
+  { id: 'trading_hall_1', type: 'trading_hall', role: 'trading hall', size: [14, 17], villager: 'trading_hall', brief: 'A trading hall with stalls.' },
+  { id: 'cottage_1', type: 'cottage', role: 'cottage', size: [11, 14], villager: 'dwelling', brief: 'A cottage.' },
+  { id: 'cottage_2', type: 'cottage', role: 'cottage', size: [11, 14], villager: 'dwelling', brief: 'A cottage.' },
+  { id: 'smithy_1', type: 'smithy', role: 'smithy', size: [11, 14], villager: 'job', brief: 'A smithy.' },
+  { id: 'farm_1', type: 'farm', role: 'farm', size: [14, 17], villager: 'farm', brief: 'A farm.' },
+  { id: 'cottage_3', type: 'cottage', role: 'cottage', size: [11, 14], villager: 'dwelling', brief: 'A cottage.' },
+  { id: 'bakery_1', type: 'bakery', role: 'bakery', size: [11, 14], villager: 'job', brief: 'A bakery.' },
+  { id: 'inn_1', type: 'tavern', role: 'inn', size: [14, 17], villager: 'job', brief: 'An inn.' },
+  { id: 'cottage_4', type: 'cottage', role: 'cottage', size: [11, 14], villager: 'dwelling', brief: 'A cottage.' },
+].map((l) => Object.freeze(l)));
+
 export default function (ctx) {
   return build(ctx);
 }
@@ -46,11 +70,12 @@ export function build(ctx, { _unsafe = {}, after } = {}) {
   const r = region(ctx);
   const p = ctx.params;
   r.stages(p.wellWater ? ['ground', 'street', 'lots', 'props', 'fluids'] : ['ground', 'street', 'lots', 'props']);
-  if (!p.lots.length) throw new Error('flat village: params.lots is empty');
+  // (7c TC) a template pick sends no lots: the first `houses` of the default lots (S7's)
+  const lots = p.lots.length ? p.lots : DEFAULT_LOTS.slice(0, p.houses ?? 8).map((l) => structuredClone(l));
   const shared = p.shared === 'square' ? { kind: 'square', size: p.squareSize } : { kind: 'well', size: 7 };
   const keepOut = ctx.keepOut;
   let props = null;
-  const L = streetLayout(r, p.lots, {
+  const L = streetLayout(r, lots, {
     rules: STREET_RULES, shared, laneWidth: p.laneWidth, requireAll: p.requireAll, orientation: p.orientation ?? 'auto', maxHeight: 32, _unsafe,
     planProps: ({ o, sh, res, lots }) => (props = planProps(r, { o, sh, res, lots, laneWidth: p.laneWidth, lamps: p.lamps, bell: p.bell, keepOut, rng: ctx.rng('props'), ...(p.wellWater ? { wellWater: true } : {}) })),
   });

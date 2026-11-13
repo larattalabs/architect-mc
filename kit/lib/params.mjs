@@ -99,6 +99,7 @@ export function validateParams(params, { region = false } = {}) {
       for (const k of ['min', 'max', 'default']) if (!Number.isInteger(p[k])) throw new Error(`${where}.${k} must be an integer`);
       if (p.min > p.max) throw new Error(`${where}: min > max`);
       if (p.default < p.min || p.default > p.max) throw new Error(`${where}: default ${p.default} is outside ${p.min}..${p.max}`);
+      if (p.omitDefault !== undefined && typeof p.omitDefault !== 'boolean') throw new Error(`${where}.omitDefault must be true or false`);
     } else if (p.type === 'bool') {
       if (typeof p.default !== 'boolean') throw new Error(`${where}.default must be true or false`);
       if (p.omitDefault !== undefined && typeof p.omitDefault !== 'boolean') throw new Error(`${where}.omitDefault must be true or false`);
@@ -144,7 +145,8 @@ export function resolveValues(params = {}, given = {}) {
   // (6c MP) a bool param with `omitDefault: true` (an opt-in demo switch) is left out at its default, so a program that gains
   // one keeps its default seed, IR and tiles
   // (C37) an enum param may do the same (flat_village's orientation: 'auto' is left out, so no seed or IR changes)
-  for (const [k, p] of Object.entries(params)) if ((p.type === 'bool' || p.type === 'enum') && p.omitDefault === true && out[k] === p.default) delete out[k];
+  // (7c TC) an int param too (flat_village's houses, used only with no lot list: S7's seed, IR and golden hold)
+  for (const [k, p] of Object.entries(params)) if ((p.type === 'bool' || p.type === 'enum' || p.type === 'int') && p.omitDefault === true && out[k] === p.default) delete out[k];
   return out;
 }
 

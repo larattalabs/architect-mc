@@ -27,6 +27,7 @@ export const catalogue = {
   description: 'A rift settlement: a long straight carved canyon (a rift or chasm) with ledge terraces on both walls holding the houses, bridges across at the rim, spiral stairs from the rims to the floor, a lit cavern hall off the floor and a utility corridor along it. For towns built down the walls of a rift, gorge or canyon cut into open ground.',
   needs: { minFlat: 0.5, water: false, relief: 'low' },
   claim: { min: [140, 100], max: [400, 200] },
+  keywords: ['rift', 'chasm', 'canyon', 'gorge', 'ravine', 'gully', 'cleft', 'ledges', 'walls'],
 };
 
 const BRIEFS = ['Ledge house', 'Rope maker', 'Miner lodge', 'Tavern on the ledge', 'Lookout', 'Workshop', 'Store', 'Bath house'];

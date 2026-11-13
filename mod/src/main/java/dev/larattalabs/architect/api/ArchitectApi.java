@@ -231,6 +231,12 @@ public interface ArchitectApi {
 	 * {@code form.hollow_mountain}, {@code form.crater} (its lake an H pond body) and {@code form.floating_island} are supported, each
 	 * natural cut and fill (free in survival); a hollow mountain's cavern, ledge and halls are recorded in the plan's affordances
 	 * ({@link Regions#affordances}: cliff_face, cave, ledge). No new record, method or reason.
+	 * (7c TC, since NEXT) {@code "scenarioTemplates"} is advertised when the helper has the template catalogue (its
+	 * {@code region.templates}): {@link Regions#design}'s pick also lists the scenario programs ({@code flat_village}, {@code ice_outpost},
+	 * {@code terraced_monastery}, {@code s5_treehouses}, {@code s6_cave_city}; {@code floating_islands} already was), each with the land
+	 * features it needs ({@code needs.affordances}: AF kinds, counts and metric floors); the mod freezes the claim's volume (read only) so
+	 * the pick sees the claim's affordance summary, and a pick that would land a template on land without its features answers
+	 * {@code NO_TEMPLATE} with that program as the closest. No new record, method or reason.
 	 */
 	Set<String> features();
 }

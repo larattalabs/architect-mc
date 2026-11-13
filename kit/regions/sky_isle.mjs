@@ -23,6 +23,7 @@ export const catalogue = {
   description: 'A sky citadel: ONE large rock mass high in the air (radius 24-60), held up by stone pillars or a tapered rock underside, with a walled citadel on top (towers, crenels, a gate), an arched bridge with towers from a spiral stair tower to the gate, and 4-8 lots inside the walls. For a single great floating rock, a castle in the sky, an aerie or a sky fortress.',
   needs: { minFlat: 0.4, water: 'ok', relief: 'any' },
   claim: { min: [160, 200], max: [320, 320] },
+  keywords: ['sky', 'citadel', 'castle', 'fortress', 'aerie', 'floating', 'rock', 'great', 'single'],
 };
 
 const BRIEFS = ['Keep', 'Great hall', 'Barracks', 'Armoury', 'Chapel', 'Stables', 'Granary', 'Guard house'];

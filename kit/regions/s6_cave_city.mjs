@@ -10,9 +10,18 @@ import { region } from '../lib/region/program.mjs';
 
 export const id = 's6_cave_city';
 export const description = 'S6 cave city: carved halls in the walls of a cavern hall under the mountain (7b SB).';
-export const catalogue = false;
+/**
+ * (7c TC) In Regions.design's pick (the template catalogue). Its hall is scenario setup, not generator output (SB reading 2): a cavern
+ * hall under the claim's middle, so `needs.affordances` asks AF for a large cave and a pick over land without one can't fit.
+ */
+export const catalogue = {
+  description: 'A cave city: seven homes carved into the walls of a long cavern hall under the mountain (three on each long wall, one at the west end), the hall floor paved as a street, and a ramp up to the surface at its east end. For a city, dwarf hold or settlement carved inside a mountain or underground. It carves into a hall that is already there (it digs none): the land must have a large cave under the claim.',
+  needs: { relief: 'a mountain or high ground over the hall', affordances: { cave: { count: 1, min: { floorArea: 400, ceiling: 6 } } } },
+  claim: { min: [160, 160], max: [256, 256] },
+  keywords: ['cave', 'caves', 'cavern', 'underground', 'carved', 'mountain', 'dwarf', 'dwarven', 'hold', 'subterranean', 'inside', 'beneath', 'mine'],
+};
 export const params = {
-  floorY: { type: 'int', min: -64, max: 300, default: -64, label: 'Hall floor y (the sculpt; -64: auto)' },
+  floorY: { type: 'int', min: -64, max: 300, default: -64, pick: false, label: 'Hall floor y (-64: the land\'s hall)' },
 };
 
 /** The city's numbers: lots per long wall, the lot's design size [w, h, d] (front south), the gap between lots, the hall's size. */
@@ -61,11 +70,27 @@ export function caveLayout(claim, heightAt, floorY = null) {
   return { cx, cz, floorY: F, low, hall: { x0: hx0, x1: hx1, z0: hz0, z1: hz1, y0: F + 1, y1: F + CITY.hallHeight }, lots, ramp, top, volume };
 }
 
+const within = (a, b) => a.minX >= b.minX && a.maxX <= b.maxX && a.minY >= b.minY && a.maxY <= b.maxY && a.minZ >= b.minZ && a.maxZ <= b.maxZ;
+
 export default function s6CaveCity(ctx) {
   const { claim, survey, params: P } = ctx;
   const r = region(ctx);
   r.stages(['ground', 'lots']);
-  const L = caveLayout(claim, (x, z) => survey.heightAt(x, z), P?.floorY > -64 ? P.floorY : null);
+  const hAt = (x, z) => survey.heightAt(x, z);
+  // (7c TC) auto (a template pick sends no floorY): the hall is the land's, so find it. One read box holds every floor the sculpt can
+  // choose (24..36 under the lowest ground) and the city over it; AF's caves in it, and the largest whose box meets the hall's columns
+  // gives the floor (its anchor stands on the floor: the floor's top row is one under). No such cave: the old auto floor.
+  let probe = null, floorY = P?.floorY > -64 ? P.floorY : null;
+  if (floorY === null) {
+    const L0 = caveLayout(claim, hAt);
+    const top = Math.max(L0.volume.maxY, ...[[L0.volume.minX, L0.volume.minZ], [L0.volume.maxX, L0.volume.maxZ], [L0.cx, L0.cz]].map(([x, z]) => hAt(x, z) + 8));
+    probe = { minX: L0.volume.minX, maxX: Math.min(claim.maxX, L0.volume.maxX + 24), minZ: L0.volume.minZ, maxZ: L0.volume.maxZ, minY: Math.max(claim.minY, L0.low - CITY.cover - 12 - 8), maxY: Math.min(claim.maxY, top + 24) };
+    const H0 = L0.hall;
+    const caves = r.affordances(probe, { kinds: ['cave'] }).filter((a) => a.box.minX <= H0.x1 && a.box.maxX >= H0.x0 && a.box.minZ <= H0.z1 && a.box.maxZ >= H0.z0);
+    caves.sort((a, b) => b.metrics.floorArea - a.metrics.floorArea || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    if (caves.length) floorY = caves[0].anchors[0][1] - 1;
+  }
+  const L = caveLayout(claim, hAt, floorY);
   r.meta.sb = { scenario: 's6', floorY: L.floorY, hall: L.hall, top: L.top, dwellings: L.lots.map((l) => l.id), fitCalledFor: { carve_into: L.lots.map((l) => l.id) } };
   const at = L.top ?? [L.hall.x1, L.floorY + 1, L.cz];
   r.anchor('entrance', at);
@@ -79,7 +104,7 @@ export default function s6CaveCity(ctx) {
   r.anchor('cam_high', [L.cx, L.low + 40, L.cz + 60]);
   r.anchor('cam_n', [L.cx, L.low + 24, L.cz - 70]);
   r.anchor('cam_s', [L.cx, L.low + 24, L.cz + 70]);
-  const vol = r.needVolume(L.volume);
+  const vol = r.needVolume(probe && within(L.volume, probe) ? probe : L.volume);
   if (!vol) return r; // (the first plan asks for the city's volume; the second places the lots from it)
   // the street: the hall's floor paved (clear of the lots' front rows) and every ramp step, the path role over the sculpted rock
   const street = r.part('street', { stage: 'ground', set: 'path' });

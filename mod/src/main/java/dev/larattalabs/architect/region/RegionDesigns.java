@@ -59,8 +59,10 @@ public final class RegionDesigns {
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 		CompletableFuture<String> summary = ArchitectApi.get().survey().sample(r.level(), c, res, LoadPolicy.LOADED_ONLY).thenApply(
 			dev.larattalabs.architect.api.Sample::summary).exceptionally(e -> "");
+		boolean templates = ArchitectApi.get().features().contains("scenarioTemplates"); // (7c TC) the helper has region.templates
 		return summary.thenCompose(sum -> RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, LoadPolicy.LOADED_ONLY).thenCompose(
-			cols -> BlobPut.put(link, cols.encode(), "survey")).thenCompose(blobId -> link.send(message(r, blobId, sum)))).thenCompose(ack -> {
+			cols -> BlobPut.put(link, cols.encode(), "survey").thenCompose(blobId -> (templates ? claimVolume(r, cols) : CompletableFuture
+				.<dev.larattalabs.architect.api.@Nullable Volume>completedFuture(null)).thenCompose(vol -> link.send(message(r, blobId, sum, vol)))))).thenCompose(ack -> {
 				if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
 					return CompletableFuture.failedFuture(new IllegalStateException("the helper refused the design: " + RegionsImpl.str(ack, "error")));
 				}
@@ -74,8 +76,60 @@ public final class RegionDesigns {
 			});
 	}
 
+	/** (7c TC) The helper's feature: the template catalogue (the scenario programs with their land needs) and the pick's affordances. */
+	public static final String TEMPLATES_FEATURE = "region.templates";
+	/** (7c TC) The claim's volume window for the pick's affordance summary: at most this many columns a side, centred on the claim. */
+	public static final int AFFORDANCE_WINDOW = 256;
+	/** (7c TC) The window's depth under the claim's lowest ground (a hall 24-36 under it, S6) and its height over the highest top. */
+	public static final int AFFORDANCE_BELOW = 48, AFFORDANCE_ABOVE = 24;
+
+	/**
+	 * (7c TC) The box the pick's affordance summary reads: the claim's columns (a centred {@value #AFFORDANCE_WINDOW}-column window of a
+	 * larger claim), from {@value #AFFORDANCE_BELOW} under the surveyed lowest ground to {@value #AFFORDANCE_ABOVE} over the highest top,
+	 * clamped to the level's height; null when the survey has no loaded column. Pure.
+	 */
+	static @Nullable BoundingBox affordanceBox(Columns cols, BoundingBox claim, int levelMinY, int levelMaxY) {
+		int lo = Integer.MAX_VALUE, hi = Integer.MIN_VALUE;
+		for (int k = 0; k < cols.width * cols.depth; k++) {
+			if (cols.missing(k)) {
+				continue;
+			}
+			lo = Math.min(lo, Math.min(cols.ground[k], cols.floor[k]));
+			hi = Math.max(hi, Math.max(cols.ground[k], cols.height[k]));
+		}
+		if (lo > hi) {
+			return null;
+		}
+		int w = Math.min(AFFORDANCE_WINDOW, claim.getXSpan()), d = Math.min(AFFORDANCE_WINDOW, claim.getZSpan());
+		int x0 = claim.minX() + (claim.getXSpan() - w) / 2, z0 = claim.minZ() + (claim.getZSpan() - d) / 2;
+		return new BoundingBox(x0, Math.max(levelMinY, lo - AFFORDANCE_BELOW), z0, x0 + w - 1, Math.min(levelMaxY, hi + AFFORDANCE_ABOVE), z0 + d - 1);
+	}
+
+	/**
+	 * (7c TC) The claim's volume, frozen (read only: {@link dev.larattalabs.architect.region.volume.VolumeSurvey}) and uploaded for the
+	 * pick's affordance summary; null (the pick goes on without one, and a template that needs land features can't fit) when it can't be
+	 * read or sent.
+	 */
+	static CompletableFuture<dev.larattalabs.architect.api.@Nullable Volume> claimVolume(RegionDesignRequest r, Columns cols) {
+		BoundingBox b = affordanceBox(cols, r.claim(), r.level().getMinY(), r.level().getMaxY());
+		if (b == null) {
+			return CompletableFuture.completedFuture(null);
+		}
+		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(r.level(), b, LoadPolicy.LOADED_ONLY, null).thenCompose(
+			dev.larattalabs.architect.apiimpl.SurveyImpl::upload).<dev.larattalabs.architect.api.@Nullable Volume>thenApply(v -> v.blobId().startsWith(
+				"local:") ? null : v).exceptionally(e -> {
+					Architect.LOGGER.warn("Region design: the claim's volume for the template pick could not be read: {}", e.getMessage());
+					return null;
+				});
+	}
+
 	/** The {@code region.design} message. Pure. */
 	static JsonObject message(RegionDesignRequest r, String surveyBlobId, String surveySummary) {
+		return message(r, surveyBlobId, surveySummary, null);
+	}
+
+	/** The {@code region.design} message; (7c TC) {@code volume}: the claim's frozen volume for the pick's affordances ({blobId, sha}). Pure. */
+	static JsonObject message(RegionDesignRequest r, String surveyBlobId, String surveySummary, dev.larattalabs.architect.api.@Nullable Volume volume) {
 		JsonObject m = new JsonObject();
 		m.addProperty("type", "region.design");
 		m.addProperty("brief", r.brief());
@@ -103,6 +157,12 @@ public final class RegionDesigns {
 		cl.addProperty("maxY", r.level().getMaxY());
 		m.add("claim", cl);
 		m.addProperty("surveyBlobId", surveyBlobId);
+		if (volume != null) {
+			JsonObject v = new JsonObject();
+			v.addProperty("blobId", volume.blobId());
+			v.addProperty("sha", volume.sha());
+			m.add("volume", v);
+		}
 		if (!surveySummary.isEmpty()) {
 			m.addProperty("surveySummary", surveySummary);
 		}
