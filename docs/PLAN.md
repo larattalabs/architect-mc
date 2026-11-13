@@ -1634,3 +1634,33 @@ which no re-cut can fix without rewriting history. `tools/lib/fl-norm.mjs` gains
 7bF's hang_from_ceiling without its `until`), as CL's, LF's and K3's movers were. HY-b's item 11 reads it in its before comparison; H-a's haAsks reads it
 (with the connector.drawbridge and tunnel.under gap rows dropped) in both its comparisons, against H-a's record and the before table. `flAsksFilter` and its
 other callers are unchanged.
+
+## Planned after 7c: phases 8a, 8b, 8c (Noah via parent session, 2026-11-13: "let's add all of it to plans")
+
+Three items move from SETTLEMENTS §21 "Deferred" into the plan, in this order (hardest last). Each gets its **own contract and a Steward
+review before any building**, and none starts until 7c closes unless Noah says otherwise. Names are working names; versions are set at merge.
+
+**8a: construction mode for forms and relief (the rest of region-scale survival).**
+- Already shipped (so §21's "Region-scale survival (N4)" line was out of date): the 2026-10-08 survival rule (the construction-site lifecycle;
+  terrain cut free, no drops, exact Remove); RS's terrain half (regions in survival: terrain free, lots and roads construct from a region
+  crate); the connector half (7a, each connector's survival row); XR's one-owner rule; growth and revision billing (A2, IG); QT's quotes; FC's
+  field cells; SO's support order for site-aware houses; JR's crash-safe refunds and RL's reconcile at load.
+- What's left: **forms** (hollow mountain, floating island, crater, spires, giant trees, ...) and **relief** (terraces, cut and fill, erosion
+  touch-ups) are today written at once, even in survival. 8a builds them in survival as **staged construction sites over time**, in
+  support order, with the journal, Remove and JR/RL's refund and reconcile rules covering half-built terrain.
+- Question for Noah in 8a's contract: does terrain stay **free** and only take time, or does it **cost** something (and if so, what)?
+- Depends on: 7c closed (BF's forms in place); JR and RL merged.
+
+**8b: a settlement UI for players.** An in-game Settlement/Terrain tab on lab-ui:
+- a map of the lots, districts and connectors; each lot's status; the survival bill or what is owed (QT's quote);
+- actions: preview or approve a plan, grow a district, swap a lot's design, undo a part, mark points for a connector (CX), pick a template (TC).
+- Steward likely shares the screens (its settlement cards): a Steward review is required, and the shared parts go into lab-ui.
+- Depends on: 7c (TC, CX, CO), 8a for the survival status of forms.
+
+**8c: flowing rivers and waterfalls** beyond today's declared water (H's contained bodies, HY's courses, the waterfall's declared curtain
+cells, IRR's sources):
+- a water model on the virtual world and a settle step at realise;
+- E-normal classification of settled flowing water, and a drain-order undo;
+- rivers through settlements; waterfalls off cliffs and islands;
+- later water mechanics (item streams; Steward's 5b spine, with its own row).
+- Depends on: 8a (staged terrain under water); the hardest of the three (fluid physics and exact undo).

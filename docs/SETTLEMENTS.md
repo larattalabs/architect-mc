@@ -1045,6 +1045,8 @@ Sizes are relative to 6a (6a = 1.0). Versions follow the phase 6 rules: one mino
 
 **6d: region evolution** stays as specified in the phase 6 contract, deferred to Steward's phase 3, and gains section 14.
 
+**After 7c (planned 2026-11-13, Noah via parent session):** 8a construction mode for forms and relief, 8b a settlement UI for players, 8c flowing rivers and waterfalls; see PLAN.md "Planned after 7c". Each needs its own contract and a Steward review first.
+
 ### 17.3 Spend per scenario run (what a player or Steward pays)
 
 | Run | What Claude does | Est. per run |
@@ -1125,15 +1127,15 @@ cost nothing.
 
 ## 21. Deferred
 
-- Flowing rivers and waterfalls beyond declared single cells (E-normal can't classify them yet).
+- ~~Flowing rivers and waterfalls beyond declared single cells~~ → planned as **8c** (PLAN.md, Noah via parent session, 2026-11-13).
 - Live capture of vanilla features at realise (stamps first).
 - A model judge or set-level critic as a gate (until a recalibrated critic passes 5a's eval).
 - Nether and End settlements (the Nether ground search is still open; regions are Overworld only).
 - Moving or rotating a placed settlement (replan and re-realise).
 - Redstone lifts (piston elevators) as connectors: fragile across versions; bubble columns only.
-- Region-scale survival (N4 above), and construction mode for forms and relief.
+- ~~Region-scale survival (N4 above), and construction mode for forms and relief~~ → most of region-scale survival has shipped (RS, the connector rows, XR, A2/IG billing, QT, JR, RL); construction mode for forms and relief is planned as **8a** (PLAN.md, 2026-11-13).
 - Writing under standing lots (6d's pad delta under a BOX cover).
-- A Terrain tab or settlement UI in Architect for players (commands, API and the gallery until regions see real use).
+- ~~A Terrain tab or settlement UI in Architect for players~~ → planned as **8b** (PLAN.md, 2026-11-13).
 
 ## Noah's decisions (2026-10-08)
 
