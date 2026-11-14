@@ -730,7 +730,8 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // (6c F1) a plan that reads a frozen volume of the live world (forms_demo's kept ice) records that volume's sha: a fresh world
     // copy differs by a few natural cells (plants, water), so with every tile sha equal and the IR equal but for its volume blobs,
     // the golden matches
-    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; return JSON.stringify(o); };
+    // ((7c BR) and a site lot's own cut of that volume (its site.volumeSha and blob id: SL's site volumes, S6's carve_into lots)
+    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; for (const l of o.lots ?? []) if (l.site) { delete l.site.volumeSha; delete l.site.volumeBlobId; } return JSON.stringify(o); };
     const gIr = fs.existsSync(path.join(SCEN, 'goldens', gkey(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', gkey(sc), 'ir.json'), 'utf8')) : null;
     const volOnly = sameTiles && gIr && noVol(gIr) === noVol(JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')));
     golden = sameTiles && g.irSha === ts.irSha ? 'match'

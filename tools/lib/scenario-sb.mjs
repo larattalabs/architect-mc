@@ -152,7 +152,8 @@ export async function librarySiteEntries(L, sc, ir, tag) {
     const pool = cached.filter((c) => c.fit === l.site.fit);
     const c = pool[(k[l.site.fit] = (k[l.site.fit] ?? -1) + 1) % pool.length];
     const key = `L_${c.e}`;
-    if (!plan.reuse[key]) { plan.reuse[key] = c.e; plan.archetypes.push({ key, lot: l.id, request: {} }); } else plan.variants[l.id] = key;
+    // (`direct`: every lot its own variant of the cached entry, so one refused site never leaves the others without a source)
+    if (lib.direct) { const kd = `${key}_${l.id}`; plan.reuse[kd] = c.e; plan.archetypes.push({ key: kd, lot: l.id, request: {} }); } else if (!plan.reuse[key]) { plan.reuse[key] = c.e; plan.archetypes.push({ key, lot: l.id, request: {} }); } else plan.variants[l.id] = key;
   }
   const a = mine.length ? await paSiteEntries(L, sc, { ...ir, lots: mine }, plan) : { entries: {}, rows: [], archetypes: {} };
   const b = rest.length ? await siteEntries(L, sc, { ...ir, lots: rest }, tag) : { entries: {}, rows: [], archetypes: {} };

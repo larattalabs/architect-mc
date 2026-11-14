@@ -13,8 +13,9 @@ export const params = {
   lots: { type: 'int', min: 1, max: 8, default: 5, label: 'Cliff lots' },
   minHeight: { type: 'int', min: 4, max: 64, default: 10, label: 'Least face height' },
 };
-/** The cliff design's size [w, h, d] (front south; 7b P1's gen_pa_cliff_house). */
-export const DESIGN = Object.freeze([18, 24, 12]);
+/** The lot's size [w, h, d] (front south): 7b P1's gen_pa_cliff_house is 18x24x12; two rows deeper, as its source writes one row past a
+ * 12-deep box on some cliffs (BR's first gallery run: SITE_UNFIT site_bound). */
+export const DESIGN = Object.freeze([18, 24, 14]);
 const NORMAL = Object.freeze({ north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] });
 const meets = (a, b, g) => a.minX - g <= b.maxX && a.maxX + g >= b.minX && a.minY - g <= b.maxY && a.maxY + g >= b.minY && a.minZ - g <= b.maxZ && a.maxZ + g >= b.minZ;
 
