@@ -267,7 +267,7 @@ export async function registerFK(steps, h) {
     if (c.containers?.length) {
       const [hx, hy, hz] = c.containers[2].at.split(',').map(Number);
       const [lx, ly, lz] = c.locks[0].at.split(',').map(Number);
-      const ow1 = await call('dev.cells.place', { kind: 'test:fk', cells: [[hx, hy, hz, 'minecraft:stone']], overlap: 'LAYER', force: true }, 120_000).catch((e) => ({ error: String(e) }));
+      const ow1 = await call('dev.cells.place', { kind: 'test:fk', cells: [[hx, hy, hz, 'minecraft:stone']], overlap: 'LAYER', force: true, naturalOnly: false }, 120_000).catch((e) => ({ error: String(e) }));
       const ow2 = await call('dev.pl.place', { blueprint: 'rs_shed', origin: [lx - 1, ly - 2, lz - 1], overlap: 'layer', force: true, mode: 'instant' }, 300_000).catch((e) => ({ error: String(e) }));
       await L.settle(1500);
       const cx = await fk(p.site);
