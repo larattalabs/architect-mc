@@ -774,6 +774,14 @@ public final class Sites {
 			}
 		}
 		{
+			// (M5 FK) never written over a filled site's declared container or lock cell (the snapshot box: every cell it may write)
+			Anchors.Bounds sb = snapBox;
+			String over = Fills.overwriteRefusal(level, p -> sb.contains(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)), moving == null ? null : moving.id());
+			if (over != null) {
+				out.add(Reason.NOT_ALLOWED, "Not placed: " + over);
+			}
+		}
+		{
 			Blueprints.Entry fe = Blueprints.entry(bp.id());
 			String no = fe == null ? null : Fills.refusal(fe.json());
 			if (no != null) {

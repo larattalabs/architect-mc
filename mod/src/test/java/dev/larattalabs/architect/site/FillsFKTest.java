@@ -152,4 +152,16 @@ class FillsFKTest {
 		assertFalse(new StockLedger().toJson().has("filled"), "additive: absent when unused");
 		assertFalse(new StockLedger().toJson().has("custody"));
 	}
+
+	@Test
+	void anOverwriteOfADeclaredCellIsFoundBeforeAnyWrite() {
+		// (the coordinator's ruling on the contract's XR row) a writer whose cells hold a declared container or lock cell is refused
+		Fills.Spec s = Fills.parse(entry(ONE, true));
+		Fills.ToWorld at = (x, y, z) -> new net.minecraft.core.BlockPos(100 + x, 64 + y, 200 + z);
+		long hopper = net.minecraft.core.BlockPos.asLong(101, 66, 201);
+		long lever = net.minecraft.core.BlockPos.asLong(100, 67, 201);
+		assertEquals("filled container at 101, 66, 201", Fills.firstHit(s, at, p -> p == hopper));
+		assertEquals("lock cell at 100, 67, 201", Fills.firstHit(s, at, p -> p == lever));
+		assertNull(Fills.firstHit(s, at, p -> p == net.minecraft.core.BlockPos.asLong(102, 66, 201)), "a cell beside them: not refused");
+	}
 }

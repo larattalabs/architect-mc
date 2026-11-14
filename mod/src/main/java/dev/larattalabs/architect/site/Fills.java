@@ -696,6 +696,64 @@ public final class Fills {
 		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
 	}
 
+	// ------------------------------------------------------------------ other writers (XR)
+
+	/**
+	 * (M5 FK, the coordinator's ruling on the contract's XR row) Another writer (a lot or any site placement, a road, a tile or region
+	 * target, a cell site) whose cells include a filled site's declared container or lock cell is refused before any write: an overwrite
+	 * would destroy or double-refund the fill. Null when no such cell is hit; else the refusal's message naming the cell.
+	 */
+	public static @Nullable String overwriteRefusal(ServerLevel level, java.util.function.LongPredicate writes, @Nullable String self) {
+		MinecraftServer srv = level.getServer();
+		String dim = Sites.dimensionId(level);
+		for (Site s : Sites.all()) {
+			if (s.id().equals(self) || !dim.equals(s.dimension()) || phase(s) == null && !filledSite(s)) {
+				continue;
+			}
+			Spec spec = of(srv, s);
+			String hit = spec == null ? null : firstHit(spec, (x, y, z) -> world(s, x, y, z), writes);
+			if (hit != null) {
+				return "it would write over " + s.id() + "'s " + hit + " (a filled-container entry's cells are never overwritten)";
+			}
+		}
+		return null;
+	}
+
+	/** A template cell to the world. */
+	@FunctionalInterface
+	interface ToWorld {
+		BlockPos at(int x, int y, int z);
+	}
+
+	/** (pure) The first declared container or lock cell {@code writes} holds, as "filled container at x, y, z" / "lock cell at ...", or null. */
+	static @Nullable String firstHit(Spec spec, ToWorld world, java.util.function.LongPredicate writes) {
+		for (Box b : spec.containers()) {
+			BlockPos p = world.at(b.x(), b.y(), b.z());
+			if (writes.test(p.asLong())) {
+				return "filled container at " + p.toShortString();
+			}
+		}
+		for (Lock l : spec.locks()) {
+			BlockPos p = world.at(l.x(), l.y(), l.z());
+			if (writes.test(p.asLong())) {
+				return "lock cell at " + p.toShortString();
+			}
+		}
+		return null;
+	}
+
+	/** {@link #overwriteRefusal} over a list of written cells, thrown as NOT_ALLOWED. */
+	static void refuseOverwrite(ServerLevel level, long[] positions, String what) throws Sites.SiteException {
+		if (positions == null || positions.length == 0) {
+			return;
+		}
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet set = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(positions);
+		String no = overwriteRefusal(level, set::contains, null);
+		if (no != null) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, what + ": " + no);
+		}
+	}
+
 	// ------------------------------------------------------------------ load
 
 	/**
