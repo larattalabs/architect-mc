@@ -78,7 +78,15 @@ export async function registerSAroad(steps, h) {
     const rs = await G.rsState(ctx, region);
     const roadT = (rs.targets ?? []).filter((t) => t.part === roadKey || t.part === `road ${X?.road}` || String(t.id).includes(X?.road ?? '\u0000'));
     out.built = { state: w.r.state, waves: f.waves, consumed: used, roadTargets: roadT.map((t) => [t.id, t.part, t.built ?? t.done, t.bom]) };
-    check(w.r.state === 'PLACED' && G.same(q0.bom, used), `A3: built (${w.r.state}, ${f.waves} waves); consumed equals the quote item for item: quote ${json(q0.bom)}, consumed ${json(used)}`, out.built);
+    // (A11, the coordinator's (c)) the quote is an upper bound when its paid cells include terrain the land may already hold: consumed is at
+    // most the quote item for item, equal unless the quote says so (inexact, its note naming the cells)
+    const over = G.minus(used, q0.bom);
+    const under = G.minus(q0.bom, used);
+    const bound = (q0.notes ?? []).some((n) => /upper bound/.test(n));
+    out.built.over = over;
+    out.built.under = under;
+    check(w.r.state === 'PLACED' && !Object.values(over).some((n) => n > 0) && (G.same(q0.bom, used) || (q0.exact === false && bound)),
+      `A3/A11: built (${w.r.state}, ${f.waves} waves); consumed ${json(used)} is at most the quote ${json(q0.bom)} item for item${G.same(q0.bom, used) ? ' (equal)' : `, under by ${json(under)}: the quote inexact (${q0.exact}) and naming the upper bound`}`, out.built);
     // undone: the world before the growth; what came back equals what was consumed
     const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
     await L.settle(3000);
