@@ -46,6 +46,13 @@ const FLAT = 'G6B Flat Base';
 const DEFAULT_HOUSES = [['fit_attach_to_cliff', 'cliff_face'], ['fit_span', 'rift_site'], ['fit_suspend', 'overhang']];
 /** ((7c US) GATE7BSO_HOUSES `id:fixture,...` runs the same survival flow over other houses: tools/gate7cus.mjs, the inverted house) */
 const HOUSES = process.env.GATE7BSO_HOUSES ? process.env.GATE7BSO_HOUSES.split(',').map((h) => h.split(':')) : DEFAULT_HOUSES;
+/**
+ * ((SA, A36) GATE7BSO_STANDALONE=1: each house's site placed as ST's standalone spec (its sidecar site without a lot id: the way in is the
+ * player's), through the same survival flow: Sites.place in construction mode, SO's support order, items in = items out, every prefix
+ * connected. (SA, A35) before it, the pinned entry placed and checked with no site is refused SITE_MISMATCH naming the site variant
+ * route (Sites.place, Sites.check and /architect place). tools/gate-chains.json `sa-survival-st`.)
+ */
+const STANDALONE = process.env.GATE7BSO_STANDALONE === '1';
 const EVERY = 100;
 /** (SO-b) Architect's cosmetic scaffolding block, and whether a tally holds any scaffolding item (vanilla's, or one of Architect's). */
 const SCAF = 'architect_mc:scaffold';
@@ -152,7 +159,7 @@ function scan(cells, ctx) {
 
 async function siteCtx(id, fixture) {
   const side = JSON.parse(fs.readFileSync(path.join(KIT, 'examples', id, `${id}.blueprint.json`), 'utf8'));
-  const site = side.site;
+  const site = STANDALONE ? Object.fromEntries(Object.entries(side.site).filter(([k]) => k !== 'lotId')) : side.site;
   const o = site.frame.origin;
   const { decodeArvx, classAt, VOXEL_CLASSES } = await imp('lib/region/volume.mjs');
   const vol = decodeArvx(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'site', fixture, 'volume.bin')));
@@ -244,9 +251,25 @@ async function freshHouse(ctx, name) {
   await call('dev.survival.set', { on: true }, 30_000);
 }
 
+let pinChecked = false;
 async function placeConstruction(ctx) {
+  if (STANDALONE && !pinChecked) {
+    pinChecked = true;
+    // (SA, A35) the pinned entry with no site: Sites.place and Sites.check refuse SITE_MISMATCH naming the site variant route; so does
+    // /architect place; nothing is written
+    const at = ctx.site.frame.origin;
+    const np = await call('dev.pl.place', { blueprint: ctx.id, origin: at, rotation: 'none', mode: 'construction' }, 300_000);
+    const nc = await call('dev.pl.place', { blueprint: ctx.id, origin: at, rotation: 'none', mode: 'construction', check: true }, 300_000);
+    const rx = (o) => (o.refusals ?? [])[0] ?? {};
+    const cm = await L.cmd(`/architect place ${ctx.id}`).catch((e) => ({ messages: [String(e.message ?? e)] }));
+    const cmText = JSON.stringify(cm?.messages ?? cm ?? '');
+    check(!np.placed && rx(np).reason === 'SITE_MISMATCH' && /site variant here/.test(rx(np).message ?? '') && rx(nc).reason === 'SITE_MISMATCH'
+      && /site-bound/.test(cmText) && !/Placed/.test(cmText),
+      `A35: the pinned ${ctx.id} with no site: Sites.place ${rx(np).reason} ("${String(rx(np).message ?? '').slice(0, 110)}"), Sites.check ${rx(nc).reason}, /architect place ${cmText.slice(0, 120)}`,
+      { place: np, check: nc, command: cm });
+  }
   const p = await call('dev.pl.place', { blueprint: ctx.id, site: ctx.site, mode: 'construction' }, 300_000);
-  check(p.placed, `${ctx.id}: Sites.place with its site in construction mode placed ${p.site}`, p);
+  check(p.placed && (!STANDALONE || ctx.site.lotId === undefined), `${ctx.id}: Sites.place with its ${STANDALONE ? 'standalone ' : ''}site in construction mode placed ${p.site}${STANDALONE ? ' (no lot id: the way in is the player\'s)' : ''}`, p);
   return p.site;
 }
 
