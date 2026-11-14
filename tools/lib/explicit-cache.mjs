@@ -57,12 +57,16 @@ export function ownSteps({ ids, now, base, files = [], own = [] }) {
   return out;
 }
 
-/** Whether a step is strict tier: conf = gate-cache.json `explicit` ({ strict: { ids: [], pattern: "regex" } }). */
-export function isStrict(conf, id) {
+/**
+ * Whether a step is strict tier: conf = gate-cache.json `explicit` ({ strict: { ids: [], pattern: "regex on the id", descPattern:
+ * "regex on the chain entry's desc" } }); entry: the step's chain entry (its desc names what it checks: undo, E-flat, a ledger, ...).
+ */
+export function isStrict(conf, id, entry = null) {
   const pid = parentOf(id);
   const s = conf?.strict ?? {};
   if ((s.ids ?? []).includes(pid)) return true;
-  return s.pattern ? new RegExp(s.pattern).test(pid) : false;
+  if (s.pattern && new RegExp(s.pattern).test(pid)) return true;
+  return !!(s.descPattern && entry?.desc && new RegExp(s.descPattern, 'i').test(entry.desc));
 }
 
 /**

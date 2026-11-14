@@ -200,7 +200,8 @@
     "$comment": "(slice GX) An explicit list (--only/--from) looks up its steps (tools/lib/explicit-cache.mjs; docs/GATES.md \"Slice GX as built\"): its own steps (--own, and what the range adds or changes) always run; a strict-tier step takes only an exact key hit (never a coverage hit); an entry from another platform never serves it; --no-cache runs all. strict: speed rule 1's strict tier (save data and persistence, billing, refunds and stock, undo and revert, crash recovery and reconcile, anything that can mint or lose items), by id and by pattern.",
     "strict": {
       "ids": ["unit-mod", "umt", "umt-long", "apijars", "api-compat", "safety-ingame", "y2-bom", "qt-unit", "qt-growth", "qt-approved", "ig-instant", "pl-ingame", "gr-town", "lp-remove", "6b-ghost", "hr-ghost", "4e-orders", "4e-orders-full"],
-      "pattern": "crash|survival|undo|ledger|reconcile|refund|stock|resume|eflat|rmcrash|^p3-|^rs-|^jr-|^rl-|^hf-|^ps-|^ru-|^cu-|^rv-|^x-resume"
+      "pattern": "crash|survival|undo|ledger|reconcile|refund|stock|resume|eflat|rmcrash|^p3-|^rs-|^jr-|^rl-|^hf-|^ps-|^ru-|^cu-|^rv-|^x-resume",
+      "descPattern": "ledger|refund|stock|\\bbill|undo|journal|crash|reconcil|survival|\\bsaves?\\b|saved|E-flat|conservation|dupe"
     }
   },
   "uncacheable": {

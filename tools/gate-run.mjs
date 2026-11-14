@@ -552,6 +552,7 @@ const JUDGED_BENCHES = judgedBenches(CACHE_CONF);
 // entry from another platform never serves it
 const EXPLICIT = !!(opt('--only') || opt('--from'));
 const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps'
+  : EXPLICIT && (NIGHTLY || !['change', 'slice'].includes(chainName)) ? `--only/--from in ${NIGHTLY ? 'the nightly' : chainName}: an explicit list runs (explicit lookups are for change and slice)`
   : flag('--no-cache') ? '--no-cache' : tierInfo.full?.on ? `release --full (${tierInfo.full.why.join('; ')})` : !INPUT_MAP ? 'no tools/step-inputs.json' : null;
 let CACHE = null;
 let cacheErr = null;
@@ -674,7 +675,7 @@ if (tierInfo.cache.lookup) {
       const w = keyFor(warm, id);
       l = w.key === k.key ? { hit: { key: k.key, at: `(assumed: a full nightly at ${warm.head.slice(0, 9)})`, head: warm.head, run: INPUT_MAP.steps[parentOf(id)]?.verified ? '(assumed)' : '(assumed; its set is NOT yet verified by a traced PASS: computed imports may be missing)', tier: 'assumed' } } : { hit: null, why: w.key ? `its key at ${warm.head.slice(0, 9)} differs (an input, its definition or a mode moved)` : `no key at ${warm.head.slice(0, 9)}: ${w.why}` };
     } else if (EXPLICIT) {
-      const strict = isStrict(CACHE_CONF.explicit, id);
+      const strict = isStrict(CACHE_CONF.explicit, id, RAW_CFG.steps[parentOf(id)]);
       l = explicitDecision({ own: null, strict, key: k, exact: lookup(CACHE, id, k.key), coverage: coverageMode(CACHE, id) ? () => lookupCoverage(CACHE, id) : null, platform: platformNow() });
       if (l.hit) for (const [lib, dep] of [['tools/lib/junit-reuse.mjs', 'unit-mod'], ['tools/lib/kit-reuse.mjs', 'unit-kit'], ['tools/lib/sidecar-reuse.mjs', 'unit-sidecar']]) {
         // as below: a reader's coverage PASS stands only beside the suite it delegated to
@@ -1109,6 +1110,11 @@ const CC = changeConfig(cfg);
 const CHANGE_ON = changeApplies(CC, { chain: chainName, turbo: TURBO, shardsArg: SHARDS_ARG, steps: steps.length, portsGiven: allPairs ? portPairs.length : 0 });
 const CHANGE = CHANGE_ON.on && !flag('--no-change-shards');
 let changeChoice = null;
+// (GX, speed rule 5) in a change-sharded run, in-game shard k starts its first in-game step (k - 1) x slots.load.settleSec after
+// the run's work starts (the lanes and shard 1 at once), so two in-game starts are never closer than the rule's 300 s; until then
+// that shard takes client-less steps only
+let WORK_T0 = null;
+const gameHeld = (sh) => CHANGE && sh.kind === 'game' && sh.k > 1 && !!sh.RUN && WORK_T0 !== null && Date.now() < WORK_T0 + (sh.k - 1) * LOAD_GATE.settleSec * 1000;
 async function decideChange() {
   const offline = steps.filter((s) => s.client === 'none').length;
   const game = steps.length - offline;
@@ -1148,10 +1154,12 @@ function pick(sh, st, all) {
   // (it would stop its client for one), so the in-game shards keep their clients and the lanes run the units beside them
   const lanes = all.some((o) => o.kind === 'offline');
   const offline = (s) => s.client === 'none';
-  const gamePending = lanes && sh.kind !== 'offline' && st.pending.some((j) => !offline(steps[j]));
+  const spaced = gameHeld(sh);
+  const gamePending = lanes && sh.kind !== 'offline' && !spaced && st.pending.some((j) => !offline(steps[j]));
   const ready = [];
   for (const i of st.pending) {
     const s = steps[i];
+    if (spaced && !offline(s)) continue;
     if (lanes && (sh.kind === 'offline' ? !offline(s) : offline(s) && gamePending)) continue;
     if (steps.some((b, j) => j < i && b.stopOnFail && !st.done.has(b.id))) continue;
     if (s.after && stepIds.includes(s.after)) {
@@ -2402,6 +2410,7 @@ async function worker(sh) {
   wakeAll();
 }
 
+WORK_T0 = Date.now();
 await Promise.all(shards.map((sh) => worker(sh)));
 if (draining) {
   const left = st.pending.map((j) => steps[j].id);

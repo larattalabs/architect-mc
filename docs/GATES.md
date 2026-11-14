@@ -357,8 +357,9 @@ FAIL, TIMEOUT, ERROR and NOISY are never recorded. `--no-cache` turns lookups of
 
 ### Lookups and the release selection
 
-A tier run (`change`, `slice`, `release`) looks up every selected step. It does not when the run is a named chain, `--only`/`--from`
-(an explicit list, such as the verifier's re-runs, always runs), `--no-cache` or `release --full`. A step with a recorded PASS for
+A tier run (`change`, `slice`, `release`) looks up every selected step. It does not when the run is a named chain, `--no-cache` or
+`release --full`. An explicit list (`--only`/`--from`) looks up too since slice GX, under its own rule ("Slice GX as built": own steps
+always run, strict-tier steps take exact keys only); **a verifier's re-run passes `--no-cache`**. A step with a recorded PASS for
 its key is **CACHED**: it is not run. It is listed in `--plan`, in `summary.json` `cached` (key, PASS time, head, run dir, log) and in
 SUMMARY.md, each with a pointer to its evidence.
 
@@ -2681,7 +2682,8 @@ The runner never calls Claude. The independent gate-verifier is launched by the 
      of the steps that matter (gate JSONs under `gate4e/`, `gate6a/`, ...), checking that the run's head is the slice head and
      that the selection covered the diff;
   3. then it **re-runs only the risky steps**: anything touching the journal, the undo or survival, plus the steps for whatever the
-     diff touches that the verifier judges risky (`node tools/gate-run.mjs change --only <steps> ...` on its own ports).
+     diff touches that the verifier judges risky (`node tools/gate-run.mjs change --only <steps> --no-cache ...` on its own ports: `--no-cache`, since an explicit list looks up
+     its steps from slice GX on, and a re-run must run).
 - **Per release:** full reproduction. The `release` run, then the full independent gate-verifier, which reproduces the gates
   itself (every bar, every step, not only the runner's word).
 

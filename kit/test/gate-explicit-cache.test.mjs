@@ -177,4 +177,8 @@ test('the strict tier in tools/gate-cache.json: the crash, survival, ledger and 
     assert.ok(isStrict(real.explicit, id), id);
   }
   for (const id of ['d-unit', 't1-unit', 'd3-unit', 'unit-kit', 'lint-structure', 'slb-ingame']) assert.ok(!isStrict(real.explicit, id), id);
+  // by what it checks: a step whose desc names undo, E-flat, a ledger, a bill, a save is strict whatever its id
+  const chains = JSON.parse(fs.readFileSync(new URL('../../tools/gate-chains.json', import.meta.url), 'utf8'));
+  for (const id of ['y-unit', 'c29-unit', 'pt2-unit', 'slb-ingame', 'h-ingame', '0b-ingame', 'pa-unit']) assert.ok(isStrict(real.explicit, id, chains.steps[id]), id);
+  for (const id of ['d-unit', 't1-unit', 'unit-kit', 'lint-structure']) assert.ok(!isStrict(real.explicit, id, chains.steps[id]), id);
 });
