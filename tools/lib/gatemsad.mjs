@@ -83,8 +83,8 @@ export async function registerSAD(steps, h) {
 
   steps.sadunit = async () => {
     const out = {};
-    out.java = await h.javaTests(['*RegionAdoptSurvivalSADTest*', '*RegionAdoptTest*'], 8);
-    check(out.java.ok, `RegionAdoptSurvivalSADTest (a construction site adopts in survival only, never with a live crate, a building one needs the stockpile; a joined shared-crate group adopts; the region is survival exactly when the world is) and RegionAdoptTest: ${out.java.tests} tests, ${out.java.failures} failures`, out.java.tail);
+    out.java = await h.javaTests(['*RegionAdoptSurvivalSADTest*', '*RegionAdoptTest*', '*StockpileAdoptSADTest*', '*StockpileRepairSADTest*', '*StockpileLegacyJRbTest*'], 12);
+    check(out.java.ok, `RegionAdoptSurvivalSADTest (a construction site adopts in survival only, never with a live crate, a building one needs the stockpile; a joined shared-crate group adopts; the region is survival exactly when the world is) RegionAdoptTest, StockpileAdoptSADTest (a joined crate credited once across a save), StockpileRepairSADTest (the start's repair names nothing on an ordinary world), StockpileLegacyJRbTest: ${out.java.tests} tests, ${out.java.failures} failures`, out.java.tail);
     out.apicompat = apiCompat();
     check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible (SAD changes no API type)', out.apicompat);
     spendZero();
@@ -184,9 +184,9 @@ export async function registerSAD(steps, h) {
     return { ledger: l, saves: s.saves };
   }
   /** The halt (a kill point armed by `arm`, or dev.stockpile.halt), the saved ledger read off the disk, the world reopened. */
-  async function halt(tag, W, b0, go) {
+  async function halt(tag, W, b0, go, { savedByOp = false } = {}) {
     const s1 = await savedNow();
-    check(s1.saves === b0.saves, `${tag}: nothing saved the ledger between the baseline and the halt (save #${b0.saves} -> #${s1.saves})`);
+    check(s1.saves === b0.saves, `${tag}: nothing saved the ledger between the baseline and the halt's operation (save #${b0.saves} -> #${s1.saves})${savedByOp ? '; the operation saves it once before its kill point' : ''}`);
     go();
     const down = await haltWait();
     check(down, `${tag}: the server halted with nothing saved`);
@@ -271,9 +271,35 @@ export async function registerSAD(steps, h) {
     }
     const p0 = await pile();
     const crateBefore = await siteState(ids.house_4);
+    // SAC2: halted between adoptCrates' two saves (the ledger joined and saved with the world; the groups' crates cleared, the sites' crate
+    // references not yet): the restart has the stock and the records as saved; the next adoptCrates repairs the references, crediting nothing twice
+    const bS2 = await baseline('SAC2');
+    await call('dev.journal.killAt', { point: 'SAC2' }, 10_000);
+    const Ld2 = await halt('SAC2', W, bS2, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null), { savedByOp: true });
+    let la2 = null;
+    if (Ld2) {
+      la2 = (await pile()).ledger ?? {};
+      const moved2 = G.plus(G.minus(stockOf(Ld2), stockOf(p0.ledger)), G.minus(Ld2.dropped ?? {}, p0.ledger?.dropped ?? {}));
+      out.sac2 = { moved: moved2, crateStock: crateBefore.ledger?.stock, records: Object.keys(Ld2.paid ?? {}), sameAsSaved: json(Ld2) === json(la2) };
+      check(json(Ld2.paid ?? {}) === json(la2.paid ?? {}) && G.same(stockOf(Ld2), stockOf(la2)) && G.same(moved2, crateBefore.ledger?.stock ?? {})
+        && Object.keys(Ld2.paid ?? {}).some((k) => k.startsWith(`site:${ids.house_3}@`)), `SAC2: after the unclean restart the stockpile holds the crate's stock once (${json(moved2)}) and the keyed records (${Object.keys(Ld2.paid ?? {}).length}) as saved`, out.sac2);
+      // the world's start repaired the references before any reader: no crate-fed path is left to double-spend the joined crate
+      const s3w = await siteState(ids.house_3);
+      const s4w = await siteState(ids.house_4);
+      const ow = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+      out.sac2.atStart = { s3: s3w.crate, s4: s4w.crate, order: ow };
+      check(s3w.crate?.x === undefined && s4w.crate?.x === undefined && ow.includes(ids.house_4) && !ow.includes(ids.house_3),
+        `SAC2: the world's start cleared both crate references (the ledger had joined that crate) before any feed, refund or undo; house_4 in the feed order, house_3 not (${json(ow)})`, out.sac2.atStart);
+    }
     const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     check(!ac.refused, `row 2: adoptCrates joined the shared crate to the stockpile (${json(ac.refused ?? 'joined')})`);
     const p1 = await pile();
+    if (la2) {
+      const s3r = await siteState(ids.house_3);
+      const s4r = await siteState(ids.house_4);
+      check(json(p1.ledger?.paid ?? {}) === json(la2.paid ?? {}) && G.same(stockOf(p1.ledger), stockOf(la2)) && s3r.crate?.x === undefined && s4r.crate?.x === undefined,
+        'SAC2: a later adoptCrates credits nothing twice (records and stock unchanged; both references clear)', { s3: s3r.crate, s4: s4r.crate });
+    }
     // (no adoption yet: an older survival world's crate) the crate's stock moved once: into the stock, or dropped
     {
       const moved = G.plus(G.minus(stockOf(p1.ledger), stockOf(p0.ledger)), G.minus(p1.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
