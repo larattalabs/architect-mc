@@ -79,7 +79,6 @@ public final class GivenPrograms {
 		}
 	}
 
-	/** The {@code design.fromProgram} message. Throws {@link IllegalArgumentException} / FIELD_LIMIT for a bad argument. Pure. */
 	/** (SA, A25) The index of the first lone UTF-16 surrogate in a string, or -1. Pure. */
 	static int loneSurrogate(String s) {
 		for (int i = 0; i < s.length(); i++) {
@@ -98,6 +97,7 @@ public final class GivenPrograms {
 		return -1;
 	}
 
+	/** The {@code design.fromProgram} message. Throws {@link IllegalArgumentException} / FIELD_LIMIT for a bad argument. Pure. */
 	static JsonObject fromProgramMessage(String source, JsonObject params, @Nullable BiblePin bible, String opKey, @Nullable String owner) {
 		if (source == null || source.isEmpty()) {
 			throw new IllegalArgumentException("fromProgram needs the program's source");

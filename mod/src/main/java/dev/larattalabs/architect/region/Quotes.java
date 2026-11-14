@@ -222,11 +222,6 @@ public final class Quotes {
 		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bill.bom(), bill.parts, bound, bill.exact, notes);
 	}
 
-	/**
-	 * (SA, A11) The region's paid cells that may already stand in the land: per target group, the items of natural terrain blocks
-	 * ({@link CellCond#natural}: dirt, stone, sand, ...) in the kit's bill ({@code tiles}: group -> {item: n}). A realise skips a cell
-	 * whose block the world already holds, so those cells can bill less, never more. Null when there are none (the quote stays exact).
-	 */
 	/** (SA, A11) The common terrain blocks, besides the tag rule ({@link CellCond#natural}): a grade's or a fill's usual materials. */
 	private static final java.util.Set<net.minecraft.world.level.block.Block> TERRAIN = java.util.Set.of(net.minecraft.world.level.block.Blocks.DIRT,
 		net.minecraft.world.level.block.Blocks.GRASS_BLOCK, net.minecraft.world.level.block.Blocks.COARSE_DIRT, net.minecraft.world.level.block.Blocks.ROOTED_DIRT,
@@ -237,6 +232,11 @@ public final class Quotes {
 		net.minecraft.world.level.block.Blocks.GRAVEL, net.minecraft.world.level.block.Blocks.CLAY, net.minecraft.world.level.block.Blocks.SANDSTONE,
 		net.minecraft.world.level.block.Blocks.RED_SANDSTONE, net.minecraft.world.level.block.Blocks.NETHERRACK, net.minecraft.world.level.block.Blocks.SNOW_BLOCK);
 
+	/**
+	 * (SA, A11) The region's paid cells that may already stand in the land: per target group, the items of natural terrain blocks
+	 * ({@link CellCond#natural}: dirt, stone, sand, ...) in the kit's bill ({@code tiles}: group -> {item: n}). A realise skips a cell
+	 * whose block the world already holds, so those cells can bill less, never more. Null when there are none (the quote stays exact).
+	 */
 	static @Nullable String mayAlreadyHold(JsonObject tiles) {
 		List<String> parts = new ArrayList<>();
 		int total = 0;
