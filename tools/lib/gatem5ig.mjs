@@ -583,4 +583,7 @@ export async function registerIG(steps, h) {
     spendZero();
     return out;
   };
+
+  // (SAD) the helpers slice SAD's survival adoption steps reuse (tools/lib/gatemsad.mjs)
+  return { installCabin, installField, planGrowth, placedChecks, adBatchWait, waterIn, lotWaits, FARM, FIELD };
 }

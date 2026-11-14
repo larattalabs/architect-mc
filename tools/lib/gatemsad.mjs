@@ -1,0 +1,444 @@
+// Slice SAD gate (docs/CONTRACT.md "Slice SAD: survival adoption"): a survival (Supplied) street town adopted as a region and grown
+// from materials; items in = items out against the saved state at every halt. Registered into tools/gate6dgr.mjs (GR's survival town,
+// growth and kill-point helpers; IG's field, cabin and growth helpers). Headless server, the sim sidecar: $0.
+//
+//   node tools/gate6dgr.mjs sadunit      (sad-unit)      RegionAdoptSurvivalSADTest, RegionAdoptTest; api-compat (no API change)
+//   node tools/gate6dgr.mjs sadsurvival  (sad-survival)  rows 2-5 and 7: a Supplied street town in survival (one instant build; one
+//                                                       construction build with a shared crate: its road and one lot BUILT, one lot still
+//                                                       building) refused while the crate stands, then adopted after adoptCrates: 0 cells,
+//                                                       0 journal entries, the paid records unchanged, RegionView.build survival with the
+//                                                       lot building (built false, percent < 100); fed until it finishes (consumed = its
+//                                                       outstanding; built, 100); grown by a plain lot and an irrigated lot (IG-b's stages),
+//                                                       fed partly, halted with nothing saved, the reconcile at the restart, fed the rest:
+//                                                       consumed since the saved baseline = the quote; the growth's undo halted at RVU2 with
+//                                                       nothing saved, resumed: E-flat 0, no water, back = what the saved ledger says it
+//                                                       consumed; Regions.remove: E-flat 0 against the world before the settlement, the paid
+//                                                       records refunded item for item
+//   node tools/gate6dgr.mjs sadcrash     (sad-crash)     row 6: the adoption halted with nothing saved at AD3 (the journal write: rolled
+//                                                       back) and at AD4 (the sites file moved: rolled forward); memberships agree; stock,
+//                                                       paid records and returned equal the saved ledger's; the building lot then builds
+//                                                       from the stockpile; Regions.remove exact
+//   node tools/gate6dgr.mjs sadinstant   (sad-instant)   row 6b: an all-instant street town adopted in survival, grown by a plain lot from
+//                                                       materials (consumed = quote), the growth undone (refund = consumed); the instant lots
+//                                                       stand and refund nothing; Regions.remove E-flat 0
+//
+// Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+export async function registerSAD(steps, h) {
+  const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, growPlan, rvState, rvWait, root, cellsOf, diff, haltWait, removeRegion, ig } = h;
+  const ctx = { L, OUT, KIT: path.join(root, 'kit'), imp: h.imp };
+  const OWNER = G.OWNER;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
+  const pile = async () => (await call('dev.stockpile.state', { owner: OWNER }, 60_000)).stockpile ?? {};
+  const savedNow = async () => call('dev.stockpile.saved', { owner: OWNER }, 60_000);
+  const ledgerOf = (rootJ) => (rootJ?.stockpiles ?? []).find((p) => p.owner === OWNER)?.ledger ?? null;
+  const paidSum = (l) => Object.values(l?.paid ?? {}).reduce((a, m) => G.plus(a, m), {});
+  function stockOf(l) {
+    const o = {};
+    for (const k of new Set([...Object.keys(l?.delivered ?? {}), ...Object.keys(l?.returned ?? {})])) {
+      const s = (l.delivered?.[k] ?? 0) + (l.returned?.[k] ?? 0) - (l.consumed?.[k] ?? 0) - (l.withdrawn?.[k] ?? 0) - (l.dropped?.[k] ?? 0);
+      if (s) o[k] = s;
+    }
+    return o;
+  }
+  const backOf = (l) => G.plus(stockOf(l), l?.refundOverflow ?? {});
+  const siteState = (id) => call('dev.site.state', { site: id }, 60_000);
+  const pause = (site, paused) => call('dev.stockpile.pause', { site, paused }, 60_000);
+  const rs = (region) => call('dev.rs.state', { region }, 120_000);
+  const LOT = { sx: 15, sz: 17 };
+  // the settlement's box (AD's claim) and the world box judged for E-flat; the crates stand outside both
+  const TCLAIM = [CX, CZ, CX + 160, CZ + 96];
+  const BOX = (gy) => BOXOF(TCLAIM, gy);
+  const PILE_AT = (gy) => [0, 1, 2, 3].map((k) => [CX - 30 + 2 * k, gy + 1, CZ - 30]);
+  const CRATE_AT = (gy) => [CX - 30, gy + 1, CZ - 24];
+
+  function apiCompat() {
+    const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
+    const J = h.apiJars();
+    return [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
+      const ac = fs.existsSync(args.at(-1)) ? spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 900_000, env }) : { status: -1, stdout: `missing ${args.at(-1)}`, stderr: '' };
+      return { args: args.slice(1).map((a) => path.basename(a)), code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter(Boolean).slice(-3) };
+    });
+  }
+
+  steps.sadunit = async () => {
+    const out = {};
+    out.java = await h.javaTests(['*RegionAdoptSurvivalSADTest*', '*RegionAdoptTest*'], 8);
+    check(out.java.ok, `RegionAdoptSurvivalSADTest (a construction site adopts in survival only, never with a live crate, a building one needs the stockpile; a joined shared-crate group adopts; the region is survival exactly when the world is) and RegionAdoptTest: ${out.java.tests} tests, ${out.java.failures} failures`, out.java.tail);
+    out.apicompat = apiCompat();
+    check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible (SAD changes no API type)', out.apicompat);
+    spendZero();
+    return out;
+  };
+
+  /** A fresh survival world (G.SURV's copy), the owner's cabin entry and RS's designs installed: {gy, dir}. */
+  async function world(name) {
+    await G.survivalBase(ctx);
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await cmd('/op @s').catch(() => null);
+    await G.designs(ctx);
+    await L.tp(CX + 80, 80, CZ + 48);
+    const gy = await groundY(CX + 4, CZ + 4);
+    return { gy, dir: path.join(L.SAVES, name) };
+  }
+
+  /** The town's lot layout (AD's: 15 x 17, alternating north and south of the street, lotGap 3): 4 lots, the street's line. */
+  function layout(gy) {
+    const sz = CZ + 48;
+    const lots = [];
+    let xn = CX + 12, xs = CX + 12;
+    for (let i = 0; i < 4; i++) {
+      const north = i % 2 === 0;
+      const x = north ? xn : xs;
+      lots.push({ id: `house_${i + 1}`, x, z: north ? sz - 3 - LOT.sz + 1 : sz + 3, sx: LOT.sx, sz: LOT.sz, north });
+      if (north) xn = x + LOT.sx + 3; else xs = x + LOT.sx + 3;
+    }
+    const x0 = Math.min(...lots.map((l) => l.x)), x1 = Math.max(...lots.map((l) => l.x + l.sx - 1));
+    const xm = lots[1].x + LOT.sx; // the first two lots' end: street | street#2
+    return { sz, lots, x0, x1, xm, y: gy + 1 };
+  }
+
+  /** One Steward build through dev.ad.settlement; instant builds with the survival toggle off (no actor needed), construction ones on. */
+  async function build(T, entry, lots, spans, b, { keys, construction = false, sharedCrate = false, crateAt = null, waitDone = true } = {}) {
+    if (!construction) await call('dev.survival.set', { on: false });
+    const q = await call('dev.ad.settlement', { owner: OWNER, entry, streetZ: T.sz, y: T.y, lots, spans, settlement: 'sad', build: b, ...(keys ? { keys } : {}),
+      ...(construction ? { mode: 'construction', sharedCrate, ...(crateAt ? { crateAt } : {}) } : {}) }, 120_000);
+    if (!construction) await call('dev.survival.set', { on: true });
+    if (q.refused) throw new Error(`build ${b} was refused: ${q.refused}`);
+    const t0 = Date.now();
+    let bt;
+    for (; Date.now() - t0 < 900_000;) {
+      bt = await call('dev.ad.batch', { batchId: q.batchId }, 10_000);
+      if (['DONE', 'CANCELLED', 'FAILED'].includes(bt.status) || (!waitDone && bt.items.every((i) => i.site))) break;
+      await sleep(L.pollDelayMs(Date.now() - t0));
+    }
+    const ids = Object.fromEntries(bt.items.map((i) => [i.key, i.site]));
+    check(bt.items.every((i) => i.site), `build ${b} (${construction ? 'from materials' : 'instant'}): ${bt.items.length} items put down in group ${bt.group}: ${json(bt.items.map((i) => [i.key, i.status]))}`);
+    return { ids, group: bt.group, batchId: q.batchId };
+  }
+
+  /** Inserts a construction target's missing items into its crate (or the stockpile), `share` of each (1 = all). */
+  async function feedSite(site, share = 1, into = null) {
+    const s = await siteState(site);
+    const want = Object.fromEntries((s.rows ?? []).map((r) => [r.item, share >= 1 ? r.missing : Math.ceil(r.missing * share)]).filter(([, n]) => n > 0));
+    if (!Object.keys(want).length) return {};
+    return (await call('dev.crate.insert', { site: into ?? site, items: want, exact: true }, 120_000)).accepted ?? {};
+  }
+  async function builtWait(site, timeoutMs = 900_000) {
+    const t0 = Date.now();
+    let s;
+    for (; Date.now() - t0 < timeoutMs;) { s = await siteState(site); if (s.state === 'BUILT' || s.state === 'built') return s; await sleep(2000); }
+    return s;
+  }
+  /** Feeds the stockpile what its fed targets still lack until `done()` (the stockpile's own targets, no region needed). */
+  async function feedPile(done, timeoutMs = 1_800_000) {
+    const t0 = Date.now();
+    for (; Date.now() - t0 < timeoutMs;) {
+      if (await done()) return true;
+      const ps = await pile();
+      const need = {};
+      for (const [it, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[it] ?? 0); if (lack > 0) need[it] = lack; }
+      if (Object.keys(need).length) await call('dev.crate.insert', { site: `stockpile:${OWNER}`, items: need, exact: true }, 120_000);
+      await sleep(2500);
+    }
+    return false;
+  }
+
+  /** The adoption request of the town (both street pieces, the four lots). */
+  const adoptReq = (T, ids) => ({ owner: OWNER, claim: TCLAIM, geometry: { streetZ: T.sz, xLo: T.x0, xHi: T.x1 }, roads: [ids.street, ids['street#2']],
+    lots: Object.fromEntries(T.lots.map((l) => [l.id, ids[l.id]])) });
+
+  /** The saved baseline: /save-all flush, PS's periodic save off (the crash window), the saved file's ledger and save count. */
+  async function baseline(tag) {
+    await cmd('/save-all flush');
+    await call('dev.wait', { ms: 2000 }, 30_000);
+    const ps = await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    const s = await savedNow();
+    const live = await pile();
+    const l = ledgerOf(s.file);
+    check(l && G.same(l.consumed, live.ledger?.consumed) && G.same(l.delivered, live.ledger?.delivered) && ps.noPeriodic === true,
+      `${tag}: the baseline: the ledger saved by /save-all flush equals the live one (save #${s.saves}); PS's periodic save off for the window`, { saved: l, live: live.ledger });
+    return { ledger: l, saves: s.saves };
+  }
+  /** The halt (a kill point armed by `arm`, or dev.stockpile.halt), the saved ledger read off the disk, the world reopened. */
+  async function halt(tag, W, b0, go) {
+    const s1 = await savedNow();
+    check(s1.saves === b0.saves, `${tag}: nothing saved the ledger between the baseline and the halt (save #${b0.saves} -> #${s1.saves})`);
+    go();
+    const down = await haltWait();
+    check(down, `${tag}: the server halted with nothing saved`);
+    if (!down) return null;
+    const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
+    await L.openWorld(path.basename(W.dir));
+    await L.tp(CX + 80, 80, CZ + 48);
+    await sleep(3000);
+    return Ld;
+  }
+
+  /**
+   * The Supplied town: build b1 instant (street, street#2, house_1, house_2), build b2 from materials with a shared crate (house_3,
+   * house_4); house_3 fed to BUILT, house_4 a third fed and paused (still building). `pileFirst` makes the stockpile before
+   * b2 (no crate: b2 draws from it).
+   */
+  async function suppliedTown(tag, W, { pileFirst = false } = {}) {
+    const T = layout(W.gy);
+    const B0 = await cellsOf(BOX(W.gy));
+    const entry = await ig.installCabin('sad_cabin');
+    if (pileFirst) {
+      const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+      check(!cr.refused, `${tag}: a stockpile of 4 crates for ${OWNER} (before build b2: it draws from it)`);
+    }
+    const [l1, l2, l3, l4] = T.lots;
+    // (the street pieces are instant: a construction road reports no material rows to feed it by; b2's lots share one crate)
+    const b1 = await build(T, entry, [l1, l2], [[T.x0, T.xm], [T.xm + 1, T.x1]], 'b1');
+    const b2 = await build(T, entry, [l3, l4], [], 'b2', { construction: true, sharedCrate: !pileFirst, crateAt: pileFirst ? null : CRATE_AT(W.gy), waitDone: false });
+    const ids = { ...b1.ids, ...b2.ids };
+    await pause(ids.house_4, true);
+    const s4 = await siteState(ids.house_4);
+    check(!!s4.state && s4.state !== 'instant' && (pileFirst || s4.crate?.present === true), `${tag}: house_4 is a construction site (${s4.state}, ${pileFirst ? 'from the stockpile' : `the shared crate ${json(s4.crate)}`}), paused`, s4);
+    // house_3 fed to BUILT
+    for (const id of [ids.house_3]) {
+      if (pileFirst) await feedPile(async () => ['BUILT', 'built'].includes((await siteState(id)).state), 900_000);
+      else for (let i = 0; i < 6; i++) { await feedSite(id); const s = await siteState(id); if (['BUILT', 'built'].includes(s.state)) break; await sleep(5000); }
+      const s = await builtWait(id);
+      check(['BUILT', 'built'].includes(s.state), `${tag}: house_3 built from materials (${s.state}, ${s.built}/${s.queue})`);
+    }
+    // house_4: a third fed, then paused again while still building
+    await pause(ids.house_4, false);
+    if (pileFirst) {
+      const s = await siteState(ids.house_4);
+      const third = Object.fromEntries((s.rows ?? []).map((r) => [r.item, Math.ceil(r.missing / 3)]).filter(([, n]) => n > 0));
+      await call('dev.crate.insert', { site: `stockpile:${OWNER}`, items: third, exact: true }, 120_000);
+    } else await feedSite(ids.house_4, 1 / 3);
+    let s;
+    for (let i = 0; i < 60; i++) { s = await siteState(ids.house_4); if (s.built > 0 && i >= 10) break; await sleep(2000); }
+    await pause(ids.house_4, true);
+    s = await siteState(ids.house_4);
+    check(s.built > 0 && s.built < s.queue && !['BUILT', 'built'].includes(s.state), `${tag}: house_4 part built and still building (${s.built}/${s.queue}, ${s.state}), paused`, s);
+    return { T, ids, B0, entry, b1, b2 };
+  }
+
+  steps.sadsurvival = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B SAD Survival');
+    const { T, ids, B0, b1, b2 } = await suppliedTown('town', W);
+    const req = adoptReq(T, ids);
+    // the crate still stands: refused before anything is written
+    const S_pre = await cellsOf(BOX(W.gy));
+    const r0 = await call('dev.ad.adopt', req, 900_000);
+    out.refusedLive = r0.refused ?? null;
+    check(String(r0.refused ?? '').startsWith('NOT_ALLOWED') && /adoptCrates/.test(r0.refused), `row 2: Regions.adopt with the shared crate standing refused (${r0.refused})`);
+    check(diff(S_pre, await cellsOf(BOX(W.gy))).n === 0, 'row 2: the refused adoption wrote nothing');
+    // the stockpile, the crates joined (adoptCrates), then the adoption
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `row 2: a stockpile of 4 crates for ${OWNER}`);
+    const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    check(!ac.refused, `row 2: adoptCrates joined the shared crate to the stockpile (${json(ac.refused ?? 'joined')})`);
+    const p1 = await pile();
+    const S1 = await cellsOf(BOX(W.gy));
+    const sites = Object.values(ids);
+    const st0 = await call('dev.ad.state', { sites }, 60_000);
+    const a = await call('dev.ad.adopt', req, 900_000);
+    check(!a.refused && a.state === 'PLACED', `row 2: Regions.adopt of the Supplied town (2 instant lots, 2 lots from materials, one building; 2 street pieces): ${a.region} ${a.state ?? a.refused}`);
+    if (a.refused) { await L.leaveWorld(); spendZero(); return out; }
+    const region = a.region;
+    const st1 = await call('dev.ad.state', { sites }, 60_000);
+    const d1 = diff(S1, await cellsOf(BOX(W.gy)));
+    const p2 = await pile();
+    const b = (await rs(region)).build;
+    out.adopt = { region, entries: [st0.entries, st1.entries], agree: st1.agree, cells: d1.n, paid: [paidSum(p1.ledger), paidSum(p2.ledger)], build: b };
+    check(d1.n === 0 && st1.entries === st0.entries && st1.agree !== false, `row 2: the adoption wrote no cell (${d1.n} differ) and no journal entry (${st0.entries} -> ${st1.entries}); memberships agree (${st1.agree})`, d1.first);
+    check(G.same(p1.ledger?.paid ? paidSum(p1.ledger) : {}, paidSum(p2.ledger)) && json(p1.ledger?.paid) === json(p2.ledger?.paid), `row 2: the paid records unchanged by the adoption (${Object.keys(p2.ledger?.paid ?? {}).length} records, ${sum(paidSum(p2.ledger))} units)`);
+    check(!!b && b.built === false && b.percent < 100, `row 2 (S-SAD-2): RegionView.build of the adopted region is survival and counts the building lot: built ${b?.built}, percent ${b?.percent}`, b);
+    // row 3: the building lot fed to BUILT under the region's group
+    await pause(ids.house_4, false);
+    const c3 = p2.ledger?.consumed ?? {};
+    const out3 = p2.outstanding ?? {};
+    const ok3 = await feedPile(async () => ['BUILT', 'built'].includes((await siteState(ids.house_4)).state));
+    const p3 = await pile();
+    const b3 = (await rs(region)).build;
+    const used3 = G.minus(p3.ledger?.consumed ?? {}, c3);
+    out.finish = { ok: ok3, outstanding: out3, consumed: used3, build: b3 };
+    check(ok3 && G.same(used3, out3), `row 3: house_4 built from the stockpile under the region's group: consumed ${json(used3)} = its outstanding at the adoption ${json(out3)}`, out.finish);
+    check(b3?.built === true && b3?.percent === 100, `row 3 (S-SAD-2): RegionView.build then reads built ${b3?.built}, percent ${b3?.percent}`, b3);
+    // row 4: a growth by a plain lot and an irrigated lot (IG-b's stages), fed partly, halted unsaved, reconciled, fed the rest
+    const bp = await ig.installField();
+    const plain = { id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' };
+    const g = await growPlan(region, { lots: [ig.FARM, plain] });
+    check(!g.refused && g.revisionOf?.rid >= 1 && json(g.stages) === json(['adopted', 'street', 'lots', 'fluids']), `row 4: the survival growth planned (planned in survival, a survival region: no NOT_ALLOWED): ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}, stages ${json(g.stages)}`}`);
+    if (g.refused) { await L.leaveWorld(); spendZero(); return out; }
+    const lot = (g.lots ?? []).find((l) => l.id === ig.FARM.id);
+    const P = { g, lot, irr: lot?.ext?.['architect_mc:lotIrrigation'] };
+    const entries = { [ig.FARM.id]: ig.FIELD, hb: 'rs_hut' };
+    const q = await call('dev.region.quote', { planId: g.planId, lotEntries: entries }, 300_000);
+    check(!q.refused && q.survival === true && sum(q.bom) > 0, `row 4: the growth quoted in survival: ${sum(q.bom)} units, exact ${q.exact}`, q.bom);
+    const S0 = await cellsOf(BOX(W.gy));
+    const c0 = (await pile()).ledger?.consumed ?? {};
+    const r = await call('dev.region.realise', { planId: g.planId, lots: entries }, 300_000);
+    check(!r.refused, `row 4: the growth realised: ${r.refused ?? r.region}`);
+    for (let i = 0; i < 90; i++) { if (sum((await pile()).outstanding) > 0) break; await sleep(2000); }
+    const b4 = await baseline('row 4');
+    const ps = await pile();
+    const half = {};
+    for (const [it, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[it] ?? 0); if (lack > 1) half[it] = Math.floor(lack / 2); }
+    await call('dev.crate.insert', { site: `stockpile:${OWNER}`, items: half, exact: true }, 120_000);
+    await sleep(15_000);
+    const live4 = await pile();
+    const Ld4 = await halt('row 4', W, b4, () => call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null));
+    if (Ld4) {
+      out.grow = { fedLive: G.minus(live4.ledger?.consumed, b4.ledger.consumed), savedConsumed: G.minus(Ld4.consumed, b4.ledger.consumed) };
+      const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 2_400_000, every: 2500 });
+      const w = await rvWait(region, g.revisionOf.rid, 1_800_000);
+      check(w.r.state === 'PLACED' && f.last.rs.build?.done, `row 4: after the unclean restart, fed the rest (${f.waves} waves): the growth ${w.r.state}`);
+      out.grow.placed = await ig.placedChecks(region, P, bp, 'row 4');
+      const p4 = await pile();
+      const paid = G.minus(p4.ledger?.consumed ?? {}, c0);
+      const audit = await call('dev.stockpile.audit', { owner: OWNER }, 120_000);
+      out.grow.consumed = paid;
+      out.grow.quote = q.bom;
+      out.grow.identity = audit.identity;
+      check(G.same(paid, q.bom) && audit.identity !== false, `row 4: consumed since the saved baseline equals the quote item for item, across the partial feed, the unsaved halt (live ${sum(out.grow.fedLive)} units fed, ${sum(out.grow.savedConsumed)} in the saved ledger) and the reconcile: quote ${json(q.bom)}, consumed ${json(paid)}; identity ${audit.identity}`, { diff: G.minus(paid, q.bom) });
+      // row 5: the growth's undo halted at RVU2 with nothing saved
+      const b5 = await baseline('row 5');
+      await call('dev.journal.killAt', { point: 'RVU2' }, 10_000);
+      const Ld5 = await halt('row 5', W, b5, () => call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000).catch(() => null));
+      if (Ld5) {
+        let s;
+        const t0 = Date.now();
+        for (; Date.now() - t0 < 1_800_000;) { s = await rvState(region); if (s.busy === null) break; await sleep(L.pollDelayMs(Date.now() - t0)); }
+        await L.settle(3000);
+        const La = (await pile()).ledger ?? {};
+        const back = G.minus(backOf(La), backOf(Ld5));
+        const consumedSaved = G.minus(Ld5.consumed, c0);
+        const d = diff(S0, await cellsOf(BOX(W.gy)));
+        const water = await ig.waterIn(BOX(W.gy));
+        out.undo = { position: s?.position, states: s?.revisions?.map((x) => [x.rid, x.state]), diff: d.n, water: water.length, back, consumedSaved };
+        check(s?.busy === null && s?.position === 0 && d.n === 0 && water.length === 0, `row 5: the undo halted at RVU2 (nothing saved) resumed: position ${s?.position}, E-flat ${d.n} over the growth, no water (${water.length})`, d.first);
+        check(G.same(back, consumedSaved) && G.same(consumedSaved, q.bom), `row 5: items in = items out against the saved state: back ${json(back)} = what the saved ledger says the growth consumed ${json(consumedSaved)} (= the quote)`, { mint: G.minus(back, consumedSaved) });
+      }
+    }
+    // row 7: Regions.remove: E-flat 0 against the world before the settlement; every paid record refunded
+    const pr = await pile();
+    const paidBefore = paidSum(pr.ledger);
+    const rmr = await removeRegion(region, OWNER);
+    const pa = await pile();
+    const back7 = G.minus(backOf(pa.ledger), backOf(pr.ledger));
+    const d7 = diff(B0, await cellsOf(BOX(W.gy)));
+    out.remove = { removed: rmr?.removed ?? rmr, diff: d7.n, paid: paidBefore, back: back7, paidAfter: paidSum(pa.ledger) };
+    check(rmr?.removed === true && d7.n === 0, `row 7: Regions.remove of the adopted town: E-flat ${d7.n} against the world before the settlement`, d7.first);
+    check(G.same(back7, paidBefore) && sum(back7) > 0, `row 7: the refund equals every paid record of the town item for item: back ${json(back7)}, paid ${json(paidBefore)} (the instant lots refund nothing)`, out.remove);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  steps.sadcrash = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B SAD Crash');
+    const { T, ids, B0 } = await suppliedTown('crash', W, { pileFirst: true });
+    const req = adoptReq(T, ids);
+    const sites = Object.values(ids);
+    let region = null;
+    for (const point of ['AD3', 'AD4']) {
+      const b0 = await baseline(point);
+      const before = await call('dev.ad.state', { sites }, 60_000);
+      await call('dev.journal.killAt', { point }, 10_000);
+      const Ld = await halt(point, W, b0, () => call('dev.ad.adopt', req, 900_000).catch(() => null));
+      if (!Ld) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); continue; }
+      const st = await call('dev.ad.state', { sites }, 60_000);
+      const la = (await pile()).ledger ?? {};
+      const regions = (await call('dev.region.list', {}, 60_000).catch(() => ({}))).regions ?? [];
+      const adopted = regions.filter((x) => x.ext?.['architect_mc:adopted'] && x.state !== 'REMOVED');
+      const fwd = point === 'AD4';
+      out[point] = { agree: st.agree, intents: st.intents, regions: adopted.map((x) => [x.id, x.state]), entries: [before.entries, st.entries],
+        stock: [stockOf(Ld), stockOf(la)], paid: [paidSum(Ld), paidSum(la)], returned: [Ld.returned, la.returned] };
+      check(st.agree !== false && (st.intents ?? []).length === 0 && st.entries === before.entries, `${point}: after the unclean restart the adoption recovered (no intent left), every membership agrees (${st.agree}), no journal entry written (${before.entries} -> ${st.entries})`, out[point]);
+      check(fwd ? adopted.length === 1 && adopted[0].state === 'PLACED' : adopted.length === 0, `${point}: ${fwd ? 'rolled forward: one adopted region PLACED' : 'rolled back: no region'} (${json(out[point].regions)})`);
+      check(G.same(stockOf(Ld), stockOf(la)) && json(Ld.paid) === json(la.paid) && G.same(Ld.returned, la.returned) && G.same(Ld.consumed, la.consumed),
+        `${point}: items in = items out against the saved state: stock, every paid record, consumed and returned as the saved ledger has them (no mint, no loss)`, out[point]);
+      if (fwd) region = adopted[0]?.id ?? null;
+    }
+    if (region) {
+      const b = (await rs(region)).build;
+      check(!!b && b.built === false, `the rolled-forward region is survival and counts its building lot (built ${b?.built}, percent ${b?.percent})`, b);
+      await pause(ids.house_4, false);
+      const c0 = (await pile()).ledger?.consumed ?? {};
+      const o0 = (await pile()).outstanding ?? {};
+      const ok = await feedPile(async () => ['BUILT', 'built'].includes((await siteState(ids.house_4)).state));
+      const used = G.minus((await pile()).ledger?.consumed ?? {}, c0);
+      check(ok && G.same(used, o0), `after the recovered adoption, house_4 built from the stockpile: consumed ${json(used)} = its outstanding ${json(o0)}`);
+      const pr = await pile();
+      const rmr = await removeRegion(region, OWNER);
+      const pa = await pile();
+      const back = G.minus(backOf(pa.ledger), backOf(pr.ledger));
+      const d = diff(B0, await cellsOf(BOX(W.gy)));
+      out.remove = { diff: d.n, back, paid: paidSum(pr.ledger) };
+      check(rmr?.removed === true && d.n === 0 && G.same(back, paidSum(pr.ledger)), `Regions.remove of the recovered region: E-flat ${d.n}; refund = the paid records ${json(back)}`, out.remove);
+    }
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
+  steps.sadinstant = async () => {
+    await ensure();
+    const out = {};
+    const W = await world('G6B SAD Instant');
+    const T = layout(W.gy);
+    const B0 = await cellsOf(BOX(W.gy));
+    const entry = await ig.installCabin('sad_cabin');
+    const [l1, l2, l3, l4] = T.lots;
+    const b1 = await build(T, entry, [l1, l2], [[T.x0, T.xm]], 'b1');
+    const b2 = await build(T, entry, [l3, l4], [[T.xm + 1, T.x1]], 'b2', { keys: ['street#2'] });
+    const ids = { ...b1.ids, ...b2.ids };
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    check(!cr.refused, `a stockpile of 4 crates for ${OWNER}`);
+    const a = await call('dev.ad.adopt', adoptReq(T, ids), 900_000);
+    check(!a.refused && a.state === 'PLACED', `row 6b: an all-instant street town adopted in survival: ${a.region} ${a.state ?? a.refused}`);
+    if (a.refused) { await L.leaveWorld(); spendZero(); return out; }
+    const region = a.region;
+    const b = (await rs(region)).build;
+    check(!!b && b.built === true && b.percent === 100, `row 6b: the region is survival (RegionView.build ${json(b && { built: b.built, percent: b.percent })}): nothing to build, its instant lots counted as nothing`, b);
+    const S0 = await cellsOf(BOX(W.gy));
+    const g = await growPlan(region, { lots: [{ id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' }] });
+    check(!g.refused, `row 6b: a growth planned in survival: ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}`}`);
+    if (!g.refused) {
+      const q = await call('dev.region.quote', { planId: g.planId, lotEntries: { hb: 'rs_hut' } }, 300_000);
+      const p0 = await pile();
+      await call('dev.region.realise', { planId: g.planId, lots: { hb: 'rs_hut' } }, 300_000);
+      const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+      const w = await rvWait(region, g.revisionOf.rid, 1_800_000);
+      const p1 = await pile();
+      const used = G.minus(p1.ledger?.consumed ?? {}, p0.ledger?.consumed ?? {});
+      out.grow = { quote: q.bom, consumed: used, state: w.r.state, waves: f.waves };
+      check(w.r.state === 'PLACED' && !q.refused && sum(q.bom) > 0 && G.same(q.bom, used), `row 6b: grown from materials: ${w.r.state}; consumed = quote: ${json(used)}`, out.grow);
+      const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+      await L.settle(3000);
+      const p2 = await pile();
+      const back = G.minus(backOf(p2.ledger), backOf(p1.ledger));
+      const d = diff(S0, await cellsOf(BOX(W.gy)));
+      const lv = (await call('dev.region.state', { region }, 60_000)).view?.lots ?? [];
+      out.undo = { removed: u.removed, back, diff: d.n, lots: lv.map((l) => [l.id, l.state]) };
+      check(u.removed === true && G.same(back, used) && d.n === 0 && T.lots.every((l) => lv.find((x) => x.id === l.id)?.state === 'placed'),
+        `row 6b: the growth undone: refund ${json(back)} = consumed; E-flat ${d.n} against the town before it; the instant lots stand (${json(out.undo.lots)})`, out.undo);
+    }
+    const pr = await pile();
+    const rmr = await removeRegion(region, OWNER);
+    const pa = await pile();
+    const back = G.minus(backOf(pa.ledger), backOf(pr.ledger));
+    const d = diff(B0, await cellsOf(BOX(W.gy)));
+    out.remove = { diff: d.n, back };
+    check(rmr?.removed === true && d.n === 0 && sum(back) === 0, `row 6b: Regions.remove: E-flat ${d.n}; the instant lots refunded nothing (${json(back)})`, out.remove);
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+}
