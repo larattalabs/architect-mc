@@ -1772,6 +1772,10 @@ public final class Builder {
 				freeChanged = true;
 			}
 			retill(level, r, i);
+			if (cantStand(level, r, i, p)) {
+				r.blockedSince.putIfAbsent(i, ticks);
+				continue;
+			}
 			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			put(level, r, i, p, true);
@@ -1926,22 +1930,36 @@ public final class Builder {
 	}
 
 	/**
-	 * (BC, S-M5-10) Before cell {@code i} (a crop) is put on its support: a support that is this run's farmland, built and dried back to
-	 * dirt by vanilla while the target waited, is tilled again, free (a hoe's work: the farmland was paid once). Without it the crop would
-	 * stand on dirt. Nothing when the support is not ours, not built or not dirt. Returns whether it tilled.
+	 * (BC, S-M5-10) Before cell {@code i}, a crop, is put down: the dirt under it is tilled again, free (a hoe's work: the farmland was paid
+	 * once), when it is our farmland that vanilla dried while the target waited: this run's built support cell, or (a support another target
+	 * wrote, such as an irrigation shell's farmland side) a cell inside this target's box. Without it the crop breaks on dirt and is paid
+	 * again on every try. Returns whether it tilled.
 	 */
 	static boolean retill(ServerLevel level, Run r, int i) {
-		int sup = r.support[i];
-		if (sup < 0 || !r.built.get(sup) || !r.target[sup].is(Blocks.FARMLAND)) {
+		if (!(r.target[i].getBlock() instanceof net.minecraft.world.level.block.CropBlock)) {
 			return false;
 		}
-		BlockPos sp = r.pos(sup);
+		int sup = r.support[i];
+		BlockPos sp = r.pos(i).below();
+		boolean ours = sup >= 0 ? r.built.get(sup) && r.target[sup].is(Blocks.FARMLAND) : r.box.minX() <= sp.getX() && sp.getX() <= r.box.maxX()
+			&& r.box.minY() <= sp.getY() && sp.getY() <= r.box.maxY() && r.box.minZ() <= sp.getZ() && sp.getZ() <= r.box.maxZ();
+		if (!ours) {
+			return false;
+		}
 		BlockState now = stateIfLoaded(level, sp);
 		if (now == null || !now.is(Blocks.DIRT)) {
 			return false;
 		}
-		dev.larattalabs.architect.placed.Placed.set(level, sp, r.target[sup], Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, sp, sup >= 0 ? r.target[sup] : Blocks.FARMLAND.defaultBlockState(), Sites.FLAGS);
 		return true;
+	}
+
+	/**
+	 * (BC, S-M5-10) Whether a plant (crop, flower, sapling) can't stand at its cell now (no soil it takes, too dark for a crop): it is not
+	 * put down or paid, it waits (vanilla would break it at once, and each try would be paid again).
+	 */
+	static boolean cantStand(ServerLevel level, Run r, int i, BlockPos p) {
+		return r.target[i].getBlock() instanceof VegetationBlock && !r.target[i].canSurvive(level, p);
 	}
 
 	/** Writes queue cell {@code i} exactly as the instant placement did (state, block-entity NBT without inventories). */

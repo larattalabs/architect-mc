@@ -460,6 +460,10 @@ public final class RoadBuilder {
 			}
 			r.blockedSince.remove(i);
 			Builder.retill(level, r, i); // (BC, S-M5-10) a crop's dried support farmland tilled again, free
+			if (Builder.cantStand(level, r, i, p)) {
+				r.blockedSince.putIfAbsent(i, Builder.ticksNow());
+				continue;
+			}
 			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			if (regionRoad && !now.isAir()) {
