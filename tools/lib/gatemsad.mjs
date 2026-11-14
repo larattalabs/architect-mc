@@ -109,8 +109,7 @@ export async function registerSAD(steps, h) {
     if (!construction) await call('dev.survival.set', { on: false });
     const q = await call('dev.ad.settlement', { owner: OWNER, entry, streetZ: T.sz, y: T.y, lots, spans, settlement: 'sad', build: b, ...(keys ? { keys } : {}),
       ...(construction ? { mode: 'construction', sharedCrate, ...(crateAt ? { crateAt } : {}) } : {}) }, 120_000);
-    if (!construction) await call('dev.survival.set', { on: true });
-    if (q.refused) throw new Error(`build ${b} was refused: ${q.refused}`);
+    if (q.refused) { if (!construction) await call('dev.survival.set', { on: true }); throw new Error(`build ${b} was refused: ${q.refused}`); }
     const t0 = Date.now();
     let bt;
     for (; Date.now() - t0 < 900_000;) {
@@ -118,8 +117,10 @@ export async function registerSAD(steps, h) {
       if (['DONE', 'CANCELLED', 'FAILED'].includes(bt.status) || (!waitDone && bt.items.every((i) => i.site))) break;
       await sleep(L.pollDelayMs(Date.now() - t0));
     }
+    // (the toggle back on only once every item is put down: an instant item put down in a survival world needs an actor)
+    if (!construction) await call('dev.survival.set', { on: true });
     const ids = Object.fromEntries(bt.items.map((i) => [i.key, i.site]));
-    check(bt.items.every((i) => i.site), `build ${b} (${construction ? 'from materials' : 'instant'}): ${bt.items.length} items put down in group ${bt.group}: ${json(bt.items.map((i) => [i.key, i.status]))}`);
+    check(bt.items.every((i) => i.site && i.status !== 'FAILED'), `build ${b} (${construction ? 'from materials' : 'instant'}): ${bt.items.length} items put down in group ${bt.group}: ${json(bt.items.map((i) => [i.key, i.status, i.reason ?? '']))}`);
     return { ids, group: bt.group, batchId: q.batchId };
   }
 
@@ -204,8 +205,8 @@ export async function registerSAD(steps, h) {
     check(!!s4.state && s4.state !== 'instant' && (pileFirst || s4.crate?.present === true), `${tag}: house_4 is a construction site (${s4.state}, ${pileFirst ? 'from the stockpile' : `the shared crate ${json(s4.crate)}`}), paused`, s4);
     // house_3 fed to BUILT
     for (const id of [ids.house_3]) {
-      if (pileFirst) await feedPile(async () => ['BUILT', 'built'].includes((await siteState(id)).state), 900_000);
-      else for (let i = 0; i < 6; i++) { await feedSite(id); const s = await siteState(id); if (['BUILT', 'built'].includes(s.state)) break; await sleep(5000); }
+      // (its own rows only: the stockpile's outstanding also lists the paused house_4)
+      for (let i = 0; i < 6; i++) { await feedSite(id, 1, pileFirst ? `stockpile:${OWNER}` : null); const s = await siteState(id); if (['BUILT', 'built'].includes(s.state)) break; await sleep(5000); }
       const s = await builtWait(id);
       check(['BUILT', 'built'].includes(s.state), `${tag}: house_3 built from materials (${s.state}, ${s.built}/${s.queue})`);
     }
