@@ -20,8 +20,8 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
-| v0.67.0 | 2026-11-14 | 1.60.0 | 0.62.0 | 23 | `kitVersion`, `maxBill`, `sitesLoadHealthy` | RC pending | unverified |
-| v0.66.0 | 2026-11-14 | 1.59.0 | 0.61.0 | 23 | `filledContainers`, `programAuthoring` | RC pending | ok |
+| v0.67.0 | 2026-11-14 | 1.60.0 | 0.62.0 | 23 | `kitVersion`, `maxBill`, `sitesLoadHealthy` | RC pending | ok |
+| v0.66.0 | 2026-11-14 | 1.59.0 | 0.61.0 | 23 | `filledContainers`, `programAuthoring` | RC passed | ok |
 | v0.65.0 | 2026-11-13 | 1.58.0 | 0.60.0 | 22 | `apiVersion`, `aqueduct`, `compose`, `designOpKeys`, `jobSystemRefs`, `placeConnector`, `suspendedBuilds`, `wallLotsExactMassing` | RC passed | ok |
 | v0.64.1 | 2026-11-13 | 1.57.0 | 0.59.0 | 21 |  | RC passed | ok |
 | v0.64.0 | 2026-11-12 | 1.57.0 | 0.59.0 | 21 | `composites`, `hiddenRooms`, `regionM15`, `scenarioTemplates` | RC passed | ok |
