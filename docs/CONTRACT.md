@@ -31456,8 +31456,25 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
     - FAIL qt-growth 11/1: "the land and Architect's files hold still with no call": `stockpiles.json` 2869 -> 4084 bytes in the 3 s
       window, the ledger's background save of the town just built (the three no-write rounds after it passed). Fix (test-only, 39ff37ea):
       the still-check waits for `dev.stockpile.saved.unsaved` false first (at most 30 s).
-  - **Run 4** (RUN4_HEAD, origin/main d9947c91 merged (RU, v0.65.0); the last run): RUN4_RESULTS.
-- **Strict verifier:** VERIFIER_RESULTS.
+  - **Run 4** (e805435b, origin/main d9947c91 merged (RU, v0.65.0)): 7 PASS, 1 FAIL, 25m10s.
+    - PASS: gr-survival 12/0, jr-crash 24/0, jr-crash-v063 23/0, hf-crash 25/0, ps-crash 27/0, ru-crash 36/0, qt-growth 12/0 (both run 3
+      fixes hold).
+    - FAIL rl-crash 64/1: RL1's new save-on-join disk check (saves #18 -> #18, 0 books, 0 paid records). The check set `noPeriodic`, which
+      since 39ff37ea also turns off the save on join it was checking. Every other rl-crash assertion passed. Fix (test-only, bfbe9d74): a
+      separate switch, `joinSave: true`, keeps the save on join on with the periodic save off.
+  - **Run 5** (f8ebc01a, the fix; rl-crash only, the one step run 4 failed): PASS, rl-crash 66/0, 6m20s.
+    - RL1's save on join checked on the disk: `noPeriodic: true, joinSave: true`; saves #1 -> #5 with periodic 0; `stockpiles.json` held the
+      joined lot's book (`site:s1@...`) and the 5 paid records of the targets fed before it (roads c1, c2, c3, r1, r2). So rl-crash now
+      checks the paid records that the save on join wrote.
+    - The numbers match run 2: RL1 71 ahead, charged 71; RL2 143 ahead, charged 142; RL4 charged 72, owed 70, reopened; every case
+      standing 389 = paid 389, taken since the baseline = records gained (196), and a second unclean load changes nothing.
+- **Strict verifier** (gate-verifier, own runs on 8916/8917, `artifacts/gate-runs-rl-verify`):
+  - First pass (e805435b): FAIL, only on RL1's save-on-join check, the same cause as run 4. The accounting review was clean: no mint, no
+    double charge, no non-idempotence, no owed cell built free; consumed = records gained (196 = 196).
+  - Re-run (f8ebc01a, 20261114-010719-change): **PASS**, rl-crash 66/0 and jr-crash 24/0. RL1's join-save check: saves #7 -> #11, periodic 0,
+    the lot's book on the disk, 4 paid records. The diff review found `testNoJoinSave` false by default, set only by the dev `ps` op and
+    read only at the save on join, so production keeps it. Reconcile charges only the ahead cells the stock affords and owes the rest;
+    `markBuilt` refuses owed cells; lost cells are given back only out of the record. RL units: 53 tests, 0 failures.
 - **Units:**
   - `StockpileReconcileRLTest` (6): the book saved with the ledger and an older file has none; the plan over known cells only; the plan
     applied twice is idempotent; the world ahead charged once and the ledger ahead taken once; (audit b) an owed cell not refunded until
@@ -31466,12 +31483,12 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
     purse gives a swap back as it is.
   - HF's `StockpileSaveHFTest` holds: the reconcile saves through `saveWithWorld`.
 - **Other checks:**
-  - Gradle `build` (b1212e42, the merged tree): BUILD SUCCESSFUL, 1201 tests, 0 failures.
-  - Kit: 1303 tests, 1301 pass, 2 fail. Neither is RL's: kit/ is untouched. They are the floatingIsland per-cell cost bench, run under
-    gate load, and release-version's s3 golden re-plan, which reads kit/ only.
+  - Gradle `build` (f8ebc01a, the final code): BUILD SUCCESSFUL, 1201 tests, 0 failures.
+  - Kit (f8ebc01a, the merged tree, no gate running): 1336 tests, 1336 pass (kit/ untouched; the 2 failures seen under gate load
+    before the merge are gone).
   - `node tools/step-inputs.mjs check`: 388 steps clean.
-  - Sidecar `tsc --noEmit`: clean (sidecar untouched).
-  - api-compat `--baselines` (b1212e42): all 5 clean (the 0.65.0, 0.64.1 and 0.64.0 apitest jars, the 1.58.0 surface, Steward's jar).
+  - Sidecar `tsc --noEmit` (f8ebc01a): clean (sidecar untouched).
+  - api-compat `--baselines` (f8ebc01a): all 5 clean (the 0.65.0, 0.64.1 and 0.64.0 apitest jars, the 1.58.0 surface, Steward's jar).
 
 ### Known open
 
