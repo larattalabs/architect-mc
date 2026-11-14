@@ -110,6 +110,9 @@ test('the drivers\' kit-suite reuse still hits: the flag stays out of kitReuse\'
     assert.ok(hit?.reused, 'reused');
     assert.equal(hit.pass, 1);
     assert.equal(kitReuse(ROOT, [...testConcurrencyArgs({ GATE_TEST_CONCURRENCY: '2' }), ...files]), null, 'a flag in the list is a re-run');
+    // (GI A49) a file whose every test was skipped in unit-kit ran nothing: not reused
+    fs.writeFileSync(file, `<?xml version="1.0" encoding="utf-8"?>\n<testsuites>\n<testcase name="a" time="0" classname="test" file="${path.join(ROOT, 'kit', 'test', 'gate-cpu-budget.test.mjs')}"><skipped type="skip"/></testcase>\n</testsuites>\n`);
+    assert.equal(kitReuse(ROOT, files), null, 'all skipped is a re-run');
   } finally {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];
