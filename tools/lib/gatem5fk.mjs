@@ -272,7 +272,7 @@ export async function registerFK(steps, h) {
       await L.settle(1500);
       const cx = await fk(p.site);
       out.overwrite = { cells: ow1, site: ow2 };
-      check(ow1.placed !== true && /filled container at/.test(json(ow1)) && ow2.placed !== true && /(filled container|lock cell) at/.test(json(ow2)) && exactly(cx) && leverUnlocked(cx),
+      check(ow1.placed !== true && /filled\s*container\s*at/.test(json(ow1)) && ow2.placed !== true && /(filled\s*container|lock\s*cell)\s*at/.test(json(ow2)) && exactly(cx) && leverUnlocked(cx),
         `another writer over the fill's cells is refused before any write: a cell site over the hopper at ${hx},${hy},${hz} (${json(ow1.refusals ?? ow1).slice(0, 200)}); a site layered over the lever (${json(ow2.refusals ?? ow2).slice(0, 200)}); the hoppers and the lever as they were`, out.overwrite);
     }
     const rmc = p.site ? await call('dev.pl.remove', { site: p.site }, 600_000) : {};
