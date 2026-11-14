@@ -301,6 +301,11 @@ public interface ArchitectApi {
 	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
 	 * as construction; {@code SITE_BUILT} comes after the unlock. A checker refusal of a fill is {@link Reason#PROGRAM_REFUSED} with detail
 	 * {@code fill}. No new method or reason.
+	 * (7c PF, since NEXT) {@code "shapePromotion"} is advertised when the helper's kit plans promoted forms (its
+	 * {@code plan.shapePromotion}): generators that passed the kit's promotion pipeline (kit/lib/forms/CANDIDATES.md) are ordinary plan/0
+	 * {@code form.<name>} catalogue entries with their {@code sinceApi}; the first is {@code form.arch_span} (the archSpan module: an arcade
+	 * of masonry arches carrying a deck, its piers down to the ground), built in the Style's structure role and, in survival, a construction
+	 * target. A promoted form's IR is ordinary ops or baked voxels, so an older IR still evaluates. No new record, method or reason.
 	 */
 	Set<String> features();
 }

@@ -1146,9 +1146,10 @@ export class Region {
 
   /**
    * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
-   * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
+   * go into part `id` (created in `stage`) and its provenance into the IR's `forms`. (7c PF) `terrain: false` keeps its ops out of the
+   * terrain kinds' writes (a survival plan bills them: a built form, never free); the default is a terrain write, as before.
    */
-  form(id, gen, { stage, set = 'terrain', bake = 'auto' } = {}) {
+  form(id, gen, { stage, set = 'terrain', bake = 'auto', terrain = true } = {}) {
     if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
     const from = p.ops.length;
@@ -1188,9 +1189,12 @@ export class Region {
       const blob = `vox_${id}`.slice(0, 32);
       const b = bakeOps(resolved, blob, { cond: COND.IF_NATURAL });
       this._sideBlob(blob, 'voxels', b.bytes);
-      this.terrain(() => p._push(b.op)); // (6c RS) a form is a terrain kind's write
+      // (6c RS) a form is a terrain kind's write; ((7c PF) `terrain: false`: a built form, such as plan/0's form.arch_span, whose
+      // masonry is a construction target in survival, never free)
+      if (terrain) this.terrain(() => p._push(b.op)); else p._push(b.op);
       baked = { blob, cells: b.cells, ops: resolved.length };
-    } else this.terrain(() => { for (const o of resolved) p._push(o); });
+    } else if (terrain) this.terrain(() => { for (const o of resolved) p._push(o); });
+    else for (const o of resolved) p._push(o);
     this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length, ...(baked ? { baked } : {}) });
     (this.meta.parts[id] ??= {}).kind = 'form';
     return p;
