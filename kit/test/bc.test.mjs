@@ -59,3 +59,23 @@ test('a group past the cap keeps none; rows merge by state and sort', () => {
   assert.deepEqual(out.g.map((r) => r.state), ['minecraft:dirt', 'minecraft:stone']);
   assert.deepEqual(decode(out.g[0].cells), [[4, 5, 6], [-7, 8, -9]]);
 });
+
+function prog2(ctx) {
+  const r = region(ctx);
+  r.anchor('spawn', [2, 2]);
+  r.anchor('entrance', [3, 2]);
+  r.stages(['ground', 'top']);
+  // the same tile key in both stages: the ground stage cuts (air) one column the top stage then fills with dirt; the top stage's other cells
+  // no earlier stage writes
+  r.part('cut', { stage: 'ground' }).fill({ kind: 'box', min: [20, { abs: 66 }, 20], max: [20, { abs: 66 }, 20] }, 'minecraft:air', { cond: 0 });
+  r.part('mound', { stage: 'top' }).fill({ kind: 'box', min: [20, { abs: 66 }, 20], max: [21, { abs: 66 }, 20] }, 'minecraft:dirt', { cond: 0 });
+  return r;
+}
+
+test('a kept cell an earlier evaluation of its tile key writes is dropped (the realise writes that one first); its item stays uncovered', async () => {
+  const survey = columnsOf(flat, CLAIM.minX, CLAIM.minZ, 64, 64, 1);
+  const res = await planRegion({ program: { id: 'bc_inline2', default: prog2 }, programSource: prog2.toString(), survey, seed: '42', claim: CLAIM, node: 'test', survival: true });
+  assert.equal(res.survivalBom.mound['minecraft:dirt'], 2, 'both mound cells billed');
+  const cells = decode(res.survivalTerrain.mound[0].cells).map((c) => c.join(','));
+  assert.deepEqual(cells, ['21,66,20'], 'the cut cell is dropped, the other kept');
+});

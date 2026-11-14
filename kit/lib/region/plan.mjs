@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CORE_ROLES, MACRO_ROLES, PALETTES, ROLE_NAME, rolesOfPalette } from '../kit.mjs';
 import { fnv64, splitmix64, fromDecimal64, toDecimal64 } from '../noise.mjs';
-import { evalTile, MAX_OPS, walkKinds } from '../realise.mjs';
+import { cellId, evalTile, MAX_OPS, walkKinds } from '../realise.mjs';
 import { shapeBounds, yrefAbs } from '../sdf.mjs';
 import { FLAG_MISSING, asColumns, canonicalJson, makeColumns, sha256Hex } from './pack.mjs';
 import { voxelsSize } from './voxels.mjs';
@@ -593,7 +593,7 @@ export async function planRegion(o) {
   const perStage = {};
   const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey
   const windows = new Map();
-  const evaluatedKeys = new Set(); // (BC, A11) a tile key's first evaluation keeps its terrain cells (a later one may write over an earlier one's)
+  const evalsOf = new Map(); // (BC, A11) per tile key, its evaluations in realise order ({stage, set}) and their kept terrain cells
   for (const s of stages) {
     perStage[s] = { terrain: 0, path: 0 };
     for (const set of ['terrain', 'path']) {
@@ -607,9 +607,12 @@ export async function planRegion(o) {
           t.free += x.free; t.held += x.held; t.paid += x.paid;
           for (const [it, n] of Object.entries(x.bom ?? {})) t.bom[it] = (t.bom[it] ?? 0) + n;
           for (const [b, n] of Object.entries(x.creativeOnly ?? {})) t.creativeOnly[b] = (t.creativeOnly[b] ?? 0) + n;
-          if (x.terrain && !evaluatedKeys.has(key)) for (const q of x.terrain) (t.terrain ??= []).push(q);
+          if (x.terrain) {
+            const ev = evalsOf.get(key) ?? []; // this evaluation's index is ev.length (pushed below)
+            for (const q of x.terrain) (t.terrain ??= []).push({ ...q, key, at: ev.length });
+          }
         }
-        evaluatedKeys.add(key);
+        if (sv) { const ev = evalsOf.get(key) ?? []; ev.push({ stage: s, set }); evalsOf.set(key, ev); }
         if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
         perStage[s][set] += e.count;
       }
@@ -759,6 +762,31 @@ export async function planRegion(o) {
   const survivalBom = sv ? Object.fromEntries(Object.keys(sv).sort().map((g) => [g, Object.fromEntries(Object.entries(sv[g].bom).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
   // (BC, A11) the paid terrain cells (dirt, stone, sand ...) per group, by state: Regions.quote reads the world at each and bills only the cells
   // the land does not already hold (a realise skips those), so the quote is what the realise consumes. plan.json's `survivalTerrain`
+  // a kept cell an earlier evaluation of its tile key also writes is dropped (the realise writes that one first: the land then no longer holds
+  // what the quote would read), so each key's earlier evaluations run again for the cells they write
+  if (sv) {
+    const written = new Map(); // `${key}|${at}` -> Set of the cells evaluations 0..at-1 write
+    const earlier = (key, at) => {
+      const k = `${key}|${at}`;
+      if (!written.has(k)) {
+        const set = new Set();
+        const ev = evalsOf.get(key) ?? [];
+        for (let i = 0; i < at; i++) evalTile(ir, key, windows.get(key), { stage: ev[i].stage, set: ev[i].set, countOnly: true, blobs: evalBlobs, written: set });
+        written.set(k, set);
+      }
+      return written.get(k);
+    };
+    for (const g of Object.values(sv)) {
+      if (!g.terrain) continue;
+      g.terrain = g.terrain.map((q) => {
+        if (!q.at) return q;
+        const w = earlier(q.key, q.at);
+        const cells = [];
+        for (let i = 0; i + 2 < q.cells.length; i += 3) if (!w.has(cellId(q.cells[i], q.cells[i + 1], q.cells[i + 2]))) cells.push(q.cells[i], q.cells[i + 1], q.cells[i + 2]);
+        return { ...q, cells };
+      });
+    }
+  }
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}) };
 }
