@@ -288,7 +288,9 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     const two = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: BAD, reason: 'r1' }], 'architect_mc:repairRounds': 2, 'architect_mc:composeHints': { zones: [{ id: 'town', lots: 3 }] }, 'architect_mc:composeSystem': 'Never build a wall.' } });
     const d2 = await playMod(two.designId);
     expect((d2.result as Record<string, unknown>).outcome).toBe('NO_PLAN');
-    expect(st(two.designId).rounds).toHaveLength(3);
+    // ((7c AU) the oscillation stop: round 2's answers repeat round 1's (the same scripted plan), so no third round is paid for)
+    expect(st(two.designId).rounds).toHaveLength(2);
+    expect((d2.result as Record<string, unknown>).stopped).toBe('oscillation');
     const q = queries(st(two.designId).rounds[0]!.jobId)[0]!;
     expect(q.prompt).toContain('{"zones":[{"id":"town","lots":3}]}');
     expect(q.system.endsWith('## The caller\'s rules (they add to the rules above)\n\nNever build a wall.')).toBe(true);

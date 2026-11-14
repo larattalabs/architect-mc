@@ -274,6 +274,12 @@ public interface ArchitectApi {
 	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
 	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
 	 * ceiling). An overhang made by the plan's own forms can't host one (the land is read before the plan). No new record, method or reason.
+	 * (M5 FK, since NEXT) {@code "filledContainers"} is advertised when the helper's kit takes a given program's fill (its {@code design.fill}):
+	 * a program's {@code bp.fillContainers({containers, locks})} declares containers (at most {@link Limits#FILL_CONTAINERS_MAX}) Architect fills once
+	 * after every core cell stands, and lock cells (at most {@link Limits#FILL_LOCKS_MAX}) built in their locked state and unlocked after the
+	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
+	 * as construction; {@code SITE_BUILT} comes after the unlock. A checker refusal of a fill is {@link Reason#PROGRAM_REFUSED} with detail
+	 * {@code fill}. No new method or reason.
 	 */
 	Set<String> features();
 }

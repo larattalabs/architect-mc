@@ -135,11 +135,13 @@ public final class ApiRules {
 					case "design.composite" -> "composites"; // 7c CM-b: a design job may return a Composite (Java's own "composites" places it)
 					case "region.templates" -> "scenarioTemplates"; // 7c TC: the template catalogue (the scenario programs, their land needs, the pick's affordances)
 					case "region.compose" -> "compose"; // 7c CO: Regions.compose, the standalone composer (pick, compose, check, one repair)
+					case "region.author" -> "programAuthoring"; // 7c AU: Regions.authorProgram, checker-driven authoring rounds, authored programs in plans
 					case "plan.bigForms" -> "bigForms"; // 7c BF: plan/0's form.hollow_mountain, form.crater and form.floating_island (since 1.56.0)
 					case "plan.hiddenRooms" -> "hiddenRooms"; // 7c HR: plan/0's form.hidden_room and the artifact's $.secrets[] (since 1.57.0)
 					case "plan.aqueduct" -> "aqueduct"; // 7c AQ: a course past its fill carried on piers or arches (channel.aqueduct; since 1.58.0)
 					case "region.m15" -> "regionM15"; // 7c RM: region M15 (cantilever, necks, spans and the port links' joints) in the region check, as warnings (since 1.57.0)
 					case "plan.suspendedBuilds" -> "suspendedBuilds"; // 7c US: plan/0's rule.suspended (an elevated zone's lots hung inverted from overhang ceilings; since 1.58.0)
+					case "design.fill" -> "filledContainers"; // M5 FK: a given program's bp.fill (filled containers and lock cells; since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)

@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program', 'bible.format3', 'plan.bigForms', 'design.composite', 'plan.hiddenRooms', 'region.m15', 'region.templates', 'plan.aqueduct', 'region.compose', 'region.planImages', 'plan.suspendedBuilds'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.districts', 'region.beside', 'region.outpost', 'region.boundary', 'region.walls', 'region.rope', 'region.bridges', 'region.tunnels', 'region.fluids', 'region.wet', 'vocab', 'bible.rarity', 'region.hydrology', 'region.courses', 'region.waterGates', 'region.irrigation', 'reserved', 'plan.rules', 'region.survival', 'plan.forms2', 'region.terracedZones', 'region.monastery', 'plan.layouts', 'region.planDiscard', 'region.catwalks', 'region.plan.besideReach', 'region.plan.dry', 'region.climbs', 'region.walls.along', 'region.walls.walk', 'palette.roles', 'bible.save', 'bible.check', 'bible.parts', 'region.rockStairs', 'region.spirals', 'region.revise', 'plan.revision', 'region.grow', 'region.lifts', 'region.walls.lots', 'design.opKeys', 'wallLots.exactMassing', 'region.plan.gateJoin', 'region.walls.mechanisms', 'region.plan.passageJoin', 'entry.follow', 'site.analyse', 'site.design', 'region.siteLots', 'site.standalone', 'region.link', 'design.program', 'bible.format3', 'plan.bigForms', 'design.composite', 'plan.hiddenRooms', 'region.m15', 'region.templates', 'plan.aqueduct', 'region.compose', 'region.planImages', 'plan.suspendedBuilds', 'design.fill', 'region.author'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -440,10 +440,11 @@ export const Design = z.object({
   conformance: Conformance.optional().describe('(4c) a detail pass: the massing conformance result (errors failed a round; issues are warnings)'),
   critique: CritiqueRecord.optional().describe('(5a) the critique rounds, the best round, the end reason and the split cost'),
   critiqueOf: z.string().optional().describe('(5a) a report critique of this library entry (design.critique): no new entry'),
-  kind: z.enum(['polish', 'region', 'settlement']).optional().describe('(5b) polish: a polish of a library entry (design.polish): no new entry, at most one new version; (6b) region: a template pick (region.design), `region` and `result` say what; (7c CO) settlement: a composed settlement (region.compose), `settlement` and `result` say what'),
+  kind: z.enum(['polish', 'region', 'settlement', 'program']).optional().describe('(7c AU) program: an authored region program (region.author), `program` and `result` say what; (5b) polish: a polish of a library entry (design.polish): no new entry, at most one new version; (6b) region: a template pick (region.design), `region` and `result` say what; (7c CO) settlement: a composed settlement (region.compose), `settlement` and `result` say what'),
   polish: PolishRecord.optional().describe('(5b) the polish: steps, end, installed version, the apply intent'),
   region: z.record(z.string(), z.unknown()).optional().describe('(6b) a region design: the request (brief, card, claim, surveyBlobId, bible, mustPass, requireFit, plan) and its tries'),
   result: z.record(z.string(), z.unknown()).optional().describe('(6b) a region design: {outcome: PICKED|NO_TEMPLATE, fits, program, params, reason, cost, planId?, tries}; (7c CO) a settlement design: {outcome: PICKED|COMPOSED|NO_PLAN, plan?, check?, waits?, cost, rounds, pick, ...} (compose.ts)'),
+  program: z.record(z.string(), z.unknown()).optional().describe('(7c AU) a program design (region.author): the request and each round (author.ts AuthorState)'),
   settlement: z.record(z.string(), z.unknown()).optional().describe("(7c CO) a settlement design (region.compose): the request, the pick's design, the inputs and each round (compose.ts ComposeState); `awaiting` {round, plan} while the mod checks a round's plan"),
 });
 export type Design = z.infer<typeof Design>;
@@ -1364,6 +1365,9 @@ const ReachInputs = z
   .passthrough();
 
 // 6a regions (client -> sidecar)
+/** (7c AU) The largest authored source (UTF-8 bytes; Limits.PROGRAM_SOURCE_MAX) and the most a plan names. */
+export const AUTHORED_SOURCE_MAX = 262144;
+export const AUTHORED_PER_PLAN = 4;
 export const RegionPlanMsg = z.object({
   ...envelope('region.plan'),
   program: z.string().min(1).max(4096).describe('a bundled program id (kit/regions/<id>.mjs, [a-z][a-z0-9_]{0,47}) or a .mjs path under <gameDir>/architect/regions/programs'),
@@ -1424,6 +1428,11 @@ export const RegionPlanMsg = z.object({
   timeoutMs: z.number().int().min(1).max(600_000).optional().describe("(6c P0) at most this plan time (a check's maxMs plus its grace; never more than the program's budget)"),
   heapMb: z.number().int().min(64).max(8192).optional().describe("(6c P0) at most this heap (a check's maxHeapMb; never more than the program's budget)"),
   planImages: z.boolean().optional().describe("(7c CO, feature region.planImages, S-7c-2) a plan check: also render the planning images (kit/lib/region/planImages.mjs: a top hillshade with the plan's affordances numbered, two sections, an iso) over the check's survey; region.planned's planCheck carries planImages {images: [{name, blobId, pixelSha, width, height}], labels} (or planImagesError). Changes nothing else"),
+  authored: z
+    .record(z.string().regex(/^[a-z][a-z0-9_]{0,47}$/), z.object({ source: z.string().max(AUTHORED_SOURCE_MAX * 2) }))
+    .refine((o) => Object.keys(o).length <= AUTHORED_PER_PLAN, `at most ${AUTHORED_PER_PLAN} authored programs a plan`)
+    .optional()
+    .describe("(7c AU, feature region.author) a plan check naming authored programs (a zone's program {template: authored, params: {id, sha}}): each one's installed source (the mod's world-local store, the owner's), staged in the plan dir as authored/<id>.mjs, where the plan child hashes and lints it (a sha other than the plan's refuses AUTHORED_STALE). Kept with the plan, so the link pass replays the same bytes"),
 });
 export const RegionTileReq = z.object({
   key: TileKey,
@@ -1542,6 +1551,27 @@ export const RegionComposeMsg = z.object({
   owner: Owner.optional(),
   ext: Ext.optional().describe('kept on the design; on the sim backend only, ext["architect:simCompose"] scripts the rounds\' answers ({plan, reason} per round) and ext["architect:simAnswers"] the pick\'s'),
 });
+/**
+ * (7c AU, feature region.author; docs/CONTRACT.md "Phase 7c" §3 row 13) Program authoring: a design (kind "program") whose rounds (at
+ * most 4, checker-driven, no critic) each write a region program; the helper's checker lints it, plans it in the plan sandbox over the
+ * claim's survey and runs the region checker; a clean round ends AUTHORED with the source and its sha (the mod installs it world-local,
+ * the caller's), else NOT_SHOWN with the last findings. The ack is {designId, adopted?}: the design id is the authored program's id.
+ */
+export const RegionAuthorMsg = z.object({
+  ...envelope('region.author'),
+  brief: z.string().trim().min(1).max(4000),
+  claim: RegionClaim,
+  surveyBlobId: BlobId.describe('the plan survey: an ARSV columns blob (the checker plans every round over it)'),
+  surveySummary: z.string().max(8000).optional(),
+  style: BibleId.optional().describe("the Style (bible): the checker plans with its roles; its role names reach the author"),
+  planId: z.string().max(64).optional().describe('the plan the part belongs to (recorded)'),
+  partId: z.string().max(64).optional().describe('the plan part it answers (recorded)'),
+  model: ModelId.optional().describe('default config regionDesignModel, else jobModel'),
+  budgetUsd: BudgetUsd.optional().describe('hard stop on the estimated cost of every round together'),
+  opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional().describe('the same key and body adopt the first design; another body: op_key_conflict'),
+  owner: Owner.optional(),
+  ext: Ext.optional().describe('kept on the design; architect_mc:authorRounds (1-4) caps the rounds; on the sim backend only, ext["architect:simAuthor"] scripts the rounds\' answers ({source, reason} per round, a later round reusing the last)'),
+});
 /** (7c CO) The mod's check of a settlement design's round (the plan in `settlement.awaiting`): its answer, or why it could not run. */
 export const RegionComposeCheckedMsg = z.object({
   ...envelope('region.compose.checked'),
@@ -1607,6 +1637,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionDesignMsg,
   RegionComposeMsg,
   RegionComposeCheckedMsg,
+  RegionAuthorMsg,
   SiteAnalyseMsg,
   SiteVariantMsg,
   DesignFromProgramMsg,
@@ -1643,7 +1674,7 @@ export function toProtocol1(full: Record<string, unknown>): Record<string, unkno
   // (4c) massing jobs and detail passes are protocol-2 work: a protocol-1 client never sees them
   // (5a) and a report critique of a library entry (design.critique)
   // (5b) and polish designs
-  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || (d as { kind?: unknown }).kind === 'polish' || (d as { kind?: unknown }).kind === 'region' || (d as { kind?: unknown }).kind === 'settlement' || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
+  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || (d as { kind?: unknown }).kind === 'polish' || (d as { kind?: unknown }).kind === 'region' || (d as { kind?: unknown }).kind === 'settlement' || (d as { kind?: unknown }).kind === 'program' || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
   // (5a) critiquing is a protocol-2 status: protocol 1 sees rendering, with the step text
   const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;

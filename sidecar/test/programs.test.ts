@@ -215,3 +215,45 @@ describe('given-program designs and keyed variants (M5 GP) on the real kit', () 
     expect(fs.readdirSync(h.cfg.libraryDir).filter((d) => d.startsWith(`${entryId}_kv`))).toEqual([variantId]);
   });
 });
+
+// (M5 FK, S-M5-3) A given program's fill survives the install: the entry's sidecar keeps `fill` (template coordinates) with
+// `givenProgram`, which is what the mod honours; a program whose fill breaks the kit's rule is refused PROGRAM_REFUSED detail `fill`.
+describe('given-program fills (M5 FK) on the real kit', () => {
+  const FK = fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'fk', 'fk_hall.mjs'), 'utf8');
+  let h: Harness;
+  let sc: Sidecar;
+  beforeAll(async () => {
+    h = makeSidecar(['--backend', 'sim', '--kit', KIT]);
+    sc = h.sc;
+    await sc.start(new SimDesigner(sc, 10));
+  });
+  afterAll(async () => {
+    await sc.close();
+    rmrf(h.root);
+  });
+
+  it('names the feature and the rule', () => {
+    expect(FEATURES).toContain('design.fill');
+    expect(findingRule('fill: containers[0]: minecraft:stone at 0,0,0 is not a container a fill may declare (minecraft:hopper, ...)')).toBe('fill');
+  });
+
+  it('fromProgram keeps the fill in the entry with givenProgram', async () => {
+    const a = await call(sc, { type: 'design.fromProgram', source: FK, params: { slots: 2, count: 18 }, opKey: 'steward.t.module.hall', owner: 'steward:test' });
+    const done = await finished({ events: h.events }, a);
+    expect(done.refused).toBeUndefined();
+    const j = entryJson(h, done.newEntryId as string) as { fill?: { containers: Array<{ at: number[]; items: unknown[] }>; locks: unknown[] }; givenProgram?: unknown };
+    expect(j.givenProgram).toBeDefined();
+    expect(j.fill?.containers.map((c) => c.at)).toEqual([[1, 2, 1], [2, 2, 1]]);
+    expect(j.fill?.containers[0]?.items).toEqual([{ slot: 0, id: 'minecraft:flint', count: 18 }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: 'minecraft:paper', count: 1 }))]);
+    expect(j.fill?.locks).toEqual([{ at: [0, 3, 1], locked: { powered: 'true' } }]);
+  });
+
+  it('a fill that breaks the kit rule is refused PROGRAM_REFUSED fill', async () => {
+    const bad = FK.replace("locked: { powered: 'true' }", "locked: { facing: 'north' }");
+    expect(bad).not.toBe(FK);
+    const a = await call(sc, { type: 'design.fromProgram', source: bad, params: {}, opKey: 'steward.t.module.hall_bad', owner: 'steward:test' });
+    const done = await finished({ events: h.events }, a);
+    expect(done.refused).toBeDefined();
+    expect(JSON.stringify(done.refused)).toContain('fill');
+  });
+});

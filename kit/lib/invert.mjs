@@ -87,6 +87,7 @@ export function flipOf(name, props = {}) {
  * `unflipped`: 'refuse' (default: throws naming the cells with no flipped twin) or 'keep' (left as they are). Returns bp.
  */
 export function invertBlueprint(bp, { unflipped = 'refuse' } = {}) {
+  if (bp.fillSpec) throw new Error(`${bp.id}: a design with a fill (lib/fill.mjs) can't be inverted (its declared cells and lock states would move)`);
   const H = bp.size.y;
   const flip = (k) => { const [x, y, z] = k.split(',').map(Number); return `${x},${H - 1 - y},${z}`; };
   const cells = new Map();

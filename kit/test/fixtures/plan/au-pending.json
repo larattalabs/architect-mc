@@ -1,0 +1,6 @@
+{
+  "about": "(7c AU) program.authored is supported for an authored program installed for the plan's owner (Regions.authorProgram), which a plan/0 fixture can't carry: kit/test/au.test.mjs covers it (fits over the whole claim, the artifact's authored member, AUTHORED_STALE on a moved sha, NO_PROGRAM when none is installed: fixtures/plan/au/e19_authored_program.json)",
+  "ids": [
+    "program.authored"
+  ]
+}

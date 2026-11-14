@@ -69,7 +69,7 @@ class PlanCatalogueTest {
 	void kindsEqualTheKitsPlanCatalogueKinds() throws Exception {
 		// (7cF) Regions.planCatalogue(kinds): the jar's answer equals the kit's planCatalogueKinds for the same kinds (a def, a draft, an
 		// alias with neither, a reserved kind with neither, and two unknown ids)
-		java.util.List<String> kinds = java.util.List.of("rule.suspended", "connector.wall", "zone.district", "program.authored", "form.brush", "zz.nope",
+		java.util.List<String> kinds = java.util.List.of("rule.suspended", "connector.wall", "zone.district", "rule.shape", "form.brush", "zz.nope",
 			"aa.nope", "program.crater_works");
 		Process p;
 		try {
@@ -94,14 +94,14 @@ class PlanCatalogueTest {
 		assertTrue(e.get(1).getAsJsonObject().getAsJsonObject("def").has("properties"), "a supported entry's def");
 		JsonObject crater = null;
 		for (var x : e) {
-			if (x.getAsJsonObject().get("id").getAsString().equals("program.authored")) {
+			if (x.getAsJsonObject().get("id").getAsString().equals("rule.shape")) {
 				crater = x.getAsJsonObject();
 			}
 		}
 		// ((7c BF) form.crater is supported since BF; (7c HR) form.hidden_room since HR; (7c US) rule.suspended since US: program.authored
-		// (until AU) is the reserved draft here)
+		// was the reserved draft here until AU made it supported; rule.shape (until RC) is now)
 		assertEquals("reserved", crater.getAsJsonObject("def").get("x-state").getAsString(), "a reserved entry's draft");
-		assertTrue(crater.has("note"), "the long text: its note");
+		assertTrue(crater.has("note") || crater.getAsJsonObject("def").has("description"), "the long text: its note or its draft's description");
 		assertEquals(JsonParser.parseString("[\"aa.nope\", \"zz.nope\"]"), mod.get("unknown"));
 		for (String k : new String[] {"catalogueVersion", "api", "kitVersion", "schemaVersion"}) {
 			assertEquals(PlanCatalogue.get().get(k), mod.get(k), k);

@@ -69,6 +69,7 @@ import { emitFree, emitStreetLamps, possibleLanterns, LAMP_GAP } from '../region
 import { emitElevatedZone, isElevatedZone, resolveElevatedZone } from './elevated.mjs';
 // (7b LP) port links between site lots (the link pass)
 import { LINK_STAGE, LinkError, PLAN_CODE_OF_LINK, PORT_LINK_KINDS } from '../region/links.mjs';
+import { authoredRef } from './authored.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -583,8 +584,30 @@ function wouldFitMove(zone, loc, c) {
 
 /** The whole-claim templates' claim ranges (their catalogue `claim`). */
 export const WHOLE_CLAIM = new Map();
+/**
+ * (7c AU) A whole-claim zone's template: a bundled one from WHOLE_CLAIM, or (template "authored") the plan's authored program from
+ * ctx.authored (region.mjs plan --authored; per run, never in WHOLE_CLAIM), its sha checked against the plan's before anything runs:
+ * {claim, module, params} | {refuse: reasons} | {malformed: reasons}. Its own params (params.params) are the program's values.
+ */
+function wholeOf(env, program) {
+  if (program.template !== 'authored') {
+    const t = WHOLE_CLAIM.get(program.template);
+    return t ? { ...t, params: program.params ?? {} } : null;
+  }
+  const ref = authoredRef(program);
+  if (ref.error) return { malformed: [{ code: 'SCHEMA', path: ref.error.path, message: ref.error.message }] };
+  const a = env.ctx.authored?.get(ref.id);
+  if (!a) return { refuse: [{ code: 'NO_PROGRAM', message: `no authored program ${ref.id} is installed for this plan's owner (Regions.authorProgram)`, evidence: { id: ref.id } }] };
+  if (a.sha !== ref.sha) return { refuse: [{ code: 'AUTHORED_STALE', message: `authored program ${ref.id} is ${a.sha.slice(0, 12)} now, not the ${ref.sha.slice(0, 12)} this plan names`, evidence: { id: ref.id, sha: a.sha, named: ref.sha } }] };
+  if (!a.module) return { refuse: [{ code: 'NO_PROGRAM', message: `authored program ${ref.id}: ${a.problem}`, evidence: { id: ref.id } }] };
+  const c = a.module.catalogue?.claim;
+  const ok = (v) => Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 8 && n <= 1024);
+  return { claim: c && ok(c.min) && ok(c.max) ? c : { min: [16, 16], max: [1024, 1024] }, module: a.module, params: ref.params, authored: { id: ref.id, sha: a.sha } };
+}
 function resolveWholeClaim(env, z, obstacles) {
-  const t = WHOLE_CLAIM.get(z.part.program.template);
+  const t = wholeOf(env, z.part.program);
+  if (t?.malformed) return { klass: 'malformed', reasons: t.malformed };
+  if (t?.refuse) return { klass: 'refused', reasons: t.refuse };
   const W = env.claim.maxX - env.claim.minX + 1, D = env.claim.maxZ - env.claim.minZ + 1;
   if (!t) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `template ${z.part.program.template} is not loaded` }] };
   if (obstacles.length) return { klass: 'refused', reasons: [{ code: 'OVERLAP', message: `${z.part.program.template} takes the whole claim, so it compiles only as the plan's sole zone (N-P0-1)` }] };
@@ -1343,15 +1366,17 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
   const mark = (pid, added) => { for (const id of [...added.parts, ...added.lots.map((l) => `lot:${l}`), ...added.roads.map((x) => `road:${x}`), ...(added.paths ?? []).map((x) => `path:${x}`), ...(added.nodes ?? []).map((x) => `node:${x}`), ...(added.edges ?? []).map((x) => `edge:${x}`)]) partOf[id] = pid; };
   if (whole) {
     // N-P0-1: the template runs first over the whole claim with its own params; the region is its
-    const t = WHOLE_CLAIM.get(whole.part.program.template);
-    const sub = Object.create(ctx, { params: { value: Object.freeze(templateParams(t.module, whole.part.program.params ?? {})), enumerable: true } });
+    const t = wholeOf(env, whole.part.program);
+    // ((7c AU) an authored program: frozen into the artifact by {id, sha}; its name in messages is its id)
+    if (t.authored) record.authored = [{ part: whole.id, ...t.authored }];
+    const sub = Object.create(ctx, { params: { value: Object.freeze(templateParams(t.module, t.params)), enumerable: true } });
     try {
       r = t.module.default(sub);
       if (!r || typeof r.part !== 'function') throw new Error('the template returned no region');
     } catch (e) {
       r = null;
       res.set(whole.id, { klass: 'refused' });
-      ans(whole, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `${whole.part.program.template}: ${e.message}` }] });
+      ans(whole, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `${t.authored ? `authored program ${t.authored.id}` : whole.part.program.template}: ${e.message}` }] });
     }
     if (r) {
       const c0 = { parts: 0, lots: 0, roads: 0, pathIds: [], nodes: 0, edges: 0 };

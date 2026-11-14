@@ -234,6 +234,8 @@ export interface ComposeState {
   rounds: ComposeRound[];
   /** repair rounds after the first (ext architect_mc:repairRounds; default REPAIR_ROUNDS) */
   repairs?: number;
+  /** (7c AU) why the rounds stopped before their number: nothing to repair, or the answers repeated */
+  stopped?: 'nothing_to_repair' | 'oscillation';
   /** the caller's anchors (composeHints.anchors): the mod checks every round with them */
   anchors?: Record<string, [number, number, number]>;
   /** the players' builds meeting the claim, as the mod sent them (id, kind, bounds, entrances) */
@@ -393,6 +395,38 @@ export function roundRank(r: ComposeRound): number {
   if (r.refused || !r.check) return OVERALL_RANK.length;
   const i = OVERALL_RANK.indexOf(String(r.check.overall));
   return i < 0 ? OVERALL_RANK.length : i;
+}
+
+/**
+ * (7c AU, CO's gaps for Steward's adoption) Whether a round's check leaves anything a repair round can fix: a part refused or malformed, a
+ * malformed plan, or a check that could not run. Parts that only wait (unsupported, blocked behind a waiting part) are never repaired, as
+ * Steward's PlanWriter does: another paid round cannot make a reserved kind build.
+ */
+export function repairable(r: ComposeRound | undefined): boolean {
+  if (!r) return false;
+  if (r.refused || !r.check) return true;
+  if (String(r.check.overall) === 'MALFORMED' || r.check.malformed) return true;
+  return (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).some((p) => p.class === 'refused' || p.class === 'malformed');
+}
+
+/** (7c AU) A round's typed answers as one string (overall, each part's class and reason codes; or the refusal): the oscillation stop compares them. */
+export function answersKey(r: ComposeRound): string {
+  if (r.refused || !r.check) return `refused:${r.refused ?? ''}`;
+  const parts = (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).map((p) => [p.part, p.class, (Array.isArray(p.reasons) ? (p.reasons as Array<Record<string, unknown>>) : []).map((x) => x.code)]);
+  return JSON.stringify([r.check.overall, r.check.malformed ?? null, parts]);
+}
+
+/**
+ * (7c AU) Why the rounds stop before the next repair, or undefined to go on: `nothing_to_repair` (no part refused or malformed: what is
+ * left only waits) or `oscillation` (the last round's typed answers repeat an earlier round's: another round would go round again).
+ */
+export function repairStop(rounds: readonly ComposeRound[]): 'nothing_to_repair' | 'oscillation' | undefined {
+  const last = rounds[rounds.length - 1];
+  if (!last) return undefined;
+  if (!repairable(last)) return 'nothing_to_repair';
+  const k = answersKey(last);
+  if (rounds.slice(0, -1).some((r) => answersKey(r) === k)) return 'oscillation';
+  return undefined;
 }
 
 /** The best round: the best rank, a tie to the later round. */
@@ -737,6 +771,13 @@ export class ComposeDesigns {
       if (!r) {
         const prev = st.rounds[i - 1];
         if (prev && !prev.refused && prev.check && String(prev.check.overall) === 'READY' && prev.check.artifactSha) break;
+        // ((7c AU, CO's gaps) a repair only while a part is refused or malformed, and never round again over the same answers)
+        const why = prev ? repairStop(st.rounds) : undefined;
+        if (why) {
+          st.stopped = why;
+          this.save(id, st);
+          break;
+        }
         const left = this.left(st);
         if (left !== undefined && left <= 0) return this.fail(id, st, 'budget', this.outcome(st, pickOut, await this.until(st)));
         let prompt = first;
@@ -808,7 +849,7 @@ export class ComposeDesigns {
     const images = st.planImages ? { images: st.planImages.images.map((im) => ({ name: im.name, blobId: im.blobId })) } : {};
     // every round's answer, in order: what each check said (the repair's evidence without the record)
     const history = st.rounds.map((r) => ({ round: r.n, ...(r.refused ? { refused: r.refused } : { overall: String(r.check?.overall ?? 'unchecked') }), ...(typeof r.check?.planSha === 'string' ? { planSha: r.check.planSha } : {}) }));
-    const base = { rounds: st.rounds.length, history, pick, ...images };
+    const base = { rounds: st.rounds.length, history, pick, ...images, ...(st.stopped ? { stopped: st.stopped } : {}) };
     if (ready && last) return { outcome: 'COMPOSED', reason: last.reason ?? '', plan: last.plan, check: last.check, round: last.n, ...base };
     return {
       outcome: 'NO_PLAN',

@@ -177,6 +177,7 @@ public final class InfraPlace {
 	/** {@link #beginRoad}; {@code construction} (6c 0c, C16): built by the builder from the batch's shared crate once placed. */
 	static InfraJob beginRoad(ServerLevel level, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
 		boolean construction) throws Sites.SiteException {
+		Fills.refuseOverwrite(level, c.positions(), "The road"); // (M5 FK) never over a filled site's declared cells
 		if (construction) {
 			JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
 			spec.addProperty(RoadBuilder.SPEC_CONSTRUCTION, true);
@@ -441,6 +442,7 @@ public final class InfraPlace {
 		if (!c.ok()) {
 			throw new Sites.SiteException(c.refusals().get(0).reason(), c.refusals().get(0).message());
 		}
+		Fills.refuseOverwrite(level, c.positions(), "The cell site"); // (M5 FK)
 		SiteJournal.requireAvailable();
 		String id = "c" + SiteJournal.store().newCells();
 		Infra rec = new Infra(id, Infra.CELLS + kind, owner, ext, Sites.dimensionId(level), c.box(), System.currentTimeMillis(), member, true, c.spec());
@@ -470,6 +472,7 @@ public final class InfraPlace {
 	/** {@link #beginTile}; (RP) {@code before} runs with the site id before the PLACING commit (the realised record). */
 	static InfraJob beginTile(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
 		TileCheck.Result r, String tile, @Nullable BeforeCommit before) throws Sites.SiteException {
+		Fills.refuseOverwrite(level, c.positions(), "The tile " + tile); // (M5 FK)
 		SiteJournal.requireAvailable();
 		String id = "c" + SiteJournal.store().newCells();
 		if (before != null) {
@@ -501,6 +504,7 @@ public final class InfraPlace {
 	static InfraJob beginTileSurvival(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
 		TileCheck.Result r, String tile, RegionTargets.Split split, String regionId, int @Nullable [][] payload, @Nullable BeforeCommit before)
 		throws Sites.SiteException {
+		Fills.refuseOverwrite(level, c.positions(), "The tile " + tile); // (M5 FK)
 		SiteJournal.requireAvailable();
 		var srv = level.getServer();
 		String dim = Sites.dimensionId(level);
