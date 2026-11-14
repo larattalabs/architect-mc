@@ -471,13 +471,17 @@ steps.bccap = async () => {
   check(!!capped && capped.target.waiting === true && drawnPl <= 100 && drawnPl > 0 && (capped.target.nextNeeded ?? []).some((n) => n.item === PL),
     `S-M5-9: fed in full (${waves} waves): the planks drawn stop at the cap (${drawnPl} of 100); target ${capped?.target.id} waits typed ${capped?.target.blocked} (waiting ${capped?.target.waiting}, nextNeeded ${json(capped?.target.nextNeeded)})`, out.capped);
   if (!capped) return out;
+  // fed past the cap: the stockpile holds every plank the target still needs (the stockpile takes no more than its targets owe), and for
+  // 20 s more none is drawn
+  const need = (capped.target.nextNeeded ?? []).find((n) => n.item === PL)?.count ?? 0;
+  const ins = await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [PL]: 64 }, exact: false }, 120_000);
   const stock0 = (await pile()).stock?.[PL] ?? 0;
-  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [PL]: 64 }, exact: true }, 120_000);
   await L.sleep(20_000);
   const c1 = await L.call('dev.bc.cap', { region }, 30_000);
   const stock1 = (await pile()).stock?.[PL] ?? 0;
-  out.pastCap = { drawnBefore: drawnPl, drawnAfter: c1.drawn?.[PL], stockBefore: stock0, stockAfter: stock1, still: (c1.targets ?? []).filter((x) => x.blocked === 'bill_cap').map((x) => x.id) };
-  check(c1.drawn?.[PL] === drawnPl && stock1 === stock0 + 64 && out.pastCap.still.length > 0, `S-M5-9: 64 more planks fed are not drawn: drawn ${drawnPl} -> ${c1.drawn?.[PL]}, stock ${stock0} -> ${stock1}; still bill_cap ${json(out.pastCap.still)}`, out.pastCap);
+  out.pastCap = { need, inserted: ins.accepted ?? ins, drawnBefore: drawnPl, drawnAfter: c1.drawn?.[PL], stockBefore: stock0, stockAfter: stock1, still: (c1.targets ?? []).filter((x) => x.blocked === 'bill_cap').map((x) => x.id) };
+  check(c1.drawn?.[PL] === drawnPl && stock0 >= need && need > 0 && stock1 === stock0 && out.pastCap.still.length > 0,
+    `S-M5-9: fed past the cap, not drawn: the stockpile holds ${stock0} planks (the target needs ${need}; 64 more offered, ${json(ins.accepted ?? {})} taken), drawn ${drawnPl} -> ${c1.drawn?.[PL]} over 20 s, stock ${stock0} -> ${stock1}; still bill_cap ${json(out.pastCap.still)}`, out.pastCap);
   // the cap back at the quote: built; consumed equals the quote
   await L.call('dev.bc.cap', { region, set: q.bom }, 30_000);
   const f = await G.feed(ctx, region, { timeoutMs: 1_200_000 });
