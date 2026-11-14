@@ -65,6 +65,21 @@ class RelayBCTest {
 		assertFalse(fresh.matches(Blocks.AIR.defaultBlockState(), q), "mined since: not built, the builder places and pays it again");
 	}
 
+	@Test
+	void aRemovedTargetMatchesStrictly() {
+		// the audit reads a removed (pending) site: the land its removal put back (natural dirt under a farmland target) is not its paid block
+		LedgerSim s = new LedgerSim();
+		Builder.Run r = s.place("farm", "farm").run;
+		int q = farmlandCell(r);
+		r.tilled.clear();
+		r.markBuilt(q, true);
+		r.soilFamily = false;
+		assertFalse(r.matches(Blocks.DIRT.defaultBlockState(), q));
+		assertFalse(r.matches(Blocks.GRASS_BLOCK.defaultBlockState(), q));
+		assertTrue(r.matches(Blocks.FARMLAND.defaultBlockState(), q), "its own block still is");
+		assertEquals(dev.larattalabs.architect.site.Cells.cost(Blocks.DIRT.defaultBlockState()), r.refundCost(Blocks.DIRT.defaultBlockState(), q));
+	}
+
 	/** The soil family a written cell may turn into and back: dirt, grass, podzol, mycelium, farmland, dirt path; not coarse dirt or mud. */
 	@Test
 	void theSoilFamily() {

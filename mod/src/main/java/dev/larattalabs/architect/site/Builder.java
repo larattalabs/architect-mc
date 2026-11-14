@@ -628,7 +628,7 @@ public final class Builder {
 			// (BC, S-M5-10) generalised: a soil cell this run wrote (its built bit), or the target's ledger book says stood paid at the last
 			// save ({@link #paidBefore}), that vanilla turned into another soil block (farmland dried, grass spread over our dirt, a dirt
 			// path under a block) is still the cell we paid for: never re-laid, never paid again; its refund is what was paid
-			if ((built.get(i) || tilled.get(i) || paidBefore.get(i)) && ownSoil(target[i]) && ownSoil(now)) {
+			if (soilFamily && (built.get(i) || tilled.get(i) || paidBefore.get(i)) && ownSoil(target[i]) && ownSoil(now)) {
 				return true;
 			}
 			return Copper.is(now, target[i].getBlock());
@@ -646,6 +646,11 @@ public final class Builder {
 		 * ({@link #matches}). Attached when the run is made ({@code Stockpiles.attachPaid}).
 		 */
 		final BitSet paidBefore = new BitSet();
+		/**
+		 * (BC) The soil-family rule (a written soil cell vanilla turned to another soil stays ours) holds while the target stands; a removed
+		 * target's cells (the audit reads pending sites) match strictly: the land its removal put back is not its paid block.
+		 */
+		boolean soilFamily = true;
 
 		/**
 		 * (BC, S-M5-10) The soil blocks vanilla turns into one another on a cell we wrote: {@link #soil} and the dirt path (it goes to dirt
@@ -669,7 +674,7 @@ public final class Builder {
 		 */
 		List<SurvivalItems.Cost> refundCost(BlockState now, int i) {
 			// (BC, S-M5-10) a soil cell vanilla changed to another soil block pays back what it was paid (a refund is never past the bill)
-			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) || ownSoil(now) && ownSoil(target[i]) ? cost.get(i) : Cells.cost(now);
+			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) || soilFamily && ownSoil(now) && ownSoil(target[i]) ? cost.get(i) : Cells.cost(now);
 		}
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */
@@ -3096,6 +3101,16 @@ public final class Builder {
 
 	/** {@link #paidStanding}, less the cells in {@code skip} (XR: a survival region lot's cells a later writer of the region owns). */
 	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
+		boolean family = r.soilFamily;
+		r.soilFamily = Sites.get(s.id()) != null; // (BC) a removed (pending) site matches strictly
+		try {
+			return paidStanding0(level, s, r, skip);
+		} finally {
+			r.soilFamily = family;
+		}
+	}
+
+	private static Map<String, Integer> paidStanding0(ServerLevel level, Site s, Run r, it.unimi.dsi.fastutil.longs.@Nullable LongOpenHashSet skip) {
 		r.rescan(level, false, true); // never loads a chunk (a far target's cells keep their last known state)
 		r.newlyCount = 0;
 		BitSet free = s.construction().free();
