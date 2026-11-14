@@ -103,6 +103,8 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch } from './lib/stall-watch.mjs';
+import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
+import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -126,7 +128,7 @@ process.on('SIGUSR2', () => {
     // before the scheduler started: the workers see `draining` when they start
   }
 });
-const VALUED = ['--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
+const VALUED = ['--own', '--assume-warm', '--nightly-dir', '--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host', '--lanes'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -545,8 +547,11 @@ const RAW_CFG = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); // the chain f
 // the judged benches (tools/gate-cache.json release.benches.judged): recorded in the step cache only from the nightly (judged,
 // isolated); a release reuses that PASS through the bench rule, never through a lookup
 const JUDGED_BENCHES = judgedBenches(CACHE_CONF);
-// lookups: a tier run (not a named chain, not --only/--from: an explicit list always runs), not --no-cache, not release --full
-const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps' : opt('--only') || opt('--from') ? '--only/--from: an explicit list runs'
+// lookups: a tier run (not a named chain), not --no-cache, not release --full. An explicit list (--only/--from) looks up too since
+// slice GX, under tools/lib/explicit-cache.mjs's rule: its own steps always run, a strict-tier step takes only an exact key hit, an
+// entry from another platform never serves it
+const EXPLICIT = !!(opt('--only') || opt('--from'));
+const CACHE_OFF_WHY = tierInfo.kind !== 'tier' ? 'a named chain runs its steps'
   : flag('--no-cache') ? '--no-cache' : tierInfo.full?.on ? `release --full (${tierInfo.full.why.join('; ')})` : !INPUT_MAP ? 'no tools/step-inputs.json' : null;
 let CACHE = null;
 let cacheErr = null;
@@ -625,7 +630,29 @@ if (tierInfo.cache.lookup) {
     warm.rawCfg = RAW_CFG;
     tierInfo.cache.assumeWarm = { ref: opt('--assume-warm'), head: warm.head };
   }
+  // (GX) an explicit list's own steps: --own, and what the range adds or changes (tools/lib/explicit-cache.mjs)
+  let own = new Map();
+  if (EXPLICIT) {
+    let base = null;
+    const r = tierInfo.range && !String(tierInfo.range).startsWith('--files') ? String(tierInfo.range) : null;
+    if (r) {
+      try {
+        const [a, b] = r.includes('...') ? r.split('...') : r.split('..');
+        const mb = r.includes('...') ? git(SRC, 'merge-base', a, b || 'HEAD') : git(SRC, 'rev-parse', a);
+        base = JSON.parse(git(SRC, 'show', `${mb.trim()}:${path.relative(SRC, CONFIG_PATH)}`)).steps ?? {};
+      } catch {
+        base = null;
+      }
+    }
+    own = ownSteps({ ids: [...want], now: RAW_CFG.steps, base, files: tierInfo.impact?.files ?? [], own: (opt('--own') ?? '').split(',').map((x) => x.trim()).filter(Boolean) });
+    tierInfo.cache.explicit = { own: Object.fromEntries(own), base: base ? 'the range\'s base chain file' : r ? 'base chain file unreadable: --own and the files only' : 'no range: --own and the files only' };
+  }
   for (const id of want) {
+    if (EXPLICIT && own.has(id)) {
+      run.add(id);
+      push(id, `own step: always runs (${own.get(id)})`);
+      continue;
+    }
     if (canary.has(parentOf(id))) {
       run.add(id);
       push(id, canary.get(parentOf(id)));
@@ -646,6 +673,13 @@ if (tierInfo.cache.lookup) {
     if (warm) {
       const w = keyFor(warm, id);
       l = w.key === k.key ? { hit: { key: k.key, at: `(assumed: a full nightly at ${warm.head.slice(0, 9)})`, head: warm.head, run: INPUT_MAP.steps[parentOf(id)]?.verified ? '(assumed)' : '(assumed; its set is NOT yet verified by a traced PASS: computed imports may be missing)', tier: 'assumed' } } : { hit: null, why: w.key ? `its key at ${warm.head.slice(0, 9)} differs (an input, its definition or a mode moved)` : `no key at ${warm.head.slice(0, 9)}: ${w.why}` };
+    } else if (EXPLICIT) {
+      const strict = isStrict(CACHE_CONF.explicit, id);
+      l = explicitDecision({ own: null, strict, key: k, exact: lookup(CACHE, id, k.key), coverage: coverageMode(CACHE, id) ? () => lookupCoverage(CACHE, id) : null, platform: platformNow() });
+      if (l.hit) for (const [lib, dep] of [['tools/lib/junit-reuse.mjs', 'unit-mod'], ['tools/lib/kit-reuse.mjs', 'unit-kit'], ['tools/lib/sidecar-reuse.mjs', 'unit-sidecar']]) {
+        // as below: a reader's coverage PASS stands only beside the suite it delegated to
+        if (l.hit.mode === 'coverage' && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes(lib) && !want.has(dep)) l = { hit: null, why: `its tests are delegated to ${dep}, which is not in this run` };
+      }
     } else {
       l = lookup(CACHE, id, k.key);
       // an in-game step: the newest coverage PASS whose touched files are unchanged here
@@ -917,6 +951,8 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
     GATE_RUN_SHARED: RUN_SHARED_DIR,
     // (speed audit A) api-compat's per-run memo of clean checks (tools/api-compat.mjs): the run's, shared by every step and shard
     GATE_APICOMPAT_MEMO: path.join(RUN_SHARED_DIR, 'apicompat-memo'),
+    // (GX) the run's shared kit suite: when unit-kit's report can't serve, the readers run the whole suite once between them
+    GATE_KIT_SHARED_DIR: path.join(RUN_SHARED_DIR, 'kit-suite'),
     // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
     ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
@@ -1067,7 +1103,32 @@ async function decideAuto() {
   buildShards(c.n, pairsFree.slice(0, c.n));
   return autoChoice;
 }
-const decideShards = TURBO ? decideTurbo : AUTO ? decideAuto : null;
+// change shards (tools/lib/change-shards.mjs, docs/GATES.md "Slice GX as built"): a shared change/slice run of more than
+// shards.change.minSteps steps with one --ports pair runs on in-game shards plus offline lanes on pairs derived from that pair
+const CC = changeConfig(cfg);
+const CHANGE_ON = changeApplies(CC, { chain: chainName, turbo: TURBO, shardsArg: SHARDS_ARG, steps: steps.length, portsGiven: allPairs ? portPairs.length : 0 });
+const CHANGE = CHANGE_ON.on && !flag('--no-change-shards');
+let changeChoice = null;
+async function decideChange() {
+  const offline = steps.filter((s) => s.client === 'none').length;
+  const game = steps.length - offline;
+  let derived;
+  try {
+    derived = derivePairs(portPairs[0], CC.pairs, { stride: CC.stride, turboRange: TC.portRange });
+  } catch (e) {
+    die(`change shards: ${e.message}`);
+  }
+  const holders = allSlotHolders();
+  const taken = new Set(holders.flatMap((h) => (Array.isArray(h.ports) ? h.ports.flat() : [])).map(Number));
+  // the base pair is the coordinator's: always ours (the run's --lock guards it); the derived ones must be free now
+  const usable = [derived[0], ...(await usablePairs(derived.slice(1), { taken }))];
+  const c = chooseChange(CC, { wallFor: (n, l) => estimate(est, n, l).wallMin, offline, game, pairs: usable.length, probe: probeMachine() });
+  changeChoice = { ...c, mode: `change shards (${CHANGE_ON.why}; --no-change-shards: one shard)`, ports: usable.slice(0, c.n + c.lanes).map((p) => p.join(':')), derived: derived.map((p) => p.join(':')), decidedAt: new Date().toISOString(), text: describeChange(c, CC, usable) };
+  autoChoice = { mode: changeChoice.mode, n: c.n, lanes: c.lanes, bound: c.bound, caps: c.caps, wallByN: c.table.map((t) => ({ n: t.n, lanes: t.lanes, wallMin: Math.round(t.wallMin * 10) / 10 })), ports: changeChoice.ports, portSource: `derived from --ports ${portPairs[0].join(':')} (stride ${CC.stride})`, decidedAt: changeChoice.decidedAt, text: changeChoice.text, change: true };
+  buildShards(c.n, usable.slice(0, c.n + c.lanes), c.lanes);
+  return autoChoice;
+}
+const decideShards = TURBO ? decideTurbo : CHANGE ? decideChange : AUTO ? decideAuto : null;
 if (!decideShards) buildShards(NSHARDS, portPairs);
 
 /**
@@ -1220,6 +1281,7 @@ function printCache() {
   const cached = tierInfo.cached ?? [];
   if (c.lookup) console.log(`  CACHED ${cached.length}, to run ${stepIds.length}${cached.length ? ':' : ''}`);
   for (const h of cached) console.log(`    CACHED ${h.id.padEnd(22)} PASS ${h.at} (${h.tier ?? '?'}, head ${String(h.head).slice(0, 9)}, key ${h.key.slice(0, 12)}) evidence ${h.log ?? h.run}`);
+  if (c.explicit) console.log(`  explicit list (--only/--from): own steps always run (${c.explicit.base}): ${Object.entries(c.explicit.own).map(([id, w]) => `${id} (${w})`).join('; ') || 'none'}; strict-tier steps take exact keys only; --no-cache runs every step`);
 }
 
 function printPlan() {
@@ -1675,7 +1737,9 @@ function runProcess(sh, step, logFile) {
       env.GATE_TRACE_ROOTS = JSON.stringify([...new Set([SRC, DRV])].map((r) => [r, '']).concat([[sh.RUN, ''], [path.join(MAIN, 'artifacts'), '@artifacts/']]));
     }
     const cwd = resolveCwd(step.cwd, sh);
-    const [cmd, args] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];
+    const [cmd0, args0] = step.shell ? ['/bin/zsh', ['-c', step.shell]] : [step.cmd[0], step.cmd.slice(1)];
+    // (GX) an offline lane of a change-sharded run runs its unit and sim steps under nice (speed rule 5), beside the in-game shards
+    const [cmd, args] = CHANGE && sh.kind === 'offline' ? ['/usr/bin/nice', ['-n', String(CC.nice), cmd0, ...args0]] : [cmd0, args0];
     fs.writeSync(fd, `# ${new Date().toISOString()} ${step.shell ?? step.cmd.join(' ')}  (cwd ${cwd}, shard ${sh.name}, ports ${sh.SIDECAR_PORT}/${sh.DEV_PORT})\n`);
     const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', fd, fd] });
     let timedOut = false;
@@ -1954,9 +2018,10 @@ function summaryMd() {
     const c = summary.cache;
     lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
     if (summary.cached.length) {
-      lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key`, '', '| step | PASS at | head | evidence |', '|---|---|---|---|');
-      for (const h of summary.cached) lines.push(`| ${h.id} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${h.log ?? h.run}\` |`);
+      lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key${c.explicit ? ' (an explicit list: own steps always ran, strict-tier steps took exact keys only)' : ''}`, '', '| step | key | PASS at | head | source run | evidence |', '|---|---|---|---|---|---|');
+      for (const h of summary.cached) lines.push(`| ${h.id} | ${String(h.key).slice(0, 12)} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${path.basename(String(h.run ?? '?'))}\` | \`${h.log ?? h.run}\` |`);
     }
+    if (c.explicit && Object.keys(c.explicit.own).length) lines.push('', `Own steps (always run; ${c.explicit.base}): ${Object.entries(c.explicit.own).map(([id, w]) => `${id} (${w})`).join('; ')}.`);
     if (summary.inputsMisses.length) {
       lines.push('', `### Inputs-map misses (${summary.inputsMisses.length}): these PASSes were not cached`, '', `A step read source files outside its set in tools/step-inputs.json. Widen it: \`node tools/step-inputs.mjs merge ${OUT}\`, review, commit.`, '');
       for (const m of summary.inputsMisses) lines.push(`- **${m.step}**: ${m.paths.slice(0, 8).map((p) => `\`${p}\``).join(', ')}${m.paths.length > 8 ? ` and ${m.paths.length - 8} more` : ''}`);

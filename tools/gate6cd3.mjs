@@ -32,7 +32,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { kitReuse } from './lib/kit-reuse.mjs';
+import { kitOnceAsync, kitReuse } from './lib/kit-reuse.mjs';
+import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
@@ -108,22 +109,27 @@ function nodeTest(files) {
   const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)), comments: t.split('\n').filter((l) => /^# /.test(l)).slice(0, 40) };
 }
-const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
-  out.d3 = nodeTest(['kit/test/districts-d3.test.mjs', 'kit/test/districts-d3-parity.test.mjs']);
+  // (GX) the four kit groups (D3's own files, D1/D2's, P0's, the goldens) check counts and failures only: unit-kit's report (or
+  // the run's shared kit suite, when one is running or done) stands for them; what it can't serve runs here, the groups side by
+  // side
+  [out.d3, out.d, out.p0, out.goldens] = await Promise.all([
+    kitOnceAsync(root, ['kit/test/districts-d3.test.mjs', 'kit/test/districts-d3-parity.test.mjs']),
+    kitOnceAsync(root, ['kit/test/districts-d.test.mjs', 'kit/test/districts-d2.test.mjs']),
+    kitOnceAsync(root, ['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/plan-ops.test.mjs']),
+    kitOnceAsync(root, ['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/village.test.mjs']),
+  ]);
   check(out.d3.code === 0 && out.d3.fail === 0 && out.d3.pass >= 14, `items 1, 2, 17 (kit): §3's geometry row by row, the candidates and the choice (thinning, the prune, the 48 cap), held and body columns hard, 300 seeded synthetic towns, M28:beside and M25:clear's foreign bodies with the four broken variants caught, the land, plan/0's endpoint.region reach, §9, the pinned seam joins, the IR sha over 3 plans, the parity fixture: ${out.d3.pass} pass, ${out.d3.fail} fail`, out.d3.failing);
-  out.d = kitOnce(['kit/test/districts-d.test.mjs', 'kit/test/districts-d2.test.mjs']);
   check(out.d.code === 0 && out.d.fail === 0, `item 2 / 18: D1's and D2's kit tests unchanged (districts_demo's IR sha and golden, the beside fixture, the outpost and boundary districts): ${out.d.pass} pass, ${out.d.fail} fail`, out.d.failing);
-  out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/plan-ops.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `item 2: the plan fixtures (valid/v17-v23 among them) and Steward's 59 asks answer as before: ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
-  out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/village.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 2: the tile goldens (S1, S2, S7, mega_bench) and every committed scenario golden unchanged; the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*DistrictLandTest', '--tests', '*ApiRulesTest', '--tests', '*ApiDTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env: { ...process.env, JAVA_HOME, GRADLE_USER_HOME: path.join(root, '.gradle-home') }, timeout: 1_800_000 }));
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAILED|tests completed|error/.test(l)).slice(0, 10) };
   check(g.status === 0, `item 1: DistrictLand.java equals land.mjs and BesideReach.standing equals besideStanding on every parity fixture; the features (besideReach, besideCheck, districtLand): gradle exit ${g.status}`, out.java.tail);
-  const sc = spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/plan-check.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
+  // (GX) the sidecar's files from unit-sidecar's report when exact (tools/lib/sidecar-reuse.mjs), as d-unit and t1-unit do
+  const sc = sidecarReuse(root, ['test/regions-village.test.ts', 'test/plan-check.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/plan-check.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   out.sidecar = { code: sc.status, summary: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `§2.4, §7 (sidecar): region.plan besideReach and dry: ${out.sidecar.summary}`);
   spendZero();

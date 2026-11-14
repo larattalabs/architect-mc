@@ -319,6 +319,7 @@ export function lookup(ctx, id, key) {
     return { hit: null, why: 'no recorded PASS for this key' };
   }
   if (e.status !== 'PASS' || e.key !== key) return { hit: null, why: 'entry mismatch' };
+  if (e.platform && e.platform !== `${process.platform}-${process.arch}`) return { hit: null, why: `recorded on ${e.platform}` };
   // the archived files it read under artifacts/ (tag builds, apitest jars): each must still be there, unchanged
   for (const [rel, fpr] of Object.entries(e.external ?? {})) {
     const now = externalFingerprint(ctx.main, rel);
@@ -357,6 +358,8 @@ export function record(ctx, id, rec, opts) {
   } else if (chk.outside.length) return { stored: false, why: `inputs-map miss: the step read ${chk.outside.length} source path(s) outside its set`, outside: chk.outside };
   const e = {
     id, key: opts.key, status: 'PASS', at: rec.startedAt, recordedAt: new Date().toISOString(), head: ctx.head, tier: opts.tier,
+    // (GX) the platform it ran on: an explicit list's lookup takes only an entry of this platform (tools/lib/explicit-cache.mjs)
+    platform: `${process.platform}-${process.arch}`,
     timingPolicy: opts.timingPolicy,
     ...(opts.judgedBench ? { benchJudged: true, nightly: true } : {}),
     run: opts.run, log: rec.log ? path.join(opts.run, rec.log) : null, evidence: opts.ev, seconds: rec.seconds, ok: rec.ok,

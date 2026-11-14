@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { kitReuse } from './lib/kit-reuse.mjs';
+import { kitOnceAsync, kitReuse } from './lib/kit-reuse.mjs';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { sidecarReuse } from './lib/sidecar-reuse.mjs';
@@ -110,16 +110,21 @@ const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
 steps.unit = async () => {
   const out = {};
-  out.d = nodeTest(['kit/test/districts-d.test.mjs']);
+  // (GX) the whole kit suite first: from unit-kit's report, else the run's shared kit suite (run once for every reader, when
+  // unit-kit's report can't serve), so the subsets below and the other drivers read the same results; the files' own counts
+  // and failures are checked exactly as before
+  const ALL = fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`);
+  const kitAll = kitReuse(root, ALL, { startShared: true });
+  // D1's and D2's own kit files: pass/fail and counts only, so unit-kit's report stands for them; else both run here side by side
   // (6c D2) C27 (biome edge, shore, ridge), C28, outposts, refusals: the kit half
-  out.d2 = nodeTest(['kit/test/districts-d2.test.mjs']);
+  [out.d, out.d2] = await Promise.all([kitOnceAsync(root, ['kit/test/districts-d.test.mjs']), kitOnceAsync(root, ['kit/test/districts-d2.test.mjs'])]);
   check(out.d2.code === 0 && out.d2.fail === 0 && out.d2.pass >= 8, `D2 (kit): C28's 4x4 biome grid, a biome-edge district's shape within 4 cells of the edge over its length, a shore street parallel to the shore, a ridge street on the crest, stable re-plans, named refusals (NO_EDGE, PROTECTED), an outpost's corridor, plan/0's D2 flips: ${out.d2.pass} pass, ${out.d2.fail} fail`, out.d2.failing);
   check(out.d.code === 0 && out.d.fail === 0 && out.d.pass >= 13, `items 1-4, 8 (kit): the assignment on 300 seeded claims (exact <= greedy, no overlap, none in keep-out or C17 areas, unplaced exact), full plans with keep-out (0 lots in it), districts_demo's bands and connectivity on S3's survey, loopiness on 8 districts, the IR sha, the beside seam rule and join, plan/0's program.districts and endpoint.region: ${out.d.pass} pass, ${out.d.fail} fail`, out.d.failing);
   out.p0 = kitOnce(['kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/plan-p0-det-1.test.mjs', 'kit/test/plan-p0-det-2.test.mjs', 'kit/test/plan-p0-det-3.test.mjs', 'kit/test/plan-p0-asks.test.mjs', 'kit/test/plan-ops.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `P0 item 9 (the catalogue flip: program.districts and endpoint.region reserved -> supported, exactly, against P0's archived golden and catalogue-next.json), P0's items 1-11 with D1's fixtures (Steward's 59 plans: none malformed): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
   out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/region-fixtures.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/region-lint.test.mjs', 'kit/test/relief-t1.test.mjs', 'kit/test/route-t2.test.mjs', 'kit/test/village.test.mjs', 'kit/test/village-layout-1.test.mjs', 'kit/test/village-layout-2.test.mjs', 'kit/test/village-layout-3.test.mjs', 'kit/test/village-layout-4.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: S1, S7, mega_bench, relief_demo, route_demo (and every committed) scenario golden, the format-1 goldens and the 6b fixtures unchanged; districts_demo's golden holds; the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
-  out.kit = kitOnce(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
+  out.kit = kitAll ?? nodeTest(ALL);
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const sc = sidecarReuse(root, ['test/regions-village.test.ts', 'test/plan-check.test.ts', 'test/jobs.test.ts']) ?? spawnSync('npx', ['vitest', 'run', 'test/regions-village.test.ts', 'test/plan-check.test.ts', 'test/jobs.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 900_000 });
   const st = `${sc.stdout}${sc.stderr}`;
