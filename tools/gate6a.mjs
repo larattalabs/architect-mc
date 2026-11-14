@@ -806,11 +806,13 @@ steps.apijars = async () => {
   // (TJ CG) main's latest three releases, from tools/api-baselines.json (rolled by tools/release-version.mjs at every release), each
   // the unchanged apitest jar built from its tag with the tag's own tools/apitest.mjs (tools/api-baselines-build.mjs build <tag>), in
   // <main checkout>/artifacts/api-baselines/<dir>/. (Before TJ this list was hand-kept and stopped at 0.42.0, API 1.39.0.)
-  const { readBaselines, artifactsDir, releaseFiles } = await import('./api-baselines.mjs');
+  // (GI) plus the anchors (tools/api-baselines.json: one older release per API minor family, never rolled; apitestBaselines)
+  const { readBaselines, artifactsDir, releaseFiles, apitestBaselines } = await import('./api-baselines.mjs');
   const art = artifactsDir(root);
-  const runs = readBaselines(root).releases.map((r) => ({ api: r.api, key: r.mod.replace(/\./g, ''), dir: releaseFiles(art, r).dir, jar: path.basename(releaseFiles(art, r).apitest),
+  const all = apitestBaselines(readBaselines(root));
+  const runs = all.map((r) => ({ api: r.api, key: r.mod.replace(/\./g, ''), dir: releaseFiles(art, r).dir, jar: path.basename(releaseFiles(art, r).apitest),
     world: `G6A Jar${r.mod.replace(/\./g, '')}`, tag: r.tag }));
-  for (const r of runs) if (!fs.existsSync(path.join(r.dir, r.jar)) || !fs.existsSync(releaseFiles(art, readBaselines(root).releases.find((x) => x.tag === r.tag)).tools)) {
+  for (const r of runs) if (!fs.existsSync(path.join(r.dir, r.jar)) || !fs.existsSync(releaseFiles(art, all.find((x) => x.tag === r.tag)).tools)) {
     check(false, `apijars: the ${r.tag} baseline is missing in ${r.dir} (build it: node tools/api-baselines-build.mjs build ${r.tag})`);
     return { missing: r.tag };
   }
