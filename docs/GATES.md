@@ -178,13 +178,13 @@ for the first runs the count is a floor.
 On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot
 rules above stay as they are. On top of them, a **shared** run whose turn it is (no ticket ahead of it, no turbo run, a free slot)
 still waits while:
-- the 1-minute load average is above `slots.load.max1` (54, three times the 18 cores; 36 until 2026-11-13, raised because the speed
-  rules' `nice`d unit suites hold the load average near 80 without slowing the gate JVMs), or
+- the 1-minute load average is above `slots.load.max1` (72, four times the 18 cores; 36 until 2026-11-13, raised because the speed
+  rules' `nice`d unit suites hold the load average near 80; still holds a run back in spikes such as 130), or
 - another run took its slot less than `slots.load.settleSec` (300 s since the speed rules of 2026-11-13; 120 s before) ago. The load average lags by about a minute, so without this
   every run queued behind a high load would start in the same 15 s poll once it dips.
 
 It **never waits when it would be the only gate run** (the load is then not the gate runs', so waiting would not end it), and waits
-**at most `slots.load.maxWaitMin` (30) minutes**, then starts and records that it gave up. So non-gate load can't starve the queue
+**at most `slots.load.maxWaitMin` (15 since 2026-11-13; 30 before) minutes**, then starts and records that it gave up. So non-gate load can't starve the queue
 or the 02:00 nightly. FIFO is unchanged: only the head of the queue waits on the load, and the runs behind it wait for it as
 before. A turbo run has no load gate: it starts only once every other run has ended, and its reserved slots keep later runs out.
 
