@@ -65,8 +65,9 @@ const cells = new Map([
   ['2,0,0', { name: 'minecraft:stone', props: {} }],
   ['3,0,0', { name: 'minecraft:lever', props: { face: 'floor', facing: 'east', powered: 'false' } }],
   ['4,0,0', { name: 'minecraft:shulker_box', props: { facing: 'up' } }],
+  ['5,0,0', { name: 'minecraft:redstone_torch', props: { lit: 'true' } }],
 ]);
-const SIZE = [5, 1, 1];
+const SIZE = [6, 1, 1];
 const hop = (items, at = [0, 0, 0]) => ({ at, items });
 const one = [{ slot: 0, id: 'minecraft:dirt', count: 1 }];
 const run = (fill) => checkFill(fill, cells, SIZE);
@@ -89,7 +90,10 @@ test('the fill rule refuses every bad case, each line prefixed fill:', () => {
     [{ containers: [hop([{ slot: 0, id: 'minecraft:air', count: 1 }])], locks: [] }, /plain item id/],
     [{ containers: [hop([{ slot: 0, id: 'minecraft:dirt', count: 1, components: { custom_name: 'x' } }])], locks: [] }, /no components/],
     [{ containers: [hop(one)], locks: [{ at: [0, 0, 0], locked: { enabled: 'false' } }] }, /declared twice/],
-    [{ containers: [hop(one)], locks: [{ at: [3, 0, 0], locked: { lit: 'true' } }] }, /not a state of minecraft:lever/],
+    [{ containers: [hop(one)], locks: [{ at: [3, 0, 0], locked: { lit: 'true' } }] }, /not a lock vanilla keeps/],
+    [{ containers: [hop(one, [1, 0, 0])], locks: [{ at: [0, 0, 0], locked: { enabled: 'false' } }] }, /hopper's enabled .* not a lock vanilla keeps/],
+    [{ containers: [hop(one)], locks: [{ at: [5, 0, 0], locked: { lit: 'false' } }] }, /torch's lit .* not a lock vanilla keeps/],
+    [{ containers: [hop(one)], locks: [{ at: [3, 0, 0], locked: { facing: 'up' } }] }, /not a lock vanilla keeps/],
     [{ containers: [hop(one)], locks: [{ at: [3, 0, 0], locked: { powered: 'false' } }] }, /the template's own state/],
     [{ containers: [hop(one)], locks: [{ at: [2, 0, 0], locked: {} }] }, /at least one property/],
   ];

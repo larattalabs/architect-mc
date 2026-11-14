@@ -1017,7 +1017,7 @@ public final class Stockpiles {
 	 * credited before.
 	 */
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
-		if (items.isEmpty() && !p.ledger.credited(key)) {
+		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
 			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
 			return StockLedger.Credit.NONE;
 		}
@@ -1390,6 +1390,11 @@ public final class Stockpiles {
 					@Override
 					public void changed() {
 						Stockpiles.changed(p);
+					}
+
+					@Override
+					public StockLedger ledger() {
+						return p.ledger; // (M5 FK) the fill's commit point
 					}
 				};
 				// (RL) what it owes after a crash is charged first: an owed cell is built only once paid
@@ -2264,6 +2269,11 @@ public final class Stockpiles {
 				srv.saveAllChunks(true, true, false);
 			} finally {
 				explicitSave = false;
+			}
+			if (Fills.haltBeforeLedger()) {
+				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
+				Architect.LOGGER.error("Stockpiles: kill point FK3: the chunks flushed, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
 			}
 		}
 		save();

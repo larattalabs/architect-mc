@@ -242,9 +242,14 @@ public final class Groups {
 			return;
 		}
 		boolean already = p != null && p.ledger().credited(c.key());
+		Map<String, Integer> held = p == null ? Map.of() : p.ledger().custody(c.key()); // (M5 FK) the declared containers' contents
+		if (!held.isEmpty() && !already) {
+			dev.larattalabs.architect.journal.WorldJournal.kill("FKC2"); // (TEST) the restore written, the custody's credit not yet
+		}
 		Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);
 		if (!already) {
 			c.items().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+			held.forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
 			// (slice PS, audit N1) the credit is saved with the world (players, the restored chunks flushed, the ledger) before the caller
 			// drops the member from the saved removal (and end() drops the removal, its decCredit with it): a crash after that point finds the
 			// refund in the saved ledger, never the building gone and its refund gone. Before it, the removal resumes and credits the key
@@ -1006,6 +1011,30 @@ public final class Groups {
 				return;
 			}
 		}
+		// (M5 FK) a filled site's declared containers: their contents into the ledger's custody in this tick (the credit is fixed now; the
+		// undo writes them ticks later), then saved with the world; cargo found now ends the removal unwritten, the custody given back
+		boolean custody = false;
+		for (String id : ids) {
+			Site s = Sites.get(id);
+			if (s != null && s.construction() != null && Fills.phase(s) != null) {
+				String cargo = Fills.takeCustody(level, s, false);
+				if (cargo != null) {
+					for (String back : ids) {
+						Site b = Sites.get(back);
+						if (b != null && Fills.phase(b) != null) {
+							Fills.writeBack(level, b);
+						}
+					}
+					end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, List.of(cargo))), Map.copyOf(r.refund)));
+					return;
+				}
+				custody = true;
+			}
+		}
+		if (custody) {
+			Stockpiles.saveWithWorld(server);
+			dev.larattalabs.architect.journal.WorldJournal.kill("FKC1"); // (TEST) the custody saved, the undo's world write not yet
+		}
 		// refunds against the stacks before the undo is planned (rule 7)
 		for (String id : ids) {
 			Site s = Sites.get(id);
@@ -1224,6 +1253,16 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		if (!result.removed() && r.undo == null) {
+			// (M5 FK) ended before its undo began: a custody taken for a member that still stands goes back into its containers
+			for (String id : r.decCredit.keySet()) {
+				Site s = Sites.get(id);
+				ServerLevel lv = s == null ? null : Sites.levelOf(server, s);
+				if (lv != null && Fills.phase(s) != null && Sites.pendingRecord(id) == null) {
+					Fills.writeBack(lv, s);
+				}
+			}
+		}
 		if (r.stage == null) {
 			boolean untouched = !result.removed() && r.undo == null && r.planned == null && r.current == null && r.undoSites.isEmpty() && r.restoredCells == 0
 				&& result.restored() == 0 && result.handedDown().isEmpty() && !dev.larattalabs.architect.region.RegionFluids.drainStarted(r.group);

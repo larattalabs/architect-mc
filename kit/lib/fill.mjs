@@ -23,6 +23,11 @@ export const FILL_CONTAINERS = Object.freeze({
   'minecraft:dropper': 9,
   'minecraft:dispenser': 9,
 });
+/**
+ * (Steward's review A) The lock properties vanilla keeps as written, per block: a lock must hold until the unlock. A hopper's `enabled`
+ * (recomputed on a neighbour update), a torch's `lit` (on its tick), a wire's power, a repeater's or comparator's `powered` are not.
+ */
+export const LOCK_PROPS = Object.freeze({ 'minecraft:lever': Object.freeze(['powered']) });
 /** The most of one item a slot may hold (the mod checks the item's own max stack). */
 export const FILL_STACK_MAX = 64;
 const ITEM_ID = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
@@ -112,6 +117,9 @@ export function checkFill(fill, cells, size) {
     if (!st) { e(`${where}: cell ${k} holds no block (a lock is a state of the block the template holds there)`); continue; }
     const locked = l.locked;
     if (!locked || typeof locked !== 'object' || Object.keys(locked).length === 0) { e(`${where}: locked must set at least one property of ${st.name}`); continue; }
+    const kept = LOCK_PROPS[st.name] ?? [];
+    const notKept = Object.keys(locked).filter((p) => !kept.includes(p));
+    if (notKept.length) { e(`${where}: ${st.name}'s ${notKept.join(', ')} at ${k} is not a lock vanilla keeps (a lock is a lever's powered)`); continue; }
     let full;
     try {
       full = normalize(st.name, { ...st.props, ...locked });
