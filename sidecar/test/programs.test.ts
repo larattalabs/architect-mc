@@ -218,7 +218,7 @@ describe('given-program fills (M5 FK) on the real kit', () => {
     const j = entryJson(h, done.newEntryId as string) as { fill?: { containers: Array<{ at: number[]; items: unknown[] }>; locks: unknown[] }; givenProgram?: unknown };
     expect(j.givenProgram).toBeDefined();
     expect(j.fill?.containers.map((c) => c.at)).toEqual([[1, 2, 1], [2, 2, 1]]);
-    expect(j.fill?.containers[0].items).toEqual([{ slot: 0, id: 'minecraft:flint', count: 18 }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: 'minecraft:paper', count: 1 }))]);
+    expect(j.fill?.containers[0]?.items).toEqual([{ slot: 0, id: 'minecraft:flint', count: 18 }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: 'minecraft:paper', count: 1 }))]);
     expect(j.fill?.locks).toEqual([{ at: [0, 3, 1], locked: { powered: 'true' } }]);
   });
 
