@@ -123,7 +123,7 @@ package dev.larattalabs.architect.api;
  * <li>{@code AUTHORED_STALE} (7c, since 1.55.0): an approved artifact names an authored program ({@code program.authored {id, sha}})
  * whose installed source no longer has the approved sha; {@link ArchitectRefused#detail()} is the program id. Answered from slice
  * AU.</li>
- * <li>{@code BILL_CAP} (BC, since NEXT): a survival realise with a {@code maxBill} ({@link RealiseRequest#maxBill},
+ * <li>{@code BILL_CAP} (BC, since 1.60.0): a survival realise with a {@code maxBill} ({@link RealiseRequest#maxBill},
  * {@link ApprovedRealise#maxBill}) whose bill at put-down (its quote, {@link Regions#quote}) is past the cap for an item; the message names
  * the items, the bill and the cap. Refused before anything is reserved or written.</li>
  * </ul>
@@ -157,6 +157,6 @@ public enum Reason {
 	PROGRAM_REFUSED,
 	// 1.55.0 (7c foundation): composition's reasons, in the contract's order
 	JOINT_MISMATCH, AUTHORED_STALE,
-	// NEXT (BC, S-M5-9): a survival realise's bill past its maxBill
+	// 1.60.0 (BC, S-M5-9): a survival realise's bill past its maxBill
 	BILL_CAP
 }

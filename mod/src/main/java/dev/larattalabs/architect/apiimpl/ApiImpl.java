@@ -21,12 +21,12 @@ import org.jspecify.annotations.Nullable;
 public final class ApiImpl implements ArchitectApi {
 	@Override
 	public String kitVersion() {
-		return dev.larattalabs.architect.region.IrStale.KIT_VERSION; // (BC, NEXT)
+		return dev.larattalabs.architect.region.IrStale.KIT_VERSION; // (BC, 1.60.0)
 	}
 
 	@Override
 	public java.util.Optional<String> checkerVersion() {
-		// (BC, NEXT) the connected helper kit: it runs the checker and the plan check
+		// (BC, 1.60.0) the connected helper kit: it runs the checker and the plan check
 		com.google.gson.JsonObject v = RegionBridge.versions();
 		return v != null && v.get("kitVersion") instanceof com.google.gson.JsonElement k && k.isJsonPrimitive() ? java.util.Optional.of(k.getAsString())
 			: java.util.Optional.empty();

@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  *     {@link Reason#OP_KEY_CONFLICT}. The body is every other component (the actor by UUID). Found after a restart by
  *     {@link Regions#realiseByKey}, including a realise that was interrupted and resumed; kept as long as the region exists (removing the
  *     region ends its key). The plan's lot {@code ext} needs no request member: the realise copies it onto each lot's site.
- * @param maxBill (BC, S-M5-9, since NEXT) null: no cap. Else the most the realise may consume in survival, item id -> count (the bound the
+ * @param maxBill (BC, S-M5-9, since 1.60.0) null: no cap. Else the most the realise may consume in survival, item id -> count (the bound the
  *     caller approved, e.g. its quote's {@code bom}); an item it does not name may not be consumed at all. The realise is refused
  *     {@link Reason#BILL_CAP} before anything is reserved or written when its bill at put-down ({@link Regions#quote} of the plan with these
  *     entries, the same reading) is past it. Then, while it builds, what its targets draw (net of a swap's or a removal's refunds) never
@@ -68,7 +68,7 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, null);
 	}
 
-	/** (BC, since NEXT) The same request with this cap ({@link #maxBill}; null: none). */
+	/** (BC, since 1.60.0) The same request with this cap ({@link #maxBill}; null: none). */
 	public RealiseRequest withMaxBill(@Nullable Map<String, Integer> cap) {
 		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, consent, cap);
 	}

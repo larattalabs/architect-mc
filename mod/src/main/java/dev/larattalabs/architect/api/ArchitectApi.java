@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.59.0";
+	String VERSION = "1.60.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -46,19 +46,19 @@ public interface ArchitectApi {
 	 * (BC, Steward M1 ask) The version of the kit this Architect bundles, read at runtime: its generators, its region evaluator, the plan
 	 * check and the blueprint checker (the kit KIT_VERSION). It moves with a kit change, not with an API or mod version bump alone, so a
 	 * consumer can tell the two apart and pin modules to it. An Architect before it throws {@link UnsupportedOperationException}: check
-	 * {@code features().contains("kitVersion")} first. Since NEXT.
+	 * {@code features().contains("kitVersion")} first. Since 1.60.0.
 	 */
 	default String kitVersion() {
-		throw new UnsupportedOperationException("ArchitectApi.kitVersion needs Architect API NEXT");
+		throw new UnsupportedOperationException("ArchitectApi.kitVersion needs Architect API 1.60.0");
 	}
 
 	/**
 	 * (BC, Steward M1 ask) The version of the checker that checks plans and designs now: the kit the connected helper runs (it runs the
 	 * blueprint checker and the plan check), or empty when no helper is connected or it has not said. Equal to {@link #kitVersion()} unless
-	 * the helper is stale (a realise then refuses PLAN_STALE until it restarts). Feature {@code "kitVersion"}. Since NEXT.
+	 * the helper is stale (a realise then refuses PLAN_STALE until it restarts). Feature {@code "kitVersion"}. Since 1.60.0.
 	 */
 	default java.util.Optional<String> checkerVersion() {
-		throw new UnsupportedOperationException("ArchitectApi.checkerVersion needs Architect API NEXT");
+		throw new UnsupportedOperationException("ArchitectApi.checkerVersion needs Architect API 1.60.0");
 	}
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
@@ -210,7 +210,7 @@ public interface ArchitectApi {
 	 * (TJ, since 1.58.0) Every feature name that is a dotted sidecar name also comes as a camelCase alias, and both are advertised (names
 	 * are stable within 1.x): {@code "design.opKeys"} and {@code "designOpKeys"}, {@code "wallLots.exactMassing"} and
 	 * {@code "wallLotsExactMassing"}, {@code "job.systemRefs"} and {@code "jobSystemRefs"}. New consumers should check the camelCase
-	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists. (BC, since NEXT) {@code "kitVersion"}:
+	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists. (BC, since 1.60.0) {@code "kitVersion"}:
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}

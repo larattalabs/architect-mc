@@ -53,7 +53,7 @@ import org.jspecify.annotations.Nullable;
 final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	@Override
 	public boolean loadHealthy() {
-		return dev.larattalabs.architect.site.Sites.loadHealthy(); // (BC, NEXT)
+		return dev.larattalabs.architect.site.Sites.loadHealthy(); // (BC, 1.60.0)
 	}
 
 	private final MinecraftServer server;

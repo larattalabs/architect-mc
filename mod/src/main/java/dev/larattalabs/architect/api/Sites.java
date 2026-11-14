@@ -523,9 +523,9 @@ public interface Sites {
 	 * (BC, Steward GE ask) Whether the world sites store loaded cleanly: a world is running and its sites file was read (or there was none
 	 * yet). False before a world starts, after it stops, and when the file exists but could not be read (then no sites are loaded and placing
 	 * is refused): a consumer must not read "no Architect sites" as "none stand" unless this is true. Any thread. Feature
-	 * {@code "sitesLoadHealthy"}. Since NEXT.
+	 * {@code "sitesLoadHealthy"}. Since 1.60.0.
 	 */
 	default boolean loadHealthy() {
-		throw new UnsupportedOperationException("Sites.loadHealthy needs Architect API NEXT");
+		throw new UnsupportedOperationException("Sites.loadHealthy needs Architect API 1.60.0");
 	}
 }
