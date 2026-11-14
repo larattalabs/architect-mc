@@ -25,6 +25,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { moduleClosure, dirtyPaths } from './lib/step-inputs.mjs';
 import { globToRe } from './gate-impact.mjs';
+import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const ALL = ['kit', 'sidecar', 'gradle'];
 const J = 'mod/src/main/java/dev/larattalabs/architect';
@@ -361,8 +362,8 @@ if (isMain) {
       results.push({ name, code: r.status ?? 1 });
     };
     for (const f of sel.checks) run(`node --check ${f}`, 'node', ['--check', f], SRC);
-    if (plan.kit.full) run('kit', 'node', ['--test', ...[...graph.tests].filter(([, s]) => s === 'kit').map(([t]) => t).sort()], SRC);
-    else if (plan.kit.picked) run('kit', 'node', ['--test', ...plan.kit.tests], SRC);
+    if (plan.kit.full) run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...[...graph.tests].filter(([, s]) => s === 'kit').map(([t]) => t).sort()], SRC);
+    else if (plan.kit.picked) run('kit', 'node', ['--test', ...testConcurrencyArgs(), ...plan.kit.tests], SRC);
     const sc = path.join(SRC, 'sidecar');
     if (plan.sidecar.full) run('sidecar', 'npx', ['vitest', 'run'], sc);
     else if (plan.sidecar.picked) run('sidecar', 'npx', ['vitest', 'run', ...plan.sidecar.tests.map((t) => path.relative('sidecar', t))], sc);
