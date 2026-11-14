@@ -88,6 +88,26 @@ export async function registerBC(steps, h) {
     const ps0 = await pile();
     const r = await call('dev.region.realise', { planId: g.planId, lots: entries }, 300_000);
     check(!r.refused, `the growth realised with the quoted entry: ${r.refused ?? r.region}`);
+    // the street stage's shells put down first (IRR: shells, then the lot): fed half their dirt, then random ticks on, so grass spreads over
+    // the dirt they laid while they wait (Steward's half-fed round: a shell paid 1-3 dirt again)
+    const DIRT = 'minecraft:dirt';
+    for (let i = 0; i < 90; i++) {
+      const ps = await pile();
+      if ((ps.outstanding?.[DIRT] ?? 0) > 0) break;
+      await sleep(2000);
+    }
+    const psS = await pile();
+    const shellDirt = (psS.outstanding?.[DIRT] ?? 0) - (psS.stock?.[DIRT] ?? 0);
+    const halfDirt = Math.floor(shellDirt / 2);
+    if (halfDirt > 0) await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [DIRT]: halfDirt }, exact: true }, 120_000);
+    await sleep(8000);
+    await cmd('/gamerule randomTickSpeed 300');
+    await sleep(30_000);
+    await cmd('/gamerule randomTickSpeed 0');
+    await sleep(3000);
+    const psS1 = await pile();
+    out.shells = { outstandingDirt: shellDirt, fedDirt: halfDirt, consumed: G.minus(psS1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}), outstandingAfter: psS1.outstanding?.[DIRT] ?? 0 };
+    check(halfDirt > 0, `the shells waited half-fed (${halfDirt} of ${shellDirt} dirt) with random ticks on for 30 s`, out.shells);
     // fed all but the seeds, until only the seeds are outstanding: the farm's site waits with its farmland laid, nothing planted, no water
     const SEEDS = 'minecraft:wheat_seeds';
     const skip = new Set([SEEDS]);
