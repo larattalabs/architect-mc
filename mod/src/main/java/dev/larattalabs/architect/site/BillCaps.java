@@ -114,4 +114,45 @@ public final class BillCaps {
 		});
 		return out;
 	}
+
+	/**
+	 * (TEST, {@code dev.bc.cap}) A region's cap state: its cap and base, its group's draws, and every target of the group with its wait; with
+	 * {@code set}, the region's cap is replaced first (the gate's stand-in for draws that pass the approved bound). Server thread.
+	 */
+	public static JsonObject devState(net.minecraft.server.MinecraftServer srv, String region, @Nullable Map<String, Integer> set) {
+		JsonObject o = new JsonObject();
+		var live = dev.larattalabs.architect.region.RegionsImpl.live(region);
+		if (live == null || live.rec().survival == null) {
+			o.addProperty("refused", "no survival region " + region);
+			return o;
+		}
+		var rec = live.rec();
+		if (set != null) {
+			Map<String, Integer> base = items(rec.survival.get("billBase"));
+			record(rec.survival, set, base);
+			dev.larattalabs.architect.region.RegionsImpl.saveRec(live);
+		}
+		o.add("maxBill", rec.survival.get("maxBill") == null ? null : rec.survival.get("maxBill").deepCopy());
+		o.add("billBase", rec.survival.get("billBase") == null ? null : rec.survival.get("billBase").deepCopy());
+		var pile = Stockpiles.get(rec.owner);
+		o.add("drawn", json(pile == null ? Map.of() : drawn(pile.ledger(), rec.groupId)));
+		com.google.gson.JsonArray ts = new com.google.gson.JsonArray();
+		java.util.List<Object> all = new java.util.ArrayList<>(Sites.all());
+		all.addAll(Infras.all());
+		for (Object t : all) {
+			if (!rec.groupId.equals(groupOf(t))) {
+				continue;
+			}
+			String id = t instanceof Site st ? st.id() : ((Infra) t).id();
+			var w = SiteWaits.view(srv, id);
+			if (w == null) {
+				continue;
+			}
+			JsonObject x = SiteWaits.json(w, null);
+			x.addProperty("id", id);
+			ts.add(x);
+		}
+		o.add("targets", ts);
+		return o;
+	}
 }

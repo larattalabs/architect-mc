@@ -226,6 +226,11 @@ public final class Sites {
 		return loadFailed;
 	}
 
+	/** (BC, Steward GE ask) A world is running and its sites store loaded cleanly ({@link dev.larattalabs.architect.api.Sites#loadHealthy}). */
+	public static boolean loadHealthy() {
+		return worldDir != null && !loadFailed;
+	}
+
 	// ------------------------------------------------------------------ reads
 
 	/** Every placed site in placement order. Any thread. */

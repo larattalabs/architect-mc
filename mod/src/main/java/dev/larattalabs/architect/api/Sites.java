@@ -518,4 +518,14 @@ public interface Sites {
 	default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest request) {
 		throw new UnsupportedOperationException("Sites.placeConnector is reserved: it throws until slice CX ships (feature placeConnector)");
 	}
+
+	/**
+	 * (BC, Steward GE ask) Whether the world sites store loaded cleanly: a world is running and its sites file was read (or there was none
+	 * yet). False before a world starts, after it stops, and when the file exists but could not be read (then no sites are loaded and placing
+	 * is refused): a consumer must not read "no Architect sites" as "none stand" unless this is true. Any thread. Feature
+	 * {@code "sitesLoadHealthy"}. Since NEXT.
+	 */
+	default boolean loadHealthy() {
+		throw new UnsupportedOperationException("Sites.loadHealthy needs Architect API NEXT");
+	}
 }

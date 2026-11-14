@@ -51,6 +51,11 @@ import org.jspecify.annotations.Nullable;
 
 /** {@link dev.larattalabs.architect.api.Sites} over the internal {@link Sites}. Internal. */
 final class SitesImpl implements dev.larattalabs.architect.api.Sites {
+	@Override
+	public boolean loadHealthy() {
+		return dev.larattalabs.architect.site.Sites.loadHealthy(); // (BC, NEXT)
+	}
+
 	private final MinecraftServer server;
 
 	SitesImpl(MinecraftServer server) {

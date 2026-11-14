@@ -403,6 +403,97 @@ steps.bcquote = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (slice BC, S-M5-9) bc-cap: maxBill, refused before a write; the bill_cap wait
+
+/**
+ * (BC, S-M5-9 and items 5-6) x03 checked in survival and quoted; the runtime versions and the store's health read; realiseApproved with a
+ * maxBill one plank under the quote: refused BILL_CAP, the world and the stockpile unchanged (no region); with the quote as maxBill: accepted,
+ * then its cap lowered to 100 planks (the gate's stand-in for draws past the approved bound) and fed in full: its planks drawn stop at the cap,
+ * a target waits typed bill_cap (waiting, STARVED); 64 more planks fed are not drawn; the cap back at the quote: PLACED, consumed equals the
+ * quote; removed: what came back equals what was consumed. $0.
+ */
+steps.bccap = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  const PL = 'minecraft:oak_planks';
+  const fx = fixture('x03_cellar');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, 'bc cap', fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const ck = await G.check(ctx, 'bc-cap', s);
+  const sha = ck.check?.artifactSha;
+  check(ck.check?.survival === true && ck.check?.overall === 'READY' && !!sha, `x03 checked in survival: ${ck.check?.overall}`);
+  if (!sha) return out;
+  const q = await L.call('dev.region.quote', { sha, lotEntries: entries }, 300_000);
+  out.quote = { exact: q.exact, bom: q.bom };
+  check(q.exact === true && (q.bom?.[PL] ?? 0) > 100, `the quote: exact ${q.exact}, ${q.bom?.[PL]} planks`);
+  // items 5 and 6: the runtime versions, the store's health
+  const v = await L.call('dev.api.versions', {}, 30_000);
+  out.versions = v;
+  check(/^\d+\.\d+\.\d+$/.test(v.kitVersion ?? '') && /^\d+\.\d+\.\d+$/.test(v.apiVersion ?? '') && v.loadHealthy === true && json(v.features) === json(['kitVersion', 'sitesLoadHealthy', 'maxBill'])
+    && (v.checkerVersion === undefined || v.checkerVersion === v.kitVersion), `items 5-6: apiVersion ${v.apiVersion}, kitVersion ${v.kitVersion}, checkerVersion ${v.checkerVersion ?? '(no helper)'}, loadHealthy ${v.loadHealthy}, features ${json(v.features)}`, v);
+  const pile = async () => (await L.call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  await G.pile(ctx, s, 3);
+  const box = boxOf(s.W);
+  const pre = await G.snap(ctx, box, 'bc-cap-pre');
+  const ps0 = await pile();
+  // refused before any write: one plank under the bill
+  const under = { ...q.bom, [PL]: q.bom[PL] - 1 };
+  const rr = await L.call('dev.region.realiseApproved', { sha, lotEntries: entries, maxBill: under }, 300_000);
+  await L.settle(2000);
+  const d0 = await G.diff(ctx, box, pre);
+  const ps0b = await pile();
+  out.refused = { rr, mismatches: d0.mismatches, consumed: G.minus(ps0b.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}) };
+  check(!rr.region && rr.reason === 'BILL_CAP' && /oak_planks/.test(String(rr.refused ?? rr.message ?? '')) && d0.mismatches === 0 && Object.keys(out.refused.consumed).length === 0,
+    `S-M5-9: maxBill one plank under the bill: refused ${rr.reason} (${rr.refused ?? rr.message}); the world unchanged (${d0.mismatches} cells differ), nothing consumed`, out.refused);
+  // accepted at the quote; then the cap lowered to 100 planks: the draws stop there and a target waits, typed bill_cap
+  const ra = await L.call('dev.region.realiseApproved', { sha, lotEntries: entries, maxBill: q.bom }, 300_000);
+  check(!!ra.region, `maxBill at the quote: accepted (${ra.region ?? json(ra)})`);
+  if (!ra.region) return out;
+  const region = ra.region;
+  const c0 = await L.call('dev.bc.cap', { region, set: { ...q.bom, [PL]: 100 } }, 30_000);
+  check(c0.maxBill?.[PL] === 100 && json(c0.billBase) === '{}', `the region keeps its cap (a new region: base {}): planks ${c0.maxBill?.[PL]}`, c0);
+  let capped = null, waves = 0;
+  const end = Date.now() + 900_000;
+  while (Date.now() < end) {
+    const ps = await pile();
+    const need = {};
+    for (const [it, n] of Object.entries(ps.outstanding ?? {})) { const lack = n - (ps.stock?.[it] ?? 0); if (lack > 0) need[it] = lack; }
+    if (Object.keys(need).length) { await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000); waves++; }
+    const c = await L.call('dev.bc.cap', { region }, 30_000);
+    const t = (c.targets ?? []).find((x) => x.blocked === 'bill_cap');
+    if (t) { capped = { cap: c, target: t }; break; }
+    await L.sleep(3000);
+  }
+  out.capped = capped && { drawn: capped.cap.drawn, target: capped.target, waves };
+  const drawnPl = capped?.cap.drawn?.[PL] ?? 0;
+  check(!!capped && capped.target.waiting === true && drawnPl <= 100 && drawnPl > 0 && (capped.target.nextNeeded ?? []).some((n) => n.item === PL),
+    `S-M5-9: fed in full (${waves} waves): the planks drawn stop at the cap (${drawnPl} of 100); target ${capped?.target.id} waits typed ${capped?.target.blocked} (waiting ${capped?.target.waiting}, nextNeeded ${json(capped?.target.nextNeeded)})`, out.capped);
+  if (!capped) return out;
+  const stock0 = (await pile()).stock?.[PL] ?? 0;
+  await L.call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [PL]: 64 }, exact: true }, 120_000);
+  await L.sleep(20_000);
+  const c1 = await L.call('dev.bc.cap', { region }, 30_000);
+  const stock1 = (await pile()).stock?.[PL] ?? 0;
+  out.pastCap = { drawnBefore: drawnPl, drawnAfter: c1.drawn?.[PL], stockBefore: stock0, stockAfter: stock1, still: (c1.targets ?? []).filter((x) => x.blocked === 'bill_cap').map((x) => x.id) };
+  check(c1.drawn?.[PL] === drawnPl && stock1 === stock0 + 64 && out.pastCap.still.length > 0, `S-M5-9: 64 more planks fed are not drawn: drawn ${drawnPl} -> ${c1.drawn?.[PL]}, stock ${stock0} -> ${stock1}; still bill_cap ${json(out.pastCap.still)}`, out.pastCap);
+  // the cap back at the quote: built; consumed equals the quote
+  await L.call('dev.bc.cap', { region, set: q.bom }, 30_000);
+  const f = await G.feed(ctx, region, { timeoutMs: 1_200_000 });
+  const ps1 = await pile();
+  const used = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+  const c2 = await L.call('dev.bc.cap', { region }, 30_000);
+  out.built = { state: f.last.st.view.state, consumed: used, blocked: (c2.targets ?? []).filter((x) => x.blocked).map((x) => x.id) };
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && G.same(used, q.bom) && out.built.blocked.length === 0,
+    `the cap back at the quote: ${f.last.st.view.state}; consumed equals the quote item for item${G.same(used, q.bom) ? '' : `: over ${json(G.minus(used, q.bom))}`}; no target held`, out.built);
+  const rm = await G.remove(ctx, region);
+  const ps2 = await pile();
+  const back = G.minus(ps2.ledger?.returned ?? {}, ps1.ledger?.returned ?? {});
+  check(rm.removed && G.same(back, used), `removed: what came back equals what was consumed (${json(back)})`, { back, used });
+  return out;
+};
+
 // ------------------------------------------------------------------ the report
 
 steps.report = async () => {
