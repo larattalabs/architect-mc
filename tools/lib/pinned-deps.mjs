@@ -92,15 +92,15 @@ export function ensurePinnedDeps({ home, modDir, slot = home, env = process.env,
 
 // ------------------------------------------------------------------ (GI A46) the full-classpath seed
 
-/** The build files whose content decides what resolves (relative to the mod dir; a missing one hashes as absent). */
-export const SEED_FILES = ['gradle.properties', 'settings.gradle', 'build.gradle', 'apitest/build.gradle', 'devserver/build.gradle', 'gradle/wrapper/gradle-wrapper.properties'];
+/** The build files whose content decides what resolves (relative to the repo root, the mod dir's parent; a missing one hashes as absent). */
+export const SEED_FILES = ['mod/gradle.properties', 'mod/settings.gradle', 'mod/build.gradle', 'apitest/build.gradle', 'devserver/build.gradle', 'mod/gradle/wrapper/gradle-wrapper.properties'];
 
 /** The fingerprint of `modDir`'s build files (16 hex), and the marker path for it in `home`. */
 export function seedKey(modDir) {
   const h = createHash('sha256');
   for (const f of SEED_FILES) {
     let t = '\u0000absent';
-    try { t = fs.readFileSync(path.join(modDir, f), 'utf8'); } catch { /* absent */ }
+    try { t = fs.readFileSync(path.join(path.dirname(modDir), f), 'utf8'); } catch { /* absent */ }
     h.update(`${f}\n${t}\n`);
   }
   return h.digest('hex').slice(0, 16);

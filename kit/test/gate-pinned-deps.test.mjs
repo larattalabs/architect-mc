@@ -93,7 +93,7 @@ test('seed: a bump changes the key (any build file), so the next call resolves a
   const k1 = seedKey(modDir);
   fs.writeFileSync(path.join(modDir, 'build.gradle'), 'dependencies { implementation "a:b:2" }\n');
   assert.notEqual(seedKey(modDir), k1);
-  assert.ok(SEED_FILES.includes('apitest/build.gradle') && SEED_FILES.includes('gradle/wrapper/gradle-wrapper.properties'));
+  assert.ok(SEED_FILES.includes('apitest/build.gradle') && SEED_FILES.includes('mod/gradle/wrapper/gradle-wrapper.properties'));
   let n = 0;
   seedClasspath({ home, modDir, run: () => { n++; return { ok: true }; } });
   assert.equal(n, 1);
