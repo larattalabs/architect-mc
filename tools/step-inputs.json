@@ -108789,6 +108789,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -109055,6 +109056,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -124731,6 +124733,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -124950,6 +124953,18 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -125154,6 +125169,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -125384,6 +125400,18 @@
     {
      "from": "tools/gate6dgr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -126501,6 +126529,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -126720,6 +126749,18 @@
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
     },
     {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
+    },
+    {
      "from": "kit/lib/components.mjs",
      "expr": "`${pathToFileURL(file).href}?v=${st.mtimeMs}-${st.size}`)"
     },
@@ -126924,6 +126965,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -127154,6 +127196,18 @@
     {
      "from": "tools/gate6dgr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -127376,6 +127430,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -127606,6 +127661,18 @@
     {
      "from": "tools/gate6dgr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
     },
     {
      "from": "kit/lib/components.mjs",
