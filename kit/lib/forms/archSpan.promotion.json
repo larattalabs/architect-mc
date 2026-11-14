@@ -1,0 +1,728 @@
+{
+ "generator": "archSpan",
+ "steps": {
+  "lint": {
+   "pass": true,
+   "findings": [],
+   "sourceSha": "79edf360fd318d5cbdba05ad30f9c21ba9781712a836903e4a6430a4777bbd1e",
+   "at": "2026-11-14T19:51:10Z"
+  },
+  "determinism": {
+   "pass": true,
+   "golden": [
+    "0 85a58e144a8ac0b0a8efe3fac577ad70c2882631c002a5e3d93dc61d8604a513 c4758bc2593015968dc6045392d408fdeaf85b3b798064073db35dfde59c3303",
+    "1 120a2ff876a370c1e8163f162d8dead7edc3985a6e0023c01ceb09553b1005c8 92534c20c8ce07101c30ddd9b07fe63e26fbcac365434c1948ba8d6f3b74b4aa",
+    "2 039f69805d4439265cec656c3c07edfac73a918980bfc6cf9b1f25194af58693 6a99e02ab18dab808188a5adb386b188d5f35fb1cbea89030b67b79cf21fda65",
+    "3 ee2c177a1a270bb890765c55c97502b07714efa2379cb6f0576b1874b966035d 798ceb597a47a33fe4105ab7a0e7c36d8315f934276d2bcbfcd0a7d9f4fd83e9",
+    "4 45af15f297486caba195c56a34fc82674fa924c62f4f2780d09aab415affc48d 7c9ecfcf546627d06a4ca713d9ce8ff3b07c2328a47f427b6f92169df7f1dc25",
+    "5 f80f8afdf5e9f8a7eb5d02f2cb10835dde14dbced81e907175a68900c94f08d3 7d1b48195eff94af1317130602401f0f2d82ebc20234b73ad107e63b827c99e4",
+    "6 31c41052d58adcf0a66a1be5f1f0b58590be34122f25e5d4b93f4050ceadde87 5840253db05994661ba8d021de871b964275f8f23f80081d5a5dd8679c80899c",
+    "7 43c41e88d47a67996b8c9301666c178689ca6d614a5d083c70e7590a2a06c497 11980358ed062795c40f3848209b4980a489c56d84403610db2aa413bb0bed0a",
+    "8 709080fae1b070bf293629ce8da848a6fbd3c02c2fe71303f75f0c730cb65663 13a7c2cc4b0d51b066410ddceacacc72ae9a150df1cdf5bc952e2a3d30436045",
+    "9 4c5a60d783dfe2b340302266af8809d6ba1136ce35f100f0f608badb3b851312 dac6fbd7a5b51f49b394ee4165324bd36a0cd328deaad10dba649b90271cef72",
+    "10 d18d400ce6bc45dcab34fff29eb8caa7add54ce1bfc2faddd333e52e41eb3caa 398bfa8c5ad2d6dc27d4f30a399a3d876d468835c0b993607f53d03f5c34eb43",
+    "11 d8a9dfd398b94ac1ac26fbe242d10ea58f61512d5370b7ff69f902fab39faa15 3397584c5179f0d95742e0a277610f40d06858375564ea6079ea33f1873accfc",
+    "12 36d538409b22b5f0e14a9b48ee2362da7309350be0ea776717b8c65bd4e589c7 b5e2ea6cc5046d49b45792d175ab77949d82ddbd6494909cd547d4c8574e152e",
+    "13 1f413db0bb6413c427a37f6d758e7def78199cb4f77f73477445f3e089a2f4db a7145c619a2a5b9754fb3f08cbdcd54cadffb8cd030e644270861e7fa64dc8c7",
+    "14 9c7b6fb8044b403ab224ec2ae48b1e9925bacf6f9c7821b9e8c9325d396da07d eb93a2c75ea39941bd890008edba995eb552d471a7cd178787e009f409ce4adc",
+    "15 642d1b3809fe7a33528a74952046484225d06020905b4b0257124d5fcf3f2057 325350e45acde4cb0b8cef5fd6e004eddaec6444e5f6ca0b08864ed4c2dd68f8",
+    "16 60063082ad418f5c3c119667466a433efb56baad63fc5190dba4ac6f5228f3e8 19b1bcb8330b17769315ebb6160200290fe387b3fc089c43e718bde592de3685",
+    "17 cda5afa3e913709565c176b52465e4273b18dedba8d7dcfdc713478a6edf205b a0cd6bf25772dfdcf48c2abe1e171a68f40a6c17a9b200011572d03a3c0c5794",
+    "18 786d1bfa166148262df07a8e1b62598232f76e3f3629ad699e9de588daee6001 02f69427aab4092615e519af43a7fc956914e366e9c187a7fcddd3ada5ae5f9e",
+    "19 81ee86771981de4ae89f344b5ef0709342a9836254e472568c2f42cd1e6c4b80 e67fe504c2ece0cb0be5ddbcaf05a6c68906dc1a308f36c1dda242dd4db7bf16"
+   ],
+   "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4",
+   "legs": [
+    {
+     "label": "run 1 (this Node)",
+     "ok": true,
+     "node": "24.22.1",
+     "platform": "darwin",
+     "arch": "arm64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    },
+    {
+     "label": "run 2 (this Node)",
+     "ok": true,
+     "node": "24.22.1",
+     "platform": "darwin",
+     "arch": "arm64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    },
+    {
+     "label": "run 3 (this Node)",
+     "ok": true,
+     "node": "24.22.1",
+     "platform": "darwin",
+     "arch": "arm64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    },
+    {
+     "label": "node@22 (mise)",
+     "ok": true,
+     "node": "22.23.4",
+     "platform": "darwin",
+     "arch": "arm64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    },
+    {
+     "label": "linux node:22 --platform linux/amd64",
+     "ok": true,
+     "node": "22.23.4",
+     "platform": "linux",
+     "arch": "x64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    },
+    {
+     "label": "linux node:24-slim",
+     "ok": true,
+     "node": "24.22.1",
+     "platform": "linux",
+     "arch": "arm64",
+     "all": "c956de6a255abd23029835eecc2bf851e2b2687e7679846c863b93f02d6b1dd4"
+    }
+   ],
+   "at": "2026-11-14T19:51:14Z"
+  },
+  "properties": {
+   "pass": true,
+   "sets": 40,
+   "m3Sets": 40,
+   "failed": [],
+   "materials": {
+    "default": [
+     "minecraft:oak_fence",
+     "minecraft:stone_bricks"
+    ],
+    "sandstone": [
+     "minecraft:birch_fence",
+     "minecraft:cut_sandstone"
+    ],
+    "deepslate": [
+     "minecraft:dark_oak_fence",
+     "minecraft:deepslate_bricks"
+    ]
+   },
+   "cost": {
+    "nsPerCell": 232,
+    "reference": "crater",
+    "refNsPerCell": 244,
+    "ratio": 0.95,
+    "bound": 2,
+    "flagged": false
+   },
+   "at": "2026-11-14T19:51:14Z"
+  },
+  "variety": {
+   "pairs": 190,
+   "below": 190,
+   "share": 1,
+   "median": 0.306,
+   "min": 0.093,
+   "max": 0.717,
+   "pass": true,
+   "sheetSha": "ac9b3ab3e2baa054e01f652c3ae252fa8a7a3b5a2cfdcb13d123dee150cfa97f",
+   "seeds": [
+    {
+     "k": 0,
+     "seed": "pm0",
+     "species": "roman",
+     "profile": "round",
+     "tiers": 2,
+     "height": 27,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 13,
+       "crown": 7,
+       "leg": 7
+      },
+      {
+       "bays": 6,
+       "span": 6,
+       "crown": 3,
+       "leg": 6
+      }
+     ]
+    },
+    {
+     "k": 1,
+     "seed": "pm1",
+     "species": "viaduct",
+     "profile": "elliptical",
+     "tiers": 2,
+     "height": 24,
+     "parapet": "none",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 13,
+       "crown": 3,
+       "leg": 9
+      },
+      {
+       "bays": 6,
+       "span": 6,
+       "crown": 1,
+       "leg": 7
+      }
+     ]
+    },
+    {
+     "k": 2,
+     "seed": "pm2",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 23,
+     "parapet": "rail",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 19,
+       "crown": 5,
+       "leg": 17
+      }
+     ]
+    },
+    {
+     "k": 3,
+     "seed": "pm3",
+     "species": "viaduct",
+     "profile": "elliptical",
+     "tiers": 1,
+     "height": 19,
+     "parapet": "none",
+     "stats": [
+      {
+       "bays": 4,
+       "span": 9,
+       "crown": 2,
+       "leg": 16
+      }
+     ]
+    },
+    {
+     "k": 4,
+     "seed": "pm4",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 2,
+     "height": 15,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 4,
+       "span": 10,
+       "crown": 8,
+       "leg": 0
+      },
+      {
+       "bays": 8,
+       "span": 4,
+       "crown": 3,
+       "leg": 1
+      }
+     ]
+    },
+    {
+     "k": 5,
+     "seed": "pm5",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 1,
+     "height": 15,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 13,
+       "crown": 9,
+       "leg": 4
+      }
+     ]
+    },
+    {
+     "k": 6,
+     "seed": "pm6",
+     "species": "roman",
+     "profile": "round",
+     "tiers": 1,
+     "height": 28,
+     "parapet": "crenel",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 19,
+       "crown": 10,
+       "leg": 16
+      }
+     ]
+    },
+    {
+     "k": 7,
+     "seed": "pm7",
+     "species": "roman",
+     "profile": "round",
+     "tiers": 2,
+     "height": 22,
+     "parapet": "crenel",
+     "stats": [
+      {
+       "bays": 4,
+       "span": 8,
+       "crown": 4,
+       "leg": 8
+      },
+      {
+       "bays": 8,
+       "span": 3,
+       "crown": 2,
+       "leg": 5
+      }
+     ]
+    },
+    {
+     "k": 8,
+     "seed": "pm8",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 2,
+     "height": 17,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 8,
+       "span": 4,
+       "crown": 2,
+       "leg": 5
+      },
+      {
+       "bays": 8,
+       "span": 4,
+       "crown": 2,
+       "leg": 2
+      }
+     ]
+    },
+    {
+     "k": 9,
+     "seed": "pm9",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 16,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 13,
+       "crown": 3,
+       "leg": 12
+      }
+     ]
+    },
+    {
+     "k": 10,
+     "seed": "pm10",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 17,
+     "parapet": "rail",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 19,
+       "crown": 5,
+       "leg": 10
+      }
+     ]
+    },
+    {
+     "k": 11,
+     "seed": "pm11",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 18,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 21,
+       "crown": 5,
+       "leg": 12
+      }
+     ]
+    },
+    {
+     "k": 12,
+     "seed": "pm12",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 1,
+     "height": 12,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 4,
+       "span": 10,
+       "crown": 8,
+       "leg": 3
+      }
+     ]
+    },
+    {
+     "k": 13,
+     "seed": "pm13",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 13,
+     "parapet": "rail",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 18,
+       "crown": 4,
+       "leg": 7
+      }
+     ]
+    },
+    {
+     "k": 14,
+     "seed": "pm14",
+     "species": "roman",
+     "profile": "round",
+     "tiers": 2,
+     "height": 13,
+     "parapet": "crenel",
+     "stats": [
+      {
+       "bays": 7,
+       "span": 4,
+       "crown": 2,
+       "leg": 3
+      },
+      {
+       "bays": 7,
+       "span": 5,
+       "crown": 3,
+       "leg": 1
+      }
+     ]
+    },
+    {
+     "k": 15,
+     "seed": "pm15",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 21,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 21,
+       "crown": 4,
+       "leg": 15
+      }
+     ]
+    },
+    {
+     "k": 16,
+     "seed": "pm16",
+     "species": "bridge",
+     "profile": "segmental",
+     "tiers": 1,
+     "height": 20,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 2,
+       "span": 19,
+       "crown": 4,
+       "leg": 15
+      }
+     ]
+    },
+    {
+     "k": 17,
+     "seed": "pm17",
+     "species": "roman",
+     "profile": "round",
+     "tiers": 2,
+     "height": 25,
+     "parapet": "crenel",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 12,
+       "crown": 6,
+       "leg": 8
+      },
+      {
+       "bays": 6,
+       "span": 5,
+       "crown": 3,
+       "leg": 5
+      }
+     ]
+    },
+    {
+     "k": 18,
+     "seed": "pm18",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 1,
+     "height": 15,
+     "parapet": "crenel",
+     "stats": [
+      {
+       "bays": 5,
+       "span": 7,
+       "crown": 5,
+       "leg": 7
+      }
+     ]
+    },
+    {
+     "k": 19,
+     "seed": "pm19",
+     "species": "gothic",
+     "profile": "pointed",
+     "tiers": 2,
+     "height": 22,
+     "parapet": "wall",
+     "stats": [
+      {
+       "bays": 3,
+       "span": 14,
+       "crown": 9,
+       "leg": 3
+      },
+      {
+       "bays": 6,
+       "span": 6,
+       "crown": 4,
+       "leg": 3
+      }
+     ]
+    }
+   ],
+   "iou": [
+    0.508,
+    0.227,
+    0.195,
+    0.334,
+    0.521,
+    0.432,
+    0.306,
+    0.276,
+    0.444,
+    0.344,
+    0.231,
+    0.204,
+    0.262,
+    0.222,
+    0.188,
+    0.218,
+    0.576,
+    0.354,
+    0.357,
+    0.411,
+    0.227,
+    0.273,
+    0.5,
+    0.27,
+    0.394,
+    0.218,
+    0.362,
+    0.285,
+    0.209,
+    0.333,
+    0.404,
+    0.327,
+    0.212,
+    0.236,
+    0.629,
+    0.385,
+    0.594,
+    0.317,
+    0.205,
+    0.168,
+    0.495,
+    0.47,
+    0.213,
+    0.176,
+    0.313,
+    0.28,
+    0.191,
+    0.234,
+    0.161,
+    0.507,
+    0.517,
+    0.38,
+    0.156,
+    0.435,
+    0.292,
+    0.219,
+    0.251,
+    0.385,
+    0.35,
+    0.247,
+    0.422,
+    0.565,
+    0.3,
+    0.245,
+    0.193,
+    0.415,
+    0.492,
+    0.223,
+    0.2,
+    0.229,
+    0.534,
+    0.179,
+    0.347,
+    0.568,
+    0.401,
+    0.439,
+    0.249,
+    0.357,
+    0.416,
+    0.372,
+    0.149,
+    0.235,
+    0.301,
+    0.464,
+    0.242,
+    0.146,
+    0.328,
+    0.377,
+    0.619,
+    0.447,
+    0.242,
+    0.383,
+    0.449,
+    0.366,
+    0.132,
+    0.197,
+    0.452,
+    0.572,
+    0.398,
+    0.299,
+    0.183,
+    0.15,
+    0.26,
+    0.221,
+    0.162,
+    0.2,
+    0.141,
+    0.284,
+    0.346,
+    0.357,
+    0.135,
+    0.257,
+    0.339,
+    0.251,
+    0.389,
+    0.284,
+    0.402,
+    0.368,
+    0.305,
+    0.442,
+    0.464,
+    0.347,
+    0.308,
+    0.546,
+    0.403,
+    0.539,
+    0.379,
+    0.282,
+    0.315,
+    0.295,
+    0.208,
+    0.309,
+    0.275,
+    0.354,
+    0.245,
+    0.521,
+    0.387,
+    0.195,
+    0.244,
+    0.21,
+    0.184,
+    0.243,
+    0.395,
+    0.383,
+    0.25,
+    0.584,
+    0.26,
+    0.358,
+    0.235,
+    0.29,
+    0.457,
+    0.322,
+    0.375,
+    0.226,
+    0.155,
+    0.185,
+    0.117,
+    0.484,
+    0.53,
+    0.224,
+    0.203,
+    0.197,
+    0.579,
+    0.438,
+    0.133,
+    0.201,
+    0.194,
+    0.393,
+    0.356,
+    0.487,
+    0.14,
+    0.245,
+    0.259,
+    0.476,
+    0.336,
+    0.093,
+    0.168,
+    0.235,
+    0.412,
+    0.282,
+    0.717,
+    0.227,
+    0.12,
+    0.396,
+    0.258,
+    0.176,
+    0.345,
+    0.311,
+    0.454,
+    0.307
+   ],
+   "sheet": "artifacts/promote/archSpan/sheet.png",
+   "at": "2026-11-14T19:51:15Z"
+  },
+  "approval": {
+   "pass": true,
+   "by": "Noah",
+   "at": "2026-11-14",
+   "sheetSha": "ac9b3ab3e2baa054e01f652c3ae252fa8a7a3b5a2cfdcb13d123dee150cfa97f",
+   "via": "N-7c-6, relayed verbatim by the parent session local_a69a2186 through the Architect coordinator: \"Yes as is\" (flat profiles included)"
+  },
+  "output": {
+   "pass": true,
+   "version": "1.0.0",
+   "module": "kit/lib/forms/archSpan.mjs",
+   "from": "0.1.0",
+   "sourceSha": "e061d354d363243ab4a4538c3c0764a6d8bf468f582593eb9e064e0c8e3194cd",
+   "at": "2026-11-14T20:12:12Z"
+  }
+ },
+ "module": "kit/lib/forms/archSpan.mjs",
+ "describe": "archSpan: a masonry arcade carrying a deck across a gap (1-2 tiers; round, segmental, pointed or elliptical arches; wall, crenel, rail or no parapet), a span for AQ"
+}
