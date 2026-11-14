@@ -91,12 +91,17 @@ export async function registerFK(steps, h) {
 
   /** The fk_hall site among the stockpile's targets (the one with a fill). */
   async function fkSite() {
-    for (let i = 0; i < 60; i++) {
+    // the lots stage is put down once the ground and street stages are built: feed those (never the fill's items) meanwhile
+    const seen = new Set();
+    for (let i = 0; i < 360; i++) {
       for (const id of Object.keys((await pile()).targets ?? {})) {
+        if (seen.has(id)) continue;
         const s = await fk(id);
         if (s.hasFill) return id;
+        if (s.state === 'BUILT') seen.add(id);
       }
-      await L.sleep(2000);
+      await deliver({ fill: false });
+      await L.sleep(2500);
     }
     return null;
   }
