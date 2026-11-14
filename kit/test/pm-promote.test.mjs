@@ -81,7 +81,7 @@ test('approval refuses another sheet, a missing --by and a no without reasons; r
   assert.throws(() => P.approve(r, { sheet: fake, by: 'Noah', at: 't' }), /not the recorded sheet/);
   // a file with the recorded bytes' sha: write the recorded sheet if it is on this machine, else skip this half
   const real = path.join(path.dirname(path.dirname(P.REPO)), 'architect-mc', 'artifacts', 'promote', 'archSpan', 'sheet.png');
-  const sheet = [real, rec.steps.variety?.sheet].find((f) => f && fs.existsSync(f));
+  const sheet = [real].find((f) => fs.existsSync(f));
   if (sheet) {
     if (P.sha256Of(fs.readFileSync(sheet)) === rec.steps.variety.sheetSha) {
       assert.throws(() => P.approve(structuredClone(rec), { sheet, by: '', at: 't' }), /--by/);

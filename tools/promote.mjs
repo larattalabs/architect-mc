@@ -116,7 +116,7 @@ async function step(s, rec, { write = true } = {}) {
       const png = path.join(sheetDir(), 'sheet.png');
       fs.writeFileSync(png, v.png);
       fs.writeFileSync(path.join(sheetDir(), 'sheet.json'), `${JSON.stringify({ candidate: name, sheetSha: v.sheetSha, layout: '5 x 4, seed pm0 top left, row by row; each tile an iso render over its side silhouette in the shared frame', ...nums, seeds: v.seeds }, null, 1)}\n`);
-      r.sheet = png;
+      r.sheet = path.relative(mainCheckout(), png); // relative to the main checkout (no home path in the committed record)
     } else r._png = v.png;
   }
   r.at = now();
