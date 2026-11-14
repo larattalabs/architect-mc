@@ -15,6 +15,8 @@ gate anything:
 - the verifier only reviews, except for undo, the journal, crash recovery and survival accounting;
 - **speed rules (Noah, 2026-11-13; docs/GATES.md "Speed rules"):** strict vs light tier, re-run only failing steps, 3 full runs
   per slice, batched merges, 4 gate runs, `nice -n 10` unit suites, 5 min between in-game starts, 10-15 line as-builts;
+  scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
+  the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
 - a Steward RC only for API changes;
 - the full set runs nightly.
 

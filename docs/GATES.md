@@ -44,6 +44,14 @@ and replace stricter habits where they differ (the DEV MODE section below still 
    The nightly blackout and nightly rules are unchanged.
 7. **Short as-builts.** A slice's as-built and its report are 10-15 lines: what changed, what ran and passed, the leftovers. The
    detail stays in the commits.
+8. **Scoped unit suites per slice** (Noah via parent session, 2026-11-13: "yes, send that to both managers/add to agent/claude
+   docs"). A slice runs only the kit, sidecar and Java tests for the files it touched plus their direct dependents; the full kit,
+   sidecar and Gradle suites run once, at the batch merge. A slice that touches shared core (the checker core, the journal or
+   ledger, the build pipeline) runs the full suite. *Tooling:* the scoped selection is being built (a $0 tooling slice); until it
+   lands, a full suite already running may finish.
+9. **Timing benches are report-only** (same decision). Benches such as the forms-island evaluation cost move out of the pass/fail
+   suites into a report step that records the number and the load; past its bound a bench flags, it does not fail the slice. The
+   nightly keeps tracking them.
 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
