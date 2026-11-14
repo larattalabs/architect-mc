@@ -98,6 +98,13 @@ export default function revise(ctx) {
     used.add(shellStage);
     used.add('fluids');
   }
+  // (SAD) a growth of an adopted street town (one base stage, `adopted`): its props go in their own `props` stage after the pads, lanes and
+  // verges (and IG-b's street and lots), as V's town orders them. In one stage a prop (a lamp: fence + lantern) went down before the verges
+  // and a verge cell met it: survival_paid refused the verge (sad-instant), and in creative the verge wrote over the lamp
+  if (G && baseStages.length === 1 && baseStages[0] === 'adopted') {
+    growStages.props = 'props';
+    added.push('props');
+  }
   // (a body needs the region's `fluids` stage, last: H's settle and census run in it, §7)
   if (parts.some((p) => p?.call?.fn === 'pond')) used.add('fluids');
   const fresh = [...used].filter((s) => !baseStages.includes(s) && s !== 'fluids' && !added.includes(s)).sort();

@@ -852,7 +852,9 @@ public final class Stockpiles {
 		Map<String, Construction.Crate> crates = new LinkedHashMap<>();
 		List<Site> sites = new ArrayList<>();
 		for (Site s : Sites.all()) {
-			if (s.building() && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension.equals(s.dimension())) {
+			// (SAD) a BUILT site whose crate still stands (a shared crate another site of its group still builds from) joins too: the crate's
+			// placed counts are keyed to its paid record and its crate reference cleared, so its refund comes out of the stockpile, capped
+			if ((s.building() || crateStands(level, s)) && owner.equals(s.owner()) && s.construction().crate() != null && p.dimension.equals(s.dimension())) {
 				sites.add(s);
 				crates.putIfAbsent(Builder.crateOwner(s), s.construction().crate());
 			}
@@ -907,7 +909,9 @@ public final class Stockpiles {
 			if (cur != null && cur.construction() != null) {
 				Sites.replace(srv, cur.withConstruction(cur.construction().withCrate(null)));
 				Builder.forgetRun(s.id());
-				joined.add(Sites.get(s.id()));
+				if (cur.building()) {
+					joined.add(Sites.get(s.id())); // (SAD) a BUILT one is fully paid: it joins no feed
+				}
 			}
 		}
 		for (Infra i : roads) {
@@ -926,10 +930,24 @@ public final class Stockpiles {
 		}
 		Builder.dropItems(level, drop, dropped, null);
 		changed(p);
+		WorldJournal.kill("SAC1"); // (SAD, test) the crates joined in memory, their cells restored, nothing saved
 		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
 		Architect.LOGGER.info("Stockpile {}: adopted {} crate(s) ({} site(s), {} road(s)){}", owner, crates.size(), sites.size(), roads.size(), dropped
 			.isEmpty() ? "" : "; over capacity, dropped " + dropped);
 		return p;
+	}
+
+	/**
+	 * (SAD) Whether a construction site's crate block still stands with its owner id (its own crate, or its group's shared crate): a
+	 * crate-fed site whose crate is gone (a legacy site's crate taken down at its completion) is not crate-fed any more.
+	 */
+	public static boolean crateStands(@Nullable ServerLevel level, Site s) {
+		Construction c = s.construction();
+		if (level == null || c == null || c.crate() == null) {
+			return false;
+		}
+		BlockPos cp = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
+		return level.isLoaded(cp) && level.getBlockEntity(cp) instanceof CrateBlockEntity be && Builder.crateOwner(s).equals(be.siteId());
 	}
 
 	/**

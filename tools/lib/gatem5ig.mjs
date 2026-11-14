@@ -386,8 +386,8 @@ export async function registerIG(steps, h) {
     if (!P.g.refused) {
       out.plan = { stages: P.g.stages, lotStage: P.irLot ? P.rvir.lots.find((l) => l.id === FARM.id)?.stage : null };
       const shells = (P.rvir.parts ?? []).filter((p) => /_irr_\d+_\d+_shell$/.test(p.id));
-      check(json(P.g.stages) === json(['adopted', 'street', 'lots', 'fluids']) && out.plan.lotStage === 'lots' && shells.length === 4 && shells.every((p) => p.stage === 'street'),
-        `adopted: the revision adds its own stages (${json(P.g.stages)}): the 4 shells in street (${json(shells.map((p) => p.stage))}), the farm lot in lots (${out.plan.lotStage}), the water in fluids; the base's adopted unchanged`, out.plan);
+      check(json(P.g.stages) === json(['adopted', 'street', 'lots', 'props', 'fluids']) && out.plan.lotStage === 'lots' && shells.length === 4 && shells.every((p) => p.stage === 'street'),
+        `adopted: the revision adds its own stages (${json(P.g.stages)}): the 4 shells in street (${json(shells.map((p) => p.stage))}), the farm lot in lots (${out.plan.lotStage}), the props in props (SAD), the water in fluids; the base's adopted unchanged`, out.plan);
       const r = await call('dev.region.realise', { planId: P.g.planId, lots: { [FARM.id]: FIELD } }, 300_000);
       check(!r.refused, `adopted: the growth realised with the field entry bound: ${r.refused ?? r.region}`);
       const w = await rvWait(region, P.g.revisionOf.rid);

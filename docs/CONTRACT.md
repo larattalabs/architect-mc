@@ -31814,6 +31814,15 @@ the region's group, their crates join the owner's stockpile first, and its growt
 - **Adoption itself writes no block (AD's rule holds), so it doesn't join crates.** A site or road that is still fed by a live crate (its
   own, or its group's shared crate) refuses `NOT_ALLOWED: site <id> is fed by crate <key>: join it to the stockpile first (adoptCrates)`.
   Steward already calls `adoptCrates` at every build, so this is normally met.
+- **Amended in the build:** `adoptCrates` (`Stockpiles.adopt`) also takes a **BUILT** site whose crate still stands (a shared crate
+  another site of its group still builds from): it is keyed a paid record (JR-b's shared rule: its paid standing, capped) and its crate
+  reference is cleared, but it joins no feed. Before, only building targets joined, so a built lot kept its crate reference, refused
+  adoption, and had no paid record for its refund. The adoption's refusal counts a built site's crate only while that crate stands.
+  **Intended for every world, adopted or not** (Steward calls `adoptCrates` at every build from materials, `Stockpiles.ensure`): an older
+  survival world's BUILT lot on a standing shared crate is keyed and refunds from the stockpile, capped by that record, by any path
+  (`Sites.remove`, `undoStage` of its old build, a region removal). A second `adoptCrates` changes nothing. A BUILT site whose crate is
+  gone keeps its crate reference and refunds as before (dropped at the site). Kill point **SAC1** (test): the crates joined in memory,
+  their cells restored, nothing saved.
 - After `adoptCrates`, the crate's placed counts are keyed into the targets' paid records (JR-b rule 3: a one-target crate gives all of
   them, a shared crate gives each target its paid standing, capped), its stock is in the stockpile, and the group's `crate()` is null with
   `sharedCrate` still true (`withCrate(null)`).
@@ -31827,9 +31836,13 @@ the region's group, their crates join the owner's stockpile first, and its growt
   building one keeps building, from the stockpile, at its place in the feed order (the joined crate's targets at the end, in placement order).
 - **Outstanding:** unchanged (what its queue still needs); the stock the crate held joined the stockpile and feeds it.
 - **XR (one owner per cell):** it is now a writer of the region's group (a construction lot or road), so a later revision target over its
-  paid cells is refused `survival_paid` at plan time (TileCheck, unchanged code), and a retake follows XR's rules. A revision cell over an
-  adopted **instant** site's block refuses the same way (`survival_paid`, though nothing paid for it): TileCheck sees the region's own
-  entries. The message says "a block the region built"; SAD rewords it to "a block of the region" for adopted entries.
+  paid cells follows XR's rules (a retake gives back what was paid). TileCheck's `survival_paid` reads only the region's own tile entries
+  (terrain and path), never a site's or road's, so an adopted site's block, instant or paid, never refuses it (amended in the build: the
+  draft said instant blocks would). **Amended in the build:** a growth of an adopted base (its stages exactly `['adopted']`) puts its props
+  in its own `props` stage after the pads, lanes and verges (and IG-b's `street` and `lots`), as V's town orders them (`kit/regions/revise.mjs`):
+  in one stage a prop (a paid lamp) went down before the verges and a verge cell met it, so `survival_paid` refused the verge and the growth
+  ended PARTIAL (sad-instant run 2; in creative the verge wrote over the lamp). Stages: a dry growth `adopted, props`; an irrigated one
+  `adopted, street, lots, props, fluids`. TileCheck is unchanged.
 - **`RegionView.build()` counts it** (S-SAD-2, Steward's pre-plan check): an adopted survival region's build lists every adopted
   construction site and road of its group (built or building) under its parts (`lots`, `road:street_<n>`), so with a lot still building
   `build().built()` is false and `percent()` is under 100; once it finishes, `built()` is true and `percent()` 100. Instant adopted sites
@@ -31844,8 +31857,8 @@ the region's group, their crates join the owner's stockpile first, and its growt
 ### 5. Growth, refunds, undo and cancel (A2, IG-b, JR/RL, RU)
 
 - **Bill:** a survival revision of an adopted region bills as A2's (its tiles' targets, its construction lots and roads, IG's shells, the
-  quote QT/BC+ exact rules). The revision's stages are IG-b's (`adopted, street, lots, fluids` when irrigated; `adopted` plus its own
-  otherwise). Water is free.
+  quote QT/BC+ exact rules). The revision's stages are IG-b's plus SAD's `props` (`adopted, street, lots, props, fluids` when irrigated;
+  `adopted, props` otherwise). Water is free.
 - **Refunds:** every refund is out of the target's paid record, capped (JR), pool only for pre-JR targets (JR-b); an adopted instant site
   refunds nothing; a PT-recorded player block in a queued cell drops as the player's (JR-b F10).
 - **`undoRevision`:** RU's (a growth still building is cancelled, then drained first, then its stages undone top first, refunded once per
@@ -31875,7 +31888,10 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | 6 | Crash: adoption | an unsaved halt at AD3 (the journal write) and one at AD4: each restart rolls forward or back; memberships agree; the building lot keeps building from the stockpile; stock + paid records + returned per item equal the saved state's; no mint, no loss |
 | 6b | An instant town | an all-instant street town adopted in survival, grown by one lot from materials, then the growth undone: consumed = quote = refund; the instant lots refund nothing and stay |
 | 7 | Remove | `Regions.remove`: E-flat 0 against the world before the settlement; refund = every paid record, item for item |
-| 8 | Re-runs | gr-survival, rs-survival-smoke, jr-crash, rl-crash, igb-adopted |
+| 2b | Crates, no adoption yet (coordinator) | the town before its adoption is an older survival world with a standing shared crate: `adoptCrates` halted at SAC1 (nothing saved): the crate stands with its ledger, the stockpile as saved; then `adoptCrates`: the BUILT lot keyed a record within the crate's placed counts, its crate reference cleared, no feed; the crate's stock moved once; a second `adoptCrates` a no-op (ledger and saved ledger byte-equal) |
+| 6c | Refund paths | the BUILT lot removed alone after adoption (sad-survival); un-adopt, then `undoStage` of the old builds (sad-crash, crate-fed): each refunds once from the stockpile, item for item its record; the instant build nothing; E-flat 0 |
+| 6d | The lamp | sad-instant: a verge column meets a paid prop's cell; stages `adopted, props`; the lamp stands; consumed = quote |
+| 8 | Re-runs | gr-survival, rs-survival-smoke, jr-crash, jr-crash-v063 (JR-b's adoptCrates keying of a legacy crate), rl-crash, igb-adopted |
 
 ### Steward's review (2026-11-14, via the coordinator, Steward main 2821d6d): accepted
 

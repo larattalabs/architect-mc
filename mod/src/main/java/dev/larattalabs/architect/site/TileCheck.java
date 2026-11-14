@@ -444,7 +444,7 @@ final class TileCheck {
 					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is in the owner's protected area";
 				} else if (survivalRevision && ours.contains(q) && s != null && !CellCond.natural(s, dev.larattalabs.architect.placement.TerrainFit.flags(s))) {
 					why = dev.larattalabs.architect.api.Reason.NOT_ALLOWED;
-					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is over a block of the region (one it built and paid for, or an adopted one) (survival_paid)";
+					no = "the revision's cell (" + x + ", " + BlockPos.getY(q) + ", " + z + ") is over a block the region built and paid for (survival_paid)";
 				}
 				if (no != null) {
 					result = refused(why, no);

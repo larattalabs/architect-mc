@@ -47,6 +47,22 @@ export async function registerSAD(steps, h) {
   }
   const backOf = (l) => G.plus(stockOf(l), l?.refundOverflow ?? {});
   const siteState = (id) => call('dev.site.state', { site: id }, 60_000);
+  const api = async (args) => {
+    const r = await cmd(`/apitest ${args}`);
+    const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null');
+    if (line === undefined) throw new Error(`/apitest ${args.slice(0, 120)}: no JSON answer: ${JSON.stringify(r).slice(0, 400)}`);
+    return JSON.parse(line);
+  };
+  const later = async (args, timeoutMs = 600_000) => {
+    const pd = await api(args);
+    if (!pd?.pending) return pd;
+    for (const end = Date.now() + timeoutMs; Date.now() < end; await sleep(500)) {
+      const r = await api(`get ${pd.pending}`);
+      if (r && r.value !== undefined && r.value !== null) return r.value;
+    }
+    throw new Error(`no result for ${pd.pending}`);
+  };
+  const isBlock = async ([x, y, z], block) => { const r = await L.cmd(`/execute if block ${x} ${y} ${z} ${block}`); return !!(r?.success || Number(r?.result) > 0); };
   const pause = (site, paused) => call('dev.stockpile.pause', { site, paused }, 60_000);
   const rs = (region) => call('dev.rs.state', { region }, 120_000);
   const LOT = { sx: 15, sz: 17 };
@@ -240,9 +256,47 @@ export async function registerSAD(steps, h) {
     // the stockpile, the crates joined (adoptCrates), then the adoption
     const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
     check(!cr.refused, `row 2: a stockpile of 4 crates for ${OWNER}`);
+    // (coordinator) adoptCrates halted before its save (kill SAC1: the crates joined in memory, their cells restored, nothing saved):
+    // the restart has the crate standing with its own ledger, and the stockpile as saved
+    const bS = await baseline('SAC1');
+    const crate0 = await siteState(ids.house_4);
+    await call('dev.journal.killAt', { point: 'SAC1' }, 10_000);
+    const LdS = await halt('SAC1', W, bS, () => call('dev.stockpile.adopt', { owner: OWNER }, 120_000).catch(() => null));
+    if (LdS) {
+      const la = (await pile()).ledger ?? {};
+      const c1 = await siteState(ids.house_4);
+      out.sac1 = { crate: [crate0.crate, c1.crate], crateLedger: [crate0.ledger, c1.ledger], stock: [stockOf(LdS), stockOf(la)] };
+      check(c1.crate?.present === true && G.same(c1.ledger?.stock, crate0.ledger?.stock) && G.same(c1.ledger?.placed, crate0.ledger?.placed) && G.same(stockOf(LdS), stockOf(la))
+        && json(LdS.paid ?? {}) === json(la.paid ?? {}), `SAC1: after the unclean restart the shared crate stands with its ledger as before (stock ${sum(c1.ledger?.stock)}, placed ${sum(c1.ledger?.placed)}), the stockpile and its paid records as saved: no mint, no loss`, out.sac1);
+    }
+    const p0 = await pile();
+    const crateBefore = await siteState(ids.house_4);
     const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
     check(!ac.refused, `row 2: adoptCrates joined the shared crate to the stockpile (${json(ac.refused ?? 'joined')})`);
     const p1 = await pile();
+    // (no adoption yet: an older survival world's crate) the crate's stock moved once: into the stock, or dropped
+    {
+      const moved = G.plus(G.minus(stockOf(p1.ledger), stockOf(p0.ledger)), G.minus(p1.ledger?.dropped ?? {}, p0.ledger?.dropped ?? {}));
+      out.leftover = { crateStock: crateBefore.ledger?.stock, moved };
+      check(G.same(moved, crateBefore.ledger?.stock ?? {}), `the crate's leftover stock moved into the stockpile exactly once (stocked or dropped: ${json(moved)}; the crate held ${json(crateBefore.ledger?.stock)})`, out.leftover);
+      const f1 = await savedNow();
+      const ac2 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+      const p1b = await pile();
+      const f2 = await savedNow();
+      const o1 = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+      out.again = { refused: ac2.refused ?? null, same: json(p1.ledger) === json(p1b.ledger), saved: json(ledgerOf(f1.file)) === json(ledgerOf(f2.file)) };
+      check(!ac2.refused && json(p1.ledger) === json(p1b.ledger) && json(ledgerOf(f1.file)) === json(ledgerOf(f2.file)) && json(p1.stock) === json(p1b.stock) && o1.includes(ids.house_4),
+        'adoptCrates a second time is a no-op: the ledger, its paid records and the stock equal, the saved ledger byte-equal, the feed order unchanged', out.again);
+    }
+    // (amendment 1) the BUILT house_3 on the shared crate: a paid record within its paid standing, its crate reference cleared, no feed
+    const rec3 = Object.entries(p1.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
+    const s3 = await siteState(ids.house_3);
+    const order = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+    out.built3 = { record: rec3, crate: s3.crate, order, placedOnCrate: crate0.ledger?.placed };
+    check(!!rec3 && sum(rec3[1]) > 0 && s3.crate?.present === false && s3.crate?.x === undefined && !order.includes(ids.house_3) && order.includes(ids.house_4),
+      `amendment 1: the BUILT house_3 got a paid record from the shared crate (${rec3 ? sum(rec3[1]) : 0} units), its crate reference cleared, and it joins no feed (feed order ${json(order)})`, out.built3);
+    const keyedAll = Object.values(p1.ledger?.paid ?? {}).reduce((a, m) => G.plus(a, m), {});
+    check(Object.entries(keyedAll).every(([k, v]) => v <= (crate0.ledger?.placed?.[k] ?? 0)), `amendment 1: the records keyed from the crate stay within its placed counts (capped): ${json(G.minus(crate0.ledger?.placed, keyedAll))} left unkeyed`);
     const S1 = await cellsOf(BOX(W.gy));
     const sites = Object.values(ids);
     const st0 = await call('dev.ad.state', { sites }, 60_000);
@@ -273,7 +327,7 @@ export async function registerSAD(steps, h) {
     const bp = await ig.installField();
     const plain = { id: 'hb', type: 'house', size: [9, 9], villager: 'dwelling' };
     const g = await growPlan(region, { lots: [ig.FARM, plain] });
-    check(!g.refused && g.revisionOf?.rid >= 1 && json(g.stages) === json(['adopted', 'street', 'lots', 'fluids']), `row 4: the survival growth planned (planned in survival, a survival region: no NOT_ALLOWED): ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}, stages ${json(g.stages)}`}`);
+    check(!g.refused && g.revisionOf?.rid >= 1 && json(g.stages) === json(['adopted', 'street', 'lots', 'props', 'fluids']), `row 4: the survival growth planned (planned in survival, a survival region: no NOT_ALLOWED): ${g.refused ?? `${g.planId} rid ${g.revisionOf?.rid}, stages ${json(g.stages)}`}`);
     if (g.refused) { await L.leaveWorld(); spendZero(); return out; }
     const lot = (g.lots ?? []).find((l) => l.id === ig.FARM.id);
     const P = { g, lot, irr: lot?.ext?.['architect_mc:lotIrrigation'] };
@@ -325,6 +379,19 @@ export async function registerSAD(steps, h) {
         check(G.same(back, consumedSaved) && G.same(consumedSaved, q.bom), `row 5: items in = items out against the saved state: back ${json(back)} = what the saved ledger says the growth consumed ${json(consumedSaved)} (= the quote)`, { mint: G.minus(back, consumedSaved) });
       }
     }
+    // (amendment 1) the BUILT house_3 removed alone after the adoption: its refund comes out of the stockpile within its record
+    {
+      const q3 = await pile();
+      const r3 = Object.entries(q3.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
+      await call('dev.sites.remove', { site: ids.house_3, force: true }, 600_000);
+      for (let i = 0; i < 120; i++) { const sv = await call('dev.sites.state', {}, 30_000); if (!JSON.stringify(sv.sites ?? []).includes(`"${ids.house_3}"`)) break; await sleep(1000); }
+      await L.settle(3000);
+      const q4 = await pile();
+      const back3 = G.minus(backOf(q4.ledger), backOf(q3.ledger));
+      const left = Object.entries(q4.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
+      out.remove3 = { record: r3?.[1], back: back3, left: left?.[1] ?? null };
+      check(!!r3 && G.same(back3, r3[1]) && !left, `amendment 1: house_3 removed after the adoption refunded its record from the stockpile, item for item (${sum(back3)} units = record ${sum(r3?.[1])}), the record spent`, out.remove3);
+    }
     // row 7: Regions.remove: E-flat 0 against the world before the settlement; every paid record refunded
     const pr = await pile();
     const paidBefore = paidSum(pr.ledger);
@@ -344,10 +411,20 @@ export async function registerSAD(steps, h) {
     await ensure();
     const out = {};
     const W = await world('G6B SAD Crash');
-    const { T, ids, B0 } = await suppliedTown('crash', W, { pileFirst: true });
+    const { T, ids, B0, b1, b2 } = await suppliedTown('crash', W);
     const req = adoptReq(T, ids);
+    const cr = await call('dev.stockpile.create', { owner: OWNER, crates: PILE_AT(W.gy) }, 120_000);
+    const ac = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
+    check(!cr.refused && !ac.refused, `crash: the stockpile made and the shared crate joined (adoptCrates): ${json(cr.refused ?? ac.refused ?? 'ok')}`);
     const sites = Object.values(ids);
     let region = null;
+    // a clean save, leave and reopen first: a load compacts the journal's index (the entry count drops at the first reopen of a world that
+    // built from materials), so the crash cases compare loads with loads
+    await cmd('/save-all flush');
+    await L.leaveWorld();
+    await L.openWorld(path.basename(W.dir));
+    await L.tp(CX + 80, 80, CZ + 48);
+    await sleep(3000);
     for (const point of ['AD3', 'AD4']) {
       const b0 = await baseline(point);
       const before = await call('dev.ad.state', { sites }, 60_000);
@@ -361,7 +438,8 @@ export async function registerSAD(steps, h) {
       const fwd = point === 'AD4';
       out[point] = { agree: st.agree, intents: st.intents, regions: adopted.map((x) => [x.id, x.state]), entries: [before.entries, st.entries],
         stock: [stockOf(Ld), stockOf(la)], paid: [paidSum(Ld), paidSum(la)], returned: [Ld.returned, la.returned] };
-      check(st.agree !== false && (st.intents ?? []).length === 0 && st.entries === before.entries, `${point}: after the unclean restart the adoption recovered (no intent left), every membership agrees (${st.agree}), no journal entry written (${before.entries} -> ${st.entries})`, out[point]);
+      out[point].nextId = [before.nextId, st.nextId];
+      check(st.agree !== false && (st.intents ?? []).length === 0 && st.entries === before.entries && st.nextId === before.nextId, `${point}: after the unclean restart the adoption recovered (no intent left), every membership agrees (${st.agree}), no journal entry written (${before.entries} -> ${st.entries} entries, next id ${before.nextId} -> ${st.nextId})`, out[point]);
       check(fwd ? adopted.length === 1 && adopted[0].state === 'PLACED' : adopted.length === 0, `${point}: ${fwd ? 'rolled forward: one adopted region PLACED' : 'rolled back: no region'} (${json(out[point].regions)})`);
       check(G.same(stockOf(Ld), stockOf(la)) && json(Ld.paid) === json(la.paid) && G.same(Ld.returned, la.returned) && G.same(Ld.consumed, la.consumed),
         `${point}: items in = items out against the saved state: stock, every paid record, consumed and returned as the saved ledger has them (no mint, no loss)`, out[point]);
@@ -376,13 +454,29 @@ export async function registerSAD(steps, h) {
       const ok = await feedPile(async () => ['BUILT', 'built'].includes((await siteState(ids.house_4)).state));
       const used = G.minus((await pile()).ledger?.consumed ?? {}, c0);
       check(ok && G.same(used, o0), `after the recovered adoption, house_4 built from the stockpile: consumed ${json(used)} = its outstanding ${json(o0)}`);
+      // un-adopt, then the old builds undone (Steward's undo of its own build): the crate-fed lots refund once, from their records
+      const un = await call('dev.ad.unadopt', { region }, 300_000);
+      check(!un.refused, `the recovered region un-adopted: the sites back in their groups (${json(un.refused ?? un.groups)})`);
       const pr = await pile();
-      const rmr = await removeRegion(region, OWNER);
-      const pa = await pile();
-      const back = G.minus(backOf(pa.ledger), backOf(pr.ledger));
+      const recs = Object.entries(pr.ledger?.paid ?? {}).filter(([k]) => k.startsWith(`site:${ids.house_3}@`) || k.startsWith(`site:${ids.house_4}@`));
+      const want = recs.reduce((a, [, m]) => G.plus(a, m), {});
+      const u2 = await later(`sundo ${b2.group} stage1 force`);
+      await L.settle(3000);
+      const pm = await pile();
+      const back2 = G.minus(backOf(pm.ledger), backOf(pr.ledger));
+      const left = Object.keys(pm.ledger?.paid ?? {}).filter((k) => k.startsWith(`site:${ids.house_3}@`) || k.startsWith(`site:${ids.house_4}@`));
+      out.undoB2 = { result: u2, back: back2, records: Object.fromEntries(recs), left };
+      check(recs.length === 2 && G.same(back2, want) && left.length === 0, `undo of the old build b2 after the un-adoption: house_3 (BUILT, its crate keyed) and house_4 refunded once from the stockpile, item for item their records (${sum(back2)} units = ${sum(want)}), the records spent`, out.undoB2);
+      const u1 = await later(`sundo ${b1.group} stage1 force`);
+      const u1s = await later(`sundo ${b1.group} street force`);
+      await L.settle(3000);
+      const pz = await pile();
+      const back1 = G.minus(backOf(pz.ledger), backOf(pm.ledger));
       const d = diff(B0, await cellsOf(BOX(W.gy)));
-      out.remove = { diff: d.n, back, paid: paidSum(pr.ledger) };
-      check(rmr?.removed === true && d.n === 0 && G.same(back, paidSum(pr.ledger)), `Regions.remove of the recovered region: E-flat ${d.n}; refund = the paid records ${json(back)}`, out.remove);
+      out.undoB1 = { result: [u1, u1s], back: back1, diff: d.n };
+      check(sum(back1) === 0 && d.n === 0, `the instant build b1 undone: nothing refunded (${json(back1)}); E-flat ${d.n} against the world before the settlement`, out.undoB1);
+      const pz2 = await pile();
+      check(json(pz.ledger) === json(pz2.ledger), 'nothing refunded twice: the ledger holds still after the undos');
     }
     await L.leaveWorld();
     spendZero();
@@ -421,6 +515,16 @@ export async function registerSAD(steps, h) {
       const used = G.minus(p1.ledger?.consumed ?? {}, p0.ledger?.consumed ?? {});
       out.grow = { quote: q.bom, consumed: used, state: w.r.state, waves: f.waves };
       check(w.r.state === 'PLACED' && !q.refused && sum(q.bom) > 0 && G.same(q.bom, used), `row 6b: grown from materials: ${w.r.state}; consumed = quote: ${json(used)}`, out.grow);
+      // the lamp case (run 2's finding): a verge column meets a paid prop's cell; the props stage comes after the verges, so the lamp stands
+      const rvir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', g.planId, 'ir.json'), 'utf8'));
+      const colsOf = (id) => (rvir.parts.find((pt) => pt.id === id)?.ops ?? []).flatMap((o) => { const c = o.cols ?? []; const r = []; for (let i = 0; i + 4 < c.length; i += 5) r.push(c.slice(i, i + 5)); return r.map((x) => ({ x: x[0], z: x[1], y0: x[2], y1: x[3], k: x[4], mats: o.materials })); });
+      const props = colsOf(`rv${g.revisionOf.rid}_props`);
+      const verges = new Set(colsOf(`rv${g.revisionOf.rid}_verges`).map((v) => `${v.x},${v.z}`));
+      const met = props.filter((pc) => verges.has(`${pc.x},${pc.z}`));
+      let standing = 0;
+      for (const pc of met) if (await isBlock([pc.x, pc.y0, pc.z], String(pc.mats?.[pc.k] ?? '').replace(/\[.*$/, ''))) standing++;
+      out.lamp = { stages: g.stages, met: met.map((pc) => [pc.x, pc.y0, pc.z, String(pc.mats?.[pc.k] ?? '')]), standing };
+      check(json(g.stages) === json(['adopted', 'props']) && met.length >= 1 && standing === met.length, `row 6b (the lamp): the growth's props in their own stage (${json(g.stages)}); ${met.length} prop cell(s) on a verge column, ${standing} standing as planned (the verge never wrote over the paid lamp; consumed = quote above)`, out.lamp);
       const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
       await L.settle(3000);
       const p2 = await pile();

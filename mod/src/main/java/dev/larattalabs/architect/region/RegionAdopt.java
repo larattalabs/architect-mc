@@ -148,7 +148,7 @@ public final class RegionAdopt {
 				throw no(Reason.NOT_ALLOWED, "road site " + id + ": no standing 4e road of that id");
 			}
 			siteRules(id, i.owner(), i.dimension(), i.box().minX(), i.box().minZ(), i.box().maxX(), i.box().maxZ(), i.placing(), i.construction(),
-				i.building(), i.group(), r.owner(), dim, claim, s);
+				i.building(), i.construction() != null && i.construction().crate() != null && i.building(), i.group(), r.owner(), dim, claim, s);
 			JsonArray pts = i.spec().get("points") instanceof JsonArray a ? a : new JsonArray();
 			for (JsonElement p : pts) {
 				JsonArray q = p.getAsJsonArray();
@@ -178,8 +178,11 @@ public final class RegionAdopt {
 				throw no(Reason.NOT_ALLOWED, "lot " + e.getKey() + ": no standing site " + id);
 			}
 			var bx = b.box();
-			siteRules(id, b.owner(), b.dimension(), bx.minX(), bx.minZ(), bx.maxX(), bx.maxZ(), b.placing(), b.construction(), b.building(), b.member() == null
-				? null : b.member().group(), r.owner(), dim, claim, s);
+			// (SAD §3) a BUILT site's crate reference counts only while its crate still stands (a shared crate another site builds from)
+			boolean crateLive = b.construction() != null && b.construction().crate() != null && (b.building() || dev.larattalabs.architect.site.Stockpiles
+				.crateStands(Sites.levelOf(s, b.dimension()), b));
+			siteRules(id, b.owner(), b.dimension(), bx.minX(), bx.minZ(), bx.maxX(), bx.maxZ(), b.placing(), b.construction(), b.building(), crateLive,
+				b.member() == null ? null : b.member().group(), r.owner(), dim, claim, s);
 			if (bx.minY() < claim[1] || bx.maxY() > claim[4]) {
 				throw no(Reason.NOT_ALLOWED, "site " + id + " is outside the claim's y range");
 			}
@@ -225,7 +228,7 @@ public final class RegionAdopt {
 	}
 
 	private static void siteRules(String id, @Nullable String owner, String dimension, int x0, int z0, int x1, int z1, boolean placing,
-		dev.larattalabs.architect.site.@Nullable Construction construction, boolean building, @Nullable String group, @Nullable String reqOwner, String dim,
+		dev.larattalabs.architect.site.@Nullable Construction construction, boolean building, boolean crateLive, @Nullable String group, @Nullable String reqOwner, String dim,
 		int[] claim, MinecraftServer s) {
 		if (!Objects.equals(owner, reqOwner)) {
 			throw no(Reason.NOT_ALLOWED, "site " + id + " is " + (owner == null ? "the player's" : owner + "'s") + ", not " + (reqOwner == null ? "the player's" : reqOwner
@@ -244,7 +247,7 @@ public final class RegionAdopt {
 			// (SAD §2-§3) a construction site or road adopts into a survival region only: its run, book and paid record are keyed per target
 			// and follow it into the region's group; a live crate must have joined the owner's stockpile first (adoption writes no block)
 			boolean draws = !building || dev.larattalabs.architect.site.Stockpiles.drawsFrom(owner, dimension);
-			String why = constructionRefusal(id, owner, dimension, RegionSurvival.on(s), construction.crate() != null, building, draws, draws ? null
+			String why = constructionRefusal(id, owner, dimension, RegionSurvival.on(s), crateLive, building, draws, draws ? null
 				: dev.larattalabs.architect.site.Stockpiles.dimensionRefusal(owner, dimension));
 			if (why != null) {
 				throw no(Reason.NOT_ALLOWED, why);
