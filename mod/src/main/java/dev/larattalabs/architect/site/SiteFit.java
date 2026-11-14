@@ -221,6 +221,21 @@ public final class SiteFit {
 		return Optional.empty();
 	}
 
+	/**
+	 * (SA, A35; N-7b-6, Noah yes 2026-11-13) {@code SITE_MISMATCH} when a site-bound entry ({@link #boundSha}: the pin badge) is placed with
+	 * no site at all ({@code /architect place}, {@code Sites.place} without {@code site}): it places only on its own site, or elsewhere as a
+	 * site variant of it. Null for an unbound entry. Since NEXT.
+	 */
+	public static @Nullable Refusal pinnedNoSite(String entryId, @Nullable JsonObject entryJson) {
+		Optional<String> b = boundSha(entryJson);
+		if (b.isEmpty()) {
+			return null;
+		}
+		// the message starts with the bound sha, as {@link #mismatch}'s does (the refusal's detail)
+		return new Refusal(Reason.SITE_MISMATCH, b.get() + ": " + entryId + " is site-bound (pinned to its site): placed with no site it is refused;"
+			+ " place it on its own site, or place a site variant here instead");
+	}
+
 	/** {@code SITE_MISMATCH} when the entry is bound ({@link #boundSha}) to another volume sha; an unbound entry may be fitted. */
 	static @Nullable Refusal mismatch(@Nullable JsonObject entryJson, SiteSpec s) {
 		Optional<String> b = boundSha(entryJson);

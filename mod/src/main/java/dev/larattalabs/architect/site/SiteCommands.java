@@ -557,6 +557,13 @@ public final class SiteCommands {
 			src.sendFailure(unknownDesign(bpId));
 			return 0;
 		}
+		// (SA, A35) a pinned (site-bound) entry places only on its site or as a site variant: the command never carries a site
+		Blueprints.Entry pinEntry = Blueprints.entry(bpId);
+		dev.larattalabs.architect.api.Refusal pin = SiteFit.pinnedNoSite(bpId, pinEntry == null ? null : pinEntry.json());
+		if (pin != null) {
+			src.sendFailure(Component.literal(pin.message() + " (Library ⋯ › Site variant here…)"));
+			return 0;
+		}
 		String args;
 		try {
 			args = StringArgumentType.getString(ctx, "args").trim();

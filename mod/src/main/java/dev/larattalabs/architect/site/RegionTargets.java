@@ -1683,7 +1683,10 @@ public final class RegionTargets {
 			return new int[] {a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt(), a.get(3).getAsInt()};
 		}
 		if (i.key.startsWith("road:")) {
-			for (var road : l.ir().roads()) {
+			// ((SA, A3) a revision's road is in its revision's IR as its lot is (IG): a plan/0 revision's added streets are not in the base IR,
+			// so without it a grown road found no box, never waited, and in survival was put down over an earlier stage's unbuilt cells)
+			var ri = dev.larattalabs.architect.region.Revisions.liveFor(l, i.stage);
+			for (var road : ri.ir().roads()) {
 				if (i.key.equals("road:" + road.id())) {
 					int x0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
 					for (int[] p : road.points()) {
