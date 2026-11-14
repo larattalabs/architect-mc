@@ -36,6 +36,8 @@ gate anything:
 
 - **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
+- **Unit tests per slice:** `node tools/unit-scope.mjs --run` (the tests for the files you changed plus their direct dependents;
+  full suites for shared core; docs/GATES.md "Scoped unit suites"). The full suites run once, at the batch merge.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`, `../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
