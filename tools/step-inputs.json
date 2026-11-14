@@ -120145,7 +120145,10 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
+    "mod/build.gradle",
     "mod/gradle.properties",
+    "mod/gradle/wrapper/gradle-wrapper.properties",
+    "mod/settings.gradle",
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "tools/api-baselines.json",
     "tools/api-baselines.mjs",
@@ -120174,6 +120177,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatem5fc.mjs",
+    "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
     "tools/lib/gatem5qt.mjs",
@@ -120211,6 +120215,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/examples/cabin/**",
+    "kit/lib/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -120261,6 +120266,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5fk.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     }
    ],
    "env": [
@@ -120387,6 +120396,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -120554,6 +120564,7 @@
     "kit/test/d3-parity.mjs",
     "kit/test/districts-d3-parity.test.mjs",
     "kit/test/fc.test.mjs",
+    "kit/test/fixtures/fk/fk_hall.mjs",
     "kit/test/fixtures/plan/valid/v30_walled_village.json",
     "kit/test/fixtures/regions/eval-worker.mjs",
     "kit/test/fixtures/regions/mega_bench.golden.json",
@@ -120561,6 +120572,7 @@
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/vocab/voc-designs.mjs",
     "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/fk.test.mjs",
     "kit/test/gr-a.test.mjs",
     "kit/test/gr-parity.mjs",
     "kit/test/gr-parity.test.mjs",
@@ -120607,6 +120619,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatem5fc.mjs",
+    "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
     "tools/lib/gatem5qt.mjs",
@@ -120639,6 +120652,7 @@
    "globs": [
     "kit/bibles/**",
     "kit/designs/**",
+    "kit/lib/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -120688,6 +120702,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5fk.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     }
    ],
    "env": [
@@ -120760,6 +120778,8 @@
     "tools/gate6dgr.mjs"
    ],
    "closure": [
+    "apitest/build.gradle",
+    "devserver/build.gradle",
     "kit/build.mjs",
     "kit/check.mjs",
     "kit/lib/bible.mjs",
@@ -120799,6 +120819,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -120966,6 +120987,7 @@
     "kit/test/d3-parity.mjs",
     "kit/test/districts-d3-parity.test.mjs",
     "kit/test/fc.test.mjs",
+    "kit/test/fixtures/fk/fk_hall.mjs",
     "kit/test/fixtures/plan/valid/v30_walled_village.json",
     "kit/test/fixtures/regions/eval-worker.mjs",
     "kit/test/fixtures/regions/mega_bench.golden.json",
@@ -120973,6 +120995,7 @@
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/vocab/voc-designs.mjs",
     "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/fk.test.mjs",
     "kit/test/gr-a.test.mjs",
     "kit/test/gr-parity.mjs",
     "kit/test/gr-parity.test.mjs",
@@ -122261,6 +122284,7 @@
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
     "kit/lib/write.mjs",
+    "kit/regions/adopted_village.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/districts.mjs",
     "kit/regions/flat_village.mjs",
@@ -122278,6 +122302,7 @@
     "kit/schemas/plan.json",
     "kit/schemas/site-spec.json",
     "kit/schemas/vocab-1.json",
+    "kit/test/ad.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/d3-helpers.mjs",
     "kit/test/d3-parity.mjs",
@@ -122297,6 +122322,7 @@
     "kit/test/gr-parity.test.mjs",
     "kit/test/h-helpers.mjs",
     "kit/test/ig.test.mjs",
+    "kit/test/igb.test.mjs",
     "kit/test/irr.test.mjs",
     "kit/test/plan-helpers.mjs",
     "kit/test/plan-p0-asks.test.mjs",
@@ -122681,6 +122707,7 @@
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
     "kit/lib/write.mjs",
+    "kit/regions/adopted_village.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/districts.mjs",
     "kit/regions/flat_village.mjs",
@@ -122698,6 +122725,7 @@
     "kit/schemas/plan.json",
     "kit/schemas/site-spec.json",
     "kit/schemas/vocab-1.json",
+    "kit/test/ad.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/d3-helpers.mjs",
     "kit/test/d3-parity.mjs",
@@ -122717,6 +122745,7 @@
     "kit/test/gr-parity.test.mjs",
     "kit/test/h-helpers.mjs",
     "kit/test/ig.test.mjs",
+    "kit/test/igb.test.mjs",
     "kit/test/irr.test.mjs",
     "kit/test/plan-helpers.mjs",
     "kit/test/plan-p0-asks.test.mjs",
@@ -123130,6 +123159,7 @@
     "kit/lib/vocab/rarity.mjs",
     "kit/lib/vocab/survival.mjs",
     "kit/lib/write.mjs",
+    "kit/regions/adopted_village.mjs",
     "kit/regions/crater_works.mjs",
     "kit/regions/districts.mjs",
     "kit/regions/flat_village.mjs",
@@ -123147,6 +123177,7 @@
     "kit/schemas/plan.json",
     "kit/schemas/site-spec.json",
     "kit/schemas/vocab-1.json",
+    "kit/test/ad.test.mjs",
     "kit/test/coa.test.mjs",
     "kit/test/d3-helpers.mjs",
     "kit/test/d3-parity.mjs",
@@ -123166,6 +123197,7 @@
     "kit/test/gr-parity.test.mjs",
     "kit/test/h-helpers.mjs",
     "kit/test/ig.test.mjs",
+    "kit/test/igb.test.mjs",
     "kit/test/irr.test.mjs",
     "kit/test/plan-helpers.mjs",
     "kit/test/plan-p0-asks.test.mjs",
