@@ -203,7 +203,10 @@ export async function registerPS(steps, h) {
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {}; // the feed's targets, before any is built
     const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
     check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `single: fed until built (${f.waves} waves): ${f.last.st.view.state}`);
-    const ids = [...new Set(st0.feedOrder ?? [])];
+    const st1 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    const ss = await call('dev.sites.state', {}, 30_000).catch(() => ({}));
+    const siteIds = JSON.stringify(ss).match(/"(s\d+)"/g)?.map((x) => x.slice(1, -1)) ?? [];
+    const ids = [...new Set([...(st0.feedOrder ?? []), ...(st1.feedOrder ?? []), ...Object.keys(st1.targets ?? {}), ...siteIds])];
     const roads = ids.filter((id) => !/^s\d/.test(id));
     const sites = ids.filter((id) => /^s\d/.test(id));
     log(`  single: targets ${json(ids)} (roads ${json(roads)}, sites ${json(sites)})`);
