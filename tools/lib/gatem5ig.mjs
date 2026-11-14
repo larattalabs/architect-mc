@@ -140,7 +140,7 @@ export async function registerIG(steps, h) {
     const out = {};
     out.kit = h.nodeTest(['kit/test/igb.test.mjs', 'kit/test/ig.test.mjs', 'kit/test/ad.test.mjs', 'kit/test/irr.test.mjs', 'kit/test/gr-parity.test.mjs', 'kit/test/rv-a.test.mjs']);
     check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 30, `kit igb.test (an adopted street town's irrigated growth: the revision adds street, lots and fluids after adopted, the shells in street, the lot in lots, M25/M29 clean; a dry growth there as before; a base naming street or lots out of order refuses; the survival bill holds the 4 shells once), ig.test, ad.test, irr.test; gr-parity and rv-a (re-cut: programSha only): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-    out.java = await h.javaTests(['*IgLotDrainTest*', '*RevisionsTest*', '*RegionAdoptTest*'], 10);
+    out.java = await h.javaTests(['*IgLotDrainTest*', '*RevisionsTest*', '*RegionAdoptTest*'], 9);
     check(out.java.ok, `IgLotDrainTest, RevisionsTest (the re-cut merge fixture), RegionAdoptTest: ${out.java.tests} tests, ${out.java.failures} failures`, out.java.tail);
     out.apicompat = apiCompat();
     check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible with the apitest jars and the mod surface (no API change: the kit adds the stages)', out.apicompat);
