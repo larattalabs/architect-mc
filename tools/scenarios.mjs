@@ -44,8 +44,10 @@ const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
 // (6c MP) a scenario may name its short id (its golden and run dirs); else the id's first word
 const short = (sc) => sc.short ?? sc.id.split('_')[0];
-// (7c BR) the golden a run compares with and cuts: a brief run's own (goldens/<short>-br), else the scenario's
-const gkey = (sc) => sc.goldenKey ?? short(sc);
+// (7c BR) the golden a run cuts: a brief run's own (goldens/<short>-br), else the scenario's; the golden it compares with: that one,
+// or for a brief run with none of its own the scenario's (a brief that plans the program run's IR needs no second golden)
+const cutKey = (sc) => sc.goldenKey ?? short(sc);
+const gkey = (sc) => (sc.goldenKey && fs.existsSync(path.join(SCEN, 'goldens', `${sc.goldenKey}.json`)) ? sc.goldenKey : short(sc));
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -1081,16 +1083,16 @@ async function golden(id, runDir) {
   if (!ts.workersSame) throw new Error('1 and 4 workers differ');
   const run0 = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   if (run0.brief) sc.goldenKey = (await br()).briefGoldenKey(short(sc)); // (7c BR) a brief run cuts goldens/<short>-br
-  const gDir = path.join(SCEN, 'goldens', gkey(sc));
+  const gDir = path.join(SCEN, 'goldens', cutKey(sc));
   fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
   for (const f of ['ir.json', 'survey.bin', 'meta.json']) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   // ((6c S3) the monastery's fountain reads the plan's biome grid and the bible's fluids: kept beside the golden's inputs)
   if (isS3(sc)) for (const f of ['biomes.json', 'bible.json']) if (fs.existsSync(path.join(planDir, f))) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   for (const f of fs.existsSync(path.join(planDir, 'blobs')) ? fs.readdirSync(path.join(planDir, 'blobs')) : []) fs.copyFileSync(path.join(planDir, 'blobs', f), path.join(gDir, 'blobs', f));
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
-  const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${gkey(sc)}/${run0.brief ? ` (7c BR: the plan of the scenario's one-line brief through ${run0.brief.via === 'compose' ? 'Regions.compose' : 'Regions.design'}, ${run0.brief.program} ${JSON.stringify(run0.brief.params)})` : ''}`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };
-  fs.writeFileSync(path.join(SCEN, 'goldens', `${gkey(sc)}.json`), `${JSON.stringify(g, null, 1)}\n`);
-  return { irSha: ts.irSha, tiles: Object.keys(ts.tiles).length, golden: gkey(sc) };
+  const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${cutKey(sc)}/${run0.brief ? ` (7c BR: the plan of the scenario's one-line brief through ${run0.brief.via === 'compose' ? 'Regions.compose' : 'Regions.design'}, ${run0.brief.program} ${JSON.stringify(run0.brief.params)})` : ''}`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };
+  fs.writeFileSync(path.join(SCEN, 'goldens', `${cutKey(sc)}.json`), `${JSON.stringify(g, null, 1)}\n`);
+  return { irSha: ts.irSha, tiles: Object.keys(ts.tiles).length, golden: cutKey(sc) };
 }
 
 /** `check --phase 6b`: every scenario of the phase has a natural run whose metrics pass and an approval for its evidence. */
