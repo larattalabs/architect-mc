@@ -209,18 +209,20 @@ export async function registerRL(steps, h) {
     const rcell = road?.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4))?.slice(0, 3);
     // paused, so neither builder puts its cell back before the player does
     for (const id of [road?.target, lot].filter(Boolean)) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000).catch(() => null);
-    const mineAndPlace = async (at, item) => {
-      const m = await call('dev.site.mine', { pos: at }, 30_000);
-      const id = String(m.was ?? '').match(/Block\{([^}]+)\}/)?.[1];
+    const mineAndPlace = async (at, item, id) => {
+      // the player's break of a build's block is guarded (not the owner): the cell is cleared by command (no record, no drop), as a mined one
+      await cmd(`/setblock ${at[0]} ${at[1]} ${at[2]} minecraft:air`);
+      const m = { mined: (await call('dev.pt.at', { at }, 10_000)).state === 'minecraft:air' };
       const u = (await call('dev.pt.uses', { ops: [{ item: item ?? id, at, on: [at[0], at[1] - 1, at[2]], face: 'up', placer: 'J1Placer' }] }, 30_000)).results?.[0];
       return { at, was: id, mined: m.mined, placed: u };
     };
-    if (rcell) out.road = { target: road.target, ...(await mineAndPlace(rcell)) };
+    const rid = rcell ? (await call('dev.pt.at', { at: rcell }, 10_000)).state : null; // the road block standing there
+    if (rcell) out.road = { target: road.target, ...(await mineAndPlace(rcell, rid, rid)) };
     check(!!out.road?.placed?.tracked && out.road.placed.state === out.road.was, `${tag} F10 roads: a player mined ${road?.target ?? 'no road'}'s paid cell ${json(rcell)} (${out.road?.was}) and placed the same block back (PT record ${out.road?.placed?.tracked})`, out.road);
     // JR-b's residual: rs_hut's one copper block, mined and replaced by the player with another stage (a CU equivalent of the target)
     const cells = await call('dev.site.cells', { site: lot }, 30_000);
     const cu = Object.entries(cells).find(([, b]) => b === 'minecraft:copper_block')?.[0]?.split(',').map(Number);
-    if (cu) out.cu = await mineAndPlace(cu, 'minecraft:exposed_copper');
+    if (cu) out.cu = await mineAndPlace(cu, 'minecraft:exposed_copper', 'minecraft:copper_block');
     check(!!out.cu?.placed?.tracked && out.cu.placed.state === 'minecraft:exposed_copper', `${tag} JR-b residual: a player replaced ${lot}'s copper block ${json(cu)} with exposed copper (a CU equivalent; PT record ${out.cu?.placed?.tracked})`, out.cu);
     const before = await audit();
     const paid = paidSum(before.ledger);
