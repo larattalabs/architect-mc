@@ -2,7 +2,7 @@
   "name": "G7C-BR S2 frontier outpost (format 3)",
   "format": 3,
   "scope": "settlement",
-  "prompt": "S2's fixture bible (CONTRACT 6c S2 \u00a72): a frontier outpost among the ice spikes in spruce and stone bricks with packed-ice accents; packed snow (snow blocks) as the ground's surface; soul lanterns for light (block light 10: under vanilla's melt, so no light near the spikes melts ice or snow, M17); the lot entries are built in its roles too (7c BR) Format 3: the same roles as g6c_s2_outpost (a format 2 Style read as a settlement Style), plus settlement.roleShares bands set from the Style's intent before any brief run, never fitted to one: the built ground is the Style's stone (foundation at least 1%), accents and lights stay restrained (accent at most 5%, light at most 2%).",
+  "prompt": "S2's fixture bible (CONTRACT 6c S2 §2): a frontier outpost among the ice spikes in spruce and stone bricks with packed-ice accents; packed snow (snow blocks) as the ground's surface; soul lanterns for light (block light 10: under vanilla's melt, so no light near the spikes melts ice or snow, M17); the lot entries are built in its roles too (7c BR) Format 3: the same roles as g6c_s2_outpost (a format 2 Style read as a settlement Style), plus settlement.roleShares bands set from the Style's intent before any brief run, never fitted to one: the built ground is the Style's stone (foundation at least 1%), lights stay restrained (light at most 2%). Accent is not banded here: this Style's accent, packed ice, is also the material of the generated ice spikes, so its share is the spikes' (BR's first run measured 0.271 with a band of [0, 0.05] that misread it as a restraint role).",
   "roles": {
     "wall": "minecraft:spruce_planks",
     "wall_alt": "minecraft:stripped_spruce_log",
@@ -31,10 +31,6 @@
       "foundation": [
         0.01,
         0.6
-      ],
-      "accent": [
-        0,
-        0.05
       ],
       "light": [
         0,

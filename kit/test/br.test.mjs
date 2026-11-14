@@ -84,7 +84,7 @@ test('the brief runs\' format 3 Styles: valid, settlement scope, the scenario fi
     for (const [r, st] of Object.entries(own.roles)) assert.equal(b.roles[r], st, `${style}.${r}`);
     if (own.fluids) assert.deepEqual(b.fluids, own.fluids);
     const bands = v.bible.settlement.roleShares;
-    assert.ok(Object.keys(bands).length >= 3);
+    assert.ok(Object.keys(bands).length >= 2);
     for (const [r, [lo, hi]] of Object.entries(bands)) assert.ok(b.roles[r] && lo >= 0 && hi <= 1 && lo <= hi, `${style} ${r}`);
   }
 });

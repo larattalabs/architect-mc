@@ -815,6 +815,21 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, distant: (e.classes.distant ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'distant' } : m)) };
   };
+  // (7c BR) the sculpt's leaves decaying (S5/S6's natural land is written with vanilla /fill, whose leaves stand at distance 7, not
+  // persistent, until a neighbour update re-counts them; the build and the undo update them, and vanilla's random ticks then decay
+  // those that are truly far from a log): an unclassified mismatch where such a leaf became air, at a cell the plan never writes and in
+  // no lot box, is classed `leafdecay` (a world class, by what the change is). Anything else, and any such leaf in a lot box, stays.
+  const leafDecayOf = (e) => {
+    if (!e || flat || !isSB(sc) || !(e.classes?.none > 0)) return e;
+    const inLot = (x, y, z) => (ir.lots ?? []).some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number);
+      return /^minecraft:\w+_leaves\[/.test(String(m.was)) && /distance=7/.test(String(m.was)) && /persistent=false/.test(String(m.was)) && /^minecraft:air$/.test(String(m.now))
+        && !(vw.flags(x, y, z) & F_WRITTEN) && !inLot(x, y, z); });
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, leafdecay: (e.classes.leafdecay ?? 0) + moved.length };
+    if (!classes.none) delete classes.none;
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'leafdecay' } : m)) };
+  };
   // (6c F2) amethyst growth (the world's own random ticks on a budding block): an unclassified mismatch where air or cave air
   // became a small, medium or large amethyst bud or a cluster, at a cell the plan never writes, is classed `amethyst` (a world
   // class, by what the change is)
@@ -834,7 +849,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const meltOf = (e) => (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : meltClass(e, vw, F_WRITTEN));
   // (6c S3, CONTRACT S3 §6) S3's natural run: s3Classify (the mod's growth, grazed and live only at unwritten cells; freeze, flow and melt
   // by kind; farfluid; nothing within 6 of a body classed)
-  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
+  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : leafDecayOf(meltOf(distantOf(amethystOf(flowOf(freezeOf(exact))))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, ...(roleShares ? { roleShares } : {}), organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: sc.paSpendUsd ?? 0, paid: sc.paSpendUsd !== undefined, approval: 'pending' });
@@ -987,6 +1002,8 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   // (7c BR) a brief run's own row: the brief reached a plan through the API (the program it landed on recorded)
   if (brief) rows = [(await br()).briefRow(brief, sc.program), ...rows.filter((r) => r.id !== 'brief')];
+  // (7c BR) the role shares row (SETTLEMENTS §16.3) kept through a scenario's own bar set (S2's and S3's rebuild the rows)
+  if (roleShares) { const rs = M.bars({ palette, roleShares }).find((r) => r.id === 'roleShares'); if (rs && !rows.some((r) => r.id === 'roleShares')) rows = [...rows, rs]; }
   const metrics = { scenario: sc.id, ...(brief ? { brief } : {}), worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);

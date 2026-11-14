@@ -113465,7 +113465,20 @@
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
     "tools/lib/scenario-br.mjs"
-   ]
+   ],
+   "data": [
+    "eval/fixtures/bibles/mosswater/**",
+    "kit/test/fixtures/s3-live/**",
+    "kit/test/fixtures/sf/**",
+    "scenarios",
+    "scenarios/goldens/s3/**",
+    "scenarios/s1_floating_islands.json",
+    "scenarios/s2_ice_spikes.json",
+    "scenarios/s3_monastery.json",
+    "scenarios/s5_treehouses.json",
+    "scenarios/s6_cave_city.json"
+   ],
+   "verified": "20261114-212845-change br-unit"
   },
   "br-s1": {
    "classes": [
@@ -113847,6 +113860,9 @@
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
     "tools/scenarios.mjs"
+   ],
+   "data": [
+    "rustic"
    ]
   },
   "br-s2": {

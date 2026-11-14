@@ -29,6 +29,7 @@ export default function s3v2Cliffs(ctx) {
   const faces = r.affordances(probe, { kinds: ['cliff_face'] });
   const cx = claim.minX + Math.floor((claim.maxX - claim.minX + 1) / 2), cz = claim.minZ + Math.floor((claim.maxZ - claim.minZ + 1) / 2);
   r.anchor('entrance', [cx, survey.heightAt(cx, cz) + 1, cz]);
+  r.anchor('spawn', [cx, survey.heightAt(cx, cz) + 1, cz]);
   if (!faces.length) { r.meta.s3v2 = { faces: 0, lots: [] }; return r; } // (the first plan reads the volume; the second places the lots)
   const tall = faces.filter((a) => a.box.maxY - a.box.minY + 1 >= P.minHeight && NORMAL[a.normal]);
   tall.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
