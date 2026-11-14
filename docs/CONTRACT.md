@@ -31876,7 +31876,7 @@ the region's group, their crates join the owner's stockpile first, and its growt
 - The judged quantity at every kill: **items in = items out against the saved state**: stock + every paid record + dropped + returned, per
   item, before and after (as jr-crash and rl-crash judge), and E-flat where a removal or undo should restore the land.
 
-### 7. Gate (strict tier, $0; ports 8930/8931, verifier 8912/8913): step `sad-survival` (+ `sad-crash`), chain `sad`
+### 7. Gate (strict tier, $0; ports 8930/8931, verifier 8928/8929, `--shards 1`): step `sad-survival` (+ `sad-crash`), chain `sad`
 
 | # | Check | Bar |
 |---|---|---|
