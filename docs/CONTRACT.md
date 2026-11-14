@@ -30365,6 +30365,28 @@ connector-mode item, without a placed site house); multiplayer (the player path 
 **Gallery (glance, not awaited):** `artifacts/gate-runs-cx/20261113-110146-change/gate7c-cx/shots/`: `cx-marker.png` (the ends, the dotted line, the HUD
 with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 
+### Slice AU as built (branch `slice/AU` off main 64a53dfd; versions NEXT; $0, sim only; light, the sandbox and lint verifier-reviewed; recorded 2026-11-14)
+
+- **API (additive, NEXT):** `Regions.authorProgram` (RegionsImpl -> `region/Authors`) completes with the id of a design of kind `Design.Kind.PROGRAM` (appended); that id is the program id. `result` holds `outcome` (AUTHORED: `sha`, `source`, `reason`; NOT_SHOWN: the last `findings`), plus `rounds`, `history` and `cost`. `AuthorRequest.EXT_OWNER`, `EXT_STYLE` and `EXT_ROUNDS` (1-4). Feature `programAuthoring` comes from the helper's `region.author`. `AUTHORED_STALE` is answered.
+- **Rounds** (`sidecar/src/author.ts`, on CO's harness; no critic): at most 4 structured rounds, each answering `{source, reason}`, with prompt text in `kit/prompts/author.md`. The checker never takes the program's word (`Regions.authorCheck`):
+  1. the lint runs in the sidecar (`kit/lib/plan/authored.mjs`: the realise lint's forms, the plan-path bans and the closed kit imports, token-based, template expressions scanned);
+  2. the plan runs in the plan sandbox, writing only `out/`;
+  3. `region.mjs check` runs in a second sandboxed process; its errors and its M3 support rules block.
+- **Install and freeze:** an AUTHORED source is installed in `<world>/architect/authored/<id>.mjs` (+ `.json`) before DESIGN_DONE. It installs once, only if well formed and hashing to its sha, owned by EXT_OWNER. A plan names it as a zone program `{template: "authored", params: {id, sha, params?}}`, which is whole-claim, so it must be the plan's sole zone. `program.authored` is now supported.
+- **Checks against moved sources:** checkPlan sends the owner's named sources. The kit refuses a moved sha AUTHORED_STALE and an uninstalled id NO_PROGRAM (`reason` codes appended). The artifact freezes `authored [{part, id, sha}]`. realiseApproved re-hashes the file and refuses AUTHORED_STALE (detail the id) before it writes anything.
+- **Sandbox hardening** (every plan child; found by the verifier and by probes, each now a unit):
+  - code generation from strings is off;
+  - every dns entry point is refused, and no dgram Socket can be made;
+  - process.kill, _kill, _debugProcess and os.setPriority are refused;
+  - plan-args are kept outside the plan dir, and the link pass writes only its sub-dir.
+- **CO's gaps done:** the anchors and builds were already CO's; AU adds repairing only while a part is refused or malformed, and the oscillation stop (`result.stopped`).
+- **Ran:** full suites at 38059e40 (shared core: devserver/build.gradle): kit 1358/1358, sidecar 902/902, Gradle 1207 (0 failed, 1 skipped); step-inputs (390 steps) and api-compat --baselines (8) clean. Gate: au-unit PASS 2/0 (20261114-075946); au-author PASS 11/0 (20261114-090151 at 3fdba64c, after two driver fixes and one product fix: an opKey adopting a design that ended in another world now re-sends its upsert, so this world installs it). gate-verifier review (sandbox and lint): FAIL, FAIL, then PASS at 38059e40.
+- **Leftovers:**
+  - the plan check of an authored plan runs the program in the kit's check process, as for any programs-dir program, so its answers are trusted as plan code (the claim, protection and journal stay the mod's);
+  - `loadAuthoredDir` imports every staged `*.mjs`;
+  - CO's `vocab/1#compact`, `{waits, summary}` and the $0 wouldFit street fix;
+  - a model's programs are measured by PAY's P3.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
