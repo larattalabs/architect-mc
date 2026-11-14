@@ -8,6 +8,7 @@
 // Floor convention: floor row y = groundY-1 (replaces the terrain's top block), feet row y = groundY (sits on the
 // terrain surface). `origin` shifts every design coordinate, so a design can be written relative to its main walls
 // while the template keeps a margin for overhangs, porches and paths.
+import { normalizeFill } from './fill.mjs';
 import { nbt } from './nbt.mjs';
 import { BLOCKS, normalize, qualify, isCube, familyOf, info } from './blocks.mjs';
 import { fitOf } from './siteFits.mjs';
@@ -535,6 +536,8 @@ export class Blueprint {
     this.ports = [];
     /** namespaced extra data for other mods ({"<modid>:<key>": any}); Architect never interprets it */
     this.ext = { ...(o.ext ?? {}) };
+    /** (M5 FK) the declared filled containers and lock cells (lib/fill.mjs), template coordinates; null: none */
+    this.fillSpec = null;
     const og = o.origin ?? [0, 0, 0];
     this.ox = og[0];
     this.oy = og[1];
@@ -1075,6 +1078,16 @@ export class Blueprint {
    * A named connector port (R5) on cell (x, y, z) (design coordinates), facing a horizontal direction. `kind`: one of
    * PORT_KINDS or `<modid>:<kind>`. The checker validates the cell (inside the template), the facing and the kind.
    */
+  /**
+   * (M5 FK, S-M5-3) Declares the containers Architect fills once after every core cell stands, and the lock cells it holds locked until
+   * then (lib/fill.mjs; docs/CONTRACT.md "### FK contract"). Design coordinates. Honoured on given-program entries only. Call once.
+   */
+  fill(spec) {
+    if (this.fillSpec) throw new Error('fill: declared twice (one bp.fill per build)');
+    this.fillSpec = normalizeFill(spec, [this.ox, this.oy, this.oz]);
+    return this;
+  }
+
   port(name, kind, x, y, z, facing) {
     this.ports = this.ports.filter((p) => p.name !== name);
     this.ports.push({ name, kind, x: x + this.ox, y: y + this.oy, z: z + this.oz, facing });
@@ -1237,6 +1250,8 @@ export class Blueprint {
     if (this.request !== undefined) s.request = this.request;
     if (this.ports.length) s.ports = this.ports.map((p) => ({ ...p }));
     if (Object.keys(this.ext).length) s.ext = structuredClone(this.ext);
+    // (M5 FK) absent for every design without a fill, so their bytes do not move
+    if (this.fillSpec) s.fill = structuredClone(this.fillSpec);
     // phase 4b: named parts (R3) and an open type's checker profile (R4)
     if (this.partNames.length) s.parts = this.partBoxes();
     if (this.profile !== undefined) s.profile = [...this.profile];

@@ -75,6 +75,7 @@ export function mirrorProps(name, props, axis) {
  * has written everything; `finalize()` (run by entries()) recomputes the pane, fence and wall connections afterwards.
  */
 export function mirrorBlueprint(bp, axis = mirrorAxisOf(bp.front)) {
+  if (bp.fillSpec) throw new Error(`${bp.id}: a design with a fill (lib/fill.mjs) can't be mirrored (its declared cells and lock states would move)`);
   const S = axis === 'x' ? bp.size.x : bp.size.z;
   const flipCell = (x, y, z) => (axis === 'x' ? [S - 1 - x, y, z] : [x, y, S - 1 - z]);
   const cells = new Map();

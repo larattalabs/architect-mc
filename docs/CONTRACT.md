@@ -30771,12 +30771,15 @@ A given program declares the fill from its build, so a variant with other params
   components, and not air. `count` is 1..the item's max stack.
 - **`locks`**: 0..64 (`Limits.FILL_LOCKS_MAX`). Each `at` is a distinct template cell that is not a declared container. The template holds
   its **final, unlocked** state. `locked` overrides properties of the same block: the locked state is the template's block with those
-  properties set. It must be a valid state of that block and cost the same items (`Cells.cost`; a lever powered or unpowered, a hopper
-  enabled or not). So a lock is a state change, never a different block: it is billed once, as its template cell, and there is no lock item
-  to dupe.
+  properties set. It must be a valid state of that block and cost the same items (`Cells.cost`). So a lock is a state change, never a
+  different block: it is billed once, as its template cell, and there is no lock item to dupe. **A lock must hold (Steward's review A):**
+  only a property vanilla keeps as written is a lock, in this slice a **lever's `powered`**. A property vanilla recomputes (a hopper's
+  `enabled` on a neighbour update, a torch's `lit` on its tick, a wire's power, a repeater's or comparator's `powered`) is refused.
 - **Refused** by the kit's checker as the new rule `fill` (`fill: ...` lines; `findingRule` learns them, so `ProgramRefused.detail` is
   `fill` with typed findings). The cases: a cell outside the box, a keep or reserved cell, a non-container cell, a bad slot or count, a
-  component item, a duplicate, a lock on a container, a locked state that is not a state of the same block, a cost change, or over a bound.
+  component item, a duplicate, a lock on a container, a locked state that is not a state of the same block, a lock on a property that
+  isn't kept (A), or over a bound. The mod refuses what the kit can't know: an unknown item, a count over the item's max stack, a cost
+  change.
 - **Only given-program entries.** `Designs.fromProgram` and `variant` keep the sidecar's `fill`. The Java side honours `fill` only on an
   entry that records `givenProgram`; any other entry carrying one refuses placement (`NOT_ALLOWED`: "a fill is only for given-program
   entries"). The design agent's path never writes one.
@@ -30786,9 +30789,12 @@ A given program declares the fill from its build, so a variant with other params
 - `Limits.FILL_CONTAINERS_MAX = 64`, `Limits.FILL_LOCKS_MAX = 64`.
 - Feature `"filledContainers"` on the Java side, and on the helper as `design.fill`.
 - `ProgramRefused` detail `fill`. There is no new `Reason`.
-- **No new method in this draft.** SITE_BUILT now means built, filled and unlocked (section 3). `Sites.view` and `outstanding` show the fill
-  through the existing fields (the items in the outstanding until the fill). **Question for Steward:** do you need a phase read
-  (`Sites.fillPhase(siteId)`: WAITING / FILLED / UNLOCKED)? I add it only if you ask.
+- **No new method.** SITE_BUILT now means built, filled and unlocked (section 3). `Sites.view` and `outstanding` show the fill through
+  the existing fields (the items in the outstanding until the fill).
+- **A typed pre-fill wait (Steward's review B):** `SiteWait` gains `@Nullable String blocked` and `List<BlockPos> blockedCells` (the old
+  constructor kept: `null`, empty). While a declared container is not empty at the fill (3(b)), the target's wait (`Sites.view`'s
+  `siteWait`, `Sites.waiting`, SITE_WAITING) is `waiting` true with `blocked` = `SiteWait.FILL_BLOCKED` (`"fill_blocked"`) and those
+  cells. It clears when the fill runs.
 - **Refusals** (`NOT_ALLOWED`, each with a plain message):
   - placing a fill entry as a **crate-fed survival site** (its own construction crate). In survival a fill builds from a stockpile: the
     fill's commit point is in the stockpile ledger (section 4). Steward's lots are stockpile targets.
@@ -30810,10 +30816,11 @@ A given program declares the fill from its build, so a variant with other params
 3. **Filled once** (the **fill step**, after every queue cell is built and a rescan confirms it stands, before `complete()`):
    - (a) **Intent.** The site record is written with `architect_mc:fillState {phase: FILLING, key: fill:<id>@<placedAt>}` (the queue and
      site files are written synchronously).
-   - (b) **Pre-checks.** If any declared container is not empty, the site waits (IDLE, a message to the owner naming the cells). It is
-     never filled over cargo. If the stock can't pay the whole fill, it waits STARVED.
+   - (b) **Pre-checks.** If any declared container is not empty, the site waits with the typed wait `fill_blocked` and those cells
+     (section 2), and a message to the owner names them. It is never filled over cargo. If the stock can't pay the whole fill, it waits STARVED.
    - (c) In **one server tick** with nothing in between: every lock cell is written to its locked state, the purse pays the fill, and each
-     container is written with its declared stacks.
+     container is written with its declared stacks, `setChanged` and `updateNeighbourForOutputSignal` (Steward's review C: comparators
+     re-read it).
    - (d) **Commit.** `Stockpiles.saveWithWorld` (players, the chunks flushed, then the ledger). The ledger write carries the **fill
      marker** `fills[fill:<id>@<placedAt>]` (an additive format-2 field) together with the charge. That ledger write is the commit point.
    - (e) The site record goes to `phase: FILLED`.
@@ -30860,7 +30867,8 @@ For each site whose record says `FILLING`:
   - the custody is dropped in the same ledger change, then PS's `saveWithWorld`.
 - **Replay.** A resumed removal rewrites the container cells (Architect's `FLAGS` skip block-entity side effects, so nothing drops) and
   never captures again: the custody is in the saved ledger, and a credited key is never credited twice.
-- **A removal that ends unwritten** (a later blocker, a journal error): the custody is written back into its containers, free, and dropped.
+- **A removal that ends unwritten** (a later blocker, a journal error): the custody is written back into its containers, free, and dropped
+  (with `setChanged` and the comparator update, C).
   At load, a custody whose site still stands and has no removal in the queue file is written back the same way.
 - **Creative** removal: no custody and no refund. The contents go with the cell's write. The blocker rule is the same.
 - A single site's Remove and `deconstruct` (`Sites.remove` → `Builder.dropDeconstruction`) take custody the same way, in the tick they
@@ -30915,6 +30923,17 @@ and after, as JR's and RL's gates measure). No mint, no loss.
    a lever that powers the lock line.
 2. Is SITE_BUILT after the unlock enough, or do you want `Sites.fillPhase`?
 3. Is "a fill builds from a stockpile in survival" (crate-fed survival sites refused) acceptable?
+
+#### Steward review: accepted with A-C (2026-11-13; these win over the text above)
+
+- **A. Locks must hold:** a lock only on a property vanilla keeps (a lever's `powered`); a hopper's `enabled` and a torch's `lit` refused by
+  the checker as `fill`. M4 locks the hall's input line with a lever on its first hopper, released at the unlock. (Folded in above.)
+- **B. A typed pre-fill wait:** `SiteWait.blocked` `fill_blocked` with the cells (section 2). (Folded in above.)
+- **C. Comparator update:** the fill's write and the custody's write-back call `setChanged` and `updateNeighbourForOutputSignal`. (Folded in.)
+- **Answers:** no `Sites.fillPhase` (SITE_BUILT after the unlock is enough). Crate-fed survival fill sites refused: accepted. **The survival
+  route of the fill items:** M4 supplies the filter items and fillers through the stockpile target; they are in the target's outstanding from
+  placement, delivered to the stockpile like any item, and charged under the target's key at the fill. The fillers are plain items (M4's).
+- Everything else accepted as written.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
