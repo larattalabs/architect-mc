@@ -1907,7 +1907,13 @@ public final class Stockpiles {
 			if (r == null) {
 				continue;
 			}
-			r.rescan(level, false, true); // never loads a chunk
+			boolean family = r.soilFamily;
+			r.soilFamily = Infras.get(i.id()) != null; // (BC) a removed (pending) target matches strictly: the land put back is not its paid block
+			try {
+				r.rescan(level, false, true); // never loads a chunk
+			} finally {
+				r.soilFamily = family;
+			}
 			Map<String, Integer> one = new TreeMap<>();
 			var shadow = RegionOverwrites.shadowedCells(srv, level, i.group(), i.id(), i.placedAt(), r, false); // (XR) a later writer's
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
