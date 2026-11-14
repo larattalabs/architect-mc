@@ -17,6 +17,7 @@ gate anything:
   per slice, batched merges, 4 gate runs, `nice -n 10` unit suites, 5 min between in-game starts, 10-15 line as-builts;
   scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
   the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
+  the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
 - a Steward RC only for API changes;
 - the full set runs nightly.
 

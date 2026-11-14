@@ -52,6 +52,11 @@ and replace stricter habits where they differ (the DEV MODE section below still 
 9. **Timing benches are report-only** (same decision). Benches such as the forms-island evaluation cost move out of the pass/fail
    suites into a report step that records the number and the load; past its bound a bench flags, it does not fail the slice. The
    nightly keeps tracking them.
+10. **Load-gate bounds** (Noah via parent session, 2026-11-13: "lets ensure that is 15 min max from now on, with high at least 72
+   cap"). `slots.load.maxWaitMin` stays at 15 or less and `slots.load.max1` at 72 or more (0, `--no-load-wait`, stays allowed).
+   Raising max1 or shortening the wait is fine; anything outside needs Noah. `loadConfig` (tools/lib/turbo.mjs) clamps a config or
+   env override (`GATE_LOAD_MAX`, `GATE_LOAD_WAIT_MAX_MIN`) outside the bounds, with a warning; the nightly runs through gate-run, so
+   the same bounds hold there.
 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
