@@ -196,6 +196,58 @@ export async function registerRL(steps, h) {
   }
 
   /**
+   * (J1) On RL5's built town, before its removal: F10 for roads (a player mines one of a road's paid cells and places the same block back:
+   * a PT record) and JR-b's residual case (a player tills a lot's built dirt cell to farmland, a CU equivalent with a PT record). Then the
+   * region removed: the road cell's block drops at the cell as the player's and is not refunded; the farmland stays (the undo's holdsOurs),
+   * neither dropped nor refunded; the refund is the paid records less those two cells' cost.
+   */
+  async function playerCells(tag, W, lot) {
+    const out = {};
+    const rs = await call('dev.rs.cells', { region: W.region }, 300_000);
+    const road = (rs.targets ?? []).find((t) => /^[cr]\d/.test(t.target) && (t.cells ?? []).some((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4)));
+    const rcell = road?.cells.find((c) => (c[3] & 2) && !(c[3] & 1) && !(c[3] & 4))?.slice(0, 3);
+    if (rcell) {
+      const m = await call('dev.site.mine', { pos: rcell }, 30_000);
+      const id = String(m.was ?? '').match(/Block\{([^}]+)\}/)?.[1];
+      const u = id ? (await call('dev.pt.uses', { ops: [{ item: id, at: rcell, on: [rcell[0], rcell[1] - 1, rcell[2]], face: 'up', placer: 'J1Placer' }] }, 30_000)).results?.[0] : null;
+      out.road = { target: road.target, at: rcell, id, mined: m.mined, placed: u };
+    }
+    check(!!out.road?.placed?.tracked && out.road.placed.state === out.road.id, `${tag} F10 roads: a player mined ${road?.target ?? 'no road'}'s paid cell ${json(rcell)} (${out.road?.id}) and placed the same block back (PT record ${out.road?.placed?.tracked})`, out.road);
+    const cells = await call('dev.site.cells', { site: lot }, 30_000);
+    const dirt = Object.entries(cells).filter(([, b]) => b === 'minecraft:dirt' || b === 'minecraft:grass_block').map(([k]) => k.split(',').map(Number));
+    for (const at of dirt.slice(0, 40)) {
+      const u = (await call('dev.pt.uses', { ops: [{ item: 'minecraft:wooden_hoe', at, on: at, face: 'up', placer: 'J1Placer' }] }, 30_000)).results?.[0];
+      if (u?.state === 'minecraft:farmland') { out.cu = { at, tracked: u.tracked, r: u }; break; }
+    }
+    check(!!out.cu?.tracked, `${tag} JR-b residual: a player tilled ${lot}'s built dirt cell ${json(out.cu?.at)} to farmland (a CU equivalent; PT record ${out.cu?.tracked}; ${dirt.length} dirt cell(s))`, out.cu);
+    const before = await audit();
+    const paid = paidSum(before.ledger);
+    const back0 = G.plus(before.stock ?? {}, before.ledger?.refundOverflow ?? {});
+    await call('dev.region.remove', { region: W.region, requester: G.OWNER }, 3_600_000).catch(() => null);
+    let st;
+    for (let i = 0; i < 900; i++) {
+      st = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
+      if (!st?.view?.state || ['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state)) break;
+      await L.sleep(2000);
+    }
+    await L.settle(3000);
+    const after = await audit();
+    const refund = G.minus(G.plus(after.stock ?? {}, after.ledger?.refundOverflow ?? {}), back0);
+    const want = { ...paid };
+    if (out.road?.id) want[out.road.id] = (want[out.road.id] ?? 0) - 1;
+    if (out.cu) want['minecraft:dirt'] = (want['minecraft:dirt'] ?? 0) - 1;
+    const near = out.road ? await call('dev.items.near', { pos: out.road.at, radius: 1.5 }, 10_000) : {};
+    const cuNow = out.cu ? await call('dev.site.mine', { pos: out.cu.at, pickup: false }, 30_000).catch(() => null) : null; // read by mining it (after the removal)
+    out.removed = { state: st?.view?.state ?? 'gone', paid: sum(paid), refund: sum(pos(refund)), want: sum(pos(want)), diff: G.minus(refund, pos(want)), roadDrops: near.items ?? {}, cuAfter: cuNow?.was ?? null };
+    log(`  ${tag}: removed ${out.removed.state}; refund ${sum(pos(refund))} vs paid ${sum(paid)} less the two player cells ${sum(pos(want))}; diff ${json(out.removed.diff)}; at the road cell ${json(near.items)}; the tilled cell ${out.removed.cuAfter}`);
+    check(!st?.view?.state || st.view.state === 'REMOVED', `${tag}: the town removed: ${out.removed.state}`);
+    check(!out.road?.id || (near.items?.[out.road.id] ?? 0) >= 1, `${tag} F10 roads: the player's block dropped at the road cell as theirs (${json(near.items)})`, out.removed);
+    check(!out.cu || /farmland/.test(out.removed.cuAfter ?? ''), `${tag} JR-b residual: the farmland stays the player's after the removal (${out.removed.cuAfter}): not dropped as dirt`, out.removed);
+    check(G.same(pos(refund), pos(want)), `${tag}: the removal refunded the paid records less the two player cells, item for item (${sum(pos(refund))} = ${sum(pos(want))}; before J1 the road cell came out of the road's record)`, out.removed);
+    return out;
+  }
+
+  /**
    * One case: the lot paused, `fraction` of what the targets lack delivered, the ledger saved at once (/save-all flush, as an autosave:
    * the lot's items are in the saved stock, not consumed), the lot resumed, it builds after the save until built or starved, 12 s for the
    * chunks' eager saves, then the halt (`mode`); the saved ledger off the disk; restarted.
@@ -247,10 +299,12 @@ export async function registerRL(steps, h) {
     const unpaidAtLoad = rc ? sum(rc.charged) + sum(rc.owes) : null;
     if (mode === 'now') check(rc && rc.aheadCells > 0, `${tag}: the reconcile found ${lot}'s cells built after the save standing unpaid: ${rc ? `${rc.aheadCells} cell(s), charged ${sum(rc.charged)}, owes ${sum(rc.owes)} (${rc.owedCells} cell(s)), reopened ${rc.reopened}` : 'none'} (before RL: ${unpaidAtLoad ?? 0} units free)`, rc);
     if (playerBlock) check(rc && (rc.playerCells ?? 0) >= 1, `${tag}: the player's block in ${lot}'s cell was told apart at the reconcile: ${rc?.playerCells ?? 0} player cell(s) left uncharged (before J1: charged to the stock), charged ${sum(rc?.charged)} for the ${(rc?.aheadCells ?? 0) - (rc?.playerCells ?? 0)} built by Architect`, { rc, placed });
+    let pc = null;
+    if (playerBlock) pc = await playerCells(tag, W, lot);
     if (restAfterSave) check(rc && rc.owedCells > 0 && rc.reopened, `${tag}: the saved stock was short: ${rc?.owedCells} cell(s) owed and the built lot builds again (reopened ${rc?.reopened})`, rc);
     await L.leaveWorld();
     const { a1, ...rest } = r;
-    return { ...n, placed, reconciled: rc, unpaidAtLoad, ...rest };
+    return { ...n, placed, playerCells: pc, reconciled: rc, unpaidAtLoad, ...rest };
   }
 
   steps.rlcrash = async () => {

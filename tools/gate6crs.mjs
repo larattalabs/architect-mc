@@ -1268,6 +1268,7 @@ steps.rsc = async () => {
   await cmd('/gamerule tntExplosionDropDecay false');
   // ---- pistons
   await cmd('/gamemode survival');
+  await cmd('/item replace entity @s weapon.mainhand with minecraft:diamond_pickaxe'); // stone-class free cells drop only to a pickaxe
   await L.call('dev.rs.freeDrops', { off: true }, 30_000);
   const p0 = await L.call('dev.rs.piston', { at: A, phase: 'push' }, 30_000);
   await sleep(1500);
@@ -1277,7 +1278,7 @@ steps.rsc = async () => {
   await sleep(1500);
   const p0drop = G.minus(await ground(), g0);
   out.P0 = { pushed: p0r, broken: b0, dropped: p0drop };
-  check(p0r.extended === true && /air/.test(p0r.at) && /air/.test(b0.after ?? ''), `rsc P0 (before J1, the hooks off): the piston pushed the free cell ${json(A)} (${p0.at}) up (now ${p0r.at} / above ${p0r.above}); mined there it dropped ${json(p0drop)}: ${Object.values(p0drop).reduce((a, b) => a + b, 0)} item(s) minted`);
+  check(p0r.extended === true && /piston_head/.test(p0r.at) && /air/.test(b0.after ?? '') && Object.keys(p0drop).length > 0, `rsc P0 (before J1, the hooks off): the piston pushed the free cell ${json(A)} (${p0.at}) up (now ${p0r.at} / above ${p0r.above}); mined there it dropped ${json(p0drop)}: ${Object.values(p0drop).reduce((a, b) => a + b, 0)} item(s) minted`);
   await L.call('dev.rs.freeDrops', { off: false }, 30_000);
   const held0 = (await L.call('dev.rs.freeDrops', {}, 30_000)).pistonHeld;
   const p1 = await L.call('dev.rs.piston', { at: B, phase: 'push' }, 30_000);
