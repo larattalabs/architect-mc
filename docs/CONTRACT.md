@@ -31908,3 +31908,25 @@ the region's group, their crates join the owner's stockpile first, and its growt
 - **S-SAD-3. The mode.** The world's mode at adoption decides (§2), and older adopted regions stay creative. Default: yes.
 - **S-SAD-4. Hardcore towns.** Nothing in this slice differs for Hardcore (the same stockpile and construction rules). Default: they adopt as
   Supplied ones.
+
+### Slice SAD as built (branch `slice/SAD` off main bdc1cad1; versions NEXT; $0; DEV MODE, strict; recorded 2026-11-14)
+
+- **Adoption in survival** (`RegionAdopt`): an adoption in a survival world makes a survival region (`rec.survival {on, adopted}`; `RegionView.build` counts the adopted construction sites, S-SAD-2). Construction sites adopt with their run, book and paid records (per target, so the ledger doesn't move). A site still fed by a standing crate refuses until `adoptCrates`. A creative world refuses construction sites; a building target needs the stockpile. No API change.
+- **adoptCrates** (`Stockpiles.adopt`, every world through Steward's `Stockpiles.ensure`): a BUILT site on a standing crate is keyed a capped paid record and its crate reference cleared, but it joins no feed. **This fixes a crash loss on main since JR-b:** the records were saved before the ledger, so a crash in between lost the crate's stock and placed counts. The ledger and the world now save first and the records after (kill points SAC1, SAC2). The world's start (`repairJoinedCrates`, first in `reconcileAtStart`) clears any reference to a crate the ledger already joined. It runs before RL's reconcile but changes nothing RL reads: a target repaired at start had no book (it was crate-fed at the last save), so RL skips it until its next save. On an ordinary start it matches nothing and saves nothing (`StockpileRepairSADTest`). `StockLedger` is unchanged (its existing `credited(key)`).
+- **Kit** (`revise.mjs`): a growth on an adopted base (stages exactly `['adopted']`) puts its props in their own `props` stage, V's order. In one stage a paid lamp went down before the verges, and survival refused the verge (PARTIAL); in creative the verge overwrote the lamp. **Pre-SAD adopted bases, creative included, now grow with a props stage.** TileCheck is unchanged. The gr/land.json and rv/merge.json parity fixtures differ only in irSha/programSha.
+- **Dev/gate:** `dev.ad.settlement` `mode: construction`, `sharedCrate`, `crateAt`; killAt SAC1..SAC2; steps `sad-unit`, `sad-survival`, `sad-crash`, `sad-instant` (`tools/lib/gatemsad.mjs`, chain `sad`).
+- **Checks:** Gradle build 1251 tests, 0 failures (1 skipped); kit 1388/1390 (2 skipped); step-inputs 404 clean; api-compat `--baselines` 8/8; sidecar untouched. Final run `gate-runs-sad/20261114-214319-change` at 9db9459c, **11/11 PASS**: sad-unit 2/0, sad-survival 48/0, sad-crash 24/0, sad-instant 10/0, igb-unit 3/0, igb-adopted 25/0, gr-survival 12/0, rs-survival-smoke 40/0, jr-crash 24/0, jr-crash-v063 23/0, rl-crash 66/0. Earlier `--only` runs 1-5 found the issues above.
+- **Leftovers:** construction roads in an adopted region are covered by code path only (the gate's street pieces are instant: a construction road reports no rows to feed); regions adopted before SAD stay creative; a BUILT site whose crate is gone keeps its reference (refund dropped at the site, as before).
+
+| case | measured | verdict |
+|---|---|---|
+| SAC1 (adoptCrates halted before its first save) | crate stands with its ledger; stockpile as saved | neither |
+| SAC2 (halted between the saves) | stock moved once (3 units), 2 records as saved; refs cleared at start; a later adoptCrates credits nothing | neither |
+| BUILT house_3 on the shared crate | record 509; removed after adoption: back 509 | neither |
+| building lot after adoption | outstanding 330 = consumed 330; build 100 | neither |
+| growth, unsaved halt mid-feed + reconcile | consumed since the saved baseline 1520 = quote 1520 | neither |
+| undo halted at RVU2, nothing saved | back 1520 = saved consumption 1520; E-flat 0, no water | neither |
+| AD3 / AD4 halts | rolled back / forward; entries 6 = 6, next id 12 = 12; ledger as saved | neither |
+| un-adopt, then undo of old build b2 (crate-fed) | back 1018 = the two records; instant b1 back 0; E-flat 0 | neither |
+| instant town grown in survival | consumed 231 = quote; undo 231; lamp stands (2/2 cells); remove refunds 0, E-flat 0 | neither |
+| region remove | back 509 = paid records; E-flat 0 | neither |
