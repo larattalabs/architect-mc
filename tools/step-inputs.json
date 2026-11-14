@@ -17571,6 +17571,7 @@
     "kit/lib/fluids/waterfall.mjs",
     "kit/lib/fluids/wet.mjs",
     "kit/lib/fluids/world.mjs",
+    "kit/lib/forms/archSpan.mjs",
     "kit/lib/forms/bigForms.mjs",
     "kit/lib/forms/cave.mjs",
     "kit/lib/forms/coral.mjs",
