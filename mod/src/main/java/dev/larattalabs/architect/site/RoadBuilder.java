@@ -458,6 +458,7 @@ public final class RoadBuilder {
 				continue;
 			}
 			r.blockedSince.remove(i);
+			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			if (regionRoad && !now.isAir()) {
 				// (XR) a region's road writing over a block another writer of the region (a target, a road, a lot) owns and paid for: its

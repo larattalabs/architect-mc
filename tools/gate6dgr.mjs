@@ -1019,6 +1019,13 @@ steps.look = async () => {
   await registerPS(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, cellsOf, diff });
 }
 
+// ------------------------------------------------------------------ (slice BC+) bcrelay: tools/lib/gatebc.mjs
+
+{
+  const { registerBC } = await import('./lib/gatebc.mjs');
+  await registerBC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, cellsOf });
+}
+
 const name = process.argv[2];
 if (!steps[name]) {
   console.error(`usage: node tools/gate6dgr.mjs <${Object.keys(steps).join(' | ')}>`);

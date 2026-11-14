@@ -450,6 +450,21 @@ public final class Builder {
 		/** (RL) The last {@link #settleOwed} left a standing owed cell the stock could not pay. */
 		boolean owedShort;
 
+		/** (BC, S-M5-10) The cells this run has paid for: a second payment of one is logged ({@link #paidAgain}). */
+		final BitSet paidCells = new BitSet();
+
+		/** (BC, S-M5-10) Records that cell {@code i} is paid now; logs it when this run paid it before (it held {@code now}). */
+		void paidAgain(int i, BlockState now) {
+			if (cost.get(i).isEmpty()) {
+				return;
+			}
+			if (paidCells.get(i)) {
+				dev.larattalabs.architect.Architect.LOGGER.warn("{}: cell {} ({}) paid again ({}): it held {}", name == null ? id : name, i, pos(i).toShortString(),
+					cost.get(i), now);
+			}
+			paidCells.set(i);
+		}
+
 		/** (RL) The cells whose state this run has read (a rescan, a placement): what a save's book may say of them. */
 		final BitSet seen = new BitSet();
 
@@ -1736,6 +1751,7 @@ public final class Builder {
 				}
 				freeChanged = true;
 			}
+			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			put(level, r, i, p, true);
 			if (j >= 0) {
