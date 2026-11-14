@@ -20,6 +20,7 @@ fork and does not track upstream.
 | 2026-10-04 | Mod id `architect_mc`: the Modrinth slug `architect` is taken (an old biome mod). The display name stays Architect for now. |
 | 2026-10-05 | **Publishing the API artifact:** GitHub Packages from CI on release tags (`v*`), as `dev.larattalabs:architect_mc`. It's free for public packages. GitHub's Maven registry needs a token even to read public packages: Steward's CI reads it with GITHUB_TOKEN once the package grants steward-mc access, and outside builders need a PAT with `read:packages`. Modrinth Maven (anonymous reads) is the option if Architect ships there. |
 | 2026-10-04 | Branding: "Powered by Claude" is fine. The name must never include "Claude Code". |
+| 2026-11-13 | **7c spend approved: $65 total, a hard cap** (Noah via parent session: "Approve $65"). It is the paid batch **PAY**'s CONTRACT 7c §4 plan (AU, PM and BR are $0 sim slices). Shares as §4 estimates: P1 $5, P2 $29, P3 $11, P4 $3, P5 $3, P6 $6 (optional, only if the ledger reads at most $50 after P5), R $8. Stop and ask Noah (through the parent session) before any item goes past its share by more than 20%, or before a step whose cap would take the total past $65. Order: the ranked queue (Status and parked items). |
 
 ## Architecture
 
@@ -1694,7 +1695,7 @@ cells, IRR's sources):
      gaps; after SA and FK).
   6. **DX** CONTRACT restructure and docs tidy (light, docs only; at a quiet point after SA and FK merge).
   7. **SS** save spikes (strict, small; after FK). **GI2** gate infra 2 (light, small; any time).
-  8. **AU** then **PM**, **BR** then **PAY**: 7c's remaining rows 13-16 (spend needs Noah, ~$65 in all).
+  8. **AU** then **PM**, **BR** then **PAY**: 7c's remaining rows 13-16 (AU, PM and BR at $0; PAY's $65 approved 2026-11-13, Decisions).
   9. **J2** journal backlog (strict, own contract; UMT F9/DPT/F10/PTS/UC; after J1).
   10. **UI** (light; Noah's screenshots; lab-ui L-0.5 first), **SP2** unread Style and bible params, **CS** composite and site edges,
       **CN** connectors in game, **R2** 7c-region-2, **DR** diagnose-and-repair (strict, own contract).
