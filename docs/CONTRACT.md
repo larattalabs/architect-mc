@@ -30747,6 +30747,175 @@ Runs 1 and 2 (`20261112-233703`, `20261113-012134`) failed only on the driver: i
 `/gamerule randomTickSpeed` (26.3's is `random_tick_speed`), bone meal clicked on the farmland, and vanilla's farmland under the cobblestone
 drying to dirt on the reload read as a change. Run 2 already showed every FC behaviour above (16 ok).
 
+### FK contract (S-M5-3 filled containers; slice `slice/FK` off origin/main 5868f62f; DRAFT for Steward's review, 2026-11-13)
+
+Steward's S-M5-3 (MODULES.md 3.2, 6), with the survival-safety audit's F12 rules folded in. A given-program entry (GP) may declare
+**filled containers** and **lock cells**. Architect builds the entry with its locks locked and its containers empty, fills the containers
+once in one keyed, journaled step after every core cell stands, then unlocks. At removal it takes the containers' contents into its custody
+in one tick and refunds them as construction. Strict slice (journal, billing, crash replay). $0. Versions `NEXT`. The API is additive.
+
+#### 1. The declaration (kit, on the program's Blueprint)
+
+A given program declares the fill from its build, so a variant with other params gets its own:
+
+    bp.fill({
+      containers: [ { at: [x, y, z], items: [ { slot: 0, id: 'minecraft:cobblestone', count: 18 }, ... ] }, ... ],
+      locks:      [ { at: [x, y, z], locked: { powered: 'true' } }, ... ]
+    })
+
+- **Coordinates** are template cells (design coordinates, like `bp.set`). They are written to the sidecar as `fill: {containers, locks}`.
+  No IR or golden moves for a blueprint without a fill.
+- **`containers`**: 1..64 (`Limits.FILL_CONTAINERS_MAX`, Steward's bound). Each `at` is a distinct template cell holding a hopper, chest,
+  trapped chest, barrel, dropper or dispenser (a double chest is two cells, declared separately). Shulker boxes are excluded: their item
+  carries its contents. `items` holds 1..size entries. `slot` is distinct and inside the container's size. `id` is a plain item: no
+  components, and not air. `count` is 1..the item's max stack.
+- **`locks`**: 0..64 (`Limits.FILL_LOCKS_MAX`). Each `at` is a distinct template cell that is not a declared container. The template holds
+  its **final, unlocked** state. `locked` overrides properties of the same block: the locked state is the template's block with those
+  properties set. It must be a valid state of that block and cost the same items (`Cells.cost`; a lever powered or unpowered, a hopper
+  enabled or not). So a lock is a state change, never a different block: it is billed once, as its template cell, and there is no lock item
+  to dupe.
+- **Refused** by the kit's checker as the new rule `fill` (`fill: ...` lines; `findingRule` learns them, so `ProgramRefused.detail` is
+  `fill` with typed findings). The cases: a cell outside the box, a keep or reserved cell, a non-container cell, a bad slot or count, a
+  component item, a duplicate, a lock on a container, a locked state that is not a state of the same block, a cost change, or over a bound.
+- **Only given-program entries.** `Designs.fromProgram` and `variant` keep the sidecar's `fill`. The Java side honours `fill` only on an
+  entry that records `givenProgram`; any other entry carrying one refuses placement (`NOT_ALLOWED`: "a fill is only for given-program
+  entries"). The design agent's path never writes one.
+
+#### 2. Java API (additive, `Since NEXT`)
+
+- `Limits.FILL_CONTAINERS_MAX = 64`, `Limits.FILL_LOCKS_MAX = 64`.
+- Feature `"filledContainers"` on the Java side, and on the helper as `design.fill`.
+- `ProgramRefused` detail `fill`. There is no new `Reason`.
+- **No new method in this draft.** SITE_BUILT now means built, filled and unlocked (section 3). `Sites.view` and `outstanding` show the fill
+  through the existing fields (the items in the outstanding until the fill). **Question for Steward:** do you need a phase read
+  (`Sites.fillPhase(siteId)`: WAITING / FILLED / UNLOCKED)? I add it only if you ask.
+- **Refusals** (`NOT_ALLOWED`, each with a plain message):
+  - placing a fill entry as a **crate-fed survival site** (its own construction crate). In survival a fill builds from a stockpile: the
+    fill's commit point is in the stockpile ledger (section 4). Steward's lots are stockpile targets.
+  - **moving** a fill site.
+  - a **construction delta** (`versionOf`, swaps) to or from a fill entry.
+  - an **overwrite** of a declared container or lock cell by another writer of the region (XR) is refused at plan check.
+
+#### 3. The lifecycle (survival, a stockpile target)
+
+1. **Built locked.** A lock cell's write target is its locked state. Containers are written empty (as today). During the build a lock cell
+   counts as built when it holds its block in any state, so a player's flip doesn't stall the site; the fill step re-asserts the lock.
+2. **Billed and delivered before the fill.**
+   - From placement until the fill commits, the fill's items (summed over the containers) are part of the target's **outstanding**. The
+     stockpile's accept rule then takes their deliveries, and the target waits STARVED while they are short.
+   - They are charged at the fill, by the feed's purse under the target's credit key (`site:<id>@<placedAt>`): `consumed` and
+     `paid[key]` together, as a cell is paid (F12: "fill items billed under the target's credit key").
+   - The fill is Architect's own write of plain stacks into the containers, never through a crate. PS's component rule doesn't touch
+     it: the items are plain by the declaration's rule and come out of the stock by id.
+3. **Filled once** (the **fill step**, after every queue cell is built and a rescan confirms it stands, before `complete()`):
+   - (a) **Intent.** The site record is written with `architect_mc:fillState {phase: FILLING, key: fill:<id>@<placedAt>}` (the queue and
+     site files are written synchronously).
+   - (b) **Pre-checks.** If any declared container is not empty, the site waits (IDLE, a message to the owner naming the cells). It is
+     never filled over cargo. If the stock can't pay the whole fill, it waits STARVED.
+   - (c) In **one server tick** with nothing in between: every lock cell is written to its locked state, the purse pays the fill, and each
+     container is written with its declared stacks.
+   - (d) **Commit.** `Stockpiles.saveWithWorld` (players, the chunks flushed, then the ledger). The ledger write carries the **fill
+     marker** `fills[fill:<id>@<placedAt>]` (an additive format-2 field) together with the charge. That ledger write is the commit point.
+   - (e) The site record goes to `phase: FILLED`.
+4. **Then unlocked.** Each lock cell is written to its template state **with neighbour updates** (the drops still suppressed), so the
+   circuit reacts. Its journal `after` is updated in the same journal transaction, so the undo, the standing score and LC see it as ours.
+   Then `phase: UNLOCKED`, then `complete()`. So **SITE_BUILT**, `RegionsImpl.constructionBuilt` (a region's PLACED) and RL's "a target
+   not building keeps no book" all come after the unlock.
+5. **A cancel before the fill commits** charges and writes no fill items, so it refunds none. Delivered stock stays stock.
+
+**Creative / instant placement:** the placement's own commit writes the locked states and the empty containers. In the same tick the fill
+writes the declared stacks (no bill) and unlocks. A crash before that leaves `phase: FILLING`, and the load finishes it. A container that
+already holds exactly its declared contents is not written again. Any other content waits as above.
+
+#### 4. Crash replay of the fill (at load, with the stockpiles loaded; before players act)
+
+For each site whose record says `FILLING`:
+- **The fill marker is in the saved ledger** (the commit reached disk): the fill is paid. **It is never written again**, even into a
+  container that is now empty: a player may have emptied a locked hopper, with their inventory saved. Go to FILLED, then unlock.
+- **No marker** (the commit never reached disk): the charge is not on disk.
+  - A declared container holding **exactly** its declared contents means the chunks were flushed but the ledger wasn't. It is cleared
+    with no credit, then the fill runs as new.
+  - A container holding anything else is left untouched, and the site waits as in 3(b).
+- `FILLED` (the commit and the record are on disk): unlock (idempotent: a lock cell already in its template state is skipped).
+
+#### 5. Removal: custody, capture and refund
+
+- **Ours or cargo** (`Sites.removalBlockers`, all removal paths): a declared container of a FILLED/UNLOCKED fill site is **not a blocker**
+  while its contents are a sub-multiset of its declaration (per item id; plain stacks, in any slots). Anything more is **cargo** and
+  blocks the removal, named as today: another item, a component stack, or more of a declared item, even of the filter's own. Before the
+  fill, every declared container must be empty, as any template container.
+- **Custody, in the tick the credit is fixed.** A group, stage, region or revision removal checks blockers over ticks, and its world
+  writes come ticks after `prepareDeconstruct` fixes its credit (`decCredit`). In the tick `prepareDeconstruct` runs for a fill site,
+  Architect:
+  - re-reads each declared container (cargo now ends the removal unwritten, with the blocker message);
+  - **takes** its contents out of the world (no transfer, no vanilla drop);
+  - records them in the stockpile ledger as the key's **custody** (`custody[site:<id>@<placedAt>]`, additive format 2);
+  - saves with the world (`saveWithWorld`).
+  The containers are then empty until the undo writes them. Through-traffic (an item mid-transfer) is either in custody or, if it is more
+  than declared, cargo that refuses the removal.
+- **The refund.** When the member's credit books (`Groups.credit`, once per key), the custody joins the block refund as one credit:
+  - **F12 min(actual, declared):** custody per item is at most the declared count, so an emptied hopper refunds only what was left;
+  - **F12 cap:** `credit(key, blocks + custody)` is capped by `paid[key]` and taken out of it. The fill is in that record, so the cap covers
+    the capture;
+  - the custody is dropped in the same ledger change, then PS's `saveWithWorld`.
+- **Replay.** A resumed removal rewrites the container cells (Architect's `FLAGS` skip block-entity side effects, so nothing drops) and
+  never captures again: the custody is in the saved ledger, and a credited key is never credited twice.
+- **A removal that ends unwritten** (a later blocker, a journal error): the custody is written back into its containers, free, and dropped.
+  At load, a custody whose site still stands and has no removal in the queue file is written back the same way.
+- **Creative** removal: no custody and no refund. The contents go with the cell's write. The blocker rule is the same.
+- A single site's Remove and `deconstruct` (`Sites.remove` → `Builder.dropDeconstruction`) take custody the same way, in the tick they
+  compute the refund.
+
+#### 6. Readers that judge a lock cell by phase
+
+These readers match a lock cell by its block, in any state of it: `Run.matches` and the rescan; RL's book and its reconcile at load (an
+unlocked lock is not "lost"); `Sites.standing`, LC and the world-start Reconcile; and `prepareDeconstruct`'s tally (refunded as its
+template cell). The journal `after` holds the locked state until the unlock, then the template state.
+
+#### 7. QT
+
+`Quotes.lot` adds `fill:<lot>` for a bound entry with a fill, in survival: the summed declared items, exact. A creative quote stays empty.
+`quoteApproved` is the same. qt-growth's bar (consumed equals the quote) then covers the fill.
+
+#### 8. Dev hooks and kill points (TEST, `dev.fk.*`)
+
+`dev.fk.halt {at}` halts the server (`dev.stockpile.halt`, nothing saved) at a named point:
+
+| Point | Where | Expected after the restart |
+|---|---|---|
+| `FK1` | after the FILLING record (3a), before the charge and the write | the fill runs once; consumed = the fill; no double charge |
+| `FK2` | after the charge and the write in memory (3c), before the save | on disk nothing happened; it runs once (no mint) |
+| `FK3` | inside the commit: the chunks flushed, then a halt before the ledger write | the world is ahead: containers full, no marker. Cleared and filled once; items in = items out |
+| `FK4` | after the commit (3d), before the unlock | not filled again; unlocked; consumed = the fill once |
+| `FKC1` | removal: custody saved, before the undo's world write | the removal resumes; the custody is credited once; nothing drops |
+| `FKC2` | removal: the world written, before the credit | credited once (blocks + custody), capped by paid |
+
+Each case's bar: **items in = items out against the saved state** (stock + paid + custody + containers + the player's inventory, before
+and after, as JR's and RL's gates measure). No mint, no loss.
+
+#### 9. Gate (planned)
+
+- **fk-unit:** kit `fk.test` (the declaration and every refusal); Java `FilledContainersTest` (the spec, a lock's cost rule, the
+  sub-multiset rule, custody min/cap, the replay branches) and `ApiFKTest` (limits, feature, defaults).
+- **fk-survival** (headless, 8922/8923): a survival town grown by a lot bound to a given-program `fk_hall` (a small filter hall: hoppers,
+  comparators, a lever lock, 4 declared hoppers, 2 chests), fed from the stockpile.
+  - consumed = the quote, the fill included;
+  - the fill written once, locks unlocked, SITE_BUILT after the unlock;
+  - removal capture (refund = blocks + fill, capped);
+  - a hopper the player emptied refunds the rest only;
+  - a hopper with one extra item of its own kind refuses removal as cargo (the input stopped first, so no through-traffic).
+- **fk-creative:** the same entry placed instant; filled and unlocked; removal exact.
+- **fk-crash:** FK1-FK4, FKC1 and FKC2 as above, with no save after an autosave.
+- Re-run `jr-crash`, `rl-crash` and `rs-survival-smoke`.
+- The strict verifier re-runs fk-survival and fk-crash on 8924/8925.
+
+#### Questions for Steward
+
+1. Does the lock shape (the same block in another state, the template holding the unlocked state) fit M0's measured circuit? For example,
+   a lever that powers the lock line.
+2. Is SITE_BUILT after the unlock enough, or do you want `Sites.fillPhase`?
+3. Is "a fill builds from a stockpile in survival" (crate-fed survival sites refused) acceptable?
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
