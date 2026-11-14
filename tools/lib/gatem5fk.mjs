@@ -210,16 +210,6 @@ export async function registerFK(steps, h) {
     out.consumed = consumed;
     check(r0.last.st.view.state === 'PLACED' && G.same(consumed, q.bom), `the town PLACED; consumed equals the quote item for item, the fill included (consumed ${sum(consumed)} units, quote ${sum(q.bom)}; differ ${json(G.minus(consumed, q.bom))})`, { consumed, quote: q.bom });
     check(G.same(only(s.paid, FK), FILL), `the fill billed under the site's key ${s.key}: its paid record holds ${json(only(s.paid, FK))}`);
-    // (XR) another writer over a declared cell is refused before any write: a cell site over a hopper, a site layered over the lever
-    const [hx, hy, hz] = s.containers[2].at.split(',').map(Number);
-    const [lx, ly, lz] = s.locks[0].at.split(',').map(Number);
-    const ow1 = await call('dev.cells.place', { kind: 'test:fk', cells: [[hx, hy, hz, 'minecraft:stone']], overlap: 'LAYER', force: true }, 120_000).catch((e) => ({ error: String(e) }));
-    const ow2 = await call('dev.pl.place', { blueprint: 'rs_shed', origin: [lx - 1, ly - 2, lz - 1], overlap: 'layer', force: true, owner: G.OWNER }, 300_000).catch((e) => ({ error: String(e) }));
-    await L.settle(1500);
-    const sx = await fk(site);
-    out.overwrite = { cells: ow1, site: ow2 };
-    check(ow1.placed !== true && /filled container at/.test(json(ow1)) && ow2.placed !== true && /(filled container|lock cell) at/.test(json(ow2)) && exactly(sx) && leverUnlocked(sx),
-      `another writer over the fill's cells is refused before any write: a cell site over the hopper at ${hx},${hy},${hz} (${json(ow1).slice(0, 160)}); a site layered over the lever (${json(ow2).slice(0, 160)}); the hoppers and the lever as they were`, out.overwrite);
     // the player takes 8 flint (ours: still within the declaration); one more clay ball than declared in another (cargo)
     const [hA, hB] = [s.containers[0].at, s.containers[1].at];
     await hand(hA, { take: { [FLINT]: 8 } });
@@ -272,6 +262,19 @@ export async function registerFK(steps, h) {
     const c = p.site ? await fk(p.site) : {};
     out.creative = { placed: p.placed, site: p.site, state: c };
     check(p.placed && c.state === 'INSTANT' && c.phase === 'UNLOCKED' && exactly(c) && leverUnlocked(c), `creative: fk_hall placed instant (${p.site}): filled at once (${(c.containers ?? []).map((x) => json(x.holds)).join(' ')}), unlocked (${(c.locks ?? []).map((l) => l.state).join(',')}), phase ${c.phase}`, c);
+    // (XR) another writer over a filled site's declared cell is refused before any write: a cell site over a hopper, a site layered over
+    // the lever (a creative world: both writers may place instantly here)
+    if (c.containers?.length) {
+      const [hx, hy, hz] = c.containers[2].at.split(',').map(Number);
+      const [lx, ly, lz] = c.locks[0].at.split(',').map(Number);
+      const ow1 = await call('dev.cells.place', { kind: 'test:fk', cells: [[hx, hy, hz, 'minecraft:stone']], overlap: 'LAYER', force: true }, 120_000).catch((e) => ({ error: String(e) }));
+      const ow2 = await call('dev.pl.place', { blueprint: 'rs_shed', origin: [lx - 1, ly - 2, lz - 1], overlap: 'layer', force: true, mode: 'instant' }, 300_000).catch((e) => ({ error: String(e) }));
+      await L.settle(1500);
+      const cx = await fk(p.site);
+      out.overwrite = { cells: ow1, site: ow2 };
+      check(ow1.placed !== true && /filled container at/.test(json(ow1)) && ow2.placed !== true && /(filled container|lock cell) at/.test(json(ow2)) && exactly(cx) && leverUnlocked(cx),
+        `another writer over the fill's cells is refused before any write: a cell site over the hopper at ${hx},${hy},${hz} (${json(ow1.refusals ?? ow1).slice(0, 200)}); a site layered over the lever (${json(ow2.refusals ?? ow2).slice(0, 200)}); the hoppers and the lever as they were`, out.overwrite);
+    }
     const rmc = p.site ? await call('dev.pl.remove', { site: p.site }, 600_000) : {};
     await L.settle(1500);
     const hc1 = await hashOf(area);

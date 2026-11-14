@@ -354,6 +354,13 @@ public final class Sites {
 		Site b = built.record().withPin(built.pin()).withConstruction(cs).withPlacing(false);
 		replace(server, b);
 		SiteJournal.updateMeta(id, b.toJson());
+		if (cs == null) {
+			Fills.creative(server, level, b); // (M5 FK) an instant site of a fill entry: filled in the tick it is placed
+			Site nb = get(id);
+			if (nb != null) {
+				b = nb;
+			}
+		}
 		lastNote = built.note();
 		Architect.LOGGER.info("Placed site {} ({}) at {} rotation {}: box {}, journal box {}{}{}", id, bp.id(), origin.toShortString(), b.rotation(),
 			Anchors.str(b.box()), Anchors.str(b.restoreBox()), force ? " (forced)" : "", built.note() == null ? "" : "; " + built.note());
