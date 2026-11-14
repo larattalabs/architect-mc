@@ -30935,6 +30935,16 @@ and after, as JR's and RL's gates measure). No mint, no loss.
   placement, delivered to the stockpile like any item, and charged under the target's key at the fill. The fillers are plain items (M4's).
 - Everything else accepted as written.
 
+### Slice FK as built (branch `slice/FK` off origin/main 5868f62f, main 64a53dfd merged; versions NEXT; $0; strict; recorded 2026-11-14)
+
+- **Shape as contracted, with:** kit `bp.fillContainers({containers, locks})` (the kit's `bp.fill` is the box-fill helper); sidecar member `fill`; `Limits.FILL_CONTAINERS_MAX`/`FILL_LOCKS_MAX` 64; feature `filledContainers` (helper `design.fill`); `ProgramRefused` detail `fill`; `SiteWait.blocked`/`blockedCells` (`fill_blocked`; the 1.15.0 constructor kept). Code: `site/Fills.java`, `StockLedger` `filled`/`custody` (format 2, additive).
+- **Additions:** `SiteWait.nextNeeded` lists the fill's items while it waits; a pending fill keeps reserving its stock (`Run.pending()`); the fill tick re-asserts each lock with neighbour updates; "ours" also reads the ledger's marker; an XR overwrite (a site placement, road, tile or cell site) of a fill cell is refused NOT_ALLOWED before any write (the coordinator's ruling); the synchronous `Sites.place` fills an instant site too.
+- **Gate** (`tools/lib/gatem5fk.mjs`; final run `artifacts/gate-runs-fk/20261114-063511-change` at 7f7eec86): fk-unit PASS, fk-survival PASS 17/0 (quote = consumed 370 = 370 with fill:cottage_1; `fill_blocked` with the cell; filled once, unlocked, then BUILT; cargo refused unwritten; refund 362 = consumed − 8 flint taken; creative filled; both overwrites refused), fk-crash PASS 50/0 (FK1-FK3 the fill charged once, FK4 nothing more; FKC1/FKC2 refund 370 = 370; no mint, no loss), rs-survival-smoke 40/0, jr-crash 24/0, rl-crash 66/0 (6 PASS).
+- **Strict verifier** (own run on 8924/8925, `artifacts/gate-runs-fk-verify/20261114-065536-change`): PASS, fk-survival 17/0, fk-crash 50/0, the same numbers; units re-run forced. Non-blocking: a marker-on-disk FILLING site reserves the fill until its next step; at FK3 replay a player's identical items in a FILLING hopper are cleared as ours (contract §4); a write-back onto a refilled slot drops the rest at the site.
+- **Checks:** Gradle 1211 tests 0 failures; kit 1358/1358; sidecar 892/892; `step-inputs check` 391 clean; `api-compat --baselines` 8/8 clean (Steward's jar included).
+- **Steward RC areas:** `bp.fillContainers` and the sidecar `fill`; `ProgramRefused` `fill`; SITE_BUILT only after the unlock; the fill's items in `outstanding` and `nextNeeded`; `SiteWait.blocked`; Quote `fill:<lot>`; removal blockers for declared containers; refunds include custody; NOT_ALLOWED for crate-fed survival fill sites, moves, deltas and overwrites of fill cells.
+- **Left over:** a single-site Remove credits without a save (PS's leftover; a crash after it leaves an orphan custody `atStart` ignores); a stalled removal's custody is written back at load and its retry may wipe it uncredited; only the Groups removal path is gated; locks: lever `powered` only.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
