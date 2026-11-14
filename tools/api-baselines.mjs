@@ -8,7 +8,7 @@
 // that read the baselines (gate6a apijars, api-compat --baselines, release-version) never reach a Gradle call.
 //
 // The release-version roll (rollBaselines) shifts the list at every release: the release being set comes first, the oldest drops.
-// (GI) `anchors` (one older release per API minor family: 1.39 and 1.49 so far) are never rolled; apitestBaselines() is both lists.
+// (GI) `anchors` (one older release per API minor family: 1.55, 1.49 and 1.39 so far) are never rolled; apitestBaselines() is both lists.
 // The new tag does not exist yet then, so release-version prints the build command to run once the tag is pushed.
 import fs from 'node:fs';
 import os from 'node:os';

@@ -741,8 +741,11 @@ steps.item9 = async () => ({ rs02r: await steps.rs02r(), rs03: await steps.rs03(
 steps.item10 = async () => {
   await ensure();
   const out = {};
-  for (const leave of [false, true]) {
-    const tag = leave ? 'rs02m2' : 'rs02m1';
+  // (GI) GATE6CRS_ITEM10_REPEAT=N runs the reopen case N times (rs02m2, rs02m2r2, ..., each on its own world): a flake hunt in one gate
+  // run (the runner runs a step once). Default 1, as before.
+  const reps = Math.max(1, Number(process.env.GATE6CRS_ITEM10_REPEAT ?? 1) || 1);
+  for (const [n, leave] of [false, ...Array(reps).fill(true)].entries()) {
+    const tag = leave ? (n > 1 ? `rs02m2r${n}` : 'rs02m2') : 'rs02m1';
     if (!leave && smokeSkip('item 10 (rs02m1): the mid-build removal without a reopen', 'rs02m2 (the same removal, with a save, a leave and a reopen mid-removal)')) continue;
     const R = await realised(tag, 'rs02_walled');
     const C = new G.Conservation(ctx, R.box);
