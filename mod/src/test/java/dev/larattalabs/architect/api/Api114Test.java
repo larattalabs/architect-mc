@@ -48,10 +48,11 @@ class Api114Test {
 		assertEquals("beside", pc[pc.length - 1].getName());
 		assertEquals("opKey", pc[pc.length - 2].getName());
 		var rc = RealiseRequest.class.getRecordComponents();
-		// (6c PT) consent appended after opKey
-		assertEquals("consent", rc[rc.length - 1].getName());
-		assertEquals("opKey", rc[rc.length - 2].getName());
-		assertEquals("maxWaitSeconds", rc[rc.length - 3].getName());
+		// (6c PT) consent appended after opKey; (BC) maxBill after consent
+		assertEquals("consent", rc[rc.length - 2].getName());
+		assertEquals("maxBill", rc[rc.length - 1].getName());
+		assertEquals("opKey", rc[rc.length - 3].getName());
+		assertEquals("maxWaitSeconds", rc[rc.length - 4].getName());
 		RealiseRequest r = new RealiseRequest("p1", null, null, null, null, false, null, false, null);
 		assertNull(r.opKey());
 		assertEquals(0, r.maxWaitSeconds());

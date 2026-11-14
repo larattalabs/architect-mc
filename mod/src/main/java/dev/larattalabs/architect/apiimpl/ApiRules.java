@@ -38,10 +38,10 @@ public final class ApiRules {
 		"quote",
 		// (7c CM-b) Sites.place of a composite entry: its modules as one site group; CompositeInfo.of(entry); JOINT_MISMATCH
 		"composites",
-		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion",
 		// (BC) ArchitectApi.kitVersion and checkerVersion; Sites.loadHealthy; maxBill on a realise (BILL_CAP, the bill_cap wait)
-		"kitVersion", "sitesLoadHealthy", "maxBill");
+		"kitVersion", "sitesLoadHealthy", "maxBill",
+		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
+		"apiVersion");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:

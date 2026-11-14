@@ -55,7 +55,7 @@ class ApiAUTest {
 		assertTrue(ApiRules.features(2, List.of("job.run", "region.design", Authors.FEATURE)).contains("programAuthoring"));
 		assertFalse(ApiRules.features(2, List.of("job.run", "region.compose")).contains("programAuthoring"));
 		assertFalse(ApiRules.JAVA_FEATURES.contains("programAuthoring"));
-		assertEquals(Reason.values().length - 1, Reason.AUTHORED_STALE.ordinal(), "7cF's reason, still last");
+		assertEquals(Reason.BILL_CAP.ordinal() - 1, Reason.AUTHORED_STALE.ordinal(), "7cF's reason, then BC's BILL_CAP appended after it");
 	}
 
 	@Test
