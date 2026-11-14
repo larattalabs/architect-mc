@@ -11,11 +11,20 @@
 export const BRIEF_VIA = Object.freeze({ s3_monastery: 'compose', s6_cave_city: 'compose' });
 
 /**
- * The Style a brief run uses (a fixture in scenarios/bibles/, installed as the sidecar's Style v1 as `--bible` does): format 3
+ * The Style a brief run uses (a fixture in scenarios/styles/, beside scenarios/bibles/ so the palette snapshots of the older fixtures hold; installed as the sidecar's Style v1 as `--bible` does): format 3
  * settlement Styles with roleShares bands, the same roles as the scenario's own format 2 fixture (its lot entries re-skin in them at
  * $0, tools/scenarios.mjs prepV). Scenarios not named keep their own Style (or none).
  */
 export const BRIEF_STYLE = Object.freeze({ s2_ice_spikes: 'g7cbr_s2_outpost', s3_monastery: 'g7cbr_s3_monastery' });
+
+/**
+ * The cached library entries a brief run's site lots use (tools/lib/scenario-sb.mjs librarySiteEntries: $0 site variants; lots of a fit
+ * none of them has go SB's way, the sim's archetype). S5: 7b P2's treehouse entries, committed under kit/test/fixtures/br/library (the
+ * coordinator, 2026-11-14: 7b's S5/S6 paid entries are gone from disk but these two). S6 has none (its carve_into lots: the sim archetype).
+ */
+export const BRIEF_LIBRARY = Object.freeze({
+  s5_treehouses: Object.freeze({ from: 'kit/test/fixtures/br/library', repo: true, entries: Object.freeze(['gen_pa_treehouse_home', 'gen_pa_treehouse_lodge']) }),
+});
 
 /** design | compose: an explicit `--via` wins, else BRIEF_VIA, else the pick (design). */
 export function briefVia(sc, over = null) {

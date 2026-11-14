@@ -1,5 +1,5 @@
 // (7c BR) brief runs: tools/lib/scenario-br.mjs (the request bodies never name the program, the answers read, the pick row, the golden
-// key) and the format 3 Styles of the brief runs (scenarios/bibles/g7cbr_*.json: valid, the scenario fixture's roles, bands set).
+// key) and the format 3 Styles of the brief runs (scenarios/styles/g7cbr_*.json: valid, the scenario fixture's roles, bands set).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -75,7 +75,7 @@ test('the brief runs\' format 3 Styles: valid, settlement scope, the scenario fi
   assert.deepEqual(Object.keys(BRIEF_STYLE).sort(), ['s2_ice_spikes', 's3_monastery']);
   for (const [id, style] of Object.entries(BRIEF_STYLE)) {
     const s = sc(id);
-    const b = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'bibles', `${style}.json`), 'utf8'));
+    const b = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'styles', `${style}.json`), 'utf8'));
     const v = validateBible(b);
     assert.deepEqual(v.errors, [], `${style}: ${v.errors}`);
     assert.equal(v.bible.format, 3);
@@ -87,4 +87,43 @@ test('the brief runs\' format 3 Styles: valid, settlement scope, the scenario fi
     assert.ok(Object.keys(bands).length >= 3);
     for (const [r, [lo, hi]] of Object.entries(bands)) assert.ok(b.roles[r] && lo >= 0 && hi <= 1 && lo <= hi, `${style} ${r}`);
   }
+});
+
+test('the brief runs\' cached lots: 7b P2\'s treehouse entries committed as fixtures, wrap_trunk, sources without absolute paths', async () => {
+  const { BRIEF_LIBRARY } = await import('../../tools/lib/scenario-br.mjs');
+  assert.deepEqual(Object.keys(BRIEF_LIBRARY), ['s5_treehouses']);
+  const lib = BRIEF_LIBRARY.s5_treehouses;
+  assert.equal(lib.repo, true);
+  for (const e of lib.entries) {
+    const d = path.join(root, lib.from, e);
+    for (const f of [`${e}.nbt`, `${e}.parts.nbt`, `${e}.mjs`, `${e}.blueprint.json`, 'site/site.json', 'bible/bible.json']) assert.ok(fs.existsSync(path.join(d, f)), `${e}/${f}`);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(d, `${e}.blueprint.json`), 'utf8')).site.fit, 'wrap_trunk');
+    for (const f of [`${e}.mjs`, `${e}.blueprint.json`, 'site/site.json', 'bible/bible.json', 'bible/components.mjs']) assert.doesNotMatch(fs.readFileSync(path.join(d, f), 'utf8'), /\/Users\/|\/home\/|C:\\\\/);
+  }
+});
+
+test('S-THEME on the cached treehouse entries: every structural block traces to a role of the entry\'s Style; the rest are its furnishings', async () => {
+  const { traceRole, UNTHEMED_OK } = await import('../lib/connectors/style.mjs');
+  const { BRIEF_LIBRARY } = await import('../../tools/lib/scenario-br.mjs');
+  // the furnishings a room holds (job sites, storage, a carpet, a potted plant): placed as themselves, never a role's block
+  const FURNISHING = /^minecraft:(\w+_carpet|\w+_bed|barrel|bookshelf|chest|campfire|crafting_table|furnace|smoker|grindstone|potted_\w+|cauldron|water_cauldron)$/;
+  for (const e of BRIEF_LIBRARY.s5_treehouses.entries) {
+    const d = path.join(root, BRIEF_LIBRARY.s5_treehouses.from, e);
+    const roles = JSON.parse(fs.readFileSync(path.join(d, 'bible', 'bible.json'), 'utf8')).roles;
+    const mats = JSON.parse(fs.readFileSync(path.join(d, `${e}.blueprint.json`), 'utf8')).materials;
+    const off = mats.filter((m) => { const t = traceRole(m, roles, { lightFixture: roles.light ?? null }); return !t && !UNTHEMED_OK.has(m) && !FURNISHING.test(m); });
+    assert.deepEqual(off, [], `${e}: blocks no role gives`);
+    assert.ok(mats.filter((m) => traceRole(m, roles, { lightFixture: roles.light ?? null }) && traceRole(m, roles, { lightFixture: roles.light ?? null }) !== 'functional').length >= 10, `${e}: its structure in its roles`);
+  }
+});
+
+test('the S3 v2 gallery item: gallery only, its program outside the pick catalogue, P1\'s cliff design from the library', async () => {
+  const s = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's3v2_cliff_gallery.json'), 'utf8'));
+  assert.equal(s.galleryOnly, true);
+  assert.equal(s.program, 's3v2_cliffs');
+  assert.equal(s.siteLibrary.entry, 'gen_pa_cliff_house');
+  assert.deepEqual(s.fixture, sc('s3_monastery').fixture);
+  const m = await import('../regions/s3v2_cliffs.mjs');
+  assert.equal(m.catalogue, false);
+  assert.equal(m.id, 's3v2_cliffs');
 });

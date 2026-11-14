@@ -112,6 +112,54 @@ export async function siteEntries(L, sc, ir, tag) {
   return { entries, rows, archetypes: archetype };
 }
 
+/** (7c BR) The entry ids of a `siteLibrary` ({entry} or {entries: [...]}). */
+export const libraryEntries = (lib) => lib.entries ?? [lib.entry];
+
+/**
+ * (7c BR) Cached library entries copied into this game's library before the world opens (the library loads them then). `lib` =
+ * {entry | entries, from, repo?}: `from` is relative to this checkout when `repo` (committed fixtures, kit/test/fixtures/br/library), else
+ * to the main checkout (the sibling `architect-mc`; artifacts/ is local evidence, never committed), or GATE_BR_LIBRARY. An entry the
+ * game's library already holds is left as it is.
+ */
+export function copyLibraryEntry(L, lib, root) {
+  const base = process.env.GATE_BR_LIBRARY ? path.resolve(process.env.GATE_BR_LIBRARY) : lib.repo ? path.join(root, lib.from) : path.resolve(root, '..', 'architect-mc', lib.from);
+  for (const e of libraryEntries(lib)) {
+    const src = path.join(base, e), dst = path.join(L.LIBRARY, e);
+    if (!fs.existsSync(path.join(src, `${e}.nbt`))) throw new Error(`the library entry ${e} is not in ${base}`);
+    if (fs.existsSync(path.join(dst, `${e}.nbt`))) continue;
+    fs.mkdirSync(L.LIBRARY, { recursive: true });
+    fs.cpSync(src, dst, { recursive: true });
+    L.log(`  library: ${e} from ${base}`);
+  }
+}
+
+/**
+ * (7c BR) The lots of a plan's site lots from cached entries ($0, no design call). A site lot whose fit a cached entry has (its
+ * blueprint's site.fit) gets one of those entries, round robin: the first lot of each entry a site variant of the entry itself (PA's
+ * `reuse` path), its later lots site variants of that first variant. Every other site lot goes SB's way (siteEntries: the sim's archetype
+ * per fit, then variants). siteEntries' shape, with `library` rows naming which way each lot went.
+ */
+export async function librarySiteEntries(L, sc, ir, tag) {
+  const lib = sc.siteLibrary;
+  const fitOf = (e) => { try { return JSON.parse(fs.readFileSync(path.join(L.LIBRARY, e, `${e}.blueprint.json`), 'utf8')).site?.fit ?? null; } catch { return null; } };
+  const cached = libraryEntries(lib).map((e) => ({ e, fit: fitOf(e) }));
+  const site = ir.lots.filter((l) => l.site);
+  const mine = [], rest = [];
+  for (const l of site) (cached.some((c) => c.fit === l.site.fit) ? mine : rest).push(l);
+  const plan = { item: 'BR', opPrefix: `br-${tag}`, backend: 'sim', archetypes: [], reuse: {}, variants: {} };
+  const k = {};
+  for (const l of mine) {
+    const pool = cached.filter((c) => c.fit === l.site.fit);
+    const c = pool[(k[l.site.fit] = (k[l.site.fit] ?? -1) + 1) % pool.length];
+    const key = `L_${c.e}`;
+    if (!plan.reuse[key]) { plan.reuse[key] = c.e; plan.archetypes.push({ key, lot: l.id, request: {} }); } else plan.variants[l.id] = key;
+  }
+  const a = mine.length ? await paSiteEntries(L, sc, { ...ir, lots: mine }, plan) : { entries: {}, rows: [], archetypes: {} };
+  const b = rest.length ? await siteEntries(L, sc, { ...ir, lots: rest }, tag) : { entries: {}, rows: [], archetypes: {} };
+  return { entries: { ...a.entries, ...b.entries }, rows: [...a.rows, ...b.rows], archetypes: { ...a.archetypes, ...b.archetypes },
+    library: { entries: cached, cachedLots: mine.map((l) => l.id), simLots: rest.map((l) => l.id) } };
+}
+
 /**
  * (7b PA, docs/CONTRACT.md "Phase 7b" §4 P2/P3) The paid batch's lots of a scenario run: per the plan, archetypes and a landmark designed
  * by the run's designer (the claude login, or the sim for P0) into their own site lots, each paid job guarded by the PA ledger

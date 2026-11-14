@@ -20,7 +20,9 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
-import { BRIEF_STYLE, briefCall, briefGoldenKey, briefPlan, briefRow, briefText, briefVia, readBrief } from './lib/scenario-br.mjs';
+// (7c BR) loaded lazily: release-version's tests copy scenarios.mjs with only the modules its offline commands import
+let BRm;
+const br = async () => (BRm ??= await import('./lib/scenario-br.mjs'));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCEN = path.join(root, 'scenarios');
@@ -286,7 +288,9 @@ const isT2 = (sc) => sc.phase === '6c-t2'; // (6c T2) route_demo on S3's claim
 const isD = (sc) => sc.phase === '6c-d'; // (6c D1) districts_demo on S3's claim
 const isS2 = (sc) => sc.program === 'ice_outpost'; // (6c S2) the ice-spike outpost on S2's claim
 const isS3 = (sc) => sc.program === 'terraced_monastery'; // (6c S3) the terraced monastery on S3's claim
-const isSB = (sc) => !!sc.sculpt; // (7b SB) S5's treehouses and S6's cave city: a sculpt first, site lots with $0 site variants (tools/lib/scenario-sb.mjs)
+const isSB = (sc) => !!sc.sculpt;
+// (7c BR) site lots from the library: the S3 v2 gallery item's cliff lots get $0 site variants of a cached entry (scenario-sb librarySiteEntries)
+const isSites = (sc) => isSB(sc) || !!sc.siteLibrary; // (7b SB) S5's treehouses and S6's cave city: a sculpt first, site lots with $0 site variants (tools/lib/scenario-sb.mjs)
 const BARS = new Set(['mspt', 't1-tiles', 't2-tiles', 'd-tiles', 's2-tiles', 's3-tiles']); // timing rows (recorded, not blocking in change/slice)
 
 /** (6c T2) An /apitest command's JSON answer (the apitest mod: protected areas). */
@@ -406,6 +410,7 @@ async function pin(id) {
  * --images, --brief-ext <json file> (compose's ext as is).
  */
 async function briefRun(sc, claim, flat, out) {
+  const { briefCall, briefPlan, briefText, briefVia, readBrief } = await br();
   const via = briefVia(sc, opt('via'));
   const extFile = opt('brief-ext');
   const o = { model: typeof opt('model') === 'string' ? opt('model') : null, budgetUsd: opt('budget') ? Number(opt('budget')) : null, images: !!opt('images'),
@@ -438,13 +443,16 @@ async function runScenario(id) {
   const phase = opt('phase', '6b');
   // (7c BR) a brief run: its own golden key (goldens/<short>-br) and run dirs (<phase>/<short>-br/)
   const briefOn = !!opt('brief');
-  if (briefOn) sc.goldenKey = briefGoldenKey(short(sc));
+  const BR = briefOn ? await br() : null;
+  if (briefOn) sc.goldenKey = BR.briefGoldenKey(short(sc));
   // (6c W) `--bible <id>`: the run with another fixture bible (scenarios/bibles/<id>.json, installed as bible <id> v1): the W path
   // bibles and the gallery's looks. Its runs go to <phase>/<short>-<id>/; its golden row compares with S7's own golden (recorded).
   const bibleOpt = opt('bible');
   if (bibleOpt) { sc.bible = bibleOpt; sc.bibleFixture = `bibles/${bibleOpt}.json`; }
   // (7c BR) a brief run's Style: its format 3 settlement Style with roleShares bands where BRIEF_STYLE names one
-  else if (briefOn && BRIEF_STYLE[sc.id]) { sc.bible = BRIEF_STYLE[sc.id]; sc.bibleFixture = `bibles/${BRIEF_STYLE[sc.id]}.json`; }
+  else if (briefOn && BR.BRIEF_STYLE[sc.id]) { sc.bible = BR.BRIEF_STYLE[sc.id]; sc.bibleFixture = `styles/${BR.BRIEF_STYLE[sc.id]}.json`; }
+  // (7c BR) a brief run's lots from the library where BRIEF_LIBRARY names cached entries (S5: 7b P2's treehouse entries, committed fixtures)
+  if (briefOn && BR.BRIEF_LIBRARY[sc.id]) sc.siteLibrary = BR.BRIEF_LIBRARY[sc.id];
   const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-')}${flat ? '-flat' : ''}`;
   const out = path.resolve(opt('out') || path.join(ART, phase, bibleOpt ? `${short(sc)}-${bibleOpt}` : briefOn ? sc.goldenKey : short(sc), runId));
   const raw = path.join(out, 'raw');
@@ -457,6 +465,7 @@ async function runScenario(id) {
   const cams = Object.fromEntries(Object.entries(sc.cams).map(([k, v]) => [k, [v[0] + off[0], v[1], v[2] + off[1], v[3], v[4]]]));
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
   if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc);
+  if (sc.siteLibrary) (await import('./lib/scenario-sb.mjs')).copyLibraryEntry(L, sc.siteLibrary, root);
   let t0 = Date.now();
   await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.claimBase(sc.world.seed, sc.fixture.claim));
   await L.setRules(flat ? 'exact' : 'gallery');
@@ -516,14 +525,16 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
   // (7b SB) the cameras: the plan's cam_* anchors looking at its hub (as `pin` aims them; the layout is the sculpt's, known only now)
-  if (isSB(sc)) {
+  if (isSites(sc)) {
     const hub = ir.anchors.hub ?? ir.anchors.entrance;
     for (const [n, a] of Object.entries(ir.anchors).filter(([k]) => k.startsWith('cam_')).sort()) cams[n] = [a[0] + 0.5 + off[0], a[1], a[2] + 0.5 + off[1], ...look([a[0] + 0.5, a[1], a[2] + 0.5], [hub[0], hub[1], hub[2]])];
   }
   // (7b SB) the $0 lots: an archetype per fit (the sim's site-aware stub) and Designs.siteVariant of it for every other site lot
-  if (isSB(sc)) {
+  if (isSites(sc)) {
     t0 = Date.now();
-    const se = await (await import('./lib/scenario-sb.mjs')).siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
+    const SBL = await import('./lib/scenario-sb.mjs');
+    const se = sc.siteLibrary ? await SBL.librarySiteEntries(L, sc, ir, `${short(sc)}-${runId}`) : await SBL.siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
+    sbRun ??= {};
     sbRun.entries = se;
     sc.lotEntries = se.entries;
     if (se.pa) sc.paSpendUsd = se.pa.spendUsd; // (7b PA) the paid batch's run: its archetypes' reported cost
@@ -973,7 +984,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     fs.writeFileSync(path.join(out, 'sb-metrics.json'), `${JSON.stringify({ ...sbm, rows: undefined }, null, 1)}\n`);
   }
   // (7c BR) a brief run's own row: the brief reached a plan through the API (the program it landed on recorded)
-  if (brief) rows = [briefRow(brief, sc.program), ...rows.filter((r) => r.id !== 'brief')];
+  if (brief) rows = [(await br()).briefRow(brief, sc.program), ...rows.filter((r) => r.id !== 'brief')];
   const metrics = { scenario: sc.id, ...(brief ? { brief } : {}), worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
@@ -996,9 +1007,10 @@ async function metricsOf(runDir) {
   await lib();
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   const sc = readSc(run.scenario);
-  if (run.brief) sc.goldenKey = briefGoldenKey(short(sc)); // (7c BR)
+  if (run.brief) sc.goldenKey = (await br()).briefGoldenKey(short(sc)); // (7c BR)
   // (7c BR) the run's own Style fixture (a brief run's BRIEF_STYLE, or a --bible run's), so its roleShares bands are read again
-  if (run.bible && run.bible !== sc.bible && fs.existsSync(path.join(SCEN, 'bibles', `${run.bible}.json`))) { sc.bible = run.bible; sc.bibleFixture = `bibles/${run.bible}.json`; }
+  const own = run.bible && run.bible !== sc.bible ? ['styles', 'bibles'].find((d) => fs.existsSync(path.join(SCEN, d, `${run.bible}.json`))) : null;
+  if (own) { sc.bible = run.bible; sc.bibleFixture = `${own}/${run.bible}.json`; }
   if (isSB(sc) && run.lots) sc.lotEntries = run.lots; // (7b SB) the run's own $0 entries
   const planDir = path.join(runDir, 'raw', 'plan');
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
@@ -1068,7 +1080,7 @@ async function golden(id, runDir) {
   const ts = await tileShas(planDir);
   if (!ts.workersSame) throw new Error('1 and 4 workers differ');
   const run0 = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
-  if (run0.brief) sc.goldenKey = briefGoldenKey(short(sc)); // (7c BR) a brief run cuts goldens/<short>-br
+  if (run0.brief) sc.goldenKey = (await br()).briefGoldenKey(short(sc)); // (7c BR) a brief run cuts goldens/<short>-br
   const gDir = path.join(SCEN, 'goldens', gkey(sc));
   fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
   for (const f of ['ir.json', 'survey.bin', 'meta.json']) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
@@ -1126,7 +1138,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const flatRun = sub === 'run' && r.metrics.variant === 'flat';
     const irSame = flatRun && new Set(JSON.parse(fs.readFileSync(path.join(r.out, 'run.json'), 'utf8')).irShas).size === 1;
     const eFlat0 = flatRun && JSON.parse(fs.readFileSync(path.join(r.out, 'exact.json'), 'utf8')).mismatches === 0;
-    const runBad = (x) => x.gated && !x.pass && x.id !== 'gallery'
+    // ((7c BR) a gallery-only scenario (the S3 v2 item: "no bars") records every row; its exit code judges only that it ran)
+    const galleryOnly = sub === 'run' && !!readSc(args[1]).galleryOnly;
+    const runBad = (x) => !galleryOnly && x.gated && !x.pass && x.id !== 'gallery'
       && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame) && !(flatRun && x.id === 'exactness' && eFlat0);
     const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
     if (sub === 'run') console.error(`${r.metrics.rows.filter(runBad).length} failure(s) (scenario run)`);
