@@ -30397,6 +30397,39 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 - **Ran:** kit full suite 1400/1400; scoped units (unit-scope: kit 904/905, the one a gate-chains convention fixed then 6/6; Gradle picks pass; sidecar full 908/908); pm-promote.test 10/10 (+ au.test 6: 16/0); step-inputs check clean (402 steps); api-compat --baselines 8/8 clean; gate **20261114-202005-change** at 6516f550 PASS 2/2 (pm-unit, pm-promote; ports 8918/8919). Earlier runs failed on step wiring only (`${OUT}` in a shell, ok-line accounting).
 - **Leftovers (the coordinator's follow-on slice):** the catalogue entry `form.arch_span` and the `shapePromotion` feature (§2) need plan compile, the compact copy and Java; AQ's arches still come from course.mjs (rewiring them moves committed fixtures); the sheet's iso renders are compared by sha on one machine only.
 
+### Slice BR as built (branch `slice/BR` off main c787a7e5; versions NEXT; $0, sim only; light; recorded 2026-11-14)
+
+- **Brief runs.**
+  - `tools/scenarios.mjs run <s> --brief` takes the program and params from the scenario's one-line brief, never from the scenario file. S1, S2 and S5 go through `Regions.design`; S3 and S6 go through `Regions.compose` (`tools/lib/scenario-br.mjs`, `BRIEF_VIA`).
+  - The call runs on the run's world after any sculpt, with the claim forceloaded (TC's volume reads loaded chunks only).
+  - The rest of the run is unchanged. Each run writes `brief.json` and a gated `brief` row.
+- **Goldens.**
+  - A brief run cuts `goldens/<short>-br`. With no `-br` golden of its own, it compares with the scenario's golden.
+  - New: `goldens/s6-br` (`floorY` and the lots now come from the land's hall, TC's auto mode).
+  - None moved. S1's and S2's briefs plan their goldens' tiles (S1's IR differs only by `kitVersion`). S3's run holds its golden through its committed inputs re-planning, as the program runs do.
+  - The golden match "differs only by the frozen live volume" now also skips a site lot's cut of that volume.
+- **Bars.**
+  - `roleShares` is gated. It is kept through S2's and S3's own bar sets.
+  - Brief runs use format 3 settlement Styles in `scenarios/styles/` (outside `scenarios/bibles/`, so the v0.37 palette snapshot holds). Their bands were set from each Style's intent.
+  - Reading: S2's accent is unbanded. Its accent, packed ice, is also the spikes' material (measured 0.271 against [0, 0.05]).
+  - New world class `leafdecay`: SB-sculpted /fill leaves at distance 7, not persistent, gone to air at an unwritten cell in no lot box.
+- **Lots** (the coordinator's reading, 2026-11-14).
+  - S5 uses 7b P2's cached `gen_pa_treehouse_home` and `gen_pa_treehouse_lodge`. They are committed at `kit/test/fixtures/br/library` (146 KB, no PNGs, S-THEME unit) and given as $0 `Designs.siteVariant`s, 6 of 6 lots.
+  - S6 uses SB's sim archetype. 7b's paid S5/S6 entries are gone from disk, and P3's S6 lots failed disturbance (0.514 against 0.3).
+- **S3 v2 gallery item** (`kit/regions/s3v2_cliffs.mjs`, not in the catalogue; `scenarios/s3v2_cliff_gallery.json`, gallery only).
+  - It lays 5 `attach_to_cliff` lots on S3's own cliff faces, and the cameras shoot.
+  - P1's `gen_pa_cliff_house` refused all 5 variants with `SITE_UNFIT site_bound`: its source writes at z = depth on any site. **Not shown**; the shots are of the empty lots.
+- **PAY hooks:** `--via`, `--model`, `--budget`, `--images`, `--brief-ext <json>` (compose's ext as is), and `brief.json` (TC's pick accuracy, P2). The cached-entry path (`siteLibrary`, `librarySiteEntries`) is ready for PAY's regenerated carve_into lots.
+- **Ran.**
+  - Full kit suite: 1408/1408.
+  - Scoped units, step-inputs check (409 steps) and api-compat `--baselines` (8/8 clean) all pass. `release-version --check --lenient` is consistent; `s6-br` re-plans byte for byte.
+  - Gate (ports 8916-8921): br-unit, br-s1, br-s2, br-s3, br-s5, br-s6 and br-s3v2 PASS (runs 20261114-214821, -222801, -232*). MSPT is recorded only; it missed on a loaded box.
+- **Leftovers:**
+  - COMPOSED plan/0 artifacts aren't realised by the harness. That's PAY P2's plan-path hook, which also needs a skip-pick key outside the sim.
+  - P1's cliff design writes past its box, so S3 v2 needs a fixed cliff design.
+  - S7 has no brief run.
+  - The determinism row's threshold text names `goldens/s1.json` for every scenario.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
