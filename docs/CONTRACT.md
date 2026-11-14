@@ -30682,53 +30682,25 @@ the unsaved case stays open.
 | ad-hoc probe (8910/8911; not a gate run) | survival growth then undo, not killed. Before the roi fix: the plain lot was exact; the irrigated lot consumed 304 seeds against 320 quoted, with no crop over the sides. After it: 320 = quote, 16 crops, the refund exact |
 | gate-verifier (strict) | **PASS** at 1ccfa0cb. Its own run `artifacts/gate-runs-ig-verify/20261113-020949-change` on 8918/8919: ig-unit 3/0, ig-instant 23/0, ig-survival 22/0. <br>- Undo drains first and is exact for the plain, RVU1 and RVU2+save cases, and for a grown lot removed alone (the drainLot fix). <br>- Consumed = quote for both lots, the refund once across the saved kill, both grown lots stage-wait. <br>- The roi change is judged safe (liveFor falls back to the base for realised stages; no ordering or deadlock risk seen); the revision roads are left out as intended. <br>- Byte identity: its own structural diff shows the fixtures differ only at `irSha`/`programSha`. <br>- Minor: the hydration judgement no longer enforces IRR's 240 s bound at vanilla speed. The 240 s count is recorded only (290/304 in its run, 296/304 in run 3, 300/304 at 300 s in run 2); the judged check is reach, every cell moist once the random ticks are sped up |
 
-### Slice IG-b as built (branch `slice/IG-b` off `origin/main` 5868f62f (v0.65.0 + RU + RL); versions NEXT; $0; DEV MODE, strict: undo; recorded 2026-11-13)
+### Slice IG-b as built (branch `slice/IG-b` off origin/main 5868f62f, main 7b985ba9 merged; versions NEXT; $0; DEV MODE, strict: undo; recorded 2026-11-13)
 
-Steward's S-M5-8: an irrigated grow lot in an adopted street town. Before, a growth of a region whose stages have none between the pads'
-and the lots' (an adopted region's single `adopted`) refused `NOT_ALLOWED [irrigate] region stages (adopted) have no stage between ...`
-(IG's as-built, reading 2). **No API change** and no Java change: the kit's revise program adds the stages.
-
-**What changed for a caller:**
-- `planRevision(adoptedRegion, (program, {grow: {lots: [{..., irrigate: true}]}}))` no longer refuses. The plan's stages are
-  `["adopted", "street", "lots", "fluids"]` (journal stages `rv<rid>:adopted`, `rv<rid>:street`, ...), as an irrigated growth of a V town
-  shows `street` and `fluids`. Everything else is IG's: the report `LotSpec.ext["architect_mc:lotIrrigation"]`, the mask, drainLot, the
-  drain-first `undoRevision`.
-- A dry growth of an adopted town is unchanged: one stage `adopted`, its lots in it (byte-identical IR but `programSha`).
-- A base that names `street` or `lots` but not in the order ground < street < lots still refuses as before.
-
-**How it is built** (`kit/regions/revise.mjs`):
-- When an irrigated growth's base has no stage between the pads' and the lots', the revision adds two stages of its own after every
-  base stage, in this order: `street` (the shells) and `lots` (every grown lot of the growth). Then `fluids`, last as always.
-- The pads, the lanes, an extension road and the props stay in the base's stage (`adopted`). The shells' write passes the pads' cells
-  because the pads are an earlier stage. The grown lot's survival stage wait (IG's `roi()` fix) would see the shells as an earlier stage.
-- The effective IR keeps the base's stages (`mergeEffective`), so each later irrigated growth adds its own again.
-- The new-names rule (base names first, then new names sorted) is unchanged; the two added stages go after the sorted ones, in their
-  own order (sorting would put `lots` before `street`).
-
-**Readings:**
-1. **An adopted region builds in creative only.** `Regions.adopt` sets no survival record (`RegionAdopt`), adopting a survival
-   construction site refuses, and `Revisions` refuses a survival-planned revision of a creative region. So the brief's "from materials
-   (fed partly, then the rest)" can't run on an adopted region. Steward's MODULES.md lists adopted street towns as "instant, not Supplied".
-   The code: `RegionAdopt` ~245 (the construction-site refusal) and ~389 (the record, no `survival`), `Revisions` ~861 (the mode check).
-   The survival bill of such a growth is covered by units only (igb.test: the 4 shells' 20 items, once). The coordinator agreed the
-   instant-only gate (2026-11-13). **Leftover:** survival-capable adoption, a separate slice and a Steward-visible change, not built here.
-2. The added stages are named `street` and `lots`, V's names, so Steward reads the same stage names on both kinds of town.
-3. Only an irrigated growth adds them. A dry growth of the same town plans as before, so no shipped adopted growth changes.
-
-**Steward RC areas:** none beyond "it no longer refuses". Steward may offer watered modules in adopted street towns (`ModuleOffer`). The
-revision's stages there now read `adopted, street, lots, fluids` (RevisionView.stages, RegionPlan stages).
-
-**Checks** ($0; no API or Java change):
-
-| Check | Result |
-|---|---|
-| kit `node --test kit/test/*.test.mjs` | 1341/1341 at 4b7c1c41. New `igb.test` 5: the adopted base's one stage; an irrigated growth's stages `adopted, street, lots, fluids`, its shells in street, its lot in lots, its sources and record, M25/M29 clean; a dry growth as before (`irrigate: false` = absent); the refusals (out-of-order bases, not a farm lot); the survival bill holds the 4 shells once (20 items) |
-| byte identity | `gr/land.json` and `rv/merge.json` re-cut with their own scripts: a structural diff shows only `irSha`/`programSha` changed |
-| mod `./gradlew build --offline --no-daemon` | BUILD SUCCESSFUL |
-| sidecar | untouched; `tsc --noEmit -p .` clean (the frozen source's toolchain, the same tree at 4b7c1c41) |
-| `node tools/step-inputs.mjs check` | clean, 390 steps (igb-unit, igb-adopted added) |
-| run 1 | TBD |
-| gate-verifier (strict) | TBD |
+Steward's S-M5-8. **What changed:** `kit/regions/revise.mjs` only; no Java or API change.
+- An irrigated grow lot in a region whose base has no stage between the pads' and the lots' (an adopted town's single `adopted`) no
+  longer refuses. The revision adds its own `street` (the shells) and `lots` (the grown lots) after the base's stages, then `fluids`:
+  `adopted, street, lots, fluids`, V's names.
+- The pads, lanes, roads and props stay in `adopted`, and the base's stages are unchanged. A dry growth plans as before (one stage). A base
+  that names `street` or `lots` out of order still refuses `[irrigate]`. The report, mask, drainLot and drain-first undo are IG's.
+- **Creative only:** an adopted region has no survival record (`RegionAdopt` ~245, ~389), and `Revisions` ~861 refuses a survival
+  revision of a creative region. So the gate is instant, and the survival bill is covered by units only (the coordinator agreed).
+- **Checks:** kit 1341/1341 before the merge, the scoped tests 35/35 after it (new `igb.test` 5). The parity fixtures were re-cut and differ in
+  `irSha`/`programSha` only. Gradle build OK; sidecar tsc clean; step-inputs clean (390 steps; `igb-unit` and `igb-adopted` added).
+- **Gate:** run 1 `gate-runs-igb/20261114-021805-change`: igb-adopted 25/0, gr-survival 12/0, ig-unit 3/0. igb-unit missed on its own test
+  count and rs-survival-smoke on the item-10 flake; run 2 `20261114-032612` passed both (3/0, 40/0). Final run: FINAL.
+  igb-adopted: AD's adopted settlement grows the irrigated lot; the lone lot drains; undoRevision is exact; the RVU1 kill resumes exact,
+  with no water; Regions.remove E-flat 0.
+- **Strict verifier PASS** (`gate-runs-igb-verify/20261114-035615-change`, 8902/8903): igb-unit 3/0, igb-adopted 25/0, the diff reviewed.
+- **Leftover:** survival-capable adoption (a separate slice, Steward-visible). **Steward RC:** none; watered modules may now be offered in
+  adopted street towns.
 
 ### Slice FC as built (branch `slice/FC` off `origin/main` 0cdb1869, main c87a4c3d merged; versions NEXT; $0; DEV MODE, strict: refunds, removal; recorded 2026-11-12)
 
