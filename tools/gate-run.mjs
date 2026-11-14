@@ -313,6 +313,7 @@ function select() {
     // a file whose only changes are version constants maps to its unit suite (gate-impact.mjs versionOnlyFiles; needs a range)
     imp = impactOf(files, cfg.impact ?? {}, { versionOnly: listed ? new Set() : versionOnlyFiles(SRC, range, cfg.impact?.versionConstants) });
     info.range = range ?? `--files (${files.length})`;
+    info.changedFiles = files; // (GX) the own steps of an explicit list (tools/lib/explicit-cache.mjs)
     info.impact = { files: imp.files, rules: Object.fromEntries(Object.entries(imp.rules).map(([k, v]) => [k, v.files.length])), unmapped: imp.unmapped, ignored: imp.ignored.length, tags: imp.tags };
     info.impactText = describeImpact(imp);
   }
@@ -645,7 +646,7 @@ if (tierInfo.cache.lookup) {
         base = null;
       }
     }
-    own = ownSteps({ ids: [...want], now: RAW_CFG.steps, base, files: tierInfo.impact?.files ?? [], own: (opt('--own') ?? '').split(',').map((x) => x.trim()).filter(Boolean) });
+    own = ownSteps({ ids: [...want], now: RAW_CFG.steps, base, files: tierInfo.changedFiles ?? [], own: (opt('--own') ?? '').split(',').map((x) => x.trim()).filter(Boolean) });
     tierInfo.cache.explicit = { own: Object.fromEntries(own), base: base ? 'the range\'s base chain file' : r ? 'base chain file unreadable: --own and the files only' : 'no range: --own and the files only' };
   }
   for (const id of want) {
