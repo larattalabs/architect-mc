@@ -6,7 +6,8 @@
 //   node tools/promote.mjs <candidate> lint|determinism|properties|variety     one step (recorded)
 //   node tools/promote.mjs <candidate> approve --by <who> --sheet <png> [--no --reasons <text>] [--via <how>] [--at <iso time>]
 //   node tools/promote.mjs <candidate> output --version X.Y.Z                 step 6: the module stamped (every earlier step passed)
-//   node tools/promote.mjs <candidate> check [--no-linux]   re-run steps 1-4 against the record, write nothing (the gate step pm-promote)
+//   node tools/promote.mjs <candidate> check [--no-linux|--linux-auto]   re-run steps 1-4 against the record, write nothing (the gate step
+//                                                          pm-promote; --linux-auto: with docker unreachable, the recorded Linux legs stand, said so)
 //   node tools/promote.mjs <candidate> status | shas [--json]                 the record's state | this Node's determinism shas
 //
 // Determinism's legs: 3 runs on this Node, one on the other Node major (mise exec node@22 or node@24), and Linux in throwaway OrbStack
@@ -42,8 +43,16 @@ function leg(label, command, args) {
   } catch (e) { return { label, ok: false, error: `unreadable output: ${e.message}` }; }
 }
 
-async function stepDeterminism({ linux = true } = {}) {
+async function stepDeterminism({ linux = true, linuxAuto = false } = {}) {
   const here = await P.determinismShas(c);
+  // --linux-auto (the gate step): with no docker reachable, the recorded Linux legs stand, named as such; never a fresh record's pass
+  let recordedLinux = null;
+  if (linuxAuto && spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], { encoding: 'utf8' }).status !== 0) {
+    const r0 = P.readRecord(c).steps?.determinism;
+    const lx = (r0?.legs ?? []).filter((l) => /linux/.test(l.label));
+    recordedLinux = { at: r0?.at ?? null, ok: lx.length >= 2 && lx.every((l) => l.ok && l.all === here.all) };
+    linux = false;
+  }
   const self = ['tools/promote.mjs', name, 'shas', '--json'];
   const legs = [];
   for (let i = 1; i <= 3; i++) legs.push(leg(`run ${i} (this Node)`, process.execPath, self));
@@ -59,9 +68,10 @@ async function stepDeterminism({ linux = true } = {}) {
   const rec = P.readRecord(c);
   const golden = rec.steps?.determinism?.golden ?? null;
   const all = legs.every((l) => l.ok && l.all === here.all) && (!golden || P.shaOfLines(golden) === here.all);
+  const linuxOk = linux || (recordedLinux?.ok ?? false);
   return {
-    pass: all && linux, golden: here.lines, all: here.all,
-    legs, ...(linux ? {} : { note: 'the Linux legs were skipped (--no-linux): not a pass' }),
+    pass: all && linuxOk, golden: here.lines, all: here.all,
+    legs, ...(linux ? {} : recordedLinux ? { note: `docker unreachable: the Linux legs not run; the recorded ones (${recordedLinux.at}) ${recordedLinux.ok ? 'stand, equal to this golden' : 'do not match'}` } : { note: 'the Linux legs were skipped (--no-linux): not a pass' }),
     ...(golden && P.shaOfLines(golden) !== here.all ? { drift: 'this Node\'s shas differ from the recorded golden' } : {}),
   };
 }
@@ -95,7 +105,7 @@ function save(rec) {
 async function step(s, rec, { write = true } = {}) {
   let r;
   if (s === 'lint') r = P.stepLint(c);
-  else if (s === 'determinism') r = await stepDeterminism({ linux: !flag('--no-linux') });
+  else if (s === 'determinism') r = await stepDeterminism({ linux: !flag('--no-linux'), linuxAuto: flag('--linux-auto') && !write });
   else if (s === 'properties') r = await P.stepProperties(c);
   else if (s === 'variety') {
     const v = await P.stepVariety(c);
@@ -114,7 +124,7 @@ async function step(s, rec, { write = true } = {}) {
     const { bench } = await import('./lib/bench-report.mjs');
     bench({ id: `promote/${name}/eval-cost-ratio`, value: r.cost.ratio, bound: P.COST_BOUND, better: 'lower', unit: 'x', note: `${r.cost.nsPerCell} ns/cell vs ${r.cost.reference} ${r.cost.refNsPerCell}` });
   }
-  console.log(`${s}: ${r.pass ? 'PASS' : 'FAIL'}${s === 'variety' ? ` ${r.below}/${r.pairs} pairs under ${P.IOU_MAX} (median ${r.median}, max ${r.max})` : ''}${s === 'properties' ? ` ${r.failed.length} of ${r.sets} failed; cost ${r.cost.ratio}x ${r.cost.reference}${r.cost.flagged ? ' FLAG' : ''}` : ''}${s === 'determinism' ? ` ${r.legs.map((l) => `${l.label}: ${l.ok ? (l.all === r.all ? 'equal' : 'DIFFERS') : `error ${l.error}`}`).join('; ')}` : ''}${s === 'lint' && r.findings.length ? ` ${JSON.stringify(r.findings.slice(0, 5))}` : ''}`);
+  console.log(`${s}: ${r.pass ? 'PASS' : 'FAIL'}${s === 'variety' ? ` ${r.below}/${r.pairs} pairs under ${P.IOU_MAX} (median ${r.median}, max ${r.max})` : ''}${s === 'properties' ? ` ${r.failed.length} of ${r.sets} failed; cost ${r.cost.ratio}x ${r.cost.reference}${r.cost.flagged ? ' FLAG' : ''}` : ''}${s === 'determinism' ? `${r.note ? ` [${r.note}]` : ''} ${r.legs.map((l) => `${l.label}: ${l.ok ? (l.all === r.all ? 'equal' : 'DIFFERS') : `error ${l.error}`}`).join('; ')}` : ''}${s === 'lint' && r.findings.length ? ` ${JSON.stringify(r.findings.slice(0, 5))}` : ''}`);
   if (write) { rec.steps[s] = r; for (const later of P.STEPS.slice(P.STEPS.indexOf(s) + 1)) if (rec.steps[later] && !(s === 'output')) delete rec.steps[later]; save(rec); }
   return r;
 }
