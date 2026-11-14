@@ -12,6 +12,9 @@ import { cacheContext, keyFor, lookup, record } from '../../tools/lib/step-cache
 import { staticEntry, treeAt } from '../../tools/lib/step-inputs.mjs';
 import { commandPaths, entryShape, explicitDecision, isStrict, ownSteps, platformNow } from '../../tools/lib/explicit-cache.mjs';
 
+// A platform that is never this one (CI runs on linux-x64, so a fixed linux-x64 would match there).
+const OTHER_PLATFORM = platformNow() === 'linux-x64' ? 'darwin-arm64' : 'linux-x64';
+
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 const write = (root, rel, text) => {
   fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -121,7 +124,7 @@ test('a different platform never hits; an entry without a platform never serves 
   const k = rec(ctx());
   const f = path.join(main, 'artifacts', 'step-cache', 'a', `${k.key}.json`);
   const e = JSON.parse(fs.readFileSync(f, 'utf8'));
-  fs.writeFileSync(f, JSON.stringify({ ...e, platform: 'linux-x64' }));
+  fs.writeFileSync(f, JSON.stringify({ ...e, platform: OTHER_PLATFORM }));
   assert.equal(lookup(ctx(), 'a', k.key).hit, null, 'lookup refuses another platform');
   assert.equal(decide(ctx()).hit, null);
   const { platform, ...legacy } = e;
@@ -139,7 +142,7 @@ test('a strict-tier step takes only an exact key: a coverage hit never serves it
   assert.equal(strict.hit, null);
   assert.match(strict.why, /strict tier: exact key only/);
   assert.ok(decide(ctx(), { strict: false, coverage: cov }).hit);
-  const foreign = () => ({ hit: { key: 'other', platform: 'linux-x64', mode: 'coverage', status: 'PASS' }, why: 'coverage PASS' });
+  const foreign = () => ({ hit: { key: 'other', platform: OTHER_PLATFORM, mode: 'coverage', status: 'PASS' }, why: 'coverage PASS' });
   assert.equal(decide(ctx(), { coverage: foreign }).hit, null, 'a coverage hit from another platform is refused too');
 });
 
