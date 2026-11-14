@@ -2785,3 +2785,47 @@ the mod. So every harness that realises lots clears the box itself, and no run c
   player in a fourth and a villager at the claim corner, with the pre-clear paused: it must end `PLACED` within 10 minutes, both
   waits must have been answered and cleared, and the villager must still be there (the bot is made creative for this check: spectators
   never block).
+
+### Slice GI as built
+
+Gate infra, tooling only (no mod behaviour, no API change). Base `origin/main` 5868f62f. Gate run
+`artifacts/gate-runs-gi/20261114-022714-change` (head 2f07633f): apijars, api-compat and rs-survival-smoke/p3 all PASS, 22m23s,
+at load p50 48.
+
+- **rs02m2 (item 10, the reopen mid-removal).** The check after the reopen now **accepts REMOVING or REMOVED** and records which
+  (`out.rs02m2.reopened`). Why both are correct: in the failing RL run 2 (11-13) the removal was still pending at the stop
+  (`WORLD_STOPPED`) and the resume ended before the first read. The refund was equal and credited once, conservation exact and
+  E-flat 0. Those end checks are unchanged and still judge every case. `GATE6CRS_ITEM10_REPEAT=N` runs the reopen case N times,
+  each on its own world (`rs02m2`, `rs02m2r2`, …), because the runner runs a step only once. The GI run used 3: the first read
+  REMOVED (the flake's case, now passing) and the other two REMOVING. All three ended REMOVED with E-flat 0 and the refund equal.
+- **apijars anchors.** `tools/api-baselines.json` gains `anchors`: fixed older releases, never rolled. They are v0.62.0 (API 1.55),
+  v0.56.0 (API 1.49) and v0.42.0 (API 1.39), so each minor family keeps one jar after the three latest roll past it.
+  - Readers: `apitestBaselines()` (tools/api-baselines.mjs) is the releases, then the anchors, without a duplicate. It is read by
+    apijars, `api-compat --baselines` (each jar's references), `api-baselines.mjs list` / `missingFiles` and `api-baselines-build.mjs`.
+  - `formatBaselines` writes the anchors back, and the roll leaves them alone (kit/test/release-version.test.mjs).
+  - The jars were built offline from their tags (`node tools/api-baselines-build.mjs build v0.56.0`, then `v0.42.0`; v0.62.0 was
+    already there).
+  - In the run, all 6 jars passed 46 ok / 0 FAIL each, and api-compat was 8/8 clean. apijars now takes about 10 min instead of 4.
+- **A44.** In `kit/test/gate-corpus-plan.test.mjs`, the artifact test's store read-back part (which needs entries) is skipped with a
+  diagnostic when `kit/` or `scenarios/` is dirty: the store never caches a dirty tree. Its cold/warm/uncached equality still runs.
+  Checked on a dirty tree: 3/3 pass.
+- **A46, the full-classpath seed.** `seedClasspath()` lives in tools/lib/pinned-deps.mjs and runs from `ensurePinnedDeps`, so the
+  frozen source, build-artifact, server-host and nomod-server all get it. It works per gradle home, once per fingerprint of the
+  build files (`SEED_FILES`, with a marker in `<home>/architect-seed/<key>.ok`):
+  - an offline `architectResolveAll` (an init script: every resolvable compile/runtime classpath and annotation processor of every
+    project) must pass;
+  - if it fails, ONE online run of the same task, then the offline run again;
+  - the marker is written only after an offline pass. Otherwise it throws, naming the slot and the fix.
+  - Checked by hand: a fake `java_websocket_version=1.5.99` fails offline ("No cached version … available for offline mode") and
+    leaves no marker. In the run, the run dir's home seeded offline in 7.6 s (client.log). Units: kit/test/gate-pinned-deps.test.mjs.
+- **A41.** kit/test/gate-turbo.test.mjs covers two new cases. A run aborted mid-wait (released by the signal handler, or SIGKILLed)
+  hands the head to the next run, which then waits on the load itself. `--no-load-wait` (max1 0) skips the settle rule too, and
+  gate-run maps the flag to it. Two items are not done: **D3** (a wiring test of the stall watch inside runProcess needs a mini
+  runner; it costs more than it saves) and **D5** (a holder clock in the future keeps the settle rule on until the 30-min cap; the
+  fix is in `loadGate`, and this slice must not change the load-aware start).
+- **A49.** `kitReuse` refuses a file whose every test was skipped (as `javaReuse` does). The "inputs" note needed nothing:
+  unit-kit's recorded set holds `tools/lib/corpus-plan.mjs`. junit-reuse method-pattern matching is not done (a few seconds a run;
+  an unmatched pattern already falls back to gradle).
+- **A32 (SO minors), skipped.** Both are mod Java: `Builder.anchorState` counts the player's hopper chain as support, and
+  `Builder.removeScaffold` logs a failed undo and carries on. The so-survival driver's own connectivity scan already ignores the
+  hopper chain (it reads the frozen fixture volume). A fix belongs to a mod slice.
