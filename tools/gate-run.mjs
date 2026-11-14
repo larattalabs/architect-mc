@@ -1350,7 +1350,7 @@ if (!steps.length) {
     .filter((p) => !p.startsWith('no step ran'));
   if (!PLAN && bad.length) die(`nothing to run, but: ${bad.join('; ')}`);
   printSelection();
-  console.log(`${chainName}: nothing to run (${tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
+  console.log(`${chainName}: nothing to run (${tierInfo.cached?.length ? 'every selected step is CACHED, listed above' : tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
 }
 
