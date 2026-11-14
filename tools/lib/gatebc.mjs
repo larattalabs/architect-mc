@@ -4,7 +4,7 @@
 //   node tools/gate6dgr.mjs bcrelay   (bc-relay)   S-M5-10: a survival V town fed until built; an irrigated farm lot grown (IG's crop_farm
 //                                                  20 x 21 with IRR's field entry), quoted and realised; fed everything but its wheat
 //                                                  seeds, so the site waits with bare farmland and no water (the fluids stage is last);
-//                                                  random ticks on (randomTickSpeed 300) until vanilla dried some of its farmland back
+//                                                  random ticks on (random_tick_speed 300) until vanilla dried some of its farmland back
 //                                                  to dirt; then fed the rest: PLACED; consumed equals the quote item for item (no
 //                                                  dried cell re-laid and paid again); undoRevision: what it consumed comes back exactly
 //
@@ -86,6 +86,10 @@ export async function registerBC(steps, h) {
     const q = await call('dev.region.quote', { planId: g.planId, lotEntries: entries }, 300_000);
     out.quote = { bom: q.bom, exact: q.exact, notes: q.notes, refused: q.refused };
     check(!q.refused && q.bom?.['minecraft:dirt'] > 0 && q.bom?.['minecraft:wheat_seeds'] > 0, `the growth quoted: ${json(q.bom)} (exact ${q.exact})`, out.quote);
+    // the town's leftover dirt out of the stockpile (to the player), so the growth's shells wait for theirs (Steward's half-fed round)
+    const left0 = (await pile()).stock?.['minecraft:dirt'] ?? 0;
+    if (left0 > 0) await call('dev.stockpile.withdraw', { owner: G.OWNER, items: { 'minecraft:dirt': left0 } }, 60_000);
+    out.withdrawn = { dirt: left0, after: (await pile()).stock?.['minecraft:dirt'] ?? 0 };
     const ps0 = await pile();
     const r = await call('dev.region.realise', { planId: g.planId, lots: entries }, 300_000);
     check(!r.refused, `the growth realised with the quoted entry: ${r.refused ?? r.region}`);
@@ -102,13 +106,13 @@ export async function registerBC(steps, h) {
     const halfDirt = Math.floor(shellDirt / 2);
     if (halfDirt > 0) await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: { [DIRT]: halfDirt }, exact: true }, 120_000);
     await sleep(8000);
-    await cmd('/gamerule randomTickSpeed 300');
-    await sleep(30_000);
-    await cmd('/gamerule randomTickSpeed 0');
+    await cmd('/gamerule random_tick_speed 300');
+    await sleep(60_000);
+    await cmd('/gamerule random_tick_speed 0');
     await sleep(3000);
     const psS1 = await pile();
     out.shells = { outstandingDirt: shellDirt, fedDirt: halfDirt, consumed: G.minus(psS1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}), outstandingAfter: psS1.outstanding?.[DIRT] ?? 0 };
-    check(halfDirt > 0, `the shells waited half-fed (${halfDirt} of ${shellDirt} dirt) with random ticks on for 30 s`, out.shells);
+    check(halfDirt > 0, `the shells waited half-fed (${halfDirt} of ${shellDirt} dirt) with random ticks on (random_tick_speed 300) for 60 s`, out.shells);
     // fed all but the seeds, until only the seeds are outstanding: the farm's site waits with its farmland laid, nothing planted, no water
     const SEEDS = 'minecraft:wheat_seeds';
     const skip = new Set([SEEDS]);
@@ -126,14 +130,14 @@ export async function registerBC(steps, h) {
     out.waiting = { waves, only, floor: wait0, outstanding: (await pile()).outstanding };
     check(only && wait0.farmland > 0, `fed all but the seeds (${waves} waves): the farm waits on ${SEEDS} only, its floor laid (${wait0.farmland} farmland, ${wait0.dirt} dirt)`, out.waiting);
     // vanilla dries the bare farmland: random ticks on until some of it is dirt again (no water: the fluids stage is last)
-    await cmd('/gamerule randomTickSpeed 300');
+    await cmd('/gamerule random_tick_speed 300');
     let dried = wait0;
     for (let i = 0; i < 40; i++) {
-      await sleep(3000);
+      await sleep(3000); // (up to 2 min at random_tick_speed 300)
       dried = await floor(lot);
       if (dried.dirt - wait0.dirt >= 20) break;
     }
-    await cmd('/gamerule randomTickSpeed 0');
+    await cmd('/gamerule random_tick_speed 0');
     await sleep(5000); // the builder sees the dried cells
     const psMid = await pile();
     out.dried = { floor: dried, consumedSoFar: G.minus(psMid.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}), outstanding: psMid.outstanding };
