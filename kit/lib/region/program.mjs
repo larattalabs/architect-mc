@@ -33,6 +33,7 @@ import { rockSpire } from '../forms/rockSpire.mjs';
 import { BAKE_OPS, bakeCells, bakeOps } from '../forms/rules.mjs';
 import { giantTree } from '../forms/giantTree.mjs';
 import { giantMushroom } from '../forms/giantMushroom.mjs';
+import { archSpan } from '../forms/archSpan.mjs';
 import { lintStates } from '../forms/states.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { analyseVolume } from './affordances.mjs';
@@ -1094,6 +1095,16 @@ export class Region {
   /** (6c F3) A `giantMushroom` (lib/forms/giantMushroom.mjs) as form part `id`, on the plan ground (always baked). */
   giantMushroom(id, params, opts = {}) {
     const gen = giantMushroom({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'giantMushroom', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z) });
+    this.form(id, gen, opts);
+    return gen;
+  }
+
+  /**
+   * (7c PM) An `archSpan` (lib/forms/archSpan.mjs, the first promoted form: kit/lib/forms/CANDIDATES.md) as form part `id`: an arcade
+   * carrying a deck, its piers down to the plan ground. Options as `form` (`bake`). Returns the generator's result.
+   */
+  archSpan(id, params, opts = {}) {
+    const gen = archSpan({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'archSpan', id).hex, groundAt: params.groundAt ?? ((x, z) => this.survey.heightAt(x, z)) });
     this.form(id, gen, opts);
     return gen;
   }
