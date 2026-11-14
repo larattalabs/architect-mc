@@ -21,6 +21,7 @@ fork and does not track upstream.
 | 2026-10-05 | **Publishing the API artifact:** GitHub Packages from CI on release tags (`v*`), as `dev.larattalabs:architect_mc`. It's free for public packages. GitHub's Maven registry needs a token even to read public packages: Steward's CI reads it with GITHUB_TOKEN once the package grants steward-mc access, and outside builders need a PAT with `read:packages`. Modrinth Maven (anonymous reads) is the option if Architect ships there. |
 | 2026-10-04 | Branding: "Powered by Claude" is fine. The name must never include "Claude Code". |
 | 2026-11-13 | **7c spend approved: $65 total, a hard cap** (Noah via parent session: "Approve $65"). It is the paid batch **PAY**'s CONTRACT 7c §4 plan (AU, PM and BR are $0 sim slices). Shares as §4 estimates: P1 $5, P2 $29, P3 $11, P4 $3, P5 $3, P6 $6 (optional, only if the ledger reads at most $50 after P5), R $8. Stop and ask Noah (through the parent session) before any item goes past its share by more than 20%, or before a step whose cap would take the total past $65. Order: the ranked queue (Status and parked items). |
+| 2026-11-14 | N-7c-6 (2026-11-14): Noah approved archSpan as is, flat profiles included (sheet ac9b3ab3). |
 
 ## Architecture
 

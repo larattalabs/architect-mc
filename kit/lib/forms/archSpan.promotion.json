@@ -706,6 +706,21 @@
    ],
    "sheet": "/Users/noahlaratta/Developer/LarattaLabs/Minecraft/architect-mc/artifacts/promote/archSpan/sheet.png",
    "at": "2026-11-14T19:51:15Z"
+  },
+  "approval": {
+   "pass": true,
+   "by": "Noah",
+   "at": "2026-11-14",
+   "sheetSha": "ac9b3ab3e2baa054e01f652c3ae252fa8a7a3b5a2cfdcb13d123dee150cfa97f",
+   "via": "N-7c-6, relayed verbatim by the parent session local_a69a2186 through the Architect coordinator: \"Yes as is\" (flat profiles included)"
+  },
+  "output": {
+   "pass": true,
+   "version": "1.0.0",
+   "module": "kit/lib/forms/archSpan.mjs",
+   "from": "0.1.0",
+   "sourceSha": "e061d354d363243ab4a4538c3c0764a6d8bf468f582593eb9e064e0c8e3194cd",
+   "at": "2026-11-14T20:12:12Z"
   }
  },
  "module": "kit/lib/forms/archSpan.mjs",

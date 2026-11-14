@@ -35,6 +35,6 @@ the JSON beside its module (`<module>.promotion.json`), and its block below is w
 | determinism | PASS: 6/6 legs equal (run 1 (this Node); run 2 (this Node); run 3 (this Node); node@22 (mise); linux node:22 --platform linux/amd64; linux node:24-slim); 20 seeds, all c956de6a255a |
 | properties | PASS: 40 param sets (M3 on 40), 0 failed; materials under default, sandstone, deepslate; eval 232 ns/cell, 0.95x crater |
 | variety | PASS: 190/190 pairs under IoU 0.8 (100%; median 0.306, max 0.717); sheet ac9b3ab3e2ba |
-| approval | open |
-| output | open |
+| approval | YES: Noah, 2026-11-14, sheet ac9b3ab3e2ba |
+| output | PASS: kit/lib/forms/archSpan.mjs 1.0.0 |
 <!-- /promote:archSpan -->

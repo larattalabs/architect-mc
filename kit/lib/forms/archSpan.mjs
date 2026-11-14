@@ -18,7 +18,7 @@ import { fnv64, splitmix64 } from '../noise.mjs';
 
 export const GENERATOR = 'archSpan';
 /** The module's semver (promotion step 6). */
-export const VERSION = '0.1.0';
+export const VERSION = '1.0.0';
 export const PROFILES = Object.freeze(['round', 'segmental', 'pointed', 'elliptical']);
 export const PARAPETS = Object.freeze(['wall', 'crenel', 'rail', 'none']);
 /** The deepest a pier reaches under `at` to the ground. */
