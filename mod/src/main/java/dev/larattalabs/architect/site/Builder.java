@@ -571,10 +571,7 @@ public final class Builder {
 			// (6c close-out B, L-V7) after a restart the run has no built bit: a farmland cell whose before (the target entry's, at put-down)
 			// was not dirt holds dirt only because its farmland dried, so it counts as built as it did before the stop: written once, paid
 			// once ({@link Builder#driedFarmland})
-			// (BC, S-M5-10) generalised: a soil cell this run wrote (its built bit), or the target's ledger book says stood paid at the last
-			// save ({@link #paidBefore}), that vanilla turned into another soil block (farmland dried, grass spread over our dirt, a dirt
-			// path under a block) is still the cell we paid for: never re-laid, never paid again; its refund is what was paid
-			if ((built.get(i) || tilled.get(i) || paidBefore.get(i)) && ownSoil(target[i]) && ownSoil(now)) {
+			if ((built.get(i) || tilled.get(i)) && target[i].is(net.minecraft.world.level.block.Blocks.FARMLAND) && now.is(net.minecraft.world.level.block.Blocks.DIRT)) {
 				return true;
 			}
 			return Copper.is(now, target[i].getBlock());
@@ -585,21 +582,6 @@ public final class Builder {
 		 * ({@link #driedFarmland}). Derived from the journal's befores whenever a run is made, so it survives a restart.
 		 */
 		final BitSet tilled = new BitSet();
-
-		/**
-		 * (BC, S-M5-10) The cells the target's ledger book (RL) says stood paid at the last save ({@code StockLedger.Book#standing}): durable,
-		 * unlike the built bits, so a run made after a restart still knows a soil cell vanilla changed since was written and paid
-		 * ({@link #matches}). Attached when the run is made ({@code Stockpiles.attachPaid}).
-		 */
-		final BitSet paidBefore = new BitSet();
-
-		/**
-		 * (BC, S-M5-10) The soil blocks vanilla turns into one another on a cell we wrote: {@link #soil} and the dirt path (it goes to dirt
-		 * under a block, as farmland does). Each costs a dirt ({@code Refunds}' dirt family).
-		 */
-		static boolean ownSoil(BlockState s) {
-			return soil(s) || s.is(net.minecraft.world.level.block.Blocks.DIRT_PATH);
-		}
 
 		/** (6c RS) A built survival region target's run: soil cells (dirt, grass, podzol, mycelium, farmland) are one block (grass spreads, farmland dries). */
 		boolean soilSame;
@@ -614,8 +596,7 @@ public final class Builder {
 		 * copper chain, waxed or scraped) the items of the block standing: the refund pays what is there.
 		 */
 		List<SurvivalItems.Cost> refundCost(BlockState now, int i) {
-			// (BC, S-M5-10) a soil cell vanilla changed to another soil block pays back what it was paid (a refund is never past the bill)
-			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) || ownSoil(now) && ownSoil(target[i]) ? cost.get(i) : Cells.cost(now);
+			return now.is(target[i].getBlock()) || soilSame && soil(now) && soil(target[i]) ? cost.get(i) : Cells.cost(now);
 		}
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */
@@ -750,7 +731,6 @@ public final class Builder {
 		r = new Run(s, target);
 		dev.larattalabs.architect.journal.JournalStore.Meta main = SiteJournal.main(s.id());
 		driedFarmland(r, main == null ? null : SiteJournal.beforeOf(main.id(), s.restoreBox()));
-		Stockpiles.attachPaid(s, r); // (BC, S-M5-10) the book's paid cells: a soil cell vanilla changed since is still built
 		ServerLevel level = Sites.levelOf(server, s);
 		if (level != null) {
 			r.rescan(level);
@@ -1771,7 +1751,6 @@ public final class Builder {
 				}
 				freeChanged = true;
 			}
-			retill(level, r, i);
 			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			put(level, r, i, p, true);
@@ -1923,25 +1902,6 @@ public final class Builder {
 			return true;
 		}
 		return level.getEntities((Entity) null, new AABB(p), e -> e instanceof LivingEntity && e.isAlive() && !e.isSpectator()).isEmpty();
-	}
-
-	/**
-	 * (BC, S-M5-10) Before cell {@code i} (a crop) is put on its support: a support that is this run's farmland, built and dried back to
-	 * dirt by vanilla while the target waited, is tilled again, free (a hoe's work: the farmland was paid once). Without it the crop would
-	 * stand on dirt. Nothing when the support is not ours, not built or not dirt. Returns whether it tilled.
-	 */
-	static boolean retill(ServerLevel level, Run r, int i) {
-		int sup = r.support[i];
-		if (sup < 0 || !r.built.get(sup) || !r.target[sup].is(Blocks.FARMLAND)) {
-			return false;
-		}
-		BlockPos sp = r.pos(sup);
-		BlockState now = stateIfLoaded(level, sp);
-		if (now == null || !now.is(Blocks.DIRT)) {
-			return false;
-		}
-		dev.larattalabs.architect.placed.Placed.set(level, sp, r.target[sup], Sites.FLAGS);
-		return true;
 	}
 
 	/** Writes queue cell {@code i} exactly as the instant placement did (state, block-entity NBT without inventories). */
