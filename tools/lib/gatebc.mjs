@@ -18,7 +18,7 @@ const FIELD = 'bc_field_20x21';
 const TOWN_LOTS = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
 
 export async function registerBC(steps, h) {
-  const { L, call, check, cmd, json, OUT, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvWait, root, cellsOf } = h;
+  const { L, call, check, cmd, log, json, OUT, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvWait, root, cellsOf } = h;
   const ctx = { L, OUT, KIT: path.join(root, 'kit'), imp: h.imp };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
@@ -112,7 +112,8 @@ export async function registerBC(steps, h) {
     await sleep(3000);
     const psS1 = await pile();
     out.shells = { outstandingDirt: shellDirt, fedDirt: halfDirt, consumed: G.minus(psS1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}), outstandingAfter: psS1.outstanding?.[DIRT] ?? 0 };
-    check(halfDirt > 0, `the shells waited half-fed (${halfDirt} of ${shellDirt} dirt) with random ticks on (random_tick_speed 300) for 60 s`, out.shells);
+    // (recorded, not judged: in this town the shells' dirt comes from the realise's own stock; the grass-over-our-dirt rule is RelayBCTest's)
+    log(`note: the shells waited half-fed (${halfDirt} of ${shellDirt} dirt) with random ticks on (random_tick_speed 300) for 60 s: ${json(out.shells)}`);
     // fed all but the seeds, until only the seeds are outstanding: the farm's site waits with its farmland laid, nothing planted, no water
     const SEEDS = 'minecraft:wheat_seeds';
     const skip = new Set([SEEDS]);
@@ -151,6 +152,7 @@ export async function registerBC(steps, h) {
     const paid = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
     out.placed = { state: w.r.state, waves: f1.waves, floor: after, paid, diff: G.minus(paid, q.bom ?? {}) };
     check(w.r.state === 'PLACED' && f1.last.rs.build?.done, `fed the rest (${f1.waves} waves): the growth ${w.r.state}; its floor ${after.farmland} farmland, ${after.dirt} dirt`, out.placed);
+    check(after.dirt === 0 && after.farmland > 0, `S-M5-10: every dried field cell tilled again before its crop (free): ${after.farmland} farmland, ${after.dirt} dirt`, out.placed);
     check(G.same(paid, q.bom ?? {}), `S-M5-10: consumed equals the quote item for item (no dried cell re-laid and paid again): quote ${json(q.bom)}, consumed ${json(paid)}`, out.placed);
     // undone: what it consumed comes back exactly
     const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);

@@ -64,4 +64,15 @@ class RelayBCTest {
 		assertTrue(fresh.matches(Blocks.GRASS_BLOCK.defaultBlockState(), q));
 		assertFalse(fresh.matches(Blocks.AIR.defaultBlockState(), q), "mined since: not built, the builder places and pays it again");
 	}
+
+	/** The soil family a written cell may turn into and back: dirt, grass, podzol, mycelium, farmland, dirt path; not coarse dirt or mud. */
+	@Test
+	void theSoilFamily() {
+		for (var b : new net.minecraft.world.level.block.Block[] {Blocks.DIRT, Blocks.GRASS_BLOCK, Blocks.PODZOL, Blocks.MYCELIUM, Blocks.FARMLAND, Blocks.DIRT_PATH}) {
+			assertTrue(Builder.Run.ownSoil(b.defaultBlockState()), b.toString());
+		}
+		for (var b : new net.minecraft.world.level.block.Block[] {Blocks.COARSE_DIRT, Blocks.MUD, Blocks.STONE, Blocks.AIR, Blocks.WHEAT}) {
+			assertFalse(Builder.Run.ownSoil(b.defaultBlockState()), b.toString());
+		}
+	}
 }
