@@ -1998,21 +1998,6 @@ public final class Stockpiles {
 	/** (RL) The server of the loaded world (the books are refreshed on its thread at each save). */
 	static volatile @Nullable MinecraftServer SERVER;
 
-	/**
-	 * (BC, S-M5-10) Attaches to a new run the cells its target's ledger book says stood paid at the last save ({@link Builder.Run#paidBefore}),
-	 * when the book indexes this run's queue. Nothing for a target no stockpile feeds or with no book. Server thread.
-	 */
-	static void attachPaid(Object t, Builder.Run r) {
-		Pile p = t instanceof Site s ? pileOf(s) : pileOf((Infra) t);
-		if (p == null) {
-			return;
-		}
-		StockLedger.Book b = p.ledger.book(keyOf(t));
-		if (b != null && b.fits(r.queue)) {
-			r.paidBefore.or(b.standing());
-		}
-	}
-
 	/** (RL) A feed target's credit key (its paid record's key). */
 	static String keyOf(Object t) {
 		return t instanceof Site s ? Builder.creditKey(s) : RoadBuilder.creditKey((Infra) t);
