@@ -27,7 +27,9 @@ import org.jspecify.annotations.Nullable;
  *     revision's refills; a lot with none stays a pad and costs nothing here
  * @param exact true when every piece is known to equal what the realise takes, on the land as it is now: false when a lot's bill may drift
  *     (C26's drift sources, or cells in unloaded chunks), when fluids are an upper bound, or when the land under a lot is written by the plan's
- *     own tiles first; {@code notes} say which
+ *     own tiles first, or (since 1.59.0) when the region's paid cells include natural terrain (dirt, stone, ...) that may already stand in
+ *     the land: a realise skips a cell that already holds its block, so the quote is an upper bound (consumed at most the quote, never
+ *     more); {@code notes} say which
  * @param notes why a piece is not exact, and what the quote read
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,

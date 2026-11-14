@@ -267,7 +267,30 @@ public final class LandCheck {
 	 */
 	public static Cls classifyCell(BlockState now, Supplier<@Nullable CompoundTag> nowNbt, boolean playerRecord, Journal.Value after, boolean mech,
 		boolean mechMoving) {
+		return classifyCell(now, nowNbt, playerRecord, after, mech, mechMoving, false);
+	}
+
+	/**
+	 * (SA, A47; LCi finding 2, Steward yes 2026-11-11) As {@link #classifyCell(BlockState, Supplier, boolean, Journal.Value, boolean, boolean)},
+	 * and a mechanism's trigger cell ({@code triggers[].at}, {@link #mechTriggers}): its state stays excused (a lever pulled, a button
+	 * pressed), but a written trigger block gone (air or a fluid there now) is {@link Cls#REMOVED}. Lanes and rungs stay excused: an empty
+	 * lane can't be told from an open gate.
+	 */
+	public static Cls classifyCell(BlockState now, Supplier<@Nullable CompoundTag> nowNbt, boolean playerRecord, Journal.Value after, boolean mech,
+		boolean mechMoving, boolean trigger) {
+		if (trigger && !playerRecord && !WorldJournal.state(after).isAir()
+			&& (now.isAir() || now.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock)) {
+			return Cls.REMOVED;
+		}
 		return mechMoving && !playerRecord ? Cls.SAME : classify(now, nowNbt, playerRecord, after, mech);
+	}
+
+	/** (SA, A47) Every gate mechanism's trigger cells ({@code triggers[].at}, not its rungs) in an IR: a subset of {@link #mechVolatile}. */
+	public static LongOpenHashSet mechTriggers(JsonObject ir) {
+		LongOpenHashSet vol = new LongOpenHashSet();
+		LongOpenHashSet out = new LongOpenHashSet();
+		walk(ir, null, vol, out, 0);
+		return out;
 	}
 
 	/**
@@ -276,18 +299,18 @@ public final class LandCheck {
 	 */
 	public static LongOpenHashSet mechVolatile(JsonObject ir) {
 		LongOpenHashSet out = new LongOpenHashSet();
-		walk(ir, null, out, 0);
+		walk(ir, null, out, new LongOpenHashSet(), 0);
 		return out;
 	}
 
-	private static void walk(JsonElement e, @Nullable String key, LongOpenHashSet out, int depth) {
+	private static void walk(JsonElement e, @Nullable String key, LongOpenHashSet out, LongOpenHashSet triggers, int depth) {
 		if (depth > 24) {
 			return;
 		}
 		if (e instanceof JsonArray a) {
 			for (JsonElement x : a) {
 				if (x.isJsonObject() || x.isJsonArray()) {
-					walk(x, null, out, depth + 1);
+					walk(x, null, out, triggers, depth + 1);
 				}
 			}
 			return;
@@ -307,6 +330,7 @@ public final class LandCheck {
 				for (JsonElement te : ts) {
 					if (te instanceof JsonObject t) {
 						point(t.get("at"), out);
+						point(t.get("at"), triggers);
 						if (t.get("rungs") instanceof JsonArray rs) {
 							rs.forEach(r -> point(r, out));
 						}
@@ -316,7 +340,7 @@ public final class LandCheck {
 		}
 		for (var c : o.entrySet()) {
 			if (c.getValue().isJsonObject() || c.getValue().isJsonArray()) {
-				walk(c.getValue(), c.getKey(), out, depth + 1);
+				walk(c.getValue(), c.getKey(), out, triggers, depth + 1);
 			}
 		}
 	}
@@ -372,6 +396,7 @@ public final class LandCheck {
 		final Map<String, String> roadOfSite = new HashMap<>();
 		final Map<String, Owner> owners = new HashMap<>();
 		final LongOpenHashSet mechVol;
+		final LongOpenHashSet mechTrig;
 		final Map<String, Acc> parts = new TreeMap<>();
 		final Map<String, long[]> lots = new LinkedHashMap<>();
 		final CompletableFuture<LandReport> future = new CompletableFuture<>();
@@ -386,6 +411,7 @@ public final class LandCheck {
 			this.js = js;
 			this.sections = sections;
 			this.mechVol = mechVolatile(l.ir().json());
+			this.mechTrig = mechTriggers(l.ir().json());
 		}
 	}
 
@@ -536,7 +562,8 @@ public final class LandCheck {
 			boolean pt = Placed.record(c, x, y, z) != null;
 			boolean mech = o.mech;
 			Cls cls = o.field != null && o.field.unchanged(pos, now) ? Cls.SAME // (M5 FC) air or a field crop over our farmland
-				: classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos));
+				: classifyCell(now, () -> WorldJournal.beNbt(j.level, bp), pt, after, mech, mech && j.mechVol.contains(pos),
+					mech && j.mechTrig.contains(pos));
 			if (lot != null) {
 				long[] a = j.lots.computeIfAbsent(lot, q -> new long[2]);
 				if (cls == Cls.PLAYER) {

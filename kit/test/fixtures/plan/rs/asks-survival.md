@@ -30,7 +30,7 @@ cliff_monks cost.bom 84 items; survival true
 conquered_town/village zone.standard fits free 42442 held 843 paid-items 54
 conquered_town cost.bom 54 items; survival true
 crater_mine/mine_zone zone.standard fits free 57255 held 692 paid-items 57
-crater_mine/crater form.crater unsupported
+crater_mine/crater form.crater fits free 6362 held 0 paid-items 0
 crater_mine/crater_relief form.relief fits free 1776 held 0 paid-items 0
 crater_mine cost.bom 57 items; survival true
 desert_jungle_wall/town zone.standard fits free 72067 held 1119 paid-items 54
@@ -38,8 +38,8 @@ desert_jungle_wall/great_wall connector.wall fits free 0 held 36 paid-items 5660
 desert_jungle_wall/two_faced_palette rule.palette refused
 desert_jungle_wall cost.bom 5714 items; survival true
 dwarven_hold/hold zone.standard fits free 70953 held 975 paid-items 54
-dwarven_hold/mountain_hollow form.hollow_mountain unsupported
-dwarven_hold cost.bom 54 items; survival true
+dwarven_hold/mountain_hollow form.hollow_mountain adjusted free 12994 held 0 paid-items 0
+dwarven_hold cost.bom 60 items; survival true
 end_city_ruins/city zone.standard fits free 43190 held 819 paid-items 54
 end_city_ruins/dwelling_bridges connector.bridge refused
 end_city_ruins/central_terrace form.terrace fits free 0 held 12390 paid-items 30
@@ -110,9 +110,9 @@ redstone_gate/curtain_wall connector.wall adjusted free 0 held 26 paid-items 455
 redstone_gate/main_gate connector.gate refused
 redstone_gate/drawbridge connector.drawbridge blocked
 redstone_gate cost.bom 8471 items; survival true
-ring_city/ring_town zone.standard blocked
-ring_city/crater_lake form.crater unsupported
-ring_city cost.bom 0 items; survival true
+ring_city/ring_town zone.standard fits free 69758 held 3753 paid-items 0
+ring_city/crater_lake form.crater fits free 307 held 6505 paid-items 211
+ring_city cost.bom 311 items; survival true
 rival_families/estates zone.standard refused
 rival_families/family_colours rule.palette refused
 rival_families/mirrored_banks rule.shape unsupported
@@ -124,9 +124,9 @@ row_houses cost.bom 57 items; survival true
 ruined_empire/survivors_camp zone.standard fits free 53987 held 795 paid-items 54
 ruined_empire cost.bom 54 items; survival true
 secret_tunnels/cove zone.standard fits free 26164 held 675 paid-items 54
-secret_tunnels/tunnel_cellar tunnel.under unsupported
-secret_tunnels/tunnel_dock tunnel.under unsupported
-secret_tunnels/tunnel_hatch tunnel.under unsupported
+secret_tunnels/tunnel_cellar tunnel.under refused
+secret_tunnels/tunnel_dock tunnel.under refused
+secret_tunnels/tunnel_hatch tunnel.under refused
 secret_tunnels cost.bom 54 items; survival true
 ship_town/ship_deck zone.standard fits free 58502 held 963 paid-items 54
 ship_town/ship_hull form.ship_hull unsupported
@@ -134,7 +134,7 @@ ship_town/ship_masts form.mast unsupported
 ship_town cost.bom 54 items; survival true
 sky_monastery/cloister zone.standard fits free 34303 held 699 paid-items 54
 sky_monastery/long_stair connector.stair refused
-sky_monastery/sky_island form.floating_island unsupported
+sky_monastery/sky_island form.floating_island adjusted free 7365 held 0 paid-items 0
 sky_monastery cost.bom 54 items; survival true
 sorting_warehouse/trading_post zone.standard fits free 50870 held 759 paid-items 54
 sorting_warehouse cost.bom 54 items; survival true
@@ -180,7 +180,7 @@ upside_down/village zone.standard fits free 36361 held 524 paid-items 57
 upside_down/main_street connector.street fits free 0 held 62 paid-items 69
 upside_down/chain_bridges connector.rope_bridge refused
 upside_down/winch_lift connector.lift refused
-upside_down/hang_from_ceiling rule.suspended unsupported
+upside_down/hang_from_ceiling rule.suspended refused
 upside_down cost.bom 126 items; survival true
 walled_town/town zone.standard fits free 65447 held 843 paid-items 54
 walled_town/town_wall connector.wall fits free 0 held 0 paid-items 5416

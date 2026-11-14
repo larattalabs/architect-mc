@@ -229,7 +229,7 @@ public interface Regions {
 	 * {@link #realise} of the artifact's own plan (its IR: never planned again), with the key. Completes with the region id once
 	 * queued. {@link #remove} undoes it. Since 1.23.0.
 	 * <p>(6c close-out A, §1) <b>The key after a refusal.</b> A realise refused before its region record is written ({@link
-	 * Reason#ARTIFACT_UNAPPROVED}, {@link Reason#ARTIFACT_STALE}, {@link Reason#PALETTE}, {@link Reason#NOT_LOADED}, and what {@link
+	 * Reason#ARTIFACT_UNAPPROVED}, {@link Reason#ARTIFACT_STALE}, {@link Reason#PALETTE}, {@link Reason#NOT_LOADED}, (7c AU) {@link Reason#AUTHORED_STALE}, and what {@link
 	 * #realise} refuses before it writes the record: {@link Reason#NOT_ALLOWED}, {@link Reason#CREATIVE_ONLY_BLOCK}) binds nothing to its
 	 * opKey: the same key may realise another artifact (the one checked again after a stale refusal). Once a realise under the key has
 	 * written its region record, the key is that region's while the region stands, in every state but REMOVED (as since C20, {@link
@@ -308,7 +308,7 @@ public interface Regions {
 	 * {@code architect_mc:land}, the beside data) reads the older effective IR. Once begun it is never abandoned: a call with the same
 	 * target returns the running operation. Since 1.43.0.
 	 *
-	 * <p>In survival (RV §8, slice RU, since NEXT) a revision whose targets are not all built is cancelled by its undo, not refused: a
+	 * <p>In survival (RV §8, slice RU, since 1.59.0) a revision whose targets are not all built is cancelled by its undo, not refused: a
 	 * revision still writing has its batch cancelled first (its waiting items fail {@code CANCELLED}), then its unbuilt targets and lots
 	 * are removed with the rest: each refunds what of it stands paid (never more than its paid record), items delivered but not consumed
 	 * stay in the stock (a target's reservation ends with it), and the land comes back as before the revision.
@@ -416,6 +416,19 @@ public interface Regions {
 	 * plan path only, checker-driven, at most 4 rounds. Completes with the authored program id; its result holds the outcome
 	 * ({@code AUTHORED} or {@code NOT_SHOWN}), the rounds, the checker findings and the cost. Runs under the caller's budget and the
 	 * player's approval. Built by slice AU (feature {@code "programAuthoring"}); until then it throws. Since 1.55.0.
+	 * <p>
+	 * (7c AU, as built; docs/CONTRACT.md "Slice AU as built") Completes, once the helper took the request, with the id of a design of kind
+	 * {@link Design.Kind#PROGRAM}: that id is the authored program's id. Each round's structured job writes the program's whole source; the
+	 * helper's checker lints it (the realise lint's banned forms, the plan path's rules, the closed kit imports), plans it in the region plan's
+	 * sandbox over the claim's survey (the Overworld; {@link AuthorRequest#EXT_STYLE}'s roles) and runs the region checker (its errors and its
+	 * M3 support rules); a round with findings gets a next round with them, at most 4 ({@link AuthorRequest#EXT_ROUNDS}). The design ends DONE
+	 * with {@code result.outcome} AUTHORED ({@code sha}, {@code source}, {@code reason}) or NOT_SHOWN (the last round's {@code findings}),
+	 * and {@code rounds}, {@code history} and {@code cost}; a budget stop fails it. An AUTHORED program is installed world-local ({@code
+	 * <world>/architect/authored/<id>.mjs}) for {@link AuthorRequest#EXT_OWNER} before DESIGN_DONE fires; a plan names it as a zone's program
+	 * {@code {template: "authored", params: {id, sha, params?}}} (a whole-claim program: the plan's sole zone), checked for the same owner;
+	 * the approved artifact freezes {@code {part, id, sha}} and {@link #realiseApproved} refuses {@link Reason#AUTHORED_STALE} (detail the id)
+	 * when the installed file no longer hashes to it. The same {@code opKey} and body adopt the first design; another body refuses
+	 * OP_KEY_CONFLICT. Since 1.59.0.
 	 */
 	default CompletableFuture<String> authorProgram(AuthorRequest request) {
 		throw new UnsupportedOperationException("Regions.authorProgram is reserved: it throws until slice AU ships (feature programAuthoring)");

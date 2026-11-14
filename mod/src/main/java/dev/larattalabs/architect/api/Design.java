@@ -54,13 +54,19 @@ public record Design(String id, Status status, String step, Optional<String> ent
 
 	/**
 	 * What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}; since 1.9.0 a region design
-	 * ({@link Regions#design}) is {@link #REGION}; (7c CO) a composed settlement ({@link Regions#compose}) is {@link #SETTLEMENT} (since 1.58.0).
+	 * ({@link Regions#design}) is {@link #REGION}; (7c CO) a composed settlement ({@link Regions#compose}) is {@link #SETTLEMENT} (since 1.58.0); (7c AU) an authoring session
+	 * ({@link Regions#authorProgram}) is {@link #PROGRAM} (since 1.59.0).
 	 * New values are only ever appended.
 	 */
 	public enum Kind {
 		DESIGN, MASSING, REPORT, POLISH, REGION,
 		/** (7c CO) {@link Regions#compose}: its {@link Design#result()} holds {@code outcome} (PICKED, COMPOSED or NO_PLAN). Since 1.58.0. */
-		SETTLEMENT
+		SETTLEMENT,
+		/**
+		 * (7c AU) {@link Regions#authorProgram}: its id is the authored program's id; its {@link Design#result()} holds {@code outcome} (AUTHORED
+		 * or NOT_SHOWN), {@code sha}, {@code rounds}, {@code findings}, {@code history} and {@code cost}. Since 1.59.0.
+		 */
+		PROGRAM
 	}
 
 	/** This job's kind (since 1.7.0). */
@@ -70,6 +76,9 @@ public record Design(String id, Status status, String step, Optional<String> ent
 		}
 		if (request != null && request.has("kind") && request.get("kind").isJsonPrimitive() && "settlement".equals(request.get("kind").getAsString())) {
 			return Kind.SETTLEMENT;
+		}
+		if (request != null && request.has("kind") && request.get("kind").isJsonPrimitive() && "program".equals(request.get("kind").getAsString())) {
+			return Kind.PROGRAM;
 		}
 		if (polish.isPresent() || request != null && request.has("kind") && "polish".equals(request.get("kind").getAsString())) {
 			return Kind.POLISH;

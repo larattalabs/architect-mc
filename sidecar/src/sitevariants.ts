@@ -209,6 +209,9 @@ export class SiteVariants {
     if (!this.queue.includes(id)) this.queue.push(id);
     if (this.runP || this.stopped) return;
     this.runP = (async () => {
+      // (SA, A18) yield to the event loop first: the runner's first steps (the kit copy, the site files) are synchronous, and started
+      // inside the request they ran before the site.variant ack was written; under load the ack missed the mod's 20 s window
+      await new Promise<void>((r) => setImmediate(r));
       try {
         while (!this.stopped && this.queue.length) {
           const next = this.queue.shift()!;

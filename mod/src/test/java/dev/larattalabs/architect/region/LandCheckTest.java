@@ -179,5 +179,54 @@ class LandCheckTest {
 		LongOpenHashSet v = LandCheck.mechVolatile(ir);
 		assertEquals(6, v.size(), "three open cells, one closed, a trigger and its rung");
 		assertTrue(v.contains(BlockPos.asLong(10, 65, 20)) && v.contains(BlockPos.asLong(11, 64, 20)) && v.contains(BlockPos.asLong(12, 70, 21)));
+		// (SA, A47) the trigger cells alone: its `at`, not its rung
+		LongOpenHashSet t = LandCheck.mechTriggers(ir);
+		assertEquals(1, t.size(), "one trigger");
+		assertTrue(t.contains(BlockPos.asLong(12, 65, 21)) && !t.contains(BlockPos.asLong(12, 70, 21)));
+	}
+
+	/** (SA, A47) A missing trigger block reads removed; a pulled or pressed one stays the same; a player's lever there stays the player's. */
+	@Test
+	void aMissingTriggerIsRemoved() {
+		BlockState air = Blocks.AIR.defaultBlockState();
+		BlockState lever = Blocks.LEVER.defaultBlockState();
+		BlockState button = Blocks.STONE_BUTTON.defaultBlockState();
+		assertEquals(LandCheck.Cls.REMOVED, LandCheck.classifyCell(air, () -> null, false, val(lever), true, true, true), "the lever broken");
+		assertEquals(LandCheck.Cls.REMOVED, LandCheck.classifyCell(air, () -> null, false, val(button), true, true, true), "the button broken");
+		assertEquals(LandCheck.Cls.REMOVED, LandCheck.classifyCell(Blocks.WATER.defaultBlockState(), () -> null, false, val(lever), true, true, true),
+			"water where the lever was");
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(lever.setValue(BlockStateProperties.POWERED, true), () -> null, false, val(lever), true,
+			true, true), "the lever pulled");
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(button.setValue(BlockStateProperties.POWERED, true), () -> null, false, val(button), true,
+			true, true), "the button pressed");
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(air, () -> null, false, val(air), true, true, true), "a trigger cell written as air");
+		assertEquals(LandCheck.Cls.PLAYER, LandCheck.classifyCell(Blocks.COBBLESTONE.defaultBlockState(), () -> null, true, val(lever), true, true, true),
+			"a player's block over the trigger is the player's");
+		// the old overload (no trigger flag) is unchanged: a lane cell
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(air, () -> null, false, val(lever), true, true), "a moving cell, not a trigger");
+	}
+
+	/** (SA, A48) LCi's gaps: every cell of a several-cell lane, and a piston pushing a player's block along it. */
+	@Test
+	void aLaneOfSeveralCellsAndAPushedPlayerBlock() {
+		BlockState air = Blocks.AIR.defaultBlockState();
+		BlockState bars = Blocks.IRON_BARS.defaultBlockState();
+		JsonObject ir = JsonParser.parseString("{\"lots\":[{\"onWall\":{\"passage\":{\"mechanism\":{\"states\":{\"open\":[10,20,64,67],\"closed\":[10,21,64,67]},"
+			+ "\"triggers\":[{\"at\":[12,65,21]}]}}}}]}").getAsJsonObject();
+		LongOpenHashSet v = LandCheck.mechVolatile(ir);
+		LongOpenHashSet t = LandCheck.mechTriggers(ir);
+		for (int y = 64; y <= 67; y++) {
+			long p = BlockPos.asLong(10, y, 20);
+			assertTrue(v.contains(p) && !t.contains(p), "lane cell y " + y);
+			// written closed (bars) and now open (air), or written open and now closed: never judged
+			assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(air, () -> null, false, val(bars), true, true, false), "opened at y " + y);
+			assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(bars, () -> null, false, val(air), true, true, false), "closed at y " + y);
+		}
+		// a piston pushes a player's cobblestone one cell along the lane: the cell it left keeps the player's record over air (the player's
+		// block gone from it: not the land's change), the cell it entered has no record and is a moving cell (not judged)
+		BlockState cob = Blocks.COBBLESTONE.defaultBlockState();
+		LandCheck.Cls left = LandCheck.classifyCell(air, () -> null, true, val(air), true, true, false);
+		assertTrue(left == LandCheck.Cls.SAME || left == LandCheck.Cls.PLAYER, "the cell it left: never removed or changed (" + left + ")");
+		assertEquals(LandCheck.Cls.SAME, LandCheck.classifyCell(cob, () -> null, false, val(air), true, true, false), "the cell it entered");
 	}
 }

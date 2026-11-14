@@ -115,6 +115,14 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		if (no != null) {
 			return List.of(new Refusal(Reason.NOT_ALLOWED, no));
 		}
+		// (SA, A35) a pinned (site-bound) entry placed with no site: refused, naming the "site variant here" route (was the client's only)
+		if (r.site() == null) {
+			var e = Blueprints.entry(bp.id());
+			Refusal pin = dev.larattalabs.architect.site.SiteFit.pinnedNoSite(bp.id(), e == null ? null : e.json());
+			if (pin != null) {
+				return List.of(pin);
+			}
+		}
 		// the dry run first: it never loads a chunk, and it lists every reason, not only the first
 		String badStyle = dev.larattalabs.architect.site.EntranceStyle.refusal(r.pathStyle());
 		if (badStyle != null) {

@@ -503,6 +503,12 @@ public final class RegionsImpl implements Regions {
 		return PlanCatalogue.kinds(kinds); // (7cF) the long text by kind, from the same jar copy: synchronous, no helper
 	}
 
+	/** (7c AU) Program authoring ({@link Authors}). */
+	@Override
+	public CompletableFuture<String> authorProgram(dev.larattalabs.architect.api.AuthorRequest request) {
+		return Authors.start(request);
+	}
+
 	/** (7c CO) The standalone composer ({@link Composes}). */
 	@Override
 	public CompletableFuture<String> compose(dev.larattalabs.architect.api.ComposeRequest request) {

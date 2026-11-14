@@ -1683,7 +1683,10 @@ public final class RegionTargets {
 			return new int[] {a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt(), a.get(3).getAsInt()};
 		}
 		if (i.key.startsWith("road:")) {
-			for (var road : l.ir().roads()) {
+			// ((SA, A3) a revision's road is in its revision's IR as its lot is (IG): a plan/0 revision's added streets are not in the base IR,
+			// so without it a grown road found no box, never waited, and in survival was put down over an earlier stage's unbuilt cells)
+			var ri = dev.larattalabs.architect.region.Revisions.liveFor(l, i.stage);
+			for (var road : ri.ir().roads()) {
 				if (i.key.equals("road:" + road.id())) {
 					int x0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
 					for (int[] p : road.points()) {
@@ -1786,12 +1789,10 @@ public final class RegionTargets {
 			if (!group.equals(i.group()) || !i.road() || i.construction() == null) {
 				continue;
 			}
-			String roadPart = null;
-			for (var road : l.ir().roads()) {
-				if (i.member() != null && ("road:" + road.id()).equals(i.member().itemKey())) {
-					roadPart = road.id();
-				}
-			}
+			// ((SA, A3) by its item key road:<id>, as firstBuilding names it: a revision's new street is not in the base IR, and its progress
+			// fell into the shared "roads" row)
+			String rk = i.member() == null ? null : i.member().itemKey();
+			String roadPart = rk != null && rk.startsWith("road:") ? rk.substring(5) : null;
 			Acc a = parts.computeIfAbsent(roadPart == null ? "roads" : roadPart, k -> new Acc());
 			int[] pr = RoadBuilder.progress(srv, i);
 			a.targets.add(i.id());

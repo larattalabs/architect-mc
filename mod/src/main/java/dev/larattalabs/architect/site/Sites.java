@@ -354,6 +354,13 @@ public final class Sites {
 		Site b = built.record().withPin(built.pin()).withConstruction(cs).withPlacing(false);
 		replace(server, b);
 		SiteJournal.updateMeta(id, b.toJson());
+		if (cs == null) {
+			Fills.creative(server, level, b); // (M5 FK) an instant site of a fill entry: filled in the tick it is placed
+			Site nb = get(id);
+			if (nb != null) {
+				b = nb;
+			}
+		}
 		lastNote = built.note();
 		Architect.LOGGER.info("Placed site {} ({}) at {} rotation {}: box {}, journal box {}{}{}", id, bp.id(), origin.toShortString(), b.rotation(),
 			Anchors.str(b.box()), Anchors.str(b.restoreBox()), force ? " (forced)" : "", built.note() == null ? "" : "; " + built.note());
@@ -760,6 +767,32 @@ public final class Sites {
 			String pileDim = Stockpiles.dimensionRefusal(owner, dimensionId(level)); // 6c Y (S-Y-6): one dimension per stockpile
 			if (pileDim != null) {
 				out.add(Reason.NOT_ALLOWED, "Not placed: " + pileDim);
+			}
+			// (M5 FK) a fill builds from a stockpile in survival (its commit point is in the stockpile ledger)
+			Blueprints.Entry fe = Blueprints.entry(bp.id());
+			if (fe != null && fe.json().has("fill") && !Stockpiles.drawsFrom(owner, dimensionId(level))) {
+				out.add(Reason.NOT_ALLOWED, "Not placed: " + bp.id() + " has filled containers; in survival it builds from a stockpile, not its own crate");
+			}
+		}
+		if (moving != null) {
+			Blueprints.Entry fe = Blueprints.entry(bp.id());
+			if (fe != null && fe.json().has("fill")) {
+				out.add(Reason.NOT_ALLOWED, "Not moved: " + bp.id() + " has filled containers (a fill site is not moved)"); // (M5 FK)
+			}
+		}
+		{
+			// (M5 FK) never written over a filled site's declared container or lock cell (the snapshot box: every cell it may write)
+			Anchors.Bounds sb = snapBox;
+			String over = Fills.overwriteRefusal(level, p -> sb.contains(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)), moving == null ? null : moving.id());
+			if (over != null) {
+				out.add(Reason.NOT_ALLOWED, "Not placed: " + over);
+			}
+		}
+		{
+			Blueprints.Entry fe = Blueprints.entry(bp.id());
+			String no = fe == null ? null : Fills.refusal(fe.json());
+			if (no != null) {
+				out.add(Reason.NOT_ALLOWED, "Not placed: " + bp.id() + ": " + no); // (M5 FK) a fill only on a given-program entry, and a sound one
 			}
 		}
 		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, Occupancy.ownedBy(owner)); // 6c 0c (C18): the owner's tagged entities
@@ -1553,6 +1586,26 @@ public final class Sites {
 		for (Site x : all) {
 			drainIrrigation(level, x);
 		}
+		// (M5 FK) a filled site's declared containers: their contents into the ledger's custody, saved with the world, before the refunds
+		boolean custody = false;
+		for (Site x : all) {
+			if (x.construction() != null && Fills.filledSite(x)) {
+				String cargo = Fills.takeCustody(level, x, force);
+				if (cargo != null) {
+					for (Site y : all) {
+						if (y.construction() != null && Fills.phase(y) != null) {
+							Fills.writeBack(level, y);
+						}
+					}
+					throw new SiteException(blockersMessage(x.id(), List.of(cargo)));
+				}
+				custody = true;
+			}
+		}
+		if (custody) {
+			Stockpiles.saveWithWorld(server);
+			WorldJournal.kill("FKC1");
+		}
 		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
 		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
 		for (Site x : all) {
@@ -1849,6 +1902,8 @@ public final class Sites {
 		Set<BlockPos> own = ownBlockEntities(b);
 		Anchors.Bounds box = b.restoreBox();
 		String dim = dimensionId(level);
+		// (M5 FK) a filled site's declared containers are ours while they hold at most their declaration
+		Map<BlockPos, Map<String, Integer>> declared = Fills.declaredOurs(level.getServer(), b);
 		forEachBlockEntity(level, box, be -> {
 			BlockPos p = be.getBlockPos();
 			List<WorldJournal.Layer> st;
@@ -1871,7 +1926,12 @@ public final class Sites {
 				return;
 			}
 			if (be instanceof Container c && !c.isEmpty()) {
-				out.add(what + " (" + items(c) + ")");
+				Map<String, Integer> fill = declared.get(p);
+				Map<String, Integer> now = fill == null ? null : Fills.plainCounts(c);
+				if (now != null && Fills.within(now, fill)) {
+					return; // (M5 FK) its fill, or what the player left of it: ours
+				}
+				out.add(what + " (" + items(c) + (fill != null ? ", more than its fill: cargo" : "") + ")");
 				return;
 			}
 			if (!own.contains(p) && !journalOwn) {

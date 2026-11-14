@@ -140,6 +140,9 @@ public final class Builder {
 		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
+		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
+		// first server tick ({@link #tick})
+		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -175,6 +178,11 @@ public final class Builder {
 		default Map<String, Integer> giveBackPaid(String targetId, Map<String, Integer> items, BlockPos fallback) {
 			giveBack(items, fallback);
 			return items;
+		}
+
+		/** (M5 FK) The stockpile ledger behind this purse (a fill's commit point), or null for a legacy crate. */
+		default dev.larattalabs.architect.survival.@Nullable StockLedger ledger() {
+			return null;
 		}
 	}
 
@@ -308,6 +316,44 @@ public final class Builder {
 			} else {
 				this.old = null;
 			}
+			// (M5 FK) a fill entry: its lock cells built in their locked state (the template holds the unlocked one), and the fill's items in
+			// the outstanding until the fill is paid (the stockpile's accept rule takes them; STARVED while short)
+			Fills.Spec fill = server == null ? null : Fills.of(server, s);
+			String ph = Fills.phase(s);
+			if (fill != null && !Fills.UNLOCKED.equals(ph)) {
+				for (var e : Fills.lockCells(s, fill).entrySet()) {
+					int i = queuePos(BlockPos.of(e.getKey()));
+					if (i >= 0) {
+						unlockedTarget.put(e.getKey(), target[i]);
+						target[i] = Fills.locked(target[i], e.getValue());
+					}
+				}
+			}
+			if (fill != null && ph == null || fill != null && Fills.FILLING.equals(ph)) {
+				fillOwed = fill.items();
+				fillOwed.forEach((k, v) -> unbuilt.merge(k, v, Integer::sum));
+			}
+		}
+
+		/** (M5 FK) The lock cells' template (unlocked) states, by world cell; the fill's items while unpaid (in {@link #unbuilt}). */
+		final Map<Long, BlockState> unlockedTarget = new HashMap<>();
+		Map<String, Integer> fillOwed = Map.of();
+
+		/** (M5 FK) A queued cell's template state (a lock cell's unlocked one), or null when the cell is not queued. */
+		@Nullable BlockState templateAt(BlockPos p) {
+			BlockState u = unlockedTarget.get(p.asLong());
+			if (u != null) {
+				return u;
+			}
+			int i = queuePos(p);
+			return i < 0 ? null : target[i];
+		}
+
+		/** (M5 FK) The fill is paid: its items leave the outstanding. */
+		void dropFill() {
+			fillOwed.forEach((k, v) -> unbuilt.merge(k, -v, Integer::sum));
+			unbuilt.values().removeIf(v -> v == 0);
+			fillOwed = Map.of();
 		}
 
 		/** Whether the world at a swap cell still holds the old version's block (the swap has not happened; 6c CU: at any copper stage). */
@@ -420,7 +466,15 @@ public final class Builder {
 		 * at most once per 20 ticks (stops at the first loaded frontier cell). A target whose whole frontier is unloaded doesn't
 		 * reserve (Steward's S-Y-1 exception).
 		 */
+		/** (M5 FK) Whether it still needs items: an unbuilt cell, or a fill not yet paid. */
+		boolean pending() {
+			return built.cardinality() < size() || !fillOwed.isEmpty();
+		}
+
 		boolean frontierLoaded(ServerLevel level, long now) {
+			if (!fillOwed.isEmpty() && built.cardinality() == queue.length) {
+				return true; // (M5 FK) every cell stands, the fill waits: its items are its frontier
+			}
 			if (now - frontierAt < 20 && now >= frontierAt) {
 				return frontier;
 			}
@@ -985,6 +1039,18 @@ public final class Builder {
 			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, dimNo);
 		}
 		boolean stockpiled = Stockpiles.drawsFrom(siteOwner, Sites.dimensionId(level));
+		// (M5 FK) a fill builds from a stockpile in survival: its commit point is in the stockpile ledger (CONTRACT "### FK contract" 2)
+		Blueprints.Entry fe = Blueprints.entry(bp.id());
+		if (fe != null && fe.json().has("fill")) {
+			String no = Fills.refusal(fe.json());
+			if (no != null) {
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, bp.id() + ": " + no);
+			}
+			if (!stockpiled) {
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, bp.id() + " has filled containers: in survival it builds "
+					+ "from a stockpile (a stockpile target), not from its own crate");
+			}
+		}
 		Anchors.Bounds sb = built.snapshotBox();
 		int dx = sb.maxX() - sb.minX() + 1;
 		int dz = sb.maxZ() - sb.minZ() + 1;
@@ -1577,7 +1643,18 @@ public final class Builder {
 
 	// ------------------------------------------------------------------ the builder
 
+	/** (M5 FK) Set at SERVER_STARTED: the first tick runs {@link Fills#atStart}. */
+	private static volatile boolean fkAtStart;
+
 	static void tick(MinecraftServer srv) {
+		if (fkAtStart) {
+			fkAtStart = false;
+			try {
+				Fills.atStart(srv);
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Fills at start failed", e);
+			}
+		}
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
@@ -1656,7 +1733,10 @@ public final class Builder {
 		BlockPos cp = c.crate() == null ? null : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 		r.crateMissing = fed == null && (cp == null || level.isLoaded(cp) && crate == null);
 		if (r.built.cardinality() == r.size()) {
-			complete(srv, level, s, r, crate);
+			if (fillReady(srv, level, s, r, fed)) {
+				Site now = Sites.get(s.id()); // (M5 FK) the fill step rewrote the record (its phase): complete from it
+				complete(srv, level, now != null ? now : s, r, crate);
+			}
 			return;
 		}
 		if (fed == null && crate == null || c.paused()) {
@@ -1764,9 +1844,28 @@ public final class Builder {
 			Sites.replace(srv, s.withConstruction(c.withFree(free)));
 			s = Sites.get(s.id());
 		}
-		if (s != null && r.built.cardinality() == r.size()) {
-			complete(srv, level, s, r, crate);
+		if (s != null && r.built.cardinality() == r.size() && fillReady(srv, level, s, r, purse)) {
+			Site now = Sites.get(s.id()); // (M5 FK) the fill step rewrote the record (its phase): complete from it
+			complete(srv, level, now != null ? now : s, r, crate);
 		}
+	}
+
+	/**
+	 * (M5 FK) Every queued cell stands: a fill entry fills and unlocks first ({@link Fills#step}); true when the site may complete. A
+	 * paused site, or one with no purse, waits.
+	 */
+	private static boolean fillReady(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable Purse purse) {
+		if (Fills.UNLOCKED.equals(Fills.phase(s)) || Fills.of(srv, s) == null) {
+			return true;
+		}
+		if (purse == null) {
+			return true; // a legacy crate site has no fill (refused at placement); Fills.step logs it for a fed one
+		}
+		if (s.construction().paused()) {
+			return false;
+		}
+		Site now = Sites.get(s.id());
+		return Fills.step(srv, level, now != null ? now : s, r, purse);
 	}
 
 	/**
@@ -2661,10 +2760,13 @@ public final class Builder {
 	 */
 	static void creditRefund(ServerLevel level, @Nullable String owner, @Nullable String key, Map<String, Integer> items, BlockPos at,
 		Sites.@Nullable Drops drops) {
-		if (owner == null || key == null || items.isEmpty()) {
+		if (owner == null || key == null) {
 			return;
 		}
 		Stockpiles.Pile p = Stockpiles.get(owner);
+		if (items.isEmpty() && (p == null || p.ledger().custody(key).isEmpty())) { // (M5 FK) a key's custody refunds with no block standing too
+			return;
+		}
 		if (p == null) {
 			dropItems(level, at, items, drops);
 			return;

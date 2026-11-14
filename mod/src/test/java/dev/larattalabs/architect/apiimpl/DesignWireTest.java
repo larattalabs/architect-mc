@@ -59,4 +59,20 @@ class DesignWireTest {
 		assertTrue(req().profile().isEmpty());
 		assertEquals(null, req().bibleVersion());
 	}
+
+	/** (SA, A18) an ack timeout (null message) is a typed SIDECAR_UNAVAILABLE naming the opKey replay; other failures pass through. */
+	@Test
+	void anAckTimeoutIsTypedSidecarUnavailable() {
+		Throwable t = DesignsImpl.ackFailure(new java.util.concurrent.CompletionException(new java.util.concurrent.TimeoutException()), "site.variant");
+		assertTrue(t instanceof dev.larattalabs.architect.api.ArchitectRefused, String.valueOf(t));
+		var r = (dev.larattalabs.architect.api.ArchitectRefused) t;
+		assertEquals(dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, r.reason());
+		assertTrue(r.getMessage().contains("site.variant") && r.getMessage().contains("same opKey"), r.getMessage());
+		assertEquals("ack_timeout", r.detail());
+		Throwable unkeyed = DesignsImpl.ackFailure(new java.util.concurrent.TimeoutException(), "bible.parts", false);
+		assertTrue(unkeyed instanceof dev.larattalabs.architect.api.ArchitectRefused u && u.reason() == dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE
+			&& !u.getMessage().contains("opKey"), String.valueOf(unkeyed));
+		IllegalStateException other = new IllegalStateException("sidecar not connected (OFFLINE)");
+		assertEquals(other, DesignsImpl.ackFailure(new java.util.concurrent.CompletionException(other), "site.variant"));
+	}
 }

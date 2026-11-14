@@ -101,6 +101,12 @@ public final class Limits {
 	 */
 	public static final int PROGRAM_SOURCE_MAX = 262144;
 	public static final int PROGRAM_PARAMS_MAX = 16384;
+	/**
+	 * (M5 FK) A given program's fill ({@code bp.fillContainers}): the most declared containers per entry (Steward's bound) and the most lock cells.
+	 * Since 1.59.0.
+	 */
+	public static final int FILL_CONTAINERS_MAX = 64;
+	public static final int FILL_LOCKS_MAX = 64;
 	/** (since 1.41.0) The most roles a palette carries inline ({@code {bible: {id, version, roles}}}). */
 	public static final int PALETTE_ROLES_MAX = 64;
 

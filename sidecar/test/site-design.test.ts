@@ -276,6 +276,23 @@ describe('site-aware design and site variants on the sim (7b DS)', () => {
     expect(other.error).toMatch(/op_key_conflict/);
   });
 
+  it('(SA, A18) the site.variant ack is written before the runner copies the kit: the scratch dir does not exist yet at the ack', async () => {
+    const blob = put(h, EAST.bytes);
+    let ackAt: boolean | undefined;
+    const parsed = parseClientMessage(JSON.stringify({ v: 1, id: 'q', type: 'site.variant', entryId, site: { ...EAST.spec, volumeBlobId: blob }, opKey: 'sv-ack-first' }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    let id = '';
+    await h.sc.handle(parsed.msg, (m) => {
+      if (m.type !== 'ack') return;
+      id = String((m.result as Record<string, unknown> | undefined)?.id ?? '');
+      ackAt = fs.existsSync(path.join(h.cfg.dataDir, 'sitevariant-scratch', id));
+    });
+    expect(id).not.toBe('');
+    expect(ackAt).toBe(false);
+    const done = await opDone(h, id);
+    expect(done.refused).toBeUndefined();
+  });
+
   it('refuses SITE_UNFIT with the failing rule id (a player pillar: site_keep; another fit: site_bound)', async () => {
     const a = await call(h, { type: 'site.variant', entryId, site: { ...OWNED.spec, volumeBlobId: put(h, OWNED.bytes) }, opKey: 'sv-owned' });
     const done = a.result!.status === 'done' ? a.result! : await opDone(h, a.result!.id as string);

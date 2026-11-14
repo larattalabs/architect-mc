@@ -121,6 +121,32 @@ describe('given-program designs and keyed variants (M5 GP) on the real kit', () 
     expect(noDefault).toMatchObject({ ok: false, code: 'PROGRAM_REFUSED', detail: 'program' });
   });
 
+  it('(SA, A25) NO_NETWORK closes the routes the old patch left open: a dgram socket from its constructor, the c-ares resolvers', async () => {
+    const probe = (name: string, body: string) => `export const id = 'gp_${name}';\nexport default async function build() {\n  let open = false;\n  try { ${body}; open = true; } catch (e) { open = false; }\n  throw new Error('NETPROBE:' + (open ? 'open' : 'denied'));\n}\n`;
+    const probes: Array<[string, string]> = [
+      ['dgram_bind', "const { Socket } = await import('node:dgram'); await new Promise((res, rej) => { const s = new Socket('udp4'); s.on('error', rej); s.bind(0, () => { s.close(); res(undefined); }); })"],
+      ['dgram_send', "const d = await import('node:dgram'); await new Promise((res, rej) => { const s = new d.default.Socket('udp4'); s.on('error', rej); s.send(Buffer.from('x'), 9, '127.0.0.1', (e) => (e ? rej(e) : (s.close(), res(undefined)))); })"],
+      ['dns_resolver', "const { Resolver } = await import('node:dns'); const r = new Resolver(); r.setServers(['127.0.0.1']); await new Promise((res, rej) => r.resolve4('example.invalid', (e) => (e && e.code === 'ERR_ACCESS_DENIED' ? rej(e) : res(undefined))))"],
+      ['dns_promises', "const p = await import('node:dns/promises'); await p.resolve4('localhost').catch((e) => { if (e.code === 'ERR_ACCESS_DENIED') throw e; })"],
+      ['dns_lookup_service', "const { lookupService } = await import('node:dns'); await new Promise((res, rej) => lookupService('127.0.0.1', 22, (e) => (e && e.code === 'ERR_ACCESS_DENIED' ? rej(e) : res(undefined))))"],
+    ];
+    for (const [name, body] of probes) {
+      const done = await finished({ events }, await call(sc, { type: 'design.fromProgram', source: probe(name, body), params: {}, opKey: `gp-net-${name}` }));
+      expect(done.refused, name).toMatchObject({ code: 'PROGRAM_REFUSED', detail: 'program' });
+      expect(JSON.stringify(done.refused), name).toMatch(/NETPROBE:denied/);
+    }
+  });
+
+  it('(SA, A25) refuses a lone UTF-16 surrogate in the source before anything is recorded (it would read program_stale later)', async () => {
+    const lone = `${SOURCE}\n// \ud800\n`;
+    const a = await call(sc, { type: 'design.fromProgram', source: lone, params: { side: 9 }, opKey: 'gp-lone' });
+    expect(a).toMatchObject({ ok: false, code: 'PROGRAM_REFUSED', detail: 'program' });
+    expect(a.error).toMatch(/lone UTF-16 surrogate at character \d+ \(U\+D800\)/);
+    // a pair is text: not refused for it
+    const pair = await call(sc, { type: 'design.fromProgram', source: `${SOURCE}\n// \ud83c\udf3e\n`, params: { side: 9 }, opKey: 'gp-pair' });
+    expect(pair.error ?? '').not.toMatch(/surrogate/);
+  });
+
   it('a keyed variant takes other params, a bible and the lot\'s reserved cells (given to the program; the checker passes)', async () => {
     const bible = sc.bibleIndex.list().find((b) => b.id)!;
     const a = await call(sc, { type: 'design.variant', entryId, params: { crop: 'wheat' }, bible: { id: bible.id }, reserved: RESERVED, opKey: 'steward.t.module.lot_3', owner: 'steward:test' });
@@ -187,5 +213,47 @@ describe('given-program designs and keyed variants (M5 GP) on the real kit', () 
     const resumed = await opDone(events, op.id as string);
     expect(resumed.newEntryId).toBe(variantId);
     expect(fs.readdirSync(h.cfg.libraryDir).filter((d) => d.startsWith(`${entryId}_kv`))).toEqual([variantId]);
+  });
+});
+
+// (M5 FK, S-M5-3) A given program's fill survives the install: the entry's sidecar keeps `fill` (template coordinates) with
+// `givenProgram`, which is what the mod honours; a program whose fill breaks the kit's rule is refused PROGRAM_REFUSED detail `fill`.
+describe('given-program fills (M5 FK) on the real kit', () => {
+  const FK = fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'fk', 'fk_hall.mjs'), 'utf8');
+  let h: Harness;
+  let sc: Sidecar;
+  beforeAll(async () => {
+    h = makeSidecar(['--backend', 'sim', '--kit', KIT]);
+    sc = h.sc;
+    await sc.start(new SimDesigner(sc, 10));
+  });
+  afterAll(async () => {
+    await sc.close();
+    rmrf(h.root);
+  });
+
+  it('names the feature and the rule', () => {
+    expect(FEATURES).toContain('design.fill');
+    expect(findingRule('fill: containers[0]: minecraft:stone at 0,0,0 is not a container a fill may declare (minecraft:hopper, ...)')).toBe('fill');
+  });
+
+  it('fromProgram keeps the fill in the entry with givenProgram', async () => {
+    const a = await call(sc, { type: 'design.fromProgram', source: FK, params: { slots: 2, count: 18 }, opKey: 'steward.t.module.hall', owner: 'steward:test' });
+    const done = await finished({ events: h.events }, a);
+    expect(done.refused).toBeUndefined();
+    const j = entryJson(h, done.newEntryId as string) as { fill?: { containers: Array<{ at: number[]; items: unknown[] }>; locks: unknown[] }; givenProgram?: unknown };
+    expect(j.givenProgram).toBeDefined();
+    expect(j.fill?.containers.map((c) => c.at)).toEqual([[1, 2, 1], [2, 2, 1]]);
+    expect(j.fill?.containers[0]?.items).toEqual([{ slot: 0, id: 'minecraft:flint', count: 18 }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: 'minecraft:paper', count: 1 }))]);
+    expect(j.fill?.locks).toEqual([{ at: [0, 3, 1], locked: { powered: 'true' } }]);
+  });
+
+  it('a fill that breaks the kit rule is refused PROGRAM_REFUSED fill', async () => {
+    const bad = FK.replace("locked: { powered: 'true' }", "locked: { facing: 'north' }");
+    expect(bad).not.toBe(FK);
+    const a = await call(sc, { type: 'design.fromProgram', source: bad, params: {}, opKey: 'steward.t.module.hall_bad', owner: 'steward:test' });
+    const done = await finished({ events: h.events }, a);
+    expect(done.refused).toBeDefined();
+    expect(JSON.stringify(done.refused)).toContain('fill');
   });
 });
