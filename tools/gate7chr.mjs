@@ -359,6 +359,50 @@ steps.survival = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ (slice BC, A11) bc-x03: x03's survival quote equals what it consumes
+
+/**
+ * (BC, A11) x03 (the hamlet over its grading, the cottage cellar) checked in survival, quoted (Regions.quoteApproved), realised and fed in
+ * waves until built: the quote exact, its kit bill's paid grading dirt the land already holds left out (SA's upper bound before BC: 49 dirt
+ * billed, none consumed), consumed equal to the quote item for item; removed: what came back equals what was consumed. $0.
+ */
+steps.bcquote = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  const fx = fixture('x03_cellar');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, 'bc x03', fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const ck = await G.check(ctx, 'bc-x03', s);
+  check(ck.check?.survival === true && ck.check?.overall === 'READY' && !!ck.check?.artifactSha, `x03 checked in survival: ${ck.check?.overall}, artifact ${ck.check?.artifactSha?.slice(0, 12)}`);
+  if (!ck.check?.artifactSha) return out;
+  const q = await L.call('dev.region.quote', { sha: ck.check.artifactSha, lotEntries: entries }, 300_000);
+  const tilesPart = Object.fromEntries(Object.entries(q.bomParts ?? {}).filter(([k]) => k.startsWith('tiles:')));
+  const standNote = (q.notes ?? []).find((n) => /already stand in the land/.test(n)) ?? null;
+  const bound = (q.notes ?? []).filter((n) => /upper bound|not loaded/.test(n));
+  out.quote = { exact: q.exact, bom: q.bom, tiles: tilesPart, standNote, bound, refused: q.refused };
+  check(!q.refused && q.exact === true && bound.length === 0 && !!standNote, `A11: x03's quote exact (${q.exact}); the paid terrain the land already holds left out: ${standNote}; tiles ${json(tilesPart)}`, out.quote);
+  const pile = async () => (await L.call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  await G.pile(ctx, s, 3);
+  const ps0 = await pile();
+  const region = await G.realise(ctx, ck.check.artifactSha, entries);
+  out.region = region;
+  const f = await G.feed(ctx, region, { fraction: 0.5, timeoutMs: 2_400_000 });
+  const st = f.last.st, rs = f.last.rs;
+  const ps1 = await pile();
+  const used = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+  out.built = { state: st.view.state, waves: f.waves, consumed: used };
+  check(st.view.state === 'PLACED' && rs.build?.done, `x03 realised and fed in ${f.waves} waves: ${st.view.state}`);
+  check(G.same(used, q.bom ?? {}), `A11: x03 consumed equals the quote item for item: quote ${json(q.bom)}, consumed ${json(used)}${G.same(used, q.bom ?? {}) ? '' : `, over ${json(G.minus(used, q.bom))}, under ${json(G.minus(q.bom, used))}`}`, out.built);
+  const rm = await G.remove(ctx, region);
+  const ps2 = await pile();
+  const back = G.minus(ps2.ledger?.returned ?? {}, ps1.ledger?.returned ?? {});
+  out.removed = { removed: rm.removed, back };
+  check(rm.removed && G.same(back, used), `x03 removed: what came back equals what was consumed: consumed ${json(used)}, returned ${json(back)}`, out.removed);
+  return out;
+};
+
 // ------------------------------------------------------------------ the report
 
 steps.report = async () => {
