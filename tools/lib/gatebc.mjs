@@ -18,7 +18,7 @@ const FIELD = 'bc_field_20x21';
 const TOWN_LOTS = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
 
 export async function registerBC(steps, h) {
-  const { L, call, check, cmd, json, OUT, G, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvWait, root, cellsOf } = h;
+  const { L, call, check, cmd, json, OUT, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvWait, root, cellsOf } = h;
   const ctx = { L, OUT, KIT: path.join(root, 'kit'), imp: h.imp };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
@@ -59,6 +59,7 @@ export async function registerBC(steps, h) {
   }
 
   steps.bcrelay = async () => {
+    await ensure();
     const out = {};
     const SW = 'G6B BC Relay';
     await G.survivalBase(ctx);
