@@ -124,12 +124,26 @@ public final class Quotes {
 		}
 		Bill bill = new Bill();
 		// 1. the region's paid cells, per target group (the kit's)
-		for (var g : tiles.entrySet()) {
-			bill.add("tiles:" + g.getKey(), items(g.getValue()));
-		}
 		// ((SA, A11) the kit bills every paid cell it writes; in game a cell the land already holds (a grade's dirt over dirt) is skipped,
-		// never written, billed or consumed: the quote is then an upper bound, never under)
-		String mayHold = mayAlreadyHold(tiles);
+		// never written, billed or consumed. (BC, A11) the plan keeps its paid terrain cells by position (survivalTerrain): the ones the
+		// world holds now are left out, so the quote is what the realise consumes; what no kept cell covers stays an upper bound)
+		Standing standing = standing(level, p.planned().get("survivalTerrain") instanceof JsonObject t ? t : new JsonObject());
+		for (var g : tiles.entrySet()) {
+			Map<String, Integer> its = items(g.getValue());
+			Map<String, Integer> off = standing.off().getOrDefault(g.getKey(), Map.of());
+			off.forEach((k, v) -> its.merge(k, -v, Integer::sum));
+			bill.add("tiles:" + g.getKey(), its);
+		}
+		if (standing.offCells() > 0) {
+			notes.add("tiles: " + standing.offCells() + " paid terrain cell(s) already stand in the land (" + standing.offText() + "): a realise skips "
+				+ "them, so they are not billed");
+		}
+		if (standing.unloaded() > 0) {
+			bill.exact = false;
+			notes.add("tiles: " + standing.unloaded() + " paid terrain cell(s) are in chunks not loaded: billed (they may already stand: consumed "
+				+ "at most this quote)");
+		}
+		String mayHold = mayAlreadyHold(tiles, standing.covered());
 		if (mayHold != null) {
 			bill.exact = false;
 			notes.add(mayHold);
@@ -238,6 +252,14 @@ public final class Quotes {
 	 * whose block the world already holds, so those cells can bill less, never more. Null when there are none (the quote stays exact).
 	 */
 	static @Nullable String mayAlreadyHold(JsonObject tiles) {
+		return mayAlreadyHold(tiles, Map.of());
+	}
+
+	/**
+	 * (BC, A11) As {@link #mayAlreadyHold(JsonObject)}, less what the plan's kept terrain cells cover ({@code covered}: group -> {item: n},
+	 * every kept cell; an unloaded one has its own note): only the rest may still stand unread.
+	 */
+	static @Nullable String mayAlreadyHold(JsonObject tiles, Map<String, Map<String, Integer>> covered) {
 		List<String> parts = new ArrayList<>();
 		int total = 0;
 		for (var g : new java.util.TreeMap<>(tiles.asMap()).entrySet()) {
@@ -253,7 +275,10 @@ public final class Quotes {
 				}
 				var st = b.defaultBlockState();
 				if (!st.isAir() && (TERRAIN.contains(b) || CellCond.natural(st, dev.larattalabs.architect.placement.TerrainFit.flags(st)))) {
-					int n = e.getValue().getAsInt();
+					int n = e.getValue().getAsInt() - covered.getOrDefault(g.getKey(), Map.of()).getOrDefault(e.getKey(), 0);
+					if (n <= 0) {
+						continue;
+					}
 					total += n;
 					its.add(n + " " + e.getKey().replace("minecraft:", ""));
 				}
@@ -267,6 +292,77 @@ public final class Quotes {
 		}
 		return "tiles: " + total + " paid cell(s) of natural terrain may already stand in the land (" + String.join("; ", parts) + "): a realise "
 			+ "skips a cell that already holds its block, so the region's cells are an upper bound: consumed is at most this quote, never more";
+	}
+
+	/**
+	 * (BC, A11) The plan's kept paid terrain cells read against the world now: per group the items of the cells whose block already stands
+	 * ({@code off}: a realise skips them), the items of every kept cell ({@code covered}) and how many could not be read (chunk not loaded).
+	 */
+	record Standing(Map<String, Map<String, Integer>> off, Map<String, Map<String, Integer>> covered, int offCells, int unloaded) {
+		String offText() {
+			List<String> out = new ArrayList<>();
+			off.forEach((g, its) -> {
+				List<String> s = new ArrayList<>();
+				its.forEach((k, v) -> s.add(v + " " + k.replace("minecraft:", "")));
+				out.add(g + " (" + String.join(", ", s) + ")");
+			});
+			return String.join("; ", out);
+		}
+	}
+
+	/** (BC, A11) {@link Standing} over plan.json's {@code survivalTerrain} (group -> [{state, items, cells}]; see the kit's survivalTerrainOf). */
+	static Standing standing(ServerLevel level, JsonObject terrain) {
+		return standing(terrain, (x, y, z) -> {
+			BlockPos bp = new BlockPos(x, y, z);
+			if (!level.hasChunk(x >> 4, z >> 4)) {
+				return null;
+			}
+			return level.getBlockState(bp);
+		});
+	}
+
+	/** The world at a cell: its block, or null when its chunk is not loaded. */
+	interface World {
+		net.minecraft.world.level.block.state.@Nullable BlockState at(int x, int y, int z);
+	}
+
+	static Standing standing(JsonObject terrain, World world) {
+		Map<String, Map<String, Integer>> off = new TreeMap<>(), covered = new TreeMap<>();
+		int offCells = 0, unloaded = 0;
+		for (var g : new TreeMap<>(terrain.asMap()).entrySet()) {
+			if (!(g.getValue() instanceof com.google.gson.JsonArray rows)) {
+				continue;
+			}
+			for (JsonElement row : rows) {
+				if (!(row instanceof JsonObject r) || !(r.get("state") instanceof JsonElement se) || !(r.get("cells") instanceof JsonElement ce)) {
+					continue;
+				}
+				net.minecraft.world.level.block.state.BlockState want;
+				try {
+					want = Packed.parse(se.getAsString());
+				} catch (RuntimeException e) {
+					continue; // an unknown state: its cells stay billed (and uncovered: the upper-bound note names them)
+				}
+				Map<String, Integer> its = items(r.get("items"));
+				java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(ce.getAsString())).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+				while (b.remaining() >= 12) {
+					int x = b.getInt(), y = b.getInt(), z = b.getInt();
+					var now = world.at(x, y, z);
+					Map<String, Integer> cv = covered.computeIfAbsent(g.getKey(), k -> new TreeMap<>());
+					its.forEach((k, v) -> cv.merge(k, v, Integer::sum)); // a kept cell: the unloaded note names it when it can't be read
+					if (now == null) {
+						unloaded++;
+						continue;
+					}
+					if (now == want) {
+						offCells++;
+						Map<String, Integer> o = off.computeIfAbsent(g.getKey(), k -> new TreeMap<>());
+						its.forEach((k, v) -> o.merge(k, v, Integer::sum));
+					}
+				}
+			}
+		}
+		return new Standing(off, covered, offCells, unloaded);
 	}
 
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */

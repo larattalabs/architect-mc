@@ -593,20 +593,23 @@ export async function planRegion(o) {
   const perStage = {};
   const sv = ir.survival ? {} : null; // (6c RS) per group: free, held, paid cells and creative-only blocks over the survey
   const windows = new Map();
+  const evaluatedKeys = new Set(); // (BC, A11) a tile key's first evaluation keeps its terrain cells (a later one may write over an earlier one's)
   for (const s of stages) {
     perStage[s] = { terrain: 0, path: 0 };
     for (const set of ['terrain', 'path']) {
       for (const key of tilesOut[s][set]) {
         let w = windows.get(key);
         if (!w) { w = windowFromSurvey(evalSurvey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
-        const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs });
+        const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs, terrainCells: !!sv });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
         if (sv) for (const [g, x] of Object.entries(e.notes.survival ?? {})) {
           const t = (sv[g] ??= { free: 0, held: 0, paid: 0, creativeOnly: {}, bom: {} });
           t.free += x.free; t.held += x.held; t.paid += x.paid;
           for (const [it, n] of Object.entries(x.bom ?? {})) t.bom[it] = (t.bom[it] ?? 0) + n;
           for (const [b, n] of Object.entries(x.creativeOnly ?? {})) t.creativeOnly[b] = (t.creativeOnly[b] ?? 0) + n;
+          if (x.terrain && !evaluatedKeys.has(key)) for (const q of x.terrain) (t.terrain ??= []).push(q);
         }
+        evaluatedKeys.add(key);
         if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
         perStage[s][set] += e.count;
       }
@@ -754,5 +757,35 @@ export async function planRegion(o) {
   // (M5 QT) a survival plan's paid cells' bill per target group, over the survey (the plan check's cost.bom of the regions' cells, kept for
   // every survival plan so Regions.quote can read it): plan.json's `survivalBom`, outside the IR (its sha is unchanged)
   const survivalBom = sv ? Object.fromEntries(Object.keys(sv).sort().map((g) => [g, Object.fromEntries(Object.entries(sv[g].bom).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}) };
+  // (BC, A11) the paid terrain cells (dirt, stone, sand ...) per group, by state: Regions.quote reads the world at each and bills only the cells
+  // the land does not already hold (a realise skips those), so the quote is what the realise consumes. plan.json's `survivalTerrain`
+  const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}) };
+}
+
+/** (BC, A11) At most this many paid terrain cells per group are kept by position; past it the group keeps none (the quote stays an upper bound). */
+export const TERRAIN_CELLS_MAX = 65536;
+
+/**
+ * (BC, A11) plan.json's `survivalTerrain`: group -> [{state, items, cells}], cells the base64 of little-endian int32 [x, y, z] triples, sorted
+ * by state; a group over {@link TERRAIN_CELLS_MAX} cells is left out. Null when no group has one.
+ */
+export function survivalTerrainOf(sv) {
+  const out = {};
+  for (const g of Object.keys(sv).sort()) {
+    const by = new Map();
+    for (const q of sv[g].terrain ?? []) {
+      const e = by.get(q.state) ?? { state: q.state, items: q.items, cells: [] };
+      for (const v of q.cells) e.cells.push(v);
+      by.set(q.state, e);
+    }
+    const n = [...by.values()].reduce((a, e) => a + e.cells.length / 3, 0);
+    if (!n || n > TERRAIN_CELLS_MAX) continue;
+    out[g] = [...by.values()].sort((a, b) => (a.state < b.state ? -1 : a.state > b.state ? 1 : 0)).map((e) => {
+      const buf = Buffer.alloc(e.cells.length * 4);
+      e.cells.forEach((v, i) => buf.writeInt32LE(v, i * 4));
+      return { state: e.state, items: Object.fromEntries(Object.entries(e.items).sort()), cells: buf.toString('base64') };
+    });
+  }
+  return Object.keys(out).length ? out : null;
 }

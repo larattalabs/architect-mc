@@ -1116,6 +1116,7 @@ export const RegionPlannedMsg = z
     checkError: z.string().optional().describe('(6b addition) the check or the previews failed (the plan itself is good): why'),
     affordances: z.array(z.record(z.string(), z.unknown())).max(256).optional().describe("(7b AF) the affordances the program found (r.affordances; plan.json's affordances[]), best first; absent when it asked for none"),
     survivalBom: z.record(z.string(), z.record(z.string(), z.number().int().nonnegative())).optional().describe("(M5 QT) a survival plan's paid cells' bill per target group over the survey (plan.json's survivalBom; Regions.quote reads it); absent for a creative plan"),
+    survivalTerrain: z.record(z.string(), z.array(z.object({ state: z.string(), items: z.record(z.string(), z.number().int().nonnegative()), cells: z.string() })).max(4096)).optional().describe("(BC, A11) a survival plan's paid terrain cells per target group, by state (plan.json's survivalTerrain; cells: base64 of little-endian int32 x, y, z triples): Regions.quote leaves out the cells the land already holds; absent when there are none"),
     planCheck: z.record(z.string(), z.unknown()).optional().describe("(6c P0) a plan check's answer (the kit's plancheck.json: overall, parts, cost, catalogue, preview with the class map's absolute path), with `artifact` (its canonical JSON) when it made one"),
   })
   .refine((m) => (m.ir === undefined) !== (m.irBlobId === undefined), 'exactly one of ir and irBlobId');

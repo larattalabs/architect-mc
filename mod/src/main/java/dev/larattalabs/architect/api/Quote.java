@@ -28,8 +28,10 @@ import org.jspecify.annotations.Nullable;
  * @param exact true when every piece is known to equal what the realise takes, on the land as it is now: false when a lot's bill may drift
  *     (C26's drift sources, or cells in unloaded chunks), when fluids are an upper bound, or when the land under a lot is written by the plan's
  *     own tiles first, or (since NEXT) when the region's paid cells include natural terrain (dirt, stone, ...) that may already stand in
- *     the land: a realise skips a cell that already holds its block, so the quote is an upper bound (consumed at most the quote, never
- *     more); {@code notes} say which
+ *     the land and the quote could not read: a realise skips a cell that already holds its block, so those cells are an upper bound
+ *     (consumed at most the quote, never more). Since NEXT (BC) the plan keeps its paid terrain cells by position and the quote reads the
+ *     world at each: a cell that already holds its block is left out of {@code tiles:<group>}, so the quote equals what the realise
+ *     consumes; only cells in unloaded chunks (or past the kit's cap) stay an upper bound; {@code notes} say which
  * @param notes why a piece is not exact, and what the quote read
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,

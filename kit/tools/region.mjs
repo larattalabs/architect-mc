@@ -155,7 +155,7 @@ async function plan(argv) {
     fs.writeFileSync(path.join(opts.out, 'meta.json'), `${JSON.stringify(res.meta)}\n`);
     const ir = res.ir;
     const planJson = { ok: true, irSha: res.irSha, id: ir.id, seed: ir.seed, claim: ir.claim, stages: ir.stages, lots: ir.lots.length, roads: ir.roads.length, paths: ir.paths.length, anchors: ir.anchors, budget: ir.budget, notes: res.notes, stats: res.stats,
-      irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })), ...(res.affordances ? { affordances: res.affordances } : {}), ...(res.survivalBom ? { survivalBom: res.survivalBom } : {}) };
+      irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })), ...(res.affordances ? { affordances: res.affordances } : {}), ...(res.survivalBom ? { survivalBom: res.survivalBom } : {}), ...(res.survivalTerrain ? { survivalTerrain: res.survivalTerrain } : {}) };
     fs.writeFileSync(path.join(opts.out, 'plan.json'), `${JSON.stringify(planJson, null, 2)}\n`);
   }
   // (6c P0) a plan check (plan_v0): the cost, the overall result, the light preview and the artifact

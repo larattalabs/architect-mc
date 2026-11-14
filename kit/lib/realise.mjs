@@ -14,7 +14,7 @@ import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
 import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
-import { CLASS_HELD, CLASS_PAID, CREATIVE_ONLY, MK_DIRT_PATH, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
+import { CLASS_HELD, CLASS_PAID, CREATIVE_ONLY, MK_DIRT_PATH, TERRAIN_BLOCKS, blockName, canPay, chargedOf, freeCell, itemsOf, materialKind } from './region/survival.mjs';
 
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp', 'fluid'];
@@ -502,6 +502,8 @@ function compileSurvival(sv, irParts, parts, ops, mats, opMats) {
     itemsAt: (m) => (items[m] ??= itemsOf(mats[m])),
     charged: mats.map((m) => chargedOf(m)),
     creative: mats.map((m) => CREATIVE_ONLY.has(blockName(m))),
+    // (BC, A11) a terrain block: its paid cells are kept by position (survivalTerrain)
+    terrain: Uint8Array.from(mats.map((m) => (TERRAIN_BLOCKS.has(blockName(m)) ? 1 : 0))),
   };
 }
 
@@ -615,6 +617,7 @@ export function evalTile(ir, key, heights, opts = {}) {
   const cols = asColumns(heights);
   if (cols.resolution !== 1) throw new Error(`evalTile: heights must have resolution 1 (got ${cols.resolution})`);
   const { stage = null, set = null, countOnly = false, writers = false } = opts;
+  const keepTerrain = opts.terrainCells === true; // (BC, A11) the plan's quote data: the paid terrain cells by position
   const cellOps = opts.cellOps || writers;
   // (6b, the checker) the op index of every emitted cell, in payload order
   let opsOut = cellOps ? new Int32Array(4096) : null, opsN = 0;
@@ -919,8 +922,12 @@ export function evalTile(ir, key, heights, opts = {}) {
               // a fluid op's cells are never held: the fluids gate writes them in its waves (a target writing a reach's sources after the gate
               // cleared the reaches not yet due would let them flow early)
               const cls = free ? (S.hold[g] && !S.padPart[o.part] && S.opFluid[opi] !== 1 ? CLASS_HELD : 0) : CLASS_PAID;
-              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map() });
-              if (cls === CLASS_PAID) { st.paid++; for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c); }
+              const st = (svStats[g] ??= { free: 0, held: 0, paid: 0, bom: new Map(), charged: new Map(), creativeOnly: new Map(), terrain: new Map() });
+              if (cls === CLASS_PAID) {
+                st.paid++;
+                for (const [it, c] of S.itemsAt(m)) st.bom.set(it, (st.bom.get(it) ?? 0) + c);
+                if (keepTerrain && S.terrain[m]) { let a = st.terrain.get(m); if (!a) st.terrain.set(m, (a = [])); a.push(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15)); }
+              }
               else if (cls === CLASS_HELD) st.held++;
               else st.free++;
               if (S.opFluid[opi] && S.charged[m]) st.charged.set(S.charged[m], (st.charged.get(S.charged[m]) ?? 0) + 1);
@@ -1001,7 +1008,9 @@ export function evalTile(ir, key, heights, opts = {}) {
     S.groups.forEach((gid, g) => {
       const st = svStats[g];
       if (!st) return;
-      sv[gid] = { free: st.free, held: st.held, paid: st.paid, bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}) };
+      sv[gid] = { free: st.free, held: st.held, paid: st.paid, bom: sorted(st.bom), ...(st.charged.size ? { charged: sorted(st.charged) } : {}), ...(st.creativeOnly.size ? { creativeOnly: sorted(st.creativeOnly) } : {}),
+        // (BC, A11) the paid terrain cells by state: [x, y, z, ...] per state, with each cell's items
+        ...(st.terrain.size ? { terrain: [...st.terrain].map(([m, cells]) => ({ state: C.mats[m], items: Object.fromEntries(S.itemsAt(m)), cells })) } : {}) };
     });
     notes.survival = sv;
   }

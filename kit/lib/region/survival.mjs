@@ -6,6 +6,14 @@ import { COSTS, CREATIVE_ONLY, FREE_NATURAL } from './survivalData.mjs';
 export { CREATIVE_ONLY, FREE_NATURAL };
 
 /** Cell classes in ARTL v2 (docs/CONTRACT.md slice RS; kit 0.39.0): written in the free pass, held free in a target, paid in a target. */
+/**
+ * (BC, A11) The common terrain blocks a grade or a fill writes (the mod's Quotes.TERRAIN): a paid cell of one may already stand in the land,
+ * and a realise skips a cell whose block the world already holds. The plan keeps those cells (survivalTerrain) so Regions.quote can read
+ * the world at each and leave the ones already there out of the bill.
+ */
+export const TERRAIN_BLOCKS = new Set(['dirt', 'grass_block', 'coarse_dirt', 'rooted_dirt', 'podzol', 'mycelium', 'dirt_path', 'mud', 'stone', 'deepslate',
+  'granite', 'diorite', 'andesite', 'tuff', 'sand', 'red_sand', 'gravel', 'clay', 'sandstone', 'red_sandstone', 'netherrack', 'snow_block'].map((b) => `minecraft:${b}`));
+
 export const CLASS_FREE = 0;
 export const CLASS_HELD = 1;
 export const CLASS_PAID = 2;

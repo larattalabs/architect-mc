@@ -851,6 +851,8 @@ export class Regions {
         ...(Array.isArray(kitPlan.affordances) && kitPlan.affordances.length ? { affordances: kitPlan.affordances } : {}),
         // (M5 QT) a survival plan's paid cells' bill per target group (plan.json's survivalBom): what Regions.quote bills the region's cells by
         ...(kitPlan.survivalBom && typeof kitPlan.survivalBom === 'object' ? { survivalBom: kitPlan.survivalBom } : {}),
+        // (BC, A11) its paid terrain cells by position (plan.json's survivalTerrain): Regions.quote leaves out the ones the land already holds
+        ...(kitPlan.survivalTerrain && typeof kitPlan.survivalTerrain === 'object' ? { survivalTerrain: kitPlan.survivalTerrain } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);
