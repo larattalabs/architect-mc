@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bench } from '../../tools/lib/bench-report.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { region, blockState } from '../lib/region/program.mjs';
 import { compileIR, evalTile } from '../lib/realise.mjs';
@@ -180,6 +181,8 @@ test('floatingIsland evaluation cost per cell against a sphere (recorded)', asyn
   // evaluation per cell, the relief noise, the material rule). Recorded as a deviation (CONTRACT "Phase 6b as built"); what
   // the estimate protects is held instead: an island tile evaluates far inside the 2 s per-tile limit and above the 45k
   // cells/s evaluation bar (CONTRACT phase 6 §7).
-  // Gated at 2x the bar, not 4x: shared CI runners measured 179.6k (4x is 180k), so 4x was flaky on timing alone.
-  assert.ok(1000 / ci >= 45_000 * 2, `island evaluation ${(1000 / ci).toFixed(0)} cells/s (at least 2x the 45k bar)`);
+  // Bound at 2x the bar, not 4x: shared CI runners measured 179.6k (4x is 180k). Report-only (docs/GATES.md "Speed rules" 9): the
+  // reading and the load go to artifacts/benches/, past the bound it flags (ARCHITECT_TIMING_BARS=1 judges it).
+  assert.ok(ci > 0 && cs > 0 && Number.isFinite(ratio), 'both evaluations ran');
+  bench({ id: 'forms-island/eval-cells-per-s', value: 1000 / ci, bound: 45_000 * 2, better: 'higher', unit: 'cells/s', note: `sphere ratio ${ratio.toFixed(1)}` });
 });

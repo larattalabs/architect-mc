@@ -256,8 +256,54 @@ test('load-aware start: never waits when it would be the only gate run; gives up
 });
 
 test('load-aware start: config and env', () => {
-  assert.deepEqual(loadConfig({}, {}), { max1: 36, settleSec: 120, maxWaitMin: 30 });
-  assert.deepEqual(loadConfig({ slots: { load: { max1: 30 } } }, { GATE_LOAD_WAIT_MAX_MIN: '10' }), { max1: 30, settleSec: 120, maxWaitMin: 10 });
-  assert.equal(loadConfig({}, { GATE_LOAD_MAX: '0' }).max1, 0);
+  const quiet = () => {};
+  assert.deepEqual(loadConfig({}, {}, quiet), { max1: 72, settleSec: 300, maxWaitMin: 15 });
+  assert.deepEqual(loadConfig({ slots: { load: { max1: 90 } } }, { GATE_LOAD_WAIT_MAX_MIN: '10' }, quiet), { max1: 90, settleSec: 300, maxWaitMin: 10 });
+  assert.equal(loadConfig({}, { GATE_LOAD_MAX: '0' }, quiet).max1, 0);
+  // rule 10 (Noah, 2026-11-13): max1 >= 72 (0 = off allowed), maxWaitMin <= 15; outside them is clamped, with a warning
+  const warned = [];
+  const c = loadConfig({ slots: { load: { max1: 36, maxWaitMin: 30 } } }, {}, (m) => warned.push(m));
+  assert.deepEqual([c.max1, c.maxWaitMin, warned.length], [72, 15, 2]);
+  assert.deepEqual(loadConfig({}, { GATE_LOAD_MAX: '54', GATE_LOAD_WAIT_MAX_MIN: '60' }, quiet), { max1: 72, settleSec: 300, maxWaitMin: 15 });
   assert.equal(loadGate({}, [{ startedAt: new Date(0).toISOString() }], { load: null }), null);
+});
+
+// (GI A41, gate-robust verifier D4) --no-load-wait and an abort mid-wait
+test('load-aware start: a run aborted mid-wait (released, or killed) leaves the head to the next, which then waits on the load itself', async () => {
+  for (const how of ['released', 'killed']) {
+    const dir = tmp();
+    const t = Date.now();
+    const h = await queued(dir, run('h'));
+    await go(dir, h);
+    h.dir = dir;
+    startedAgo(h, t, 10 * 60_000);
+    const a = await queued(dir, run('a'));
+    const b = await queued(dir, run('b'));
+    const o = { load: LOAD, loadNow: () => 70, now: () => t };
+    assert.match((await go(dir, a, o)).waitingOn.join(), /the 1-min load above 36/);
+    assert.match((await go(dir, b, o)).waitingOn.join(), new RegExp(`queued before it: pid ${a.pid}`));
+    if (how === 'released') releaseAll(dir, a.pid); // gate-run's SIGINT/SIGTERM handler (acquireSlot onSig -> releaseSlot)
+    else await a.kill(); // SIGKILL: no handler runs; its ticket's pid is dead
+    const wb = await go(dir, b, o);
+    assert.equal(wb.acquired, false, how);
+    assert.match(wb.waitingOn.join(), /the 1-min load above 36/, `${how}: b now waits on the load, not on a`);
+    assert.doesNotMatch(wb.waitingOn.join(), new RegExp(`pid ${a.pid}`), how);
+    assert.ok((await go(dir, b, { ...o, loadNow: () => 10, now: () => t + 60_000 })).acquired, `${how}: b goes once the load drops`);
+  }
+});
+
+test('load-aware start: --no-load-wait (max1 0) skips the settle rule too, and gate-run maps the flag to it', async () => {
+  const dir = tmp();
+  const t = Date.now();
+  const h = await queued(dir, run('h'));
+  await go(dir, h);
+  h.dir = dir;
+  startedAgo(h, t, 5_000); // a run that just started: the settle rule would hold the next back
+  const a = await queued(dir, run('a'));
+  const off = { ...loadConfig({}, {}, () => {}), max1: 0 }; // gate-run's LOAD_GATE under --no-load-wait
+  assert.ok((await go(dir, a, { load: off, loadNow: () => 99, now: () => t })).acquired);
+  assert.equal(a.m.loadWait, undefined, 'no wait recorded');
+  const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'tools', 'gate-run.mjs'), 'utf8');
+  assert.match(src, /flag\('--no-load-wait'\) \? \{ \.\.\.loadConfig\(cfg\), max1: 0 \} : loadConfig\(cfg\)/, 'the flag sets max1 0');
+  assert.match(src, /load: LOAD_GATE/, 'and the acquire uses it');
 });

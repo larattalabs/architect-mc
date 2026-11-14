@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bench } from '../../tools/lib/bench-report.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { synthSurvey } from '../lib/region/synth.mjs';
 import { makeColumns, FLAG_WATER } from '../lib/region/pack.mjs';
@@ -112,5 +113,6 @@ test('prefix checks: M2 and M3 hold on every stage prefix of walled_hill; the pr
     assert.equal(x.M3.spurs, 0, `no floating spur after stage ${x.stage}`);
   }
   console.log(`# walled_hill: full check ${tFull.toFixed(0)} ms (rules ${JSON.stringify(full.ms.perRule)}), prefixes ${r.ms.prefix} ms over ${r.prefix.length} prefixes`);
-  assert.ok(r.ms.prefix <= 2 * tFull, `prefixes ${r.ms.prefix} ms <= 2 x full ${tFull.toFixed(0)} ms`);
+  // report-only (docs/GATES.md "Speed rules" 9): the prefixes' cost against 2x one full check flags, it does not fail
+  bench({ id: 'region-fixtures/walled_hill-prefix-ms', value: r.ms.prefix, bound: 2 * tFull, unit: 'ms', note: `full check ${tFull.toFixed(0)} ms` });
 });

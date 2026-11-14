@@ -13,6 +13,11 @@ Steward (`../steward-mc`) is the main consumer of the API.
 gate anything:
 - a slice merges on its unit tests, the instant lints and its own in-game steps;
 - the verifier only reviews, except for undo, the journal, crash recovery and survival accounting;
+- **speed rules (Noah, 2026-11-13; docs/GATES.md "Speed rules"):** strict vs light tier, re-run only failing steps, 3 full runs
+  per slice, batched merges, 4 gate runs, `nice -n 10` unit suites, 5 min between in-game starts, 10-15 line as-builts;
+  scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
+  the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
+  the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
 - a Steward RC only for API changes;
 - the full set runs nightly.
 
@@ -32,11 +37,13 @@ gate anything:
 
 - **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
+- **Unit tests per slice:** `node tools/unit-scope.mjs --run` (the tests for the files you changed plus their direct dependents;
+  full suites for shared core; docs/GATES.md "Scoped unit suites"). The full suites run once, at the batch merge.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`, `../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
   per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
-  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 3 gate runs at once (`slots.max` 3; docs/GATES.md "Slot lock").
+  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 4 gate runs at once (`slots.max` 4; docs/GATES.md "Slot lock", "Speed rules").
 - **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
   as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
   "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod
