@@ -110,7 +110,12 @@ public final class Authors {
 					String id = res2.get("designId").getAsString();
 					dev.larattalabs.architect.apiimpl.ApiImpl.rememberDesign(id, ownerOf(r), r.ext().deepCopy());
 					Architect.LOGGER.info("Program design {} requested (authorProgram): {}", id, r.brief());
-					return RegionsImpl.onServer(s, () -> id);
+					// an adopted design (the same key and body) may have ended AUTHORED in another world (the helper's data spans the
+					// worlds): installed into this one now, as its end would have; idempotent
+					return RegionsImpl.onServer(s, () -> {
+						ArchitectApi.get().designs().get(id).ifPresent(d -> changed(s, d));
+						return id;
+					});
 				});
 		});
 	}
