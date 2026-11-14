@@ -597,6 +597,10 @@ final class DesignsImpl implements Designs {
 				res.addProperty("planError", planError);
 			}
 			result = Optional.ofNullable(res);
+		} else if ("program".equals(str(raw, "kind")) || "program".equals(str(req, "kind"))) {
+			// (7c AU) an authoring session (kind "program"): its outcome (AUTHORED or NOT_SHOWN) and rounds; the design id is the program's
+			req.addProperty("kind", "program");
+			result = Optional.ofNullable(raw.has("result") && raw.get("result").isJsonObject() ? raw.getAsJsonObject("result").deepCopy() : null);
 		} else if ("settlement".equals(str(raw, "kind")) || "settlement".equals(str(req, "kind"))) {
 			// (7c CO) a composed settlement (kind "settlement") carries its outcome; a PICKED one the plan the mod ran for the pick
 			req.addProperty("kind", "settlement");
@@ -636,6 +640,9 @@ final class DesignsImpl implements Designs {
 		}
 		if (d.kind() == Design.Kind.SETTLEMENT) {
 			dev.larattalabs.architect.region.Composes.changed(server, d, raw); // 7c CO: a round's plan is checked; a pick is planned
+		}
+		if (d.kind() == Design.Kind.PROGRAM) {
+			dev.larattalabs.architect.region.Authors.changed(server, d); // 7c AU: an AUTHORED program is installed world-local before DESIGN_DONE
 		}
 		if (!d.status().isFinal()) {
 			return;

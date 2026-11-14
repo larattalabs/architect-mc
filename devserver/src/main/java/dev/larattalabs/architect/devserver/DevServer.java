@@ -205,6 +205,7 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SliceSlDev.init(); // (7b SL) dev.sl.*
 		dev.larattalabs.architect.devserver.gen.SliceLpDev.init(); // (7b LP) dev.lp.*
 		dev.larattalabs.architect.devserver.gen.SliceCoDev.init(); // (7c CO) dev.region.compose
+		dev.larattalabs.architect.devserver.gen.SliceAuDev.init(); // (7c AU) dev.region.author, dev.au.store
 		ServerSidecar.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
 			server = s;
