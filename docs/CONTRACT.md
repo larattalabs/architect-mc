@@ -30695,7 +30695,7 @@ Steward's S-M5-8. **What changed:** `kit/regions/revise.mjs` only; no Java or AP
 - **Checks:** kit 1341/1341 before the merge, the scoped tests 35/35 after it (new `igb.test` 5). The parity fixtures were re-cut and differ in
   `irSha`/`programSha` only. Gradle build OK; sidecar tsc clean; step-inputs clean (390 steps; `igb-unit` and `igb-adopted` added).
 - **Gate:** run 1 `gate-runs-igb/20261114-021805-change`: igb-adopted 25/0, gr-survival 12/0, ig-unit 3/0. igb-unit missed on its own test
-  count and rs-survival-smoke on the item-10 flake; run 2 `20261114-032612` passed both (3/0, 40/0). Final run: FINAL.
+  count and rs-survival-smoke on the item-10 flake; run 2 `20261114-032612` passed both (3/0, 40/0). Final full run `20261114-044819-change` at 4b5fafa8: all 5 PASS (igb-adopted 25/0, igb-unit 3/0, ig-unit 3/0, gr-survival 12/0, rs-survival-smoke 40/0).
   igb-adopted: AD's adopted settlement grows the irrigated lot; the lone lot drains; undoRevision is exact; the RVU1 kill resumes exact,
   with no water; Regions.remove E-flat 0.
 - **Strict verifier PASS** (`gate-runs-igb-verify/20261114-035615-change`, 8902/8903): igb-unit 3/0, igb-adopted 25/0, the diff reviewed.
