@@ -13,6 +13,7 @@ import { sha256, sideBlobs } from '../src/regions.js';
 import type { ClientHandle } from '../src/server.js';
 import { SimDesigner } from '../src/sim.js';
 import { arsv, makeSidecar, tileHeights, until, type Harness } from './helpers.js';
+import { bench } from '../../tools/lib/bench-report.mjs';
 
 // ---- helpers ----------------------------------------------------------------------------------------
 
@@ -212,7 +213,8 @@ describe('region.plan with the check and previews (fake kit)', () => {
     expect(p.sitePlan).toMatchObject({ format: 1, irSha: p.irSha, graph: { derived: true } });
     expect(p.checkMs).toBeGreaterThan(0);
     expect(p.renderMs).toBeGreaterThan(0);
-    expect(p.checkMs! + p.renderMs!).toBeLessThan(h.cfg.regions.checkMs);
+    // report-only (docs/GATES.md "Speed rules" 9): check + render against regionCheckMs flags, it does not fail
+    bench({ id: 'sidecar/regions-6b/fake-check-render-ms', value: p.checkMs! + p.renderMs!, bound: h.cfg.regions.checkMs });
     expect(ServerMessage.safeParse({ v: 1, ...p }).success).toBe(true);
     for (const f of ['report.json', 'summary.txt', 'siteplan.json']) expect(fs.existsSync(path.join(dir, f)), f).toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'plan.json'), 'utf8'))).toMatchObject({ ok: true, irFormat: 1, checkMs: p.checkMs, renderMs: p.renderMs });

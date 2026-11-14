@@ -18,6 +18,7 @@ import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
 import { secretPartsOf, sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
+import { bench } from '../../tools/lib/bench-report.mjs';
 
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
@@ -306,7 +307,8 @@ describe.skipIf(!hasCheck && !hasCatalogue)("the real kit's check, previews and 
     expect(Array.isArray(p.report!.findings)).toBe(true);
     for (const v of ['top', 'section', 'iso', 'siteplan']) expect(p.previews![v]!.length, v).toBeGreaterThan(0);
     expect(p.sitePlan).toMatchObject({ format: 1 });
-    expect(p.checkMs! + p.renderMs!).toBeLessThan(sc.config.regions.checkMs);
+    // report-only (docs/GATES.md "Speed rules" 9): check + render against regionCheckMs flags, it does not fail
+    bench({ id: 'sidecar/regions-real-kit-6b/region_small-check-render-ms', value: p.checkMs! + p.renderMs!, bound: sc.config.regions.checkMs });
     expect(events.filter((e) => e.type === 'region.progress' && e.planId === planId).map((e) => (e as { phase: string }).phase)).toEqual(['planning', 'checking', 'rendering']);
     const c = await ask({ type: 'region.check', planId });
     expect(c.ok, c.error).toBe(true);
