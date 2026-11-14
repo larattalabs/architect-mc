@@ -106343,6 +106343,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -106391,6 +106392,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -106510,6 +106512,7 @@
     "kit/test/d3-parity.mjs",
     "kit/test/districts-d3-parity.test.mjs",
     "kit/test/fc.test.mjs",
+    "kit/test/fixtures/fk/fk_hall.mjs",
     "kit/test/fixtures/plan/valid/v30_walled_village.json",
     "kit/test/fixtures/regions/eval-worker.mjs",
     "kit/test/fixtures/regions/mega_bench.golden.json",
@@ -106517,6 +106520,7 @@
     "kit/test/fixtures/rv/merge.json",
     "kit/test/fixtures/vocab/voc-designs.mjs",
     "kit/test/fixtures/vocab/vocc-designs.mjs",
+    "kit/test/fk.test.mjs",
     "kit/test/gr-a.test.mjs",
     "kit/test/gr-parity.mjs",
     "kit/test/gr-parity.test.mjs",
@@ -106570,6 +106574,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatem5fc.mjs",
+    "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
     "tools/lib/gatem5qt.mjs",
@@ -106608,6 +106613,7 @@
     "kit/bibles/**",
     "kit/designs/**",
     "kit/examples/cabin/**",
+    "kit/lib/**",
     "kit/test/fixtures/designs/**",
     "kit/test/fixtures/plan/**",
     "kit/test/fixtures/plan/asks/**",
@@ -106618,6 +106624,18 @@
     {
      "from": "tools/gate6dgr.mjs",
      "expr": "pathToFileURL(path.join(KIT, p)).href)"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
     },
     {
      "from": "kit/lib/components.mjs",
@@ -106658,6 +106676,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5fk.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     }
    ],
    "env": [
@@ -106786,6 +106808,7 @@
     "kit/lib/connectors/wall.mjs",
     "kit/lib/connectors/wallLots.mjs",
     "kit/lib/connectors/wallWalk.mjs",
+    "kit/lib/fill.mjs",
     "kit/lib/fluids/biomes.mjs",
     "kit/lib/fluids/body.mjs",
     "kit/lib/fluids/course.mjs",
@@ -106834,6 +106857,7 @@
     "kit/lib/noise.mjs",
     "kit/lib/params.mjs",
     "kit/lib/pattern.mjs",
+    "kit/lib/plan/authored.mjs",
     "kit/lib/plan/catalogue.mjs",
     "kit/lib/plan/compile.mjs",
     "kit/lib/plan/elevated.mjs",
@@ -107031,6 +107055,18 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), import.meta"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "), no import.meta)')"
+    },
+    {
+     "from": "kit/lib/plan/authored.mjs",
+     "expr": "pathToFileURL(file).href)"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -127552,6 +127588,7 @@
     "tools/lib/gatem5ru.mjs",
     "tools/lib/gatemhf.mjs",
     "tools/lib/gatemps.mjs",
+    "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/realised-virtual.mjs",
@@ -127995,6 +128032,7 @@
     "tools/lib/gatem5ru.mjs",
     "tools/lib/gatemhf.mjs",
     "tools/lib/gatemps.mjs",
+    "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pinned-deps.mjs",
@@ -128460,6 +128498,7 @@
     "tools/lib/gatem5ru.mjs",
     "tools/lib/gatemhf.mjs",
     "tools/lib/gatemps.mjs",
+    "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pinned-deps.mjs",
