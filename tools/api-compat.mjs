@@ -165,7 +165,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.argv[2] === '--baselines') {
-  const { readBaselines, artifactsDir, releaseFiles, consumerFile } = await import('./api-baselines.mjs');
+  const { readBaselines, artifactsDir, releaseFiles, consumerFile, apitestBaselines } = await import('./api-baselines.mjs');
   const rest = process.argv.slice(3);
   const ai = rest.indexOf('--artifacts');
   let override = null;
@@ -173,7 +173,7 @@ if (process.argv[2] === '--baselines') {
   const art = artifactsDir(root, override);
   const b = readBaselines(root);
   const checks = [];
-  for (const r of b.releases) checks.push([`${r.mod} apitest (API ${r.api})`, [releaseFiles(art, r).apitest], `node tools/api-baselines-build.mjs build ${r.tag}`]);
+  for (const r of apitestBaselines(b)) checks.push([`${r.mod} apitest (API ${r.api})`, [releaseFiles(art, r).apitest], `node tools/api-baselines-build.mjs build ${r.tag}`]);
   if (b.releases.length) checks.push([`${b.releases[0].api} surface (${b.releases[0].mod})`, ['--surface', releaseFiles(art, b.releases[0]).mod], `node tools/api-baselines-build.mjs build ${b.releases[0].tag}`]);
   for (const c of b.consumers) checks.push([`consumer ${c.name}`, ['--consumer', consumerFile(art, c)], `node tools/api-baselines-build.mjs ${c.name}`]);
   const { execFile } = await import('node:child_process');

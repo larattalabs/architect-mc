@@ -777,7 +777,11 @@ steps.item10 = async () => {
       await L.leaveWorld();
       await L.openWorld(R.s.world);
       const mid = await api(`rget ${R.region}`).catch(() => null);
-      check(mid?.state === 'REMOVING', `item 10 (${tag}): after the reopen the region reads REMOVING (stopped mid-removal, resumes): ${mid?.state}`);
+      // (GI) REMOVING (stopped mid-removal, resumes) or REMOVED (the removal's last writes and its end reached the save before the world
+      // stopped, or the resume finished before this read): both are correct, and the end below is judged exactly either way. Seen REMOVED
+      // in 3 of about 30 runs under load (LEFTOVERS rs02m2); the state read is recorded in out[tag].reopened.
+      pend.reopened = mid?.state ?? null;
+      check(mid?.state === 'REMOVING' || mid?.state === 'REMOVED', `item 10 (${tag}): after the reopen the region reads REMOVING (stopped mid-removal, resumes) or REMOVED (it ended before the stop): ${mid?.state}`);
       await L.call('dev.placement.slow', { on: false });
       await C.point('reopened mid-removal');
     }
@@ -791,7 +795,7 @@ steps.item10 = async () => {
     const got = G.minus(s2.stock, s0.stock);
     const e = await G.diff(ctx, R.box, R.pre);
     const ef = e.list.filter((m) => !R.crateAt.some((c) => c.join(',') === m.pos));
-    out[tag] = { pending: pend, leftFeed: leftFeed.length, of: ids.length, state: v?.state, refund: got, paid: a0.paidStanding, eflat: ef.length, points: C.points };
+    out[tag] = { pending: pend, reopened: pend.reopened ?? null, leftFeed: leftFeed.length, of: ids.length, state: v?.state, refund: got, paid: a0.paidStanding, eflat: ef.length, points: C.points };
     check(ids.length > 1 && leftFeed.length === ids.length && sum(a0.paidStanding) > 0, `item 10 (${tag}, ${sum(a0.paidStanding)} paid items standing): the removal takes the ${ids.length} targets out of the feed at once (${leftFeed.length} left it right after Regions.remove)`);
     check(G.same(got, a0.paidStanding) && (v?.state ?? 'REMOVED') === 'REMOVED', `item 10 (${tag}${leave ? ', saved, left and reopened mid-removal' : ''}): the refund equals the paid cells standing at the removal (${sum(a0.paidStanding)} items), credited once: ${G.same(got, a0.paidStanding) ? 'equal' : `differs ${json(G.minus(got, a0.paidStanding))}`}; ${v?.state ?? 'gone'}`);
     // (the point right after the reopen is recorded, not judged: the audit reads no pending target's cells after a load until its restore

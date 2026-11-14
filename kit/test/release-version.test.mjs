@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TARGETS, checkTree, featureNames, findPlaceholders, javaNextOffsets, readVersions, recutGolden, releaseDocProblems, setVersions, syncBlock, verifyRecut } from '../../tools/release-version.mjs';
-import { rollBaselines } from '../../tools/api-baselines.mjs';
+import { apitestBaselines, formatBaselines, rollBaselines } from '../../tools/api-baselines.mjs';
 import { releaseContext } from '../../tools/release-context.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -240,4 +240,15 @@ test('(TJ) featureNames reads JAVA_FEATURES, the sidecar mappings, out.add and t
   const b = { releases: [{ mod: '0.3.0' }, { mod: '0.2.0' }, { mod: '0.1.0' }], consumers: [] };
   assert.deepEqual(rollBaselines(b, { mod: '0.4.0', api: '1.4.0' }).releases.map((r) => r.mod), ['0.4.0', '0.3.0', '0.2.0']);
   assert.deepEqual(rollBaselines(b, { mod: '0.3.0', api: '1.3.0' }).releases.map((r) => r.mod), ['0.3.0', '0.2.0', '0.1.0'], 'a re-run replaces, never duplicates');
+});
+
+test('(GI) the anchors: never rolled, judged after the three, no duplicate mod; formatBaselines writes them back', () => {
+  const b = { $comment: 'x', releases: [{ tag: 'v0.3.0', mod: '0.3.0', api: '1.3.0', dir: 'v030' }, { tag: 'v0.2.0', mod: '0.2.0', api: '1.2.0', dir: 'v020' }],
+    anchors: [{ tag: 'v0.2.0', mod: '0.2.0', api: '1.2.0', dir: 'v020' }, { tag: 'v0.1.0', mod: '0.1.0', api: '1.1.0', dir: 'v010' }], consumers: [] };
+  assert.deepEqual(apitestBaselines(b).map((r) => r.mod), ['0.3.0', '0.2.0', '0.1.0']);
+  const n = rollBaselines(b, { mod: '0.4.0', api: '1.4.0' });
+  assert.deepEqual(n.anchors, b.anchors, 'the roll leaves the anchors');
+  assert.deepEqual(JSON.parse(formatBaselines(n)).anchors, b.anchors);
+  assert.equal(JSON.parse(formatBaselines({ ...b, anchors: undefined })).anchors, undefined, 'a file without anchors stays without');
+  assert.deepEqual(apitestBaselines({ releases: b.releases }).map((r) => r.mod), ['0.3.0', '0.2.0']);
 });
