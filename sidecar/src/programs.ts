@@ -117,6 +117,7 @@ export function findingRule(msg: string): string {
   if (/^(structure:|blocks\[|duplicate block|block at \S+ outside|no blocks)/.test(m)) return 'structure';
   if (/^(palette\[|unknown or non-vanilla blocks)/.test(m)) return 'blocks';
   if (/^(missing required anchor|anchor )/.test(m)) return 'anchors';
+  if (/^fill:/.test(m)) return 'fill';
   if (/^design \S+ threw|^kit\/designs\//.test(m)) return 'program';
   return 'check';
 }
@@ -146,6 +147,34 @@ export class ProgramRefused extends RefusedError {
   constructor(detail: string, message: string) {
     super('PROGRAM_REFUSED', detail, message);
   }
+}
+
+/**
+ * A given program's source checks (PROGRAM_REFUSED `program`): its length, a default export, and (SA, A25) well-formed UTF-16: a lone
+ * surrogate does not round-trip through UTF-8 (the file on disk, the mod's wire), so the recorded sha would later read `program_stale`.
+ */
+export function checkProgramSource(source: string): void {
+  if (source.length > PROGRAM_SOURCE_MAX) throw new ProgramRefused('program', `the program is ${source.length} characters (at most ${PROGRAM_SOURCE_MAX})`);
+  const bad = loneSurrogate(source);
+  if (bad >= 0) throw new ProgramRefused('program', `the program has a lone UTF-16 surrogate at character ${bad} (U+${source.charCodeAt(bad).toString(16).toUpperCase()}): it is not text that survives UTF-8; remove or escape it`);
+  if (!/export\s+default\b/.test(source)) throw new ProgramRefused('program', 'the program has no default export (a kit design program: `export default function build({ palette, ...values })`)');
+}
+
+/** The index of the first lone UTF-16 surrogate in a string, or -1. */
+export function loneSurrogate(s: string): number {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const d = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      if (d >= 0xdc00 && d <= 0xdfff) {
+        i++;
+        continue;
+      }
+      return i;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) return i;
+  }
+  return -1;
 }
 
 export class Programs {
@@ -203,10 +232,11 @@ export class Programs {
   /** design.fromProgram */
   fromProgram(source: string, params: Record<string, unknown>, bible: ProgramBible | undefined, opKey: string, owner?: string): ProgramOp {
     const body = { type: 'design.fromProgram', source, params, ...(bible ? { bible } : {}) };
+    // (SA, A25) the source's own checks run before a replay too: a replay gets the answer a fresh request would (an operation kept from
+    // before a check was added is refused, not returned)
+    checkProgramSource(source);
     const prior = this.prior('program', owner, opKey, body);
     if (prior) return prior;
-    if (source.length > PROGRAM_SOURCE_MAX) throw new ProgramRefused('program', `the program is ${source.length} characters (at most ${PROGRAM_SOURCE_MAX})`);
-    if (!/export\s+default\b/.test(source)) throw new ProgramRefused('program', 'the program has no default export (a kit design program: `export default function build({ palette, ...values })`)');
     this.sandboxReady();
     this.checkBible(bible);
     const now = this.host.now();
@@ -284,6 +314,9 @@ export class Programs {
     if (!this.queue.includes(id)) this.queue.push(id);
     if (this.runP || this.stopped) return;
     this.runP = (async () => {
+      // (SA, A18) yield to the event loop first: the runner's first steps (the kit copy, the site files) are synchronous, and started
+      // inside the request they ran before the design.fromProgram / design.variant ack was written; under load the ack missed the mod's 20 s window
+      await new Promise<void>((r) => setImmediate(r));
       try {
         while (!this.stopped && this.queue.length) {
           const next = this.queue.shift()!;

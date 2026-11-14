@@ -60,7 +60,7 @@ class ApiCOTest {
 		req.addProperty("kind", "settlement");
 		Design d = new Design("d1", Design.Status.DONE, "", Optional.empty(), Cost.NONE, Optional.empty(), req, Optional.empty(), 0, 0);
 		assertEquals(Design.Kind.SETTLEMENT, d.kind());
-		assertEquals(Design.Kind.values().length - 1, Design.Kind.SETTLEMENT.ordinal(), "appended last");
+		assertEquals(Design.Kind.REGION.ordinal() + 1, Design.Kind.SETTLEMENT.ordinal(), "appended after REGION (7c AU appends PROGRAM after it)");
 		req.addProperty("kind", "region");
 		assertEquals(Design.Kind.REGION, new Design("d2", Design.Status.DONE, "", Optional.empty(), Cost.NONE, Optional.empty(), req, Optional.empty(), 0, 0).kind());
 	}

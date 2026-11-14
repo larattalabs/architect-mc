@@ -381,6 +381,11 @@ public final class PlanChecks {
 		if (planImagesAsked(r)) {
 			extra.addProperty("planImages", true);
 		}
+		// (7c AU) the authored programs the plan names, the owner's, as their files are now (the kit hashes them against the plan's shas)
+		JsonObject authored = Authors.sourcesFor(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT), r.plan(), r.owner());
+		if (authored.size() > 0) {
+			extra.add("authored", authored);
+		}
 		// (6c D2) the claim's biome grid (4x4, loaded chunks): a zone along a biome edge reads it
 		extra.add("biomes", BiomeGrid.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		// (6c VOC-c) a plan with a palette rule: the block histograms of the lots whose entry it names (the kit measures them at check time)
@@ -1484,6 +1489,13 @@ public final class PlanChecks {
 		if (checkedSurvival != RegionSurvival.on(s)) {
 			return refused(Reason.ARTIFACT_STALE, checkedSurvival ? "artifact " + sha.substring(0, 12) + " was checked in survival: check the plan again in creative"
 				: "artifact " + sha.substring(0, 12) + " was checked in creative: check the plan again in survival");
+		}
+		// (7c AU) every authored program the artifact froze, re-hashed from its installed file now: moved or gone refuses AUTHORED_STALE (its
+		// id the detail), before anything is written, so the key stays free (6c close-out A)
+		String[] st = Authors.stale(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT), body);
+		if (st != null) {
+			return CompletableFuture.failedFuture(new RegionsImpl.RegionException(Reason.AUTHORED_STALE, "AUTHORED_STALE: artifact " + sha.substring(0, 12) + ": " + st[1]
+				+ " (author it again, or check a plan naming its new sha)", st[0]));
 		}
 		ServerLevel level = Sites.levelOf(s, p.dimension());
 		if (level == null) {

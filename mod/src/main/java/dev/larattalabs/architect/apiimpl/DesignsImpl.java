@@ -597,6 +597,10 @@ final class DesignsImpl implements Designs {
 				res.addProperty("planError", planError);
 			}
 			result = Optional.ofNullable(res);
+		} else if ("program".equals(str(raw, "kind")) || "program".equals(str(req, "kind"))) {
+			// (7c AU) an authoring session (kind "program"): its outcome (AUTHORED or NOT_SHOWN) and rounds; the design id is the program's
+			req.addProperty("kind", "program");
+			result = Optional.ofNullable(raw.has("result") && raw.get("result").isJsonObject() ? raw.getAsJsonObject("result").deepCopy() : null);
 		} else if ("settlement".equals(str(raw, "kind")) || "settlement".equals(str(req, "kind"))) {
 			// (7c CO) a composed settlement (kind "settlement") carries its outcome; a PICKED one the plan the mod ran for the pick
 			req.addProperty("kind", "settlement");
@@ -636,6 +640,9 @@ final class DesignsImpl implements Designs {
 		}
 		if (d.kind() == Design.Kind.SETTLEMENT) {
 			dev.larattalabs.architect.region.Composes.changed(server, d, raw); // 7c CO: a round's plan is checked; a pick is planned
+		}
+		if (d.kind() == Design.Kind.PROGRAM) {
+			dev.larattalabs.architect.region.Authors.changed(server, d); // 7c AU: an AUTHORED program is installed world-local before DESIGN_DONE
 		}
 		if (!d.status().isFinal()) {
 			return;
@@ -883,7 +890,12 @@ final class DesignsImpl implements Designs {
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
 		}
-		return ApiImpl.onServerFuture(b.send(message).thenApply(ack -> {
+		String type = message.has("type") && message.get("type").isJsonPrimitive() ? message.get("type").getAsString() : "?";
+		boolean keyed = message.has("opKey");
+		CompletableFuture<JsonObject> sent = b.send(message).exceptionally(e -> {
+			throw new java.util.concurrent.CompletionException(ackFailure(e, type, keyed));
+		});
+		return ApiImpl.onServerFuture(sent.thenApply(ack -> {
 			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
 				String err = ack.has("error") ? ack.get("error").getAsString() : "refused by the helper";
 				// (6c 0a) a typed refusal (OP_KEY_CONFLICT); (6c 0b) one with a code and detail (COPY_REFUSED, VERSION_REFUSED)
@@ -895,6 +907,29 @@ final class DesignsImpl implements Designs {
 			}
 			return ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : new JsonObject();
 		}));
+	}
+
+	/**
+	 * (SA, A18) A send that failed before its ack: a {@link java.util.concurrent.TimeoutException} (no ack within the link's window; its
+	 * message is null, and was refused untyped as "null") is {@code SIDECAR_UNAVAILABLE}, saying the helper may still carry the message
+	 * out and that replaying the same opKey returns its operation (or the entry it installed); anything else unchanged. Pure.
+	 */
+	static Throwable ackFailure(Throwable e, String type) {
+		return ackFailure(e, type, true);
+	}
+
+	/** {@link #ackFailure(Throwable, String)}; {@code keyed}: the message carried an opKey (only then is its replay named). Pure. */
+	static Throwable ackFailure(Throwable e, String type, boolean keyed) {
+		Throwable c = e;
+		while ((c instanceof java.util.concurrent.CompletionException || c instanceof java.util.concurrent.ExecutionException) && c.getCause() != null) {
+			c = c.getCause();
+		}
+		if (c instanceof java.util.concurrent.TimeoutException) {
+			return new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, "the Architect helper did not"
+				+ " answer " + type + " in time (it may be busy" + (keyed ? ", and may still carry it out): ask again with the same opKey, which returns"
+				+ " its operation or what it installed" : "): try again"), "ack_timeout");
+		}
+		return c;
 	}
 
 	static JsonObject msg(String type) {

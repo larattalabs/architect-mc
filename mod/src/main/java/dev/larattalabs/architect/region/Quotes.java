@@ -127,6 +127,13 @@ public final class Quotes {
 		for (var g : tiles.entrySet()) {
 			bill.add("tiles:" + g.getKey(), items(g.getValue()));
 		}
+		// ((SA, A11) the kit bills every paid cell it writes; in game a cell the land already holds (a grade's dirt over dirt) is skipped,
+		// never written, billed or consumed: the quote is then an upper bound, never under)
+		String mayHold = mayAlreadyHold(tiles);
+		if (mayHold != null) {
+			bill.exact = false;
+			notes.add(mayHold);
+		}
 		// the region the lots go into: a revision's standing one (its record, read only), else a record of the plan as a realise makes it
 		boolean revision = Revisions.isRevision(p);
 		RegionRec rec;
@@ -215,6 +222,53 @@ public final class Quotes {
 		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bill.bom(), bill.parts, bound, bill.exact, notes);
 	}
 
+	/** (SA, A11) The common terrain blocks, besides the tag rule ({@link CellCond#natural}): a grade's or a fill's usual materials. */
+	private static final java.util.Set<net.minecraft.world.level.block.Block> TERRAIN = java.util.Set.of(net.minecraft.world.level.block.Blocks.DIRT,
+		net.minecraft.world.level.block.Blocks.GRASS_BLOCK, net.minecraft.world.level.block.Blocks.COARSE_DIRT, net.minecraft.world.level.block.Blocks.ROOTED_DIRT,
+		net.minecraft.world.level.block.Blocks.PODZOL, net.minecraft.world.level.block.Blocks.MYCELIUM, net.minecraft.world.level.block.Blocks.DIRT_PATH,
+		net.minecraft.world.level.block.Blocks.MUD, net.minecraft.world.level.block.Blocks.STONE, net.minecraft.world.level.block.Blocks.DEEPSLATE,
+		net.minecraft.world.level.block.Blocks.GRANITE, net.minecraft.world.level.block.Blocks.DIORITE, net.minecraft.world.level.block.Blocks.ANDESITE,
+		net.minecraft.world.level.block.Blocks.TUFF, net.minecraft.world.level.block.Blocks.SAND, net.minecraft.world.level.block.Blocks.RED_SAND,
+		net.minecraft.world.level.block.Blocks.GRAVEL, net.minecraft.world.level.block.Blocks.CLAY, net.minecraft.world.level.block.Blocks.SANDSTONE,
+		net.minecraft.world.level.block.Blocks.RED_SANDSTONE, net.minecraft.world.level.block.Blocks.NETHERRACK, net.minecraft.world.level.block.Blocks.SNOW_BLOCK);
+
+	/**
+	 * (SA, A11) The region's paid cells that may already stand in the land: per target group, the items of natural terrain blocks
+	 * ({@link CellCond#natural}: dirt, stone, sand, ...) in the kit's bill ({@code tiles}: group -> {item: n}). A realise skips a cell
+	 * whose block the world already holds, so those cells can bill less, never more. Null when there are none (the quote stays exact).
+	 */
+	static @Nullable String mayAlreadyHold(JsonObject tiles) {
+		List<String> parts = new ArrayList<>();
+		int total = 0;
+		for (var g : new java.util.TreeMap<>(tiles.asMap()).entrySet()) {
+			if (!(g.getValue() instanceof JsonObject bom)) {
+				continue;
+			}
+			List<String> its = new ArrayList<>();
+			for (var e : new java.util.TreeMap<>(bom.asMap()).entrySet()) {
+				net.minecraft.resources.Identifier id = net.minecraft.resources.Identifier.tryParse(e.getKey());
+				var b = id == null ? null : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+				if (b == null || b == net.minecraft.world.level.block.Blocks.AIR || !e.getValue().isJsonPrimitive()) {
+					continue;
+				}
+				var st = b.defaultBlockState();
+				if (!st.isAir() && (TERRAIN.contains(b) || CellCond.natural(st, dev.larattalabs.architect.placement.TerrainFit.flags(st)))) {
+					int n = e.getValue().getAsInt();
+					total += n;
+					its.add(n + " " + e.getKey().replace("minecraft:", ""));
+				}
+			}
+			if (!its.isEmpty()) {
+				parts.add(g.getKey() + " (" + String.join(", ", its) + ")");
+			}
+		}
+		if (parts.isEmpty()) {
+			return null;
+		}
+		return "tiles: " + total + " paid cell(s) of natural terrain may already stand in the land (" + String.join("; ", parts) + "): a realise "
+			+ "skips a cell that already holds its block, so the region's cells are an upper bound: consumed is at most this quote, never more";
+	}
+
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */
 	private static void lot(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, Map<String, String> entries, @Nullable EntranceStyle style,
 		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech) {
@@ -266,7 +320,11 @@ public final class Quotes {
 			}
 			notes.add("lot " + lot.id() + " (" + entry + ") may differ: " + String.join("; ", why));
 		}
-		// (FK's hook, S-M5-3) a given-program entry's declared containers' fill items: bill.add("fill:" + lot.id(), ...) once FK lands
+		// (M5 FK, S-M5-3) a given-program entry's declared containers' fill items: billed once at the fill, exact
+		dev.larattalabs.architect.site.Fills.Spec fill = dev.larattalabs.architect.site.Fills.ofEntry(bp.id());
+		if (fill != null) {
+			bill.add("fill:" + lot.id(), fill.items());
+		}
 		if (mech && site == null) {
 			String bpId = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;
 			bill.add("mech:" + lot.id(), PlanChecks.mechanismBill(ir, lot.id(), bpId));

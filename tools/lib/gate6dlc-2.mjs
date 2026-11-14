@@ -5,7 +5,7 @@
 //                            a GM portcullis): the fresh castle reports no change; the gate open, closed (the lever powered, the pistons
 //                            extended), mid-move (moving pistons, under /tick freeze) and closed by the sensor at dusk: the same report
 //                            each time; a player's block in an open lane is the player's (§2); a player who mines a piston is `removed`
-//                            in `mech:gatehouse_1`; the wall: player breaks `removed` in the wall's part (by the kit's writers), a broken
+//                            in `mech:gatehouse_1`, a lever the player breaks too (SA, A47); the wall: player breaks `removed` in the wall's part (by the kit's writers), a broken
 //                            wall cell re-filled by the player `playerPlaced`, a block on a cell the region never wrote not reported; a
 //                            tower's broken and re-filled cells in its LotLand row (its standing lower); each landCheck writes nothing
 //   survival  (lc-survival)  item 3 on gm_castle_13x7 in survival (flat: the kit's writers name every tile cell's part), fed in waves
@@ -510,15 +510,20 @@ export async function registerLC2(steps, h) {
       base = lcPiston;
     }
 
-    // as built (recorded, not judged): a lever the player breaks is a trigger cell, never judged, so it does not show
+    // ---- (SA, A47) a lever the player breaks: its cell is a trigger cell (its state never judged), but the lever gone reads removed in
+    // the mechanism's part, exactly one cell; every other part and lot as before (the gate's lanes moving with it are excused)
     {
       const lv = levers[1] ?? levers[0];
       await breaks([lv]);
       await L.settle(1500);
       const lcLever = await landCheck(region);
-      const [eq, d] = same(base, lcLever);
-      out.leverBroken = { at: lv, now: await stateAt(lv), sameAsBefore: eq, diff: d };
-      log(`  (recorded) a player broke the lever ${json(lv)} (now ${out.leverBroken.now}): the report ${eq ? 'unchanged (a trigger cell is never judged, as built)' : `moved ${json(d)}`}`);
+      const now = await stateAt(lv);
+      const ldelta = {};
+      addTo(ldelta, 'parts', mechPart, 'removed', 1, null);
+      const [okL, dL] = plusDelta(lcLever, base, ldelta);
+      out.leverBroken = { at: lv, now, delta: ldelta, row: row(lcLever, mechPart) };
+      check(isAir(now) && okL,
+        `item A47: the player broke the lever ${json(lv)} (now ${now}): ${mechPart} removed ${row(lcLever, mechPart)?.removed} (one more than before), every other part and lot as before`, dL);
       base = lcLever;
     }
 

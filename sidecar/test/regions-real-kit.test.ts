@@ -18,6 +18,7 @@ import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
 import { canonicalJson, sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
+import { bench } from '../../tools/lib/bench-report.mjs';
 
 // ARCHITECT_REGION_KIT points it at another kit checkout (e.g. the kit branch's worktree)
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
@@ -128,7 +129,8 @@ describe.skipIf(!hasKit)('region plans and tiles with the real kit (mega_bench)'
   it('plans mega_bench within the budget, and the IR is the same on a second run', async () => {
     const a = await plan(await sidecar(1));
     console.log(`[numbers] real mega_bench plan: ${a.ms} ms round trip (${a.planned.ms} ms in the child), IR ${a.planned.ir ? Buffer.byteLength(a.planned.ir) : `blob ${a.planned.irBlobId}`} bytes, budget ${JSON.stringify(a.planned.budget)}`);
-    expect(a.ms).toBeLessThan(KIT_SHAPE.planBudgetMs);
+    // report-only (docs/GATES.md "Speed rules" 9): the round trip against the plan budget flags, it does not fail
+    bench({ id: 'sidecar/regions-real-kit/mega_bench-plan-ms', value: a.ms, bound: KIT_SHAPE.planBudgetMs });
     expect(a.planned.stages.length).toBeGreaterThan(0);
     const b = await plan(sidecars[0]!);
     expect(b.planned.irSha).toBe(a.planned.irSha);

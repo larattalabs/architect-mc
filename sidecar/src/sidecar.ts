@@ -35,6 +35,7 @@ import { Follows, view as followView } from './follows.js';
 import { Regions } from './regions.js';
 import { RegionDesigns } from './regiondesign.js';
 import { ComposeDesigns } from './compose.js';
+import { AuthorDesigns } from './author.js';
 
 export type { RunOutcome } from './bibles.js';
 
@@ -170,6 +171,8 @@ export class Sidecar {
   readonly regionDesigns: RegionDesigns;
   /** (7c CO) the standalone composer (region.compose) */
   readonly composeDesigns: ComposeDesigns;
+  /** (7c AU) program authoring (region.author) */
+  readonly authorDesigns: AuthorDesigns;
   /** (6d FS) copies following their source (entry.follow, entry.followAll) */
   readonly follows: Follows;
   /** (7b DS) site variants (Designs.siteVariant): a source's program re-run on another site, $0 */
@@ -216,6 +219,7 @@ export class Sidecar {
     this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
     this.regionDesigns = new RegionDesigns(this);
     this.composeDesigns = new ComposeDesigns(this);
+    this.authorDesigns = new AuthorDesigns(this);
     this.follows = new Follows(this);
     this.siteVariants = new SiteVariants(this);
     this.programs = new Programs(this);
@@ -366,7 +370,7 @@ export class Sidecar {
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
       // (6b) a region pick is not the designer's: it carries on below, once jobs run
-      if (d.kind === 'region' || d.kind === 'settlement') continue;
+      if (d.kind === 'region' || d.kind === 'settlement' || d.kind === 'program') continue;
       // (5a) a design whose loop waits for its critic needs no slot: the critique module picks it up once jobs run
       if (this.store.data.work?.[d.id]?.critique && !this.critiques.revising(d.id)) {
         critiqued.push(d);
@@ -389,6 +393,7 @@ export class Sidecar {
     for (const d of critiqued) this.critiques.resume(d);
     this.regionDesigns.resume();
     this.composeDesigns.resume();
+    this.authorDesigns.resume();
     // (4c) massing garbage collection: now, then hourly
     this.runGc();
     this.gcTimer = setInterval(() => this.runGc(), GC_INTERVAL_MS);
@@ -701,6 +706,9 @@ export class Sidecar {
         return this.composeDesigns.request(msg);
       case 'region.compose.checked':
         return this.composeDesigns.checked(msg);
+      // ---- 7c AU: program authoring (the ack carries the design, whose id is the authored program's)
+      case 'region.author':
+        return this.authorDesigns.request(msg);
       // ---- 7b AF (no Claude)
       case 'site.analyse':
         return this.regions.siteAnalyse(msg);
@@ -914,6 +922,7 @@ export class Sidecar {
     this.stopDesign(id, 'cancelled', undefined, 'cancelled');
     if (d.kind === 'region') this.regionDesigns.cancelled(d);
     if (d.kind === 'settlement') this.composeDesigns.cancelled(d);
+    if (d.kind === 'program') this.authorDesigns.cancelled(d);
     this.log.info(`design ${id} cancelled`);
     return d;
   }

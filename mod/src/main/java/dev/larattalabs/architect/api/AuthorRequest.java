@@ -17,10 +17,20 @@ import org.jspecify.annotations.Nullable;
  * @param partId the plan part it answers, or null
  * @param budgetUsd the session's spend cap, or null (the default)
  * @param opKey the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}})
- * @param ext the caller's namespaced members (never read); null is empty
+ * @param ext the caller's namespaced members; (7c AU) the helper reads {@link #EXT_OWNER}, {@link #EXT_STYLE} and {@link #EXT_ROUNDS}; null is empty
  */
 public record AuthorRequest(String brief, BoundingBox claim, @Nullable String planId, @Nullable String partId, @Nullable Double budgetUsd,
 	String opKey, JsonObject ext) {
+	/**
+	 * (7c AU) {@code ext["architect_mc:owner"]}: the owner the authored program is installed for (a string; absent: the player). A plan
+	 * names it only when checked for the same owner ({@link PlanRequest#owner()}). Since NEXT.
+	 */
+	public static final String EXT_OWNER = "architect_mc:owner";
+	/** (7c AU) {@code ext["architect_mc:style"]}: the Style (bible id) the checker plans every round with (absent: the default roles). Since NEXT. */
+	public static final String EXT_STYLE = "architect_mc:style";
+	/** (7c AU) {@code ext["architect_mc:authorRounds"]}: at most this many rounds, 1 to 4 (absent: 4); other values refuse. Since NEXT. */
+	public static final String EXT_ROUNDS = "architect_mc:authorRounds";
+
 	public AuthorRequest {
 		Objects.requireNonNull(brief, "brief");
 		Objects.requireNonNull(claim, "claim");

@@ -83,6 +83,29 @@ class SiteFitTest {
 		assertEquals(Reason.LOT_TOO_SMALL, SiteFit.shape(s, new BlockPos(0, 5, 0), Rotation.NONE, new Anchors.Bounds(0, 5, 0, 6, 30, 6)).reason());
 	}
 
+	/** (SA, A35) A pinned entry with no site: SITE_MISMATCH, the bound sha first, naming the site variant route; an unbound one: null. */
+	@Test
+	void aPinnedEntryWithNoSiteIsRefused() {
+		SiteSpec s = spec(FitMode.WRAP_TRUNK, List.of(), List.of());
+		assertNull(SiteFit.pinnedNoSite("plain", null));
+		assertNull(SiteFit.pinnedNoSite("plain", new JsonObject()));
+		JsonObject entry = new JsonObject();
+		JsonObject ext = new JsonObject();
+		ext.add(SiteBinding.EXT_KEY, SiteBinding.of(s, null).wire());
+		entry.add("ext", ext);
+		Refusal r = SiteFit.pinnedNoSite("bound_by_ext", entry);
+		assertNotNull(r);
+		assertEquals(Reason.SITE_MISMATCH, r.reason());
+		assertTrue(r.message().startsWith(SHA + ":") && r.message().contains("site variant here"), r.message());
+		JsonObject kit = new JsonObject();
+		kit.add("site", s.wire());
+		assertNotNull(SiteFit.pinnedNoSite("bound_by_sidecar", kit), "a design built over a site is pinned too");
+		// an on_pad design keeps fitToLot and its plain placement on a pad lot
+		JsonObject pad = new JsonObject();
+		pad.add("site", spec(FitMode.ON_PAD, List.of(), List.of()).wire());
+		assertNull(SiteFit.pinnedNoSite("on_pad", pad), "on_pad: not refused");
+	}
+
 	@Test
 	void mismatchOnlyForAnEntryBoundToAnotherSha() {
 		SiteSpec s = spec(FitMode.WRAP_TRUNK, List.of(), List.of());

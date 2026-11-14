@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { benchRows } from './lib/bench-report.mjs';
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(HERE, '..', 'architect-mc');
@@ -378,6 +379,20 @@ for (const r of runs.filter((x) => x.run)) {
   }
 }
 summary.release = mm.release;
+
+// the unit suites' report-only benches (docs/GATES.md "Speed rules" 9): what tonight's kit and sidecar suites recorded in the run dirs'
+// artifacts/benches/ (and the worktree's), and which flagged past their bound
+{
+  const base = path.basename(RUN_DIR);
+  let sib = [];
+  try {
+    sib = fs.readdirSync(path.dirname(RUN_DIR)).filter((n) => n.startsWith(base)).map((n) => path.join(path.dirname(RUN_DIR), n));
+  } catch {
+    // no run dir yet
+  }
+  const rows = benchRows([...new Set([RUN_DIR, ...sib, WT])].map((d) => path.join(d, 'artifacts', 'benches')), summary.startedAt);
+  summary.unitBenches = { recorded: rows.length, flagged: rows.filter((r) => !r.ok).map((r) => ({ id: r.id, value: r.value, bound: r.bound, unit: r.unit, load1: r.load1 })) };
+}
 summary.impactMapMisses = mm.misses.length;
 fs.writeFileSync(path.join(DAY, 'impact-map-misses.json'), `${JSON.stringify(mm, null, 1)}\n`);
 const lines = mm.misses.map((m) => `| ${date} | ${m.step} | ${m.nightlyStatus} at key ${m.cachedKey.slice(0, 12)} (nightly ${String(summary.head).slice(0, 9)}); CACHED in ${path.basename(mm.release.run)} from ${path.basename(m.cachedFrom.run ?? '?')} @ ${String(m.cachedFrom.head).slice(0, 9)}; ${m.changedCount} file(s) changed since the PASS | open: find the input the map lacks (or a flake), widen tools/step-inputs.json |`);
@@ -442,6 +457,7 @@ const md = [
   ...(summary.yield?.yieldedAt ? [`**Yielded** at ${summary.yield.yieldedAt} (past ${summary.yield.cutoff} with ${summary.yield.queued?.length ?? '?'} run(s) queued): ${summary.yield.notStarted} step(s) ran afterwards as a one-slot run, \`${summary.yield.secondRun ?? '-'}\`.`] : []),
   `Steps: ${Object.entries(summary.counts ?? {}).map(([k, v]) => `${v} ${k}`).join(', ') || '-'}; ${summary.recorded} PASS(es) recorded in the step cache.`,
   `Benches (timing judged, isolated; a release reuses these PASSes): ${summary.benches.results.map((b) => `${b.id} ${b.status}${b.status === 'PASS' ? (b.recorded ? ' (recorded)' : ` (NOT recorded: ${b.why})`) : ''}`).join(', ') || '-'}${summary.benches.megaB ? `; megaB: ${summary.benches.megaB.id} (${summary.benches.megaB.why})` : ''}.`,
+  `Unit benches (report-only, artifacts/benches/): ${summary.unitBenches.recorded} recorded, ${summary.unitBenches.flagged.length} flagged${summary.unitBenches.flagged.length ? `: ${summary.unitBenches.flagged.map((b) => `${b.id} ${b.value} ${b.unit} (bound ${b.bound}, load ${b.load1})`).join('; ')}` : ''}.`,
   '',
   `**Impact-map misses: ${mm.misses.length}**${mm.release ? ` (against the last cached release ${path.basename(mm.release.run)} @ ${String(mm.release.head).slice(0, 9)})` : ' (no release has served a step from the cache yet)'}.`,
   ...mm.misses.map((m) => `- **${m.step}** ${m.nightlyStatus} at the key it was CACHED under: \`${(m.failLines[0] ?? '').replace(/`/g, "'").slice(0, 160)}\` (log \`${m.nightlyLog}\`). Paste \`misses-log.md\` into docs/GATES.md's misses log.`),

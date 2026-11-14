@@ -19,10 +19,11 @@ test('catalogue: against catalogue-pre7c.json exactly program.authored added (re
   const d = diffCatalogues(pre, golden);
   // (later 7c slices' own flips are their tests')
   const mine = (xs) => xs.filter((x) => !FLIPS.includes(x.id ?? x));
-  assert.deepEqual(d.added, [{ id: 'program.authored', state: 'reserved' }]);
+  // ((7c AU) program.authored is supported since AU: au.test.mjs holds its answers)
+  assert.deepEqual(d.added.map((x) => x.id), ['program.authored']);
   assert.deepEqual([d.removed, d.retired, mine(d.reservedToSupported), mine(d.otherStateChanges), mine(d.untilChanged), mine(d.notesChanged)], [[], [], [], [], [], []]);
   const e = golden.entries.find((x) => x.id === 'program.authored');
-  assert.equal(e.until, 'AU');
+  assert.ok(e.state === 'supported' || e.until === 'AU', e.state);
   assert.ok(e.sinceApi === 'NEXT' || /^\d+\.\d+\.\d+$/.test(e.sinceApi), e.sinceApi);
 });
 
