@@ -102,6 +102,30 @@ timing): `regions.test.ts`'s doubling lower bound, `proc.test.ts`'s clock tolera
 - Leftovers: tool CLIs with no unit (e.g. `tools/api-baselines-build.mjs`) select the full kit suite; the gate runner's `change`
   tier still runs the full unit suites (wiring unit-scope into it is a follow-up); bench files are named by UTC date.
 
+### Slice GX as built
+
+- **Change shards** (`tools/lib/change-shards.mjs`, gate-cache `shards.change`): a non-turbo `change`/`slice` run of more than 10
+  steps with one `--ports` pair gets up to 2 in-game shards plus offline lanes (`client: none` only, `nice -n 10`), the fewest
+  workers within 5% of the best estimate, on the base pair + stride 2 (8904 -> 8906, 8908; turbo's range, 8892-8895 or a live
+  run's pair refused). **One slot per run**: 2+1 workers peaked at 16.1 GB gate RSS (10.9 on one shard), 47.5 GB free. Rule 5
+  inside a run: shard k starts in-game steps `(k-1) x settleSec` after the first; rule 10's load gate still gates the start.
+- **Explicit-list cache** (`tools/lib/explicit-cache.mjs`): `--only`/`--from` in `change`/`slice` reuses a PASS with the same
+  key, except own steps (`--own`, new step, changed chain entry, changed file its command names) and strict tier (gate-cache
+  `explicit.strict`: ledger, refunds, stock, undo, crash, survival, saves), which takes exact keys only, so a strict step recorded
+  in coverage mode always runs. Another or no platform (every pre-GX entry), a dirty tree or another Node/JDK never hits; never in
+  the nightly or other chains; `--no-cache`/`release --full` off. Hits go in SUMMARY.md with key and source run. Cold after merge.
+- **Shared kit suite** (`kit-reuse.mjs sharedSuite`): with unit-kit's report missing or incomplete, the first of d/t1/d3-unit runs
+  the kit suite once under a lock, the others read it; d3's kit groups and d's d/d2 run in parallel; no assertion dropped.
+  sim-jobs gained `restartClient` (it checks the launcher started its sidecar; a same-family switch from 6b broke that).
+
+| run (same steps, `--no-cache`) | today's runner | GX |
+|---|---|---|
+| RL core `454fc401^...a338b546`, 19 steps | 2h53m, load p50 75, 18 PASS + unit-kit TIMEOUT | 30m09s (2+1 workers), load p50 34, 18 PASS + sim-jobs FAIL -> PASS with `restartClient` |
+| d-unit + t1-unit + d3-unit, no unit-kit | 49m20s (23m43s + 16m14s + 9m13s), load p50 18 | 16m05s (1m26s + 13m43s, which ran the kit suite once, + 27s), load p50 16 |
+
+- Leftovers: unit-kit's 20-minute timeout is unchanged; the estimate doesn't model the rule-5 hold; an all-CACHED run prints its
+  hits but writes no SUMMARY.md; `~/.claude/agents/gate-verifier.md` (global) should say `--no-cache` for re-runs.
+
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
 These override the tier, verifier and RC rules below for as long as dev mode is on.
