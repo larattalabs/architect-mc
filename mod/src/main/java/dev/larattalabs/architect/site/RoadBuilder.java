@@ -254,6 +254,7 @@ public final class RoadBuilder {
 		r.name = "road " + i.id();
 		BlockState[] bs = freeOff(r, before);
 		Builder.driedFarmland(r, before); // (6c close-out B, L-V7)
+		Stockpiles.attachPaid(i, r); // (BC, S-M5-10)
 		ServerLevel level = Sites.levelOf(srv, i.dimension());
 		if (level != null) {
 			r.rescan(level);
@@ -458,6 +459,7 @@ public final class RoadBuilder {
 				continue;
 			}
 			r.blockedSince.remove(i);
+			Builder.retill(level, r, i); // (BC, S-M5-10) a crop's dried support farmland tilled again, free
 			r.paidAgain(i, now);
 			purse.pay(r.cost.get(i));
 			if (regionRoad && !now.isAir()) {

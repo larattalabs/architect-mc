@@ -848,6 +848,7 @@ public final class RegionTargets {
 		Plan pl = plan(i, r);
 		PLANS.put(i.id(), pl);
 		Builder.driedFarmland(r, beforeOf(i, pl)); // (6c close-out B, L-V7) a farmland cell that dried before a restart stays built
+		Stockpiles.attachPaid(i, r); // (BC, S-M5-10) the book's paid cells: a soil cell vanilla changed since is still built
 		ServerLevel level = Sites.levelOf(srv, i.dimension());
 		if (level != null) {
 			r.rescan(level);
