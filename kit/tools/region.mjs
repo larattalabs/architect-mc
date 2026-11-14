@@ -123,7 +123,7 @@ async function plan(argv) {
   const linkBase = opts['link-base'] ? readJson(opts['link-base'], '--link-base') : null;
   if (linkBase && !links) throw new Usage('--link-base needs --links');
   // (7c AU) the authored programs a plan names (<dir>/<id>.mjs, the installed sources' bytes): hashed, linted, staged and imported here
-  const authored = opts.authored ? await loadAuthoredDir(opts.authored, KIT_DIR) : null;
+  const authored = opts.authored ? await loadAuthoredDir(opts.authored, KIT_DIR, opts.out ? path.join(opts.out, '.authored') : undefined) : null;
   let res;
   try {
     res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });

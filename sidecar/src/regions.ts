@@ -43,7 +43,7 @@ import type { Logger } from './context.js';
 import { minimalEnv, outputTail } from './designs.js';
 import { ClientError } from './errors.js';
 import { parseCatalogue, type CatalogueProgram } from './regiondesign.js';
-import { IR_INLINE_BYTES, MAX_TILE_FRAME_BYTES, PREVIEW_VIEWS, REGION_PROGRAM_ID, type Outbound, type RegionPlanMsg, type RegionTilesRequestMsg } from './protocol.js';
+import { AUTHORED_SOURCE_MAX, IR_INLINE_BYTES, MAX_TILE_FRAME_BYTES, PREVIEW_VIEWS, REGION_PROGRAM_ID, type Outbound, type RegionPlanMsg, type RegionTilesRequestMsg } from './protocol.js';
 import type { ClientHandle } from './server.js';
 import { TilePool, type TileResult } from './regionpool.js';
 import { run } from './util/proc.js';
@@ -74,7 +74,7 @@ export interface PlanImages {
 /** (6b) A frozen ARVX volume decompresses to at most this (the mod's 268M-cell limit is about 0.2 bytes of runs per natural cell). */
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
-/** Refuses networking inside the plan child (Node 24's permission model has no network switch). Loaded with --import. */
+/** Refuses networking (Node 24's permission model has no network switch) and signals inside the plan child. Loaded with --import. */
 export const NO_NETWORK = [
   "import net from 'node:net'; import tls from 'node:tls'; import dgram from 'node:dgram'; import dns from 'node:dns'; import http from 'node:http'; import https from 'node:https';",
   "import { syncBuiltinESMExports } from 'node:module';",
@@ -83,6 +83,14 @@ export const NO_NETWORK = [
   'tls.connect = tls.createServer = no; dgram.createSocket = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
   'http.request = http.get = http.createServer = https.request = https.get = https.createServer = no;',
   "for (const k of ['fetch', 'WebSocket', 'EventSource']) { try { Object.defineProperty(globalThis, k, { value: undefined, configurable: false, writable: false }); } catch {} }",
+  // ((7c AU) every dns entry point (resolve4 and the rest, the Resolver classes, the promises API), not only lookup and resolve: a DNS
+  // query carries data out)
+  "for (const o of [dns, dns.promises]) for (const k of Object.keys(o)) if (typeof o[k] === 'function') { try { o[k] = no; } catch {} }",
+  // ((7c AU) Node's permission model does not cover signals or priorities: a program could otherwise kill or renice another process by pid)
+  "import os from 'node:os';",
+  "const denied = (what) => () => { throw Object.assign(new Error(`${what} are not allowed in a region plan`), { code: 'ERR_ACCESS_DENIED' }); };",
+  "Object.defineProperty(process, 'kill', { value: denied('signals'), configurable: false, writable: false });",
+  "os.setPriority = denied('process priorities');",
   'syncBuiltinESMExports();',
 ].join('\n');
 
@@ -136,7 +144,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean; revision?: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; besideReach?: boolean; revision?: boolean; authored?: boolean; authorCheck?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -253,6 +261,11 @@ export class Regions {
     return path.join(this.host.config.dataDir, 'regions', 'plans');
   }
 
+  /** (7c AU) each plan's recorded arguments, outside every plan dir (no plan child can write it). */
+  argsDir(): string {
+    return path.join(this.plansDir(), '.args');
+  }
+
   planDir(planId: string): string {
     return path.join(this.plansDir(), planId);
   }
@@ -298,6 +311,8 @@ export class Regions {
       lotBlocks: tool.includes("'lot-blocks'"), // (6c VOC-c) the bound lots' block histograms (--lot-blocks)
       survival: tool.includes("survival: 'flag'"), // (6c RS) a plan in survival (--survival: the world's mode)
       besideReach: tool.includes("'beside-reach'"), // (6c D3) the reach inputs beside a standing region (--beside-reach)
+      authored: tool.includes('authored: 1'), // (7c AU) the plan's authored programs (--authored <dir>)
+      authorCheck: tool.includes("'author-check'"), // (7c AU) one authoring round's checker
       revision: /revision: 1/.test(tool), // (6d RV) a revision's inputs (--revision)
     };
     const perm = permissionFlag();
@@ -393,6 +408,10 @@ export class Regions {
     // (6d RV) a revision's inputs (an older kit has no --revision: the mod sends none to a helper without the region.revise feature)
     const revision = info.caps.revision && msg.revision ? msg.revision : null;
     if (msg.revision && !info.caps.revision) throw new ClientError(`the kit (${info.kitVersion}) cannot plan a revision (its plan CLI has no --revision)`);
+    // (7c AU) the authored programs the plan names (the mod's world-local sources): staged in the plan dir; an older kit can't run them
+    const authored = msg.authored && Object.keys(msg.authored).length ? msg.authored : null;
+    if (authored && !info.caps.authored) throw new ClientError(`the kit (${info.kitVersion}) cannot plan an authored program (its plan CLI has no --authored)`);
+    if (authored) for (const [id, a] of Object.entries(authored)) if (Buffer.byteLength(a.source, 'utf8') > AUTHORED_SOURCE_MAX) throw new ClientError(`authored program ${id}: its source is more than ${AUTHORED_SOURCE_MAX} bytes`);
     // (6c D3, §7.1) a dry plan (Regions.checkBeside): its own directory, deleted when the run ends; nothing kept, no blob published
     const dry = msg.dry === true;
     const planId = `${dry ? 'd' : 'p'}${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
@@ -432,6 +451,10 @@ export class Regions {
     if (revision) fs.writeFileSync(path.join(dir, 'revision.json'), JSON.stringify(revision));
     if (biomes) fs.writeFileSync(path.join(dir, 'biomes.json'), JSON.stringify(biomes));
     if (lotBlocks) fs.writeFileSync(path.join(dir, 'lotblocks.json'), JSON.stringify(lotBlocks));
+    if (authored) {
+      fs.mkdirSync(path.join(dir, 'authored'), { recursive: true });
+      for (const [id, a] of Object.entries(authored)) fs.writeFileSync(path.join(dir, 'authored', `${id}.mjs`), a.source, 'utf8');
+    }
     const request = {
       planId,
       program: program.label,
@@ -452,12 +475,13 @@ export class Regions {
       ...(passes.length ? { passes } : {}),
       ...(planCache ? { planCheck: true } : {}),
       ...(survival ? { survival: true } : {}),
+      ...(authored ? { authored: Object.fromEntries(Object.entries(authored).map(([id, a]) => [id, sha256(Buffer.from(a.source, 'utf8'))])) } : {}),
       createdAt: this.host.now(),
     };
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb, ...(msg.planImages === true ? { planImages: true } : {}) }))
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, besideReach: !!reachIn, revision: !!revision, dry, biomes: !!biomes, lotBlocks: !!lotBlocks, survival, authored: !!authored, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb, ...(msg.planImages === true ? { planImages: true } : {}) }))
       .finally(() => {
         this.planning.delete(planId);
         // (6c D3, §7.1) a dry plan keeps nothing: its directory goes, success or failure
@@ -565,7 +589,7 @@ export class Regions {
     return keys.length;
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; planCache?: string; authored?: boolean }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -588,6 +612,7 @@ export class Regions {
       ...(o.biomes ? ['--biomes', path.join(dir, 'biomes.json')] : []),
       ...(o.lotBlocks ? ['--lot-blocks', path.join(dir, 'lotblocks.json')] : []),
       ...(o.survival ? ['--survival'] : []),
+      ...(o.authored ? ['--authored', path.join(dir, 'authored')] : []),
       ...(this.stampsDir() ? ['--stamps', this.stampsDir()!] : []),
       ...(o.planCache && caps.planCache ? ['--plan-cache', o.planCache] : []),
       '--out',
@@ -625,7 +650,7 @@ export class Regions {
    * Run `node <kit>/tools/region.mjs <args>` in the plan sandbox: reads the kit, the plan dir (and `extraReads`), writes
    * the plan dir only, no network, a minimal environment, a heap cap and a wall-clock limit. The last JSON line of stdout.
    */
-  private async runKit(dir: string, args: string[], o: { timeoutMs: number; heapMb: number; extraReads?: string[]; what: string }): Promise<KitRun> {
+  private async runKit(dir: string, args: string[], o: { timeoutMs: number; heapMb: number; extraReads?: string[]; what: string; writeDir?: string }): Promise<KitRun> {
     const t0 = Date.now();
     const ms = () => Date.now() - t0;
     const kit = fs.realpathSync(this.host.config.kitDir);
@@ -635,7 +660,7 @@ export class Regions {
     if (!perm) return { ok: false, message: `region planning needs Node's permission model (Node 22.13 or later; this is ${process.version})`, ms: ms() };
     if (o.timeoutMs <= 0) return { ok: false, message: `no time was left for the ${o.what}`, ms: 0 };
     const reads = [kit, dir, ...(o.extraReads ?? [])];
-    const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${dir}`, `--max-old-space-size=${o.heapMb}`, `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
+    const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${o.writeDir ?? dir}`, `--max-old-space-size=${o.heapMb}`, `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
     const r = await run(process.execPath, [...flags, script, ...args], { cwd: dir, env: minimalEnv(), timeoutMs: o.timeoutMs });
     const out = lastJson(r.stdout);
     if (r.timedOut) return { ok: false, message: `the ${o.what} took longer than ${Math.round(o.timeoutMs / 100) / 10} s and was stopped`, ms: ms() };
@@ -656,7 +681,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number; planImages?: boolean },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; besideReach?: boolean; revision?: boolean; dry?: boolean; biomes?: boolean; lotBlocks?: boolean; survival?: boolean; authored?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number; planImages?: boolean },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
@@ -679,7 +704,14 @@ export class Regions {
       const args = this.planArgs(dir, program, o);
       const extraReads = [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : []), ...(o.planCache ? [o.planCache] : [])];
       // ((7b LP) the plan's own arguments, so the realise's link pass replays exactly this plan: region.link)
-      if (!o.dry) fs.writeFileSync(path.join(dir, 'plan-args.json'), JSON.stringify({ args, extraReads, budget }));
+      // ((7c AU) and kept OUTSIDE the plan dir too (plans/.args/<planId>.json): the plan child may write its dir, so a program could rewrite
+      // plan-args.json there before the link pass reads it (widening that run's reads); the link pass reads the outside copy)
+      if (!o.dry) {
+        const pa = JSON.stringify({ args, extraReads, budget });
+        fs.writeFileSync(path.join(dir, 'plan-args.json'), pa);
+        fs.mkdirSync(this.argsDir(), { recursive: true });
+        fs.writeFileSync(path.join(this.argsDir(), `${planId}.json`), pa);
+      }
       const r = await this.runKit(dir, args, { ...budget, extraReads, what: 'plan' });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
@@ -928,7 +960,9 @@ export class Regions {
     if (sha256(base) !== irSha) throw new ClientError(`plan ${planId}'s IR is not ${irSha.slice(0, 12)} (it hashes to ${sha256(base).slice(0, 12)})`);
     let pa: { args: string[]; extraReads: string[]; budget: { timeoutMs: number; heapMb: number } };
     try {
-      pa = JSON.parse(fs.readFileSync(path.join(dir, 'plan-args.json'), 'utf8')) as typeof pa;
+      // ((7c AU) the copy outside the plan dir when there is one; a plan planned before AU has only its own)
+      const outside = path.join(this.argsDir(), `${planId}.json`);
+      pa = JSON.parse(fs.readFileSync(fs.existsSync(outside) ? outside : path.join(dir, 'plan-args.json'), 'utf8')) as typeof pa;
     } catch {
       throw new ClientError(`plan ${planId} has no recorded arguments (planned before the link pass): check it again`);
     }
@@ -945,7 +979,7 @@ export class Regions {
         if (at('--blobs-out') >= 0) args[at('--blobs-out') + 1] = path.join(sub, 'blobs');
         args.push('--links', path.join(sub, 'links.json'), '--link-base', path.join(dir, 'ir.json'));
         const extraReads = (pa.extraReads ?? []).filter((x) => fs.existsSync(x));
-        const r = await this.runKit(dir, args, { timeoutMs: pa.budget?.timeoutMs ?? this.cfg.planMs, heapMb: pa.budget?.heapMb ?? this.cfg.planHeapMb, extraReads, what: 'link pass' });
+        const r = await this.runKit(dir, args, { timeoutMs: pa.budget?.timeoutMs ?? this.cfg.planMs, heapMb: pa.budget?.heapMb ?? this.cfg.planHeapMb, extraReads, what: 'link pass', writeDir: sub });
         if (!r.ok) {
           const nl = r.out?.noLink as Record<string, unknown> | undefined;
           if (nl && typeof nl === 'object') {
@@ -1300,6 +1334,7 @@ export class Regions {
     const d = this.planDir(planId);
     const existed = fs.existsSync(d);
     if (existed) fs.rmSync(d, { recursive: true, force: true });
+    fs.rmSync(path.join(this.argsDir(), `${planId}.json`), { force: true });
     return { planId, existed };
   }
 
@@ -1358,6 +1393,44 @@ export class Regions {
       return { name: String(im.name), blobId, file: this.host.blobs.file(blobId), pixelSha: String(im.pixelSha), width: Number(im.width), height: Number(im.height) };
     });
     return { images, labels: Array.isArray(out.labels) ? (out.labels as PlanImages['labels']) : [] };
+  }
+
+  /**
+   * (7c AU) One authoring round's checker: `node <kit>/tools/region.mjs author-check` IN THE PLAN SANDBOX (runKit: reads the kit and `dir`,
+   * writes `dir`, no network or signals, the plan's heap and time), over the claim's survey with the Style's roles. `dir` is the round's
+   * own scratch dir (the source, survey and bible are written there first). The answer: {sha, findings: [{rule, message, line?}], irSha?,
+   * cells?}; a run that failed (time, memory, a crash) is one finding of rule `sandbox` or `timeout`. Never throws for the program's sake.
+   */
+  async authorCheck(dir: string, o: { source: string; surveyBlobId: string; claim: PlanMsg['claim']; style?: { id: string; version: number } }): Promise<{ sha: string; findings: Array<{ rule: string; message: string; line?: number }>; irSha?: string; cells?: number }> {
+    const info = this.kitInfo();
+    if (!info.caps.authorCheck) throw new Error(`the kit (${info.kitVersion}) has no author-check (an older kit)`);
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const real = fs.realpathSync(dir);
+    fs.writeFileSync(path.join(real, 'source.mjs'), o.source, 'utf8');
+    fs.writeFileSync(path.join(real, 'survey.bin'), this.host.blobs.read(o.surveyBlobId));
+    const sha = sha256(Buffer.from(o.source, 'utf8'));
+    let hasBible = false;
+    if (o.style) {
+      const r = this.host.bibleIndex.resolve(o.style);
+      let patterns: unknown;
+      try {
+        patterns = (JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown }).patterns;
+      } catch {
+        /* a built-in bible has no file */
+      }
+      fs.writeFileSync(path.join(real, 'bible.json'), JSON.stringify({ id: r.pin.id, version: r.pin.version, roles: { ...r.info.roles }, ...(patterns && typeof patterns === 'object' ? { patterns } : {}) }));
+      hasBible = true;
+    }
+    const c = o.claim;
+    const out = path.join(real, 'out');
+    const args = ['author-check', path.join(real, 'source.mjs'), '--survey', path.join(real, 'survey.bin'), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','), ...(hasBible ? ['--bible', path.join(real, 'bible.json')] : []), '--out', out, '--json'];
+    const b = this.planBudget([]);
+    const r = await this.runKit(real, args, { ...b, what: 'authored program\'s check' });
+    if (!r.ok) return { sha, findings: [{ rule: /longer than/.test(r.message) ? 'timeout' : 'sandbox', message: truncate(r.message, 2000) }] };
+    const f = Array.isArray(r.out.findings) ? (r.out.findings as Array<{ rule: string; message: string; line?: number }>) : [{ rule: 'sandbox', message: 'the checker answered no findings list' }];
+    if (typeof r.out.sha === 'string' && r.out.sha !== sha) f.push({ rule: 'sandbox', message: `the checker hashed the source to ${String(r.out.sha).slice(0, 12)}, not ${sha.slice(0, 12)}` });
+    return { sha, findings: f.slice(0, 40).map((x) => ({ rule: String(x.rule), message: truncate(String(x.message), 2000), ...(typeof x.line === 'number' ? { line: x.line } : {}) })), ...(typeof r.out.irSha === 'string' ? { irSha: r.out.irSha } : {}), ...(typeof r.out.cells === 'number' ? { cells: r.out.cells } : {}) };
   }
 
   clientGone(client: ClientHandle): void {

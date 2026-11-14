@@ -212,10 +212,10 @@ export function stageAuthored(source, kitDir) {
 
 /**
  * The authored programs staged in `dir` for a plan (the sidecar writes `<dir>/<id>.mjs`, each the installed source's exact bytes): id ->
- * {sha, module | null, problem | null}. Each is hashed, linted and, when clean, staged (`<dir>/.staged/<id>.mjs`, imports rewritten to this
- * kit) and imported. A problem is the lint's first finding or the import's error; the plan compile refuses the zone with it.
+ * {sha, module | null, problem | null}. Each is hashed, linted and, when clean, staged (`<stageDir>/<id>-<sha>.mjs`, imports rewritten to
+ * this kit; the plan's --out, so a replay that may write only its own output dir stages there) and imported. A problem is the lint's first finding or the import's error; the plan compile refuses the zone with it.
  */
-export async function loadAuthoredDir(dir, kitDir) {
+export async function loadAuthoredDir(dir, kitDir, stageDir = path.join(dir, '.staged')) {
   const out = new Map();
   let files;
   try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort(); } catch (e) { throw new Error(`--authored: ${e.message}`); }
@@ -228,9 +228,8 @@ export async function loadAuthoredDir(dir, kitDir) {
     const source = bytes.toString('utf8');
     const lint = lintAuthored(source);
     if (lint.length) { out.set(id, { sha, module: null, problem: `${lint[0].rule}: ${lint[0].message}` }); continue; }
-    const staged = path.join(dir, '.staged');
-    fs.mkdirSync(staged, { recursive: true });
-    const file = path.join(staged, `${id}-${sha.slice(0, 16)}.mjs`);
+    fs.mkdirSync(stageDir, { recursive: true });
+    const file = path.join(stageDir, `${id}-${sha.slice(0, 16)}.mjs`);
     fs.writeFileSync(file, stageAuthored(source, kitDir));
     try {
       const module = await import(pathToFileURL(file).href);
