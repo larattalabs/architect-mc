@@ -139,4 +139,47 @@ class FullBomTest {
 		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> air());
 		assertEquals(Map.of("minecraft:chest", 1), r.items(), r.items().toString());
 	}
+
+	/**
+	 * (BC, S-M5-11) a crop on farmland: its shape update reads the light (CropBlock.hasSufficientLight, getRawBrightness(pos, 0)); with the
+	 * level's light known the bill is exact, and an unknown light is named. (Block tags are unbound in a unit bootstrap, so whether the crop
+	 * stands is the in-game gate's; here the light is read and the reason is right.)
+	 */
+	@Test
+	void aCropReadsTheLightAndIsExactWhenItIsKnown() {
+		int[] xyz = {0, 10, 0, 0, 11, 0};
+		BlockState[] st = {Blocks.FARMLAND.defaultBlockState(), Blocks.WHEAT.defaultBlockState()};
+		java.util.function.LongFunction<BlockState> world = p -> BlockPos.getY(p) < 10 ? Blocks.DIRT.defaultBlockState() : air();
+		java.util.List<String> asked = new java.util.ArrayList<>();
+		FullBom.Result lit = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), world, (layer, p) -> {
+			asked.add(layer + "@" + BlockPos.getY(p));
+			return layer == net.minecraft.world.level.LightLayer.SKY ? 15 : 0;
+		});
+		assertTrue(lit.exact(), lit.inexactBecause().toString());
+		assertTrue(asked.contains("SKY@11") && asked.contains("BLOCK@11"), asked.toString());
+		// the raw brightness is the larger of sky (less the darkening) and block light, as LevelLightEngine.getRawBrightness
+		FullBom.Flag f = new FullBom.Flag();
+		var r = FullBom.reader(p -> air(), f, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 4 : 9);
+		assertEquals(9, r.getRawBrightness(new BlockPos(0, 11, 0), 0));
+		assertEquals(9, r.getRawBrightness(new BlockPos(0, 11, 0), 3));
+		assertEquals(4, r.getBrightness(net.minecraft.world.level.LightLayer.SKY, new BlockPos(0, 11, 0)));
+		var r2 = FullBom.reader(p -> air(), f, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 15 : 2);
+		assertEquals(11, r2.getRawBrightness(new BlockPos(0, 11, 0), 4));
+		assertTrue(f.why.isEmpty(), f.why.toString());
+		// light unknown: inexact, with the reason named (not "a cell the plan reads is not loaded")
+		FullBom.Result unknown = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), world);
+		assertFalse(unknown.exact());
+		assertEquals(java.util.List.of("the light at a block that reads it is not known"), unknown.inexactBecause());
+	}
+
+	/** (BC, S-M5-11) the reason labels: a written cell outside the loaded world says so (it was labelled "an updateShape threw"). */
+	@Test
+	void anUnloadedWrittenCellIsNamedAsSuch() {
+		int[] xyz = {0, 10, 0};
+		BlockState[] st = {Blocks.OAK_PLANKS.defaultBlockState()};
+		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> null);
+		assertFalse(r.exact());
+		assertTrue(r.inexactBecause().contains("a cell the plan writes is not loaded"), r.inexactBecause().toString());
+		assertFalse(r.inexactBecause().contains("an updateShape threw"), r.inexactBecause().toString());
+	}
 }

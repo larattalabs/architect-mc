@@ -96,8 +96,28 @@ final class FullBom {
 			int z = BlockPos.getZ(p);
 			LevelChunk c = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
 			return c == null ? null : c.getBlockState(BlockPos.of(p));
+		}, (layer, p) -> {
+			// (BC, S-M5-11) a crop's shape update asks for the light at its cell: the level's, as it stands before the build
+			int x = BlockPos.getX(p);
+			int z = BlockPos.getZ(p);
+			if (level.getChunkSource().getChunkNow(x >> 4, z >> 4) == null) {
+				return -1;
+			}
+			return level.getBrightness(layer, BlockPos.of(p));
 		});
 	}
+
+	/**
+	 * (BC, S-M5-11) The light a simulated block reads at a cell, per layer (sky, block), as it stands before the build; -1 = unknown
+	 * (not loaded). A crop's {@code hasSufficientLight} reads {@code getRawBrightness(pos, 0)}, the larger of the two.
+	 */
+	@FunctionalInterface
+	interface Light {
+		int at(net.minecraft.world.level.LightLayer layer, long p);
+	}
+
+	/** No light known: a block whose shape update reads light makes the bill inexact. */
+	static final Light NO_LIGHT = (layer, p) -> -1;
 
 	/**
 	 * The bill of {@code in}: every cell the build queues at the state of its last write, costed with {@link Cells#cost}. {@code world}:
@@ -109,8 +129,13 @@ final class FullBom {
 	 * neighbours). So a door written over a hillside, whose upper cell the template clears next, is gone before the first block is built.
 	 */
 	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world) {
+		return compute(in, world, NO_LIGHT);
+	}
+
+	/** {@link #compute(Inputs, LongFunction)} with the light the simulated shape updates read ({@link Light}). */
+	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world, Light light) {
 		Flag unknown = new Flag();
-		Sim sim = new Sim(world, unknown);
+		Sim sim = new Sim(world, unknown, light);
 		Set<Long> queued = new LinkedHashSet<>();
 		BlockState air = Blocks.AIR.defaultBlockState();
 		int n = in.templateStates().length;
@@ -245,9 +270,13 @@ final class FullBom {
 		boolean runaway;
 
 		Sim(LongFunction<@Nullable BlockState> world, Flag unknown) {
+			this(world, unknown, NO_LIGHT);
+		}
+
+		Sim(LongFunction<@Nullable BlockState> world, Flag unknown, Light light) {
 			this.world = world;
 			this.unknown = unknown;
-			this.reader = reader(this::at, unknown);
+			this.reader = reader(this::at, unknown, light);
 		}
 
 		@Nullable BlockState at(long p) {
@@ -262,7 +291,9 @@ final class FullBom {
 			try {
 				return st.updateShape(reader, ticks, pos, toNeighbour, neighbour, neighbourState, random);
 			} catch (RuntimeException e) {
-				unknown.set("a cell the plan reads is not loaded");
+				// (BC, S-M5-11: was labelled "not loaded") the block's shape update asked the simulation for something it can't answer
+				unknown.set("an updateShape the simulation can't run (" + Cells.blockId(st) + ": " + e.getClass().getSimpleName() + (e.getMessage() == null ? ""
+					: " " + e.getMessage()) + ")");
 				return st;
 			}
 		}
@@ -271,7 +302,8 @@ final class FullBom {
 		void set(long p, BlockState s, boolean cascade) {
 			BlockState old = at(p);
 			if (old == null) {
-				unknown.set("an updateShape threw");
+				// (BC, S-M5-11: was labelled "an updateShape threw")
+				unknown.set("a cell the plan writes is not loaded");
 			}
 			if (old == s) {
 				return;
@@ -353,6 +385,11 @@ final class FullBom {
 
 	/** A {@link net.minecraft.world.level.LevelReader} over the planned cells: {@code getBlockState} and {@code getFluidState}, nothing else. */
 	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, Flag unknown) {
+		return reader(at, unknown, NO_LIGHT);
+	}
+
+	/** {@link #reader(LongFunction, Flag)} that also answers {@code getRawBrightness} and {@code getBrightness} from {@code light}. */
+	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, Flag unknown, Light light) {
 		return (net.minecraft.world.level.LevelReader) java.lang.reflect.Proxy.newProxyInstance(FullBom.class.getClassLoader(),
 			new Class<?>[] {net.minecraft.world.level.LevelReader.class}, (proxy, m, args) -> {
 				switch (m.getName()) {
@@ -368,6 +405,21 @@ final class FullBom {
 					}
 					case "getBlockEntity" -> {
 						return null;
+					}
+					case "getRawBrightness", "getBrightness" -> {
+						// (BC, S-M5-11) getRawBrightness(pos, darkening) / getBrightness(layer, pos), from the level's light at the cell
+						if (args != null && args.length == 2) {
+							boolean raw = m.getName().equals("getRawBrightness");
+							long p = ((BlockPos) (raw ? args[0] : args[1])).asLong();
+							int sky = raw ? light.at(net.minecraft.world.level.LightLayer.SKY, p) : light.at((net.minecraft.world.level.LightLayer) args[0], p);
+							int block = raw ? light.at(net.minecraft.world.level.LightLayer.BLOCK, p) : 0;
+							if (sky < 0 || block < 0) {
+								unknown.set("the light at a block that reads it is not known");
+								return 15;
+							}
+							// LevelLightEngine.getRawBrightness: the sky's less the darkening, or the block light, whichever is more
+							return raw ? Math.max(sky - (Integer) args[1], block) : sky;
+						}
 					}
 					case "hashCode" -> {
 						return System.identityHashCode(proxy);
