@@ -51,6 +51,11 @@ and replace stricter habits where they differ (the DEV MODE section below still 
 9. **Timing benches are report-only** (same decision). Benches such as the forms-island evaluation cost move out of the pass/fail
    suites into a report step that records the number and the load; past its bound a bench flags, it does not fail the slice. The
    nightly keeps tracking them (`tools/lib/bench-report.mjs`, below).
+10. **Load-gate bounds** (Noah via parent session, 2026-11-13: "lets ensure that is 15 min max from now on, with high at least 72
+   cap"). `slots.load.maxWaitMin` stays at 15 or less and `slots.load.max1` at 72 or more (0, `--no-load-wait`, stays allowed).
+   Raising max1 or shortening the wait is fine; anything outside needs Noah. `loadConfig` (tools/lib/turbo.mjs) clamps a config or
+   env override (`GATE_LOAD_MAX`, `GATE_LOAD_WAIT_MAX_MIN`) outside the bounds, with a warning; the nightly runs through gate-run, so
+   the same bounds hold there.
 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
@@ -219,12 +224,13 @@ for the first runs the count is a floor.
 On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot
 rules above stay as they are. On top of them, a **shared** run whose turn it is (no ticket ahead of it, no turbo run, a free slot)
 still waits while:
-- the 1-minute load average is above `slots.load.max1` (36, about twice the 18 cores), or
+- the 1-minute load average is above `slots.load.max1` (72, four times the 18 cores; 36 until 2026-11-13, raised because the speed
+  rules' `nice`d unit suites hold the load average near 80; still holds a run back in spikes such as 130), or
 - another run took its slot less than `slots.load.settleSec` (300 s since the speed rules of 2026-11-13; 120 s before) ago. The load average lags by about a minute, so without this
   every run queued behind a high load would start in the same 15 s poll once it dips.
 
 It **never waits when it would be the only gate run** (the load is then not the gate runs', so waiting would not end it), and waits
-**at most `slots.load.maxWaitMin` (30) minutes**, then starts and records that it gave up. So non-gate load can't starve the queue
+**at most `slots.load.maxWaitMin` (15 since 2026-11-13; 30 before) minutes**, then starts and records that it gave up. So non-gate load can't starve the queue
 or the 02:00 nightly. FIFO is unchanged: only the head of the queue waits on the load, and the runs behind it wait for it as
 before. A turbo run has no load gate: it starts only once every other run has ended, and its reserved slots keep later runs out.
 
