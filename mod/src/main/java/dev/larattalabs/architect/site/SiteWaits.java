@@ -239,6 +239,11 @@ public final class SiteWaits {
 				}
 			}
 		}
+		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
+		if (held != null) {
+			// (M5 FK) a declared container not empty at the fill: a typed wait, not for materials
+			return new SiteWait(id, true, since > 0 ? since : FILL_SINCE.getOrDefault(id, 0L), items(needs), needs.moreUnits(), SiteWait.FILL_BLOCKED, held);
+		}
 		return new SiteWait(id, waiting, since, items(needs), needs.moreUnits());
 	}
 
@@ -250,6 +255,12 @@ public final class SiteWaits {
 			if (!c.isEmpty()) {
 				unbuilt.add(c);
 			}
+		}
+		if (!r.fillOwed.isEmpty()) {
+			// (M5 FK) the fill comes after every cell: its items last, one step (it is written in one tick)
+			List<SurvivalItems.Cost> fill = new ArrayList<>();
+			r.fillOwed.forEach((k, v) -> fill.add(new SurvivalItems.Cost(k, v)));
+			unbuilt.add(fill);
 		}
 		return WaitCalc.walk(unbuilt, supply::available);
 	}
@@ -286,7 +297,45 @@ public final class SiteWaits {
 		}
 		o.add("nextNeeded", a);
 		o.addProperty("moreUnits", w.moreUnits());
+		if (w.blocked() != null) {
+			o.addProperty("blocked", w.blocked()); // (M5 FK)
+			com.google.gson.JsonArray cells = new com.google.gson.JsonArray();
+			for (net.minecraft.core.BlockPos p : w.blockedCells()) {
+				cells.add(p.getX() + "," + p.getY() + "," + p.getZ());
+			}
+			o.add("blockedCells", cells);
+		}
 		return o;
+	}
+
+	/** (M5 FK) The targets held at their fill by declared containers that are not empty, with those cells (live; the next step re-derives it). */
+	private static final Map<String, List<net.minecraft.core.BlockPos>> FILL_BLOCKED = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final Map<String, Long> FILL_SINCE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (M5 FK) The fill of {@code id} is held by {@code cells}: the typed wait {@link SiteWait#FILL_BLOCKED} (SITE_WAITING when it starts or moves). */
+	static void fillBlocked(MinecraftServer srv, String id, List<net.minecraft.core.BlockPos> cells) {
+		List<net.minecraft.core.BlockPos> was = FILL_BLOCKED.put(id, List.copyOf(cells));
+		if (was == null) {
+			FILL_SINCE.put(id, srv.overworld().getGameTime());
+		}
+		if (!cells.equals(was)) {
+			SiteView v = liveView(srv, id);
+			SiteWait w = view(srv, id);
+			if (v != null && w != null) {
+				ApiEvents.waiting(v, w);
+			}
+		}
+	}
+
+	/** (M5 FK) The fill of {@code id} is no longer held (it ran, or the target went). */
+	static void fillUnblocked(MinecraftServer srv, String id) {
+		if (FILL_BLOCKED.remove(id) != null) {
+			FILL_SINCE.remove(id);
+			SiteView v = liveView(srv, id);
+			if (v != null) {
+				ApiEvents.waiting(v, new SiteWait(id, false, 0L, List.of(), 0));
+			}
+		}
 	}
 
 	/** {@code Sites.waiting}: empty when the id is not a construction target. */

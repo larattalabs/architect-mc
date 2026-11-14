@@ -58,6 +58,17 @@ public final class StockLedger {
 	 * at an unclean start compares the loaded world with it (docs/CONTRACT.md "Slice RL").
 	 */
 	private final Map<String, Book> books = new TreeMap<>();
+	/**
+	 * (M5 FK) The targets (credit keys) whose fill is paid: the fill's commit point, written with the charge in the same ledger save
+	 * ({@code Stockpiles.saveWithWorld}). A target in it is never filled again. Dropped with the key's credit.
+	 */
+	private final java.util.Set<String> filled = new java.util.TreeSet<>();
+	/**
+	 * (M5 FK) Per target (credit key), the declared containers' contents a removal took out of the world (at most each one's declaration):
+	 * Architect's custody until the key's credit books them with the blocks (capped by the paid record), or a removal that ends unwritten
+	 * puts them back.
+	 */
+	private final Map<String, Map<String, Integer>> custody = new TreeMap<>();
 
 	/**
 	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
@@ -345,6 +356,14 @@ public final class StockLedger {
 			return new Credit(Map.of(), Map.of(), true);
 		}
 		credited.add(key);
+		// (M5 FK) the declared containers' contents in custody refund with the blocks, under the same cap (the fill is in the record)
+		Map<String, Integer> held = custody.remove(key);
+		filled.remove(key);
+		if (held != null && !held.isEmpty()) {
+			Map<String, Integer> all = new TreeMap<>(items);
+			held.forEach((k, v) -> all.merge(k, v, Integer::sum));
+			items = all;
+		}
 		String deltaOf = deltaSite(key);
 		if (deltaOf != null) {
 			// (JR) a construction delta's refund: from its site's record (taken out of it, as a retake)
@@ -360,6 +379,42 @@ public final class StockLedger {
 		Map<String, Integer> in = capRecordThenLegacy(items, rec == null ? new TreeMap<>() : new TreeMap<>(rec), placedAtOf(key));
 		Credit c = giveBack(in, capacityStacks, maxStack);
 		return new Credit(c.returned(), c.overflow(), false, shortfall(items, in));
+	}
+
+	/** (M5 FK) The fill of target {@code key} is paid (its commit point, saved with the charge). */
+	public void markFilled(String key) {
+		filled.add(key);
+	}
+
+	/** (M5 FK) Whether the saved ledger had the fill of {@code key} paid. */
+	public boolean filled(String key) {
+		return filled.contains(key);
+	}
+
+	/** (M5 FK) Takes {@code items} into custody under {@code key} (added to what it holds). */
+	public void holdCustody(String key, Map<String, Integer> items) {
+		items.forEach((k, v) -> {
+			if (v > 0) {
+				custody.computeIfAbsent(key, x -> new TreeMap<>()).merge(k, v, Integer::sum);
+			}
+		});
+	}
+
+	/** (M5 FK) What {@code key} holds in custody (empty: none). */
+	public Map<String, Integer> custody(String key) {
+		Map<String, Integer> m = custody.get(key);
+		return m == null ? Map.of() : Map.copyOf(m);
+	}
+
+	/** (M5 FK) Every key with custody. */
+	public java.util.Set<String> custodyKeys() {
+		return java.util.Set.copyOf(custody.keySet());
+	}
+
+	/** (M5 FK) Drops and returns {@code key}'s custody (written back into its containers). */
+	public Map<String, Integer> releaseCustody(String key) {
+		Map<String, Integer> m = custody.remove(key);
+		return m == null ? Map.of() : m;
 	}
 
 	/** (JR) Books what the feed consumed for a target under its credit key (with {@link #consume}). */
@@ -639,6 +694,16 @@ public final class StockLedger {
 		if (legacySince > 0) {
 			o.addProperty("legacySince", legacySince); // (JR-b) additive
 		}
+		if (!filled.isEmpty()) {
+			JsonArray f = new JsonArray();
+			filled.forEach(f::add);
+			o.add("filled", f); // (M5 FK) additive (format 2): the paid fills' commit points
+		}
+		if (!custody.isEmpty()) {
+			JsonObject cu = new JsonObject();
+			custody.forEach((key, m) -> cu.add(key, counts(m)));
+			o.add("custody", cu); // (M5 FK) additive (format 2)
+		}
 		return o;
 	}
 
@@ -691,6 +756,20 @@ public final class StockLedger {
 					read(e.getValue().getAsJsonObject(), m);
 					if (!m.isEmpty()) {
 						l.paid.put(e.getKey(), m);
+					}
+				}
+			});
+		}
+		if (o.has("filled") && o.get("filled").isJsonArray()) {
+			o.getAsJsonArray("filled").forEach(e -> l.filled.add(e.getAsString()));
+		}
+		if (o.has("custody") && o.get("custody").isJsonObject()) {
+			o.getAsJsonObject("custody").entrySet().forEach(e -> {
+				if (e.getValue().isJsonObject()) {
+					Map<String, Integer> m = new TreeMap<>();
+					read(e.getValue().getAsJsonObject(), m);
+					if (!m.isEmpty()) {
+						l.custody.put(e.getKey(), m);
 					}
 				}
 			});

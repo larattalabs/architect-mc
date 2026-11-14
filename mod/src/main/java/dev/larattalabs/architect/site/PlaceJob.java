@@ -524,8 +524,16 @@ final class PlaceJob implements Placement.Job {
 
 	/** P8: the record placed (or a construction site, building), SITE_PLACED. */
 	private boolean placed(MinecraftServer server) {
-		if (Sites.finishPlacing(server, this, bedCells, finishNote) == null && broken == null) {
+		Site done = Sites.finishPlacing(server, this, bedCells, finishNote);
+		if (done == null && broken == null) {
 			broken = "its site record is gone";
+		}
+		if (done != null && done.construction() == null) {
+			// (M5 FK) an instant site of a fill entry: filled now, in the tick it is placed (a crash before it: Fills.atStart)
+			ServerLevel lv = Sites.levelOf(server, done);
+			if (lv != null) {
+				Fills.creative(server, lv, done);
+			}
 		}
 		phase = DONE;
 		return true;

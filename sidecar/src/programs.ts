@@ -117,6 +117,7 @@ export function findingRule(msg: string): string {
   if (/^(structure:|blocks\[|duplicate block|block at \S+ outside|no blocks)/.test(m)) return 'structure';
   if (/^(palette\[|unknown or non-vanilla blocks)/.test(m)) return 'blocks';
   if (/^(missing required anchor|anchor )/.test(m)) return 'anchors';
+  if (/^fill:/.test(m)) return 'fill';
   if (/^design \S+ threw|^kit\/designs\//.test(m)) return 'program';
   return 'check';
 }

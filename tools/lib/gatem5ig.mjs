@@ -18,6 +18,13 @@
 //                                                      quote item for item; undoRevision killed at RVU2 (drained, nothing removed), resumed
 //                                                      after the restart: the world before the growth, no water, what it consumed refunded
 //                                                      exactly once
+//   node tools/gate6dgr.mjs igbunit     (igb-unit)     IG-b offline: kit igb.test, ig.test, ad.test, the parity fixtures; RevisionsTest; api-compat
+//   node tools/gate6dgr.mjs igbadopted  (igb-adopted)  IG-b (S-M5-8) in game: AD's Steward-shaped settlement adopted (one stage, adopted) grows
+//                                                      an irrigated farm lot instantly: the revision's own stages adopted, street, lots, fluids;
+//                                                      the report, the sources, the mask; the lot removed alone drains; undoRevision exact; a
+//                                                      second growth's undo killed at RVU1, resumed after the restart: exact, no water; then
+//                                                      Regions.remove E-flat 0 against the world before the settlement. (An adopted region
+//                                                      builds in creative only: RegionAdopt sets no survival record)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -118,18 +125,36 @@ export async function registerIG(steps, h) {
     return out;
   }
 
+  function apiCompat() {
+    const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
+    const J = h.apiJars();
+    return [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
+      const ac = fs.existsSync(args.at(-1)) ? spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 900_000, env }) : { status: -1, stdout: `missing ${args.at(-1)}`, stderr: '' };
+      return { args: args.slice(1).map((a) => path.basename(a)), code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter(Boolean).slice(-3) };
+    });
+  }
+
+  // (M5 IG-b) igb-unit: kit igb.test (an adopted street town's irrigated growth adds street, lots and fluids; a dry one as before; the
+  // refusals; the survival bill), ig.test, ad.test and the parity fixtures re-cut (revise.mjs's programSha); RevisionsTest; api-compat
+  steps.igbunit = async () => {
+    const out = {};
+    out.kit = h.nodeTest(['kit/test/igb.test.mjs', 'kit/test/ig.test.mjs', 'kit/test/ad.test.mjs', 'kit/test/irr.test.mjs', 'kit/test/gr-parity.test.mjs', 'kit/test/rv-a.test.mjs']);
+    check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 30, `kit igb.test (an adopted street town's irrigated growth: the revision adds street, lots and fluids after adopted, the shells in street, the lot in lots, M25/M29 clean; a dry growth there as before; a base naming street or lots out of order refuses; the survival bill holds the 4 shells once), ig.test, ad.test, irr.test; gr-parity and rv-a (re-cut: programSha only): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+    out.java = await h.javaTests(['*IgLotDrainTest*', '*RevisionsTest*', '*RegionAdoptTest*'], 9);
+    check(out.java.ok, `IgLotDrainTest, RevisionsTest (the re-cut merge fixture), RegionAdoptTest: ${out.java.tests} tests, ${out.java.failures} failures`, out.java.tail);
+    out.apicompat = apiCompat();
+    check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible with the apitest jars and the mod surface (no API change: the kit adds the stages)', out.apicompat);
+    spendZero();
+    return out;
+  };
+
   steps.igunit = async () => {
     const out = {};
     out.kit = h.nodeTest(['kit/test/ig.test.mjs', 'kit/test/irr.test.mjs', 'kit/test/gr-parity.test.mjs', 'kit/test/rv-a.test.mjs']);
     check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 25, `kit ig.test (an irrigated grow lot's sources, record in the lot frame, stages and M25/M29; the refusals; irrigate false = absent; the survival bill holds the shells once) and irr.test (plan/0's IRR through the shared helper); gr-parity and rv-a (the parity fixtures re-cut: revise.mjs's programSha only): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
     out.java = await h.javaTests(['*IgLotDrainTest*', '*ApiIrrTest*', '*RevisionsTest*'], 10);
     check(out.java.ok, `IgLotDrainTest (a grown lot is its revision's: drainLot drains through that revision's record), ApiIrrTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
-    const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
-    const J = h.apiJars();
-    out.apicompat = [...J.jars.map((j) => ['tools/api-compat.mjs', j]), ['tools/api-compat.mjs', '--surface', J.surface]].map((args) => {
-      const ac = fs.existsSync(args.at(-1)) ? spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', timeout: 900_000, env }) : { status: -1, stdout: `missing ${args.at(-1)}`, stderr: '' };
-      return { args: args.slice(1).map((a) => path.basename(a)), code: ac.status, tail: `${ac.stdout}${ac.stderr}`.split('\n').filter(Boolean).slice(-3) };
-    });
+    out.apicompat = apiCompat();
     check(out.apicompat.every((a) => a.code === 0), 'api-compat: binary compatible with the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface (no API type changed: a grow lot\'s irrigate is JSON, the report a LotSpec.ext member)', out.apicompat);
     spendZero();
     return out;
@@ -261,6 +286,169 @@ export async function registerIG(steps, h) {
       }
       await L.leaveWorld();
     }
+    spendZero();
+    return out;
+  };
+
+  // ------------------------------------------------------------------ (M5 IG-b, S-M5-8) an adopted street town grows an irrigated farm lot
+
+  /** AD's cabin entry (kit/build.mjs cabin, v1) in the library under `id`: the settlement's lots' design. */
+  async function installCabin(id = 'igb_cabin') {
+    const { execFileSync } = await import('node:child_process');
+    const tmp = path.join(OUT, 'kitbuild', id);
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.mkdirSync(tmp, { recursive: true });
+    execFileSync('node', [path.join(root, 'kit', 'build.mjs'), 'cabin', '--out', tmp], { stdio: 'ignore' });
+    const lib = path.join(L.LIBRARY, id);
+    fs.rmSync(lib, { recursive: true, force: true });
+    fs.mkdirSync(lib, { recursive: true });
+    for (const f of fs.readdirSync(tmp)) {
+      if (!f.startsWith('cabin.')) continue;
+      const target = path.join(lib, id + f.slice('cabin'.length));
+      if (f.endsWith('.blueprint.json')) {
+        const j = JSON.parse(fs.readFileSync(path.join(tmp, f), 'utf8'));
+        Object.assign(j, { id, name: id, source: `${id}.mjs` });
+        fs.writeFileSync(target, JSON.stringify(j, null, 2));
+      } else fs.copyFileSync(path.join(tmp, f), target);
+    }
+    await L.cmd('/architect reload');
+    await L.settle(2000);
+    return id;
+  }
+  async function adBatchWait(batchId, timeoutMs = 600_000) {
+    const t0 = Date.now();
+    let b;
+    while (Date.now() - t0 < timeoutMs) {
+      b = await call('dev.ad.batch', { batchId }, 10_000);
+      if (['DONE', 'CANCELLED', 'FAILED'].includes(b.status)) return b;
+      await sleep(L.pollDelayMs(Date.now() - t0));
+    }
+    throw new Error(`batch ${batchId} did not end: ${json(b)}`);
+  }
+  /**
+   * AD's Steward-shaped settlement (tools/gate6dad.mjs `settlement`): a founding build (the street, 4 lots of 15 x 17 alternating north and
+   * south, lotGap 3) and an addition (street#2 and one lot) in two groups, then Regions.adopt: one region, one stage `adopted`.
+   */
+  async function adoptedTown(cx, cz, y, entry) {
+    const LOT = { sx: 15, sz: 17 };
+    const sz = cz + 48;
+    const lots = [];
+    let xn = cx + 12, xs = cx + 12;
+    for (let i = 0; i < 4; i++) {
+      const north = i % 2 === 0;
+      const x = north ? xn : xs;
+      lots.push({ id: `house_${i + 1}`, x, z: north ? sz - 3 - LOT.sz + 1 : sz + 3, sx: LOT.sx, sz: LOT.sz, north });
+      if (north) xn = x + LOT.sx + 3; else xs = x + LOT.sx + 3;
+    }
+    const x0 = Math.min(...lots.map((l) => l.x)), x1 = Math.max(...lots.map((l) => l.x + l.sx - 1));
+    const build = async (bl, spans, b, keys) => {
+      const q = await call('dev.ad.settlement', { owner: OWNER, entry, streetZ: sz, y, lots: bl, spans, settlement: 'igb', build: b, ...(keys ? { keys } : {}) }, 120_000);
+      if (q.refused) throw new Error(`the build was refused: ${q.refused}`);
+      const done = await adBatchWait(q.batchId);
+      const bad = done.items.filter((i) => i.status !== 'PLACED');
+      check(done.status === 'DONE' && !bad.length, `adopted town: Steward's build ${b}: ${done.items.length} items placed in group ${done.group} (${json(bad)})`);
+      return Object.fromEntries(done.items.map((i) => [i.key, i.site]));
+    };
+    const b1 = await build(lots, [[x0, x1]], 'b1');
+    const ax = x1 + 4;
+    const add = { id: 'house_5', x: ax, z: sz + 3, sx: LOT.sx, sz: LOT.sz, north: false };
+    const b2 = await build([add], [[x1 + 1, ax + LOT.sx - 1]], 'b2', ['street#2']);
+    const lotSites = {};
+    for (const l of [...lots, add]) lotSites[l.id] = b1[l.id] ?? b2[l.id];
+    const claim = [cx, cz, cx + 160, cz + 96];
+    const a = await call('dev.ad.adopt', { owner: OWNER, claim, geometry: { streetZ: sz, xLo: x0, xHi: ax + LOT.sx - 1 }, roads: [b1.street, b2['street#2']], lots: lotSites }, 900_000);
+    check(!a.refused && a.state === 'PLACED', `adopted town: Regions.adopt of the settlement (5 lots, 2 street pieces): region ${a.region} ${a.state ?? a.refused}`);
+    const st = await call('dev.region.state', { region: a.region }, 60_000);
+    return { region: a.region, claim, st };
+  }
+
+  steps.igbadopted = async () => {
+    await ensure();
+    const out = {};
+    const W = 'G6B IGb Adopted';
+    await L.fresh(W, 'G6B Flat Base');
+    await L.setRules('exact');
+    await cmd('/op @s').catch(() => null);
+    await L.tp(CX + 80, 60, CZ + 48);
+    const gy = await groundY(CX + 4, CZ + 4);
+    const cabin = await installCabin();
+    const BOX = BOXOF([CX, CZ, CX + 160, CZ + 96], gy);
+    const B0 = await cellsOf(BOX);
+    const T = await adoptedTown(CX, CZ, gy + 1, cabin);
+    if (!T.region) { await L.leaveWorld(); spendZero(); return out; }
+    const region = T.region;
+    const rir = JSON.parse(fs.readFileSync(path.join(L.SAVES, W, 'architect-regions', region, 'ir.json'), 'utf8'));
+    out.base = { stages: rir.stages, survival: T.st.view?.survival ?? null };
+    check(json(rir.stages) === json(['adopted']), `adopted town: its IR has the one stage adopted (${json(rir.stages)}): before IG-b an irrigated growth here refused NOT_ALLOWED [irrigate]`);
+    const bp = await installField();
+    const S0 = await cellsOf(BOX);
+    const P = await planGrowth(region, 'adopted');
+    if (!P.g.refused) {
+      out.plan = { stages: P.g.stages, lotStage: P.irLot ? P.rvir.lots.find((l) => l.id === FARM.id)?.stage : null };
+      const shells = (P.rvir.parts ?? []).filter((p) => /_irr_\d+_\d+_shell$/.test(p.id));
+      check(json(P.g.stages) === json(['adopted', 'street', 'lots', 'fluids']) && out.plan.lotStage === 'lots' && shells.length === 4 && shells.every((p) => p.stage === 'street'),
+        `adopted: the revision adds its own stages (${json(P.g.stages)}): the 4 shells in street (${json(shells.map((p) => p.stage))}), the farm lot in lots (${out.plan.lotStage}), the water in fluids; the base's adopted unchanged`, out.plan);
+      const r = await call('dev.region.realise', { planId: P.g.planId, lots: { [FARM.id]: FIELD } }, 300_000);
+      check(!r.refused, `adopted: the growth realised with the field entry bound: ${r.refused ?? r.region}`);
+      const w = await rvWait(region, P.g.revisionOf.rid);
+      check(w.r.state === 'PLACED', `adopted: the growth's revision ${w.r.rid} ${w.r.state} (stages ${json(w.r.stages ?? null)})`);
+      out.placed = await placedChecks(region, P, bp, 'adopted');
+      // the adopted sites stand as they were: the growth wrote only its own cells (none of the five lots' or the street's boxes moved)
+      const lv = (await call('dev.region.state', { region }, 60_000)).view.lots;
+      check(lv.filter((l) => l.id.startsWith('house_')).every((l) => l.state === 'placed') && lv.length === 6, `adopted: the region's lots: ${json(lv.map((l) => [l.id, l.state]))}`);
+      // S-IRR-4 on the grown lot: its site removed alone drains its sources first
+      const sid = out.placed.lot?.siteId;
+      const rm = await call('dev.sites.remove', { site: sid, force: true }, 600_000);
+      for (let i = 0; i < 120; i++) { const s = await call('dev.sites.state', {}, 30_000); if (!JSON.stringify(s).includes(`"${sid}"`) || JSON.stringify(s).includes('"removed":true')) break; await sleep(1000); }
+      await L.settle(5000);
+      const R = roles(P.irr, P.lot.floorY);
+      const b = P.lot.box;
+      const water = await waterIn([b[0] - 2, P.lot.floorY - 3, b[2] - 2, b[3] + 2, P.lot.floorY + 3, b[5] + 2]);
+      const st = await call('dev.region.state', { region }, 60_000);
+      const rows = (st.view.ext?.['architect_mc:fluids'] ?? []).filter((x) => x.rid === P.g.revisionOf.rid);
+      const sides = (await count(R.sides, 'minecraft:farmland')) + (await count(R.sides, 'minecraft:dirt'));
+      out.lotAlone = { removed: rm.removed ?? rm, water: water.length, rows: rows.map((x) => [x.body, x.state, x.reason]), state: st.view.state, sides };
+      check(water.length === 0 && rows.length === 4 && rows.every((x) => x.state === 'drained' && /lot removed/.test(x.reason ?? '')) && st.view.state === 'PLACED' && sides === R.sides.length,
+        `adopted (S-IRR-4): the grown lot's site removed alone: its 4 sources drained first (${water.length} water in its box + 2), each row 'drained: lot removed', the region ${st.view.state}, the farmland sides standing (${sides}/${R.sides.length})`, out.lotAlone);
+      const u = await call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000);
+      const d = diff(S0, await cellsOf(BOX));
+      const left = await waterIn(BOX);
+      out.undo = { removed: u.removed, refused: u.refused, diff: d, water: left.length };
+      check(u.removed === true && d.n === 0 && left.length === 0, `adopted: undoRevision after the lot went: the adopted town as before the growth (${d.n} differ), no water in the box (${left.length})`, d.first);
+      // a second growth (the lot standing), undone with the operation killed at RVU1, resumed after the restart
+      const P2 = await planGrowth(region, 'adopted, again');
+      if (!P2.g.refused) {
+        await call('dev.region.realise', { planId: P2.g.planId, lots: { [FARM.id]: FIELD } }, 300_000);
+        const w2 = await rvWait(region, P2.g.revisionOf.rid);
+        out.placed2 = await placedChecks(region, P2, bp, 'adopted, again');
+        check(w2.r.state === 'PLACED', `adopted, again: the second growth (rid ${w2.r.rid}) ${w2.r.state}`);
+        await call('dev.journal.killAt', { point: 'RVU1' }, 10_000);
+        call('dev.rv.undo', { region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
+        const down = await haltWait();
+        check(down, 'adopted, again: RVU1 halted the server during the irrigated growth\'s undo');
+        if (!down) await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+        else {
+          await L.openWorld(W);
+          await L.tp(CX + 80, 60, CZ + 48);
+          let s;
+          const t0 = Date.now();
+          for (; Date.now() - t0 < 1_800_000;) { s = await rvState(region); if (s.busy === null) break; await sleep(L.pollDelayMs(Date.now() - t0)); }
+          const d2 = diff(S0, await cellsOf(BOX));
+          const left2 = await waterIn(BOX);
+          out.killed = { busy: s.busy, position: s.position, states: s.revisions.map((x) => [x.rid, x.state]), diff: d2, water: left2.length };
+          check(s.busy === null && s.position === 0 && s.revisions.every((x) => x.state === 'UNDONE') && d2.n === 0 && left2.length === 0,
+            `adopted, again: the undo killed at RVU1 resumed after the restart and finished drain-first: position ${s.position}, ${json(out.killed.states)}; the adopted town as before (${d2.n} differ), no water (${left2.length})`, out.killed);
+          const u2 = await call('dev.rv.undo', { region, toPosition: 0 }, 60_000);
+          check(String(u2.refused ?? '').startsWith('NOT_ALLOWED'), `adopted, again: a second undo has nothing left (refused: ${u2.refused})`);
+        }
+      }
+    }
+    // the adopted region removed: E-flat 0 against the world before the settlement (AD's row 5 after the growths)
+    const rmr = await removeRegion(region);
+    const d5 = diff(B0, await cellsOf(BOX));
+    out.removed = { removed: rmr?.removed ?? rmr, diff: d5 };
+    check(rmr?.removed === true && d5.n === 0, `adopted: Regions.remove after the growths: removed ${rmr?.removed}; E-flat ${d5.n} against the world before the settlement`, d5.first);
+    await L.leaveWorld();
     spendZero();
     return out;
   };

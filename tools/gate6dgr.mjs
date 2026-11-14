@@ -984,6 +984,13 @@ steps.look = async () => {
   await registerFC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, rvIr, cellsOf, root, javaTests, apiJars, nodeTest });
 }
 
+// ------------------------------------------------------------------ (M5 FK) fkunit, fksurvival, fkcrash: tools/lib/gatem5fk.mjs
+
+{
+  const { registerFK } = await import('./lib/gatem5fk.mjs');
+  await registerFK(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, BOXOF, CX, CZ, CLAIM, haltWait, root, javaTests, apiJars, nodeTest });
+}
+
 // ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs
 
 {

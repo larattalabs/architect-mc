@@ -30,6 +30,7 @@ import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, T
 import { checkConformance } from './massing.mjs';
 import { CREATIVE_ONLY } from './vocab/survival.mjs';
 import { reservedHits } from './reserved.mjs';
+import { checkFill } from './fill.mjs';
 // (7b SC) the checker with a site: the composite grid and the site rules (lib/siteCheck.mjs)
 import { SITE_UNCHECKED, siteFindings, siteGrid } from './siteCheck.mjs';
 // (6c VOC-b) the `state` and `hazard` errors, `metrics.rarity` and `metrics.drift`, and the opt-in `rarity`/`coherence` warnings
@@ -350,6 +351,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
     const hits = reservedHits(blocks, { size, groundY: sidecar.groundY, front: sidecar.front }, opts.reserved);
     if (hits.length) err(`reserved: the design writes ${hits.length} of the lot's reserved cell(s) (an irrigated field's water, its bed, its farmland sides and the air over each source: leave them air): ${hits.slice(0, 4).map((h) => `${h.block} at ${h.template.join(',')} (the lot's ${h.at.join(',')})`).join('; ')}`);
   }
+
+  // ---- (M5 FK, S-M5-3) declared filled containers and lock cells (rule `fill`)
+  for (const m of checkFill(sidecar.fill, cells, size)) err(m);
 
   // ---- sidecar basics
   for (const f of ['id', 'name', 'type', 'size', 'groundY', 'front', 'anchors']) if (sidecar[f] === undefined) err(`sidecar: '${f}' missing`);

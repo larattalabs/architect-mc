@@ -594,6 +594,11 @@ public final class SiteDeltas {
 			out.add(new Refusal(Reason.OTHER, r.siteId() + " is in " + b.dimension(), false));
 			return empty(out, r.siteId(), 0, 0, notes);
 		}
+		if (Fills.phase(b) != null || Fills.ofEntry(b.blueprint()) != null) {
+			// (M5 FK) a fill site's containers and locks are declared per version: a delta to or from a fill entry is refused
+			out.add(new Refusal(Reason.NOT_ALLOWED, r.siteId() + " has filled containers: a construction delta to or from a fill entry is refused", false));
+			return empty(out, r.siteId(), 0, 0, notes);
+		}
 		String why = SiteJournal.unavailable();
 		if (why != null) {
 			out.add(new Refusal(Reason.JOURNAL_UNAVAILABLE, why, false));
