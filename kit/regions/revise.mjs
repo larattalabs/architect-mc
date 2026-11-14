@@ -79,16 +79,29 @@ export default function revise(ctx) {
     const v = l.spec.irrigate;
     if (v !== undefined && typeof v !== 'boolean') throw new Error(`NOT_ALLOWED: [call] grow lot ${l.spec.id}: irrigate must be true or false`);
   }
+  // the shells' stage (V's `street`); `added`: the stages the revision itself adds for them, in order (IG-b)
+  let shellStage = growStages?.street ?? null;
+  const added = [];
   if (irrigated.length) {
     for (const l of irrigated) if (!isFarm(l.spec)) throw new Error(`NOT_ALLOWED: [irrigate] grow lot ${l.spec.id} is not a farm lot (villager '${l.spec.villager ?? ''}', type '${l.spec.type}')`);
     const iG = baseStages.indexOf(growStages.ground), iS = baseStages.indexOf(growStages.street), iL = baseStages.indexOf(growStages.lots);
-    if (!(iG < iS && iS < iL)) throw new Error(`NOT_ALLOWED: [irrigate] region stages (${baseStages.join(', ')}) have no stage between the pads' and the lots' for the sources' shells`);
-    used.add(growStages.street);
+    if (!(iG < iS && iS < iL)) {
+      // (IG-b, S-M5-8) a base with no stage between the pads' and the lots' (an adopted street town's single `adopted`): the revision adds
+      // its own, as V's street town has them: the shells in `street`, then the grown lots in `lots`, after every base stage (the pads, lanes,
+      // roads and props stay in the base's). The base's stages are unchanged; a base that names `street` or `lots` in another order refuses.
+      if (baseStages.includes('street') || baseStages.includes('lots')) throw new Error(`NOT_ALLOWED: [irrigate] region stages (${baseStages.join(', ')}) have no stage between the pads' and the lots' for the sources' shells`);
+      shellStage = 'street';
+      growStages.lots = 'lots';
+      added.push('street', 'lots');
+      used.add('lots');
+    }
+    used.add(shellStage);
     used.add('fluids');
   }
   // (a body needs the region's `fluids` stage, last: H's settle and census run in it, §7)
   if (parts.some((p) => p?.call?.fn === 'pond')) used.add('fluids');
-  const stages = [...baseStages.filter((s) => used.has(s) && s !== 'fluids'), ...[...used].filter((s) => !baseStages.includes(s) && s !== 'fluids').sort(), ...(used.has('fluids') ? ['fluids'] : [])];
+  const fresh = [...used].filter((s) => !baseStages.includes(s) && s !== 'fluids' && !added.includes(s)).sort();
+  const stages = [...baseStages.filter((s) => used.has(s) && s !== 'fluids'), ...fresh, ...added, ...(used.has('fluids') ? ['fluids'] : [])];
   const r = region(ctx);
   r.stages(stages);
   // the base's anchors (§2.3: the claim, roles, anchors and budget rules are the base IR's)
@@ -142,7 +155,7 @@ export default function revise(ctx) {
   const irrOut = [];
   for (const l of irrigated) {
     const lot = r.lots.find((q) => q.id === l.spec.id);
-    const res = irrigateLot(r, ctx, lot, { name: l.spec.id, part: null, stage: growStages.street, lotsStage: growStages.lots, bodyPrefix: pre });
+    const res = irrigateLot(r, ctx, lot, { name: l.spec.id, part: null, stage: shellStage, lotsStage: growStages.lots, bodyPrefix: pre });
     if (!res.ok) throw new Error(`NOT_ALLOWED: [irrigate] ${res.note.replace(/^irrigate: /, '')}`);
     r.note(res.note);
     irrOut.push(l.spec.id);
