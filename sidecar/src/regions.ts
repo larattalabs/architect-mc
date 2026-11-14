@@ -84,7 +84,7 @@ export const NO_NETWORK = [
   "import { syncBuiltinESMExports } from 'node:module';",
   "const no = () => { throw Object.assign(new Error('network access is not allowed in a region plan'), { code: 'ERR_ACCESS_DENIED' }); };",
   'net.connect = net.createConnection = net.createServer = no; net.Socket.prototype.connect = no; net.Server.prototype.listen = no;',
-  'tls.connect = tls.createServer = no; dgram.createSocket = no; dgram.Socket.prototype.send = dgram.Socket.prototype.bind = dgram.Socket.prototype.connect = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
+  'tls.connect = tls.createServer = no; dgram.createSocket = no; { const P = dgram.Socket.prototype; for (const k of ["send", "sendto", "bind", "bindSync", "connect", "connectSync"]) P[k] = no; } dgram.Socket = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
   'http.request = http.get = http.createServer = https.request = https.get = https.createServer = no;',
   "for (const k of ['fetch', 'WebSocket', 'EventSource']) { try { Object.defineProperty(globalThis, k, { value: undefined, configurable: false, writable: false }); } catch {} }",
   // ((7c AU) every dns entry point (resolve4 and the rest, the Resolver classes, the promises API), not only lookup and resolve: a DNS

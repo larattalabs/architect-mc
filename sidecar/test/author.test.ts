@@ -213,6 +213,8 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
       dgram: "return process.getBuiltinModule('node:dgram').createSocket('udp4')",
       udpSocket: "return new (process.getBuiltinModule('node:dgram').Socket)('udp4').send('x', 9, '127.0.0.1')",
       udpBind: "return new (process.getBuiltinModule('node:dgram').Socket)('udp4').bind(0)",
+      // (the verifier's re-review) a raw handle send needs no patched method, only an instance: none can be made
+      udpHandle: "const s = new (process.getBuiltinModule('node:dgram').Socket)('udp4'); s.bindSync({ port: 0, address: '127.0.0.1' }); return s._handle.send({}, [Buffer.from('x')], 1, 9, '127.0.0.1', false)",
     };
     for (const [k, body] of Object.entries(tries)) {
       const f = await probeOut(body);
