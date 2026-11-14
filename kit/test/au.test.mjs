@@ -39,8 +39,15 @@ test('lint: the evasions (template expressions, computed members, dynamic code, 
     ctorString: "({})['constructor'];", proto: '({}).__proto__;', reflect: 'Reflect.get({}, "a");', proxy: 'new Proxy({}, {});', dynImport: 'import("node:fs");',
     importMeta: 'const u = import.meta.url;', unicodeEsc: 'const a = \\u0070rocess;', unicodeId: 'const é = 1;', regex: 'const r = /a/.test("a");', with: 'with ({}) {}',
     wasm: 'WebAssembly.compile(new Uint8Array(0));', sab: 'new SharedArrayBuffer(8);', buffer: 'Buffer.from("a");',
+    // (the verifier's review) a regex after a statement head's ")" read as division hid code in a string or template
+    desyncIf: 'if (1) /"/.test(\'a\'); Date.now(); // "', desyncWhile: "while (0) /'/.test('a'); Date.now(); // '", desyncTpl: 'if (1) /`/.test(\'a\');\nMath.sin(1);\n// `',
+    slashQuote: 'const a = 1 /"x"/ 2;',
+    crypto: 'crypto.getRandomValues(new Uint8Array(1));', uuid: 'crypto.randomUUID();', intl: "new Intl.DateTimeFormat('en').format();", event: "new Event('x').timeStamp;",
+    abort: 'AbortSignal.timeout(5);', navigator: 'navigator.hardwareConcurrency;', weakref: 'new WeakRef({});', locale: '(1).toLocaleString();', compare: "'a'.localeCompare('b');",
   };
   for (const [k, body] of Object.entries(ev)) assert.ok(lintAuthored(wrap(body)).length > 0, `${k} passed the lint`);
+  // division stays division (after an operand and after a closing paren of an expression)
+  for (const ok of ['const a = 4 / 2;', 'const b = (1 + 2) / 3;', 'const c = [4][0] / 2;', 'let d = 8; d /= 2;']) assert.deepEqual(lintAuthored(wrap(ok)), [], ok);
 });
 
 test('lint: imports are the closed list only; exports, size and encoding', () => {

@@ -1,5 +1,5 @@
 // (7b LP) region.link with the REAL kit (../kit): a player's program with two site lots (wrap_trunk, on two synthetic trees of a frozen
-// volume) and a branch walk between their ports is planned (its IR records portLinks and an empty site_links stage; plan-args.json kept);
+// volume) and a branch walk between their ports is planned (its IR records portLinks and an empty site_links stage; plan-args kept, outside the plan dir since 7c AU);
 // region.link replays it with the bound entries' ports: IR v2 (the link part in site_links, `linked`, the same plan otherwise), its sha
 // the ir text's, cached for the tiles; an entry without the port answers noLink {lot, port}; another irSha is refused. Skipped
 // without a kit that has the link pass.
@@ -88,7 +88,8 @@ describe.skipIf(!hasLP)('region.link: the realise\'s link pass with the real kit
     expect(ir.portLinks.map((l) => [l.id, l.from.port, l.to.port])).toEqual([['ab', 'walk_e', 'walk_w']]);
     expect(ir.stages).toEqual(['ground', 'lots', 'site_links', 'props']);
     expect(ir.parts.filter((p) => p.stage === 'site_links')).toEqual([]);
-    expect(fs.existsSync(path.join(sc.regions.planDir(planned.planId), 'plan-args.json'))).toBe(true);
+    expect(fs.existsSync(path.join(sc.regions.argsDir(), `${planned.planId}.json`))).toBe(true); // (7c AU) kept outside the plan dir
+    expect(fs.existsSync(path.join(sc.regions.planDir(planned.planId), 'plan-args.json'))).toBe(false);
   });
 
   it('region.link answers IR v2: the link written in site_links, linked, its sha the text\'s; the tiles resolve it from the cache', async () => {

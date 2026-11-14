@@ -1,8 +1,10 @@
 // (7c AU, docs/CONTRACT.md "Phase 7c" §3 row 13, "Slice AU as built") Program authoring through the sidecar with the REAL kit (../kit, or
 // ARCHITECT_REGION_KIT), on the sim backend: scripted rounds, the checker (lint, a sandboxed plan, the region checker), a round failed on a
-// checker finding and fixed, AUTHORED and NOT_SHOWN, opKey and cancel; and the sandbox itself, probed by programs that pass the static lint
-// (the Function constructor reached through a computed member) and then try the network, files outside their dir, other processes and
-// timers. The sandbox is the security boundary: each probe must be refused at run time.
+// checker finding and fixed, AUTHORED and NOT_SHOWN, opKey and cancel; and the sandbox itself, the security boundary every region program
+// runs in (an authored program's plan, the plan check that names it, the link pass): probe programs from the programs dir (never linted)
+// try the network (incl. a raw UDP socket), files outside their dir, other processes (incl. process._kill), code from strings and timers,
+// and each must be refused at run time. Code from strings is off in every plan child, so the lint-passing route to the Function
+// constructor (a computed member) ends in an EvalError.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,22 +59,31 @@ describe('the author\'s pure parts (7c AU)', () => {
   });
 });
 
-/** A program that passes the static lint and reaches the Function constructor at run time (a computed member), then runs `body`. */
-const probe = (body: string) => `import { region } from '../lib/region/program.mjs';
-export const id = 'probe';
+/** A probe region program (the programs dir: no lint): runs `body` and throws its outcome, which the plan's failure message carries. */
+const probe = (body: string) => `export const id = 'probe';
 export const params = {};
-const c = 'constr' + 'uctor';
-const F = ({})[c][c];
 export default function (ctx) {
   let out = 'none';
-  try { out = 'ALLOWED ' + String(F(${JSON.stringify(body)})()); } catch (e) { out = 'REFUSED ' + String(e && (e.code || e.message)); }
+  try { out = 'ALLOWED ' + String((() => { ${body} })()); } catch (e) { out = 'REFUSED ' + String(e && (e.code || e.name || e.message)); }
   throw new Error('PROBE ' + out);
+}
+`;
+/** The lint-passing route to the Function constructor (a computed member): an authored program the lint takes. */
+const VIA_FUNCTION = `import { region } from '../lib/region/program.mjs';
+export const id = 'probe_fn';
+export const params = {};
+const c = 'constr' + 'uctor';
+export default function (ctx) {
+  const F = ({})[c][c];
+  F('return 1')();
+  return region(ctx);
 }
 `;
 
 describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
   let root: string;
   let sc: Sidecar;
+  const events: Outbound[] = [];
   const SIDE = 96;
   const claim = { minX: 0, minZ: 0, maxX: SIDE - 1, maxZ: SIDE - 1, minY: -64, maxY: 319 };
   const survey = arsv(0, 0, SIDE, SIDE, () => 64);
@@ -93,10 +104,17 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
   const queries = (jobId: string) =>
     fs.readFileSync(path.join(sc.config.dataDir, 'jobs', jobId, 'sim-queries.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { system: string; prompt: string });
   const check = (source: string) => sc.regions.authorCheck(path.join(root, 'probe', crypto.randomBytes(4).toString('hex')), { source, surveyBlobId: sc.blobs.putBytes(survey, 'survey', 'bin'), claim });
+  let probes = 0;
+  /** Plans a probe program from the programs dir in the plan sandbox (region.plan): its failure message, `{message}`. */
   const probeOut = async (body: string) => {
-    const r = await check(probe(body));
-    expect(r.findings.length).toBe(1);
-    return r.findings[0]!;
+    const file = `probe_${++probes}.mjs`;
+    fs.writeFileSync(path.join(sc.config.regions.programsDir, file), probe(body));
+    const a = await ask({ type: 'region.plan', program: file, params: {}, claim, surveyBlobId: sc.blobs.putBytes(survey, 'survey', 'bin'), check: false });
+    expect(a.ok, a.error).toBe(true);
+    const planId = a.result!.planId as string;
+    await until(() => events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && (e as { planId?: string }).planId === planId), 120_000, 25);
+    const f = events.find((e) => e.type === 'region.failed' && (e as { planId?: string }).planId === planId) as { message?: string } | undefined;
+    return { message: String(f?.message ?? 'planned (no PROBE outcome)') };
   };
 
   beforeAll(async () => {
@@ -106,7 +124,8 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
     cfg.simStepMs = 10;
     cfg.regions.planMs = 8000; // the timers probe ends on the plan's wall clock
     sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
-    sc.subscribe((_m: Outbound) => undefined);
+    fs.mkdirSync(cfg.regions.programsDir, { recursive: true });
+    sc.subscribe((m: Outbound) => events.push(m));
     await sc.start(new SimDesigner(sc, 5));
     fs.writeFileSync(path.join(root, 'secret.txt'), 'SECRET');
   });
@@ -169,12 +188,17 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
     expect(bad.error).toMatch(/FIELD_LIMIT/);
   }, 180_000);
 
-  // ---- the sandbox (each probe passes the lint, then is refused at run time)
-  it('sandbox: the probe programs pass the static lint (so the run-time sandbox is what refuses them)', async () => {
-    const { lintAuthored } = (await import(path.join(KIT, 'lib', 'plan', 'authored.mjs'))) as { lintAuthored: (s: string) => unknown[] };
-    expect(lintAuthored(probe('return 1'))).toEqual([]);
+  // ---- the sandbox (every plan child: each probe is refused at run time)
+  it('sandbox: a probe runs (the harness), code from strings is off: the lint-passing Function-constructor route ends in an EvalError', async () => {
     expect((await probeOut('return 1')).message).toContain('PROBE ALLOWED 1');
-  }, 60_000);
+    expect((await probeOut("return new Function('return 1')()")).message).toMatch(/PROBE REFUSED (EvalError|ERR_)/);
+    expect((await probeOut("return (0, eval)('1')")).message).toMatch(/PROBE REFUSED (EvalError|ERR_)/);
+    const { lintAuthored } = (await import(path.join(KIT, 'lib', 'plan', 'authored.mjs'))) as { lintAuthored: (s: string) => unknown[] };
+    expect(lintAuthored(VIA_FUNCTION)).toEqual([]);
+    const r = await check(VIA_FUNCTION);
+    expect(r.findings.map((f) => f.rule)).toEqual(['program']);
+    expect(r.findings[0]!.message).toMatch(/[Cc]ode generation from strings disallowed|EvalError/);
+  }, 120_000);
 
   it('sandbox: no network (fetch, net, http, dns, http2, a server)', async () => {
     const tries = {
@@ -187,6 +211,8 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
       http2: "return process.getBuiltinModule('node:http2').connect('http://127.0.0.1:1')",
       server: "return process.getBuiltinModule('node:net').createServer().listen(0)",
       dgram: "return process.getBuiltinModule('node:dgram').createSocket('udp4')",
+      udpSocket: "return new (process.getBuiltinModule('node:dgram').Socket)('udp4').send('x', 9, '127.0.0.1')",
+      udpBind: "return new (process.getBuiltinModule('node:dgram').Socket)('udp4').bind(0)",
     };
     for (const [k, body] of Object.entries(tries)) {
       const f = await probeOut(body);
@@ -206,6 +232,8 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
       exec: "return process.getBuiltinModule('node:child_process').execSync('echo x')",
       worker: "return new (process.getBuiltinModule('node:worker_threads').Worker)('1', { eval: true })",
       kill: 'return process.kill(process.ppid, 0)',
+      rawKill: 'return process._kill(process.ppid, 0)',
+      debugProcess: 'return process._debugProcess(process.ppid)',
       inspector: "return process.getBuiltinModule('node:inspector').open(0)",
       priority: "return process.getBuiltinModule('node:os').setPriority(process.ppid, 19)",
       addon: "return process.dlopen({ exports: {} }, '/usr/lib/libz.dylib')",
@@ -218,13 +246,13 @@ describe.skipIf(!hasAU)('program authoring with the real kit (7c AU)', () => {
 
   it('sandbox: a live timer or a busy loop ends on the plan\'s wall clock (timeout), never hangs the session', async () => {
     const t0 = Date.now();
-    const busy = await check(probe('for (;;) {}'));
+    expect((await probeOut('for (;;) {}')).message).toMatch(/longer than/);
+    const busy = await check(COURT.replace('return r;\n}', 'for (;;) {}\n  return r;\n}'));
     expect(busy.findings.map((f) => f.rule)).toEqual(['timeout']);
     const timer = await check(`${COURT.replace('return r;\n}', "setTimeout(() => 0, 1);\n  return r;\n}")}`);
     expect(timer.findings[0]!.rule).toBe('lint');
-    const live = await check(probe("const g = process.getBuiltinModule('node:timers'); g.setInterval(() => 0, 5); return 'started'"));
-    // a live interval keeps the child alive after its answer: the wall clock stops it, or the plan answers first; either way it ends
-    expect(['timeout', 'program']).toContain(live.findings[0]!.rule);
+    // a live interval keeps the child alive after its answer: the wall clock stops it, or the plan fails first; either way it ends
+    expect((await probeOut("const g = process.getBuiltinModule('node:timers'); g.setInterval(() => 0, 5); return 'started'")).message).toMatch(/PROBE|longer than/);
     expect(Date.now() - t0).toBeLessThan(60_000);
   }, 120_000);
 });

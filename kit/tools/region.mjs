@@ -317,7 +317,7 @@ function synth(argv) {
 export const AUTHOR_BLOCKING = /^M3(:|$)/;
 
 async function authorCheck(argv) {
-  const { pos, opts } = parseArgs(argv, { survey: 1, claim: 1, bible: 1, seed: 1, volumes: 1, out: 1, json: 'flag' });
+  const { pos, opts } = parseArgs(argv, { survey: 1, claim: 1, bible: 1, seed: 1, volumes: 1, out: 1, json: 'flag', 'plan-only': 'flag' });
   if (pos.length !== 1 || !opts.survey || !opts.claim || !opts.out) throw new Usage('author-check <source.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] --out dir [--bible b.json] [--json]');
   const bytes = fs.readFileSync(pos[0]);
   const sha = authoredSha(bytes);
@@ -344,6 +344,13 @@ async function authorCheck(argv) {
   }
   fs.writeFileSync(path.join(opts.out, 'ir.json'), res.irJson);
   fs.writeFileSync(path.join(opts.out, 'meta.json'), `${JSON.stringify(res.meta)}\n`);
+  if (res.blobs.size) {
+    fs.mkdirSync(path.join(opts.out, 'blobs'), { recursive: true });
+    for (const [s, b] of res.blobs) fs.writeFileSync(path.join(opts.out, 'blobs', `${s}.bin`), b);
+  }
+  // --plan-only (the sidecar's checker): the region check runs in a second process that never runs the program, so the program can't
+  // answer for it (this process's stdout and files are the program's to forge)
+  if (opts['plan-only']) return say({ findings: [], irSha: res.irSha, cells: res.ir.budget?.cells ?? null });
   const blobs = (s) => res.blobs.get(s) ?? null;
   const report = checkRegion({ ir: res.ir, survey, blobs, volumes: volumes.map((v) => v.decoded), meta: res.meta, prefix: false });
   delete report._world;

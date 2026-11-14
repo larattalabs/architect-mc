@@ -35,6 +35,7 @@ import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import type { BlobStore } from './blobs.js';
 import type { BibleIndex } from './bibles.js';
@@ -74,13 +75,16 @@ export interface PlanImages {
 /** (6b) A frozen ARVX volume decompresses to at most this (the mod's 268M-cell limit is about 0.2 bytes of runs per natural cell). */
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
+/** (7c AU) Checker rules that block an authored program's install beyond the region checker's errors (kit/tools/region.mjs's). */
+export const AUTHOR_BLOCKING = /^M3(:|$)/;
+
 /** Refuses networking (Node 24's permission model has no network switch) and signals inside the plan child. Loaded with --import. */
 export const NO_NETWORK = [
   "import net from 'node:net'; import tls from 'node:tls'; import dgram from 'node:dgram'; import dns from 'node:dns'; import http from 'node:http'; import https from 'node:https';",
   "import { syncBuiltinESMExports } from 'node:module';",
   "const no = () => { throw Object.assign(new Error('network access is not allowed in a region plan'), { code: 'ERR_ACCESS_DENIED' }); };",
   'net.connect = net.createConnection = net.createServer = no; net.Socket.prototype.connect = no; net.Server.prototype.listen = no;',
-  'tls.connect = tls.createServer = no; dgram.createSocket = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
+  'tls.connect = tls.createServer = no; dgram.createSocket = no; dgram.Socket.prototype.send = dgram.Socket.prototype.bind = dgram.Socket.prototype.connect = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
   'http.request = http.get = http.createServer = https.request = https.get = https.createServer = no;',
   "for (const k of ['fetch', 'WebSocket', 'EventSource']) { try { Object.defineProperty(globalThis, k, { value: undefined, configurable: false, writable: false }); } catch {} }",
   // ((7c AU) every dns entry point (resolve4 and the rest, the Resolver classes, the promises API), not only lookup and resolve: a DNS
@@ -89,7 +93,7 @@ export const NO_NETWORK = [
   // ((7c AU) Node's permission model does not cover signals or priorities: a program could otherwise kill or renice another process by pid)
   "import os from 'node:os';",
   "const denied = (what) => () => { throw Object.assign(new Error(`${what} are not allowed in a region plan`), { code: 'ERR_ACCESS_DENIED' }); };",
-  "Object.defineProperty(process, 'kill', { value: denied('signals'), configurable: false, writable: false });",
+  "for (const k of ['kill', '_kill', '_debugProcess', '_debugEnd']) { try { Object.defineProperty(process, k, { value: denied('signals'), configurable: false, writable: false }); } catch {} }",
   "os.setPriority = denied('process priorities');",
   'syncBuiltinESMExports();',
 ].join('\n');
@@ -660,7 +664,7 @@ export class Regions {
     if (!perm) return { ok: false, message: `region planning needs Node's permission model (Node 22.13 or later; this is ${process.version})`, ms: ms() };
     if (o.timeoutMs <= 0) return { ok: false, message: `no time was left for the ${o.what}`, ms: 0 };
     const reads = [kit, dir, ...(o.extraReads ?? [])];
-    const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${o.writeDir ?? dir}`, `--max-old-space-size=${o.heapMb}`, `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
+    const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${o.writeDir ?? dir}`, `--max-old-space-size=${o.heapMb}`, '--disallow-code-generation-from-strings', `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
     const r = await run(process.execPath, [...flags, script, ...args], { cwd: dir, env: minimalEnv(), timeoutMs: o.timeoutMs });
     const out = lastJson(r.stdout);
     if (r.timedOut) return { ok: false, message: `the ${o.what} took longer than ${Math.round(o.timeoutMs / 100) / 10} s and was stopped`, ms: ms() };
@@ -704,11 +708,10 @@ export class Regions {
       const args = this.planArgs(dir, program, o);
       const extraReads = [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : []), ...(o.planCache ? [o.planCache] : [])];
       // ((7b LP) the plan's own arguments, so the realise's link pass replays exactly this plan: region.link)
-      // ((7c AU) and kept OUTSIDE the plan dir too (plans/.args/<planId>.json): the plan child may write its dir, so a program could rewrite
+      // ((7c AU) kept OUTSIDE the plan dir (plans/.args/<planId>.json): the plan child may write its dir, so a program could rewrite
       // plan-args.json there before the link pass reads it (widening that run's reads); the link pass reads the outside copy)
       if (!o.dry) {
         const pa = JSON.stringify({ args, extraReads, budget });
-        fs.writeFileSync(path.join(dir, 'plan-args.json'), pa);
         fs.mkdirSync(this.argsDir(), { recursive: true });
         fs.writeFileSync(path.join(this.argsDir(), `${planId}.json`), pa);
       }
@@ -960,7 +963,7 @@ export class Regions {
     if (sha256(base) !== irSha) throw new ClientError(`plan ${planId}'s IR is not ${irSha.slice(0, 12)} (it hashes to ${sha256(base).slice(0, 12)})`);
     let pa: { args: string[]; extraReads: string[]; budget: { timeoutMs: number; heapMb: number } };
     try {
-      // ((7c AU) the copy outside the plan dir when there is one; a plan planned before AU has only its own)
+      // ((7c AU) the copy outside the plan dir; only a plan planned before AU has its in-dir copy (no authored program could run in it))
       const outside = path.join(this.argsDir(), `${planId}.json`);
       pa = JSON.parse(fs.readFileSync(fs.existsSync(outside) ? outside : path.join(dir, 'plan-args.json'), 'utf8')) as typeof pa;
     } catch {
@@ -1399,7 +1402,9 @@ export class Regions {
    * (7c AU) One authoring round's checker: `node <kit>/tools/region.mjs author-check` IN THE PLAN SANDBOX (runKit: reads the kit and `dir`,
    * writes `dir`, no network or signals, the plan's heap and time), over the claim's survey with the Style's roles. `dir` is the round's
    * own scratch dir (the source, survey and bible are written there first). The answer: {sha, findings: [{rule, message, line?}], irSha?,
-   * cells?}; a run that failed (time, memory, a crash) is one finding of rule `sandbox` or `timeout`. Never throws for the program's sake.
+   * cells?}; a run that failed (time, memory, a crash) is one finding of rule `program` or `timeout`. Never throws for the program's sake.
+   * Three steps, so the program never answers for its own check: the lint here (no program runs), the plan in the sandbox writing only
+   * `out/`, and the region check of its IR in a second sandboxed process that runs only the kit.
    */
   async authorCheck(dir: string, o: { source: string; surveyBlobId: string; claim: PlanMsg['claim']; style?: { id: string; version: number } }): Promise<{ sha: string; findings: Array<{ rule: string; message: string; line?: number }>; irSha?: string; cells?: number }> {
     const info = this.kitInfo();
@@ -1423,14 +1428,39 @@ export class Regions {
       hasBible = true;
     }
     const c = o.claim;
+    // 1. the lint, here in the sidecar (a pure tokenizer: the program does not run), so no program can answer it
+    const lint = (await import(pathToFileURL(path.join(fs.realpathSync(this.host.config.kitDir), 'lib', 'plan', 'authored.mjs')).href)) as { lintAuthored: (s: string) => Array<{ rule: string; message: string; line?: number }> };
+    const lf = lint.lintAuthored(o.source);
+    const keep = (x: Array<{ rule: string; message: string; line?: number }>) => x.slice(0, 40).map((f) => ({ rule: String(f.rule), message: truncate(String(f.message), 2000), ...(typeof f.line === 'number' ? { line: f.line } : {}) }));
+    if (lf.length) return { sha, findings: keep(lf) };
+    // 2. the plan, in the sandbox, writing only out/ (the source, survey and bible next to it stay as written here)
     const out = path.join(real, 'out');
-    const args = ['author-check', path.join(real, 'source.mjs'), '--survey', path.join(real, 'survey.bin'), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','), ...(hasBible ? ['--bible', path.join(real, 'bible.json')] : []), '--out', out, '--json'];
+    fs.mkdirSync(out, { recursive: true });
+    const args = ['author-check', path.join(real, 'source.mjs'), '--survey', path.join(real, 'survey.bin'), '--claim', [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','), ...(hasBible ? ['--bible', path.join(real, 'bible.json')] : []), '--out', out, '--plan-only', '--json'];
     const b = this.planBudget([]);
-    const r = await this.runKit(real, args, { ...b, what: 'authored program\'s check' });
-    if (!r.ok) return { sha, findings: [{ rule: /longer than/.test(r.message) ? 'timeout' : 'sandbox', message: truncate(r.message, 2000) }] };
-    const f = Array.isArray(r.out.findings) ? (r.out.findings as Array<{ rule: string; message: string; line?: number }>) : [{ rule: 'sandbox', message: 'the checker answered no findings list' }];
-    if (typeof r.out.sha === 'string' && r.out.sha !== sha) f.push({ rule: 'sandbox', message: `the checker hashed the source to ${String(r.out.sha).slice(0, 12)}, not ${sha.slice(0, 12)}` });
-    return { sha, findings: f.slice(0, 40).map((x) => ({ rule: String(x.rule), message: truncate(String(x.message), 2000), ...(typeof x.line === 'number' ? { line: x.line } : {}) })), ...(typeof r.out.irSha === 'string' ? { irSha: r.out.irSha } : {}), ...(typeof r.out.cells === 'number' ? { cells: r.out.cells } : {}) };
+    const r = await this.runKit(real, args, { ...b, what: 'authored program\'s plan', writeDir: out });
+    if (!r.ok) return { sha, findings: [{ rule: /longer than/.test(r.message) ? 'timeout' : 'program', message: truncate(r.message, 2000) }] };
+    const pf = Array.isArray(r.out.findings) ? (r.out.findings as Array<{ rule: string; message: string; line?: number }>) : [];
+    if (pf.length) return { sha, findings: keep(pf) };
+    const irFile = path.join(out, 'ir.json');
+    if (!fs.existsSync(irFile)) return { sha, findings: [{ rule: 'program', message: 'the plan wrote no ir.json' }] };
+    const irSha = sha256(fs.readFileSync(irFile));
+    // 3. the region check, in a second sandboxed process that runs only the kit (reads out/, writes check/): its report is the verdict
+    const chk = path.join(real, 'check');
+    fs.mkdirSync(chk, { recursive: true });
+    const blobsArg = fs.existsSync(path.join(out, 'blobs')) ? ['--blobs', path.join(out, 'blobs')] : [];
+    const cr = await this.runKit(real, ['check', irFile, '--survey', path.join(real, 'survey.bin'), ...blobsArg, '--out', chk, '--json'], { timeoutMs: this.cfg.checkMs, heapMb: b.heapMb, what: 'authored program\'s region check', writeDir: chk });
+    if (!cr.ok) return { sha, irSha, findings: [{ rule: 'check', message: truncate(`the region check did not run: ${cr.message}`, 2000) }] };
+    let report: { findings?: Array<{ rule: string; severity: string; part?: string | null; message: string }> };
+    try {
+      report = JSON.parse(fs.readFileSync(path.join(chk, 'report.json'), 'utf8')) as typeof report;
+    } catch (e) {
+      return { sha, irSha, findings: [{ rule: 'check', message: `the region check wrote no report (${(e as Error).message})` }] };
+    }
+    // the checker's errors, plus its support rules (M3: cells on neither the ground nor a declared floating group, spurs, gravity blocks,
+    // overhangs), which an authored program must meet (a warning for a bundled one); other warnings never block
+    const findings = (report.findings ?? []).filter((f) => f.severity === 'error' || AUTHOR_BLOCKING.test(f.rule)).map((f) => ({ rule: `check:${f.rule}`, message: `${f.part ? `[${f.part}] ` : ''}${f.message}` }));
+    return { sha, irSha, findings: keep(findings), ...(typeof r.out.cells === 'number' ? { cells: r.out.cells } : {}) };
   }
 
   clientGone(client: ClientHandle): void {

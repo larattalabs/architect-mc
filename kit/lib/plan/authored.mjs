@@ -31,6 +31,9 @@ export const AUTHORED_BANNED = Object.freeze([
   'setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'queueMicrotask', 'structuredClone', 'constructor',
   '__proto__', 'prototype', 'getPrototypeOf', 'setPrototypeOf', 'defineProperty', '__defineGetter__', '__defineSetter__', '__lookupGetter__',
   'arguments', 'with', 'debugger', 'Buffer', 'createRequire', 'Symbol',
+  // (the verifier's review) non-deterministic or clock-like globals, and the locale-dependent members
+  'crypto', 'Intl', 'Event', 'EventTarget', 'AbortSignal', 'AbortController', 'navigator', 'WeakRef', 'FinalizationRegistry', 'MessageChannel',
+  'BroadcastChannel', 'toLocaleString', 'toLocaleDateString', 'toLocaleTimeString', 'toLocaleUpperCase', 'toLocaleLowerCase', 'localeCompare',
 ]);
 const BANNED = new Set(AUTHORED_BANNED);
 const MATH_OK = new Set(AUTHORED_MATH);
@@ -53,7 +56,10 @@ export function tokens(src) {
   const out = [];
   let i = 0, line = 1;
   const prevSig = () => out[out.length - 1];
-  const regexAllowed = () => { const p = prevSig(); return !p || (p.t === 'punc' && REGEX_AFTER.has(p.v)) || (p.t === 'id' && REGEX_AFTER.has(p.v)); };
+  // a `)` closing `if (...)`, `while (...)`, `for (...)` or `with (...)` ends a statement head, so a `/` after it begins a regex: the
+  // paren stack records which `(` opened such a head (the verifier's desync: `if (1) /"/.test(x); Date.now(); // "`)
+  const parens = [];
+  const regexAllowed = () => { const p = prevSig(); return !p || (p.t === 'punc' && (REGEX_AFTER.has(p.v) || p.ctrl === true)) || (p.t === 'id' && REGEX_AFTER.has(p.v)); };
   // a stack of open `${` braces: the brace depth at which each template expression closes
   const tplStack = [];
   let depth = 0;
@@ -137,7 +143,12 @@ export function tokens(src) {
     const v = m ?? c;
     if (v === '{') depth++;
     if (v === '}') depth--;
-    out.push({ t: 'punc', v, line });
+    const tok = { t: 'punc', v, line };
+    if (v === '(') { const p = prevSig(); parens.push(p?.t === 'id' && ['if', 'while', 'for', 'with'].includes(p.v)); }
+    if (v === ')' && parens.pop() === true) tok.ctrl = true;
+    // a division straight into a quote or backtick is how a regex read as division hides code: refused outright
+    if ((v === '/' || v === '/=') && /^\s*['"`]/.test(src.slice(i + v.length))) throw new Error(`line ${line}: a "/" straight before a quote or backtick (ambiguous with a regular expression)`);
+    out.push(tok);
     i += v.length;
   }
   if (tplStack.length) throw new Error('unterminated template expression');
