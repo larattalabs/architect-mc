@@ -20,9 +20,41 @@ node tools/nightly.mjs                                           # the nightly: 
 node tools/nightly.mjs --megab-full                              # the nightly with megaB's full walk on demand (else weekly)
 node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8896:8897,8898:8899,8900:8901   # a fixed shard count, as before
 node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
-node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 3)
+node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default slots.max, 4)
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
+
+## Speed rules (Noah, 2026-11-13)
+
+Noah via parent session, 2026-11-13 20:30 MST: "yes, apply all of those". They apply to running slices and new ones, on both mods,
+and replace stricter habits where they differ (the DEV MODE section below still holds otherwise).
+
+1. **Risk tiers.** *Strict:* save data and persistence, billing, refunds and stock, undo and revert, crash recovery and reconcile,
+   anything that can mint or lose items: the strict gate-verifier (re-runs on its own ports) and, where the rules ask, the GPT review.
+   *Light:* everything else (UI, wording, tooling and gate infra, docs, fixtures, $0 prompts): units plus one targeted in-game flow,
+   no independent verifier, no GPT review; a design-critic look only for new screens. The coordinator picks the tier in the brief.
+2. **Failing steps only.** After a gate failure, fix and re-run only the failing steps (`--only`); the full gate runs once at the
+   end, before the report. At most 3 full runs per slice; a 4th needs the coordinator's decision.
+3. **Batched merges.** The coordinator merges 2-4 ready slices together and runs the merge suite once on the combined result; if it
+   fails, bisect by slice.
+4. **Module re-certification** (Steward's measured modules) at an Architect pin only when the module's code changes or the Architect
+   build, billing or realise paths it uses change; a plain version bump gets a smoke check (one field round plus the billing check).
+5. **Gate capacity.** 4 concurrent in-game gate runs (`slots.max` 4); unit suites (kit, sidecar, Gradle) under `nice -n 10`; no two
+   in-game runs start within 5 minutes of each other (`slots.load.settleSec` 300); docs, kit-only and unit-only work takes no slot.
+   The nightly blackout and nightly rules are unchanged.
+7. **Short as-builts.** A slice's as-built and its report are 10-15 lines: what changed, what ran and passed, the leftovers. The
+   detail stays in the commits.
+8. **Scoped unit suites per slice** (Noah via parent session, 2026-11-13: "yes, send that to both managers/add to agent/claude
+   docs"). A slice runs only the kit, sidecar and Java tests for the files it touched plus their direct dependents; the full kit,
+   sidecar and Gradle suites run once, at the batch merge. A slice that touches shared core (the checker core, the journal or
+   ledger, the build pipeline) runs the full suite. *Tooling:* the scoped selection is being built (a $0 tooling slice); until it
+   lands, a full suite already running may finish.
+9. **Timing benches are report-only** (same decision). Benches such as the forms-island evaluation cost move out of the pass/fail
+   suites into a report step that records the number and the load; past its bound a bench flags, it does not fail the slice. The
+   nightly keeps tracking them.
+
+(Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
+the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
 
 ## DEV MODE (Noah, 2026-10-24): the rules in force until Noah starts playing or before a public release
 
@@ -48,7 +80,7 @@ the journal, removal, crash recovery or survival accounting. Those stay strict, 
 **No new test-tooling projects** unless something is actually broken.
 
 **Keep the machine for product:**
-- at most 3 gate runs on the machine at once (`slots.max` 3, below; the one number every doc and brief uses);
+- at most 4 gate runs on the machine at once (`slots.max` 4, below; the one number every doc and brief uses; Noah's speed rules, 2026-11-13);
 - no duplicate before/after runs: compare against recorded history instead;
 - commit before running (the runner tests a frozen snapshot).
 
@@ -77,7 +109,7 @@ from each slice's own focused items, the verifier's code review and Steward's re
 5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
    merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
-   *Implemented:* see "Slot lock" below. (Raised to 4 on 10-17, set back to `slots.max` 3 on 2026-11-13 so the tool, AGENTS.md and every brief agree; a run's shard count now follows the machine's load,
+   *Implemented:* see "Slot lock" below. (Raised to 4 on 10-17, set back to `slots.max` 3 on 2026-11-13 so the tool, AGENTS.md and every brief agree, then raised to 4 by Noah's speed rules the same evening; a run's shard count now follows the machine's load,
    "Adaptive shards".)
 7. **Bench isolation only where timing is judged (Noah, 2026-10-17).** A bench step runs alone only at `release`, in the named
    chains and with `--judge-timing`. In `change` and `slice` it schedules like any other step (same client, host and
@@ -128,7 +160,7 @@ A driver whose check mixes both is split into a functional `check` and a `bar`.
 
 Steward's own agent range (its AGENTS.md "8960-8989") overlaps the turbo range above and is Steward's to move.
 
-### Slot lock: at most N gate runs on the machine (`slots.max`, 3)
+### Slot lock: at most N gate runs on the machine (`slots.max`, 4)
 
 Every gate run (not `--plan`) takes one of N slot files, `slot-1.json` .. `slot-N.json`, in `<LarattaLabs>/.gate-slots/` before
 anything else: pid, worktree, chain and start time, and (since "Adaptive shards") the run's shard count and ports. **One slot per
@@ -136,7 +168,7 @@ run, whatever its shard count**: the slot caps how many agents' runs share the b
 load it. With none free it logs the wait (the holders, repeated every 5 minutes) and
 polls every 15 s. The slot is released on exit, on SIGINT/SIGTERM (also while waiting), and a slot whose pid is dead counts as
 free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (`slots.max` in
-`gate-chains.json`, 3), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
+`gate-chains.json`, 4), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
@@ -147,7 +179,7 @@ On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machin
 rules above stay as they are. On top of them, a **shared** run whose turn it is (no ticket ahead of it, no turbo run, a free slot)
 still waits while:
 - the 1-minute load average is above `slots.load.max1` (36, about twice the 18 cores), or
-- another run took its slot less than `slots.load.settleSec` (120 s) ago. The load average lags by about a minute, so without this
+- another run took its slot less than `slots.load.settleSec` (300 s since the speed rules of 2026-11-13; 120 s before) ago. The load average lags by about a minute, so without this
   every run queued behind a high load would start in the same 15 s poll once it dips.
 
 It **never waits when it would be the only gate run** (the load is then not the gate runs', so waiting would not end it), and waits
@@ -2785,3 +2817,47 @@ the mod. So every harness that realises lots clears the box itself, and no run c
   player in a fourth and a villager at the claim corner, with the pre-clear paused: it must end `PLACED` within 10 minutes, both
   waits must have been answered and cleared, and the villager must still be there (the bot is made creative for this check: spectators
   never block).
+
+### Slice GI as built
+
+Gate infra, tooling only (no mod behaviour, no API change). Base `origin/main` 5868f62f. Gate run
+`artifacts/gate-runs-gi/20261114-022714-change` (head 2f07633f): apijars, api-compat and rs-survival-smoke/p3 all PASS, 22m23s,
+at load p50 48.
+
+- **rs02m2 (item 10, the reopen mid-removal).** The check after the reopen now **accepts REMOVING or REMOVED** and records which
+  (`out.rs02m2.reopened`). Why both are correct: in the failing RL run 2 (11-13) the removal was still pending at the stop
+  (`WORLD_STOPPED`) and the resume ended before the first read. The refund was equal and credited once, conservation exact and
+  E-flat 0. Those end checks are unchanged and still judge every case. `GATE6CRS_ITEM10_REPEAT=N` runs the reopen case N times,
+  each on its own world (`rs02m2`, `rs02m2r2`, …), because the runner runs a step only once. The GI run used 3: the first read
+  REMOVED (the flake's case, now passing) and the other two REMOVING. All three ended REMOVED with E-flat 0 and the refund equal.
+- **apijars anchors.** `tools/api-baselines.json` gains `anchors`: fixed older releases, never rolled. They are v0.62.0 (API 1.55),
+  v0.56.0 (API 1.49) and v0.42.0 (API 1.39), so each minor family keeps one jar after the three latest roll past it.
+  - Readers: `apitestBaselines()` (tools/api-baselines.mjs) is the releases, then the anchors, without a duplicate. It is read by
+    apijars, `api-compat --baselines` (each jar's references), `api-baselines.mjs list` / `missingFiles` and `api-baselines-build.mjs`.
+  - `formatBaselines` writes the anchors back, and the roll leaves them alone (kit/test/release-version.test.mjs).
+  - The jars were built offline from their tags (`node tools/api-baselines-build.mjs build v0.56.0`, then `v0.42.0`; v0.62.0 was
+    already there).
+  - In the run, all 6 jars passed 46 ok / 0 FAIL each, and api-compat was 8/8 clean. apijars now takes about 10 min instead of 4.
+- **A44.** In `kit/test/gate-corpus-plan.test.mjs`, the artifact test's store read-back part (which needs entries) is skipped with a
+  diagnostic when `kit/` or `scenarios/` is dirty: the store never caches a dirty tree. Its cold/warm/uncached equality still runs.
+  Checked on a dirty tree: 3/3 pass.
+- **A46, the full-classpath seed.** `seedClasspath()` lives in tools/lib/pinned-deps.mjs and runs from `ensurePinnedDeps`, so the
+  frozen source, build-artifact, server-host and nomod-server all get it. It works per gradle home, once per fingerprint of the
+  build files (`SEED_FILES`, with a marker in `<home>/architect-seed/<key>.ok`):
+  - an offline `architectResolveAll` (an init script: every resolvable compile/runtime classpath and annotation processor of every
+    project) must pass;
+  - if it fails, ONE online run of the same task, then the offline run again;
+  - the marker is written only after an offline pass. Otherwise it throws, naming the slot and the fix.
+  - Checked by hand: a fake `java_websocket_version=1.5.99` fails offline ("No cached version … available for offline mode") and
+    leaves no marker. In the run, the run dir's home seeded offline in 7.6 s (client.log). Units: kit/test/gate-pinned-deps.test.mjs.
+- **A41.** kit/test/gate-turbo.test.mjs covers two new cases. A run aborted mid-wait (released by the signal handler, or SIGKILLed)
+  hands the head to the next run, which then waits on the load itself. `--no-load-wait` (max1 0) skips the settle rule too, and
+  gate-run maps the flag to it. Two items are not done: **D3** (a wiring test of the stall watch inside runProcess needs a mini
+  runner; it costs more than it saves) and **D5** (a holder clock in the future keeps the settle rule on until the 30-min cap; the
+  fix is in `loadGate`, and this slice must not change the load-aware start).
+- **A49.** `kitReuse` refuses a file whose every test was skipped (as `javaReuse` does). The "inputs" note needed nothing:
+  unit-kit's recorded set holds `tools/lib/corpus-plan.mjs`. junit-reuse method-pattern matching is not done (a few seconds a run;
+  an unmatched pattern already falls back to gradle).
+- **A32 (SO minors), skipped.** Both are mod Java: `Builder.anchorState` counts the player's hopper chain as support, and
+  `Builder.removeScaffold` logs a failed undo and carries on. The so-survival driver's own connectivity scan already ignores the
+  hopper chain (it reads the frozen fixture volume). A fix belongs to a mod slice.

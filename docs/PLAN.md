@@ -1188,6 +1188,10 @@ gatehouses), since a gatehouse is the natural home for the mechanism.
   independent runs on 2026-10-24 (speed-audit-c's branch run and speed-audit-b's new run). Neither changed that code, and it had
   passed in about 18 earlier logs. If the nightly shows it again, treat it as a real race in the reopen-during-removal path, not
   a flake.
+  **Closed (GI, 2026-11-13):** seen again in RL run 2 (11-13, 3 of about 30 runs in all). There the removal was still pending at
+  the stop (`WORLD_STOPPED`) and the resume ended before the first read after the reopen. The refund was equal and credited once,
+  conservation exact and E-flat 0. So REMOVED is a correct state there, not a race: the check now accepts REMOVING or REMOVED and
+  records which (docs/GATES.md "Slice GI as built").
 - **A natural-site survey drifts in trees and water (CL, 2026-10-24).** Two surveys of the same G6B Seed Base in one run differed in
   about 500 columns of trees and water, because chunk features aren't settled at survey time, and both differed from route_demo's
   golden. Any gate that plans on a natural site should expect that drift: don't pin an answer on a tree or a water cell, and check
@@ -1551,10 +1555,13 @@ the safeguards and the measurements are in docs/GATES.md "Speed set A (slice SP)
   (on a cold store). Two steps got slower: unit-kit (10m42 p50 -> 8m30 here, against main's run of 6m48: the asks kit tests
   prewarm a cold store) and h-unit (its base tree was cold).
 
-**Follow-ups (not done):**
-- junit-reuse could match method-pattern filters (`*IrStale*`) on testcase names.
+**Follow-ups:**
+- [ ] junit-reuse could match method-pattern filters (`*IrStale*`) on testcase names. (GI: not done. It saves a few seconds a run
+  and adds a parser that must stay exact; an unmatched pattern already falls back to gradle safely.)
 - The stale committed asks tables (coa, h-a, hy, vocc, f3) are a fix-forward for the nightly's owner.
-- The kit tests now import `tools/lib/corpus-plan.mjs`, so a change there invalidates unit-kit (step inputs).
+- [x] The kit tests now import `tools/lib/corpus-plan.mjs`, so a change there invalidates unit-kit (step inputs). (GI: checked:
+  unit-kit's recorded set in tools/step-inputs.json holds it, and `step-inputs check` passes.)
+- [x] (GI A49) kitReuse reused a file whose every test was skipped (pass 0). It now falls back, as javaReuse does.
 ## Queued fix-forward (coordinator, 2026-11-11)
 
 - **LC: a missing trigger block reads `removed`** (LCi finding 2; Steward yes, 2026-11-11). `LandCheck.classifyCell` judges a mechanism's

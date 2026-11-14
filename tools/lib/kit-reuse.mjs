@@ -78,6 +78,8 @@ export function kitReuse(root, args) {
     if (!e) return no(`${f} is not in unit-kit's report`);
     if (e.tests === 0) return no(`${f} has no tests in the report`);
     if (e.failures > 0) return no(`${f} failed in unit-kit`);
+    // (GI A49) as javaReuse: a file whose every test was skipped (or todo) ran nothing there, so it is not a pass to reuse
+    if (e.skipped >= e.tests) return no(`${f}: every test was skipped in unit-kit (nothing ran)`);
     pass += e.tests - e.skipped;
   }
   const reused = `reused from this run's unit-kit (${path.basename(file)}, kit tree ${tree.slice(0, 12)}): ${files.length} file(s), ${pass} pass, 0 fail${flags.length ? `; the run had every test, ${flags.join(' ')} would skip some` : ''}`;

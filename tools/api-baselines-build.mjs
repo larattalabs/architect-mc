@@ -20,7 +20,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { artifactsDir, consumerFile, dirOf, mainCheckout, missingFiles, readBaselines, releaseFiles } from './api-baselines.mjs';
+import { apitestBaselines, artifactsDir, consumerFile, dirOf, mainCheckout, missingFiles, readBaselines, releaseFiles } from './api-baselines.mjs';
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sha256 = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
@@ -52,7 +52,7 @@ export function buildRelease(root, tag, { art = artifactsDir(root) } = {}) {
   const main = mainCheckout(root);
   const b = readBaselines(root);
   const mod = tag.replace(/^v/, '');
-  const r = b.releases.find((x) => x.tag === tag) ?? { tag, mod, api: null, dir: dirOf(mod) };
+  const r = apitestBaselines(b).find((x) => x.tag === tag) ?? { tag, mod, api: null, dir: dirOf(mod) };
   const tagMod = /^mod_version=(.+)$/m.exec(sh('git', ['-C', main, 'show', `${tag}:mod/gradle.properties`]))?.[1];
   if (tagMod !== mod) throw new Error(`${tag}: its mod_version is ${tagMod}, not ${mod}`);
   const api = /^\tString VERSION = "(\d+\.\d+\.\d+)";$/m.exec(sh('git', ['-C', main, 'show', `${tag}:mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java`]))?.[1];

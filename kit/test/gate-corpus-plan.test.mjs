@@ -52,7 +52,9 @@ test('the drivers\' unchanged() loops: the store cold, warm and off print the sa
 
 // (speed audit A) coa-unit's signatures compare the plan's artifact, which the lite record must carry: through the store, cold and
 // warm, it equals the artifact of the uncached call, is not empty for a plan that makes one, and a record without it is re-planned.
-test('the store\'s record carries the artifact (coa-unit compares it): cold, warm and uncached equal; an artifact-less result throws', async () => {
+// (GI A44) a dirty kit/ or scenarios/ is never stored (corpus-plan treesOf): the cold/warm/uncached equality still runs, the part that
+// reads the store's entries back is skipped then (it needs a clean tree; a clean checkout and every gate run's frozen tree run it).
+test('the store\'s record carries the artifact (coa-unit compares it): cold, warm and uncached equal; an artifact-less result throws', async (t) => {
   const { artSig } = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'gate6ccoa-kit.mjs')).href);
   assert.throws(() => artSig({}), /no artifact/);
   assert.throws(() => artSig({ check: {}, res: {} }), /no artifact/);
@@ -75,6 +77,10 @@ test('the store\'s record carries the artifact (coa-unit compares it): cold, war
       assert.equal(artSig(r), artSig(truth), `${pass}: its signature equals`);
     }
     // (an entry from a store that predates the artifact has no `art`: it is not an entry)
+    if (!CP.treesOf(ROOT)) {
+      t.diagnostic('A44: kit/ or scenarios/ is dirty, so the store wrote nothing: the entry read-back part is skipped (run it on a clean tree)');
+      return;
+    }
     const zlib = await import('node:zlib');
     const files = [];
     (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : /\.json\.gz$/.test(e.name) && files.push(path.join(d, e.name)); })(dir);

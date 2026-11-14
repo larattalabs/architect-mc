@@ -8,6 +8,7 @@
 // that read the baselines (gate6a apijars, api-compat --baselines, release-version) never reach a Gradle call.
 //
 // The release-version roll (rollBaselines) shifts the list at every release: the release being set comes first, the oldest drops.
+// (GI) `anchors` (one older release per API minor family: 1.55, 1.49 and 1.39 so far) are never rolled; apitestBaselines() is both lists.
 // The new tag does not exist yet then, so release-version prints the build command to run once the tag is pushed.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -38,6 +39,16 @@ export function readBaselines(root = HERE) {
   return JSON.parse(fs.readFileSync(path.join(root, BASELINES_FILE), 'utf8'));
 }
 
+/**
+ * (GI) Every release whose unchanged apitest jar is judged: main's latest three (`releases`, rolled) then the fixed `anchors` (one older
+ * release per API minor family the three no longer reach, never rolled), without a duplicate mod version. apijars runs each; api-compat
+ * --baselines checks each jar's references (the mod-jar surface stays the newest release's only).
+ */
+export function apitestBaselines(b) {
+  const seen = new Set(b.releases.map((r) => r.mod));
+  return [...b.releases, ...(b.anchors ?? []).filter((r) => !seen.has(r.mod) && seen.add(r.mod))];
+}
+
 /** A release baseline's files: {dir, apitest, mod, tools} as absolute paths under `art`. */
 export function releaseFiles(art, r) {
   const dir = path.join(art, 'api-baselines', r.dir);
@@ -62,14 +73,14 @@ export function rollBaselines(b, { mod, api }) {
 /** The baselines' file text, as committed (one release per line). */
 export function formatBaselines(b) {
   const line = (o) => `  ${JSON.stringify(o).replace(/":/g, '": ').replace(/,"/g, ', "').replace(/^\{/, '{ ').replace(/\}$/, ' }')}`;
-  return `{\n "$comment": ${JSON.stringify(b.$comment)},\n "releases": [\n${b.releases.map(line).join(',\n')}\n ],\n "consumers": [\n${b.consumers.map(line).join(',\n')}\n ]\n}\n`;
+  return `{\n "$comment": ${JSON.stringify(b.$comment)},\n "releases": [\n${b.releases.map(line).join(',\n')}\n ],\n${b.anchors ? ` "anchors": [\n${b.anchors.map(line).join(',\n')}\n ],\n` : ''} "consumers": [\n${b.consumers.map(line).join(',\n')}\n ]\n}\n`;
 }
 
 /** What is missing: [{what, path, fix}] (empty = every baseline in place). */
 export function missingFiles(root = HERE, art = artifactsDir(root)) {
   const b = readBaselines(root);
   const out = [];
-  for (const r of b.releases) {
+  for (const r of apitestBaselines(b)) {
     const f = releaseFiles(art, r);
     for (const k of ['apitest', 'mod', 'tools']) if (!fs.existsSync(f[k])) out.push({ what: `${r.tag} ${k}`, path: f[k], fix: `node tools/api-baselines-build.mjs build ${r.tag}` });
   }
@@ -92,9 +103,10 @@ async function main(argv) {
   const cmd = o._[0];
   if (cmd === 'list') {
     const b = readBaselines(HERE);
-    for (const r of b.releases) {
+    const anchor = new Set((b.anchors ?? []).map((r) => r.mod));
+    for (const r of apitestBaselines(b)) {
       const f = releaseFiles(art, r);
-      log(`${r.tag} (API ${r.api}): ${['apitest', 'mod', 'tools'].map((k) => `${k} ${fs.existsSync(f[k]) ? 'ok' : 'MISSING'}`).join(', ')}   ${f.dir}`);
+      log(`${r.tag} (API ${r.api}${anchor.has(r.mod) && !b.releases.some((x) => x.mod === r.mod) ? ', anchor' : ''}): ${['apitest', 'mod', 'tools'].map((k) => `${k} ${fs.existsSync(f[k]) ? 'ok' : 'MISSING'}`).join(', ')}   ${f.dir}`);
     }
     for (const c of b.consumers) {
       const p = consumerFile(art, c);
