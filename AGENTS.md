@@ -15,6 +15,9 @@ gate anything:
 - the verifier only reviews, except for undo, the journal, crash recovery and survival accounting;
 - **speed rules (Noah, 2026-11-13; docs/GATES.md "Speed rules"):** strict vs light tier, re-run only failing steps, 3 full runs
   per slice, batched merges, 4 gate runs, `nice -n 10` unit suites, 5 min between in-game starts, 10-15 line as-builts;
+  scoped unit suites per slice (files touched + direct dependents; full suites at the batch merge, or when touching shared core:
+  the checker core, the journal or ledger, the build pipeline); timing benches report-only (they flag, never fail a slice);
+  the load gate keeps max1 >= 72 and maxWaitMin <= 15 (rule 10; the runner clamps overrides);
 - a Steward RC only for API changes;
 - the full set runs nightly.
 
@@ -34,6 +37,8 @@ gate anything:
 
 - **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
+- **Unit tests per slice:** `node tools/unit-scope.mjs --run` (the tests for the files you changed plus their direct dependents;
+  full suites for shared core; docs/GATES.md "Scoped unit suites"). The full suites run once, at the batch merge.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../_work/architect-mc-<x>`; from a worktree inside `_work`, `../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once

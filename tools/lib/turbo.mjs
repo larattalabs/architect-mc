@@ -170,11 +170,15 @@ export async function enqueue(dir, me) {
  * unchanged: only the head of the queue waits on the load, and the runs behind it wait for it as before. max1 0: off.
  * A turbo run needs no gate: it starts only once every other run has ended (its reserved slots keep later runs out meanwhile).
  */
-export const LOAD_DEFAULTS = { max1: 36, settleSec: 120, maxWaitMin: 30 };
-export function loadConfig(cfg, env = process.env) {
+export const LOAD_DEFAULTS = { max1: 72, settleSec: 300, maxWaitMin: 15 };
+/** Noah's rule 10 (docs/GATES.md "Speed rules", 2026-11-13): max1 at least 72 (0 = off is allowed), maxWaitMin at most 15. Outside them needs Noah. */
+export const LOAD_BOUNDS = { max1Min: 72, maxWaitMinMax: 15 };
+export function loadConfig(cfg, env = process.env, warn = (m) => console.warn(m)) {
   const c = { ...LOAD_DEFAULTS, ...(cfg.slots?.load ?? {}) };
   if (env.GATE_LOAD_MAX !== undefined && env.GATE_LOAD_MAX !== '') c.max1 = Number(env.GATE_LOAD_MAX);
   if (env.GATE_LOAD_WAIT_MAX_MIN !== undefined && env.GATE_LOAD_WAIT_MAX_MIN !== '') c.maxWaitMin = Number(env.GATE_LOAD_WAIT_MAX_MIN);
+  if (c.max1 > 0 && c.max1 < LOAD_BOUNDS.max1Min) { warn(`load-aware start: max1 ${c.max1} is below rule 10's floor; clamped to ${LOAD_BOUNDS.max1Min}`); c.max1 = LOAD_BOUNDS.max1Min; }
+  if (!(c.maxWaitMin <= LOAD_BOUNDS.maxWaitMinMax)) { warn(`load-aware start: maxWaitMin ${c.maxWaitMin} is above rule 10's cap; clamped to ${LOAD_BOUNDS.maxWaitMinMax}`); c.maxWaitMin = LOAD_BOUNDS.maxWaitMinMax; }
   return c;
 }
 

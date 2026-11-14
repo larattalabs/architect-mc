@@ -256,9 +256,15 @@ test('load-aware start: never waits when it would be the only gate run; gives up
 });
 
 test('load-aware start: config and env', () => {
-  assert.deepEqual(loadConfig({}, {}), { max1: 36, settleSec: 120, maxWaitMin: 30 });
-  assert.deepEqual(loadConfig({ slots: { load: { max1: 30 } } }, { GATE_LOAD_WAIT_MAX_MIN: '10' }), { max1: 30, settleSec: 120, maxWaitMin: 10 });
-  assert.equal(loadConfig({}, { GATE_LOAD_MAX: '0' }).max1, 0);
+  const quiet = () => {};
+  assert.deepEqual(loadConfig({}, {}, quiet), { max1: 72, settleSec: 300, maxWaitMin: 15 });
+  assert.deepEqual(loadConfig({ slots: { load: { max1: 90 } } }, { GATE_LOAD_WAIT_MAX_MIN: '10' }, quiet), { max1: 90, settleSec: 300, maxWaitMin: 10 });
+  assert.equal(loadConfig({}, { GATE_LOAD_MAX: '0' }, quiet).max1, 0);
+  // rule 10 (Noah, 2026-11-13): max1 >= 72 (0 = off allowed), maxWaitMin <= 15; outside them is clamped, with a warning
+  const warned = [];
+  const c = loadConfig({ slots: { load: { max1: 36, maxWaitMin: 30 } } }, {}, (m) => warned.push(m));
+  assert.deepEqual([c.max1, c.maxWaitMin, warned.length], [72, 15, 2]);
+  assert.deepEqual(loadConfig({}, { GATE_LOAD_MAX: '54', GATE_LOAD_WAIT_MAX_MIN: '60' }, quiet), { max1: 72, settleSec: 300, maxWaitMin: 15 });
   assert.equal(loadGate({}, [{ startedAt: new Date(0).toISOString() }], { load: null }), null);
 });
 
@@ -294,7 +300,7 @@ test('load-aware start: --no-load-wait (max1 0) skips the settle rule too, and g
   h.dir = dir;
   startedAgo(h, t, 5_000); // a run that just started: the settle rule would hold the next back
   const a = await queued(dir, run('a'));
-  const off = { ...loadConfig({}, {}), max1: 0 }; // gate-run's LOAD_GATE under --no-load-wait
+  const off = { ...loadConfig({}, {}, () => {}), max1: 0 }; // gate-run's LOAD_GATE under --no-load-wait
   assert.ok((await go(dir, a, { load: off, loadNow: () => 99, now: () => t })).acquired);
   assert.equal(a.m.loadWait, undefined, 'no wait recorded');
   const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'tools', 'gate-run.mjs'), 'utf8');
