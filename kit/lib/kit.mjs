@@ -1081,9 +1081,10 @@ export class Blueprint {
   /**
    * (M5 FK, S-M5-3) Declares the containers Architect fills once after every core cell stands, and the lock cells it holds locked until
    * then (lib/fill.mjs; docs/CONTRACT.md "### FK contract"). Design coordinates. Honoured on given-program entries only. Call once.
+   * (Named fillContainers: `fill` is the box-fill helper.)
    */
-  fill(spec) {
-    if (this.fillSpec) throw new Error('fill: declared twice (one bp.fill per build)');
+  fillContainers(spec) {
+    if (this.fillSpec) throw new Error('fill: declared twice (one bp.fillContainers per build)');
     this.fillSpec = normalizeFill(spec, [this.ox, this.oy, this.oz]);
     return this;
   }

@@ -1574,7 +1574,7 @@ public final class Sites {
 		// (M5 FK) a filled site's declared containers: their contents into the ledger's custody, saved with the world, before the refunds
 		boolean custody = false;
 		for (Site x : all) {
-			if (x.construction() != null && Fills.phase(x) != null) {
+			if (x.construction() != null && Fills.filledSite(x)) {
 				String cargo = Fills.takeCustody(level, x, force);
 				if (cargo != null) {
 					for (Site y : all) {

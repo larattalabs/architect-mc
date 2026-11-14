@@ -487,7 +487,8 @@ public final class Fills {
 			BlockPos p = BlockPos.of(e.getKey());
 			BlockState now = level.getBlockState(p);
 			BlockState lk = locked(now, e.getValue());
-			if (lk != now) {
+			if (now.getBlock() == lk.getBlock()) {
+				// always with neighbour updates: a lock built (FLAGS, no updates) may never have told its circuit (Steward's review A)
 				writeLock(level, p, lk);
 			}
 		}
@@ -568,10 +569,22 @@ public final class Fills {
 
 	// ------------------------------------------------------------------ removal
 
+	/**
+	 * Whether a site's fill was written: its record FILLED or UNLOCKED, or (a survival site) its stockpile ledger holds the fill's commit
+	 * marker (kept until the key's credit), so a record that lost its phase never turns filled hoppers into cargo.
+	 */
+	static boolean filledSite(Site s) {
+		String ph = phase(s);
+		if (FILLED.equals(ph) || UNLOCKED.equals(ph)) {
+			return true;
+		}
+		Stockpiles.Pile pile = s.construction() == null ? null : Stockpiles.pileOf(s);
+		return pile != null && pile.ledger().filled(Builder.creditKey(s));
+	}
+
 	/** The declared containers of a filled site (FILLED or UNLOCKED), by world cell, with their declarations; empty for any other site. */
 	public static Map<BlockPos, Map<String, Integer>> declaredOurs(@Nullable MinecraftServer srv, Site s) {
-		String ph = phase(s);
-		if (!FILLED.equals(ph) && !UNLOCKED.equals(ph)) {
+		if (!filledSite(s)) {
 			return Map.of();
 		}
 		Spec spec = of(srv, s);
@@ -592,8 +605,7 @@ public final class Fills {
 	 */
 	public static @Nullable String takeCustody(ServerLevel level, Site s, boolean force) {
 		MinecraftServer srv = level.getServer();
-		String ph = phase(s);
-		if (!FILLED.equals(ph) && !UNLOCKED.equals(ph)) {
+		if (!filledSite(s)) {
 			return null; // before the commit nothing was filled (any content is cargo, refused by the blockers)
 		}
 		Spec spec = of(srv, s);

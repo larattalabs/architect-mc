@@ -1,7 +1,7 @@
 // M5 FK gate (docs/CONTRACT.md "M5 support", "### FK contract"; Steward's S-M5-3): filled containers of a given-program entry, registered
 // into tools/gate6dgr.mjs (GR's survival town and feed helpers). Headless server, the sim sidecar: $0. Strict (journal, billing, crash replay).
 //
-//   node tools/gate6dgr.mjs fkunit      (fk-unit)      kit fk.test (bp.fill, the checker's rule fill), FillsFKTest (the mod's checks, the
+//   node tools/gate6dgr.mjs fkunit      (fk-unit)      kit fk.test (bp.fillContainers, the checker's rule fill), FillsFKTest (the mod's checks, the
 //                                                      lock rule, ours-or-cargo, the marker and the custody in the ledger), ApiFKTest; api-compat
 //   node tools/gate6dgr.mjs fksurvival  (fk-survival)  a survival flat_village town with cottage_1 bound to fk_hall (4 declared filter hoppers,
 //                                                      a lever lock): quoted (the fill:cottage_1 piece); the town's blocks fed but not the fill
@@ -151,7 +151,7 @@ export async function registerFK(steps, h) {
   steps.fkunit = async () => {
     const out = {};
     out.kit = h.nodeTest(['kit/test/fk.test.mjs']);
-    check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 6, `kit fk.test (bp.fill's sidecar member, template coordinates; the checker's rule fill: every refusal, a lock only on a lever's powered; mirror/invert refuse a fill): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
+    check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 6, `kit fk.test (bp.fillContainers' sidecar member, template coordinates; the checker's rule fill: every refusal, a lock only on a lever's powered; mirror/invert refuse a fill): ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
     out.java = await h.javaTests(['*FillsFKTest*', '*ApiFKTest*', '*StockpilePaidJRTest*'], 10);
     check(out.java.ok, `FillsFKTest (given-program only, the mod's own checks, a kept lock, ours while within the declaration; the custody refunds once with the blocks, capped by paid; the marker and custody saved), ApiFKTest, StockpilePaidJRTest: ${out.java.tests} tests, ${out.java.failures} failures (${out.java.names.join('; ')})`, out.java.tail);
     const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', PATH: `/opt/homebrew/opt/openjdk@25/bin:${process.env.PATH}` };
@@ -178,10 +178,11 @@ export async function registerFK(steps, h) {
     check(!!site, `fk_hall's site joined the feed (${site})`);
     if (!site) { await L.leaveWorld(); return out; }
     await blocksBuilt('fk-survival', site);
-    await L.sleep(6000);
+    await L.sleep(9000); // the wait latches after 100 ticks without a placement
     let s = await fk(site);
     out.beforeFill = s;
-    check(s.state === 'BUILDING' && !s.phase && s.containers.every((c) => sum(c.holds) === 0) && s.wait?.waiting === true && !s.wait?.blocked,
+    const next = Object.fromEntries((s.wait?.nextNeeded ?? []).map((x) => [x.item, x.count]));
+    check(s.state === 'BUILDING' && !s.phase && s.containers.every((c) => sum(c.holds) === 0) && s.wait?.waiting === true && !s.wait?.blocked && G.same(only(next, FK), FILL),
       `every cell stands, the fill not fed: the site still BUILDING (${s.state}, phase ${s.phase ?? 'none'}), its hoppers empty, waiting for the fill's items (waiting ${s.wait?.waiting}, next ${json(s.wait?.nextNeeded ?? [])})`, s);
     // a declared container with an item in it at the fill: never filled over; the typed wait fill_blocked names it
     const h0 = s.containers[0].at;
@@ -293,12 +294,17 @@ export async function registerFK(steps, h) {
     const site = await fkSite();
     if (!site) { check(false, `${tag}: no fk_hall site`); await L.leaveWorld(); return null; }
     await blocksBuilt(tag, site);
+    // the site paused, the fill's items delivered (a paused target still takes them), the baseline saved with them in the stock, the kill
+    // point armed, then the site resumed: its next tick runs the fill step and halts (the resume's reply may never come)
+    const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: true }, 60_000);
+    check(!pr.refused, `${tag}: ${site} paused: ${json(pr.refused ?? 'paused')}`);
+    const acc = await deliver({ fill: true });
+    check(G.same(acc, FILL), `${tag}: the fill's items delivered to the stockpile while it is paused (${json(acc)})`);
     await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
     await cmd('/save-all flush');
     const B = savedLedger(W.name);
     await call('dev.journal.killAt', { point }, 10_000);
-    const acc = await deliver({ fill: true });
-    check(G.same(acc, FILL), `${tag}: the fill's items delivered (${json(acc)}), the kill point ${point} armed`);
+    call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
     if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
     const S = savedLedger(W.name);
     const sitesFile = JSON.parse(fs.readFileSync(path.join(W.dir, 'architect-sites.json'), 'utf8'));

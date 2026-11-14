@@ -58,7 +58,7 @@ export default function build({ palette = PALETTES.rustic, slots = 4, count = 18
       containers.push({ at: [x, 2, 1], items: [{ slot: 0, id: FILTERS[i], count }, ...[1, 2, 3, 4].map((slot) => ({ slot, id: FILLER, count: 1 }))] });
     }
   });
-  bp.fill({ containers, locks: [{ at: [0, 3, 1], locked: { powered: 'true' } }] });
+  bp.fillContainers({ containers, locks: [{ at: [0, 3, 1], locked: { powered: 'true' } }] });
   bp.spot('entrance', 1, 3, 180);
   bp.spot('spawn', 1, 3, 180);
   return bp;

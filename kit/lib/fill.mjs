@@ -3,7 +3,7 @@
 // A program declares, from its build, the containers Architect fills once after every core cell stands and the lock cells that keep its
 // circuit locked until then:
 //
-//   bp.fill({ containers: [{ at: [x, y, z], items: [{ slot, id, count }] }], locks: [{ at: [x, y, z], locked: { prop: value } }] })
+//   bp.fillContainers({ containers: [{ at: [x, y, z], items: [{ slot, id, count }] }], locks: [{ at: [x, y, z], locked: { prop: value } }] })
 //
 // Coordinates are design coordinates (as bp.set); the sidecar records template coordinates as `fill: {containers, locks}`. The template
 // holds each lock cell's final, unlocked state; `locked` overrides properties of that same block. The kit checks the shape and the cells

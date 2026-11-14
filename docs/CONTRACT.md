@@ -30758,7 +30758,7 @@ in one tick and refunds them as construction. Strict slice (journal, billing, cr
 
 A given program declares the fill from its build, so a variant with other params gets its own:
 
-    bp.fill({
+    bp.fillContainers({   // (named so: the kit's `bp.fill` is the box-fill helper)
       containers: [ { at: [x, y, z], items: [ { slot: 0, id: 'minecraft:cobblestone', count: 18 }, ... ] }, ... ],
       locks:      [ { at: [x, y, z], locked: { powered: 'true' } }, ... ]
     })

@@ -466,7 +466,15 @@ public final class Builder {
 		 * at most once per 20 ticks (stops at the first loaded frontier cell). A target whose whole frontier is unloaded doesn't
 		 * reserve (Steward's S-Y-1 exception).
 		 */
+		/** (M5 FK) Whether it still needs items: an unbuilt cell, or a fill not yet paid. */
+		boolean pending() {
+			return built.cardinality() < size() || !fillOwed.isEmpty();
+		}
+
 		boolean frontierLoaded(ServerLevel level, long now) {
+			if (!fillOwed.isEmpty() && built.cardinality() == queue.length) {
+				return true; // (M5 FK) every cell stands, the fill waits: its items are its frontier
+			}
 			if (now - frontierAt < 20 && now >= frontierAt) {
 				return frontier;
 			}
@@ -1726,7 +1734,8 @@ public final class Builder {
 		r.crateMissing = fed == null && (cp == null || level.isLoaded(cp) && crate == null);
 		if (r.built.cardinality() == r.size()) {
 			if (fillReady(srv, level, s, r, fed)) {
-				complete(srv, level, s, r, crate);
+				Site now = Sites.get(s.id()); // (M5 FK) the fill step rewrote the record (its phase): complete from it
+				complete(srv, level, now != null ? now : s, r, crate);
 			}
 			return;
 		}
@@ -1836,7 +1845,8 @@ public final class Builder {
 			s = Sites.get(s.id());
 		}
 		if (s != null && r.built.cardinality() == r.size() && fillReady(srv, level, s, r, purse)) {
-			complete(srv, level, s, r, crate);
+			Site now = Sites.get(s.id()); // (M5 FK) the fill step rewrote the record (its phase): complete from it
+			complete(srv, level, now != null ? now : s, r, crate);
 		}
 	}
 

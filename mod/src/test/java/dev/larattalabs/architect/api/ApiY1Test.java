@@ -55,7 +55,9 @@ class ApiY1Test {
 			"returned", "withdrawn", "dropped", "refundOverflow", "outstandingByTarget", "outstanding", "feedOrder", "waiting", "missingCrates"), names(
 				Stockpile.class));
 		assertEquals(List.of("owner", "dimension", "crates"), names(StockpileRequest.class));
-		assertEquals(List.of("targetId", "waiting", "waitingSince", "nextNeeded", "moreUnits"), names(SiteWait.class));
+		// (M5 FK) blocked and blockedCells appended (the 1.15.0 constructor kept)
+		assertEquals(List.of("targetId", "waiting", "waitingSince", "nextNeeded", "moreUnits", "blocked", "blockedCells"), names(SiteWait.class));
+		assertTrue(new SiteWait("s", false, 0L, List.of(), 0).blocked() == null);
 		assertEquals(List.of("item", "count"), names(ItemCount.class));
 	}
 

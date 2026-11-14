@@ -256,6 +256,12 @@ public final class SiteWaits {
 				unbuilt.add(c);
 			}
 		}
+		if (!r.fillOwed.isEmpty()) {
+			// (M5 FK) the fill comes after every cell: its items last, one step (it is written in one tick)
+			List<SurvivalItems.Cost> fill = new ArrayList<>();
+			r.fillOwed.forEach((k, v) -> fill.add(new SurvivalItems.Cost(k, v)));
+			unbuilt.add(fill);
+		}
 		return WaitCalc.walk(unbuilt, supply::available);
 	}
 

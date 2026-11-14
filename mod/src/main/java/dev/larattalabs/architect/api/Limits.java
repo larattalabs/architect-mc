@@ -102,7 +102,7 @@ public final class Limits {
 	public static final int PROGRAM_SOURCE_MAX = 262144;
 	public static final int PROGRAM_PARAMS_MAX = 16384;
 	/**
-	 * (M5 FK) A given program's fill ({@code bp.fill}): the most declared containers per entry (Steward's bound) and the most lock cells.
+	 * (M5 FK) A given program's fill ({@code bp.fillContainers}): the most declared containers per entry (Steward's bound) and the most lock cells.
 	 * Since NEXT.
 	 */
 	public static final int FILL_CONTAINERS_MAX = 64;

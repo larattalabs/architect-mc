@@ -1491,7 +1491,7 @@ public final class Stockpiles {
 			}
 			boolean paused = v.paused(t);
 			v.step(t, r, reserve);
-			boolean reserves = FeedOrder.reserves(v.building(t), paused, r.built.cardinality() < r.size(), v.frontierLoaded(t, r));
+			boolean reserves = FeedOrder.reserves(v.building(t), paused, r.pending(), v.frontierLoaded(t, r));
 			reserve.add(v.reservation(t, r), reserves); // (6c RS, §6.2) a region's target: only its current run's bill
 		}
 		return reserve.reserved();
@@ -1530,7 +1530,7 @@ public final class Stockpiles {
 			}
 			boolean paused = t instanceof Site x ? x.construction().paused() : ((Infra) t).construction().paused();
 			reserve.add(t instanceof Infra ri && RegionTargets.is(ri) ? RegionTargets.reservation(srv, ri, r) : r.unbuilt, FeedOrder.reserves(true, paused, r
-				.built.cardinality() < r.size(), level == null || r.frontierLoaded(level, ticks)));
+				.pending(), level == null || r.frontierLoaded(level, ticks)));
 		}
 		return Map.of();
 	}
@@ -1669,7 +1669,7 @@ public final class Stockpiles {
 				x.addProperty("paused", paused);
 				x.addProperty("frontierLoaded", fl);
 				x.addProperty("leaving", leaving); // C29: a removal started on it: out of the feed
-				x.addProperty("reserves", !leaving && FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), fl));
+				x.addProperty("reserves", !leaving && FeedOrder.reserves(true, paused, r.pending(), fl));
 			}
 			byT.add(idOf(t), x);
 		}

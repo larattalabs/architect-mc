@@ -1016,7 +1016,7 @@ public final class Groups {
 		boolean custody = false;
 		for (String id : ids) {
 			Site s = Sites.get(id);
-			if (s != null && s.construction() != null && Fills.phase(s) != null) {
+			if (s != null && s.construction() != null && Fills.filledSite(s)) {
 				String cargo = Fills.takeCustody(level, s, false);
 				if (cargo != null) {
 					for (String back : ids) {

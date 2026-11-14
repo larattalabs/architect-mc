@@ -1,4 +1,4 @@
-// (M5 FK, S-M5-3) A given program's fill: bp.fill's sidecar member (template coordinates; absent without one), the checker's rule `fill`
+// (M5 FK, S-M5-3) A given program's fill: bp.fillContainers' sidecar member (template coordinates; absent without one), the checker's rule `fill`
 // (every refusal case of docs/CONTRACT.md "### FK contract" 1), and mirror/invert refusing a fill.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -54,8 +54,8 @@ test('design coordinates are moved to template coordinates; ids qualified; slots
   assert.deepEqual(f, { containers: [{ at: [2, 1, 3], items: [{ slot: 0, id: 'minecraft:sand', count: 1 }, { slot: 2, id: 'minecraft:dirt', count: 3 }] }], locks: [] });
   assert.throws(() => normalizeFill({ containers: [{ at: [0, 0], items: [] }] }), /at must be/);
   const bp = new Blueprint({ id: 'twice', size: [1, 1, 1], groundY: 0 });
-  bp.fill({ containers: [] });
-  assert.throws(() => bp.fill({ containers: [] }), /declared twice/);
+  bp.fillContainers({ containers: [] });
+  assert.throws(() => bp.fillContainers({ containers: [] }), /declared twice/);
 });
 
 /** A grid of named cells for checkFill ("x,y,z" -> {name, props}), the props complete as the checker's palette has them. */
@@ -107,7 +107,7 @@ test('the fill rule refuses every bad case, each line prefixed fill:', () => {
 test('the checker runs the fill rule', () => {
   const bp = new Blueprint({ id: 'bad_fill', size: [1, 1, 1], groundY: 0 });
   bp.set(0, 0, 0, 'minecraft:stone');
-  bp.fill({ containers: [{ at: [0, 0, 0], items: one }] });
+  bp.fillContainers({ containers: [{ at: [0, 0, 0], items: one }] });
   const r = checkBlueprint(bp, {});
   assert.ok(r.errors.some((e) => /^fill: containers\[0\]: minecraft:stone/.test(e)), r.errors.join('\n'));
 });
