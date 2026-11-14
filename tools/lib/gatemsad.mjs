@@ -286,7 +286,7 @@ export async function registerSAD(steps, h) {
       // the world's start repaired the references before any reader: no crate-fed path is left to double-spend the joined crate
       const s3w = await siteState(ids.house_3);
       const s4w = await siteState(ids.house_4);
-      const ow = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+      const ow = (await pile()).feedOrder ?? [];
       out.sac2.atStart = { s3: s3w.crate, s4: s4w.crate, order: ow };
       check(s3w.crate?.x === undefined && s4w.crate?.x === undefined && ow.includes(ids.house_4) && !ow.includes(ids.house_3),
         `SAC2: the world's start cleared both crate references (the ledger had joined that crate) before any feed, refund or undo; house_4 in the feed order, house_3 not (${json(ow)})`, out.sac2.atStart);
@@ -309,7 +309,7 @@ export async function registerSAD(steps, h) {
       const ac2 = await call('dev.stockpile.adopt', { owner: OWNER }, 120_000);
       const p1b = await pile();
       const f2 = await savedNow();
-      const o1 = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+      const o1 = (await pile()).feedOrder ?? [];
       out.again = { refused: ac2.refused ?? null, same: json(p1.ledger) === json(p1b.ledger), saved: json(ledgerOf(f1.file)) === json(ledgerOf(f2.file)) };
       check(!ac2.refused && json(p1.ledger) === json(p1b.ledger) && json(ledgerOf(f1.file)) === json(ledgerOf(f2.file)) && json(p1.stock) === json(p1b.stock) && o1.includes(ids.house_4),
         'adoptCrates a second time is a no-op: the ledger, its paid records and the stock equal, the saved ledger byte-equal, the feed order unchanged', out.again);
@@ -317,7 +317,7 @@ export async function registerSAD(steps, h) {
     // (amendment 1) the BUILT house_3 on the shared crate: a paid record within its paid standing, its crate reference cleared, no feed
     const rec3 = Object.entries(p1.ledger?.paid ?? {}).find(([k]) => k.startsWith(`site:${ids.house_3}@`));
     const s3 = await siteState(ids.house_3);
-    const order = (await call('dev.stockpile.order', { owner: OWNER }, 60_000)).feedOrder ?? [];
+    const order = (await pile()).feedOrder ?? [];
     out.built3 = { record: rec3, crate: s3.crate, order, placedOnCrate: crate0.ledger?.placed };
     check(!!rec3 && sum(rec3[1]) > 0 && s3.crate?.present === false && s3.crate?.x === undefined && !order.includes(ids.house_3) && order.includes(ids.house_4),
       `amendment 1: the BUILT house_3 got a paid record from the shared crate (${rec3 ? sum(rec3[1]) : 0} units), its crate reference cleared, and it joins no feed (feed order ${json(order)})`, out.built3);
