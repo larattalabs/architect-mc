@@ -31321,7 +31321,7 @@ defaults", 2026-11-13): **pre-JR targets keep refunding from the legacy pool as 
   - F10 with PT tracking off (the world rule): no record, so the old REFUND (capped) stands.
   - A PT-recorded player block in a queued cell still counts in `Builder.paidStanding` (Stockpiles' audit; RL's reconcile may charge it).
 
-## Slice RL, reconcile at load (branch `slice/RL` off main 40a59368, origin/main 27019ef8 merged (HF, PS, JR-b); 2026-11-13; DEV MODE, survival accounting strict)
+## Slice RL, reconcile at load (branch `slice/RL` off main 40a59368, origin/main 27019ef8 (HF, PS, JR-b) and d9947c91 (RU) merged; 2026-11-13; DEV MODE, survival accounting strict)
 
 The follow-up to JR (its "Known open"): after a crash with **no undo**, blocks the feed built after the ledger's last save stand in the
 saved world while the saved stock still holds their items (a dupe with no refund involved); and the opposite, a cell the saved ledger
@@ -31364,7 +31364,10 @@ not involve a refund or an undo.
      matches. A cell the run has not read this session keeps its last book state.
    - A target no longer building keeps no book: it is fully paid, and its book goes at the next save.
    - **A target joining a feed saves the ledger with the world** (`saveWithWorld` after the feed pass). A new target is then in the saved
-     ledger with a book before it can build anything. Cost: 3-6 ms.
+     ledger with a book before it can build anything. Cost: 3-6 ms. Production always keeps it. The test switch
+     `dev.stockpile.ps {noPeriodic}` (PS's, this JVM only) turns it off together with the periodic save, so a gate case can hold a
+     window with nothing saved between lifecycle saves (jr-crash-v063's no-record case; rl-crash's window after its own save).
+     `joinSave: true` (RL, TEST) keeps the save on join on with the periodic save off; the answer reports `joinSave`.
 2. **The reconcile at an unclean start** (`Stockpiles.reconcileAtStart`, at SERVER_STARTED after the sites, the stockpiles and the
    region targets). "Unclean" is the running marker of `SiteDeltas.atStart`.
    - **Scope:** every crate-less target with a book, BUILT ones too. Its chunks are loaded (as the sites check does). Cells placed free
@@ -31419,8 +31422,10 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
   - a second halt at once and load change nothing (charged 0, given back 0, owed unchanged);
   - fed until built: the paid cells standing equal the paid records item for item (no dupe, no double charge), and what the stock gave
     up since the save equals what the records gained.
-  - Stages are approved by hand so no target joins the feed in the crash window. PS's periodic save is held off in that window only
-    (`dev.stockpile.ps {noPeriodic}`); the restart runs as shipped.
+  - Stages are approved by hand so no target joins the feed in the crash window. PS's periodic save and RL's save on join are held off
+    in that window only (`dev.stockpile.ps {noPeriodic}`, set after the targets joined); the restart runs as shipped.
+  - **RL1 also shows the save on join on the disk:** the periodic save off (`noPeriodic`, `joinSave: true`) from before the stage approvals, so every ledger save until the
+    case's own is a save on join; `stockpiles.json` then holds the joined lot's book and the paid records of the targets fed before it.
 - **Measured (run 2, a338b546).** "Before RL" counts the units the old code left free.
 
   | case | what happens | before RL | reconcile | built after the restart |
@@ -31442,7 +31447,16 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
     - PASS: rl-crash 64/0, jr-crash 24/0, xr-survival 24/0, lc-survival 14/0, so-survival 55/0, gr-survival 12/0, qt-growth 12/0.
     - FAIL: rs-survival-smoke 39/1, item 10 (rs02m2) "reads REMOVING after the reopen", got REMOVED. This is JR's known timing flake
       (2 of 28 earlier runs), at load 104. rs02m2 is a clean save, leave and reopen, so the reconcile never runs.
-  - **Run 3** (126e8197, main merged): RUN3_RESULTS.
+  - **Run 3** (126e8197, main merged): 10 PASS, 2 FAIL, 1h06m.
+    - PASS: rl-crash 64/0, jr-crash 24/0, hf-crash 25/0, ps-crash 27/0, rs-survival-smoke 40/0, cu-survival 10/0, xr-survival 24/0,
+      lc-survival 14/0, so-survival 55/0, gr-survival 12/0.
+    - FAIL jr-crash-v063 22/1: RVU2-v063 "nothing saved between the baseline and the halt" (save #18 -> #20). The growth's roads c8 and r3
+      joined the feed after the baseline and the save on join wrote their records; the case needs none on the disk. Its accounting checks
+      passed (minted 0, lost 0, the legacy pool untouched). Fix (test-only, 39ff37ea): `noPeriodic` turns the save on join off too.
+    - FAIL qt-growth 11/1: "the land and Architect's files hold still with no call": `stockpiles.json` 2869 -> 4084 bytes in the 3 s
+      window, the ledger's background save of the town just built (the three no-write rounds after it passed). Fix (test-only, 39ff37ea):
+      the still-check waits for `dev.stockpile.saved.unsaved` false first (at most 30 s).
+  - **Run 4** (RUN4_HEAD, origin/main d9947c91 merged (RU, v0.65.0); the last run): RUN4_RESULTS.
 - **Strict verifier:** VERIFIER_RESULTS.
 - **Units:**
   - `StockpileReconcileRLTest` (6): the book saved with the ledger and an older file has none; the plan over known cells only; the plan
@@ -31452,12 +31466,12 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
     purse gives a swap back as it is.
   - HF's `StockpileSaveHFTest` holds: the reconcile saves through `saveWithWorld`.
 - **Other checks:**
-  - Gradle `build`: GRADLE_RESULTS.
+  - Gradle `build` (b1212e42, the merged tree): BUILD SUCCESSFUL, 1201 tests, 0 failures.
   - Kit: 1303 tests, 1301 pass, 2 fail. Neither is RL's: kit/ is untouched. They are the floatingIsland per-cell cost bench, run under
     gate load, and release-version's s3 golden re-plan, which reads kit/ only.
-  - `node tools/step-inputs.mjs check`: 386 steps clean.
+  - `node tools/step-inputs.mjs check`: 388 steps clean.
   - Sidecar `tsc --noEmit`: clean (sidecar untouched).
-  - api-compat: the 0.47.0 and 0.45.0 apitest jars and the 0.47.0 mod surface pass.
+  - api-compat `--baselines` (b1212e42): all 5 clean (the 0.65.0, 0.64.1 and 0.64.0 apitest jars, the 1.58.0 surface, Steward's jar).
 
 ### Known open
 
