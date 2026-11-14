@@ -30,9 +30,9 @@ test('fk_hall builds clean; the sidecar records its fill in template coordinates
     assert.deepEqual(result.errors, []);
     const side = JSON.parse(fs.readFileSync(path.join(out, 'fk_hall.blueprint.json'), 'utf8'));
     assert.equal(side.fill.containers.length, 3);
-    assert.deepEqual(side.fill.containers[0], { at: [1, 2, 1], items: [{ slot: 0, id: 'minecraft:cobblestone', count: 20 },
-      { slot: 1, id: 'minecraft:stick', count: 1 }, { slot: 2, id: 'minecraft:stick', count: 1 }, { slot: 3, id: 'minecraft:stick', count: 1 },
-      { slot: 4, id: 'minecraft:stick', count: 1 }] });
+    assert.deepEqual(side.fill.containers[0], { at: [1, 2, 1], items: [{ slot: 0, id: 'minecraft:flint', count: 20 },
+      { slot: 1, id: 'minecraft:paper', count: 1 }, { slot: 2, id: 'minecraft:paper', count: 1 }, { slot: 3, id: 'minecraft:paper', count: 1 },
+      { slot: 4, id: 'minecraft:paper', count: 1 }] });
     assert.deepEqual(side.fill.locks, [{ at: [0, 3, 1], locked: { powered: 'true' } }]);
     assert.equal(bp.get(0, 3, 1).state.props.powered, 'false', 'the template holds the unlocked state');
     assert.throws(() => mirrorBlueprint(bp), /can't be mirrored/);

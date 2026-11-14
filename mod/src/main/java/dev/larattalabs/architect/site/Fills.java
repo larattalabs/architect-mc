@@ -757,6 +757,8 @@ public final class Fills {
 		Spec spec = of(srv, s);
 		o.addProperty("phase", phase(s));
 		o.addProperty("hasFill", spec != null);
+		o.addProperty("state", s.construction() == null ? "INSTANT" : s.building() ? "BUILDING" : "BUILT");
+		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), Sites.levelOf(srv, s)));
 		String key = Builder.creditKey(s);
 		o.addProperty("key", key);
 		Stockpiles.Pile pile = Stockpiles.pileOf(s);

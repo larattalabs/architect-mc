@@ -140,7 +140,9 @@ public final class Builder {
 		RegionFreeDrops.init(); // 6c RS (N-RS-2): a survival region's free cells drop nothing
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
-		ServerLifecycleEvents.SERVER_STARTED.register(Fills::atStart); // (M5 FK) after RL's reconcile: unfinished fills and custody at load
+		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
+		// first server tick ({@link #tick})
+		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -1633,7 +1635,18 @@ public final class Builder {
 
 	// ------------------------------------------------------------------ the builder
 
+	/** (M5 FK) Set at SERVER_STARTED: the first tick runs {@link Fills#atStart}. */
+	private static volatile boolean fkAtStart;
+
 	static void tick(MinecraftServer srv) {
+		if (fkAtStart) {
+			fkAtStart = false;
+			try {
+				Fills.atStart(srv);
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Fills at start failed", e);
+			}
+		}
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
