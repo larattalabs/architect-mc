@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 22,
- "api": "1.58.0",
- "kitVersion": "0.60.0",
+ "catalogueVersion": 23,
+ "api": "1.59.0",
+ "kitVersion": "0.61.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -68,7 +68,7 @@
   },
   {
    "id": "program.authored",
-   "sinceApi": "NEXT",
+   "sinceApi": "1.59.0",
    "schemaVersion": 1,
    "state": "supported",
    "note": "AU: a region program written by Regions.authorProgram (installed world-local, the caller's), named by {id, sha}: a whole-claim program, so it compiles only as the plan's sole zone, over the whole claim; params.params are its own values. A sha other than the installed source's refuses AUTHORED_STALE, an id not installed for the plan's owner NO_PROGRAM; the approved artifact freezes the source by sha (artifact.authored) and realiseApproved refuses AUTHORED_STALE if the installed file moved."

@@ -224,7 +224,7 @@ public final class SiteFit {
 	/**
 	 * (SA, A35; N-7b-6, Noah yes 2026-11-13) {@code SITE_MISMATCH} when a site-bound entry ({@link #boundSha}: the pin badge) is placed with
 	 * no site at all ({@code /architect place}, {@code Sites.place} without {@code site}): it places only on its own site, or elsewhere as a
-	 * site variant of it. Null for an unbound entry. Since NEXT.
+	 * site variant of it. Null for an unbound entry. Since 1.59.0.
 	 */
 	public static @Nullable Refusal pinnedNoSite(String entryId, @Nullable JsonObject entryJson) {
 		Optional<String> b = boundSha(entryJson);

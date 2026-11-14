@@ -23,12 +23,12 @@ public record AuthorRequest(String brief, BoundingBox claim, @Nullable String pl
 	String opKey, JsonObject ext) {
 	/**
 	 * (7c AU) {@code ext["architect_mc:owner"]}: the owner the authored program is installed for (a string; absent: the player). A plan
-	 * names it only when checked for the same owner ({@link PlanRequest#owner()}). Since NEXT.
+	 * names it only when checked for the same owner ({@link PlanRequest#owner()}). Since 1.59.0.
 	 */
 	public static final String EXT_OWNER = "architect_mc:owner";
-	/** (7c AU) {@code ext["architect_mc:style"]}: the Style (bible id) the checker plans every round with (absent: the default roles). Since NEXT. */
+	/** (7c AU) {@code ext["architect_mc:style"]}: the Style (bible id) the checker plans every round with (absent: the default roles). Since 1.59.0. */
 	public static final String EXT_STYLE = "architect_mc:style";
-	/** (7c AU) {@code ext["architect_mc:authorRounds"]}: at most this many rounds, 1 to 4 (absent: 4); other values refuse. Since NEXT. */
+	/** (7c AU) {@code ext["architect_mc:authorRounds"]}: at most this many rounds, 1 to 4 (absent: 4); other values refuse. Since 1.59.0. */
 	public static final String EXT_ROUNDS = "architect_mc:authorRounds";
 
 	public AuthorRequest {
