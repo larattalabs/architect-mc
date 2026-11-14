@@ -178,7 +178,8 @@ for the first runs the count is a floor.
 On 2026-11-11/12 three gate runs, Gradle tests and Steward's e2e took the machine to load 75-85, and steps failed on time. The slot
 rules above stay as they are. On top of them, a **shared** run whose turn it is (no ticket ahead of it, no turbo run, a free slot)
 still waits while:
-- the 1-minute load average is above `slots.load.max1` (36, about twice the 18 cores), or
+- the 1-minute load average is above `slots.load.max1` (54, three times the 18 cores; 36 until 2026-11-13, raised because the speed
+  rules' `nice`d unit suites hold the load average near 80 without slowing the gate JVMs), or
 - another run took its slot less than `slots.load.settleSec` (300 s since the speed rules of 2026-11-13; 120 s before) ago. The load average lags by about a minute, so without this
   every run queued behind a high load would start in the same 15 s poll once it dips.
 
