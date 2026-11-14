@@ -106,7 +106,7 @@ package dev.larattalabs.architect.api;
  * <li>{@code SITE_UNSUPPORTED} (7b, since 1.53.0): the live support scan of the design over its site fails (a cell connects to no
  * site-solid within its fit's limits); or {@link Designs#siteVariant} of a source with no program to re-run.</li>
  * <li>{@code SITE_MISMATCH} (7b, since 1.53.0): an entry bound to another volume sha ({@link SiteBinding}) is placed or fitted on this
- * site; {@link ArchitectRefused#detail()} is the entry's bound sha. Since NEXT also a site-bound (pinned) entry placed or checked with no
+ * site; {@link ArchitectRefused#detail()} is the entry's bound sha. Since 1.59.0 also a site-bound (pinned) entry placed or checked with no
  * site at all ({@link Sites#place} / {@link Sites#check} without {@code site}, {@code /architect place}): it places only on its own site,
  * or elsewhere as a site variant ({@link Designs#siteVariant}).</li>
  * <li>{@code SITE_UNFIT} (7b, since 1.53.0): {@link Designs#siteVariant}: the source's program re-run on the new site fails a site

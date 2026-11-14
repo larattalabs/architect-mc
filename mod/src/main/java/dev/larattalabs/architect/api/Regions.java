@@ -308,7 +308,7 @@ public interface Regions {
 	 * {@code architect_mc:land}, the beside data) reads the older effective IR. Once begun it is never abandoned: a call with the same
 	 * target returns the running operation. Since 1.43.0.
 	 *
-	 * <p>In survival (RV §8, slice RU, since NEXT) a revision whose targets are not all built is cancelled by its undo, not refused: a
+	 * <p>In survival (RV §8, slice RU, since 1.59.0) a revision whose targets are not all built is cancelled by its undo, not refused: a
 	 * revision still writing has its batch cancelled first (its waiting items fail {@code CANCELLED}), then its unbuilt targets and lots
 	 * are removed with the rest: each refunds what of it stands paid (never more than its paid record), items delivered but not consumed
 	 * stay in the stock (a target's reservation ends with it), and the land comes back as before the revision.
@@ -428,7 +428,7 @@ public interface Regions {
 	 * {@code {template: "authored", params: {id, sha, params?}}} (a whole-claim program: the plan's sole zone), checked for the same owner;
 	 * the approved artifact freezes {@code {part, id, sha}} and {@link #realiseApproved} refuses {@link Reason#AUTHORED_STALE} (detail the id)
 	 * when the installed file no longer hashes to it. The same {@code opKey} and body adopt the first design; another body refuses
-	 * OP_KEY_CONFLICT. Since NEXT.
+	 * OP_KEY_CONFLICT. Since 1.59.0.
 	 */
 	default CompletableFuture<String> authorProgram(AuthorRequest request) {
 		throw new UnsupportedOperationException("Regions.authorProgram is reserved: it throws until slice AU ships (feature programAuthoring)");

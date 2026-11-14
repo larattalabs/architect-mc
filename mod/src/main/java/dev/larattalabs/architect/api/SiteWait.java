@@ -20,17 +20,17 @@ import org.jspecify.annotations.Nullable;
  *                   exists, waiting or not
  * @param moreUnits the units of the shortfalls beyond the first 8 entries; the counts plus {@code moreUnits} equal the target's
  *                  outstanding bill minus what is available to it
- * @param blocked (M5 FK, since NEXT) why the target waits on something other than materials, else null: {@link #FILL_BLOCKED}, a declared
+ * @param blocked (M5 FK, since 1.59.0) why the target waits on something other than materials, else null: {@link #FILL_BLOCKED}, a declared
  *                container of a filled-container entry is not empty at its fill (it is never filled over cargo), so the target waits
  *                ({@code waiting} true) until it is emptied. (BC, since NEXT) {@link #BILL_CAP}: the target's region was realised with a
  *                {@code maxBill} and its next cell would draw an item past it; the target waits ({@code waiting} true, STARVED) instead
  *                of consuming, whatever the stockpile holds, and {@code nextNeeded} names the capped items
- * @param blockedCells (M5 FK, since NEXT) the world cells that hold it back ({@link #FILL_BLOCKED}: the declared containers that are not
+ * @param blockedCells (M5 FK, since 1.59.0) the world cells that hold it back ({@link #FILL_BLOCKED}: the declared containers that are not
  *                     empty); empty when {@code blocked} is null
  */
 public record SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits, @Nullable String blocked,
 	List<BlockPos> blockedCells) {
-	/** (M5 FK, since NEXT) {@link #blocked}: a declared container is not empty at the fill. */
+	/** (M5 FK, since 1.59.0) {@link #blocked}: a declared container is not empty at the fill. */
 	public static final String FILL_BLOCKED = "fill_blocked";
 	/** (BC, S-M5-9, since NEXT) {@link #blocked}: the next cell would draw past the realise's {@code maxBill}. */
 	public static final String BILL_CAP = "bill_cap";

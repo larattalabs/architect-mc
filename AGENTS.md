@@ -43,7 +43,8 @@ gate anything:
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
 - **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
   per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
-  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 4 gate runs at once (`slots.max` 4; docs/GATES.md "Slot lock", "Speed rules").
+  the verifier reviews and re-runs only undo, journal, removal or accounting items (with `--no-cache`: since slice GX an `--only`
+  list reuses unchanged PASSes, docs/GATES.md "Slice GX as built"); at most 4 gate runs at once (`slots.max` 4; docs/GATES.md "Slot lock", "Speed rules").
 - **Versions:** assigned by the coordinator at merge (next free minor). Slices never set a version number: leave the constants
   as main has them, stamp what you add with `NEXT` (`"sinceApi": "NEXT"`, `Since NEXT.` in javadoc) and write version tests as
   "at least" or read the constant. At merge the coordinator runs one command, `node tools/release-version.mjs --api X.Y.Z --mod

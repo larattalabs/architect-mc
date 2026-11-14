@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.58.0";
+	String VERSION = "1.59.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -295,7 +295,7 @@ public interface ArchitectApi {
 	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
 	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
 	 * ceiling). An overhang made by the plan's own forms can't host one (the land is read before the plan). No new record, method or reason.
-	 * (M5 FK, since NEXT) {@code "filledContainers"} is advertised when the helper's kit takes a given program's fill (its {@code design.fill}):
+	 * (M5 FK, since 1.59.0) {@code "filledContainers"} is advertised when the helper's kit takes a given program's fill (its {@code design.fill}):
 	 * a program's {@code bp.fillContainers({containers, locks})} declares containers (at most {@link Limits#FILL_CONTAINERS_MAX}) Architect fills once
 	 * after every core cell stands, and lock cells (at most {@link Limits#FILL_LOCKS_MAX}) built in their locked state and unlocked after the
 	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
