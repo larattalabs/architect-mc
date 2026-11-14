@@ -158,8 +158,12 @@ export function tokens(src) {
 /**
  * The lint's findings for an authored source: [{rule, message, line?}] (empty: clean). `rule` is `lint` for a banned form, `imports` for an
  * import outside the closed list, `size` and `encoding` for the source itself, `exports` for a missing id or default export.
+ * (7c PM) `opts.imports` replaces the closed import list and `opts.exports: false` drops the id/default rule: the promotion pipeline's
+ * lint step (tools/promote.mjs) runs this same lint over a kit forms module, whose imports are its own closed list.
  */
-export function lintAuthored(source) {
+export function lintAuthored(source, opts = {}) {
+  const imports = opts.imports ?? AUTHORED_IMPORTS;
+  const wantExports = opts.exports !== false;
   const f = [];
   if (typeof source !== 'string') return [{ rule: 'encoding', message: 'the source is not text' }];
   if (Buffer.byteLength(source, 'utf8') > AUTHORED_SOURCE_MAX) f.push({ rule: 'size', message: `the source is ${Buffer.byteLength(source, 'utf8')} bytes (at most ${AUTHORED_SOURCE_MAX})` });
@@ -194,7 +198,7 @@ export function lintAuthored(source) {
           let j = k + 1;
           while (j < T.length && !(T[j].t === 'id' && T[j].v === 'from') && T[j].t !== 'str') j++;
           const spec = T[j]?.t === 'id' ? T[j + 1] : T[j];
-          if (!spec || spec.t !== 'str' || !AUTHORED_IMPORTS.includes(spec.v)) f.push({ rule: 'imports', message: `import ${spec?.t === 'str' ? `'${spec.v}'` : '(no source)'}: an authored program imports only ${AUTHORED_IMPORTS.join(', ')}`, line: t.line });
+          if (!spec || spec.t !== 'str' || !imports.includes(spec.v)) f.push({ rule: 'imports', message: `import ${spec?.t === 'str' ? `'${spec.v}'` : '(no source)'}: an authored program imports only ${imports.join(', ')}`, line: t.line });
         }
       } else if (t.v === 'export' && !member) {
         if (next?.v === '*') add(t, 'export * is not allowed');
@@ -206,8 +210,8 @@ export function lintAuthored(source) {
       }
     }
   }
-  if (!hasId) f.push({ rule: 'exports', message: 'the program must export const id (matching [a-z][a-z0-9_]{0,47})' });
-  if (!hasDefault) f.push({ rule: 'exports', message: 'the program must export default (ctx) => Region' });
+  if (wantExports && !hasId) f.push({ rule: 'exports', message: 'the program must export const id (matching [a-z][a-z0-9_]{0,47})' });
+  if (wantExports && !hasDefault) f.push({ rule: 'exports', message: 'the program must export default (ctx) => Region' });
   return f;
 }
 
