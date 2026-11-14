@@ -184,12 +184,74 @@ export async function registerPS(steps, h) {
     }
   }
 
+  // ---------------------------------------------------------------- single: N1's shape outside a group's removal (J1)
+  /**
+   * (J1) One survival town fed until built; then, one at a time on the same world: a baseline (/save-all flush), one target removed on its
+   * own through the API (dev.pl.remove: a road's restore job credits its refund, C29; a lot site's deconstruct credits its own), 12 s for the
+   * restored chunks' eager saves, a halt with nothing else saved, the world opened again:
+   *   RR0  a road, the credit's save off (dev.stockpile.ps noCreditSave: the code before J1): the refund lost on the crash (or autosaved)
+   *   RR   a road, as built: the stock after the restart equals the stock before the halt
+   *   SD0  a lot site, the credit's save off: lost (or autosaved)
+   *   SD   a lot site, as built: kept
+   * The periodic save off throughout (it bounds the loss to ~10 s; the credit's own save is what is measured).
+   */
+  async function singlePart(out) {
+    const W = await survivalWorld('G6B PS single');
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    await L.tp(...W.at);
+    const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {}; // the feed's targets, before any is built
+    const f = await G.feed({ L }, region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `single: fed until built (${f.waves} waves): ${f.last.st.view.state}`);
+    const ids = [...new Set(st0.feedOrder ?? [])];
+    const roads = ids.filter((id) => !/^s\d/.test(id));
+    const sites = ids.filter((id) => /^s\d/.test(id));
+    log(`  single: targets ${json(ids)} (roads ${json(roads)}, sites ${json(sites)})`);
+    const plan = [['RR0', roads[0], true], ['RR', roads[1], false], ['SD0', sites[0], true], ['SD', sites[1] ?? sites[0], false]];
+    const used = new Set();
+    for (const [tag, id, noCreditSave] of plan) {
+      if (!id || used.has(id)) { check(false, `${tag}: no target left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
+      used.add(id);
+      await ps({ noPeriodic: true, noCreditSave });
+      await cmd('/save-all flush');
+      await call('dev.wait', { ms: 2000 }, 30_000);
+      const s0 = await saved();
+      const a0 = await audit();
+      const rm = await call('dev.pl.remove', { site: id, requester: G.OWNER, force: true }, 1_800_000).catch((e) => ({ removed: false, blockers: [String(e?.message ?? e)] }));
+      await call('dev.wait', { ms: 12_000 }, 60_000); // the restored chunks' eager saves
+      const a1 = await audit();
+      const s1 = await saved();
+      const refund = G.minus(backOf(a1), backOf(a0));
+      const n1 = { tag, id, noCreditSave, removed: rm.removed, blockers: rm.blockers, refund, refundUnits: sum(pos(refund)), ledgerSaves: s1.saves - s0.saves,
+        worldSaves: s1.worldSaves - s0.worldSaves, creditSaves: (s1.creditSaves ?? 0) - (s0.creditSaves ?? 0), lastWorldSaveMs: s1.lastWorldSaveMs, maxWorldSaveMs: s1.maxWorldSaveMs };
+      check(rm.removed === true && n1.refundUnits > 0, `${tag}: ${id} removed on its own (${rm.removed ? 'removed' : json(rm.blockers)}); refunded ${n1.refundUnits} item(s) live; credit saves ${n1.creditSaves} (with the world ${n1.worldSaves})`, n1);
+      W.at = [CX + 80, 60, CZ + 56];
+      const hx = await halt(tag, W);
+      if (!hx) { out[tag] = n1; return; }
+      await call('dev.wait', { ms: 5000 }, 30_000);
+      const a2 = await audit();
+      const d = G.minus(backOf(a2), backOf(a1));
+      Object.assign(n1, hx, { delta: d, lossUnits: sum(pos(G.minus({}, d))), mintUnits: sum(pos(d)), identity: a2.identity });
+      log(`  ${tag}: refund live ${json(refund)}; after the restart vs before the halt ${json(d)} (lost ${n1.lossUnits}, minted ${n1.mintUnits})`);
+      if (noCreditSave) {
+        check(n1.mintUnits === 0 && (n1.lossUnits > 0 || n1.ledgerSaves > 0), `${tag}: before J1 the refund was lost on the crash: lost ${n1.lossUnits} of ${n1.refundUnits}, minted ${n1.mintUnits} (ledger saves since the baseline: ${n1.ledgerSaves})`, n1);
+      } else {
+        check(n1.creditSaves >= 1 && n1.worldSaves >= 1, `${tag}: the credit saved the ledger with the world (${n1.creditSaves} credit save(s); last ${Number(n1.lastWorldSaveMs).toFixed(1)} ms, max ${Number(n1.maxWorldSaveMs).toFixed(1)} ms)`, n1);
+        check(n1.lossUnits === 0 && n1.mintUnits === 0 && a2.identity !== false, `${tag}: the refund kept: the stock after the restart equals the stock before the halt (lost ${n1.lossUnits}, minted ${n1.mintUnits}; identity ${a2.identity})`, n1);
+      }
+      out[tag] = n1;
+    }
+    await ps({ noPeriodic: false, noCreditSave: false });
+    await L.leaveWorld();
+  }
+
   steps.pscrash = async () => {
     await ensure();
     const out = {};
-    const parts = (process.env.GATE_PS_PARTS ?? 'hopper,k5end').split(',');
+    const parts = (process.env.GATE_PS_PARTS ?? 'hopper,k5end,single').split(',');
     if (parts.includes('hopper')) await hopperPart(out);
     if (parts.includes('k5end')) await k5endPart(out);
+    if (parts.includes('single')) await singlePart(out);
     spendZero();
     return out;
   };

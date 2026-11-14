@@ -200,7 +200,7 @@ export async function registerRL(steps, h) {
    * the lot's items are in the saved stock, not consumed), the lot resumed, it builds after the save until built or starved, 12 s for the
    * chunks' eager saves, then the halt (`mode`); the saved ledger off the disk; restarted.
    */
-  async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false, joinSave = false } = {}) {
+  async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false, joinSave = false, playerBlock = false } = {}) {
     const W = await world(`G6B RL ${tag}`, { joinSave });
     const lot = await lotPaused(tag);
     if (!lot) { await L.leaveWorld(); return null; }
@@ -216,6 +216,18 @@ export async function registerRL(steps, h) {
     check(sum(d.acc) > 0 && G.same(d.acc, d.need) && b0.ledger, `${tag}: ${fraction >= 1 ? 'all' : 'half'} of what the targets lack delivered (${sum(d.acc)} of ${sum(d.need)} units accepted) and the ledger saved (/save-all flush, save #${s0.saves}) with ${lot} paused at ${lot0.built}/${lot0.queued} built`);
     let late = null;
     if (restAfterSave) late = await deliver(1); // delivered after the save: the saved stock is short of it
+    let placed = null;
+    if (playerBlock) {
+      // (J1) a player places one of the lot's unbuilt cells' target blocks after the save (a fake player through useItemOn: a PT record)
+      const cells = await call('dev.site.cells', { site: lot }, 30_000);
+      const plain = /:(\w+_planks|cobblestone|stone_bricks|bricks|stone|\w+_log|\w+_wool|\w+_terracotta|\w+_concrete)$/;
+      const cand = Object.entries(cells).filter(([, id]) => plain.test(id)).map(([k, id]) => [k.split(',').map(Number), id]).sort((a, b) => a[0][1] - b[0][1]);
+      for (const [[x, y, z], id] of cand.slice(0, 80)) {
+        const r = (await call('dev.pt.uses', { ops: [{ item: id, at: [x, y, z], on: [x, y - 1, z], face: 'up', placer: 'J1Placer' }] }, 30_000)).results?.[0];
+        if (r?.tracked && r.state === id) { placed = { at: [x, y, z], id, r }; break; }
+      }
+      check(!!placed, `${tag}: a player placed ${placed ? `${placed.id} at ${json(placed.at)}` : 'nothing'} in one of ${lot}'s unbuilt cells after the save (a PT record: ${placed?.r?.tracked})`, placed);
+    }
     await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
     check(await quiet(), `${tag}: ${lot} resumed and built from that stock until ${fraction >= 1 || restAfterSave ? 'built' : 'starved'}`);
     const lot1 = (await pile()).targets?.[lot] ?? null;
@@ -234,10 +246,11 @@ export async function registerRL(steps, h) {
     // what the code before RL would have left free: the cells that stood unpaid at the load (charged now or owed)
     const unpaidAtLoad = rc ? sum(rc.charged) + sum(rc.owes) : null;
     if (mode === 'now') check(rc && rc.aheadCells > 0, `${tag}: the reconcile found ${lot}'s cells built after the save standing unpaid: ${rc ? `${rc.aheadCells} cell(s), charged ${sum(rc.charged)}, owes ${sum(rc.owes)} (${rc.owedCells} cell(s)), reopened ${rc.reopened}` : 'none'} (before RL: ${unpaidAtLoad ?? 0} units free)`, rc);
+    if (playerBlock) check(rc && (rc.playerCells ?? 0) >= 1, `${tag}: the player's block in ${lot}'s cell was told apart at the reconcile: ${rc?.playerCells ?? 0} player cell(s) left uncharged (before J1: charged to the stock), charged ${sum(rc?.charged)} for the ${(rc?.aheadCells ?? 0) - (rc?.playerCells ?? 0)} built by Architect`, { rc, placed });
     if (restAfterSave) check(rc && rc.owedCells > 0 && rc.reopened, `${tag}: the saved stock was short: ${rc?.owedCells} cell(s) owed and the built lot builds again (reopened ${rc?.reopened})`, rc);
     await L.leaveWorld();
     const { a1, ...rest } = r;
-    return { ...n, reconciled: rc, unpaidAtLoad, ...rest };
+    return { ...n, placed, reconciled: rc, unpaidAtLoad, ...rest };
   }
 
   steps.rlcrash = async () => {
@@ -251,6 +264,8 @@ export async function registerRL(steps, h) {
     out.RL3 = await crashCase('RL3', 1, { mode: 'autosave', waitMs: 0 });
     // RL4: half delivered before the save, the rest after it, the lot built: the saved stock is short, the lot owes and builds again
     out.RL4 = await crashCase('RL4', 0.5, { restAfterSave: true });
+    // RL5 (J1): as RL2, and a player places one of the lot's blocks in its unbuilt cell after the save: not charged at the reconcile
+    out.RL5 = await crashCase('RL5', 1, { playerBlock: true });
     spendZero();
     return out;
   };

@@ -271,11 +271,36 @@ public final class Stockpiles {
 				}
 			};
 		});
-		// the world-save callback that saves the chunks (autosave and stop): the ledger and the chunks are saved together
-		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> {
-			if (!explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
-				save();
+		// the world-save callback that saves the chunks (autosave, /save-all and stop): the ledger and the chunks are saved together.
+		// (J1, PS's leftover, audit N3) after them, not at BEFORE_SAVE (saveAllChunks' head, ahead of the chunk writes): an unflushed save
+		// (autosave) only queues its chunk writes, so their IO is waited for first. The ledger is then never on disk ahead of the chunks
+		// (a hopper's source saved full while the ledger counts the delivery: a dupe). The players are saved before the chunks
+		// (saveEverything), as in HF's order.
+		ServerLifecycleEvents.AFTER_SAVE.register((server, flush, force) -> {
+			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
+				return;
 			}
+			if (!flush) {
+				long t0 = System.nanoTime();
+				for (ServerLevel l : server.getAllLevels()) {
+					try {
+						l.getChunkSource().chunkMap.synchronize(true).join();
+					} catch (RuntimeException e) {
+						Architect.LOGGER.warn("Stockpiles: waiting for {}'s chunk writes failed; the ledger is saved anyway", l.dimension(), e);
+					}
+				}
+				double ms = (System.nanoTime() - t0) / 1e6;
+				autosaveWaits++;
+				lastAutosaveWaitMs = ms;
+				maxAutosaveWaitMs = Math.max(maxAutosaveWaitMs, ms);
+			}
+			if (haltBeforeAutosaveLedger) {
+				// (J1, TEST kill point AS1, dev.stockpile.ps haltBeforeAutosaveLedger) an autosave's chunks on disk, its ledger not: the ledger behind the world (RL's reconcile, a loss
+				// of at most the window's deliveries), never ahead of it
+				Architect.LOGGER.error("Stockpiles: kill point AS1: the autosave's chunks written, halting before the ledger write");
+				Runtime.getRuntime().halt(7);
+			}
+			save();
 		});
 		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
@@ -652,6 +677,9 @@ public final class Stockpiles {
 			}
 		}
 		BlockPos at = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
+		if (to != null && unsaved) {
+			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the dissolve then holds only the dissolve
+		}
 		Map<String, Integer> toPlayer = new TreeMap<>();
 		Map<String, Integer> toGround = new TreeMap<>();
 		Map<String, Integer> out = dissolveLedger(p.ledger, to == null ? null : (item, n) -> give(to, item, n), toPlayer, toGround);
@@ -665,7 +693,11 @@ public final class Stockpiles {
 		}
 		JsonObject last = p.toJson();
 		PILES.remove(p.id);
-		saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		if (to != null) {
+			saveLedgerFirst(srv); // (J1) items into a player: a crash inside the save loses them, never dupes them
+		} else {
+			saveWithWorld(srv); // (JR) with the chunks, as autosave: the ledger never ahead of the world
+		}
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
 		LAST_DISSOLVED.put(p.id, last);
@@ -803,6 +835,9 @@ public final class Stockpiles {
 		if (to == null) {
 			throw new Sites.SiteException(Reason.FIELD_LIMIT, "to: a player is required");
 		}
+		if (unsaved) {
+			saveWithWorld(srv); // (J1) what was pending first, in HF's order: the save after the Take then holds only the Take
+		}
 		Map<String, Integer> credit = credit(srv, p);
 		Map<String, Integer> out = new TreeMap<>();
 		Map<String, Integer> ground = new TreeMap<>();
@@ -821,6 +856,7 @@ public final class Stockpiles {
 		Builder.dropItems((ServerLevel) to.level(), to.blockPosition(), ground, null);
 		if (!out.isEmpty()) {
 			changed(p);
+			saveLedgerFirst(srv); // (J1, HF's window, audit F5) the Take saved now, the ledger before the player
 		}
 		return out;
 	}
@@ -1157,6 +1193,27 @@ public final class Stockpiles {
 		}
 		return led.credit(key, items, cap, maxStack);
 	}
+
+	/**
+	 * (PS, audit N1; J1 for its other members) A refund credit that booked is saved with the world right there (players, the chunks
+	 * flushed, the ledger), before the caller drops the record it came from: a removal's member (Groups.credit), a standalone road's
+	 * restore job, a site's deconstruct, a construction delta's refund, a put-down's take-ups. TEST: {@code dev.stockpile.ps noCreditSave}
+	 * turns it off (the case before). Server thread.
+	 */
+	static void saveCredit(MinecraftServer srv) {
+		creditSaves++;
+		if (!testNoCreditSave) {
+			saveWithWorld(srv);
+		}
+	}
+
+	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
+	static volatile int creditSaves;
+	/** (J1, dev) the autosaves' wait for their chunk writes before the ledger write: count, last and max (ms). */
+	static volatile int autosaveWaits;
+	static volatile double lastAutosaveWaitMs, maxAutosaveWaitMs;
+	/** (J1, TEST) kill point AS1: the next unflushed world save halts after its chunk writes, before the ledger's. */
+	static volatile boolean haltBeforeAutosaveLedger;
 
 	/** Credits without a key (a swap's old block, a bucket's container) as it happens. */
 	static StockLedger.Credit giveBack(MinecraftServer srv, Pile p, Map<String, Integer> items, BlockPos fallback) {
@@ -1792,6 +1849,12 @@ public final class Stockpiles {
 					o.addProperty("lastPlayerSaveMs", lastPlayerSaveMs);
 					o.addProperty("maxPlayerSaveMs", maxPlayerSaveMs);
 					o.addProperty("periodicSaves", periodicSaves); // (PS)
+					o.addProperty("creditSaves", creditSaves); // (J1)
+					o.addProperty("ledgerFirstSaves", ledgerFirstSaves); // (J1)
+					o.addProperty("lastLedgerFirstMs", lastLedgerFirstMs);
+					o.addProperty("autosaveWaits", autosaveWaits); // (J1)
+					o.addProperty("lastAutosaveWaitMs", lastAutosaveWaitMs);
+					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
 					o.addProperty("lastPeriodicMs", lastPeriodicMs);
 					o.addProperty("maxPeriodicMs", maxPeriodicMs);
 					o.addProperty("medianPeriodicMs", periodicMedianMs());
@@ -1814,6 +1877,9 @@ public final class Stockpiles {
 					}
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
+					}
+					if (req.has("haltBeforeAutosaveLedger")) {
+						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
 					if (req.has("resetPeriodic") && req.get("resetPeriodic").getAsBoolean()) {
 						periodicSaves = 0;
@@ -2223,7 +2289,17 @@ public final class Stockpiles {
 		Map<String, Integer> charged = new TreeMap<>();
 		Map<String, Integer> owes = new TreeMap<>();
 		Map<String, Integer> over = new TreeMap<>();
+		int playerCells = 0;
 		for (int i = ahead.nextSetBit(0); i >= 0; i = ahead.nextSetBit(i + 1)) {
+			if (dev.larattalabs.architect.placed.Placed.record(level, r.pos(i)) != null) {
+				// (J1, RL's known open) a PT record in the cell: a player placed this block (Architect's own writes clear the record), and the
+				// record is a chunk attachment, on disk with the block itself. As the builder does for it, it stands built and is charged
+				// nothing (JR-b's F10 then drops it as the player's at an undo). The player's inventory rolled back with the ledger (HF), so
+				// the player holds the item again: that is vanilla's rollback dupe, no longer paid for out of the stock.
+				r.markBuilt(i, true);
+				playerCells++;
+				continue;
+			}
 			List<SurvivalItems.Cost> cost = r.cost.get(i);
 			Map<String, Integer> need = new TreeMap<>();
 			cost.forEach(x -> need.merge(x.item(), x.count(), Integer::sum));
@@ -2267,6 +2343,7 @@ public final class Stockpiles {
 		o.add("creditedBack", Builder.counts(cr.returned()));
 		o.add("overflow", Builder.counts(cr.overflow()));
 		o.addProperty("reopened", reopen);
+		o.addProperty("playerCells", playerCells); // (J1) ahead cells a player placed: not charged
 		LAST_RECONCILE.put(id, o);
 		boolean moved = !ahead.isEmpty() || !lost.isEmpty();
 		if (moved) {
@@ -2303,6 +2380,7 @@ public final class Stockpiles {
 			long p0 = System.nanoTime();
 			srv.getPlayerList().saveAll();
 			double pms = (System.nanoTime() - p0) / 1e6;
+			WorldJournal.kill("HF1"); // (J1, TEST) HF's window: the players on disk, the chunks and the ledger not
 			playerSaves++;
 			lastPlayerSaveMs = pms;
 			maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
@@ -2329,6 +2407,49 @@ public final class Stockpiles {
 			Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms{}", String.format(java.util.Locale.ROOT, "%.1f", ms), quiet ? " (periodic)" : "");
 		}
 	}
+
+	/**
+	 * (J1, HF's window) The save after a move out of the stock into a player's inventory (a Take, a dissolve to the player): the ledger
+	 * first, then the players, then the chunks flushed. Its caller saves with the world first when anything else was pending
+	 * ({@code unsaved}), so this save holds only that move. A crash between the ledger and the players then loses the move (the ledger let
+	 * the items go, the saved player never got them) instead of duping it (saveWithWorld's order: the player saved with them, the ledger
+	 * still holding them). Server thread; off it, the ledger alone.
+	 */
+	static void saveLedgerFirst(MinecraftServer srv) {
+		if (loadFailed) {
+			refusedSave();
+			return;
+		}
+		save();
+		if (srv == null || !srv.isSameThread()) {
+			return;
+		}
+		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
+		long t0 = System.nanoTime();
+		srv.getPlayerList().saveAll();
+		double pms = (System.nanoTime() - t0) / 1e6;
+		playerSaves++;
+		lastPlayerSaveMs = pms;
+		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
+		explicitSave = true;
+		try {
+			srv.saveAllChunks(true, true, false);
+		} finally {
+			explicitSave = false;
+		}
+		double ms = (System.nanoTime() - t0) / 1e6;
+		ledgerFirstSaves++;
+		lastLedgerFirstMs = ms;
+		worldSaves++; // a save with the world too, in the other order
+		lastWorldSaveMs = ms;
+		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
+		Architect.LOGGER.info("Stockpiles: saved the ledger first, then the players and the world's chunks, in {} ms", String.format(java.util.Locale.ROOT,
+			"%.1f", ms));
+	}
+
+	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */
+	static volatile int ledgerFirstSaves;
+	static volatile double lastLedgerFirstMs;
 
 	static void save() {
 		Path d = dir;

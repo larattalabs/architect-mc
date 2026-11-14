@@ -48,7 +48,7 @@ class StockpileSaveHFTest {
 		int ledger = code.indexOf("save();", chunks);
 		assertTrue(ledger > chunks, "the ledger is written after the chunk save returns");
 		String all = src().replaceAll("//[^\n]*", "");
-		assertTrue(all.contains("if (!explicitSave)"), "BEFORE_SAVE (saveAllChunks' head) leaves the ledger to the explicit save");
+		assertTrue(all.contains("if (explicitSave) {"), "the world's save (AFTER_SAVE since J1) leaves the ledger to the explicit save");
 		assertTrue(all.contains("ServerPlayConnectionEvents.DISCONNECT.register"), "(F9) a logout saves an unsaved ledger with the world");
 	}
 
@@ -62,21 +62,29 @@ class StockpileSaveHFTest {
 		}
 		String sww = body(s, "static void saveWithWorld(MinecraftServer srv)");
 		int swwAt = s.indexOf(sww);
+		String slf = body(s, "static void saveLedgerFirst(MinecraftServer srv)"); // (J1) a Take's or a dissolve's save: the ledger first
+		int slfAt = s.indexOf(slf);
 		int bySaveWithWorld = 0;
 		int byLifecycle = 0;
+		int byLedgerFirst = 0;
 		for (int p : at) {
 			if (p > swwAt && p < swwAt + sww.length()) {
 				bySaveWithWorld++;
 				continue;
 			}
-			String before = s.substring(Math.max(0, p - 400), p);
-			if (before.contains("BEFORE_SAVE.register") || before.contains("SERVER_STOPPING.register")) {
+			if (p > slfAt && p < slfAt + slf.length()) {
+				byLedgerFirst++;
+				continue;
+			}
+			String before = s.substring(Math.max(0, p - 1600), p);
+			if (before.contains("AFTER_SAVE.register") || before.contains("SERVER_STOPPING.register")) { // (J1) AFTER_SAVE, was BEFORE_SAVE
 				byLifecycle++;
 			}
 		}
 		assertEquals(1, bySaveWithWorld, "saveWithWorld's own fallback");
-		assertEquals(2, byLifecycle, "the world's save (BEFORE_SAVE) and the stop (SERVER_STOPPING)");
-		assertEquals(3, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger)");
+		assertEquals(2, byLifecycle, "the world's save (AFTER_SAVE) and the stop (SERVER_STOPPING)");
+		assertEquals(1, byLedgerFirst, "(J1) saveLedgerFirst's ledger write, before its players and chunks");
+		assertEquals(4, at.size(), "no other plain save() of the ledger: an explicit save goes through saveWithWorld (players, chunks, ledger) or saveLedgerFirst");
 		Matcher w = Pattern.compile("saveWithWorld\\(srv\\);").matcher(s);
 		int callers = 0;
 		while (w.find()) {
