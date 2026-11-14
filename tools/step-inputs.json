@@ -101732,7 +101732,7 @@
     "tools/lib/sprint.mjs"
    ]
   },
-  "sa-road": {
+  "safe-road": {
    "classes": [
     "gradle",
     "jar",
@@ -102168,7 +102168,7 @@
     "tools/lib/sprint.mjs"
    ]
   },
-  "sa-survival-st": {
+  "safe-survival-st": {
    "classes": [
     "jar",
     "sidecar",

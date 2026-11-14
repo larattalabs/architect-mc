@@ -1789,12 +1789,10 @@ public final class RegionTargets {
 			if (!group.equals(i.group()) || !i.road() || i.construction() == null) {
 				continue;
 			}
-			String roadPart = null;
-			for (var road : l.ir().roads()) {
-				if (i.member() != null && ("road:" + road.id()).equals(i.member().itemKey())) {
-					roadPart = road.id();
-				}
-			}
+			// ((SA, A3) by its item key road:<id>, as firstBuilding names it: a revision's new street is not in the base IR, and its progress
+			// fell into the shared "roads" row)
+			String rk = i.member() == null ? null : i.member().itemKey();
+			String roadPart = rk != null && rk.startsWith("road:") ? rk.substring(5) : null;
 			Acc a = parts.computeIfAbsent(roadPart == null ? "roads" : roadPart, k -> new Acc());
 			int[] pr = RoadBuilder.progress(srv, i);
 			a.targets.add(i.id());

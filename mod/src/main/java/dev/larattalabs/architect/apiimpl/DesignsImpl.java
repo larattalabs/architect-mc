@@ -884,8 +884,9 @@ final class DesignsImpl implements Designs {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
 		}
 		String type = message.has("type") && message.get("type").isJsonPrimitive() ? message.get("type").getAsString() : "?";
+		boolean keyed = message.has("opKey");
 		CompletableFuture<JsonObject> sent = b.send(message).exceptionally(e -> {
-			throw new java.util.concurrent.CompletionException(ackFailure(e, type));
+			throw new java.util.concurrent.CompletionException(ackFailure(e, type, keyed));
 		});
 		return ApiImpl.onServerFuture(sent.thenApply(ack -> {
 			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
@@ -907,14 +908,19 @@ final class DesignsImpl implements Designs {
 	 * out and that replaying the same opKey returns its operation (or the entry it installed); anything else unchanged. Pure.
 	 */
 	static Throwable ackFailure(Throwable e, String type) {
+		return ackFailure(e, type, true);
+	}
+
+	/** {@link #ackFailure(Throwable, String)}; {@code keyed}: the message carried an opKey (only then is its replay named). Pure. */
+	static Throwable ackFailure(Throwable e, String type, boolean keyed) {
 		Throwable c = e;
 		while ((c instanceof java.util.concurrent.CompletionException || c instanceof java.util.concurrent.ExecutionException) && c.getCause() != null) {
 			c = c.getCause();
 		}
 		if (c instanceof java.util.concurrent.TimeoutException) {
 			return new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, "the Architect helper did not"
-				+ " answer " + type + " in time (it may be busy, and may still carry it out): ask again with the same opKey, which returns its"
-				+ " operation or what it installed", "ack_timeout");
+				+ " answer " + type + " in time (it may be busy" + (keyed ? ", and may still carry it out): ask again with the same opKey, which returns"
+				+ " its operation or what it installed" : "): try again"), "ack_timeout");
 		}
 		return c;
 	}

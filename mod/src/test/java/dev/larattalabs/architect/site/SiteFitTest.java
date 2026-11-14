@@ -100,6 +100,10 @@ class SiteFitTest {
 		JsonObject kit = new JsonObject();
 		kit.add("site", s.wire());
 		assertNotNull(SiteFit.pinnedNoSite("bound_by_sidecar", kit), "a design built over a site is pinned too");
+		// an on_pad design keeps fitToLot and its plain placement on a pad lot
+		JsonObject pad = new JsonObject();
+		pad.add("site", spec(FitMode.ON_PAD, List.of(), List.of()).wire());
+		assertNull(SiteFit.pinnedNoSite("on_pad", pad), "on_pad: not refused");
 	}
 
 	@Test

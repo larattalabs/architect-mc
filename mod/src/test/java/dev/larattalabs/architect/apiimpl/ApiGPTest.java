@@ -149,6 +149,7 @@ class ApiGPTest {
 		ArchitectRefused r = assertThrows(ArchitectRefused.class, () -> GivenPrograms.fromProgramMessage(src + high, new JsonObject(), null, "k", null));
 		assertEquals(Reason.PROGRAM_REFUSED, r.reason());
 		assertEquals("program", r.detail());
+		assertInstanceOf(ProgramRefused.class, r, "typed as the helper's refusal reaches a caller");
 		assertTrue(r.getMessage().contains("U+D800"), r.getMessage());
 		assertThrows(ArchitectRefused.class, () -> GivenPrograms.fromProgramMessage(src + low + "x", new JsonObject(), null, "k", null));
 		assertEquals(-1, GivenPrograms.loneSurrogate(src + pair), "a pair");

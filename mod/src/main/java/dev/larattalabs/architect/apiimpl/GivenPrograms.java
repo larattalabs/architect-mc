@@ -109,8 +109,9 @@ public final class GivenPrograms {
 		// text than the caller's, and the entry read program_stale later; refused before anything is sent (the helper refuses it too)
 		int lone = loneSurrogate(source);
 		if (lone >= 0) {
-			throw new ArchitectRefused(Reason.PROGRAM_REFUSED, "the program has a lone UTF-16 surrogate at character " + lone + " (U+"
-				+ Integer.toHexString(source.charAt(lone)).toUpperCase(java.util.Locale.ROOT) + "): it is not text that survives UTF-8; remove or escape it", "program");
+			// typed as the helper's PROGRAM_REFUSED reaches a caller (typed(): a ProgramRefused with its finding)
+			throw (RuntimeException) typed(new ArchitectRefused(Reason.PROGRAM_REFUSED, "the program has a lone UTF-16 surrogate at character " + lone + " (U+"
+				+ Integer.toHexString(source.charAt(lone)).toUpperCase(java.util.Locale.ROOT) + "): it is not text that survives UTF-8; remove or escape it", "program"));
 		}
 		JsonObject m = DesignsImpl.msg("design.fromProgram");
 		m.addProperty("source", source);

@@ -69,6 +69,9 @@ class DesignWireTest {
 		assertEquals(dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, r.reason());
 		assertTrue(r.getMessage().contains("site.variant") && r.getMessage().contains("same opKey"), r.getMessage());
 		assertEquals("ack_timeout", r.detail());
+		Throwable unkeyed = DesignsImpl.ackFailure(new java.util.concurrent.TimeoutException(), "bible.parts", false);
+		assertTrue(unkeyed instanceof dev.larattalabs.architect.api.ArchitectRefused u && u.reason() == dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE
+			&& !u.getMessage().contains("opKey"), String.valueOf(unkeyed));
 		IllegalStateException other = new IllegalStateException("sidecar not connected (OFFLINE)");
 		assertEquals(other, DesignsImpl.ackFailure(new java.util.concurrent.CompletionException(other), "site.variant"));
 	}

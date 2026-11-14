@@ -1,4 +1,4 @@
-// (slice SA, A3) A survival growth's new street: `sa-road` (registered on tools/gate6dgr.mjs as `saroad`; headless, survival; strict:
+// (slice SA, A3) A survival growth's new street: `safe-road` (registered on tools/gate6dgr.mjs as `saroad`; headless, survival; strict:
 // survival accounting). IG made RegionTargets.roi read a revision's lot from its revision's IR; SA does the same for its roads: a plan/0
 // revision's extension road is not in the base IR, so before SA it found no box, never waited, and in survival was put down over its
 // stage's unbuilt tiles. The step: a survival V town fed until built; an extension growth (prefer extend, its lots pads) planned and

@@ -50,7 +50,7 @@ const HOUSES = process.env.GATE7BSO_HOUSES ? process.env.GATE7BSO_HOUSES.split('
  * ((SA, A36) GATE7BSO_STANDALONE=1: each house's site placed as ST's standalone spec (its sidecar site without a lot id: the way in is the
  * player's), through the same survival flow: Sites.place in construction mode, SO's support order, items in = items out, every prefix
  * connected. (SA, A35) before it, the pinned entry placed and checked with no site is refused SITE_MISMATCH naming the site variant
- * route (Sites.place, Sites.check and /architect place). tools/gate-chains.json `sa-survival-st`.)
+ * route (Sites.place, Sites.check and /architect place). tools/gate-chains.json `safe-survival-st`.)
  */
 const STANDALONE = process.env.GATE7BSO_STANDALONE === '1';
 const EVERY = 100;
