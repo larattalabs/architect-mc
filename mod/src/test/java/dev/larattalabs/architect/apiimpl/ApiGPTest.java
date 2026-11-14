@@ -140,4 +140,18 @@ class ApiGPTest {
 		assertThrows(UnsupportedOperationException.class, () -> d.variant("e", new JsonObject(), null, null, "k"));
 		assertThrows(UnsupportedOperationException.class, () -> d.variantByKey("k"));
 	}
+
+	/** (SA, A25) a lone surrogate is refused PROGRAM_REFUSED program before anything is sent; a pair is text. */
+	@Test
+	void aLoneSurrogateIsRefusedBeforeTheWire() {
+		String src = "export default function build() {}\n// ";
+		String high = String.valueOf((char) 0xD800), low = String.valueOf((char) 0xDC00), pair = new String(Character.toChars(0x1F33E));
+		ArchitectRefused r = assertThrows(ArchitectRefused.class, () -> GivenPrograms.fromProgramMessage(src + high, new JsonObject(), null, "k", null));
+		assertEquals(Reason.PROGRAM_REFUSED, r.reason());
+		assertEquals("program", r.detail());
+		assertTrue(r.getMessage().contains("U+D800"), r.getMessage());
+		assertThrows(ArchitectRefused.class, () -> GivenPrograms.fromProgramMessage(src + low + "x", new JsonObject(), null, "k", null));
+		assertEquals(-1, GivenPrograms.loneSurrogate(src + pair), "a pair");
+		assertEquals(0, GivenPrograms.loneSurrogate(low));
+	}
 }

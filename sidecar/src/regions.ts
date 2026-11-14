@@ -74,13 +74,22 @@ export interface PlanImages {
 /** (6b) A frozen ARVX volume decompresses to at most this (the mod's 268M-cell limit is about 0.2 bytes of runs per natural cell). */
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
-/** Refuses networking inside the plan child (Node 24's permission model has no network switch). Loaded with --import. */
+/**
+ * Refuses networking inside the plan child and a given program's build (Node 24's permission model has no network switch: it denies
+ * child processes, workers, addons, the inspector and process.binding, not sockets). Loaded with --import. (SA, A25) Every entry point a
+ * probe reached under the old patch is closed too: a dgram socket made with `new dgram.Socket` (bind, send, connect), the c-ares
+ * resolvers (`dns.resolve*`, `dns.Resolver`, `dns.promises.*`, `lookupService`), not only `dns.lookup`/`dns.resolve`. It stays a preload
+ * (as hard as Node 24 allows): code that runs before it, or a native addon, is outside it; the permission flags deny both.
+ */
 export const NO_NETWORK = [
   "import net from 'node:net'; import tls from 'node:tls'; import dgram from 'node:dgram'; import dns from 'node:dns'; import http from 'node:http'; import https from 'node:https';",
   "import { syncBuiltinESMExports } from 'node:module';",
   "const no = () => { throw Object.assign(new Error('network access is not allowed in a region plan'), { code: 'ERR_ACCESS_DENIED' }); };",
   'net.connect = net.createConnection = net.createServer = no; net.Socket.prototype.connect = no; net.Server.prototype.listen = no;',
-  'tls.connect = tls.createServer = no; dgram.createSocket = no; dns.lookup = dns.resolve = no; dns.promises.lookup = dns.promises.resolve = no;',
+  'tls.connect = tls.createServer = no; dgram.createSocket = no;',
+  "for (const k of ['bind', 'send', 'connect', 'addMembership', 'addSourceSpecificMembership']) dgram.Socket.prototype[k] = no;",
+  "const noAll = (o) => { for (const k of Object.getOwnPropertyNames(o)) { if (k !== 'constructor' && typeof o[k] === 'function') { try { o[k] = no; } catch {} } } };",
+  'noAll(dns.Resolver.prototype); noAll(dns.promises.Resolver.prototype); noAll(dns); noAll(dns.promises);',
   'http.request = http.get = http.createServer = https.request = https.get = https.createServer = no;',
   "for (const k of ['fetch', 'WebSocket', 'EventSource']) { try { Object.defineProperty(globalThis, k, { value: undefined, configurable: false, writable: false }); } catch {} }",
   'syncBuiltinESMExports();',

@@ -883,7 +883,11 @@ final class DesignsImpl implements Designs {
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
 		}
-		return ApiImpl.onServerFuture(b.send(message).thenApply(ack -> {
+		String type = message.has("type") && message.get("type").isJsonPrimitive() ? message.get("type").getAsString() : "?";
+		CompletableFuture<JsonObject> sent = b.send(message).exceptionally(e -> {
+			throw new java.util.concurrent.CompletionException(ackFailure(e, type));
+		});
+		return ApiImpl.onServerFuture(sent.thenApply(ack -> {
 			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
 				String err = ack.has("error") ? ack.get("error").getAsString() : "refused by the helper";
 				// (6c 0a) a typed refusal (OP_KEY_CONFLICT); (6c 0b) one with a code and detail (COPY_REFUSED, VERSION_REFUSED)
@@ -895,6 +899,24 @@ final class DesignsImpl implements Designs {
 			}
 			return ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : new JsonObject();
 		}));
+	}
+
+	/**
+	 * (SA, A18) A send that failed before its ack: a {@link java.util.concurrent.TimeoutException} (no ack within the link's window; its
+	 * message is null, and was refused untyped as "null") is {@code SIDECAR_UNAVAILABLE}, saying the helper may still carry the message
+	 * out and that replaying the same opKey returns its operation (or the entry it installed); anything else unchanged. Pure.
+	 */
+	static Throwable ackFailure(Throwable e, String type) {
+		Throwable c = e;
+		while ((c instanceof java.util.concurrent.CompletionException || c instanceof java.util.concurrent.ExecutionException) && c.getCause() != null) {
+			c = c.getCause();
+		}
+		if (c instanceof java.util.concurrent.TimeoutException) {
+			return new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, "the Architect helper did not"
+				+ " answer " + type + " in time (it may be busy, and may still carry it out): ask again with the same opKey, which returns its"
+				+ " operation or what it installed", "ack_timeout");
+		}
+		return c;
 	}
 
 	static JsonObject msg(String type) {

@@ -121,6 +121,32 @@ describe('given-program designs and keyed variants (M5 GP) on the real kit', () 
     expect(noDefault).toMatchObject({ ok: false, code: 'PROGRAM_REFUSED', detail: 'program' });
   });
 
+  it('(SA, A25) NO_NETWORK closes the routes the old patch left open: a dgram socket from its constructor, the c-ares resolvers', async () => {
+    const probe = (name: string, body: string) => `export const id = 'gp_${name}';\nexport default async function build() {\n  let open = false;\n  try { ${body}; open = true; } catch (e) { open = false; }\n  throw new Error('NETPROBE:' + (open ? 'open' : 'denied'));\n}\n`;
+    const probes: Array<[string, string]> = [
+      ['dgram_bind', "const { Socket } = await import('node:dgram'); await new Promise((res, rej) => { const s = new Socket('udp4'); s.on('error', rej); s.bind(0, () => { s.close(); res(undefined); }); })"],
+      ['dgram_send', "const d = await import('node:dgram'); await new Promise((res, rej) => { const s = new d.default.Socket('udp4'); s.on('error', rej); s.send(Buffer.from('x'), 9, '127.0.0.1', (e) => (e ? rej(e) : (s.close(), res(undefined)))); })"],
+      ['dns_resolver', "const { Resolver } = await import('node:dns'); const r = new Resolver(); r.setServers(['127.0.0.1']); await new Promise((res, rej) => r.resolve4('example.invalid', (e) => (e && e.code === 'ERR_ACCESS_DENIED' ? rej(e) : res(undefined))))"],
+      ['dns_promises', "const p = await import('node:dns/promises'); await p.resolve4('localhost').catch((e) => { if (e.code === 'ERR_ACCESS_DENIED') throw e; })"],
+      ['dns_lookup_service', "const { lookupService } = await import('node:dns'); await new Promise((res, rej) => lookupService('127.0.0.1', 22, (e) => (e && e.code === 'ERR_ACCESS_DENIED' ? rej(e) : res(undefined))))"],
+    ];
+    for (const [name, body] of probes) {
+      const done = await finished({ events }, await call(sc, { type: 'design.fromProgram', source: probe(name, body), params: {}, opKey: `gp-net-${name}` }));
+      expect(done.refused, name).toMatchObject({ code: 'PROGRAM_REFUSED', detail: 'program' });
+      expect(JSON.stringify(done.refused), name).toMatch(/NETPROBE:denied/);
+    }
+  });
+
+  it('(SA, A25) refuses a lone UTF-16 surrogate in the source before anything is recorded (it would read program_stale later)', async () => {
+    const lone = `${SOURCE}\n// \ud800\n`;
+    const a = await call(sc, { type: 'design.fromProgram', source: lone, params: { side: 9 }, opKey: 'gp-lone' });
+    expect(a).toMatchObject({ ok: false, code: 'PROGRAM_REFUSED', detail: 'program' });
+    expect(a.error).toMatch(/lone UTF-16 surrogate at character \d+ \(U\+D800\)/);
+    // a pair is text: not refused for it
+    const pair = await call(sc, { type: 'design.fromProgram', source: `${SOURCE}\n// \ud83c\udf3e\n`, params: { side: 9 }, opKey: 'gp-pair' });
+    expect(pair.error ?? '').not.toMatch(/surrogate/);
+  });
+
   it('a keyed variant takes other params, a bible and the lot\'s reserved cells (given to the program; the checker passes)', async () => {
     const bible = sc.bibleIndex.list().find((b) => b.id)!;
     const a = await call(sc, { type: 'design.variant', entryId, params: { crop: 'wheat' }, bible: { id: bible.id }, reserved: RESERVED, opKey: 'steward.t.module.lot_3', owner: 'steward:test' });

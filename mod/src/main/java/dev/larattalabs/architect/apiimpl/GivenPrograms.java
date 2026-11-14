@@ -80,12 +80,37 @@ public final class GivenPrograms {
 	}
 
 	/** The {@code design.fromProgram} message. Throws {@link IllegalArgumentException} / FIELD_LIMIT for a bad argument. Pure. */
+	/** (SA, A25) The index of the first lone UTF-16 surrogate in a string, or -1. Pure. */
+	static int loneSurrogate(String s) {
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (Character.isHighSurrogate(c)) {
+				if (i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1))) {
+					i++;
+					continue;
+				}
+				return i;
+			}
+			if (Character.isLowSurrogate(c)) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	static JsonObject fromProgramMessage(String source, JsonObject params, @Nullable BiblePin bible, String opKey, @Nullable String owner) {
 		if (source == null || source.isEmpty()) {
 			throw new IllegalArgumentException("fromProgram needs the program's source");
 		}
 		if (source.length() > Limits.PROGRAM_SOURCE_MAX) {
 			throw new ArchitectRefused(Reason.FIELD_LIMIT, "source: " + source.length() + " characters, at most " + Limits.PROGRAM_SOURCE_MAX, "source");
+		}
+		// (SA, A25) a lone UTF-16 surrogate does not survive UTF-8 (the wire writes '?' for it): the helper would record the sha of other
+		// text than the caller's, and the entry read program_stale later; refused before anything is sent (the helper refuses it too)
+		int lone = loneSurrogate(source);
+		if (lone >= 0) {
+			throw new ArchitectRefused(Reason.PROGRAM_REFUSED, "the program has a lone UTF-16 surrogate at character " + lone + " (U+"
+				+ Integer.toHexString(source.charAt(lone)).toUpperCase(java.util.Locale.ROOT) + "): it is not text that survives UTF-8; remove or escape it", "program");
 		}
 		JsonObject m = DesignsImpl.msg("design.fromProgram");
 		m.addProperty("source", source);
