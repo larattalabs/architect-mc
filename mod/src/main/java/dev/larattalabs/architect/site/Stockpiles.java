@@ -1349,10 +1349,22 @@ public final class Stockpiles {
 
 			@Override
 			public void step(Object t, Builder.Run r, FeedOrder.Reserve reserve) {
+				// (BC, S-M5-9) the region's maxBill: what its group may still draw (its draws counted from the ledger, then as this step pays)
+				BillCaps.Cap billCap = BillCaps.of(t);
+				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap.group());
+				boolean[] capHit = {false};
 				Builder.Purse purse = new Builder.Purse() {
 					@Override
 					public int stock(String item) {
-						return reserve.available(item, p.ledger::stock);
+						int n = reserve.available(item, p.ledger::stock);
+						if (billCap != null) {
+							int left = billCap.left(drawn, item);
+							if (left < n) {
+								capHit[0] = true;
+								return left;
+							}
+						}
+						return n;
 					}
 
 					@Override
@@ -1362,6 +1374,9 @@ public final class Stockpiles {
 						for (SurvivalItems.Cost c : costs) {
 							if (p.ledger.consume(c.item(), c.count(), cap, Stockpiles::maxStack, over)) {
 								p.ledger.pay(key, c.item(), c.count()); // (JR) with consumed, saved with it
+								if (drawn != null) {
+									drawn.merge(c.item(), c.count(), Integer::sum);
+								}
 							}
 						}
 						dropOverflow(srv, p, over, fallback);
@@ -1410,6 +1425,14 @@ public final class Stockpiles {
 					// (RL, C25) nothing built this turn and an owed cell waits on the stock: it waits for materials (its step saw the owed
 					// cell's block and moved on: IDLE)
 					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
+				}
+				// (BC, S-M5-9) nothing built and the cap held a cell back: the typed wait bill_cap (else it lifts)
+				Map<String, Integer> capOver = billCap != null && capHit[0] && r.built.cardinality() == before ? BillCaps.over(r, billCap, drawn) : Map.of();
+				if (!capOver.isEmpty()) {
+					SiteWaits.billCapped(srv, idOf(t), capOver);
+					SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.STARVED);
+				} else if (billCap != null) {
+					SiteWaits.billUncapped(srv, idOf(t));
 				}
 			}
 

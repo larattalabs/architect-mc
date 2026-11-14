@@ -1665,6 +1665,7 @@ public final class RegionsImpl implements Regions {
 		}
 		if (survival) {
 			survivalRefusal(s, p, r);
+			Quotes.capRefusal(s, p, r); // (BC, S-M5-9) a bill past maxBill: refused before any write
 		}
 		String why = WorldJournal.unavailable();
 		if (why != null) {
@@ -1718,6 +1719,9 @@ public final class RegionsImpl implements Regions {
 		if (survival) {
 			JsonObject sv = new JsonObject();
 			sv.addProperty("on", true);
+			if (r.maxBill() != null) {
+				dev.larattalabs.architect.site.BillCaps.record(sv, r.maxBill(), java.util.Map.of()); // (BC) its targets draw within it
+			}
 			rec.survival = sv; // (6c RS) its tiles put targets down, its lots and roads are construction items
 		}
 		// (6c D1) planned beside a standing region: the record names it (the join is this region's; a dangling end is noted on removal)

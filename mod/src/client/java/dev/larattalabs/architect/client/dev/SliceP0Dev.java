@@ -257,7 +257,7 @@ public final class SliceP0Dev {
 				return o;
 			});
 		});
-		DevBridge.register("dev.region.realiseApproved", 300_000, "{sha, lotEntries?: {lot: entry}, fill?: [entry...] (every provisional lot, the first that fits), opKey?} - "
+		DevBridge.register("dev.region.realiseApproved", 300_000, "{sha, lotEntries?: {lot: entry}, fill?: [entry...] (every provisional lot, the first that fits), opKey?, maxBill?: {item: n} (BC)} - "
 			+ "(6c P0) Regions.realiseApproved -> {region} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String sha = f.nonBlank("sha");
@@ -270,11 +270,12 @@ public final class SliceP0Dev {
 				if (req.get("fill") instanceof JsonArray a) {
 					a.forEach(e -> fill.add(e.getAsString()));
 				}
+				Map<String, Integer> cap = capOf(req); // (BC, S-M5-9)
 				return ServerTasks.callAsPlayer((level, player) -> {
 					if (!fill.isEmpty()) {
 						ArchitectApi.get().regions().artifact(sha).ifPresent(a -> RegionsImpl.fitLots(a.planId(), fill).forEach(lots::putIfAbsent));
 					}
-					return ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(sha, Mode.INSTANT, null, lots, key, new JsonObject()));
+					return ArchitectApi.get().regions().realiseApproved(new ApprovedRealise(sha, Mode.INSTANT, null, lots, key, new JsonObject(), cap));
 				}).thenCompose(x -> wrap(x, id -> {
 					JsonObject o = new JsonObject();
 					o.addProperty("region", id);
@@ -399,5 +400,15 @@ public final class SliceP0Dev {
 
 	static JsonElement nul() {
 		return com.google.gson.JsonNull.INSTANCE;
+	}
+
+	/** (BC, S-M5-9) A request's {@code maxBill} ({item: n}), or null. */
+	static @org.jspecify.annotations.Nullable Map<String, Integer> capOf(JsonObject req) {
+		if (!(req.get("maxBill") instanceof JsonObject mb)) {
+			return null;
+		}
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		mb.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsInt()));
+		return out;
 	}
 }

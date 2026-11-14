@@ -106,6 +106,8 @@ public final class SiteWaits {
 		ServerLifecycleEvents.SERVER_STOPPED.register(srv -> {
 			STATES.clear();
 			RESTORED.clear();
+			BILL_CAPPED.clear(); // (BC) re-derived by the next step
+			CAP_SINCE.clear();
 			dirty = false;
 		});
 	}
@@ -138,6 +140,8 @@ public final class SiteWaits {
 
 	/** The target left (built, removed, deconstructed): a running wait stops now. */
 	static void ended(MinecraftServer srv, String id) {
+		BILL_CAPPED.remove(id); // (BC) a gone target is no longer held by its cap
+		CAP_SINCE.remove(id);
 		State st = STATES.remove(id);
 		Long was = RESTORED.remove(id);
 		if (was != null) {
@@ -239,6 +243,21 @@ public final class SiteWaits {
 				}
 			}
 		}
+		Map<String, Integer> capped = BILL_CAPPED.get(id);
+		if (capped != null) {
+			// (BC, S-M5-9) the next cell would draw past the realise's maxBill: STARVED, typed; nextNeeded the capped items' units over the cap
+			List<ItemCount> its = new ArrayList<>();
+			int more = 0;
+			for (var e : capped.entrySet()) {
+				Item item = BuiltInRegistries.ITEM.getOptional(Identifier.tryParse(e.getKey())).orElse(null);
+				if (item == null || its.size() >= 8) {
+					more += e.getValue();
+				} else {
+					its.add(new ItemCount(item, e.getValue()));
+				}
+			}
+			return new SiteWait(id, true, since > 0 ? since : CAP_SINCE.getOrDefault(id, 0L), its, more, SiteWait.BILL_CAP, List.of());
+		}
 		List<net.minecraft.core.BlockPos> held = FILL_BLOCKED.get(id);
 		if (held != null) {
 			// (M5 FK) a declared container not empty at the fill: a typed wait, not for materials
@@ -331,6 +350,36 @@ public final class SiteWaits {
 	static void fillUnblocked(MinecraftServer srv, String id) {
 		if (FILL_BLOCKED.remove(id) != null) {
 			FILL_SINCE.remove(id);
+			SiteView v = liveView(srv, id);
+			if (v != null) {
+				ApiEvents.waiting(v, new SiteWait(id, false, 0L, List.of(), 0));
+			}
+		}
+	}
+
+	/** (BC, S-M5-9) The targets held back by their realise's maxBill: the capped items' units over the cap. */
+	private static final Map<String, Map<String, Integer>> BILL_CAPPED = new java.util.concurrent.ConcurrentHashMap<>();
+	private static final Map<String, Long> CAP_SINCE = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** (BC, S-M5-9) {@code id}'s next cell would draw past its realise's maxBill: the typed wait {@link SiteWait#BILL_CAP}. */
+	static void billCapped(MinecraftServer srv, String id, Map<String, Integer> over) {
+		Map<String, Integer> was = BILL_CAPPED.put(id, Map.copyOf(over));
+		if (was == null) {
+			CAP_SINCE.put(id, srv.overworld().getGameTime());
+		}
+		if (!over.equals(was)) {
+			SiteView v = liveView(srv, id);
+			SiteWait w = view(srv, id);
+			if (v != null && w != null) {
+				ApiEvents.waiting(v, w);
+			}
+		}
+	}
+
+	/** (BC, S-M5-9) {@code id} is no longer held by the cap (it built a cell, or the target went). */
+	static void billUncapped(MinecraftServer srv, String id) {
+		if (BILL_CAPPED.remove(id) != null) {
+			CAP_SINCE.remove(id);
 			SiteView v = liveView(srv, id);
 			if (v != null) {
 				ApiEvents.waiting(v, new SiteWait(id, false, 0L, List.of(), 0));

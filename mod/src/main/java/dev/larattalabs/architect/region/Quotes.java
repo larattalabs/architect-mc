@@ -236,6 +236,36 @@ public final class Quotes {
 		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bill.bom(), bill.parts, bound, bill.exact, notes);
 	}
 
+	/**
+	 * (BC, S-M5-9) A realise with a {@code maxBill}: refused {@link Reason#BILL_CAP} when its bill at put-down (this plan's quote with the
+	 * realise's entries, read now) is past the cap for an item (an item the cap does not name: 0). Server thread, before any write.
+	 */
+	static void capRefusal(MinecraftServer s, RegionsImpl.PlanRec p, dev.larattalabs.architect.api.RealiseRequest r) {
+		Map<String, Integer> cap = r.maxBill();
+		if (cap == null) {
+			return;
+		}
+		Quote q = of(s, p, null, r.lotEntries());
+		List<String> over = overCap(q.bom(), cap);
+		if (!over.isEmpty()) {
+			throw RegionsImpl.refusal(Reason.BILL_CAP, "the realise's bill at put-down is past its maxBill (" + String.join(", ", over) + ")" + (q.exact() ? ""
+				: "; the bill is an upper bound: " + String.join("; ", q.notes().stream().filter(n -> n.contains("upper bound") || n.contains("not loaded")
+					|| n.contains("may")).toList())));
+		}
+	}
+
+	/** (BC) The items of a bill past a cap ({@code item n > cap}; an item the cap does not name: 0), sorted. */
+	static List<String> overCap(JsonObject bom, Map<String, Integer> cap) {
+		List<String> over = new ArrayList<>();
+		for (var e : new TreeMap<>(bom.asMap()).entrySet()) {
+			int n = e.getValue().getAsInt(), c = cap.getOrDefault(e.getKey(), 0);
+			if (n > c) {
+				over.add(e.getKey().replace("minecraft:", "") + " " + n + " > " + c);
+			}
+		}
+		return over;
+	}
+
 	/** (SA, A11) The common terrain blocks, besides the tag rule ({@link CellCond#natural}): a grade's or a fill's usual materials. */
 	private static final java.util.Set<net.minecraft.world.level.block.Block> TERRAIN = java.util.Set.of(net.minecraft.world.level.block.Blocks.DIRT,
 		net.minecraft.world.level.block.Blocks.GRASS_BLOCK, net.minecraft.world.level.block.Blocks.COARSE_DIRT, net.minecraft.world.level.block.Blocks.ROOTED_DIRT,

@@ -84,6 +84,10 @@ public final class BatchKeys {
 					if (x == null && c.getType() == dev.larattalabs.architect.api.SiteSpec.class) {
 						continue;
 					}
+					// (BC) a null maxBill leaves no key either: a realise keyed before the cap keeps its hash
+					if (x == null && r instanceof dev.larattalabs.architect.api.RealiseRequest && c.getName().equals("maxBill")) {
+						continue;
+					}
 					o.add(c.getName(), json(x, false));
 				} catch (ReflectiveOperationException e) {
 					throw new IllegalStateException("cannot read " + c.getName(), e);

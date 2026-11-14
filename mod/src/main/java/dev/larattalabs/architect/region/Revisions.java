@@ -880,6 +880,13 @@ public final class Revisions {
 		if (level == null) {
 			throw RegionsImpl.refusal(Reason.NOT_LOADED, rec.dimension + " is not loaded");
 		}
+		if (rec.survival() && r.maxBill() != null) {
+			// (BC, S-M5-9) the revision's bill past its maxBill: refused before any write; else its cap counts its own draws from now
+			Quotes.capRefusal(s, p, r);
+			var pile = dev.larattalabs.architect.site.Stockpiles.get(rec.owner);
+			dev.larattalabs.architect.site.BillCaps.record(rec.survival, r.maxBill(), pile == null ? java.util.Map.of()
+				: dev.larattalabs.architect.site.BillCaps.drawn(pile.ledger(), rec.groupId));
+		}
 		Path w = l.world();
 		Path rd = dir(w, id, rid);
 		// 1. files; 2. the manifest

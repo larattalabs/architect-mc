@@ -1520,7 +1520,7 @@ public final class PlanChecks {
 		if (!pal.rules().isEmpty()) {
 			ext.add(PaletteRules.EXT_PALETTE, PaletteRules.extRows(pal));
 		}
-		RealiseRequest rr = new RealiseRequest(planId, r.mode(), r.actor(), lots, null, true, null, false, ext, 0, r.opKey());
+		RealiseRequest rr = new RealiseRequest(planId, r.mode(), r.actor(), lots, null, true, null, false, ext, 0, r.opKey()).withMaxBill(r.maxBill()); // (BC)
 		// a keyed realise that already exists (C20): the realise's own key rule answers (the region, or OP_KEY_CONFLICT); its land has
 		// changed by its own writes, so the stale checks below are for a new realise only
 		if (r.opKey() != null && RegionsImpl.INSTANCE.realiseByKey(p.owner(), r.opKey()).isPresent()) {

@@ -244,7 +244,7 @@ public final class RegionDev {
 			});
 		});
 		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin; with fitLots: the first entry that fits each lot), "
-			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds, opKey? (6c X), ext? (6d GR)} - phase 6a: "
+			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds, opKey? (6c X), ext? (6d GR), maxBill?: {item: n} (BC)} - phase 6a: "
 			+ "Regions.realise -> {region} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.nonBlank("planId");
@@ -280,7 +280,7 @@ public final class RegionDev {
 					}
 					JsonObject rext = req.get("ext") instanceof JsonObject ce ? ce.deepCopy() : new JsonObject(); // (6d GR gate) the caller's ext
 					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, rext, maxWait,
-						realiseKey)),
+						realiseKey).withMaxBill(SliceP0Dev.capOf(req))), // (BC) maxBill?: {item: n}
 						id -> {
 							JsonObject o = new JsonObject();
 							o.addProperty("region", id);

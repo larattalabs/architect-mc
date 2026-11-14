@@ -10,12 +10,22 @@ import org.jspecify.annotations.Nullable;
  * sha the approval bound, the mode (regions are INSTANT only in this version), the actor, the library entries for provisional
  * lots ({@code lotId -> entry or entry@version}; a lot that named its entry in the plan needs none), an operation key (the
  * realise's: {@link Regions#realiseByKey} finds it after a restart) and the caller's {@code ext} (kept on the region). Since 1.23.0.
+ *
+ * <p>(BC, S-M5-9, since NEXT) {@code maxBill}: as {@link RealiseRequest#maxBill}, the bound the caller approved (item id -> count); null:
+ * no cap.
  */
 public record ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
-	JsonObject ext) {
+	JsonObject ext, @Nullable Map<String, Integer> maxBill) {
 	public ApprovedRealise {
 		mode = mode == null ? Mode.INSTANT : mode;
 		lotEntries = lotEntries == null ? Map.of() : Map.copyOf(lotEntries);
 		ext = ext == null ? new JsonObject() : ext;
+		maxBill = RealiseRequest.capOf(maxBill);
+	}
+
+	/** The 1.23.0 shape: no cap. */
+	public ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable String opKey,
+		JsonObject ext) {
+		this(artifactSha, mode, actor, lotEntries, opKey, ext, null);
 	}
 }
