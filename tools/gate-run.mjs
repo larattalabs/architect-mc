@@ -680,7 +680,7 @@ if (tierInfo.cache.lookup) {
       l = explicitDecision({ own: null, strict, key: k, exact: lookup(CACHE, id, k.key), coverage: coverageMode(CACHE, id) ? () => lookupCoverage(CACHE, id) : null, platform: platformNow() });
       if (l.hit) for (const [lib, dep] of [['tools/lib/junit-reuse.mjs', 'unit-mod'], ['tools/lib/kit-reuse.mjs', 'unit-kit'], ['tools/lib/sidecar-reuse.mjs', 'unit-sidecar']]) {
         // as below: a reader's coverage PASS stands only beside the suite it delegated to
-        if (l.hit.mode === 'coverage' && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes(lib) && !want.has(dep)) l = { hit: null, why: `its tests are delegated to ${dep}, which is not in this run` };
+        if (l.hit?.mode === 'coverage' && (INPUT_MAP.steps[parentOf(id)]?.closure ?? []).includes(lib) && !want.has(dep)) l = { hit: null, why: `its tests are delegated to ${dep}, which is not in this run` };
       }
     } else {
       l = lookup(CACHE, id, k.key);
