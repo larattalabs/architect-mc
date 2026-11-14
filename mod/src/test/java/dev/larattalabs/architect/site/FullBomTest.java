@@ -166,6 +166,19 @@ class FullBomTest {
 		var r2 = FullBom.reader(p -> air(), f, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 15 : 2);
 		assertEquals(11, r2.getRawBrightness(new BlockPos(0, 11, 0), 4));
 		assertTrue(f.why.isEmpty(), f.why.toString());
+		// sky light under 15 now (a torch-lit cell, a shaded one): the build may change it, so inexact, named
+		FullBom.Result shaded = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), world, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 12 : 9);
+		assertFalse(shaded.exact());
+		assertTrue(shaded.inexactBecause().get(0).startsWith("the build may change the light"), shaded.inexactBecause().toString());
+		// open sky, but the plan roofs the crop over: inexact
+		int[] roofed = {0, 10, 0, 0, 11, 0, 0, 14, 0};
+		BlockState[] rst = {Blocks.FARMLAND.defaultBlockState(), Blocks.WHEAT.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState()};
+		FullBom.Result roof = FullBom.compute(inputs(roofed, rst, NONE, NONE, NONE, NONE, NONE, NONE), world, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 15 : 0);
+		assertFalse(roof.exact());
+		// open sky with glass above (skylight passes): exact
+		BlockState[] gst = {Blocks.FARMLAND.defaultBlockState(), Blocks.WHEAT.defaultBlockState(), Blocks.GLASS.defaultBlockState()};
+		FullBom.Result glass = FullBom.compute(inputs(roofed, gst, NONE, NONE, NONE, NONE, NONE, NONE), world, (layer, p) -> layer == net.minecraft.world.level.LightLayer.SKY ? 15 : 0);
+		assertTrue(glass.exact(), glass.inexactBecause().toString());
 		// light unknown: inexact, with the reason named (not "a cell the plan reads is not loaded")
 		FullBom.Result unknown = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), world);
 		assertFalse(unknown.exact());

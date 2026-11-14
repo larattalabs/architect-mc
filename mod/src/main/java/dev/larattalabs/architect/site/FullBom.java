@@ -235,7 +235,41 @@ final class FullBom {
 		if (sim.runaway) {
 			unknown.set("the shape updates did not settle");
 		}
+		lightGuard(sim, light, unknown);
 		return new Result(items, drift.isEmpty() && !unknown.on, drift, count, finalStates, List.copyOf(unknown.why));
+	}
+
+	/**
+	 * (BC, S-M5-11) The light a block read is the level's before the build: exact only where the build can't change the answer. A cell
+	 * whose sky light is 15 now, with no plan write above it in its column that blocks the sky, keeps raw brightness 15 whatever else the
+	 * plan writes (a torch only adds), so a crop's light check (at least 8) gives the same answer; any other light-reading cell makes the
+	 * bill inexact, named.
+	 */
+	private static void lightGuard(Sim sim, Light light, Flag unknown) {
+		for (var it = sim.readLight.iterator(); it.hasNext();) {
+			long p = it.nextLong();
+			int x = BlockPos.getX(p);
+			int y = BlockPos.getY(p);
+			int z = BlockPos.getZ(p);
+			int sky = light.at(net.minecraft.world.level.LightLayer.SKY, p);
+			if (sky < 0) {
+				continue; // unknown: already named by the reader
+			}
+			boolean open = sky == 15;
+			if (open) {
+				for (var w : sim.writes.entrySet()) {
+					long q = w.getKey();
+					if (BlockPos.getX(q) == x && BlockPos.getZ(q) == z && BlockPos.getY(q) > y && !w.getValue().propagatesSkylightDown()) {
+						open = false;
+						break;
+					}
+				}
+			}
+			if (!open) {
+				unknown.set("the build may change the light at a block that reads it (" + x + "," + y + "," + z + ")");
+				return;
+			}
+		}
 	}
 
 	/** Whether the bill may be off, and why (for the verdict's notes). */
@@ -258,6 +292,8 @@ final class FullBom {
 	/** A small world over the plan's writes that repeats {@code Level.setBlock}'s shape updates. */
 	static final class Sim {
 		final Map<Long, BlockState> writes = new HashMap<>();
+		/** (BC) The cells whose block read the light (a crop's shape update): {@link #lightGuard}. */
+		final it.unimi.dsi.fastutil.longs.LongOpenHashSet readLight = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		private final LongFunction<@Nullable BlockState> world;
 		private final Flag unknown;
 		private final net.minecraft.world.level.LevelReader reader;
@@ -276,7 +312,7 @@ final class FullBom {
 		Sim(LongFunction<@Nullable BlockState> world, Flag unknown, Light light) {
 			this.world = world;
 			this.unknown = unknown;
-			this.reader = reader(this::at, unknown, light);
+			this.reader = reader(this::at, unknown, light, readLight::add);
 		}
 
 		@Nullable BlockState at(long p) {
@@ -390,6 +426,12 @@ final class FullBom {
 
 	/** {@link #reader(LongFunction, Flag)} that also answers {@code getRawBrightness} and {@code getBrightness} from {@code light}. */
 	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, Flag unknown, Light light) {
+		return reader(at, unknown, light, q -> {
+		});
+	}
+
+	/** {@link #reader(LongFunction, Flag, Light)}, telling {@code readsLight} each cell whose light is read. */
+	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, Flag unknown, Light light, java.util.function.LongConsumer readsLight) {
 		return (net.minecraft.world.level.LevelReader) java.lang.reflect.Proxy.newProxyInstance(FullBom.class.getClassLoader(),
 			new Class<?>[] {net.minecraft.world.level.LevelReader.class}, (proxy, m, args) -> {
 				switch (m.getName()) {
@@ -411,6 +453,7 @@ final class FullBom {
 						if (args != null && args.length == 2) {
 							boolean raw = m.getName().equals("getRawBrightness");
 							long p = ((BlockPos) (raw ? args[0] : args[1])).asLong();
+							readsLight.accept(p);
 							int sky = raw ? light.at(net.minecraft.world.level.LightLayer.SKY, p) : light.at((net.minecraft.world.level.LightLayer) args[0], p);
 							int block = raw ? light.at(net.minecraft.world.level.LightLayer.BLOCK, p) : 0;
 							if (sky < 0 || block < 0) {
