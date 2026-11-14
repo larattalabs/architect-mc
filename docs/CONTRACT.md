@@ -31499,69 +31499,14 @@ Not covered (by scope): deliveries (hoppers, F4) and player inventories (F1), wh
 - `rl-crash` reconciles stockpile-fed sites and roads. A survival region's terrain target (RegionTargets) carries a book like any target,
   but no gate case halts inside one.
 
-## Slice SA, safety follow-ups (branch `slice/SA` off main 5868f62f (RL as built); 2026-11-13; DEV MODE, strict: survival accounting, removal)
+## Slice SA, safety follow-ups (branch `slice/SA` off main 5868f62f; 2026-11-13; DEV MODE, strict; versions NEXT; $0)
 
-The docs and leftovers audit's accepted safety follow-ups (`audits/docs-leftovers.md` §1a: A18, A11, A3, A47+A48, A25, A36, A35; Noah via
-the parent session, 2026-11-13, "docs: default"). Versions NEXT; $0. The diagnose-and-repair command is a separate slice.
-
-### As built
-
-1. **A18, the site.variant ack.** Cause: `SiteVariants.enqueue` (and `Programs.enqueue`, the same pattern) started its runner inside the
-   request, and the runner's first steps (the kit copy, the site files, the program's scratch) are synchronous: they ran before the ack
-   was written, so under load the ack missed the mod's `SidecarLink.ACK_TIMEOUT_MS` (20 s) while the helper went on to install the entry.
-   - The helper: both runners yield (`setImmediate`) before their first job, so a request that starts its runner acks first
-     (`site-design.test.ts`: the scratch dir does not exist at the ack; fails without the yield). Another runner's synchronous kit copy
-     can still hold the event loop; the typed timeout covers that.
-   - The mod: `DesignsImpl.ask` maps a `TimeoutException` (no ack in the window; null message, refused untyped "null" before) to
-     `ArchitectRefused(SIDECAR_UNAVAILABLE, detail "ack_timeout")`; for a message with an opKey it says the helper may still carry it out
-     and that the same opKey returns its operation or what it installed (`DesignWireTest`).
-   - **Steward note:** a `SIDECAR_UNAVAILABLE ack_timeout` on `siteVariant` (or `fromProgram`, `variant`) may be followed by an install;
-     replaying the same opKey is safe and returns the operation (done: its entry).
-2. **A11, the pad dirt.** Measured (HR's strict verifier run 20261113-052115 on x03, and the kit's x03 survival check offline): the
-   hamlet's `cost.survival.bom` is dirt 49, lantern 4, oak fence 4; its targets bill lantern 4 and oak fence 4; the conservation sum is
-   exact built and removed (consumed = the targets' bills: dirt 0) and the world equals its INSTANT twin (0 differ). **Neither mint nor
-   loss: an over-quote.** The rule: the 49 are not the pads' (every `pads` op is free) but the hamlet's grading columns (`green`,
-   `verges`, `lanes`; cond ALWAYS_OURS) filling dirt to y 63 under the grass and path. The kit's evaluator bills every paid cell it
-   writes over the plan survey; in game `TileCheck` skips a no-op cell (the world already holds the state: dirt over the flat base's
-   dirt), so it is never written, billed or consumed. The check's `cost.survival` and QT's quote (`planned.survivalBom`) over-quote by
-   those cells. Fix: PENDING the coordinator's call (see the report).
-3. **A3, revision roads.** `RegionTargets.roi` looks a `road:` item up in its revision's IR (`Revisions.liveFor`, as IG did for lots):
-   a plan/0 revision's new street is not in the base IR, so it found no box, never waited, and in survival was put down over its stage's
-   unbuilt tiles. `RegionTargets.build` names a road's progress row by its item key (a revision road fell into the shared "roads" row).
-   Gate item `safe-road`.
-4. **A47 + A48, LC.** `LandCheck.mechTriggers`: a mechanism's `triggers[].at` cells (not its rungs); `classifyCell(..., trigger)`: a
-   trigger's state stays excused (pulled, pressed), but a written trigger block gone (air or a fluid there now) is `removed` in
-   `mech:<lot>`; lanes and rungs as before. `lc-castle` judges the broken lever (it recorded it before): one `removed` more in
-   `mech:gatehouse_1`, every other part and lot as before. `LandCheckTest`: the missing lever and button, water over a lever, pulled and
-   pressed the same, a player's block over the trigger the player's; every cell of a four-cell lane never judged; a piston pushing a
-   player's block along the lane (the cell it left the player's or the same, the cell it entered not judged).
-5. **A25, GP.**
-   - A lone UTF-16 surrogate in a program is refused `PROGRAM_REFUSED program` naming its index, by the mod before the wire (a
-     `ProgramRefused`; the wire would write '?' for it) and by the helper (`checkProgramSource`); a pair is text.
-   - A `fromProgram` replay re-runs the source's own checks (length, the surrogate, a default export) before returning the operation.
-   - NO_NETWORK as hard as Node 24 allows: its permission model has no network switch (it denies child processes, workers, addons,
-     the inspector and `process.binding`). Probed in the real build sandbox, the old preload let a program bind and send UDP through
-     `new dgram.Socket` and query DNS through the c-ares resolvers (`dns.resolve*`, `dns.Resolver`, `dns.promises`, `lookupService`).
-     Closed: dgram's prototype `bind/send/connect/addMembership`, every function of `dns`, `dns.promises` and their `Resolver`
-     prototypes. Shared with the region plan sandbox. `programs.test.ts` runs the five probes as given programs (fails on the old preload).
-6. **A36, ST survival site houses.** `safe-survival-st`: SO's survival flow (`tools/gate7bso.mjs survival`, `GATE7BSO_STANDALONE=1`)
-   over `fit_attach_to_cliff` on `cliff_face` with ST's standalone spec (no lot id): Sites.place in construction mode, the partial
-   build deconstructed, the full build in support order with every recorded prefix connected, save/quit/reload half way, items in =
-   items out, deconstructed exact, identical to its instant placement.
-7. **A35, the pin badge in the API (Noah: yes).** `Sites.place` and `Sites.check` without a site, and `/architect place`, refuse a
-   site-bound entry (`SiteFit.boundSha`: its ext binding or sidecar site) with `SITE_MISMATCH`, the message starting with the bound sha
-   (the detail) and naming "place a site variant here instead". An `on_pad` entry is not refused (it keeps `fitToLot` and its plain
-   placement on a pad lot, as PL left it). The client's own placement carries its site and is unchanged. Checked in game first in
-   `safe-survival-st`.
-
-### Steward RC areas (API behaviour changes)
-
-- A35: the new `SITE_MISMATCH` case (a pinned entry placed or checked with no site); on_pad exempt.
-- A18: `SIDECAR_UNAVAILABLE` detail `ack_timeout` on any helper ask; the helper may still install; an opKey replay is safe.
-- A25: a `fromProgram` replay can now be refused (its source re-checked); lone surrogates refused; the plan and program sandbox denies
-  dgram and the c-ares resolvers.
-- A47: `landCheck` reports a broken lever or button as `removed` in `mech:<lot>`.
-
-### Checks
-
-PENDING (gate runs, the strict verifier).
+- **A18:** the site.variant and given-program runners yield before their synchronous kit copy, so the ack goes first; an ack timeout is `SIDECAR_UNAVAILABLE ack_timeout` (an opKey replay is safe; the helper may still install).
+- **A11** (measured on x03: quote 49 dirt, targets 0, consumed 0, HR's twin 0 differ: neither mint nor loss): the kit bills the hamlet's grading dirt that TileCheck skips as already standing; a survival quote with natural-terrain paid cells is now `exact: false`, noted as an upper bound (consumed <= quote). The exact deduction is its own slice, with BC.
+- **A3:** a revision road's box comes from its revision's IR (`RegionTargets.roi`), so in survival it waits for its stage's unbuilt tiles; its progress row is named by its item key.
+- **A47/A48:** a missing lever or button reads `removed` in `mech:<lot>` (its state stays excused); units for a four-cell lane and a pushed player block; `lc-castle` judges the broken lever.
+- **A25:** lone surrogates refused `PROGRAM_REFUSED program` (mod and helper); a fromProgram replay re-checks its source; NO_NETWORK also closes `new dgram.Socket` and the c-ares resolvers (both reachable before, probed in the sandbox).
+- **A36/A35:** `safe-survival-st` runs ST's standalone house through SO's survival flow; `Sites.place`/`check` without a site and `/architect place` refuse a pinned entry `SITE_MISMATCH` (on_pad exempt).
+- **Steward RC:** the A35 refusal; `ack_timeout`; replays can be refused and the sandbox denies dgram/DNS; LC's lever `removed`; more inexact survival quotes ("over by at most N").
+- **Checks:** PENDING.
+- **Leftovers:** another runner's sync kit copy can still stall an ack (the typed timeout covers it); batch and group placement don't pass through the API precheck (no pin refusal there); the exact A11 deduction.
