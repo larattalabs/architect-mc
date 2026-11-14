@@ -1,9 +1,10 @@
 {
-  "about": "(7cF) an authored program in its draft shape (program.authored: a zone's program {template: authored, params: {id, sha}}): reserved until AU",
+  "about": "(7cF, moved by AU) an authored program the plan names but no one installed: since AU the zone answers refused NO_PROGRAM (it was unsupported {block: program.authored} while reserved)",
   "on": "s7",
   "expect": {
     "part": "hall",
-    "block": "program.authored"
+    "class": "refused",
+    "code": "NO_PROGRAM"
   },
   "plan": {
     "schemaVersion": "plan/0",
@@ -15,7 +16,9 @@
           "params": {
             "id": "sea_stack_monastery",
             "sha": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            "params": { "terraces": 3 }
+            "params": {
+              "terraces": 3
+            }
           }
         }
       }

@@ -5,6 +5,7 @@
 //        [--links l.json [--link-base ir.json]]   ((7b LP) the realise's link pass: the plan replayed with the bound entries' ports, its links
 //        written; NO_LINK {lot, port} or REPLAY when the replay is not the checked plan plus the links)
 //   node kit/tools/region.mjs eval <ir.json> --tile tx,tz --heights h.bin [--stage s] [--set terrain|path] [--json] [--out file]
+//   node kit/tools/region.mjs author-check <source.mjs> --survey s.bin --claim ... --out dir [--json]   ((7c AU) one authoring round's checker)
 //   node kit/tools/region.mjs synth --box minX,minZ,maxX,maxZ [--res 1|4] [--seed s] --out file      (a synthetic ARSV, for tests)
 // Exit 0 ok, 1 failure, 2 usage. With --json the last stdout line is one JSON object. `plan` writes only into --out.
 import fs from 'node:fs';
@@ -24,6 +25,11 @@ import { fillMissing } from '../lib/region/plan.mjs';
 import { asColumns, canonicalJson as canonicalJsonOf } from '../lib/region/pack.mjs';
 import { withStandingIds } from '../lib/region/revise.mjs';
 import { LinkError, replayDiff } from '../lib/region/links.mjs';
+import { fileURLToPath } from 'node:url';
+import { loadAuthoredDir, lintAuthored, authoredSha, stageAuthored } from '../lib/plan/authored.mjs';
+
+/** This kit's root (an authored program's imports are staged to its files). */
+const KIT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** (6d RV) a revision input's standing data, its ids filled from its effective IR (M29:revision). */
 const revisionStandingOf = (rv) => withStandingIds(rv?.standing ?? null, rv?.effective ?? null);
@@ -49,7 +55,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1, links: 1, 'link-base': 1 }); // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1, beside: 1, 'beside-reach': 1, biomes: 1, 'lot-blocks': 1, survival: 'flag', node: 1, revision: 1, links: 1, 'link-base': 1, authored: 1 }); // (7c AU) --authored <dir>: the plan's authored programs (<id>.mjs) // (6d RV) --revision: a revision's inputs // (6c RS) --survival: plan in survival (the world's mode)
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -116,9 +122,11 @@ async function plan(argv) {
   const links = opts.links ? readJson(opts.links, '--links') : null;
   const linkBase = opts['link-base'] ? readJson(opts['link-base'], '--link-base') : null;
   if (linkBase && !links) throw new Usage('--link-base needs --links');
+  // (7c AU) the authored programs a plan names (<dir>/<id>.mjs, the installed sources' bytes): hashed, linted, staged and imported here
+  const authored = opts.authored ? await loadAuthoredDir(opts.authored, KIT_DIR) : null;
   let res;
   try {
-    res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
+    res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
   } catch (e) {
     // (7b LP, change 3) a link that can't reach an entry's port: NO_LINK {lot, port} (the realise is refused, nothing written)
     if (links && e instanceof LinkError) {
@@ -299,6 +307,52 @@ function synth(argv) {
   return 0;
 }
 
+/**
+ * (7c AU) `author-check <source.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [--bible b.json] [--seed u64] [--volumes dir]
+ * --out dir [--json]`: one authoring round's checker. The source is hashed and linted; a clean one is staged (its kit imports pointed at this
+ * kit), planned over the claim as any region program (its own params' defaults) and its IR run through the region checker. The answer is
+ * `{ok: true, sha, findings: [{rule, message, line?}], irSha?, report?}`: no findings is a program that installs. Runs in the plan sandbox.
+ */
+/** (7c AU) checker rules that block an authored program's install beyond the region checker's errors. */
+export const AUTHOR_BLOCKING = /^M3(:|$)/;
+
+async function authorCheck(argv) {
+  const { pos, opts } = parseArgs(argv, { survey: 1, claim: 1, bible: 1, seed: 1, volumes: 1, out: 1, json: 'flag' });
+  if (pos.length !== 1 || !opts.survey || !opts.claim || !opts.out) throw new Usage('author-check <source.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] --out dir [--bible b.json] [--json]');
+  const bytes = fs.readFileSync(pos[0]);
+  const sha = authoredSha(bytes);
+  const source = bytes.toString('utf8');
+  const say = (o) => { if (opts.json) console.log(JSON.stringify({ ok: true, sha, ...o })); else for (const f of o.findings) console.log(`${f.rule}: ${f.message}`); return 0; };
+  const lint = lintAuthored(source);
+  if (lint.length) return say({ findings: lint });
+  fs.mkdirSync(path.join(opts.out, '.staged'), { recursive: true });
+  const staged = path.join(opts.out, '.staged', `author-${sha.slice(0, 16)}.mjs`);
+  fs.writeFileSync(staged, stageAuthored(source, KIT_DIR));
+  let mod;
+  try { mod = await import(pathToFileURL(staged).href); } catch (e) { return say({ findings: [{ rule: 'program', message: `the module did not load: ${String(e?.message ?? e).split('\n')[0]}` }] }); }
+  let survey;
+  try { survey = fs.readFileSync(opts.survey); } catch (e) { throw new Usage(`--survey: ${e.message}`); }
+  let roles = {}, patterns = {};
+  if (opts.bible) { const b = readJson(opts.bible, '--bible'); roles = { ...(b.roles ?? {}) }; patterns = { ...(b.patterns ?? {}) }; }
+  const volumes = [];
+  if (opts.volumes) for (const f of fs.readdirSync(opts.volumes).filter((n) => /^[0-9a-f]{64}\.bin$/.test(n)).sort()) { const b = fs.readFileSync(path.join(opts.volumes, f)); const d = decodeArvx(b); volumes.push({ sha: d.sha, box: d.box, bytes: Uint8Array.from(b), decoded: d }); }
+  let res;
+  try {
+    res = await planRegion({ program: mod, programSource: bytes, params: {}, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes });
+  } catch (e) {
+    return say({ findings: [{ rule: 'program', message: String(e?.message ?? e).split('\n')[0].slice(0, 2000) }] });
+  }
+  fs.writeFileSync(path.join(opts.out, 'ir.json'), res.irJson);
+  fs.writeFileSync(path.join(opts.out, 'meta.json'), `${JSON.stringify(res.meta)}\n`);
+  const blobs = (s) => res.blobs.get(s) ?? null;
+  const report = checkRegion({ ir: res.ir, survey, blobs, volumes: volumes.map((v) => v.decoded), meta: res.meta, prefix: false });
+  delete report._world;
+  // the checker's errors, each a finding of its rule, plus its support rules (M3: cells on neither the ground nor a declared floating group,
+  // spurs, gravity blocks, overhangs), which an authored program must meet (a warning for a bundled one); other warnings never block
+  const findings = (report.findings ?? []).filter((f) => f.severity === 'error' || AUTHOR_BLOCKING.test(f.rule)).slice(0, 40).map((f) => ({ rule: `check:${f.rule}`, message: `${f.part ? `[${f.part}] ` : ''}${f.message}`.slice(0, 2000) }));
+  return say({ findings, irSha: res.irSha, report: { ok: report.ok, errors: report.errors, warnings: report.warnings }, notes: res.notes, cells: res.ir.budget?.cells ?? null });
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const json = rest.includes('--json');
@@ -309,6 +363,7 @@ async function main() {
     if (cmd === 'check') return check(rest);
     if (cmd === 'preview') return preview(rest);
     if (cmd === 'catalogue') return await catalogue(rest);
+    if (cmd === 'author-check') return await authorCheck(rest);
     throw new Usage('usage: region.mjs plan|eval|synth ... (see kit/REGIONS.md "CLI")');
   } catch (e) {
     const usage = e instanceof Usage;

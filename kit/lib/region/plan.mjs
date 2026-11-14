@@ -461,6 +461,9 @@ export async function planRegion(o) {
     Object.defineProperty(ctx, 'besideReach', { enumerable: false, get: () => besideReach });
     // (6d RV) a revision's inputs (Regions.planRevision: {rid, position, parent, base, effective, standing}); not enumerable, as besideReach
     if (o.revision) Object.defineProperty(ctx, 'revision', { enumerable: false, value: o.revision });
+    // (7c AU) the plan's authored programs (region.mjs plan --authored: id -> {sha, module, problem}); not enumerable, as besideReach. Only
+    // plan_v0's compile reads it (a zone {template: authored, params: {id, sha}}); a plan without one has none
+    if (o.authored) Object.defineProperty(ctx, 'authored', { enumerable: false, value: o.authored });
     // (7b LP) the link pass's input at realise ({lots: {lot: {entry, version?, ports}}}: the bound entries' own ports); not enumerable, as
     // besideReach. A plan without it records its port links (ir.portLinks) and writes none; with it, it writes them in LINK_STAGE.
     if (o.links) {

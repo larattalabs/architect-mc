@@ -214,6 +214,9 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       ...(pc.paletteRows?.length ? { palette: pc.paletteRows } : {}),
       // (7c HR, S-7c-4) the hidden rooms that stand in the plan: each entrance cell and kind, its host and its room's box. Only here (never in
       // an answer, a preview or siteplan.json; PlanRequest ext architect_mc:secrets adds them to those as data). Only in a plan with one
+      // (7c AU) the authored programs the plan's standing zones ran, by {part, id, sha}: the source frozen by sha (realiseApproved re-hashes the
+      // installed file and refuses AUTHORED_STALE when it moved). Only in a plan with one
+      ...((pc.authored ?? []).some((q) => answers.some((a) => a.part === q.part && OK.has(a.class))) ? { authored: pc.authored.filter((q) => answers.some((a) => a.part === q.part && OK.has(a.class))).map((q) => ({ part: q.part, id: q.id, sha: q.sha })) } : {}),
       ...((pc.secrets ?? []).some((q) => answers.some((a) => a.part === q.part && OK.has(a.class))) ? { secrets: pc.secrets.filter((q) => answers.some((a) => a.part === q.part && OK.has(a.class))) } : {}),
     };
     // (6d RV, §9.3) a revision plan's artifact: whose revision it is, the tiles it writes (dirty) with the region's history at each (compared
