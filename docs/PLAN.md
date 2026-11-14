@@ -1678,13 +1678,29 @@ cells, IRR's sources):
 
 ## Status and parked items (2026-11-13, Noah via parent session: "docs: default")
 
-- **Status:** phases 0-6c and 6d's revision work, 7a and 7b are built and closed (7b phase close 2026-11-13). 7c (composition) is in
-  progress: waves 1-2 released (v0.63.0, v0.64.0), wave 3 building (CO, AQ, US, CX), then AU, PM, BR and PAY. Phases 8a-8c are planned
-  after 7c (below). The per-slice record is CONTRACT.md's as-builts; the deferred list is `../LEFTOVERS.md`.
+- **Status (2026-11-13 evening):** phases 0-6c and 6d's revision work, 7a and 7b are built and closed (7b phase close 2026-11-13). 7c
+  (composition): waves 1-3 merged (released through v0.65.0); RL, RU, GI, SU and IG-b merged since; SA and FK running. Phases 8a-8c
+  are planned after 7c (below). The per-slice record is CONTRACT.md's as-builts; the detail of every open item is `../LEFTOVERS.md`
+  (Architect "Slice backlog").
+- **Ranked queue** (leftovers triage 2026-11-13, Noah via parent session: "yes, have both managers do the triage pass"; safety before
+  more 7c features; the speed rules' tiers in GATES.md):
+  1. **SA** safety follow-ups (strict, running), then release **v0.66.0** (RL + SA + RU + IG-b + SU + GI) with a Steward RC.
+  2. **FK** filled containers (strict, running; unblocks Steward M4).
+  3. **BC+** bill bounds and exact quotes (strict; S-M5-10 farmland leak, S-M5-11 exact crop_farm quotes, A11's exact cut, S-M5-9
+     `maxBill`; after SA).
+  4. **SAD** survival adoption (strict; S-AD-5 and survival revisions of adopted regions; contract first, Steward review; unblocks
+     Steward's survival street towns; after SA, beside BC+).
+  5. **J1** crash and refund edges (strict; RS-c pistons and explosions, unsaved N1-shape credits, save order, the RL/RU/JR-b gate
+     gaps; after SA and FK).
+  6. **DX** CONTRACT restructure and docs tidy (light, docs only; at a quiet point after SA and FK merge).
+  7. **SS** save spikes (strict, small; after FK). **GI2** gate infra 2 (light, small; any time).
+  8. **AU** then **PM**, **BR** then **PAY**: 7c's remaining rows 13-16 (spend needs Noah, ~$65 in all).
+  9. **J2** journal backlog (strict, own contract; UMT F9/DPT/F10/PTS/UC; after J1).
+  10. **UI** (light; Noah's screenshots; lab-ui L-0.5 first), **SP2** unread Style and bible params, **CS** composite and site edges,
+      **CN** connectors in game, **R2** 7c-region-2, **DR** diagnose-and-repair (strict, own contract).
+  11. After 7c: the **player-ready pass**, then **8a** (contract first: construction mode free or costing?), **8b**, **8c**.
 - **Unscheduled catalogue kinds:** `rule.*` (until RC), `connector.tube` (until UW), `connector.rail` (until CR) and `revision.change`
   (until RV2) stay reserved and are **unscheduled**: no slice plans them.
 - **The player-ready pass** (first-run guidance, the accessibility pack, rebindable keys, the glossary, the undo hotkey, Preview on ghost)
   is ordered **after 7c**.
-- **Next safety work:** RL (reconcile at load), HF (players saved with the ledger), RU (survival revision cancel), then a strict
-  "safety-follow" slice before more 7c features.
-- **Nightlies** resumed 2026-11-14 (the 01:30-03:30 blackout applies); triage is fix-forward.
+- **Nightlies:** 11-13 and 11-14 skipped (Noah via parent session); the next real one is 11-15; triage is fix-forward.
