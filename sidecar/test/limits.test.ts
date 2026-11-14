@@ -124,7 +124,9 @@ describe('Limits.java against the zod bounds (6c 0c §5)', () => {
   it('every Limits constant is used by a bound (no stale constant), but for the custom-refined ones', () => {
     const used = new Set(all.map((b) => constantOf(b.path)));
     // (6c B) the brush's radius and strength are the mod's own bounds (no sidecar message carries them; kit/lib/region/brush.mjs BRUSH_LIMITS, held equal by kit/test/brush-b.test.mjs)
-    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'JOB_SYSTEM_AGENT_MAX', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX', 'PALETTE_ROLES_MAX', 'PROGRAM_PARAMS_MAX']);
+    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'JOB_SYSTEM_AGENT_MAX', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX', 'PALETTE_ROLES_MAX', 'PROGRAM_PARAMS_MAX', 'FILL_CONTAINERS_MAX', 'FILL_LOCKS_MAX']);
+    // (M5 FK) the fill's bounds are the kit checker's (kit/lib/fill.mjs FILL_CONTAINERS_MAX, FILL_LOCKS_MAX), not a message field
+    expect([ints.get('FILL_CONTAINERS_MAX'), ints.get('FILL_LOCKS_MAX')]).toEqual([64, 64]);
     // (M5 GP) PROGRAM_PARAMS_MAX is the params record's refine (characters as JSON), and both equal the helper's own (programs.ts)
     const at = (n: number) => ({ type: 'design.fromProgram', v: 1, source: 'export default function () {}', opKey: 'k', params: { notes: 'y'.repeat(n - '{"notes":""}'.length) } });
     expect(P.DesignFromProgramMsg.safeParse(at(ints.get('PROGRAM_PARAMS_MAX')!)).success).toBe(true);
