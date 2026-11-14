@@ -224,16 +224,19 @@ export async function registerRL(steps, h) {
     const cu = Object.entries(cells).find(([, b]) => b === 'minecraft:copper_block')?.[0]?.split(',').map(Number);
     if (cu) out.cu = await mineAndPlace(cu, 'minecraft:exposed_copper', 'minecraft:copper_block');
     check(!!out.cu?.placed?.tracked && out.cu.placed.state === 'minecraft:exposed_copper', `${tag} JR-b residual: a player replaced ${lot}'s copper block ${json(cu)} with exposed copper (a CU equivalent; PT record ${out.cu?.placed?.tracked})`, out.cu);
+    await cmd('/kill @e[type=minecraft:item]'); // a dropped stack in a lot stops its removal (a blocker)
     const before = await audit();
     const paid = paidSum(before.ledger);
     const back0 = G.plus(before.stock ?? {}, before.ledger?.refundOverflow ?? {});
-    await call('dev.region.remove', { region: W.region, requester: G.OWNER }, 3_600_000).catch(() => null);
+    const rm = await call('dev.region.remove', { region: W.region, requester: G.OWNER }, 3_600_000).catch((e) => ({ refused: String(e?.message ?? e) }));
     let st;
     for (let i = 0; i < 900; i++) {
       st = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
       if (!st?.view?.state || ['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state)) break;
+      if (i >= 15 && st.view.state === 'PLACED') break; // the removal stopped before writing anything (a blocker): it stays PLACED
       await L.sleep(2000);
     }
+    out.removeCall = rm;
     await L.settle(3000);
     const after = await audit();
     const refund = G.minus(G.plus(after.stock ?? {}, after.ledger?.refundOverflow ?? {}), back0);
