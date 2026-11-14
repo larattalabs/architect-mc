@@ -12,7 +12,9 @@
 //     author  (au-author)  in game (headless, the flat base): Regions.authorProgram (dev.region.author) on a 96x96 claim: (a) round 1 a
 //                          court floating 14 above the ground: the checker's M3 finding; round 2 fixed: AUTHORED, installed world-local
 //                          (the file's sha the result's); (b) a plan naming it {template: authored, params: {id, sha}} checks READY with
-//                          the artifact's authored member; a plan naming another sha answers refused AUTHORED_STALE; (c) the artifact
+//                          the artifact's authored member; a plan naming another sha answers refused AUTHORED_STALE; (d, first) the installed
+//                          source edited on disk: the artifact's realiseApproved refuses AUTHORED_STALE naming the program, nothing written,
+//                          the file put back; (c) the artifact
 //                          realised, PLACED, removed: the claim's hash restored (E-flat 0); (d) the installed source edited on disk: the
 //                          same artifact's realiseApproved refuses AUTHORED_STALE naming the program and writes nothing
 //     report               REPORT.md over the step JSONs
@@ -136,14 +138,25 @@ steps.author = async () => {
   const frozen = art?.body?.authored ?? art?.artifact?.body?.authored ?? null;
   out.b = { overall: c0.check?.overall, artifactSha: c0.check?.artifactSha, parts: (c0.check?.parts ?? []).map((p) => `${p.part}:${p.class}`), authored: frozen, refused: c0.refused };
   check(c0.check?.overall === 'READY' && json(out.b.parts) === json(['court:fits']) && !!c0.check?.artifactSha, `(b) a plan naming {template: authored, params: {id ${a.designId}, sha}} checks ${c0.check?.overall ?? c0.refused} (${json(out.b.parts)}), artifact ${c0.check?.artifactSha?.slice(0, 12)}`);
-  check(json(frozen) === json([{ part: 'court', id: a.designId, sha: ra.sha }]), `(b) the artifact freezes the source by sha: ${json(frozen)}`);
+  // (the artifact is canonical JSON: its keys sorted)
+  check(Array.isArray(frozen) && frozen.length === 1 && frozen[0].part === 'court' && frozen[0].id === a.designId && frozen[0].sha === ra.sha, `(b) the artifact freezes the source by sha: ${json(frozen)}`);
   const cs = await call('dev.region.checkPlan', { plan: planOf(a.designId, '0'.repeat(64)), claim: CLAIM }, 900_000);
   const sp = (cs.check?.parts ?? []).find((p) => p.part === 'court');
   out.b.stalePlan = { overall: cs.check?.overall, part: sp && { class: sp.class, code: sp.reasons?.[0]?.code } };
   check(sp?.class === 'refused' && sp.reasons?.[0]?.code === 'AUTHORED_STALE', `(b) a plan naming another sha: the zone ${sp?.class} ${sp?.reasons?.[0]?.code} (${String(sp?.reasons?.[0]?.message ?? '').slice(0, 100)})`);
-  // (c) realised and removed exactly
+  // (d) the installed source edited on disk: the artifact's realise refuses AUTHORED_STALE and writes nothing (before (c): a realised and
+  // removed artifact is a tombstone); then the file is put back as it was installed
   const sha = c0.check?.artifactSha;
   const box = [CLAIM[0] - 8, g - 32, CLAIM[1] - 8, CLAIM[2] + 8, g + 48, CLAIM[3] + 8];
+  if (installed) fs.appendFileSync(file, '\n// edited after approval\n');
+  const h3 = await call('dev.region.hash', { box }, 3_600_000);
+  const rs = await call('dev.region.realiseApproved', { sha }, 300_000);
+  const h4 = await call('dev.region.hash', { box }, 3_600_000);
+  out.d = { refused: rs.refused, region: rs.region, unchanged: h3.sha256 === h4.sha256 };
+  check(!rs.region && /AUTHORED_STALE/.test(String(rs.refused)) && String(rs.refused).includes(a.designId) && h3.sha256 === h4.sha256,
+    `(d) after the source file was edited, the replay refuses: ${String(rs.refused).slice(0, 160)}; nothing written`);
+  if (installed) fs.writeFileSync(file, installed);
+  // (c) the file restored: realised and removed exactly
   const h0 = await call('dev.region.hash', { box }, 3_600_000);
   const rr = await call('dev.region.realiseApproved', { sha }, 300_000);
   check(!!rr.region, `(c) realiseApproved of the authored plan's artifact queued region ${rr.region ?? rr.refused}`);
@@ -159,14 +172,6 @@ steps.author = async () => {
     out.c.removed = { removed: rm.removed, restored: rm.restored, same: h0.sha256 === h2.sha256 };
     check(rm.removed && h0.sha256 === h2.sha256, `(c) removed: the claim's hash restored (E-flat 0; ${rm.restored} cells restored)`);
   }
-  // (d) the installed source edited on disk: the same artifact's replay refuses AUTHORED_STALE and writes nothing
-  if (installed) fs.appendFileSync(file, '\n// edited after approval\n');
-  const h3 = await call('dev.region.hash', { box }, 3_600_000);
-  const rs = await call('dev.region.realiseApproved', { sha }, 300_000);
-  const h4 = await call('dev.region.hash', { box }, 3_600_000);
-  out.d = { refused: rs.refused, region: rs.region, unchanged: h3.sha256 === h4.sha256 };
-  check(!rs.region && /AUTHORED_STALE/.test(String(rs.refused)) && String(rs.refused).includes(a.designId) && h3.sha256 === h4.sha256,
-    `(d) after the source file was edited, the replay refuses: ${String(rs.refused).slice(0, 160)}; nothing written`);
   await cmd(`/forceload remove ${CLAIM[0]} ${CLAIM[1]} ${CLAIM[2]} ${CLAIM[3]}`).catch(() => {});
   return out;
 };
