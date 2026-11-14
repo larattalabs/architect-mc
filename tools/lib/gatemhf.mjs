@@ -162,6 +162,14 @@ export async function registerHF(steps, h) {
         return { moved: ins.moved };
       });
     }
+    // stocked once more without a halt (DW and AS lost theirs), saved; then the region removed: the stock becomes credit (a Take's source)
+    {
+      const left = Math.max(0, (kA ?? 0) - ((await counts()).stock[A] ?? 0));
+      await cmd(`/give @s ${A} ${Math.min(64, left)}`);
+      const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+      check(ins.moved > 0, `TW: ${ins.moved} item(s) stocked for the Take`);
+      await cmd('/save-all flush');
+    }
     // the region removed: what the stock holds becomes credit (a Take's source)
     await call('dev.region.remove', { region, requester: G.OWNER }, 600_000).catch(() => null);
     for (let i = 0; i < 300; i++) {

@@ -195,8 +195,8 @@ export async function registerPS(steps, h) {
    *   SD   a lot site, as built: kept
    * The periodic save off throughout (it bounds the loss to ~10 s; the credit's own save is what is measured).
    */
-  async function singlePart(out) {
-    const W = await survivalWorld('G6B PS single');
+  async function singlePart(out, name = 'G6B PS single', cases = [['RR0', 'road', true], ['RR', 'road', false], ['SD0', 'site', true]]) {
+    const W = await survivalWorld(name);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
     const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...W.at);
@@ -210,10 +210,10 @@ export async function registerPS(steps, h) {
     const roads = ids.filter((id) => !/^s\d/.test(id));
     const sites = ids.filter((id) => /^s\d/.test(id));
     log(`  single: targets ${json(ids)} (roads ${json(roads)}, sites ${json(sites)})`);
-    const plan = [['RR0', roads[0], true], ['RR', roads[1], false], ['SD0', sites[0], true], ['SD', sites[1] ?? sites[0], false]];
     const used = new Set();
-    for (const [tag, id, noCreditSave] of plan) {
-      if (!id || used.has(id)) { check(false, `${tag}: no target left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
+    for (const [tag, kind, noCreditSave] of cases) {
+      const id = (kind === 'road' ? roads : sites).find((x) => !used.has(x));
+      if (!id) { check(false, `${tag}: no ${kind} left to remove (roads ${json(roads)}, sites ${json(sites)})`); continue; }
       used.add(id);
       await ps({ noPeriodic: true, noCreditSave });
       await cmd('/save-all flush');
@@ -254,7 +254,10 @@ export async function registerPS(steps, h) {
     const parts = (process.env.GATE_PS_PARTS ?? 'hopper,k5end,single').split(',');
     if (parts.includes('hopper')) await hopperPart(out);
     if (parts.includes('k5end')) await k5endPart(out);
-    if (parts.includes('single')) await singlePart(out);
+    if (parts.includes('single')) {
+      await singlePart(out);
+      await singlePart(out, 'G6B PS single SD', [['SD', 'site', false]]); // the town has one lot site: SD on a world of its own
+    }
     spendZero();
     return out;
   };
