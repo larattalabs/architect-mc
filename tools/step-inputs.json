@@ -121584,6 +121584,8 @@
     "tools/gate6dgr.mjs"
    ],
    "closure": [
+    "apitest/build.gradle",
+    "devserver/build.gradle",
     "kit/build.mjs",
     "kit/check.mjs",
     "kit/lib/bible.mjs",
@@ -121818,7 +121820,10 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
+    "mod/build.gradle",
     "mod/gradle.properties",
+    "mod/gradle/wrapper/gradle-wrapper.properties",
+    "mod/settings.gradle",
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "tools/api-baselines.json",
     "tools/api-baselines.mjs",
@@ -122028,6 +122033,8 @@
     "tools/gate6dgr.mjs"
    ],
    "closure": [
+    "apitest/build.gradle",
+    "devserver/build.gradle",
     "kit/build.mjs",
     "kit/check.mjs",
     "kit/lib/bible.mjs",
@@ -122262,7 +122269,10 @@
     "kit/vocab/hazards.json",
     "kit/vocab/roles.json",
     "kit/vocab/tiers.json",
+    "mod/build.gradle",
     "mod/gradle.properties",
+    "mod/gradle/wrapper/gradle-wrapper.properties",
+    "mod/settings.gradle",
     "mod/src/main/java/dev/larattalabs/architect/api/ArchitectApi.java",
     "tools/api-baselines.json",
     "tools/api-baselines.mjs",
