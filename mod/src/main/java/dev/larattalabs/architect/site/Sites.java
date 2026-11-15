@@ -1696,11 +1696,20 @@ public final class Sites {
 			}
 		}
 		for (Site x : all) {
-			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
+			// (slice LC) the late cargo of its container cells, in the write's tick (this removal is atomic; the check holds for any path)
+			List<net.minecraft.world.item.ItemStack> cargo = new ArrayList<>();
+			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group, force ? null : rs -> cargo.addAll(LateCargo.take(level, rs, x,
+				LateCargo.containerCells(level, rs, x.restoreBox()))));
 			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
+			List<String> notes = new ArrayList<>(notesOf(level, r));
+			String lc = LateCargo.note(cargo, dropPosOf(x));
+			if (lc != null) {
+				notes.add(lc);
+			}
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
-				x.id().equals(id) ? cascade : List.of(), notesOf(level, r));
+				x.id().equals(id) ? cascade : List.of(), notes);
+			LateCargo.drop(level, dropPosOf(x), cargo, drops::keep);
 			tr.mark("after " + x.id());
 			if (x.id().equals(id)) {
 				last = done;
@@ -1763,6 +1772,11 @@ public final class Sites {
 		Placement.add(level.getServer(), job);
 		Architect.LOGGER.info("Removing {} over ticks ({} cells in its restore box)", id, b.restoreBox().volume());
 		return f;
+	}
+
+	/** (slice LC) Where a removed site's late cargo drops: its builder's drop cell. */
+	private static BlockPos dropPosOf(Site s) {
+		return Builder.dropPos(s);
 	}
 
 	/** The sites covering {@code id}, recursively, top-down (the highest layer first). */
@@ -2483,16 +2497,25 @@ public final class Sites {
 	static Removed finishGroupDeconstruct(ServerLevel level, Site b, String group, Map<String, Integer> items, @Nullable BlockPos at,
 		Map<String, Integer> handed) throws SiteException {
 		Drops drops = Drops.before(level, b.restoreBox());
-		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
+		// (slice LC, S-M5-12) the late cargo: what its container cells hold in this tick, taken out right before the write, dropped at the site
+		List<net.minecraft.world.item.ItemStack> cargo = new ArrayList<>();
+		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group, rs -> cargo.addAll(LateCargo.take(level, rs, b, LateCargo.containerCells(level, rs,
+			b.restoreBox()))));
 		drops.clearNew(level);
 		BlockPos where = at != null ? at : Builder.dropPos(b);
 		Builder.dropItems(level, where, items, drops);
+		LateCargo.drop(level, where, cargo, drops::keep);
 		Builder.forget(level.getServer(), b.id());
 		reholdNear(level, b.restoreBox());
 		SiteJournal.restoreRing(level, r.ring());
 		save(level.getServer(), state);
 		notifyListeners();
-		Removed done = new Removed(b, Map.copyOf(items), r.cells().size(), 0, handed, List.of(), notesOf(level, r));
+		List<String> notes = new ArrayList<>(notesOf(level, r));
+		String lc = LateCargo.note(cargo, where);
+		if (lc != null) {
+			notes.add(lc);
+		}
+		Removed done = new Removed(b, Map.copyOf(items), r.cells().size(), 0, handed, List.of(), notes);
 		ApiEvents.removed(level.getServer(), done);
 		return done;
 	}

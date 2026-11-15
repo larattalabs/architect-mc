@@ -148,8 +148,9 @@ export async function registerLC(steps, h) {
       const s1 = await fk(A.site);
       const ps1 = await pile();
       out.failAfterCustody = { u1, holds: s1.containers?.map((c) => c.holds), custody: s1.custody, back: backOf(ps1.ledger, psA.ledger) };
-      check(u1.removed === false && /failAfterCustody/.test(json(u1)) && exactly(s1) && sum(s1.custody) === 0 && sum(out.failAfterCustody.back) === 0 && s1.state === 'BUILT',
-        `S-M5-13: dev.removal.failAfterCustody: the stage undo ended unwritten after the custody take (${json(u1.blockers ?? u1.error).slice(0, 200)}); the custody written back: each hopper exactly its declaration, no custody, nothing refunded (${sum(out.failAfterCustody.back)}), the site ${s1.state}`, out.failAfterCustody);
+      // (the later stage, props, is undone first and refunds its own cells: only the fill site's key is judged here)
+      check(u1.removed === false && /failAfterCustody/.test(json(u1)) && exactly(s1) && sum(s1.custody) === 0 && G.same(s1.paid, s.paid) && s1.state === 'BUILT',
+        `S-M5-13: dev.removal.failAfterCustody: the stage undo ended unwritten after the custody take (${json(u1.blockers ?? u1.error).slice(0, 200)}); the custody written back: each hopper exactly its declaration, no custody, the site's paid record untouched (nothing credited), the site ${s1.state}`, out.failAfterCustody);
       // S-M5-12: the stage undo again, with late cargo put in right after the custody take (ticks before the restore)
       await call('dev.removal.lateCargo', { site: A.site, pos: A.chest, items: { [DIAMOND]: 3 } }, 10_000);
       await call('dev.removal.lateCargo', { site: A.site, pos: h0, items: { [FLINT]: 5 } }, 10_000);
