@@ -284,6 +284,7 @@ public final class Stockpiles {
 			long w0 = timed ? SaveTiming.started() : System.nanoTime();
 			if (!flush) {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.IO); // (SS) J1's wait is the autosave's IO wait
 				for (ServerLevel l : server.getAllLevels()) {
 					try {
 						l.getChunkSource().chunkMap.synchronize(true).join();
@@ -291,6 +292,7 @@ public final class Stockpiles {
 						Architect.LOGGER.warn("Stockpiles: waiting for {}'s chunk writes failed; the ledger is saved anyway", l.dimension(), e);
 					}
 				}
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				autosaveWaits++;
 				lastAutosaveWaitMs = ms;
