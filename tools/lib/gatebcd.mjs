@@ -9,7 +9,7 @@
 //                                               G2  a plain growth (qb: rs_hut, maxBill null): uncapped (no cap of its rid), fed in full it is
 //                                                   built and no target ever waits bill_cap (0.72.0: held to G1's spent cap)
 //                                               G3  a capped growth (qc) whose cap is lowered (dev.bc.cap rid 3) below its planks: its target
-//                                                   waits bill_cap; a second growth planned meanwhile is refused (one survival growth builds
+//                                                   waits bill_cap; a second capped growth realised meanwhile is refused (one survival growth builds
 //                                                   at a time: two capped revisions are never in flight); undoRevision to position 2: its
 //                                                   refund = what it consumed; G1's and the town's caps unchanged
 //                                               G4  a plain growth after the undo: uncapped, built
@@ -126,8 +126,15 @@ export async function registerBCD(steps, h) {
     check(!!held && (c3.drawn?.[PL] ?? 0) <= low[PL] && G.same(others.r0, q0) && G.same(others.r1, g1.quote) && (c3.targets ?? []).filter((t) => t.blocked === 'bill_cap').every((t) => t.rid === g3.rid),
       `G3 (rid ${g3.rid}): its own cap lowered to ${low[PL]} planks: ${held?.id} waits bill_cap (drawn ${c3.drawn?.[PL] ?? 0}); only its own targets held; the town's and G1's caps unchanged`, out.G3);
     const gx = await growPlan(region, { lots: [{ id: 'qx', type: 'house', size: [9, 9], villager: 'dwelling' }] });
-    out.G3.second = gx.refused ?? gx.planId;
-    check(!!gx.refused, `two revisions in flight: a growth planned while G3 builds is refused (${gx.refused ?? 'planned'}): never two capped revisions at once`);
+    // a second capped growth while G3 builds: planned, but its realise is refused (survival_unfinished): never two revisions in flight
+    let second = gx.refused ?? null;
+    if (!gx.refused) {
+      const gq = await call('dev.region.quote', { planId: gx.planId, lotEntries: { qx: 'rs_hut' } }, 300_000);
+      const gr = await call('dev.region.realise', { planId: gx.planId, lots: { qx: 'rs_hut' }, maxBill: gq.bom }, 300_000);
+      second = gr.refused ?? null;
+    }
+    out.G3.second = second;
+    check(!!second && /survival_unfinished|OVERLAP_BUSY/.test(String(second)), `two revisions in flight: a second capped growth while G3 builds is refused (${second ?? 'accepted'}): never two capped revisions at once`);
     const u = await call('dev.rv.undo', { region, toPosition: 2 }, 4 * 3_600_000).catch((e) => ({ refused: String(e) }));
     let st;
     for (let i = 0; i < 300; i++) { st = await rvState(region); if (st.busy === null) break; await L.sleep(2000); }
