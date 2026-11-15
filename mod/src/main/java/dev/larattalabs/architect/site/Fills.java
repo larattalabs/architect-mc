@@ -5,7 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.journal.WorldJournal;
-import dev.larattalabs.architect.placement.Blueprint;
+import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.placement.Blueprints;
 import dev.larattalabs.architect.survival.StockLedger;
@@ -406,12 +406,22 @@ public final class Fills {
 
 	/** A template cell of a site in the world (the placement's rotation from the template box's corner). */
 	static BlockPos world(Site s, int x, int y, int z) {
-		Blueprint bp = Blueprints.get(s.blueprint());
-		int turns = BlueprintTransform.parseTurns(s.rotation());
-		int sx = bp != null ? bp.sizeX() : s.box().maxX() - s.box().minX() + 1;
-		int sz = bp != null ? bp.sizeZ() : s.box().maxZ() - s.box().minZ() + 1;
-		int[] rc = BlueprintTransform.rotateBlock(x, z, sx, sz, Math.max(0, turns));
-		return new BlockPos(s.box().minX() + rc[0], s.box().minY() + y, s.box().minZ() + rc[1]);
+		return world(s.box(), s.rotation(), x, y, z);
+	}
+
+	/**
+	 * (FK-b fix, the release verification) A template cell in the world from the site's own stored footprint and rotation, never the
+	 * library head's size: a fill's declaration belongs to the placed version, and a later head of another size must not move its cells
+	 * (a resized head once moved a rotated site's guard off its hoppers). {@code box} is the rotated template's world box, so its extents
+	 * are the template's, swapped for an odd number of turns.
+	 */
+	static BlockPos world(Anchors.Bounds box, String rotation, int x, int y, int z) {
+		int turns = Math.max(0, BlueprintTransform.parseTurns(rotation));
+		int ex = box.maxX() - box.minX() + 1;
+		int ez = box.maxZ() - box.minZ() + 1;
+		boolean odd = (turns & 1) == 1;
+		int[] rc = BlueprintTransform.rotateBlock(x, z, odd ? ez : ex, odd ? ex : ez, turns);
+		return new BlockPos(box.minX() + rc[0], box.minY() + y, box.minZ() + rc[1]);
 	}
 
 	/** The declared containers' world cells, in declaration order. */
