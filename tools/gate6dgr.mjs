@@ -1015,7 +1015,7 @@ steps.look = async () => {
 
 {
   const { registerRL } = await import('./lib/gatem5rl.mjs');
-  await registerRL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait });
+  await registerRL(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait, root });
 }
 
 // ------------------------------------------------------------------ (slice RU) rucancel, rucrash: tools/lib/gatem5ru.mjs
