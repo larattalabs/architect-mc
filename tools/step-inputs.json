@@ -115020,6 +115020,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
