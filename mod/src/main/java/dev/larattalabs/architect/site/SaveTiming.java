@@ -12,9 +12,17 @@ public final class SaveTiming {
 
 	private static boolean on;
 	private static int phase;
-	private static long last;
+	private static long last, started;
 	private static final long[] NANOS = new long[NAMES.length];
 	private static int chunksSaved;
+	private static long forced0, skipped0;
+	/** (SS) Region files forced (fsynced) and forces skipped (nothing written since the last force), this session: any IO worker thread. */
+	static final java.util.concurrent.atomic.AtomicLong FORCED = new java.util.concurrent.atomic.AtomicLong(), SKIPPED = new java.util.concurrent.atomic.AtomicLong();
+	/**
+	 * (SS) Every region file forced at a flush, as vanilla does (RegionFileFlushMixin off): {@code -Darchitect.regionForceAll=true}, or the
+	 * TEST switch {@code dev.stockpile.ps {forceAll}} (the gate's before case).
+	 */
+	public static volatile boolean forceAll = Boolean.getBoolean("architect.regionForceAll");
 
 	private SaveTiming() {
 	}
@@ -22,8 +30,11 @@ public final class SaveTiming {
 	static void start() {
 		java.util.Arrays.fill(NANOS, 0);
 		chunksSaved = 0;
+		forced0 = FORCED.get();
+		skipped0 = SKIPPED.get();
 		phase = OTHER;
 		last = System.nanoTime();
+		started = last;
 		on = true;
 	}
 
@@ -43,6 +54,16 @@ public final class SaveTiming {
 		NANOS[phase] += now - last;
 		last = now;
 		phase = p;
+	}
+
+	/** A region file forced at a flush (an IO worker). */
+	public static void forced() {
+		FORCED.incrementAndGet();
+	}
+
+	/** A region file's force skipped: nothing written since its last one (an IO worker). */
+	public static void forceSkipped() {
+		SKIPPED.incrementAndGet();
 	}
 
 	/** A chunk copied for its write (ChunkMap.save returned true). */
@@ -65,7 +86,10 @@ public final class SaveTiming {
 			appendPart(b, i);
 		}
 		appendPart(b, OTHER);
-		b.append(" | chunksSaved ").append(chunksSaved);
+		b.append(" | chunksSaved ").append(chunksSaved).append(" | forced ").append(FORCED.get() - forced0).append(" skipped ").append(SKIPPED.get() - skipped0);
+		if (forceAll) {
+			b.append(" | forceAll");
+		}
 		return b.toString();
 	}
 
@@ -78,6 +102,11 @@ public final class SaveTiming {
 			b.append(" | ");
 		}
 		b.append(NAMES[i]).append(' ').append(String.format(java.util.Locale.ROOT, "%.1f", ms));
+	}
+
+	/** When the timed save started (System.nanoTime). */
+	static long started() {
+		return started;
 	}
 
 	static double ms(int p) {

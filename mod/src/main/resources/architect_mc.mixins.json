@@ -13,6 +13,7 @@
 		"MovingPistonBlockMixin",
 		"PistonBaseBlockMixin",
 		"PistonMovingBlockEntityMixin",
+		"RegionFileFlushMixin",
 		"SaveTimingLevelMixin",
 		"SaveTimingMixin",
 		"SaveTimingServerMixin",

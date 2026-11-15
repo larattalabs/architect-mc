@@ -280,8 +280,8 @@ public final class Stockpiles {
 			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
 				return;
 			}
-			long w0 = System.nanoTime();
 			boolean timed = SaveTiming.on();
+			long w0 = timed ? SaveTiming.started() : System.nanoTime();
 			if (!flush) {
 				long t0 = System.nanoTime();
 				for (ServerLevel l : server.getAllLevels()) {
@@ -1965,6 +1965,9 @@ public final class Stockpiles {
 					o.addProperty("autosaveWaits", autosaveWaits); // (J1)
 					o.addProperty("lastAutosaveWaitMs", lastAutosaveWaitMs);
 					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
+					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
+					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
+					o.addProperty("forceAll", SaveTiming.forceAll);
 					o.addProperty("lastPeriodicMs", lastPeriodicMs);
 					o.addProperty("maxPeriodicMs", maxPeriodicMs);
 					o.addProperty("medianPeriodicMs", periodicMedianMs());
@@ -1988,6 +1991,9 @@ public final class Stockpiles {
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
 					}
+					if (req.has("forceAll")) {
+						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
+					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
@@ -2002,6 +2008,7 @@ public final class Stockpiles {
 					o.addProperty("noPeriodic", testNoPeriodic);
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
+					o.addProperty("forceAll", SaveTiming.forceAll);
 					return o;
 				}
 				case "state" -> {
