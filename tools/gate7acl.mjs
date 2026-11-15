@@ -39,6 +39,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { F7A_MOVED } from './lib/f7a-norm.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-CL-run');
@@ -137,7 +138,9 @@ steps.unit = async () => {
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 25, `items 1, 9, 12, 13 (kit): the profiles change only their edges; NO_CLIMB and the climb deviation; rest landings at every rest; the top gate; the face rule; every refusal (NO_CLIMB, MOVER, ANCHOR, SPAN, UNREACHABLE) with evidence and its wouldFit re-checked alone; the broken variants; climbs_demo flat and natural (the kit movers: the mesa's bed unreached by villagers, the stair's reached); a stair beside a fountain M25:clear 0; the catalogue's three flips; 3 checks identical; the foundation's, P0's, K1's and T3's tests: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   // the Java: the feature (ApiCLTest)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.api.ApiCLTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.api.ApiCLTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAIL|error/i.test(l)).slice(0, 10) };
   check(g.status === 0, 'item 15 (Java): ApiCLTest (the feature climbConnectors from the sidecar\'s region.climbs; protocol 1 none)', out.java.tail);
   // item 2: byte identity against the merge base, the named exceptions aside

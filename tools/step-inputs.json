@@ -43074,6 +43074,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -43220,6 +43221,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -43228,6 +43232,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -43264,9 +43270,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release irr-holders"
   },
@@ -49186,6 +49194,7 @@
   },
   "rk-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -49450,6 +49459,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lint-cases.mjs",
     "tools/lib/lint-look-cases.mjs",
@@ -49477,6 +49487,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lint.mjs",
     "tools/plan-catalogue-diff.mjs",
@@ -49597,11 +49608,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -49629,11 +49645,14 @@
    "eager": [
     "tools/gate7ark.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "rk-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -49908,6 +49927,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lint-cases.mjs",
     "tools/lib/lint-look-cases.mjs",
@@ -49937,6 +49957,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -50068,11 +50089,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -50106,13 +50132,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "rk-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -50387,6 +50416,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lint-cases.mjs",
     "tools/lib/lint-look-cases.mjs",
@@ -50416,6 +50446,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -50547,11 +50578,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -50585,13 +50621,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "rk-natural": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -50866,6 +50905,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lint-cases.mjs",
     "tools/lib/lint-look-cases.mjs",
@@ -50895,6 +50935,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -51026,11 +51067,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -51064,13 +51110,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "rk-look": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -51345,6 +51394,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lint-cases.mjs",
     "tools/lib/lint-look-cases.mjs",
@@ -51374,6 +51424,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -51505,11 +51556,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -51543,9 +51599,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "gj-unit": {
@@ -54480,6 +54538,7 @@
   },
   "lf-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -54757,6 +54816,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -54784,6 +54844,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lint.mjs",
     "tools/plan-catalogue-diff.mjs",
@@ -54903,11 +54964,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -54940,7 +55006,9 @@
    "eager": [
     "tools/gate7alf.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "fb-unit": {
@@ -55264,6 +55332,7 @@
   },
   "lf-probe": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -55551,6 +55620,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -55580,6 +55650,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -55710,11 +55781,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -55753,13 +55829,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lf-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -56047,6 +56126,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -56076,6 +56156,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -56206,11 +56287,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -56249,13 +56335,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lf-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -56543,6 +56632,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -56572,6 +56662,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -56702,11 +56793,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -56745,13 +56841,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lf-natural": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -57039,6 +57138,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -57068,6 +57168,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -57198,11 +57299,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -57241,13 +57347,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lf-look": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -57535,6 +57644,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/lf-norm.mjs",
     "tools/lib/lint-cases.mjs",
@@ -57564,6 +57674,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/lint.mjs",
@@ -57694,11 +57805,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "LINT_KIT_DIR",
     "LINT_NO_CACHE",
     "LINT_PREFIX",
@@ -57737,9 +57853,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "ui-gallery": {
@@ -58047,6 +58165,7 @@
   },
   "cl-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -58298,6 +58417,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -58320,6 +58440,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -58425,10 +58546,15 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "SCENARIOS_ART"
@@ -58450,11 +58576,14 @@
     "tools/gate7acl.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cl-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -58716,6 +58845,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -58740,6 +58870,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -58856,11 +58987,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -58888,13 +59024,16 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cl-natural": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -59156,6 +59295,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -59180,6 +59320,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -59296,11 +59437,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -59328,13 +59474,16 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cl-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -59592,6 +59741,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -59616,6 +59766,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -59729,11 +59880,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "SCENARIOS_ART"
@@ -59755,11 +59911,14 @@
     "tools/gate7acl.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cl-look": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -60021,6 +60180,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -60045,6 +60205,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -60161,11 +60322,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -60193,9 +60359,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/f7a-norm.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "sa-unit": {
@@ -74985,6 +75153,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -75118,6 +75287,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
@@ -75125,6 +75297,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "SCENARIOS_ART"
@@ -75155,7 +75329,9 @@
     "tools/gate6cirr.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release irr-unit"
   },
@@ -75441,6 +75617,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -75587,6 +75764,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -75595,6 +75775,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -75631,9 +75813,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release irr-ingame/p3"
   },
@@ -75919,6 +76103,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -76065,6 +76250,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -76073,6 +76261,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -76109,9 +76299,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release irr-crash"
   },
@@ -76397,6 +76589,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -76543,6 +76736,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -76551,6 +76747,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -76587,9 +76785,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "fl-unit": {
@@ -76847,6 +77047,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -76977,10 +77178,15 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "SCENARIOS_ART"
@@ -77005,7 +77211,9 @@
    "eager": [
     "tools/gate6cfl.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/gate-part.mjs"
+    "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "data": [
     "deno.json",
@@ -77286,6 +77494,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -77429,11 +77638,16 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -77465,8 +77679,10 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release fl-ingame"
   },
@@ -77735,6 +77951,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -77878,11 +78095,16 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -77914,8 +78136,10 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release fl-natural"
   },
@@ -78184,6 +78408,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -78327,11 +78552,16 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -78363,8 +78593,10 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release fl-look"
   },
@@ -81815,6 +82047,7 @@
     "tools/lib/gate6cirr-kit.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6cvoc-c.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -81961,6 +82194,9 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
@@ -81969,6 +82205,8 @@
     "IRR_PROBE",
     "JAVA",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -82005,9 +82243,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "kc-ingame-smoke": {
@@ -84293,6 +84533,7 @@
     "tools/lib/gate6cs3-game.mjs",
     "tools/lib/gate6cs3-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -84435,10 +84676,15 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "SCENARIOS_ART",
@@ -84467,7 +84713,9 @@
     "tools/gate6cs3.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/gate-part.mjs",
-    "tools/lib/sidecar-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/sidecar-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "data": [
     "deno.json",
@@ -84766,6 +85014,7 @@
     "tools/lib/gate6cs3-game.mjs",
     "tools/lib/gate6cs3-kit.mjs",
     "tools/lib/gate6cvoc-b.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -84921,11 +85170,16 @@
     "GATE_SIDECAR_RESULTS",
     "GATE_SIDECAR_TREE",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PATH",
     "PA_PLAN",
     "REFIND",
@@ -84960,9 +85214,11 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
     "tools/lib/gate-part.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sidecar-reuse.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ],
    "verified": "20261023-114540-release s3-plan"
   },
@@ -105323,6 +105579,7 @@
   },
   "sl-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -105583,6 +105840,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -105604,6 +105862,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -105715,9 +105974,14 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "SCENARIOS_ART"
    ],
@@ -105738,11 +106002,14 @@
    "eager": [
     "tools/gate7bsl.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "sl-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -106013,6 +106280,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -106036,6 +106304,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -106158,11 +106427,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -106189,13 +106463,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "bf-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -106442,6 +106719,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -106464,6 +106742,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -106564,9 +106843,14 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "SCENARIOS_ART",
     "UPDATE_GOLDEN"
@@ -106588,11 +106872,14 @@
    "eager": [
     "tools/gate7cbf.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "bf-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -106849,6 +107136,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -106873,6 +107161,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -106984,11 +107273,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART",
@@ -107016,13 +107310,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "bc-x03": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -107280,6 +107577,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -107305,6 +107603,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -107417,11 +107716,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -107449,14 +107753,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "bc-cap": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -107714,6 +108021,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -107739,6 +108047,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -107851,11 +108160,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -107883,14 +108197,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "ql-drift": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -108148,6 +108465,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -108173,6 +108491,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -108285,11 +108604,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -108317,14 +108641,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "hr-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -108572,6 +108899,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -108595,6 +108923,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -108696,9 +109025,14 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "SCENARIOS_ART"
    ],
@@ -108720,12 +109054,15 @@
    "eager": [
     "tools/gate7chr.mjs",
     "tools/lib/cpu-budget.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
-    "tools/lib/quote-terrain.mjs"
+    "tools/lib/quote-terrain.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "hr-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -108983,6 +109320,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -109008,6 +109346,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -109120,11 +109459,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -109152,14 +109496,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "hr-ghost": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -109417,6 +109764,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -109442,6 +109790,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -109554,11 +109903,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -109586,14 +109940,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "hr-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -109851,6 +110208,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -109876,6 +110234,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -109988,11 +110347,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -110020,14 +110384,17 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "aq-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -110278,6 +110645,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -110300,6 +110668,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -110400,9 +110769,14 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "SCENARIOS_ART"
    ],
@@ -110424,11 +110798,14 @@
    "eager": [
     "tools/gate7caq.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "aq-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -110689,6 +111066,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -110713,6 +111091,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -110824,11 +111203,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -110856,13 +111240,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "aq-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -111123,6 +111510,7 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -111147,6 +111535,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -111258,11 +111647,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -111290,9 +111684,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "us-survival": {
@@ -112578,6 +112974,7 @@
   },
   "cx-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -112816,6 +113213,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pf-norm.mjs",
@@ -112825,6 +113223,7 @@
     "tools/lib/run-shared.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh"
    ],
@@ -112903,9 +113302,14 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "HYB_BYPASS",
     "HYB_ONLY",
-    "HYB_WATCH"
+    "HYB_WATCH",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS"
    ],
    "flags": {
     "originMain": [
@@ -112924,11 +113328,14 @@
    "eager": [
     "tools/gate7ccx.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cx-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -113182,6 +113589,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -113206,6 +113614,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -113318,11 +113727,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -113349,13 +113763,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "cx-survival": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -113609,6 +114026,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -113633,6 +114051,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -113745,11 +114164,16 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "HYB_BYPASS",
     "HYB_ONLY",
     "HYB_WATCH",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -113776,9 +114200,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "tc-unit": {
@@ -120361,6 +120787,7 @@
   },
   "lp-unit": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -120614,6 +121041,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -120635,6 +121063,7 @@
     "tools/lib/scenario-scatter.mjs",
     "tools/lib/scenario-village.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/run-gate6b-client.sh",
     "tools/scenarios.mjs"
@@ -120734,6 +121163,11 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "SCENARIOS_ART"
    ],
@@ -120755,11 +121189,14 @@
    "eager": [
     "tools/gate7blp.mjs",
     "tools/lib/cpu-budget.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/junit-reuse.mjs",
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lp-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -121023,6 +121460,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -121046,6 +121484,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -121156,8 +121595,13 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -121185,13 +121629,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lp-remove": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -121455,6 +121902,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -121478,6 +121926,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -121588,8 +122037,13 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -121617,13 +122071,16 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lp-gr": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -121887,6 +122344,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -121910,6 +122368,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -122020,8 +122479,13 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -122049,9 +122513,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "lp-ad": {
@@ -124524,6 +124990,7 @@
   },
   "slb-ingame": {
    "classes": [
+    "gradle",
     "jar",
     "sidecar",
     "world"
@@ -124787,6 +125254,7 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate7a-kit.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
@@ -124810,6 +125278,7 @@
     "tools/lib/scenario-village.mjs",
     "tools/lib/server-host.mjs",
     "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs",
     "tools/lib/theme-rest-norm.mjs",
     "tools/lib/wsserver.mjs",
     "tools/run-gate6b-client.sh",
@@ -124920,8 +125389,13 @@
     "GATE_RUNNER",
     "GATE_RUN_SHARED",
     "GATE_SPRINT",
+    "GATE_UNIT_MOD_JUNIT",
+    "GATE_UNIT_MOD_TREE",
+    "GRADLE_OPTS",
     "GRADLE_USER_HOME",
     "JAVA_HOME",
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
     "PA_PLAN",
     "REFIND",
     "SCENARIOS_ART"
@@ -124949,9 +125423,11 @@
     "tools/lib/clearBox.mjs",
     "tools/lib/cpu-budget.mjs",
     "tools/lib/devclient.mjs",
+    "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
-    "tools/lib/sprint.mjs"
+    "tools/lib/sprint.mjs",
+    "tools/lib/src-gradle.mjs"
    ]
   },
   "rv-unit": {

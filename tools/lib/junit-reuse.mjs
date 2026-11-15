@@ -143,3 +143,34 @@ export function javaClasses(root, patterns, classes, run, { log = console.log } 
     return { code: g.status, reused: null, classes: out, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').filter((l) => /FAIL|error|Exception/i.test(l)).slice(0, 10) };
   });
 }
+
+/** The `--tests` values of a gradle argument list. */
+export const testsOf = (args) => args.flatMap((a, i) => (args[i - 1] === '--tests' ? [a] : []));
+
+/**
+ * (chore GRB) A driver's `./gradlew test ... --tests ...` as one call: unit-mod's XML when javaReuse() says it is exact (patterns: the
+ * args' --tests values), else the driver's own `run()` (its literal spawnSync('./gradlew', javaArgs, ...), which step-inputs reads for
+ * the step's test filters) under the checkout's gradle lock (srcGradle). Unlocked, two steps' gradle calls in one run-src mod/ both
+ * exited 1 with no XML (SP2's b-unit and t3b-unit). `classes` (fully qualified) are read inside the lock, or from unit-mod's rows.
+ * -> spawnSync's shape { status, stdout, stderr } plus { reused, junit: { [class]: { tests, failures, errors } | null } }.
+ */
+export function javaRun(root, args, run, { classes = [], log = console.log } = {}) {
+  const re = javaReuse(root, testsOf(args), { log });
+  if (re) {
+    const by = new Map(readJunitDir(process.env.GATE_UNIT_MOD_JUNIT).map((r) => [r.name, r]));
+    const junit = Object.fromEntries(classes.map((c) => { const r = by.get(c); return [c, r ? { tests: r.tests, failures: r.failures, errors: r.errors } : null]; }));
+    return { status: 0, stdout: `${re.reused}\n`, stderr: '', reused: re.reused, junit };
+  }
+  return srcGradle(root, () => {
+    const g = run();
+    const junit = {};
+    for (const c of classes) {
+      const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-${c}.xml`);
+      if (!fs.existsSync(f)) { junit[c] = null; continue; }
+      const t = fs.readFileSync(f, 'utf8');
+      const n = (k) => Number((new RegExp(`${k}="(\\d+)"`).exec(t) ?? [])[1] ?? -1);
+      junit[c] = { tests: n('tests'), failures: n('failures'), errors: n('errors') };
+    }
+    return { status: g.status, stdout: g.stdout ?? '', stderr: g.stderr ?? '', reused: null, junit };
+  });
+}

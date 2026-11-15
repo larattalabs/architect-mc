@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { javaClasses, javaReuse, methodPattern, readJunitDir } from '../../tools/lib/junit-reuse.mjs';
+import { javaClasses, javaReuse, javaRun, methodPattern, readJunitDir, testsOf } from '../../tools/lib/junit-reuse.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
@@ -120,5 +120,37 @@ test('javaClasses: without unit-mod\'s XML it runs gradle holding the checkout\'
   assert.equal(t.reused, null);
   assert.deepEqual(t.classes, { 'region.PlanChecksT3Test': { tests: 4, failures: 0 }, 'api.ApiT3Test': null });
   assert.ok(fs.existsSync(res));
+  assert.ok(!fs.existsSync(path.join(root, 'mod', '.gradle', 'gate-gradle.lock')), 'the lock is released');
+});
+
+// (chore GRB, extended) javaRun: every driver's `./gradlew test --tests ...` as one call (reuse, else the driver's spawn under the lock)
+test('testsOf: the --tests values of a gradle argument list', () => {
+  assert.deepEqual(testsOf(['test', '--offline', '-q', '--tests', 'dev.x.ATest', '--no-daemon', '--tests', '*BTest']), ['dev.x.ATest', '*BTest']);
+  assert.deepEqual(testsOf(['test']), []);
+});
+
+test('javaRun: unit-mod\'s XML answers when exact (status 0, the named classes\' counts), and gradle never runs', () => {
+  const root = repo();
+  const dir = xmlDir([['region.IrRoadExtTest', [{ n: 'a()' }, { n: 'b()' }]], ['api.ApiCLTest', [{ n: 'a()' }]]]);
+  const env = { GATE_UNIT_MOD_JUNIT: dir, GATE_UNIT_MOD_TREE: git(root, 'rev-parse', 'HEAD^{tree}') };
+  const r = withEnv(env, () => javaRun(root, ['test', '--offline', '-q', '--tests', '*IrRoadExtTest', '--tests', 'dev.larattalabs.architect.api.ApiCLTest'], () => assert.fail('gradle ran'),
+    { classes: ['dev.larattalabs.architect.region.IrRoadExtTest', 'dev.larattalabs.architect.x.Missing'], log: () => {} }));
+  assert.equal(r.status, 0);
+  assert.ok(r.reused);
+  assert.deepEqual(r.junit, { 'dev.larattalabs.architect.region.IrRoadExtTest': { tests: 2, failures: 0, errors: 0 }, 'dev.larattalabs.architect.x.Missing': null });
+});
+
+test('javaRun: a class unit-mod lacks runs the driver\'s gradle under the lock, the XML read inside it; a failing exit comes back as is', () => {
+  const root = repo();
+  fs.mkdirSync(path.join(root, 'mod'));
+  fs.writeFileSync(path.join(root, 'mod', 'gradlew'), `#!/bin/sh\n[ -d .gradle/gate-gradle.lock ] || { echo "no lock"; exit 3; }\nmkdir -p build/test-results/test\ncat > build/test-results/test/TEST-dev.larattalabs.architect.region.ApiS3Test.xml <<'X'\n${suite('dev.larattalabs.architect.region.ApiS3Test', [{ n: 'a()' }, { n: 'b()', fail: true }])}X\nexit 1\n`, { mode: 0o755 });
+  const dir = xmlDir([['api.ApiCLTest', [{ n: 'a()' }]]]);
+  const env = { GATE_UNIT_MOD_JUNIT: dir, GATE_UNIT_MOD_TREE: git(root, 'rev-parse', 'HEAD^{tree}') };
+  const javaArgs = ['test', '--offline', '--tests', '*ApiS3Test'];
+  const r = withEnv(env, () => javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8' }),
+    { classes: ['dev.larattalabs.architect.region.ApiS3Test'], log: () => {} }));
+  assert.equal(r.status, 1, r.stdout);
+  assert.equal(r.reused, null);
+  assert.deepEqual(r.junit['dev.larattalabs.architect.region.ApiS3Test'], { tests: 2, failures: 1, errors: 0 });
   assert.ok(!fs.existsSync(path.join(root, 'mod', '.gradle', 'gate-gradle.lock')), 'the lock is released');
 });

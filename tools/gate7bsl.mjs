@@ -35,6 +35,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-SL-run');
@@ -101,7 +102,9 @@ steps.unit = async () => {
   out.kit = kitOnce(['kit/test/sl.test.mjs', 'kit/test/f7b-foundation.test.mjs', 'kit/test/af-affordances.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/f7a-foundation.test.mjs', 'kit/test/gm-c.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 30, `kit: sl.test.mjs (r.siteLot's site wire, the cut volume, keep cells, default ports, refusals; the reserved box and its host; layout.elevated fits, adjusted, refused, the first plan's VOLUME, connectors until LP; the artifact's lots[].site; the catalogue flip) and the 7b/P0 tests it touches: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.region.ApiSLTest', '--tests', 'dev.larattalabs.architect.api.Api7bFTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.region.ApiSLTest', '--tests', 'dev.larattalabs.architect.api.Api7bFTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAIL|error/i.test(l)).slice(0, 10) };
   check(g.status === 0, 'Java: ApiSLTest (LotSpec.site from the IR, the bind check, the general freeze box, the region volume lookup, hasElevated, the feature) and Api7bFTest', out.java.tail);
   // byte identity against the merge base, the named exceptions aside

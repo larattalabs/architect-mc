@@ -29,6 +29,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 import { kitReuse } from './lib/kit-reuse.mjs'; // ((gate speed 3) its kit files' results from this run's unit-kit, when exact)
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -100,14 +101,6 @@ function nodeTest(files, timeout = 3_600_000) {
 }
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
 
-/** A JUnit result file's counts (the mod's own test run, `./gradlew test`). */
-function junit(name) {
-  const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-${name}.xml`);
-  if (!fs.existsSync(f)) return null;
-  const t = fs.readFileSync(f, 'utf8');
-  const g = (k) => Number((new RegExp(`${k}="(\\d+)"`).exec(t) ?? [])[1] ?? -1);
-  return { tests: g('tests'), failures: g('failures'), errors: g('errors') };
-}
 
 // a split irr-unit (docs/GATES.md "Turbo"): `items` (items 1 and 10) and item 8's fixture loop in round-robin slices
 const UNIT_SECTIONS = ['items', ...sliceSections('unchanged', 3)];
@@ -120,8 +113,10 @@ steps.unit = async () => {
   check(out.irr.code === 0 && out.irr.fail === 0 && out.irr.pass >= 9, `item 1 (kit): detection (lot, zone, false over the zone, type-implied farms, template and district lots), the grid (every field column within 4 on 20 x 20 field sizes 3..62, 4 fronts), the mask, the lot's frame against the mod's placement table, reserved, the notes (not a farm, cold, small), M25:keep's own-lot exemption, the broken variants (M25:clear, M25:shell, M25:keep): ${out.irr.pass} pass, ${out.irr.fail} fail`, out.irr.failing);
   // item 1 (mod): the units the mod's own build ran
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*ApiIrrTest', '--tests', '*LotMaskTest', '--tests', '*PlanChecksHTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env });
-  out.mod = { code: g.status, api: junit('dev.larattalabs.architect.apiimpl.ApiIrrTest'), mask: junit('dev.larattalabs.architect.site.LotMaskTest'), planChecks: junit('dev.larattalabs.architect.region.PlanChecksHTest') };
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', '*ApiIrrTest', '--tests', '*LotMaskTest', '--tests', '*PlanChecksHTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env }), { classes: ['dev.larattalabs.architect.apiimpl.ApiIrrTest', 'dev.larattalabs.architect.site.LotMaskTest', 'dev.larattalabs.architect.region.PlanChecksHTest'], log });
+  out.mod = { code: g.status, api: g.junit['dev.larattalabs.architect.apiimpl.ApiIrrTest'], mask: g.junit['dev.larattalabs.architect.site.LotMaskTest'], planChecks: g.junit['dev.larattalabs.architect.region.PlanChecksHTest'] };
   check(g.status === 0 && [out.mod.api, out.mod.mask, out.mod.planChecks].every((x) => x && x.tests > 0 && x.failures === 0 && x.errors === 0), `item 1 (mod): kit and Java agree on detection (PlanChecks.hasH over lots, template lots and districts; a string never), the mask (ext, filter, a delta's writes and growth), the placement table, DesignRequest.reserved (the 1.11.0 constructor kept, sent only when set, refused by a helper before IRR, its limits): ${json(out.mod)}`);
   }
   // item 8 (byte identity, the 59 asks among the fixtures)

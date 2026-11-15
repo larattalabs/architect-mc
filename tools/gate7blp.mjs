@@ -32,6 +32,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-LP-run');
@@ -98,7 +99,9 @@ steps.unit = async () => {
   out.sidecar = { code: sc.status, tail: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|FAIL|✓|×/.test(l)).slice(0, 10) };
   check(sc.status === 0, 'sidecar: region.link with the real kit (the plan\'s portLinks and plan-args.json; IR v2 answered and cached; noLink {lot, port}; another irSha refused)', out.sidecar.tail);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.region.ApiLPTest', '--tests', 'dev.larattalabs.architect.region.ApiSLTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.region.ApiLPTest', '--tests', 'dev.larattalabs.architect.region.ApiSLTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAIL|error/i.test(l)).slice(0, 10) };
   check(g.status === 0, 'Java: ApiLPTest (which IRs run the pass, the lots and the input, the feature linkPass, NO_LINK last) and ApiSLTest', out.java.tail);
   // byte identity against SL's head (LP's base) until SL is on main, then the merge base
