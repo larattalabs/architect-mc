@@ -26,8 +26,8 @@ export function bccCaps({ call, check, json, G, owner }) {
   const track = (region) => region && regions.add(region);
 
   /** One capped region's state (dev.bc.cap), or null when it is gone (removed). */
-  async function state(region) {
-    const c = await call('dev.bc.cap', { region }, 30_000).catch(() => null);
+  async function state(region, rid) {
+    const c = await call('dev.bc.cap', { region, ...(rid === undefined ? {} : { rid }) }, 30_000).catch(() => null);
     return !c || c.refused ? null : c;
   }
 
@@ -41,14 +41,19 @@ export function bccCaps({ call, check, json, G, owner }) {
     const out = { reconciledUnderCap: rc.map(([id, x]) => ({ id, region: x.capRegion, capOver: x.capOver, charged: x.charged })), regions: [] };
     check(rc.every(([, x]) => Object.keys(x.capOver ?? {}).length === 0), `${tag} (BC-c): the reconcile under a maxBill (${rc.length} target(s) reconciled under a cap: ${rc.map(([id, x]) => `${id} ${json(x.capOver)}`).join(', ') || 'none'}) charged no standing cell past it`, out.reconciledUnderCap);
     for (const region of regions) {
-      const c = await state(region);
-      if (!c) continue;
-      const total = G.plus(c.paid ?? {}, c.regionCharged ?? {});
-      const blocked = (c.targets ?? []).filter((x) => x.blocked === 'bill_cap').map((x) => x.id);
-      const r = { region, drawn: c.drawn, paid: c.paid, regionCharged: c.regionCharged, overshoot: c.overshoot, blocked, countsRegion: c.countsRegion };
-      out.regions.push(r);
-      check(c.countsRegion === true && G.same(c.drawn, total) && Object.keys(c.overshoot ?? {}).length === 0 && blocked.length === 0,
-        `${tag} (BC-c): region ${region} after the restart: within its maxBill (overshoot ${json(c.overshoot)}); the cap's total = the charges (drawn ${sumOf(c.drawn)} = paid ${sumOf(c.paid)} + region ${json(c.regionCharged)}); held bill_cap: ${json(blocked)}`, r);
+      const c0 = await state(region);
+      if (!c0) continue;
+      for (const rid of Object.keys(c0.caps ?? {}).map(Number)) {
+        // (BC-d) each rid's own cap: its own targets' draws and the region's charges for it
+        const c = await state(region, rid);
+        if (!c) continue;
+        const total = G.plus(c.paid ?? {}, c.regionCharged ?? {});
+        const blocked = (c.targets ?? []).filter((x) => x.blocked === 'bill_cap').map((x) => x.id);
+        const r = { region, rid, drawn: c.drawn, paid: c.paid, regionCharged: c.regionCharged, overshoot: c.overshoot, blocked };
+        out.regions.push(r);
+        check(c.rid === rid && G.same(c.drawn, total) && Object.keys(c.overshoot ?? {}).length === 0 && blocked.length === 0,
+          `${tag} (BC-c): region ${region} rid ${rid} after the restart: within its maxBill (overshoot ${json(c.overshoot)}); the cap's total = the charges (drawn ${sumOf(c.drawn)} = paid ${sumOf(c.paid)} + region ${json(c.regionCharged)}); held bill_cap: ${json(blocked)}`, r);
+      }
     }
     return out;
   }

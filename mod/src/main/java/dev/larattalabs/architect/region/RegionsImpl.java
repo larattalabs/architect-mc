@@ -1720,7 +1720,7 @@ public final class RegionsImpl implements Regions {
 			JsonObject sv = new JsonObject();
 			sv.addProperty("on", true);
 			if (r.maxBill() != null) {
-				dev.larattalabs.architect.site.BillCaps.record(sv, r.maxBill(), java.util.Map.of()); // (BC) its targets draw within it
+				dev.larattalabs.architect.site.BillCaps.record(sv, 0, r.maxBill(), 0); // (BC, BC-d) its own targets (rid 0) draw within it
 			}
 			rec.survival = sv; // (6c RS) its tiles put targets down, its lots and roads are construction items
 		}

@@ -195,7 +195,8 @@ public final class MechCharges {
 		String owner = l.rec().owner;
 		// (BC-c) its bill counts against the region's maxBill while it builds: past it, the item waits (nothing charged or written)
 		Stockpiles.Pile capPile = Stockpiles.get(owner);
-		Map<String, Integer> capOver = BillCaps.chargeOver(BillCaps.ofRegion(l), capPile == null ? null : capPile.ledger(), bill);
+		int rid = BillCaps.ridOf(b.ext);
+		Map<String, Integer> capOver = BillCaps.chargeOver(BillCaps.ofRegion(l, rid), capPile == null ? null : capPile.ledger(), bill);
 		if (!capOver.isEmpty()) {
 			JsonObject w = new JsonObject();
 			w.addProperty("target", capPile == null ? "stockpile" : Stockpiles.PREFIX + capPile.id());
@@ -229,6 +230,9 @@ public final class MechCharges {
 		i.ext.remove(RegionTargets.EXT_WAITS_FOR);
 		i.ext.remove(EXT_BILL_WAIT);
 		e.add("charged", json(bill));
+		if (rid != 0) {
+			e.addProperty("rid", rid); // (BC-c, BC-d) counted against that rid's cap
+		}
 		ServerLevel level = Sites.levelOf(srv, i.dimension);
 		e.addProperty("chargedAt", level == null ? 0L : level.getGameTime());
 		RegionsImpl.saveRec(l);

@@ -774,7 +774,7 @@ public final class RegionFluids {
 			if (!charge.isEmpty()) {
 				// (BC-c) the charge counts against the region's maxBill while it builds: past it, the stage waits (nothing charged or written)
 				var pile = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
-				Map<String, Integer> capOver = dev.larattalabs.architect.site.BillCaps.chargeOver(dev.larattalabs.architect.site.BillCaps.ofRegion(l), pile == null
+				Map<String, Integer> capOver = dev.larattalabs.architect.site.BillCaps.chargeOver(dev.larattalabs.architect.site.BillCaps.ofRegion(l, l.rid()), pile == null
 					? null : pile.ledger(), charge);
 				if (!capOver.isEmpty()) {
 					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait bill_cap: their charge " + charge + " is past the region's maxBill by "
@@ -789,6 +789,7 @@ public final class RegionFluids {
 				JsonObject c = new JsonObject();
 				charge.forEach(c::addProperty);
 				l.rec().survival.add("charged", c);
+				l.rec().survival.addProperty(dev.larattalabs.architect.site.BillCaps.CHARGED_RID, l.rid()); // (BC-c) counted against that rid's cap
 			}
 			l.rec().survival.addProperty("chargedAt", level.getGameTime());
 			RegionsImpl.saveRec(l);
