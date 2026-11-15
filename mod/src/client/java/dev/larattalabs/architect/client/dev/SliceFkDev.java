@@ -23,7 +23,239 @@ public final class SliceFkDev {
 	private SliceFkDev() {
 	}
 
+	private static BlockPos posOf(JsonObject req) {
+		JsonElement pe = req.get("pos");
+		if (pe == null || !pe.isJsonArray() || pe.getAsJsonArray().size() != 3) {
+			throw new DevBridge.DevException("pos must be [x, y, z]");
+		}
+		JsonArray pa = pe.getAsJsonArray();
+		return new BlockPos(pa.get(0).getAsInt(), pa.get(1).getAsInt(), pa.get(2).getAsInt());
+	}
+
+	private static JsonObject counts(Map<String, Integer> m) {
+		JsonObject o = new JsonObject();
+		m.forEach(o::addProperty);
+		return o;
+	}
+
+	private static Map<String, Integer> holds(Container c) {
+		Map<String, Integer> m = new TreeMap<>();
+		for (int i = 0; i < c.getContainerSize(); i++) {
+			ItemStack st = c.getItem(i);
+			if (!st.isEmpty()) {
+				m.merge(BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), Integer::sum);
+			}
+		}
+		return m;
+	}
+
+	private static final String SLAB = "minecraft:petrified_oak_slab";
+
+	/** The player's petrified slabs (inventory and cursor). */
+	private static int playerSlabs(net.minecraft.server.level.ServerPlayer pl) {
+		int n = 0;
+		for (int i = 0; i < pl.getInventory().getContainerSize(); i++) {
+			ItemStack st = pl.getInventory().getItem(i);
+			if (st.is(net.minecraft.world.item.Items.PETRIFIED_OAK_SLAB)) {
+				n += st.getCount();
+			}
+		}
+		return n;
+	}
+
+	/** Petrified slab item entities within 32 blocks of pos. */
+	private static int slabEntities(ServerLevel level, BlockPos p) {
+		int n = 0;
+		for (var e : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(p).inflate(32))) {
+			if (e.getItem().is(net.minecraft.world.item.Items.PETRIFIED_OAK_SLAB)) {
+				n += e.getItem().getCount();
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * (FK-b) A menu click on a container as the server's first player, through the real menu ({@code AbstractContainerMenu.clicked}, which
+	 * checks {@code Slot.mayPickup} on every take path).
+	 */
+	private static JsonObject take(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		int slot = req.has("slot") ? req.get("slot").getAsInt() : 0;
+		String click = req.has("click") ? req.get("click").getAsString() : "pickup";
+		JsonObject o = new JsonObject();
+		var players = s.getPlayerList().getPlayers();
+		BlockEntity be = level.getBlockEntity(p);
+		if (players.isEmpty() || !(be instanceof net.minecraft.world.MenuProvider mp) || !(be instanceof Container c)) {
+			o.addProperty("error", players.isEmpty() ? "no player" : "no container menu at " + p.toShortString());
+			return o;
+		}
+		net.minecraft.server.level.ServerPlayer pl = players.get(0);
+		net.minecraft.world.inventory.AbstractContainerMenu menu = mp.createMenu(0, pl.getInventory(), pl);
+		if (menu == null) {
+			o.addProperty("error", "the menu would not open");
+			return o;
+		}
+		o.addProperty("creative", pl.isCreative());
+		Map<String, Integer> before = holds(c);
+		int slabsBefore = playerSlabs(pl);
+		int entBefore = slabEntities(level, p);
+		o.add("before", counts(before));
+		ItemStack carriedIn = ItemStack.EMPTY;
+		net.minecraft.world.inventory.ContainerInput in;
+		int button = 0;
+		int at = slot;
+		switch (click) {
+			case "pickup" -> in = net.minecraft.world.inventory.ContainerInput.PICKUP;
+			case "quick" -> in = net.minecraft.world.inventory.ContainerInput.QUICK_MOVE;
+			case "swap" -> {
+				in = net.minecraft.world.inventory.ContainerInput.SWAP;
+				button = 8; // the last hotbar slot
+			}
+			case "offhand" -> {
+				in = net.minecraft.world.inventory.ContainerInput.SWAP;
+				button = 40;
+			}
+			case "throw" -> in = net.minecraft.world.inventory.ContainerInput.THROW; // Q
+			case "throwAll" -> {
+				in = net.minecraft.world.inventory.ContainerInput.THROW; // ctrl-Q
+				button = 1;
+			}
+			case "collect" -> {
+				// double-click collect: a carried slab (one) gathers its kind; clicked on an empty slot of the player's inventory in the menu
+				in = net.minecraft.world.inventory.ContainerInput.PICKUP_ALL;
+				carriedIn = new ItemStack(net.minecraft.world.item.Items.PETRIFIED_OAK_SLAB, 1);
+				menu.setCarried(carriedIn.copy());
+				at = -1;
+				for (int i = c.getContainerSize(); i < menu.slots.size(); i++) {
+					if (!menu.slots.get(i).hasItem()) {
+						at = i;
+						break;
+					}
+				}
+				if (at < 0) {
+					o.addProperty("error", "no empty inventory slot to collect into");
+					menu.setCarried(ItemStack.EMPTY);
+					return o;
+				}
+			}
+			default -> throw new DevBridge.DevException("click must be pickup|quick|swap|offhand|throw|throwAll|collect");
+		}
+		if (click.equals("swap") || click.equals("offhand")) {
+			ItemStack hand = click.equals("offhand") ? pl.getOffhandItem() : pl.getInventory().getItem(8);
+			if (!hand.isEmpty()) {
+				o.addProperty("error", "the swap's hand slot is not empty");
+				return o;
+			}
+		}
+		menu.clicked(at, button, in, pl);
+		Map<String, Integer> after = holds(c);
+		ItemStack carried = menu.getCarried();
+		o.add("after", counts(after));
+		o.addProperty("carried", carried.isEmpty() ? "" : BuiltInRegistries.ITEM.getKey(carried.getItem()) + " x" + carried.getCount());
+		int carriedSlabs = carried.is(net.minecraft.world.item.Items.PETRIFIED_OAK_SLAB) ? carried.getCount() : 0;
+		o.addProperty("slabsGained", playerSlabs(pl) - slabsBefore + carriedSlabs - carriedIn.getCount());
+		o.addProperty("slabEntitiesGained", slabEntities(level, p) - entBefore);
+		o.addProperty("containerSlabsLost", before.getOrDefault(SLAB, 0) - after.getOrDefault(SLAB, 0));
+		// put things back as they were: what the click took goes back into the container slot, the test's own slab is cleared
+		if (!carried.isEmpty() && !carried.is(net.minecraft.world.item.Items.PETRIFIED_OAK_SLAB)) {
+			if (c.getItem(slot).isEmpty()) {
+				c.setItem(slot, carried.copy());
+			} else if (ItemStack.isSameItemSameComponents(c.getItem(slot), carried)) {
+				c.getItem(slot).grow(carried.getCount());
+			}
+		}
+		menu.setCarried(ItemStack.EMPTY);
+		be.setChanged();
+		o.add("restored", counts(holds(c)));
+		return o;
+	}
+
+	/** (FK-b) A hopper minecart under {@code pos} ticked {@code n} times (its pull, {@code HopperBlockEntity.suckInItems}); what it pulled. */
+	private static JsonObject pull(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		int n = req.has("n") ? req.get("n").getAsInt() : 10;
+		var cart = new net.minecraft.world.entity.vehicle.minecart.MinecartHopper(net.minecraft.world.entity.EntityTypes.HOPPER_MINECART, level);
+		cart.setPos(p.getX() + 0.5, p.getY() - 1 + 0.0625, p.getZ() + 0.5);
+		Map<String, Integer> before = level.getBlockEntity(p) instanceof Container c ? holds(c) : Map.of();
+		for (int i = 0; i < n; i++) {
+			net.minecraft.world.level.block.entity.HopperBlockEntity.suckInItems(level, cart);
+		}
+		JsonObject o = new JsonObject();
+		o.add("pulled", counts(holds(cart)));
+		o.add("before", counts(before));
+		if (level.getBlockEntity(p) instanceof Container c) {
+			o.add("after", counts(holds(c)));
+		}
+		cart.discard();
+		return o;
+	}
+
+	/** (FK-b) A Fabric Transfer API extraction ({@code ItemStorage.SIDED}, from below) from the container at pos, in a transaction aborted after. */
+	private static JsonObject transfer(net.minecraft.server.MinecraftServer s, JsonObject req) {
+		ServerLevel level = s.overworld();
+		BlockPos p = posOf(req);
+		String item = Fields.of(req).nonBlank("item");
+		long max = req.has("max") ? req.get("max").getAsLong() : 64;
+		JsonObject o = new JsonObject();
+		var storage = net.fabricmc.fabric.api.transfer.v1.item.ItemStorage.SIDED.find(level, p, net.minecraft.core.Direction.DOWN);
+		if (storage == null) {
+			o.addProperty("error", "no item storage at " + p.toShortString());
+			return o;
+		}
+		var variant = net.fabricmc.fabric.api.transfer.v1.item.ItemVariant.of(BuiltInRegistries.ITEM.getValue(Identifier.parse(item)));
+		try (var tx = net.fabricmc.fabric.api.transfer.v1.transaction.Transaction.openOuter()) {
+			o.addProperty("extracted", storage.extract(variant, max, tx));
+			tx.abort(); // the probe moves nothing for good
+		}
+		o.addProperty("guardApplied", dev.larattalabs.architect.site.FillGuard.transferGuardApplied());
+		return o;
+	}
+
 	public static void init() {
+		DevBridge.register("dev.fk.take", 30_000, "{pos: [x, y, z], slot, click: pickup|quick|swap|offhand|throw|throwAll|collect} - (FK-b) TEST: a menu click "
+			+ "on the container as the first player, through the real menu (Slot.mayPickup); answers {before, after, carried, slabsGained, "
+			+ "slabEntitiesGained, containerSlabsLost, restored}; a taken billed item is put back", (req, mc) -> ServerTasks.callOnServer(s -> take(s, req)));
+		DevBridge.register("dev.fk.pull", 30_000, "{pos: [x, y, z], n?: 10} - (FK-b) TEST: a hopper minecart under pos pulls n times; answers {pulled, before, "
+			+ "after}", (req, mc) -> ServerTasks.callOnServer(s -> pull(s, req)));
+		DevBridge.register("dev.fk.transfer", 30_000, "{pos: [x, y, z], item, max?: 64} - (FK-b) TEST: a Fabric Transfer API extraction (ItemStorage.SIDED, "
+			+ "from below), aborted after; answers {extracted, guardApplied}", (req, mc) -> ServerTasks.callOnServer(s -> transfer(s, req)));
+		DevBridge.register("dev.fk.guard", 10_000, "{} - (FK-b) {transferGuardApplied, stripped}", (req, mc) -> ServerTasks.callOnServer(s -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("transferGuardApplied", dev.larattalabs.architect.site.FillGuard.transferGuardApplied());
+			o.addProperty("stripped", dev.larattalabs.architect.site.Fills.STRIPPED);
+			return o;
+		}));
+		DevBridge.register("dev.fk.break", 30_000, "{pos: [x, y, z], halt?: bool} - (FK-b) TEST: the first player breaks the block at pos (its game mode's "
+			+ "destroyBlock: vanilla's drops); halt: the JVM halts right after, before any save (the strip's crash case); answers {broken, stripped}",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				BlockPos p = posOf(req);
+				var players = s.getPlayerList().getPlayers();
+				JsonObject o = new JsonObject();
+				if (players.isEmpty()) {
+					o.addProperty("error", "no player");
+					return o;
+				}
+				long before = dev.larattalabs.architect.site.Fills.STRIPPED;
+				boolean ok = players.get(0).gameMode.destroyBlock(p);
+				if (req.has("halt") && req.get("halt").getAsBoolean()) {
+					dev.larattalabs.architect.Architect.LOGGER.warn("TEST dev.fk.break: halting after the break at {} (stripped {})", p.toShortString(),
+						dev.larattalabs.architect.site.Fills.STRIPPED - before);
+					Runtime.getRuntime().halt(7);
+				}
+				o.addProperty("broken", ok);
+				o.addProperty("stripped", dev.larattalabs.architect.site.Fills.STRIPPED - before);
+				return o;
+			}));
+		DevBridge.register("dev.fk.slabs", 10_000, "{pos: [x, y, z]} - (FK-b) the first player's petrified slabs and the slab item entities within 32 of pos",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				JsonObject o = new JsonObject();
+				var players = s.getPlayerList().getPlayers();
+				o.addProperty("player", players.isEmpty() ? -1 : playerSlabs(players.get(0)));
+				o.addProperty("entities", slabEntities(s.overworld(), posOf(req)));
+				return o;
+			}));
 		DevBridge.register("dev.fk.state", 30_000, "{site} - (M5 FK) a fill site: {phase, hasFill, key, filled, custody, paid, fillItems, containers: [{at, declared, "
 			+ "holds}], locks: [{at, state}]}", (req, mc) -> {
 				String id = Fields.of(req).nonBlank("site");
