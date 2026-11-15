@@ -344,7 +344,8 @@ const metricsText = (m: Record<string, unknown>) => Object.entries(m).filter(([,
 
 /** The numbered affordance list (the images' numbers), or why there is none. */
 export function affordanceList(list: ComposeAffordance[] | undefined, note?: string): string {
-  if (!list) return `not analysed${note ? ` (${note})` : ''}`;
+  // ((7c CF) say what is missing, so the composer does not read an empty list as land with no features)
+  if (!list) return `not analysed${note ? ` (${note})` : ''}: the land's features (caves, cliffs, overhangs, water) are missing from this list, not absent from the land; read the land from the survey (and the planning images, when there are any) and name no affordance`;
   if (!list.length) return 'none found';
   return rankAffordances(list).map((a, i) => `${i + 1}. ${a.kind} ${a.id}: ${boxText(a.box)}${Object.keys(a.metrics).length ? ` (${metricsText(a.metrics)})` : ''}`).join('\n');
 }
@@ -403,11 +404,43 @@ export function composePrompt(i: ComposeInput): string {
   ].join('\n');
 }
 
-/** One part's typed answer as the repair prompt states it (only what the composer can act on). */
-export function partAnswerLine(p: Record<string, unknown>): string {
+/** (7c CF) A reason's evidence is at most this many characters in a repair answer, a part's at most EVIDENCE_PART_MAX, a check's at most EVIDENCE_TOTAL_MAX. */
+export const EVIDENCE_LINE_MAX = 600;
+export const EVIDENCE_PART_MAX = 1_500;
+export const EVIDENCE_TOTAL_MAX = 12_000;
+/** (7c CF) Arrays in evidence keep their first this many items, then a "+N more" count. */
+const EVIDENCE_ITEMS = 6;
+
+/** (7c CF) A compact rendering of a reason's evidence: long arrays cut to their first items plus a count, then the JSON truncated to `max`. */
+export function evidenceText(ev: unknown, max = EVIDENCE_LINE_MAX): string {
+  const cut = (v: unknown, depth: number): unknown => {
+    if (Array.isArray(v)) {
+      const head = v.slice(0, EVIDENCE_ITEMS).map((x) => cut(x, depth + 1));
+      return v.length > EVIDENCE_ITEMS ? [...head, `+${v.length - EVIDENCE_ITEMS} more`] : head;
+    }
+    if (v && typeof v === 'object') return depth > 4 ? '{…}' : Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, cut(x, depth + 1)]));
+    return v;
+  };
+  return truncate(JSON.stringify(cut(ev, 0)) ?? 'null', max);
+}
+
+/**
+ * One part's typed answer as the repair prompt states it (only what the composer can act on). (7c CF) Each reason carries its evidence
+ * (evidenceText), within EVIDENCE_PART_MAX for the part and `budget.left` for the whole check (the rest: "evidence omitted").
+ */
+export function partAnswerLine(p: Record<string, unknown>, budget: { left: number } = { left: EVIDENCE_TOTAL_MAX }): string {
   const bits: string[] = [`- ${String(p.part)}: ${String(p.class)}${p.block ? ` (${String(p.block)})` : ''}${p.required === true ? ', required' : ''}`];
   const reasons = Array.isArray(p.reasons) ? (p.reasons as Array<Record<string, unknown>>) : [];
-  for (const r of reasons.slice(0, 8)) bits.push(`  - ${String(r.code ?? 'REASON')}${r.path ? ` at ${String(r.path)}` : ''}: ${truncate(String(r.message ?? ''), 600)}`);
+  let partLeft = EVIDENCE_PART_MAX;
+  for (const r of reasons.slice(0, 8)) {
+    bits.push(`  - ${String(r.code ?? 'REASON')}${r.path ? ` at ${String(r.path)}` : ''}: ${truncate(String(r.message ?? ''), 600)}`);
+    if (r.evidence === undefined || r.evidence === null || (typeof r.evidence === 'object' && !Object.keys(r.evidence).length)) continue;
+    const room = Math.min(EVIDENCE_LINE_MAX, partLeft, budget.left);
+    if (room < 40) { bits.push('    evidence omitted (the repair prompt\'s evidence budget is spent)'); continue; }
+    const t = evidenceText(r.evidence, room);
+    partLeft -= t.length; budget.left -= t.length;
+    bits.push(`    evidence: ${t}`);
+  }
   if (p.wouldFit !== undefined && p.wouldFit !== null) bits.push(`  - would fit: ${truncate(JSON.stringify(p.wouldFit), 600)}`);
   if (Array.isArray(p.blockedBy) && p.blockedBy.length) bits.push(`  - blocked by: ${truncate(JSON.stringify(p.blockedBy), 600)}`);
   if (Array.isArray(p.deviations) && p.deviations.length) bits.push(`  - deviations: ${truncate(JSON.stringify(p.deviations), 600)}`);
@@ -453,7 +486,7 @@ export function repairPrompt(first: string, round: ComposeRound, kindsText: stri
     '',
     '## The check',
     round.refused ? `the check did not run: ${round.refused}` : `overall: ${String(check?.overall ?? 'unknown')}; ${parts.length - bad.length} of ${parts.length} part(s) fit or adjusted`,
-    ...bad.map(partAnswerLine),
+    ...((budget) => bad.map((p) => partAnswerLine(p, budget)))({ left: EVIDENCE_TOTAL_MAX }),
     ...(notes.length ? ['notes:', ...notes.slice(0, 12).map((n) => `- ${truncate(n, 600)}`)] : []),
     ...(check?.malformed ? [`malformed: ${truncate(JSON.stringify(check.malformed), 2000)}`] : []),
     '',
@@ -899,7 +932,7 @@ export class ComposeDesigns {
     if (st.volume && st.affordances === undefined && st.affordanceError === undefined) {
       sc.designs.update(id, { status: 'designing', step: 'reading the claim\'s land features' });
       try {
-        st.affordances = keepComposeAffordances((await sc.regions.claimAffordances(st.volume.blobId, st.volume.sha)).affordances);
+        st.affordances = keepComposeAffordances((await sc.regions.claimAffordances(st.volume.blobId, st.volume.sha, (st.claim.maxX - st.claim.minX + 1) * (st.claim.maxZ - st.claim.minZ + 1))).affordances);
       } catch (e) {
         st.affordanceError = truncate((e as Error).message, 500);
       }

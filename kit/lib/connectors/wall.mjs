@@ -982,6 +982,24 @@ export function wallsEvidence(K, leg) {
 }
 
 /**
+ * (7c CF) A leg's UNREACHABLE message when a sealed wall ring stands between its ends (wallsEvidence's walls): it names the wall and the
+ * fix, instead of the generic "no route within the grade ..." that sent the composer after the slope. Null when no sealed wall is between.
+ * A wall sealed by gates 0 never opens; one sealed because it is written closed with no gate part opens with a gate part or unwritten closed.
+ */
+export function sealedWallMessage(K, leg, ev) {
+  const sealed = (ev?.walls ?? []).filter((w) => w.sealed);
+  if (!sealed.length) return null;
+  const why = sealed.map((w) => {
+    const W = K.walls.find((q) => q.id === w.wall);
+    const zero = W && W.st.gatesMax === 0 && (W.p.part.gates === 0 || W.st.P.read.gatesMin === 0);
+    return zero
+      ? `the wall ring ${w.wall} is sealed (gates 0), so the route can't leave it; give the wall gates (gates.min 1 or more) or end the route inside it`
+      : `the wall ring ${w.wall} is closed with no gate part, so the route can't leave it; add a gate part ({kind: "gate", wall: "${w.wall}", crossing: "${leg.conn?.id ?? '<this route>'}"}) or open the ring (leave closed unwritten: crossing routes then get their gates by themselves)`;
+  });
+  return `leg ${leg.k + 1}: ${why.join('; ')}`;
+}
+
+/**
  * (7a K2) A leg the route pass could not route (no route, or the search's budget spent) whose ends an open wall (wall.along: its ends
  * clip at the claim margin) cuts apart: the claim's dry cells reach one end from the other without the walls' cells, and not with them.
  * Its answer says so (refused UNREACHABLE, evidence {kind: wall, walls}) instead of a bare UNREACHABLE or BUDGET: K1a's gate move opens
