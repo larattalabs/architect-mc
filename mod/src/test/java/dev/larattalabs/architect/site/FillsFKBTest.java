@@ -206,4 +206,31 @@ class FillsFKBTest {
 		String guard = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/FillGuard.java"));
 		assertFalse(guard.contains("Fills.filledSite("), "the guard asks guardedSite (FILLING counts), never filledSite alone");
 	}
+
+	@Test
+	void aFillsCellsComeFromTheSitesOwnFootprintNeverTheLibraryHead() {
+		// (FK-b fix, the release verification) v1 4x3x4 placed clockwise_90: its declared hopper (template 1,0,2) is at 101,66,101 from the
+		// site's box and rotation alone, so a later head of another size (v2, depth 8: 105,66,101 by the head) can't move its guard
+		dev.larattalabs.architect.placement.Anchors.Bounds box = new dev.larattalabs.architect.placement.Anchors.Bounds(100, 66, 100, 103, 68, 103);
+		Site v1 = new Site("fkb-resize", "fkb_resize_absent_head", "clockwise_90", box, box, Map.of(), 0L, Site.OVERWORLD, box, Builder.JOURNAL_TARGET,
+			null, null, null);
+		assertEquals(new net.minecraft.core.BlockPos(101, 66, 101), Fills.world(v1, 1, 0, 2));
+		// every rotation of a non-square template: the box's extents (swapped for odd turns) give the template's own size back
+		String[] rot = {"none", "clockwise_90", "180", "counterclockwise_90"};
+		for (int[] size : new int[][] {{4, 6}, {5, 3}, {7, 7}}) {
+			for (int t = 0; t < 4; t++) {
+				int ex = (t & 1) == 1 ? size[1] : size[0];
+				int ez = (t & 1) == 1 ? size[0] : size[1];
+				var b = new dev.larattalabs.architect.placement.Anchors.Bounds(10, 64, 20, 10 + ex - 1, 70, 20 + ez - 1);
+				int turns = dev.larattalabs.architect.placement.BlueprintTransform.parseTurns(rot[t]);
+				assertEquals(t, turns, rot[t]);
+				for (int x = 0; x < size[0]; x++) {
+					for (int z = 0; z < size[1]; z++) {
+						int[] rc = dev.larattalabs.architect.placement.BlueprintTransform.rotateBlock(x, z, size[0], size[1], t);
+						assertEquals(new net.minecraft.core.BlockPos(10 + rc[0], 65, 20 + rc[1]), Fills.world(b, rot[t], x, 1, z), size[0] + "x" + size[1] + " " + rot[t]);
+					}
+				}
+			}
+		}
+	}
 }
