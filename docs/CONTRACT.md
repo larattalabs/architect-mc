@@ -31035,6 +31035,167 @@ and after, as JR's and RL's gates measure). No mint, no loss.
 - **Steward RC areas:** `bp.fillContainers` and the sidecar `fill`; `ProgramRefused` `fill`; SITE_BUILT only after the unlock; the fill's items in `outstanding` and `nextNeeded`; `SiteWait.blocked`; Quote `fill:<lot>`; removal blockers for declared containers; refunds include custody; NOT_ALLOWED for crate-fed survival fill sites, moves, deltas and overwrites of fill cells.
 - **Left over:** a single-site Remove credits without a save (PS's leftover; a crash after it leaves an orphan custody `atStart` ignores); a stalled removal's custody is written back at load and its retry may wipe it uncredited; only the Groups removal path is gated; locks: lever `powered` only.
 
+### FK-b contract (module-provided fill items; slice `slice/FKB`; accepted by Steward, 2026-11-14)
+
+Drafted against origin/main 799a1df4 plus J1's branch (slice/J1 2410f3f4) for the refund, credit and save paths; the build starts only after J1
+merges. Strict tier, $0, versions `NEXT`, additive API. It extends FK's contract (CONTRACT "### FK contract" and "Slice FK as built"); where
+this says nothing, FK's text holds.
+
+#### 1. The declaration (kit and sidecar)
+
+    bp.fillContainers({ containers: [ { at: [x, y, z], items: [
+        { slot: 0, id: 'minecraft:cobblestone', count: 18 },                          // billed, as in FK
+        { slot: 1, id: 'minecraft:petrified_oak_slab', count: 1, provided: true },   // module-provided
+    ] } ], locks: [...] })
+
+- `provided` is an optional boolean on an item (absent = false). The sidecar's `fill` carries it unchanged; no IR or golden moves for a
+  fill without it.
+- **The allow-list** is one constant: `Limits.FILL_PROVIDED_ITEMS = Set.of("minecraft:petrified_oak_slab")` (Java), mirrored in the kit
+  (`FILL_PROVIDED_ITEMS`, a kit unit test pins them equal). Plain, survival-unobtainable items only; a later item is an API change.
+- **Refused at plan time** (kit checker rule `fill`, so `ProgramRefused.detail` = `fill`; Java `Fills.parse` refuses the same, so a placement
+  reaching the mod with one is NOT_ALLOWED before any write; 0 cells written either way). New finding strings:
+  - `fill: <id> can't be module-provided (allowed: minecraft:petrified_oak_slab)`: `provided: true` on any other item;
+  - `fill: <id> is creative-only; declare it provided: true`: an allow-listed item declared **billed** (survival could never deliver it; the
+    target would starve forever);
+  - `fill: a provided item can't go in a <dropper|dispenser>`: those eject their contents when powered (a leak); provided items go only in a
+    hopper, chest, trapped chest or barrel;
+  - `fill: provided must be true or false`.
+- A container may hold provided items only, billed only, or both. A fill whose items are all provided has an empty bill.
+
+#### 2. Java API (additive, `Since NEXT`)
+
+- `Limits.FILL_PROVIDED_ITEMS` (an unmodifiable `Set<String>`).
+- Feature `"fillProvided"` (helper `design.fillProvided`).
+- No new method, record field or `Reason`. `Sites.view`, `outstanding`, `SiteWait.nextNeeded` and the quote simply leave provided items out.
+
+#### 3. The fill (survival and creative)
+
+- `Fills.Spec` splits into `billed()` (the bill: what `purse.pay`, the stock check, `outstanding`/`nextNeeded`, `Run.pending()`'s reservation
+  and `Quotes.lot`'s `fill:<lot>` use) and `provided()`. `Box.counts()` stays the full declaration: "ours vs cargo", FK3's `holdsExactly`
+  replay and `atStart` count the slabs as ours.
+- In FK's one fill tick (3c) the provided stacks are written with the billed ones, **unbilled**: not paid, not in `paid[key]`.
+- **Ledger:** the commit's ledger write (3d) carries, with FK's marker, `provided[key] = {item: count}` (additive format-2 field, beside
+  `filled`/`custody`). That write stays the commit point, so FK1-FK4 hold unchanged: before it on disk, the fill runs once (FK3 clears a
+  container holding exactly its full declaration, slabs included); after it, never again.
+- A fill with only provided items still has a commit (the marker and `provided[key]`), so it is never written twice.
+- **Creative/instant:** written with the rest, as FK; no ledger.
+- **Quote/bill:** `consumed = quote` holds with the slabs out of both.
+
+#### 4. Removal and undo
+
+- `takeCustody` (both callers: Groups and Sites.remove) splits what it takes: billed items into `custody[key]` (as FK), provided items into
+  a separate `heldProvided[key]`, in the same ledger change and the same `saveWithWorld`.
+- At the key's credit (`StockLedger.credit`, once per key): the billed custody refunds with the blocks under FK's per-item cap;
+  `heldProvided[key]` and `provided[key]` are dropped, **refunding nothing**. The slabs leave the game.
+- `writeBack` (a removal ending unwritten, or an orphan custody at load) writes both back by declaration. A provided item with no free slot
+  is **destroyed** (logged), never dropped at the site (FK drops billed leftovers there; that stays).
+- Creative removal: as FK (contents go with the cell's FLAGS write; no drop).
+- Crash: FKC1/FKC2 as FK. Custody (both maps) is on disk before the world write; a credited key never credits again; `heldProvided` is
+  never refunded, so a replay can neither mint nor double-take.
+
+#### 5. Never into survival: the break and take paths
+
+The coordinator asked that no path mint the creative-only item; with repair (section 6) any leak would be repeatable. Every path is covered,
+so the contract names **no known leak**.
+
+- **(a) Any break, one hook.** In 26.3 every container's contents drop through `BlockEntity.preRemoveSideEffects` ->
+  `Containers.dropContents` (no container overrides it). A mixin at its head strips the allow-listed provided stacks of a declared container
+  of a filled site before vanilla drops the rest. That covers a player's break (survival or creative), explosions (TNT, creeper, crystal,
+  bed, anchor, wither), the wither and dragon, `/setblock`/`/fill`. Billed items (the filter items) still drop as vanilla: they are the
+  player's paid goods. Architect's own writes use FLAGS that skip block-entity side effects, so the hook never fires on a removal or undo.
+  No `PlayerBlockBreakEvents` hook is needed. (Hoppers and chests can't be piston-moved.)
+- **(b) The menu.** A mixin on `Slot.mayPickup`: a non-creative player can't pick up an allow-listed provided stack from a slot of a declared
+  container of a filled site. Every menu take path checks it (click, shift-click, hotbar swap, throw, double-click collect; `tryRemove`
+  and `safeTake`, which bundles use). Billed items stay takeable (FK's "an emptied hopper refunds the rest" is unchanged). Inserting is not
+  touched.
+- **(c) Item transfer.** Mixins on `HopperBlockEntity.tryTakeInItemFromSlot` (a hopper or hopper minecart pulling from the container) and
+  on `ejectItems` (a declared hopper pushing its own slots) skip provided stacks. In M4's normal running nothing changes: a hopper pushes
+  from its first non-empty slot, and the filter item sits first.
+- **(d) Other mods' pipes (Fabric Transfer API).** Every item extraction through `ItemStorage.SIDED` from a vanilla container goes through
+  Fabric's `ContainerSlotWrapper.extract` (the sided wrapper delegates to it). A mixin there returns 0 for a provided variant in a slot of a
+  declared fill container (a double chest's compound container mapped to its half by slot). The mixin targets a Fabric impl class, so a
+  Fabric API update that renames it fails the mod's load in the gate, never silently.
+- **Named leak (out of scope):** a mod that edits a container's stacks directly (`setItem`, `removeItem`, or shrinking the stack
+  `getItem` returns), bypassing both vanilla transfer and Fabric's Transfer API. Such a mod can create items anyway; FK-b doesn't guard
+  raw `Container` calls, because Architect and vanilla make them too.
+- **The lookup** is cheap on every path: first "does the stack (or container) hold an allow-listed item" (almost always no), then a
+  position index of the filled sites' declared containers per dimension (built from the sites file at load, updated at the fill commit,
+  the custody take and the site's removal), never a scan of `Sites.all()`.
+- **Scope (coordinator, 11-14).** All three hooks act only on a provided stack in a declared fill container: the container's position is a
+  declared container of a filled site (the index, built from the Fills record and the ledger's `provided[key]`), and the stack's item is one
+  that container's declaration marks provided. Petrified slabs anywhere else behave as vanilla: a creative player's own slabs, a hopper that
+  is not a fill container, a fill container's cell of a site that isn't filled yet (cargo, as FK).
+- **Every menu take path** goes through `Slot.mayPickup`: click pickup (`tryRemove`), shift-click (`QUICK_MOVE` checks it before
+  `quickMoveStack`), number-key and offhand swap (`SWAP`), drop from the slot, Q and ctrl-Q (`THROW`), double-click collect (`PICKUP_ALL`), a bundle's take (`safeTake`).
+  Drag (`QUICK_CRAFT`) only places items from the cursor, so it can't take. A hopper minecart under the container pulls through
+  `tryTakeInItemFromSlot` (5c).
+- **Crash safety of the strip.** The strip writes no ledger record: `provided[key]` stays as written and `heldProvided` exists only from a
+  removal's custody take. A kill after the strip and before the next save leaves the saved chunk as it was, the container standing with its
+  slabs, matching `provided[key]`. The slabs never became item entities, so no slab is saved loose and no `heldProvided` is stale. A kill
+  after the chunk save leaves the container gone, its slabs destroyed, and `provided[key]` untouched until the removal.
+- **Conservation:** a stripped stack is destroyed and counted (`Fills.STRIPPED`, dev); `provided[key]` is unchanged until the removal.
+  Per provided item: written at the fill = in the containers + stripped + taken at removal, and the player's inventory and the world's item
+  entities never gain one.
+- **Not covered, on purpose:** commands and a creative player (both can create the item anyway).
+
+#### 6. Repair
+
+Architect has no in-place repair of a BUILT site (its builder never re-queues a broken cell, and an UNLOCKED site never fills again). So a
+Steward repair of a broken filter hopper is a **removal of the target and a new placement** of the same entry: a new `placedAt`, a new key.
+- The removal takes what is left (billed refunded, provided not); the broken hopper's slabs were stripped at the break (5a).
+- The new placement's fill writes the plan again into empty containers: provided **unbilled**, filter items billed and on the quote.
+  Exactly the planned counts, never more: FK's fill writes only into empty containers, once per key.
+- Since 5a-5c close every take path, a repair can't be turned into a source of slabs.
+- **The supported repair (Steward's review):** undo the hall's growth (its revision) and grow it again, under a new key. There is no
+  in-place re-fill.
+
+#### 7. Dev hooks and kill points
+
+- `dev.fk.state` adds `provided`, `heldProvided` and the containers' provided counts; `dev.fk.stripped` reads `Fills.STRIPPED`.
+- `dev.fk.take {site, cell, slot}` runs a server-side menu click as the player (for 5b); `dev.fk.pull {cell}` ticks a hopper minecart under
+  a cell (5c).
+- Kill points unchanged (FK1-FK4, FKC1, FKC2), re-run with provided items in the fill.
+
+#### 8. Gate (strict; one in-game step `fkb-survival` plus `fkb-crash`, headless, 8916/8917)
+
+- **fkb-unit:** kit `fk.test` additions (every new refusal, the allow-list mirror); Java `FillsFKBTest` (the split, the ledger round trip
+  of `provided`/`heldProvided`, credit drops them with no refund, writeBack destroys an unplaceable provided item, the index) and
+  `ApiFKBTest` (limit, feature).
+- **fkb-survival:** `fk_hall` with filter hoppers holding billed filter items plus provided petrified slabs, fed from the stockpile:
+  - quote and bill show only the filter items; consumed = quote; the containers hold the planned stacks (slabs included);
+  - menu takes of a slab refused, driven server-side as the player's container clicks: pickup, shift-click, number-key swap, offhand
+    swap, Q and ctrl-Q, double-click collect; a filter item's pickup allowed; a hopper minecart under a filter hopper pulls no slab (bundle and
+    drag named as covered by the code path);
+  - **negative case:** a creative-placed hopper holding petrified slabs, not a fill container, behaves as vanilla: the slabs can be taken,
+    a minecart pulls them, and its break drops them;
+  - a kill after a strip and before the save: after the restart, the container stands with its slabs, no slab entity, no `heldProvided`;
+  - player break of a filter hopper: its filter items drop, no slab entity, `STRIPPED` = its slabs; a TNT explosion on another: same;
+  - repair, one cycle: break a filter hopper, undo the hall's revision, grow it again: slabs = the plan, the new fill's bill = the filter
+    items only, items in = items out;
+  - a Transfer API extraction (`ItemStorage.SIDED` on a declared hopper) moves no slab, and does move a filter item;
+  - removal and undo: slabs taken, refund = the billed part only; items in = items out per item against the saved state, provided apart;
+  - a non-allow-listed item marked provided (and the slab declared billed): refused at plan time, 0 cells written.
+  - the player's inventory and the item entities hold 0 petrified slabs throughout.
+- **fkb-crash:** FK2/FK3 at the fill and FKC1/FKC2 at removal, with slabs: no duplicate and no loss of slabs or billed items.
+- Re-run fk-survival, fk-crash, jr-crash, rl-crash, rs-survival-smoke. Strict verifier on 8896:8897 `--shards 1`, `--no-cache`.
+
+#### 9. Steward RC areas
+
+`provided: true` and the allow-list; the new `fill` findings; quote/bill/outstanding/nextNeeded without provided items; removal refunds
+without them; slabs unpickupable and untransferable from declared containers; stripped at any break; repair = remove + re-place.
+
+#### Changes from Steward's review (accepted 2026-11-14, through the coordinator; these win over the text above)
+
+- **Scope (coordinator):** the hooks act only on provided stacks in declared fill containers of filled sites, never on petrified slabs
+  elsewhere. Gated with a negative case: a creative-placed hopper outside any fill behaves as vanilla. (Folded into 5.)
+- **Every menu take path (coordinator, Steward):** pickup, shift-click, number-key and offhand swap, Q and ctrl-Q, double-click collect,
+  bundle; drag only places items. The ones the headless harness can drive are gated; the rest are named as covered by the code path. (5, 8)
+- **Strip crash safety (coordinator):** a kill between the strip and the save leaves no loose slab and no stale `heldProvided`. Gated. (5, 8)
+- **Repair (Steward, 6):** undo the revision and grow again (a new key) is the supported repair; no in-place re-fill. Gated as one cycle.
+- **Every automated transfer (Steward):** block hoppers, hopper minecarts, and the Fabric Transfer API (5d). Direct `Container` edits by
+  another mod are the one named leak.
+- Steward's M4 certifies `slots > 0` once FK-b ships.
+
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
 
 A safety slice from IG's finding (side note `architect-IG-rvu2-refund.md`). After the server stopped without saving, a survival undo
