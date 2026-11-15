@@ -400,7 +400,12 @@ subs['p0-plan-path'] = async () => {
   for (const flat of [true, false]) {
     const key = flat ? 'flat' : 'natural';
     const outDir = path.join(art, `${scn}-co${flat ? '-flat' : ''}`);
-    const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), 'run', scn, '--brief', '--via', 'compose', '--brief-ext', path.join(root, 'tools', 'lib', 'pay-compose-ext.json'), '--phase', '7c-pay', ...(flat ? ['--flat'] : []), '--out', outDir], { stdio: 'inherit', env: process.env });
+    fs.mkdirSync(art, { recursive: true });
+    const slog = path.join(art, `${scn}-co${flat ? '-flat' : ''}.scenario.log`);
+    const fd = fs.openSync(slog, 'a');
+    const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), 'run', scn, '--brief', '--via', 'compose', '--brief-ext', path.join(root, 'tools', 'lib', 'pay-compose-ext.json'), '--phase', '7c-pay', ...(flat ? ['--flat'] : []), '--out', outDir], { stdio: ['ignore', fd, fd], env: process.env });
+    fs.closeSync(fd);
+    log(`P0 plan path ${scn} ${key}: the scenario's own log ${slog} (its FAIL lines are the scenario bars, recorded here; this step prints P0's verdict)`);
     const m = readJson(path.join(outDir, 'metrics.json'), {});
     const b = readJson(path.join(outDir, 'brief.json'), {});
     const rows = m.rows ?? [];
