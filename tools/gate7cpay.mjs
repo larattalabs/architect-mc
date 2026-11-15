@@ -285,8 +285,10 @@ function roundJobs(L, designId) {
 /** A calibration site's world: a fresh copy of the pinned seed's base, the player over the claim, the claim forceloaded. */
 async function siteWorld(L, s, tag) {
   const claim = site(s.site).fixture.claim;
+  // (a fresh copy of the base per call, rules frozen: P4's A/B arms must read the same land; P0 found a few cells of drift between two
+  // composes in one live world, cave cells and an overhang's clearance moving under random ticks)
   await L.fresh(`G6B PAY ${tag} ${s.key}`, await L.claimBase(SEED, claim));
-  await L.setRules('default').catch(() => null);
+  await L.setRules('exact').catch(() => null);
   await L.tp((claim[0] + claim[2]) / 2, 200, (claim[1] + claim[3]) / 2);
   await L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
   await L.cmd(`/forceload add ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`);
@@ -310,15 +312,21 @@ subs['p0-compose'] = async () => {
   check(/sim/i.test(st.status?.authSource ?? ''), `the run's sidecar is the sim (${st.status?.authSource})`);
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   for (const s of P1_COMPOSES) {
-    const claim = await siteWorld(L, s, 'P0');
+    const claim = site(s.site).fixture.claim;
     const row = res.sites[s.key] = { site: s.site, claim, brief: s.brief };
     try {
       const arm = async (images, skip) => {
+        // each arm on its own fresh copy of the same land
+        await siteWorld(L, s, `P0 ${images ? 'on' : 'off'} ${skip ? 'skip' : 'pick'}`);
         const body = { brief: s.brief, claim, style: s.style, images, budgetUsd: P.P1_BUDGETS.compose, opKey: `pay-p0-${stamp}-${s.key}-${images ? 'on' : 'off'}-${skip ? 'skip' : 'pick'}`, ext: skip ? { [SKIP_PICK]: true } : {}, wait: true };
-        const d = await L.call('dev.region.compose', body, 1_800_000);
-        const c = composeRead(d);
-        c.rounds_ = roundJobs(L, c.designId);
-        return c;
+        try {
+          const d = await L.call('dev.region.compose', body, 1_800_000);
+          const c = composeRead(d);
+          c.rounds_ = roundJobs(L, c.designId);
+          return c;
+        } finally {
+          await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
+        }
       };
       const on = row.on = await arm(true, true);
       const off = row.off = await arm(false, true);
@@ -329,19 +337,25 @@ subs['p0-compose'] = async () => {
       check(q1off && q1off.images.length === 0 && !/Planning images/.test(q1off.prompt) && off.images.length === 0, `${s.key}: round 1 (images off, P4's arm) sends no image and no images section`);
       const df = lineDiff(q1off?.prompt, q1on?.prompt);
       writeJson(path.join(out, `compose-diff-${s.key}-images-on-vs-off.json`), { on: q1on, off: q1off, diff: df });
-      check(df.minus.length === 0 && df.plus.length > 0 && df.plus.every((l) => /image|top|section|iso|^$|^#/i.test(l)), `${s.key}: the prompt diff images on vs off is the images section only (+${df.plus.length}/-${df.minus.length})`, df.plus);
+      // the images section plus the affordances header's "the images number them the same way"; any other affordance line that moved
+      // is land drift between the arms (recorded: P4's arms must read the same land)
+      const aff = (l) => /^\d+\. [a-z_]+ [a-z_]+_[0-9a-f]+: /.test(l) || /^## Site affordances/.test(l);
+      const other = { plus: df.plus.filter((l) => !aff(l)), minus: df.minus.filter((l) => !aff(l)) };
+      row.landDrift = df.plus.filter((l) => /^\d+\. /.test(l)).length;
+      check(other.minus.length === 0 && other.plus.length === 2 && other.plus[0] === '## Planning images' && /^4 images come before this text/.test(other.plus[1]), `${s.key}: the prompt diff images on vs off is the images section only (+${other.plus.length}/-${other.minus.length} outside the affordance list)`, other);
+      check(row.landDrift === 0, `${s.key}: both arms read the same land (affordance lines that differ: ${row.landDrift})`, df.plus.filter((l) => /^\d+\. /.test(l)));
       const shaOn = on.history.map((x) => x.planSha ?? null), shaOff = off.history.map((x) => x.planSha ?? null);
       check(JSON.stringify(shaOn) === JSON.stringify(shaOff), `${s.key}: the sim's plans with images on and off are the same, round by round (${shaOn.join(',')})`);
       check(pick.status === 'DONE' && pick.pick?.outcome, `${s.key}: the natural pick (recorded: P1 skips it) ${pick.pick?.outcome} ${pick.pick?.program ?? ''} -> ${pick.outcome}`);
       if (s.key === 'cliff') {
         // P3's mechanism: an authoring session on the sim over this claim (P3's own briefs are stage 2)
+        await siteWorld(L, s, 'P0 author');
         const a = row.author = await L.call('dev.region.author', { brief: 'A builder-written test program: a terrace of three cottages along the cliff foot.', claim, budgetUsd: 1, opKey: `pay-p0-${stamp}-author`, wait: true }, 1_800_000);
+        await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
         check(a.status === 'DONE' && a.kind === 'PROGRAM', `P3 mechanism: Regions.authorProgram (sim) ${a.status} ${a.kind} ${a.result?.outcome ?? a.error ?? a.refused ?? ''}`);
       }
     } catch (e) {
       check(false, `${s.key}: ${e.message}`);
-    } finally {
-      await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
     }
   }
   res.ok = res.checks.every((c) => c.ok);
