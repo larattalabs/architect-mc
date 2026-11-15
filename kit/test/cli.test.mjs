@@ -7,9 +7,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { decodePng } from '../lib/png.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-kit-'));
+const tmp = archTmpDir('architect-kit');
 const run = (script, args) => spawnSync(process.execPath, [path.join(KIT, script), ...args], { encoding: 'utf8' });
 
 for (const id of ['cabin', 'tower', 'tavern', 'gatehouse']) {
@@ -124,7 +125,7 @@ test('build: a bad palette or bad values is bad usage (exit 2), still one JSON l
 });
 
 test('build never writes favorite/userTags/displayName, and a rebuild keeps them', () => {
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-kit-user-'));
+  const out = archTmpDir('architect-kit-user');
   assert.equal(run('build.mjs', ['cabin', '--out', out]).status, 0);
   const file = path.join(out, 'cabin.blueprint.json');
   const sc = JSON.parse(fs.readFileSync(file, 'utf8'));

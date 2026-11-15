@@ -14,6 +14,7 @@ import { hillAt } from '../regions/s3_hill.mjs';
 import { analyseVolume } from '../lib/region/affordances.mjs';
 import { renderPlanImages, rankAffordances, PLAN_IMAGE_NAMES, PLAN_IMAGE_AFFORDANCES } from '../lib/region/planImages.mjs';
 import { decodePng } from '../lib/png.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GOLDEN = path.join(KIT, 'test', 'fixtures', 'co', 'planimages.json');
@@ -80,7 +81,7 @@ test('7c CO: the affordances are ranked by score then id, at most 60, numbered a
 
 test('7c CO: the CLI writes the library\'s images', async () => {
   const cav = await cavernLand();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'co-pi-'));
+  const dir = archTmpDir('co-pi');
   try {
     fs.writeFileSync(path.join(dir, 'survey.bin'), cav.survey);
     fs.writeFileSync(path.join(dir, 'aff.json'), JSON.stringify({ affordances: cav.affordances }));

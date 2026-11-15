@@ -8,7 +8,7 @@ import path from 'node:path';
 import { ensurePinnedDeps, missingPins, readPins } from '../../tools/lib/pinned-deps.mjs';
 
 function fixture(version = '0.4.0', cached = []) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinned-deps-'));
+  const root = archTmpDir('pinned-deps');
   const modDir = path.join(root, 'mod');
   fs.mkdirSync(modDir, { recursive: true });
   fs.writeFileSync(path.join(modDir, 'gradle.properties'), `# c\nmod_version=1.0.0\nlab_ui_version=${version}\n`);
@@ -65,6 +65,7 @@ test('LAB_UI_DIR (a sibling lab-ui checkout) skips the check', () => {
 
 // (GI A46) the full-classpath seed: any dependency bump, not only dev.larattalabs
 import { SEED_FILES, seedClasspath, seedKey, seedMarker } from '../../tools/lib/pinned-deps.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 function seedFixture() {
   const { root, modDir, home } = fixture('0.4.0', ['0.4.0']);

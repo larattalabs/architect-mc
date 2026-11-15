@@ -11,10 +11,11 @@ import { BUILTIN_BIBLES, builtinBible, styleFieldsErrors, validateBible } from '
 import { AUTHORED_STYLES, PALETTES, PALETTE_PRESETS, WOODS, palette, variant } from '../lib/kit.mjs';
 import { FEATURE_IDS, MAX_SUGGESTED_FEATURES, STYLE_META, editMain, editMainFrom, fanOut, formApply, formNew, formSaveRequest, formStyle, formView, mainOf, presetStyle, provenanceOf, styleTable } from '../lib/styles.mjs';
 import { fitsRole } from '../lib/vocab.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-styles-'));
+const tmp = archTmpDir('kit-styles');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 test('the six word-only chips are authored built-in Styles: valid, no role warnings, sensible roles', () => {

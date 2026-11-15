@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as P from '../../tools/lib/pa-ledger.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const day = (h, m) => new Date(2026, 10, 12, h, m);
 const at4pm = day(16, 0);
@@ -119,7 +120,7 @@ test('the A/B sides are recorded per pair and follow the random bit', () => {
 });
 
 test('the ledger files: the phase ledger and each item\'s copy, under a lock', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-ledger-'));
+  const dir = archTmpDir('pa-ledger');
   const f = path.join(dir, 'spend.json');
   P.withLedger(f, (L) => { P.openJob(L, { item: 'P1', step: 'P1:cliff', capUsd: 5 }); P.updateJob(L, 'P1:cliff', { usd: 3, ended: true }); });
   const L = P.readLedger(f);

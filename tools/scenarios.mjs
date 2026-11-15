@@ -20,6 +20,9 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+// (7c BR) loaded lazily: release-version's tests copy scenarios.mjs with only the modules its offline commands import
+let BRm;
+const br = async () => (BRm ??= await import('./lib/scenario-br.mjs'));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCEN = path.join(root, 'scenarios');
@@ -41,6 +44,10 @@ const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
 // (6c MP) a scenario may name its short id (its golden and run dirs); else the id's first word
 const short = (sc) => sc.short ?? sc.id.split('_')[0];
+// (7c BR) the golden a run cuts: a brief run's own (goldens/<short>-br), else the scenario's; the golden it compares with: that one,
+// or for a brief run with none of its own the scenario's (a brief that plans the program run's IR needs no second golden)
+const cutKey = (sc) => sc.goldenKey ?? short(sc);
+const gkey = (sc) => (sc.goldenKey && fs.existsSync(path.join(SCEN, 'goldens', `${sc.goldenKey}.json`)) ? sc.goldenKey : short(sc));
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -283,7 +290,9 @@ const isT2 = (sc) => sc.phase === '6c-t2'; // (6c T2) route_demo on S3's claim
 const isD = (sc) => sc.phase === '6c-d'; // (6c D1) districts_demo on S3's claim
 const isS2 = (sc) => sc.program === 'ice_outpost'; // (6c S2) the ice-spike outpost on S2's claim
 const isS3 = (sc) => sc.program === 'terraced_monastery'; // (6c S3) the terraced monastery on S3's claim
-const isSB = (sc) => !!sc.sculpt; // (7b SB) S5's treehouses and S6's cave city: a sculpt first, site lots with $0 site variants (tools/lib/scenario-sb.mjs)
+const isSB = (sc) => !!sc.sculpt;
+// (7c BR) site lots from the library: the S3 v2 gallery item's cliff lots get $0 site variants of a cached entry (scenario-sb librarySiteEntries)
+const isSites = (sc) => isSB(sc) || !!sc.siteLibrary; // (7b SB) S5's treehouses and S6's cave city: a sculpt first, site lots with $0 site variants (tools/lib/scenario-sb.mjs)
 const BARS = new Set(['mspt', 't1-tiles', 't2-tiles', 'd-tiles', 's2-tiles', 's3-tiles']); // timing rows (recorded, not blocking in change/slice)
 
 /** (6c T2) An /apitest command's JSON answer (the apitest mod: protected areas). */
@@ -395,6 +404,38 @@ async function pin(id) {
   return { seed, cams, lotEntries, irSha: p.irSha };
 }
 
+/**
+ * (7c BR) The brief of a run: the scenario's one-line brief (never its program) through Regions.design or Regions.compose
+ * (tools/lib/scenario-br.mjs), on the run's world after any sculpt, with the claim's chunks forceloaded (TC's claim volume and the
+ * survey read loaded chunks only: S5's and S6's land needs fail closed on an unloaded claim). The answer goes to brief.json; a brief
+ * that reaches no plan stops the run (the row would fail; nothing else could be judged). PAY's hooks: --via, --model, --budget,
+ * --images, --brief-ext <json file> (compose's ext as is).
+ */
+async function briefRun(sc, claim, flat, out) {
+  const { briefCall, briefPlan, briefText, briefVia, readBrief } = await br();
+  const via = briefVia(sc, opt('via'));
+  const extFile = opt('brief-ext');
+  const o = { model: typeof opt('model') === 'string' ? opt('model') : null, budgetUsd: opt('budget') ? Number(opt('budget')) : null, images: !!opt('images'),
+    ext: typeof extFile === 'string' ? JSON.parse(fs.readFileSync(path.resolve(extFile), 'utf8')) : null };
+  const [hook, body] = briefCall(sc, claim, via, o);
+  const chunks = (Math.floor(claim[2] / 16) - Math.floor(claim[0] / 16) + 1) * (Math.floor(claim[3] / 16) - Math.floor(claim[1] / 16) + 1);
+  const fl = chunks <= 256 ? `${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}` : null;
+  if (fl) { await L.cmd(`/forceload add ${fl}`); await L.settle(3000); }
+  let d;
+  try {
+    L.log(`  brief (${via}): "${body.brief}" over [${claim.join(',')}]${sc.bible ? ` in ${sc.bible}` : ''}`);
+    d = await L.call(hook, body, 1_800_000);
+  } finally {
+    if (fl) await L.cmd(`/forceload remove ${fl}`).catch(() => null);
+  }
+  const b = { ...readBrief(via, d, briefText(sc)), scenarioProgram: sc.program, forceloaded: fl ? chunks : 0, variant: flat ? 'flat' : 'natural' };
+  fs.writeFileSync(path.join(out, 'brief.json'), `${JSON.stringify({ ...b, answer: d }, null, 2)}\n`);
+  const p = briefPlan(b);
+  L.log(`  brief: ${b.status} ${b.outcome} ${b.program ?? '-'} ${JSON.stringify(b.params)}${b.planId ? ` (the mod planned ${b.planId})` : ''} $${b.costUsd.toFixed(4)}${p.ok ? '' : `: ${p.why}`}`);
+  if (!p.ok) throw new Error(`the brief reached no plan: ${p.why}`);
+  return b;
+}
+
 async function runScenario(id) {
   await lib();
   L.refuseKeys();
@@ -402,12 +443,20 @@ async function runScenario(id) {
   const sc = readSc(id);
   const flat = !!opt('flat');
   const phase = opt('phase', '6b');
+  // (7c BR) a brief run: its own golden key (goldens/<short>-br) and run dirs (<phase>/<short>-br/)
+  const briefOn = !!opt('brief');
+  const BR = briefOn ? await br() : null;
+  if (briefOn) sc.goldenKey = BR.briefGoldenKey(short(sc));
   // (6c W) `--bible <id>`: the run with another fixture bible (scenarios/bibles/<id>.json, installed as bible <id> v1): the W path
   // bibles and the gallery's looks. Its runs go to <phase>/<short>-<id>/; its golden row compares with S7's own golden (recorded).
   const bibleOpt = opt('bible');
   if (bibleOpt) { sc.bible = bibleOpt; sc.bibleFixture = `bibles/${bibleOpt}.json`; }
+  // (7c BR) a brief run's Style: its format 3 settlement Style with roleShares bands where BRIEF_STYLE names one
+  else if (briefOn && BR.BRIEF_STYLE[sc.id]) { sc.bible = BR.BRIEF_STYLE[sc.id]; sc.bibleFixture = `styles/${BR.BRIEF_STYLE[sc.id]}.json`; }
+  // (7c BR) a brief run's lots from the library where BRIEF_LIBRARY names cached entries (S5: 7b P2's treehouse entries, committed fixtures)
+  if (briefOn && BR.BRIEF_LIBRARY[sc.id]) sc.siteLibrary = BR.BRIEF_LIBRARY[sc.id];
   const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-')}${flat ? '-flat' : ''}`;
-  const out = path.resolve(opt('out') || path.join(ART, phase, bibleOpt ? `${short(sc)}-${bibleOpt}` : short(sc), runId));
+  const out = path.resolve(opt('out') || path.join(ART, phase, bibleOpt ? `${short(sc)}-${bibleOpt}` : briefOn ? sc.goldenKey : short(sc), runId));
   const raw = path.join(out, 'raw');
   fs.mkdirSync(raw, { recursive: true });
   const t = {};
@@ -418,6 +467,7 @@ async function runScenario(id) {
   const cams = Object.fromEntries(Object.entries(sc.cams).map(([k, v]) => [k, [v[0] + off[0], v[1], v[2] + off[1], v[3], v[4]]]));
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
   if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc);
+  if (sc.siteLibrary) (await import('./lib/scenario-sb.mjs')).copyLibraryEntry(L, sc.siteLibrary, root);
   let t0 = Date.now();
   await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.claimBase(sc.world.seed, sc.fixture.claim));
   await L.setRules(flat ? 'exact' : 'gallery');
@@ -432,8 +482,15 @@ async function runScenario(id) {
   for (const a of protect) { await apitest(`unprotect ${owner} ${a.id}`).catch(() => null); await apitest(`protect ${JSON.stringify({ owner, ...a }).replaceAll(' ', '_')}`); }
   // (7b SB) the sculpt (natural land, vanilla /fill) before any plan; its record gives the program its params
   let sbRun = null;
-  if (isSB(sc)) { const SB = await import('./lib/scenario-sb.mjs'); sbRun = { sculpt: await SB.sculpt(L, sc, claim, flat) }; sc.params = SB.paramsFrom(sc, sbRun.sculpt.record); T('sculpt', t0); t0 = Date.now(); }
-  const p1 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });
+  // ((7c BR) a brief run takes no params from the sculpt's record: the pick sends none for S5/S6, whose programs find their land (TC))
+  if (isSB(sc)) { const SB = await import('./lib/scenario-sb.mjs'); sbRun = { sculpt: await SB.sculpt(L, sc, claim, flat) }; if (!briefOn) sc.params = SB.paramsFrom(sc, sbRun.sculpt.record); T('sculpt', t0); t0 = Date.now(); }
+  // (7c BR) `--brief`: the program and params come from the scenario's one-line brief through Regions.design (the pick) or
+  // Regions.compose (the plan path; tools/lib/scenario-br.mjs BRIEF_VIA), never from the scenario file
+  let brief = null;
+  if (briefOn) { t0 = Date.now(); brief = await briefRun(sc, claim, flat, out); T('brief', t0); t0 = Date.now(); }
+  const program = brief ? brief.program : sc.program;
+  const params = brief ? brief.params : sc.params;
+  const p1 = await L.plan(program, claim, { params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });
   T('plan', t0);
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
@@ -456,9 +513,9 @@ async function runScenario(id) {
   if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
-    p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible, owner });
+    p2 = await L.plan(program, claim, { params, surveyLoad: 'generated:64', seed: sc.seed, bible, owner });
     irShas = [p2.irSha];
-    for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible, owner })).irSha);
+    for (let i = 0; i < 2; i++) irShas.push((await L.plan(program, claim, { params, surveyLoad: 'generated:64', seed: sc.seed, bible, owner })).irSha);
   } finally {
     if (freeze) await L.cmd('/tick unfreeze');
   }
@@ -470,14 +527,16 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
   // (7b SB) the cameras: the plan's cam_* anchors looking at its hub (as `pin` aims them; the layout is the sculpt's, known only now)
-  if (isSB(sc)) {
+  if (isSites(sc)) {
     const hub = ir.anchors.hub ?? ir.anchors.entrance;
     for (const [n, a] of Object.entries(ir.anchors).filter(([k]) => k.startsWith('cam_')).sort()) cams[n] = [a[0] + 0.5 + off[0], a[1], a[2] + 0.5 + off[1], ...look([a[0] + 0.5, a[1], a[2] + 0.5], [hub[0], hub[1], hub[2]])];
   }
   // (7b SB) the $0 lots: an archetype per fit (the sim's site-aware stub) and Designs.siteVariant of it for every other site lot
-  if (isSB(sc)) {
+  if (isSites(sc)) {
     t0 = Date.now();
-    const se = await (await import('./lib/scenario-sb.mjs')).siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
+    const SBL = await import('./lib/scenario-sb.mjs');
+    const se = sc.siteLibrary ? await SBL.librarySiteEntries(L, sc, ir, `${short(sc)}-${runId}`) : await SBL.siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
+    sbRun ??= {};
     sbRun.entries = se;
     sc.lotEntries = se.entries;
     if (se.pa) sc.paSpendUsd = se.pa.spendUsd; // (7b PA) the paid batch's run: its archetypes' reported cost
@@ -600,7 +659,7 @@ async function runScenario(id) {
   for (const a of protect) await apitest(`unprotect ${owner} ${a.id}`).catch(() => null);
   await L.leaveWorld();
   const lotStates = (st.view.lots ?? []).map((l) => ({ id: l.id, state: l.state }));
-  const metrics = await computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat, lotStates });
+  const metrics = await computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat, lotStates, brief });
   const gp = fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8');
   const api = /String VERSION = "([^"]+)"/.exec(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'ArchitectApi.java'), 'utf8'))?.[1];
   const hello = await L.call('dev.state').catch(() => ({}));
@@ -609,7 +668,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: sc.paSpendUsd ?? 0, lotStates, mobs, ...(hill ? { hill } : {}), ...(sbRun ? { sb: sbRun } : {}),
+    spendUsd: (sc.paSpendUsd ?? 0) + (brief?.costUsd ?? 0), lotStates, mobs, ...(hill ? { hill } : {}), ...(sbRun ? { sb: sbRun } : {}), ...(brief ? { brief } : {}),
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
@@ -628,7 +687,7 @@ async function runScenario(id) {
 }
 
 /** The metrics of a run directory (also `scenarios.mjs metrics <runDir>` to recompute after a kit fix). */
-async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat, lotStates = null }) {
+async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat, lotStates = null, brief = null }) {
   const { decodeArwd, dumpWorld, buildVirtual, F_WRITTEN } = await import('../kit/lib/region/vworld.mjs');
   const { sampleIndex: sampleIndexOf } = await import('../kit/lib/region/survey.mjs');
   const { checkRegion } = await import('../kit/lib/region/check.mjs');
@@ -660,7 +719,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
   const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) ? 3 : 1 });
-  const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
+  const gFile = path.join(SCEN, 'goldens', `${gkey(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
     const g = JSON.parse(fs.readFileSync(gFile, 'utf8'));
@@ -671,8 +730,9 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // (6c F1) a plan that reads a frozen volume of the live world (forms_demo's kept ice) records that volume's sha: a fresh world
     // copy differs by a few natural cells (plants, water), so with every tile sha equal and the IR equal but for its volume blobs,
     // the golden matches
-    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; return JSON.stringify(o); };
-    const gIr = fs.existsSync(path.join(SCEN, 'goldens', short(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', short(sc), 'ir.json'), 'utf8')) : null;
+    // ((7c BR) and a site lot's own cut of that volume (its site.volumeSha and blob id: SL's site volumes, S6's carve_into lots)
+    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; for (const l of o.lots ?? []) if (l.site) { delete l.site.volumeSha; delete l.site.volumeBlobId; } return JSON.stringify(o); };
+    const gIr = fs.existsSync(path.join(SCEN, 'goldens', gkey(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', gkey(sc), 'ir.json'), 'utf8')) : null;
     const volOnly = sameTiles && gIr && noVol(gIr) === noVol(JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')));
     golden = sameTiles && g.irSha === ts.irSha ? 'match'
       : volOnly ? 'match (every tile sha; the IR differs only by its frozen volume of the live world)'
@@ -682,7 +742,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // program picks its sites from it), so a run whose plan survey differs from the golden's can't reproduce its IR. Then the row
     // holds the golden itself: its committed inputs re-plan to its IR sha and every tile sha (1 = 4 workers), and it records how far
     // the run's survey is from the golden's
-    const gDir = path.join(SCEN, 'goldens', short(sc));
+    const gDir = path.join(SCEN, 'goldens', gkey(sc));
     if ((isT1(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) || isSB(sc)) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) { // (6c T2: route_demo on S3 too; 6c D1: districts_demo; 6c S2: the outpost reads a live survey and frozen volume)
       const runSurvey = fs.readFileSync(path.join(planDir, 'survey.bin')), gSurvey = fs.readFileSync(path.join(gDir, 'survey.bin'));
       if (sha256(runSurvey) !== sha256(gSurvey)) {
@@ -756,6 +816,21 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, distant: (e.classes.distant ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'distant' } : m)) };
   };
+  // (7c BR) the sculpt's leaves decaying (S5/S6's natural land is written with vanilla /fill, whose leaves stand at distance 7, not
+  // persistent, until a neighbour update re-counts them; the build and the undo update them, and vanilla's random ticks then decay
+  // those that are truly far from a log): an unclassified mismatch where such a leaf became air, at a cell the plan never writes and in
+  // no lot box, is classed `leafdecay` (a world class, by what the change is). Anything else, and any such leaf in a lot box, stays.
+  const leafDecayOf = (e) => {
+    if (!e || flat || !isSB(sc) || !(e.classes?.none > 0)) return e;
+    const inLot = (x, y, z) => (ir.lots ?? []).some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number);
+      return /^minecraft:\w+_leaves\[/.test(String(m.was)) && /distance=7/.test(String(m.was)) && /persistent=false/.test(String(m.was)) && /^minecraft:air$/.test(String(m.now))
+        && !(vw.flags(x, y, z) & F_WRITTEN) && !inLot(x, y, z); });
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, leafdecay: (e.classes.leafdecay ?? 0) + moved.length };
+    if (!classes.none) delete classes.none;
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'leafdecay' } : m)) };
+  };
   // (6c F2) amethyst growth (the world's own random ticks on a budding block): an unclassified mismatch where air or cave air
   // became a small, medium or large amethyst bud or a cluster, at a cell the plan never writes, is classed `amethyst` (a world
   // class, by what the change is)
@@ -775,7 +850,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const meltOf = (e) => (!e || flat || !(isT2(sc) || isD(sc) || isS2(sc) || isS3(sc)) || !(e.classes?.none > 0) ? e : meltClass(e, vw, F_WRITTEN));
   // (6c S3, CONTRACT S3 §6) S3's natural run: s3Classify (the mod's growth, grazed and live only at unwritten cells; freeze, flow and melt
   // by kind; farfluid; nothing within 6 of a body classed)
-  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
+  const exN = !flat && isS3(sc) ? s3Classify(exact, { vw, ir, F_WRITTEN, sampleIndexOf }) : leafDecayOf(meltOf(distantOf(amethystOf(flowOf(freezeOf(exact))))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, ...(roleShares ? { roleShares } : {}), organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: sc.paSpendUsd ?? 0, paid: sc.paSpendUsd !== undefined, approval: 'pending' });
@@ -926,7 +1001,11 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     rows = [...rows, ...sbm.rows];
     fs.writeFileSync(path.join(out, 'sb-metrics.json'), `${JSON.stringify({ ...sbm, rows: undefined }, null, 1)}\n`);
   }
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  // (7c BR) a brief run's own row: the brief reached a plan through the API (the program it landed on recorded)
+  if (brief) rows = [(await br()).briefRow(brief, sc.program), ...rows.filter((r) => r.id !== 'brief')];
+  // (7c BR) the role shares row (SETTLEMENTS §16.3) kept through a scenario's own bar set (S2's and S3's rebuild the rows)
+  if (roleShares) { const rs = M.bars({ palette, roleShares }).find((r) => r.id === 'roleShares'); if (rs && !rows.some((r) => r.id === 'roleShares')) rows = [...rows, rs]; }
+  const metrics = { scenario: sc.id, ...(brief ? { brief } : {}), worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${BARS.has(r.id) ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
@@ -937,7 +1016,8 @@ function latestRun(sc, out, wantFlat) {
   const dir = path.dirname(out);
   if (!fs.existsSync(dir)) return null;
   // (6c F2) only this scenario's own runs: a gate's --out puts every scenario's runs side by side
-  const own = (d) => { try { return JSON.parse(fs.readFileSync(path.join(dir, d, 'run.json'), 'utf8')).scenario === sc.id; } catch { return true; } };
+  // ((7c BR) and a brief run's sibling is a brief run: the program run of the same scenario may sit beside it)
+  const own = (d) => { try { const r = JSON.parse(fs.readFileSync(path.join(dir, d, 'run.json'), 'utf8')); return r.scenario === sc.id && !!r.brief === !!sc.goldenKey; } catch { return true; } };
   const runs = fs.readdirSync(dir).filter((d) => d.endsWith('-flat') === wantFlat && fs.existsSync(path.join(dir, d, 'exact.json')) && own(d)).sort();
   return runs.length ? path.join(dir, runs[runs.length - 1]) : null;
 }
@@ -947,12 +1027,16 @@ async function metricsOf(runDir) {
   await lib();
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
   const sc = readSc(run.scenario);
+  if (run.brief) sc.goldenKey = (await br()).briefGoldenKey(short(sc)); // (7c BR)
+  // (7c BR) the run's own Style fixture (a brief run's BRIEF_STYLE, or a --bible run's), so its roleShares bands are read again
+  const own = run.bible && run.bible !== sc.bible ? ['styles', 'bibles'].find((d) => fs.existsSync(path.join(SCEN, d, `${run.bible}.json`))) : null;
+  if (own) { sc.bible = run.bible; sc.bibleFixture = `${own}/${run.bible}.json`; }
   if (isSB(sc) && run.lots) sc.lotEntries = run.lots; // (7b SB) the run's own $0 entries
   const planDir = path.join(runDir, 'raw', 'plan');
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
   const old = JSON.parse(fs.readFileSync(path.join(runDir, 'metrics.json'), 'utf8'));
   const exact = JSON.parse(fs.readFileSync(path.join(runDir, 'exact.json'), 'utf8'));
-  const m = await computeMetrics({ sc, out: runDir, planDir, ir, irShas: run.irShas, mspt: old.mspt, cps: old.cellsPerSecond ?? null, exact, flat: run.variant === 'flat', lotStates: run.lotStates ?? null });
+  const m = await computeMetrics({ sc, out: runDir, planDir, ir, irShas: run.irShas, mspt: old.mspt, cps: old.cellsPerSecond ?? null, exact, flat: run.variant === 'flat', lotStates: run.lotStates ?? null, brief: run.brief ?? null });
   const ev = evidenceSha(runDir);
   fs.writeFileSync(path.join(runDir, 'evidence.sha'), `${ev.sha}\n`);
   return { evidence: ev.sha, failing: m.rows.filter((r) => r.gated && !r.pass).map((r) => r.id) };
@@ -1015,16 +1099,18 @@ async function golden(id, runDir) {
   const planDir = path.join(runDir, 'raw', 'plan');
   const ts = await tileShas(planDir);
   if (!ts.workersSame) throw new Error('1 and 4 workers differ');
-  const gDir = path.join(SCEN, 'goldens', short(sc));
+  const run0 = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+  if (run0.brief) sc.goldenKey = (await br()).briefGoldenKey(short(sc)); // (7c BR) a brief run cuts goldens/<short>-br
+  const gDir = path.join(SCEN, 'goldens', cutKey(sc));
   fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
   for (const f of ['ir.json', 'survey.bin', 'meta.json']) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   // ((6c S3) the monastery's fountain reads the plan's biome grid and the bible's fluids: kept beside the golden's inputs)
   if (isS3(sc)) for (const f of ['biomes.json', 'bible.json']) if (fs.existsSync(path.join(planDir, f))) fs.copyFileSync(path.join(planDir, f), path.join(gDir, f));
   for (const f of fs.existsSync(path.join(planDir, 'blobs')) ? fs.readdirSync(path.join(planDir, 'blobs')) : []) fs.copyFileSync(path.join(planDir, 'blobs', f), path.join(gDir, 'blobs', f));
   const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
-  const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${short(sc)}/`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };
-  fs.writeFileSync(path.join(SCEN, 'goldens', `${short(sc)}.json`), `${JSON.stringify(g, null, 1)}\n`);
-  return { irSha: ts.irSha, tiles: Object.keys(ts.tiles).length };
+  const g = { scenario: sc.id, version: sc.version, note: `tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${cutKey(sc)}/${run0.brief ? ` (7c BR: the plan of the scenario's one-line brief through ${run0.brief.via === 'compose' ? 'Regions.compose' : 'Regions.design'}, ${run0.brief.program} ${JSON.stringify(run0.brief.params)})` : ''}`, fromRun: run.runId, irSha: ts.irSha, kitVersion: JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion, cells: ts.cells, tiles: ts.tiles };
+  fs.writeFileSync(path.join(SCEN, 'goldens', `${cutKey(sc)}.json`), `${JSON.stringify(g, null, 1)}\n`);
+  return { irSha: ts.irSha, tiles: Object.keys(ts.tiles).length, golden: cutKey(sc) };
 }
 
 /** `check --phase 6b`: every scenario of the phase has a natural run whose metrics pass and an approval for its evidence. */
@@ -1072,7 +1158,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const flatRun = sub === 'run' && r.metrics.variant === 'flat';
     const irSame = flatRun && new Set(JSON.parse(fs.readFileSync(path.join(r.out, 'run.json'), 'utf8')).irShas).size === 1;
     const eFlat0 = flatRun && JSON.parse(fs.readFileSync(path.join(r.out, 'exact.json'), 'utf8')).mismatches === 0;
-    const runBad = (x) => x.gated && !x.pass && x.id !== 'gallery'
+    // ((7c BR) a gallery-only scenario (the S3 v2 item: "no bars") records every row; its exit code judges only that it ran)
+    const galleryOnly = sub === 'run' && !!readSc(args[1]).galleryOnly;
+    const runBad = (x) => !galleryOnly && x.gated && !x.pass && x.id !== 'gallery'
       && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame) && !(flatRun && x.id === 'exactness' && eFlat0);
     const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
     if (sub === 'run') console.error(`${r.metrics.rows.filter(runBad).length} failure(s) (scenario run)`);

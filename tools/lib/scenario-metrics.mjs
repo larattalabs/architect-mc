@@ -150,9 +150,9 @@ export function bars(x) {
   out.push(row('safety', 'Safety (M4, M5, M8)', `M4 ${M4}; M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% dark spawnable; M8 ${M8 ? (100 * M8.share).toFixed(1) : '?'}% guarded (${M8?.unguarded ?? '?'} open of ${M8?.edgeCells ?? '?'})`,
     'M4 0; M5 < 1% of walk area; M8 100%', M4 === 0 && M5 && M5.share < 0.01 && M8 && M8.unguarded === 0));
   out.push(row('palette', 'Theme fit: palette', x.palette ? `${x.palette.share.toFixed(3)} (${x.palette.adherent}/${x.palette.cells})` : 'n/a', '>= 0.9', x.palette && x.palette.share >= 0.9));
-  // ((7c SF) only for a run whose Style sets settlement.roleShares: recorded, not gated, until BR turns the bars on)
+  // ((7c SF) only for a run whose Style sets settlement.roleShares; (7c BR) gated: SETTLEMENTS §16.3 "every banded role inside its band")
   if (x.roleShares?.bands) out.push(row('roleShares', 'Theme fit: role shares', `${Object.entries(x.roleShares.bands).map(([r, b]) => `${r} ${b.share.toFixed(3)} [${b.lo}, ${b.hi}]${b.inside ? '' : ' OUTSIDE'}`).join('; ')} of ${x.roleShares.cells} cells`,
-    "every banded role inside the Style's roleShares band (recorded until BR)", x.roleShares.outside.length === 0, false));
+    "every banded role inside the Style's roleShares band", x.roleShares.outside.length === 0));
   out.push(row('organic', 'Theme fit: organic read', x.organic ? `axis-run share ${x.organic.share.toFixed(3)} of ${x.organic.boundaryCells} boundary cells` : 'n/a', 'recorded (calibrated on held-out seeds for 6c)', null, false));
   const bErr = (x.buildings ?? []).reduce((a, b) => a + b.errors, 0);
   const bRes = (x.buildings ?? []).flatMap((b) => b.restraint ?? []);
@@ -173,7 +173,7 @@ export function bars(x) {
   // E-normal (6a's rule): every mismatch classified; the world's own doing during the stand (growth, grazing, live blocks, gravity,
   // unsupported plants) is classified and not the undo's; what remains is held to 0.01% of the written cells; (6c S3) farfluid: voc-natural's
   // far flowing fluid (scenarios.mjs farFluidOf), S3's natural run
-  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow', 'distant', 'amethyst', 'melt', 'farfluid']; // (6c F1) freeze: water freezing / snow falling where the plan writes nothing; (6c T1) flow: a stream's flowing water that moved; (6c T2) melt: snow a region lamp melted where the plan writes nothing; (6c F2) distant: a fluid, fluid-made stone or leaf-distance change 8 or more from every written cell; amethyst: a bud or cluster grown into air (scenarios.mjs)
+  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow', 'distant', 'amethyst', 'melt', 'farfluid', 'leafdecay']; // (6c F1) freeze: water freezing / snow falling where the plan writes nothing; (6c T1) flow: a stream's flowing water that moved; (6c T2) melt: snow a region lamp melted where the plan writes nothing; (6c F2) distant: a fluid, fluid-made stone or leaf-distance change 8 or more from every written cell; amethyst: a bud or cluster grown into air (scenarios.mjs)
   const undoOwn = en ? en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0) : null;
   out.push(row('exactness', 'Exactness', `E-flat ${ef ? ef.mismatches : 'n/a'}; E-normal ${en ? `${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})` : 'n/a'}`,
     'E-flat 0; E-normal all classified, <= 0.01% of written cells', ef && en && ef.mismatches === 0 && (en.classes?.none ?? 0) === 0 && undoOwn <= cap));

@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { fixtures, planFixture } from './gate6ckc-kit.mjs';
 import { normSiblingIr } from './batch-0410.mjs';
 import { identicalToBase, skippedLine, syncBaseTree } from './base-tree.mjs';
+import { archTmpDir } from './arch-tmp.mjs';
 import { F7A_MOVED, f7aAskLine } from './f7a-norm.mjs'; // (7a foundation) its named movers and ask movers
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
 import { clAskLine } from './fl-norm.mjs'; // (7a CL) its three ask movers compare by part and kind
@@ -96,7 +97,7 @@ export const ASKS_MOVED = Object.freeze(['redstone_gate/gate_road', 'terraced_hi
 /** The 59 asks' table on a copy of the base kit with this tree's asks (the "before" of item 6): an APFS clone in os.tmpdir(). */
 async function asksBefore(root, baseDir) {
   const os = await import('node:os');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coa-asks-'));
+  const tmp = archTmpDir('coa-asks');
   const kit = path.join(tmp, 'kit');
   execFileSync('cp', ['-c', '-R', path.join(baseDir, 'kit'), kit]);
   for (const f of fs.readdirSync(path.join(root, 'kit', 'test', 'fixtures', 'plan', 'asks'))) {

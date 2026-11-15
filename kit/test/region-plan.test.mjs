@@ -17,11 +17,12 @@ import { evalTile } from '../lib/realise.mjs';
 import { canonicalJson, encodeColumns, makeColumns, sha256Hex } from '../lib/region/pack.mjs';
 import { synthSurvey } from '../lib/region/synth.mjs';
 import { planInline, worldOf } from './region-helpers.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const run = promisify(execFile);
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(KIT, 'tools', 'region.mjs');
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'kit-region-'));
+const tmp = () => archTmpDir('kit-region');
 const anchors = (r, c) => { r.anchor('spawn', [c.minX + 2, c.minZ + 2]); r.anchor('entrance', [c.minX + 3, c.minZ + 2]); };
 
 test('the sandbox: Math.random throws "use ctx.rng", Date.now is 0, ctx.rng is seeded and deterministic', async () => {

@@ -224,11 +224,13 @@ test('roleShares (tools/lib/scenario-metrics.mjs): role shares over the written 
   assert.deepEqual(r.shares, { floor: 4 / 8, foundation: 2 / 8, light: 1 / 8 });
   assert.deepEqual(r.outside, ['foundation']);
   assert.deepEqual(r.bands.floor, { lo: 0.4, hi: 0.6, share: 0.5, inside: true });
-  // the bars: the row only with bands, never gated (BR turns it on)
+  // the bars: the row only with bands, gated since 7c BR (a role outside its band fails it)
   const rows = M.bars({ palette: { share: 1, adherent: 1, cells: 1 }, roleShares: r });
   const row = rows.find((x) => x.id === 'roleShares');
-  assert.equal(row.gated, false);
-  assert.equal(row.pass, null);
+  assert.equal(row.gated, true);
+  assert.equal(row.pass, false);
+  const inside = M.bars({ palette: { share: 1, adherent: 1, cells: 1 }, roleShares: M.roleShares(ir, world, { floor: [0.4, 0.6] }) }).find((x) => x.id === 'roleShares');
+  assert.equal(inside.pass, true);
   assert.match(row.value, /foundation 0\.250 \[0, 0\.1\] OUTSIDE/);
   assert.equal(M.bars({ palette: { share: 1, adherent: 1, cells: 1 } }).some((x) => x.id === 'roleShares'), false);
 });

@@ -16,6 +16,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DevClient } from './lib/devclient.mjs';
 import { LIBRARY, SEEDS } from './lib/stamp-library.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 
 const args = process.argv.slice(2);
@@ -34,7 +35,7 @@ const out = { at: new Date().toISOString(), seeds, features: [] };
 let bad = 0;
 try {
   await dev.call('dev.camera', { x: 8.5, y: -40, z: 8.5, yaw: 0, pitch: 30 }).catch(() => null);
-  const tmp = opt('twice') ? fs.mkdtempSync(path.join(os.tmpdir(), 'stamps-twice-')) : null;
+  const tmp = opt('twice') ? archTmpDir('stamps-twice') : null;
   for (const e of lib) {
     const r = await dev.call('dev.feature.stamp', { feature: e.feature, seeds, ground: e.ground, ...(dir ? { dir } : {}) }, 600_000);
     const row = { feature: e.feature, ground: e.ground, dir: r.dir, minecraft: r.minecraft, stamps: r.stamps };

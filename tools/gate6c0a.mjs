@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gatePart } from './lib/gate-part.mjs';
 import { sharedOnce } from './lib/run-shared.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.join(path.dirname(root), 'architect-mc');
@@ -137,7 +138,7 @@ steps.stub = async () => {
   if (!fs.existsSync(jar) && jarRoot !== root) jar = path.join(root, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`);
   const port = Number(opt('port', process.env.ARCHITECT_PORT ?? '8902'));
   if (!fs.existsSync(jar)) throw new Error(`no ${jar} (cd sidecar && npm run build; cd mod && ./gradlew build)`);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-stub-'));
+  const dir = archTmpDir('gate6c0a-stub');
   fs.rmSync(path.join(OUT, 'stub-helper.log'), { force: true });
   execFileSync('unzip', ['-q', jar, 'architect-sidecar/*', '-d', dir]);
   const bundle = JSON.parse(fs.readFileSync(path.join(dir, 'architect-sidecar', 'BUNDLE.json'), 'utf8'));
@@ -476,7 +477,7 @@ async function flowItem() {
     let jar = path.join(jarRoot, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`);
     if (!fs.existsSync(jar) && jarRoot !== root) jar = path.join(root, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`);
     if (check(fs.existsSync(jar), `the packed architect_mc-${ver}.jar exists (${path.relative(root, jar)})`)) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-jar-'));
+      const dir = archTmpDir('gate6c0a-jar');
       try {
         execFileSync('unzip', ['-q', jar, 'architect-sidecar/*', '-d', dir]);
         const bundle = JSON.parse(fs.readFileSync(path.join(dir, 'architect-sidecar', 'BUNDLE.json'), 'utf8'));
@@ -561,7 +562,7 @@ async function flowItem() {
     if (check(fs.existsSync(path.join(lib, 'versions', '1')) && fs.existsSync(path.join(lib, 'versions', '2')), `${entry} has v1 and v2 (version folders in ${path.relative(RUN, lib)})`)) {
       // the residue ages v1 and has it collected: this run's library entry is saved first and put back after (a later 0a-flow or any step
       // reading ${entry} in this run worktree starts from the seeded library, as before the residue ran)
-      const keep = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-lib-'));
+      const keep = archTmpDir('gate6c0a-lib');
       execFileSync('cp', ['-c', '-R', lib, path.join(keep, entry)]);
       try {
       await result(await api(`pin p1 ${entry} 1 steward:s1`));

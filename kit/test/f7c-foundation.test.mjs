@@ -11,7 +11,7 @@ import { PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const golden = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
-const FLIPS = ['form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'rule.suspended', 'channel.aqueduct'];
+const FLIPS = ['form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'rule.suspended', 'channel.aqueduct', 'form.arch_span'];
 
 test('catalogue: against catalogue-pre7c.json exactly program.authored added (reserved until AU, sinceApi NEXT); the six flips unchanged in the answer', () => {
   assert.deepEqual(planCatalogue(), golden);
@@ -20,7 +20,8 @@ test('catalogue: against catalogue-pre7c.json exactly program.authored added (re
   // (later 7c slices' own flips are their tests')
   const mine = (xs) => xs.filter((x) => !FLIPS.includes(x.id ?? x));
   // ((7c AU) program.authored is supported since AU: au.test.mjs holds its answers)
-  assert.deepEqual(d.added.map((x) => x.id), ['program.authored']);
+  // ((7c PF) form.arch_span added: pf.test.mjs)
+  assert.deepEqual(d.added.map((x) => x.id).filter((id) => id !== 'form.arch_span'), ['program.authored']);
   assert.deepEqual([d.removed, d.retired, mine(d.reservedToSupported), mine(d.otherStateChanges), mine(d.untilChanged), mine(d.notesChanged)], [[], [], [], [], [], []]);
   const e = golden.entries.find((x) => x.id === 'program.authored');
   assert.ok(e.state === 'supported' || e.until === 'AU', e.state);

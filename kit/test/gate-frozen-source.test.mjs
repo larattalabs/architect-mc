@@ -8,11 +8,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { kitReaderSlowPath, prepareFrozenSource } from '../../tools/lib/frozen-source.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 function repo() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'frozen-src-'));
+  const root = archTmpDir('frozen-src');
   const src = path.join(root, 'src');
   fs.mkdirSync(path.join(src, 'kit'), { recursive: true });
   git(root, 'init', '-q', src);

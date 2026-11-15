@@ -17,6 +17,7 @@ import { classifyRevision } from '../lib/plan/revision.mjs';
 import {
   REVISION_LIMITS, columnProblem, dirtyKeys, historySha, mergeEffective, nonAdditive, reviseIR, revisionSeed, revisionStanding, ridPrefix, standingClasses,
 } from '../lib/region/revise.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 // ---- the standing town (D3's flat_village fixture) and its ctx.standing, once
 let T = null;
@@ -181,7 +182,7 @@ test('determinism (item 17): the revision IR over 3 plans; its tile shas with 1 
   assert.ok(rs.every((r) => r.irSha === rs[0].irSha));
   const { tileShas } = await import('../../tools/scenarios.mjs');
   const { encodeColumns } = await import('../lib/region/pack.mjs');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rv-det-'));
+  const dir = archTmpDir('rv-det');
   try {
     fs.writeFileSync(path.join(dir, 'ir.json'), rs[0].irJson);
     fs.writeFileSync(path.join(dir, 'survey.bin'), Buffer.from(S.survey instanceof Uint8Array ? S.survey : encodeColumns(S.survey)));
