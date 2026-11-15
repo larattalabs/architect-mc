@@ -405,7 +405,7 @@ export async function registerFK(steps, h) {
     if (rc.region) {
       const rmc = await G.remove(ctx, rc.region);
       const h1 = await hashOf(BOX);
-      const ci = (await call('dev.items.near', { pos: [CX + 80, g, CZ + 56], radius: 96 }, 60_000)).items ?? {};
+      const ci = (await call('dev.items.near', { pos: (cs.containers?.[0]?.at ?? `${CX},${g},${CZ}`).split(',').map(Number), radius: 24 }, 60_000)).items ?? {};
       out.creative.removed = { rmc, h0, h1, items: only(ci, FK) };
       check(rmc.removed !== false && h1 === h0 && sum(only(ci, FK)) === 0, `creative: Regions.remove is exact: the claim box's hash as before; none of the fill's items dropped (${json(only(ci, FK))})`, out.creative.removed);
     }
