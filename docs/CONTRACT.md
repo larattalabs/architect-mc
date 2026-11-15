@@ -32130,5 +32130,5 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   doesn't hold it names whose it is; a name two zones hold without `grow.zone`: "... is a district of zones a, b: name one with grow.zone".
 - A districts region (`params.spec.districts`) is byte-identical: `kit/test/gd.test.mjs` (5) pins one growth's sha, taken on main b003c214.
   `grow.zone` alone on a plan_v0 zone is unchanged (any street of the zone). No API or Java change (the request already carries `district`).
-- Not covered: a D2 following zone on plan_v0 grows by frontage and §4 only (no boundary extension: its `follow` isn't in the IR); plan/0's
-  own `revision.grow` for a districts zone still answers unsupported.
+- Not covered (not checked): a D2 following zone's district on plan_v0 gets no §5 boundary extension (its `follow` is a districts region's
+  param); `districtLand` stays null on plan_v0 (no land record there); plan/0's own `revision.grow` of a districts zone stays unsupported.

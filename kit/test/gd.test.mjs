@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { KIT } from './d3-helpers.mjs';
 import { mergeEffective, revisionStanding, reviseIR } from '../lib/region/revise.mjs';
-import { growPlan, streetRuns, zoneDistricts } from '../lib/region/grow.mjs';
+import { growPlan, streetRuns, zoneDistricts, graphCut } from '../lib/region/grow.mjs';
+import { districtLand } from '../lib/region/land.mjs';
 import { planRegion, fillMissing } from '../lib/region/plan.mjs';
 import { asColumns, canonicalJson, makeColumns } from '../lib/region/pack.mjs';
 import { surveyApi } from '../lib/region/survey.mjs';
@@ -62,6 +63,11 @@ function onlyDistrict(s, r, d) {
   // the checker over the revision: no M29 (nothing written on a standing cell) and no error finding
   const chk = checkRegion({ ir: r.ir, survey: fillMissing(asColumns(s.sv.bytes)).columns, blobs: (sha) => r.blobs.get(sha), standing: s.st });
   assert.deepEqual(chk.findings.filter((f) => f.rule === 'M29:revision' || f.severity === 'error').map((f) => `${f.rule} ${f.message}`), []);
+  // every grown lot joins the graph (no lot cut off from a plaza); plan_v0 keeps no district land record (districts regions only)
+  const m = mergeEffective(s.res.ir, [{ rid: 1, position: 1, ir: r.ir }]);
+  assert.ok(m.graph.nodes.some((n) => n.kind === 'plaza'));
+  assert.deepEqual(graphCut(m), []);
+  assert.equal(districtLand(m), null);
   return g;
 }
 
