@@ -211,10 +211,14 @@ export async function registerRL(steps, h) {
     for (const id of [road?.target, lot].filter(Boolean)) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000).catch(() => null);
     const mineAndPlace = async (at, item, id) => {
       // the player's break of a build's block is guarded (not the owner): the cell is cleared by command (no record, no drop), as a mined one
+      const pre = (await call('dev.items.near', { pos: at, radius: 2 }, 10_000)).items ?? {};
       await cmd(`/setblock ${at[0]} ${at[1]} ${at[2]} minecraft:air`);
-      const m = { mined: (await call('dev.pt.at', { at }, 10_000)).state === 'minecraft:air' };
+      await L.sleep(500);
+      // what the clearing knocked off its neighbours (rs_hut's wall torch hangs on the copper block): no longer standing, so never refunded
+      const popped = pos(G.minus((await call('dev.items.near', { pos: at, radius: 2 }, 10_000)).items ?? {}, pre));
+      const m = { mined: (await call('dev.pt.at', { at }, 10_000)).state === 'minecraft:air', popped };
       const u = (await call('dev.pt.uses', { ops: [{ item: item ?? id, at, on: [at[0], at[1] - 1, at[2]], face: 'up', placer: 'J1Placer' }] }, 30_000)).results?.[0];
-      return { at, was: id, mined: m.mined, placed: u };
+      return { at, was: id, mined: m.mined, popped: m.popped, placed: u };
     };
     const rid = rcell ? (await call('dev.pt.at', { at: rcell }, 10_000)).state : null; // the road block standing there
     if (rcell) out.road = { target: road.target, ...(await mineAndPlace(rcell, rid, rid)) };
@@ -243,13 +247,18 @@ export async function registerRL(steps, h) {
     const want = { ...paid };
     if (out.road?.was) want[out.road.was] = (want[out.road.was] ?? 0) - 1;
     if (out.cu?.was) want[out.cu.was] = (want[out.cu.was] ?? 0) - 1;
+    for (const c of [out.road, out.cu]) for (const [k, v] of Object.entries(c?.popped ?? {})) want[k] = (want[k] ?? 0) - v; // the harness's side effect
     const near = out.road ? await call('dev.items.near', { pos: out.road.at, radius: 1.5 }, 10_000) : {};
     const cuNow = out.cu ? await call('dev.site.mine', { pos: out.cu.at, pickup: false }, 30_000).catch(() => null) : null; // read by mining it (after the removal)
     out.removed = { state: st?.view?.state ?? 'gone', paid: sum(paid), refund: sum(pos(refund)), want: sum(pos(want)), diff: G.minus(refund, pos(want)), roadDrops: near.items ?? {}, cuAfter: cuNow?.was ?? null };
     log(`  ${tag}: removed ${out.removed.state}; refund ${sum(pos(refund))} vs paid ${sum(paid)} less the two player cells ${sum(pos(want))}; diff ${json(out.removed.diff)}; at the road cell ${json(near.items)}; the tilled cell ${out.removed.cuAfter}`);
     check(!st?.view?.state || st.view.state === 'REMOVED', `${tag}: the town removed: ${out.removed.state}`);
     check(!out.road?.was || (near.items?.[out.road.was] ?? 0) >= 1, `${tag} F10 roads: the player's block dropped at the road cell as theirs (${json(near.items)})`, out.removed);
-    check(!out.cu || /exposed_copper/.test(out.removed.cuAfter ?? ''), `${tag} JR-b residual: the exposed copper stays the player's after the removal (${out.removed.cuAfter}): neither dropped nor refunded`, out.removed);
+    const cuNear = out.cu ? (await call('dev.items.near', { pos: out.cu.at, radius: 2 }, 10_000)).items ?? {} : {};
+    out.removed.cuDrops = cuNear;
+    // JR-b's fix is the dupe: a CU equivalent with a record is NONE (neither a PLAYER_DROP of it nor a refund of the copper it stands for).
+    // Recorded, not judged: what the undo does with the block (JR-b's as-built says it stays; J1 measured it here)
+    check(!out.cu || (!(cuNear['minecraft:exposed_copper'] > 0) && !(cuNear['minecraft:copper_block'] > 0)), `${tag} JR-b residual: the player's exposed copper neither dropped nor refunded at the removal (drops near it ${json(cuNear)}; the cell after it: ${out.removed.cuAfter}, recorded)`, out.removed);
     check(G.same(pos(refund), pos(want)), `${tag}: the removal refunded the paid records less the two player cells, item for item (${sum(pos(refund))} = ${sum(pos(want))}; before J1 the road cell came out of the road's record)`, out.removed);
     return out;
   }
