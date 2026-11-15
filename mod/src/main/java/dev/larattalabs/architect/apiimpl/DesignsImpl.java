@@ -378,7 +378,7 @@ final class DesignsImpl implements Designs {
 				}
 			}));
 			return ApiImpl.onServerFuture(resolved.thenCompose(x -> ask(r.opKey() != null ? "design.opKeys" : SiteDesigns.FEATURE, r.opKey() != null
-				? "design operation keys" : "site-aware designs", x)).thenApply(res -> keyedAck(r, res)));
+				? "design operation keys" : "site-aware designs", x)).thenCompose(res -> adoptedRecord(keyedAck(r, res), res)));
 		}
 		CompletableFuture<String> out = b.designRequest(wire(r, b.protocol())).thenApply(id -> {
 			synchronized (this) {
@@ -500,8 +500,19 @@ final class DesignsImpl implements Designs {
 			Architect.LOGGER.info("API: design {} {}: the next version of {}{}", id, res.has("adopted") && res.get("adopted").getAsBoolean()
 				? "adopted by opKey " + r.opKey() : "requested", entryId, r.versionOfSite() == null ? "" : " (site " + r
 				.versionOfSite() + ")");
-			return id;
-		});
+			return adoptedRecord(id, res);
+		}).thenCompose(f -> f);
+	}
+
+	/**
+	 * (CH) {@code id} once an adopted design's record reached the reader ({@link AdoptWait}: the helper sends one that ended again, which
+	 * may have been in another world or before the last snapshot), else TIMED_OUT; a new design at once.
+	 */
+	private static CompletableFuture<String> adoptedRecord(String id, JsonObject res) {
+		boolean adopted = res.has("adopted") && res.get("adopted").getAsBoolean();
+		return AdoptWait.record(id, adopted, () -> new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.TIMED_OUT,
+			"the design this opKey names (" + id + ") ended before, but its record did not reach this world within " + AdoptWait.BOUND_MS / 1000
+				+ " s: ask again with the same key"));
 	}
 
 	/** (6b) A design started outside {@link #request} (a region design): its owner and ext are kept as for any API design. */

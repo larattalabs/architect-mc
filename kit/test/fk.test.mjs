@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildDesign } from '../build.mjs';
 import { Blueprint } from '../lib/kit.mjs';
 import { checkBlueprint } from '../lib/check.mjs';
-import { checkFill, FILL_CONTAINERS_MAX, normalizeFill } from '../lib/fill.mjs';
+import { checkFill, FILL_CONTAINERS_MAX, FILL_PROVIDED_ITEMS, normalizeFill } from '../lib/fill.mjs';
 import { mirrorBlueprint } from '../lib/mirror.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
@@ -111,4 +111,58 @@ test('the checker runs the fill rule', () => {
   bp.fillContainers({ containers: [{ at: [0, 0, 0], items: one }] });
   const r = checkBlueprint(bp, {});
   assert.ok(r.errors.some((e) => /^fill: containers\[0\]: minecraft:stone/.test(e)), r.errors.join('\n'));
+});
+
+// ------------------------------------------------------------------ (FK-b) module-provided fill items (docs/CONTRACT.md "### FK-b contract" 1)
+
+const SLAB = 'minecraft:petrified_oak_slab';
+const cellsB = new Map([...cells, ['6,0,0', { name: 'minecraft:dropper', props: { facing: 'down', triggered: 'false' } }],
+  ['7,0,0', { name: 'minecraft:dispenser', props: { facing: 'down', triggered: 'false' } }], ['8,0,0', { name: 'minecraft:barrel', props: { facing: 'up', open: 'false' } }]]);
+const runB = (fill) => checkFill(fill, cellsB, [9, 1, 1]);
+
+test('FK-b: a provided petrified slab beside billed items is sound in a hopper, chest or barrel; normalizeFill keeps provided only when declared', () => {
+  const items = [{ slot: 0, id: 'minecraft:flint', count: 18 }, { slot: 1, id: SLAB, count: 1, provided: true }];
+  assert.deepEqual(runB({ containers: [hop(items), hop(items, [1, 0, 0]), hop(items, [8, 0, 0])], locks: [] }), []);
+  assert.deepEqual(runB({ containers: [hop([{ slot: 0, id: SLAB, count: 4, provided: true }])], locks: [] }), [], 'provided items only: an empty bill');
+  const f = normalizeFill({ containers: [{ at: [0, 0, 0], items: [{ slot: 1, id: 'petrified_oak_slab', count: 1, provided: true }, { slot: 0, id: 'flint', count: 2 }] }] });
+  assert.deepEqual(f.containers[0].items, [{ slot: 0, id: 'minecraft:flint', count: 2 }, { slot: 1, id: SLAB, count: 1, provided: true }]);
+  assert.equal('provided' in normalizeFill({ containers: [{ at: [0, 0, 0], items: one }] }).containers[0].items[0], false, 'no provided key without one');
+});
+
+test('FK-b: the four new findings, each prefixed fill:', () => {
+  const cases = [
+    [[{ slot: 0, id: 'minecraft:diamond', count: 1, provided: true }], [0, 0, 0], `fill: minecraft:diamond can't be module-provided (allowed: ${SLAB})`],
+    [[{ slot: 0, id: SLAB, count: 1 }], [0, 0, 0], `fill: ${SLAB} is creative-only; declare it provided: true`],
+    [[{ slot: 0, id: SLAB, count: 1, provided: false }], [0, 0, 0], `fill: ${SLAB} is creative-only; declare it provided: true`],
+    [[{ slot: 0, id: SLAB, count: 1, provided: true }], [6, 0, 0], 'fill: a provided item can\'t go in a dropper'],
+    [[{ slot: 0, id: SLAB, count: 1, provided: true }], [7, 0, 0], 'fill: a provided item can\'t go in a dispenser'],
+    [[{ slot: 0, id: SLAB, count: 1, provided: 'yes' }], [0, 0, 0], 'fill: provided must be true or false'],
+  ];
+  for (const [items, at, want] of cases) {
+    const errs = runB({ containers: [hop(items, at)], locks: [] });
+    assert.deepEqual(errs, [want], JSON.stringify(items));
+  }
+});
+
+test('FK-b: the allow-list is the Java one (Limits.FILL_PROVIDED_ITEMS)', () => {
+  const java = fs.readFileSync(path.join(KIT, '..', 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Limits.java'), 'utf8');
+  const m = java.match(/FILL_PROVIDED_ITEMS\s*=\s*(?:java\.util\.)?Set\.of\(([^)]*)\)/);
+  assert.ok(m, 'Limits.FILL_PROVIDED_ITEMS = Set.of(...)');
+  assert.deepEqual([...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]).sort(), [...FILL_PROVIDED_ITEMS].sort());
+  assert.deepEqual([...FILL_PROVIDED_ITEMS], [SLAB]);
+});
+
+test('FK-b: fk_hall with provided 1 records the slabs as provided and checks clean', async () => {
+  const dir = designDir({ fk_hall: SOURCE });
+  const out = archTmpDir('fkb-out');
+  try {
+    const { result } = await buildDesign('fk_hall', { dir, out, values: { slots: 2, count: 18, provided: 1 } });
+    assert.deepEqual(result.errors, []);
+    const side = JSON.parse(fs.readFileSync(path.join(out, 'fk_hall.blueprint.json'), 'utf8'));
+    assert.deepEqual(side.fill.containers[1].items, [{ slot: 0, id: 'minecraft:clay_ball', count: 18 },
+      ...[1, 2, 3, 4].map((slot) => ({ slot, id: SLAB, count: 1, provided: true }))]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(out, { recursive: true, force: true });
+  }
 });

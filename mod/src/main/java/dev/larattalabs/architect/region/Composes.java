@@ -99,10 +99,19 @@ public final class Composes {
 						JsonObject res2 = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
 						String id = res2.get("designId").getAsString();
 						dev.larattalabs.architect.apiimpl.ApiImpl.rememberDesign(id, r.owner(), r.ext().deepCopy());
-						Architect.LOGGER.info("Settlement design {} requested (compose): {}", id, r.brief());
-						return RegionsImpl.onServer(s, () -> id);
+						boolean adopted = res2.has("adopted") && res2.get("adopted").getAsBoolean();
+						Architect.LOGGER.info("Settlement design {} {} (compose): {}", id, adopted ? "adopted by its opKey" : "requested", r.brief());
+						// (CH) an adopted design may have ended in another world or before the last snapshot: the helper sends it again; never wait unbounded
+						return dev.larattalabs.architect.apiimpl.AdoptWait.record(id, adopted, () -> adoptTimeout("compose", id)).thenCompose(x -> RegionsImpl.onServer(s,
+							() -> id));
 					});
 		});
+	}
+
+	/** (CH) An adopted design whose record never reached this world's reader: TIMED_OUT, naming it. Also Authors'. */
+	static RegionsImpl.RegionException adoptTimeout(String what, String id) {
+		return new RegionsImpl.RegionException(Reason.TIMED_OUT, "the " + what + " this opKey names (design " + id + ") ended before, but its record did not reach"
+			+ " this world within " + dev.larattalabs.architect.apiimpl.AdoptWait.BOUND_MS / 1000 + " s: ask again with the same key");
 	}
 
 	/** The {@code region.compose} message in the Overworld. Pure. */
@@ -318,5 +327,8 @@ public final class Composes {
 	public static void reset() {
 		PLANNING.clear();
 		CHECKING.clear();
+		// (CH) a pick's plan is this world's: an adopted PICKED design is planned again in the next world (announced again on adoption, $0)
+		PLAN_OF.clear();
+		PLAN_ERROR.clear();
 	}
 }

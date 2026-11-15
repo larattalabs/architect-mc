@@ -4,10 +4,13 @@
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"BlockBehaviourExplosionMixin",
+		"BlockEntityStripMixin",
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
 		"ChunkSaveWaitMixin",
+		"CompoundContainerAccessor",
 		"FallingBlockEntityMixin",
+		"HopperGuardMixin",
 		"LevelChunkMixin",
 		"LevelTicksAccessor",
 		"LevelTicksMixin",
@@ -21,6 +24,7 @@
 		"SaveTimingMixin",
 		"SaveTimingServerMixin",
 		"ServerPlayerGameModeMixin",
+		"SlotMayPickupMixin",
 		"StructureTemplateAccessor"
 	],
 	"injectors": {

@@ -120,6 +120,36 @@ describe.skipIf(!hasKit)('design opKeys and the confirmed cancel (sim backend, r
     expect((await send(h.sc, { type: 'design.request', request: keyed() })).result).toMatchObject({ designId: id, adopted: true });
   });
 
+  it('(CH) adopting a final design past the snapshot window sends its design.upsert again, before the ack; a running one is not re-sent', async () => {
+    h = await harness();
+    const a1 = await send(h.sc, { type: 'design.request', request: keyed() });
+    const id = a1.result!.designId as string;
+    // while it runs: adopted, no extra upsert of it beyond its own progress (a running design is always in the snapshot)
+    await final(h.sc, id);
+    // 21 more designs end: the keyed one falls out of the snapshot's last DESIGN_SNAPSHOT_LIMIT (a fresh mod connect never hears of it)
+    for (let i = 0; i < 21; i++) {
+      const d = await send(h.sc, { type: 'design.request', request: request({ name: `filler ${i}` }) });
+      await final(h.sc, d.result!.designId as string);
+    }
+    expect(h.sc.designs.recent().some((d) => d.id === id)).toBe(false);
+    let atAck = -1;
+    const off = h.events.length;
+    const ack = await new Promise<Ack>((res) => {
+      void h!.sc.handle({ v: 1, id: 'ch1', type: 'design.request', request: keyed() } as never, (m) => {
+        if (m.type === 'ack') {
+          atAck = h!.events.slice(off).findIndex((e) => e.type === 'design.upsert' && (e as { design: Design }).design.id === id);
+          res(m as never);
+        }
+      });
+    });
+    expect(ack.result).toMatchObject({ designId: id, adopted: true });
+    const again = h.events.slice(off).filter((m) => m.type === 'design.upsert' && (m as { design: Design }).design.id === id);
+    expect(again).toHaveLength(1);
+    expect((again[0] as { design: Design }).design).toMatchObject({ id, status: 'done' });
+    // the upsert went out before the ack (the mod's reader has the record when the ack lands)
+    expect(atAck).toBeGreaterThanOrEqual(0);
+  });
+
   it('a keyed versionOf is adopted while it runs (never VERSION_REFUSED busy), even with new site blob ids', async () => {
     h = await harness({ simStepMs: 80 });
     const e0 = h.sc.requestDesign(DesignRequest.parse(request({ type: 'tavern', name: 'Inn', maxSize: { x: 64, y: 64, z: 64 } })));

@@ -444,9 +444,17 @@ const consumer = process.argv[2] === '--consumer';
 const args = surface || consumer ? process.argv.slice(3) : process.argv.slice(2);
 const jar = args[0];
 // a classesDir may list several dirs (path.delimiter-separated: main and client)
-const classDirs = args[1] ? args[1].split(path.delimiter).map((d) => path.resolve(d)) : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
+// (GI2) without one: the classes built from this head (unit-mod's run worktree, the frozen source, this checkout; tools/lib/api-classes.mjs)
+const { resolveClassDirs, hasClasses, noClassesMessage } = await import('./lib/api-classes.mjs');
+const resolved = args[1] ? null : resolveClassDirs({ root });
+const classDirs = args[1] ? args[1].split(path.delimiter).map((d) => path.resolve(d)) : resolved.dirs;
 if (!jar) {
   console.error('usage: node tools/api-compat.mjs [--surface | --consumer] <old.jar> [classesDir] | --baselines [--artifacts dir]');
+  process.exit(2);
+}
+// (GI2) no class file at all is a setup problem, not 951 MISSING members
+if (!classDirs.some((d) => hasClasses(d))) {
+  console.log(noClassesMessage(classDirs, resolved?.tried));
   process.exit(2);
 }
 const javap = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'javap') : 'javap';
