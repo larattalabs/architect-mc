@@ -276,10 +276,17 @@ public final class Stockpiles {
 		// (autosave) only queues its chunk writes, so their IO is waited for first. The ledger is then never on disk ahead of the chunks
 		// (a hopper's source saved full while the ledger counts the delivery: a dupe). The players are saved before the chunks
 		// (saveEverything), as in HF's order.
+		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> {
+			if (!explicitSave && server.isSameThread() && !SaveTiming.on()) {
+				SaveTiming.start(); // (SS) a world save's parts, timed to its ledger write (AFTER_SAVE)
+			}
+		});
 		ServerLifecycleEvents.AFTER_SAVE.register((server, flush, force) -> {
 			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
 				return;
 			}
+			long w0 = System.nanoTime();
+			boolean timed = SaveTiming.on();
 			if (!flush) {
 				long t0 = System.nanoTime();
 				for (ServerLevel l : server.getAllLevels()) {
@@ -301,6 +308,9 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 			save();
+			if (timed) {
+				logTiming(flush ? "world save (flush)" : "autosave", w0, SaveTiming.stop());
+			}
 		});
 		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
@@ -2479,12 +2489,18 @@ public final class Stockpiles {
 			return; // (PS, F6) nothing of the stockpiles is written this session
 		}
 		long t0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		if (srv != null && srv.isSameThread()) {
 			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
 			// is never on disk ahead of player.dat, so a crash after it neither dupes nor loses those items. saveAllChunks never saves players
 			// (26.3: level.dat keeps only the singleplayer host's UUID; every player, the host too, is in playerdata/<uuid>.dat).
 			long p0 = System.nanoTime();
+			SaveTiming.at(SaveTiming.PLAYERS);
 			srv.getPlayerList().saveAll();
+			SaveTiming.at(SaveTiming.OTHER);
 			double pms = (System.nanoTime() - p0) / 1e6;
 			WorldJournal.kill("HF1"); // (J1, TEST) HF's window: the players on disk, the chunks and the ledger not
 			playerSaves++;
@@ -2512,6 +2528,29 @@ public final class Stockpiles {
 		if (!quiet || TRACE_SAVES) {
 			Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms{}", String.format(java.util.Locale.ROOT, "%.1f", ms), quiet ? " (periodic)" : "");
 		}
+		if (timed) {
+			String parts = SaveTiming.stop();
+			if (!quiet || TRACE_SAVES || ms >= TIMING_LOG_MS) {
+				logTiming(quiet ? "periodic" : caller(), t0, parts);
+			}
+		}
+	}
+
+	/** (SS) A save with the world logs its parts at or above this (ms), and every one not periodic. */
+	static final double TIMING_LOG_MS = 50;
+
+	/** (SS) The save's parts, one line: "SS save: <why> total <ms> | players .. | chunks .. | io .. | ...". */
+	private static void logTiming(String why, long t0, String parts) {
+		double ms = (System.nanoTime() - t0) / 1e6;
+		Architect.LOGGER.info("SS save: {} total {} ms | {}{}", why, String.format(java.util.Locale.ROOT, "%.1f", ms), parts, testNoPeriodic ? " | noPeriodic" : "");
+	}
+
+	/** (SS) The first method outside the save helpers that asked for this save (Class.method), for the timing line. */
+	private static String caller() {
+		return StackWalker.getInstance().walk(f -> f.map(x -> x.getClassName().substring(x.getClassName().lastIndexOf('.') + 1) + "." + x.getMethodName())
+			.filter(n -> !n.startsWith("Stockpiles.saveWithWorld") && !n.startsWith("Stockpiles.saveCredit") && !n.startsWith("Stockpiles.caller")
+				&& !n.startsWith("Stockpiles.lambda$caller"))
+			.findFirst().orElse("?"));
 	}
 
 	/**
@@ -2526,13 +2565,20 @@ public final class Stockpiles {
 			refusedSave();
 			return;
 		}
+		long l0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		save();
 		if (srv == null || !srv.isSameThread()) {
 			return;
 		}
 		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
 		long t0 = System.nanoTime();
+		SaveTiming.at(SaveTiming.PLAYERS);
 		srv.getPlayerList().saveAll();
+		SaveTiming.at(SaveTiming.OTHER);
 		double pms = (System.nanoTime() - t0) / 1e6;
 		playerSaves++;
 		lastPlayerSaveMs = pms;
@@ -2551,6 +2597,9 @@ public final class Stockpiles {
 		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
 		Architect.LOGGER.info("Stockpiles: saved the ledger first, then the players and the world's chunks, in {} ms", String.format(java.util.Locale.ROOT,
 			"%.1f", ms));
+		if (timed) {
+			logTiming("ledger first (" + caller() + ")", l0, SaveTiming.stop());
+		}
 	}
 
 	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */
@@ -2570,7 +2619,9 @@ public final class Stockpiles {
 		if (sv != null && sv.isSameThread()) {
 			try {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.BOOKS);
 				int n = refreshBooks(sv);
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				bookRefreshes++;
 				lastBookMs = ms;
@@ -2588,10 +2639,12 @@ public final class Stockpiles {
 			if (PILES.isEmpty() && !Files.exists(f)) {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
+			SaveTiming.at(SaveTiming.WRITE);
 			Files.createDirectories(d);
 			Path tmp = d.resolve(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			SaveTiming.at(SaveTiming.OTHER);
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
