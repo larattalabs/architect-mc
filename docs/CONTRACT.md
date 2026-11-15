@@ -32130,21 +32130,22 @@ and no per-slice verifier. **API: no new type or method;** item 1 changes which 
 - **Finding.** All three recorded failures refused site B for an entity, not a busy state: `"bee at 114, 71, 54"` (QL, 0.67.0 jar),
   `"bee at 118, 72, 55"` (CP, 0.70.0), `"bee at 116, 65, 52"` (CP, 0.68.0), each inside B's restore box (e.g. s2: box y 62-73, restore box
   x 110-120, y 50-73, z 52-67), in air above or beside the cabin. `Occupancy.classify` makes every wild animal `LIVING`, keep=true, and
-  `Sites.removalBlockersOf` refuses on any such entity in the whole restore box. apijars clients make a fresh world per jar, so a bee
-  nest near B appears on a random jar: hence "a random old-API jar per run". Site A's removal before it plays no part.
+  `Sites.removalBlockersOf` refuses on any such entity in the whole restore box. apijars deletes and creates each jar's world
+  (`G6A Jar<ver>`) every run, and whether a bee is in B's box at that moment is chance: hence "a random old-API jar per run" (inferred
+  from gate6a.mjs and the three records; not yet reproduced live). Site A's removal before it plays no part.
 - **Why it is a product fix, not a test fix.** apijars runs each tag's **archived** `tools/apitest.mjs` (gate6a.mjs `apijars`), so a
   retry in today's script never reaches the three old baselines; and the refusal's own reason ("removing it puts the old terrain back
   over them") does not hold for a bee in a cell that stays air.
 - **Rule (proposed).** A wild living entity (`Kind.LIVING`: not a player, not OWNED (tame, owned, leashed), not hostile, not an item) in
-  a removal's box blocks only when the removal would harm it: (a) **buried**: a cell its bounding box overlaps is a cell this removal
-  writes (its journal top layer is this site's) and the state written there has a collision shape; or (b) **dropped**: it is on the ground
-  and the cell under its feet is one this removal writes to a state with no collision shape. Otherwise it stays where it is and is not
-  listed. Named animals follow the same rule (they are not harmed either). Everything else that blocks today (pets, players' items,
+  a removal's box blocks only when the removal **changes the state of a cell its bounding box overlaps, or of the cell it stands on**
+  (a cell whose journal top layer is this site's and whose before differs from the world now). That covers burial (stone, leaves,
+  logs), harm without burial (water, lava, fire, powder snow written into its cell) and a floor taken from under it, with one simple
+  test. Otherwise it stays where it is and is not listed. Named animals follow the same rule (they are not harmed either). Everything else that blocks today (pets, players' items,
   containers, block entities, item frames, armor stands, `OTHER` entities, dropped items) is unchanged, and placement is unchanged.
 - **Where.** `Sites.removalBlockersOf` (and `Adopt.blockers`' entity part if it shares the loop), one pure helper over (entity box
   cells, written cells' states) so it unit-tests without a world. Both the single-site and the Groups removal read it.
-- **Gate.** Units for the helper (bee in air over the site: not a blocker; bee in a cell the restore fills: blocker; cow standing on
-  the site's floor 1 block up: blocker; cow on unchanged grass inside the box: not a blocker). In game (apitest survival, new check
+- **Gate.** Units for the helper (bee in an air cell the removal leaves air: not a blocker; bee in a cell the restore fills, or writes
+  water into: blocker; cow standing on the site's floor: blocker; cow on unchanged grass inside the box: not a blocker). In game (apitest survival, new check
   after rmB's): `/summon bee` at a known air cell of a fresh instant site's box, `remove - noforce`: removed, refund 0, the bee alive;
   a second site with a bee summoned inside a cell its restore makes solid (its foundation): refused naming the bee. apijars (the
   three archived scripts) then pass the instant-remove check.
@@ -32155,7 +32156,8 @@ Reading the code on main (J1 added `Stockpiles.saveCredit` in `Builder.dropDecon
 record drops), the remaining loss path is **inside that save**: `saveWithWorld` writes players, then the chunks (flushed), then the
 ledger. A kill after the chunk flush and before the ledger write (or any crash where the restored chunks reached the disk and the
 credit did not) leaves, at the next load: the journal UNDONE, the record pending "removed", the world restored, and the ledger with the
-custody (FKC1's save) and the paid record but no credit. The settle RELEASEs the site; `Fills.atStart` skips the key (no site record);
+custody (FKC1's save) and the paid record but no credit. **This is read from the code, not yet reproduced**: J2's first step
+on item 2 is the CS1 kill (below) on main, which must show the loss before the fix. The settle RELEASEs the site; `Fills.atStart` skips the key (no site record);
 nothing credits it: **the containers' contents and the site's block refund are lost**. A plain (unfilled) single-site removal loses its
 block refund the same way.
 
@@ -32166,10 +32168,11 @@ block refund the same way.
   record as at removal), then `saveWithWorld`. RECOVER (the site stands again) drops the stored credit and the custody goes back (2b).
   `credited(key)` keeps it exactly once whichever save landed.
 - **2b, custody resolved by the journal, not by who holds it in memory.** At load a custody key resolves by its placement's journal
-  state: a removal still queued (Groups' saved removal, or the single site's interrupted restore job) keeps it for that removal's credit;
+  state: a removal still queued (Groups' saved removal; a filled site is a construction site, so a single one never takes the
+  `removeLarge` job path and always removes synchronously) keeps it for that removal's credit;
   a placement settled removed credits it (2a; Groups' members through their queue file as today); only a placement standing with no
   committed removal gets it written back. Today `Fills.atStart` writes back whenever the site stands and `Groups.leaving` is false,
-  which is what lets a stalled removal's retry wipe the contents uncredited. **To reproduce first** (unit plus in-game kill) and name
+  which is what lets a stalled **Groups** removal's retry wipe the contents uncredited. **To reproduce first** (unit plus in-game kill) and name
   the exact stalled shape in the as-built; if it turns out narrower, the fix is the narrow one.
 - **Kill points (new, TEST):** `FKS1` (single site: custody saved, before the commit), K6 on the single-site path with a fill, `CS1`
   (a credit's save: players and chunks on disk, the ledger not; the existing FK3-style halt, armed only around `saveCredit`), and the
@@ -32216,12 +32219,16 @@ No API surface change.
 
 ### Open questions (for Steward, through the coordinator)
 
-1. **Item 1's rule.** (a) as proposed: buried or dropped, any wild animal; (b) narrower: only entities not on the ground (bees, bats,
-   flying parrots, allays) in cells that stay non-colliding; (c) keep the refusal as is and accept the old jars' flake (archived
-   scripts can't wait). I recommend (a). Does Steward rely on a wild animal refusing a settlement removal anywhere (for example as a
+1. **Item 1's rule.** (a) as proposed: a wild animal blocks only when the removal changes its cell or its floor; (b) narrower: only
+   entities not on the ground (bees, bats, flying parrots, allays) in cells the removal leaves unchanged; (c) keep the product rule and
+   fix the harness: gate6a's `apijars` is current code (not archived), so it can clear wild mobs near the apitest spots before each
+   archived script runs; (d) keep everything and accept the flake. I recommend (a) (a wandering bee can stall any caller's removal,
+   Steward's too); (c) is the choice that leaves removal behaviour alone. Does Steward rely on a wild animal refusing a settlement removal anywhere (for example as a
    "something is in the way" signal)?
-2. **FK-b overlap.** 2b changes `Fills.atStart`'s custody loop and 2a's settle feeds the same custody records FK-b extends (`provided`).
-   I propose items 1, 3 and 4 now, and item 2's code after FK-b merges (rebased on it); FK-b's `provided` items would then follow 2a's
-   pending credit the same way (taken back, refunded nothing). OK, or should FK-b carry 2b?
+2. **FK-b and SS overlap.** FK-b's branch does not touch `Fills.atStart`, `writeBack` or `takeCustody` (checked against
+   origin/slice/FKB), but it adds `provided` stacks to the same fills, and its Builder/Sites edits are one line each. SS's branch adds
+   timing to `Stockpiles.saveWithWorld` (no change of order or flushing), where CS1's halt goes. I propose items 1, 3 and 4 now and item
+   2's code after FK-b and SS merge (rebased on both); provided items then follow 2a's pending credit (taken back, refunded nothing).
+   OK, or should FK-b carry 2b?
 3. **UC scope.** UC is the class "the journal is durable ahead of the chunks"; a general fix is on SS's save path. I propose J2 fixes only
    the two minimal repros if their settle logic can tell (evidence-side, no save-path change), else tags them for SS and reports. OK?
