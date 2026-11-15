@@ -69,6 +69,12 @@ const SCN_STYLES = Object.freeze([
   { key: 's5', scenario: 's5_treehouses', name: 'PAY S5 Treehouses', refs: ['S5-treehouse-1', 'S5-treehouse-2', 'S5-treehouse-3'] },
 ]);
 const SKIP_PICK = 'architect_mc:skipPick';
+/**
+ * (P0's reading, for P4) Two fresh copies of the same generated land differ by a few cells at the claim's edge chunks (P0: cliff 6
+ * affordance lines, caravan 1, hill 0), so P4's images-off arm must run on a clone of the ONE saved world P2's images-on arm read,
+ * never on land generated again. P4's subcommand (not built in stage 1) must honour this.
+ */
+export const P4_SHARED_WORLD = true;
 const REF_EXT = 'architect_mc:referenceImages';
 
 // ---- env and the helper -------------------------------------------------------------------------------------------------------------
@@ -377,7 +383,7 @@ subs['p0-verdict'] = async () => {
     at: new Date().toISOString(),
     P1: { pass: ok(c, /^(cliff|caravan|hill): (compose|round 1 \(images on)/) && ok(s, /^P1: /), what: 'the 3 calibration composes on the sim (images on, the pick skipped) and the settlement Style job' },
     P2: { pass: false, what: 'picks: BR\'s br-s1..s6 (sim, PASS on main 2026-11-14, not re-run); forced plan path: compose with the pick skipped (P1\'s rows); settlement Styles references off (P0 styles)', blocker: "a COMPOSED plan/0 artifact is not realised by tools/scenarios.mjs (BR's leftover): S3's and S6's forced plan path cannot reach the scenario's bars until that hook is built (stage 2, before P2)", parts: { styles: ok(s, /^P2:/), composeSkipPick: ok(c, /images on, pick skipped/) } },
-    P3: { pass: ok(c, /^P3 mechanism/), what: 'Regions.authorProgram on the sim over a calibration claim (P3\'s own briefs: stage 2)' },
+    P3: { pass: ok(c, /^P3 mechanism/), what: 'Regions.authorProgram on the sim over a calibration claim: the call path ran end to end, but the sim session ended NOT_SHOWN (no program installed), so no authored program is shown in sim; P3\'s own two briefs are not dry-run yet' },
     P4: { pass: ok(c, /images off|images on and off are the same|prompt diff images/), what: 'the composer with images off from the same inputs: no image blocks, the prompt diff only the images section, the same sim plans', note: `land drift between two fresh copies of the same land: ${(c?.readings ?? []).map((r) => `${r.site} ${r.landDriftLines}`).join(', ')} affordance lines; P4's arms must share one generated, saved world (stage 2)` },
     P5: { pass: ok(s, /^s[35]: /) && ok(s, /^P5:/), what: 'the settlement Style job with N-7c-4\'s six references: image blocks, one prompt line, recorded in format 3 references' },
     P6: { pass: null, what: 'optional; not dry-run in stage 1 (CM-b\'s sim castle covers the Composite path; a design job returning a Composite is stage 2 if the ledger allows it)' },
@@ -388,9 +394,20 @@ subs['p0-verdict'] = async () => {
   log(`P0 verdict: ${Object.entries(v).filter(([k]) => /^P\d|^R$/.test(k)).map(([k, x]) => `${k} ${x.pass === null ? 'n/a' : x.pass ? 'PASS' : 'FAIL'}`).join(', ')}`);
 };
 
+/**
+ * P0 must pass before any paid item (§4): every item P0 judges (P1-P5; P6 and R have no dry run of their own) must read PASS, unless the
+ * coordinator's answer for exactly `P0:override:<item>` is recorded in the ledger (`answer --step P0:override:P1 --yes --text ...`):
+ * as 7b's `--p0-reviewed`, a recorded decision, never the builder's. The item's own P0 row must pass in either case.
+ */
 function needP0(item) {
   const v = readJson(path.join(ART, 'P0', 'P0.json'));
-  if (!v?.[item]?.pass) throw Object.assign(new Error(`refusing ${item}: its P0 dry run has not passed (artifacts/7c/P0/P0.json); P0 must pass before a paid item`), { code: 2 });
+  const failing = ['P1', 'P2', 'P3', 'P4', 'P5'].filter((k) => v?.[k]?.pass !== true);
+  if (!failing.length) return;
+  if (v?.[item]?.pass === true && P.approved(P.readLedger(LEDGER), `P0:override:${item}`)) {
+    log(`${item}: P0 reads ${failing.join(', ')} not passed; the coordinator's recorded answer P0:override:${item} lets ${item} go`);
+    return;
+  }
+  throw Object.assign(new Error(`refusing ${item}: P0 has not passed (${failing.map((k) => `${k} ${v?.[k]?.pass == null ? 'not run' : 'FAIL'}`).join(', ')}; artifacts/7c/P0/P0.json). P0 must pass before a paid item; the coordinator may record P0:override:${item}`), { code: 2 });
 }
 
 // ---- P1 (paid) ------------------------------------------------------------------------------------------------------------------------
@@ -475,7 +492,9 @@ subs['p1-compose'] = async () => {
 subs.restate = async () => {
   const c = readJson(path.join(ART, 'P1', 'compose.json'), { composes: {} });
   const s = readJson(path.join(ART, 'P1', 'style.json'), {});
-  const composes = Object.values(c.composes ?? {}).filter((x) => x.status === 'DONE' && typeof x.costUsd === 'number');
+  // every compose that reported a cost counts: a budget-stopped one is real spend and a floor on the unit (marked in the table)
+  const composes = Object.values(c.composes ?? {}).filter((x) => typeof x.costUsd === 'number' && x.costUsd > 0);
+  const stopped = composes.filter((x) => x.status !== 'DONE' || /budget/i.test(String(x.error ?? '')));
   if (!composes.length || !(s.usd > 0)) throw new Error('restate needs P1\'s composes and Style (artifacts/7c/P1/compose.json, style.json)');
   const composeUsd = r6(composes.reduce((a, x) => a + x.costUsd, 0) / composes.length);
   // a site-aware archetype design: 7b's measured mean (its ledger's P1-P3 designs)
@@ -485,7 +504,7 @@ subs.restate = async () => {
   const u = { composeUsd, styleUsd: s.usd, pickUsd: Number(opt('pick', 0.05)), designUsd, authorUsd: 5.5, compositeUsd: 6 };
   const rs = P.withLedger(LEDGER, (L) => P.restate(L, u));
   const rows = Object.entries(rs.items).map(([k, x]) => `| ${k} | $${x.oldEstUsd} | $${x.newEstUsd.toFixed(2)} | $${x.ceilingUsd} | $${x.capUsd} | ${Object.entries(x.units).map(([n, m]) => `${m} ${n}`).join(', ')}${x.overCeiling ? ' (OVER its ceiling)' : ''} |`);
-  const md = [`# P2-P6 restated from P1 (${rs.at})`, '', `Units: compose $${composeUsd} (P1 mean of ${composes.length}, images on), settlement Style $${s.usd} (P1), pick $${u.pickUsd} (6b, not measured by P1), site-aware design $${designUsd} (7b's ${d7.length} measured designs), authoring $5.5 and composite $6 (§4, not measured by P1).`, '',
+  const md = [`# P2-P6 restated from P1 (${rs.at})`, '', `Units: compose $${composeUsd} (P1 mean of ${composes.length}, images on${stopped.length ? `; ${stopped.length} stopped early (${stopped.map((x) => `${x.site} ${x.status}`).join('; ')}): a floor` : ''}), settlement Style $${s.usd} (P1; P5's Style with 3 reference images is this plus the images' input tokens, not measured), pick $${u.pickUsd} (6b, not measured by P1), site-aware design $${designUsd} (7b's ${d7.length} measured designs), authoring $5.5 and composite $6 (§4, not measured by P1).`, '',
     '| Item | Old est. | New est. | Ceiling (1.2 x share) | Cap | Units |', '|---|---|---|---|---|---|', ...rows, '',
     `P1 spent $${rs.p1SpentUsd}; P1 + P2-P6 estimated $${rs.totalEstUsd} (+ R $${rs.reserveUsd}); hard cap $${P.HARD_CAP_USD}: ${rs.totalEstUsd + rs.reserveUsd <= P.HARD_CAP_USD ? 'fits' : 'does NOT fit with the full reserve'}.`];
   fs.writeFileSync(path.join(ART, 'P1', 'restated.md'), `${md.join('\n')}\n`);
