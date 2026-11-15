@@ -410,21 +410,12 @@ final class TileCheck {
 			boolean owned = others.contains(q);
 			String bd = owned ? null : dev.larattalabs.architect.placed.Placed.build(level, chunk, x, BlockPos.getY(q), z);
 			boolean buildKept = bd != null && !consent.allows(bd);
-			BlockState s = null;
-			boolean unbreakable = false;
-			boolean condPasses = true;
-			boolean same = false;
-			if (!owned && !buildKept) {
-				s = chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
-				unbreakable = brushRefuses(s);
-				if (!unbreakable) {
-					boolean incidental = dev.larattalabs.architect.placed.Placed.naturalForWrites(level, chunk, x, BlockPos.getY(q), z, consent);
-					condPasses = CellCond.passes(p.cond()[cursor], s, ours.contains(q)) || (playerBlocks && strokeMayClear(p.cond()[cursor])) || (incidental
-						&& CellCond.passesIncidental(p.cond()[cursor], s));
-					same = condPasses && s == p.states()[cursor];
-				}
-			}
-			byte c = dev.larattalabs.architect.region.Realised.decide(owned, buildKept, unbreakable, condPasses, same);
+			BlockState s = owned || buildKept ? null : chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
+			final LevelChunk ch = chunk;
+			final int yq = BlockPos.getY(q);
+			byte c = dev.larattalabs.architect.region.Realised.decideCell(owned, buildKept, s, stroke, playerBlocks && strokeMayClear(p.cond()[cursor]),
+				() -> dev.larattalabs.architect.placed.Placed.naturalForWrites(level, ch, x, yq, z, consent), p.cond()[cursor], ours.contains(q),
+				p.states()[cursor], CellCond::passes);
 			code[cursor] = c;
 			if (revision) {
 				// (6d RV, §3.2, §5.1) held, a player's build, the owner's area: the revision's tile refuses, nothing of it written
@@ -491,10 +482,6 @@ final class TileCheck {
 		return true;
 	}
 
-	/** (6c B) A stroke never writes over an unbreakable block (bedrock, barriers, portals, command and structure blocks). */
-	private boolean brushRefuses(BlockState s) {
-		return stroke && s.getBlock().defaultDestroyTime() < 0;
-	}
 
 	/**
 	 * (6c B, Noah's destruction rule) With PLAYER_BLOCKS an unowned cell passes whatever it holds (a player's or another mod's

@@ -221,6 +221,73 @@ class QuotesApproachQLCTest {
 		assertTrue(!COND.passes(3, Blocks.OAK_PLANKS.defaultBlockState(), false), "not ours: planks fail ALWAYS_OURS");
 	}
 
+	/** The world now with incidental cobblestone (a player's placed block, not a kept build) across row 4 at x 3..5, y 10. */
+	static Quotes.Reads cobbled(boolean kept) {
+		return new Quotes.Reads() {
+			boolean cobble(int x, int y, int z) {
+				return z == 13 && y == 10 && x >= 3 && x <= 5;
+			}
+
+			@Override
+			public BlockState at(int x, int y, int z) {
+				return cobble(x, y, z) ? Blocks.COBBLESTONE.defaultBlockState() : NOW.at(x, y, z);
+			}
+
+			@Override
+			public boolean kept(int x, int y, int z) {
+				return kept && cobble(x, y, z);
+			}
+
+			@Override
+			public boolean incidental(int x, int y, int z) {
+				return !kept && cobble(x, y, z);
+			}
+		};
+	}
+
+	@Test
+	void aWalkOverIncidentalPlayerBlocksIsDecidedAsTheRealiseDecidesIt() {
+		// the GPT review's probe: a dirt road 7 rows out, a planned 3-cell gravel walk (IF_NATURAL) across row 4 over incidental cobblestone.
+		// CellCond alone skips the walk (cobblestone is not natural): 18 dirt. TileCheck passes an incidental cell (passesIncidental): the realise
+		// lays the walk, joins it and lays 9 gravel. The quote decides it through the same Realised.decideCell
+		Long2ObjectOpenHashMap<BlockState> road = road(7, Blocks.DIRT.defaultBlockState());
+		JsonObject all = new JsonObject();
+		all.add("hut", ground(List.of(new int[] {3, 10, 13}, new int[] {4, 10, 13}, new int[] {5, 10, 13}), new Object[] {"minecraft:gravel", 0, 1}));
+		Quotes.LandOf lo = new Quotes.Land(road, all, "p1").of("hut", cobbled(false), COND);
+		assertNull(lo.gap());
+		assertEquals(0, lo.undecided());
+		assertEquals(3, lo.walk().size(), "the incidental cells are written");
+		LongOpenHashSet roads = keys(road);
+		roads.addAll(lo.walk());
+		Approach.Plan quote = plan(over(lo.land(), (x, y, z) -> cobbled(false).at(x, y, z)), roads, lo.land().tiles());
+		assertEquals(3, quote.rows());
+		assertEquals(9, quote.pathCount());
+		assertEquals("minecraft:gravel", quote.pathBlock());
+		assertTrue(lo.land().tilesTouching(quote) > 0);
+	}
+
+	@Test
+	void aWalkOverAKeptBuildIsPlannedBothWays() {
+		// the same walk over a kept build's cobblestone: the realise writes it only when its consent names the build, which a quote does not know.
+		// Both lands come back: without the walk (the road at row 7: 18 dirt) and with it (9 gravel); the lot bills the larger of each item
+		Long2ObjectOpenHashMap<BlockState> road = road(7, Blocks.DIRT.defaultBlockState());
+		JsonObject all = new JsonObject();
+		all.add("hut", ground(List.of(new int[] {3, 10, 13}, new int[] {4, 10, 13}, new int[] {5, 10, 13}), new Object[] {"minecraft:gravel", 0, 1}));
+		Quotes.LandOf lo = new Quotes.Land(road, all, "p1").of("hut", cobbled(true), COND);
+		assertEquals(3, lo.undecided());
+		assertNotNull(lo.ifWritten());
+		assertTrue(lo.walk().isEmpty(), "no consent: a build's cells are kept");
+		LongOpenHashSet r1 = keys(road);
+		Approach.Plan without = plan(over(lo.land(), (x, y, z) -> cobbled(true).at(x, y, z)), r1, lo.land().tiles());
+		assertEquals(18, without.pathCount());
+		assertTrue(without.pathBlock().startsWith("minecraft:dirt"), without.pathBlock());
+		LongOpenHashSet r2 = keys(road);
+		r2.addAll(lo.ifWritten().walk());
+		Approach.Plan with = plan(over(lo.ifWritten().land(), (x, y, z) -> cobbled(true).at(x, y, z)), r2, lo.ifWritten().land().tiles());
+		assertEquals(9, with.pathCount());
+		assertEquals("minecraft:gravel", with.pathBlock());
+	}
+
 	@Test
 	void farmlandOfAnotherMoistureIsNotBilled() {
 		// the review's probe: a paid field cell planned moisture 7 over moisture-0 farmland: TileCheck queues it (another state), the run marks it

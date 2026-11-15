@@ -93,6 +93,32 @@ public final class Realised {
 		return k >= 0 && k < EXTRA_NAMES.length ? EXTRA_NAMES[k] : "kind" + k;
 	}
 
+	/** A write condition over a cell's state ({@link CellCond#passes}; the unit tests' seam, whose registry binds no tags). */
+	@FunctionalInterface
+	public interface CondTest {
+		boolean passes(int cond, net.minecraft.world.level.block.state.BlockState s, boolean ours);
+	}
+
+	/**
+	 * (QL-c) TileCheck's decision for one cell (shared with Regions.quote's approach land, so the quote decides each tile write as the realise
+	 * does): another entry's cell is held, a kept build's is a build, an unbreakable block refuses a stroke; else the condition (or, with
+	 * PLAYER_BLOCKS, a stroke that may clear: {@code strokeClears}; or, over an incidental player-placed cell, {@link CellCond#passesIncidental}),
+	 * the cell's own state a no-op. {@code s} is null only when owned or buildKept; {@code incidental} is asked only when the condition is reached.
+	 */
+	public static byte decideCell(boolean owned, boolean buildKept, net.minecraft.world.level.block.state.@org.jspecify.annotations.Nullable BlockState s,
+		boolean stroke, boolean strokeClears, java.util.function.BooleanSupplier incidental, int cond, boolean ours,
+		net.minecraft.world.level.block.state.BlockState target, CondTest test) {
+		boolean unbreakable = false, condPasses = true, same = false;
+		if (!owned && !buildKept && s != null) {
+			unbreakable = stroke && s.getBlock().defaultDestroyTime() < 0;
+			if (!unbreakable) {
+				condPasses = test.passes(cond, s, ours) || strokeClears || (incidental.getAsBoolean() && CellCond.passesIncidental(cond, s));
+				same = condPasses && s == target;
+			}
+		}
+		return decide(owned, buildKept, unbreakable, condPasses, same);
+	}
+
 	/**
 	 * The code of one intended cell from TileCheck's decisions, in its order (ownership first, then a build, then the world's state).
 	 * TileCheck calls this for every cell it reads.
