@@ -53,6 +53,16 @@ export class DesignBook {
     return this.all.find((d) => d.id === id);
   }
 
+  /**
+   * (CH) An adopted design that already ended, broadcast again as it stands (no change, no write): the helper's designs span the worlds
+   * and a snapshot carries only the last DESIGN_SNAPSHOT_LIMIT, so the mod adopting it may never have heard of it, and its caller would wait
+   * for an end that already happened. The mod's handling of a final record is idempotent (DESIGN_DONE fires once per design). Returns it.
+   */
+  announce(d: Design): Design {
+    if (isFinalDesign(d)) this.ctx.emit({ type: 'design.upsert', design: structuredClone(d) });
+    return d;
+  }
+
   /** queued or running */
   active(): Design[] {
     return this.all.filter((d) => !isFinalDesign(d));

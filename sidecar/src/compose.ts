@@ -512,6 +512,9 @@ export class ComposeDesigns {
     const pd = prior ? sc.designs.get(prior) : undefined;
     if (pd) {
       sc.log.info(`design ${pd.id}: compose adopted by opKey ${key} (${pd.status})`);
+      // (CH) one that ended (in another world, or before this snapshot's last 20) is sent again, so the mod hears of it and plans a PICKED
+      // one in this world ($0: no round runs again)
+      sc.designs.announce(pd);
       return { designId: pd.id, adopted: true };
     }
     if (msg.volume && !sc.blobs.get(msg.volume.blobId)) throw new ClientError(`volume: no blob "${msg.volume.blobId}"`);
