@@ -1071,10 +1071,16 @@ public final class Sites {
 	 * the site's), each cell costed dry as the run costs it (the conversion clears every queued cell to air, so each is paid). Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
 	 */
 	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
+		return quoteBill(level, bp, v, masked, null);
+	}
+
+	/** (QL-b D'') {@link #quoteBill} over the world with {@code ground} on top (cell -> state: the land the region's tiles before it leave). */
+	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked,
+		java.util.@Nullable Map<Long, BlockState> ground) {
 		if (v.plan() == null || !v.construction()) {
 			return null;
 		}
-		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		FullBom.Result r = FullBom.of(level, bp, v.plan(), ground);
 		if (r == null) {
 			return null;
 		}

@@ -150,6 +150,8 @@ public final class Quotes {
 			bill.exact = false;
 			notes.add(mayHold);
 		}
+		// (QL-b D'') each lot's ground as the tiles before it leave it (plan.json's lotGround)
+		JsonObject lotGround = p.planned().get("lotGround") instanceof JsonObject lgo ? lgo : null;
 		// the region the lots go into: a revision's standing one (its record, read only), else a record of the plan as a realise makes it
 		boolean revision = Revisions.isRevision(p);
 		RegionRec rec;
@@ -203,7 +205,7 @@ public final class Quotes {
 				}
 				Ir.Lot lot = eff.lots().stream().filter(x -> x.id().equals(lotId)).findFirst().orElse(null);
 				if (lot != null) {
-					lot(level, rec, eff, lot, entry, entries, style, roadCells, bill, notes, false);
+					lot(level, rec, eff, lot, entry, entries, style, roadCells, bill, notes, false, lotGround);
 					bound.put(lotId, entry);
 				}
 			}
@@ -213,7 +215,7 @@ public final class Quotes {
 			if (entry == null) {
 				continue; // a pad: its paid cells are the tiles'
 			}
-			lot(level, rec, ir, lot, entry, entries, style, roadCells, bill, notes, !revision);
+			lot(level, rec, ir, lot, entry, entries, style, roadCells, bill, notes, !revision, lotGround);
 			bound.put(lot.id(), entry);
 		}
 		// 4. a first realise's K1 swing gates (a revision queues no mechanism item)
@@ -485,6 +487,69 @@ public final class Quotes {
 		return new Standing(off, covered, offCells, unloaded);
 	}
 
+	/**
+	 * (QL-b D'') A lot's ground (one entry of plan.json's lotGround: {seqs: [[[state, cond], ...]], runs: base64 int32 [x, z, y0, y1, seq]}) over
+	 * the world now: per cell its writes in order, each where its condition passes on the cell as it then stands ({@link CellCond#passes}, not
+	 * ours), as the realise's tiles write before the lot. Only the cells it changes; a cell in a chunk not loaded is left to the world.
+	 */
+	static Map<Long, net.minecraft.world.level.block.state.BlockState> ground(ServerLevel level, JsonObject lg) {
+		return ground(lg, (x, y, z) -> level.hasChunk(x >> 4, z >> 4) ? level.getBlockState(new BlockPos(x, y, z)) : null, (c, now) -> CellCond.passes(c, now, false));
+	}
+
+	/** A write condition over a cell's state ({@link CellCond#passes}; a seam for the unit test, whose registry binds no tags). */
+	interface Cond {
+		boolean passes(int cond, net.minecraft.world.level.block.state.BlockState now);
+	}
+
+	static Map<Long, net.minecraft.world.level.block.state.BlockState> ground(JsonObject lg, World world, Cond cond) {
+		Map<Long, net.minecraft.world.level.block.state.BlockState> out = new java.util.HashMap<>();
+		if (!(lg.get("seqs") instanceof com.google.gson.JsonArray seqs) || !(lg.get("runs") instanceof JsonElement re)) {
+			return out;
+		}
+		List<net.minecraft.world.level.block.state.BlockState[]> st = new ArrayList<>();
+		List<int[]> cd = new ArrayList<>();
+		for (JsonElement q : seqs) {
+			com.google.gson.JsonArray w = q.getAsJsonArray();
+			net.minecraft.world.level.block.state.BlockState[] a = new net.minecraft.world.level.block.state.BlockState[w.size()];
+			int[] c = new int[w.size()];
+			for (int i = 0; i < w.size(); i++) {
+				com.google.gson.JsonArray e = w.get(i).getAsJsonArray();
+				try {
+					a[i] = Packed.parse(e.get(0).getAsString());
+				} catch (RuntimeException ex) {
+					a[i] = null; // an unknown state: that write is left out
+				}
+				c[i] = e.get(1).getAsInt();
+			}
+			st.add(a);
+			cd.add(c);
+		}
+		java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(re.getAsString())).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+		while (b.remaining() >= 20) {
+			int x = b.getInt(), z = b.getInt(), y0 = b.getInt(), y1 = b.getInt(), k = b.getInt();
+			if (k < 0 || k >= st.size()) {
+				continue;
+			}
+			for (int y = y0; y <= y1; y++) {
+				var now = world.at(x, y, z);
+				if (now == null) {
+					continue;
+				}
+				var cur = now;
+				for (int i = 0; i < st.get(k).length; i++) {
+					var w = st.get(k)[i];
+					if (w != null && cond.passes(cd.get(k)[i], cur)) {
+						cur = w;
+					}
+				}
+				if (cur != now) {
+					out.put(BlockPos.asLong(x, y, z), cur);
+				}
+			}
+		}
+		return out;
+	}
+
 	/** (QL-b, a gate hook) When set, each lot's bill taken apart ({@link dev.larattalabs.architect.site.LotBillDebug}) by lot id. */
 	static final ThreadLocal<@Nullable JsonObject> DEBUG_LOTS = new ThreadLocal<>();
 
@@ -517,7 +582,7 @@ public final class Quotes {
 
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */
 	private static void lot(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, Map<String, String> entries, @Nullable EntranceStyle style,
-		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech) {
+		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech, @Nullable JsonObject lotGround) {
 		QItem q = RegionsImpl.lotItemOf(level, rec, ir, lot, entry, new ArrayList<>(), entries, null);
 		if (q == null) {
 			return;
@@ -547,9 +612,17 @@ public final class Quotes {
 		} finally {
 			Sites.QUOTE_ROADS.remove();
 		}
-		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
+		// (QL-b D'') the lot over the land as the region's tiles before it leave it (plan.json's lotGround): the realise puts it down after them
+		JsonObject lg = lotGround != null && lotGround.get(lot.id()) instanceof JsonObject one ? one : null;
+		if (lg != null && lg.has("capped")) {
+			bill.exact = false;
+			notes.add("lot " + lot.id() + " (" + entry + "): priced over the land now: the tiles before it write too many cells under it to keep ("
+				+ lg.get("capped").getAsInt() + " column runs): may differ");
+		}
+		Map<Long, net.minecraft.world.level.block.state.BlockState> ground = lg == null ? null : ground(level, lg);
+		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext), ground);
 		if (DEBUG_LOTS.get() instanceof JsonObject dbg) { // (QL-b, a gate hook's reader) the lot bill taken apart
-			JsonObject d = dev.larattalabs.architect.site.LotBillDebug.of(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
+			JsonObject d = dev.larattalabs.architect.site.LotBillDebug.of(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext), ground);
 			if (d != null) {
 				d.addProperty("entry", entry);
 				d.addProperty("origin", q.x + "," + q.y + "," + q.z + " turns " + q.turns);

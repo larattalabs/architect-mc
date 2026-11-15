@@ -855,6 +855,8 @@ export class Regions {
         ...(kitPlan.survivalTerrain && typeof kitPlan.survivalTerrain === 'object' ? { survivalTerrain: kitPlan.survivalTerrain } : {}),
         // (QL-b) the paid terrain cells an earlier write always covers first, their items per group: always paid, so never "may already stand"
         ...(kitPlan.survivalTerrainWritten && typeof kitPlan.survivalTerrainWritten === 'object' ? { survivalTerrainWritten: kitPlan.survivalTerrainWritten } : {}),
+        // (QL-b D'') each lot's ground as the tiles before it leave it (writes by cell, with their conditions): Regions.quote prices the lot over it
+        ...(kitPlan.lotGround && typeof kitPlan.lotGround === 'object' ? { lotGround: kitPlan.lotGround } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);

@@ -148,4 +148,21 @@ test('survival: the adopted growth\'s bill holds each source\'s bed and four far
     assert.deepEqual(wet.survivalTerrainWritten?.[p.id], { 'minecraft:dirt': 5 }, p.id);
   }
   assert.ok(!wet.irJson.includes('survivalTerrainWritten'), 'outside the IR');
+  // (QL-b D'') the lot's ground as the tiles before it leave it: under the field's floor row the pads' IF_NATURAL grass, over it their clear; a
+  // shell side its air then the shell's farmland, in realise order; outside the IR; the same plan twice gives the same bytes
+  const lot = wet.ir.lots.find((l) => l.id === 'farm_m');
+  const g = wet.lotGround?.farm_m;
+  assert.ok(g && g.runs && Array.isArray(g.seqs), JSON.stringify(Object.keys(wet.lotGround ?? {})));
+  const buf = Buffer.from(g.runs, 'base64');
+  const at = new Map();
+  for (let i = 0; i + 19 < buf.length; i += 20) {
+    const [x, z, y0, y1, k] = [0, 4, 8, 12, 16].map((o) => buf.readInt32LE(i + o));
+    for (let y = y0; y <= y1; y++) at.set(`${x},${y},${z}`, g.seqs[k]);
+  }
+  const cx = lot.box.minX + 3, cz = lot.box.minZ + 3;
+  assert.deepEqual(at.get(`${cx},${lot.floorY - 1},${cz}`), [['minecraft:grass_block', 0]], 'the pad grass under the floor row');
+  const side = lot.irrigation.cells.find((c) => c[2] === c[3] && c[2] === lot.floorY);
+  assert.deepEqual(at.get(`${side[0]},${side[2]},${side[1]}`)?.at(-1), ['minecraft:farmland[moisture=7]', 3], 'a shell side ends farmland');
+  assert.ok(!wet.irJson.includes('lotGround'));
+  assert.equal(JSON.stringify((await run([FARM()])).lotGround), JSON.stringify(wet.lotGround), 'deterministic');
 });

@@ -91,7 +91,18 @@ final class FullBom {
 	}
 
 	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan) {
+		return of(level, bp, plan, null);
+	}
+
+	/**
+	 * {@link #of(ServerLevel, Blueprint, Sites.SitePlan)} over the world with {@code ground} on top (QL-b D'': a quote's lot over the land as the
+	 * region's tiles before it leave it; cell -> the state they leave there). Null: the world as it is.
+	 */
+	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan, java.util.@Nullable Map<Long, BlockState> ground) {
 		return compute(inputs(level, bp, plan), p -> {
+			if (ground != null && ground.get(p) instanceof BlockState g) {
+				return g;
+			}
 			int x = BlockPos.getX(p);
 			int z = BlockPos.getZ(p);
 			LevelChunk c = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
