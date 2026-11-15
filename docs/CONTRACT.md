@@ -32547,23 +32547,27 @@ No API surface change.
 - **Item 2's code waits until FK-b and SS merge** (accepted); items 1, 3 and 4 build now. **UC** as proposed (accepted).
 - **Steward RC areas (added):** an undo with the steward standing near the box, and an undo with a bee in the air inside it.
 
-### Slice J2 as built (in progress: items 1, 3, 4 built and gated; item 2 and the RL6 fix wait for SS; recorded 2026-11-15)
+### Slice J2 as built (branch `slice/J2`, main bbdffc4d and `slice/SS` f9165df2 merged; versions NEXT; $0; strict; recorded 2026-11-15)
 
 - **Item 1:** `Sites.removalBlockersOf`: an unnamed `LIVING` animal blocks only when `wildHarmed` (the removal changes a cell its box overlaps or the
-  cell under its feet). Named animals, pets, players unchanged. Units `RemovalWildJ2Test` (6). apitest survival (this checkout, 8916): ALL OK; a named
-  bee in an air cell of s2's box refuses ("Buzz (bee) at 110, 73, 52"), an unnamed one doesn't and is alive after; apijars 12/0 (old jars' line 375 ok).
-- **Item 4:** F9 (the start's settle releases groups after every pending record settled), DPT (`JournalStore.ptOf` into D7), PTS
-  (`Placed.restoreUnchanged` / `SiteJournal.restoresUnchanged`), F10 (a UMT model gap: template order). Repros moved to `UmtPropertiesTest`; UMT CI
-  baseline: seed 207's F5 rehashed. UC tagged for SS.
-- **Item 3:** `ru-crash-mid`: the middle-revision case cannot arise: a second growth planned while a survival growth still builds is refused
-  OVERLAP_BUSY ("revising 1"; measured: the growth stays revising until built); gated as that guard. `rl-crash-j2` RL7 (rs01_land, RegionTargets
-  `c2`, part spire): 958 cells built after the save, reconciled (charged 28), second load idempotent, built: standing 153 = paid 153. **RL6
-  (crash + swap) found a loss:** live before the halt standing 335 = paid 335; after the restart the 21 swapped cells (oak to spruce planks,
-  built after the save) are charged spruce by the reconcile, but the swap's give-back of the oak (`refundSwap` -> `fromPaid`) was lost with the
-  unsaved ledger and the reconcile never redoes it: the record keeps 21 oak planks that no cell holds (lost to the player; no mint). Fix
-  (proposed, in `Stockpiles.reconcile`, SS's file): an ahead cell with a swap's old block (`Run.old[i]`, not free) gives the old block's cost back
-  out of the record, as `refundSwap` does.
-- **Gate (rule 11, 8916/8917):** run 20261115-085918: umt 37/0, apijars 12/0, jr-crash 24/0, jr-crash-v063 23/0, rl-crash 90/0, sad-crash 24/0
-  (ru-crash-mid's first form failed on the guard above). Run 20261115-095948: ru-crash-mid 8/0, rl-crash-j2 33/1 (RL6's finding).
-- **Checks:** Gradle 1284 tests, 0 failures after the rebaseline (1 skipped); kit 1426/1426; `step-inputs check` 420 clean; `api-compat
-  --baselines` 8/8; gitleaks clean.
+  cell under its feet); named animals, pets and players block anywhere, as before. apitest survival ALL OK (a named bee refuses, an unnamed one
+  doesn't and lives); apijars 12/0. Units `RemovalWildJ2Test`.
+- **Item 2:** a single-site removal holds each stockpile deconstruct's credit pending in the ledger (`StockLedger.pendingCredit`, additive) and
+  saves it with the custody before its journal commit; a save SS refuses (a chunk write not durable) ends the removal unwritten (custody and
+  credits back). The start (`Stockpiles.settlePendingCredits`, first in `Fills.atStart`) books a settled removal's pending credit once, custody
+  included; a standing site's is dropped; a still-pending one is left. A refused credit save leaves it pending (`saveCreditPending`). Kill point
+  CS1 (inside a credit's save, after the chunks): fk-crash CS1, the pending credit on disk booked at the start, back 123 = paid 123. 2b (the
+  stalled removal's write-back) not reproduced on main after FK-b; custody keys with a settled removal now credit before any write-back.
+  Cost: one more world save per single construction-site removal (before its commit).
+- **Item 3:** RL6 crash + swap found a loss (21 oak planks: the swap's give-back lost with the unsaved ledger); fixed in `Stockpiles.reconcile`
+  (`swapOldCost`, `Builder.swapRefunds`, refundSwap's rule, out of the record, before the charge; once: the give-back and the new block's
+  charge share a tick, so a saved give-back never leaves the cell ahead): swapBack oak 21, standing 389 = paid 389. RL7 (rs01_land, `c2`) passes.
+  `ru-crash-mid`: the middle-revision case can't arise (OVERLAP_BUSY while a growth revises), gated as that guard.
+- **Item 4:** F9, DPT, PTS fixed in production, F10 a UMT model gap; repros in `UmtPropertiesTest`; seed 207's F5 rehashed. UC to SS.
+- **Gate (rule 11, 8916/8917):** 20261115-085918 (umt 37/0, apijars 12/0, jr-crash, jr-crash-v063, rl-crash, sad-crash), 20261115-095948
+  (ru-crash-mid 8/0), 20261115-1232 (after SS and the fixes: jr-crash 24/0, rl-crash 90/0, rl-crash-j2 34/0, ps-crash 56/0, sad-crash 24/0,
+  fk-crash 58/0 with CS1). Gradle 1318 tests, 0 failures (1 skipped); kit 1426/1426; step-inputs 425 clean; api-compat 8/8; gitleaks clean.
+- **Steward RC:** removal blockers (unnamed wild animals only when harmed); a single site's removal saves once more before its commit, and a
+  removal SS's durability check refuses now ends unwritten (JOURNAL_UNAVAILABLE) with its fill's contents back.
+- **Leftovers:** DPT's records live in memory across a DeltaJob (a resumed job carries none); UC (SS); a swap cell mined by a player before a
+  crash-lost swap: the give-back is capped by the record, not by what stood.
