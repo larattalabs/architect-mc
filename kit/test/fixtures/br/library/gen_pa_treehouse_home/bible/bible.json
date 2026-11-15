@@ -1,0 +1,46 @@
+{
+  "id": "rustic",
+  "name": "Rustic",
+  "version": 1,
+  "builtin": true,
+  "preset": "rustic",
+  "scope": "building",
+  "roles": {
+    "wall": "minecraft:spruce_planks",
+    "wall_alt": "minecraft:calcite",
+    "trim": "minecraft:mossy_cobblestone",
+    "roof": "minecraft:dark_oak_planks",
+    "floor": "minecraft:spruce_planks",
+    "frame": "minecraft:spruce_log",
+    "accent": "minecraft:dark_oak_planks",
+    "light": "minecraft:lantern",
+    "glass": "minecraft:glass_pane",
+    "foundation": "minecraft:cobblestone",
+    "path": "minecraft:dirt_path"
+  },
+  "proportions": {
+    "storey": 4,
+    "roofPitch": 1,
+    "overhang": 1,
+    "windowRhythm": 3,
+    "plinth": 1
+  },
+  "components": [
+    "window",
+    "door_surround",
+    "lantern_post",
+    "roof_trim",
+    "chimney"
+  ],
+  "tags": [
+    "rustic",
+    "timber",
+    "countryside"
+  ],
+  "suggestedFeatures": [
+    "chimney",
+    "porch"
+  ],
+  "blurb": "Spruce timber on cobblestone under a dark oak roof.",
+  "origin": "builtin"
+}

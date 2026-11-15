@@ -1,7 +1,7 @@
 // (M5 IG-b, docs/CONTRACT.md "M5 support" slice IG-b, Steward's S-M5-8) Irrigated growth of an adopted street town, the kit's side. An
 // adopted region (adopted_village, slice AD's `Regions.adopt`) has one stage, `adopted`. A growth with an irrigated farm lot there adds its
 // own stages as V's street town has them: the shells in `street`, the grown lots in `lots`, the water in `fluids`, after the base's
-// `adopted` (the pads, lanes and props stay in it). A dry growth there is as before (one stage). A base that names `street` or `lots` in
+// `adopted` (the pads, lanes and verges stay in it; the props go in `props`, SAD). A dry growth there takes `adopted` and `props`. A base that names `street` or `lots` in
 // another order still refuses NOT_ALLOWED [irrigate].
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -71,7 +71,7 @@ test('an irrigated grow lot in an adopted street town: the revision adds street,
   const S = await town();
   const r = await twice(S, { grow: { lots: [FARM()] } });
   const ir = r.ir;
-  assert.deepEqual(ir.stages, ['adopted', 'street', 'lots', 'fluids']);
+  assert.deepEqual(ir.stages, ['adopted', 'street', 'lots', 'props', 'fluids']); // (SAD) the props in their own stage, as V's
   const lot = ir.lots.find((l) => l.id === 'farm_m');
   assert.ok(lot, 'the lot is placed');
   assert.equal(lot.stage, 'lots', 'the grown lot is in the revision\'s own lots stage');
@@ -82,7 +82,7 @@ test('an irrigated grow lot in an adopted street town: the revision adds street,
   assert.deepEqual(lotFrame(lot).size, [20, 21]);
   assert.ok(g.bodies.every((b) => b.startsWith('rv1_farm_m_irr_')), JSON.stringify(g.bodies));
   assert.equal(g.cells.reduce((n, q) => n + q[3] - q[2] + 1, 0), irrigationCells(lot, gridOf(lot)).length);
-  // the shells in street, the bodies in fluids; the pads, lanes and props in the base's adopted
+  // the shells in street, the bodies in fluids, the props in props (SAD); the pads, lanes and verges in the base's adopted
   const shells = ir.parts.filter((p) => p.id.endsWith('_shell'));
   assert.equal(shells.length, 4);
   assert.ok(shells.every((p) => p.stage === 'street'), JSON.stringify(shells.map((p) => [p.id, p.stage])));
@@ -90,7 +90,8 @@ test('an irrigated grow lot in an adopted street town: the revision adds street,
   assert.deepEqual(fluids.map((o) => o.id).sort(), [...g.bodies].sort());
   assert.ok(fluids.every((o) => o.stage === 'fluids'));
   const other = ir.parts.filter((p) => !p.id.endsWith('_shell') && !(p.ops ?? []).some((o) => o.op === 'fluid') && !p.id.endsWith('_irr_design'));
-  assert.ok(other.length > 0 && other.every((p) => p.stage === 'adopted'), JSON.stringify(other.map((p) => [p.id, p.stage])));
+  assert.ok(other.length > 0 && other.every((p) => p.stage === (/_props$/.test(p.id) ? 'props' : 'adopted')), JSON.stringify(other.map((p) => [p.id, p.stage])));
+  assert.ok(other.some((p) => /_props$/.test(p.id)), 'the growth has props');
   assert.deepEqual(ir.revision.grow.irrigated, ['farm_m']);
   const chk = checkRegion({ ir, survey: fillMissing(asColumns(S.survey)).columns, blobs: (sha) => r.blobs.get(sha), standing: S.standing });
   const bad = chk.findings.filter((f) => /^M2[59]/.test(f.rule) && f.severity !== 'info');
@@ -98,10 +99,12 @@ test('an irrigated grow lot in an adopted street town: the revision adds street,
   assert.ok(r.notes.some((n) => /irrigate: farm_m gets 4 sources \(2 x 2\)/.test(n)), r.notes.join(' | '));
 });
 
-test('a dry growth of an adopted street town is as before: one stage, the lot in adopted', async () => {
+test('a dry growth of an adopted street town: the base stage, then its props (SAD), the lot in adopted', async () => {
   const S = await town();
   const r = await twice(S, { grow: { lots: [FARM({ irrigate: false })] } });
-  assert.deepEqual(r.ir.stages, ['adopted']);
+  assert.deepEqual(r.ir.stages, ['adopted', 'props']);
+  assert.ok(r.ir.parts.filter((p) => /_props$/.test(p.id)).every((p) => p.stage === 'props') && r.ir.parts.filter((p) => !/_props$/.test(p.id)).every((p) => p.stage === 'adopted'),
+    JSON.stringify(r.ir.parts.map((p) => [p.id, p.stage])));
   assert.equal(r.ir.lots.find((l) => l.id === 'farm_m').stage, 'adopted');
   const a = await twice(S, { grow: { lots: [{ id: 'farm_m', type: 'crop_farm', size: [20, 21] }] } });
   const strip = (ir) => { const { params, ...rest } = ir; void params; return JSON.parse(JSON.stringify(rest)); };
