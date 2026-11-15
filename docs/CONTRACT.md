@@ -32071,6 +32071,39 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
 | RL5: a player's block in a lot cell after the save | charged to the stock | 1 player cell uncharged; standing 388 = paid 388; second load changes nothing |
 | RL5 F10 roads + JR-b residual at the removal | the road cell refunded from its record | dropped as the player's; refund 385 = paid less the two cells and the popped torch |
 
+### Slice SS as built (save spikes; branch `slice/SS` off main 1d195edb, main 91ce29bf merged; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Profile** (`SaveTiming` plus timing-only mixins on ChunkMap, ServerLevel and MinecraftServer's save; one `SS save: <why> total .. | players | data | chunks | wait | poi | unloads | io | entities | leveldat | books | write | chunksSaved | forced/skipped | waitsSkipped` line per explicit save, autosave and `/save-all`). In run 1 (41fc9168, timing only), the spikes were not the ledger's own parts (books ≤ 2 ms, write ≤ 4 ms). They came from two parts of vanilla's flushed save. First, **chunks**: `saveAllChunks(true)` waits (`managedBlock(isReadyForSaving)`) for every accessible chunk's pending load or generation; for example, a crate created while chunks loaded spent 920 ms there with 70 chunks saved, and this caused the 714-998 ms maxima. Second, **io**: every flush forces (F_FULLFSYNC on macOS) every region file the storages hold open, written or not; 137 ms with 0 chunks saved. The removal saves (`Groups.credit`, JR's K5/RVU2) peaked at 338 ms, mostly real writes (189-595 chunks).
+- **Fix: neither of the brief's two options.** The profile showed the cost was in syncing files with no writes and waiting for chunks with no changes, not in the build's own chunks. The order (players, then chunks durable, then ledger) and every kill point are unchanged.
+  1. `RegionFileFlushMixin`: `RegionFile.flush` skips the force when the file has had no write since its last successful force. Every save.
+  2. `ChunkSaveWaitMixin`: only inside `saveWithWorld` / `saveLedgerFirst` (`SaveTiming.explicit`), the per-chunk wait is skipped for a chunk with nothing unsaved or still a ProtoChunk. An unsaved LevelChunk (or the LevelChunk an imposter wraps) is waited for and saved as before. Vanilla saves (`/save-all`, autosave, the stop's save) wait as vanilla.
+  Switches (TEST): `dev.stockpile.ps {forceAll, waitAll}`, `-Darchitect.regionForceAll`, `-Darchitect.chunkWaitAll`.
+- **Why the force skip can never leave a chunk write unforced when the ledger is written:**
+  - (a) Every write of a RegionFile's channel goes through `writeHeader`: `write` calls it after its sector writes, and `clear` calls it. The only other writes are `padToFullSector` (called only from `close`, which forces unconditionally) and `writeToExternalFile` (an oversized chunk's own `.mcc` channel, which vanilla never forces either; `write` then writes the stub and header through `writeHeader`). `RegionFileFlushSSTest` checks this against this version's bytecode, so an update that adds a write path fails the unit test.
+  - (b) Each `writeHeader` increments a per-object counter. A force reads the counter at its start, and records it as covered only when `flush` returns normally. So a force that throws is retried at the next flush, and a write counted after a force began is never taken as covered.
+  - (c) Reuse: a RegionFile object lives in its storage's cache across many saves, and its counter persists with it. Eviction and storage close call `close`, which forces unconditionally (not touched). A reopened file is a new object whose previous object's writes were forced by that close.
+  - (d) Two saves in flight: a storage's writes (`runStore`) and its `flush` all run on its IOWorker's consecutive executor, one task at a time. `synchronize(true)` runs the flush task only after every write queued before it has completed, `writeHeader` included, so the counter it reads covers them. A later save's writes either precede its own flush task (and are forced there) or follow it (and belong to the next save). Separate storages (chunks, entities, POI, per level) have separate RegionFile objects.
+  - (e) The ledger is written after `saveAllChunks` returns, which joins each storage's `synchronize(true)`: unchanged from PS/J1.
+  - Limit: the kill steps (`Runtime.halt`, the page cache survives) can't detect a wrong skip. The guards are the bytecode test and the in-game rule that every save with `chunksSaved > 0` forced ≥ 1 file: 0 violations over 413 lines in run 2.
+- **Bench** (the same four worlds, the same regex; `artifacts/gate-runs-ss/save-bench.mjs`), "saved with the world's chunks" lines:
+
+  | run | rs-survival-smoke, jr-crash, hf-crash, ps-crash | load1 mean / max |
+  |---|---|---|
+  | before (run 1, 41fc9168) | 326 saves: p50 37.1, p90 95.5, max 997.8 ms | 29 / 61 |
+  | after (run 2, 5fea7bd2) | 302 saves: p50 20.6, p90 92.5, max 376.4 ms | 67 / 128 |
+
+  - The rest of run 2, under more than twice run 1's load:
+    - region forces: 1001 made, 1651 skipped;
+    - `Stockpiles.create` max 998.8 → 376.9 ms (the chunks part 920 → 10 ms; what remains is the wait for unsaved chunks still promoting, up to 315 ms);
+    - feed saves max 560 → 98 ms;
+    - removals (`Groups.credit`) max 338 → 306 ms, p50 29 → 22 ms.
+  - Removals stay bound by their real writes. Leftover: unflushed saves while a removal runs, so its final flush is small.
+  - Vanilla `/save-all flush` world saves still reach 1.3 s under that load (io on files the eager saves wrote).
+  - RL's book refresh (the 10 s periodic save's refresh): max 9.2 ms over every logged save, including sad-crash; report-only, not a spike source.
+  - J1's autosave IO wait: 14.3 ms (2 autosaves).
+- **Steward RC:** no API change. Both mixins change vanilla's save behaviour: the force skip on every world save, the wait skip inside Architect's saves with the world. Expect shorter stalls at crate, feed and credit saves.
+- **Checks** (rule 11 scope, `--out artifacts/gate-runs-ss`, 8906:8907): run 1 (41fc9168, before) rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0; run 2 (5fea7bd2) jr-crash 24/0, hf-crash 38/0 (HF1, AS1), ps-crash 45/0, sad-crash 24/0 (SAC1/SAC2), rs-survival-smoke 36/1 (item 10: its check ran out of the 120 s budget under load 128, no artifact sha; not the save path); run 3 (5fea7bd2, rs-survival-smoke only) 40/0. Gradle build 1275 tests, 0 failures (1 skipped); unit-scope PASS; kit 1426/1426; step-inputs 418 clean; api-compat `--baselines` 8/8; gitleaks clean. jr-crash-v063, rl-crash and sad-survival not run (rule 11, deferred to the release).
+
 ## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
 
 Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
