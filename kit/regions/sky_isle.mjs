@@ -43,6 +43,17 @@ export default function skyIsle(ctx) {
   const mass = r.part('mass', { stage: 'mass' });
   const disc = { kind: 'cylinder', c: [cx, { abs: alt - 7 }, cz], r: R, h: 7 };
   mass.add(disc, 'rock', P.support === 'pillars' ? { underside: 'pillars', supportEvery: 12, pillarMaterial: 'structure' } : { underside: 'rock', taper: 0.9 });
+  // ((SP2, RM's leftover) a ring of pillars under the rim, one within 3 (Chebyshev) of every rim cell, so no cell of the disc, its wall
+  // or its pads overhangs a pillar by more than M15's 4: the grid's every 12 left the rim up to 10 out)
+  if (P.support === 'pillars') {
+    const inside = (x, z) => (x - cx) * (x - cx) + (z - cz) * (z - cz) <= (R - 1) * (R - 1);
+    const rim = [];
+    for (let z = cz - R; z <= cz + R; z++) for (let x = cx - R; x <= cx + R; x++) {
+      if (!inside(x, z) || (inside(x + 1, z) && inside(x - 1, z) && inside(x, z + 1) && inside(x, z - 1))) continue;
+      if (!rim.some(([px, pz]) => Math.max(Math.abs(px - x), Math.abs(pz - z)) <= 3)) rim.push([x, z]);
+    }
+    for (const [x, z] of rim) mass.pillar([x, alt - 8, z], { material: 'structure' });
+  }
   mass.fill({ kind: 'cylinder', c: [cx, { abs: alt }, cz], r: R, h: 1 }, 'surface', { cond: 2 });
   if (P.support === 'taper') { r.anchor('isle', [cx + 4, alt + 1, cz + 4]); r.floating(['mass'], { anchor: 'isle' }); }
   // ---- the citadel wall on the mass, its gate to the south
