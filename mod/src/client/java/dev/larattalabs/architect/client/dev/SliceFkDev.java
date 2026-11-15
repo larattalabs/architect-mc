@@ -305,6 +305,67 @@ public final class SliceFkDev {
 				o.addProperty("entities", slabEntities(s.overworld(), posOf(req)));
 				return o;
 			}));
+		// (slice LC, S-M5-12/S-M5-13) late cargo and a failure after the custody, deterministic
+		DevBridge.register("dev.removal.lateCargo", 10_000, "{site, pos: [x, y, z], items: {item: count}} - (slice LC) TEST: arms one injection: the next "
+			+ "removal of site puts the items into the container at pos right after its custody is saved (a group removal: ticks before its writes)",
+			(req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				BlockPos p = posOf(req);
+				Map<String, Integer> items = new TreeMap<>();
+				req.getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.site.LateCargo.armInject(site, p, items);
+					return dev.larattalabs.architect.site.LateCargo.stateJson();
+				});
+			});
+		DevBridge.register("dev.removal.failAfterCustody", 10_000, "{site} - (slice LC, S-M5-13) TEST: the next removal of site (a group, stage, region or "
+			+ "revision removal, or a single Remove) ends unwritten right after its custody is saved: the custody written back (then kill point LC1)",
+			(req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				return ServerTasks.callOnServer(s -> {
+					dev.larattalabs.architect.site.LateCargo.armFail(site);
+					return dev.larattalabs.architect.site.LateCargo.stateJson();
+				});
+			});
+		DevBridge.register("dev.removal.state", 10_000, "{clear?: bool} - (slice LC) TEST: the armed hooks and the last late cargo handed out {site, items, "
+			+ "cells, at}", (req, mc) -> ServerTasks.callOnServer(s -> {
+				if (req.has("clear") && req.get("clear").getAsBoolean()) {
+					dev.larattalabs.architect.site.LateCargo.clear();
+				}
+				return dev.larattalabs.architect.site.LateCargo.stateJson();
+			}));
+		DevBridge.register("dev.removal.undoStage", 3_600_000, "{site} - (slice LC) TEST: undoes the stage holding site as a region revision undoes its own "
+			+ "stage (Groups.undoStage, ownStage) -> {removed, blockers, refund}", (req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				return ServerTasks.callOnServer(s -> {
+					var rec = dev.larattalabs.architect.site.Sites.get(site);
+					if (rec == null || rec.member() == null) {
+						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
+					}
+					var g = dev.larattalabs.architect.site.Sites.group(rec.member().group());
+					String stage = g == null ? null : g.stages().stream().filter(st -> st.sites().contains(site)).map(st -> st.name()).findFirst().orElse(null);
+					if (stage == null) {
+						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
+					}
+					return dev.larattalabs.architect.site.Groups.undoStage(s, g.id(), stage, false, dev.larattalabs.architect.site.Sites.Covered.KEEP, true);
+				}).thenCompose(f -> f).handle((r, ex) -> {
+					JsonObject o = new JsonObject();
+					if (ex != null) {
+						o.addProperty("error", String.valueOf(ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()));
+						return o;
+					}
+					if (r == null) {
+						o.addProperty("error", "no stage holds " + site);
+						return o;
+					}
+					o.addProperty("removed", r.removed());
+					JsonArray b = new JsonArray();
+					r.blockers().forEach(b::add);
+					o.add("blockers", b);
+					o.add("refund", counts(r.refund()));
+					return o;
+				});
+			});
 		DevBridge.register("dev.fk.state", 30_000, "{site} - (M5 FK) a fill site: {phase, hasFill, key, filled, custody, paid, fillItems, containers: [{at, declared, "
 			+ "holds}], locks: [{at, state}]}", (req, mc) -> {
 				String id = Fields.of(req).nonBlank("site");

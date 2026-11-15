@@ -814,7 +814,31 @@ public final class SiteJournal {
 	/** What an undo does to one site (R4): its BOX template and mask, its other cells, its ring. */
 	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, List<CellWrite> pre,
 		List<CellWrite> halves, int[] ring,
-		int holes, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts) {
+		int holes, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts, Map<Long, Value> boxCells) {
+		/**
+		 * (slice LC) The value this restore writes at {@code pos} (its template's cell, or one of its other cells), or null when it doesn't
+		 * write the cell. Linear over the non-template cells: called per container cell only.
+		 */
+		@Nullable Value writes(long pos) {
+			if (template != null) {
+				Value v = boxCells.get(pos);
+				if (v != null) {
+					return v;
+				}
+			}
+			for (CellWrite c : cells) {
+				if (c.pos() == pos) {
+					return c.value();
+				}
+			}
+			for (CellWrite c : pre) {
+				if (c.pos() == pos) {
+					return c.value();
+				}
+			}
+			return null;
+		}
+
 		/** (6c PT) Runs {@code writes} (some of this restore's) with its records restored as its blocks come back (§5). */
 		void writing(Runnable writes) {
 			writing(null, writes);
@@ -980,7 +1004,7 @@ public final class SiteJournal {
 			// ((7a GM-a, §7 item 6) piston heads and moving pistons first, then the bases, then the rest (lowest first within each))
 			cells.sort(Comparator.comparingInt((CellWrite c) -> gateRank(level, c.pos())).thenComparingInt(c -> Journal.y(c.pos())));
 		}
-		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes, pts);
+		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes, pts, boxWritten);
 	}
 
 	/** (7a GM-a) Whether a site is a region's gate mechanism (the cells site of kind {@code architect:mechanism}). */
@@ -1081,7 +1105,18 @@ public final class SiteJournal {
 	 * mask when it has holes), then its other cells, then the leaf ring. Returns the restore.
 	 */
 	static Restore writeNow(ServerLevel level, String siteId, String group) throws Sites.SiteException {
+		return writeNow(level, siteId, group, null);
+	}
+
+	/**
+	 * {@link #writeNow}; {@code before} (slice LC) runs on the gathered restore in the same tick, right before its first write (a removal
+	 * takes the late cargo out of the container cells it writes).
+	 */
+	static Restore writeNow(ServerLevel level, String siteId, String group, java.util.function.@Nullable Consumer<Restore> before) throws Sites.SiteException {
 		Restore r = restore(level, siteId, group);
+		if (before != null) {
+			before.accept(r);
+		}
 		r.writing(level, () -> {
 			writeCells(level, r.pre());
 			if (r.template() != null && r.box() != null) {

@@ -1643,6 +1643,21 @@ public final class Sites {
 			}
 			WorldJournal.kill("FKC1");
 		}
+		// (slice LC, TEST) the late-cargo injection and the failure after the custody (dev.removal.*), as in Groups.plan
+		for (Site x : all) {
+			LateCargo.injectArmed(level, x.id());
+		}
+		String failed = LateCargo.failArmed(all.stream().map(Site::id).toList());
+		if (failed != null) {
+			Stockpiles.dropPendingCredits(decs.values());
+			for (Site y : all) {
+				if (y.construction() != null && Fills.phase(y) != null) {
+					Fills.writeBack(level, y);
+				}
+			}
+			WorldJournal.kill("LC1");
+			throw new SiteException(failed + ": the removal ended unwritten after its custody was saved (TEST: dev.removal.failAfterCustody)");
+		}
 		Anchors.Bounds u = all.get(0).restoreBox();
 		for (Site x : all) {
 			u = union(u, x.restoreBox());
@@ -3376,7 +3391,7 @@ public final class Sites {
 		return level.dimension().identifier().toString();
 	}
 
-	private static void forEachBlockEntity(ServerLevel level, Anchors.Bounds box, Consumer<BlockEntity> action) {
+	static void forEachBlockEntity(ServerLevel level, Anchors.Bounds box, Consumer<BlockEntity> action) {
 		for (int cx = box.minX() >> 4; cx <= box.maxX() >> 4; cx++) {
 			for (int cz = box.minZ() >> 4; cz <= box.maxZ() >> 4; cz++) {
 				for (BlockEntity be : List.copyOf(level.getChunk(cx, cz).getBlockEntities().values())) {
