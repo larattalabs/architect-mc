@@ -654,7 +654,9 @@ public final class Sites {
 				unloaded[0] = true;
 				return 0;
 			}
-			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(chunk[0].getBlockState(mp.set(x, y, z)));
+			// (QL-c) a quote's lot: outside the box's columns, the land the plan's roads and earlier tiles leave (QuoteLand), as the realise finds it
+			BlockState planned = y < level.getMinY() || y > level.getMaxY() ? null : QuoteLand.outside(box, x, y, z);
+			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(planned != null ? planned : chunk[0].getBlockState(mp.set(x, y, z)));
 			// 6c PT: a player's build cell (the consent's aside) stops an approach as a road does
 			if (y >= level.getMinY() && y <= level.getMaxY()) {
 				String bd = dev.larattalabs.architect.placed.Placed.build(level, chunk[0], x, y, z);
@@ -1046,10 +1048,18 @@ public final class Sites {
 		return hasSite && noRefusal && notMoving && libraryEntry && QUOTE_ROADS.get() == null;
 	}
 
+	/** (QL-c) How many cells a quote's tiles changed where a verdict's entrance approach reads the land ({@link QuoteLand#tilesTouching}); 0: none. */
+	public static int approachTilesTouching(Verdict v, QuoteLand land) {
+		return v.plan() == null ? 0 : land.tilesTouching(v.plan().approach());
+	}
+
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
-	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
+	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause, int standingOutside) {
+		public BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
+			this(items, exact, driftCells, inexactBecause, 0);
+		}
 	}
 
 	/**
@@ -1071,16 +1081,10 @@ public final class Sites {
 	 * the site's), each cell costed dry as the run costs it (the conversion clears every queued cell to air, so each is paid). Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
 	 */
 	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
-		return quoteBill(level, bp, v, masked, null);
-	}
-
-	/** (QL-b D'') {@link #quoteBill} over the world with {@code ground} on top (cell -> state: the land the region's tiles before it leave). */
-	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked,
-		java.util.@Nullable Map<Long, BlockState> ground) {
 		if (v.plan() == null || !v.construction()) {
 			return null;
 		}
-		FullBom.Result r = FullBom.of(level, bp, v.plan(), ground);
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
 		if (r == null) {
 			return null;
 		}
@@ -1098,7 +1102,7 @@ public final class Sites {
 			}
 		}
 		boolean exact = r.exact() && v.refusals().isEmpty();
-		return new BomFull(items, exact, r.driftCells(), List.copyOf(why));
+		return new BomFull(items, exact, r.driftCells(), List.copyOf(why), r.standingOutside());
 	}
 
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */

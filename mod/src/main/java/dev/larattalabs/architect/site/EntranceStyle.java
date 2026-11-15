@@ -104,35 +104,71 @@ public record EntranceStyle(String path, @Nullable String foundation, @Nullable 
 	Approach.Style resolve(ServerLevel level, LongSet roads, boolean dryRun) {
 		String dim = Sites.dimensionId(level);
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-		Approach.Surface surface = (x, y, z) -> {
-			BlockState st = read(level, dryRun, m.set(x, y, z));
+		StateAt at = withLand(QuoteLand.QUOTE.get(), (x, y, z) -> read(level, dryRun, m.set(x, y, z)));
+		return new Approach.Style(path, foundation, surface(level, at, roads, regionGroup != null, pos -> regionTile(dim, pos)));
+	}
+
+	/** A cell's state, or null when it can't be read (a chunk not loaded). */
+	@FunctionalInterface
+	public interface StateAt {
+		@Nullable BlockState at(int x, int y, int z);
+	}
+
+	/** (QL-c) {@code world} with a quote's land on top (its planned state first), or {@code world} when there is none. */
+	public static StateAt withLand(@Nullable QuoteLand land, StateAt world) {
+		if (land == null) {
+			return world;
+		}
+		return (x, y, z) -> {
+			BlockState st = world.at(x, y, z);
+			if (st == null) {
+				return null; // not loaded: no surface, as before
+			}
+			BlockState planned = land.at(x, y, z);
+			return planned != null ? planned : st;
+		};
+	}
+
+	/**
+	 * The walk surfaces over {@code at} (shapes read through {@code shapes} at the cell): a road cell, or with {@code region} a cell with a
+	 * collision shape that {@code regionTile} owns, with two open fluid-free cells above it. Pure; the unit tests' seam.
+	 */
+	public static Approach.Surface surface(net.minecraft.world.level.BlockGetter shapes, StateAt at, LongSet roads, boolean region,
+		java.util.function.LongPredicate regionTile) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		return (x, y, z) -> {
+			BlockState st = at.at(x, y, z);
 			if (st == null || st.isAir()) {
 				return null;
 			}
+			m.set(x, y, z);
 			long pos = BlockPos.asLong(x, y, z);
 			if (!roads.contains(pos)) {
-				if (regionGroup == null || st.getCollisionShape(level, m).isEmpty() || !st.getFluidState().isEmpty() || !open(level, dryRun, x, y + 1, z)
-					|| !open(level, dryRun, x, y + 2, z) || !regionTile(dim, pos)) {
+				if (!region || st.getCollisionShape(shapes, m).isEmpty() || !st.getFluidState().isEmpty() || !open(shapes, at, x, y + 1, z) || !open(shapes, at, x,
+					y + 2, z) || !regionTile.test(pos)) {
 					return null;
 				}
 			}
-			boolean full = st.isCollisionShapeFullBlock(level, m) && !st.hasBlockEntity() && st.getFluidState().isEmpty();
+			m.set(x, y, z);
+			boolean full = st.isCollisionShapeFullBlock(shapes, m) && !st.hasBlockEntity() && st.getFluidState().isEmpty();
 			return new Approach.Met(BlockStateParser.serialize(st), full);
 		};
-		return new Approach.Style(path, foundation, surface);
+	}
+
+	private static boolean open(net.minecraft.world.level.BlockGetter shapes, StateAt at, int x, int y, int z) {
+		BlockState st = at.at(x, y, z);
+		return st != null && st.getCollisionShape(shapes, new BlockPos(x, y, z)).isEmpty() && st.getFluidState().isEmpty();
 	}
 
 	private boolean regionTile(String dim, long pos) {
+		QuoteLand land = QuoteLand.QUOTE.get();
+		if (land != null && land.tiles().contains(pos)) {
+			return true; // (QL-c) a quote: a cell a tile of the plan queues before the lot (its entry owns it at put-down)
+		}
 		String owner = SiteJournal.ownerSite(dim, pos);
 		Infra in = owner == null ? null : Infras.get(owner);
 		return in != null && regionGroup.equals(in.group()) && in.kind().startsWith(Infra.CELLS) && RegionKinds.tile(in.kind().substring(Infra.CELLS
 			.length()));
-	}
-
-	private static boolean open(ServerLevel level, boolean dryRun, int x, int y, int z) {
-		BlockPos p = new BlockPos(x, y, z);
-		BlockState st = read(level, dryRun, p);
-		return st != null && st.getCollisionShape(level, p).isEmpty() && st.getFluidState().isEmpty();
 	}
 
 	private static @Nullable BlockState read(ServerLevel level, boolean dryRun, BlockPos p) {
