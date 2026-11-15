@@ -102,7 +102,8 @@ export async function registerBC(steps, h) {
     // quote prices the lot over the pads' grass: 10 pairs 5 s apart (5 near, 5 away) bill the template's 205 + the shell's 5 dirt, none moves
     const old = JSON.parse(fs.readFileSync(path.join(dst, 'architect-regions', 'plans', `${PLANS[1].planId}.json`), 'utf8'));
     const grow = old.ir?.params?.spec?.grow;
-    const g = await call('dev.rv.plan', { region: 'rg1', program: 'plan_v0', params: { grow }, ext: old.ext ?? {} }, 900_000);
+    const ext = Object.fromEntries(Object.entries(old.ext ?? {}).filter(([k]) => !k.startsWith('architect_mc:'))); // Architect's own keys are refused
+    const g = await call('dev.rv.plan', { region: 'rg1', program: 'plan_v0', params: { grow }, ext }, 900_000);
     out.fresh = { planId: g.planId, refused: g.refused ?? null, lots: (g.lots ?? []).map((l) => l.id) };
     check(!g.refused && !!g.planId, `a fresh growth with rv3's request planned: ${g.refused ?? g.planId}`, out.fresh);
     if (g.refused) { await L.leaveWorld(); spendZero(); return out; }
