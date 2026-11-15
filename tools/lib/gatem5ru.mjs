@@ -280,8 +280,12 @@ export async function registerRU(steps, h) {
       const ps0 = await pile();
       const g1 = await grow(tag, T.region, T.t0);
       if (!g1) { await L.leaveWorld(); continue; }
-      const f1 = await feedPart(`${tag} (first growth)`, T.region, 0.5);
-      check(!f1.build?.done, `${tag}: the first growth (rid ${g1.rid}) still building when the second is planned (${f1.build?.percent}%)`);
+      // a growth is planned only on a region not revising: the first growth fed in part until its batch has put every stage down
+      // (busy null) while its last targets still build
+      let f1 = await feedPart(`${tag} (first growth)`, T.region, 0.5);
+      for (let k = 0; k < 12 && f1.busy && !f1.build?.done; k++) f1 = await feedPart(`${tag} (first growth, wave ${k + 2})`, T.region, 0.25);
+      check(!f1.busy && !f1.build?.done, `${tag}: the first growth (rid ${g1.rid}) has put its stages down (busy ${f1.busy}) and still builds when the second is planned (${f1.build?.percent}%)`);
+      if (f1.busy || f1.build?.done) { await L.leaveWorld(); continue; }
       const feed1 = (await pile()).feedOrder ?? [];
       const g2 = await growPlan(T.region, { lots: GROW2 });
       check(!g2.refused && g2.revisionOf?.rid > g1.rid, `${tag}: a second growth planned on top of it: ${g2.refused ?? `${g2.planId} rid ${g2.revisionOf?.rid} on ${g2.revisionOf?.parentRid}`}`);
