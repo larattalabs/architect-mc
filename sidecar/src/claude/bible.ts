@@ -91,7 +91,7 @@ export function draftPrompt(job: BibleJob, ctx: { seed?: { id: string; roles: Re
     referenceImagesLine((r.referenceImages ?? []).map((x) => x.label)),
     job.kind === 'revise' ? `Revise the style bible below into version ${job.version}. What to change: ${r.notes}` : `Write a style bible for: "${r.prompt}".`,
     r.name ? `Its name: "${r.name}".` : '',
-    `Scope: ${r.scope ?? 'building'}${r.scope === 'settlement' ? ' (also fill the macro roles rock, surface, subsurface, rubble, rail, structure: the terrain, ground cover, spoil, track and engineering blocks of the place)' : ''}.`,
+    `Scope: ${r.scope ?? 'building'}${r.scope === 'settlement' ? ' (also fill the macro roles rock, surface, subsurface, rubble, rail, structure: the terrain, ground cover, spoil, railing (a fence or wall block along edges, decks and bridges; never a minecart rail) and engineering blocks of the place)' : ''}.`,
     ctx.seed ? `Start from the built-in bible "${ctx.seed.id}" (roles: ${JSON.stringify(ctx.seed.roles)}) and change what the prompt asks for.` : '',
     ctx.references?.length ? `Learn from these existing buildings of the library: ${ctx.references.map((x) => `${x.name} (${x.id}): ${x.materials.slice(0, 10).join(', ')}`).join('; ')}.` : '',
     ctx.previous ? `The current version:\n${ctx.previous.json}\n\nIts prose:\n${truncate(ctx.previous.prose, 4000)}` : '',

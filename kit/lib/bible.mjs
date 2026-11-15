@@ -196,6 +196,9 @@ export function validateBible(j, opts = {}) {
     if (scope === 'settlement') {
       const m = MACRO_ROLES.filter((k) => !roles[k]);
       if (m.length) err(`roles: a settlement bible also names the macro roles; missing ${m.join(', ')}`);
+      // (7c PAY) rail is the railing role (the floating islands' edges, quay rails, deck guards), never a minecart track: a track there
+      // guards nothing and floats on every edge (P1's paid settlement Style and the sim stub both took minecraft:rail from "track")
+      if (/^minecraft:(rail|powered_rail|detector_rail|activator_rail)$/.test(roles.rail ?? '')) err(`roles.rail is the railing role (a fence or wall block along edges, decks and bridges), not a track: got ${roles.rail}`);
     }
     if (!errors.length) {
       let p;

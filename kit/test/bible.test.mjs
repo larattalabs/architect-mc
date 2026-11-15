@@ -143,8 +143,11 @@ test('validateBible: roles, macro roles for a settlement, the typed rest', () =>
   }
   const town = validateBible(ASHFALL, { scope: 'settlement' });
   assert.ok(!town.ok && town.errors.some((e) => /macro roles; missing rock, surface/.test(e)), town.errors.join(' | '));
-  const macro = Object.fromEntries(MACRO_ROLES.map((r, i) => [r, ['minecraft:stone', 'minecraft:grass_block', 'minecraft:dirt', 'minecraft:cobblestone', 'minecraft:rail', 'minecraft:oak_planks'][i]]));
+  const macro = Object.fromEntries(MACRO_ROLES.map((r, i) => [r, ['minecraft:stone', 'minecraft:grass_block', 'minecraft:dirt', 'minecraft:cobblestone', 'minecraft:oak_fence', 'minecraft:oak_planks'][i]]));
   assert.ok(validateBible({ ...ASHFALL, roles: { ...ASHFALL.roles, ...macro } }, { scope: 'settlement' }).ok);
+  // (7c PAY) rail is the railing role: a minecart track there is refused (a settlement Style only)
+  const track = validateBible({ ...ASHFALL, roles: { ...ASHFALL.roles, ...macro, rail: 'minecraft:rail' } }, { scope: 'settlement' });
+  assert.ok(!track.ok && track.errors.some((e) => /roles.rail is the railing role/.test(e)), track.errors.join(' | '));
   assert.deepEqual(CORE_ROLES.length, 11);
   // the CLI
   const f = path.join(tmp, 'b.json');

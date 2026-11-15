@@ -1278,7 +1278,7 @@ export class SimBibleBackend implements BibleBackend {
           floor: 'minecraft:polished_basalt', frame: 'minecraft:crimson_stem', accent: 'minecraft:crimson_planks', light: 'minecraft:shroomlight',
           glass: 'minecraft:red_stained_glass_pane', foundation: 'minecraft:blackstone', path: 'minecraft:coarse_dirt',
         };
-    if ((p.job.request.scope ?? 'building') === 'settlement') Object.assign(roles, { rock: 'minecraft:stone', surface: 'minecraft:grass_block', subsurface: 'minecraft:dirt', rubble: 'minecraft:cobblestone', rail: 'minecraft:rail', structure: 'minecraft:oak_planks' });
+    if ((p.job.request.scope ?? 'building') === 'settlement') Object.assign(roles, { rock: 'minecraft:stone', surface: 'minecraft:grass_block', subsurface: 'minecraft:dirt', rubble: 'minecraft:cobblestone', rail: 'minecraft:oak_fence', structure: 'minecraft:oak_planks' });
     this.charge(p, 'draft');
     return {
       ok: true,
