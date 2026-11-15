@@ -308,7 +308,7 @@ public final class SliceP0Dev {
 			});
 		// (M5 QT) Regions.quote / quoteApproved: the whole survival bill of a plan with its lot entries, read-only
 		DevBridge.register("dev.region.quote", 120_000, "{planId | sha, lotEntries?: {lot: entry}} - (M5 QT) Regions.quote (planId) or Regions.quoteApproved (sha) "
-			+ "-> {planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, thread, ms} or {refused, reason}", (req, mc) -> {
+			+ "-> {planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, terrain (QL), thread, ms} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.optStr("planId", null);
 				String sha = f.optStr("sha", null);
@@ -337,10 +337,28 @@ public final class SliceP0Dev {
 					JsonArray n = new JsonArray();
 					q.notes().forEach(n::add);
 					o.add("notes", n);
+					JsonObject tr = new JsonObject();
+					q.terrain().forEach(tr::addProperty);
+					o.add("terrain", tr);
 					o.addProperty("thread", thread[0]);
 					o.addProperty("ms", (System.nanoTime() - t0[0]) / 1e6);
 					return o;
 				}));
+			});
+		// (QL gate) a plan's kept paid terrain cells, read-only: the gate picks one standing cell to change between two quotes
+		DevBridge.register("dev.ql.terrainCells", 60_000, "{planId | sha, max?: 64} - (QL gate) up to max of the plan's kept paid terrain cells "
+			+ "(plan.json survivalTerrain) -> {planId, cells: [{group, state, x, y, z, loaded, standing}]}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String planId0 = f.optStr("planId", null);
+				String sha = f.optStr("sha", null);
+				int max = req.has("max") ? req.get("max").getAsInt() : 64;
+				return ServerTasks.callOnServer(s -> {
+					String planId = planId0 != null ? planId0 : sha == null ? null : ArchitectApi.get().regions().artifact(sha).map(a -> a.planId()).orElse(null);
+					JsonObject o = new JsonObject();
+					o.addProperty("planId", planId);
+					o.add("cells", dev.larattalabs.architect.region.Quotes.devTerrainCells(s, planId, max));
+					return o;
+				});
 			});
 		DevBridge.register("dev.qt.templateBom", 30_000, "{entry} - (M5 QT gate) an entry's template bill (Builder.templateBom: its template's cells only, the plan "
 			+ "check's lot bill) -> {entry, bom} or {missing}", (req, mc) -> {

@@ -31942,7 +31942,7 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | instant town grown in survival | consumed 231 = quote; undo 231; lamp stands (2/2 cells); remove refunds 0, E-flat 0 | neither |
 | region remove | back 509 = paid records; E-flat 0 | neither |
 
-## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; DRAFT for Steward's review)
+## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
 
 Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
 by a terrain cell before the realise reaches it. **Additive API change, binary compatible.**
@@ -31962,3 +31962,14 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
 - **Gate:** units (split, 0 keys, clamp, x03, one cell changed between two quotes: only `terrain`, `bom` and `tiles:<group>` move, by one);
   `bc-x03` extended in game with the one-cell drift; `bc-cap`; api-compat `--baselines`. **Steward RC:** `terrain`, `quoteTerrain`, a
   `maxBill` built from it realising past a one-cell drift.
+
+### Changes from Steward's review (2026-11-14, through the coordinator: accepted on all three points)
+
+- **Zero keys:** confirmed. Steward builds `maxBill` over `bom` ∪ `terrain` keys, so a 0-count terrain item gets its allowance of 2.
+- **The allowance base is the terrain part:** `cap[item] = bom[item] + max(2, ceil(2% × terrain[item]))` for a terrain item; lot material
+  (and every other item) stays exact. Without `quoteTerrain` Steward keeps every item exact.
+- **Unkept cells** stay outside `terrain`: accepted.
+- **Steward RC areas:** a module quote, a survival region growth's quote, and `maxBill` at realise. **Tests:** a module quote with terrain
+  lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
+  one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
+

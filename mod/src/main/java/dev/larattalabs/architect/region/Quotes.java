@@ -143,6 +143,7 @@ public final class Quotes {
 			notes.add("tiles: " + standing.unloaded() + " paid terrain cell(s) are in chunks not loaded: billed (they may already stand: consumed "
 				+ "at most this quote)");
 		}
+		Map<String, Integer> terrain = standing.terrain(); // (QL) clamped to the whole bom below
 		String mayHold = mayAlreadyHold(tiles, standing.covered());
 		if (mayHold != null) {
 			bill.exact = false;
@@ -233,7 +234,8 @@ public final class Quotes {
 		}
 		notes.add("the region's cells are the kit's bill over the plan survey; lots and roads are measured over the land now (loaded chunks), "
 			+ "before the plan's own tiles write");
-		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bill.bom(), bill.parts, bound, bill.exact, notes);
+		JsonObject bom = bill.bom();
+		return new Quote(p.planId(), sha, revision ? rec.id : null, true, bom, bill.parts, bound, bill.exact, notes, clamp(terrain, bom));
 	}
 
 	/**
@@ -264,6 +266,59 @@ public final class Quotes {
 			}
 		}
 		return over;
+	}
+
+	/**
+	 * (QL, a gate hook's reader) Up to {@code max} of a plan's kept paid terrain cells (plan.json's {@code survivalTerrain}), in the plan's
+	 * order: {group, state, x, y, z, standing (the world holds the state now), loaded}. Read-only. Server thread.
+	 */
+	public static com.google.gson.JsonArray devTerrainCells(MinecraftServer s, String planId, int max) {
+		com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+		RegionsImpl.PlanRec p = planId == null ? null : RegionsImpl.planRec(planId);
+		ServerLevel level = p == null ? null : Sites.levelOf(s, p.dimension());
+		if (level == null || !(p.planned().get("survivalTerrain") instanceof JsonObject t)) {
+			return out;
+		}
+		for (var g : new TreeMap<>(t.asMap()).entrySet()) {
+			if (!(g.getValue() instanceof com.google.gson.JsonArray rows)) {
+				continue;
+			}
+			for (JsonElement row : rows) {
+				if (!(row instanceof JsonObject r) || !(r.get("state") instanceof JsonElement se) || !(r.get("cells") instanceof JsonElement ce)) {
+					continue;
+				}
+				java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(ce.getAsString())).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+				while (b.remaining() >= 12 && out.size() < max) {
+					int x = b.getInt(), y = b.getInt(), z = b.getInt();
+					JsonObject c = new JsonObject();
+					c.addProperty("group", g.getKey());
+					c.addProperty("state", se.getAsString());
+					c.addProperty("x", x);
+					c.addProperty("y", y);
+					c.addProperty("z", z);
+					boolean loaded = level.hasChunk(x >> 4, z >> 4);
+					c.addProperty("loaded", loaded);
+					boolean standing = false;
+					if (loaded) {
+						try {
+							standing = level.getBlockState(new BlockPos(x, y, z)) == Packed.parse(se.getAsString());
+						} catch (RuntimeException e) {
+							standing = false;
+						}
+					}
+					c.addProperty("standing", standing);
+					out.add(c);
+				}
+			}
+		}
+		return out;
+	}
+
+	/** (QL) {@link Quote#terrain}: each terrain count clamped to [0, its bom count] (a 0 key stays: the item is still a terrain item). */
+	static Map<String, Integer> clamp(Map<String, Integer> terrain, JsonObject bom) {
+		Map<String, Integer> out = new TreeMap<>();
+		terrain.forEach((k, v) -> out.put(k, Math.max(0, Math.min(v, bom.get(k) instanceof JsonElement e && e.isJsonPrimitive() ? e.getAsInt() : 0))));
+		return out;
 	}
 
 	/** (SA, A11) The common terrain blocks, besides the tag rule ({@link CellCond#natural}): a grade's or a fill's usual materials. */
@@ -329,6 +384,19 @@ public final class Quotes {
 	 * ({@code off}: a realise skips them), the items of every kept cell ({@code covered}) and how many could not be read (chunk not loaded).
 	 */
 	record Standing(Map<String, Map<String, Integer>> off, Map<String, Map<String, Integer>> covered, int offCells, int unloaded) {
+		/**
+		 * (QL) The units the kept cells bill, per item over every group: covered less off (a standing cell in neither), every covered item a
+		 * key, 0 included. Not yet clamped to the bom ({@link Quotes#clamp}).
+		 */
+		Map<String, Integer> terrain() {
+			Map<String, Integer> out = new TreeMap<>();
+			covered.forEach((g, its) -> its.forEach((k, v) -> {
+				int n = v - off.getOrDefault(g, Map.of()).getOrDefault(k, 0);
+				out.merge(k, Math.max(0, n), Integer::sum);
+			}));
+			return out;
+		}
+
 		String offText() {
 			List<String> out = new ArrayList<>();
 			off.forEach((g, its) -> {
