@@ -2442,6 +2442,19 @@ public final class Stockpiles {
 		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt());
 		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
 		dropOverflow(srv, p, cr.overflow(), fallback);
+		// (J2, RL6) a construction delta's swap built after the save: the builder gave the old block back out of the record as it swapped
+		// (Builder.refundSwap -> giveBackPaid: fromPaid under the target's key, then giveBack), and the unsaved ledger lost that. Done again
+		// here, the same way, before the new block is charged. Once: the swap's give-back and its new block's charge are booked in the same
+		// tick, so a saved ledger that holds the give-back holds the cell as standing paid in its book too (never ahead); the book written
+		// below counts the cell standing, so a second load finds nothing ahead
+		Map<String, Integer> swapOld = swapOldCost(level, r, ahead, free);
+		Map<String, Integer> swapBack = swapOld.isEmpty() ? Map.of() : p.ledger.fromPaid(id, swapOld, t instanceof Site st2 ? st2.placedAt()
+			: ((Infra) t).placedAt());
+		StockLedger.Credit scr = swapBack.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(swapBack, cap, Stockpiles::maxStack);
+		dropOverflow(srv, p, scr.overflow(), fallback);
+		if (!swapBack.equals(swapOld)) {
+			Architect.LOGGER.warn("Stockpile {}: the reconcile's swap give-back of {} capped at the record: {} of {}", p.owner, id, swapBack, swapOld);
+		}
 		// the world ahead: charged now while the stock affords it, the rest owed
 		java.util.BitSet owed = b.owed();
 		owed.clear();
@@ -2501,6 +2514,7 @@ public final class Stockpiles {
 		o.add("owes", Builder.counts(owes));
 		o.add("creditedBack", Builder.counts(cr.returned()));
 		o.add("overflow", Builder.counts(cr.overflow()));
+		o.add("swapBack", Builder.counts(scr.returned())); // (J2, RL6) the swaps' old blocks given back
 		o.addProperty("reopened", reopen);
 		o.addProperty("playerCells", playerCells); // (J1) ahead cells a player placed: not charged
 		LAST_RECONCILE.put(id, o);
@@ -2511,6 +2525,24 @@ public final class Stockpiles {
 				reopen ? "; it builds again" : "");
 		}
 		return moved;
+	}
+
+	/**
+	 * (J2, RL6) The old blocks' cost of the ahead cells that are a construction delta's swaps, as {@link Builder}'s refundSwap counts it (a
+	 * swap cell, its old block known, not free), less a cell a player placed (its PT record: the reconcile leaves it uncharged and gives
+	 * nothing back for it either).
+	 */
+	static Map<String, Integer> swapOldCost(ServerLevel level, Builder.Run r, java.util.BitSet ahead, java.util.BitSet free) {
+		Map<String, Integer> out = new TreeMap<>();
+		if (r.old == null) {
+			return out;
+		}
+		for (int i = ahead.nextSetBit(0); i >= 0; i = ahead.nextSetBit(i + 1)) {
+			if (Builder.swapRefunds(r, i, free) && dev.larattalabs.architect.placed.Placed.record(level, r.pos(i)) == null) {
+				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			}
+		}
+		return out;
 	}
 
 	static volatile int worldSaves;

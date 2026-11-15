@@ -3191,9 +3191,14 @@ public final class Builder {
 	/** Dev trace (ARCHITECT_TRACE_REFUNDS=1): every refunded cell in the log. */
 	static final boolean TRACE_REFUNDS = System.getenv("ARCHITECT_TRACE_REFUNDS") != null;
 
+	/** (J2, RL6) Whether cell {@code i}'s swap gives its old block back (refundSwap's rule; the reconcile's redo uses it too). */
+	static boolean swapRefunds(Run r, int i, BitSet free) {
+		return r.old != null && r.old[i] != null && !free.get(i);
+	}
+
 	/** A swap: the old block's item goes to the crate's cell (when it was paid), and the cell counts as paid for its new block. */
 	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free, Purse purse) {
-		if (r.old != null && r.old[i] != null && !free.get(i)) {
+		if (swapRefunds(r, i, free)) {
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(r.old[i]).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
 			if (TRACE_REFUNDS) {
