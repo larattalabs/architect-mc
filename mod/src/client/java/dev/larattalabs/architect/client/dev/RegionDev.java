@@ -382,12 +382,13 @@ public final class RegionDev {
 					}));
 			});
 		DevBridge.register("dev.region.hash", 4 * 3_600_000L, "{box | region (its claim + margin), margin?: 8, ySpan?: [y0,y1], exclude?, mode?: hash|snap|diff, "
-			+ "file?, cells?} - phase 4e/6a: SHA-256 over states and BE NBT; sliced over ticks per 64x64 tile (snap: to a file; diff: against one, "
+			+ "file?, cells?, dimension? ((7c CP) a box in another level; sliced)} - phase 4e/6a: SHA-256 over states and BE NBT; sliced over ticks per 64x64 tile (snap: to a file; diff: against one, "
 			+ "every mismatch classified); a small box without region/mode answers at once as in 4e", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String mode = f.optStr("mode", null);
 				String region = f.optStr("region", null);
-				if (mode == null && region == null && req.has("box")) {
+				String dim = f.optStr("dimension", null);
+				if (mode == null && region == null && dim == null && req.has("box")) {
 					int[] b = JournalDev.six(req.get("box"));
 					long volume = (long) (b[3] - b[0] + 1) * (b[4] - b[1] + 1) * (b[5] - b[2] + 1);
 					if (volume <= 8_000_000) {
@@ -417,7 +418,10 @@ public final class RegionDev {
 						req.getAsJsonArray("exclude").forEach(e -> ex.add(JournalDev.six(e)));
 					}
 					Path file = req.has("file") ? Path.of(req.get("file").getAsString()) : null;
-					ServerLevel level = s.overworld();
+					ServerLevel level = dim == null ? s.overworld() : dev.larattalabs.architect.site.Sites.levelOf(s, dim);
+					if (level == null) {
+						throw new DevBridge.DevException("no loaded dimension " + dim);
+					}
 					int limit = req.has("limit") ? req.get("limit").getAsInt() : 2000; // (6c RS) the mismatches listed
 					return RegionHash.start(level, box, ex, mode == null ? "hash" : mode, file, limit).thenApply(o -> {
 						JsonArray bb = new JsonArray();

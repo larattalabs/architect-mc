@@ -1551,6 +1551,7 @@ export const RegionComposeMsg = z.object({
   opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional().describe('the same key and body adopt the first design; another body: op_key_conflict'),
   owner: Owner.optional(),
   ext: Ext.optional().describe('kept on the design; on the sim backend only, ext["architect:simCompose"] scripts the rounds\' answers ({plan, reason} per round) and ext["architect:simAnswers"] the pick\'s'),
+  dimension: z.string().max(200).optional().describe("(7c CP) the claim's level when it is not the Overworld (the mod checks every round and plans a pick there); absent: the Overworld"),
 });
 /**
  * (7c AU, feature region.author; docs/CONTRACT.md "Phase 7c" §3 row 13) Program authoring: a design (kind "program") whose rounds (at

@@ -53,7 +53,8 @@ class Api7cFTest {
 	void requestRecords() {
 		ComposeRequest c = new ComposeRequest("b", CLAIM, "s", true, 1.5, "k", null);
 		assertEquals(new JsonObject(), c.ext(), "a null ext is empty");
-		assertEquals(List.of("brief", "claim", "styleId", "images", "budgetUsd", "opKey", "ext"), names(ComposeRequest.class));
+		// (7c CP appends level and owner after the frozen seven; the frozen constructor stays: ApiCPTest)
+		assertEquals(List.of("brief", "claim", "styleId", "images", "budgetUsd", "opKey", "ext", "level", "owner"), names(ComposeRequest.class));
 		assertEquals(List.of("brief", "claim", "planId", "partId", "budgetUsd", "opKey", "ext"), names(AuthorRequest.class));
 		assertEquals(List.of("kind", "from", "to", "styleId", "params", "mode", "opKey"), names(ConnectorRequest.class));
 		assertEquals(new JsonObject(), new ConnectorRequest("ladder", BlockPos.ZERO, BlockPos.ZERO, null, null, Mode.INSTANT, "k").params());
