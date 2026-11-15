@@ -42,10 +42,10 @@ public final class ApiRules {
 		"kitVersion", "sitesLoadHealthy", "maxBill",
 		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
 		"quoteTerrain",
-		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion",
 		// (DR) Sites.diagnose and Sites.repair (an op's roll-forward of cells lagging the journal); Sites.suspects (the auto-diagnose's cache)
-		"diagnoseRepair", "repairSuspects");
+		"diagnoseRepair", "repairSuspects",
+		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
+		"apiVersion");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:
