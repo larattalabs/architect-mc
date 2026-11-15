@@ -32662,20 +32662,17 @@ No API surface change.
 
 ### Slice CS as built (branch `slice/CS` off main de4c88ac; versions NEXT; $0; light; recorded 2026-11-15)
 
-LEFTOVERS "CS composite and site edges". **API (additive, Steward reviews):** `DesignRequest.inverted` (28th component; the 27-argument
-constructor kept, every wither keeps it, `withInverted`), feature `invertedDesigns` (helper `design.inverted`, appended last); new detail
-`composite` on `VERSION_REFUSED` and on `follow`'s `NOT_ALLOWED`; `Library.delete` of a composite also trashes its modules, of a module alone false.
-- **SR pass-through:** variant and re-skin keep the source request's `allowComposite` and install a composite as a new composite entry with its
-  own modules; polish, versionOf, revert and follow of a composite or hidden module refuse at the request (`composite`): a new version would
-  need its modules versioned, which no path does. Site variants stay refused (SR reading 2). Group copies of a composite archetype keep falling back.
-- **CM-b:** delete cascade (client, headless bridge, API); batch item refusal kept (persistence, strict); the mid-batch rollback stays for the release run.
-- **CM-a:** stone under the four corner towers (goldens re-cut), so cmb-ingame's dirt_path allowance is gone; its item now asks `allowComposite`
-  (SR made it required; the step had not run since) and checks the delete; JOINT_FACING isolated in a test; vertical joints intended (pinned).
-- **PL, DS:** intended as recorded (CLEAR re-plan over KEEP, the queue persists no site, polish has no site check); pinned in ApiCSTest.
-- **US:** the brief's "Inverted lot" section, refused without a suspend site or helper, a versionOf keeps it; upside_down waits on R2.
-- **HR:** the ghost was closed by SR Fix 2; hidden_village and secret_tunnels wait on R2 (forms as land) and CN (hatch into a tunnel).
-- **SR Fix 1:** designs.ts, cm-b.test, the castle, composite.mjs and LibraryFeature joined the CM-b impact rule (cmb-ingame).
-- **Checks** ($0, no in-game run, rule 11.1): `unit-scope --run` kit PASS; sidecar 573/574 (eval.e2e's sim tier lost its sidecar under load,
-  4/4 alone; cm-b 5/5, cs-inverted 5/5 new); Gradle full 1340, 1 fail (Api7bFTest's last-component check, updated: 12/12 with ApiCSTest 7/7);
-  api-compat --baselines 8/8 clean (Steward's jar too); step-inputs check clean (426); gitleaks clean. For the release run: cmb-ingame (now
-  allowComposite, exact verify, the delete), cmb-crash, a module's mid-batch rollback, a region realise with an inverted lot.
+LEFTOVERS "CS composite and site edges". **API (additive):** `DesignRequest.inverted` (28th component, the 27-arg constructor kept, withers keep
+it, `withInverted`; feature `invertedDesigns` from helper `design.inverted`); detail `composite` on `VERSION_REFUSED` and follow's `NOT_ALLOWED`;
+`Library.delete` of a composite trashes its hidden modules, of a module alone answers false. No Architect path designs site lots: Steward sets
+`inverted` from the artifact's `$.lots[].inverted`.
+- **SR:** a variant or re-skin keeps the source request's `allowComposite` and installs a new composite with its own modules; polish, versionOf,
+  revert and follow of a composite or module refuse at the request (a new version would need its modules versioned). Site variants stay refused.
+- **CM-b:** the delete cascade (client, headless, API); a batch item's composite refusal kept (persistence is strict work).
+- **CM-a:** stone under the corner towers (cm-a goldens re-cut), so cmb-ingame verifies exactly; its item now asks `allowComposite` (required
+  since SR) and checks the delete; JOINT_FACING isolated; vertical joints intended (pinned).
+- **PL, DS, HR, US:** PL/DS refusals intended as recorded (pinned in ApiCSTest); HR's ghost closed by SR; hidden_village, secret_tunnels and
+  upside_down wait on R2/CN; the US brief gains an "Inverted lot" section.
+- **Checks** ($0, rule 11.1): kit PASS; sidecar 573/574 (eval.e2e lost its sidecar under load, 4/4 alone); Gradle 1340 with Api7bFTest's
+  component check updated (12/12, ApiCSTest 7/7); api-compat 8/8 (Steward's jar too); step-inputs clean; gitleaks clean. Release run: cmb-ingame,
+  cmb-crash, a module's mid-batch rollback, an inverted lot's realise. Leftover: a group copy of a composite archetype falls back to an original.
