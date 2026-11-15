@@ -323,6 +323,154 @@ export async function registerRL(steps, h) {
     return { ...n, placed, playerCells: pc, reconciled: rc, unpaidAtLoad, ...rest };
   }
 
+  // ------------------------------------------------------------------ (J2 item 3: J1's deferred gate-only cases)
+
+  /** (J2) rs_hut's next version with spruce walls (G.designs' rs_hut, walls swapped): every wall cell a changed cell (a swap). */
+  async function hutV2() {
+    const { Blueprint, palette } = await h.imp('lib/kit.mjs');
+    const { writeBlueprint } = await h.imp('lib/write.mjs');
+    const X = 6, Z = 4, H = 4;
+    const bp = new Blueprint({ id: 'rs_hut', name: 'rs_hut', description: 'RS rs_hut', type: 'custom', profile: ['door', 'lit'], size: [X + 1, H + 1, Z + 5], origin: [0, 0, 0], groundY: 1, front: 'south', palette: palette({}), approach: false, interior: [1, 1, 1, X - 1, H - 1, Z - 1] });
+    bp.part('main', () => bp.room([0, 0, 0, X, H, Z], { wall: 'minecraft:spruce_planks', floor: 'minecraft:cobblestone', ceiling: 'minecraft:oak_planks', corners: 'minecraft:oak_log' }));
+    bp.part('openings', () => { bp.door(3, 1, Z, 'south'); bp.set(1, 2, Z, 'minecraft:glass_pane'); bp.set(5, 2, Z, 'minecraft:glass_pane'); bp.set(3, 3, 1, 'minecraft:wall_torch', { facing: 'south' }); bp.set(3, 3, 0, 'minecraft:copper_block'); });
+    bp.part('approach', () => bp.floor(2, Z + 1, 4, Z + 4, 0, 'minecraft:gravel'));
+    bp.spot('entrance', 3, Z + 1, 180);
+    bp.spot('spawn', 3, Z + 3, 180);
+    const dir = path.join(h.OUT, 'rs_hut-v2');
+    fs.rmSync(dir, { recursive: true, force: true });
+    writeBlueprint(bp, dir);
+    return call('dev.entry.installVersion', { entry: 'rs_hut', dir, summary: 'J2 spruce walls' }, 60_000);
+  }
+
+  /** (J2) The apitest mod's async answer (`/apitest <args>`, then `get <key>` until it has a value). */
+  async function apiLater(args, timeoutMs = 120_000) {
+    const one = async (a) => {
+      const r = await cmd(`/apitest ${a}`);
+      const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null');
+      return line === undefined ? null : JSON.parse(line);
+    };
+    const p = await one(args);
+    if (!p?.pending) return p;
+    for (const end = Date.now() + timeoutMs; Date.now() < end;) {
+      const r = await one(`get ${p.pending}`);
+      if (r && r.value !== undefined && r.value !== null) return r.value;
+      await L.sleep(500);
+    }
+    return { refused: `no answer for ${args}` };
+  }
+
+  /** (J2) Delivers `fraction` of what one target lacks (its own outstanding less the stock), in one insert. */
+  async function deliverTo(id, fraction) {
+    const ps = await pile();
+    const need = {};
+    for (const [it, n] of Object.entries(ps.targets?.[id]?.outstanding ?? {})) {
+      const lack = n - (ps.stock?.[it] ?? 0);
+      if (lack > 0) need[it] = fraction >= 1 ? lack : Math.max(1, Math.floor(lack * fraction));
+    }
+    const acc = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
+    return { need, acc };
+  }
+
+  /**
+   * (J2 item 3a, RL "Known open") Crash + swap: the lot built, a construction delta to rs_hut v2 (its walls swapped, oak to spruce planks)
+   * queued; the lot paused, half of what it lacks delivered, the ledger saved (/save-all flush), the lot resumed: it swaps cells after the
+   * save until it starves; 12 s; a halt with nothing saved. After the restart: no cell stands unpaid, a second load changes nothing, fed
+   * until built: the paid cells standing equal the paid records and what the targets took equals what their records gained.
+   */
+  async function swapCase(tag) {
+    const W = await world(`G6B RL ${tag}`);
+    const lot = await lotPaused(tag);
+    if (!lot) { await L.leaveWorld(); return null; }
+    await deliver(1);
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
+    let built = false;
+    for (let i = 0; i < 300 && !built; i++) { built = !(await pile()).targets?.[lot] || (await call('dev.site.state', { site: lot }, 30_000).catch(() => ({}))).state === 'BUILT'; if (!built) { await deliver(1); await L.sleep(2000); } }
+    check(built, `${tag}: ${lot} built at v1 (rs_hut)`);
+    const v = await hutV2();
+    check((v?.version ?? 0) >= 2, `${tag}: rs_hut v2 installed (spruce walls): ${json(v)}`);
+    const d = await apiLater(`applydelta ${lot} ${v.version} ${G.OWNER}`);
+    check(d?.applied === true, `${tag}: the construction delta v1 -> v${v.version} of ${lot} queued (${json(d?.refusals ?? d?.to ?? d)}; refund ${json(d?.refund)})`, d);
+    if (!d?.applied) { await L.leaveWorld(); return null; }
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: true }, 60_000);
+    await quiet();
+    const half = await deliverTo(lot, 0.5);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/save-all flush');
+    const s0 = await savedNow();
+    const b0 = { ledger: ledgerOf(s0.file) };
+    const lot0 = (await pile()).targets?.[lot] ?? {};
+    check(sum(half.acc) > 0 && b0.ledger, `${tag}: half of the swap's bill delivered (${sum(half.acc)} of ${sum(half.need)}) and the ledger saved (save #${s0.saves}) with ${lot} paused at ${lot0.built}/${lot0.queued}`);
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
+    check(await quiet(), `${tag}: ${lot} swapped cells after the save until it starved`);
+    const lot1 = (await pile()).targets?.[lot] ?? null;
+    await call('dev.wait', { ms: 12_000 }, 60_000);
+    const s1 = await savedNow();
+    check(s1.saves === s0.saves, `${tag}: nothing saved the ledger between the case's save and the halt (save #${s1.saves})`);
+    check(!!lot1 && (lot1.built ?? 0) > (lot0.built ?? 0), `${tag}: ${lot} swapped after the save: ${lot0.built} -> ${lot1?.built}/${lot1?.queued} (mid-swap at the halt)`);
+    if (!(await halt(tag))) return null;
+    await restart(W);
+    const r = await after(tag, W, { b0 }, { lot });
+    await L.leaveWorld();
+    const { a1, ...rest } = r;
+    return { lot, delta: { to: d.to, refund: d.refund }, lotAtSave: lot0, lotAtHalt: lot1, reconciled: a1?.reconciled?.[lot] ?? null, ...rest };
+  }
+
+  /**
+   * (J2 item 3c, RL "Known open") A halted terrain target: one of the town's RegionTargets (dev.rs.cells) with paid cells still unbuilt,
+   * paused while the rest is fed; half of what it lacks delivered, the ledger saved, the target resumed: it builds after the save until it
+   * starves; 12 s; a halt with nothing saved. After the restart: the reconcile found its cells built after the save; no cell stands unpaid;
+   * a second load changes nothing; fed until built: standing = the paid records, taken = what the records gained.
+   */
+  async function terrainCase(tag) {
+    const W = await world(`G6B RL ${tag}`);
+    let T = null;
+    for (let i = 0; i < 60 && !T; i++) {
+      const rs = await call('dev.rs.cells', { region: W.region }, 300_000).catch(() => ({}));
+      const paidLeft = (t) => (t.cells ?? []).filter((c) => !(c[3] & 1) && !(c[3] & 2) && !(c[3] & 4)).length;
+      const cand = (rs.targets ?? []).filter((t) => !/^[cr]\d/.test(t.target) && paidLeft(t) >= 8).sort((a, b) => paidLeft(b) - paidLeft(a));
+      T = cand[0] ?? null;
+      if (!T) await L.sleep(2000);
+    }
+    check(!!T, `${tag}: a terrain target of the town with paid cells to build: ${T ? `${T.target} (part ${T.part})` : 'none'}`);
+    if (!T) { await L.leaveWorld(); return null; }
+    const id = T.target;
+    const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+    check(!pr.refused, `${tag}: ${id} paused: ${json(pr.refused ?? 'paused')}`);
+    await deliver(1, (k) => k === id);
+    await quiet();
+    const half = await deliverTo(id, 0.5);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/save-all flush');
+    const s0 = await savedNow();
+    const b0 = { ledger: ledgerOf(s0.file) };
+    const t0 = (await pile()).targets?.[id] ?? {};
+    check(sum(half.acc) > 0 && b0.ledger, `${tag}: half of what ${id} lacks delivered (${sum(half.acc)} of ${sum(half.need)}) and the ledger saved (save #${s0.saves}) with it paused at ${t0.built}/${t0.queued}`);
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: false }, 60_000);
+    check(await quiet(), `${tag}: ${id} built after the save until it starved`);
+    const t1 = (await pile()).targets?.[id] ?? null;
+    await call('dev.wait', { ms: 12_000 }, 60_000);
+    const s1 = await savedNow();
+    check(s1.saves === s0.saves, `${tag}: nothing saved the ledger between the case's save and the halt (save #${s1.saves})`);
+    check(!!t1 && (t1.built ?? 0) > (t0.built ?? 0), `${tag}: ${id} built after the save: ${t0.built} -> ${t1?.built}/${t1?.queued}`);
+    if (!(await halt(tag))) return null;
+    await restart(W);
+    const r = await after(tag, W, { b0 }, { lot: id });
+    const rc = r.a1?.reconciled?.[id] ?? null;
+    check(rc && rc.aheadCells > 0, `${tag}: the reconcile read ${id}'s book: ${rc ? `${rc.aheadCells} cell(s) built after the save, charged ${sum(rc.charged)}, owes ${sum(rc.owes)}` : 'not reconciled'}`, rc);
+    await L.leaveWorld();
+    const { a1, ...rest } = r;
+    return { target: id, part: T.part, atSave: t0, atHalt: t1, reconciled: rc, ...rest };
+  }
+
+  steps.rlj2 = async () => {
+    await ensure();
+    const out = {};
+    out.RL6 = await swapCase('RL6');
+    out.RL7 = await terrainCase('RL7');
+    spendZero();
+    return out;
+  };
+
   steps.rlcrash = async () => {
     await ensure();
     const out = {};
