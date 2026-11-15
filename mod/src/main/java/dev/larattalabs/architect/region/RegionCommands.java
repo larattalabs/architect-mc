@@ -110,6 +110,14 @@ public final class RegionCommands {
 		return src.getTextName();
 	}
 
+	/**
+	 * (7c CN) A region a player placed outside the commands (the Build a link path): {@code /architect region remove} (and state) with no
+	 * id then name it. {@code who} is the player's name (a player source's text name).
+	 */
+	public static void rememberRegion(String who, String regionId) {
+		LAST_REGION.put(who, regionId);
+	}
+
 	private static void say(CommandSourceStack src, Component c) {
 		src.getServer().execute(() -> src.sendSuccess(() -> c, false));
 	}
@@ -336,7 +344,11 @@ public final class RegionCommands {
 			return 0;
 		}
 		src.sendSuccess(() -> Component.literal("Removing region " + id + "..."), false);
-		ArchitectApi.get().regions().remove(id, new RemoveOptions(false, null, null)).whenComplete((r, e) -> {
+		// ((7c CN) a player's own link (Build a link: the region owned by the player's UUID) is removed as its owner, never forced)
+		String me = src.getPlayer() == null ? null : src.getPlayer().getUUID().toString();
+		String owner = ArchitectApi.get().regions().get(id).map(RegionView::owner).orElse(null);
+		String requester = me != null && me.equals(owner) ? me : null;
+		ArchitectApi.get().regions().remove(id, new RemoveOptions(false, requester, null)).whenComplete((r, e) -> {
 			if (e != null) {
 				fail(src, "Remove failed: " + why(e));
 			} else {

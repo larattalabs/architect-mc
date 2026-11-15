@@ -32676,3 +32676,25 @@ it, `withInverted`; feature `invertedDesigns` from helper `design.inverted`); de
 - **Checks** ($0, rule 11.1): kit PASS; sidecar 573/574 (eval.e2e lost its sidecar under load, 4/4 alone); Gradle 1340 with Api7bFTest's
   component check updated (12/12, ApiCSTest 7/7); api-compat 8/8 (Steward's jar too); step-inputs clean; gitleaks clean. Release run: cmb-ingame,
   cmb-crash, a module's mid-batch rollback, an inverted lot's realise. Leftover: a group copy of a composite archetype falls back to an original.
+
+### Slice CN as built (branch `slice/CN` off `slice/CS` 0c7c9d81; versions NEXT; no API change; $0; light; recorded 2026-11-15)
+
+LEFTOVERS "CN connectors in game". **No API change** (no record, method, reason or feature; nothing Steward calls moved).
+- **Built:** (1) **stepped branch walks** (`links.mjs` `routeBranchWalk`, `BRANCH_WALK.rise` 4): walk ports up to 4 feet rows apart route
+  one row per straight move, monotone, never on a turn; the step's higher cell is the deck's stairs (themed, `variant(deck, 'stairs')`), the lower
+  cell 3 open; the record gains `steps` only when it has some; M10:branch_walk reads each cell's own feet y. Ports at one y route as before
+  (byte-identical). Covers WL's pre-WL entries off by 1-4; 5+ rows stay `LEVEL` (typed, nothing written). (2) **The player's remove:** the
+  placed link's notes and toast name `/architect region remove <rg>`; the command removes a region as its owner when the player owns it, and
+  with no id names the player's last link. (3) **The hub's "Build a link…"** (`ArchitectScreen.java`, Library > Placed here footer; UI slice:
+  one button, `BuildLinkKey.start`). (4) **Ladder, catwalk, rock stair in game:** `fixtures/plan/cn/` lands (ConnectorPlace's plan shape,
+  READY fits in cn.test), step `cn-ingame` (chain `7ccn`). (5) **A revision of an IR-v2 region** (kit): keep + add; canopy and link stand,
+  no site_links/portLinks/linked in the revision IR.
+- **Intended:** owner/dimension in params (7cF froze the record; the player path is integrated-server only, multiplayer needs a packet: UI);
+  composited blocks as link support (plan time has no design blocks, and IR v2 must equal IR v1 plus links); SL's three asks (the asks' land
+  has no canopy/overhang/swamp: us.test's shelves and sl.test's canopy fit); WL's pre-WL entries (typed NO_LINK; up to 4 rows now step).
+- **Deferred:** pad-lot ports (LotFitting frames pads at tryStart); rope bridges at a port and CL's ladder to a walk port (one-ended port links
+  plus a PORT_LINK_KINDS/catalogue change; CL with R2's "region ladder becomes a port"); SB's second trunk port (`choosePort` would flip
+  standing plans to a port installed entries lack: needs an opt-in); HR's hatch into a tunnel (a vertical port link; street lots have no
+  cellar door); the drop-to-link with a placed site house in game (release run). **Links in survival: design note only (strict, billing):** the
+  link's cells exist only in IR v2, made at realise after binding, so the check's quote never bills them; a survival link needs either a
+  plan-time bill from the sites' ports held to QD's "up to N" bound at realise, or a second target with its own quote and approval.
