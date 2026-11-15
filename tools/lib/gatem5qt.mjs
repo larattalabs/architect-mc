@@ -108,7 +108,11 @@ export async function registerQT(steps, h) {
     const ps1 = await pile();
     const paid = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
     const want = q.bom ?? {};
-    check(Object.keys(want).length >= 1 && G.same(want, paid), `${label}: the materials consumed equal the quote item for item: quote ${json(want)}, consumed ${json(paid)} (${f.waves} feed waves)`, { want, paid, diff: G.minus(paid, want), parts: q.bomParts });
+    // (QL-b) an exact quote is what the realise consumes; an inexact one is an upper bound, item for item (consumed <= quote: never more). A lot's
+    // fill or approach cells the land already holds are billed and make it inexact: the realise plans them over the land its tiles leave
+    const under = Object.entries(paid).filter(([k, n]) => n > (want[k] ?? 0));
+    const ok = q.exact === true ? G.same(want, paid) : under.length === 0;
+    check(Object.keys(want).length >= 1 && ok, `${label}: the materials consumed ${q.exact === true ? 'equal the (exact) quote item for item' : 'stay within the (upper-bound) quote item for item'}: quote ${json(want)}, consumed ${json(paid)} (${f.waves} feed waves)${q.exact === true ? '' : `; notes ${json((q.notes ?? []).filter((n) => /fill or approach/.test(n)))}`}`, { want, paid, diff: G.minus(paid, want), under, parts: q.bomParts, exact: q.exact });
     return { paid, want, waves: f.waves, last: f.last };
   }
 

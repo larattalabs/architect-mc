@@ -23,18 +23,17 @@ public final class LotBillDebug {
 	/** At most this many cells are listed per list. */
 	static final int MAX = 64;
 
-	public static @Nullable JsonObject of(ServerLevel level, Blueprint bp, Sites.Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked,
-		java.util.@Nullable Map<Long, BlockState> ground) {
+	public static @Nullable JsonObject of(ServerLevel level, Blueprint bp, Sites.Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
 		if (v.plan() == null || !v.construction()) {
 			return null;
 		}
 		FullBom.Inputs in = FullBom.inputs(level, bp, v.plan());
-		FullBom.Result r = FullBom.of(level, bp, v.plan(), ground);
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
 		if (r == null) {
 			return null;
 		}
 		JsonObject o = new JsonObject();
-		o.addProperty("groundCells", ground == null ? 0 : ground.size());
+		o.addProperty("standingOutside", r.standingOutside());
 		java.util.Set<Long> tpl = new java.util.HashSet<>(), fill = new java.util.HashSet<>(), appr = new java.util.HashSet<>();
 		Map<String, Integer> tplItems = new TreeMap<>(), fillItems = new TreeMap<>(), apprItems = new TreeMap<>(), otherItems = new TreeMap<>();
 		JsonArray changed = new JsonArray();

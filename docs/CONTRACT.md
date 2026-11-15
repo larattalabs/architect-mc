@@ -32360,15 +32360,17 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state goes to plan.json's `survivalTerrainWritten` (group -> {item: n},
   outside the IR, forwarded by the sidecar), which `Quotes.mayAlreadyHold` counts as covered: the shells leave the may-stand note. Farmland
   joins `TERRAIN_BLOCKS` and the mod's `TERRAIN`.
-- **Steward's 209 -> 210 (crop-farm-067):** the lot was priced over the land before the plan's own earlier tiles write. The growth's pads
-  write grass on the lot's floor row; one template dirt (1811,64,71965) sat over the land's own dirt, a no-op in FullBom's simulation, so it
-  went unbilled (209) until grass spread onto it (210); at put-down the pads' grass stands there and the realise pays it (consumed 205 + 5).
-  No mob was involved. (Billing every queued cell instead broke qt-growth: reverted.)
-- **D'' (the fix):** the kit keeps each lot's ground (plan.json `lotGround`): the writes of the tiles the realise puts down before the lot
-  under its box +-1 (earlier stages and its own stage's tiles, RegionsImpl.deps), per cell in realise order with their conditions, as column
-  runs (`LOT_GROUND_RUNS_MAX` 16384 per lot; past it {capped} and the quote names the lot inexact; about 25 KB for a 20 x 21 farm lot).
-  `Quotes.ground` applies each write where its condition passes on the cell as it then stands (not ours); FullBom prices the lot over it,
-  inside the template's box only (the fill and approach are planned over the land now, and priced so). The realise path is unchanged.
-- Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (10 pairs).
-- Units: igb (the shells' `survivalTerrainWritten`; the lot's ground), `QuotesWrittenQLBTest`, `QuotesLotGroundQLBTest`, `FullBomTest` (a lot
-  over its pads' grass bills the dirt; no ground, the land's dirt stays free).
+- **Steward's 209 -> 210 (crop-farm-067):** one template dirt (1811,64,71965) sat over the land's own dirt, a no-op in FullBom's simulation,
+  so the quote left it out (209) until grass spread onto it (210); the realise pays it either way (consumed 205 + 5). No mob was involved.
+- **The fix (after the v0.72.0 review; D'' withdrawn):** a construction lot's conversion clears every queued cell to air and the builder
+  writes each back (`Builder.planConvert`, `Builder.clear`), so every queued cell is paid, one the land already held too. `FullBom.compute`
+  now bills each queued cell at the simulation's state (the world's when the write changed nothing; only a cell that ends as air is free).
+  D'' (plan.json `lotGround`, the land the earlier tiles leave under a lot) is removed: inside the template's box every cell is the
+  template's, so the overlay could only make a cell free (the review's grass-over-grass case) or, capped, price the original land.
+  No queued cell is free in the quote, so consumed <= quote over the cells the quote's plan and the realise's share. A lot's fill or approach cells the land already holds are billed and counted (`standingOutside`): the realise
+  plans those over the land its tiles leave and can plan fewer (qt-growth's cottage: 3 approach dirt), so the quote names them and is
+  inexact. Open: a realise whose approach comes out longer than the quote's (the plan's tiles lower the land in front) can still pay more;
+  not seen in any gate. qt-growth now judges an exact quote equal and an inexact one an upper bound, item for item.
+- Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (rv3 in 10 pairs at 210).
+- Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`, `FullBomTest` (grass over grass billed as over dirt, the review's
+  case; a 96 x 96 dirt floor over dirt bills all 9216; an approach path over a standing path billed and counted).

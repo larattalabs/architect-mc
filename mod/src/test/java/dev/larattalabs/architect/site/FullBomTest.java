@@ -197,16 +197,50 @@ class FullBomTest {
 	}
 
 	@Test
-	void aLotOverItsPadsGroundBillsTheDirtThePadsCover() {
-		// (QL-b D'') cf067: a template dirt over the land's own dirt is a no-op, unbilled (qt-growth's cottage: free at put-down too); over the
-		// ground the pads leave (grass) it is billed, whether the land there is dirt or grass now
+	void aQueuedCellTheWorldAlreadyHoldsIsBilled() {
+		// (QL-b, the v0.72.0 review) the conversion clears every queued cell and the builder writes it back: a grass-floored template over grass
+		// costs its dirt as it does over dirt (the review's case: {} exact over grass vs {dirt:1} over dirt), and Steward's crop-farm-067 template
+		// dirt over the land's dirt (1811,64,71965: 209 -> 210) is billed whatever the land holds
 		int[] xyz = {0, 9, 0};
-		BlockState[] st = {Blocks.DIRT.defaultBlockState()};
+		BlockState[] grass = {Blocks.GRASS_BLOCK.defaultBlockState()};
 		long p0 = net.minecraft.core.BlockPos.asLong(0, 9, 0);
-		java.util.Map<Long, BlockState> pads = java.util.Map.of(p0, Blocks.GRASS_BLOCK.defaultBlockState());
-		FullBom.Result bare = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == p0 ? Blocks.DIRT.defaultBlockState() : air());
-		assertTrue(bare.items().isEmpty(), "no ground: the land's dirt stands, nothing to pay");
-		FullBom.Result padded = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> pads.containsKey(p) ? pads.get(p) : p == p0 ? Blocks.DIRT.defaultBlockState() : air());
-		assertEquals(1, padded.items().get("minecraft:dirt"), padded.items().toString());
+		FullBom.Result overGrass = FullBom.compute(inputs(xyz, grass, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == p0 ? Blocks.GRASS_BLOCK.defaultBlockState() : air());
+		FullBom.Result overDirt = FullBom.compute(inputs(xyz, grass, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == p0 ? Blocks.DIRT.defaultBlockState() : air());
+		assertEquals(java.util.Map.of("minecraft:dirt", 1), overGrass.items());
+		assertEquals(overDirt.items(), overGrass.items());
+		assertEquals(0, overGrass.standingOutside(), "a template cell: the same plan pays it");
+		BlockState[] dirt = {Blocks.DIRT.defaultBlockState()};
+		assertEquals(java.util.Map.of("minecraft:dirt", 1), FullBom.compute(inputs(xyz, dirt, NONE, NONE, NONE, NONE, NONE, NONE),
+			p -> p == p0 ? Blocks.DIRT.defaultBlockState() : air()).items());
+	}
+
+	@Test
+	void aLargeLotOverItsOwnLandBillsEveryCell() {
+		// (QL-b, the review's 96 x 96 lot) a dirt floor over the land's own dirt: every one of the 9216 cells is billed, so consumed <= quote
+		int n = 96;
+		int[] xyz = new int[n * n * 3];
+		BlockState[] st = new BlockState[n * n];
+		for (int i = 0; i < n * n; i++) {
+			xyz[3 * i] = i % n;
+			xyz[3 * i + 1] = 9;
+			xyz[3 * i + 2] = i / n;
+			st[i] = Blocks.DIRT.defaultBlockState();
+		}
+		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE),
+			p -> net.minecraft.core.BlockPos.getY(p) <= 9 ? Blocks.DIRT.defaultBlockState() : air());
+		assertEquals(n * n, r.items().get("minecraft:dirt"));
+	}
+
+	@Test
+	void anApproachCellTheWorldHoldsIsBilledAndCounted() {
+		// (QL-b) an approach path over a path that already stands: billed (paid when planned) and counted (the realise may plan fewer)
+		long p1 = net.minecraft.core.BlockPos.asLong(5, 9, 0);
+		FullBom.Inputs in = new FullBom.Inputs(net.minecraft.world.level.block.Rotation.NONE, NONE, new BlockState[0], (p, s) -> false, NONE, NONE, NONE, NONE,
+			new int[] {5, 9, 0}, NONE, Blocks.STONE_BRICKS.defaultBlockState(), Blocks.DIRT.defaultBlockState(), Blocks.DIRT_PATH.defaultBlockState(),
+			Blocks.STONE_BRICK_SLAB.defaultBlockState());
+		FullBom.Result r = FullBom.compute(in, p -> p == p1 ? Blocks.DIRT_PATH.defaultBlockState() : p == net.minecraft.core.BlockPos.asLong(5, 8, 0)
+			? Blocks.DIRT.defaultBlockState() : air());
+		assertEquals(java.util.Map.of("minecraft:dirt", 1), r.items());
+		assertEquals(1, r.standingOutside());
 	}
 }

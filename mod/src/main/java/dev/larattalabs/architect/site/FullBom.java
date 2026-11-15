@@ -49,7 +49,11 @@ final class FullBom {
 	static final int MAX_LISTED = 16;
 
 	/** The bill by item id, whether it is exact, and the drift cells (for the verdict's notes). */
-	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states, List<String> inexactBecause) {
+	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states, List<String> inexactBecause,
+		int standingOutside) {
+		Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states, List<String> inexactBecause) {
+			this(items, exact, driftCells, cells, states, inexactBecause, 0);
+		}
 	}
 
 	private FullBom() {
@@ -91,20 +95,7 @@ final class FullBom {
 	}
 
 	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan) {
-		return of(level, bp, plan, null);
-	}
-
-	/**
-	 * {@link #of(ServerLevel, Blueprint, Sites.SitePlan)} over the world with {@code ground} on top (QL-b D'': a quote's lot over the land as the
-	 * region's tiles before it leave it; cell -> the state they leave there). Null: the world as it is.
-	 */
-	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan, java.util.@Nullable Map<Long, BlockState> ground) {
-		// only inside the template's box: the fill and the approach outside it are planned over the land now (Sites.verdict), and priced so
-		var box = plan.box();
 		return compute(inputs(level, bp, plan), p -> {
-			if (ground != null && ground.get(p) instanceof BlockState g && inBox(box, p)) {
-				return g;
-			}
 			int x = BlockPos.getX(p);
 			int z = BlockPos.getZ(p);
 			LevelChunk c = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
@@ -118,11 +109,6 @@ final class FullBom {
 			}
 			return level.getBrightness(layer, BlockPos.of(p));
 		});
-	}
-
-	private static boolean inBox(dev.larattalabs.architect.placement.Anchors.Bounds b, long p) {
-		int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
-		return x >= b.minX() && x <= b.maxX() && y >= b.minY() && y <= b.maxY() && z >= b.minZ() && z <= b.maxZ();
 	}
 
 	/**
@@ -235,8 +221,18 @@ final class FullBom {
 		int count = 0;
 		Map<Long, BlockState> finalStates = new java.util.LinkedHashMap<>();
 		LongFunction<@Nullable BlockState> at = sim::at;
+		int standingOutside = 0;
 		for (long p : queued) {
+			// (QL-b) every queued cell is paid, one the world already held too: the conversion clears each to air and the builder writes it back
+			// (Builder.planConvert, Builder.clear), so a write that changed nothing still bills its block. Outside the template (fill, approach)
+			// such a cell is counted: a region lot's realise plans those over the land as the plan's own tiles leave it, which can differ
 			BlockState s = sim.writes.get(p);
+			if (s == null) {
+				s = sim.at(p);
+				if (s != null && !s.isAir() && !shape.contains(p)) {
+					standingOutside++;
+				}
+			}
 			if (s == null || s.isAir()) {
 				continue;
 			}
@@ -254,7 +250,7 @@ final class FullBom {
 			unknown.set("the shape updates did not settle");
 		}
 		lightGuard(sim, light, unknown);
-		return new Result(items, drift.isEmpty() && !unknown.on, drift, count, finalStates, List.copyOf(unknown.why));
+		return new Result(items, drift.isEmpty() && !unknown.on, drift, count, finalStates, List.copyOf(unknown.why), standingOutside);
 	}
 
 	/**

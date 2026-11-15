@@ -804,63 +804,8 @@ export async function planRegion(o) {
     }
   }
   const survivalTerrainWritten = Object.keys(writtenFirst).length ? Object.fromEntries(Object.keys(writtenFirst).sort().map((g) => [g, Object.fromEntries(Object.entries(writtenFirst[g]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
-  // (QL-b D'') each lot's ground as the realise puts it down: the writes of the tiles before it under its box +-1 (every earlier stage, and its
-  // own stage's tiles: RegionsImpl.deps), in realise order, by cell, with their conditions. Regions.quote applies them over the world now
-  // (each write where its condition passes) before it prices the lot, so a lot is quoted over the land its pads leave. plan.json's
-  // `lotGround`: lotId -> {seqs: [[[state, cond], ...]], runs: base64 int32 [x, z, y0, y1, seq] (column runs)}; a lot past LOT_GROUND_RUNS_MAX
-  // runs keeps {capped: n} (Regions.quote then names it inexact)
-  const lotGround = sv && Array.isArray(ir.lots) && ir.lots.length ? lotGroundOf(ir, stages, evalsOf, windows, evalBlobs) : null;
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}), ...(lotGround ? { lotGround } : {}) };
-}
-
-/** (QL-b D'') At most this many column runs per lot in plan.json's `lotGround`; past it the lot keeps {capped: n}. */
-export const LOT_GROUND_RUNS_MAX = 16384;
-
-/** (QL-b D'') plan.json's `lotGround` (see planRegion), or null when no lot has a tile write under it. */
-export function lotGroundOf(ir, stages, evalsOf, windows, blobs) {
-  const order = new Map(stages.map((s, i) => [s, i]));
-  const lots = ir.lots.filter((l) => l.box && order.has(l.stage)).map((l) => ({ id: l.id, si: order.get(l.stage), b: l.box,
-    x0: l.box.minX - 1, x1: l.box.maxX + 1, z0: l.box.minZ - 1, z1: l.box.maxZ + 1, y0: l.box.minY - 2, y1: l.box.maxY + 1, cells: new Map() }));
-  if (!lots.length) return null;
-  for (const [key, evs] of evalsOf) {
-    const [tx, tz] = key.split(',').map(Number);
-    const kx0 = tx * 64, kz0 = tz * 64;
-    const near = lots.filter((l) => l.x0 <= kx0 + 63 && kx0 <= l.x1 && l.z0 <= kz0 + 63 && kz0 <= l.z1);
-    if (!near.length) continue;
-    for (const ev of evs) {
-      const si = order.get(ev.stage);
-      const to = near.filter((l) => si <= l.si);
-      if (!to.length) continue;
-      evalTile(ir, key, windows.get(key), { stage: ev.stage, set: ev.set, countOnly: true, blobs, onWrite: (x, y, z, st, cond) => {
-        for (const l of to) {
-          if (x < l.x0 || x > l.x1 || z < l.z0 || z > l.z1 || y < l.y0 || y > l.y1) continue;
-          const id = `${x},${z},${y}`;
-          const c = l.cells.get(id);
-          if (c) c.w.push([st, cond]); else l.cells.set(id, { x, y, z, w: [[st, cond]] });
-        }
-      } });
-    }
-  }
-  const out = {};
-  for (const l of [...lots].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
-    if (!l.cells.size) continue;
-    const seqs = [], seqIdx = new Map(), runs = [];
-    const cells = [...l.cells.values()].sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y);
-    for (const c of cells) {
-      const k = JSON.stringify(c.w);
-      let si = seqIdx.get(k);
-      if (si === undefined) { si = seqs.length; seqs.push(c.w); seqIdx.set(k, si); }
-      const r = runs[runs.length - 1];
-      if (r && r[0] === c.x && r[1] === c.z && r[3] === c.y - 1 && r[4] === si) r[3] = c.y;
-      else runs.push([c.x, c.z, c.y, c.y, si]);
-    }
-    if (runs.length > LOT_GROUND_RUNS_MAX) { out[l.id] = { capped: runs.length }; continue; }
-    const buf = Buffer.alloc(runs.length * 20);
-    runs.forEach((r, i) => r.forEach((v, j) => buf.writeInt32LE(v, i * 20 + j * 4)));
-    out[l.id] = { seqs, runs: buf.toString('base64') };
-  }
-  return Object.keys(out).length ? out : null;
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}) };
 }
 
 /** (BC, A11) At most this many paid terrain cells per group are kept by position; past it the group keeps none (the quote stays an upper bound). */
