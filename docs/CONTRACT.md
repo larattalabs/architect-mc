@@ -32398,3 +32398,18 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   both ways, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
 - **Leftovers:** a later-stage tile that writes over an approach is not modelled (it does not change the lot's plan); the both-ways bound
   covers a kept build's cells all written or none, not a mix; the box's own columns are still priced over the land now (QL-b).
+
+### Slice RT as built (branch `slice/RT` off origin/slice/QLC 9ffb0cd4, which touches TileCheck; no API change; $0; strict-ish; 2026-11-15)
+
+- **Finding (PAY P2 S3):** 231 cells of the terrace wall `monastery_retain` (stage ground, spruce logs over natural grass) were logs in the
+  kit's model and air in the world: 40 open drops along the terrace front (M8 53.7%). Not same-stage ordering or IF_NATURAL: one tile (ground
+  56,-15) writes those cells, and the mod wrote them. Cause: `TileCheck`'s C31 felling. The later routes path tile 56,-14 writes a fence
+  (ALWAYS_OURS) over one wall log (3645,84,-890); `treeLog` (#logs, voxel class LOG) cannot tell a log the region built from a grown one, so
+  the write seeded a felling that flooded the connected wall to air up to that tile's window (z >= -904: the 8-cell margin). A kit
+  replay of that flood over the model's logs gives exactly the 231 differing cells. The kit models no felling; it stays the spec.
+- **Fix (`TileCheck.fellsFrom`, `fellStops`):** a cell of the region's own tile entries (`ours`) neither seeds a felling nor is felled or
+  flooded through, and is not counted in `M3:tree_kept`. Another owner's cell is still checked first; natural trees still go whole.
+- **Units:** `TileFellOwnRTTest` (a later write over the wall's own log fells nothing and the cells equal evalTile's; a grown trunk touching
+  the wall goes, the wall stays; a plain trunk goes whole; the decisions). In game: the paid plan realised on a copy of `G6B PAY P2 s3 land`.
+- **Affected:** every release since 6a (v0.11.0) whose region writes a later or neighbouring tile (or a brush stroke) over or beside its
+  own log cells; most visible since composed plans build log retaining walls.
