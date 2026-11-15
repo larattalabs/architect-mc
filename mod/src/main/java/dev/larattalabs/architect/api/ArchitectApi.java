@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.61.0";
+	String VERSION = "1.62.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -213,7 +213,7 @@ public interface ArchitectApi {
 	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists. (BC, since 1.60.0) {@code "kitVersion"}:
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
-	 * (QL, since NEXT) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
+	 * (QL, since 1.62.0) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.
