@@ -81,7 +81,8 @@ class RegionFluidsLFTest {
 
 	@Test
 	void theKindIsAppended() {
-		assertEquals(IrStale.KINDS_FORMAT2.size() - 1, IrStale.KINDS_FORMAT2.indexOf("bubbleColumns"), "appended at the end, after coralDecor");
+		// ((8aF) stagedTerrain is appended after it)
+		assertEquals(IrStale.KINDS_FORMAT2.indexOf("stagedTerrain") - 1, IrStale.KINDS_FORMAT2.indexOf("bubbleColumns"), "appended after coralDecor, before 8aF's stagedTerrain");
 		assertEquals(IrStale.KINDS_FORMAT2.indexOf("coralDecor") + 1, IrStale.KINDS_FORMAT2.indexOf("bubbleColumns"));
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "bubbleColumns"), null), "this mod reads it");
 		assertNotNull(IrStale.reason(PlanStaleTest.ir(2, IrStale.KIT_VERSION, "fluid", "bubbleColumns"), new IrStale.Hello(IrStale.KIT_VERSION, List.of(1, 2),

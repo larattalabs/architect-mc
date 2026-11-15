@@ -32659,3 +32659,35 @@ No API surface change.
 - **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
 - **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
 - **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).
+
+## Phase 8a: construction mode for forms and relief
+
+The contract (FINAL 2026-11-15: Noah's "free, 16, staged", Steward's accept) lives in the coordinator's side-session notes
+(`architect-8a-contract-draft.md`); its rows are 8aF, TO, ST, HB and QX, merged as one batch. Noah started 8a before 7c closed.
+
+### Slice 8aF as built (branch `slice/8aF` off origin/main d7d000ca; versions NEXT; $0; light; recorded 2026-11-15)
+
+- **Kit.** `markSurvival` adds `staged: true` to every op a terrain kind wrote (the ops that get `free`), except fluid ops (8c's) and a
+  brush stroke's (the player's instant tool: reading taken; "natural-only strokes inside a region" are left to ST). `walkKinds` adds
+  `stagedTerrain` (appended to `KINDS_FORMAT2`, kit and `IrStale`), so an older mod or kit refuses the IR `PLAN_STALE`.
+- **"Terrain parts in their own tile entries"**: ARTL v2 cells already carry their group, but a group can mix a terrain IR part with paid ones
+  (`town` = its `pads` + streets and props), so the per-cell class says it: **class 3 `CLASS_STAGED`** = a free-pass cell of a staged op (held
+  wins: a terrace's cut and fill stay `HELD` with its walls). Counted free, so `survival.cells`, `cost.survival` and every bill are unchanged.
+  The mod decodes it (`Packed.STAGED`, `freePass`) and `RegionTargets.split` writes it in the free pass exactly as `FREE` until ST builds
+  it as targets. Groups, journal entries and put-down are unchanged.
+- **API (NEXT, binary compatible)**: `PartBuild.terrainCells/terrainBuilt`, `RegionBuild.terrainPerTick`, `Quote.terrainCells` (old constructors
+  kept: 0 or empty until ST/QX); feature `terrainConstruction` from the helper's `region.terrainConstruction`; `RegionTargets.WAIT_KIND_TERRAIN
+  = "terrain"` pinned by a test. Dev hooks `dev.region.terrain` and `dev.terrain.rate` are ST's (they need its targets and rate).
+- **Ran**: compile; `unit-scope --run` (kit 132 files, 1071 pass; Gradle 689: one failure, `RegionFluidsLFTest` pinned `bubbleColumns` last,
+  fixed and re-run green; sidecar 566 of 568, the two `eval.e2e` sim runs timed out under the parallel dumps' load and pass 4/4 alone); api-compat `--baselines` 8 of 8 clean; gitleaks clean. Byte identity, all 454 committed plan fixtures
+  against d7d000ca: **creative IRs byte-identical (454/454)**; **survival IRs identical once `staged` and `stagedTerrain` are stripped
+  (454/454; 231 carry marks)**; rs/'s survival tiles cell-identical with class 3 read as 0 (rs01 5,586 staged cells, survival_village
+  20,394). No fixture moves, so no `*_MOVED` list changes; `asks-survival.md` is unchanged (its counts are free/held/paid).
+- **§0 drift (91ce29bf -> d7d000ca)**: versions only (v0.72.0: API 1.64.0, mod 0.72.0, kit 0.67.0); `bySupport` still BOX-only (Builder),
+  `blocksPerTick` 4, `PartBuild`/`RegionBuild`/`Quote`/`RegionTargets` unchanged; QL-b/QL-c changed the quote's land, not the free rule.
+  The free pass covers pads (always), relief, forms, scatter and stamps as §0 says. x01 plans 32,035 free cells on a flat survey
+  (§0's 32,078 is cells placed in game).
+- **For ST**: build `CLASS_STAGED` cells as fed held targets per (tile x group), separate from that group's paid/held target; fill
+  `terrainCells/terrainBuilt`, `terrainPerTick`, the typed wait (`WAIT_KIND_TERRAIN`) and the dev hooks. **TO** orders them; **HB**'s RL book
+  marks them free; **QX** fills `Quote.terrainCells` from the plan's staged counts (the kit would need to count class 3 apart: today it is
+  inside `free`).
