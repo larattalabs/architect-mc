@@ -32381,8 +32381,9 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
 
 - **The land a lot goes down on:** `Regions.quote` now plans each lot's approach over the land the realise finds (`site.QuoteLand`, set on
   the quote's thread with `QUOTE_ROADS`): every cell the plan's 4e roads write (air included), then the tiles' writes in the lot's approach
-  window, applied over the world as TileCheck decides them (a road's cell held, a failing condition skipped, the cell's own state a no-op,
-  ALWAYS_OURS over the region's own). The verdict's terrain reads (outside the placed box's columns) and the entrance style's surfaces read
+  window, each decided by TileCheck's own code (`Realised.decideCell`, which TileCheck now calls too): a road's or another entry's cell held,
+  a failing condition skipped unless the cell is an incidental player block, the cell's own state a no-op, ALWAYS_OURS over the region's own.
+  A kept build's cell is the realise's consent's to decide: the lot is planned both ways and bills the larger of each item, inexact. The verdict's terrain reads (outside the placed box's columns) and the entrance style's surfaces read
   it; the tiles' queued cells are the style's region ground (a first realise's quote style now has a group) and their walk cells road cells.
 - **The kit:** plan.json's `approachGround` (lotId -> {seqs [[state, cond, walk]], runs}, `approachGroundOf`; `{}` when no lot has a write,
   `{capped}` past 16384 runs): the window is the lot, 5 cells across its front either side, 26 rows out of it, floorY +-50. Sidecar forwards it.
@@ -32393,6 +32394,7 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   bill_cap; callers that set none, including Steward before its QD, can consume past the quote.
 - **Case 3** (farmland moisture): `Quotes.standing` compares the block as the region run does (`builderHolds`: `Builder.Run#matches` while a
   target builds); grass where dirt is planned is still billed.
-- Units: `QuotesApproachQLCTest` (the four probes, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
-- **Leftovers:** TileCheck's player-build, unbreakable and incidental branches are not mirrored; a later-stage tile that writes over an
-  approach is not modelled (it does not change the lot's plan); the box's own columns are still priced over the land now (QL-b).
+- Units: `QuotesApproachQLCTest` (the four probes, the GPT review's walk over incidental cobblestone (9 gravel, not 18 dirt), a kept build
+  both ways, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
+- **Leftovers:** a later-stage tile that writes over an approach is not modelled (it does not change the lot's plan); the both-ways bound
+  covers a kept build's cells all written or none, not a mix; the box's own columns are still priced over the land now (QL-b).
