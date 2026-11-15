@@ -31941,3 +31941,24 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | un-adopt, then undo of old build b2 (crate-fed) | back 1018 = the two records; instant b1 back 0; E-flat 0 | neither |
 | instant town grown in survival | consumed 231 = quote; undo 231; lamp stands (2/2 cells); remove refunds 0, E-flat 0 | neither |
 | region remove | back 509 = paid records; E-flat 0 | neither |
+
+## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; DRAFT for Steward's review)
+
+Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
+by a terrain cell before the realise reaches it. **Additive API change, binary compatible.**
+
+- **`Quote.terrain()`: `Map<String, Integer>`** (item id -> count, sorted, unmodifiable; a new last record component). **Keys:** every item
+  of the plan's kept paid terrain cells (plan.json `survivalTerrain`, all groups), **including items whose count is 0** (x03: 49 dirt all
+  standing -> `{"minecraft:dirt": 0}`), so a terrain item can be told from any other. **Count:** the units of `bom` those cells bill at
+  quote time (cells not holding their block now, plus cells in unloaded chunks, which stay billed with `exact` false and a note). A standing
+  cell is in neither `terrain` nor `bom`. Each count is clamped to `[0, bom[item]]` (`bom` drops zero items, so a 0 key may be absent there).
+- **Empty** for a creative quote and for a plan with no `survivalTerrain`. Natural cells the plan could not keep (past the kit's cap, unknown
+  states) are not terrain: they stay billed as an upper bound (SA's note) and can only bill less. No unread-cell count: `exact` and `notes` say it.
+- **Steward's rule (named here so the field is unambiguous; Architect does not apply it):** a terrain item may go up to
+  `max(2, ceil(2% of terrain[item]))` over its quoted `bom` count; every other item stays exact. Build `maxBill` over **bom ∪ terrain keys**.
+- **One world read:** the same pass as the A11 cut; BILL_CAP and the `bill_cap` wait are unchanged.
+- **Compat:** the old 9-component constructor stays (empty `terrain`); `Since NEXT.`; feature `quoteTerrain` in `ArchitectApi.features()`
+  (Java side only, as `quote` and `maxBill`: quotes don't cross the sidecar, so no sidecar FEATURES or protocol change). `dev.region.quote` returns it.
+- **Gate:** units (split, 0 keys, clamp, x03, one cell changed between two quotes: only `terrain`, `bom` and `tiles:<group>` move, by one);
+  `bc-x03` extended in game with the one-cell drift; `bc-cap`; api-compat `--baselines`. **Steward RC:** `terrain`, `quoteTerrain`, a
+  `maxBill` built from it realising past a one-cell drift.
