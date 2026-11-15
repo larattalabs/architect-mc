@@ -1016,6 +1016,8 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   // (7c BR) a brief run's own row: the brief reached a plan through the API (the program it landed on recorded)
   if (brief) rows = [(await br()).briefRow(brief, sc.program), ...rows.filter((r) => r.id !== 'brief')];
+  // (7c PAY) a composed plan has no committed golden: its determinism row is the 3 plans and 1 vs 4 workers (as a fixture without one)
+  if (brief?.composed) rows = rows.map((r) => (r.id === 'determinism' ? { ...r, pass: new Set(irShas).size === 1 && ts.workersSame, threshold: 'identical over 3 plans and 1 vs 4 workers (a composed plan/0: no committed golden)' } : r));
   // (7c BR) the role shares row (SETTLEMENTS §16.3) kept through a scenario's own bar set (S2's and S3's rebuild the rows)
   if (roleShares) { const rs = M.bars({ palette, roleShares }).find((r) => r.id === 'roleShares'); if (rs && !rows.some((r) => r.id === 'roleShares')) rows = [...rows, rs]; }
   const metrics = { scenario: sc.id, ...(brief ? { brief } : {}), worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), ...(route ? { route } : {}), ...(districts ? { districts } : {}), ...(s2 ? { s2 } : {}), ...(s3 ? { s3 } : {}), ...(sbm ? { sb: { fit: sbm.fit, disturbance: sbm.disturbance, ports: sbm.ports, padShare: sbm.padShare } } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
