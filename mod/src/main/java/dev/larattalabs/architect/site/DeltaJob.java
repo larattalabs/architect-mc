@@ -74,6 +74,8 @@ final class DeltaJob implements Placement.Job {
 	long layer;
 	@Nullable List<Long> cells;
 	@Nullable Map<Long, Value> before;
+	/** (J2, UMT DPT) the player-placed records of the cells at D3, kept into D7's rewrite (in memory: a job resumed after a stop has none). */
+	Map<Long, dev.larattalabs.architect.journal.Pt> pts = Map.of();
 	@Nullable TemplateWriter writer;
 	@Nullable Set<Long> masked;
 	WorldJournal.@Nullable Captured after;
@@ -332,6 +334,7 @@ final class DeltaJob implements Placement.Job {
 					@SuppressWarnings("unchecked")
 					List<dev.larattalabs.architect.journal.SectionCells> secs = (List<dev.larattalabs.architect.journal.SectionCells>) p[1];
 					JournalStore.Txn t = s.begin().label("D3:" + siteId);
+					pts = JournalStore.ptOf(b.dimension(), secs);
 					t.create(JournalStore.Meta.header(entryId, WorldJournal.DELTA, siteId, b.group(), b.dimension(), Policy.BOX, layer, Status.PLACING, System
 						.currentTimeMillis()), secs, new JournalNbt.Head((JsonObject) p[2], new int[0]));
 					commit = s.submit(t);
@@ -446,10 +449,11 @@ final class DeltaJob implements Placement.Job {
 						Map<Long, Value> bf = before;
 						List<Long> cs = cells;
 						long l = layer;
+						Map<Long, dev.larattalabs.architect.journal.Pt> pt = pts;
 						prepared = CompletableFuture.supplyAsync(() -> {
 							List<Cell> done = new ArrayList<>(cs.size());
 							for (long q : cs) {
-								done.add(new Cell(q, l, bf.get(q), a.at(q)));
+								done.add(new Cell(q, l, bf.get(q), a.at(q), pt.get(q)));
 							}
 							return new Object[] {JournalStore.bySection(done)};
 						});
@@ -642,7 +646,7 @@ final class DeltaJob implements Placement.Job {
 						prepared = null;
 						restore = (SiteJournal.Restore) ready[0];
 						long tw = System.nanoTime();
-						restore.writing(() -> SiteJournal.writeCells(level, restore.pre()));
+						restore.writing(level, () -> SiteJournal.writeCells(level, restore.pre()));
 						if ((System.nanoTime() - tw) / 1_000_000 > 10) {
 							Architect.LOGGER.warn("Delta job of {}: {} pre cells written in {} ms", siteId, restore.pre().size(), (System.nanoTime() - tw) / 1_000_000);
 						}
@@ -671,7 +675,7 @@ final class DeltaJob implements Placement.Job {
 					TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 					held.clear();
 					long q1 = System.nanoTime();
-					restore.writing(() -> {
+					restore.writing(level, () -> {
 						SiteJournal.writeCells(level, restore.cells());
 						SiteJournal.fixHalves(level, restore.halves());
 					});

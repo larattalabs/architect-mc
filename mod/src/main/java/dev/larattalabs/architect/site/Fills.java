@@ -888,6 +888,7 @@ public final class Fills {
 	 * (the world saved ahead of the ledger: ours, uncharged); a custody whose site stands with no removal holding it goes back.
 	 */
 	public static void atStart(MinecraftServer srv) {
+		Stockpiles.settlePendingCredits(srv); // (J2) a settled removal's pending credit books (custody included) before any write-back below
 		for (Site s : Sites.all()) {
 			String ph = phase(s);
 			if (ph == null || UNLOCKED.equals(ph)) {
