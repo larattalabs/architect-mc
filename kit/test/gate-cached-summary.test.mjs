@@ -19,7 +19,7 @@ test('an all-CACHED run writes summary.json (done, PASS, no steps) and SUMMARY.m
   const md = fs.readFileSync(w.md, 'utf8');
   assert.match(md, /every selected step CACHED/);
   assert.match(md, /### CACHED \(1\)/);
-  assert.match(md, /\| unit-kit \| abcdef012345 \| .* \| `20261115-010000-change` \| `unit-kit.log` \|/);
+  assert.match(md, /\| unit-kit \| k1k1k1k1k1k1 \| .* \| `20261115-010000-change` \| `unit-kit.log` \|/);
 });
 
 test('cachedTableLines: empty for no hits; the explicit-list note', () => {
