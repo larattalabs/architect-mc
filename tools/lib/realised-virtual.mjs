@@ -102,6 +102,9 @@ export async function realisedVsVirtual(planDir, afterFile, beforeFile = null, {
       for (let y = b.minY; y <= b.maxY; y++) {
         const s = d.palette[d.cells[d.at(x, y, z)]];
         if (!LIGHT.test(s) || inLot(x, y, z) || planEmit.has(`${x},${y},${z}`)) continue;
+        // (7c PAY) a light the world held before the realise (S6's sculpted cavern lights its hall every 6 blocks, in the road
+        // columns over it) is the land's, not a street lantern the mod laid: P0 found 5 and 10 of these, all present before
+        if (pre && pre.palette[pre.cells[pre.at(x, y, z)]] === s) continue;
         real.add(`${x},${y},${z}`);
       }
     }
