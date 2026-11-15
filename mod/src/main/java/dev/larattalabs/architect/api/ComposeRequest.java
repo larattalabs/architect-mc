@@ -20,8 +20,9 @@ import org.jspecify.annotations.Nullable;
  * @param ext the caller's namespaced members (never read, but for Architect's own keys below: {@link #EXT_HINTS}, {@link #EXT_SYSTEM},
  *     {@link #EXT_REPAIR_ROUNDS}, {@link #EXT_SKIP_PICK}, {@link #EXT_VOCAB},
  *     {@link #EXT_STREET_FIX}); null is empty
- * @param level (7c CP) the level the claim is in, or null: the Overworld (as before CP). The survey, the players' builds, every round's check and
- *     a PICKED program's plan are in it. Since NEXT.
+ * @param level (7c CP) the level the claim is in, or null: the Overworld (as before CP). It is carried to the design, but regions are still
+ *     Overworld only: a compose in another level ends {@code NO_PLAN} at once ($0, no pick or round) with {@code refused} {@code "NOT_ALLOWED:
+ *     regions are Overworld only in this version"} and the summary "regions can only be built in the Overworld for now". Since NEXT.
  * @param owner (7c CP) the design's and its plans' owner, or null: the player (as before CP). Every round's check gets it as its {@code
  *     PlanRequest.owner}. Since NEXT.
  */

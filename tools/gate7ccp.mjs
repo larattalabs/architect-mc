@@ -9,8 +9,9 @@
 //                            player words, the street round, an invented family refused and repaired, owner and dimension in the record)
 //     compose  (cp-compose)  in game (headless, the flat base): Regions.compose through the public API (dev.region.compose):
 //                            (a) skipPick on a brief a template fits: no REGION pick design (counted), COMPOSED from the rounds; without
-//                            the key PICKED flat_village; (b) in the Nether (a cleared platform) with an owner: COMPOSED, the design's
-//                            owner, the composed artifact recorded in the_nether, realised there and removed exactly; (c) a grid zone refused
+//                            the key PICKED flat_village; (b) regions are Overworld only: a Nether compose with an owner
+//                            ends NO_PLAN at once ($0, no pick or round) with NOT_ALLOWED and a player-worded summary; an Overworld compose
+//                            with an owner records it (the design's, the artifact's check); (c) a grid zone refused
 //                            NO_ROOM with a street wouldFit: a free street round, then READY; (d) composeVocab families: an invented family
 //                            refused by the check (NO_FEATURE) and repaired; (e) NO_PLAN: the best round's summary, waits[].say, the reason
 //                            unchanged
@@ -133,40 +134,30 @@ steps.compose = async () => {
   check(a2.result?.outcome === 'PICKED' && a2.result?.program === 'flat_village' && (k2.REGION ?? 0) === (k1.REGION ?? 0) + 1,
     `(a) without the key: the pick first, ${a2.result?.outcome} ${a2.result?.program} (REGION ${k1.REGION ?? 0} -> ${k2.REGION ?? 0})`);
 
-  // (b) in the Nether with an owner
+  // (b) regions are Overworld only: a Nether compose with an owner ends NO_PLAN at once ($0, no round), in player words; the owner is
+  // recorded on an Overworld compose (the design's, the composed artifact's check)
   const [x0, z0, x1, z1] = NCLAIM;
   const inN = (c) => cmd(`/execute in ${NETHER} run ${c}`);
   await inN(`forceload add ${x0} ${z0} ${x1} ${z1}`);
   await L.settle(3000);
-  // (48x48 columns x 14 layers = 32,256 blocks a fill, under /fill's 32,768): netherrack y 36..63, air y 64..127 (the roof too)
-  for (let y = 36; y <= 127; y += 14) await inN(`fill ${x0} ${y} ${z0} ${x1} ${Math.min(127, y + 13)} ${z1} ${y + 13 <= 63 ? 'minecraft:netherrack' : 'minecraft:air'}`);
-  await inN(`fill ${x0} 50 ${z0} ${x1} 63 ${z1} minecraft:netherrack`);
-  await L.settle(3000);
-  const b = await compose('b', 'a few homes beside a winding lane', { claim: NCLAIM, dimension: NETHER, owner: 'gate:cp', opKey: 'gate.cp.b', ext: { 'architect_mc:skipPick': true } });
+  const k3 = await kinds();
+  const b = await compose('b', 'a few homes beside a winding lane', { claim: NCLAIM, dimension: NETHER, owner: 'gate:cp', opKey: 'gate.cp.b' });
+  const k4 = await kinds();
   const rb = b.result ?? {};
-  const sha = rb.check?.artifactSha;
-  const meta = sha ? artifactMeta(sha) : null;
-  out.b = { status: b.status, outcome: rb.outcome, history: rb.history, owner: b.owner, artifactSha: sha, meta, error: b.error ?? b.refused };
-  check(b.status === 'DONE' && rb.outcome === 'COMPOSED' && b.owner === 'gate:cp', `(b) a Nether compose with an owner: ${b.status} ${rb.outcome} ${json(rb.history)}; the design's owner ${b.owner}`);
-  check(meta?.dimension === NETHER && meta?.owner === 'gate:cp', `(b) the composed artifact (${sha?.slice(0, 12)}) was checked in ${meta?.dimension} with owner ${meta?.owner}`);
-  if (sha) {
-    const box = [x0 - 8, 40, z0 - 8, x1 + 8, 127, z1 + 8];
-    const h0 = await call('dev.region.hash', { box, dimension: NETHER }, 3_600_000);
-    const rr = await call('dev.region.realiseApproved', { sha }, 300_000);
-    check(!!rr.region, `(b) realiseApproved of the Nether artifact queued region ${rr.region ?? rr.refused}`);
-    if (rr.region) {
-      const st = await L.waitRegion(rr.region, 3_600_000);
-      const h1 = await call('dev.region.hash', { box, dimension: NETHER }, 3_600_000);
-      out.b.realise = { region: rr.region, state: st.view.state, cells: st.view.cellsWritten, changed: h0.sha256 !== h1.sha256 };
-      check(st.view.state === 'PLACED' && h0.sha256 !== h1.sha256, `(b) placed in the Nether: ${st.view.state}, ${st.view.cellsWritten} cells written, the Nether box changed`);
-      const rm = await call('dev.region.remove', { region: rr.region }, 3_600_000);
-      await L.settle(3000);
-      const h2 = await call('dev.region.hash', { box, dimension: NETHER }, 3_600_000);
-      out.b.removed = { removed: rm.removed, restored: rm.restored, same: h0.sha256 === h2.sha256 };
-      check(rm.removed && h0.sha256 === h2.sha256, `(b) removed: the Nether box's hash restored (${rm.restored} cells restored)`);
-    }
-  }
+  out.b = { status: b.status, outcome: rb.outcome, refused: rb.refused, summary: rb.summary, rounds: rb.rounds, owner: b.owner, kinds: [k3, k4] };
+  check(b.status === 'DONE' && rb.outcome === 'NO_PLAN' && rb.refused === 'NOT_ALLOWED: regions are Overworld only in this version' && rb.rounds === 0
+    && (k4.REGION ?? 0) === (k3.REGION ?? 0) && b.owner === 'gate:cp',
+    `(b) a Nether compose with an owner: ${b.status} ${rb.outcome}, refused "${rb.refused}", ${rb.rounds} round(s), no pick (REGION ${k3.REGION ?? 0} -> ${k4.REGION ?? 0}); the design's owner ${b.owner}`);
+  check(rb.summary === 'regions can only be built in the Overworld for now', `(b) its summary in player words: "${rb.summary}"`);
   await inN(`forceload remove ${x0} ${z0} ${x1} ${z1}`).catch(() => {});
+  const b2 = await compose('b2', 'a few homes beside a winding lane', { owner: 'gate:cp', opKey: 'gate.cp.b2', ext: { 'architect_mc:skipPick': true } });
+  const rb2 = b2.result ?? {};
+  const sha = rb2.check?.artifactSha;
+  const meta = sha ? artifactMeta(sha) : null;
+  out.b.overworld = { status: b2.status, outcome: rb2.outcome, owner: b2.owner, artifactSha: sha, meta };
+  check(b2.status === 'DONE' && rb2.outcome === 'COMPOSED' && b2.owner === 'gate:cp' && meta?.owner === 'gate:cp'
+    && (meta?.dimension ?? 'minecraft:overworld') === 'minecraft:overworld',
+    `(b) an Overworld compose with an owner: ${b2.status} ${rb2.outcome}; the design's owner ${b2.owner}, the artifact (${sha?.slice(0, 12)}) checked in ${meta?.dimension} with owner ${meta?.owner}`);
 
   // (c) the $0 street round
   const c = await compose('c', 'three cottages', { opKey: 'gate.cp.c', ext: { 'architect_mc:skipPick': true, 'architect:simCompose': [{ plan: GRID, reason: 'three cottages in a grid' }] } });

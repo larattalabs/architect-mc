@@ -121,6 +121,8 @@ export const EXT_REPAIRS = 'architect_mc:repairRounds';
 export const HINTS_MAX = 16_000;
 /** The caller's rules are at most this many characters (with plan/0#compact and the composer's own, well under JOB_SYSTEM_MAX). */
 export const CALLER_SYSTEM_MAX = 30_000;
+/** (7c CP) The block-families block is at most this many characters, and with ext composeVocab "families" it counts against the caller's rules. */
+export const FAMILIES_MAX = 2_000;
 /** (7c CP) `ext["architect_mc:skipPick"]`: true composes from plan/0's parts with no template pick first. */
 export const EXT_SKIP_PICK = 'architect_mc:skipPick';
 /** (7c CP) `ext["architect_mc:composeVocab"]`: "families" adds vocab/1's block families (names, groups, dyed, the palette line) to the system. */
@@ -184,7 +186,9 @@ export function callerOptions(ext: Record<string, unknown> | undefined): CallerO
   const sy = e[EXT_SYSTEM];
   if (sy !== undefined) {
     if (typeof sy !== 'string') throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is a string`);
-    if (sy.length > CALLER_SYSTEM_MAX) throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is ${sy.length} characters (at most ${CALLER_SYSTEM_MAX})`);
+    // ((7c CP) with the block families the rules have FAMILIES_MAX less, so the round's system stays under JOB_SYSTEM_MAX)
+    const max = e[EXT_VOCAB] === 'families' ? CALLER_SYSTEM_MAX - FAMILIES_MAX : CALLER_SYSTEM_MAX;
+    if (sy.length > max) throw new ClientError(`FIELD_LIMIT: ext["${EXT_SYSTEM}"] is ${sy.length} characters (at most ${max}${max < CALLER_SYSTEM_MAX ? ` with ext["${EXT_VOCAB}"] "families"` : ''})`);
     if (sy.trim()) out.system = sy.trim();
   }
   const r = e[EXT_REPAIRS];
@@ -240,6 +244,7 @@ export function vocabFamiliesText(kitDir: string): string {
     `dyed (members are colour-prefixed): ${((c.dyed ?? []) as string[]).join(', ')}`,
     ...(typeof c.palette === 'string' ? [c.palette] : []),
   ].join('\n');
+  if (t.length > FAMILIES_MAX) throw new Error(`the block families are ${t.length} characters (at most ${FAMILIES_MAX})`);
   familiesCache.set(file, t);
   return t;
 }
@@ -514,6 +519,11 @@ export function waitsOf(check: Record<string, unknown> | undefined, until: Map<s
     .filter((p) => !GOOD.has(String(p.class)))
     .map((p) => ({ part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}) }));
 }
+
+/** (7c CP) The one level regions build in (the mod's Level.OVERWORLD), its refusal as the mod words it, and the player's words for it. */
+export const OVERWORLD = 'minecraft:overworld';
+export const NOT_OVERWORLD = 'NOT_ALLOWED: regions are Overworld only in this version';
+export const NOT_OVERWORLD_SAY = 'regions can only be built in the Overworld for now';
 
 /** (7c CP) The waits with each one's player line (`say`): `waitsOf` plus `say` from the plan's names. */
 export function waitsSaid(plan: unknown, check: Record<string, unknown> | undefined, until: Map<string, string>): Array<Record<string, unknown>> {
@@ -829,6 +839,14 @@ export class ComposeDesigns {
     if (!d0 || isFinalDesign(d0) || d0.kind !== 'settlement') return;
     const st = this.state(d0);
     const ext = (d0.request.ext ?? {}) as Record<string, unknown>;
+
+    // 0. (7c CP) regions are Overworld only (PlanChecks/RegionsImpl refuse NOT_ALLOWED): another level ends NO_PLAN at once, $0 (no pick, no round)
+    if (st.dimension && st.dimension !== OVERWORLD) {
+      return this.done(id, st, 'no plan: regions are Overworld only', {
+        outcome: 'NO_PLAN', reason: `${NOT_OVERWORLD} (${st.dimension})`, refused: NOT_OVERWORLD, summary: NOT_OVERWORLD_SAY,
+        waits: [], leftOut: [], rounds: 0, history: [], pick: { outcome: 'SKIPPED', program: null, fits: false },
+      });
+    }
 
     // 1. the template pick ((7c CP) none with ext architect_mc:skipPick: no region.design at all)
     if (!st.pick && ext[EXT_SKIP_PICK] === true) {

@@ -23,6 +23,7 @@ import {
   EXT_REPAIRS,
   EXT_SYSTEM,
   CALLER_SYSTEM_MAX,
+  FAMILIES_MAX,
   composerText,
   composeSystemText,
   composeKeyBody,
@@ -169,11 +170,15 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(fam).toContain('group wood: ');
     expect(fam).toContain('dyed (members are colour-prefixed): ');
     expect(fam).toContain('rule.palette {family, share}');
-    expect(fam.length).toBeLessThan(3_000);
+    expect(fam.length).toBeLessThanOrEqual(FAMILIES_MAX);
     const sysText = composeSystemText(TEXT, 'Keep a wall.', fam);
     expect(sysText).toBe(`${TEXT.system}\n\n${fam}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
     expect(composeSystemText(TEXT, 'Keep a wall.')).toBe(`${TEXT.system}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
-    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX), fam));
+    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), fam));
+    // the families count against the caller's rules: 28,000 with them, 30,000 without
+    expect(callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), 'architect_mc:composeVocab': 'families' }).vocab).toBe('families');
+    expect(() => callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX + 1), 'architect_mc:composeVocab': 'families' })).toThrow(/FIELD_LIMIT: ext\["architect_mc:composeSystem"\] is 28001 characters \(at most 28000 with ext\["architect_mc:composeVocab"\] "families"\)/);
+    expect(callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX) }).system?.length).toBe(CALLER_SYSTEM_MAX);
     console.log(`7c CP: the composer's system with the families and the largest rules is ${big.length} characters (families ${fam.length})`);
     expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
   });
@@ -441,12 +446,23 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(bad.error).toMatch(/FIELD_LIMIT: ext\["architect_mc:skipPick"\] is a boolean/);
   }, 600_000);
 
-  it('(7c CP) owner and dimension: kept in the record and the design (the mod checks there); absent, the record has neither', async () => {
-    const { designId } = await compose('a flat village with a well', { owner: 'steward:s1', dimension: 'minecraft:the_nether', ext: { 'architect_mc:skipPick': true } });
+  it('(7c CP) owner and dimension: the owner kept in the record and the design; another level than the Overworld ends NO_PLAN at once, $0', async () => {
+    const spy = vi.spyOn(sc.regionDesigns, 'request');
+    const { designId: nether } = await compose('a flat village with a well', { owner: 'steward:s1', dimension: 'minecraft:the_nether' });
+    await until(() => final(nether), 600_000);
+    const n = sc.designs.get(nether)!;
+    expect(n.status).toBe('done');
+    expect(st(nether).dimension).toBe('minecraft:the_nether');
+    expect(n.request.owner).toBe('steward:s1');
+    expect(n.result).toMatchObject({ outcome: 'NO_PLAN', refused: 'NOT_ALLOWED: regions are Overworld only in this version', summary: 'regions can only be built in the Overworld for now', rounds: 0, waits: [] });
+    expect(st(nether).rounds).toEqual([]); // no round
+    expect(spy).not.toHaveBeenCalled(); // no pick
+    spy.mockRestore();
+    const { designId } = await compose('a flat village with a well', { owner: 'steward:s1', dimension: 'minecraft:overworld', ext: { 'architect_mc:skipPick': true } });
     await until(() => st(designId).awaiting !== undefined || final(designId), 600_000);
     expect(st(designId).owner).toBe('steward:s1');
-    expect(st(designId).dimension).toBe('minecraft:the_nether');
     expect(sc.designs.get(designId)!.request.owner).toBe('steward:s1');
+    expect(st(designId).awaiting).toBeDefined();
     await ask({ type: 'design.cancel', designId });
     const { designId: plain } = await compose('a flat village with a well', { ext: { 'architect_mc:skipPick': true } });
     await until(() => st(plain).awaiting !== undefined || final(plain), 600_000);

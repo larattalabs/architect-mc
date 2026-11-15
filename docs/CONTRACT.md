@@ -32027,4 +32027,11 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
   the model invents from a family name is still refused or repaired by compose's check (gated: an invented family, refused `NO_FEATURE`,
   repaired).
 - `summary`, `waits[].say` and `leftOut` as written; NO_PLAN's `reason` unchanged; `level`/`owner` sent only when not the default.
-- Steward RC areas for the release: a card compose with skipPick, NO_PLAN wording, the street free round, a Nether owner/level compose.
+- Steward RC areas for the release: a card compose with skipPick, NO_PLAN wording, the street free round, a non-Overworld compose refused
+  cleanly, an Overworld owner compose.
+- d) (coordinator, 2026-11-14, after gate run 1) Regions stay Overworld only (`checkPlan`, `plan`, adopt refuse `NOT_ALLOWED`); lifting it is
+  its own strict slice (leftover "regions in other dimensions"). `level` is carried; a non-Overworld compose ends `NO_PLAN` at once, $0
+  (no pick, no round): `refused` "NOT_ALLOWED: regions are Overworld only in this version", `summary` "regions can only be built in the
+  Overworld for now", `rounds` 0. Gate (b) asserts that plus the owner on an Overworld compose (no Nether realise).
+- e) (after merging PF: plan/0 grew) The families block is at most 2,000 characters (`FAMILIES_MAX`) and, with `composeVocab` "families",
+  counts against the caller's rules: `composeSystem` at most 28,000 then (30,000 without), so a round's system stays under 120,000.
