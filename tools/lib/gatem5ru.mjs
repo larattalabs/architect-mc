@@ -95,8 +95,10 @@ export async function registerRU(steps, h) {
       const lack = n - (ps.stock?.[it] ?? 0);
       if (lack > 0) need[it] = Math.max(1, Math.floor(lack * fraction));
     }
-    // (batch 3) a target builds a run only with its whole bill: when `fraction` of the lack covers no target's outstanding (a growth whose one
-    // target is put down first, its lot staged after it), the smallest target's whole lack is fed, so something builds and the rest waits
+    // (batch 3) a target builds a run only with its whole bill: when `fraction` of the lack covers no target's outstanding, the smallest
+    // target's whole lack is fed, so something builds and the rest waits. Since SA's A3 (def88894, v0.66.0) a growth puts one target down
+    // first: its rv1 verges tile target (c<n>); its road (r<n>, street_e_g1) waits until that is built (RegionTargets.stageWait by the
+    // road's box from its revision's IR), where before A3 the road found no box and was put down at once over the unbuilt verges
     const covers = (o) => Object.entries(o ?? {}).every(([it, n]) => (need[it] ?? 0) + (ps.stock?.[it] ?? 0) >= n);
     const open = Object.values(ps.targets ?? {}).map((x) => x.outstanding ?? {}).filter((o) => sum(o) > 0);
     if (open.length && !open.some(covers)) {

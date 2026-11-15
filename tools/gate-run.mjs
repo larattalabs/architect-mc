@@ -1869,7 +1869,7 @@ async function runStep(sh, step, rec) {
     if (why) {
       const td = path.join(OUT, 'traces', step.id);
       const pids = clientProcs(sh).map((p) => p.pid);
-      const dumps = pids.length ? captureThreadDumps({ pids, dir: td, reason: `${step.id}: ${why}` }) : [];
+      const dumps = pids.length ? captureThreadDumps({ pids, dir: td, reason: `${step.id}: ${why}`, env: childEnv(sh) }) : [];
       const slept = hostSleep({ from: new Date(ts), to: new Date(), dir: td });
       rec.threadDumps = { reason: why, dumps: dumps.map((d) => ({ ...d, file: path.relative(OUT, d.file) })), hostSleep: slept ? { ...slept, file: path.relative(OUT, slept.file) } : null };
       log(`  ${why}: ${pids.length ? dumps.map((d) => (d.ok ? `pid ${d.pid}'s threads (${d.threads}, ${d.tool})` : `pid ${d.pid}: no dump (${d.error})`)).join('; ') : 'no server JVM alive to dump'}${slept ? `; the host slept ${slept.sleptSeconds} s during the step (${path.relative(OUT, slept.file)})` : ''}`, sh);
