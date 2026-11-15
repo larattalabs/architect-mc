@@ -142059,6 +142059,7 @@
     "tools/api-baselines.mjs",
     "tools/api-compat.mjs",
     "tools/gate6dgr.mjs",
+    "tools/lib/api-classes.mjs",
     "tools/lib/arch-tmp.mjs",
     "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
@@ -142248,7 +142249,7 @@
     "*RegionFluidsLintTest*",
     "*RevisionsTest*"
    ],
-   "testFiltersComplete": true,
+   "testFiltersComplete": false,
    "gradleUse": "tests",
    "eager": [
     "tools/gate6dgr.mjs",
@@ -142523,6 +142524,7 @@
     "tools/gate6b.mjs",
     "tools/gate6dgr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/api-classes.mjs",
     "tools/lib/arch-tmp.mjs",
     "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
@@ -143009,6 +143011,7 @@
     "tools/gate6b.mjs",
     "tools/gate6dgr.mjs",
     "tools/gen-palettes.mjs",
+    "tools/lib/api-classes.mjs",
     "tools/lib/arch-tmp.mjs",
     "tools/lib/asks-first.mjs",
     "tools/lib/base-tree.mjs",
