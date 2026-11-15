@@ -213,6 +213,7 @@ public interface ArchitectApi {
 	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists. (BC, since 1.60.0) {@code "kitVersion"}:
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
+	 * (QL, since NEXT) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.

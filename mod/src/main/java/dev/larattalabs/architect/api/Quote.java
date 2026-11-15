@@ -33,13 +33,30 @@ import org.jspecify.annotations.Nullable;
  *     world at each: a cell that already holds its block is left out of {@code tiles:<group>}, so the quote equals what the realise
  *     consumes; only cells in unloaded chunks (or past the kit's cap) stay an upper bound; {@code notes} say which
  * @param notes why a piece is not exact, and what the quote read
+ * @param terrain (QL, since NEXT, feature {@code "quoteTerrain"}) item id to count, sorted: the part of {@code bom} that comes from the
+ *     plan's kept paid terrain cells (plan.json's {@code survivalTerrain}, every group) read at quote time. Its keys are every item of
+ *     those cells, <b>including an item whose count is 0</b> (every cell already stands), so a caller can tell a terrain item from any
+ *     other; its count is the units those cells bill (cells not holding their block now, plus cells in unloaded chunks, billed with
+ *     {@code exact} false), each at most its {@code bom} count ({@code bom} leaves out a 0 item). A cell already standing is in neither.
+ *     Everything else in {@code bom} (other tile cells, lots, roads, mechanisms, fluids, fills) is not terrain, nor are natural cells the plan
+ *     could not keep (past the kit's cap: an upper bound, they can only bill less). Empty for a creative quote and a plan with no
+ *     {@code survivalTerrain}. A terrain cell can change between the quote and the realise (grass over dirt, farmland drying back), so a
+ *     caller's {@code maxBill} may allow a little over on these items only; Steward's rule is {@code bom[item] + max(2, ceil(2% of
+ *     terrain[item]))} over the union of {@code bom}'s and {@code terrain}'s keys, every other item exact
  */
 public record Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
-	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes) {
+	java.util.Map<String, String> lotEntries, boolean exact, List<String> notes, java.util.Map<String, Integer> terrain) {
 	public Quote {
 		bom = bom == null ? new JsonObject() : bom;
 		bomParts = bomParts == null ? new JsonObject() : bomParts;
 		lotEntries = lotEntries == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(lotEntries));
 		notes = notes == null ? List.of() : List.copyOf(notes);
+		terrain = terrain == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(new java.util.TreeMap<>(terrain));
+	}
+
+	/** The 1.55.0 shape: no terrain part ({@link #terrain} empty). */
+	public Quote(String planId, @Nullable String artifactSha, @Nullable String region, boolean survival, JsonObject bom, JsonObject bomParts,
+		java.util.Map<String, String> lotEntries, boolean exact, List<String> notes) {
+		this(planId, artifactSha, region, survival, bom, bomParts, lotEntries, exact, notes, null);
 	}
 }

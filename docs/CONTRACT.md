@@ -32035,3 +32035,51 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
   Overworld for now", `rounds` 0. Gate (b) asserts that plus the owner on an Overworld compose (no Nether realise).
 - e) (after merging PF: plan/0 grew) The families block is at most 2,000 characters (`FAMILIES_MAX`) and, with `composeVocab` "families",
   counts against the caller's rules: `composeSystem` at most 28,000 then (30,000 without), so a round's system stays under 120,000.
+
+## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
+
+Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
+by a terrain cell before the realise reaches it. **Additive API change, binary compatible.**
+
+- **`Quote.terrain()`: `Map<String, Integer>`** (item id -> count, sorted, unmodifiable; a new last record component). **Keys:** every item
+  of the plan's kept paid terrain cells (plan.json `survivalTerrain`, all groups), **including items whose count is 0** (x03: 49 dirt all
+  standing -> `{"minecraft:dirt": 0}`), so a terrain item can be told from any other. **Count:** the units of `bom` those cells bill at
+  quote time (cells not holding their block now, plus cells in unloaded chunks, which stay billed with `exact` false and a note). A standing
+  cell is in neither `terrain` nor `bom`. Each count is clamped to `[0, bom[item]]` (`bom` drops zero items, so a 0 key may be absent there).
+- **Empty** for a creative quote and for a plan with no `survivalTerrain`. Natural cells the plan could not keep (past the kit's cap, unknown
+  states) are not terrain: they stay billed as an upper bound (SA's note) and can only bill less. No unread-cell count: `exact` and `notes` say it.
+- **Steward's rule (named here so the field is unambiguous; Architect does not apply it):** a terrain item may go up to
+  `max(2, ceil(2% of terrain[item]))` over its quoted `bom` count; every other item stays exact. Build `maxBill` over **bom ∪ terrain keys**.
+- **One world read:** the same pass as the A11 cut; BILL_CAP and the `bill_cap` wait are unchanged.
+- **Compat:** the old 9-component constructor stays (empty `terrain`); `Since NEXT.`; feature `quoteTerrain` in `ArchitectApi.features()`
+  (Java side only, as `quote` and `maxBill`: quotes don't cross the sidecar, so no sidecar FEATURES or protocol change). `dev.region.quote` returns it.
+- **Gate:** units (split, 0 keys, clamp, x03, one cell changed between two quotes: only `terrain`, `bom` and `tiles:<group>` move, by one);
+  `bc-x03` extended in game with the one-cell drift; `bc-cap`; api-compat `--baselines`. **Steward RC:** `terrain`, `quoteTerrain`, a
+  `maxBill` built from it realising past a one-cell drift.
+
+### Changes from Steward's review (2026-11-14, through the coordinator: accepted on all three points)
+
+- **Zero keys:** confirmed. Steward builds `maxBill` over `bom` ∪ `terrain` keys, so a 0-count terrain item gets its allowance of 2.
+- **The allowance base is the terrain part:** `cap[item] = bom[item] + max(2, ceil(2% × terrain[item]))` for a terrain item; lot material
+  (and every other item) stays exact. Without `quoteTerrain` Steward keeps every item exact.
+- **Unkept cells** stay outside `terrain`: accepted.
+- **Steward RC areas:** a module quote, a survival region growth's quote, and `maxBill` at realise. **Tests:** a module quote with terrain
+  lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
+  one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
+
+
+### Slice QL as built (2026-11-14)
+
+- `Quote.terrain()`, the new last component (sorted, unmodifiable, null → empty); the 9-arg 1.55.0 constructor is kept and gives empty terrain.
+  Feature `quoteTerrain` is in `ApiRules` (Java-only, like `quote` and `maxBill`; no sidecar entry).
+- `Quotes.of` (survival): `terrain` = Σ over the `survivalTerrain` groups of covered − off, clamped to [0, bom]. A 0 key stays; an unloaded
+  kept cell counts as terrain (billed, `exact` false). Creative quotes carry an empty map. The `maxBill`/BILL_CAP path is unchanged.
+- Dev hooks: `dev.region.quote` returns `terrain`; the new `dev.ql.terrainCells {planId|sha, max}` lists kept cells with
+  {group, state, items, x, y, z, loaded, standing} for the gate.
+- `tools/lib/quote-terrain.mjs`: `terrainShape` (integers, ≤ bom, ≤ the tiles pieces, sorted) and `stewardCap` (Steward's rule over bom ∪ terrain).
+- Gate step `ql-drift` (x03 survival): q1 has terrain dirt 0. One grass cell billing a dirt is set to coarse dirt; q2 then moves only
+  `tiles:hamlet` by {dirt:1}. Under Steward's cap with planks 2 below the bill, the realise is refused BILL_CAP (world unchanged, nothing
+  consumed). With Steward's cap it is accepted; it consumes the put-down bill and the refund equals what was consumed. qt-growth (town and
+  growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
+- Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
+  `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.

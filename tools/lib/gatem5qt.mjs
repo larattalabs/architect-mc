@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { terrainShape } from './quote-terrain.mjs';
 
 /** Every file under dir: relative path -> "bytes:sha16". */
 function listing(dir) {
@@ -149,6 +150,8 @@ export async function registerQT(steps, h) {
     const q0 = await quote({ planId: p0.planId, lotEntries: { cottage_1: 'qt_hut' } });
     out.town = { planId: p0.planId, quote: strip(q0) };
     check(!q0.refused && q0.survival === true && q0.region === null, `the town's plan quoted (a first realise, survival): ${q0.refused ?? `bom ${json(q0.bom)}`}`);
+    // (QL) its terrain part: the kept terrain cells' share of the bill, within the bom and the tile pieces
+    check(terrainShape(q0).length === 0, `QL: the town's quote has a terrain part within its bill: ${json(q0.terrain)}${terrainShape(q0).length ? `; ${json(terrainShape(q0))}` : ''}`);
     const ps00 = await pile();
     const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'qt_hut' } });
     // (recorded, not judged: every lot of these fixtures faces a plan road, so its approach is 0 and its piece is its template's bill; the
@@ -165,6 +168,9 @@ export async function registerQT(steps, h) {
     out.growth = { planId: g.planId, quote: strip(q), rounds: nw.rounds };
     check(q.survival === true && q.region === region && json(q.lotEntries) === json(entries) && Object.keys(q.bomParts).some((k) => k.startsWith('tiles:')) && q.bomParts['lot:qa'] && q.bomParts['lot:qb'],
       `the growth's quote: region ${q.region}, entries ${json(q.lotEntries)}, parts ${json(Object.keys(q.bomParts ?? {}))}, exact ${q.exact}${q.notes?.length ? `; notes ${json(q.notes)}` : ''}`);
+    // (QL) a growth's quote: its terrain part (the revision plan's kept terrain cells) within its bill
+    out.growth.terrain = q.terrain;
+    check(terrainShape(q).length === 0, `QL: the growth's quote has a terrain part within its bill: ${json(q.terrain)}${terrainShape(q).length ? `; ${json(terrainShape(q))}` : ''}`);
     // (recorded) by a plan road the approach stops at it: the piece is then the template's
     out.growth.template = { diff: G.minus(q.bomParts['lot:qa'] ?? {}, await tmplBom('qt_hut')) };
     // the quote of an over-bound bill takes nothing (Steward's 4.2 step 5): the stockpile unchanged across the quotes (above), the realise now

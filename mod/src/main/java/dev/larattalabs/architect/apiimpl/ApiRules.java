@@ -40,6 +40,8 @@ public final class ApiRules {
 		"composites",
 		// (BC) ArchitectApi.kitVersion and checkerVersion; Sites.loadHealthy; maxBill on a realise (BILL_CAP, the bill_cap wait)
 		"kitVersion", "sitesLoadHealthy", "maxBill",
+		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
+		"quoteTerrain",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
 		"apiVersion");
 
