@@ -545,8 +545,9 @@ export async function registerRL(steps, h) {
     const s1 = await savedNow();
     out.set = { item: X, quote: quote[X], atSave: cSave.drawn?.[X], live: cLive.drawn?.[X], cap: cl.maxBill?.[X], need: need[X], saves: [s0.saves, s1.saves] };
     check(cl.maxBill?.[X] === low[X] && s1.saves === s0.saves, `${tag}: ${X} capped at its draws at the save (${low[X]}; live ${cLive.drawn?.[X]}, +${dX} since the save; the lot still needs ${need[X]}); nothing saved the ledger (save #${s0.saves} -> #${s1.saves})`, out.set);
-    const logF = path.join(L.OUT, 'client.log');
-    const log0 = fs.existsSync(logF) ? fs.statSync(logF).size : 0;
+    // the server's log: the runner's client.log (one up from the step's OUT when gate-run starts the client), this OUT's, or the game's
+    const logs = [path.join(path.dirname(L.OUT), 'client.log'), path.join(L.OUT, 'client.log'), path.join(L.GAME_DIR, 'logs', 'latest.log')];
+    const log0 = Object.fromEntries(logs.map((f) => [f, fs.existsSync(f) ? fs.statSync(f).size : 0]));
     await call('dev.wait', { ms: 12_000 }, 60_000); // the chunks' eager saves (RL1's 12 s): the cells built after the save stand on the disk
     if (!(await halt(tag))) { spendZero(); return out; }
     await restart(W);
@@ -557,7 +558,7 @@ export async function registerRL(steps, h) {
     check(a1.uncleanStart === true && (rc.aheadCells ?? 0) > 0 && b1.dupeUnits === 0 && (rc.owedCells ?? 0) === 0, `${tag}: the reconcile charged ${lot}'s ${rc.aheadCells} standing cell(s) built after the save whatever the cap (charged ${json(rc.charged)}; owed ${rc.owedCells ?? 0}); no cell stands unpaid (dupe ${b1.dupeUnits})`, out.reconcile);
     const over = rc.capOver?.[X] ?? 0;
     check(rc.capRegion === W.region && over > 0 && over <= dX, `${tag}: the reconcile named the overshoot: capOver ${json(rc.capOver)} (${X}: at most +${dX}, the draws since the save), region ${rc.capRegion}`, rc);
-    const tail = fs.existsSync(logF) ? fs.readFileSync(logF, 'utf8').slice(log0) : '';
+    const tail = logs.map((f) => (fs.existsSync(f) ? fs.readFileSync(f).subarray(fs.statSync(f).size >= log0[f] ? log0[f] : 0).toString('utf8') : '')).join('\n');
     const warn = tail.split('\n').find((l) => /WARN/.test(l) && /past its maxBill by/.test(l) && l.includes(X)) ?? null;
     out.warn = warn;
     check(!!warn, `${tag}: the WARN names the overshoot: ${warn ? warn.slice(warn.indexOf('Stockpile')).slice(0, 260) : 'none in the server log'}`);
