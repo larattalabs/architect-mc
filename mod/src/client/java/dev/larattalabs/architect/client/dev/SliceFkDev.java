@@ -335,7 +335,7 @@ public final class SliceFkDev {
 				return dev.larattalabs.architect.site.LateCargo.stateJson();
 			}));
 		DevBridge.register("dev.removal.undoStage", 3_600_000, "{site} - (slice LC) TEST: undoes the stage holding site as a region revision undoes its own "
-			+ "stage (Groups.undoStage, ownStage) -> {removed, blockers, refund}", (req, mc) -> {
+			+ "stage (Groups.undoStage, ownStage), the later placed stages first (last first) -> {removed, blockers, refund}", (req, mc) -> {
 				String site = Fields.of(req).nonBlank("site");
 				return ServerTasks.callOnServer(s -> {
 					var rec = dev.larattalabs.architect.site.Sites.get(site);
@@ -343,11 +343,32 @@ public final class SliceFkDev {
 						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
 					}
 					var g = dev.larattalabs.architect.site.Sites.group(rec.member().group());
-					String stage = g == null ? null : g.stages().stream().filter(st -> st.sites().contains(site)).map(st -> st.name()).findFirst().orElse(null);
-					if (stage == null) {
+					int at = -1;
+					for (int i = 0; g != null && i < g.stages().size(); i++) {
+						if (g.stages().get(i).sites().contains(site)) {
+							at = i;
+						}
+					}
+					if (at < 0) {
 						return java.util.concurrent.CompletableFuture.completedFuture((dev.larattalabs.architect.site.Groups.Removed) null);
 					}
-					return dev.larattalabs.architect.site.Groups.undoStage(s, g.id(), stage, false, dev.larattalabs.architect.site.Sites.Covered.KEEP, true);
+					// the later placed stages first (a revision's suffix undoes last first), then the site's own
+					java.util.List<String> order = new java.util.ArrayList<>();
+					for (int i = g.stages().size() - 1; i > at; i--) {
+						var st = g.stages().get(i);
+						if (st.state() == dev.larattalabs.architect.api.Stage.State.PLACED || st.state() == dev.larattalabs.architect.api.Stage.State.PARTIAL) {
+							order.add(st.name());
+						}
+					}
+					order.add(g.stages().get(at).name());
+					String gid = g.id();
+					java.util.concurrent.CompletableFuture<dev.larattalabs.architect.site.Groups.Removed> f = java.util.concurrent.CompletableFuture.completedFuture(null);
+					for (String st : order) {
+						f = f.thenCompose(prev -> prev != null && !prev.removed() ? java.util.concurrent.CompletableFuture.completedFuture(prev)
+							: s.submit(() -> dev.larattalabs.architect.site.Groups.undoStage(s, gid, st, false, dev.larattalabs.architect.site.Sites.Covered.KEEP, true))
+								.thenCompose(x -> x));
+					}
+					return f;
 				}).thenCompose(f -> f).handle((r, ex) -> {
 					JsonObject o = new JsonObject();
 					if (ex != null) {

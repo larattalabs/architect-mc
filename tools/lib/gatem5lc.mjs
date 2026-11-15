@@ -84,6 +84,7 @@ export async function registerLC(steps, h) {
     await L.setRules('exact');
     await cmd('/weather clear');
     await entry();
+    await call('dev.removal.state', { clear: true }, 10_000);
     await L.tp(CX + 80, 80, CZ + 56);
     const gy = await groundY();
     const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
@@ -122,14 +123,18 @@ export async function registerLC(steps, h) {
     return { name, gy, region, site, ps0, chest, s, dir: path.join(L.SAVES, name) };
   }
 
-  const near = async (at) => (await call('dev.items.near', { pos: at, radius: 96 }, 60_000)).items ?? {};
+  /** Item entities within 64 of the hook's drop cell (the last late cargo handed out), or of `at` when none was handed out. */
+  const near = async (at) => {
+    const last = (await call('dev.removal.state', {}, 10_000).catch(() => ({}))).last;
+    const pos = last?.at ? P(last.at) : at;
+    return (await call('dev.items.near', { pos, radius: 64 }, 60_000)).items ?? {};
+  };
 
   // ------------------------------------------------------------------ lc-survival
 
   steps.lcsurvival = async () => {
     await ensure();
     const out = {};
-    await call('dev.removal.state', { clear: true }, 10_000).catch(() => null);
     // town A: the stage undo (the path a region's undoRevision takes: Groups.undoStage, ownStage)
     const A = await town('G6B LC Undo');
     if (A) {
@@ -166,7 +171,6 @@ export async function registerLC(steps, h) {
       await L.leaveWorld();
     }
     // town B: the region Remove (the whole group's undo)
-    await call('dev.removal.state', { clear: true }, 10_000).catch(() => null);
     const B = await town('G6B LC Remove');
     if (B) {
       const h2 = P(B.s.containers[2].at);
@@ -232,7 +236,7 @@ export async function registerLC(steps, h) {
     await L.settle(2000);
     const F = (await pile()).ledger;
     const back = backOf(F, B);
-    const items = (await call('dev.items.near', { pos: at, radius: 96 }, 60_000)).items ?? {};
+    const items = (await call('dev.items.near', { pos: at, radius: 64 }, 60_000)).items ?? {};
     out.LC1 = { savedCustody, state: st?.view?.state ?? 'gone', back: sum(back), consumed: sum(consumed), diff: G.minus(back, consumed), items: only(items, FK), custody: F.custody ?? null };
     check(['REMOVED', 'gone'].includes(out.LC1.state) && G.same(back, consumed) && !F.custody && sum(only(items, FK)) === 0,
       `LC1: after the restart and the retry the removal ends once (${out.LC1.state}): what came back = what the town consumed, item for item (${sum(back)} = ${sum(consumed)}; differ ${json(out.LC1.diff)}): items in = items out; no custody; none of the fill's items dropped`, out.LC1);
