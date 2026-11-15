@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.63.0";
+	String VERSION = "1.64.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -302,7 +302,7 @@ public interface ArchitectApi {
 	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
 	 * as construction; {@code SITE_BUILT} comes after the unlock. A checker refusal of a fill is {@link Reason#PROGRAM_REFUSED} with detail
 	 * {@code fill}. No new method or reason.
-	 * (FK-b, since NEXT) {@code "fillProvided"} is advertised when the helper's kit takes module-provided fill items (its
+	 * (FK-b, since 1.64.0) {@code "fillProvided"} is advertised when the helper's kit takes module-provided fill items (its
 	 * {@code design.fillProvided}): a fill's item may carry {@code provided: true} when it is in {@link Limits#FILL_PROVIDED_ITEMS} (and must,
 	 * for those). A provided item is written with the fill unbilled: it is left out of the quote, the bill, the outstanding and
 	 * {@code nextNeeded}, and a removal or undo takes it back with no refund. It never reaches survival: a break of its declared container
