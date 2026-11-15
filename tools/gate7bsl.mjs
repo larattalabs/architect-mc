@@ -112,16 +112,20 @@ steps.unit = async () => {
   // the 59 asks on the merge base and here
   const B = await import('./lib/gate6chy-b.mjs');
   // (current: the asks as they stand: the three that wait on layout.elevated are among Steward's 12 re-recorded plans (close-out A))
-  const before = await B.asksGap(path.join(path.resolve(root, '..', 'architect-mc-SL-main'), 'kit'), { current: true }), after = await B.asksGap(KIT, { current: true });
+  const baseKit = path.join(path.resolve(root, '..', 'architect-mc-SL-main'), 'kit');
+  // ((chore AR) SL is on main since v0.60.0: on a base past SL nothing moves, and the base's table is the head's, so it equals the committed
+  // after table; asks-before.txt stays SL's record of the three layout.elevated asks, as CL's item 3 reads its own)
+  const onMain = fs.existsSync(path.join(baseKit, 'lib', 'region', 'siteLots.mjs'));
+  const before = await B.asksGap(baseKit, { current: true }), after = await B.asksGap(KIT, { current: true });
   fs.writeFileSync(path.join(OUT, 'sl-asks-before.txt'), before.text);
   fs.writeFileSync(path.join(OUT, 'sl-asks-after.txt'), after.text);
   const lines = (t) => new Map(t.split('\n').filter((l) => /^[a-z_0-9]+\/[a-z_0-9]+ /.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...new Set([...la.keys(), ...lb.keys()])].filter((k) => lb.get(k) !== la.get(k));
   const F = path.join(KIT, 'test', 'fixtures', 'plan', 'sl');
-  out.asks = { moved, malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text };
-  check(after.malformed === 0 && moved.length > 0 && moved.every((k) => ASKS_MOVE.test(k)) && out.asks.committedAfter && out.asks.committedBefore,
-    `the 59 asks on the merge base and here: 0 malformed; only the asks that waited on layout.elevated move (${moved.join(', ')}); both tables equal fixtures/plan/sl/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
+  out.asks = { moved, malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && (fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text || (onMain && fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === before.text)) };
+  check(after.malformed === 0 && ((moved.length > 0 && moved.every((k) => ASKS_MOVE.test(k))) || (onMain && moved.length === 0)) && out.asks.committedAfter && out.asks.committedBefore,
+    `the 59 asks on the merge base and here: 0 malformed; ${onMain ? 'SL on the base: nothing moves' : 'only the asks that waited on layout.elevated move'} (${moved.join(', ') || 'none'}); both tables equal fixtures/plan/sl/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
   spendZero();
   return out;
 };

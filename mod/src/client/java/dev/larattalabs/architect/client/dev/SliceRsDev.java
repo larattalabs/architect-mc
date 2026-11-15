@@ -129,6 +129,120 @@ public final class SliceRsDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.rs.freeDrops", 30_000, "{off?: bool} - (J1, RS-c, TEST) the piston and explosion free-drop hooks off (the case "
+			+ "before the fix) or on -> {off, broken, pistonHeld, pistonBroken, exploded}", (req, mc) -> ServerTasks.callOnServer(s -> {
+				if (req.has("off")) {
+					RegionFreeDrops.testNoPistonExplosion = req.get("off").getAsBoolean();
+				}
+				JsonObject o = new JsonObject();
+				o.addProperty("off", RegionFreeDrops.testNoPistonExplosion);
+				o.addProperty("broken", RegionFreeDrops.BROKEN.get());
+				o.addProperty("pistonHeld", RegionFreeDrops.PISTON_HELD.get());
+				o.addProperty("pistonBroken", RegionFreeDrops.PISTON_BROKEN.get());
+				o.addProperty("exploded", RegionFreeDrops.EXPLODED.get());
+				return o;
+			}));
+		DevBridge.register("dev.rs.explode", 60_000, "{at: [x,y,z], power?: 2} - (J1, RS-c) a TNT-class explosion at the cell's centre (no source "
+			+ "entity), as a primed TNT's -> {cells: [[x,y,z,free,before]] for every cell within power+1 that held a block, destroyed: [[x,y,z,free]], "
+			+ "exploded}", (req, mc) -> {
+				JsonArray a = req.getAsJsonArray("at");
+				BlockPos p = new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
+				float power = req.has("power") ? req.get("power").getAsFloat() : 2f;
+				return ServerTasks.callAsPlayer((level, player) -> {
+					int r = (int) Math.ceil(power) + 1;
+					java.util.List<BlockPos> cells = new java.util.ArrayList<>();
+					java.util.List<Boolean> free = new java.util.ArrayList<>();
+					JsonArray before = new JsonArray();
+					for (BlockPos q : BlockPos.betweenClosed(p.offset(-r, -r, -r), p.offset(r, r, r))) {
+						if (level.getBlockState(q).isAir()) {
+							continue;
+						}
+						BlockPos k = q.immutable();
+						boolean f = RegionFreeDrops.freeWrite(level, k);
+						cells.add(k);
+						free.add(f);
+						JsonArray c = new JsonArray();
+						c.add(k.getX());
+						c.add(k.getY());
+						c.add(k.getZ());
+						c.add(f);
+						c.add(level.getBlockState(k).toString());
+						before.add(c);
+					}
+					long ex0 = RegionFreeDrops.EXPLODED.get();
+					level.explode(null, p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5, power, net.minecraft.world.level.Level.ExplosionInteraction.TNT);
+					JsonArray destroyed = new JsonArray();
+					for (int i = 0; i < cells.size(); i++) {
+						if (level.getBlockState(cells.get(i)).isAir()) {
+							JsonArray c = new JsonArray();
+							c.add(cells.get(i).getX());
+							c.add(cells.get(i).getY());
+							c.add(cells.get(i).getZ());
+							c.add(free.get(i));
+							destroyed.add(c);
+						}
+					}
+					JsonObject o = new JsonObject();
+					o.add("cells", before);
+					o.add("destroyed", destroyed);
+					o.addProperty("exploded", RegionFreeDrops.EXPLODED.get() - ex0);
+					return o;
+				});
+			});
+		DevBridge.register("dev.rs.surface", 60_000, "{columns: [[x,z]], minY, maxY} - (J1, RS-c) per column, the topmost cell from maxY down that "
+			+ "is a survival region's free write with air above it -> {cells: [[x,y,z,state] | null]}", (req, mc) -> {
+				JsonArray cols = req.getAsJsonArray("columns");
+				int minY = req.get("minY").getAsInt(), maxY = req.get("maxY").getAsInt();
+				return ServerTasks.callAsPlayer((level, player) -> {
+					JsonArray out = new JsonArray();
+					for (var c : cols) {
+						JsonArray a = c.getAsJsonArray();
+						int x = a.get(0).getAsInt(), z = a.get(1).getAsInt();
+						JsonArray hit = null;
+						for (int y = maxY; y >= minY && hit == null; y--) {
+							BlockPos q = new BlockPos(x, y, z);
+							if (!level.getBlockState(q).isAir() && level.getBlockState(q.above()).isAir() && level.getBlockState(q.above(2)).isAir()) {
+								if (RegionFreeDrops.freeWrite(level, q)) {
+									hit = new JsonArray();
+									hit.add(x);
+									hit.add(y);
+									hit.add(z);
+									hit.add(level.getBlockState(q).toString());
+								}
+								break; // the column's surface: free or not, no lower cell has air above it
+							}
+						}
+						out.add(hit);
+					}
+					JsonObject o = new JsonObject();
+					o.add("cells", out);
+					return o;
+				});
+			});
+		DevBridge.register("dev.rs.piston", 30_000, "{at: [x,y,z], phase: push|read} - (J1, RS-c) push: a piston below the cell facing up, then a "
+			+ "redstone block beside the piston (vanilla updates, not journalled); read: the cell, the cell above and the piston -> {at, above, "
+			+ "piston, extended, pistonHeld}", (req, mc) -> {
+				JsonArray a = req.getAsJsonArray("at");
+				BlockPos p = new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
+				String phase = req.has("phase") ? req.get("phase").getAsString() : "read";
+				return ServerTasks.callAsPlayer((level, player) -> {
+					BlockPos pb = p.below();
+					if ("push".equals(phase)) {
+						level.setBlock(pb, net.minecraft.world.level.block.Blocks.PISTON.defaultBlockState().setValue(
+							net.minecraft.world.level.block.piston.PistonBaseBlock.FACING, net.minecraft.core.Direction.UP), 3);
+						level.setBlock(pb.east(), net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK.defaultBlockState(), 3);
+					}
+					net.minecraft.world.level.block.state.BlockState ps = level.getBlockState(pb);
+					JsonObject o = new JsonObject();
+					o.addProperty("at", level.getBlockState(p).toString());
+					o.addProperty("above", level.getBlockState(p.above()).toString());
+					o.addProperty("piston", ps.toString());
+					o.addProperty("extended", ps.hasProperty(net.minecraft.world.level.block.piston.PistonBaseBlock.EXTENDED) && ps.getValue(
+						net.minecraft.world.level.block.piston.PistonBaseBlock.EXTENDED));
+					o.addProperty("pistonHeld", RegionFreeDrops.PISTON_HELD.get());
+					return o;
+				});
+			});
 		DevBridge.register("dev.rs.break", 60_000, "{at: [x,y,z]} - (6c RS, N-RS-2) the player breaks the cell as in survival (its game mode's own "
 			+ "destroyBlock: the break events fire, drops as vanilla or none) -> {broken, before, after, freeBroken}", (req, mc) -> {
 				JsonArray a = req.getAsJsonArray("at");

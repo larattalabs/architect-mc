@@ -608,7 +608,7 @@ public final class RoadBuilder {
 			// 6c Y: a stockpile's road: its paid cells standing are refunded into the stockpile (once per placement); no crate here.
 			// C29: tallied now (the road left the feed with its removal job, so nothing is placed after this) and credited by the job
 			// once its restore is written (RestoreJob.credit), not before: a restore that breaks credits nothing
-			Map<String, Integer> refund = refundOf(level, road);
+			Map<String, Integer> refund = refundOf(level, road, dropPlayerMatches(level, road)); // (J1) a player's matching block: theirs
 			Builder.Run r = RUNS.get(road.id());
 			if (r != null) {
 				Builder.sendClear(srv, r, false);
@@ -664,6 +664,68 @@ public final class RoadBuilder {
 	/** Where a road's items drop without a crate: above its box's middle. */
 	static BlockPos dropAt(Infra road) {
 		return new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ() + road.box().maxZ()) / 2);
+	}
+
+	/**
+	 * (J1, JR-b's F10 for roads) Before a stockpile road's removal tallies its refund: a built, non-free queued cell holding its target with
+	 * a PT record is the player's block (Architect's own writes clear the record, so the builder found it standing and charged nothing). Its
+	 * item drops at the cell and the cell gets its before from the road's journal layer now (so a removal run again finds nothing to drop);
+	 * a CU equivalent (another copper stage, farmland for dirt) the restore keeps as the player's (holdsOurs). Both are left out of the
+	 * refund (never out of the road's paid record). A before that is the same block keeps it standing. Returns the cells left out.
+	 */
+	static it.unimi.dsi.fastutil.longs.LongOpenHashSet dropPlayerMatches(ServerLevel level, Infra road) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet out = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		Construction c = road.construction();
+		Builder.Run r = c == null ? null : run(level.getServer(), road);
+		if (r == null) {
+			return out;
+		}
+		r.rescan(level, true);
+		BitSet free = c.free();
+		int dropped = 0;
+		for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+			BlockPos p = r.pos(q);
+			if (free.get(q) || dev.larattalabs.architect.placed.Placed.record(level, p) == null) {
+				continue;
+			}
+			BlockState now = level.getBlockState(p);
+			if (!r.matches(now, q)) {
+				continue;
+			}
+			BlockState was = beforeOf(road, p);
+			if (was == null || dev.larattalabs.architect.journal.Copper.is(now, was.getBlock())) {
+				out.add(p.asLong()); // the restore writes the same block back (or no layer to read): it stays the player's, no refund
+				continue;
+			}
+			out.add(p.asLong());
+			if (WorldJournal.cuEquivalent(now, r.target[q])) {
+				continue; // (JR-b verifier's case) the restore keeps it as the player's: nothing dropped, nothing refunded
+			}
+			Map<String, Integer> items = new TreeMap<>();
+			Cells.cost(now).forEach(x -> items.merge(x.item(), x.count(), Integer::sum));
+			Builder.dropItems(level, p, items, null);
+			dev.larattalabs.architect.placed.Placed.set(level, p, was, Sites.CELL_FLAGS);
+			dropped++;
+		}
+		if (!out.isEmpty()) {
+			Architect.LOGGER.info("Construction road {}: {} player block(s) in its cells left out of its refund ({} dropped at their cells)", road.id(),
+				out.size(), dropped);
+		}
+		return out;
+	}
+
+	/** The road's own journal layer's before at {@code p}, or null. */
+	private static @Nullable BlockState beforeOf(Infra road, BlockPos p) {
+		try {
+			for (WorldJournal.Layer l : WorldJournal.stack(road.dimension(), p.asLong())) {
+				if (road.id().equals(l.meta().site())) {
+					return WorldJournal.state(l.cell().before());
+				}
+			}
+		} catch (java.io.IOException e) {
+			// unreadable: no before
+		}
+		return null;
 	}
 
 	/** 6c Y: what a construction road's removal refunds: the cost of its paid cells standing as built (loading its chunks). */

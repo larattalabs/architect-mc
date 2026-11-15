@@ -1,12 +1,8 @@
-# 59 asks: adjusted 16, blocked 21, fits 64, refused 11, unsupported 16
+# 59 asks: adjusted 18, blocked 20, fits 67, refused 14, unsupported 9
 # gap table (unsupported parts per block id):
-  tunnel.under             3
-  form.crater              2
   rule.variety             2
   connector.rail           1
   connector.tube           1
-  form.floating_island     1
-  form.hollow_mountain     1
   form.mast                1
   form.seabed_site         1
   form.ship_hull           1
@@ -32,13 +28,13 @@ cliff_monks/sea_stair connector.path fits
 cliff_monks/ledge_path connector.path fits
 conquered_town/village zone.standard fits
 crater_mine/mine_zone zone.standard fits
-crater_mine/crater form.crater unsupported UNSUPPORTED until 7c
+crater_mine/crater form.crater fits
 crater_mine/crater_relief form.relief fits
 desert_jungle_wall/town zone.standard fits
 desert_jungle_wall/great_wall connector.wall fits
 desert_jungle_wall/two_faced_palette rule.palette refused NO_FEATURE
 dwarven_hold/hold zone.standard fits
-dwarven_hold/mountain_hollow form.hollow_mountain unsupported UNSUPPORTED until 7c
+dwarven_hold/mountain_hollow form.hollow_mountain adjusted
 end_city_ruins/city zone.standard adjusted
 end_city_ruins/terrace_1 form.terrace fits
 falls_to_ruin/hold zone.standard fits
@@ -85,8 +81,8 @@ redstone_gate/moat connector.channel fits
 redstone_gate/gate_road connector.road blocked DEPENDENCY
 redstone_gate/main_gate connector.gate blocked DEPENDENCY
 redstone_gate/drawbridge connector.drawbridge blocked DEPENDENCY
-ring_city/ring_town zone.standard blocked DEPENDENCY
-ring_city/crater_lake form.crater unsupported UNSUPPORTED until 7c
+ring_city/ring_town zone.standard fits
+ring_city/crater_lake form.crater fits
 rival_families/west_bank zone.standard adjusted
 rival_families/east_bank zone.standard adjusted
 row_houses/row zone.standard fits
@@ -94,15 +90,15 @@ row_houses/identical_houses rule.variety unsupported UNSUPPORTED until RC
 row_houses/plain_palette rule.palette refused NO_FEATURE
 ruined_empire/survivors_camp zone.standard fits
 secret_tunnels/cove zone.standard fits
-secret_tunnels/tunnel_cellar tunnel.under unsupported UNSUPPORTED until 7b
-secret_tunnels/tunnel_dock tunnel.under unsupported UNSUPPORTED until 7b
-secret_tunnels/tunnel_hatch tunnel.under unsupported UNSUPPORTED until 7b
+secret_tunnels/tunnel_cellar tunnel.under refused NO_FEATURE
+secret_tunnels/tunnel_dock tunnel.under refused NO_FEATURE
+secret_tunnels/tunnel_hatch tunnel.under refused NO_FEATURE
 ship_town/ship_deck zone.standard fits
 ship_town/ship_hull form.ship_hull unsupported UNSUPPORTED until unscheduled
 ship_town/ship_masts form.mast unsupported UNSUPPORTED until unscheduled
 sky_monastery/cloister zone.standard fits
 sky_monastery/long_stair connector.stair refused NO_CLIMB
-sky_monastery/sky_island form.floating_island unsupported UNSUPPORTED until N-P0-1
+sky_monastery/sky_island form.floating_island adjusted
 sorting_warehouse/trading_post zone.standard fits
 spiral_town/hill_town zone.standard adjusted
 survival_village/village zone.standard fits

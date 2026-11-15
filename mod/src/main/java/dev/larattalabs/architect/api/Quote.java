@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  *     world at each: a cell that already holds its block is left out of {@code tiles:<group>}, so the quote equals what the realise
  *     consumes; only cells in unloaded chunks (or past the kit's cap) stay an upper bound; {@code notes} say which
  * @param notes why a piece is not exact, and what the quote read
- * @param terrain (QL, since NEXT, feature {@code "quoteTerrain"}) item id to count, sorted: the part of {@code bom} that comes from the
+ * @param terrain (QL, since 1.62.0, feature {@code "quoteTerrain"}) item id to count, sorted: the part of {@code bom} that comes from the
  *     plan's kept paid terrain cells (plan.json's {@code survivalTerrain}, every group) read at quote time. Its keys are every item of
  *     those cells, <b>including an item whose count is 0</b> (every cell already stands), so a caller can tell a terrain item from any
  *     other; its count is the units those cells bill (cells not holding their block now, plus cells in unloaded chunks, billed with

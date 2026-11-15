@@ -1,4 +1,4 @@
-# 59 asks (adjusted 8, blocked 5, fits 70, refused 33, unsupported 16); 0 malformed
+# 59 asks (adjusted 10, blocked 4, fits 73, refused 34, unsupported 11); 0 malformed
 arcology REQUIRED_BLOCKED
   tower_city zone.standard fits
   unused_placeholder zone.standard refused NO_ROOM
@@ -28,17 +28,17 @@ cliff_monks READY
   ledge_path connector.path fits
 conquered_town READY
   village zone.standard fits
-crater_mine REQUIRED_BLOCKED
+crater_mine READY
   mine_zone zone.standard fits
-  crater form.crater unsupported UNSUPPORTED
+  crater form.crater fits
   crater_relief form.relief fits
 desert_jungle_wall NEEDS_REPAIR
   town zone.standard fits
   great_wall connector.wall fits
   two_faced_palette rule.palette refused NO_FEATURE
-dwarven_hold REQUIRED_BLOCKED
+dwarven_hold READY
   hold zone.standard fits
-  mountain_hollow form.hollow_mountain unsupported UNSUPPORTED
+  mountain_hollow form.hollow_mountain adjusted
 end_city_ruins NEEDS_REPAIR
   city zone.standard fits
   dwelling_bridges connector.bridge refused NO_GAP
@@ -109,9 +109,9 @@ redstone_gate REQUIRED_BLOCKED
   curtain_wall connector.wall adjusted
   main_gate connector.gate refused NO_ROOM
   drawbridge connector.drawbridge blocked DEPENDENCY
-ring_city REQUIRED_BLOCKED
-  ring_town zone.standard blocked DEPENDENCY
-  crater_lake form.crater unsupported UNSUPPORTED
+ring_city READY
+  ring_town zone.standard fits
+  crater_lake form.crater fits
 rival_families REQUIRED_BLOCKED
   estates zone.standard refused NO_FEATURE
   family_colours rule.palette refused NO_FEATURE
@@ -134,7 +134,7 @@ ship_town REQUIRED_BLOCKED
 sky_monastery REQUIRED_BLOCKED
   cloister zone.standard fits
   long_stair connector.stair refused NO_CLIMB
-  sky_island form.floating_island unsupported UNSUPPORTED
+  sky_island form.floating_island adjusted
 sorting_warehouse READY
   trading_post zone.standard fits
 spiral_town REQUIRED_BLOCKED
@@ -180,7 +180,7 @@ upside_down REQUIRED_BLOCKED
   main_street connector.street fits
   chain_bridges connector.rope_bridge refused NO_GAP
   winch_lift connector.lift refused NO_CLIMB
-  hang_from_ceiling rule.suspended unsupported UNSUPPORTED
+  hang_from_ceiling rule.suspended refused NO_FEATURE
 walled_town READY
   town zone.standard fits
   town_wall connector.wall fits

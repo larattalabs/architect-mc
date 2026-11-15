@@ -1236,6 +1236,93 @@ steps.item15 = async () => {
   return { fill, spire: heldSpire, b1, b2, dropped, eflat: ef.length };
 };
 
+// ------------------------------------------------------------------ rsc: free drops by piston and explosion (J1, RS-c, audit F8)
+
+/**
+ * Slice J1 (RS-c): item 15's free cells, taken by a piston and an explosion instead of a player. Each a before case (the hooks off,
+ * dev.rs.freeDrops {off: true}: what the old code minted) and an after case (as built). P0/P1: a piston below a surface free cell, facing
+ * up, powered; P0's block moves up and drops when mined there; P1's piston can't push it. E0/E1: a TNT-class explosion (power 2, drop decay
+ * off) centred on a surface free cell; the items dropped in the box counted. Then the removal: E1's blast cells (remembered as mined) are
+ * restored with the rest (E-flat 0 outside the before cases' and the piston rigs' cells).
+ */
+steps.rsc = async () => {
+  await ensure();
+  const R = await realised('rs01c', 'rs01_land', { crates: 3 });
+  const f = await G.feed(ctx, R.region, { timeoutMs: 1_800_000 });
+  check(f.last.rs.build?.done, `rsc: rs01 built (${f.last.st.view.state})`);
+  const W = R.s.W;
+  const columns = [];
+  for (let dx = 3; dx < W.claim[2] - W.claim[0] - 2; dx += 7) for (let dz = 3; dz < W.claim[3] - W.claim[1] - 2; dz += 7) columns.push([W.claim[0] + dx, W.claim[1] + dz]);
+  const sf = await L.call('dev.rs.surface', { columns, minY: W.minY - 2, maxY: W.maxY + 12 }, 300_000);
+  const free = (sf.cells ?? []).filter(Boolean);
+  // four cells at least 7 apart (one per case)
+  const picks = [];
+  for (const c of free) if (picks.length < 4 && picks.every((q) => Math.abs(q[0] - c[0]) + Math.abs(q[2] - c[2]) >= 7)) picks.push(c);
+  check(picks.length === 4, `rsc: four surface free cells with air above (${free.length} found over ${columns.length} columns)`, picks);
+  if (picks.length < 4) return { free: free.length };
+  const [A, B, C, D] = picks.map((c) => c.slice(0, 3));
+  const box = { owner: G.OWNER, min: [R.box[0], R.box[1], R.box[2]], max: [R.box[3], R.box[4], R.box[5]] };
+  const ground = async () => (await L.call('dev.stockpile.audit', box, 120_000)).entities ?? {};
+  const out = {};
+  await cmd('/gamerule tnt_explosion_drop_decay false');
+  await cmd('/gamerule tntExplosionDropDecay false');
+  // ---- pistons
+  await cmd('/gamemode survival');
+  await cmd('/item replace entity @s weapon.mainhand with minecraft:diamond_pickaxe'); // stone-class free cells drop only to a pickaxe
+  await L.call('dev.rs.freeDrops', { off: true }, 30_000);
+  const p0 = await L.call('dev.rs.piston', { at: A, phase: 'push' }, 30_000);
+  await sleep(1500);
+  const p0r = await L.call('dev.rs.piston', { at: A, phase: 'read' }, 30_000);
+  const g0 = await ground();
+  const b0 = await L.call('dev.rs.break', { at: [A[0], A[1] + 1, A[2]] }, 60_000);
+  await sleep(1500);
+  const p0drop = G.minus(await ground(), g0);
+  out.P0 = { pushed: p0r, broken: b0, dropped: p0drop };
+  check(p0r.extended === true && /piston_head/.test(p0r.at) && /air/.test(b0.after ?? '') && Object.keys(p0drop).length > 0, `rsc P0 (before J1, the hooks off): the piston pushed the free cell ${json(A)} (${p0.at}) up (now ${p0r.at} / above ${p0r.above}); mined there it dropped ${json(p0drop)}: ${Object.values(p0drop).reduce((a, b) => a + b, 0)} item(s) minted`);
+  await L.call('dev.rs.freeDrops', { off: false }, 30_000);
+  const held0 = (await L.call('dev.rs.freeDrops', {}, 30_000)).pistonHeld;
+  const p1 = await L.call('dev.rs.piston', { at: B, phase: 'push' }, 30_000);
+  await sleep(1500);
+  const p1r = await L.call('dev.rs.piston', { at: B, phase: 'read' }, 30_000);
+  const g1 = await ground();
+  const b1 = await L.call('dev.rs.break', { at: B }, 60_000);
+  await sleep(1500);
+  const p1drop = G.minus(await ground(), g1);
+  out.P1 = { pushed: p1r, broken: b1, dropped: p1drop };
+  check(p1r.extended === false && p1r.at === p1.at && /air/.test(p1r.above) && p1r.pistonHeld > held0 && /air/.test(b1.after ?? '') && Object.keys(p1drop).length === 0,
+    `rsc P1 (as built): the powered piston below the free cell ${json(B)} (${p1.at}) did not extend (held ${p1r.pistonHeld - held0}), the cell still holds it; mined, nothing dropped (${json(p1drop)})`);
+  // ---- explosions (the bot in creative: the blast's damage aside)
+  await cmd('/gamemode creative');
+  const boom = async (at, off) => {
+    await L.call('dev.rs.freeDrops', { off }, 30_000);
+    const g = await ground();
+    const e = await L.call('dev.rs.explode', { at, power: 2 }, 60_000);
+    await sleep(2500);
+    const dropped = G.minus(await ground(), g);
+    const freeGone = (e.destroyed ?? []).filter((c) => c[3]).length;
+    const otherGone = (e.destroyed ?? []).length - freeGone;
+    return { at, dropped, items: Object.values(dropped).reduce((a, b) => a + b, 0), destroyed: e.destroyed ?? [], freeGone, otherGone, exploded: e.exploded };
+  };
+  out.E0 = await boom(C, true);
+  check(out.E0.freeGone > 0 && out.E0.exploded === 0, `rsc E0 (before J1, the hooks off): the blast at ${json(C)} took ${out.E0.freeGone} free cell(s) and ${out.E0.otherGone} other(s); dropped ${json(out.E0.dropped)}: ${out.E0.items} item(s)`);
+  out.E1 = await boom(D, false);
+  await L.call('dev.rs.freeDrops', { off: false }, 30_000);
+  check(out.E1.freeGone > 0 && out.E1.exploded === out.E1.freeGone && (out.E1.otherGone > 0 || out.E1.items === 0),
+    `rsc E1 (as built): the blast at ${json(D)} took ${out.E1.freeGone} free cell(s) without loot (the hook counted ${out.E1.exploded}) and ${out.E1.otherGone} other(s); dropped ${json(out.E1.dropped)} (${out.E1.items} item(s)${out.E1.otherGone ? ', the others\' loot' : ''})`);
+  await cmd('/gamemode survival');
+  // ---- the removal: the mined free cells (B, E1's blast) put back, then restored; the before cases' cells and the rigs aside
+  await cmd('/kill @e[type=minecraft:item]');
+  const rm = await G.remove(ctx, R.region);
+  const e = await G.diff(ctx, R.box, R.pre);
+  const near = (m, c, r) => { const [x, y, z] = m.pos.split(',').map(Number); return Math.abs(x - c[0]) <= r && Math.abs(y - c[1]) <= r && Math.abs(z - c[2]) <= r; };
+  const aside = (m) => R.crateAt.some((c) => c.join(',') === m.pos) || near(m, A, 2) || near(m, C, 4) || near(m, B, 1) && !(m.pos === B.join(','));
+  const ef = e.list.filter((m) => !aside(m));
+  const e1Cells = e.list.filter((m) => near(m, D, 4));
+  out.eflat = ef.length;
+  check(rm.removed && ef.length === 0, `rsc: then removed: E-flat ${ef.length} outside the before cases (P0 at ${json(A)}, E0 at ${json(C)}) and P1's rig; E1's blast cells differ ${e1Cells.length}`, ef.slice(0, 8));
+  return out;
+};
+
 // ------------------------------------------------------------------ item 18: the survival toggle switched off mid-build (fix/survival-off-storm)
 
 /**

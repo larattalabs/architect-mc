@@ -20,6 +20,7 @@ Rows before v0.60.0 were back-filled from the git tags on 2026-11-13 (slice TJ):
 
 | Release | Date | API | Kit | Catalogue | Feature names added | Steward | Package |
 |---|---|---|---|---|---|---|---|
+| v0.70.0 | 2026-11-15 | 1.62.0 | 0.65.0 | 24 | `quoteTerrain` | RC passed | ok |
 | v0.69.0 | 2026-11-15 | 1.61.0 | 0.64.0 | 24 | `shapePromotion` | RC passed | ok |
 | v0.68.0 | 2026-11-14 | 1.60.0 | 0.63.0 | 23 |  | RC passed | ok |
 | v0.67.0 | 2026-11-14 | 1.60.0 | 0.62.0 | 23 | `kitVersion`, `maxBill`, `sitesLoadHealthy` | RC passed | ok |

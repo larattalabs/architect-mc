@@ -167,7 +167,7 @@ class StockpileSavePSTest {
 		String g = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Groups.java")).replaceAll("//[^\n]*", "");
 		String credit = StockpileSaveHFTest.body(g, "private static void credit(MinecraftServer server, Removal r, String id)");
 		int booked = credit.indexOf("Builder.creditRefund(");
-		int saved = credit.indexOf("Stockpiles.saveWithWorld(server);");
+		int saved = credit.indexOf("Stockpiles.saveCredit(server);"); // (J1) saveCredit: saveWithWorld unless the TEST switch
 		assertTrue(booked >= 0 && saved > booked, "N1: a booked refund credit is saved with the world right after it");
 		assertTrue(credit.substring(booked, saved).contains("if (!already)"), "only when it booked (once per key)");
 
