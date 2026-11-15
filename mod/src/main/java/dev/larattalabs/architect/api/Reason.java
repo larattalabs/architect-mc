@@ -158,5 +158,7 @@ public enum Reason {
 	// 1.55.0 (7c foundation): composition's reasons, in the contract's order
 	JOINT_MISMATCH, AUTHORED_STALE,
 	// 1.60.0 (BC, S-M5-9): a survival realise's bill past its maxBill
-	BILL_CAP
+	BILL_CAP,
+	// NEXT (DR): a repair whose plan's cells changed since its diagnosis (diagnose again)
+	REPAIR_STALE
 }

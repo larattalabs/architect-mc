@@ -43,7 +43,9 @@ public final class ApiRules {
 		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
 		"quoteTerrain",
 		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion");
+		"apiVersion",
+		// (DR) Sites.diagnose and Sites.repair (an op's roll-forward of cells lagging the journal); Sites.suspects (the auto-diagnose's cache)
+		"diagnoseRepair", "repairSuspects");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:

@@ -56,6 +56,33 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return dev.larattalabs.architect.site.Sites.loadHealthy(); // (BC, 1.60.0)
 	}
 
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Diagnosis> diagnose(dev.larattalabs.architect.api.DiagnoseScope scope) {
+		java.util.Objects.requireNonNull(scope, "scope");
+		return onServer(() -> {
+			if (!dev.larattalabs.architect.site.Repairs.startDone()) {
+				throw new IllegalStateException("the world is still starting (its settles are not done)");
+			}
+			return dev.larattalabs.architect.site.Repairs.diagnose(server, scope); // (DR)
+		});
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.RepairResult> repair(String planId, @Nullable ServerPlayer actor, boolean apply) {
+		java.util.Objects.requireNonNull(planId, "planId");
+		return onServer(() -> dev.larattalabs.architect.site.Repairs.repair(server, planId, actor, apply)); // (DR) the actor is always required
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.RepairSuspect> suspects() {
+		return dev.larattalabs.architect.site.Repairs.suspects(); // (DR) the auto-diagnose's cache: loads nothing
+	}
+
+	@Override
+	public boolean suspectsPending() {
+		return dev.larattalabs.architect.site.Repairs.suspectsPending();
+	}
+
 	private final MinecraftServer server;
 
 	SitesImpl(MinecraftServer server) {
