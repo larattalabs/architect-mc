@@ -1,0 +1,495 @@
+#!/usr/bin/env node
+// Phase 7c slice PAY (docs/CONTRACT.md "Phase 7c" §3 row 16, §4 Spend plan, §5 Gates): the phase's only paid batch, one driver, modelled
+// on 7b's tools/gate7bpa.mjs. Every paid job runs on Noah's claude login only (never an API key), guarded by the PAY ledger
+// (tools/lib/pay-ledger.mjs): one phase ledger artifacts/7c/spend.json (in the main checkout), costs from each job's own reported usage;
+// before each paid job: committed + its cap > $65 (Noah's hard cap) refuses and writes STOP.json; the item's committed + the job's cap past
+// 1.2 x its share stops for the coordinator (exit 3, STOP.json); each job carries budgetUsd; at most one retry per item, from R; no paid
+// step in the nightly window; the env of every process the driver starts has no ANTHROPIC_* / CLAUDE* variable, and a key variable in
+// its own env refuses at once. No Discord, ever.
+//
+//   node tools/gate7cpay.mjs --plan                 every item's estimate (restated after P1), share, ceiling, cap and the running total
+//   node tools/gate7cpay.mjs --only <item>          one item: P0 (the offline parts: p0-styles, then the verdict; p0-compose is a gate
+//                                                   step) or P1 (p1-style, p1-compose, restate). P2-P6 and R: stage 2 (refused here)
+//   node tools/gate7cpay.mjs status                 the ledger
+//   node tools/gate7cpay.mjs p0-styles              P0 ($0, own sim helper): the Style jobs of P1, P2 (references off) and P5 (on), their
+//                                                   draft prompts diffed (references on vs off)
+//   node tools/gate7cpay.mjs p0-compose             P0 ($0, a gate step: the run dir's client on the sim): P1's three composes (images
+//                                                   on, the pick skipped) over the calibration claims, P4's arm (images off), each brief's
+//                                                   natural pick, P3's authoring call; the composer's prompts diffed (images on vs off)
+//   node tools/gate7cpay.mjs p0-verdict             P0's verdict per paid item (artifacts/7c/P0/P0.json)
+//   node tools/gate7cpay.mjs p1-style               P1 (paid, own helper on the claude login): 1 format 3 settlement Style
+//   node tools/gate7cpay.mjs p1-compose             P1 (paid, the run dir's client on the claude login): the 3 calibration composes
+//   node tools/gate7cpay.mjs restate                P2-P6's estimates from P1's measured unit costs (the table)
+//   node tools/gate7cpay.mjs answer --step <s> --yes|--no --text "<the coordinator's words>"
+//
+// Ports 8896 (helper / the client's sidecar) and 8897 (DevBridge), --shards 1 (the brief; 8930/8931 are QL-b's). The helper and the
+// client never run at once.
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import * as P from './lib/pay-ledger.mjs';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const MAIN = path.resolve(root, '..', 'architect-mc');
+const ART = process.env.PAY_OUT ? path.resolve(process.env.PAY_OUT) : path.join(MAIN, 'artifacts', '7c');
+const LEDGER = path.join(ART, 'spend.json');
+const RUN = process.env.PAY_RUN ? path.resolve(process.env.PAY_RUN) : path.resolve(root, '..', 'architect-mc-PAY-run');
+const SIDECAR_PORT = 8896, DEV_PORT = 8897;
+const SEED = '2026100906';
+const REFS = path.resolve(root, '..', '..', 'references', '7c-N-7c-4');
+const args = process.argv.slice(2);
+const opt = (k, d = null) => { const i = args.indexOf(`--${k}`); return i < 0 ? d : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const r6 = (n) => Math.round(n * 1e6) / 1e6;
+fs.mkdirSync(ART, { recursive: true });
+const log = (m) => {
+  const line = `[${new Date().toISOString()}] ${m}`;
+  console.log(line);
+  fs.appendFileSync(path.join(ART, 'pay.log'), `${line}\n`);
+};
+const writeJson = (f, o) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, `${JSON.stringify(o, null, 2)}\n`); };
+const readJson = (f, d = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
+const gitHead = () => execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+
+// ---- P1's inputs: builder-written, non-scenario briefs over the calibration sites (scenarios/sites, the pinned seed) ------------------
+
+const site = (id) => JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'sites', `${id}.json`), 'utf8'));
+/** P1's three composes (never a scenario brief: AGENTS "Don't tune prompts against the eval briefs"). */
+export const P1_COMPOSES = Object.freeze([
+  { key: 'cliff', site: 'cliff_face', style: 'rustic', brief: "A small mining hamlet at the foot of the red cliff: a few miners' cottages and a tool shed, and a lookout on the clifftop reached by a stair up the face." },
+  { key: 'caravan', site: 'rift_site', style: 'medieval', brief: "A caravan stop on the open desert: a walled court round a well, a few traders' houses and stalls, and a road out of the court." },
+  { key: 'hill', site: 'tunnel_hill', style: 'rustic', brief: 'A farming village at the foot of the hill: cottages round a green, fields on the flat ground, and a road through a tunnel in the hill to the far side.' },
+]);
+/** P1's format 3 settlement Style (non-scenario). */
+export const P1_STYLE = Object.freeze({ name: 'PAY Badlands Hamlet', prompt: 'A red-sandstone mining hamlet in the badlands: timber-propped cottages on stone footings, lanterns on chains, tracks and spoil heaps.' });
+/** P2's and P5's settlement Styles (sim only in stage 1): the scenario's brief, references off (P2) and on (P5, N-7c-4's six images). */
+const SCN_STYLES = Object.freeze([
+  { key: 's3', scenario: 's3_monastery', name: 'PAY S3 Monastery', refs: ['S3-monastery-1', 'S3-monastery-2', 'S3-monastery-3'] },
+  { key: 's5', scenario: 's5_treehouses', name: 'PAY S5 Treehouses', refs: ['S5-treehouse-1', 'S5-treehouse-2', 'S5-treehouse-3'] },
+]);
+const SKIP_PICK = 'architect_mc:skipPick';
+const REF_EXT = 'architect_mc:referenceImages';
+
+// ---- env and the helper -------------------------------------------------------------------------------------------------------------
+
+/** No key, the claude login only: refuse when a key variable is set; every child env scrubbed (no ANTHROPIC_* / CLAUDE*). */
+function envCheck(step) {
+  const keys = P.KEY_VARS.filter((k) => process.env[k]?.trim());
+  if (keys.length) throw Object.assign(new Error(`refusing ${step}: ${keys.join(', ')} set (claude login only)`), { code: 2 });
+  const env = P.scrubbedEnv();
+  const names = P.anthropicNames(env);
+  if (names.length) throw Object.assign(new Error(`refusing ${step}: the child env still names anthropic: ${names.join(', ')}`), { code: 2 });
+  fs.appendFileSync(path.join(ART, 'auth.log'), `${JSON.stringify({ at: new Date().toISOString(), step, envAnthropic: names, keysInEnv: keys })}\n`);
+  return env;
+}
+
+class Helper {
+  /** Our own sidecar (this worktree's source) on 8896: `sim` or `claude` (the claude login), its dirs under `dir`. */
+  static async start(dir, backend) {
+    const h = new Helper();
+    h.dir = dir;
+    for (const d of ['data', 'library', 'bibles', 'massings']) fs.mkdirSync(path.join(dir, d), { recursive: true });
+    fs.rmSync(path.join(dir, 'data', 'client.token'), { force: true });
+    if (!fs.existsSync(path.join(dir, 'data', 'config.json'))) writeJson(path.join(dir, 'data', 'config.json'), {});
+    if (backend === 'claude') {
+      // the opt-in to the local claude login (as tools/lib/run6b.mjs setClaudeLogin), never a key
+      const f = path.join(dir, 'data', 'secrets.json');
+      fs.writeFileSync(f, JSON.stringify({ useClaudeLogin: true }), { mode: 0o600 });
+    }
+    const env = envCheck(`helper:${backend}`);
+    const out = fs.openSync(path.join(dir, 'sidecar.log'), 'a');
+    const a = ['--import', 'tsx', 'src/main.ts', '--port', String(SIDECAR_PORT), '--data', path.join(dir, 'data'), '--library', path.join(dir, 'library'), '--kit', path.join(root, 'kit'), '--bibles', path.join(dir, 'bibles'), '--massings', path.join(dir, 'massings'), '--parent-pid', String(process.pid), ...(backend === 'sim' ? ['--backend', 'sim'] : ['--backend', 'claude', '--use-claude-login'])];
+    h.proc = spawn(process.execPath, a, { cwd: path.join(root, 'sidecar'), env, stdio: ['ignore', out, out] });
+    fs.writeFileSync(path.join(dir, 'sidecar.pid'), String(h.proc.pid));
+    log(`helper pid ${h.proc.pid} (${backend}) on ${SIDECAR_PORT}, data ${dir}`);
+    for (let i = 0; i < 300 && !fs.existsSync(path.join(dir, 'data', 'client.token')); i++) await sleep(200);
+    await h.open();
+    for (let i = 0; i < 180 && (!h.status || h.status.auth === 'checking'); i++) await sleep(1000);
+    log(`helper auth ${JSON.stringify(h.auth())}`);
+    return h;
+  }
+  async open() {
+    const token = fs.readFileSync(path.join(this.dir, 'data', 'client.token'), 'utf8').trim();
+    this.ws = new WebSocket(`ws://127.0.0.1:${SIDECAR_PORT}`);
+    this.msgs = []; this.bibles = new Map(); this.status = null; this.n = 0;
+    this.ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'bible.upsert') this.bibles.set(m.bible.id, m.bible);
+      else if (m.type === 'status') this.status = m.status;
+      else if (m.type === 'snapshot') { this.status = m.status ?? this.status; for (const b of m.bibles ?? []) this.bibles.set(b.id, b); } else this.msgs.push(m);
+    };
+    await new Promise((res, rej) => ((this.ws.onopen = res), (this.ws.onerror = rej)));
+    this.ws.send(JSON.stringify({ v: 1, type: 'hello', client: 'gate7cpay', token, protocols: [2] }));
+    for (let i = 0; i < 100 && !this.status; i++) await sleep(100);
+  }
+  auth() { return { auth: this.status?.auth ?? null, authSource: this.status?.authSource ?? null }; }
+  async send(o, ms = 120_000) {
+    const id = `pay${++this.n}`;
+    this.ws.send(JSON.stringify({ v: 1, id, ...o }));
+    for (let i = 0; i < ms / 100; i++) {
+      const a = this.msgs.find((m) => m.type === 'ack' && m.re === id);
+      if (a) { if (!a.ok) throw Object.assign(new Error(`${o.type}: ${a.error}`), { refused: a.error }); return a.result ?? {}; }
+      await sleep(100);
+    }
+    throw new Error(`no ack for ${o.type}`);
+  }
+  async image(file) {
+    const bytes = fs.readFileSync(file);
+    const chunks = [];
+    for (let i = 0; i < bytes.length; i += 1 << 20) chunks.push(bytes.subarray(i, i + (1 << 20)).toString('base64'));
+    return (await this.send({ type: 'blob.put', kind: 'image', chunks })).blobId;
+  }
+  async waitBible(id, ms, onPoll) {
+    const t0 = Date.now();
+    for (;;) {
+      const b = this.bibles.get(id);
+      if (b && onPoll) onPoll(b);
+      if (b && ['done', 'failed', 'cancelled'].includes(b.status)) return b;
+      if (Date.now() - t0 > ms) return { ...(b ?? {}), status: 'timeout' };
+      await sleep(3000);
+    }
+  }
+  async stop() {
+    if (!this.proc || this.proc.exitCode !== null) return;
+    try { this.ws?.close(); } catch { /* closed */ }
+    const done = new Promise((r) => this.proc.once('exit', r));
+    this.proc.kill('SIGTERM'); // our own child, by its handle
+    await Promise.race([done, sleep(20_000)]);
+  }
+}
+
+/** A Style job's draft query as the sim recorded it (<scratch>/sim-queries.jsonl, kind bible-draft). */
+function bibleDraft(dir, jobId) {
+  const f = path.join(dir, 'data', 'bibles', jobId, 'sim-queries.jsonl');
+  const g = fs.existsSync(f) ? f : findFile(path.join(dir, 'data'), jobId, 'sim-queries.jsonl');
+  if (!g) return null;
+  return fs.readFileSync(g, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).find((q) => q.kind === 'bible-draft') ?? null;
+}
+// <base>/.../<id>/<name>: a job scratch dir, wherever the sidecar keeps it
+function findFile(base, id, name) {
+  const stack = [base];
+  while (stack.length) {
+    const d = stack.pop();
+    let es = [];
+    try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    for (const e of es) {
+      if (!e.isDirectory()) continue;
+      const p = path.join(d, e.name);
+      if (e.name === id && fs.existsSync(path.join(p, name))) return path.join(p, name);
+      if (!['kit', 'node_modules', 'library'].includes(e.name)) stack.push(p);
+    }
+  }
+  return null;
+}
+const lineDiff = (a, b) => { const A = String(a ?? '').split('\n'), B = String(b ?? '').split('\n'); const sa = new Set(A), sb = new Set(B); return { plus: B.filter((l) => !sa.has(l)), minus: A.filter((l) => !sb.has(l)) }; };
+
+// ---- the guard around one paid job --------------------------------------------------------------------------------------------------
+
+/** Guard and open one paid job (exit 3 with STOP.json on a stop or the $65 refusal; 2 on any other refusal). */
+function openPaid({ item, step, capUsd, authSource, retry = false, minutes = 45 }) {
+  envCheck(step);
+  const L0 = P.readLedger(LEDGER);
+  log(`${step}: the ledger before: spent $${L0.totalUsd}, committed $${L0.committedUsd} (hard cap $${P.HARD_CAP_USD}); ${item}: committed $${L0.items[item].committedUsd} of its ceiling $${P.ceilingOf(item)}; this job's cap $${capUsd}`);
+  P.withLedger(LEDGER, (L) => {
+    const g = P.guard(L, { item, step, capUsd, retry, minutes, authSource, envKeys: P.KEY_VARS.filter((k) => process.env[k]?.trim()) });
+    if (!g.ok) {
+      if (g.report) writeJson(path.join(ART, 'STOP.json'), { at: new Date().toISOString(), ...g });
+      throw Object.assign(new Error(g.message), { code: g.report ? 3 : 2, pay: g });
+    }
+    P.openJob(L, { item, step, capUsd, retry, authSource });
+  });
+}
+const closePaid = (step, o) => P.withLedger(LEDGER, (L) => P.updateJob(L, step, o));
+
+const subs = {};
+
+subs.plan = async () => {
+  const L = P.readLedger(LEDGER);
+  let running = 0;
+  const rows = Object.entries(P.ITEMS).map(([k, it]) => {
+    const est = P.estimateOf(L, k);
+    running = r6(running + (k === 'R' ? it.capUsd : est));
+    return { item: k, what: it.what, estUsd: est, shareUsd: it.shareUsd, ceilingUsd: k === 'P0' ? 0 : P.ceilingOf(k), capUsd: it.capUsd, spentUsd: L.items[k].spentUsd, runningTotalUsd: running };
+  });
+  console.log(JSON.stringify({ hardCapUsd: P.HARD_CAP_USD, rule: 'refuse past $65 committed; stop past 1.2 x share per item; one retry per item from R; claude login only', items: rows, spentUsd: L.totalUsd, committedUsd: L.committedUsd, p1Budgets: P.P1_BUDGETS, p1: P1_COMPOSES, p1Style: P1_STYLE, ledger: LEDGER, runDir: RUN, ports: [SIDECAR_PORT, DEV_PORT], restated: L.restated }, null, 2));
+};
+subs.status = async () => { const L = P.readLedger(LEDGER); console.log(JSON.stringify({ totalUsd: L.totalUsd, committedUsd: L.committedUsd, items: L.items, jobs: L.jobs, answers: L.answers, restated: L.restated }, null, 2)); };
+subs.answer = async () => {
+  const step = opt('step');
+  if (!step) throw new Error('answer --step <step> --yes|--no --text "..."');
+  P.withLedger(LEDGER, (L) => { L.answers.push({ at: new Date().toISOString(), step, yes: args.includes('--yes'), text: String(opt('text', '')) }); });
+  log(`answer recorded for ${step}`);
+};
+
+// ---- P0 ($0) --------------------------------------------------------------------------------------------------------------------------
+
+/** P0, the Style jobs on the sim: P1's (no references), P2's per scenario (references off) and P5's (on); the draft prompts diffed. */
+subs['p0-styles'] = async () => {
+  const out = path.join(ART, 'P0');
+  const res = { at: new Date().toISOString(), head: gitHead(), checks: [], styles: {} };
+  const check = (ok, what, data) => { res.checks.push({ ok: !!ok, what, ...(data === undefined ? {} : { data }) }); log(`${ok ? 'ok  ' : 'FAIL'} P0 ${what}`); };
+  const dir = path.join(out, 'styles-sim');
+  const h = await Helper.start(dir, 'sim');
+  try {
+    check(h.auth().auth === 'ok', `sim helper up ${JSON.stringify(h.auth())}`);
+    const job = async (key, req) => {
+      const a = await h.send({ type: 'bible.request', request: { budgetUsd: P.P1_BUDGETS.style, ...req } });
+      const id = a.jobId;
+      const b = await h.waitBible(id, 600_000);
+      const q = bibleDraft(dir, id);
+      const bj = readJson(path.join(dir, 'bibles', b.bibleId ?? '', 'bible.json'), {});
+      res.styles[key] = { jobId: id, status: b.status, bibleId: b.bibleId, error: b.error ?? null, format: bj.format ?? null, references: bj.references ?? null, draft: q ? { prompt: q.prompt, images: q.images } : null };
+      check(b.status === 'done' && bj.format === 3, `${key}: settlement Style job (sim) ${b.status} format ${bj.format}${b.error ? ` ${b.error}` : ''}`);
+      return res.styles[key];
+    };
+    await job('P1', { prompt: P1_STYLE.prompt, name: P1_STYLE.name, scope: 'settlement' });
+    for (const s of SCN_STYLES) {
+      const sc = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', `${s.scenario}.json`), 'utf8'));
+      const prompt = String(sc.brief).replace(/\s*\((S\d+ v\d+|[A-Z]\d+)[^)]*\)\s*$/, '').trim();
+      const off = await job(`P2:${s.key}`, { prompt, name: s.name, scope: 'settlement' });
+      const files = s.refs.map((r) => path.join(REFS, `${r}.png`));
+      const have = files.every((f) => fs.existsSync(f));
+      check(have, `${s.key}: N-7c-4's references present (${files.map((f) => path.basename(f)).join(', ')} in ${REFS})`);
+      if (!have) continue;
+      const blobs = [];
+      for (const [i, f] of files.entries()) blobs.push({ blob: await h.image(f), label: `${s.refs[i]} (gpt-image-2)` });
+      const on = await job(`P5:${s.key}`, { prompt, name: `${s.name} R`, scope: 'settlement', ext: { [REF_EXT]: blobs } });
+      const df = lineDiff(off.draft?.prompt, on.draft?.prompt);
+      writeJson(path.join(out, `style-diff-${s.key}-references-on-vs-off.json`), { off: off.draft, on: on.draft, diff: df });
+      const plusOk = df.plus.length === 2 && df.plus.some((l) => l.startsWith('3 reference images of the place come before this text')) && df.plus.some((l) => l.startsWith('Its name:'));
+      check(plusOk && df.minus.length === 1 && (off.draft?.images ?? []).length === 0, `${s.key}: Style draft prompt references on vs off: +${df.plus.length}/-${df.minus.length} (the references line and the name), images off ${(off.draft?.images ?? []).length}`, df);
+      check((on.draft?.images ?? []).length === 3 && on.draft.images.every((im) => im.bytes > 1e6 && im.mediaType === 'image/png'), `${s.key}: the draft gets 3 image blocks (${(on.draft?.images ?? []).map((i) => `${i.label} ${i.bytes} B`).join('; ')})`);
+      check(Array.isArray(on.references) && on.references.length === 3 && on.references.every((r, i) => r.blob === blobs[i].blob) && off.references === null, `${s.key}: the made Style records its 3 references (format 3 references); the off arm none`);
+    }
+  } finally { await h.stop(); }
+  res.ok = res.checks.every((c) => c.ok);
+  writeJson(path.join(out, 'styles.json'), res);
+  log(`P0 styles: ${res.ok ? 'PASS' : 'FAIL'} (${res.checks.filter((c) => c.ok).length}/${res.checks.length})`);
+  if (!res.ok) process.exitCode = 1;
+};
+
+/** The run dir's lib (GATE6B_* env: the gate runner's, or set here for the paid run). */
+async function game() { return import('./lib/run6b.mjs'); }
+/** The sidecar's jobs of a design's compose rounds (state.json tags `design <id> compose round <n>`) and their recorded queries. */
+function roundJobs(L, designId) {
+  const st = readJson(path.join(L.SIDECAR_DATA, 'state.json'), {});
+  const jobs = (st.jobs ?? st.jobBook?.jobs ?? []).filter((j) => typeof j.tag === 'string' && j.tag.startsWith(`design ${designId} compose round `));
+  return jobs.map((j) => {
+    const f = findFile(L.SIDECAR_DATA, j.id, 'sim-queries.jsonl');
+    const q = f ? fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l))[0] : null;
+    return { jobId: j.id, round: Number(j.tag.split(' ').pop()), cost: j.cost?.usd ?? null, query: q ? { prompt: q.prompt, images: q.images ?? [], systemChars: q.system?.length ?? null } : null };
+  }).sort((a, b) => a.round - b.round);
+}
+/** A calibration site's world: a fresh copy of the pinned seed's base, the player over the claim, the claim forceloaded. */
+async function siteWorld(L, s, tag) {
+  const claim = site(s.site).fixture.claim;
+  await L.fresh(`G6B PAY ${tag} ${s.key}`, await L.claimBase(SEED, claim));
+  await L.setRules('default').catch(() => null);
+  await L.tp((claim[0] + claim[2]) / 2, 200, (claim[1] + claim[3]) / 2);
+  await L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
+  await L.cmd(`/forceload add ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`);
+  await L.settle(5000);
+  return claim;
+}
+const composeRead = (d) => {
+  const r = d?.result ?? {};
+  return { designId: d?.designId ?? null, status: d?.status ?? null, kind: d?.kind ?? null, outcome: r.outcome ?? null, reason: r.reason ?? null, rounds: r.rounds ?? null, history: r.history ?? [], pick: r.pick ?? null, waits: r.waits ?? [], artifactSha: r.check?.artifactSha ?? null, overall: r.check?.overall ?? null, costUsd: d?.costUsd ?? r.cost ?? 0, images: (r.images ?? []).map((i) => i.name), error: d?.refused ?? d?.error ?? null, summary: r.summary ?? null };
+};
+
+/** P0, in game on the sim (a gate step): P1's composes images on, P4's arm images off, the natural pick, P3's authoring call. */
+subs['p0-compose'] = async () => {
+  const L = await game();
+  L.refuseKeys();
+  await L.connect();
+  const out = path.join(ART, 'P0');
+  const res = { at: new Date().toISOString(), head: gitHead(), checks: [], sites: {} };
+  const check = (ok, what, data) => { res.checks.push({ ok: !!ok, what, ...(data === undefined ? {} : { data }) }); log(`${ok ? 'ok  ' : 'FAIL'} P0 ${what}`); };
+  const st = await L.call('dev.sidecar.state', {}, 30_000).catch(() => ({}));
+  check(/sim/i.test(st.status?.authSource ?? ''), `the run's sidecar is the sim (${st.status?.authSource})`);
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  for (const s of P1_COMPOSES) {
+    const claim = await siteWorld(L, s, 'P0');
+    const row = res.sites[s.key] = { site: s.site, claim, brief: s.brief };
+    try {
+      const arm = async (images, skip) => {
+        const body = { brief: s.brief, claim, style: s.style, images, budgetUsd: P.P1_BUDGETS.compose, opKey: `pay-p0-${stamp}-${s.key}-${images ? 'on' : 'off'}-${skip ? 'skip' : 'pick'}`, ext: skip ? { [SKIP_PICK]: true } : {}, wait: true };
+        const d = await L.call('dev.region.compose', body, 1_800_000);
+        const c = composeRead(d);
+        c.rounds_ = roundJobs(L, c.designId);
+        return c;
+      };
+      const on = row.on = await arm(true, true);
+      const off = row.off = await arm(false, true);
+      const pick = row.pick = await arm(true, false);
+      check(on.status === 'DONE' && on.kind === 'SETTLEMENT' && ['COMPOSED', 'NO_PLAN'].includes(on.outcome) && on.pick?.outcome === 'SKIPPED', `${s.key}: compose (images on, pick skipped) ${on.status} ${on.kind} ${on.outcome} (${on.history.map((x) => x.overall ?? x.refused).join(' -> ')}), pick ${on.pick?.outcome}`);
+      const q1on = on.rounds_[0]?.query, q1off = off.rounds_[0]?.query;
+      check(q1on && q1on.images.length === 4 && /4 images come before this text/.test(q1on.prompt), `${s.key}: round 1 (images on) sends 4 image blocks (${(q1on?.images ?? []).map((i) => i.label).join(', ')}) and names them`);
+      check(q1off && q1off.images.length === 0 && !/Planning images/.test(q1off.prompt) && off.images.length === 0, `${s.key}: round 1 (images off, P4's arm) sends no image and no images section`);
+      const df = lineDiff(q1off?.prompt, q1on?.prompt);
+      writeJson(path.join(out, `compose-diff-${s.key}-images-on-vs-off.json`), { on: q1on, off: q1off, diff: df });
+      check(df.minus.length === 0 && df.plus.length > 0 && df.plus.every((l) => /image|top|section|iso|^$|^#/i.test(l)), `${s.key}: the prompt diff images on vs off is the images section only (+${df.plus.length}/-${df.minus.length})`, df.plus);
+      const shaOn = on.history.map((x) => x.planSha ?? null), shaOff = off.history.map((x) => x.planSha ?? null);
+      check(JSON.stringify(shaOn) === JSON.stringify(shaOff), `${s.key}: the sim's plans with images on and off are the same, round by round (${shaOn.join(',')})`);
+      check(pick.status === 'DONE' && pick.pick?.outcome, `${s.key}: the natural pick (recorded: P1 skips it) ${pick.pick?.outcome} ${pick.pick?.program ?? ''} -> ${pick.outcome}`);
+      if (s.key === 'cliff') {
+        // P3's mechanism: an authoring session on the sim over this claim (P3's own briefs are stage 2)
+        const a = row.author = await L.call('dev.region.author', { brief: 'A builder-written test program: a terrace of three cottages along the cliff foot.', claim, budgetUsd: 1, opKey: `pay-p0-${stamp}-author`, wait: true }, 1_800_000);
+        check(a.status === 'DONE' && a.kind === 'PROGRAM', `P3 mechanism: Regions.authorProgram (sim) ${a.status} ${a.kind} ${a.result?.outcome ?? a.error ?? a.refused ?? ''}`);
+      }
+    } catch (e) {
+      check(false, `${s.key}: ${e.message}`);
+    } finally {
+      await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
+    }
+  }
+  res.ok = res.checks.every((c) => c.ok);
+  writeJson(path.join(out, 'compose.json'), res);
+  log(`P0 compose: ${res.ok ? 'PASS' : 'FAIL'} (${res.checks.filter((c) => c.ok).length}/${res.checks.length})`);
+  if (!res.ok) process.exitCode = 1;
+};
+
+/** P0's verdict per paid item: what each item's sim dry run showed, and what is not built yet. */
+subs['p0-verdict'] = async () => {
+  const s = readJson(path.join(ART, 'P0', 'styles.json'));
+  const c = readJson(path.join(ART, 'P0', 'compose.json'));
+  const ok = (r, re) => !!r && r.checks.filter((x) => re.test(x.what)).length > 0 && r.checks.filter((x) => re.test(x.what)).every((x) => x.ok);
+  const v = {
+    at: new Date().toISOString(),
+    P1: { pass: ok(c, /^(cliff|caravan|hill): (compose|round 1 \(images on)/) && ok(s, /^P1: /), what: 'the 3 calibration composes on the sim (images on, the pick skipped) and the settlement Style job' },
+    P2: { pass: false, what: 'picks: BR\'s br-s1..s6 (sim, PASS on main 2026-11-14, not re-run); forced plan path: compose with the pick skipped (P1\'s rows); settlement Styles references off (P0 styles)', blocker: "a COMPOSED plan/0 artifact is not realised by tools/scenarios.mjs (BR's leftover): S3's and S6's forced plan path cannot reach the scenario's bars until that hook is built (stage 2, before P2)", parts: { styles: ok(s, /^P2:/), composeSkipPick: ok(c, /images on, pick skipped/) } },
+    P3: { pass: ok(c, /^P3 mechanism/), what: 'Regions.authorProgram on the sim over a calibration claim (P3\'s own briefs: stage 2)' },
+    P4: { pass: ok(c, /images off|images on and off are the same|prompt diff images/), what: 'the composer with images off from the same inputs: no image blocks, the prompt diff only the images section, the same sim plans' },
+    P5: { pass: ok(s, /^s[35]: /) && ok(s, /^P5:/), what: 'the settlement Style job with N-7c-4\'s six references: image blocks, one prompt line, recorded in format 3 references' },
+    P6: { pass: null, what: 'optional; not dry-run in stage 1 (CM-b\'s sim castle covers the Composite path; a design job returning a Composite is stage 2 if the ledger allows it)' },
+    R: { pass: null, what: 'retries of the items above; no paid step of its own' },
+  };
+  v.p1Ready = v.P1.pass;
+  writeJson(path.join(ART, 'P0', 'P0.json'), v);
+  log(`P0 verdict: ${Object.entries(v).filter(([k]) => /^P\d|^R$/.test(k)).map(([k, x]) => `${k} ${x.pass === null ? 'n/a' : x.pass ? 'PASS' : 'FAIL'}`).join(', ')}`);
+};
+
+function needP0(item) {
+  const v = readJson(path.join(ART, 'P0', 'P0.json'));
+  if (!v?.[item]?.pass) throw Object.assign(new Error(`refusing ${item}: its P0 dry run has not passed (artifacts/7c/P0/P0.json); P0 must pass before a paid item`), { code: 2 });
+}
+
+// ---- P1 (paid) ------------------------------------------------------------------------------------------------------------------------
+
+/** P1's Style job: one format 3 settlement Style on our own helper, the claude login. */
+subs['p1-style'] = async () => {
+  needP0('P1');
+  const out = path.join(ART, 'P1');
+  const h = await Helper.start(path.join(ART, 'P1', 'helper'), 'claude');
+  const res = { at: new Date().toISOString(), head: gitHead(), auth: h.auth() };
+  try {
+    if (res.auth.auth !== 'ok' || !/claude login/i.test(res.auth.authSource ?? '')) throw Object.assign(new Error(`refusing P1:style: the helper is not on the claude login (${JSON.stringify(res.auth)})`), { code: 2 });
+    const step = `P1:style${opt('attempt') ? `:${opt('attempt')}` : ''}`;
+    const retry = !!opt('retry');
+    openPaid({ item: 'P1', step, capUsd: P.P1_BUDGETS.style, authSource: res.auth.authSource, retry, minutes: 40 });
+    const t0 = Date.now();
+    let b;
+    try {
+      const a = await h.send({ type: 'bible.request', request: { prompt: P1_STYLE.prompt, name: P1_STYLE.name, scope: 'settlement', budgetUsd: P.P1_BUDGETS.style } });
+      const id = a.jobId;
+      b = await h.waitBible(id, 40 * 60_000, (x) => P.withLedger(LEDGER, (L) => P.updateJob(L, step, { usd: x.cost?.usd ?? 0, ref: id })));
+    } catch (e) {
+      closePaid(step, { usd: 0, ended: true, status: 'refused', error: e.message });
+      throw e;
+    }
+    const usd = b.cost?.usd ?? 0;
+    closePaid(step, { usd, ended: b.status !== 'timeout', status: b.status, error: b.error, data: { bibleId: b.bibleId, turns: b.cost?.turns ?? null } });
+    const bj = readJson(path.join(ART, 'P1', 'helper', 'bibles', b.bibleId ?? '', 'bible.json'), {});
+    Object.assign(res, { step, status: b.status, error: b.error ?? null, bibleId: b.bibleId ?? null, usd, cost: b.cost ?? null, minutes: r6((Date.now() - t0) / 60000), format: bj.format ?? null, roles: bj.roles ?? null, settlement: bj.settlement ?? null, connectors: bj.connectors ?? null });
+    log(`P1 style: ${b.status} $${usd.toFixed(4)} ${b.bibleId ?? b.error ?? ''} format ${bj.format}`);
+  } finally {
+    await h.stop();
+    writeJson(path.join(out, 'style.json'), res);
+  }
+};
+
+/** P1's composes: the run dir's client on the claude login, the 3 calibration briefs (images on, the pick skipped). */
+subs['p1-compose'] = async () => {
+  needP0('P1');
+  const env = envCheck('P1:client');
+  Object.assign(process.env, { GATE6B_RUN: RUN, GATE6B_DEV_PORT: String(DEV_PORT), GATE6B_SIDECAR_PORT: String(SIDECAR_PORT), GATE6B_OUT: path.join(ART, 'P1', 'gate6b') });
+  fs.mkdirSync(process.env.GATE6B_OUT, { recursive: true });
+  const L = await game();
+  const only = opt('site');
+  const run = (a) => spawnSync(process.execPath, a, { cwd: root, stdio: 'inherit', env: { ...env, GATE6B_RUN: RUN, GATE6B_DEV_PORT: String(DEV_PORT), GATE6B_SIDECAR_PORT: String(SIDECAR_PORT), GATE6B_OUT: process.env.GATE6B_OUT, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
+  if (!fs.existsSync(RUN)) throw new Error(`no run dir ${RUN} (P0's gate run makes it)`);
+  const out = path.join(ART, 'P1');
+  const res = readJson(path.join(out, 'compose.json'), { composes: {} });
+  Object.assign(res, { at: new Date().toISOString(), head: gitHead() });
+  try {
+    if (run([path.join(root, 'tools', 'gate6b.mjs'), 'start', 'G6B Flat Base', 'claude']).status !== 0) throw new Error('the client did not start');
+    await L.connect();
+    const auth = await L.logAuth('P1:compose');
+    res.auth = auth;
+    if (auth.auth !== 'ok' || !/claude login/i.test(auth.authSource ?? '')) throw Object.assign(new Error(`refusing P1:compose: the client's sidecar is not on the claude login (${JSON.stringify(auth)})`), { code: 2 });
+    const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+    for (const s of P1_COMPOSES) {
+      if (only && only !== s.key) continue;
+      const claim = await siteWorld(L, s, 'P1');
+      const step = `P1:compose:${s.key}${opt('attempt') ? `:${opt('attempt')}` : ''}`;
+      try {
+        openPaid({ item: 'P1', step, capUsd: P.P1_BUDGETS.compose, authSource: auth.authSource, retry: !!opt('retry'), minutes: 30 });
+        const t0 = Date.now();
+        const d = await L.call('dev.region.compose', { brief: s.brief, claim, style: s.style, images: true, budgetUsd: P.P1_BUDGETS.compose, opKey: `pay-p1-${stamp}-${s.key}`, ext: { [SKIP_PICK]: true }, wait: true }, 1_800_000);
+        const c = composeRead(d);
+        c.roundJobs = roundJobs(L, c.designId).map((x) => ({ jobId: x.jobId, round: x.round, cost: x.cost }));
+        closePaid(step, { usd: c.costUsd, ended: true, status: c.outcome ?? c.status, error: c.error, ref: c.designId, data: { outcome: c.outcome, rounds: c.rounds, history: c.history } });
+        res.composes[s.key] = { ...c, site: s.site, claim, brief: s.brief, style: s.style, minutes: r6((Date.now() - t0) / 60000), step };
+        log(`P1 ${s.key}: ${c.status} ${c.outcome} $${Number(c.costUsd).toFixed(4)} rounds ${c.rounds} (${c.history.map((x) => x.overall ?? x.refused).join(' -> ')})${c.waits.length ? ` waits ${c.waits.map((w) => w.part).join(',')}` : ''}`);
+      } finally {
+        await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
+        writeJson(path.join(out, 'compose.json'), res);
+      }
+    }
+  } finally {
+    run([path.join(root, 'tools', 'gate6b.mjs'), 'stop']);
+    writeJson(path.join(out, 'compose.json'), res);
+  }
+};
+
+/** P2-P6's estimates restated from P1's measured unit costs (§4's last rule), the table; nothing runs. */
+subs.restate = async () => {
+  const c = readJson(path.join(ART, 'P1', 'compose.json'), { composes: {} });
+  const s = readJson(path.join(ART, 'P1', 'style.json'), {});
+  const composes = Object.values(c.composes ?? {}).filter((x) => x.status === 'DONE' && typeof x.costUsd === 'number');
+  if (!composes.length || !(s.usd > 0)) throw new Error('restate needs P1\'s composes and Style (artifacts/7c/P1/compose.json, style.json)');
+  const composeUsd = r6(composes.reduce((a, x) => a + x.costUsd, 0) / composes.length);
+  // a site-aware archetype design: 7b's measured mean (its ledger's P1-P3 designs)
+  const b7 = readJson(path.join(MAIN, 'artifacts', '7b', 'spend.json'), { jobs: [] });
+  const d7 = b7.jobs.filter((j) => j.status === 'done' && j.usd > 0 && /^P[123]:/.test(j.step));
+  const designUsd = d7.length ? r6(d7.reduce((a, j) => a + j.usd, 0) / d7.length) : 4.25;
+  const u = { composeUsd, styleUsd: s.usd, pickUsd: Number(opt('pick', 0.05)), designUsd, authorUsd: 5.5, compositeUsd: 6 };
+  const rs = P.withLedger(LEDGER, (L) => P.restate(L, u));
+  const rows = Object.entries(rs.items).map(([k, x]) => `| ${k} | $${x.oldEstUsd} | $${x.newEstUsd.toFixed(2)} | $${x.ceilingUsd} | $${x.capUsd} | ${Object.entries(x.units).map(([n, m]) => `${m} ${n}`).join(', ')}${x.overCeiling ? ' (OVER its ceiling)' : ''} |`);
+  const md = [`# P2-P6 restated from P1 (${rs.at})`, '', `Units: compose $${composeUsd} (P1 mean of ${composes.length}, images on), settlement Style $${s.usd} (P1), pick $${u.pickUsd} (6b, not measured by P1), site-aware design $${designUsd} (7b's ${d7.length} measured designs), authoring $5.5 and composite $6 (§4, not measured by P1).`, '',
+    '| Item | Old est. | New est. | Ceiling (1.2 x share) | Cap | Units |', '|---|---|---|---|---|---|', ...rows, '',
+    `P1 spent $${rs.p1SpentUsd}; P1 + P2-P6 estimated $${rs.totalEstUsd} (+ R $${rs.reserveUsd}); hard cap $${P.HARD_CAP_USD}: ${rs.totalEstUsd + rs.reserveUsd <= P.HARD_CAP_USD ? 'fits' : 'does NOT fit with the full reserve'}.`];
+  fs.writeFileSync(path.join(ART, 'P1', 'restated.md'), `${md.join('\n')}\n`);
+  console.log(md.join('\n'));
+};
+
+// ---- the entry --------------------------------------------------------------------------------------------------------------------
+
+const STAGE2 = new Set(['P2', 'P3', 'P4', 'P5', 'P6', 'R']);
+async function only(item) {
+  if (STAGE2.has(item)) throw Object.assign(new Error(`refusing --only ${item}: stage 2 (P2-P6 and R start only after the coordinator relays Noah's go on P1's restated estimates)`), { code: 2 });
+  if (item === 'P0') { await subs['p0-styles'](); await subs['p0-verdict'](); return; }
+  if (item === 'P1') { await subs['p1-style'](); await subs['p1-compose'](); await subs.restate(); return; }
+  throw new Error(`--only P0|P1 (got ${item})`);
+}
+
+const sub = args[0];
+try {
+  if (args.includes('--plan')) await subs.plan();
+  else if (opt('only')) await only(String(opt('only')));
+  else if (subs[sub]) await subs[sub]();
+  else { console.error('usage: node tools/gate7cpay.mjs --plan | --only P0|P1 | status | p0-styles | p0-compose | p0-verdict | p1-style | p1-compose | restate | answer'); process.exitCode = 64; }
+} catch (e) {
+  log(`stopped: ${e.stack ?? e.message}`);
+  process.exitCode = e.code ?? 1;
+}

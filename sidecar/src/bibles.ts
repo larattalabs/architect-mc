@@ -20,7 +20,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { BibleInfo, BibleJob, BibleJobStatus, BibleRef, BibleRequest, BiblePin, Cost, Outbound } from './protocol.js';
-import { BibleInfo as BibleInfoSchema, EXT_RELATED_TO } from './protocol.js';
+import { BibleInfo as BibleInfoSchema, EXT_REFERENCE_IMAGES, EXT_RELATED_TO, MAX_IMAGE_BYTES } from './protocol.js';
+import { imageType } from './jobs/runner.js';
 import { KIT, minimalEnv, outputTail, refreshKit, runNode, slugify } from './designs.js';
 import { copyBible } from './scratch.js';
 import { zeroCost } from './jobs/cost.js';
@@ -746,12 +747,48 @@ export class Bibles {
     // (7c SF) a zone Style: its settlement Style pinned now (its latest version), the job copies its core roles in
     const relId = req.ext?.[EXT_RELATED_TO];
     const relatedTo = relId !== undefined ? this.sc.bibleIndex.relatedTarget(relId) : undefined;
+    // (7c PAY) a settlement Style's reference images: checked now, copied into the job's scratch below
+    const refs = this.referenceImagesOf(req);
     const base = `bib_${slugify(req.name ?? req.prompt.split(/\s+/).slice(0, 4).join(' '), 28) || 'bible'}`;
     let id = base;
     for (let n = 2; this.sc.bibleIndex.taken(id); n++) id = `${base}_${n}`;
-    const j = this.create('request', id, 1, { ...req, ...(relatedTo ? { relatedTo } : {}) });
+    const j = this.create('request', id, 1, { ...req, ...(relatedTo ? { relatedTo } : {}), ...(refs.length ? { referenceImages: refs.map((r) => ({ blob: r.blob, label: r.label, file: r.file, mediaType: r.mediaType })) } : {}) });
+    if (refs.length) {
+      const dir = path.join(this.scratchDir(j.id), 'references');
+      fs.mkdirSync(dir, { recursive: true });
+      for (const r of refs) fs.writeFileSync(path.join(dir, r.file), r.buf);
+    }
     this.sc.log.info(`bible job ${j.id} requested: ${id} ("${truncate(req.prompt, 80)}")`);
     return j;
+  }
+
+  /**
+   * (7c PAY, P5) ext architect_mc:referenceImages of a bible.request: `[{blob, label?}]`, 1-8 PNG or JPEG blobs of at most 5 MB, a
+   * settlement Style only (format 3 is the format that records `references`). Refused at once (FIELD_LIMIT) otherwise.
+   */
+  referenceImagesOf(req: BibleRequest): Array<{ blob: string; label: string; file: string; mediaType: 'image/png' | 'image/jpeg'; buf: Buffer }> {
+    const v = req.ext?.[EXT_REFERENCE_IMAGES];
+    if (v === undefined) return [];
+    const bad = (m: string) => new ClientError(`FIELD_LIMIT: ext["${EXT_REFERENCE_IMAGES}"] ${m}`);
+    if (!Array.isArray(v) || v.length < 1 || v.length > 8) throw bad('must be a list of 1-8 { blob, label? }');
+    if (req.scope !== 'settlement') throw bad('is read by a settlement Style only (scope "settlement")');
+    return v.map((x: unknown, i) => {
+      const o = x as { blob?: unknown; label?: unknown };
+      if (!o || typeof o !== 'object' || typeof o.blob !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(o.blob)) throw bad(`[${i}].blob must be a blob id`);
+      if (Object.keys(o).some((k) => k !== 'blob' && k !== 'label')) throw bad(`[${i}]: only blob and label`);
+      const label = o.label === undefined ? `reference ${i + 1}` : o.label;
+      if (typeof label !== 'string' || label.length < 1 || label.length > 60) throw bad(`[${i}].label must be 1-60 characters`);
+      let buf: Buffer;
+      try {
+        buf = this.sc.blobs.read(o.blob);
+      } catch (e) {
+        throw bad(`[${i}]: blob ${o.blob}: ${(e as Error).message}`);
+      }
+      const mediaType = imageType(buf);
+      if (!mediaType) throw bad(`[${i}]: blob ${o.blob} is not a PNG or JPEG`);
+      if (buf.length > MAX_IMAGE_BYTES) throw bad(`[${i}]: blob ${o.blob} is ${buf.length} bytes, more than ${MAX_IMAGE_BYTES}`);
+      return { blob: o.blob, label, file: `ref-${i + 1}.${mediaType === 'image/png' ? 'png' : 'jpg'}`, mediaType, buf };
+    });
   }
 
   /** bible.revise: version + 1 of an installed bible, from the notes. */
@@ -1067,7 +1104,9 @@ export class Bibles {
         }
         // (5a) every new version is format 2 (the kit validates its restraint and limits); (7c SF) a settlement or zone Style format 3
         const fmt = jobFormat(scope, !!related);
-        const v = await this.validate(scratch, { ...r.bible, format: fmt, id: j.bibleId, version: j.version, ...(related ? { relatedTo: { ...related } } : {}) }, scope);
+        // (7c PAY) a format 3 Style made from reference images records them (style3 `references`; the draft saw them as images)
+        const refs = fmt === 3 && j.request.referenceImages?.length ? { references: j.request.referenceImages.map((x) => ({ blob: x.blob, label: x.label })) } : {};
+        const v = await this.validate(scratch, { ...r.bible, format: fmt, id: j.bibleId, version: j.version, ...(related ? { relatedTo: { ...related } } : {}), ...refs }, scope);
         if (!v.ok) {
           if (w.draftRetries < 1) {
             w.draftRetries++;
@@ -1203,6 +1242,14 @@ export class SimBibleBackend implements BibleBackend {
   async draft(p: BiblePass): Promise<DraftResult> {
     await this.sleep(this.stepMs);
     if (this.stops.delete(p.job.id)) return { ok: false, outcome: 'finished' };
+    // (7c PAY) what the Claude draft would have been sent, as the sim job driver records a query: the system, the prompt and the
+    // reference images' labels and files (so a $0 run can diff the Style job's prompt with its references on and off)
+    {
+      const cb = await import('./claude/bible.js');
+      const prompt = p.retryErrors ? cb.draftRetryPrompt(p.retryErrors) : cb.draftPrompt(p.job, cb.draftContext(this.sc, p.job));
+      const images = cb.draftImages(p.job, p.scratch).map((im) => ({ label: im.label, mediaType: im.mediaType, file: path.relative(p.scratch, im.file), bytes: fs.existsSync(im.file) ? fs.statSync(im.file).size : -1 }));
+      fs.appendFileSync(path.join(p.scratch, 'sim-queries.jsonl'), `${JSON.stringify({ kind: 'bible-draft', system: cb.BIBLE_DRAFT_SYSTEM, prompt, images })}\n`);
+    }
     const seed = p.job.request.seedPreset ? this.sc.bibleIndex.get(p.job.request.seedPreset) : undefined;
     const roles: Record<string, string> = seed
       ? { ...seed.roles }

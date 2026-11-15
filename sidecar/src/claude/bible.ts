@@ -11,6 +11,7 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { CORE_ROLES, MACRO_ROLES, REQUIRED_COMPONENTS, type BibleBackend, type BiblePass, type DraftResult, type PassResult } from '../bibles.js';
 import { costFromResult, CostMeter } from '../jobs/cost.js';
 import type { BibleJob } from '../protocol.js';
+import type { DriverImage } from '../jobs/driver.js';
 import type { Sidecar } from '../sidecar.js';
 import { truncate } from '../util/text.js';
 import type { ClaudeDesigner, Running } from './designer.js';
@@ -75,9 +76,19 @@ export const BIBLE_DRAFT_SYSTEM = [
   'Answer with the structured output only, exactly as its schema asks. Every role is a real vanilla Minecraft 26.3 block id (minecraft:...): full blocks for wall, wall_alt, trim, floor, frame, accent and foundation; the roof role must be a block that has stairs and slab variants (e.g. minecraft:deepslate_tiles, minecraft:dark_oak_planks, minecraft:mud_bricks); glass is a pane (minecraft:glass_pane or a stained one); light is a light source (minecraft:lantern, minecraft:soul_lantern, minecraft:shroomlight, minecraft:sea_lantern, ...); path is a walkable ground block (minecraft:dirt_path, minecraft:coarse_dirt, minecraft:gravel, ...). Pick a frame or accent of wood (a log, stem or planks) so doors, stairs and fences follow the style.',
 ].join('\n');
 
+/**
+ * (7c PAY, P5) The draft's line for a settlement Style's reference images (ext architect_mc:referenceImages), which come before the
+ * prompt as image blocks; none without them (the draft prompt then is byte for byte as before).
+ */
+export function referenceImagesLine(labels: string[]): string {
+  if (!labels.length) return '';
+  return `${labels.length} reference image${labels.length === 1 ? '' : 's'} of the place come${labels.length === 1 ? 's' : ''} before this text (${labels.join('; ')}). They are concept art, not Minecraft builds: take the place's mood, silhouette, massing and colours from them, and choose the roles as the vanilla blocks that read closest to their materials; never copy a detail one block cannot show.`;
+}
+
 export function draftPrompt(job: BibleJob, ctx: { seed?: { id: string; roles: Record<string, string> } | undefined; references?: Array<{ id: string; name: string; materials: string[] }>; previous?: { json: string; prose: string } | undefined }): string {
   const r = job.request;
   const lines = [
+    referenceImagesLine((r.referenceImages ?? []).map((x) => x.label)),
     job.kind === 'revise' ? `Revise the style bible below into version ${job.version}. What to change: ${r.notes}` : `Write a style bible for: "${r.prompt}".`,
     r.name ? `Its name: "${r.name}".` : '',
     `Scope: ${r.scope ?? 'building'}${r.scope === 'settlement' ? ' (also fill the macro roles rock, surface, subsurface, rubble, rail, structure: the terrain, ground cover, spoil, track and engineering blocks of the place)' : ''}.`,
@@ -220,8 +231,10 @@ export class ClaudeBibleBackend implements BibleBackend {
     let structured: unknown;
     let thrown: string | undefined;
     try {
-      const prompt = p.retryErrors ? draftRetryPrompt(p.retryErrors) : draftPrompt(job, this.draftContext(job));
-      const q = driver.query({ jobId: job.id, kind: 'structured', prompt, system: BIBLE_DRAFT_SYSTEM, model: this.model(job), effort: 'medium', maxTurns: 6, maxBudgetUsd: p.budgetLeft, schema: bibleSchema(scope), tools: [], cwd: p.scratch, resume, abort });
+      const prompt = p.retryErrors ? draftRetryPrompt(p.retryErrors) : draftPrompt(job, draftContext(this.sc, job));
+      // (7c PAY) the reference images as image blocks before the prompt (the first query; a resumed session has them)
+      const images = draftImages(job, p.scratch);
+      const q = driver.query({ jobId: job.id, kind: 'structured', prompt, system: BIBLE_DRAFT_SYSTEM, model: this.model(job), effort: 'medium', maxTurns: 6, maxBudgetUsd: p.budgetLeft, schema: bibleSchema(scope), tools: [], cwd: p.scratch, resume, abort, ...(images.length ? { images } : {}) });
       for await (const msg of q) {
         if (abort.signal.aborted) break;
         mapper.handle(msg);
@@ -251,30 +264,6 @@ export class ClaudeBibleBackend implements BibleBackend {
     if (!out || typeof out !== 'object' || Array.isArray(out)) return { ok: false, outcome: 'finished', error: 'the draft has no structured bible' };
     const { prose, ...bible } = out as Record<string, unknown>;
     return { ok: true, bible, prose: typeof prose === 'string' ? prose : '' };
-  }
-
-  /** The seed roles, the references' materials and (a revise) the previous version for the draft prompt. */
-  private draftContext(job: BibleJob): Parameters<typeof draftPrompt>[1] {
-    const r = job.request;
-    const seed = r.seedPreset ? this.sc.bibleIndex.get(r.seedPreset) : undefined;
-    const references = (r.references ?? []).flatMap((id) => {
-      try {
-        const j = JSON.parse(fs.readFileSync(path.join(this.sc.config.libraryDir, id, `${id}.blueprint.json`), 'utf8')) as { name?: string; materials?: string[] };
-        return [{ id, name: j.name ?? id, materials: Array.isArray(j.materials) ? j.materials : [] }];
-      } catch {
-        return [];
-      }
-    });
-    let previous: { json: string; prose: string } | undefined;
-    if (job.kind === 'revise') {
-      try {
-        const prev = this.sc.bibleIndex.resolve({ id: job.bibleId, version: job.version - 1 });
-        previous = { json: fs.readFileSync(prev.files.json, 'utf8'), prose: prev.files.md && fs.existsSync(prev.files.md) ? fs.readFileSync(prev.files.md, 'utf8') : '' };
-      } catch {
-        previous = undefined;
-      }
-    }
-    return { ...(seed ? { seed: { id: seed.id, roles: seed.roles } } : {}), ...(references.length ? { references } : {}), ...(previous ? { previous } : {}) };
   }
 
   async components(p: BiblePass): Promise<PassResult> {
@@ -324,4 +313,33 @@ export class ClaudeBibleBackend implements BibleBackend {
     // a turn that ended in an error still gets its file checked (it may have written it before)
     return { ok: true };
   }
+}
+
+/** The seed roles, the references' materials and (a revise) the previous version for the draft prompt. */
+export function draftContext(sc: Sidecar, job: BibleJob): Parameters<typeof draftPrompt>[1] {
+  const r = job.request;
+  const seed = r.seedPreset ? sc.bibleIndex.get(r.seedPreset) : undefined;
+  const references = (r.references ?? []).flatMap((id) => {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(sc.config.libraryDir, id, `${id}.blueprint.json`), 'utf8')) as { name?: string; materials?: string[] };
+      return [{ id, name: j.name ?? id, materials: Array.isArray(j.materials) ? j.materials : [] }];
+    } catch {
+      return [];
+    }
+  });
+  let previous: { json: string; prose: string } | undefined;
+  if (job.kind === 'revise') {
+    try {
+      const prev = sc.bibleIndex.resolve({ id: job.bibleId, version: job.version - 1 });
+      previous = { json: fs.readFileSync(prev.files.json, 'utf8'), prose: prev.files.md && fs.existsSync(prev.files.md) ? fs.readFileSync(prev.files.md, 'utf8') : '' };
+    } catch {
+      previous = undefined;
+    }
+  }
+  return { ...(seed ? { seed: { id: seed.id, roles: seed.roles } } : {}), ...(references.length ? { references } : {}), ...(previous ? { previous } : {}) };
+}
+
+/** (7c PAY) The draft's reference images: the files copied into the job's scratch references/ at the request. */
+export function draftImages(job: BibleJob, scratch: string): DriverImage[] {
+  return (job.request.referenceImages ?? []).map((x) => ({ file: path.join(scratch, 'references', x.file), label: x.label, mediaType: x.mediaType }));
 }

@@ -743,6 +743,12 @@ export function allowsComposite(req: { ext?: Record<string, unknown> | undefined
 export const BibleScope = z.enum(['building', 'settlement']);
 /** (7c SF, S-7c-3) BibleRequest ext: the settlement Style (its id) a zone Style derives from (Java BibleRequest.EXT_RELATED_TO). */
 export const EXT_RELATED_TO = 'architect_mc:relatedTo';
+/**
+ * (7c PAY, P5) A settlement Style job's reference images: `[{blob, label?}]` (1-8 PNG or JPEG blobs of at most 5 MB each, a label of
+ * 1-60 characters). The draft pass sees them as image blocks before its prompt (silhouette and mood) and the made format 3 Style
+ * records them in `references` (kit/lib/style3.mjs). Refused at once on any other scope, a missing blob or a bad image.
+ */
+export const EXT_REFERENCE_IMAGES = 'architect_mc:referenceImages';
 export const BibleRequest = z.object({
   prompt: z.string().trim().min(1).max(2000).describe('what the place is ("weathered fishing village on stilts")'),
   name: z.string().trim().min(1).max(40).optional(),
@@ -817,6 +823,11 @@ export const BibleJob = z.object({
     notes: z.string().max(4000).optional(),
     partsOf: BiblePin.optional().describe("(U5b, bible.parts) the Style whose parts this job drafts: its roles and hints are kept, no drafting pass"),
     relatedTo: BiblePin.optional().describe('(7c SF) a zone Style job: the settlement Style (ext architect_mc:relatedTo) pinned at the request, whose core roles it copies in'),
+    referenceImages: z
+      .array(z.object({ blob: z.string(), label: z.string(), file: z.string(), mediaType: z.enum(['image/png', 'image/jpeg']) }))
+      .max(8)
+      .optional()
+      .describe("(7c PAY) the reference images (ext architect_mc:referenceImages), copied into the job's scratch references/ at the request"),
   }),
   status: BibleJobStatus,
   step: z.string(),
