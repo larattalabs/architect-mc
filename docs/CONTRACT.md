@@ -32128,9 +32128,11 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state goes to plan.json's `survivalTerrainWritten` (group -> {item: n},
   outside the IR, forwarded by the sidecar), which `Quotes.mayAlreadyHold` counts as covered: the shells leave the may-stand note. Farmland
   joins `TERRAIN_BLOCKS` and the mod's `TERRAIN`.
-- **Steward's 209 -> 210 (crop-farm-067):** the lot piece. FullBom's simulation skips a write the land already holds, so a template dirt
-  over the land's own dirt (1811,64,71965 in set_2's world) went unbilled, while the conversion queues and pays every non-air cell
-  (`Builder.planConvert`: rv3 quoted 209, consumed 205 + 5). Grass spreading onto that cell put it back (210). No mob was involved. Fix:
-  `FullBom.compute` bills each queued cell at the simulation's state (the world's when the write changed nothing).
+- **Steward's 209 -> 210 (crop-farm-067), open:** the lot piece, measured over the land before the plan's own earlier stages write. The
+  growth's pads (stage ground) write grass at the lot's floor row (y 64) under the lot; the quote reads the natural land there. One template
+  dirt (1811,64,71965) sat over the land's own dirt, a write that changes nothing, so it went unbilled (209); grass spreading onto it billed it
+  (210); at put-down the pads' grass stands there, so the realise pays it (rv3 quoted 209, consumed 205 + 5). No mob was involved. Billing
+  every queued cell instead broke qt-growth (a cottage's 3 dirt over the land's dirt are free at put-down): reverted. The fix is to price the
+  lot over the land as the earlier stages leave it (open; see the QL-b report).
 - Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (10 pairs).
-- Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`, `FullBomTest` (a cell the world holds is billed).
+- Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`.
