@@ -608,7 +608,7 @@ steps.gallery = async () => {
       if (!line) throw new Error(`/apitest ${args}: no JSON answer: ${JSON.stringify(r.messages ?? r).slice(0, 200)}`);
       return JSON.parse(line);
     };
-    let ans = await apitest(`place cabin ${40 + 7 * 16} 64 40 INSTANT owned`);
+    let ans = await apitest(`place cabin ${40 + 7 * 16} 64 40 INSTANT owned actor`);
     // an async step answers {pending: key}; its result comes from /apitest get <key> (as tools/apitest.mjs result())
     for (let i = 0; ans.pending && i < 80; i++) {
       await sleep(250);
