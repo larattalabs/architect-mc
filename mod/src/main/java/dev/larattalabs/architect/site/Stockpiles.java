@@ -1181,6 +1181,8 @@ public final class Stockpiles {
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
 			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
+			p.ledger.dropPending(key); // (J2) nothing to roll forward
+			changed(p);
 			return StockLedger.Credit.NONE;
 		}
 		StockLedger.Credit c = p.ledger.credit(key, items, capacity(srv, p), Stockpiles::maxStack);
@@ -1329,8 +1331,121 @@ public final class Stockpiles {
 	static void saveCredit(MinecraftServer srv) {
 		creditSaves++;
 		if (!testNoCreditSave) {
-			saveWithWorld(srv);
+			inCreditSave = true;
+			try {
+				saveWithWorld(srv);
+			} finally {
+				inCreditSave = false;
+			}
 		}
+	}
+
+	/**
+	 * (J2) {@link #saveCredit} for a credit the ledger on disk already holds pending (a single-site removal's deconstruct,
+	 * {@link #holdPendingCredits}): a save SS refuses (a chunk write not durable) leaves it so and the removal goes on; the next start books it
+	 * once ({@link #settlePendingCredits}) unless a later save, the periodic one included, writes the credit first.
+	 */
+	static void saveCreditPending(MinecraftServer srv) {
+		try {
+			saveCredit(srv);
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a removal's credit was not saved ({}); it stays pending in the saved ledger and books at the next start",
+				e.getMessage());
+		}
+	}
+
+	/** (J2, TEST kill point CS1) inside {@link #saveCredit}'s save: the players and the chunks on disk, the ledger not. */
+	private static boolean inCreditSave;
+
+	/**
+	 * (J2, FK's durability leftover) A single-site removal's stockpile deconstructs: each credit held pending in its pile's ledger, saved with
+	 * the world before the removal's commit (Sites.removeDetailed). Returns whether any was held.
+	 */
+	static boolean holdPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
+		boolean any = false;
+		for (Builder.Deconstruction d : decs) {
+			Pile p = d.stockpile() == null || d.key() == null ? null : get(d.stockpile());
+			if (p != null) {
+				p.ledger.holdPending(d.key(), d.credit(), d.at().asLong());
+				changed(p);
+				any = true;
+			}
+		}
+		return any;
+	}
+
+	/** (J2) The removal ended unwritten (its save refused): its pending credits dropped. */
+	static void dropPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
+		for (Builder.Deconstruction d : decs) {
+			Pile p = d.stockpile() == null || d.key() == null ? null : get(d.stockpile());
+			if (p != null) {
+				p.ledger.dropPending(d.key());
+				changed(p);
+			}
+		}
+	}
+
+	/**
+	 * (J2) At the start, after the sites' settle and before the custody is written back (Fills.atStart): each pending credit (a single-site
+	 * removal's, saved before its commit) is resolved by its site's state: credited already (its save reached the disk) or the site standing
+	 * (the removal never settled: its custody goes back): dropped; the site still pending (its restore resumes): left; the site settled
+	 * removed: booked now, once (credit's key rule), custody included, then saved with the world. A save SS refuses leaves the saved ledger
+	 * as it was (pending): the next start resolves it again, and the credit's key keeps it once.
+	 */
+	static void settlePendingCredits(MinecraftServer srv) {
+		boolean any = false;
+		for (Pile p : List.copyOf(PILES.values())) {
+			for (String key : p.ledger.pendingKeys()) {
+				String what;
+				if (p.ledger.credited(key)) {
+					p.ledger.dropPending(key);
+					what = "already credited";
+				} else if (standingSite(key) != null) {
+					p.ledger.dropPending(key);
+					what = "its site stands (the removal never settled)";
+				} else if (pendingSite(key)) {
+					continue; // its removal is still pending (its restore resumes): left for the next start
+				} else {
+					ServerLevel level = Sites.levelOf(srv, p.dimension);
+					if (level == null) {
+						continue;
+					}
+					Builder.creditRefund(level, p.owner, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)), null);
+					p.ledger.dropPending(key); // (a credit of nothing standing books NONE: nothing pending either)
+					what = "its removal settled: credited now";
+				}
+				changed(p);
+				any = true;
+				Architect.LOGGER.warn("Stockpile {}: pending credit {}: {}", p.owner, key, what);
+			}
+		}
+		if (any) {
+			try {
+				saveWithWorld(srv);
+			} catch (IllegalStateException e) {
+				Architect.LOGGER.error("Stockpiles: the pending credits' save was refused ({}); resolved again at the next start", e.getMessage());
+			}
+		}
+	}
+
+	/** (J2) The standing site whose credit key is {@code key}, or null. */
+	private static @Nullable Site standingSite(String key) {
+		for (Site s : Sites.all()) {
+			if (key.equals(Builder.creditKey(s))) {
+				return s;
+			}
+		}
+		return null;
+	}
+
+	/** (J2) Whether a pending record (a removal not settled yet) has the credit key {@code key}. */
+	private static boolean pendingSite(String key) {
+		int at = key.lastIndexOf('@');
+		if (!key.startsWith("site:") || at < 0) {
+			return false;
+		}
+		Site s = Sites.pendingRecord(key.substring(5, at));
+		return s != null && key.equals(Builder.creditKey(s));
 	}
 
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
@@ -2603,6 +2718,11 @@ public final class Stockpiles {
 					return; // retried at the next periodic save; the ledger stays pending (unsaved)
 				}
 				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
+			}
+			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
+				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
+				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
 			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not

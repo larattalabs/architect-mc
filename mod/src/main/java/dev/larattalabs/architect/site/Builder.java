@@ -2841,7 +2841,7 @@ public final class Builder {
 	/** After the restore: the deconstruct's items drop at the crate's cell (kept from the restore's drop cleanup). */
 	static void dropDeconstruction(ServerLevel level, Site s, Deconstruction d, Sites.Drops drops) {
 		if (creditRefund(level, d.stockpile(), d.key(), d.credit(), d.at(), drops)) {
-			Stockpiles.saveCredit(level.getServer()); // (J1, N1's shape) before the site's record goes (forget, then the sites file)
+			Stockpiles.saveCreditPending(level.getServer()); // (J1, N1's shape) before the site's record goes; (J2) a refused save leaves it pending
 		}
 		dropItems(level, d.at(), d.all(), drops);
 		forget(level.getServer(), s.id());

@@ -1607,16 +1607,31 @@ public final class Sites {
 				custody = true;
 			}
 		}
-		if (custody) {
-			Stockpiles.saveWithWorld(server);
-			WorldJournal.kill("FKC1");
-		}
 		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
 		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
 		for (Site x : all) {
 			if (x.construction() != null) {
 				decs.put(x.id(), Builder.prepareDeconstruct(level, x));
 			}
+		}
+		// (J2, FK's durability leftover) each stockpile deconstruct's credit held pending in the ledger and saved with the custody, before the
+		// commit: a crash anywhere after it rolls the credit forward at the next start (Stockpiles.settlePendingCredits) or, if the removal
+		// never settled, drops it (the site stands: its custody goes back)
+		boolean pendingHeld = Stockpiles.holdPendingCredits(decs.values());
+		if (custody || pendingHeld) {
+			try {
+				Stockpiles.saveWithWorld(server);
+			} catch (IllegalStateException e) {
+				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
+				Stockpiles.dropPendingCredits(decs.values());
+				for (Site y : all) {
+					if (y.construction() != null && Fills.phase(y) != null) {
+						Fills.writeBack(level, y);
+					}
+				}
+				throw new SiteException(Reason.JOURNAL_UNAVAILABLE, "The removal of " + id + " was not started: " + e.getMessage());
+			}
+			WorldJournal.kill("FKC1");
 		}
 		Anchors.Bounds u = all.get(0).restoreBox();
 		for (Site x : all) {

@@ -79,6 +79,14 @@ public final class StockLedger {
 	 * written back if the removal ends unwritten, else dropped at the key's credit, refunding nothing.
 	 */
 	private final Map<String, Map<String, Integer>> heldProvided = new TreeMap<>();
+	/**
+	 * (J2, FK's durability leftover) Per target (credit key), a single-site removal's prepared deconstruct credit, saved with the world before
+	 * the removal's journal commit: the credit rolls forward at the next start if the removal settled but its credit's save never reached the
+	 * disk (a crash inside it). Dropped with the key's credit, or when the removal ends unwritten. {@code pendingAt}: the drop cell (a
+	 * BlockPos long), one per pending key (its items may be empty: the custody alone refunds).
+	 */
+	private final Map<String, Map<String, Integer>> pendingCredit = new TreeMap<>();
+	private final Map<String, Long> pendingAt = new TreeMap<>();
 
 	/**
 	 * (RL) A target's cells as the ledger knows them, by queue position: {@code known} the cells whose state the book has seen (a cell in a
@@ -366,6 +374,7 @@ public final class StockLedger {
 			return new Credit(Map.of(), Map.of(), true);
 		}
 		credited.add(key);
+		dropPending(key); // (J2) the credit books now: nothing left to roll forward
 		// (M5 FK) the declared containers' contents in custody refund with the blocks, under the same cap (the fill is in the record)
 		Map<String, Integer> held = custody.remove(key);
 		filled.remove(key);
@@ -461,6 +470,40 @@ public final class StockLedger {
 				custody.computeIfAbsent(key, x -> new TreeMap<>()).merge(k, v, Integer::sum);
 			}
 		});
+	}
+
+	/** (J2) Holds a removal's prepared credit under {@code key} until it books ({@link #credit}) or the removal ends unwritten. */
+	public void holdPending(String key, Map<String, Integer> items, long at) {
+		Map<String, Integer> m = new TreeMap<>();
+		items.forEach((k, v) -> {
+			if (v > 0) {
+				m.put(k, v);
+			}
+		});
+		pendingCredit.put(key, m);
+		pendingAt.put(key, at);
+	}
+
+	/** (J2) Drops {@code key}'s pending credit (booked, or the removal ended unwritten). */
+	public void dropPending(String key) {
+		pendingCredit.remove(key);
+		pendingAt.remove(key);
+	}
+
+	/** (J2) Every key with a pending credit. */
+	public java.util.Set<String> pendingKeys() {
+		return java.util.Set.copyOf(pendingAt.keySet());
+	}
+
+	/** (J2) {@code key}'s pending credit's items (empty: none, or only its custody refunds). */
+	public Map<String, Integer> pendingItems(String key) {
+		Map<String, Integer> m = pendingCredit.get(key);
+		return m == null ? Map.of() : java.util.Collections.unmodifiableMap(m);
+	}
+
+	/** (J2) {@code key}'s pending credit's drop cell (a BlockPos long), or 0. */
+	public long pendingAt(String key) {
+		return pendingAt.getOrDefault(key, 0L);
 	}
 
 	/** (M5 FK) What {@code key} holds in custody (empty: none). */
@@ -777,6 +820,16 @@ public final class StockLedger {
 			heldProvided.forEach((key, m) -> hp.add(key, counts(m)));
 			o.add("heldProvided", hp); // (FK-b) additive (format 2)
 		}
+		if (!pendingAt.isEmpty()) {
+			JsonObject pc = new JsonObject();
+			pendingAt.forEach((key, at) -> {
+				JsonObject e = new JsonObject();
+				e.add("items", counts(pendingCredit.getOrDefault(key, Map.of())));
+				e.addProperty("at", at);
+				pc.add(key, e);
+			});
+			o.add("pendingCredit", pc); // (J2) additive (format 2)
+		}
 		return o;
 	}
 
@@ -864,6 +917,18 @@ public final class StockLedger {
 		}
 		readKeyed(o, "provided", l.provided); // (FK-b)
 		readKeyed(o, "heldProvided", l.heldProvided); // (FK-b)
+		if (o.has("pendingCredit") && o.get("pendingCredit").isJsonObject()) { // (J2)
+			o.getAsJsonObject("pendingCredit").entrySet().forEach(e -> {
+				if (e.getValue() instanceof JsonObject pe && pe.has("at")) {
+					Map<String, Integer> m = new TreeMap<>();
+					if (pe.get("items") instanceof JsonObject it) {
+						read(it, m);
+					}
+					l.pendingCredit.put(e.getKey(), m);
+					l.pendingAt.put(e.getKey(), pe.get("at").getAsLong());
+				}
+			});
+		}
 		if (o.has("cells") && o.get("cells").isJsonObject()) {
 			o.getAsJsonObject("cells").entrySet().forEach(e -> {
 				Book b = e.getValue().isJsonObject() ? Book.fromJson(e.getValue().getAsJsonObject()) : null;
