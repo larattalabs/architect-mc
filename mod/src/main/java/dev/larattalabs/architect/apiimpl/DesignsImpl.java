@@ -217,6 +217,10 @@ final class DesignsImpl implements Designs {
 			if (r.site() != null) {
 				o.add("site", r.site().wire());
 			}
+			// (7c CS) an inverted lot (only when set: every other request is sent as before; refusalInverted holds the rest)
+			if (r.inverted()) {
+				o.addProperty("inverted", true);
+			}
 			// (Style unification U1) materials only (only when set; refusalPalette first holds a helper without palette.roles)
 			if (r.palette() != null) {
 				o.add("palette", r.palette().deepCopy());
@@ -269,7 +273,32 @@ final class DesignsImpl implements Designs {
 		why = why != null ? why : refusalReserved(r, b.protocol(), b.sidecarFeatures());
 		why = why != null ? why : refusalPalette(r, b.protocol(), b.sidecarFeatures());
 		why = why != null ? why : refusalOpKey(r, b.protocol(), b.sidecarFeatures());
+		why = why != null ? why : refusalInverted(r, b.protocol(), b.sidecarFeatures());
 		return why != null ? why : refusal5a(r.critique(), b.protocol(), b.sidecarFeatures());
+	}
+
+	/** The helper feature that reads {@link DesignRequest#inverted()} (7c CS). */
+	static final String INVERTED_FEATURE = "design.inverted";
+
+	/**
+	 * (7c CS) Why an inverted request can't be sent (null: it can, or it is not inverted): it needs a suspend site (an inverted
+	 * lot is a suspend site lot), and a helper with {@code design.inverted}, which an older helper would drop silently. Pure.
+	 */
+	static @Nullable String refusalInverted(DesignRequest r, int protocol, java.util.Set<String> features) {
+		if (!r.inverted()) {
+			return null;
+		}
+		if (r.site() == null || r.site().fit() != dev.larattalabs.architect.api.FitMode.SUSPEND) {
+			return "inverted needs a suspend site (an inverted lot hangs from its site's hang points): "
+				+ (r.site() == null ? "this request has no site" : "this site's fit is " + r.site().fit().wire());
+		}
+		if (r.massing()) {
+			return "inverted is for a site-aware design, not a massing";
+		}
+		if (protocol < 2 || !features.contains(INVERTED_FEATURE)) {
+			return "an inverted lot's design needs a helper with " + INVERTED_FEATURE + " (7c CS); this one would design it standing";
+		}
+		return null;
 	}
 
 	/**
@@ -420,6 +449,11 @@ final class DesignsImpl implements Designs {
 		String why = unavailable4b(b0, "versionOf", "versionOf designs");
 		if (why == null && r.opKey() != null) {
 			why = refusalOpKey(r, b0.protocol(), b0.sidecarFeatures());
+		}
+		// (7c CS) an inverted versionOf: its site (given, else the entry's own) must be a suspend one; the helper must read it
+		if (why == null && r.inverted()) {
+			why = r.site() != null ? refusalInverted(r, b0.protocol(), b0.sidecarFeatures())
+				: b0.protocol() < 2 || !b0.sidecarFeatures().contains(INVERTED_FEATURE) ? "an inverted lot's design needs a helper with " + INVERTED_FEATURE + " (7c CS)" : null;
 		}
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
@@ -976,6 +1010,13 @@ final class DesignsImpl implements Designs {
 		CompletableFuture<JsonObject> sent;
 		if (SiteDesigns.hasSite(m)) {
 			String whyS = unavailable4b(ApiImpl.bridge(), SiteDesigns.FEATURE, "site-aware designs");
+			// (7c CS) an inverted item: a suspend site and a helper that reads it
+			ClientBridge bi = ApiImpl.bridge();
+			for (var it : r.items()) {
+				if (whyS == null && bi != null) {
+					whyS = refusalInverted(it.request(), bi.protocol(), bi.sidecarFeatures());
+				}
+			}
 			if (whyS != null) {
 				return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(whyS)));
 			}

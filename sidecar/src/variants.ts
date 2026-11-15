@@ -20,6 +20,7 @@ import type { Config } from './config.js';
 import { checkDesign, finishCheck, freeLibraryId, installDesign, KIT, CHECK_DIR, refreshKit, renderPreviews, runNode, slugify, withDesignId, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import type { BibleIndex } from './bibles.js';
 import type { BiblePin, DesignRequest, Outbound, PaletteSpec, ParamValues, Reskin, ReskinFrom, Variant, VariantStatus } from './protocol.js';
+import { allowsComposite } from './protocol.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 import { SIM_COPY_FAIL, SIM_COPY_SIZE } from './copies.js';
@@ -210,6 +211,8 @@ export function findVariantSource(libraryDir: string, kitDir: string, from: stri
     const entry = readJsonFile(json);
     if (!entry) throw new VariantRefused(`library entry ${from}: its ${from}.blueprint.json is not valid JSON`);
     if (entry.imported === true) throw new VariantRefused(`${from} is an imported structure: it has no source, so no variants`);
+    // (7c CS) a composite's hidden module is no design of its own: its composite is the entry to vary
+    if (typeof entry.compositeOf === 'string') throw new VariantRefused(`${from} is a hidden module of composite ${entry.compositeOf}: make a variant of ${entry.compositeOf} instead`);
     const src = path.join(dir, `${from}.mjs`);
     if (!fs.existsSync(src)) throw new VariantRefused(`library entry ${from} has no source (${from}.mjs), so no variants`);
     return { from, sourceFile: src, entry, bundled: false };
@@ -520,7 +523,10 @@ export class VariantRunner {
       // example's fixture; the check runs on the composite and the variant keeps the site's files and binding
       const site = variantSite(src, scratch);
       if (site) extra.push(...SITE_CHECK_ARGS);
-      const res = await checkDesign(cfg.kitDir, scratch, bp, { type, ...(Array.isArray(entry.profile) ? { profile: entry.profile as string[] } : {}) }, KIT_TIMEOUT_MS, extra);
+      // (7c CS, SR's leftover) a variant or re-skin keeps the source request's allowComposite (never on a site-bound source): a
+      // composite's variant builds the composite again and installs as a new composite entry with its own modules
+      const comp = !site && allowsComposite((entry.request && typeof entry.request === 'object' ? entry.request : {}) as { ext?: Record<string, unknown> }) ? { allowComposite: true } : {};
+      const res = await checkDesign(cfg.kitDir, scratch, bp, { type, ...(Array.isArray(entry.profile) ? { profile: entry.profile as string[] } : {}), ...comp }, KIT_TIMEOUT_MS, extra);
       if (!res.ok) throw new Error(`the variant did not pass: ${res.problem ?? 'the check failed'}`);
       this.step(v.id, 'rendering previews');
       const r = await renderPreviews(scratch, res.nbt!, KIT_TIMEOUT_MS);
@@ -536,6 +542,7 @@ export class VariantRunner {
         source: design,
         previews: r.files,
         files: [...bibleFiles, ...(site ? siteEntryFiles(scratch) : [])],
+        ...(res.composite ? { composite: res.composite } : {}),
         meta: {
           name,
           description: typeof entry.description === 'string' ? entry.description : undefined,

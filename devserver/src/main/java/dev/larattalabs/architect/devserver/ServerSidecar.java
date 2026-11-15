@@ -654,13 +654,26 @@ public final class ServerSidecar implements ClientBridge {
 	@Override
 	public CompletableFuture<Boolean> deleteEntry(String id) {
 		Blueprints.Entry e = Blueprints.entry(id);
-		if (e == null || e.dir() == null || dev.larattalabs.architect.site.Adopt.deleteRefusal(id) != null) {
-			return CompletableFuture.completedFuture(false); // (6c PT2: an adopted entry whose site stands, as on a client)
+		if (e == null || e.dir() == null || dev.larattalabs.architect.site.Adopt.deleteRefusal(id) != null
+			|| dev.larattalabs.architect.site.Composites.deleteRefusal(id, e.json()) != null) {
+			return CompletableFuture.completedFuture(false); // (6c PT2: an adopted entry whose site stands; 7c CS: a composite's module; as on a client)
 		}
 		try {
 			Path trash = Blueprints.gameDataDir().resolve("library-trash");
 			Files.createDirectories(trash);
-			Files.move(e.dir(), trash.resolve(e.blueprint().id() + "-" + System.currentTimeMillis()), StandardCopyOption.ATOMIC_MOVE);
+			// (7c CS) a composite's hidden module entries go with it, after it (as on a client)
+			List<String> modules = dev.larattalabs.architect.site.Composites.modulesToDelete(id, e.json(), m -> {
+				Blueprints.Entry me = Blueprints.entry(m);
+				return me == null || me.dir() == null ? null : me.json();
+			});
+			long now = System.currentTimeMillis();
+			Files.move(e.dir(), trash.resolve(e.blueprint().id() + "-" + now), StandardCopyOption.ATOMIC_MOVE);
+			for (String m : modules) {
+				Blueprints.Entry me = Blueprints.entry(m);
+				if (me != null && me.dir() != null) {
+					Files.move(me.dir(), trash.resolve(m + "-" + now), StandardCopyOption.ATOMIC_MOVE);
+				}
+			}
 		} catch (IOException ex) {
 			return CompletableFuture.completedFuture(false);
 		}

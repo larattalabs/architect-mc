@@ -21,7 +21,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { checkDesign, KIT, refreshKit, renderPreviews, runNode, withDesignId, type CheckResult } from './designs.js';
+import { checkDesign, compositeRole, KIT, refreshKit, renderPreviews, runNode, withDesignId, type CheckResult } from './designs.js';
 import { ClientError, RefusedError } from './errors.js';
 import { bodyHash, OP_KEY_CONFLICT } from './opkeys.js';
 import type { BiblePin, FollowLot, Outbound } from './protocol.js';
@@ -230,6 +230,8 @@ export class Follows {
     if (prior) return prior;
     const json = this.host.versions.top(entryId);
     if (!json) throw new RefusedError('VERSION_REFUSED', 'no_entry', `no library entry "${entryId}"`);
+    // (7c CS) a composite (or a hidden module) gets no new versions, so it follows nothing
+    if (compositeRole(json)) throw new RefusedError('NOT_ALLOWED', 'composite', `${entryId} is ${compositeRole(json) === 'module' ? 'a hidden module of a composite' : 'a composite'}: it gets no new versions, so it follows nothing`);
     const der = derivationOf(json);
     this.refuseKind(entryId, der);
     const source = der!.source!;

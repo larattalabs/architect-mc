@@ -11,7 +11,7 @@
 //   z=22        south wall (front), the door at union x 60
 //   z=23..26    the approach: entrance (60, 1, 24), spawn (60, 1, 25)
 //
-// Rows: y0 the ground (stone under the hall, the palette's path outside), y1..7 the hall, y8 the roof deck, y9 the parapet, y10 the
+// Rows: y0 the ground (stone under the hall and the corner towers, the palette's path outside), y1..7 the hall, y8 the roof deck, y9 the parapet, y10 the
 // crenels; the corner towers rise to row 13 with crenels on 14, the gate tower to row 12 with crenels on 13. The hall is lit by
 // hanging lanterns every 4 cells (union x = 2 mod 4, never on a seam) in three rows. Every pattern is laid out in union coordinates, so
 // the cells both modules write on a seam agree. Every material comes from the palette.
@@ -47,6 +47,9 @@ function section(p, { name, ox, westEnd = false, eastEnd = false, gate = false, 
   bp.part('hall', () => {
     bp.floor(0, 0, X, D - 1, 0, p.path);
     bp.floor(0, ZN, X, ZS, 0, p.stone);
+    // (7c CS) stone under the corner towers too: a dirt path under a solid block turns to dirt in the game
+    if (westEnd) { bp.floor(0, 0, 6, 6, 0, p.stone); bp.floor(0, 18, 6, 24, 0, p.stone); }
+    if (eastEnd) { bp.floor(X - 6, 0, X, 6, 0, p.stone); bp.floor(X - 6, 18, X, 24, 0, p.stone); }
     bp.floor(1, ZN + 1, X - 1, ZS - 1, 0, p.planks);
     bp.walls(0, ZN, X, ZS, 1, 7, { block: p.stone, corners: p.stone });
     bp.carve([1, 1, ZN + 1, X - 1, 7, ZS - 1]); // the hall's air, written so placement clears it

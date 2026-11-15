@@ -296,6 +296,9 @@ public interface ArchitectApi {
 	 * on overhangs only (suspend site lots hung from the rock ceilings), and each artifact lot carries {@code inverted: true}: its design is
 	 * built upside down (the kit's {@code bp.invert()}), placed and built like any suspend site lot (in survival, in support order from the
 	 * ceiling). An overhang made by the plan's own forms can't host one (the land is read before the plan). No new record, method or reason.
+	 * (7c CS, since NEXT) {@code "invertedDesigns"} is advertised when the helper reads {@link DesignRequest#inverted()} (its
+	 * {@code design.inverted}): a design request for such a lot (its {@link SiteSpec}, fit {@link FitMode#SUSPEND}) sets it, and the design job is
+	 * told the lot hangs inverted (its brief's "Inverted lot" section); the entry's recorded request carries it. Without the feature an inverted request is refused, nothing sent.
 	 * (M5 FK, since 1.59.0) {@code "filledContainers"} is advertised when the helper's kit takes a given program's fill (its {@code design.fill}):
 	 * a program's {@code bp.fillContainers({containers, locks})} declares containers (at most {@link Limits#FILL_CONTAINERS_MAX}) Architect fills once
 	 * after every core cell stands, and lock cells (at most {@link Limits#FILL_LOCKS_MAX}) built in their locked state and unlocked after the

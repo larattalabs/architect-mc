@@ -65,7 +65,9 @@ package dev.larattalabs.architect.api;
  * <li>{@code VERSION_REFUSED} (1.11.0): a {@code versionOf} (or a polish) can't make the entry's next version. Detail:
  * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
  * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
- * (single designs only); (PT2) {@code adopted_polish} (an adopted build's entry is changed by versionOf, never polished).</li>
+ * (single designs only); (PT2) {@code adopted_polish} (an adopted build's entry is changed by versionOf, never polished); (7c CS,
+ * since NEXT) {@code composite} (a composite, or one of its hidden modules, gets no new versions: polish, versionOf and revert are
+ * refused; a variant or re-skin of it is a new composite entry).</li>
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
  * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
