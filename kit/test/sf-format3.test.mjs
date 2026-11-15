@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { validateBible, builtinBible, BUILTIN_BIBLES } from '../lib/bible.mjs';
 import { CORE_ROLES } from '../lib/kit.mjs';
 import { planCatalogue } from '../lib/plan/catalogue.mjs';
-import { AUTO_ROWS, FORMAT3, LOOK_PARAMS, PREFER_KINDS, SETTLEMENT_DEFAULTS, format3Of, relatedErrors, sharedCoreRoles, splitConnectors } from '../lib/style3.mjs';
+import { AUTO_ROWS, FORMAT3, LOOK_ONLY, LOOK_PARAMS, PREFER_KINDS, SETTLEMENT_DEFAULTS, format3Of, relatedErrors, sharedCoreRoles, splitConnectors } from '../lib/style3.mjs';
 import { checkPlanLocal, flatSurvey, stewardAnchors, FIX } from './plan-helpers.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -48,6 +48,11 @@ test('format 3: the members validate, a settlement Style gets the settlement def
   bad({ connectors: { rope_bridge: { maxSpan: 41 } } }, /rope_bridge\.maxSpan must be an integer 8\.\.40/);
   bad({ connectors: { rope_bridge: { sagRatio: 8 } } }, /sagRatio must be an integer 12\.\.64/);
   bad({ connectors: { ladder: { landingEvery: 30 } } }, /landingEvery must be an integer 8\.\.24/);
+  // ((SP2) aqueduct.maxSpan: a look-only type (no slots); 2..7, never wider than the span's own clear run; any other member refused)
+  assert.equal(validateBible(settlement3({ connectors: { aqueduct: { maxSpan: 5 } } })).ok, true);
+  assert.deepEqual(splitConnectors({ aqueduct: { maxSpan: 5 } }), { slots: {}, prefer: null, look: { aqueduct: { maxSpan: 5 } } });
+  bad({ connectors: { aqueduct: { maxSpan: 8 } } }, /aqueduct\.maxSpan must be an integer 2\.\.7/);
+  bad({ connectors: { aqueduct: { maxSpan: 5, pier: 'foundation' } } }, /connectors: unknown member 'aqueduct'/);
   // connectors never name blocks: light is a role (or none), and slots stay roles
   bad({ connectors: { rope_bridge: { light: 'minecraft:lantern' } } }, /light must be a role name or 'none'/);
   bad({ connectors: { rope_bridge: { light: 'lamp' } } }, /'lamp' is not a role of this Style/);
@@ -147,7 +152,9 @@ test('the prefer list names connector kinds: the catalogue\'s, but auto; auto\'s
   const kinds = planCatalogue().entries.filter((e) => e.id.startsWith('connector.') && e.id !== 'connector.auto').map((e) => e.id.slice('connector.'.length)).sort();
   assert.deepEqual([...PREFER_KINDS].sort(), kinds);
   for (const k of Object.keys(AUTO_ROWS)) assert.ok(PREFER_KINDS.includes(k), k);
-  for (const [type, ps] of Object.entries(LOOK_PARAMS)) assert.ok(PREFER_KINDS.includes(type) && Object.keys(ps).length, type);
+  // ((SP2) every look type is a connector kind, but `aqueduct`: channel.aqueduct's look, a look-only type with no slots)
+  for (const [type, ps] of Object.entries(LOOK_PARAMS)) assert.ok((PREFER_KINDS.includes(type) || LOOK_ONLY.includes(type)) && Object.keys(ps).length, type);
+  assert.deepEqual(LOOK_ONLY, ['aqueduct']);
 });
 
 // ---- the plan check: what a format 3 Style changes -------------------------------------------------------------------------------

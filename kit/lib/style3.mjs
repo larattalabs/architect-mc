@@ -29,11 +29,18 @@ export const PREFER_PENALTY = 600;
  *   rope_bridge.sagRatio    12..64  the sag d = floor(n / sagRatio) (12 = today's; a larger ratio sags less). Carried, not read yet
  *   rope_bridge.light       a role of the Style, or 'none': the rope bridge's lamps (default the light role)
  *   ladder.landingEvery     8..24   rungs between rest landings (CLIMB.restMin..restMax): a ladder part's `rest` when it sets none
+ *   aqueduct.maxSpan        2..7    (SP2) the longest clear run between an aqueduct's piers (lib/fluids/course.mjs aqueductEvery: piers
+ *                                   every maxSpan + 1, never wider than the span's own 8 or 6) and region M15:span's limit for it
+ *                                   (checkM15.mjs M15_SPAN_TYPES). `aqueduct` is channel.aqueduct's look, not a connector kind: a
+ *                                   look-only type (no slots: LOOK_ONLY)
  */
 export const LOOK_PARAMS = Object.freeze({
   rope_bridge: Object.freeze({ maxSpan: [8, 40], sagRatio: [12, 64], light: 'role' }),
   ladder: Object.freeze({ landingEvery: [8, 24] }),
+  aqueduct: Object.freeze({ maxSpan: [2, 7] }),
 });
+/** (SP2) The look types that have no slots (not a CONNECTOR_SLOTS member): splitConnectors gives them no slots entry. */
+export const LOOK_ONLY = Object.freeze(['aqueduct']);
 /** Every look parameter name (a per-type member that is not a slot). */
 export const LOOK_NAMES = Object.freeze([...new Set(Object.values(LOOK_PARAMS).flatMap((o) => Object.keys(o)))].sort());
 
@@ -101,6 +108,8 @@ export function splitConnectors(c) {
       if (isLook(type, k)) (look[type] ??= {})[k] = x;
       else s[k] = x;
     }
+    // ((SP2) a look-only type keeps a slots entry only for a member that is not a look parameter, which connectorsError then refuses)
+    if (LOOK_ONLY.includes(type) && !Object.keys(s).length) continue;
     slots[type] = s;
   }
   return { slots, prefer: Array.isArray(c.prefer) ? [...c.prefer] : null, look };
