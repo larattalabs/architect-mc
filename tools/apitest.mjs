@@ -371,7 +371,31 @@ switch (step) {
     check(mine.removed === true && mine.refundTotal > 0, `remove by the owner: refund ${mine.refundTotal} items (${Object.keys(mine.refund).length} kinds)`, mine);
     const evR = await waitEvent((e) => e.event === 'SITE_REMOVED' && e.id === siteA);
     check(!!evR && evR.result.refundTotal === mine.refundTotal, 'SITE_REMOVED with the same RemoveResult', evR);
+    // (J2 item 1) a wild animal in the air of B's box: a named one blocks anywhere, an unnamed one only where the removal changes its cell
+    const bb = Object.fromEntries([...String(evB?.box ?? '').matchAll(/(\w+)=(-?\d+)/g)].map((m) => [m[1], Number(m[2])]));
+    let airCell = null;
+    for (let y = bb.maxY; y >= bb.maxY - 3 && !airCell; y--) {
+      for (const [x, z] of [[bb.minX, bb.minZ], [bb.maxX, bb.minZ], [bb.minX, bb.maxZ], [bb.maxX, bb.maxZ]]) {
+        const st = (await call('dev.journal.at', { x, y, z }).catch(() => null))?.stack ?? null;
+        const top = st?.[st.length - 1];
+        if (st && (!top || top.site === withOp.siteId && /minecraft:air/.test(top.before) && /minecraft:air/.test(top.after ?? ''))) { airCell = { x, y, z }; break; }
+      }
+    }
+    check(!!airCell, `J2: an air cell of ${withOp.siteId}'s box its removal leaves air: ${JSON.stringify(airCell)}`, { box: evB?.box });
+    if (airCell) {
+      const at = `${airCell.x + 0.5} ${airCell.y + 0.2} ${airCell.z + 0.5}`;
+      await cmd(`/summon minecraft:bee ${at} {NoAI:1b,NoGravity:1b,Silent:1b,PersistenceRequired:1b,CustomName:"Buzz",Tags:["j2named"]}`);
+      const named = await result(await api(`remove ${withOp.siteId} - noforce`), 60_000);
+      check(!named.removed && named.blockers.some((b) => /Buzz \(bee\)/.test(b)), `J2: a named bee in the air of the box still blocks: ${named.blockers.join('; ')}`, named);
+      await cmd('/kill @e[tag=j2named]');
+      await cmd(`/summon minecraft:bee ${at} {NoAI:1b,NoGravity:1b,Silent:1b,Tags:["j2wild"]}`);
+    }
     const rmB = await result(await api(`remove ${withOp.siteId} - noforce`), 60_000);
+    if (airCell) {
+      const left = await cmd('/kill @e[tag=j2wild]');
+      check(rmB.removed === true && (left.messages ?? []).some((m) => /Killed/.test(m)), `J2: an unnamed bee in the air of the box is no blocker, and it is still there after the removal (${(left.messages ?? []).join(' ')})`,
+        { rmB, left: left.messages });
+    }
     check(rmB.removed === true && rmB.refundTotal === 0, `the player's own instant site removes with no requester, no refund (${rmB.refundTotal})`, rmB);
 
     // ---- survey

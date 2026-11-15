@@ -1953,6 +1953,10 @@ public final class Sites {
 					dropped++;
 				}
 			} else if (!f.removable()) {
+				if (f.kind() == Occupancy.Kind.LIVING && !e.hasCustomName()
+					&& !wildHarmed(occupied(e.getBoundingBox()), e.onGround() ? support(e.getBoundingBox()) : new long[0], q -> removalChanges(level, b, dim, q))) {
+					continue; // (J2) an unnamed wild animal the removal neither buries nor takes the floor from (a bee in the air) stays and never blocks
+				}
 				out.add(f.name() + " at " + e.blockPosition().toShortString());
 			}
 		}
@@ -1960,6 +1964,60 @@ public final class Sites {
 			out.add(dropped + " dropped item stack" + (dropped == 1 ? "" : "s"));
 		}
 		return out;
+	}
+
+	/**
+	 * (J2, pure) Whether a removal harms an unnamed wild animal: it changes a cell the animal's box overlaps ({@code occupied}: buried, or
+	 * water, lava, fire written into it) or a cell it stands on ({@code support}: the floor taken away). Only then does it block the removal;
+	 * a named animal, a pet and a player block anywhere in the box (Steward's StewardMotion relies on the named steward's refusal).
+	 */
+	static boolean wildHarmed(long[] occupied, long[] support, java.util.function.LongPredicate changes) {
+		for (long q : occupied) {
+			if (changes.test(q)) {
+				return true;
+			}
+		}
+		for (long q : support) {
+			if (changes.test(q)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** (J2, pure) The cells an entity's bounding box overlaps. */
+	static long[] occupied(AABB a) {
+		int x0 = net.minecraft.util.Mth.floor(a.minX), y0 = net.minecraft.util.Mth.floor(a.minY), z0 = net.minecraft.util.Mth.floor(a.minZ);
+		int x1 = net.minecraft.util.Mth.floor(a.maxX - 1e-7), y1 = net.minecraft.util.Mth.floor(a.maxY - 1e-7), z1 = net.minecraft.util.Mth.floor(a.maxZ - 1e-7);
+		it.unimi.dsi.fastutil.longs.LongArrayList out = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (int x = x0; x <= Math.max(x0, x1); x++) {
+			for (int y = y0; y <= Math.max(y0, y1); y++) {
+				for (int z = z0; z <= Math.max(z0, z1); z++) {
+					out.add(BlockPos.asLong(x, y, z));
+				}
+			}
+		}
+		return out.toLongArray();
+	}
+
+	/** (J2, pure) The cells under an entity's feet (the layer just below its box's bottom, over its footprint). */
+	static long[] support(AABB a) {
+		return occupied(new AABB(a.minX, a.minY - 0.05, a.minZ, a.maxX, a.minY - 0.01, a.maxZ));
+	}
+
+	/** (J2) Whether removing {@code b} writes the cell: its journal top layer is {@code b}'s and the world does not hold that layer's before. */
+	static boolean removalChanges(ServerLevel level, Site b, String dim, long pos) {
+		List<WorldJournal.Layer> st;
+		try {
+			st = WorldJournal.stack(dim, pos);
+		} catch (java.io.IOException e) {
+			return true; // unreadable: as before J2, the animal blocks
+		}
+		if (st.isEmpty()) {
+			return false;
+		}
+		WorldJournal.Layer top = st.get(st.size() - 1);
+		return b.id().equals(top.meta().site()) && !WorldJournal.holds(level, pos, top.cell().before());
 	}
 
 	private static String items(Container c) {
