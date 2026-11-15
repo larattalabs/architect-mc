@@ -32369,8 +32369,10 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   template's, so the overlay could only make a cell free (the review's grass-over-grass case) or, capped, price the original land.
   No queued cell is free in the quote, so consumed <= quote over the cells the quote's plan and the realise's share. A lot's fill or approach cells the land already holds are billed and counted (`standingOutside`): the realise
   plans those over the land its tiles leave and can plan fewer (qt-growth's cottage: 3 approach dirt), so the quote names them and is
-  inexact. Open: a realise whose approach comes out longer than the quote's (the plan's tiles lower the land in front) can still pay more;
-  not seen in any gate. qt-growth now judges an exact quote equal and an inexact one an upper bound, item for item.
+  inexact. qt-growth now judges an exact quote equal and an inexact one an upper bound, item for item.
+- **Leftover (accepted; a candidate for the next quote slice):** a realise whose approach comes out longer than the quote's (the plan's tiles
+  lower the land in front of a lot) pays for cells the quote never planned. With a `maxBill` set the realise never spends past it: it waits
+  `bill_cap` instead. Without a cap, consumed can exceed the quote in that case. Not seen in any gate.
 - Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (rv3 in 10 pairs at 210).
 - Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`, `FullBomTest` (grass over grass billed as over dirt, the review's
   case; a 96 x 96 dirt floor over dirt bills all 9216; an approach path over a standing path billed and counted).
