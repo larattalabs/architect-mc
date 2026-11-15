@@ -104,6 +104,7 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
+import { captureThreadDumps, dumpReason, hostSleep } from './lib/thread-dump.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
 import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
@@ -1856,6 +1857,24 @@ async function runStep(sh, step, rec) {
   }
   rec.setupSeconds = (Date.now() - ts) / 1000;
   const r = await runProcess(sh, step, logFile);
+  // (slice GT) a client-side DevBridge timeout, a TIMEOUT or a stall: the server JVM's threads (and, on macOS, any host sleep over the
+  // step) into traces/<step>/ before anything stops the client
+  {
+    let why = null;
+    try {
+      why = dumpReason({ text: fs.readFileSync(logFile, 'utf8'), timedOut: r.timedOut, stalled: Boolean(r.stalled) });
+    } catch {
+      // no log: nothing to judge
+    }
+    if (why) {
+      const td = path.join(OUT, 'traces', step.id);
+      const pids = clientProcs(sh).map((p) => p.pid);
+      const dumps = pids.length ? captureThreadDumps({ pids, dir: td, reason: `${step.id}: ${why}` }) : [];
+      const slept = hostSleep({ from: new Date(ts), to: new Date(), dir: td });
+      rec.threadDumps = { reason: why, dumps: dumps.map((d) => ({ ...d, file: path.relative(OUT, d.file) })), hostSleep: slept ? { ...slept, file: path.relative(OUT, slept.file) } : null };
+      log(`  ${why}: ${pids.length ? dumps.map((d) => (d.ok ? `pid ${d.pid}'s threads (${d.threads}, ${d.tool})` : `pid ${d.pid}: no dump (${d.error})`)).join('; ') : 'no server JVM alive to dump'}${slept ? `; the host slept ${slept.sleptSeconds} s during the step (${path.relative(OUT, slept.file)})` : ''}`, sh);
+    }
+  }
   if (covSnap) {
     try {
       const covDir = path.join(sh.ev, 'coverage');
