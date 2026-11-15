@@ -531,6 +531,15 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(c.ok).toBe(false);
     expect(c.error).toMatch(/op_key_conflict/);
     await until(() => final(a.designId), 600_000);
+    // (CH) adopted once it ended (another world's, or past the snapshot's last 20): its upsert is sent again, so the mod hears of it
+    const seen: string[] = [];
+    const off = sc.subscribe((m) => {
+      if (m.type === 'design.upsert') seen.push(`${(m as { design: Design }).design.id}:${(m as { design: Design }).design.status}`);
+    });
+    const d = await compose('a flat village with a well', { opKey: 'co.key.1' });
+    expect(d).toEqual({ designId: a.designId, adopted: true });
+    off();
+    expect(seen).toContain(`${a.designId}:done`);
   }, 600_000);
 
   it('cancel: the pick or the running round stops with the design', async () => {
