@@ -27778,7 +27778,7 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
 | a finding | `{rule, severity: 'error' or 'warning', m?: 'M21' or 'M15', count, cells: [[x, y, z]] (at most 8, design cells), message}`; `message` starts `<rule>: ` and is also one line of `errors`/`warnings` (fit:on_pad's line is the `floating:` warning, not repeated) |
 | rule ids (`SITE_RULE_IDS`, report order) | `site_bound` (error), `site_keep` (error), `fit:on_pad`, `fit:carve_into`, `fit:attach_to_cliff`, `fit:span`, `fit:wrap_trunk`, `fit:suspend` (M21), `ports_met`, `floors_reachable`, `site_breach`, `cut_volume`, `cantilever`, `neck` (M15); plus `site_unchecked` (`SITE_UNCHECKED`, a warning, never a finding). `SITE_UNFIT`'s detail (DS) is one of these ids |
 | `metrics` | `fit, volumeSha, lotId, bearing` (cells touching the site's solid); keep fits add `connected, loose, portsMet[], reached, breach, cave, cut {rock, logs, allowance}, cantileverMax, cantileverLimit, cantileverPortCells [{cell, dist}], cantileverHeld, necks`; per fit `bearings` (attach), `span, spanEnds [{u0, u1, cells, square, cell}]` (span), `chainMax` (suspend) |
-| `lib/siteCheck.mjs` | `siteGrid(cells, size, groundY, site)`, `siteFindings(ctx)`, `SITE_CHECK_LIMITS` (`cantilever 4, neckMass 200, bearCells 2, endBearing [2, 2], portWithin 2, breachWithin 1`), `siteLimits(fit, overrides)` (adds the fit row's limits; a `'bible'` limit is `null` = unbounded), `SITE_RULE_IDS`, `SITE_RULE_M`, `SITE_UNTOUCHABLE` (`PLAYER, BLOCK_ENTITY, OWNED`), `SITE_UNCHECKED` |
+| `lib/siteCheck.mjs` | `siteGrid(cells, size, groundY, site)`, `siteFindings(ctx)`, `SITE_CHECK_LIMITS` (`cantilever 4, neckMass 200, bearCells 2, endBearing [2, 2], portWithin 2, breachWithin 1, walkLevel 0`; walkLevel since 7b WL), `siteLimits(fit, overrides)` (adds the fit row's limits; a `'bible'` limit is `null` = unbounded), `SITE_RULE_IDS`, `SITE_RULE_M`, `SITE_UNTOUCHABLE` (`PLAYER, BLOCK_ENTITY, OWNED`), `SITE_UNCHECKED` |
 | CLIs | `kit/check.mjs ... --site <volume> [--lot <site.json>]` (the lot defaults to the sidecar's `site`; a volume that is not the spec's exits 2); `build.mjs --site --lot` now checks on the composite; both `--json` print `site` |
 
 **Built:**
@@ -27801,7 +27801,8 @@ frozen surface and SV's kit (no 7bF or SV signature changed; no Java API change;
     (the first and last run, along the span axis, of cells bearing on the solid below) are two, each with a 2x2 of bearing cells, and the
     longest gap between runs is within `span`; suspend's chain runs within `chain`. `fit:on_pad` is today's `floating`.
   - `ports_met`: every site port has a design port of its name, kind and facing, within `portWithin` of the hint, facing out (the cell
-    beyond it is outside on the composite) and standable or climbable; at least the fit row's `ports` walk or door ports.
+    beyond it is outside on the composite) and standable or climbable; at least the fit row's `ports` walk or door ports. Since 7b WL a
+    horizontal walk port's y is held to the hint's within `walkLevel` (0), an error (Slice WL as built).
   - `floors_reachable` (port fits): every interior floor level reached from the ports (check.mjs's own entrance rule keeps on_pad and the
     door rule).
   - `site_breach` (keep fits): a free cell the design writes beside the site's unwritten water or lava (within `breachWithin`); a room whose
@@ -28654,7 +28655,7 @@ ARCHITECT-ASKS round 8) and the 7c half of over water (aqueducts). Free layouts 
 | Template-first over the scenario programs (§10.2) | 4 named templates | the scenario programs parametrised and listed in the pick catalogue | TC |
 | Bible format 3 (§10.3), K1/T3/7a's "format 3's `connectors` block" | format 2 + restraint + rarity, Styles | format 3 over Styles: `connectors`, `forms`, `scatter`, `settlement` (with `roleShares`), `references` | SF |
 | Several related Styles in one settlement (Steward's zones, round 8) | one Style per region, per-zone `style` refs in plan/0 | a settlement Style whose zone Styles derive from it (shared core roles) | SF |
-| Style references (§16.5 use 3; N-7b-7) | deferred | Noah's GPT Image 2.5 references in format 3's `references`, A/B'd | SF, PAY |
+| Style references (§16.5 use 3; N-7b-7) | deferred | Noah's GPT Image 2.5 references in format 3's `references`, A/B'd (made with gpt-image-2, N-7c-4's answer) | SF, PAY |
 | Program authoring (old 6c; S-6b-3's `NO_TEMPLATE`) | none | `Regions.authorProgram`: an authoring session, frozen into the artifact by sha | AU |
 | Shape promotion (§13); "7c reuse across settlements" (Steward round 3: offered as a card choice only) | none | the promotion pipeline plus the first promoted form. Offering across settlements stays Steward's | PM |
 | Composites past 96x64x96 (§12); "schematics past the cap as composites" (6c's importer note) | none | kit `Composite`, joint ports, the union-grid checker, placement as one group, undo per module or group | CM-a, CM-b |
@@ -28779,7 +28780,7 @@ Unit costs used:
 | P2 | Six briefs | S1, S2, S3, S5, S6 (+ S4 if 7b made it green): 6 picks, 6 format 3 settlement Styles, the plan path forced on two scenarios (S3, S6), and up to 4 new archetype designs where no cached entry fits the run's Style (the rest re-skinned, $0) | $29 | $38 | Gallery run; the "images on" arm of P4 and the "references off" arm of P5 |
 | P3 | Authoring | 2 sessions on builder-written briefs that no program fits (a monastery on a sea stack; a crater lake town without `crater_works`) | $11 | $16 | "Not shown" with the data if a session fails its rounds; a passing generator is PM's candidate |
 | P4 | Planning images A/B (§16.5 use 1) | the composer on S3's and S6's briefs with the images **off**, from the same seed | $3 | $4 | Noah picks blind, as 7b's P4 did |
-| P5 | Style references A/B (§16.5 use 3) | the settlement Style job on two scenarios **with** Noah's GPT Image references | $3 | $4 | Only if Noah supplies them (N-7c-4); otherwise skipped, $0 |
+| P5 | Style references A/B (§16.5 use 3) | the settlement Style job on two scenarios **with** Noah's GPT Image references | $3 | $4 | Only if Noah supplies them (N-7c-4); otherwise skipped, $0. **On:** six gpt-image-2 references (N-7c-4's answer) |
 | P6 | A Claude composite (optional) | one landmark designed as a `Composite` (Opus), on S3's summit | $6 | $9 | Not gating (CM-b's hand-written castle gates); runs only if the ledger reads at most $50 after P5 |
 | R | Reserve | repair re-runs; one retry per item | $8 | $8 | Only within the $65 |
 | | **Total** | | **$57 (+$8 = $65)** | | |
@@ -28874,8 +28875,8 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
 3. **S-7c-5.** `Regions.authorProgram` runs under Steward's settlement budget and the player's approval, like a paid build (a card line, then Start).
 4. **S-7c-6, composites keep the lot binding.** A composite is one entry and one group item, so Steward's `itemKey == lotId` binding holds;
    CM-a/CM-b must keep it true (a gate item asserts it).
-5. **S-7c-9 done:** Steward main 045c6ea refreshed `fixtures/strange-asks/capabilities.json` at $0 (from the plan catalogue at main bdd1fdc0):
-   **15 built, 20 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
+5. **S-7c-9 done:** Steward main 045c6ea refreshed `fixtures/strange-asks/capabilities.json` at $0 (from the plan catalogue at main bdd1fdc0),
+   and eacff0e corrected it (big_program stays nearest): **11 built, 24 nearest, 24 wait** of 59 asks. Most unlocked by: over water (7b AF/SL, 6), working modules (phase 5, 5), carved interiors
    (7b carve_into + 7c hollow mountain, 5), sculpted forms (7c BF, 4), megastructure (7c CM, 3), off ground (7b SL, 3), secrets (7c HR).
    It supports the order BF, CM, HR after 7b's site lots (Steward's `artifacts/strange-asks/report.md`, `node tools/strange-asks.mjs`).
 
@@ -28885,6 +28886,9 @@ Steward: yes to S-7c-1 to S-7c-9, with two notes; S-7c-9 done.
 - **N-7c-2 keep both:** US (inverted builds) and CX (`Sites.placeConnector`) stay in scope, ordered last, so they're dropped first if 7c runs long.
 - **N-7c-3 yes:** the phase gate as proposed (§5).
 - **N-7c-4 yes:** when SF merges, the coordinator asks Noah (via the parent session) for 2-3 GPT Image references each for S3 and S5.
+  **Then (2026-11-12, Noah via parent session: "you go ahead and generate them w/ codex/chatgpt"):** the parent generated six with
+  **gpt-image-2**, not GPT Image 2.5 (S3-monastery-1..3, S5-treehouse-1..3, 1536x1024; `Minecraft/references/7c-N-7c-4/`, outside the
+  repo). gpt-image-2 stands in for GPT Image 2.5 wherever this contract names it for 7c's references; P5 is on.
 - **N-7c-5 yes:** program authoring ships behind the `programAuthoring` feature, on for claude-login users.
 - **N-7c-6 yes:** Noah approves each promotion candidate's 20-seed contact sheet.
 ### Slice SO as built (branch `slice/SO` off main b1ee8dcc; versions NEXT; $0; recorded 2026-11-11)
@@ -29208,7 +29212,7 @@ Architect API NEXT (slice X)"):
 | `record CompositeInfo.Joint` | `(String fromModule, String fromPort, String toModule, String toPort)`; `JsonObject wire()` |
 | `Regions` | `default CompletableFuture<String> compose(ComposeRequest)`: throws until CO; `default CompletableFuture<String> authorProgram(AuthorRequest)`: throws until AU; `default JsonObject planCatalogue(Set<String> kinds)`: **works now** (RegionsImpl), the no-arg `planCatalogue()` unchanged |
 | `Sites` | `default CompletableFuture<PlaceResult> placeConnector(ConnectorRequest)`: throws until CX |
-| `Reason` | appended after `NO_LINK`: `JOINT_MISMATCH, AUTHORED_STALE`, each documented (`AUTHORED_STALE`'s detail: the program id) |
+| `Reason` | appended: `JOINT_MISMATCH, AUTHORED_STALE` (after `NO_LINK` on the branch; on main after GP's `PROGRAM_REFUSED`, merge 212ea8e6), each documented (`AUTHORED_STALE`'s detail: the program id) |
 | ext keys | `PlanRequest.EXT_SECRETS = "architect_mc:secrets"` (HR), `PlanRequest.EXT_PLAN_IMAGES = "architect_mc:planImages"` (CO), `BibleRequest.EXT_RELATED_TO = "architect_mc:relatedTo"` (SF) |
 | Features | none advertised; `ArchitectApi.features()` javadoc reserves `bigForms`, `hiddenRooms`, `suspendedBuilds`, `aqueduct`, `regionM15`, `styleFormat3`, `scenarioTemplates`, `compose`, `programAuthoring`, `shapePromotion`, `composites`, `placeConnector` for their slices |
 
@@ -29265,6 +29269,10 @@ about 8 kinds under 90,000.
 | `node tools/step-inputs.mjs check` | clean after `build` (345 steps; unit-kit gains f7c-foundation) |
 | `tools/catalogue-since-check.mjs` | pass (NEXT off a release branch) |
 | gate-verifier (review only, DEV MODE) | **PASS** at 963ea52c: the surface purely additive (one Reason line rewritten to append), the six flips unchanged but `draft`, the golden diff one entry, the compact copy within §2/§3 row 1, kit and Java kinds equal; re-ran f7c-foundation, plan-p0, catalogue-c38 (14/14), the 7a/7b catalogue tests (71/71), system-refs (15/15), Api7cFTest/PlanCatalogueTest/ApiLPTest, and measured 78,821. Non-blocking: hand Steward the compact copy's change (notes and kind descriptions now on demand) |
+
+**Leftover (closed 2026-11-15, docs tidy DX-a):** a `systemRefs` form serving kinds' long text (a ref in place of a
+`planCatalogue(kinds)` call) was left "if wanted"; nobody asked, so it is dropped. `planCatalogue(kinds)` is the path (Steward's
+repair round uses it, its leftovers-1 fa2a452).
 
 ### Slice CM-a as built (branch `slice/CM-a` off main 0cdb1869; versions NEXT; $0, kit only, no client; recorded 2026-11-12)
 
@@ -30524,7 +30532,7 @@ lot's reserved cells, found again by key after a restart. Feature `"givenProgram
 - `Designs.variant(String entryId, JsonObject params, @Nullable BiblePin bible, DesignRequest.@Nullable Reserved reserved, String opKey)`
   and the same with `@Nullable String owner` last -> `CompletableFuture<String>`.
 - `Designs.variantByKey(String opKey)` and `variantByKey(@Nullable String owner, String opKey)` -> `CompletableFuture<Optional<String>>`.
-- `Reason.PROGRAM_REFUSED` (appended last); `class ProgramRefused extends ArchitectRefused` with `CheckReport report()` (the checker's
+- `Reason.PROGRAM_REFUSED` (appended after `NO_LINK`; 7cF's `JOINT_MISMATCH, AUTHORED_STALE`, merged after GP, follow it); `class ProgramRefused extends ArchitectRefused` with `CheckReport report()` (the checker's
   findings as `CheckReport.Finding(rule, "error", null, null, 1, [], message)`); `Limits.PROGRAM_SOURCE_MAX` 262144,
   `Limits.PROGRAM_PARAMS_MAX` 16384. `Library.makeVariant` is unchanged.
 
