@@ -1599,6 +1599,21 @@ where sim-sets ran first an `apitest` owner appears and the check fails (gate is
   fallback (`semantic.clay_text`) is gone, every call site reads `UiStyle.clayText()` (the same #9A3F27). `semantic.placeholder` needed
   no swap: lab-ui's `TextFieldView` draws it itself. Every gate slot's `.gradle-home` needs 0.4.1 resolved once (tools/lib/pinned-deps.mjs).
 
+## Chore AR as built (builder, 2026-11-14; branch `chore/AR` off main 2b6b1729; DEV MODE; $0, offline)
+
+PF's gate run (20261115-003419) found one FAIL each in hy-unit item 11, kc-unit item 3, cl-unit item 3, f3-unit §9 and sl-unit: their committed
+asks tables predate BF and US (and, for sl, LP), and kc's and sl's items compared a merge base already past them with their own "before" record.
+Tables cut on 2b6b1729 with the function each item calls (`asksGap`; sl `{ current: true }`); every changed row has an owner, none unexplained:
+- **BF** (30c36d79, form.crater, form.hollow_mountain, form.floating_island supported): crater_mine/crater and ring_city/crater_lake -> fits,
+  dwarven_hold/mountain_hollow and sky_monastery/sky_island -> adjusted, ring_city/ring_town blocked DEPENDENCY -> fits (its crater_lake now fits).
+- **US** (79018555, rule.suspended supported): upside_down/hang_from_ceiling unsupported until 7c -> refused NO_FEATURE.
+- **LP** (sl's after table only, cut before LP landed): the three secret_tunnels tunnel.under parts -> refused NO_FEATURE.
+- Re-cut: `hy/asks-gap-after.txt`, `f3/asks-after.md`, `kc/asks-after.md` (one table, byte-identical), `sl/asks-after.txt`. Before tables untouched.
+- Code: fl-norm `arAskLine`/`AR_GAP_ROW` (BF's and US's parts by part and kind), read by hy item 11 against v0.37.0's table; kc item 3's base may
+  equal either committed table (F3's rule); cl item 3 keeps `cl/asks-gap-after.txt` as CL's record (kit/test/cl.test.mjs item 3) and compares
+  through K3/LF/AT/AR normalisers; sl's step accepts "SL on the base: nothing moves" and a base table equal to the committed after table.
+- Leftover (not run, out of scope): h-unit item 10, coa-unit item 6 and vocc-unit item 3 read tables AT cut before BF and US; likely stale too.
+
 ## Chore AT as built (builder, 2026-11-11; branch `chore/AT` off main bcd9eddb; DEV MODE; $0)
 
 SP's gate run found five unit items failing on main itself: coa-unit item 6, h-unit item 10, hy-unit item 11, vocc-unit item 3, f3-unit §9.

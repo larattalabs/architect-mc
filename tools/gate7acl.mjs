@@ -155,7 +155,13 @@ steps.unit = async () => {
   const lines = (t) => new Map(t.split('\n').filter((l) => /^[a-z_0-9]+\/[a-z_0-9]+ /.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...la].filter(([k, v]) => lb.get(k) !== v).map(([k]) => k).filter((k) => !/mining_town\/rail_1/.test(k));
-  out.asks = { moved, malformed: after.malformed, committedAfter: fs.readFileSync(path.join(F, 'asks-gap-after.txt'), 'utf8') === after.text };
+  // ((chore AR) asks-gap-after.txt stays CL's record, which kit/test/cl.test.mjs item 3 holds against its before table (only the three climbs
+  // differ); the after table compares with it without what later slices moved: K3's walls, LF's lifts, GM-c's drawbridge and LP's tunnels
+  // (fl-norm k3AskLine, lfAskLine, atAskLine), BF's forms and US's rule.suspended (arAskLine), their gap rows and the tally line)
+  const { AR_GAP_ROW, arAskLine, atAskLine, k3AskLine, lfAskLine } = await import('./lib/fl-norm.mjs');
+  const later = (t) => t.split('\n').filter((l) => !/^# 59 asks:/.test(l) && !/^\s+(?:connector\.(?:lift|drawbridge)|tunnel\.under)\s+\d+$/.test(l) && !AR_GAP_ROW.test(l))
+    .map((l) => arAskLine(atAskLine(k3AskLine(lfAskLine(l))))).join('\n');
+  out.asks = { moved, malformed: after.malformed, committedAfter: later(fs.readFileSync(path.join(F, 'asks-gap-after.txt'), 'utf8')) === later(after.text) };
   const climbs = ['hidden_village/cave_ladders', 'old_new_town/quarter_stair', 'sky_monastery/long_stair'];
   check(after.malformed === 0 && (JSON.stringify(moved) === JSON.stringify(climbs) || (onMain && moved.length === 0)) && out.asks.committedAfter,
     `item 3: the 59 asks on the merge base and on this head: 0 malformed; ${onMain ? 'CL on the base: nothing moves' : 'exactly the three climbs move'} (${moved.join(', ') || 'none'}; the foundation's rail_1 aside); the after table equals fixtures/plan/cl/asks-gap-after.txt: ${out.asks.committedAfter}`);

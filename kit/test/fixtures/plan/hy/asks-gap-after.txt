@@ -1,17 +1,13 @@
-# 59 asks: adjusted 8, blocked 5, fits 70, refused 33, unsupported 16
+# 59 asks: adjusted 10, blocked 4, fits 73, refused 34, unsupported 11
 # gap table (unsupported parts per block id):
   rule.shape               3
-  form.crater              2
   rule.variety             2
   connector.rail           1
-  form.floating_island     1
-  form.hollow_mountain     1
   form.mast                1
   form.seabed_site         1
   form.ship_hull           1
   program.districts        1
   rule.stacked_floors      1
-  rule.suspended           1
 # every part:
 arcology/tower_city zone.standard fits
 arcology/unused_placeholder zone.standard refused NO_ROOM
@@ -33,13 +29,13 @@ cliff_monks/sea_stair connector.path fits
 cliff_monks/ledge_path connector.path fits
 conquered_town/village zone.standard fits
 crater_mine/mine_zone zone.standard fits
-crater_mine/crater form.crater unsupported UNSUPPORTED until 7c
+crater_mine/crater form.crater fits
 crater_mine/crater_relief form.relief fits
 desert_jungle_wall/town zone.standard fits
 desert_jungle_wall/great_wall connector.wall fits
 desert_jungle_wall/two_faced_palette rule.palette refused NO_FEATURE
 dwarven_hold/hold zone.standard fits
-dwarven_hold/mountain_hollow form.hollow_mountain unsupported UNSUPPORTED until 7c
+dwarven_hold/mountain_hollow form.hollow_mountain adjusted
 end_city_ruins/city zone.standard fits
 end_city_ruins/dwelling_bridges connector.bridge refused NO_GAP
 end_city_ruins/central_terrace form.terrace fits
@@ -85,8 +81,8 @@ redstone_gate/moat connector.channel fits
 redstone_gate/curtain_wall connector.wall adjusted
 redstone_gate/main_gate connector.gate refused NO_ROOM
 redstone_gate/drawbridge connector.drawbridge blocked DEPENDENCY
-ring_city/ring_town zone.standard blocked DEPENDENCY
-ring_city/crater_lake form.crater unsupported UNSUPPORTED until 7c
+ring_city/ring_town zone.standard fits
+ring_city/crater_lake form.crater fits
 rival_families/estates zone.standard refused NO_FEATURE
 rival_families/family_colours rule.palette refused NO_FEATURE
 rival_families/mirrored_banks rule.shape unsupported UNSUPPORTED until RC
@@ -103,7 +99,7 @@ ship_town/ship_hull form.ship_hull unsupported UNSUPPORTED until unscheduled
 ship_town/ship_masts form.mast unsupported UNSUPPORTED until unscheduled
 sky_monastery/cloister zone.standard fits
 sky_monastery/long_stair connector.stair refused NO_CLIMB
-sky_monastery/sky_island form.floating_island unsupported UNSUPPORTED until N-P0-1
+sky_monastery/sky_island form.floating_island adjusted
 sorting_warehouse/trading_post zone.standard fits
 spiral_town/hill_town zone.standard fits
 spiral_town/spiral_road connector.street refused UNREACHABLE
@@ -138,7 +134,7 @@ upside_down/village zone.standard fits
 upside_down/main_street connector.street fits
 upside_down/chain_bridges connector.rope_bridge refused NO_GAP
 upside_down/winch_lift connector.lift refused NO_CLIMB
-upside_down/hang_from_ceiling rule.suspended unsupported UNSUPPORTED until 7c
+upside_down/hang_from_ceiling rule.suspended refused NO_FEATURE
 walled_town/town zone.standard fits
 walled_town/town_wall connector.wall fits
 war_camp/camp zone.standard fits
