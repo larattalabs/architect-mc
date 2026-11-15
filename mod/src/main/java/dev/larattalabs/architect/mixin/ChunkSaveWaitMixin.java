@@ -38,7 +38,7 @@ public abstract class ChunkSaveWaitMixin {
 	private void architect$wait(BlockableEventLoop<?> loop, BooleanSupplier ready) {
 		ChunkHolder h = architect$holder;
 		architect$holder = null;
-		if (SaveTiming.explicit && !SaveTiming.waitAll && !ready.getAsBoolean() && h != null && !SaveTiming.hasChanges(h.getLatestChunk())) {
+		if (h != null && SaveTiming.skipWait(ready.getAsBoolean(), h.getLatestChunk())) {
 			SaveTiming.waitSkipped();
 			return;
 		}

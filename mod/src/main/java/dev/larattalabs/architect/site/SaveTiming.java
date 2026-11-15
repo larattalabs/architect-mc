@@ -75,7 +75,12 @@ public final class SaveTiming {
 	 * ImposterProtoChunk wraps (the imposter itself always reports clean). Anything else (a ProtoChunk loading or generating) holds no change
 	 * the ledger describes.
 	 */
-	public static boolean hasChanges(net.minecraft.world.level.chunk.ChunkAccess c) {
+	/** (SS, ChunkSaveWaitMixin's decision) A flushed save's wait for a chunk not ready is skipped: inside a stockpile save, no changes. */
+	public static boolean skipWait(boolean ready, net.minecraft.world.level.chunk.ChunkAccess latest) {
+		return explicit && !waitAll && !ready && !hasChanges(latest);
+	}
+
+		public static boolean hasChanges(net.minecraft.world.level.chunk.ChunkAccess c) {
 		if (c instanceof net.minecraft.world.level.chunk.LevelChunk lc) {
 			return lc.isUnsaved();
 		}

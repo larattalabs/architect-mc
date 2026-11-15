@@ -71,7 +71,7 @@ export async function registerPS(steps, h) {
       // their own /save-all flush baseline)
       const pr = await call('dev.stockpile.ss', { probe: true }, 180_000);
       for (const c of pr.cases ?? []) check(c.ok, `SS probe ${c.case}: ${c.detail}`);
-      check(pr.ok === true && (pr.cases ?? []).length === 9, `SS probe: ${(pr.cases ?? []).filter((c) => c.ok).length} of 9 cases hold`);
+      check(pr.ok === true && (pr.cases ?? []).length === 10, `SS probe: ${(pr.cases ?? []).filter((c) => c.ok).length} of 10 cases hold`);
       out.ssprobe = pr;
     }
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });

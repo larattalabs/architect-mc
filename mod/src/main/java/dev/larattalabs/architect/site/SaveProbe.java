@@ -21,10 +21,12 @@ import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import net.minecraft.world.level.storage.LevelResource;
 
 /**
- * (SS, the GPT review's finding 3) Behavioural checks of RegionFileFlushMixin, RegionStorageBarrierMixin and ChunkSaveWaitMixin, run in a
+ * (SS, the GPT review's finding 3 and its verification) Behavioural checks of RegionFileFlushMixin, RegionStorageBarrierMixin,
+ * ChunkSaveWaitMixin's decision and the ledger's durability check (in a save with the world and in the world save's callback), run in a
  * live server where the mixins are applied ({@code dev.stockpile.ss {probe: true}}; ps-crash asserts every case). Real RegionFile objects in
- * {@code <world>/architect/ss-probe} (storage type "ssprobe", outside the ledger's checks), the forces counted as successful ones, the
- * coverage read from {@link RegionDurability} the way the ledger's check reads it. Server thread.
+ * {@code <world>/architect/ss-probe} (storage type "ssprobe", outside the ledger's checks, except cases 9-10's "chunk" file, which must
+ * block the ledger), the forces counted as successful ones, the coverage read from {@link RegionDurability} the way the ledger's check
+ * reads it. Server thread.
  */
 final class SaveProbe {
 	private SaveProbe() {
@@ -68,13 +70,14 @@ final class SaveProbe {
 
 		// 4 a force that fails covers nothing; the retry forces
 		write(a, c0, 2000);
-		RegionDurability.failNextForce = f;
+		RegionDurability.FAILING.add(f);
 		boolean threw = false;
 		try {
 			a.flush();
 		} catch (IOException e) {
 			threw = true;
 		}
+		RegionDurability.FAILING.remove(f);
 		boolean stillOwed = !RegionDurability.undurable("ssprobe").isEmpty();
 		f0 = RegionDurability.FORCED.get();
 		a.flush();
@@ -83,13 +86,14 @@ final class SaveProbe {
 
 		// 5 a close whose force fails (an eviction) owes its path; a reopened object starts unknown and its first force clears it
 		write(a, c0, 2000);
-		RegionDurability.failNextForce = f;
+		RegionDurability.FAILING.add(f);
 		threw = false;
 		try {
 			a.close();
 		} catch (IOException e) {
 			threw = true;
 		}
+		RegionDurability.FAILING.remove(f);
 		boolean owedPath = RegionDurability.OWED.containsKey(f);
 		RegionFile b = new RegionFile(info, f, dir, false);
 		RegionDurability.State sb = state(f);
@@ -98,18 +102,6 @@ final class SaveProbe {
 		add(cases, "failedCloseThenReopen", threw && owedPath && owedAfterReopen && sb != null && sb.forcedAt == 0 && RegionDurability.undurable("ssprobe").isEmpty(),
 			"close threw " + threw + ", owed " + owedPath + ", owed after the reopen " + owedAfterReopen);
 		b.close();
-
-		// 6 an oversized chunk: its .mcc payload forced, the directory synced at the next forcing flush
-		Path f2 = dir.resolve("r.1.0.mca");
-		RegionFile c = new RegionFile(info, f2, dir, false);
-		RegionDurability.State sc = state(f2);
-		long d0 = RegionDurability.DIR_SYNCS.get();
-		write(c, new ChunkPos(32, 0), 1_200_000);
-		boolean ext = sc != null && sc.external.get() == 1 && Files.exists(dir.resolve("c.32.0.mcc"));
-		c.flush();
-		add(cases, "oversizedChunkDurable", ext && RegionDurability.DIR_SYNCS.get() == d0 + 1 && RegionDurability.undurable("ssprobe").isEmpty(),
-			"external " + ext + ", dir syncs " + (RegionDurability.DIR_SYNCS.get() - d0));
-		c.close();
 
 		// 7 the device barrier: a storage whose files are all clean still forces one in a new world save
 		RegionFileStorage st = new RegionFileStorage(info, dir, false);
@@ -134,13 +126,26 @@ final class SaveProbe {
 		}
 		net.minecraft.core.BlockPos at = player != null ? player.blockPosition() : net.minecraft.core.BlockPos.ZERO;
 		LevelChunk lc = lv.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
-		boolean dirty = false;
+		boolean waits = false;
+		String why = "no loaded chunk at the player";
 		if (lc != null) {
 			lc.markUnsaved();
 			ImposterProtoChunk ip = new ImposterProtoChunk(lc, false);
-			dirty = SaveTiming.hasChanges(lc) && SaveTiming.hasChanges(ip) && !ip.isUnsaved();
+			boolean was = SaveTiming.explicit;
+			SaveTiming.explicit = true; // as inside a stockpile save with the world, where the mixin decides
+			try {
+				boolean dirtyWaits = !SaveTiming.skipWait(false, lc), imposterWaits = !SaveTiming.skipWait(false, ip);
+				boolean protoSkips = SaveTiming.skipWait(false, null), readyWaits = !SaveTiming.skipWait(true, ip);
+				SaveTiming.explicit = false;
+				boolean vanillaWaits = !SaveTiming.skipWait(false, null);
+				waits = dirtyWaits && imposterWaits && protoSkips && readyWaits && vanillaWaits && !ip.isUnsaved();
+				why = "dirty LevelChunk waits " + dirtyWaits + ", dirty imposter (itself clean " + !ip.isUnsaved() + ") waits " + imposterWaits
+					+ ", nothing to save skips " + protoSkips + ", a ready chunk waits " + readyWaits + ", outside a stockpile save waits " + vanillaWaits;
+			} finally {
+				SaveTiming.explicit = was;
+			}
 		}
-		add(cases, "dirtyImposterWaited", dirty, lc == null ? "no loaded chunk at spawn" : "LevelChunk and imposter both have changes");
+		add(cases, "waitDecisionKeepsDirtyImposter", waits, why);
 
 		// 9 pending IO from an earlier save: an unflushed save writes the chunk (now clean) without a force; the next save with the world
 		// forces that file before the ledger
@@ -154,6 +159,47 @@ final class SaveProbe {
 			coveredAfter = !rs.isEmpty() && rs.stream().allMatch(RegionDurability.State::covered);
 		}
 		add(cases, "earlierSavesWritesForcedBeforeLedger", pending && coveredAfter, "unforced before " + pending + ", covered after " + coveredAfter);
+
+		// 9-10 a failure outstanding: an owed chunk-storage file of this world (a close whose force failed) blocks the ledger, in a save with
+		// the world and in an autosave; once the disk recovers, the next save retries the path, clears it and publishes the ledger
+		Path dx = dir.resolve("chunk");
+		Files.createDirectories(dx);
+		Path fx = dx.resolve("r.9.9.mca");
+		RegionFile x = new RegionFile(new RegionStorageInfo("ss-probe", Level.OVERWORLD, "chunk"), fx, dx, false);
+		x.flush();
+		write(x, new ChunkPos(9 * 32, 9 * 32), 2000);
+		RegionDurability.FAILING.add(fx);
+		boolean closeFailed = false;
+		try {
+			x.close();
+		} catch (IOException e) {
+			closeFailed = true;
+		}
+		try {
+			int sv0 = Stockpiles.saves, rf0 = Stockpiles.durabilityRefusals;
+			boolean threwRefusal = false;
+			try {
+				Stockpiles.saveWithWorld(srv);
+			} catch (IllegalStateException e) {
+				threwRefusal = true;
+			}
+			boolean explicitRefused = threwRefusal && Stockpiles.saves == sv0 && Stockpiles.durabilityRefusals == rf0 + 1;
+			srv.saveAllChunks(true, false, false); // an autosave: the world save's callback writes the ledger after J1's wait
+			boolean autoRefused = Stockpiles.saves == sv0 && Stockpiles.durabilityRefusals == rf0 + 2;
+			add(cases, "ledgerRefusedWhileAFailureIsOutstanding", closeFailed && explicitRefused && autoRefused, "close failed " + closeFailed
+				+ ", the save with the world refused " + explicitRefused + ", the autosave refused " + autoRefused + " (saves " + (Stockpiles.saves - sv0) + ")");
+			RegionDurability.FAILING.remove(fx); // the disk recovers
+			long r0 = RegionDurability.RETRIED.get();
+			int sv1 = Stockpiles.saves;
+			srv.saveAllChunks(true, false, false);
+			boolean autoPublished = Stockpiles.saves == sv1 + 1 && !RegionDurability.OWED.containsKey(fx) && RegionDurability.RETRIED.get() == r0 + 1;
+			Stockpiles.saveWithWorld(srv);
+			boolean explicitPublished = Stockpiles.saves == sv1 + 2;
+			add(cases, "owedPathRetriedThenLedgerPublished", autoPublished && explicitPublished, "the autosave retried and published " + autoPublished
+				+ ", then a save with the world published " + explicitPublished);
+		} finally {
+			RegionDurability.FAILING.remove(fx);
+		}
 
 		boolean ok = true;
 		for (var e : cases) {

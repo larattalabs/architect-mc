@@ -308,6 +308,7 @@ public final class Stockpiles {
 				Runtime.getRuntime().halt(7);
 			}
 			// (SS) the ledger only over durable chunk writes: an autosave forces the chunk storages (J1's wait), a flushed save the entities too
+			RegionDurability.retryOwed(); // (SS) an owed path (a close whose force failed) reopened and forced: a recovered disk clears it
 			java.util.List<String> undurable = flush ? RegionDurability.undurable("chunk", "entities") : RegionDurability.undurable("chunk");
 			if (ioFailed || !undurable.isEmpty()) {
 				refuseUndurable(flush ? "the world save" : "the autosave", undurable);
@@ -336,6 +337,7 @@ public final class Stockpiles {
 			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
 			SERVER = null;
 			PILES.clear();
 			dir = null;
@@ -1981,7 +1983,7 @@ public final class Stockpiles {
 					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
 					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
 					o.addProperty("regionBarriers", RegionDurability.BARRIERS.get());
-					o.addProperty("regionDirSyncs", RegionDurability.DIR_SYNCS.get());
+					o.addProperty("regionOwedRetried", RegionDurability.RETRIED.get());
 					o.addProperty("durabilityRefusals", durabilityRefusals);
 					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
@@ -2558,6 +2560,7 @@ public final class Stockpiles {
 				SaveTiming.explicit = false;
 			}
 			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
+			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
 			java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
 			if (!undurable.isEmpty()) {
 				refuseUndurable(quiet ? "the periodic save" : "a save with the world", undurable);
@@ -2729,6 +2732,7 @@ public final class Stockpiles {
 
 	private static void load(MinecraftServer server) {
 		SERVER = server;
+		RegionDurability.worldOpened(server.getWorldPath(LevelResource.ROOT)); // (SS) only this world's region files count
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 	}
 
