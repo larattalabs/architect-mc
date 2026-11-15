@@ -77,7 +77,7 @@ export async function registerDR(steps, h) {
     const W = 'G6B DR Crash';
     await L.fresh(W, FLAT);
     await L.setRules('exact');
-    await cmd('/op @s').catch(() => null);
+    await cmd('/op @a').catch(() => null);
     await L.tp(XL + 0.5, 140, 11400.5);
     const gy = await groundAt(XL + 20, 11300);
     const y0 = gy + 1, y1 = gy + 3;
@@ -213,10 +213,10 @@ export async function registerDR(steps, h) {
     check(!!f9 && f9.lagging > 0, `DR9: B2 lagging at ${f9?.lagging}`);
     const pn = await repair(d9.planId, true, 'none');
     check(pn.refused === 'PERMISSION' && !pn.applied, `DR9: a null actor is refused PERMISSION (${pn.message})`);
-    await cmd('/deop @s').catch(() => null);
+    await cmd('/deop @a').catch(() => null);
     await L.settle(500);
     const po = await repair(d9.planId, true, 'player');
-    await cmd('/op @s').catch(() => null);
+    await cmd('/op @a').catch(() => null);
     check(po.refused === 'PERMISSION' && !po.applied, `DR9: a non-op player is refused PERMISSION (${po.message})`);
     const pre9 = await hash(BX.B2);
     await call('dev.placement.slow', { on: true }, 10_000);
