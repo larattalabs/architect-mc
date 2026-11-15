@@ -2,7 +2,7 @@
  "note": "S1 (floating_islands) and the four family fixtures over synthSurvey(claim, \"golden\"), node pinned to \"golden\"; tiles: stage|set|key -> sha256 of the ARTL payload",
  "cases": {
   "floating_islands": {
-   "irSha": "bde0d959b3ee557fd78e6415b77f6fde690e39e8023de2f2647dfdef98057e62",
+   "irSha": "c56a34a6cb37955e0bc63f8ae0fcdea860b59b45d04966c7b04f5c2c191c0928",
    "format": 2,
    "requires": [
     "forms",
@@ -12,16 +12,16 @@
     "shape:strata",
     "shape:warp"
    ],
-   "cells": 59411,
+   "cells": 59403,
    "tiles": {
-    "islands|terrain|-1,-1": "04f678d3f6858c8c0f3949e9000b873b90f9bed1e2cc55ee189b99d3b1c4afdf",
-    "islands|terrain|-1,0": "f874c3027e279ee88946c238265e7a79853daca8923d30a52522862be0652161",
-    "islands|terrain|0,-1": "bf805df90af9aa1566abfdb22f9b7c4b13a594bfe8b1179d112e8062a7d0cbdd",
-    "islands|terrain|0,0": "d0a100460d91cb688404fce7038423888637ecce8d385a50c16aa6403c2955b3",
-    "ways|path|-1,-1": "84f63b4a4e2e4f8c0590fae0954b1915f59d19d894d056f798d3b9ad89e6b5d8",
-    "ways|path|-1,0": "d3756edfc3bcab42b7ff01838b16d381ca406c6fb9a5185cf633721fb385b55d",
-    "ways|path|0,-1": "8e4ea6ec4ecfbf1c0173b06b73fe6e2d64f1298135caf1fd7073c322ad3b1c48",
-    "ways|path|0,0": "38289be82d584cac3687d2381ec5310543a6a58795a7fb6a370eb1c4bfc5278a"
+    "islands|terrain|-1,-1": "7b40e60d65cbb483bc0115a20380675dde524adcfee8ca416a1ab2428e193c16",
+    "islands|terrain|-1,0": "3387d60fcfc9fcc6cc3f4ce39e28f8160e5890d4a5e92563313ee06ebe28a29a",
+    "islands|terrain|0,-1": "dbcb0b793796cab17f7f8cc5aad2315b2ecd0685d8ad0fe78ca0e62147c64e38",
+    "islands|terrain|0,0": "1b4868945e888286ed44e619cf329893a5c7a83f513e675123c78e682791b380",
+    "ways|path|-1,-1": "446a5e3886b68e4e8b0cbb4dd9e71371deaafa43628ea30640f898575f184b38",
+    "ways|path|-1,0": "d14bb93549c53a574dada09a18d226bee71661b59a187bd556f7a8b9109e41d3",
+    "ways|path|0,-1": "7599e33bc5e7c3db11e8d59736f2713c6c9cb7506ffb08e25e27781515abc887",
+    "ways|path|0,0": "8f6b38a0bd4d5e481667788ab08ee072561d15c91065e2740d2ed4aaf248c9c9"
    }
   },
   "crater_works": {
@@ -54,15 +54,15 @@
    }
   },
   "sky_isle": {
-   "irSha": "7cec3cc80ad4b9feca785c82ff35fafc79c065ef60dad468e5eb35cd51fbe53b",
+   "irSha": "c9cdf803178ea07dd3e29623c4e73874f1248f65e675ecbe09f03911bac41541",
    "format": 1,
    "requires": [],
-   "cells": 49519,
+   "cells": 52289,
    "tiles": {
-    "mass|terrain|-1,-1": "45ea38ca8f1f4cfdfbc4c7b8a9e609899354e2ef52d6c3768a10c323e441b315",
-    "mass|terrain|-1,0": "6ef43352f51d468600f1d76a436838ea6d86a9f552316fdd7b21643c007d5fb0",
-    "mass|terrain|0,-1": "e83ea6783389a6981fbe75e2d4442112e02716c2df30d1b7b67903dd8f0ef3e7",
-    "mass|terrain|0,0": "978569342e7f2b6aa8e78884ea3b7dbcef1df91c493482ef1b17a3bc00a22bd3",
+    "mass|terrain|-1,-1": "37c6cd1080b72efed43578a16cf0802772b9fb19e3241a176b929efc0e37b527",
+    "mass|terrain|-1,0": "2f28cab6933fae771e6707e57f980bd55e4451bc4b6692f95468902c6fedfe19",
+    "mass|terrain|0,-1": "4a101f0d66cf05c304d9c5d9e48eee2e600252edd1bdad5423017d0b94c42fea",
+    "mass|terrain|0,0": "b5ee6716b2b7fe5ff793e71680498853abb12997100c0740d70dcc53d8d259dd",
     "ways|path|-1,0": "1e41caad6a38ae9b120d1b9c54e27d2f1cd3f6e35ca032f4e183723ed45327ed",
     "ways|path|0,0": "3a50a9497f17683cf36676237e3166bca45aebf6c321dcf6dea520d5c9ac5606"
    }
