@@ -187,7 +187,7 @@ export async function registerFKB(steps, h) {
     check(sw?.swapped === true && sw.block === 'minecraft:dropper' && r1 - r0 >= 1 && sum(inDropper) === 0 && slabsOf(s1) === 0 && s1.phase == null
       && sl.entities === 0 && sl.player === 0,
       `${tag}: a declared hopper swapped for an empty dropper mid-fill (${at}): the fill saw the swap (${r1 - r0} refused attempt(s)) and wrote nothing: the dropper holds ${json(inDropper)}, no slab in any container (${slabsOf(s1)}), phase ${s1.phase ?? 'none'}, no slab loose or with the player`, res);
-    await cmd(`/setblock ${at.join(' ')} minecraft:hopper[facing=down]`);
+    await cmd(`/setblock ${P(at).join(' ')} minecraft:hopper[facing=down]`);
     return fed;
   }
 
@@ -509,7 +509,8 @@ export async function registerFKB(steps, h) {
     if (!site) { check(false, `${tag}: no fk_hall site`); await L.leaveWorld(); return null; }
     await blocksBuilt(tag, site);
     const at = (await fk(site)).containers?.[2]?.at;
-    chestAt = [at[0], at[1] - 1, at[2]];
+    const ap = P(at);
+    chestAt = [ap[0], ap[1] - 1, ap[2]];
     const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: true }, 60_000);
     check(!pr.refused, `${tag}: ${site} paused`);
     const acc = await deliver({ fill: true });
