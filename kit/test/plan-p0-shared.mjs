@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { asksSurvey, goldenSurvey, stewardAnchors, checkPlanLocal, checkPlanVolumes, memoryCache, flatSurvey, FIX, ROOT, fixtureStyle, fixtureLotBlocks } from './plan-helpers.mjs';
 import { validatePlan, PLAN_SCHEMA } from '../lib/plan/schema.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 // ((7a K1b) `flat`: a flat claim in rift_city's range, for the rope bridge fixtures; a fixture's `anchors` add to Steward's)
 export const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey(), flat: flatSurvey() };
@@ -49,7 +50,7 @@ export async function determinism(k, n) {
     assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
     if (!rs[0].artifact) continue;
     // the artifact's tile shas are the plan's own tiles (as scenario goldens compute them), 1 worker = 4 workers
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-det-'));
+    const dir = archTmpDir('p0-det');
     try {
       fs.writeFileSync(path.join(dir, 'ir.json'), rs[0].res.irJson);
       fs.writeFileSync(path.join(dir, 'survey.bin'), svOf(f).bytes);

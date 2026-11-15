@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { archTmpDir } from './arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -48,7 +49,7 @@ export const MUTATIONS = [
 
 async function lint(args, env = {}) {
   const t0 = Date.now();
-  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lint-mut-')), 'r.json');
+  const out = path.join(archTmpDir('lint-mut'), 'r.json');
   // (speed audit A) async, so the mutations can run side by side: the same process, arguments and environment as before
   const r = await new Promise((resolve) => {
     const c = spawn(process.execPath, [path.join(ROOT, 'tools', 'lint.mjs'), 'structure', ...args, '--json', out], { env: { ...process.env, ...env } });
@@ -77,7 +78,7 @@ async function one(m) {
   const env = {};
   try {
     if (m.kind === 'kit') {
-      scratch = fs.mkdtempSync(path.join(os.tmpdir(), `lint-mut-${m.id}-`));
+      scratch = archTmpDir(`lint-mut-${m.id}`);
       // (kit/ and scenarios/: the kit's test helpers read the scenario goldens from the kit's parent)
       for (const d of ['kit', 'scenarios']) {
         const r = spawnSync('cp', ['-c', '-R', path.join(ROOT, d), path.join(scratch, d)]);

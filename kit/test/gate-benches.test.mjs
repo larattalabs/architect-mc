@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyNightlyFulls, benchConf, decideBench, fullBenches, latestNightlyRecords, megaBVariant, newestOf, nightlyFulls, releaseBenches, sensitiveHits } from '../../tools/lib/bench-select.mjs';
 import { fullTwins, judgedBenches, supersededList } from '../../tools/lib/step-cache.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const CONF = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'gate-cache.json'), 'utf8'));
@@ -131,7 +132,7 @@ test('the nightly: megaB full weekly, on demand, first time, and when the sensit
 });
 
 test('the nightly records: the newest nightly result of each bench, finished or stopped; a yielded or running step does not count', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-benches-'));
+  const root = archTmpDir('gate-benches');
   const night = (date, state, steps, head) => {
     const run = path.join(root, `run-${date}`);
     fs.mkdirSync(run, { recursive: true });

@@ -12,6 +12,7 @@ import * as P from '../../tools/lib/promote.mjs';
 import { archSpan, overhangOf, OVERHANG, PROFILES, VERSION, soffit } from '../lib/forms/archSpan.mjs';
 import { lintAuthored } from '../lib/plan/authored.mjs';
 import { evalTile } from '../lib/realise.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(HERE, 'fixtures', 'promote', 'archSpan');
@@ -74,7 +75,7 @@ test('variety: the recorded sheet\'s numbers (190 pairs, >= 80% under IoU 0.8); 
 });
 
 test('approval refuses another sheet, a missing --by and a no without reasons; records who, when and the sheet\'s sha', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-'));
+  const tmp = archTmpDir('pm');
   const fake = path.join(tmp, 'sheet.png');
   fs.writeFileSync(fake, 'not the sheet');
   const r = structuredClone(rec);
@@ -98,7 +99,7 @@ test('output refuses until every earlier step passed (approval included); stamps
   delete r.steps.approval;
   assert.throws(() => P.output(c, r, '1.0.0'), /approval/);
   assert.throws(() => P.output(c, structuredClone(rec), '1.0'), /semver/);
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-'));
+  const tmp = archTmpDir('pm');
   const file = path.join(tmp, 'm.mjs');
   fs.writeFileSync(file, "export const VERSION = '0.1.0';\n");
   const steps = Object.fromEntries(P.STEPS.slice(0, -1).map((s) => [s, { pass: true }]));

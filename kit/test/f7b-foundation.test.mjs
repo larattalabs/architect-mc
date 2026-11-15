@@ -116,9 +116,9 @@ test('catalogue: form.hidden_room and rule.suspended re-reserved until 7c (N-7b-
   assert.deepEqual(planCatalogue(), golden);
   const before = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'plan', 'catalogue-pre7b.json'), 'utf8'));
   assert.ok(golden.catalogueVersion >= before.catalogueVersion, 'catalogueVersion is the coordinator\'s at merge (at least the snapshot\'s)');
-  assert.deepEqual(golden.entries.map((e) => e.id).filter((id) => id !== 'program.authored'), before.entries.map((e) => e.id)); // ((7cF) program.authored added: f7c-foundation.test.mjs)
+  assert.deepEqual(golden.entries.map((e) => e.id).filter((id) => id !== 'program.authored' && id !== 'form.arch_span'), before.entries.map((e) => e.id)); // ((7cF) program.authored added: f7c-foundation.test.mjs; (7c PF) form.arch_span: pf.test.mjs)
   // ((7b SL) layout.elevated flipped to supported by its own slice: sl.test.mjs holds that change)
-  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'rule.suspended', 'channel.aqueduct'].includes(id)); // ((7b LP) its two flips: lp.test.mjs; (7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs; (7c HR) form.hidden_room's flip: hr.test.mjs; (7c US) rule.suspended's: us.test.mjs; (7c AQ) channel.aqueduct's flip: aq.test.mjs)
+  const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(before.entries.find((x) => x.id === e.id))).map((e) => e.id).filter((id) => !['layout.elevated', 'connector.branch_walk', 'tunnel.under', 'program.authored', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'form.hidden_room', 'rule.suspended', 'channel.aqueduct', 'form.arch_span'].includes(id)); // ((7b LP) its two flips: lp.test.mjs; (7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs; (7c HR) form.hidden_room's flip: hr.test.mjs; (7c US) rule.suspended's: us.test.mjs; (7c AQ) channel.aqueduct's flip: aq.test.mjs)
   assert.deepEqual(changed, []);
   for (const id of changed) {
     const e = golden.entries.find((x) => x.id === id);

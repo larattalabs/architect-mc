@@ -16,6 +16,7 @@ import { gzipPinned } from '../lib/region/pack.mjs';
 import { siteSpecProblems } from '../lib/siteSpec.mjs';
 import { FIT_IDS } from '../lib/siteFits.mjs';
 import { buildDesign, SITE_DESIGNS } from '../build.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = path.join(KIT, 'test', 'fixtures', 'site');
@@ -23,7 +24,7 @@ const DSFIX = path.join(KIT, 'test', 'fixtures', 'ds');
 const SIX = ['cliff_face', 'tunnel_hill', 'rift_site', 'grove', 'overhang', 'trunk'];
 const EXAMPLE = { cliff_face: 'fit_attach_to_cliff', tunnel_hill: 'fit_carve_into', rift_site: 'fit_span', grove: 'fit_on_pad', overhang: 'fit_suspend', trunk: 'fit_wrap_trunk' };
 const load = (dir) => ({ site: JSON.parse(fs.readFileSync(path.join(dir, 'site.json'), 'utf8')), volume: decodeArvx(fs.readFileSync(path.join(dir, 'volume.bin'))) });
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'st-test-'));
+const tmp = archTmpDir('st-test');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 test('the six 7bF fixtures and DS\'s cliff_owned re-derive their own specs (no lot id: standalone)', () => {

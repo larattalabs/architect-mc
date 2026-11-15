@@ -8,9 +8,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { decode, encode, encodeGzip, nbt, parse, plain } from '../lib/nbt.mjs';
 import { nameFromFile } from '../lib/importer.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-import-'));
+const tmp = archTmpDir('architect-import');
 const run = (args) => spawnSync(process.execPath, [path.join(KIT, 'import.mjs'), ...args], { encoding: 'utf8' });
 
 /**

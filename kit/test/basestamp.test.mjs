@@ -6,10 +6,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { baseRecipe, recipeHash, baseStatus, baseCurrent, writeStamp, readStamp, quarantineBase, gateHost, STAMP_FILE, baseSpec, hostBaseName, logicalBaseName } from '../../tools/lib/basestamp.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const MC = { minecraft: '26.3' };
 function run() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'basestamp-'));
+  const root = archTmpDir('basestamp');
   const saves = path.join(root, 'mod', 'run', 'saves');
   fs.mkdirSync(saves, { recursive: true });
   const world = (name) => { fs.mkdirSync(path.join(saves, name), { recursive: true }); fs.writeFileSync(path.join(saves, name, 'level.dat'), 'x'); };

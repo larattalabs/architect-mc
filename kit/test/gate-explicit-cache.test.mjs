@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import { cacheContext, keyFor, lookup, record } from '../../tools/lib/step-cache.mjs';
 import { staticEntry, treeAt } from '../../tools/lib/step-inputs.mjs';
 import { commandPaths, entryShape, explicitDecision, isStrict, ownSteps, platformNow } from '../../tools/lib/explicit-cache.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 // A platform that is never this one (CI runs on linux-x64, so a fixed linux-x64 would match there).
 const OTHER_PLATFORM = platformNow() === 'linux-x64' ? 'darwin-arm64' : 'linux-x64';
@@ -27,7 +28,7 @@ const conf = {
 const cfg = { steps: { a: { shell: 'node tools/gate-a.mjs', client: 'none', timeoutMin: 5 } }, clients: {} };
 
 function setup() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'explicit-cache-'));
+  const root = archTmpDir('explicit-cache');
   git(root, 'init', '-q', '-b', 'slice/x');
   git(root, 'config', 'user.email', 't@t');
   git(root, 'config', 'user.name', 't');
@@ -36,7 +37,7 @@ function setup() {
   write(root, 'kit/lib/other.mjs', 'export const o = 1;\n');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'init');
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'explicit-cache-main-'));
+  const main = archTmpDir('explicit-cache-main');
   const map = { steps: { a: staticEntry('a', cfg.steps.a, conf, treeAt(root, 'HEAD'), { src: root }) } };
   const ctx = () => {
     const c = cacheContext({ src: root, main, cfg, conf, map, snapDir: null, env: {} });

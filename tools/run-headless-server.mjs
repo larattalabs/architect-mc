@@ -8,6 +8,7 @@
 // HEADLESS_SIDECAR: sim (the real sidecar, --backend sim; as run-gate6a/6b-client.sh) | stub (the stub sidecar; as
 // run-gate4d/4e/5b-client.sh). ARCHITECT_APITEST=0 leaves the apitest mod off the classpath (apijars puts an old jar in
 // mod/run/mods). ARCHITECT_XMX caps the heap (4G). The Minecraft EULA: ARCHITECT_SERVER_EULA (Noah's own file; see the host).
+import { ramTmpNote } from './lib/ram-tmp-env.mjs'; // first: TMPDIR on the RAM disk for this run and its children (slice TS)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

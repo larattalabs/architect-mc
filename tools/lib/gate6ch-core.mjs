@@ -10,6 +10,7 @@ import * as P3 from './p3-tier.mjs';
 import { identicalToBase, skippedLine } from './base-tree.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
+import { PF_MOVED } from './pf-norm.mjs'; // (7c PF) the aqueducts' arches from the archSpan module
 
 /**
  * Item 11's named exceptions: the fixtures that may differ from origin/main; every other fixture must not. (The H batch's T3a r06 and
@@ -18,7 +19,7 @@ import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tu
  * column onto the route's side (lo/hi -1..0, not 0..1) and their answers' cell counts and IRs differ; the overall answers are the same.
  */
 // ((6c HY) h/r08_course (a course: HY-b's v51) and extension/e15 (channel.course left the reserved list) by name, though this loop reads neither dir)
-export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json'), ...Object.keys(F7A_MOVED).filter((n) => !FL_MOVED.includes(n)), ...Object.keys(THEME_REST_MOVED)]); // ((7a foundation) its named movers)
+export const UNCHANGED_EXCEPTIONS = Object.freeze(['valid/v33_rope_bridge.json', 'valid/v34_auto.json', 'h/r08_course.json', 'extension/e15_every_reserved_a.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json'), ...Object.keys(F7A_MOVED).filter((n) => !FL_MOVED.includes(n)), ...Object.keys(THEME_REST_MOVED), ...Object.keys(PF_MOVED)]); // ((7a foundation) its named movers)
 /** Fixtures the comparison skips by name: refused/k1a_r01 runs the two-plan harness (its `volume`; H-b re-answers it WATER deep). */
 export const UNCHANGED_SKIPPED = Object.freeze(['refused/k1a_r01_wall_water.json']);
 

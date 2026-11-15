@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Blueprint, palette } from '../lib/kit.mjs';
 import { checkBlueprint, checkPorts } from '../lib/check.mjs';
 import { writeBlueprint } from '../lib/write.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const P = palette({ wood: 'oak', stone: 'cobblestone' });
 
@@ -56,7 +57,7 @@ test('the checker refuses ports outside the template, vertical facings and unkno
 });
 
 test('ext: the design may set it, a rebuild keeps what the mod wrote', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-ext-'));
+  const dir = archTmpDir('kit-ext');
   const bp = hut();
   bp.ext['kit:from_design'] = 1;
   writeBlueprint(bp, dir);

@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { archTmpDir } from './arch-tmp.mjs';
 
 export const JACOCO = {
   version: '0.8.15',
@@ -145,7 +146,7 @@ export function agentOption(main, dir, { env = process.env, includes = 'dev.lara
 export function skeletons(main, roots, { env = process.env } = {}) {
   const h = helpers(main, env);
   if (!h.ok) return null;
-  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gate-skel-')), 'skel.json');
+  const out = path.join(archTmpDir('gate-skel'), 'skel.json');
   try {
     // a java child (not node) with no JAVA_TOOL_OPTIONS: the gate's agents never run inside the tool
     const r = spawnSync(javaBin(env, 'java'), ['-cp', h.toolCp, 'GateCovTool', 'skel', out, ...roots], { encoding: 'utf8', maxBuffer: 64 << 20, env: { HOME: process.env.HOME ?? '', PATH: process.env.PATH ?? '' } });

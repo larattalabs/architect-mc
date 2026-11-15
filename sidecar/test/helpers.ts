@@ -7,15 +7,19 @@ import { memoryLogger } from '../src/context.js';
 import type { Outbound } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { Store } from '../src/store.js';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 export const SIDECAR_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const FIXTURE_KIT = path.join(SIDECAR_ROOT, 'test', 'fixtures', 'kit');
 
 export function tempDir(prefix = 'arch-test-'): string {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  // an arch-* dir with an owner marker, removed when the worker exits (test/setup-tmp.ts also clears it after each file)
+  return fs.realpathSync(archTmpDir(prefix));
 }
 
 export function rmrf(dir: string): void {
+  // ARCH_KEEP_TMP=1 keeps the test's own arch-* temp dirs for debugging (slice TS; tools/tmp-sweep.mjs removes them later)
+  if (process.env.ARCH_KEEP_TMP === '1' && path.basename(dir).startsWith('arch-')) return;
   fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 

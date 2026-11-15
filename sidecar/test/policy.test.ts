@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { classifyToolUse, describeRuleKey, lex, splitSegments, type PolicyContext, type Verdict } from '../src/policy.js';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const wt = path.join(os.tmpdir(), 'ac-policy', 'worktrees', 'demo-app', 'kit-t2');
 const outside = path.join(os.tmpdir(), 'ac-policy', 'elsewhere', 'secret.txt');
@@ -397,7 +398,7 @@ describe('permission policy', () => {
   });
 
   it('asks before editing through a link that leads outside the worktree', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-policy-link-'));
+    const root = archTmpDir('ac-policy-link');
     const tree = path.join(root, 'wt');
     const target = path.join(root, 'elsewhere');
     fs.mkdirSync(tree, { recursive: true });
@@ -415,7 +416,7 @@ describe('permission policy', () => {
   });
 
   it('npx runs a dev tool without asking only when the worktree has it installed', () => {
-    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-policy-npx-'));
+    const tree = archTmpDir('ac-policy-npx');
     const ctx: PolicyContext = { role: 'worker', cwd: tree, tempDirs: [] };
     try {
       expect(classifyToolUse('Bash', { command: 'npx tsc --noEmit' }, ctx).action).toBe('ask');

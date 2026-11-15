@@ -9,13 +9,14 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { kitReuse, sharedSuite } from '../../tools/lib/kit-reuse.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const TREE = 'abcdef0123456789abcdef';
 const junit = (file, { complete = true, fail = false } = {}) => fs.writeFileSync(file, `<?xml version="1.0" encoding="utf-8"?>\n<testsuites>\n<testcase name="a" time="0.1" classname="t" file="${path.join(ROOT, 'kit', 'test', 'gate-kit-shared.test.mjs')}">${fail ? '<failure message="x"/>' : ''}</testcase>\n${complete ? '</testsuites>\n' : ''}`);
 
 test('the first starter runs the suite once; later readers get the same report; a non-starter only uses one that exists', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir = archTmpDir('kit-shared');
   let runs = 0;
   const run = (_root, file) => {
     runs++;
@@ -35,18 +36,18 @@ test('the first starter runs the suite once; later readers get the same report; 
 });
 
 test('an incomplete or crashed shared run serves nothing (the readers run their files themselves)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir = archTmpDir('kit-shared');
   const r = sharedSuite(ROOT, TREE, { dir, start: true, run: (_root, file) => { junit(file, { complete: false }); return { code: null }; } });
   assert.equal(r.file, null);
   assert.match(r.why, /incomplete/);
-  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir2 = archTmpDir('kit-shared');
   // a run with failing tests is complete (exit 1): it serves, and the per-file rules refuse the failing files
   const f = sharedSuite(ROOT, TREE, { dir: dir2, start: true, run: (_root, file) => { junit(file, { fail: true }); return { code: 1 }; } });
   assert.ok(f.file);
 });
 
 test('a reader waits for a live holder, and takes over a lock whose owner died', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir = archTmpDir('kit-shared');
   const base = path.join(dir, `kit-${TREE.slice(0, 16)}`);
   // a live holder (a child process) that finishes after 600 ms
   const child = spawn(process.execPath, ['-e', `setTimeout(() => { const fs = require('fs'); fs.writeFileSync(${JSON.stringify(`${base}.junit.xml`)}, ${JSON.stringify(`<testsuites>\n<testcase name="a" file="${path.join(ROOT, 'kit', 'test', 'x.test.mjs')}"/>\n</testsuites>\n`)}); fs.writeFileSync(${JSON.stringify(`${base}.done`)}, JSON.stringify({ pid: process.pid, code: 0, complete: true, seconds: 0.6 })); }, 600)`], { stdio: 'ignore' });
@@ -58,7 +59,7 @@ test('a reader waits for a live holder, and takes over a lock whose owner died',
   assert.equal(ran, 0, 'it waited for the holder instead of running its own');
   assert.match(w.why, /waited/);
   // a dead owner's lock: free
-  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir2 = archTmpDir('kit-shared');
   const b2 = path.join(dir2, `kit-${TREE.slice(0, 16)}`);
   const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
   fs.mkdirSync(`${b2}.lock`);
@@ -75,7 +76,7 @@ test('kitReuse: with no unit-kit report, it reads the shared suite (same per-fil
     return;
   }
   const saved = { GATE_KIT_RESULTS: process.env.GATE_KIT_RESULTS, GATE_KIT_TREE: process.env.GATE_KIT_TREE, GATE_KIT_SHARED_DIR: process.env.GATE_KIT_SHARED_DIR };
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+  const dir = archTmpDir('kit-shared');
   try {
     delete process.env.GATE_KIT_RESULTS;
     delete process.env.GATE_KIT_TREE;
@@ -95,7 +96,7 @@ test('kitReuse: with no unit-kit report, it reads the shared suite (same per-fil
     Object.assign(process.env, { GATE_KIT_RESULTS: partial, GATE_KIT_TREE: tree });
     assert.ok(kitReuse(ROOT, files)?.reused);
     // a failing file in the shared report: a re-run (another tree's dir, so the memo doesn't serve the old report)
-    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-shared-'));
+    const dir2 = archTmpDir('kit-shared');
     process.env.GATE_KIT_SHARED_DIR = dir2;
     delete process.env.GATE_KIT_RESULTS;
     const b2 = path.join(dir2, `kit-${tree.slice(0, 16)}`);

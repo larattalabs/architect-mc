@@ -6,9 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { bench, benchRows, withinBound } from '../../tools/lib/bench-report.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 test('within, past, judged: a slow reading flags and is recorded with the load; ARCHITECT_TIMING_BARS=1 throws', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-bench-'));
+  const dir = archTmpDir('arch-bench');
   try {
     const lines = [];
     const log = (s) => lines.push(s);

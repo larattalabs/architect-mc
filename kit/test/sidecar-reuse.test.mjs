@@ -8,10 +8,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { sidecarReuse, sidecarTree, SIDECAR_TREE_PATHS } from '../../tools/lib/sidecar-reuse.mjs';
 import { identicalToBase, skippedLine } from '../../tools/lib/base-tree.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
 function repo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-reuse-'));
+  const dir = archTmpDir('sidecar-reuse');
   git(dir, 'init', '-q');
   git(dir, 'config', 'user.email', 't@t');
   git(dir, 'config', 'user.name', 't');

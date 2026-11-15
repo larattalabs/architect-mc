@@ -15,6 +15,7 @@ import { SITE_RULE_IDS } from '../src/sitevariants.js';
 import { designKeyBody } from '../src/opkeys.js';
 import { classifyToolUse } from '../src/policy.js';
 import { makeSidecar, until, type Harness } from './helpers.js';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(__dirname, '..', '..', 'kit');
 const fixture = (dir: string) => {
@@ -97,7 +98,7 @@ describe('DesignRequest.site (7b DS): schema', () => {
   });
 
   it("the policy lets the brief's site commands run (build, render, slices, reading site/)", () => {
-    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ds-policy-')));
+    const cwd = fs.realpathSync(archTmpDir('ds-policy'));
     const ctx = { role: 'worker' as const, cwd };
     for (const command of [
       'node kit/build.mjs gen_x --max 16,22,12 --type cabin --site site/site.arvx --lot site/site.json --json',

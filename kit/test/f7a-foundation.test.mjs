@@ -131,19 +131,21 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   for (const id of ['form.hollow_mountain', 'form.crater', 'form.floating_island']) flipped.add(id);
   // ((7c AQ) channel.aqueduct's flip: aq.test.mjs)
   flipped.add('channel.aqueduct');
+  // ((7c PF) form.arch_span added: pf.test.mjs)
+  flipped.add('form.arch_span');
   const own = (l, f = (x) => x) => l.filter((x) => !flipped.has(f(x)));
   assert.deepEqual(own(d.reservedToSupported), ['connector.span_bridge']);
   assert.deepEqual(own(d.schemaVersionBumps, (x) => x.id), [{ id: 'connector.span_bridge', from: 0, to: 1 }]);
   assert.deepEqual(own(d.untilChanged, (x) => x.id), [{ id: 'connector.rail', from: '7a', to: 'CR' }]);
   assert.deepEqual(own(d.notesChanged, (x) => x.id).map((x) => x.id), ['connector.rail']);
   // ((6d RV) the revision.* entries RV adds are rv-a.test.mjs's)
-  assert.deepEqual([d.added.filter((x) => !/^(revision\.|program\.authored$)/.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
+  assert.deepEqual([d.added.filter((x) => !/^(revision\.|program\.authored$|form\.arch_span$)/.test(x.id)), d.removed, d.retired, d.otherStateChanges, own(d.limitsChanged, (x) => x.id ?? x)], [[], [], [], [], []]);
   assert.deepEqual(d.recheck, [{ part: 'x', block: 'connector.span_bridge' }]);
   const sb = golden.entries.find((e) => e.id === 'connector.span_bridge');
   assert.equal(sb.aliasOf, 'connector.bridge');
   // the three changed entries carry the placeholder (the merge stamps it); nothing else changed its sinceApi
   const changed = golden.entries.filter((e) => JSON.stringify(e) !== JSON.stringify(pre.entries.find((x) => x.id === e.id)));
-  assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id).filter((id) => !/^(revision\.|program\.authored$|form\.(hollow_mountain|crater|floating_island)$|channel\.aqueduct$)/.test(id)), ['connector.rail', 'connector.span_bridge']); // ((7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs)
+  assert.deepEqual(own(changed, (e) => e.id).map((e) => e.id).filter((id) => !/^(revision\.|program\.authored$|form\.(hollow_mountain|crater|floating_island)$|channel\.aqueduct$|form\.arch_span$)/.test(id)), ['connector.rail', 'connector.span_bridge']); // ((7cF) program.authored: f7c-foundation.test.mjs; (7c BF) its three flips: bf.test.mjs)
   // (released in v0.43.0 at API 1.40.0, catalogue-v0430.json: a later release's golden.api moves on, the stamp stays; the 7a slices'
   // flips and RV's revision.* entries and 7cF's program.authored in `changed` too: each keeps the stamp of its own release, whichever that was, so a later release does not move this item;
   // tools/catalogue-since-check.mjs holds every stamp at or below the API)
@@ -155,7 +157,7 @@ test('§7 item 2: the golden equals planCatalogue(); against catalogue-pre7a.jso
   // (the two 7bF ids stay reserved: they keep their extension fixtures)
   // ((7b LP) tunnel.under keeps e17: a tunnel under flat ground between other ends still names it, refused NO_FEATURE)
   // ((7c BF) its three kinds keep e13 and e20, moved by name: each answers the class its fixture names)
-  for (const id of flipped) if (!['form.hidden_room', 'rule.suspended', 'tunnel.under', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct'].includes(id)) assert.ok(!ext.has(id), `${id} left e15 when it shipped`);
+  for (const id of flipped) if (!['form.hidden_room', 'rule.suspended', 'tunnel.under', 'form.hollow_mountain', 'form.crater', 'form.floating_island', 'channel.aqueduct', 'form.arch_span'].includes(id)) assert.ok(!ext.has(id), `${id} left e15 when it shipped`);
 });
 
 test('§7 item 4: a span_bridge part answers as the same bridge part, block connector.bridge, with the note (R25); the caller\'s plan untouched', async () => {

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { chooseTurbo, enqueue, liveHolders, liveTickets, loadConfig, loadGate, releaseAll, slotFile, tryAcquire } from '../../tools/lib/turbo.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const kids = [];
 after(() => {
@@ -18,7 +19,7 @@ function run(chain, turbo = false) {
   kids.push(k);
   return { pid: k.pid, worktree: `/tmp/${chain}`, chain, turbo, kill: () => new Promise((r) => { k.once('exit', r); k.kill('SIGKILL'); }) };
 }
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gate-turbo-'));
+const tmp = () => archTmpDir('gate-turbo');
 const me = (r) => ({ pid: r.pid, worktree: r.worktree, chain: r.chain, turbo: r.turbo });
 const go = (dir, r, o = {}) => tryAcquire(dir, r.m, { slots: 4, fill: 8, decide: async () => ({ shards: 1, ports: [] }), ...o });
 async function queued(dir, r) {
