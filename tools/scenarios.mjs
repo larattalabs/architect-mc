@@ -499,12 +499,8 @@ async function runScenario(id) {
   // (7c BR) `--brief`: the program and params come from the scenario's one-line brief through Regions.design (the pick) or
   // Regions.compose (the plan path; tools/lib/scenario-br.mjs BRIEF_VIA), never from the scenario file
   let brief = null;
-  if (briefOn) { t0 = Date.now(); brief = await briefRun(sc, claim, flat, out); T('brief', t0); t0 = Date.now(); }
-  // (7c PAY) a composed plan is the model's own: its golden key is goldens/<short>-co and none is committed (its determinism row is
-  // the 3 plans and 1 vs 4 workers, as a fixture without a golden); its lots are its own ids, given entries below
-  if (brief?.composed) { sc.goldenKey = BR.composedGoldenKey(short(sc)); sc.golden = false; }
-  // (7c PAY) `--save-world <name>`: the land the brief read, saved as a world of its own right after the brief (before any plan of the
-  // run writes): P4's images-off arm composes on a clone of it, never on land generated again (P0: two fresh copies differ)
+  // (7c PAY) `--save-world <name>`: the land the brief reads, saved as a world of its own just before the brief (after any sculpt; also
+  // when the brief reaches no plan): P4's images-off arm composes on a clone of it, never on land generated again (P0: two fresh copies differ)
   if (typeof opt('save-world') === 'string') {
     const w = opt('save-world');
     await L.cmd('/save-off');
@@ -512,9 +508,14 @@ async function runScenario(id) {
       await L.cmd('/save-all flush');
       await L.settle(3000);
       L.copyWorld(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, w);
+      fs.writeFileSync(path.join(L.SAVES, w, 'pay-saved.json'), `${JSON.stringify({ scenario: sc.id, out, runId, at: new Date().toISOString() }, null, 1)}\n`);
       L.log(`  the brief's land saved as world "${w}" (for P4)`);
     } finally { await L.cmd('/save-on'); }
   }
+  if (briefOn) { t0 = Date.now(); brief = await briefRun(sc, claim, flat, out); T('brief', t0); t0 = Date.now(); }
+  // (7c PAY) a composed plan is the model's own: its golden key is goldens/<short>-co and none is committed (its determinism row is
+  // the 3 plans and 1 vs 4 workers, as a fixture without a golden); its lots are its own ids, given entries below
+  if (brief?.composed) { sc.goldenKey = BR.composedGoldenKey(short(sc)); sc.golden = false; }
   const program = brief ? brief.program : sc.program;
   const params = brief ? brief.params : sc.params;
   const p1 = await L.plan(program, claim, { params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });

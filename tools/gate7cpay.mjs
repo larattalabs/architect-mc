@@ -730,7 +730,9 @@ subs.p4 = async () => {
     for (const s of S2.P2_SCENARIOS.filter((x) => x.saveWorld)) {
       const on = p2?.runs?.[s.key];
       const saved = path.join(c.L.SAVES, S2.p4World(s.key));
-      if (!on?.data?.out || !fs.existsSync(saved)) { res.pairs[s.key] = { skipped: `P2's ${s.key} run or its saved world is missing (${saved}): P4 never composes on land generated again` }; continue; }
+      // the saved world must be THIS P2 run's (its marker names the run's out dir): never an older run's, never land generated again
+      const mark = readJson(path.join(saved, 'pay-saved.json'), null);
+      if (!on?.data?.out || !fs.existsSync(saved) || mark?.out !== on.data.out) { res.pairs[s.key] = { skipped: `P2's ${s.key} run or its saved world is missing or another run's (${saved}, marker ${JSON.stringify(mark)}): P4 never composes on land generated again` }; continue; }
       const sc = scnFile(s.scenario);
       const claim = sc.fixture.claim;
       const st = p2.styles[s.key];
