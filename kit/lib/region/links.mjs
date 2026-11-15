@@ -281,6 +281,15 @@ function routeBranchWalk(r, land, A, B, link) {
     if (!got) throw new LinkError('ANCHOR', B.lot, B.name, `no leaf or log within ${BRANCH_WALK.reach} over a rail of deck cells ${last + 1}..${Math.min(path.length - 1, last + BRANCH_WALK.span)} of the walk between ${A.lot}.${A.name} and ${B.lot}.${B.name}: a branch walk hangs from the trees`, { from: path[last + 1] });
     hangers.push(got); used.add(k3(...got.at)); last = got.i;
   }
+  // ((SP2, RM's leftover) a rail post joined to no other rail (a turn's end beside a port) hangs on a chain of its own when a leaf or log
+  // is within reach over it: else it stands 8 off the nearest hanger, held on no side (region M15:cantilever))
+  const railKeys = new Set(rails.map((q) => `${q.at[0]},${q.at[2]}`));
+  const lone = rails.filter((q) => !used.has(k3(...q.at)) && !D4.some(([dx, dz]) => railKeys.has(`${q.at[0] + dx},${q.at[2] + dz}`)));
+  for (const q of lone) {
+    const a = anchorOf(q.at);
+    if (a) { hangers.push({ i: q.i, at: q.at, ...a }); used.add(k3(...q.at)); }
+  }
+  if (lone.length) hangers.sort((a, b) => a.i - b.i || a.at[0] - b.at[0] || a.at[2] - b.at[2]);
   // lamps: on a rail (not a hanger's) at most lampEvery deck cells apart, the first within lampEvery / 2 of the start
   const lamps = [];
   let lastLamp = -Math.ceil(BRANCH_WALK.lampEvery / 2) - 1;

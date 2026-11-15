@@ -99,6 +99,19 @@ describe.skipIf(!hasKit)('Style format 3 (sim backend, real kit)', () => {
     expect(stored(s, rev.bibleId).format).toBe(3);
     const parts = await finish(s, s.bibles.parts({ bibleId: town.bibleId }).job.id);
     expect(stored(s, parts.bibleId).format).toBe(3);
+    // (SP2) a hand-saved, building-scope, unrelated format 3 Style: its revise stays format 3 and carries its format 3 members
+    const hand = s.bibleIndex.save({ bible: { name: 'Mill', format: 3, roles: { ...MEDIEVAL, ...MACRO }, forms: { giantTree: { species: 'oak' } }, scatter: { density: 'sparse' } } });
+    expect(stored(s, hand.id).format).toBe(3);
+    const hrev = await finish(s, s.bibles.revise(hand.id, 'darker beams').id);
+    const hj = stored(s, hrev.bibleId);
+    expect(hj.format).toBe(3);
+    expect(hj.scope).toBe('building');
+    expect(hj.forms).toEqual({ giantTree: { species: 'oak' } });
+    expect(hj.scatter).toEqual({ density: 'sparse' });
+    expect(hj.settlement).toBeUndefined();
+    expect(kitValid(s, hrev.bibleId, 'building')).toMatchObject({ ok: true, errors: [] });
+    // a format 2 Style's revise stays format 2
+    expect(stored(s, (await finish(s, s.bibles.revise(house.bibleId, 'taller').id)).bibleId).format).toBe(2);
   });
 
   it('a zone Style (ext architect_mc:relatedTo) pins its settlement Style and shares its core roles; a format 2 Style is a settlement Style', async () => {

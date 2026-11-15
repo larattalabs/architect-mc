@@ -33,14 +33,21 @@ export const SITE_CHECK_LIMITS = Object.freeze({
 });
 
 /**
+ * (SP2) The bounds of a fit row's 'bible' limits (attach_to_cliff's cantilever, span's span, suspend's chain): no bible carries one, so
+ * these are the limits until one does (opts.siteLimits still overrides). span 24: the region bridges' `maxSpan` (SC's reading 2);
+ * cantilever 8: twice M15's 4 for a house braced on a face (the cliff house measures 6); chain 16: twice the hanging house's 8.
+ */
+export const SITE_BIBLE_LIMITS = Object.freeze({ cantilever: 8, span: 24, chain: 16 });
+
+/**
  * The limits a fit is judged by: SITE_CHECK_LIMITS, then the fit row's own (lib/siteFits.mjs `limits`), then `overrides` (opts.siteLimits).
  * A fit row's 'bible' limit (attach_to_cliff's cantilever, span's span, suspend's chain) is the bible's; no bible carries one yet, so
- * without an override it is unbounded (null: measured into the metrics, never a finding).
+ * without an override it is SITE_BIBLE_LIMITS' bound (SP2; unbounded, null, until then). `span` and `chain` stay null on the other fits.
  */
 export function siteLimits(fit, overrides = {}) {
   const row = fitOf(fit);
   const out = { ...SITE_CHECK_LIMITS, span: null, chain: null };
-  for (const [k, v] of Object.entries(row.limits)) if (k in out || v === 'bible') out[k] = v === 'bible' ? null : v;
+  for (const [k, v] of Object.entries(row.limits)) if (k in out || v === 'bible') out[k] = v === 'bible' ? SITE_BIBLE_LIMITS[k] ?? null : v;
   for (const [k, v] of Object.entries(overrides ?? {})) if (v !== undefined) out[k] = v;
   return out;
 }

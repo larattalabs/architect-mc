@@ -30453,6 +30453,22 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
   - S7 has no brief run.
   - The determinism row's threshold text names `goldens/s1.json` for every scenario.
 
+### Slice SP2 as built (branch `slice/SP2` off main 1d195edb; versions NEXT; $0, sim only; light; recorded 2026-11-15)
+
+- **Looks:** `aqueduct.maxSpan` 2..7 is a format 3 look (`LOOK_ONLY`, no slots) that `aqueductEvery` and M15 read (AQ's leftover). `rope_bridge.sagRatio` is read alike by the route's rope move, `ropeBridge` and M10:rope; the `meta.ropes` record carries it when it is not 12 (SF's leftover).
+- **Format:** the sidecar's plan `bible.json` now carries `format`. Below 3, `planRegion` refuses prefer and look params with validateBible's message; with no format it reads them as before. A revise of a format 3 Style stays format 3 and carries its forms, scatter, references and settlement by code (the prompt is unchanged).
+- **Crater params** (`craterParamsOf`): `depth`, `rim_height` and `diameter` (16..86; bowl radius floor(d / 2)) are read where the part sets no member of its own. A bad value is noted and the default used.
+- **SC bounds** (`SITE_BIBLE_LIMITS`): cliff cantilever 8, span 24, chain 16. The examples measure 6, 9 and 8, so they stay clean. A site design past a bound now refuses SITE_UNFIT as a site variant (any finding does).
+- **Palette:** `design X threw: Error: palette: ...` is now detail `palette` (Steward M1). ProgramRefused's javadoc already covers it; steward-mc MODULES.md:500 still says `program`.
+- **RM fixes, each M15-clean:** sky_isle has a ring of rim pillars (was farthest 10). A branch walk's lone rail post hangs on its own chain. S1's link landings are one cell nearer each rim (4 seeds checked).
+- **Moved:**
+  - `sky_isle.expected.json`: its 3 M15 rows are gone.
+  - `regions-6b` and `previews-6b` goldens: the sky_isle and floating_islands cases only.
+  - `scenarios/goldens/s1*`: re-planned from its own inputs (kit 0.12.0; the old program reproduced the old sha first), with a `recut` note.
+  - `asks/crater_mine.json`: still fits; named in `tools/lib/sp2-norm.mjs` `SP2_MOVED`, beside `PF_MOVED`.
+- **Checks:** Full kit suite 1429/1429 and sidecar 916/916, both run locally because both timed out in the gate. Gradle build passes (1272 tests, 0 failures). api-compat `--baselines` is 8/8 clean, step-inputs check passes (418) and gitleaks is clean. Gate run 2, 20261115-075046-change at 2c11a5c6 (after merging main), passed 27 steps, including sim-jobs, sets and massing, the h, hy, fl, s2, s3, d, d3, kc, irr, f3, aq and lp units, lint-structure, 6b-scenario-s1-flat and 6a-inv3. Its failures: k1b-unit item 6 listed SP2's own mover v14, now skipped by name (a3ed4d76; the step was not re-run, per speed rule 11). b-unit's and t3b-unit's Java sub-runs reported no results, while unit-mod passes those classes. lint-mutations crashes on main's TS import, `kit/test/plan-p0-shared.mjs` -> `tools/lib/arch-tmp.mjs`, which is outside the scratch kit. bf-unit's asks-before table doesn't match the merge base, a base-side table (likely pre-existing; not checked on main).
+- **Leftovers:** S1's in-game evidence predates the re-cut. Both looks reach plan parts only (not `r.ropeBridge` or `r.course`). An aqueduct never measures an M15 span past cantilever 4, so its `M15:span` stays unit-only.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop

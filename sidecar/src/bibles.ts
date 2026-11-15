@@ -800,6 +800,23 @@ export class Bibles {
   }
 
   /**
+   * (SP2) A revise job's source version when it is format 3: its format 3 members (forms, scatter, references, settlement) to carry where
+   * the draft writes none (the draft prompt is unchanged and never sees them), else null (a format 1 or 2 source: the job's own format).
+   */
+  private previousFormat3(j: BibleJob): { members: Record<string, unknown> } | null {
+    let json: Record<string, unknown> | null = null;
+    try {
+      json = readJson(this.sc.bibleIndex.resolve({ id: j.bibleId, version: j.version - 1 }).files.json) ?? null;
+    } catch {
+      return null;
+    }
+    if (!json || json.format !== 3) return null;
+    const members: Record<string, unknown> = {};
+    for (const k of ['forms', 'scatter', 'references', 'settlement']) if (json[k] !== undefined) members[k] = structuredClone(json[k]);
+    return { members };
+  }
+
+  /**
    * (U5b) An "Add parts" job's bible: the source Style's bible.json as it is (the store's fields dropped), the job's id, version,
    * name and owner, validated by the kit like a draft. A built-in's copy is hand-made and based on it; a version of the same Style
    * keeps its origin and basedOn.
@@ -1065,8 +1082,11 @@ export class Bibles {
           }
           r.bible = { ...r.bible, roles: { ...((r.bible.roles as Record<string, string> | undefined) ?? {}), ...rc.shared } };
         }
-        // (5a) every new version is format 2 (the kit validates its restraint and limits); (7c SF) a settlement or zone Style format 3
-        const fmt = jobFormat(scope, !!related);
+        // (5a) every new version is format 2 (the kit validates its restraint and limits); (7c SF) a settlement or zone Style format 3;
+        // ((SP2) a revise of a format 3 Style stays format 3, its format 3 members the draft leaves out carried by code)
+        const prev = j.kind === 'revise' ? this.previousFormat3(j) : null;
+        if (prev) r.bible = { ...prev.members, ...r.bible };
+        const fmt = prev ? 3 : jobFormat(scope, !!related);
         const v = await this.validate(scratch, { ...r.bible, format: fmt, id: j.bibleId, version: j.version, ...(related ? { relatedTo: { ...related } } : {}) }, scope);
         if (!v.ok) {
           if (w.draftRetries < 1) {

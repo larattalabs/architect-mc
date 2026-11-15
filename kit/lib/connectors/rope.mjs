@@ -10,7 +10,7 @@
 //   ropeAnswer     a routed connector's spans (n, rise, landings, over gap or water, depth) and notes
 //   emitRopes      the links stage: each routed connector's spans written (deck, rails, posts, lamps) under a checkpoint each, its
 //                  cost.bom; then the wouldFit dry runs
-import { ROPE, emitRouteRopes, slabOf, deckY, profile } from './ropeGeom.mjs';
+import { ROPE, emitRouteRopes, slabOf, deckY, profile, sagOf, sagRatioOf } from './ropeGeom.mjs';
 import { readParams } from './params.mjs';
 import { footprintOf, inferMovers, VILLAGER } from '../region/passes/route.mjs';
 import { zoneLots } from '../plan/schema.mjs';
@@ -78,6 +78,8 @@ export function ropeResolve(K, p) {
 
 /** (7c SF) A format 3 Style's rope_bridge.maxSpan (a part's span.max when it sets no span), or null. */
 const lookMaxSpan = (K) => K.ctx.connectorLook?.look?.rope_bridge?.maxSpan ?? null;
+/** (SP2) A format 3 Style's rope_bridge.sagRatio (12..64; 12 = §3's), read by the route's rope move, the emit and M10:rope alike. */
+const lookSag = (K) => sagRatioOf(K.ctx.connectorLook?.look?.rope_bridge?.sagRatio);
 
 /** A rope_bridge or auto connector's leg options for the route pass (spans, spanOnce, span, approach, width, movers). */
 export function ropeLeg(K, p) {
@@ -86,7 +88,7 @@ export function ropeLeg(K, p) {
   const part = p.part;
   return {
     width: o.width, movers: o.movers,
-    ...(o.spans ? { spans: ['rope'], spanOnce: p.kind === 'rope_bridge', approach: o.approach, ...(part.span ? { span: { ...part.span } } : lookMaxSpan(K) ? { span: { min: ROPE.spanMin, max: lookMaxSpan(K) } } : {}) } : {}),
+    ...(o.spans ? { spans: ['rope'], spanOnce: p.kind === 'rope_bridge', approach: o.approach, ...(part.span ? { span: { ...part.span } } : lookMaxSpan(K) ? { span: { min: ROPE.spanMin, max: lookMaxSpan(K) } } : {}), ...(lookSag(K) !== 12 ? { sagRatio: lookSag(K) } : {}) } : {}),
   };
 }
 
@@ -142,7 +144,7 @@ export function ropeFailAnswer(K, l, m) {
 
 /** A span's crossing: over water or a gap, and its depth (the deepest column under the deck's centre line). */
 function crossing(K, s) {
-  const S = K.env.S, ys = profile(s.n, s.from[1], s.rise), base = K.rope?.land?.base ?? null;
+  const S = K.env.S, ys = profile(s.n, s.from[1], s.rise, sagOf(s.n, lookSag(K))), base = K.rope?.land?.base ?? null;
   // the land the routes met: the survey's ground plus a template's carved base (rift_city's rift)
   const ground = (x, z) => {
     const g = S.groundAt(x, z);
@@ -193,7 +195,7 @@ export function emitRopes(K) {
       const idx = K.order.indexOf(p);
       // ((7c SF) a format 3 Style's rope_bridge.light: a role, or 'none'; a part's own lamps: none wins)
       const lookLight = K.ctx.connectorLook?.look?.rope_bridge?.light;
-      const style = p.part.lamps === 'none' || lookLight === 'none' ? { light: null } : lookLight ? { light: lookLight } : {};
+      const style = { ...(p.part.lamps === 'none' || lookLight === 'none' ? { light: null } : lookLight ? { light: lookLight } : {}), ...(lookSag(K) !== 12 ? { sagRatio: lookSag(K) } : {}) };
       const recs = emitRouteRopes(K.r, { only: [x.meta.id], stage: K.stageOf('links'), part: `links_r${idx}`, prefix: `rope_r${idx}_`, style, ...(o?.whole ? { whole: true } : {}) });
       K.mark(p.id, K.addedSince(cp));
       // a rope_bridge connector's graph edge is typed (§8: type rope_bridge, its crossing)

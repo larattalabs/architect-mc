@@ -64,6 +64,7 @@ async function plan(argv) {
   let roles = {};
   let patterns = {};
   let connectors = null;
+  let format = null;
   let fluids = null;
   let rarity = null;
   if (opts.bible) {
@@ -74,6 +75,8 @@ async function plan(argv) {
     if (b.patterns && typeof b.patterns === 'object') patterns = { ...b.patterns };
     // (7a K1) the bible's connectors member (role names per wall, gate and rope bridge slot)
     if (b.connectors && typeof b.connectors === 'object' && !Array.isArray(b.connectors)) connectors = b.connectors;
+    // ((SP2) the bible's format, when given: below 3 the plan refuses a prefer list or a look parameter, as validateBible does)
+    if (Number.isInteger(b.format)) format = b.format;
     // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring)
     if (b.fluids && typeof b.fluids === 'object' && !Array.isArray(b.fluids)) fluids = b.fluids;
     // (6c VOC) the bible's rarity budget (ctx.rarity; the plan meta's style for M26)
@@ -126,7 +129,7 @@ async function plan(argv) {
   const authored = opts.authored ? await loadAuthoredDir(opts.authored, KIT_DIR, opts.out ? path.join(opts.out, '.authored') : undefined) : null;
   let res;
   try {
-    res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
+    res = await planRegion({ ...(authored ? { authored } : {}), programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, ...(connectors ? { connectors } : {}), ...(format !== null ? { format } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}), volumes, keepOut, stamps: opts.stamps ?? null, planCache, ...(beside ? { beside } : {}), ...(besideReach ? { besideReach } : {}), ...(biomes ? { biomes } : {}), ...(lotBlocks ? { lotBlocks } : {}), ...(opts.survival ? { survival: true } : {}), ...(opts.node ? { node: opts.node } : {}), ...(revision ? { revision } : {}), ...(links ? { links } : {}) });
   } catch (e) {
     // (7b LP, change 3) a link that can't reach an entry's port: NO_LINK {lot, port} (the realise is refused, nothing written)
     if (links && e instanceof LinkError) {

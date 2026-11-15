@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import { COA_MOVED_FIXTURES } from './fl-norm.mjs'; // (6c close-out A) its movers
 import { PF_MOVED } from './pf-norm.mjs'; // (7c PF) the aqueducts' arches from the archSpan module
+import { SP2_MOVED } from './sp2-norm.mjs'; // (SP2) a crater's recorded params read
 import { firstAsk } from './asks-first.mjs'; // (6c close-out A) the asks as the earlier slices judged them
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -98,7 +99,7 @@ export async function unchanged(root, { check, log = console.log, only = null, s
     try { b = sig((await planFixture(hOld, mainDir, oldPlan)).r); } catch (e) { err = (err ? `${err}; ` : '') + `base: ${String(e.message).slice(0, 160)}`; }
     const same = !!a && !!b && a.answers === b.answers && a.overall === b.overall && a.ir === b.ir && a.first === b.first;
     // ((6c close-out A) the 12 asks Steward re-recorded and close-out A's movers: theirs to judge (fl-norm COA_MOVED_FIXTURES))
-    const named = EXCEPT[name] ?? (COA_MOVED_FIXTURES.includes(name) ? 'close-out A moves it by name' : PF_MOVED[name]);
+    const named = EXCEPT[name] ?? (COA_MOVED_FIXTURES.includes(name) ? 'close-out A moves it by name' : PF_MOVED[name] ?? SP2_MOVED[name]);
     out.fixtures[name] = { same, ...(err ? { err } : {}), ...(a && b && !same ? { head: a, base: b } : {}), ...(named ? { named } : {}) };
     if (named) { check(true, `${name}: ${same ? 'byte-identical' : 'differs'} (named: ${named})`); continue; }
     check(same || (!a && !b), `${name}: ${same ? 'byte-identical (answers, overall, IR, first plan; kitVersion and the street ext normalised)' : !a && !b ? `errors on both (${err})` : `DIFFERS ${err ?? JSON.stringify({ head: a, base: b })}`}`);

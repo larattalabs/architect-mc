@@ -6,7 +6,7 @@
 // the plan's numbers are only its inputs (n, the landings, the width), never the answer. Per bridge it records the rails (a barrier
 // on both sides of each deck cell, M8's) and the head room (2 clear over each walk cell, M6's) as metrics. A warning, as M10.
 // Called by checkRegion (check.mjs), which passes `finding`; leaves `vw` as it found it.
-import { profile, y2Of, ROPE, sagOf, maxRiseOf, rightOf } from '../connectors/ropeGeom.mjs';
+import { profile, y2Of, ROPE, sagOf, sagRatioOf, maxRiseOf, rightOf } from '../connectors/ropeGeom.mjs';
 
 const nameOf = (s) => String(s ?? '').replace(/\[.*$/, '');
 
@@ -19,8 +19,10 @@ export function ropeRules({ vw, ropes, want, findings, metrics, finding }) {
     const { n, rise, from, dir, lo, hi } = m;
     const [x0, y0, z0] = from, [dx, dz] = dir, [rx, rz] = rightOf(dir);
     // the deck cells 1..n follow the profile; the landings 0 and n + 1 stand at 2 y0 and 2 (y0 + rise)
-    const want = [...profile(n, y0, rise), 2 * (y0 + rise)];
-    const yHi = Math.max(y0, y0 + rise) + 3, yLo = Math.min(y0, y0 + rise) - sagOf(n) - maxRiseOf(n) - 4;
+    // ((SP2) a rope a format 3 Style sags less: its record's sagRatio, else §3's 12)
+    const ratio = sagRatioOf(m.sagRatio);
+    const want = [...profile(n, y0, rise, sagOf(n, ratio)), 2 * (y0 + rise)];
+    const yHi = Math.max(y0, y0 + rise) + 3, yLo = Math.min(y0, y0 + rise) - sagOf(n, ratio) - maxRiseOf(n) - 4;
     // the walk surface of a column: the highest cell in the deck's range that a mover stands on (a floor or a bottom slab with
     // two passable cells over it), as half blocks; null when there is none
     const surface = (x, z) => {

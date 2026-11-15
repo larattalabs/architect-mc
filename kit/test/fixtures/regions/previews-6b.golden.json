@@ -2,10 +2,10 @@
  "note": "sha256 of each preview's RGBA pixels (the PNG bytes depend on the bundled zlib)",
  "cases": {
   "floating_islands": {
-   "top.png": "a0fb2350d73d98707eec42ed20dae045050fc88955cd072f63b47ffee3530a1a",
+   "top.png": "a9aadb4a6eb628ef7940d826e4c3698288e7f7fad4493fd6a8b634cb190233cd",
    "section-1.png": "b5b3c6bf43d0074b049206a7c53e0ea5fc67b2f76963b1a10f8a13b042ea176f",
-   "iso.png": "0ff889a480172895401326b2699af8ddb654cbd3bd5692a43637b62181763173",
-   "siteplan.png": "6b3142bfd857d63db642b6bd552a9c57f69b4a0e2181f0fe932632df4278f840"
+   "iso.png": "de315b8294e4d3b764d839e770bb9070b6693f9a75593e6270c1e1f50b447503",
+   "siteplan.png": "a98651c69dc1ca9be2ef547ecce17d7174ebf056b8b4c8e1b932b6565de76ab8"
   },
   "crater_works": {
    "top.png": "a16e48338c9a0e0f4d6147e7e13e37d2a668c73f9197ba64132ae865b4e62f84",
@@ -16,7 +16,7 @@
   "sky_isle": {
    "top.png": "80ab16e74a45e6ee500e14ad862cb499caf7bfe8b27e3ce35f9e09c09f5ffa01",
    "section-1.png": "d5cab0b99b14f9d168af7ff96a3c131921ffa04b1238c885a5b0c2b8e8bf29cf",
-   "iso.png": "714ac1d0971ff15b4bdde82f2c359a386e6fb9cbeabcc82789e72dc35de8e31e",
+   "iso.png": "48d60d33e84aee65d03e2a24c912a1c1ed76c1667bdcbcde779601167d76048e",
    "siteplan.png": "ab32d22d9b9de8e17113bf1e47c9a6a86eca2616d7906e2e61784a0062d17f43"
   },
   "rift_city": {

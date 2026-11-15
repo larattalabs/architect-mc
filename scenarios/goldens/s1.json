@@ -3,17 +3,18 @@
  "version": 1,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s1/",
  "fromRun": "20261009-233143",
- "irSha": "46b2d75ea03a3b29c9162a5120e67a6bcf0f407f28616379d91d81223f723751",
+ "recut": "SP2 (2026-11-15): the program's link landings one cell nearer each island's rim (RM's M15:cantilever on links, a walkway end 5 off its island); re-planned from these committed inputs, kit 0.12.0 pinned",
+ "irSha": "81fb46a726f400b89289027e6eec676c59f0601160d12ac4f16ad52bcd4b0f0b",
  "kitVersion": "0.12.0",
- "cells": 60309,
+ "cells": 60280,
  "tiles": {
-  "islands|terrain|27,13": "93779cf8a7649d9865f26bc5e5aa295b06cc775cb1718c8d373434dd31ba0c84",
-  "islands|terrain|27,14": "140de93190c38dd3b31e0f17bb5a6fbbe3da4230f141b00151007c67412ea3dd",
-  "islands|terrain|28,13": "8b37dcfc3da71f903ae307e7399abf36684a42ec3dfd995fdad3aeecaae0e106",
-  "islands|terrain|28,14": "437cc2d878dbfa511aea0272830d05b7074ca0139f20c302c57034cf5f35a308",
-  "ways|path|27,13": "796dd6d88e785caa8d5b2a586a2f702d0f7ad8ce509489643e3d9169c240b9f7",
-  "ways|path|27,14": "273473e8d389c90ebf490cc57c0c069102757539915e9eafcf4c40f679afa6eb",
-  "ways|path|28,13": "83a234c11c6855b8038243989b50051375d801b0e4b075d9ddff15a0e799ae56",
-  "ways|path|28,14": "f8867f8600727882e92074d37d0f2755af439a8f2b5a331e058a7d61480c28b2"
+  "islands|terrain|27,13": "0c17931c0e13e268b4df9e0c38f58711fa76641599955dca85917ee5e17e74e9",
+  "islands|terrain|27,14": "f8d44bdc71e29606130eb37b01bec5ff24473dbbb3210af90e03d4f6ed7bf64c",
+  "islands|terrain|28,13": "7820b83733b28b0572a66794fa60b0c2fb9310eb8a459a5e21eda79d10d73ae3",
+  "islands|terrain|28,14": "76d5906fe32c8aff03be1cc5b6c84c608e422f92d1325f737f99d8491df129f6",
+  "ways|path|27,13": "091e72708be16f3c8038417a7157a5e3ccd3930ff3f447704926e07de3040fac",
+  "ways|path|27,14": "240fbbe34eb7352fab88461880a282815d28c29550c803ab6566af97f586bf12",
+  "ways|path|28,13": "cb81b7868f7ddcc19cf9bd4922db600e212530752b8a8c4010b2dda039b10ccf",
+  "ways|path|28,14": "f88943b7b0bebbaa3328d5fc1be3c8d14187581e506c6f2fe5a8f9c0b2896e6b"
  }
 }

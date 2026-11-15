@@ -32,6 +32,7 @@ import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { SP2_MOVED } from './lib/sp2-norm.mjs'; // (SP2) its named movers
 import { FL_MOVED, FL_MOVED_ASKS, normIrJson } from './lib/fl-norm.mjs'; // (6c FL) the street ext normalised, FL's named movers
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -141,7 +142,7 @@ steps.unchanged = async () => {
     const fx = JSON.parse(fs.readFileSync(path.join(fixDir, f), 'utf8'));
     if ((fx.plan.connectors ?? []).some((c) => ['wall', 'gate', 'rope_bridge', 'auto'].includes(c.kind))) { k1++; continue; }
     // ((6c FL) a fixture the base does not have (FL's v66-v71), or one FL moves by name: FL's own item 4 judges them)
-    if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', 'valid', f)) || FL_MOVED.includes(`valid/${f}`)) continue;
+    if (!fs.existsSync(path.join(mainDir, 'kit', 'test', 'fixtures', 'plan', 'valid', f)) || FL_MOVED.includes(`valid/${f}`) || SP2_MOVED[`valid/${f}`]) continue; // ((SP2) its named movers: floating_islands' landings
     // ((6c T3) a bridge or tunnel fixture, on its own terrain: T3's gate judges it (tools/gate6ct3a.mjs unchanged))
     if (fx.terrain || (fx.plan.connectors ?? []).some((c) => ['bridge', 'tunnel'].includes(c.kind))) continue;
     // ((6c F3) a fixture new on this branch (F3's v72-v77: kinds origin/main holds reserved or lacks) has no base to equal)

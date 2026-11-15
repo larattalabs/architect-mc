@@ -193,3 +193,28 @@ test('the recorded asks that waited on the three forms (dwarven_hold, ring_city,
     assert.ok(['fits', 'adjusted'].includes(a.class), `${f}/${id}: ${a.class} ${JSON.stringify(a.reasons)}`);
   }
 });
+
+test('(SP2) a crater\'s recorded params (depth, rim_height, diameter) read leniently where the part sets no member of its own', async () => {
+  const { craterParamsOf, bigSide } = await import('../lib/forms/bigForms.mjs');
+  const cr = (o) => ({ id: 'c', kind: 'crater', ...o });
+  assert.deepEqual(craterParamsOf(cr({ params: { depth: 16, diameter: 56, rim_height: 4, shape: 'bowl' } })), { read: ['depth', 'rim_height', 'diameter'], bad: [], depth: 16, rim: 4, side: 65 });
+  assert.deepEqual(bigSide(cr({ params: { diameter: 56 } })), [65, 65]);
+  // the part's own members win; out of range or not an integer: noted, the default
+  assert.deepEqual(craterParamsOf(cr({ depth: 8, rim: 2, size: { preset: 'S' }, params: { depth: 16, diameter: 56, rim_height: 4 } })), { read: [], bad: [] });
+  assert.deepEqual(craterParamsOf(cr({ params: { depth: 30, diameter: 120, rim_height: 'tall' } })), { read: [], bad: ['depth', 'rim_height', 'diameter'] });
+  assert.deepEqual(bigSide(cr({ params: { diameter: 120 } })), [48, 48]);
+  assert.deepEqual(craterParamsOf({ id: 'h', kind: 'hollow_mountain', params: { depth: 16 } }), { read: [], bad: [] });
+  // crater_mine's ask: its crater a bowl 16 deep, 56 across (radius 28), rim 4; the rest noted unread
+  const s = asksSurvey();
+  const plan = JSON.parse(fs.readFileSync(path.join(ASKS, 'crater_mine.json'), 'utf8')).answer.plan;
+  const r = await checkPlanVolumes(plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), volume: {} });
+  const a = partOf(r, 'crater');
+  assert.equal(a.class, 'fits', JSON.stringify(a.reasons));
+  assert.equal(a.geometry.radius, 28);
+  assert.ok(a.notes.includes('params floor, shape: not read (the crater\'s own members are depth, rim, lake, lakeDepth)'), a.notes.join(' | '));
+  assert.ok(a.notes.some((n) => /^params depth read as depth, rim_height read as rim, diameter read as the bowl's diameter \(size 65 with its rim\)$/.test(n)), a.notes.join(' | '));
+  const bad = structuredClone(plan);
+  bad.forms.find((f) => f.id === 'crater').params.depth = 40;
+  const b = partOf(await checkPlanVolumes(bad, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), volume: {} }), 'crater');
+  assert.ok(b.notes.includes('params.depth 40: not an integer 6..24 (the default used)'), b.notes.join(' | '));
+});

@@ -60,7 +60,7 @@ export default function floatingIslands(ctx) {
   const links = [];
   const landing = (isl, toward, half = 2) => {
     const dx = toward.x - isl.x, dz = toward.z - isl.z, l = Math.sqrt(dx * dx + dz * dz);
-    const rr = Math.min(isl.rx, isl.rz) - 4;
+    const rr = Math.min(isl.rx, isl.rz) - 3;
     const px = round(isl.x + (dx / l) * rr), pz = round(isl.z + (dz / l) * rr);
     isl.pads.push({ at: [px - half, pz - half], size: [2 * half + 1, 2 * half + 1], landing: true });
     return [px, pz];

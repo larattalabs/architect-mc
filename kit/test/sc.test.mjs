@@ -11,7 +11,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkStructure, checkFiles } from '../lib/check.mjs';
-import { SITE_CHECK_LIMITS, SITE_RULE_IDS, SITE_RULE_M, SITE_UNCHECKED, siteLimits } from '../lib/siteCheck.mjs';
+import { SITE_BIBLE_LIMITS, SITE_CHECK_LIMITS, SITE_RULE_IDS, SITE_RULE_M, SITE_UNCHECKED, siteLimits } from '../lib/siteCheck.mjs';
 import { Site } from '../lib/site.mjs';
 import { siteFixture } from '../lib/siteFixture.mjs';
 import { decodeArvx, encodeArvx, VC } from '../lib/region/volume.mjs';
@@ -74,11 +74,15 @@ test('the interface: rule ids, limits, the structured result (frozen for DS)', (
   assert.equal(SITE_RULE_M.neck, 'M15');
   assert.equal(SITE_CHECK_LIMITS.cantilever, 4);
   // a 'bible' limit with no bible is unbounded; the fit's own numbers and an override win
-  assert.equal(siteLimits('attach_to_cliff').cantilever, null);
+  // ((SP2) the 'bible' limits are bounded: SITE_BIBLE_LIMITS until a bible carries them)
+  assert.deepEqual(SITE_BIBLE_LIMITS, { cantilever: 8, span: 24, chain: 16 });
+  assert.equal(siteLimits('attach_to_cliff').cantilever, 8);
   assert.equal(siteLimits('attach_to_cliff').bearCells, 2);
-  assert.equal(siteLimits('span').span, null);
+  assert.equal(siteLimits('span').span, 24);
   assert.deepEqual(siteLimits('span').endBearing, [2, 2]);
-  assert.equal(siteLimits('suspend').chain, null);
+  assert.equal(siteLimits('suspend').chain, 16);
+  assert.equal(siteLimits('carve_into').span, null);
+  assert.equal(siteLimits('carve_into').chain, null);
   assert.equal(siteLimits('carve_into').cantilever, 4);
   assert.equal(siteLimits('attach_to_cliff', { cantilever: 6 }).cantilever, 6);
   const r = check(example('fit_span'));
@@ -288,10 +292,13 @@ test('cantilever (M15): a beam six out of the span house warns; the wrap_trunk w
   const f = finding(r, 'cantilever');
   assert.equal(f.m, 'M15');
   assert.match(f.message, /more than 4 horizontally from a support column or a bracket, held on one side only/);
-  // the cliff house is a real cantilever off its face (about 6 cells, Chebyshev); attach_to_cliff's limit is the bible's: unbounded without
+  // the cliff house is a real cantilever off its face (about 6 cells, Chebyshev); attach_to_cliff's limit is the bible's: (SP2) bounded
+  // at SITE_BIBLE_LIMITS' 8 without one, so the example stays clean
   const cliff = check(example('fit_attach_to_cliff'));
-  assert.equal(cliff.site.metrics.cantileverLimit, null);
-  assert.ok(cliff.site.metrics.cantileverMax >= 6);
+  assert.equal(cliff.site.metrics.cantileverLimit, 8);
+  assert.ok(cliff.site.metrics.cantileverMax >= 6 && cliff.site.metrics.cantileverMax <= 8);
+  assert.equal(finding(cliff, 'cantilever'), undefined);
+  assert.equal(check(example('fit_attach_to_cliff'), { siteLimits: { cantilever: null } }).site.metrics.cantileverLimit, null, 'an override may still lift it');
   assert.ok(finding(check(example('fit_attach_to_cliff'), { siteLimits: { cantilever: 4 } }), 'cantilever'));
   // wrap_trunk: the walkway's last column (the walk port's, 5 from the trunk) passes at 4 because the column inside it is within 4
   const t = check(example('fit_wrap_trunk'));

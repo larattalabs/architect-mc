@@ -8,7 +8,7 @@ import { compassDir } from '../region/geom.mjs';
 import { analyseVolume } from '../region/affordances.mjs';
 import { VC } from '../region/volume.mjs';
 import { hollowMountain, LIGHT_EVERY } from './hollowMountain.mjs';
-import { crater } from './crater.mjs';
+import { crater, RIM } from './crater.mjs';
 import { floatingIsland, islandRule } from './floatingIsland.mjs';
 import { bodyId, emitPond, leakCheck, outline, iceFor } from '../fluids/pond.mjs';
 import { fluidRolesOf } from '../fluids/place.mjs';
@@ -26,7 +26,30 @@ export const HOLLOW_AFFORDANCES = Object.freeze(['cliff_face', 'cave', 'ledge'])
 /** An island's pads: 9 by 9. */
 export const PAD = 9;
 
-/** The part's square side ([w, d]): its size preset, else the larger end of each side, else M (48). */
+/**
+ * (SP2) A crater's recorded params read leniently (Steward's shape: `depth`, `rim_height`, `diameter`), each only where the part sets
+ * no member of its own: `depth` 6..24 as depth, `rim_height` 0..6 as rim, `diameter` 16..86 (the bowl's, its rim ring outside it) as
+ * the square whose bowl radius is floor(diameter / 2) (side 2 floor(diameter / 2) + 2 RIM + 1, within the catalogue's size 24..96). One out of range or not an integer is noted and the default
+ * used, never malformed. Returns `{depth?, rim?, side?, read: [param], bad: [param]}`.
+ */
+export const CRATER_PARAMS = Object.freeze({ depth: Object.freeze([6, 24]), rim_height: Object.freeze([0, 6]), diameter: Object.freeze([16, 86]) });
+export function craterParamsOf(part) {
+  const out = { read: [], bad: [] };
+  if (part?.kind !== 'crater') return out;
+  const q = part.params ?? {};
+  const own = { depth: part.depth !== undefined, rim_height: part.rim !== undefined, diameter: part.size !== undefined };
+  for (const [k, [lo, hi]] of Object.entries(CRATER_PARAMS)) {
+    if (q[k] === undefined || own[k]) continue;
+    if (!(Number.isInteger(q[k]) && q[k] >= lo && q[k] <= hi)) { out.bad.push(k); continue; }
+    out.read.push(k);
+    if (k === 'depth') out.depth = q[k];
+    else if (k === 'rim_height') out.rim = q[k];
+    else out.side = 2 * Math.floor(q[k] / 2) + 2 * RIM + 1; // (crater.mjs: R = floor((side - 1) / 2) - RIM = floor(diameter / 2))
+  }
+  return out;
+}
+
+/** The part's square side ([w, d]): its size preset, else the larger end of each side, else (SP2) a crater's params.diameter, else M (48). */
 export function bigSide(part) {
   if (part.size?.preset) return [PRESET[part.size.preset], PRESET[part.size.preset]];
   if (part.size?.w !== undefined) {
@@ -34,6 +57,8 @@ export function bigSide(part) {
     const s = Math.max(one(part.size.w), one(part.size.d));
     return [s, s];
   }
+  const side = craterParamsOf(part).side;
+  if (side !== undefined) return [side, side];
   return [PRESET.M, PRESET.M];
 }
 
@@ -52,9 +77,14 @@ function lakeOf(part) {
 export function bigNotes(env, part, rect) {
   const notes = [];
   const kind = part.kind;
-  const keys = Object.keys(part.params ?? {}).filter((k) => !(kind === 'crater' && k === 'lake')).sort();
+  const cp = craterParamsOf(part);
+  const keys = Object.keys(part.params ?? {}).filter((k) => !(kind === 'crater' && k === 'lake') && !cp.read.includes(k) && !cp.bad.includes(k)).sort();
   if (keys.length) notes.push(`params ${keys.join(', ')}: not read (the ${kind}'s own members are ${OWN[kind].join(', ')})`);
   if (kind === 'crater' && lakeOf(part).fromParams) notes.push('params.lake read as lake: a pond in the crater\'s floor');
+  // ((SP2) the crater's recorded params read in place of its own members)
+  const AS = { depth: 'depth', rim_height: 'rim', diameter: `the bowl's diameter (size ${cp.side} with its rim)` };
+  if (cp.read.length) notes.push(`params ${cp.read.map((k) => `${k} read as ${AS[k]}`).join(', ')}`);
+  for (const k of cp.bad) notes.push(`params.${k} ${JSON.stringify(part.params[k])}: not an integer ${CRATER_PARAMS[k][0]}..${CRATER_PARAMS[k][1]} (the default used)`);
   if (kind === 'hollow_mountain') {
     let lo = Infinity, hi = -Infinity;
     for (let z = rect.minZ; z <= rect.maxZ; z++) for (let x = rect.minX; x <= rect.maxX; x++) { const g = env.S.groundAt(x, z); if (g < lo) lo = g; if (g > hi) hi = g; }
@@ -128,7 +158,8 @@ export function emitBig(K, p, f, id) {
   }
   if (p.kind === 'crater') {
     const L = lakeOf(part);
-    const gen = crater({ rect, depth: part.depth, rim: part.rim, lake: L.lake, lakeDepth: part.lakeDepth, seed, groundAt });
+    const cp = craterParamsOf(part);
+    const gen = crater({ rect, depth: part.depth ?? cp.depth, rim: part.rim ?? cp.rim, lake: L.lake, lakeDepth: part.lakeDepth, seed, groundAt });
     r.form(id, gen, { stage });
     const geometry = { centre: [gen.centre[0], gen.base, gen.centre[1]], radius: gen.R, floorY: gen.bottomAt(gen.centre[0], gen.centre[1]) + 1 };
     if (L.lake) {

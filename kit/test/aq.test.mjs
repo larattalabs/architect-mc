@@ -22,9 +22,9 @@ const FIX = path.join(HERE, 'fixtures', 'plan');
 const fixture = (rel) => JSON.parse(fs.readFileSync(path.join(FIX, `${rel}.json`), 'utf8'));
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
-async function planFx(fx, { survival = false } = {}) {
+async function planFx(fx, { survival = false, style = null } = {}) {
   const s = flatSurvey(fx.terrain ?? {});
-  const r = await checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, volume: fx.volume ?? {}, ...(survival ? { survival: true } : {}) });
+  const r = await checkPlanVolumes(fx.plan, { survey: s.bytes, claim: s.claim, anchors: { ...stewardAnchors(s.claim), ...(fx.anchors ?? {}) }, volume: fx.volume ?? {}, ...(survival ? { survival: true } : {}), ...(style ? { style } : {}) });
   const blobs = (sha) => r.res?.blobs?.get(sha) ?? null;
   const volumes = (r.volumes ?? []).map((v) => v.decoded);
   return { ...r, s, report: () => checkRegion({ ir: r.res.ir, survey: s.bytes, blobs, meta: r.res.meta, volumes }), world: () => buildVirtual({ ir: r.res.ir, survey: s.bytes, blobs, volumes }).vw };
@@ -206,4 +206,23 @@ test('HY\'s movers by name: hy/r03 and extension/e18 (the same plan) answer fits
     assert.deepEqual([fx.expect.class, fx.expect.block], ['fits', 'channel.aqueduct'], rel);
     assert.deepEqual(errors(r.report()), [], rel);
   }
+});
+
+test('(SP2) a format 3 Style\'s aqueduct.maxSpan: piers every maxSpan + 1, recorded in meta.m15, M15 clean', async () => {
+  const fx = fixture('aq/x01_valley_aqueduct');
+  const r = await planFx(fx, { style: { roles: {}, format: 3, connectors: { aqueduct: { maxSpan: 5 } } } });
+  const a = partOf(r, 'canal');
+  assert.equal(r.check.overall, 'READY');
+  assert.equal(a.block, 'channel.aqueduct');
+  assert.equal(a.geometry.aqueduct.every, 6, JSON.stringify(a.geometry.aqueduct));
+  assert.deepEqual(r.res.meta.m15, { look: { aqueduct: { maxSpan: 5 } } });
+  const rep = r.report();
+  assert.deepEqual(errors(rep), []);
+  assert.deepEqual(rep.findings.filter((f) => f.rule === 'M15:span'), [], 'held to its own limit');
+  // (the generator holds the limit: every trough cell within RM's cantilever 4 of a pier, so M15 measures no span past it)
+  assert.ok(rep.metrics.M15.cantileverMax <= 4, String(rep.metrics.M15.cantileverMax));
+  // without the Style: the default arches every 8, no m15 meta
+  const plain = await planFx(fx);
+  assert.equal(partOf(plain, 'canal').geometry.aqueduct.every, 8);
+  assert.equal(plain.res.meta.m15, undefined);
 });

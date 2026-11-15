@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { validateBible, builtinBible, BUILTIN_BIBLES } from '../lib/bible.mjs';
 import { CORE_ROLES } from '../lib/kit.mjs';
 import { planCatalogue } from '../lib/plan/catalogue.mjs';
-import { AUTO_ROWS, FORMAT3, LOOK_PARAMS, PREFER_KINDS, SETTLEMENT_DEFAULTS, format3Of, relatedErrors, sharedCoreRoles, splitConnectors } from '../lib/style3.mjs';
+import { AUTO_ROWS, FORMAT3, LOOK_ONLY, LOOK_PARAMS, PREFER_KINDS, SETTLEMENT_DEFAULTS, format3Of, relatedErrors, sharedCoreRoles, splitConnectors } from '../lib/style3.mjs';
 import { checkPlanLocal, flatSurvey, stewardAnchors, FIX } from './plan-helpers.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -48,6 +48,11 @@ test('format 3: the members validate, a settlement Style gets the settlement def
   bad({ connectors: { rope_bridge: { maxSpan: 41 } } }, /rope_bridge\.maxSpan must be an integer 8\.\.40/);
   bad({ connectors: { rope_bridge: { sagRatio: 8 } } }, /sagRatio must be an integer 12\.\.64/);
   bad({ connectors: { ladder: { landingEvery: 30 } } }, /landingEvery must be an integer 8\.\.24/);
+  // ((SP2) aqueduct.maxSpan: a look-only type (no slots); 2..7, never wider than the span's own clear run; any other member refused)
+  assert.equal(validateBible(settlement3({ connectors: { aqueduct: { maxSpan: 5 } } })).ok, true);
+  assert.deepEqual(splitConnectors({ aqueduct: { maxSpan: 5 } }), { slots: {}, prefer: null, look: { aqueduct: { maxSpan: 5 } } });
+  bad({ connectors: { aqueduct: { maxSpan: 8 } } }, /aqueduct\.maxSpan must be an integer 2\.\.7/);
+  bad({ connectors: { aqueduct: { maxSpan: 5, pier: 'foundation' } } }, /connectors: unknown member 'aqueduct'/);
   // connectors never name blocks: light is a role (or none), and slots stay roles
   bad({ connectors: { rope_bridge: { light: 'minecraft:lantern' } } }, /light must be a role name or 'none'/);
   bad({ connectors: { rope_bridge: { light: 'lamp' } } }, /'lamp' is not a role of this Style/);
@@ -147,7 +152,9 @@ test('the prefer list names connector kinds: the catalogue\'s, but auto; auto\'s
   const kinds = planCatalogue().entries.filter((e) => e.id.startsWith('connector.') && e.id !== 'connector.auto').map((e) => e.id.slice('connector.'.length)).sort();
   assert.deepEqual([...PREFER_KINDS].sort(), kinds);
   for (const k of Object.keys(AUTO_ROWS)) assert.ok(PREFER_KINDS.includes(k), k);
-  for (const [type, ps] of Object.entries(LOOK_PARAMS)) assert.ok(PREFER_KINDS.includes(type) && Object.keys(ps).length, type);
+  // ((SP2) every look type is a connector kind, but `aqueduct`: channel.aqueduct's look, a look-only type with no slots)
+  for (const [type, ps] of Object.entries(LOOK_PARAMS)) assert.ok((PREFER_KINDS.includes(type) || LOOK_ONLY.includes(type)) && Object.keys(ps).length, type);
+  assert.deepEqual(LOOK_ONLY, ['aqueduct']);
 });
 
 // ---- the plan check: what a format 3 Style changes -------------------------------------------------------------------------------
@@ -204,8 +211,22 @@ test('the look parameters change only what they name', async () => {
   // each names one connector type: the ladder's parameter leaves the rope plan byte-identical, the rope's the ladder plan
   assert.equal((await check(GAP, { ladder: { landingEvery: 8 } })).res.irSha, base.res.irSha);
   assert.equal((await check(LADDER, { rope_bridge: { maxSpan: 12, light: 'none' }, prefer: ['bridge'] })).res.irSha, ladder.res.irSha);
-  // sagRatio is carried, not read yet (the route, the generator and the checker share one profile): no change
-  assert.equal((await check(GAP, { rope_bridge: { sagRatio: 24 } })).res.irSha, base.res.irSha);
+  // ((SP2) sagRatio is read: the route's rope move, the emit and M10:rope share it) 12 is today's; 24 flattens the 14-cell rope (d 1 -> 0)
+  assert.equal((await check(GAP, { rope_bridge: { sagRatio: 12 } })).res.irSha, base.res.irSha);
+  const flat = await check(GAP, { rope_bridge: { sagRatio: 24 } });
+  assert.deepEqual(crossing(flat), crossing(base));
+  assert.notEqual(flat.res.irSha, base.res.irSha);
+  const rec = flat.res.meta.ropes.find((m) => m.n === 14);
+  assert.equal(rec.sagRatio, 24);
+  assert.equal(new Set(rec.y2.slice(1, -1)).size, 1, `a flat deck: ${rec.y2.join(',')}`);
+  assert.equal(base.res.meta.ropes.find((m) => m.n === 14).sagRatio, undefined, 'recorded only when not 12');
+  assert.ok(new Set(base.res.meta.ropes.find((m) => m.n === 14).y2).size > 1, 'the default sags');
+  // M10:rope reads the record's ratio: the flat deck passes, and the same deck judged at 12 does not
+  const { checkRegion } = await import('../lib/region/check.mjs');
+  const s = flatSurvey(GAP.terrain);
+  const rep = (meta) => checkRegion({ ir: flat.res.ir, survey: s.bytes, blobs: (sha) => flat.res.blobs.get(sha) ?? null, meta });
+  assert.deepEqual(rep(flat.res.meta).findings.filter((f) => f.rule === 'M10:rope'), []);
+  assert.ok(rep({ ...flat.res.meta, ropes: flat.res.meta.ropes.map(({ sagRatio, ...m }) => m) }).findings.some((f) => f.rule === 'M10:rope'));
 });
 
 test('roleShares (tools/lib/scenario-metrics.mjs): role shares over the written cells outside lots, shape variants as their role, the row only with bands', async () => {
@@ -233,4 +254,20 @@ test('roleShares (tools/lib/scenario-metrics.mjs): role shares over the written 
   assert.equal(inside.pass, true);
   assert.match(row.value, /foundation 0\.250 \[0, 0\.1\] OUTSIDE/);
   assert.equal(M.bars({ palette: { share: 1, adherent: 1, cells: 1 } }).some((x) => x.id === 'roleShares'), false);
+});
+
+test('(SP2) planRegion knows the Style\'s format: below 3 a prefer list or a look parameter is refused as validateBible refuses it; 3 or absent reads them', async () => {
+  const { planRegion } = await import('../lib/region/plan.mjs');
+  const s = flatSurvey(GAP.terrain);
+  const plan = (format, connectors) => planRegion({ programFile: path.join(ROOT, 'kit', 'regions', 'plan_v0.mjs'), params: { plan: GAP.plan, anchors: { anchors: { ...stewardAnchors(s.claim), ...GAP.anchors } }, protected: { areas: [] }, regions: { regions: [] }, builds: { builds: [] }, budget: {}, bible: null, fingerprint: null }, survey: s.bytes, claim: s.claim, roles: {}, connectors, ...(format !== undefined ? { format } : {}) });
+  for (const f of [1, 2]) {
+    await assert.rejects(plan(f, { rope_bridge: { maxSpan: 12 } }), /connectors\.rope_bridge: unknown slot 'maxSpan'/, `format ${f}`);
+    await assert.rejects(plan(f, { prefer: ['bridge'] }), /connectors: unknown member 'prefer'/, `format ${f}`);
+    // format 2's slots plan as before
+    assert.equal((await plan(f, { rope_bridge: { deck: 'floor' } })).irSha, (await plan(undefined, { rope_bridge: { deck: 'floor' } })).irSha);
+  }
+  // format 3 and an absent format (today's callers): the look parameter is read (no rope span under 12: the arch)
+  const three = await plan(3, { rope_bridge: { maxSpan: 12 } }), none = await plan(undefined, { rope_bridge: { maxSpan: 12 } });
+  assert.equal(three.irSha, none.irSha);
+  assert.notEqual(three.irSha, (await plan(3, { rope_bridge: { deck: 'floor' } })).irSha);
 });
