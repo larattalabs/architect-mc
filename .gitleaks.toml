@@ -1,0 +1,30 @@
+# Extends the default gitleaks ruleset; nothing is disabled. Each entry below is scoped to the
+# generic-api-key rule, one file, and the exact false-positive string (reviewed 2026-11-15).
+title = "architect-mc gitleaks config"
+
+[extend]
+useDefault = true
+
+# docs/CONTRACT.md: gate-step lists ("sim suites, apijars, 6b-scenario-s1") read as key=value.
+[[allowlists]]
+description = "gate-step list token 'apijars' in CONTRACT.md tier lines"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/CONTRACT\.md$''']
+regexes = ['''^6b-scenario-s1\W?$''']
+
+# tools/gate*.mjs: dev-bridge opKey idempotency labels such as 'steward.b1.vplan'.
+[[allowlists]]
+description = "steward.bN.vplan opKey labels in gate scripts"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tools/gate(6dgr|7agj)\.mjs$''']
+regexes = ['''^steward\.b[0-9]\.vplan2?$''']
+
+# sidecar/test/variants.test.ts: literal test fixture token.
+[[allowlists]]
+description = "fixture token in variants.test.ts"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^sidecar/test/variants\.test\.ts$''']
+regexes = ['''^tok-0123456789$''']

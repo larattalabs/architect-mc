@@ -85,6 +85,13 @@ and replace stricter habits where they differ (the DEV MODE section below still 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
 
+### gitleaks config (`.gitleaks.toml`)
+
+`gitleaks detect --source .` (git history) and `--no-git --source .` (tree) read the repo's `.gitleaks.toml` by default. It extends
+the default ruleset (`useDefault = true`) and allowlists 10 reviewed false positives of `generic-api-key`, each scoped to one file
+and the exact string (gate-step names in CONTRACT.md, `steward.bN.vplan` opKeys in `tools/gate6dgr.mjs` and `tools/gate7agj.mjs`,
+a fixture token in `sidecar/test/variants.test.ts`). No directory is excluded and no rule is off; add new entries the same way.
+
 ### Scoped unit suites (`tools/unit-scope.mjs`)
 
 ```sh
