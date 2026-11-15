@@ -972,6 +972,8 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   if (runShared.sidecarJunit) Object.assign(env, { GATE_SIDECAR_RESULTS: runShared.sidecarJunit, GATE_SIDECAR_TREE: runShared.sidecarTree });
   // the run worktree where unit-mod built this HEAD (gate6cmp reads its classes): set once unit-mod passed
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
+  // (GI2) the frozen source's classes, built at setup from this head: api-compat's fallback where no build ran (an offline lane)
+  if (FROZEN && DRV !== SRC) env.GATE_FROZEN_SOURCE = DRV;
   // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
   // a probe's verdict once per run (tools/lib/probe-reuse.mjs): the evidence dirs of the steps that passed so far
   if (Object.keys(runShared.evidence).length) env.GATE_STEP_EVIDENCE = JSON.stringify(runShared.evidence);
