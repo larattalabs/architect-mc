@@ -40,6 +40,9 @@ public final class StockpileDev {
 		op("dev.stockpile.tickets", "tickets", "{pos: [x,y,z]} - (6c Y1) the vanilla tickets on that chunk (loading and simulation) and whether it is loaded");
 		op("dev.stockpile.saved", "saved", "{} - (6c Y1) <world>/architect/stockpiles.json as saved now, and the save count this session; (PS) the "
 			+ "periodic saves (count, last, max, median ms), unsaved, loadFailed (and why), the format this build writes");
+		op("dev.stockpile.ss", "ss", "{probe?: bool} - (SS) TEST: probe: the region-file durability cases with the mixins applied (first open, clean flush, "
+			+ "write then flush, a failed force retried, a failed close then a reopen, an oversized chunk, the device barrier, a dirty imposter, an "
+			+ "earlier save's writes forced before the ledger); else the force, skip and barrier counters and the files not durable now");
 		op("dev.stockpile.ps", "ps", "{noPeriodic?: bool, joinSave?: bool, noCreditSave?: bool, resetPeriodic?: bool} - (PS) TEST: the before-the-fix cases: the "
 			+ "periodic ledger save off (RL: with the save when a target joins the feed, unless joinSave: true); a finished undo's refund not "
 			+ "saved at its credit; reset the periodic save counters");

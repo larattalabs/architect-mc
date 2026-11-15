@@ -280,15 +280,22 @@ public final class Stockpiles {
 			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
 				return;
 			}
+			boolean timed = SaveTiming.on();
+			long w0 = timed ? SaveTiming.started() : System.nanoTime();
+			boolean ioFailed = false;
 			if (!flush) {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.IO); // (SS) J1's wait is the autosave's IO wait
 				for (ServerLevel l : server.getAllLevels()) {
 					try {
 						l.getChunkSource().chunkMap.synchronize(true).join();
 					} catch (RuntimeException e) {
-						Architect.LOGGER.warn("Stockpiles: waiting for {}'s chunk writes failed; the ledger is saved anyway", l.dimension(), e);
+						// (SS, review finding 5) fail closed: no ledger write over chunk writes not known durable; the ledger stays pending
+						ioFailed = true;
+						Architect.LOGGER.error("Stockpiles: waiting for {}'s chunk writes failed; the ledger is not saved now", l.dimension(), e);
 					}
 				}
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				autosaveWaits++;
 				lastAutosaveWaitMs = ms;
@@ -300,7 +307,20 @@ public final class Stockpiles {
 				Architect.LOGGER.error("Stockpiles: kill point AS1: the autosave's chunks written, halting before the ledger write");
 				Runtime.getRuntime().halt(7);
 			}
+			// (SS) the ledger only over durable chunk writes: an autosave forces the chunk storages (J1's wait), a flushed save the entities too
+			RegionDurability.retryOwed(); // (SS) an owed path (a close whose force failed) reopened and forced: a recovered disk clears it
+			java.util.List<String> undurable = flush ? RegionDurability.undurable("chunk", "entities") : RegionDurability.undurable("chunk");
+			if (ioFailed || !undurable.isEmpty()) {
+				refuseUndurable(flush ? "the world save" : "the autosave", undurable);
+				if (timed) {
+					logTiming((flush ? "world save (flush)" : "autosave") + " REFUSED", w0, SaveTiming.stop());
+				}
+				return;
+			}
 			save();
+			if (timed) {
+				logTiming(flush ? "world save (flush)" : "autosave", w0, SaveTiming.stop());
+			}
 		});
 		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
@@ -317,6 +337,7 @@ public final class Stockpiles {
 			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
 			SERVER = null;
 			PILES.clear();
 			dir = null;
@@ -1960,6 +1981,14 @@ public final class Stockpiles {
 					o.addProperty("autosaveWaits", autosaveWaits); // (J1)
 					o.addProperty("lastAutosaveWaitMs", lastAutosaveWaitMs);
 					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
+					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
+					o.addProperty("regionBarriers", RegionDurability.BARRIERS.get());
+					o.addProperty("regionOwedRetried", RegionDurability.RETRIED.get());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
+					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
+					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("chunkWaitsSkipped", SaveTiming.WAITS_SKIPPED.get());
 					o.addProperty("lastPeriodicMs", lastPeriodicMs);
 					o.addProperty("maxPeriodicMs", maxPeriodicMs);
 					o.addProperty("medianPeriodicMs", periodicMedianMs());
@@ -1969,6 +1998,22 @@ public final class Stockpiles {
 						o.addProperty("loadFailedWhy", loadFailedWhy);
 					}
 					o.addProperty("format", FORMAT);
+					return o;
+				}
+				case "ss" -> {
+					// (SS, TEST) the region-file durability probe, with the mixins applied (SaveProbe)
+					if (req.has("probe") && req.get("probe").getAsBoolean()) {
+						try {
+							return SaveProbe.run(srv, player);
+						} catch (java.io.IOException e) {
+							throw new java.io.UncheckedIOException(e);
+						}
+					}
+					o.addProperty("forced", RegionDurability.FORCED.get());
+					o.addProperty("skipped", RegionDurability.SKIPPED.get());
+					o.addProperty("barriers", RegionDurability.BARRIERS.get());
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
 					return o;
 				}
 				case "ps" -> {
@@ -1982,6 +2027,12 @@ public final class Stockpiles {
 					}
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
+					}
+					if (req.has("forceAll")) {
+						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
+					}
+					if (req.has("waitAll")) {
+						SaveTiming.waitAll = req.get("waitAll").getAsBoolean(); // (SS) a flushed save waits for every loading chunk, as vanilla
 					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
@@ -1997,6 +2048,8 @@ public final class Stockpiles {
 					o.addProperty("noPeriodic", testNoPeriodic);
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
+					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("waitAll", SaveTiming.waitAll);
 					return o;
 				}
 				case "state" -> {
@@ -2479,12 +2532,18 @@ public final class Stockpiles {
 			return; // (PS, F6) nothing of the stockpiles is written this session
 		}
 		long t0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		if (srv != null && srv.isSameThread()) {
 			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
 			// is never on disk ahead of player.dat, so a crash after it neither dupes nor loses those items. saveAllChunks never saves players
 			// (26.3: level.dat keeps only the singleplayer host's UUID; every player, the host too, is in playerdata/<uuid>.dat).
 			long p0 = System.nanoTime();
+			SaveTiming.at(SaveTiming.PLAYERS);
 			srv.getPlayerList().saveAll();
+			SaveTiming.at(SaveTiming.OTHER);
 			double pms = (System.nanoTime() - p0) / 1e6;
 			WorldJournal.kill("HF1"); // (J1, TEST) HF's window: the players on disk, the chunks and the ledger not
 			playerSaves++;
@@ -2493,10 +2552,25 @@ public final class Stockpiles {
 			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
 			// disk ahead of the world's chunks either
 			explicitSave = true;
+			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
 				explicitSave = false;
+				SaveTiming.explicit = false;
+			}
+			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
+			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
+			java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
+			if (!undurable.isEmpty()) {
+				refuseUndurable(quiet ? "the periodic save" : "a save with the world", undurable);
+				if (timed) {
+					logTiming((quiet ? "periodic" : caller()) + " REFUSED", t0, SaveTiming.stop());
+				}
+				if (quiet) {
+					return; // retried at the next periodic save; the ledger stays pending (unsaved)
+				}
+				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
 			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
@@ -2512,6 +2586,40 @@ public final class Stockpiles {
 		if (!quiet || TRACE_SAVES) {
 			Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms{}", String.format(java.util.Locale.ROOT, "%.1f", ms), quiet ? " (periodic)" : "");
 		}
+		if (timed) {
+			String parts = SaveTiming.stop();
+			if (!quiet || TRACE_SAVES || ms >= TIMING_LOG_MS) {
+				logTiming(quiet ? "periodic" : caller(), t0, parts);
+			}
+		}
+	}
+
+	/** (SS, dev) ledger saves refused because a chunk or entity write was not known durable. */
+	static volatile int durabilityRefusals;
+
+	/** (SS) A ledger write refused: a chunk write not durable (a force that failed, a close that owes). Logged at ERROR; the ledger stays pending. */
+	private static void refuseUndurable(String what, java.util.List<String> undurable) {
+		durabilityRefusals++;
+		unsaved = true;
+		Architect.LOGGER.error("Stockpiles: {} did not write the ledger: {} region file(s) not durable ({}); it is written at the next save whose forces"
+			+ " succeed", what, undurable.size(), undurable.size() > 8 ? undurable.subList(0, 8) + " ..." : undurable);
+	}
+
+	/** (SS) A save with the world logs its parts at or above this (ms), and every one not periodic. */
+	static final double TIMING_LOG_MS = 50;
+
+	/** (SS) The save's parts, one line: "SS save: <why> total <ms> | players .. | chunks .. | io .. | ...". */
+	private static void logTiming(String why, long t0, String parts) {
+		double ms = (System.nanoTime() - t0) / 1e6;
+		Architect.LOGGER.info("SS save: {} total {} ms | {}{}", why, String.format(java.util.Locale.ROOT, "%.1f", ms), parts, testNoPeriodic ? " | noPeriodic" : "");
+	}
+
+	/** (SS) The first method outside the save helpers that asked for this save (Class.method), for the timing line. */
+	private static String caller() {
+		return StackWalker.getInstance().walk(f -> f.map(x -> x.getClassName().substring(x.getClassName().lastIndexOf('.') + 1) + "." + x.getMethodName())
+			.filter(n -> !n.startsWith("Stockpiles.saveWithWorld") && !n.startsWith("Stockpiles.saveCredit") && !n.startsWith("Stockpiles.caller")
+				&& !n.startsWith("Stockpiles.lambda$caller"))
+			.findFirst().orElse("?"));
 	}
 
 	/**
@@ -2526,22 +2634,31 @@ public final class Stockpiles {
 			refusedSave();
 			return;
 		}
+		long l0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		save();
 		if (srv == null || !srv.isSameThread()) {
 			return;
 		}
 		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
 		long t0 = System.nanoTime();
+		SaveTiming.at(SaveTiming.PLAYERS);
 		srv.getPlayerList().saveAll();
+		SaveTiming.at(SaveTiming.OTHER);
 		double pms = (System.nanoTime() - t0) / 1e6;
 		playerSaves++;
 		lastPlayerSaveMs = pms;
 		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 		explicitSave = true;
+		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave = false;
+			SaveTiming.explicit = false;
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
@@ -2551,6 +2668,9 @@ public final class Stockpiles {
 		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
 		Architect.LOGGER.info("Stockpiles: saved the ledger first, then the players and the world's chunks, in {} ms", String.format(java.util.Locale.ROOT,
 			"%.1f", ms));
+		if (timed) {
+			logTiming("ledger first (" + caller() + ")", l0, SaveTiming.stop());
+		}
 	}
 
 	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */
@@ -2570,7 +2690,9 @@ public final class Stockpiles {
 		if (sv != null && sv.isSameThread()) {
 			try {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.BOOKS);
 				int n = refreshBooks(sv);
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				bookRefreshes++;
 				lastBookMs = ms;
@@ -2588,10 +2710,12 @@ public final class Stockpiles {
 			if (PILES.isEmpty() && !Files.exists(f)) {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
+			SaveTiming.at(SaveTiming.WRITE);
 			Files.createDirectories(d);
 			Path tmp = d.resolve(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			SaveTiming.at(SaveTiming.OTHER);
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
@@ -2608,6 +2732,7 @@ public final class Stockpiles {
 
 	private static void load(MinecraftServer server) {
 		SERVER = server;
+		RegionDurability.worldOpened(server.getWorldPath(LevelResource.ROOT)); // (SS) only this world's region files count
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 	}
 
