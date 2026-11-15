@@ -611,6 +611,25 @@ public final class Placed {
 		}
 	}
 
+	/** (J2, UMT PTS) {@code SiteJournal.restoresUnchanged} over an undo's expectations, after its writes (server thread; loaded chunks only). */
+	public static void restoreUnchanged(ServerLevel level, Long2ObjectOpenHashMap<Expect> pts) {
+		if (!TrackingRule.on || pts.isEmpty()) {
+			return;
+		}
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (var en : pts.long2ObjectEntrySet()) {
+			m.set(en.getLongKey());
+			LevelChunk c = loadedChunk(level, m.getX(), m.getZ());
+			if (c == null) {
+				continue;
+			}
+			Expect e = en.getValue();
+			if (dev.larattalabs.architect.site.SiteJournal.restoresUnchanged(c.getBlockState(m), record(c, m.getX(), m.getY(), m.getZ()) != null, e.block())) {
+				put(c, m.immutable(), e.pt().placer(), e.pt().build(), false);
+			}
+		}
+	}
+
 	private static @Nullable Expect restoring(long pos) {
 		for (int i = RESTORES.size() - 1; i >= 0; i--) {
 			Expect e = RESTORES.get(i).get(pos);

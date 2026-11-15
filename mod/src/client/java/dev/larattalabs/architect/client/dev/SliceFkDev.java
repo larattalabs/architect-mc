@@ -234,8 +234,30 @@ public final class SliceFkDev {
 			JsonObject o = new JsonObject();
 			o.addProperty("transferGuardApplied", dev.larattalabs.architect.site.FillGuard.transferGuardApplied());
 			o.addProperty("stripped", dev.larattalabs.architect.site.Fills.STRIPPED);
+			o.addProperty("swapRefused", dev.larattalabs.architect.site.Fills.SWAP_REFUSED);
 			return o;
 		}));
+		DevBridge.register("dev.fk.swap", 30_000, "{pos: [x, y, z], block, site} - (FK-b fix) TEST: the block at pos set to block (an empty one, a player's swap) and "
+			+ "the site resumed in the same server task, never in a tick whose step rescans first; answers {swapped} or {retry: true}",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				JsonObject o = new JsonObject();
+				if ((dev.larattalabs.architect.site.Builder.devTicks() + 1) % 20 == 0) {
+					o.addProperty("retry", true); // the next step rescans before it fills: the swap would be seen, not tested
+					return o;
+				}
+				BlockPos p = posOf(req);
+				var block = BuiltInRegistries.BLOCK.getValue(Identifier.parse(Fields.of(req).nonBlank("block")));
+				s.overworld().setBlock(p, block.defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+				try {
+					dev.larattalabs.architect.site.Builder.setPaused(s, Fields.of(req).nonBlank("site"), false);
+				} catch (dev.larattalabs.architect.site.Sites.SiteException e) {
+					o.addProperty("error", e.getMessage());
+					return o;
+				}
+				o.addProperty("swapped", true);
+				o.addProperty("block", BuiltInRegistries.BLOCK.getKey(s.overworld().getBlockState(p).getBlock()).toString());
+				return o;
+			}));
 		DevBridge.register("dev.fk.break", 30_000, "{pos: [x, y, z], halt?: bool} - (FK-b) TEST: the first player breaks the block at pos (its game mode's "
 			+ "destroyBlock: vanilla's drops); halt: the JVM halts right after, before any save (the strip's crash case); answers {broken, stripped}",
 			(req, mc) -> ServerTasks.callOnServer(s -> {

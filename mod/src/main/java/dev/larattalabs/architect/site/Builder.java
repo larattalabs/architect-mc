@@ -141,8 +141,11 @@ public final class Builder {
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
 		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
-		// first server tick ({@link #tick})
+		// first server tick ({@link #fillsAtStart})
 		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);
+		// (FK-b fix) at the START of the first server tick, before any level ticks: a hopper of a fill the world saved ahead of its ledger
+		// (FK3) must not move an item before the reconcile has seen the container
+		ServerTickEvents.START_SERVER_TICK.register(Builder::fillsAtStart);
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -1691,7 +1694,13 @@ public final class Builder {
 	/** (M5 FK) Set at SERVER_STARTED: the first tick runs {@link Fills#atStart}. */
 	private static volatile boolean fkAtStart;
 
-	static void tick(MinecraftServer srv) {
+	/** (TEST, {@code dev.fk.swap}) The builder's tick count: a rescan runs in the step of a tick whose count is a multiple of 20. */
+	public static long devTicks() {
+		return ticks;
+	}
+
+	/** (M5 FK; FK-b fix) {@link Fills#atStart} once, at the start of the first server tick: before any level (a hopper) ticks. */
+	static void fillsAtStart(MinecraftServer srv) {
 		if (fkAtStart) {
 			fkAtStart = false;
 			try {
@@ -1700,6 +1709,10 @@ public final class Builder {
 				Architect.LOGGER.error("Fills at start failed", e);
 			}
 		}
+	}
+
+	static void tick(MinecraftServer srv) {
+		fillsAtStart(srv); // a no-op after the first tick's START listener ran it
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
@@ -2841,7 +2854,7 @@ public final class Builder {
 	/** After the restore: the deconstruct's items drop at the crate's cell (kept from the restore's drop cleanup). */
 	static void dropDeconstruction(ServerLevel level, Site s, Deconstruction d, Sites.Drops drops) {
 		if (creditRefund(level, d.stockpile(), d.key(), d.credit(), d.at(), drops)) {
-			Stockpiles.saveCredit(level.getServer()); // (J1, N1's shape) before the site's record goes (forget, then the sites file)
+			Stockpiles.saveCreditPending(level.getServer()); // (J1, N1's shape) before the site's record goes; (J2) a refused save leaves it pending
 		}
 		dropItems(level, d.at(), d.all(), drops);
 		forget(level.getServer(), s.id());
@@ -3191,9 +3204,14 @@ public final class Builder {
 	/** Dev trace (ARCHITECT_TRACE_REFUNDS=1): every refunded cell in the log. */
 	static final boolean TRACE_REFUNDS = System.getenv("ARCHITECT_TRACE_REFUNDS") != null;
 
+	/** (J2, RL6) Whether cell {@code i}'s swap gives its old block back (refundSwap's rule; the reconcile's redo uses it too). */
+	static boolean swapRefunds(Run r, int i, BitSet free) {
+		return r.old != null && r.old[i] != null && !free.get(i);
+	}
+
 	/** A swap: the old block's item goes to the crate's cell (when it was paid), and the cell counts as paid for its new block. */
 	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free, Purse purse) {
-		if (r.old != null && r.old[i] != null && !free.get(i)) {
+		if (swapRefunds(r, i, free)) {
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(r.old[i]).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
 			if (TRACE_REFUNDS) {

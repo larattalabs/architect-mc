@@ -150,8 +150,6 @@ public final class Quotes {
 			bill.exact = false;
 			notes.add(mayHold);
 		}
-		// (QL-b D'') each lot's ground as the tiles before it leave it (plan.json's lotGround)
-		JsonObject lotGround = p.planned().get("lotGround") instanceof JsonObject lgo ? lgo : null;
 		// the region the lots go into: a revision's standing one (its record, read only), else a record of the plan as a realise makes it
 		boolean revision = Revisions.isRevision(p);
 		RegionRec rec;
@@ -171,6 +169,8 @@ public final class Quotes {
 		}
 		EntranceStyle style = revision ? EntranceStyle.region(rec.id) : EntranceStyle.ofIr(irJson, null);
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet roadCells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		// (QL-c) every cell the plan's roads write (air included): the land the lots go down on has them (a graded road, its surface block)
+		it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.block.state.BlockState> roadStates = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 		// 2. the 4e roads, over the land now (the plan check's call); their surface cells stand when the lots go down
 		for (Ir.Road road : ir.roads()) {
 			List<BlockPos> pts = new ArrayList<>();
@@ -181,6 +181,9 @@ public final class Quotes {
 				if (c.ok()) {
 					bill.add("road:" + road.id(), dev.larattalabs.architect.site.RoadBuilder.bom(level, c.positions(), c.values()));
 					for (int i = 0; i < c.positions().length; i++) {
+						if (c.values()[i] != null) {
+							roadStates.put(c.positions()[i], dev.larattalabs.architect.journal.WorldJournal.state(c.values()[i]));
+						}
 						String n = c.values()[i] == null ? null : c.values()[i].name();
 						if (n != null && !n.equals("minecraft:air") && !dev.larattalabs.architect.site.roads.RoadPlan.isLampBlock(n)) {
 							roadCells.add(c.positions()[i]); // as Roads.roadCells reads a standing road's journal entry
@@ -195,6 +198,10 @@ public final class Quotes {
 				notes.add("road " + road.id() + ": its bill could not be read (" + e + ")");
 			}
 		}
+		// (QL-c) each lot's approach ground (plan.json's approachGround: the tiles' writes before it in its approach window); null: a plan made
+		// before QL-c, whose lots' approaches are planned over the land now (inexact, named)
+		JsonObject approachGround = p.planned().get("approachGround") instanceof JsonObject ag ? ag : null;
+		Land land = new Land(roadStates, approachGround, p.planId(), revision ? rec.groupId : null);
 		// 3. the lots: a revision's refills (from the effective IR, each needs its entry as the realise does), then the plan's own lots
 		if (revision) {
 			Ir eff = Ir.lenient(Revisions.effective(live), rec.claim);
@@ -205,7 +212,7 @@ public final class Quotes {
 				}
 				Ir.Lot lot = eff.lots().stream().filter(x -> x.id().equals(lotId)).findFirst().orElse(null);
 				if (lot != null) {
-					lot(level, rec, eff, lot, entry, entries, style, roadCells, bill, notes, false, lotGround);
+					lot(level, rec, eff, lot, entry, entries, style, roadCells, land, bill, notes, false);
 					bound.put(lotId, entry);
 				}
 			}
@@ -215,7 +222,7 @@ public final class Quotes {
 			if (entry == null) {
 				continue; // a pad: its paid cells are the tiles'
 			}
-			lot(level, rec, ir, lot, entry, entries, style, roadCells, bill, notes, !revision, lotGround);
+			lot(level, rec, ir, lot, entry, entries, style, roadCells, land, bill, notes, !revision);
 			bound.put(lot.id(), entry);
 		}
 		// 4. a first realise's K1 swing gates (a revision queues no mechanism item)
@@ -307,7 +314,7 @@ public final class Quotes {
 					boolean standing = false;
 					if (loaded) {
 						try {
-							standing = level.getBlockState(new BlockPos(x, y, z)) == Packed.parse(se.getAsString());
+							standing = builderHolds(level.getBlockState(new BlockPos(x, y, z)), Packed.parse(se.getAsString()));
 						} catch (RuntimeException e) {
 							standing = false;
 						}
@@ -448,6 +455,16 @@ public final class Quotes {
 		net.minecraft.world.level.block.state.@Nullable BlockState at(int x, int y, int z);
 	}
 
+	/**
+	 * (QL-c) Whether a realise consumes nothing at a kept cell that holds {@code now} where the plan writes {@code want}: the region run's own
+	 * test while a target builds ({@code Builder.Run#matches} with {@code soilSame} off: the block, or another stage of its copper chain), not
+	 * the whole state. TileCheck queues a cell of another state (farmland of another moisture), and the run then marks it built unwritten and
+	 * unpaid. Another block (grass where the plan writes dirt) is written and paid.
+	 */
+	static boolean builderHolds(net.minecraft.world.level.block.state.BlockState now, net.minecraft.world.level.block.state.BlockState want) {
+		return now == want || dev.larattalabs.architect.journal.Copper.is(now, want.getBlock());
+	}
+
 	static Standing standing(JsonObject terrain, World world) {
 		Map<String, Map<String, Integer>> off = new TreeMap<>(), covered = new TreeMap<>();
 		int offCells = 0, unloaded = 0;
@@ -476,7 +493,7 @@ public final class Quotes {
 						unloaded++;
 						continue;
 					}
-					if (now == want) {
+					if (builderHolds(now, want)) {
 						offCells++;
 						Map<String, Integer> o = off.computeIfAbsent(g.getKey(), k -> new TreeMap<>());
 						its.forEach((k, v) -> o.merge(k, v, Integer::sum));
@@ -488,42 +505,175 @@ public final class Quotes {
 	}
 
 	/**
-	 * (QL-b D'') A lot's ground (one entry of plan.json's lotGround: {seqs: [[[state, cond], ...]], runs: base64 int32 [x, z, y0, y1, seq]}) over
-	 * the world now: per cell its writes in order, each where its condition passes on the cell as it then stands ({@link CellCond#passes}, not
-	 * ours), as the realise's tiles write before the lot. Only the cells it changes; a cell in a chunk not loaded is left to the world.
+	 * (QL-c) A lot's land: the plan's writes before it, the path tiles' walk cells, why it is not fully known (null: it is), and, when some
+	 * tile writes can't be decided here ({@code undecided}: a kept player build's cell, whose consent is the realise's), the same land with
+	 * those writes made ({@code ifWritten}); the realise's land is one of the two at those cells.
 	 */
-	static Map<Long, net.minecraft.world.level.block.state.BlockState> ground(ServerLevel level, JsonObject lg) {
-		return ground(lg, (x, y, z) -> level.hasChunk(x >> 4, z >> 4) ? level.getBlockState(new BlockPos(x, y, z)) : null, (c, now) -> CellCond.passes(c, now, false));
-	}
-
-	/** A write condition over a cell's state ({@link CellCond#passes}; a seam for the unit test, whose registry binds no tags). */
-	interface Cond {
-		boolean passes(int cond, net.minecraft.world.level.block.state.BlockState now);
-	}
-
-	static Map<Long, net.minecraft.world.level.block.state.BlockState> ground(JsonObject lg, World world, Cond cond) {
-		Map<Long, net.minecraft.world.level.block.state.BlockState> out = new java.util.HashMap<>();
-		if (!(lg.get("seqs") instanceof com.google.gson.JsonArray seqs) || !(lg.get("runs") instanceof JsonElement re)) {
-			return out;
+	record LandOf(dev.larattalabs.architect.site.QuoteLand land, it.unimi.dsi.fastutil.longs.LongOpenHashSet walk, @Nullable String gap, int undecided,
+		@Nullable LandOf ifWritten) {
+		LandOf(dev.larattalabs.architect.site.QuoteLand land, it.unimi.dsi.fastutil.longs.LongOpenHashSet walk, @Nullable String gap) {
+			this(land, walk, gap, 0, null);
 		}
-		List<net.minecraft.world.level.block.state.BlockState[]> st = new ArrayList<>();
+	}
+
+	/**
+	 * (QL-c) The world a lot's approach ground is decided over, as TileCheck reads it: each cell's state (null: not loaded), its journal owner
+	 * and whether it is an incidental or a kept player-placed cell. The defaults: no owner, no player cell (the unit tests' plain world).
+	 */
+	interface Reads extends World {
+		/** 0: no entry, 1: one of the region's own tile entries (ours), 2: another entry (held). */
+		default int owner(long pos) {
+			return 0;
+		}
+
+		/** The cell is in a kept player build (TileCheck's BUILD, unless the realise's consent names it: not known to a quote). */
+		default boolean kept(int x, int y, int z) {
+			return false;
+		}
+
+		/** The cell is an incidental player-placed one ({@code Placed.naturalForWrites} with no consent). */
+		default boolean incidental(int x, int y, int z) {
+			return false;
+		}
+	}
+
+	/** (QL-c) {@link Reads} over a level: its loaded chunks, the journal's stacks, the placed-block tracker; {@code group}: the region's own. */
+	static Reads reads(ServerLevel level, @Nullable String group) {
+		String dim = Sites.dimensionId(level);
+		return new Reads() {
+			@Override
+			public net.minecraft.world.level.block.state.@Nullable BlockState at(int x, int y, int z) {
+				return level.hasChunk(x >> 4, z >> 4) ? level.getBlockState(new BlockPos(x, y, z)) : null;
+			}
+
+			@Override
+			public int owner(long pos) {
+				if (dev.larattalabs.architect.journal.WorldJournal.storeOrNull() == null) {
+					return 0;
+				}
+				int o = 0;
+				try {
+					for (var l : dev.larattalabs.architect.journal.WorldJournal.stack(dim, pos)) {
+						var m = l.meta();
+						if (m.kind().equals(dev.larattalabs.architect.journal.WorldJournal.LEAVES)) {
+							continue;
+						}
+						boolean mine = (m.kind().equals(dev.larattalabs.architect.site.RegionKinds.TERRAIN) || m.kind().equals(
+							dev.larattalabs.architect.site.RegionKinds.PATH)) && group != null && !group.isEmpty() && group.equals(m.group());
+						if (!mine) {
+							return 2; // another entry's: TileCheck checks others first
+						}
+						o = 1;
+					}
+				} catch (java.io.IOException e) {
+					return 2; // unreadable: held, as TileCheck refuses to write it
+				}
+				return o;
+			}
+
+			@Override
+			public boolean kept(int x, int y, int z) {
+				return dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z) != null;
+			}
+
+			@Override
+			public boolean incidental(int x, int y, int z) {
+				return dev.larattalabs.architect.placed.Placed.naturalForWrites(level, null, x, y, z, dev.larattalabs.architect.placed.Placed.Consent.NONE);
+			}
+		};
+	}
+
+	/** (QL-c) The plan's roads' writes and its lots' approach ground (plan.json's approachGround; null for a plan made before QL-c). */
+	static final class Land {
+		final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.block.state.BlockState> roads;
+		final @Nullable JsonObject ground;
+		final String planId;
+		final @Nullable String group;
+
+		Land(it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.block.state.BlockState> roads, @Nullable JsonObject ground, String planId) {
+			this(roads, ground, planId, null);
+		}
+
+		Land(it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.block.state.BlockState> roads, @Nullable JsonObject ground, String planId,
+			@Nullable String group) {
+			this.roads = roads;
+			this.ground = ground;
+			this.planId = planId;
+			this.group = group;
+		}
+
+		LandOf of(ServerLevel level, String lotId) {
+			return of(lotId, reads(level, group), CellCond::passes);
+		}
+
+		LandOf of(String lotId, Reads world, Realised.CondTest cond) {
+			dev.larattalabs.architect.site.QuoteLand land = new dev.larattalabs.architect.site.QuoteLand();
+			land.states().putAll(roads);
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet walk = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+			if (ground == null) {
+				return new LandOf(land, walk, "the plan was made before QL-c (no approach ground: plan it again)");
+			}
+			if (!(ground.get(lotId) instanceof JsonObject lg)) {
+				return new LandOf(land, walk, null); // no tile writes in its approach window
+			}
+			if (lg.has("capped")) {
+				return new LandOf(land, walk, "the plan's tiles write too many cells in its approach window to keep (" + lg.get("capped").getAsInt() + " column runs)");
+			}
+			int[] undecided = {0};
+			int gaps = apply(lg, world, cond, land, walk, false, undecided);
+			String gap = gaps == 0 ? null : gaps + " cell(s) of the tiles' writes in its approach window can't be read (a chunk not loaded, an unknown state)";
+			if (undecided[0] == 0) {
+				return new LandOf(land, walk, gap);
+			}
+			dev.larattalabs.architect.site.QuoteLand land2 = new dev.larattalabs.architect.site.QuoteLand();
+			land2.states().putAll(roads);
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet walk2 = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+			apply(lg, world, cond, land2, walk2, true, new int[1]);
+			return new LandOf(land, walk, gap, undecided[0], new LandOf(land2, walk2, gap));
+		}
+	}
+
+	/** A write condition over a cell's state ({@link CellCond#passes}; a seam for the unit test). */
+	interface Cond extends Realised.CondTest {
+	}
+
+	/**
+	 * (QL-c) One lot's approach ground ({seqs: [[[state, cond, walk], ...]], runs: base64 int32 [x, z, y0, y1, seq]}) over the world (and the roads
+	 * already in {@code land}): per cell its writes in order, each decided by TileCheck's own {@link Realised#decideCell}
+	 * (a road's or another entry's cell held, a kept build's skipped, the condition, an incidental player cell, the cell's own state a no-op,
+	 * ALWAYS_OURS over the region's own); a written one makes the cell the region's own, its tile's entry owns it, a walk write's cell joins
+	 * {@code walk}. A kept build's cell is the realise's consent's to decide: counted in {@code undecided}, and written only when
+	 * {@code assumeWritten} (as with consent: incidental). Returns how many cells could not be read.
+	 */
+	static int apply(JsonObject lg, Reads world, Realised.CondTest cond, dev.larattalabs.architect.site.QuoteLand land,
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet walk, boolean assumeWritten, int[] undecided) {
+		if (!(lg.get("seqs") instanceof com.google.gson.JsonArray seqs) || !(lg.get("runs") instanceof JsonElement re)) {
+			return 0;
+		}
+		List<net.minecraft.world.level.block.state.@Nullable BlockState[]> st = new ArrayList<>();
 		List<int[]> cd = new ArrayList<>();
+		List<boolean[]> wk = new ArrayList<>();
 		for (JsonElement q : seqs) {
 			com.google.gson.JsonArray w = q.getAsJsonArray();
 			net.minecraft.world.level.block.state.BlockState[] a = new net.minecraft.world.level.block.state.BlockState[w.size()];
 			int[] c = new int[w.size()];
+			boolean[] k = new boolean[w.size()];
 			for (int i = 0; i < w.size(); i++) {
 				com.google.gson.JsonArray e = w.get(i).getAsJsonArray();
 				try {
 					a[i] = Packed.parse(e.get(0).getAsString());
 				} catch (RuntimeException ex) {
-					a[i] = null; // an unknown state: that write is left out
+					a[i] = null; // an unknown state: the cell is a gap
 				}
 				c[i] = e.get(1).getAsInt();
+				k[i] = e.size() > 2 && e.get(2).getAsInt() != 0;
 			}
 			st.add(a);
 			cd.add(c);
+			wk.add(k);
 		}
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet roadCells = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(land.states().keySet());
+		int gaps = 0;
 		java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(re.getAsString())).order(java.nio.ByteOrder.LITTLE_ENDIAN);
 		while (b.remaining() >= 20) {
 			int x = b.getInt(), z = b.getInt(), y0 = b.getInt(), y1 = b.getInt(), k = b.getInt();
@@ -531,23 +681,50 @@ public final class Quotes {
 				continue;
 			}
 			for (int y = y0; y <= y1; y++) {
+				long pos = BlockPos.asLong(x, y, z);
 				var now = world.at(x, y, z);
 				if (now == null) {
+					gaps++;
 					continue;
 				}
+				// the cell's owner at put-down: a planned road's or another entry's (held), the region's own tile's (ours), or none
+				int owner = roadCells.contains(pos) ? 2 : world.owner(pos);
+				boolean kept = owner != 2 && world.kept(x, y, z);
+				if (kept && !assumeWritten) {
+					undecided[0]++;
+				}
+				boolean buildKept = kept && !assumeWritten;
+				final int fx = x, fy = y, fz = z;
+				java.util.function.BooleanSupplier incidental = () -> kept || world.incidental(fx, fy, fz); // consent given: a kept build's cell passes as natural
 				var cur = now;
+				boolean ours = owner == 1, gap = false;
 				for (int i = 0; i < st.get(k).length; i++) {
 					var w = st.get(k)[i];
-					if (w != null && cond.passes(cd.get(k)[i], cur)) {
-						cur = w;
+					if (w == null) {
+						gap = true;
+						break;
+					}
+					byte c = Realised.decideCell(owner == 2, buildKept, cur, false, false, incidental, cd.get(k)[i], ours, w, cond);
+					if (c != Realised.WRITTEN) {
+						continue; // HELD, BUILD, COND or NOOP
+					}
+					cur = w;
+					ours = true;
+					land.tiles().add(pos);
+					if (wk.get(k)[i]) {
+						walk.add(pos);
 					}
 				}
+				if (gap) {
+					gaps++;
+				}
 				if (cur != now) {
-					out.put(BlockPos.asLong(x, y, z), cur);
+					land.states().put(pos, cur);
+					land.changedByTiles().add(pos);
 				}
 			}
 		}
-		return out;
+		return gaps;
 	}
 
 	/** (QL-b, a gate hook) When set, each lot's bill taken apart ({@link dev.larattalabs.architect.site.LotBillDebug}) by lot id. */
@@ -582,7 +759,7 @@ public final class Quotes {
 
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */
 	private static void lot(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, Map<String, String> entries, @Nullable EntranceStyle style,
-		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech, @Nullable JsonObject lotGround) {
+		it.unimi.dsi.fastutil.longs.LongSet roadCells, Land land, Bill bill, List<String> notes, boolean mech) {
 		QItem q = RegionsImpl.lotItemOf(level, rec, ir, lot, entry, new ArrayList<>(), entries, null);
 		if (q == null) {
 			return;
@@ -606,23 +783,13 @@ public final class Quotes {
 		dev.larattalabs.architect.api.SiteSpec site = dev.larattalabs.architect.site.SiteLots.isSiteLot(lotJson) ? dev.larattalabs.architect.site.SiteLots.siteOf(
 			ir.json(), lot.id()) : null;
 		Sites.Verdict v;
-		Sites.QUOTE_ROADS.set(roadCells);
-		try {
-			v = SiteFit.with(site, rec.groupId, () -> Sites.verdict(level, bp, origin, rot, q.force, null, true, true, true, rec.owner, style, false));
-		} finally {
-			Sites.QUOTE_ROADS.remove();
-		}
-		// (QL-b D'') the lot over the land as the region's tiles before it leave it (plan.json's lotGround): the realise puts it down after them
-		JsonObject lg = lotGround != null && lotGround.get(lot.id()) instanceof JsonObject one ? one : null;
-		if (lg != null && lg.has("capped")) {
-			bill.exact = false;
-			notes.add("lot " + lot.id() + " (" + entry + "): priced over the land now: the tiles before it write too many cells under it to keep ("
-				+ lg.get("capped").getAsInt() + " column runs): may differ");
-		}
-		Map<Long, net.minecraft.world.level.block.state.BlockState> ground = lg == null ? null : ground(level, lg);
-		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext), ground);
+		// (QL-c) the lot over the land the plan's roads and earlier tiles leave: their states, the tiles' cells as the style's region ground (a
+		// first realise's style then has a group, as the realise's does), the path tiles' walk cells as road cells (Roads.roadCells)
+		LandOf lo = land.of(level, lot.id());
+		v = verdictOver(level, bp, origin, rot, q, rec, site, style, roadCells, land, lo);
+		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
 		if (DEBUG_LOTS.get() instanceof JsonObject dbg) { // (QL-b, a gate hook's reader) the lot bill taken apart
-			JsonObject d = dev.larattalabs.architect.site.LotBillDebug.of(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext), ground);
+			JsonObject d = dev.larattalabs.architect.site.LotBillDebug.of(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
 			if (d != null) {
 				d.addProperty("entry", entry);
 				d.addProperty("origin", q.x + "," + q.y + "," + q.z + " turns " + q.turns);
@@ -635,7 +802,46 @@ public final class Quotes {
 				.message() + ")") + ": not billed");
 			return;
 		}
-		bill.add("lot:" + lot.id(), b.items());
+		Map<String, Integer> lotItems = b.items();
+		if (lo.ifWritten() != null) {
+			// (QL-c) tile writes over a kept player build's cells: the realise writes them only when its consent names the build (not known here).
+			// Both lands are planned and the larger count of each item billed: an upper bound over the two (each such cell written, or none)
+			Sites.Verdict v2 = verdictOver(level, bp, origin, rot, q, rec, site, style, roadCells, land, lo.ifWritten());
+			Sites.BomFull b2 = Sites.quoteBill(level, bp, v2, dev.larattalabs.architect.site.LotMask.cells(q.ext));
+			Map<String, Integer> both = new TreeMap<>(lotItems);
+			if (b2 != null) {
+				b2.items().forEach((k, n) -> both.merge(k, n, Math::max));
+			}
+			lotItems = both;
+			bill.exact = false;
+			notes.add("lot " + lot.id() + " (" + entry + "): the plan's tiles write " + lo.undecided() + " cell(s) of a kept player build where its entrance "
+				+ "approach is planned (the realise writes them only with the build's consent): its approach is planned both ways and the larger of each "
+				+ "item billed (an upper bound when those cells are all written or none" + (b2 == null ? "; the written way has no construction plan" : "")
+				+ ")");
+		}
+		bill.add("lot:" + lot.id(), lotItems);
+		if (lo.gap() != null) {
+			// (QL-c) the land the realise finds in front of the lot is not fully known here: its approach can be planned longer or shorter
+			bill.exact = false;
+			notes.add("lot " + lot.id() + " (" + entry + "): " + lo.gap() + ": its approach is planned over the land now and may differ (longer or shorter): "
+				+ "not an upper bound (with a maxBill set, the realise waits bill_cap; callers that set none can consume past the quote)");
+		} else {
+			int touched = Sites.approachTilesTouching(v, lo.land());
+			if (touched > 0) {
+				// (QL-c) planned over the land the plan's tiles leave, as the realise plans it; named inexact all the same (the tiles' writes are the
+				// plan survey's, applied by their conditions over the land now)
+				bill.exact = false;
+				notes.add("lot " + lot.id() + " (" + entry + "): the plan's tiles change " + touched + " cell(s) where its entrance approach is planned: "
+					+ "the approach is planned over the land they leave, as the realise plans it (inexact: the tiles' writes are the plan survey's)");
+			}
+		}
+		if (b.standingOutside() > 0) {
+			// (QL-b) fill or approach cells whose block the land already holds are billed (the conversion pays every queued cell), but the realise
+			// plans its fill and approach over the land as the plan's own tiles leave it: it can plan fewer (a street stops the approach sooner)
+			bill.exact = false;
+			notes.add("lot " + lot.id() + " (" + entry + "): " + b.standingOutside() + " fill or approach cell(s) already hold their block: billed (an upper "
+				+ "bound: the realise plans its approach over the land as the plan's tiles leave it, and pays each cell it plans)");
+		}
 		if (!b.exact()) {
 			bill.exact = false;
 			List<String> why = new ArrayList<>(b.inexactBecause());
@@ -655,6 +861,23 @@ public final class Quotes {
 		if (mech && site == null) {
 			String bpId = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;
 			bill.add("mech:" + lot.id(), PlanChecks.mechanismBill(ir, lot.id(), bpId));
+		}
+	}
+
+	/** (QL-c) A lot's dry-run verdict over {@code lo}'s land (its states, its tiles as region ground, its walk cells as road cells). */
+	private static Sites.Verdict verdictOver(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rot, QItem q, RegionRec rec,
+		dev.larattalabs.architect.api.@Nullable SiteSpec site, @Nullable EntranceStyle style, it.unimi.dsi.fastutil.longs.LongSet roadCells, Land land, LandOf lo) {
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(roadCells);
+		roads.addAll(lo.walk());
+		EntranceStyle lotStyle = style != null && style.regionGroup() == null && !lo.land().tiles().isEmpty() ? new EntranceStyle(style.path(), style.foundation(),
+			"quote:" + land.planId) : style;
+		Sites.QUOTE_ROADS.set(roads);
+		dev.larattalabs.architect.site.QuoteLand.QUOTE.set(lo.land());
+		try {
+			return SiteFit.with(site, rec.groupId, () -> Sites.verdict(level, bp, origin, rot, q.force, null, true, true, true, rec.owner, lotStyle, false));
+		} finally {
+			Sites.QUOTE_ROADS.remove();
+			dev.larattalabs.architect.site.QuoteLand.QUOTE.remove();
 		}
 	}
 

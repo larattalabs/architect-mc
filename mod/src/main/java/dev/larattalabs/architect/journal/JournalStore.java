@@ -521,6 +521,31 @@ public final class JournalStore {
 	 */
 	public static volatile java.util.function.@Nullable BiFunction<String, Collection<SectionCells>, ? extends Collection<SectionCells>> ptSource;
 
+	/**
+	 * (J2, UMT DPT) The player-placed records {@link #ptSource} gives these cells now, by position (empty without a source): what a
+	 * create annotates. A two-step entry (a delta's PLACING create, then its ACTIVE rewrite with afters) takes them before its writes, so
+	 * the rewrite keeps them (the writes drop the world's records). Server thread, as the create.
+	 */
+	public static Map<Long, Pt> ptOf(String dimension, Collection<SectionCells> cells) {
+		var pt = ptSource;
+		Map<Long, Pt> out = new java.util.HashMap<>();
+		if (pt == null) {
+			return out;
+		}
+		for (SectionCells sc : pt.apply(dimension, cells)) {
+			if (!sc.hasPt()) {
+				continue;
+			}
+			for (int k = 0; k < sc.size(); k++) {
+				Pt r = sc.pt(k);
+				if (r != null) {
+					out.put(sc.pos(k), r);
+				}
+			}
+		}
+		return out;
+	}
+
 	/** Changes to commit together (one index write). Built on the server thread, then {@link #submit}ted. */
 	public final class Txn {
 		private final Map<String, Meta> creates = new LinkedHashMap<>();

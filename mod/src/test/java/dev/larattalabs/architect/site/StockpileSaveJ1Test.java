@@ -44,7 +44,7 @@ class StockpileSaveJ1Test {
 		String b = read(SITE + "Builder.java");
 		String dec = StockpileSaveHFTest.body(b, "static void dropDeconstruction(");
 		int credit = dec.indexOf("creditRefund(");
-		int save = dec.indexOf("Stockpiles.saveCredit(");
+		int save = dec.indexOf("Stockpiles.saveCreditPending("); // (J2) saveCredit, a refusal left pending
 		assertTrue(credit >= 0 && save > credit && save < dec.indexOf("forget("), "a deconstruct's credit is saved before its record goes");
 		String cr = StockpileSaveHFTest.body(b, "static boolean creditRefund(");
 		assertTrue(cr.contains("!c.already()"), "creditRefund answers whether a credit booked now (once per key)");

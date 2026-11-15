@@ -280,15 +280,22 @@ public final class Stockpiles {
 			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
 				return;
 			}
+			boolean timed = SaveTiming.on();
+			long w0 = timed ? SaveTiming.started() : System.nanoTime();
+			boolean ioFailed = false;
 			if (!flush) {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.IO); // (SS) J1's wait is the autosave's IO wait
 				for (ServerLevel l : server.getAllLevels()) {
 					try {
 						l.getChunkSource().chunkMap.synchronize(true).join();
 					} catch (RuntimeException e) {
-						Architect.LOGGER.warn("Stockpiles: waiting for {}'s chunk writes failed; the ledger is saved anyway", l.dimension(), e);
+						// (SS, review finding 5) fail closed: no ledger write over chunk writes not known durable; the ledger stays pending
+						ioFailed = true;
+						Architect.LOGGER.error("Stockpiles: waiting for {}'s chunk writes failed; the ledger is not saved now", l.dimension(), e);
 					}
 				}
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				autosaveWaits++;
 				lastAutosaveWaitMs = ms;
@@ -300,7 +307,20 @@ public final class Stockpiles {
 				Architect.LOGGER.error("Stockpiles: kill point AS1: the autosave's chunks written, halting before the ledger write");
 				Runtime.getRuntime().halt(7);
 			}
+			// (SS) the ledger only over durable chunk writes: an autosave forces the chunk storages (J1's wait), a flushed save the entities too
+			RegionDurability.retryOwed(); // (SS) an owed path (a close whose force failed) reopened and forced: a recovered disk clears it
+			java.util.List<String> undurable = flush ? RegionDurability.undurable("chunk", "entities") : RegionDurability.undurable("chunk");
+			if (ioFailed || !undurable.isEmpty()) {
+				refuseUndurable(flush ? "the world save" : "the autosave", undurable);
+				if (timed) {
+					logTiming((flush ? "world save (flush)" : "autosave") + " REFUSED", w0, SaveTiming.stop());
+				}
+				return;
+			}
 			save();
+			if (timed) {
+				logTiming(flush ? "world save (flush)" : "autosave", w0, SaveTiming.stop());
+			}
 		});
 		// (HF, F9) a logout saves that player (PlayerList.remove): a ledger change not saved yet (a deposit, a Take) is saved with the world
 		// right after it, so a crash then never finds the player saved and the ledger rewound. Queued: it runs after the removal's save.
@@ -317,6 +337,7 @@ public final class Stockpiles {
 			save();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			RegionDurability.worldClosed(); // (SS) nothing of this world is owed in the next one
 			SERVER = null;
 			PILES.clear();
 			dir = null;
@@ -1160,6 +1181,8 @@ public final class Stockpiles {
 	static StockLedger.Credit credit(MinecraftServer srv, Pile p, String key, Map<String, Integer> items, BlockPos fallback) {
 		if (items.isEmpty() && !p.ledger.credited(key) && p.ledger.custody(key).isEmpty()) { // (M5 FK) custody still refunds
 			p.ledger.dropPaid(key); // (JR) nothing of it stood: its paid record goes with it
+			p.ledger.dropPending(key); // (J2) nothing to roll forward
+			changed(p);
 			return StockLedger.Credit.NONE;
 		}
 		StockLedger.Credit c = p.ledger.credit(key, items, capacity(srv, p), Stockpiles::maxStack);
@@ -1308,8 +1331,121 @@ public final class Stockpiles {
 	static void saveCredit(MinecraftServer srv) {
 		creditSaves++;
 		if (!testNoCreditSave) {
-			saveWithWorld(srv);
+			inCreditSave = true;
+			try {
+				saveWithWorld(srv);
+			} finally {
+				inCreditSave = false;
+			}
 		}
+	}
+
+	/**
+	 * (J2) {@link #saveCredit} for a credit the ledger on disk already holds pending (a single-site removal's deconstruct,
+	 * {@link #holdPendingCredits}): a save SS refuses (a chunk write not durable) leaves it so and the removal goes on; the next start books it
+	 * once ({@link #settlePendingCredits}) unless a later save, the periodic one included, writes the credit first.
+	 */
+	static void saveCreditPending(MinecraftServer srv) {
+		try {
+			saveCredit(srv);
+		} catch (IllegalStateException e) {
+			Architect.LOGGER.error("Stockpiles: a removal's credit was not saved ({}); it stays pending in the saved ledger and books at the next start",
+				e.getMessage());
+		}
+	}
+
+	/** (J2, TEST kill point CS1) inside {@link #saveCredit}'s save: the players and the chunks on disk, the ledger not. */
+	private static boolean inCreditSave;
+
+	/**
+	 * (J2, FK's durability leftover) A single-site removal's stockpile deconstructs: each credit held pending in its pile's ledger, saved with
+	 * the world before the removal's commit (Sites.removeDetailed). Returns whether any was held.
+	 */
+	static boolean holdPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
+		boolean any = false;
+		for (Builder.Deconstruction d : decs) {
+			Pile p = d.stockpile() == null || d.key() == null ? null : get(d.stockpile());
+			if (p != null) {
+				p.ledger.holdPending(d.key(), d.credit(), d.at().asLong());
+				changed(p);
+				any = true;
+			}
+		}
+		return any;
+	}
+
+	/** (J2) The removal ended unwritten (its save refused): its pending credits dropped. */
+	static void dropPendingCredits(java.util.Collection<Builder.Deconstruction> decs) {
+		for (Builder.Deconstruction d : decs) {
+			Pile p = d.stockpile() == null || d.key() == null ? null : get(d.stockpile());
+			if (p != null) {
+				p.ledger.dropPending(d.key());
+				changed(p);
+			}
+		}
+	}
+
+	/**
+	 * (J2) At the start, after the sites' settle and before the custody is written back (Fills.atStart): each pending credit (a single-site
+	 * removal's, saved before its commit) is resolved by its site's state: credited already (its save reached the disk) or the site standing
+	 * (the removal never settled: its custody goes back): dropped; the site still pending (its restore resumes): left; the site settled
+	 * removed: booked now, once (credit's key rule), custody included, then saved with the world. A save SS refuses leaves the saved ledger
+	 * as it was (pending): the next start resolves it again, and the credit's key keeps it once.
+	 */
+	static void settlePendingCredits(MinecraftServer srv) {
+		boolean any = false;
+		for (Pile p : List.copyOf(PILES.values())) {
+			for (String key : p.ledger.pendingKeys()) {
+				String what;
+				if (p.ledger.credited(key)) {
+					p.ledger.dropPending(key);
+					what = "already credited";
+				} else if (standingSite(key) != null) {
+					p.ledger.dropPending(key);
+					what = "its site stands (the removal never settled)";
+				} else if (pendingSite(key)) {
+					continue; // its removal is still pending (its restore resumes): left for the next start
+				} else {
+					ServerLevel level = Sites.levelOf(srv, p.dimension);
+					if (level == null) {
+						continue;
+					}
+					Builder.creditRefund(level, p.owner, key, new TreeMap<>(p.ledger.pendingItems(key)), BlockPos.of(p.ledger.pendingAt(key)), null);
+					p.ledger.dropPending(key); // (a credit of nothing standing books NONE: nothing pending either)
+					what = "its removal settled: credited now";
+				}
+				changed(p);
+				any = true;
+				Architect.LOGGER.warn("Stockpile {}: pending credit {}: {}", p.owner, key, what);
+			}
+		}
+		if (any) {
+			try {
+				saveWithWorld(srv);
+			} catch (IllegalStateException e) {
+				Architect.LOGGER.error("Stockpiles: the pending credits' save was refused ({}); resolved again at the next start", e.getMessage());
+			}
+		}
+	}
+
+	/** (J2) The standing site whose credit key is {@code key}, or null. */
+	private static @Nullable Site standingSite(String key) {
+		for (Site s : Sites.all()) {
+			if (key.equals(Builder.creditKey(s))) {
+				return s;
+			}
+		}
+		return null;
+	}
+
+	/** (J2) Whether a pending record (a removal not settled yet) has the credit key {@code key}. */
+	private static boolean pendingSite(String key) {
+		int at = key.lastIndexOf('@');
+		if (!key.startsWith("site:") || at < 0) {
+			return false;
+		}
+		Site s = Sites.pendingRecord(key.substring(5, at));
+		return s != null && key.equals(Builder.creditKey(s));
 	}
 
 	/** (J1, dev) the credits saved by {@link #saveCredit} this session (counted with the test switch off too). */
@@ -1960,6 +2096,14 @@ public final class Stockpiles {
 					o.addProperty("autosaveWaits", autosaveWaits); // (J1)
 					o.addProperty("lastAutosaveWaitMs", lastAutosaveWaitMs);
 					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
+					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
+					o.addProperty("regionBarriers", RegionDurability.BARRIERS.get());
+					o.addProperty("regionOwedRetried", RegionDurability.RETRIED.get());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
+					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
+					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("chunkWaitsSkipped", SaveTiming.WAITS_SKIPPED.get());
 					o.addProperty("lastPeriodicMs", lastPeriodicMs);
 					o.addProperty("maxPeriodicMs", maxPeriodicMs);
 					o.addProperty("medianPeriodicMs", periodicMedianMs());
@@ -1969,6 +2113,22 @@ public final class Stockpiles {
 						o.addProperty("loadFailedWhy", loadFailedWhy);
 					}
 					o.addProperty("format", FORMAT);
+					return o;
+				}
+				case "ss" -> {
+					// (SS, TEST) the region-file durability probe, with the mixins applied (SaveProbe)
+					if (req.has("probe") && req.get("probe").getAsBoolean()) {
+						try {
+							return SaveProbe.run(srv, player);
+						} catch (java.io.IOException e) {
+							throw new java.io.UncheckedIOException(e);
+						}
+					}
+					o.addProperty("forced", RegionDurability.FORCED.get());
+					o.addProperty("skipped", RegionDurability.SKIPPED.get());
+					o.addProperty("barriers", RegionDurability.BARRIERS.get());
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
 					return o;
 				}
 				case "ps" -> {
@@ -1982,6 +2142,12 @@ public final class Stockpiles {
 					}
 					if (req.has("noCreditSave")) {
 						testNoCreditSave = req.get("noCreditSave").getAsBoolean();
+					}
+					if (req.has("forceAll")) {
+						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
+					}
+					if (req.has("waitAll")) {
+						SaveTiming.waitAll = req.get("waitAll").getAsBoolean(); // (SS) a flushed save waits for every loading chunk, as vanilla
 					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
@@ -1997,6 +2163,8 @@ public final class Stockpiles {
 					o.addProperty("noPeriodic", testNoPeriodic);
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
+					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("waitAll", SaveTiming.waitAll);
 					return o;
 				}
 				case "state" -> {
@@ -2389,6 +2557,19 @@ public final class Stockpiles {
 		Map<String, Integer> back = lostCost.isEmpty() ? Map.of() : p.ledger.fromPaid(id, lostCost, t instanceof Site st ? st.placedAt() : ((Infra) t).placedAt());
 		StockLedger.Credit cr = back.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(back, cap, Stockpiles::maxStack);
 		dropOverflow(srv, p, cr.overflow(), fallback);
+		// (J2, RL6) a construction delta's swap built after the save: the builder gave the old block back out of the record as it swapped
+		// (Builder.refundSwap -> giveBackPaid: fromPaid under the target's key, then giveBack), and the unsaved ledger lost that. Done again
+		// here, the same way, before the new block is charged. Once: the swap's give-back and its new block's charge are booked in the same
+		// tick, so a saved ledger that holds the give-back holds the cell as standing paid in its book too (never ahead); the book written
+		// below counts the cell standing, so a second load finds nothing ahead
+		Map<String, Integer> swapOld = swapOldCost(level, r, ahead, free);
+		Map<String, Integer> swapBack = swapOld.isEmpty() ? Map.of() : p.ledger.fromPaid(id, swapOld, t instanceof Site st2 ? st2.placedAt()
+			: ((Infra) t).placedAt());
+		StockLedger.Credit scr = swapBack.isEmpty() ? StockLedger.Credit.NONE : p.ledger.giveBack(swapBack, cap, Stockpiles::maxStack);
+		dropOverflow(srv, p, scr.overflow(), fallback);
+		if (!swapBack.equals(swapOld)) {
+			Architect.LOGGER.warn("Stockpile {}: the reconcile's swap give-back of {} capped at the record: {} of {}", p.owner, id, swapBack, swapOld);
+		}
 		// the world ahead: charged now while the stock affords it, the rest owed
 		java.util.BitSet owed = b.owed();
 		owed.clear();
@@ -2448,6 +2629,7 @@ public final class Stockpiles {
 		o.add("owes", Builder.counts(owes));
 		o.add("creditedBack", Builder.counts(cr.returned()));
 		o.add("overflow", Builder.counts(cr.overflow()));
+		o.add("swapBack", Builder.counts(scr.returned())); // (J2, RL6) the swaps' old blocks given back
 		o.addProperty("reopened", reopen);
 		o.addProperty("playerCells", playerCells); // (J1) ahead cells a player placed: not charged
 		LAST_RECONCILE.put(id, o);
@@ -2458,6 +2640,24 @@ public final class Stockpiles {
 				reopen ? "; it builds again" : "");
 		}
 		return moved;
+	}
+
+	/**
+	 * (J2, RL6) The old blocks' cost of the ahead cells that are a construction delta's swaps, as {@link Builder}'s refundSwap counts it (a
+	 * swap cell, its old block known, not free), less a cell a player placed (its PT record: the reconcile leaves it uncharged and gives
+	 * nothing back for it either).
+	 */
+	static Map<String, Integer> swapOldCost(ServerLevel level, Builder.Run r, java.util.BitSet ahead, java.util.BitSet free) {
+		Map<String, Integer> out = new TreeMap<>();
+		if (r.old == null) {
+			return out;
+		}
+		for (int i = ahead.nextSetBit(0); i >= 0; i = ahead.nextSetBit(i + 1)) {
+			if (Builder.swapRefunds(r, i, free) && dev.larattalabs.architect.placed.Placed.record(level, r.pos(i)) == null) {
+				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			}
+		}
+		return out;
 	}
 
 	static volatile int worldSaves;
@@ -2479,12 +2679,18 @@ public final class Stockpiles {
 			return; // (PS, F6) nothing of the stockpiles is written this session
 		}
 		long t0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		if (srv != null && srv.isSameThread()) {
 			// (HF) the players first: a ledger save that booked a deposit (items out of an inventory) or a dissolve or withdraw (items into one)
 			// is never on disk ahead of player.dat, so a crash after it neither dupes nor loses those items. saveAllChunks never saves players
 			// (26.3: level.dat keeps only the singleplayer host's UUID; every player, the host too, is in playerdata/<uuid>.dat).
 			long p0 = System.nanoTime();
+			SaveTiming.at(SaveTiming.PLAYERS);
 			srv.getPlayerList().saveAll();
+			SaveTiming.at(SaveTiming.OTHER);
 			double pms = (System.nanoTime() - p0) / 1e6;
 			WorldJournal.kill("HF1"); // (J1, TEST) HF's window: the players on disk, the chunks and the ledger not
 			playerSaves++;
@@ -2493,10 +2699,30 @@ public final class Stockpiles {
 			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
 			// disk ahead of the world's chunks either
 			explicitSave = true;
+			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
 				explicitSave = false;
+				SaveTiming.explicit = false;
+			}
+			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
+			RegionDurability.retryOwed(); // (SS) an owed path reopened and forced first: a recovered disk clears it
+			java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
+			if (!undurable.isEmpty()) {
+				refuseUndurable(quiet ? "the periodic save" : "a save with the world", undurable);
+				if (timed) {
+					logTiming((quiet ? "periodic" : caller()) + " REFUSED", t0, SaveTiming.stop());
+				}
+				if (quiet) {
+					return; // retried at the next periodic save; the ledger stays pending (unsaved)
+				}
+				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
+			}
+			if (inCreditSave && "CS1".equals(WorldJournal.armed())) {
+				// (J2, TEST kill point CS1) a crash inside a credit's save: the players and the chunks (the restore) on disk, the ledger not
+				Architect.LOGGER.error("Stockpiles: kill point CS1: a credit's save flushed its chunks, halting before the ledger write (dev.journal.killAt)");
+				Runtime.getRuntime().halt(7);
 			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
@@ -2512,6 +2738,40 @@ public final class Stockpiles {
 		if (!quiet || TRACE_SAVES) {
 			Architect.LOGGER.info("Stockpiles: saved with the world's chunks in {} ms{}", String.format(java.util.Locale.ROOT, "%.1f", ms), quiet ? " (periodic)" : "");
 		}
+		if (timed) {
+			String parts = SaveTiming.stop();
+			if (!quiet || TRACE_SAVES || ms >= TIMING_LOG_MS) {
+				logTiming(quiet ? "periodic" : caller(), t0, parts);
+			}
+		}
+	}
+
+	/** (SS, dev) ledger saves refused because a chunk or entity write was not known durable. */
+	static volatile int durabilityRefusals;
+
+	/** (SS) A ledger write refused: a chunk write not durable (a force that failed, a close that owes). Logged at ERROR; the ledger stays pending. */
+	private static void refuseUndurable(String what, java.util.List<String> undurable) {
+		durabilityRefusals++;
+		unsaved = true;
+		Architect.LOGGER.error("Stockpiles: {} did not write the ledger: {} region file(s) not durable ({}); it is written at the next save whose forces"
+			+ " succeed", what, undurable.size(), undurable.size() > 8 ? undurable.subList(0, 8) + " ..." : undurable);
+	}
+
+	/** (SS) A save with the world logs its parts at or above this (ms), and every one not periodic. */
+	static final double TIMING_LOG_MS = 50;
+
+	/** (SS) The save's parts, one line: "SS save: <why> total <ms> | players .. | chunks .. | io .. | ...". */
+	private static void logTiming(String why, long t0, String parts) {
+		double ms = (System.nanoTime() - t0) / 1e6;
+		Architect.LOGGER.info("SS save: {} total {} ms | {}{}", why, String.format(java.util.Locale.ROOT, "%.1f", ms), parts, testNoPeriodic ? " | noPeriodic" : "");
+	}
+
+	/** (SS) The first method outside the save helpers that asked for this save (Class.method), for the timing line. */
+	private static String caller() {
+		return StackWalker.getInstance().walk(f -> f.map(x -> x.getClassName().substring(x.getClassName().lastIndexOf('.') + 1) + "." + x.getMethodName())
+			.filter(n -> !n.startsWith("Stockpiles.saveWithWorld") && !n.startsWith("Stockpiles.saveCredit") && !n.startsWith("Stockpiles.caller")
+				&& !n.startsWith("Stockpiles.lambda$caller"))
+			.findFirst().orElse("?"));
 	}
 
 	/**
@@ -2526,22 +2786,31 @@ public final class Stockpiles {
 			refusedSave();
 			return;
 		}
+		long l0 = System.nanoTime();
+		boolean timed = srv != null && srv.isSameThread() && !SaveTiming.on();
+		if (timed) {
+			SaveTiming.start();
+		}
 		save();
 		if (srv == null || !srv.isSameThread()) {
 			return;
 		}
 		WorldJournal.kill("LF1"); // (TEST) the ledger on disk, the players not
 		long t0 = System.nanoTime();
+		SaveTiming.at(SaveTiming.PLAYERS);
 		srv.getPlayerList().saveAll();
+		SaveTiming.at(SaveTiming.OTHER);
 		double pms = (System.nanoTime() - t0) / 1e6;
 		playerSaves++;
 		lastPlayerSaveMs = pms;
 		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 		explicitSave = true;
+		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave = false;
+			SaveTiming.explicit = false;
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
@@ -2551,6 +2820,9 @@ public final class Stockpiles {
 		maxWorldSaveMs = Math.max(maxWorldSaveMs, ms);
 		Architect.LOGGER.info("Stockpiles: saved the ledger first, then the players and the world's chunks, in {} ms", String.format(java.util.Locale.ROOT,
 			"%.1f", ms));
+		if (timed) {
+			logTiming("ledger first (" + caller() + ")", l0, SaveTiming.stop());
+		}
 	}
 
 	/** (J1, dev) the ledger-first saves this session and the last one's players + chunks time (ms). */
@@ -2570,7 +2842,9 @@ public final class Stockpiles {
 		if (sv != null && sv.isSameThread()) {
 			try {
 				long t0 = System.nanoTime();
+				SaveTiming.at(SaveTiming.BOOKS);
 				int n = refreshBooks(sv);
+				SaveTiming.at(SaveTiming.OTHER);
 				double ms = (System.nanoTime() - t0) / 1e6;
 				bookRefreshes++;
 				lastBookMs = ms;
@@ -2588,10 +2862,12 @@ public final class Stockpiles {
 			if (PILES.isEmpty() && !Files.exists(f)) {
 				return; // a world that never had a stockpile keeps no file (0.17.0 worlds load unchanged)
 			}
+			SaveTiming.at(SaveTiming.WRITE);
 			Files.createDirectories(d);
 			Path tmp = d.resolve(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(toJson()), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			SaveTiming.at(SaveTiming.OTHER);
 			saves++;
 			unsaved = false;
 			lastSaveTick = ticks;
@@ -2608,6 +2884,7 @@ public final class Stockpiles {
 
 	private static void load(MinecraftServer server) {
 		SERVER = server;
+		RegionDurability.worldOpened(server.getWorldPath(LevelResource.ROOT)); // (SS) only this world's region files count
 		loadFrom(server.getWorldPath(LevelResource.ROOT).resolve("architect"));
 	}
 

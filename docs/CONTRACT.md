@@ -31243,6 +31243,7 @@ without them; slabs unpickupable and untransferable from declared containers; st
 - **Dev hooks:** `dev.fk.state` adds provided/heldProvided/providedItems/providedHolds/stripped/guarded; new `dev.fk.take` (the real menu, as a survival player), `dev.fk.pull` (a hopper minecart's pull), `dev.fk.transfer` (ItemStorage.SIDED, aborted), `dev.fk.guard`, `dev.fk.break` (survival break; `halt` writes `fkb-strip-halt.json` then halts), `dev.fk.slabs`.
 - **Gate (tools/lib/gatem5fkb.mjs):** fkb-unit, fkb-survival (incl. the negative hopper, repair = region removed and grown again under a new key, the creative instant fill and the bad declaration refused by the mod in a creative world: a survival instant placement stops at its op-actor check first), fkb-crash (FK2, FK3, FKC1, FKC2 with slabs, and the strip-then-halt case, here rather than in fkb-survival). The unit asserts the Transfer API target (class, extract descriptor, fields, the optional config); "applied" is asserted in game (`dev.fk.guard`).
 - **Ran:** units (unit-scope, full Gradle 1278/0, kit 1430/0, sidecar 909), step-inputs check, api-compat --baselines 8/8, gitleaks (branch commits clean); gate change run 20261115-074036 at a10c21b3: 8/8 PASS (fkb-unit 3/0, fkb-survival 28/0, fkb-crash 40/0, fk-survival 17/0, fk-crash 50/0, jr-crash 24/0, rl-crash 90/0, rs-survival-smoke 40/0). Per-slice verifier skipped (speed rule 11: once per release, by the coordinator).
+- **Release-review fix (v0.72.0 GPT review, 2 blockers):** (1) `Fills.atStart` runs at START_SERVER_TICK (`Builder.fillsAtStart`), before any level ticks, so an FK3 replay's hopper can't push before the reconcile; and `FillGuard` asks `Fills.guardedSite` (FILLING too), so the declared containers of a site saved mid-fill stay guarded. (2) `Fills.providedFits`: provided items go only into the template's declared block, never a dropper or dispenser; a swapped live block blocks the fill (it waits, `SWAP_REFUSED`), `writeBack` returns no provided item there (destroyed), and `creative` skips it. Gate: FK3-eject (fkb-crash; a chest under a declared hopper) and a hopper swapped for a dropper mid-fill (fkb-survival, `dev.fk.swap`); units FillsFKBTest +2. Ran after merging main 47630ede (J2's `settlePendingCredits` runs first in the same START-tick `atStart`): unit-scope PASS, step-inputs 426 OK, gitleaks clean; gate change run 20261115-154050 at e8bd209b: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. Verification follow-up (a resized library head moved a rotated site's fill cells): `Fills.world` derives the template size from the site's stored box and rotation (extents swapped for odd turns), never the head; every fill path goes through it. Unit FillsFKBTest +1 (11/0); gate run 20261115-161244 at 3905f771: fk-crash 58/0, fkb-survival 30/0, fkb-crash 48/0. No in-game resize case (it needs a versioned library re-cut; the unit covers the transform).
 - **Leftovers:** an all-provided fill whose blocks all went before its removal never credits (`Stockpiles.credit` returns early), so `provided`/`heldProvided` stay, as FK's `filled` marker does; bundles and drag covered by the code path only.
 
 ## Slice JR, journal vs autosave refunds (branch `slice/JR` off main 551b7a47; 2026-11-13; DEV MODE, survival accounting strict)
@@ -32271,6 +32272,110 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
 | RL5: a player's block in a lot cell after the save | charged to the stock | 1 player cell uncharged; standing 388 = paid 388; second load changes nothing |
 | RL5 F10 roads + JR-b residual at the removal | the road cell refunded from its record | dropped as the player's; refund 385 = paid less the two cells and the popped torch |
 
+### Slice SS as built (save spikes; branch `slice/SS` off main 1d195edb, main 91ce29bf merged; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Profile** (`SaveTiming` plus timing-only mixins on ChunkMap, ServerLevel and MinecraftServer's save; one `SS save: <why> total .. | players | data | chunks | wait | poi | unloads | io | entities | leveldat | books | write | chunksSaved | forced/skipped | waitsSkipped` line per explicit save, autosave and `/save-all`). In run 1 (41fc9168, timing only), the spikes were not the ledger's own parts (books ≤ 2 ms, write ≤ 4 ms). They came from two parts of vanilla's flushed save. First, **chunks**: `saveAllChunks(true)` waits (`managedBlock(isReadyForSaving)`) for every accessible chunk's pending load or generation; for example, a crate created while chunks loaded spent 920 ms there with 70 chunks saved, and this caused the 714-998 ms maxima. Second, **io**: every flush forces (F_FULLFSYNC on macOS) every region file the storages hold open, written or not; 137 ms with 0 chunks saved. The removal saves (`Groups.credit`, JR's K5/RVU2) peaked at 338 ms, mostly real writes (189-595 chunks).
+- **Fix: neither of the brief's two options.** The profile showed the cost was in syncing files with no writes and waiting for chunks with no changes, not in the build's own chunks. The order (players, then chunks durable, then ledger) and every kill point are unchanged.
+  1. `RegionFileFlushMixin` + `RegionDurability` (the rules; the mixin only reports a file's events): `RegionFile.flush` skips the force of a
+     file known clean, i.e. no write since a force of this object that returned normally. Every world save.
+  2. `ChunkSaveWaitMixin`: only inside `saveWithWorld` / `saveLedgerFirst` (`SaveTiming.explicit`), the per-chunk wait is skipped for a chunk
+     with nothing unsaved or still a ProtoChunk. An unsaved LevelChunk (or the LevelChunk an imposter wraps) is waited for and saved as before.
+     Vanilla saves (`/save-all`, autosave, the stop's save) wait as vanilla.
+  3. After the GPT review (SAFE-WITH-FIXES, 1875b15d), fixed in 94a2b371:
+     - each object starts unknown;
+     - a close owes until its force returns;
+     - one device barrier per world save (`RegionStorageBarrierMixin`, `SaveEpochMixin`);
+     - the ledger is published only over durable writes;
+     - an autosave whose IO wait failed writes no ledger.
+  4. After the GPT verification (498398ce; findings 1 and 5 resolved), fixed in 8e6e3324:
+     - the `.mcc` additions reverted to vanilla;
+     - owed paths retried at each ledger save, and the tracking scoped to the running world;
+     - a force's epoch taken when it starts;
+     - behavioural probes for the wait decision, a refused publish, and retry then publish.
+  Switches (TEST): `dev.stockpile.ps {forceAll, waitAll}`, `-Darchitect.regionForceAll`, `-Darchitect.chunkWaitAll`.
+- **Why skipping a force can never leave a chunk write unforced when the ledger is written:**
+  - **Every write is counted.** A RegionFile's channel is written only by `writeHeader` (each call is one write generation), by `write`'s sector
+    writes. Those are followed by `writeHeader` on every path that returns; a `write` that throws before `writeHeader` left
+    nothing a force could make durable: vanilla reports the chunk save failure, and a force could not save it, with SS or without (a failure inside the
+    save's own `synchronize(true)` fails it, and no ledger is written). and by `padToFullSector` (only in `close`, which forces).
+    `writeToExternalFile` writes an oversized chunk's own `.mcc` channel: vanilla never forces it or its rename (see the leftovers). `RegionFileFlushSSTest` pins this against this version's bytecode.
+  - **Only a returned force covers.** A force records the generation it read at its start, and only when `flush` returns normally. A force
+    that throws covers nothing, so the file is forced again at the next flush. A write counted after a force began is never taken as covered.
+  - **Same object reused.** The object's counters persist with it across saves in the storage's cache.
+  - **New object.** A RegionFile object opens unknown (`forcedAt = -1`), so its first flush forces it, whatever an earlier object for the same
+    file did.
+  - **Failed close.** A close (eviction, storage close) of an object with uncovered writes records its path as owed. Vanilla removes the cache
+    entry and closes the channel even when the close's force throws. The owed path is cleared by that close's successful force, by a later
+    object's successful force of the same file (fsync is per file, not per descriptor), or by `retryOwed`: before every stockpile ledger
+    write, each owed path of the running world is reopened and forced. A recovered disk clears it. A path that still can't be forced keeps
+    the ledger refused, and is logged at ERROR with its path. Only files under the running world's directory count, and everything is
+    forgotten when the world closes.
+  - **Two saves in flight.** A storage's writes (`IOWorker.runStore`) and its `flush` run on its consecutive executor, one task at a time.
+    `synchronize(true)` runs the flush task only after every write queued before it has completed, `writeHeader` included. Each storage (chunks,
+    entities, POI, per level) has its own RegionFile objects.
+  - **The check before the ledger** (`RegionDurability.undurable`):
+    - `saveWithWorld`, and a flushed world save's AFTER_SAVE, publish the ledger only when no live chunk or entity region file has a write
+      generation no successful force covered, and no path is owed. An autosave checks the chunk files: J1's wait forces those.
+    - POI is outside the check: vanilla's flushed save never forces POI, and no ledger fact lives there.
+    - On a refusal:
+      - an explicit save throws, as a failed flush already did, so its caller does not drop the removal or the credit after it;
+      - the periodic save and the autosave log at ERROR and leave the ledger pending.
+    - An autosave whose chunk IO wait failed writes no ledger (finding 5, older than SS).
+  - **The device barrier.** On macOS, `force` is F_FULLFSYNC, which also flushes the drive's cache. Vanilla's flushed save relied on that for the
+    player files written just before it (O_SYNC, not a device flush). When a storage's flush ends and no force has returned in this world save,
+    one of its files is forced anyway: one force per save instead of one per open file. A force counts for the save in which it *started*
+    (its epoch is taken in `skip` and `closeForcing`), so a force from an earlier save, whose return hook runs late, is never this save's barrier.
+  - **Evidence:**
+    - `RegionDurabilityTest` (11): the rules without Minecraft, including a retry after the disk recovers, a missing owed file failing
+      closed, the world scope, and the epoch taken at a force's start.
+    - `SaveProbe`, `dev.stockpile.ss {probe}` in ps-crash's hopper world: ten cases on real RegionFiles with the mixins applied:
+      - a first open, a clean flush, a write then a flush;
+      - a failed force retried, a failed close then a reopen;
+      - the barrier once per save;
+      - ChunkSaveWaitMixin's decision (`SaveTiming.skipWait`): a dirty imposter waits;
+      - an earlier save's unforced write forced before the ledger;
+      - an owed chunk file refusing the ledger in a save with the world and in an autosave (the real callback);
+      - the disk recovering, then the next autosave retrying the path and publishing.
+    - The kill steps (`Runtime.halt` keeps the page cache) prove the order, not the durability.
+- **Bench** (the same four worlds, the same regex; `artifacts/gate-runs-ss/save-bench.mjs`), "saved with the world's chunks" lines:
+
+  | run | rs-survival-smoke, jr-crash, hf-crash, ps-crash | load1 mean / max |
+  |---|---|---|
+  | before (run 1, 41fc9168) | 326 saves: p50 37.1, p90 95.5, max 997.8 ms | 29 / 61 |
+  | after (run 2, 5fea7bd2) | 302 saves: p50 20.6, p90 92.5, max 376.4 ms | 67 / 128 |
+  | after the review (runs 4-5, 94a2b371 / adb7329b) | 327 saves: p50 15.0, p90 44.7, max 896.1 ms | 27 / 81, 43 / 75 |
+  | after the verification (run 6, 8e6e3324) | 328 saves: p50 18.8, p90 69.8, max 1113.1 ms | 43 / 100 |
+
+  - The rest of run 2, under more than twice run 1's load:
+    - region forces: 1001 made, 1651 skipped;
+    - `Stockpiles.create` max 998.8 → 376.9 ms (the chunks part 920 → 10 ms; what remains is the wait for unsaved chunks still promoting, up to 315 ms);
+    - feed saves max 560 → 98 ms;
+    - removals (`Groups.credit`) max 338 → 306 ms, p50 29 → 22 ms.
+  - Runs 4-5: 0 ledger refusals, 36 device barriers, 1172 forces made and 1793 skipped. The 896 ms max is a jr-crash removal credit that saved 925
+    chunks and spent 735 ms waiting on unsaved chunks not yet ready, a wait SS keeps on purpose.
+  - Run 6: the 1113 ms max is a feed save under load 100, 1068 ms of it the kept wait for unsaved chunks not yet ready. The only 2 ledger
+    refusals were the probe's own, intended ones. 37 barrier forces.
+  - **Leftovers, inherited from vanilla:**
+    - oversized external chunk payloads (`.mcc`) aren't durability-tracked;
+    - a chunk write that fails before it reaches the region file is only reported, by vanilla, and no force could save it.
+  - Removals stay bound by their real writes. Leftover: unflushed saves while a removal runs, so its final flush is small.
+  - Vanilla `/save-all flush` world saves still reach 1.3 s under that load (io on files the eager saves wrote).
+  - RL's book refresh (the 10 s periodic save's refresh): max 9.2 ms over every logged save, including sad-crash; report-only, not a spike source.
+  - J1's autosave IO wait: 14.3 ms (2 autosaves).
+- **Steward RC:** no API change. A ledger save over a region write that is not durable is refused (an explicit save throws, as a failed
+  flush did). The mixins change vanilla's save behaviour: the force skip and the one barrier on every world save, the wait skip inside Architect's saves with the world. Expect shorter stalls at crate, feed and credit saves.
+- **Checks** (rule 11 scope, `--out artifacts/gate-runs-ss`, 8906:8907):
+  - Run 1 (41fc9168, before): rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0.
+  - Run 2 (5fea7bd2): jr-crash 24/0, hf-crash 38/0, ps-crash 45/0, sad-crash 24/0, rs-survival-smoke 36/1 (item 10's plan check ran out of
+    its 120 s budget under load 128; not the save path). Run 3: rs-survival-smoke 40/0.
+  - After the review, run 4 (94a2b371): rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0 (HF1, AS1), sad-crash 24/0 (SAC1/SAC2). Its
+    ps-crash failed at once: the probe ran before a world was open. Run 5 (the probe moved into the hopper world): ps-crash 55/0, all 9 probe
+    cases held.
+  - After the verification (origin/main bbdffc4d merged), run 6 (8e6e3324): rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash
+    56/0 (all 10 probe cases), sad-crash 24/0.
+  - Gradle build 1303 tests, 0 failures (1 skipped); unit-scope PASS; kit 1426/1426 (before the review); step-inputs 423 clean; api-compat
+    `--baselines` 8/8; gitleaks clean. jr-crash-v063, rl-crash and sad-survival not run (rule 11, deferred to the release).
+
 ## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
 
 Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
@@ -32360,18 +32465,191 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state goes to plan.json's `survivalTerrainWritten` (group -> {item: n},
   outside the IR, forwarded by the sidecar), which `Quotes.mayAlreadyHold` counts as covered: the shells leave the may-stand note. Farmland
   joins `TERRAIN_BLOCKS` and the mod's `TERRAIN`.
-- **Steward's 209 -> 210 (crop-farm-067):** the lot was priced over the land before the plan's own earlier tiles write. The growth's pads
-  write grass on the lot's floor row; one template dirt (1811,64,71965) sat over the land's own dirt, a no-op in FullBom's simulation, so it
-  went unbilled (209) until grass spread onto it (210); at put-down the pads' grass stands there and the realise pays it (consumed 205 + 5).
-  No mob was involved. (Billing every queued cell instead broke qt-growth: reverted.)
-- **D'' (the fix):** the kit keeps each lot's ground (plan.json `lotGround`): the writes of the tiles the realise puts down before the lot
-  under its box +-1 (earlier stages and its own stage's tiles, RegionsImpl.deps), per cell in realise order with their conditions, as column
-  runs (`LOT_GROUND_RUNS_MAX` 16384 per lot; past it {capped} and the quote names the lot inexact; about 25 KB for a 20 x 21 farm lot).
-  `Quotes.ground` applies each write where its condition passes on the cell as it then stands (not ours); FullBom prices the lot over it,
-  inside the template's box only (the fill and approach are planned over the land now, and priced so). The realise path is unchanged.
-- Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (10 pairs).
-- Units: igb (the shells' `survivalTerrainWritten`; the lot's ground), `QuotesWrittenQLBTest`, `QuotesLotGroundQLBTest`, `FullBomTest` (a lot
-  over its pads' grass bills the dirt; no ground, the land's dirt stays free).
+- **Steward's 209 -> 210 (crop-farm-067):** one template dirt (1811,64,71965) sat over the land's own dirt, a no-op in FullBom's simulation,
+  so the quote left it out (209) until grass spread onto it (210); the realise pays it either way (consumed 205 + 5). No mob was involved.
+- **The fix (after the v0.72.0 review; D'' withdrawn):** a construction lot's conversion clears every queued cell to air and the builder
+  writes each back (`Builder.planConvert`, `Builder.clear`), so every queued cell is paid, one the land already held too. `FullBom.compute`
+  now bills each queued cell at the simulation's state (the world's when the write changed nothing; only a cell that ends as air is free).
+  D'' (plan.json `lotGround`, the land the earlier tiles leave under a lot) is removed: inside the template's box every cell is the
+  template's, so the overlay could only make a cell free (the review's grass-over-grass case) or, capped, price the original land.
+  No queued cell is free in the quote, so consumed <= quote over the cells the quote's plan and the realise's share. A lot's fill or approach cells the land already holds are billed and counted (`standingOutside`): the realise
+  plans those over the land its tiles leave and can plan fewer (qt-growth's cottage: 3 approach dirt), so the quote names them and is
+  inexact. qt-growth now judges an exact quote equal and an inexact one an upper bound, item for item.
+- **Leftover (accepted; a candidate for the next quote slice):** a realise whose approach comes out longer than the quote's (the plan's tiles
+  lower the land in front of a lot) pays for cells the quote never planned. With a maxBill set, the realise waits
+  bill_cap; callers that set none, including Steward before its QD, can consume past the quote. Not seen in any gate. (Fixed in QL-c.)
+- Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (rv3 in 10 pairs at 210).
+- Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`, `FullBomTest` (grass over grass billed as over dirt, the review's
+  case; a 96 x 96 dirt floor over dirt bills all 9216; an approach path over a standing path billed and counted).
+
+### Slice QL-c as built (2026-11-15)
+
+- **The land a lot goes down on:** `Regions.quote` now plans each lot's approach over the land the realise finds (`site.QuoteLand`, set on
+  the quote's thread with `QUOTE_ROADS`): every cell the plan's 4e roads write (air included), then the tiles' writes in the lot's approach
+  window, each decided by TileCheck's own code (`Realised.decideCell`, which TileCheck now calls too): a road's or another entry's cell held,
+  a failing condition skipped unless the cell is an incidental player block, the cell's own state a no-op, ALWAYS_OURS over the region's own.
+  A kept build's cell is the realise's consent's to decide: the lot is planned both ways and bills the larger of each item, inexact. The verdict's terrain reads (outside the placed box's columns) and the entrance style's surfaces read
+  it; the tiles' queued cells are the style's region ground (a first realise's quote style now has a group) and their walk cells road cells.
+- **The kit:** plan.json's `approachGround` (lotId -> {seqs [[state, cond, walk]], runs}, `approachGroundOf`; `{}` when no lot has a write,
+  `{capped}` past 16384 runs): the window is the lot, 5 cells across its front either side, 26 rows out of it, floorY +-50. Sidecar forwards it.
+- **Case 1** (planned gravel road): joined as gravel, 9 gravel, as the realise. **Case 2** (a path tile shortens it): 3 rows, 9 gravel, and
+  **case 4** (tiles lower the land): the realise's longer approach, cell for cell. A lot whose approach land the tiles change is billed that
+  approach and named inexact (the tiles' writes are the plan survey's); one whose land can't be known (capped, a chunk not loaded, an unknown
+  state, a plan made before QL-c) is inexact with a note saying the approach may differ either way: with a maxBill set, the realise waits
+  bill_cap; callers that set none, including Steward before its QD, can consume past the quote.
+- **Case 3** (farmland moisture): `Quotes.standing` compares the block as the region run does (`builderHolds`: `Builder.Run#matches` while a
+  target builds); grass where dirt is planned is still billed.
+- Units: `QuotesApproachQLCTest` (the four probes, the GPT review's walk over incidental cobblestone (9 gravel, not 18 dirt), a kept build
+  both ways, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
+- **Leftovers:** a later-stage tile that writes over an approach is not modelled (it does not change the lot's plan); the both-ways bound
+  covers a kept build's cells all written or none, not a mix; the box's own columns are still priced over the land now (QL-b).
+
+## Slice J2, journal and removal durability backlog (branch `slice/J2` off main 91ce29bf; 2026-11-15; DEV MODE, strict; versions NEXT; $0, sim only; DRAFT for Steward's review)
+
+Strict tier (journal, removal, custody, crash recovery). Speed rule 11 (Noah, 2026-11-15): each item's own kill or reproduction case plus
+the existing crash steps the change directly touches; scoped units, the full Gradle build (journal is shared core), gitleaks; no full gate
+and no per-slice verifier. **API: no new type or method;** item 1 changes which entities block a removal (behaviour, so Steward RC).
+
+### 1. The intermittent apitest refusal (apitest.mjs:375): investigated, not a race
+
+- **Finding.** All three recorded failures refused site B for an entity, not a busy state: `"bee at 114, 71, 54"` (QL, 0.67.0 jar),
+  `"bee at 118, 72, 55"` (CP, 0.70.0), `"bee at 116, 65, 52"` (CP, 0.68.0), each inside B's restore box (e.g. s2: box y 62-73, restore box
+  x 110-120, y 50-73, z 52-67), in air above or beside the cabin. `Occupancy.classify` makes every wild animal `LIVING`, keep=true, and
+  `Sites.removalBlockersOf` refuses on any such entity in the whole restore box. apijars deletes and creates each jar's world
+  (`G6A Jar<ver>`) every run, and whether a bee is in B's box at that moment is chance: hence "a random old-API jar per run" (inferred
+  from gate6a.mjs and the three records; not yet reproduced live). Site A's removal before it plays no part.
+- **Why it is a product fix, not a test fix.** apijars runs each tag's **archived** `tools/apitest.mjs` (gate6a.mjs `apijars`), so a
+  retry in today's script never reaches the three old baselines; and the refusal's own reason ("removing it puts the old terrain back
+  over them") does not hold for a bee in a cell that stays air.
+- **Rule (proposed).** A wild living entity (`Kind.LIVING`: not a player, not OWNED (tame, owned, leashed), not hostile, not an item) in
+  a removal's box blocks only when the removal **changes the state of a cell its bounding box overlaps, or of the cell it stands on**
+  (a cell whose journal top layer is this site's and whose before differs from the world now). That covers burial (stone, leaves,
+  logs), harm without burial (water, lava, fire, powder snow written into its cell) and a floor taken from under it, with one simple
+  test. Otherwise it stays where it is and is not listed. Named animals follow the same rule (they are not harmed either). Everything else that blocks today (pets, players' items,
+  containers, block entities, item frames, armor stands, `OTHER` entities, dropped items) is unchanged, and placement is unchanged.
+- **Where.** `Sites.removalBlockersOf` (and `Adopt.blockers`' entity part if it shares the loop), one pure helper over (entity box
+  cells, written cells' states) so it unit-tests without a world. Both the single-site and the Groups removal read it.
+- **Gate.** Units for the helper (bee in an air cell the removal leaves air: not a blocker; bee in a cell the restore fills, or writes
+  water into: blocker; cow standing on the site's floor: blocker; cow on unchanged grass inside the box: not a blocker). In game (apitest survival, new check
+  after rmB's): `/summon bee` at a known air cell of a fresh instant site's box, `remove - noforce`: removed, refund 0, the bee alive;
+  a second site with a bee summoned inside a cell its restore makes solid (its foundation): refused naming the bee. apijars (the
+  three archived scripts) then pass the instant-remove check.
+
+### 2. FK's durability leftovers (with PS's leftover of the same shape)
+
+Reading the code on main (J1 added `Stockpiles.saveCredit` in `Builder.dropDeconstruction`, closing "credits without a save" before the
+record drops), the remaining loss path is **inside that save**: `saveWithWorld` writes players, then the chunks (flushed), then the
+ledger. A kill after the chunk flush and before the ledger write (or any crash where the restored chunks reached the disk and the
+credit did not) leaves, at the next load: the journal UNDONE, the record pending "removed", the world restored, and the ledger with the
+custody (FKC1's save) and the paid record but no credit. **This is read from the code, not yet reproduced**: J2's first step
+on item 2 is the CS1 kill (below) on main, which must show the loss before the fix. The settle RELEASEs the site; `Fills.atStart` skips the key (no site record);
+nothing credits it: **the containers' contents and the site's block refund are lost**. A plain (unfilled) single-site removal loses its
+block refund the same way.
+
+- **2a, roll forward from the pending record.** The single-site removal stores its prepared deconstruct credit (owner, key, items, drop
+  cell; the shape Groups keeps in its queue file as `decCredit`) in the site's `Site.Pending` record, which R3 already writes
+  synchronously before the world writes (additive JSON field; an old record without it reads as today). At load, the settle that
+  RELEASEs (or KEEPs as removed) a pending site whose key is not `credited` books that credit once (custody included, capped by the paid
+  record as at removal), then `saveWithWorld`. RECOVER (the site stands again) drops the stored credit and the custody goes back (2b).
+  `credited(key)` keeps it exactly once whichever save landed.
+- **2b, custody resolved by the journal, not by who holds it in memory.** At load a custody key resolves by its placement's journal
+  state: a removal still queued (Groups' saved removal; a filled site is a construction site, so a single one never takes the
+  `removeLarge` job path and always removes synchronously) keeps it for that removal's credit;
+  a placement settled removed credits it (2a; Groups' members through their queue file as today); only a placement standing with no
+  committed removal gets it written back. Today `Fills.atStart` writes back whenever the site stands and `Groups.leaving` is false,
+  which is what lets a stalled **Groups** removal's retry wipe the contents uncredited. **To reproduce first** (unit plus in-game kill) and name
+  the exact stalled shape in the as-built; if it turns out narrower, the fix is the narrow one.
+- **Kill points (new, TEST):** `FKS1` (single site: custody saved, before the commit), K6 on the single-site path with a fill, `CS1`
+  (a credit's save: players and chunks on disk, the ledger not; the existing FK3-style halt, armed only around `saveCredit`), and the
+  stalled-retry case from 2b. Each judged against the saved state: items in = items out per item, no custody left, nothing minted.
+- **Files.** `Sites.java` (removeDetailed, the settle), `Site.java` (Pending), `Builder.java` (Deconstruction to and from JSON),
+  `Stockpiles.java` (the CS1 switch), and **`Fills.atStart`'s custody loop (FK-b's file)**: see Q2.
+
+### 3. J1's deferred gate-only cases (code already on main)
+
+As J1's as-built sets them up, in `tools/lib/gatem5rl.mjs` / `gatem5ru.mjs` (new cases, existing steps): (a) **crash + swap**: rl-crash's
+world, a construction delta's swap queued (`dev.site.delta.apply`), a save, halted mid-swap (`dev.stockpile.halt`); (b) **a middle
+revision under a newer one**: ru-crash's world, a growth, a second growth approved while the first builds, a cancel of the middle one,
+kills at RVU1 and RVC1; (c) **a halted terrain target**: a gate6crs rs world, an rs01-style RegionTargets terrain target fed after a
+save, halted, its book reconciled. Each: the saved ledger off the disk, after the restart what stands paid = the paid records, no mint, no
+loss, a second load changes nothing. A failure found here is fixed in J2 (strict) unless it needs another slice's files (then reported).
+
+### 4. UMT open findings (docs/UMT.md)
+
+`./gradlew umtFindings` on main 91ce29bf: F9 (head room), DPT, F10, PTS and both UC repros fail; F9's solid-cell repro passes only
+through `UmtRunner.known`. **J1's "Roads F10" is the audit's F10 (a player's matching block in a road), not UMT's F10** (a plant over a
+delta-cleared cell), which stays open.
+- **F9:** `Sites.evidence` for a road (CELL policy): a cell whose after is air (or the road's solid surface) that a later restore of a
+  lower entry rewrote is not standing evidence (F1's `laterWrite`, extended to road cells); the road settles RELEASE, never recovered.
+- **DPT:** `SiteDeltas`' D7 commit carries each cell's PT record (`ptSource`) into the rewritten `Cell`, so the removal restores the
+  player's block with its record.
+- **F10 (UMT):** confirm in game first (a lot over short grass, a delta clearing the grass block under it, the removal); if real,
+  `SiteJournal.restore` writes supports before what they hold over the union template (or re-places the dependent cell after).
+- **PTS:** isolate between `SiteJournal.restore`'s PT expectations for a lower entry and the model (`UmtWorld.restoring`); fix the side
+  that is wrong (a model fix is test-only).
+- **UC:** see Q3. Each fixed repro moves from `UmtFindingsTest` to `UmtPropertiesTest` (the file's own rule).
+
+### Gate (rule 11)
+
+Units: the item-1 helper, 2a/2b (pending-record round trip, the settle's credit once, custody resolution), each fixed UMT repro; scoped
+units; full Gradle; kit full suite once; `step-inputs check`; `api-compat --baselines`; gitleaks. In game (8916/8917 after FK-b merges):
+apitest survival + apijars (item 1); fk-crash with the new single-site cases (2); rl-crash and ru-crash with the new cases (3); umt; and the
+crash steps the code touches: ps-crash, hf-crash (CS1 sits in `saveWithWorld`), jr-crash, jr-crash-v063, sad-crash (settle).
+
+### Steward RC areas
+
+Removal blockers: a wild animal in a site's box no longer refuses its removal unless the removal would bury it or drop it (pets, named
+or not, still refuse; nothing else changes). After a crash inside a removal's save, the refund and the fill's contents come back once.
+No API surface change.
+
+### Open questions (for Steward, through the coordinator)
+
+1. **Item 1's rule.** (a) as proposed: a wild animal blocks only when the removal changes its cell or its floor; (b) narrower: only
+   entities not on the ground (bees, bats, flying parrots, allays) in cells the removal leaves unchanged; (c) keep the product rule and
+   fix the harness: gate6a's `apijars` is current code (not archived), so it can clear wild mobs near the apitest spots before each
+   archived script runs; (d) keep everything and accept the flake. I recommend (a) (a wandering bee can stall any caller's removal,
+   Steward's too); (c) is the choice that leaves removal behaviour alone. Does Steward rely on a wild animal refusing a settlement removal anywhere (for example as a
+   "something is in the way" signal)?
+2. **FK-b and SS overlap.** FK-b's branch does not touch `Fills.atStart`, `writeBack` or `takeCustody` (checked against
+   origin/slice/FKB), but it adds `provided` stacks to the same fills, and its Builder/Sites edits are one line each. SS's branch adds
+   timing to `Stockpiles.saveWithWorld` (no change of order or flushing), where CS1's halt goes. I propose items 1, 3 and 4 now and item
+   2's code after FK-b and SS merge (rebased on both); provided items then follow 2a's pending credit (taken back, refunded nothing).
+   OK, or should FK-b carry 2b?
+3. **UC scope.** UC is the class "the journal is durable ahead of the chunks"; a general fix is on SS's save path. I propose J2 fixes only
+   the two minimal repros if their settle logic can tell (evidence-side, no save-path change), else tags them for SS and reports. OK?
+
+### Changes from Steward's review (2026-11-15, through the coordinator: accepted)
+
+- **Item 1 is (a), for unnamed wild animals only.** An animal with a custom name, and every player, keeps blocking anywhere in the box
+  as today: Steward's `StewardMotion` steps the named steward out of a box before an undo and relies on that refusal. Gate both: a bee
+  in the air inside the box no longer blocks; a named mob anywhere in the box (in a cell the removal leaves unchanged) still blocks.
+- **Item 2's code waits until FK-b and SS merge** (accepted); items 1, 3 and 4 build now. **UC** as proposed (accepted).
+- **Steward RC areas (added):** an undo with the steward standing near the box, and an undo with a bee in the air inside it.
+
+### Slice J2 as built (branch `slice/J2`, main bbdffc4d and `slice/SS` f9165df2 merged; versions NEXT; $0; strict; recorded 2026-11-15)
+
+- **Item 1:** `Sites.removalBlockersOf`: an unnamed `LIVING` animal blocks only when `wildHarmed` (the removal changes a cell its box overlaps or the
+  cell under its feet); named animals, pets and players block anywhere, as before. apitest survival ALL OK (a named bee refuses, an unnamed one
+  doesn't and lives); apijars 12/0. Units `RemovalWildJ2Test`.
+- **Item 2:** a single-site removal holds each stockpile deconstruct's credit pending in the ledger (`StockLedger.pendingCredit`, additive) and
+  saves it with the custody before its journal commit; a save SS refuses (a chunk write not durable) ends the removal unwritten (custody and
+  credits back). The start (`Stockpiles.settlePendingCredits`, first in `Fills.atStart`) books a settled removal's pending credit once, custody
+  included; a standing site's is dropped; a still-pending one is left. A refused credit save leaves it pending (`saveCreditPending`). Kill point
+  CS1 (inside a credit's save, after the chunks): fk-crash CS1, the pending credit on disk booked at the start, back 123 = paid 123. 2b (the
+  stalled removal's write-back) not reproduced on main after FK-b; custody keys with a settled removal now credit before any write-back.
+  Cost: one more world save per single construction-site removal (before its commit).
+- **Item 3:** RL6 crash + swap found a loss (21 oak planks: the swap's give-back lost with the unsaved ledger); fixed in `Stockpiles.reconcile`
+  (`swapOldCost`, `Builder.swapRefunds`, refundSwap's rule, out of the record, before the charge; once: the give-back and the new block's
+  charge share a tick, so a saved give-back never leaves the cell ahead): swapBack oak 21, standing 389 = paid 389. RL7 (rs01_land, `c2`) passes.
+  `ru-crash-mid`: the middle-revision case can't arise (OVERLAP_BUSY while a growth revises), gated as that guard.
+- **Item 4:** F9, DPT, PTS fixed in production, F10 a UMT model gap; repros in `UmtPropertiesTest`; seed 207's F5 rehashed. UC to SS.
+- **Gate (rule 11, 8916/8917):** 20261115-085918 (umt 37/0, apijars 12/0, jr-crash, jr-crash-v063, rl-crash, sad-crash), 20261115-095948
+  (ru-crash-mid 8/0), 20261115-1232 (after SS and the fixes: jr-crash 24/0, rl-crash 90/0, rl-crash-j2 34/0, ps-crash 56/0, sad-crash 24/0,
+  fk-crash 58/0 with CS1). Gradle 1318 tests, 0 failures (1 skipped); kit 1426/1426; step-inputs 425 clean; api-compat 8/8; gitleaks clean.
+- **Steward RC:** removal blockers (unnamed wild animals only when harmed); a single site's removal saves once more before its commit, and a
+  removal SS's durability check refuses now ends unwritten (JOURNAL_UNAVAILABLE) with its fill's contents back.
+- **Leftovers:** DPT's records live in memory across a DeltaJob (a resumed job carries none); UC (SS); a swap cell mined by a player before a
+  crash-lost swap: the give-back is capped by the record, not by what stood.
 
 ### Slice CF as built (branch `slice/CF` off origin/main d2580363; composer feedback from PAY's P1 diagnosis; no API change; $0; light; recorded 2026-11-15)
 - **Evidence in repair answers** (`sidecar/src/compose.ts`): `partAnswerLine` adds an `evidence:` line under each reason (`evidenceText`: arrays cut to 6 items plus "+N more", JSON truncated), at most 600 characters a reason, 1,500 a part and 12,000 a check (`EVIDENCE_*`); past that "evidence omitted". The caravan's `walls: [{court_wall, sealed: true}]` now reaches the model.
@@ -32381,3 +32659,11 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
 - **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
 - **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
 - **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).
+
+### Slice CF2 as built (branch `slice/CF2` off origin/main 9f12f64a; compose follow-ups from PAY's P2 diagnosis; no API change; $0; light; recorded 2026-11-15)
+- **Required zone short of its lots** (`kit/lib/plan/finish.mjs` `markLotsShort`, `lotsShortAllowed`, `LOTS_SHORT`): after the maxCells pass, a *required* zone answered fits/adjusted (not grown) whose count deviation (unplaced lots) exceeds its allowance gets a `LOTS_SHORT` reason ("N of the zone's M lots did not fit (P placed; at most A may be left out): give the zone more room ..."; evidence `{what: count, lots, placed, unplaced, allowed, ids}`). Its class, geometry and cost stay adjusted (its placed lots still build), and `overallOf` answers NEEDS_REPAIR for it (an artifact is still made). Optional zones and zones within the allowance answer as before.
+- **Allowance:** the zone's own `tolerance.count.max` when the plan writes one, else `floor(lots / 3)` (more than a third unplaced is a repair target). The kit's default count tolerance (max 0, ceiling Infinity) stays as it was: soft and unbounded for every other purpose. plan/0's schema and the Java `Overall` enum are unchanged; NEEDS_REPAIR now also covers "a required zone short of its lots" (`PlanCheck.Overall`'s javadoc still says "another part is not fits or adjusted": a doc follow-up).
+- **Compose** (`sidecar/src/compose.ts` `lotsShortOf`, `needsRepair`): `repairable` counts a LOTS_SHORT zone (so `repairStop` no longer says nothing_to_repair and the repair round runs); the repair prompt lists it with its reason and evidence (and its "N of M part(s) fit or adjusted" now counts classes); `waitsOf` lists it with `lotsShort {lots, unplaced}` and `waitSay` words it "U of the L buildings in <name> didn't fit here". A plan that ended COMPOSED with 3 of 9 lots now repairs, and ends NO_PLAN if the repair doesn't fix it.
+- **Composer rules** (`kit/prompts/composer.md`, general, no scenario nouns): slopes: on a steep slope or hillside with many lots prefer districts by `levelBand` over one small zone with a single street, and size every zone and district to its lots and street; forms: a form a zone stands inside (hollow mountain, crater) is its land, so when the check refuses or shortens it for room, enlarge the form (`size`; `height` and `halls`) before cutting lots or changing layout; repair: a LOTS_SHORT zone needs more room before fewer lots. The system with families + 28k caller rules is 119,493 characters (< 120,000; about 500 left).
+- **Replay** (P2 diagnosis `replay3.mjs` over `paid/scenarios/s3-pay/raw/plan`, $0): the recorded S3 plan (monastery 3 of 9 lots) answered READY; it now answers NEEDS_REPAIR, the monastery adjusted with LOTS_SHORT "6 of the zone's 9 lots did not fit (3 placed; at most 3 may be left out)".
+- **Tests:** `kit/test/cf2.test.mjs` (allowance, marking, real checks: required short NEEDS_REPAIR with artifact; optional, within a third, within its own max READY; a tighter own max repairs); `sidecar/test/compose-cf2.test.ts` (repairable/repairStop, repair prompt, waits in words, the rules lines, the 120k budget); `sidecar/test/compose.test.ts` (real kit: NEEDS_REPAIR then a repair round with the LOTS_SHORT line, then READY: COMPOSED).

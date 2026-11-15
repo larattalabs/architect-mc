@@ -59,13 +59,52 @@ export function survivalCostOf(st) {
   return o;
 }
 
-/** The overall result (§3). */
+/** The overall result (§3). (CF2) A required zone short of its lots (`lotsShort`) answers NEEDS_REPAIR too, though it stays adjusted. */
 export function overallOf(answers, { malformed = false } = {}) {
   if (malformed) return 'MALFORMED';
   if (answers.some((a) => a.class === 'incomplete')) return 'INCOMPLETE';
   if (answers.some((a) => a.required && ['unsupported', 'refused', 'blocked', 'malformed'].includes(a.class))) return 'REQUIRED_BLOCKED';
-  if (answers.some((a) => !OK.has(a.class))) return 'NEEDS_REPAIR';
+  if (answers.some((a) => !OK.has(a.class) || lotsShort(a))) return 'NEEDS_REPAIR';
   return 'READY';
+}
+
+/** (CF2) The reason code a required zone short of its lots carries (its class stays fits/adjusted: the lots it placed still build). */
+export const LOTS_SHORT = 'LOTS_SHORT';
+
+/** (CF2) Whether an answer is a fits/adjusted part carrying the LOTS_SHORT reason (a repair target). */
+export function lotsShort(a) {
+  return OK.has(a?.class) && Array.isArray(a.reasons) && a.reasons.some((r) => r?.code === LOTS_SHORT);
+}
+
+/**
+ * (CF2) How many of a required zone's `stated` lots may go unplaced before the zone is a repair target: the zone's own
+ * `tolerance.count.max` when the plan states one, else a third of its lots (floor). The kit's default count tolerance (max 0, no
+ * ceiling) is soft and unbounded, so without this a zone placing 3 of 9 lots answered READY.
+ */
+export function lotsShortAllowed(zone, stated) {
+  const m = zone?.tolerance?.count?.max;
+  return typeof m === 'number' && m >= 0 ? m : Math.floor(stated / 3);
+}
+
+/**
+ * (CF2) Marks each required zone (fits/adjusted, not grown) whose unplaced lots (its count deviation) exceed lotsShortAllowed with a
+ * LOTS_SHORT reason naming how many lots did not fit. Optional zones, and zones within the allowance, are left as they are. In place.
+ */
+export function markLotsShort(answers, plan) {
+  const zones = Array.isArray(plan?.zones) ? plan.zones : [];
+  for (const a of answers) {
+    if (!a.required || !OK.has(a.class) || !String(a.block ?? '').startsWith('zone') || a.geometry?.grown) continue;
+    const dev = (a.deviations ?? []).find((d) => d?.what === 'count');
+    const unplaced = typeof dev?.value === 'number' ? dev.value : 0;
+    if (!(unplaced > 0)) continue;
+    const placed = (a.geometry?.lots ?? []).filter((l) => typeof l?.id === 'string').length;
+    const stated = placed + unplaced;
+    const allowed = lotsShortAllowed(zones.find((z) => z?.id === a.part), stated);
+    if (unplaced <= allowed) continue;
+    const ids = Array.isArray(a.geometry?.unplaced) ? a.geometry.unplaced : Object.values(a.geometry?.districts ?? {}).flatMap((d) => d?.unplaced ?? []);
+    a.reasons = [...(a.reasons ?? []), { code: LOTS_SHORT, message: `${unplaced} of the zone's ${stated} lots did not fit (${placed} placed; at most ${allowed} may be left out): give the zone more room (a larger size, districts, a terrace, a bigger form) or fewer lots`,
+      evidence: { what: 'count', lots: stated, placed, unplaced, allowed, ...(ids.length ? { ids: ids.filter((x) => typeof x === 'string') } : {}) } }];
+  }
 }
 
 /**
@@ -173,6 +212,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };
   }
+  // (CF2) a required zone short of its lots: a repair target (NEEDS_REPAIR), its class and geometry kept
+  markLotsShort(answers, inputs.plan ?? ir.params.plan);
   const overall = overallOf(answers);
   const totals = answers.reduce((t, a) => {
     if (!a.cost) return t;

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { planRegion, fillMissing } from '../lib/region/plan.mjs';
+import { planRegion, fillMissing, approachWindow } from '../lib/region/plan.mjs';
 import { columnsOf, worldOf } from './region-helpers.mjs';
 import { KIT } from './d3-helpers.mjs';
 import { mergeEffective, revisionStanding, reviseIR, revisionSeed } from '../lib/region/revise.mjs';
@@ -148,11 +148,11 @@ test('survival: the adopted growth\'s bill holds each source\'s bed and four far
     assert.deepEqual(wet.survivalTerrainWritten?.[p.id], { 'minecraft:dirt': 5 }, p.id);
   }
   assert.ok(!wet.irJson.includes('survivalTerrainWritten'), 'outside the IR');
-  // (QL-b D'') the lot's ground as the tiles before it leave it: under the field's floor row the pads' IF_NATURAL grass, over it their clear; a
-  // shell side its air then the shell's farmland, in realise order; outside the IR; the same plan twice gives the same bytes
+  // (QL-c) the lot's approach ground: the tiles' writes before it in its approach window (the lot, widened across its front and run out of it), in
+  // realise order with their conditions and walk flags; outside the IR; the same plan twice gives the same bytes
   const lot = wet.ir.lots.find((l) => l.id === 'farm_m');
-  const g = wet.lotGround?.farm_m;
-  assert.ok(g && g.runs && Array.isArray(g.seqs), JSON.stringify(Object.keys(wet.lotGround ?? {})));
+  const g = wet.approachGround?.farm_m;
+  assert.ok(g && g.runs && Array.isArray(g.seqs), JSON.stringify(Object.keys(wet.approachGround ?? {})));
   const buf = Buffer.from(g.runs, 'base64');
   const at = new Map();
   for (let i = 0; i + 19 < buf.length; i += 20) {
@@ -160,9 +160,14 @@ test('survival: the adopted growth\'s bill holds each source\'s bed and four far
     for (let y = y0; y <= y1; y++) at.set(`${x},${y},${z}`, g.seqs[k]);
   }
   const cx = lot.box.minX + 3, cz = lot.box.minZ + 3;
-  assert.deepEqual(at.get(`${cx},${lot.floorY - 1},${cz}`), [['minecraft:grass_block', 0]], 'the pad grass under the floor row');
+  assert.deepEqual(at.get(`${cx},${lot.floorY - 1},${cz}`), [['minecraft:grass_block', 0, 0]], 'the pad grass under the floor row');
   const side = lot.irrigation.cells.find((c) => c[2] === c[3] && c[2] === lot.floorY);
-  assert.deepEqual(at.get(`${side[0]},${side[2]},${side[1]}`)?.at(-1), ['minecraft:farmland[moisture=7]', 3], 'a shell side ends farmland');
-  assert.ok(!wet.irJson.includes('lotGround'));
-  assert.equal(JSON.stringify((await run([FARM()])).lotGround), JSON.stringify(wet.lotGround), 'deterministic');
+  assert.deepEqual(at.get(`${side[0]},${side[2]},${side[1]}`)?.at(-1), ['minecraft:farmland[moisture=7]', 3, 0], 'a shell side ends farmland');
+  const win = approachWindow(lot);
+  for (const k of at.keys()) {
+    const [x, y, z] = k.split(',').map(Number);
+    assert.ok(x >= win.x0 && x <= win.x1 && z >= win.z0 && z <= win.z1 && y >= win.y0 && y <= win.y1, `${k} in the window`);
+  }
+  assert.ok(!wet.irJson.includes('approachGround'));
+  assert.equal(JSON.stringify((await run([FARM()])).approachGround), JSON.stringify(wet.approachGround), 'deterministic');
 });

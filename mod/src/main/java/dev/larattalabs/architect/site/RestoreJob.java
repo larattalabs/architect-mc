@@ -260,7 +260,7 @@ final class RestoreJob implements Placement.Job {
 				prepared = null;
 			}
 			restore = (SiteJournal.Restore) ready[0];
-			restore.writing(() -> SiteJournal.writeCells(level, restore.pre())); // cut plants' outside halves before the box
+			restore.writing(level, () -> SiteJournal.writeCells(level, restore.pre())); // cut plants' outside halves before the box
 			if (ready[1] != null) {
 				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
 				writer = new TemplateWriter((TemplateWriter.Cells) ready[1], min, Sites.FLAGS);
@@ -311,7 +311,7 @@ final class RestoreJob implements Placement.Job {
 		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
-		restore.writing(() -> {
+		restore.writing(level, () -> {
 			SiteJournal.writeCells(level, restore.cells());
 			SiteJournal.fixHalves(level, restore.halves());
 		});
@@ -478,7 +478,7 @@ final class RestoreJob implements Placement.Job {
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
 			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);
-			restore.writing(() -> SiteJournal.writeCells(level, part));
+			restore.writing(level, () -> SiteJournal.writeCells(level, part));
 			cellCursor = to;
 			if (cellCursor > from) {
 				WorldJournal.kill("K7");

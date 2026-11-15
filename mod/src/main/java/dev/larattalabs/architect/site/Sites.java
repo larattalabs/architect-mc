@@ -654,7 +654,9 @@ public final class Sites {
 				unloaded[0] = true;
 				return 0;
 			}
-			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(chunk[0].getBlockState(mp.set(x, y, z)));
+			// (QL-c) a quote's lot: outside the box's columns, the land the plan's roads and earlier tiles leave (QuoteLand), as the realise finds it
+			BlockState planned = y < level.getMinY() || y > level.getMaxY() ? null : QuoteLand.outside(box, x, y, z);
+			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(planned != null ? planned : chunk[0].getBlockState(mp.set(x, y, z)));
 			// 6c PT: a player's build cell (the consent's aside) stops an approach as a road does
 			if (y >= level.getMinY() && y <= level.getMaxY()) {
 				String bd = dev.larattalabs.architect.placed.Placed.build(level, chunk[0], x, y, z);
@@ -1046,10 +1048,18 @@ public final class Sites {
 		return hasSite && noRefusal && notMoving && libraryEntry && QUOTE_ROADS.get() == null;
 	}
 
+	/** (QL-c) How many cells a quote's tiles changed where a verdict's entrance approach reads the land ({@link QuoteLand#tilesTouching}); 0: none. */
+	public static int approachTilesTouching(Verdict v, QuoteLand land) {
+		return v.plan() == null ? 0 : land.tilesTouching(v.plan().approach());
+	}
+
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
-	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
+	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause, int standingOutside) {
+		public BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
+			this(items, exact, driftCells, inexactBecause, 0);
+		}
 	}
 
 	/**
@@ -1071,16 +1081,10 @@ public final class Sites {
 	 * the site's), each cell costed dry as the run costs it (the conversion clears every queued cell to air, so each is paid). Null when no plan could be made. Reads loaded chunks only; changes nothing. Server thread.
 	 */
 	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked) {
-		return quoteBill(level, bp, v, masked, null);
-	}
-
-	/** (QL-b D'') {@link #quoteBill} over the world with {@code ground} on top (cell -> state: the land the region's tiles before it leave). */
-	public static @Nullable BomFull quoteBill(ServerLevel level, Blueprint bp, Verdict v, it.unimi.dsi.fastutil.longs.@Nullable LongSet masked,
-		java.util.@Nullable Map<Long, BlockState> ground) {
 		if (v.plan() == null || !v.construction()) {
 			return null;
 		}
-		FullBom.Result r = FullBom.of(level, bp, v.plan(), ground);
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
 		if (r == null) {
 			return null;
 		}
@@ -1098,7 +1102,7 @@ public final class Sites {
 			}
 		}
 		boolean exact = r.exact() && v.refusals().isEmpty();
-		return new BomFull(items, exact, r.driftCells(), List.copyOf(why));
+		return new BomFull(items, exact, r.driftCells(), List.copyOf(why), r.standingOutside());
 	}
 
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */
@@ -1613,16 +1617,31 @@ public final class Sites {
 				custody = true;
 			}
 		}
-		if (custody) {
-			Stockpiles.saveWithWorld(server);
-			WorldJournal.kill("FKC1");
-		}
 		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
 		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
 		for (Site x : all) {
 			if (x.construction() != null) {
 				decs.put(x.id(), Builder.prepareDeconstruct(level, x));
 			}
+		}
+		// (J2, FK's durability leftover) each stockpile deconstruct's credit held pending in the ledger and saved with the custody, before the
+		// commit: a crash anywhere after it rolls the credit forward at the next start (Stockpiles.settlePendingCredits) or, if the removal
+		// never settled, drops it (the site stands: its custody goes back)
+		boolean pendingHeld = Stockpiles.holdPendingCredits(decs.values());
+		if (custody || pendingHeld) {
+			try {
+				Stockpiles.saveWithWorld(server);
+			} catch (IllegalStateException e) {
+				// (SS) the save was refused (a chunk write not durable): nothing of the removal is written; the custody and the credits go back
+				Stockpiles.dropPendingCredits(decs.values());
+				for (Site y : all) {
+					if (y.construction() != null && Fills.phase(y) != null) {
+						Fills.writeBack(level, y);
+					}
+				}
+				throw new SiteException(Reason.JOURNAL_UNAVAILABLE, "The removal of " + id + " was not started: " + e.getMessage());
+			}
+			WorldJournal.kill("FKC1");
 		}
 		Anchors.Bounds u = all.get(0).restoreBox();
 		for (Site x : all) {
@@ -1959,6 +1978,10 @@ public final class Sites {
 					dropped++;
 				}
 			} else if (!f.removable()) {
+				if (f.kind() == Occupancy.Kind.LIVING && !e.hasCustomName()
+					&& !wildHarmed(occupied(e.getBoundingBox()), e.onGround() ? support(e.getBoundingBox()) : new long[0], q -> removalChanges(level, b, dim, q))) {
+					continue; // (J2) an unnamed wild animal the removal neither buries nor takes the floor from (a bee in the air) stays and never blocks
+				}
 				out.add(f.name() + " at " + e.blockPosition().toShortString());
 			}
 		}
@@ -1966,6 +1989,60 @@ public final class Sites {
 			out.add(dropped + " dropped item stack" + (dropped == 1 ? "" : "s"));
 		}
 		return out;
+	}
+
+	/**
+	 * (J2, pure) Whether a removal harms an unnamed wild animal: it changes a cell the animal's box overlaps ({@code occupied}: buried, or
+	 * water, lava, fire written into it) or a cell it stands on ({@code support}: the floor taken away). Only then does it block the removal;
+	 * a named animal, a pet and a player block anywhere in the box (Steward's StewardMotion relies on the named steward's refusal).
+	 */
+	static boolean wildHarmed(long[] occupied, long[] support, java.util.function.LongPredicate changes) {
+		for (long q : occupied) {
+			if (changes.test(q)) {
+				return true;
+			}
+		}
+		for (long q : support) {
+			if (changes.test(q)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** (J2, pure) The cells an entity's bounding box overlaps. */
+	static long[] occupied(AABB a) {
+		int x0 = net.minecraft.util.Mth.floor(a.minX), y0 = net.minecraft.util.Mth.floor(a.minY), z0 = net.minecraft.util.Mth.floor(a.minZ);
+		int x1 = net.minecraft.util.Mth.floor(a.maxX - 1e-7), y1 = net.minecraft.util.Mth.floor(a.maxY - 1e-7), z1 = net.minecraft.util.Mth.floor(a.maxZ - 1e-7);
+		it.unimi.dsi.fastutil.longs.LongArrayList out = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (int x = x0; x <= Math.max(x0, x1); x++) {
+			for (int y = y0; y <= Math.max(y0, y1); y++) {
+				for (int z = z0; z <= Math.max(z0, z1); z++) {
+					out.add(BlockPos.asLong(x, y, z));
+				}
+			}
+		}
+		return out.toLongArray();
+	}
+
+	/** (J2, pure) The cells under an entity's feet (the layer just below its box's bottom, over its footprint). */
+	static long[] support(AABB a) {
+		return occupied(new AABB(a.minX, a.minY - 0.05, a.minZ, a.maxX, a.minY - 0.01, a.maxZ));
+	}
+
+	/** (J2) Whether removing {@code b} writes the cell: its journal top layer is {@code b}'s and the world does not hold that layer's before. */
+	static boolean removalChanges(ServerLevel level, Site b, String dim, long pos) {
+		List<WorldJournal.Layer> st;
+		try {
+			st = WorldJournal.stack(dim, pos);
+		} catch (java.io.IOException e) {
+			return true; // unreadable: as before J2, the animal blocks
+		}
+		if (st.isEmpty()) {
+			return false;
+		}
+		WorldJournal.Layer top = st.get(st.size() - 1);
+		return b.id().equals(top.meta().site()) && !WorldJournal.holds(level, pos, top.cell().before());
 	}
 
 	private static String items(Container c) {
@@ -3044,6 +3121,9 @@ public final class Sites {
 			}
 		}
 		Set<String> recovered = new HashSet<>();
+		// (J2, UMT F9) the released groups' entries go after every pending record settled: a road's evidence over a site removed after it
+		// reads the site's later restore (Sites.evidence's laterBelow), which an earlier release would have taken away
+		List<String> releaseAfter = new ArrayList<>();
 		for (Site.Pending p : List.copyOf(pending)) {
 			Site gone = p.site();
 			boolean moved = "moved".equals(p.why());
@@ -3087,7 +3167,7 @@ public final class Sites {
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
 			switch (action) {
 				case RELEASE -> {
-					SiteJournal.releaseGroup(groupIds);
+					releaseAfter.addAll(groupIds);
 					pending.remove(p);
 					changed = true;
 				}
@@ -3157,7 +3237,7 @@ public final class Sites {
 				action = Reconcile.Action.KEEP;
 			}
 			if (action == Reconcile.Action.RELEASE) {
-				SiteJournal.releaseGroup(groupIds);
+				releaseAfter.addAll(groupIds);
 				Infras.drop(server, gone.id());
 			} else if (action == Reconcile.Action.RECOVER) {
 				try {
@@ -3168,6 +3248,9 @@ public final class Sites {
 					report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
 				}
 			}
+		}
+		if (!releaseAfter.isEmpty()) {
+			SiteJournal.releaseGroup(releaseAfter);
 		}
 		for (Site b : map.values()) {
 			Boolean st = standsNow.get(b.id());
