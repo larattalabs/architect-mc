@@ -1102,10 +1102,12 @@ export class Region {
   /**
    * (7c PM) An `archSpan` (lib/forms/archSpan.mjs, the first promoted form: kit/lib/forms/CANDIDATES.md) as form part `id`: an arcade
    * carrying a deck, its piers down to the plan ground. Options as `form` (`bake`). Returns the generator's result.
+   * Built masonry, not natural ground: `terrain` defaults to false here (unlike the natural forms), so a survival plan bills its
+   * blocks; a program may still pass `{terrain: true}` explicitly.
    */
   archSpan(id, params, opts = {}) {
     const gen = archSpan({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'archSpan', id).hex, groundAt: params.groundAt ?? ((x, z) => this.survey.heightAt(x, z)) });
-    this.form(id, gen, opts);
+    this.form(id, gen, { terrain: false, ...opts });
     return gen;
   }
 

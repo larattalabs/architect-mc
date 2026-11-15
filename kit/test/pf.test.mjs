@@ -177,3 +177,15 @@ test('older aqueduct IRs: x01 planned on main before PF (AQ\'s own soffit) evalu
   assert.equal(span(old.ir), old.spanCells);
   assert.equal(span(ir), old.spanCells + 14, 'the module\'s round soffit: 14 more arch cells over x01\'s 4 bays');
 });
+
+test('r.archSpan from a program defaults to a built form (terrain false: billed in survival); an explicit {terrain: true} is kept', async () => {
+  const { Region } = await import('../lib/region/program.mjs');
+  const calls = [];
+  const self = { ctx: { seed: 's' }, survey: { heightAt: () => 64 }, form: (id, gen, opts) => calls.push(opts) };
+  Region.prototype.archSpan.call(self, 'a', { at: [0, 65, 0], length: 14 });
+  Region.prototype.archSpan.call(self, 'b', { at: [0, 65, 0], length: 14 }, { stage: 'x' });
+  Region.prototype.archSpan.call(self, 'c', { at: [0, 65, 0], length: 14 }, { terrain: true });
+  assert.equal(calls[0].terrain, false);
+  assert.deepEqual(calls[1], { terrain: false, stage: 'x' });
+  assert.equal(calls[2].terrain, true);
+});
