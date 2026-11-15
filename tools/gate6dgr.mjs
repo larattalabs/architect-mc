@@ -24,6 +24,7 @@
 //     rucancel  (ru-cancel)            slice RU: survival growths cancelled by undoRevision (never fed, fed in part), then QT's quote again
 //     rucrash   (ru-crash)             slice RU: the cancel halted at RVU1, RVC1 and RVC2 with nothing saved: resumed once, no mint, no loss
 //     rlj2      (rl-crash-j2)          J2: RL6 a crash mid-swap (a construction delta's swap), RL7 a halted terrain target (RegionTargets)
+//     drcrash   (dr-crash)             slice DR: diagnose and repair after a crash that lost world writes (DR1-3, DR6, DR9-11)
 //     rumid     (ru-crash-mid)         J2: a second growth planned while a survival growth still builds is refused OVERLAP_BUSY (no middle
 //                                      revision under a newer one); it plans once the first is built
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
@@ -1051,6 +1052,13 @@ steps.look = async () => {
 {
   const { registerBC } = await import('./lib/gatebc.mjs');
   await registerBC(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, cellsOf });
+}
+
+// ------------------------------------------------------------------ (slice DR) drcrash: tools/lib/gatedr.mjs
+
+{
+  const { registerDR } = await import('./lib/gatedr.mjs');
+  await registerDR(steps, { L, call, check, cmd, log, OUT, json, ensure, spendZero, haltWait });
 }
 
 const name = process.argv[2];

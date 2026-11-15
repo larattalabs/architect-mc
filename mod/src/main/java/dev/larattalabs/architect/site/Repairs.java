@@ -557,6 +557,40 @@ public final class Repairs {
 		}
 	}
 
+	/** {@code site} and every stuck removal stacked with it (boxes sharing cells), transitively. */
+	static Set<String> stackedWith(JournalStore js, String site, Set<String> stuck) {
+		Set<String> comp = new LinkedHashSet<>();
+		java.util.ArrayDeque<String> q = new java.util.ArrayDeque<>(List.of(site));
+		while (!q.isEmpty()) {
+			String x = q.poll();
+			if (!comp.add(x)) {
+				continue;
+			}
+			int[] a = boxOf(x);
+			for (String o : stuck) {
+				int[] b = boxOf(o);
+				if (!comp.contains(o) && a != null && b != null && a[0] <= b[3] && b[0] <= a[3] && a[1] <= b[4] && b[1] <= a[4] && a[2] <= b[5]
+					&& b[2] <= a[5]) {
+					q.add(o);
+				}
+			}
+		}
+		return comp;
+	}
+
+	private static int @Nullable [] boxOf(String site) {
+		String g = SiteJournal.lastGroup(site);
+		int[] out = null;
+		for (JournalStore.Meta m : g == null ? List.<JournalStore.Meta>of() : SiteJournal.undone(site, g)) {
+			int[] b = m.box();
+			if (b != null) {
+				out = out == null ? b.clone() : new int[] {Math.min(out[0], b[0]), Math.min(out[1], b[1]), Math.min(out[2], b[2]), Math.max(out[3], b[3]),
+					Math.max(out[4], b[4]), Math.max(out[5], b[5])};
+			}
+		}
+		return out;
+	}
+
 	private static int @Nullable [] box(JournalStore js, Unit u) {
 		int[] out = null;
 		for (JournalStore.Meta m : SiteJournal.undone(u.site(), u.group() == null ? "" : u.group())) {
@@ -681,6 +715,13 @@ public final class Repairs {
 		if (old == null) {
 			return refused(planId, Reason.REPAIR_STALE, "No diagnosis " + planId + " (or it is gone): diagnose again");
 		}
+		// busy first (a job, a queued removal): SITE_BUSY even when that job has since moved the cells
+		for (Unit u : old.units()) {
+			String b = u.stuck() || !u.lagging().isEmpty() ? busy(srv, u.site()) : null;
+			if (b != null) {
+				return refused(planId, Reason.SITE_BUSY, b + "; nothing was written");
+			}
+		}
 		Diag now = diag(srv, old.diagnosis().scope());
 		if (!now.diagnosis().planId().equals(planId)) {
 			return refused(planId, Reason.REPAIR_STALE, "The cells of " + planId + " changed since its diagnosis (now " + now.diagnosis().planId()
@@ -769,15 +810,33 @@ public final class Repairs {
 		List<String> release = new ArrayList<>();
 		Set<String> stuckNow = stuckSites(srv);
 		JournalStore js = WorldJournal.storeOrNull();
+		// a stuck removal settles with every stuck removal stacked over or under it (F1: an upper's expected values are a lower's later
+		// undo, which a release would forget), and only when all of them are unanimous
+		Set<String> asked = new LinkedHashSet<>();
 		for (var e : o.getAsJsonArray("settle")) {
-			String site = e.getAsJsonObject().get("site").getAsString();
-			String group = e.getAsJsonObject().get("group").getAsString();
-			if (!stuckNow.contains(site) || js == null) {
+			asked.add(e.getAsJsonObject().get("site").getAsString());
+		}
+		Set<String> done = new HashSet<>();
+		for (String site : asked) {
+			if (!stuckNow.contains(site) || js == null || done.contains(site)) {
 				continue;
 			}
-			if (unanimous(srv, js, site, group)) {
-				release.addAll(SiteJournal.undone(site, group).stream().map(JournalStore.Meta::id).toList());
-				settled.add(site);
+			Set<String> comp = stackedWith(js, site, stuckNow);
+			done.addAll(comp);
+			boolean every = true;
+			for (String m : comp) {
+				String g = SiteJournal.lastGroup(m);
+				every &= g != null && unanimous(srv, js, m, g);
+			}
+			if (!every) {
+				if (comp.size() > 1) {
+					Architect.LOGGER.warn("Repair {}: {} written; its removal settles with {} once they are repaired too (stacked)", planId, site, comp);
+				}
+				continue;
+			}
+			for (String m : comp) {
+				release.addAll(SiteJournal.undone(m, SiteJournal.lastGroup(m)).stream().map(JournalStore.Meta::id).toList());
+				settled.add(m);
 			}
 		}
 		// every settled group released after all are judged (a lower removal's later undo is the upper's expected value: F1)
