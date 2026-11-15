@@ -654,7 +654,9 @@ public final class Sites {
 				unloaded[0] = true;
 				return 0;
 			}
-			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(chunk[0].getBlockState(mp.set(x, y, z)));
+			// (QL-c) a quote's lot: outside the box's columns, the land the plan's roads and earlier tiles leave (QuoteLand), as the realise finds it
+			BlockState planned = y < level.getMinY() || y > level.getMaxY() ? null : QuoteLand.outside(box, x, y, z);
+			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(planned != null ? planned : chunk[0].getBlockState(mp.set(x, y, z)));
 			// 6c PT: a player's build cell (the consent's aside) stops an approach as a road does
 			if (y >= level.getMinY() && y <= level.getMaxY()) {
 				String bd = dev.larattalabs.architect.placed.Placed.build(level, chunk[0], x, y, z);
@@ -1044,6 +1046,11 @@ public final class Sites {
 	 */
 	static boolean seedsCheck(boolean hasSite, boolean noRefusal, boolean notMoving, boolean libraryEntry) {
 		return hasSite && noRefusal && notMoving && libraryEntry && QUOTE_ROADS.get() == null;
+	}
+
+	/** (QL-c) How many cells a quote's tiles changed where a verdict's entrance approach reads the land ({@link QuoteLand#tilesTouching}); 0: none. */
+	public static int approachTilesTouching(Verdict v, QuoteLand land) {
+		return v.plan() == null ? 0 : land.tilesTouching(v.plan().approach());
 	}
 
 	/** At most this many drift cells are named in a verdict's notes. */

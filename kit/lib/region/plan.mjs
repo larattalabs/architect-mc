@@ -804,8 +804,82 @@ export async function planRegion(o) {
     }
   }
   const survivalTerrainWritten = Object.keys(writtenFirst).length ? Object.fromEntries(Object.keys(writtenFirst).sort().map((g) => [g, Object.fromEntries(Object.entries(writtenFirst[g]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
+  // (QL-c) each lot's approach ground: the writes of the tiles the realise puts down before the lot (every earlier stage and its own stage's,
+  // RegionsImpl.deps) in the window its entrance approach can plan over (the lot, and APPROACH_REACH rows out of its front), in realise order,
+  // by cell, with their conditions and walk flags. Regions.quote applies them over the world now (each write where its condition passes) and
+  // plans the lot's approach over the land they leave, as the realise does. plan.json's `approachGround`: lotId -> {seqs: [[[state, cond, walk],
+  // ...]], runs: base64 int32 [x, z, y0, y1, seq]} (a lot with no write in its window: no key; past APPROACH_GROUND_RUNS_MAX runs: {capped: n})
+  const approachGround = sv && Array.isArray(ir.lots) && ir.lots.length ? approachGroundOf(ir, stages, evalsOf, windows, evalBlobs) : null;
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}) };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}), ...(approachGround ? { approachGround } : {}) };
+}
+
+/** (QL-c) At most this many column runs per lot in plan.json's `approachGround`; past it the lot keeps {capped: n}. */
+export const APPROACH_GROUND_RUNS_MAX = 16384;
+/** (QL-c) Rows out of a lot's front an approach can reach: Approach.Spec.MAX_LENGTH 16 + Approach.EXTEND 8 + the stop row and one more. */
+export const APPROACH_REACH = 26;
+/** (QL-c) Cells either side of the lot across its front (half of Approach.Spec.MAX_WIDTH 7, the lava check beside the strip, one more). */
+export const APPROACH_SIDE = 5;
+/** (QL-c) Cells below and above the lot's floor an approach reads (24 rows of one-block steps, a 12-cell fill, a 12-cell ground scan). */
+export const APPROACH_DY = 50;
+
+/** (QL-c) A lot's approach window (inclusive): the lot box, widened across its front, run out APPROACH_REACH rows past it. */
+export function approachWindow(l) {
+  const b = l.box;
+  const w = { x0: b.minX - 1, x1: b.maxX + 1, z0: b.minZ - 1, z1: b.maxZ + 1, y0: (l.floorY ?? b.minY) - APPROACH_DY, y1: (l.floorY ?? b.minY) + APPROACH_DY };
+  const front = l.front ?? 'south';
+  if (front === 'north' || front === 'south') { w.x0 = b.minX - APPROACH_SIDE; w.x1 = b.maxX + APPROACH_SIDE; }
+  else { w.z0 = b.minZ - APPROACH_SIDE; w.z1 = b.maxZ + APPROACH_SIDE; }
+  if (front === 'north') w.z0 = b.minZ - APPROACH_REACH;
+  else if (front === 'south') w.z1 = b.maxZ + APPROACH_REACH;
+  else if (front === 'west') w.x0 = b.minX - APPROACH_REACH;
+  else w.x1 = b.maxX + APPROACH_REACH;
+  return w;
+}
+
+/** (QL-c) plan.json's `approachGround` (see planRegion): {} when no lot has a tile write in its window. */
+export function approachGroundOf(ir, stages, evalsOf, windows, blobs) {
+  const order = new Map(stages.map((s, i) => [s, i]));
+  const lots = ir.lots.filter((l) => l.box && order.has(l.stage)).map((l) => ({ id: l.id, si: order.get(l.stage), ...approachWindow(l), cells: new Map() }));
+  for (const [key, evs] of evalsOf) {
+    const [tx, tz] = key.split(',').map(Number);
+    const kx0 = tx * 64, kz0 = tz * 64;
+    const near = lots.filter((l) => l.x0 <= kx0 + 63 && kx0 <= l.x1 && l.z0 <= kz0 + 63 && kz0 <= l.z1);
+    if (!near.length) continue;
+    for (const ev of evs) {
+      const si = order.get(ev.stage);
+      const to = near.filter((l) => si <= l.si);
+      if (!to.length) continue;
+      evalTile(ir, key, windows.get(key), { stage: ev.stage, set: ev.set, countOnly: true, blobs, onWrite: (x, y, z, st, cond, walk) => {
+        for (const l of to) {
+          if (x < l.x0 || x > l.x1 || z < l.z0 || z > l.z1 || y < l.y0 || y > l.y1) continue;
+          const id = `${x},${z},${y}`;
+          const c = l.cells.get(id);
+          const w = [st, cond, walk ? 1 : 0];
+          if (c) c.w.push(w); else l.cells.set(id, { x, y, z, w: [w] });
+        }
+      } });
+    }
+  }
+  const out = {};
+  for (const l of [...lots].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (!l.cells.size) continue;
+    const seqs = [], seqIdx = new Map(), runs = [];
+    const cells = [...l.cells.values()].sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y);
+    for (const c of cells) {
+      const k = JSON.stringify(c.w);
+      let si = seqIdx.get(k);
+      if (si === undefined) { si = seqs.length; seqs.push(c.w); seqIdx.set(k, si); }
+      const r = runs[runs.length - 1];
+      if (r && r[0] === c.x && r[1] === c.z && r[3] === c.y - 1 && r[4] === si) r[3] = c.y;
+      else runs.push([c.x, c.z, c.y, c.y, si]);
+    }
+    if (runs.length > APPROACH_GROUND_RUNS_MAX) { out[l.id] = { capped: runs.length }; continue; }
+    const buf = Buffer.alloc(runs.length * 20);
+    runs.forEach((r, i) => r.forEach((v, j) => buf.writeInt32LE(v, i * 20 + j * 4)));
+    out[l.id] = { seqs, runs: buf.toString('base64') };
+  }
+  return out;
 }
 
 /** (BC, A11) At most this many paid terrain cells per group are kept by position; past it the group keeps none (the quote stays an upper bound). */

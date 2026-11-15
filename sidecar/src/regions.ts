@@ -858,6 +858,8 @@ export class Regions {
         ...(kitPlan.survivalTerrain && typeof kitPlan.survivalTerrain === 'object' ? { survivalTerrain: kitPlan.survivalTerrain } : {}),
         // (QL-b) the paid terrain cells an earlier write always covers first, their items per group: always paid, so never "may already stand"
         ...(kitPlan.survivalTerrainWritten && typeof kitPlan.survivalTerrainWritten === 'object' ? { survivalTerrainWritten: kitPlan.survivalTerrainWritten } : {}),
+        // (QL-c) each lot's approach ground (the tiles' writes before it in its approach window): Regions.quote plans the approach over it
+        ...(kitPlan.approachGround && typeof kitPlan.approachGround === 'object' ? { approachGround: kitPlan.approachGround } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);

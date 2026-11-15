@@ -625,6 +625,7 @@ export function evalTile(ir, key, heights, opts = {}) {
   const keepTerrain = opts.terrainCells === true; // (BC, A11) the plan's quote data: the paid terrain cells by position
   const writtenOut = opts.written instanceof Set ? opts.written : null; // (BC, A11) every cell it writes, by cellId
   const lastOut = opts.writtenLast instanceof Map ? opts.writtenLast : null; // (QL-b) each written cell's last write: cellId -> [state, cond]
+  const onWrite = typeof opts.onWrite === 'function' ? opts.onWrite : null; // (QL-c) each written cell: (x, y, z, state, cond, walk)
   const cellOps = opts.cellOps || writers;
   // (6b, the checker) the op index of every emitted cell, in payload order
   let opsOut = cellOps ? new Int32Array(4096) : null, opsN = 0;
@@ -920,6 +921,7 @@ export function evalTile(ir, key, heights, opts = {}) {
               if (writtenOut) writtenOut.add(id);
               if (lastOut) lastOut.set(id, [C.mats[m], o.cond]);
             }
+            if (onWrite) onWrite(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15), C.mats[m], o.cond, o.walk);
             if (S) {
               // (6c RS, §4) the cell's class: free (the free pass), held (free, in a holding group's target) or paid
               const g = S.groupOfPart[o.part];
