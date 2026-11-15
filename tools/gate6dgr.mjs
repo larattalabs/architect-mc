@@ -23,6 +23,8 @@
 //                                      cancels, ru-cancel); built; undo refunds once per key (Steward's RC row 2)
 //     rucancel  (ru-cancel)            slice RU: survival growths cancelled by undoRevision (never fed, fed in part), then QT's quote again
 //     rucrash   (ru-crash)             slice RU: the cancel halted at RVU1, RVC1 and RVC2 with nothing saved: resumed once, no mint, no loss
+//     rumid     (ru-crash-mid)         J2: a middle survival growth still building under a newer one, the undo of both halted at RVU1
+//                                      and RVC1: both end UNDONE once, E-flat 0, no mint, no loss
 //     crash     (gr-crash)             the growth's kill points: realise (RV3, RV4, RG4+save mid-tile, IJ mid-road) and the undo of a growth with
 //                                      a road (RVU1, RVU2, K6): each resumes, the world as the contract names it
 //     look      (gr-look)              N-GR-1 and N-GR-2 in a client: a grown street and its new lots, shots for the gallery

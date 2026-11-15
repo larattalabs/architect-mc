@@ -3096,6 +3096,9 @@ public final class Sites {
 			}
 		}
 		Set<String> recovered = new HashSet<>();
+		// (J2, UMT F9) the released groups' entries go after every pending record settled: a road's evidence over a site removed after it
+		// reads the site's later restore (Sites.evidence's laterBelow), which an earlier release would have taken away
+		List<String> releaseAfter = new ArrayList<>();
 		for (Site.Pending p : List.copyOf(pending)) {
 			Site gone = p.site();
 			boolean moved = "moved".equals(p.why());
@@ -3139,7 +3142,7 @@ public final class Sites {
 			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
 			switch (action) {
 				case RELEASE -> {
-					SiteJournal.releaseGroup(groupIds);
+					releaseAfter.addAll(groupIds);
 					pending.remove(p);
 					changed = true;
 				}
@@ -3209,7 +3212,7 @@ public final class Sites {
 				action = Reconcile.Action.KEEP;
 			}
 			if (action == Reconcile.Action.RELEASE) {
-				SiteJournal.releaseGroup(groupIds);
+				releaseAfter.addAll(groupIds);
 				Infras.drop(server, gone.id());
 			} else if (action == Reconcile.Action.RECOVER) {
 				try {
@@ -3220,6 +3223,9 @@ public final class Sites {
 					report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
 				}
 			}
+		}
+		if (!releaseAfter.isEmpty()) {
+			SiteJournal.releaseGroup(releaseAfter);
 		}
 		for (Site b : map.values()) {
 			Boolean st = standsNow.get(b.id());

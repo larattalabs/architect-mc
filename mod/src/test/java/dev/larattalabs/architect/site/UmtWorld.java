@@ -299,6 +299,11 @@ final class UmtWorld implements BlockGetter, SiteJournal.CellTarget {
 		updates(p, old, s, flags);
 	}
 
+	/** (J2, PTS) An undo's record restore on a cell no write changed (production: Placed.restoreUnchanged). */
+	void restoreRecord(long p, Pt rec) {
+		pt.put(p, rec);
+	}
+
 	/** A player's change: places {@code s} with a record ({@code rec}), or mines (air, no record). */
 	void player(long p, BlockState s, @Nullable Pt rec, @Nullable CompoundTag data) {
 		BlockState old = get(p);

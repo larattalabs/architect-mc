@@ -1000,12 +1000,30 @@ final class UmtSim {
 					CompoundTag t = r.template();
 					ListTag pal = t.getListOrEmpty("palette");
 					ListTag blocks = t.getListOrEmpty("blocks");
+					// (J2, UMT F10) in StructureTemplate's order (load: loadPalette's addToLists and buildInfoList): full blocks, then blocks
+					// with data, then the rest (plants, torches...), each by y, x, z; the model wrote them in the list's order before
+					List<CompoundTag> order = new ArrayList<>();
 					for (int i = 0; i < blocks.size(); i++) {
-						if (c != null && c.point().equals("K7") && i == c.n() % Math.max(1, blocks.size())) {
+						order.add(blocks.getCompoundOrEmpty(i));
+					}
+					java.util.function.ToIntFunction<CompoundTag> cat = bt -> {
+						if (bt.getCompound("nbt").isPresent()) {
+							return 1;
+						}
+						BlockState st = WorldJournal.state(new Value(pal.getCompoundOrEmpty(bt.getIntOr("state", 0)), null));
+						return !st.getBlock().hasDynamicShape() && st.isCollisionShapeFullBlock(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, BlockPos.ZERO)
+							? 0 : 2;
+					};
+					java.util.function.ToIntFunction<CompoundTag> py = bt -> bt.getListOrEmpty("pos").getIntOr(1, 0);
+					java.util.function.ToIntFunction<CompoundTag> px = bt -> bt.getListOrEmpty("pos").getIntOr(0, 0);
+					java.util.function.ToIntFunction<CompoundTag> pz = bt -> bt.getListOrEmpty("pos").getIntOr(2, 0);
+					order.sort(java.util.Comparator.comparingInt(cat).thenComparingInt(py).thenComparingInt(px).thenComparingInt(pz));
+					for (int i = 0; i < order.size(); i++) {
+						if (c != null && c.point().equals("K7") && i == c.n() % Math.max(1, order.size())) {
 							world.tick();
 							crashPoint(c, "K7");
 						}
-						CompoundTag bt = blocks.getCompoundOrEmpty(i);
+						CompoundTag bt = order.get(i);
 						ListTag pos = bt.getListOrEmpty("pos");
 						long p = BlockPos.asLong(r.box().minX() + pos.getIntOr(0, 0), r.box().minY() + pos.getIntOr(1, 0), r.box().minZ() + pos.getIntOr(2, 0));
 						BlockState s = WorldJournal.state(new Value(pal.getCompoundOrEmpty(bt.getIntOr("state", 0)), null));
@@ -1022,6 +1040,13 @@ final class UmtSim {
 				var f = WorldJournal.state(w.value()).getFluidState();
 				if (!f.isEmpty() && !f.isSource()) {
 					UmtVanilla.fired("V9"); // writeCells queued it with FluidRearm (production); UMT has no fluid ticks to run
+				}
+			}
+			// (J2, PTS) production's Restore.writing(level, ...): a cell left holding its expected block with no record gets it
+			for (var en : r.pts().long2ObjectEntrySet()) {
+				long q = en.getLongKey();
+				if (SiteJournal.restoresUnchanged(world.get(q), world.record(q) != null, en.getValue().block())) {
+					world.restoreRecord(q, en.getValue().pt());
 				}
 			}
 		} finally {
@@ -1106,6 +1131,7 @@ final class UmtSim {
 		for (long q : cellsTo.keySet()) {
 			placing.add(new Cell(q, layer, world.value(q), null));
 		}
+		Map<Long, dev.larattalabs.architect.journal.Pt> pts = JournalStore.ptOf(UmtWorld.DIM_ID, JournalStore.bySection(placing)); // (J2, DPT) as SiteDeltas
 		JsonObject meta = new JsonObject();
 		meta.addProperty("kind", "update");
 		s.submit(s.begin().label("D3:" + x.id).create(JournalStore.Meta.header(id, WorldJournal.DELTA, x.id, group(x), UmtWorld.DIM_ID, Policy.BOX, layer,
@@ -1116,7 +1142,7 @@ final class UmtSim {
 		world.tick();
 		List<Cell> done = new ArrayList<>();
 		for (Cell c : placing) {
-			done.add(new Cell(c.pos(), c.layer(), c.before(), world.value(c.pos()), c.pt()));
+			done.add(new Cell(c.pos(), c.layer(), c.before(), world.value(c.pos()), pts.get(c.pos())));
 		}
 		s.submit(s.begin().label("D7:" + x.id).sections(id, JournalStore.bySection(done)).status(id, Status.ACTIVE, null, 0L)).get();
 		trace.add("  delta of " + x.id + ": " + cellsTo.size() + " cell(s) to " + to);
@@ -1377,6 +1403,7 @@ final class UmtSim {
 			}
 			return at;
 		}));
+		List<String> releaseAfter = new ArrayList<>(); // (J2, F9) production: the released groups go after every pending record settled
 		for (Rec x : settleOrder) {
 			if (!x.pending || jobSites.contains(x.id)) {
 				continue;
@@ -1414,8 +1441,7 @@ final class UmtSim {
 			recover = a == Reconcile.Action.RECOVER;
 			trace.add("  settle " + x.id + " " + g + ": " + ev + " -> " + a + (scope != null ? " " + scope : ""));
 			if (release) {
-				SiteJournal.releaseGroup(groupIds);
-				store.flush();
+				releaseAfter.addAll(groupIds);
 				recs.remove(x.id);
 			} else if (recover) {
 				// [F6] guard: a member taken back although its own cells don't show it
@@ -1443,6 +1469,10 @@ final class UmtSim {
 						+ "standing, and the settle keeps it so at every start");
 				}
 			}
+		}
+		if (!releaseAfter.isEmpty()) {
+			SiteJournal.releaseGroup(releaseAfter);
+			store.flush();
 		}
 		// placements in the queue: a placing record rolls back (Placement: its job resumes or rolls back; UMT rolls back)
 		for (Rec x : List.copyOf(recs.values())) {
