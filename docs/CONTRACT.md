@@ -30458,7 +30458,7 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
   - `regions-6b` and `previews-6b` goldens: the sky_isle and floating_islands cases only.
   - `scenarios/goldens/s1*`: re-planned from its own inputs (kit 0.12.0; the old program reproduced the old sha first), with a `recut` note.
   - `asks/crater_mine.json`: still fits; named in `tools/lib/sp2-norm.mjs` `SP2_MOVED`, beside `PF_MOVED`.
-- **Checks:** GATE_LINE
+- **Checks:** Full kit suite 1429/1429 and sidecar 916/916, both run locally because both timed out in the gate. Gradle build passes (1272 tests, 0 failures). api-compat `--baselines` is 8/8 clean, step-inputs check passes (418) and gitleaks is clean. Gate run 2, 20261115-075046-change at 2c11a5c6 (after merging main), passed 27 steps, including sim-jobs, sets and massing, the h, hy, fl, s2, s3, d, d3, kc, irr, f3, aq and lp units, lint-structure, 6b-scenario-s1-flat and 6a-inv3. Its failures: k1b-unit item 6 listed SP2's own mover v14, now skipped by name (a3ed4d76; the step was not re-run, per speed rule 11). b-unit's and t3b-unit's Java sub-runs reported no results, while unit-mod passes those classes. lint-mutations crashes on main's TS import, `kit/test/plan-p0-shared.mjs` -> `tools/lib/arch-tmp.mjs`, which is outside the scratch kit. bf-unit's asks-before table doesn't match the merge base, a base-side table (likely pre-existing; not checked on main).
 - **Leftovers:** S1's in-game evidence predates the re-cut. Both looks reach plan parts only (not `r.ropeBridge` or `r.course`). An aqueduct never measures an M15 span past cantilever 4, so its `M15:span` stays unit-only.
 
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
