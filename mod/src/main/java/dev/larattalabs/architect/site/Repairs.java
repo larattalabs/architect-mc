@@ -105,7 +105,7 @@ public final class Repairs {
 
 	public static void init() {
 		ServerLifecycleEvents.SERVER_STARTED.register(srv -> {
-			world = srv.getWorldPath(LevelResource.ROOT);
+			world = srv.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
 			startTicks = 0;
 			startDone = false;
 			running = true;
@@ -469,7 +469,7 @@ public final class Repairs {
 		for (Unit u : units) {
 			findingsOf(u, findings, lines);
 		}
-		stacked(js, units, findings);
+		stacked(js, units, stuck, findings);
 		List<String[]> custody = new ArrayList<>();
 		if (scope.kind() == DiagnoseScope.Kind.ALL || scope.kind() == DiagnoseScope.Kind.SITE) {
 			ledgerFindings(scope, findings, lines, custody);
@@ -543,15 +543,16 @@ public final class Repairs {
 	}
 
 	/** (F7) Stuck removals whose boxes share cells: rolled forward top-down in commit order. */
-	private static void stacked(JournalStore js, List<Unit> units, List<RepairFinding> out) {
-		List<Unit> st = units.stream().filter(Unit::stuck).toList();
-		for (int i = 0; i < st.size(); i++) {
-			for (int j = i + 1; j < st.size(); j++) {
-				int[] a = box(js, st.get(i));
-				int[] b = box(js, st.get(j));
-				if (a != null && b != null && a[0] <= b[3] && b[0] <= a[3] && a[1] <= b[4] && b[1] <= a[4] && a[2] <= b[5] && b[2] <= a[5]) {
-					out.add(new RepairFinding(RepairCode.STACKED, st.get(i).site(), st.get(i).region(), st.get(j).site(), 0, 0, 0, List.of(), st.get(i)
-						.site() + " and " + st.get(j).site() + " were removed over shared cells; a repair rolls them forward top-down, in commit order"));
+	private static void stacked(JournalStore js, List<Unit> units, Set<String> stuck, List<RepairFinding> out) {
+		Set<String> seen = new HashSet<>();
+		for (Unit u : units) {
+			if (!u.stuck()) {
+				continue;
+			}
+			for (String o : stackedWith(js, u.site(), stuck)) {
+				if (!o.equals(u.site()) && seen.add(u.site().compareTo(o) < 0 ? u.site() + "|" + o : o + "|" + u.site())) {
+					out.add(new RepairFinding(RepairCode.STACKED, u.site(), u.region(), o, 0, 0, 0, List.of(), u.site() + " and " + o + " were removed "
+						+ "over shared cells; a repair rolls them forward top-down, in commit order, and they settle together"));
 				}
 			}
 		}
@@ -587,19 +588,6 @@ public final class Repairs {
 				out = out == null ? b.clone() : new int[] {Math.min(out[0], b[0]), Math.min(out[1], b[1]), Math.min(out[2], b[2]), Math.max(out[3], b[3]),
 					Math.max(out[4], b[4]), Math.max(out[5], b[5])};
 			}
-		}
-		return out;
-	}
-
-	private static int @Nullable [] box(JournalStore js, Unit u) {
-		int[] out = null;
-		for (JournalStore.Meta m : SiteJournal.undone(u.site(), u.group() == null ? "" : u.group())) {
-			int[] b = m.box();
-			if (b == null) {
-				continue;
-			}
-			out = out == null ? b.clone() : new int[] {Math.min(out[0], b[0]), Math.min(out[1], b[1]), Math.min(out[2], b[2]), Math.max(out[3], b[3]),
-				Math.max(out[4], b[4]), Math.max(out[5], b[5])};
 		}
 		return out;
 	}
@@ -749,6 +737,10 @@ public final class Repairs {
 		List<String> sites = todo.stream().map(Unit::site).toList();
 		if (!apply) {
 			return new RepairResult(planId, false, write, credit, List.of(), left, null, null, dryMessage(planId, now, todo, write, left), sites);
+		}
+		if (write == 0 && credit.isEmpty() && todo.stream().noneMatch(Unit::stuck)) {
+			return new RepairResult(planId, false, 0, Map.of(), List.of(), left, null, null, "Nothing to repair in " + now.diagnosis().scope().describe()
+				+ " (" + planId + "); nothing was written", List.of()); // no record: nothing changes
 		}
 		// the record, durable before any write
 		JsonObject o = new JsonObject();

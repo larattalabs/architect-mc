@@ -155,7 +155,8 @@ export async function registerDR(steps, h) {
       check(await hash(BX[k]) === pre, `${tag}: the dry run changed no byte`);
       const r = await repair(d1.planId, true);
       check(r.applied === true && r.written === lag && r.left === foreign && !!r.record, `${tag}: repaired: wrote ${r.written}, left ${r.left}; record ${r.record} (${r.message})`, r);
-      const rec = r.record && fs.existsSync(r.record) ? JSON.parse(fs.readFileSync(r.record, 'utf8')) : null;
+      const recPath = r.record ? path.resolve(L.GAME_DIR, r.record) : null;
+      const rec = recPath && fs.existsSync(recPath) ? JSON.parse(fs.readFileSync(recPath, 'utf8')) : null;
       check(rec?.state === 'final' && rec.cells?.length === lag && !!rec.op, `${tag}: the record is final, names the op and its ${lag} cells (${rec?.state}, ${rec?.cells?.length}, ${rec?.op})`);
       if (want) check(await hash(BX[k]) === want, `${tag}: the box is as the journal committed it`);
       const d2 = await diag(ids[k]);
@@ -184,7 +185,7 @@ export async function registerDR(steps, h) {
     const fD = (dD.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.D);
     const stacked = (dD.findings ?? []).some((x) => x.code === 'STACKED');
     const rD = await repair(dD.planId, true);
-    check(!!fD && fD.lagging > 0 && rD.applied && rD.written === fD.lagging, `DR3: D (lower) repaired first: wrote ${rD.written} of its ${fD?.lagging} lagging (STACKED reported: ${stacked})`);
+    check(!!fD && fD.lagging > 0 && rD.applied && rD.written === fD.lagging && stacked, `DR3: D (lower) repaired first: wrote ${rD.written} of its ${fD?.lagging} lagging; STACKED names its partner (${stacked})`);
     const dC = await diag(ids.C);
     const fC = (dC.findings ?? []).find((x) => x.code === 'STUCK' && x.site === ids.C);
     const dD2 = (await diag(ids.D)).findings?.find((x) => x.code === 'STUCK' && x.site === ids.D);
