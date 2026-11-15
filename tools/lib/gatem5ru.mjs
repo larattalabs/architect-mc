@@ -95,6 +95,14 @@ export async function registerRU(steps, h) {
       const lack = n - (ps.stock?.[it] ?? 0);
       if (lack > 0) need[it] = Math.max(1, Math.floor(lack * fraction));
     }
+    // (batch 3) a target builds a run only with its whole bill: when `fraction` of the lack covers no target's outstanding (a growth whose one
+    // target is put down first, its lot staged after it), the smallest target's whole lack is fed, so something builds and the rest waits
+    const covers = (o) => Object.entries(o ?? {}).every(([it, n]) => (need[it] ?? 0) + (ps.stock?.[it] ?? 0) >= n);
+    const open = Object.values(ps.targets ?? {}).map((x) => x.outstanding ?? {}).filter((o) => sum(o) > 0);
+    if (open.length && !open.some(covers)) {
+      const small = open.sort((a, b) => sum(a) - sum(b))[0];
+      for (const [it, n] of Object.entries(small)) need[it] = Math.max(need[it] ?? 0, n - (ps.stock?.[it] ?? 0));
+    }
     const acc = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
     let last = null, still = 0, rs;
     for (let k = 0; k < 120 && still < 4; k++) {
@@ -257,6 +265,42 @@ export async function registerRU(steps, h) {
       out[tag] = o;
       await L.leaveWorld();
     }
+    spendZero();
+    return out;
+  };
+
+  /**
+   * (J2 item 3b, J1's deferred case) "A middle survival revision still building under a newer one": measured in J2's first run, a growth
+   * stays revising (busy) until its build is done, and a second growth planned meanwhile is refused OVERLAP_BUSY ("region is busy
+   * (revising N)"), so the middle-revision state cannot arise. This step keeps that guard: a growth fed in part (still building, busy), a
+   * second growth planned on top of it: refused OVERLAP_BUSY with nothing changed (the stock, the feed order, the first growth still
+   * revising); then the first is fed until built and the second growth plans.
+   */
+  steps.rumid = async () => {
+    await ensure();
+    const out = {};
+    const GROW2 = [{ id: 'qb', type: 'house', size: [9, 9], villager: 'dwelling' }];
+    const tag = 'RU mid';
+    await world('G6B RU MID');
+    const T = await town(tag);
+    const g1 = await grow(tag, T.region, T.t0);
+    if (!g1) { await L.leaveWorld(); return out; }
+    const f1 = await feedPart(`${tag} (first growth)`, T.region, 0.5);
+    const p0 = await pile();
+    const g2 = await growPlan(T.region, { lots: GROW2 });
+    const p1 = await pile();
+    const st = await rvState(T.region);
+    out.refused = { g2: g2.refused ?? null, busy: st.busy, build: f1.build };
+    check(!f1.build?.done && String(g2.refused ?? '').startsWith('OVERLAP_BUSY') && /revising/.test(String(g2.refused)) && /^revising/.test(String(st.busy)),
+      `${tag}: a second growth planned while the first (rid ${g1.rid}) still builds (${f1.build?.percent}%) is refused: ${g2.refused ?? `planned ${g2.planId}`}; the first still ${st.busy}: no middle revision under a newer one can arise`, out.refused);
+    check(G.same(p1.stock, p0.stock) && json(p1.feedOrder) === json(p0.feedOrder), `${tag}: the refusal changed nothing (the stock and the feed order as before)`);
+    const f = await G.feed({ L }, T.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500, until: (s2, rs) => rs.build?.done });
+    let st2 = await rvState(T.region);
+    for (let k = 0; k < 60 && st2.busy; k++) { await L.sleep(2000); st2 = await rvState(T.region); }
+    const g3 = await growPlan(T.region, { lots: GROW2 });
+    out.after = { busy: st2.busy, g3: g3.refused ?? g3.planId };
+    check(f.last.rs.build?.done && !g3.refused, `${tag}: once the first growth is built (busy ${st2.busy}) the second growth plans: ${g3.refused ?? `${g3.planId} rid ${g3.revisionOf?.rid}`}`, out.after);
+    await L.leaveWorld();
     spendZero();
     return out;
   };

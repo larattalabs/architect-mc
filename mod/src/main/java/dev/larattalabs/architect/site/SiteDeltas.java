@@ -1055,6 +1055,7 @@ public final class SiteDeltas {
 			placing.add(new Cell(q, layer, before.get(q), null));
 		}
 		JournalStore.Txn t = s.begin().label("D3:" + b.id());
+		Map<Long, dev.larattalabs.architect.journal.Pt> pts = JournalStore.ptOf(dim, JournalStore.bySection(placing)); // (J2, DPT) for D7
 		t.create(JournalStore.Meta.header(id, WorldJournal.DELTA, b.id(), b.group(), dim, Policy.BOX, layer, Status.PLACING, now), JournalStore.bySection(
 			placing), new JournalNbt.Head(meta, ring));
 		String leaves = null;
@@ -1104,7 +1105,7 @@ public final class SiteDeltas {
 		// D7: ACTIVE with after
 		List<Cell> done = new ArrayList<>(cells.size());
 		for (long q : cells) {
-			done.add(new Cell(q, layer, before.get(q), after.get(q)));
+			done.add(new Cell(q, layer, before.get(q), after.get(q), pts.get(q))); // (J2, DPT) the player's record kept for the removal
 		}
 		JournalStore.Txn t2 = s.begin().label("D7:" + b.id()).sections(id, JournalStore.bySection(done)).status(id, Status.ACTIVE, null, 0L);
 		if (leaves != null) {

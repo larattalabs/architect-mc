@@ -19,7 +19,9 @@
 //                                                      credit. Each: the saved ledger off the disk; after the restart filled exactly once (FK1-4:
 //                                                      consumed since the saved state = the fill once or none, the hoppers exactly their
 //                                                      declaration, the lever unlocked) or refunded exactly once (FKC1-2: what came back = what
-//                                                      the town consumed, item for item; no custody left; nothing dropped)
+//                                                      the town consumed, item for item; no custody left; nothing dropped);
+//                                                      (J2) CS1: the fk_hall site removed on its own, halted inside its credit's save:
+//                                                      the credit pending on disk books once at the start (= its paid record)
 //
 // Evidence: artifacts/gate6d-gr/<step>.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
@@ -392,6 +394,51 @@ export async function registerFK(steps, h) {
     return res;
   }
 
+  /**
+   * (J2 item 2, kill point CS1) The fk_hall site removed on its own (dev.pl.remove: Sites.removeDetailed, a single site's deconstruct):
+   * the town built and filled, the baseline saved, the removal halted inside its credit's save (the players and the restored chunks on
+   * disk, the ledger not). Before J2 the restart settled the site removed and nothing credited it: its blocks' refund and its custody lost.
+   * As built the saved ledger holds the credit pending (with the custody, saved before the commit) and the start books it once: what came
+   * back = the site's paid record, item for item; no custody, nothing pending; none of the fill's items dropped.
+   */
+  async function singleCase(point) {
+    const tag = point;
+    const W = await town(`G6B FK ${tag}`);
+    const site = await fkSite();
+    if (!site) { check(false, `${tag}: no fk_hall site`); await L.leaveWorld(); return null; }
+    await blocksBuilt(tag, site);
+    await filled(site);
+    const r0 = await G.feed({ L }, W.region, { fraction: 1, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done, timeoutMs: 900_000, every: 2500 });
+    check(r0.last.st.view.state === 'PLACED', `${tag}: the town built and filled (PLACED)`);
+    const at = (await fk(site)).containers[0].at.split(',').map(Number);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/kill @e[type=item]');
+    await cmd('/save-all flush');
+    const B = savedLedger(W.name);
+    const key = Object.keys(B.paid ?? {}).find((k) => k.startsWith(`site:${site}@`));
+    const paid = B.paid?.[key] ?? {};
+    check(!!key && sum(paid) > 0, `${tag}: ${site}'s paid record on disk: ${key} (${sum(paid)} units)`);
+    await call('dev.journal.killAt', { point }, 10_000);
+    call('dev.pl.remove', { site, requester: G.OWNER, force: false }, 600_000).catch(() => null);
+    if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    const S = savedLedger(W.name);
+    const pend = S.pendingCredit?.[key] ?? null;
+    log(`  ${tag}: saved: pending ${json(pend)}, custody ${json(S.custody?.[key] ?? null)}, credited ${(S.credited ?? []).includes?.(key)}`);
+    check(!!pend && sum(S.custody?.[key]) > 0, `${tag}: at the halt the saved ledger holds ${key}'s credit pending (${sum(pend?.items)} units) and its custody (${sum(S.custody?.[key])})`, { pend, custody: S.custody?.[key] });
+    await restart(W.name);
+    await L.settle(4000);
+    const F = (await pile()).ledger;
+    const back = G.minus(G.plus(F.returned, F.refundOverflow), G.plus(B.returned, B.refundOverflow));
+    const items = (await call('dev.items.near', { pos: at, radius: 24 }, 60_000)).items ?? {};
+    const gone = await fk(site).then((x) => x?.state ?? 'gone', () => 'gone');
+    const res = { key, paid: sum(paid), back: sum(back), diff: G.minus(back, paid), pending: F.pendingCredit ?? null, custody: F.custody ?? null, items: only(items, FK), site: gone };
+    out_log(tag, res);
+    check(G.same(back, paid) && !F.custody?.[key] && !F.pendingCredit?.[key] && sum(only(items, FK)) === 0,
+      `${tag}: after the restart the removal's credit booked once: what came back = ${site}'s paid record, item for item (${sum(back)} = ${sum(paid)}; differ ${json(res.diff)}): no loss, no mint; no custody, nothing pending; none of the fill's items dropped`, res);
+    await L.leaveWorld();
+    return res;
+  }
+
   const LOGS = {};
   function out_log(tag, res) {
     LOGS[tag] = res;
@@ -403,6 +450,7 @@ export async function registerFK(steps, h) {
     const out = {};
     for (const p of ['FK1', 'FK2', 'FK3', 'FK4']) out[p] = await fillCase(p);
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
+    if (process.env.GATE_FK_ONLY !== 'fill') out.CS1 = await singleCase('CS1'); // (J2) a single site's credit save halted
     spendZero();
     return out;
   };

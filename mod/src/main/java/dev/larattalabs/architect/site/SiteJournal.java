@@ -817,6 +817,14 @@ public final class SiteJournal {
 		int holes, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts) {
 		/** (6c PT) Runs {@code writes} (some of this restore's) with its records restored as its blocks come back (§5). */
 		void writing(Runnable writes) {
+			writing(null, writes);
+		}
+
+		/**
+		 * {@link #writing(Runnable)}; with {@code level} (J2, UMT PTS) a cell the writes left holding its expected block with no record (an
+		 * identical write changes nothing) gets its record too.
+		 */
+		void writing(@Nullable ServerLevel level, Runnable writes) {
 			if (pts.isEmpty()) {
 				writes.run();
 				return;
@@ -827,7 +835,19 @@ public final class SiteJournal {
 			} finally {
 				dev.larattalabs.architect.placed.Placed.endRestore();
 			}
+			if (level != null) {
+				dev.larattalabs.architect.placed.Placed.restoreUnchanged(level, pts);
+			}
 		}
+	}
+
+	/**
+	 * (J2, UMT PTS) Whether an undo's record expectation gives a cell its record back although no write changed it: the cell already holds
+	 * the expected block (an upper entry of the same group undo wrote the same block, without the record, before the lower one's identical
+	 * write, which changes nothing and so never reaches Placed's hook) and has no record now. Pure: production and UMT call it.
+	 */
+	public static boolean restoresUnchanged(BlockState now, boolean hasRecord, net.minecraft.world.level.block.Block block) {
+		return !hasRecord && !now.isAir() && now.getBlock() == block;
 	}
 
 	/** One cell an undo writes outside the BOX template: lowest first, with its kind's flags. */
@@ -1062,7 +1082,7 @@ public final class SiteJournal {
 	 */
 	static Restore writeNow(ServerLevel level, String siteId, String group) throws Sites.SiteException {
 		Restore r = restore(level, siteId, group);
-		r.writing(() -> {
+		r.writing(level, () -> {
 			writeCells(level, r.pre());
 			if (r.template() != null && r.box() != null) {
 				if (r.mask() != null) {
