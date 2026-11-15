@@ -764,31 +764,43 @@ export async function planRegion(o) {
   // the land does not already hold (a realise skips those), so the quote is what the realise consumes. plan.json's `survivalTerrain`
   // a kept cell an earlier evaluation of its tile key also writes is dropped (the realise writes that one first: the land then no longer holds
   // what the quote would read), so each key's earlier evaluations run again for the cells they write
+  // (QL-b) a dropped cell whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state: wherever the later write lands, the earlier
+  // one landed first (the cell then ours, never the later state), so the realise always writes and pays it: never "may already stand".
+  // plan.json's `survivalTerrainWritten`, their items per group (an IF_SOLID_NATURAL or IF_AIR_OR_FLUID write depends on the land: not counted)
+  const writtenFirst = {};
   if (sv) {
-    const written = new Map(); // `${key}|${at}` -> Set of the cells evaluations 0..at-1 write
+    const written = new Map(); // `${key}|${at}` -> Map of the cells evaluations 0..at-1 write -> [last state, its cond]
     const earlier = (key, at) => {
       const k = `${key}|${at}`;
       if (!written.has(k)) {
-        const set = new Set();
+        const last = new Map();
         const ev = evalsOf.get(key) ?? [];
-        for (let i = 0; i < at; i++) evalTile(ir, key, windows.get(key), { stage: ev[i].stage, set: ev[i].set, countOnly: true, blobs: evalBlobs, written: set });
-        written.set(k, set);
+        for (let i = 0; i < at; i++) evalTile(ir, key, windows.get(key), { stage: ev[i].stage, set: ev[i].set, countOnly: true, blobs: evalBlobs, writtenLast: last });
+        written.set(k, last);
       }
       return written.get(k);
     };
-    for (const g of Object.values(sv)) {
+    for (const [gn, g] of Object.entries(sv)) {
       if (!g.terrain) continue;
       g.terrain = g.terrain.map((q) => {
         if (!q.at) return q;
         const w = earlier(q.key, q.at);
         const cells = [];
-        for (let i = 0; i + 2 < q.cells.length; i += 3) if (!w.has(cellId(q.cells[i], q.cells[i + 1], q.cells[i + 2]))) cells.push(q.cells[i], q.cells[i + 1], q.cells[i + 2]);
+        for (let i = 0; i + 2 < q.cells.length; i += 3) {
+          const last = w.get(cellId(q.cells[i], q.cells[i + 1], q.cells[i + 2]));
+          if (!last) { cells.push(q.cells[i], q.cells[i + 1], q.cells[i + 2]); continue; }
+          if ((last[1] === 0 || last[1] === 3) && last[0] !== q.state) {
+            const t = (writtenFirst[gn] ??= {});
+            for (const [it, n] of Object.entries(q.items)) t[it] = (t[it] ?? 0) + n;
+          }
+        }
         return { ...q, cells };
       });
     }
   }
+  const survivalTerrainWritten = Object.keys(writtenFirst).length ? Object.fromEntries(Object.keys(writtenFirst).sort().map((g) => [g, Object.fromEntries(Object.entries(writtenFirst[g]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}) };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}) };
 }
 
 /** (BC, A11) At most this many paid terrain cells per group are kept by position; past it the group keeps none (the quote stays an upper bound). */

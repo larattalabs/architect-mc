@@ -144,7 +144,8 @@ public final class Quotes {
 				+ "at most this quote)");
 		}
 		Map<String, Integer> terrain = standing.terrain(); // (QL) clamped to the whole bom below
-		String mayHold = mayAlreadyHold(tiles, standing.covered());
+		// (QL-b) the paid terrain cells an earlier write always covers first (plan.json's survivalTerrainWritten): always paid, never standing
+		String mayHold = mayAlreadyHold(tiles, withWritten(standing.covered(), p.planned().get("survivalTerrainWritten") instanceof JsonObject w ? w : null));
 		if (mayHold != null) {
 			bill.exact = false;
 			notes.add(mayHold);
@@ -332,7 +333,8 @@ public final class Quotes {
 		net.minecraft.world.level.block.Blocks.GRANITE, net.minecraft.world.level.block.Blocks.DIORITE, net.minecraft.world.level.block.Blocks.ANDESITE,
 		net.minecraft.world.level.block.Blocks.TUFF, net.minecraft.world.level.block.Blocks.SAND, net.minecraft.world.level.block.Blocks.RED_SAND,
 		net.minecraft.world.level.block.Blocks.GRAVEL, net.minecraft.world.level.block.Blocks.CLAY, net.minecraft.world.level.block.Blocks.SANDSTONE,
-		net.minecraft.world.level.block.Blocks.RED_SANDSTONE, net.minecraft.world.level.block.Blocks.NETHERRACK, net.minecraft.world.level.block.Blocks.SNOW_BLOCK);
+		net.minecraft.world.level.block.Blocks.RED_SANDSTONE, net.minecraft.world.level.block.Blocks.NETHERRACK, net.minecraft.world.level.block.Blocks.SNOW_BLOCK,
+		net.minecraft.world.level.block.Blocks.FARMLAND); // (QL-b) farmland too (it bills dirt)
 
 	/**
 	 * (SA, A11) The region's paid cells that may already stand in the land: per target group, the items of natural terrain blocks
@@ -380,6 +382,23 @@ public final class Quotes {
 		}
 		return "tiles: " + total + " paid cell(s) of natural terrain may already stand in the land (" + String.join("; ", parts) + "): a realise "
 			+ "skips a cell that already holds its block, so the region's cells are an upper bound: consumed is at most this quote, never more";
+	}
+
+	/**
+	 * (QL-b) {@code covered} plus plan.json's {@code survivalTerrainWritten} (group -> {item: n}: the paid terrain cells an earlier evaluation
+	 * of their tile key always writes first with another state, so a realise always writes and pays them): neither may already stand.
+	 */
+	static Map<String, Map<String, Integer>> withWritten(Map<String, Map<String, Integer>> covered, @Nullable JsonObject written) {
+		if (written == null || written.isEmpty()) {
+			return covered;
+		}
+		Map<String, Map<String, Integer>> out = new TreeMap<>();
+		covered.forEach((g, its) -> out.put(g, new TreeMap<>(its)));
+		for (var g : written.entrySet()) {
+			Map<String, Integer> its = out.computeIfAbsent(g.getKey(), k -> new TreeMap<>());
+			items(g.getValue()).forEach((k, v) -> its.merge(k, v, Integer::sum));
+		}
+		return out;
 	}
 
 	/**

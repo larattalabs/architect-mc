@@ -853,6 +853,8 @@ export class Regions {
         ...(kitPlan.survivalBom && typeof kitPlan.survivalBom === 'object' ? { survivalBom: kitPlan.survivalBom } : {}),
         // (BC, A11) its paid terrain cells by position (plan.json's survivalTerrain): Regions.quote leaves out the ones the land already holds
         ...(kitPlan.survivalTerrain && typeof kitPlan.survivalTerrain === 'object' ? { survivalTerrain: kitPlan.survivalTerrain } : {}),
+        // (QL-b) the paid terrain cells an earlier write always covers first, their items per group: always paid, so never "may already stand"
+        ...(kitPlan.survivalTerrainWritten && typeof kitPlan.survivalTerrainWritten === 'object' ? { survivalTerrainWritten: kitPlan.survivalTerrainWritten } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);

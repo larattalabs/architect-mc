@@ -624,6 +624,7 @@ export function evalTile(ir, key, heights, opts = {}) {
   const { stage = null, set = null, countOnly = false, writers = false } = opts;
   const keepTerrain = opts.terrainCells === true; // (BC, A11) the plan's quote data: the paid terrain cells by position
   const writtenOut = opts.written instanceof Set ? opts.written : null; // (BC, A11) every cell it writes, by cellId
+  const lastOut = opts.writtenLast instanceof Map ? opts.writtenLast : null; // (QL-b) each written cell's last write: cellId -> [state, cond]
   const cellOps = opts.cellOps || writers;
   // (6b, the checker) the op index of every emitted cell, in payload order
   let opsOut = cellOps ? new Int32Array(4096) : null, opsN = 0;
@@ -914,7 +915,11 @@ export function evalTile(ir, key, heights, opts = {}) {
             const m = (v - opi - 1) / OP_SLOTS;
             const o = C.ops[opi];
             if (C.isAir[m]) { removed++; partStats[o.part][0]++; } else { added++; partStats[o.part][1]++; }
-            if (writtenOut) writtenOut.add(cellId(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15)));
+            if (writtenOut || lastOut) {
+              const id = cellId(sx * 16 + (p & 15), yBase + s * 16 + (p >> 8), sz * 16 + ((p >> 4) & 15));
+              if (writtenOut) writtenOut.add(id);
+              if (lastOut) lastOut.set(id, [C.mats[m], o.cond]);
+            }
             if (S) {
               // (6c RS, §4) the cell's class: free (the free pass), held (free, in a holding group's target) or paid
               const g = S.groupOfPart[o.part];

@@ -141,4 +141,11 @@ test('survival: the adopted growth\'s bill holds each source\'s bed and four far
   assert.equal(shells.length, 4);
   assert.equal(Object.values(diff).reduce((n, v) => n + v, 0), 20, JSON.stringify(diff));
   assert.ok(Object.values(diff).every((v) => v > 0), JSON.stringify(diff));
+  // (QL-b) the pads write every shell cell first (the bed grass, the sides air; IF_NATURAL): no shell cell is kept by position, each is always
+  // paid (survivalTerrainWritten: the shell's 5 dirt), so the quote's may-already-stand note leaves them out
+  for (const p of shells) {
+    assert.equal(wet.survivalTerrain?.[p.id], undefined, p.id);
+    assert.deepEqual(wet.survivalTerrainWritten?.[p.id], { 'minecraft:dirt': 5 }, p.id);
+  }
+  assert.ok(!wet.irJson.includes('survivalTerrainWritten'), 'outside the IR');
 });
