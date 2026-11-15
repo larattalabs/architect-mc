@@ -459,8 +459,15 @@ final class DesignEditor {
 		return y - s.scroll();
 	}
 
+	/**
+	 * (slice UI, UI-AUDIT 14) The body ends this far above the footer: 4 px of air and a rule over the status line (footerY - 13), where
+	 * the last row used to be cut right on "Ready: …".
+	 */
+	private static final int BODY_GAP = 20;
+
 	private void end(GuiGraphicsExtractor g, int x, int y, int w, int h, int y0, int yEnd) {
 		g.disableScissor();
+		g.fill(x, y + h + 1, x + w - 8, y + h + 2, UiStyle.rule());
 		s.clipControls(null);
 		contentH = yEnd - y0 + 6;
 		s.setScrollArea(x, y, w - 8, h, contentH, 24);
@@ -469,6 +476,11 @@ final class DesignEditor {
 
 	/** The title row: what this is, and the mode switch (New | Variant of "X") when both are open. */
 	private void titleRow(GuiGraphicsExtractor g, String title, boolean variant, int x, int y, int w, int mx, int my) {
+		titleRow(g, title, variant, x, y, w, 0, mx, my);
+	}
+
+	/** The title row; {@code reserve} px left of the mode chips stay free (a compact Remix… button). Returns that free strip's right edge. */
+	private int titleRow(GuiGraphicsExtractor g, String title, boolean variant, int x, int y, int w, int reserve, int mx, int my) {
 		VariantForm vf = LibraryFeature.variantForm();
 		int cx = x + w;
 		if (vf != null) {
@@ -493,7 +505,8 @@ final class DesignEditor {
 			n.draw(g, font(), cx, y, mx, my);
 			s.control("editor:mode:new", "New", n, !variant);
 		}
-		g.text(font(), TextUtil.ellipsize(font(), title, cx - x - 8), x, y + 5, UiStyle.clayText(), false);
+		g.text(font(), TextUtil.ellipsize(font(), title, cx - reserve - x - 8), x, y + 5, UiStyle.clayText(), false);
+		return cx - 4;
 	}
 
 	/** A "saved draft" bar: Restore / Discard. Returns the y after (unchanged without a draft). */
@@ -547,7 +560,7 @@ final class DesignEditor {
 			titleRow(g, f.remix != null ? "Remix of " + LibraryFeature.nameOf(f.remix) : "New design", false, x, top - 2, w, mx, my);
 		}
 		int by = titled ? top + Chip.H + 2 : top - 2;
-		int bh = footerY - 16 - by;
+		int bh = footerY - BODY_GAP - by;
 		int y0 = begin(g, x, by, w, bh);
 		int iw = w - 10;
 		int y = y0;
@@ -948,13 +961,18 @@ final class DesignEditor {
 		f.size = DesignForm.CUSTOM;
 	}
 
+	/** W / H / D: lab-ui's shared {@link dev.larattalabs.labui.client.widget.Stepper} (slice UI, as the set dialog's); returns the x after it. */
 	private int stepper(GuiGraphicsExtractor g, DesignForm f, String id, String name, int value, int x, int y, int mx, int my) {
-		x += chip(g, "custom:" + id + "-", new Chip("−", () -> step(f, id, -1)), x, y, mx, my) + 2;
-		String v = name + " " + value;
-		g.text(font(), v, x, y + 5, UiBits.ink(), false);
-		x += font().width(v) + 2;
-		x += chip(g, "custom:" + id + "+", new Chip("+", () -> step(f, id, 1)), x, y, mx, my);
-		return x;
+		int min = id.equals("h") ? DesignSpec.MIN_Y : DesignSpec.MIN_XZ;
+		int max = id.equals("h") ? DesignSpec.MAX_Y : DesignSpec.MAX_XZ;
+		var st = new dev.larattalabs.labui.client.widget.Stepper(() -> step(f, id, -1), () -> step(f, id, 1)).name(name).value(Integer.toString(value))
+			.valueWidth(font().width("00")).canDecrease(value > min, "At the smallest (" + min + ")").canIncrease(value < max, "At the largest (" + max + ")");
+		int w = st.draw(g, font(), x, y, mx, my(my));
+		s.control("custom:" + id + "-", "−", st.minus(), false);
+		s.control("custom:" + id + "+", "+", st.plus(), false);
+		s.tip(st.minus(), mx, my(my));
+		s.tip(st.plus(), mx, my(my));
+		return x + w;
 	}
 
 	private void footerNew(GuiGraphicsExtractor g, DesignForm f, Map<String, String> errors, int x, int w, int footerY, int mx, int my) {
@@ -1038,23 +1056,35 @@ final class DesignEditor {
 		LibraryCard c = LibraryFeature.card(f.from());
 		String name = c == null ? f.from() : c.name();
 		int y = top - 3;
-		titleRow(g, "Variant of " + name, true, x, y, w, mx, my);
-		y += Chip.H + 2;
-		// the lock bar: what is baked into the design's code
-		int lh = Button.H + 4;
-		Paint.box(g, x, y, w, lh, 0xFFEDE6D8, UiStyle.rule());
 		String rm = "Remix…";
 		int rw = Button.width(font(), rm);
-		g.text(font(), TextUtil.ellipsize(font(), "Locked: What, Features and Rules are in this design's code. A Style re-skins it; Remix… "
-			+ "changes the rest (Claude).", w - rw - 14), x + 5, y + 7, UiStyle.mutedText(), false);
+		String lockText = "Locked: What, Features and Rules are in this design's code. A Style re-skins it; Remix… changes the rest (Claude).";
 		Button remix = new Button(rm, () -> {
 			lib.closeDialog();
 			s.remix(f.from());
 		});
-		remix.draw(g, font(), x + w - 2 - rw, y + 2, rw, Button.H, mx, my);
+		// (slice UI, UI-AUDIT 14 "the variants form shows about 1.5 rows" at GUI 4) on a short panel the lock bar folds into the title row: Remix…
+		// sits beside the mode chips and the lock sentence becomes its tooltip, giving the form its rows back
+		boolean compact = footerY - top < 230;
+		int lh = Button.H + 4;
+		if (compact) {
+			int right = titleRow(g, "Variant of " + name, true, x, y, w, rw + 4, mx, my);
+			remix.tooltip(lockText);
+			remix.draw(g, font(), right - rw, y, rw, Button.MIN_H, mx, my);
+			s.tip(remix, mx, my);
+			lh = -3;
+			y += Chip.H + 2;
+		} else {
+			titleRow(g, "Variant of " + name, true, x, y, w, mx, my);
+			y += Chip.H + 2;
+			// the lock bar: what is baked into the design's code
+			Paint.box(g, x, y, w, lh, 0xFFEDE6D8, UiStyle.rule());
+			g.text(font(), TextUtil.ellipsize(font(), lockText, w - rw - 14), x + 5, y + 7, UiStyle.mutedText(), false);
+			remix.draw(g, font(), x + w - 2 - rw, y + 2, rw, Button.H, mx, my);
+		}
 		s.control("variant:remix", rm, remix, false);
 		y += lh + 3;
-		int bh = footerY - 16 - y;
+		int bh = footerY - BODY_GAP - y;
 		int by = y;
 		int y0 = begin(g, x, by, w, bh);
 		int iw = w - 10;

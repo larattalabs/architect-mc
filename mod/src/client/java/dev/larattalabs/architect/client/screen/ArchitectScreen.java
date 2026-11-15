@@ -88,7 +88,8 @@ public final class ArchitectScreen extends Screen {
 
 	private static final int MAX_W = 640;
 	private static final int MAX_H = 400;
-	static final int CHIP_H = 14;
+	/** (slice UI, A-chips) the kit Chip's height: the legacy 14 px tab-sprite chips are gone. */
+	static final int CHIP_H = dev.larattalabs.labui.client.widget.Chip.H;
 	private static final int ROW_H = 24;
 
 	enum Focus {
@@ -200,6 +201,8 @@ public final class ArchitectScreen extends Screen {
 	 */
 	private static final dev.larattalabs.labui.ui.ConfirmArm OWNED_REMOVE = new dev.larattalabs.labui.ui.ConfirmArm();
 	private static final String OWNED_KEY = "owned:";
+	/** (slice UI) The two presses of a set row's × (drop that building from the set). */
+	private static final dev.larattalabs.labui.ui.ConfirmArm GROUP_DROP = new dev.larattalabs.labui.ui.ConfirmArm();
 
 	/** "owned by steward_mc" (the mod id part of the owner), or null for the player's own site. */
 	static @Nullable String ownedLabel(Site s) {
@@ -1189,18 +1192,20 @@ public final class ArchitectScreen extends Screen {
 			}
 		}
 		int ow = UiBits.dotPillWidth(font, pill);
-		UiBits.dotPill(g, font, fam, pill, cx + cw - ow, cy - 1, UiBits.ink());
+		// (slice UI, UI-AUDIT 14 / SD) the pill and the Jobs box sit in the strip's band above its clay rule, not on it
+		int[] band = Panels.headerBand(cy - 2);
+		UiBits.dotPill(g, font, fam, pill, cx + cw - ow, band[0], UiBits.ink());
 		// (J3) the Jobs & spend panel, left of the helper pill: "Jobs (K)", with how many wait for the player
 		int waiting = dev.larattalabs.labui.ui.JobBoardModel.needsYouCount(dev.larattalabs.labui.client.jobs.JobBoard.model().rows());
 		String jl = "Jobs" + (waiting > 0 ? " · " + waiting + (waiting == 1 ? " needs you" : " need you") : "") + " (" + dev.larattalabs.labui.client.jobs.JobBoard.keyLabel() + ")";
 		int jw = font.width(jl) + 12;
 		int jx = cx + cw - ow - 6 - jw;
-		Hit jh = new Hit("header:jobs", jl, jx, cy - 3, jw, 13, true, waiting > 0, () -> dev.larattalabs.labui.client.jobs.JobBoard.open(null));
+		Hit jh = new Hit("header:jobs", jl, jx, band[0], jw, band[1], true, waiting > 0, () -> dev.larattalabs.labui.client.jobs.JobBoard.open(null));
 		hits.add(jh);
 		boolean jhov = jh.contains(mouseX, mouseY);
-		dev.larattalabs.labui.client.widget.Paint.box(g, jx, cy - 3, jw, 13, jhov ? UiStyle.rowHover() : UiStyle.withAlpha(UiStyle.PAPER, 255),
+		dev.larattalabs.labui.client.widget.Paint.box(g, jx, band[0], jw, band[1], jhov ? UiStyle.rowHover() : UiStyle.withAlpha(UiStyle.PAPER, 255),
 			waiting > 0 ? UiStyle.selectedEdge() : jhov ? UiStyle.rowHoverEdge() : UiStyle.chipEdge());
-		g.text(font, jl, jx + 6, cy, UiBits.ink(), false);
+		g.text(font, jl, jx + 6, band[0] + (band[1] - 8) / 2 + 1, UiBits.ink(), false);
 		// tabs
 		int ty = cy + 16;
 		int tx = cx;
@@ -1246,10 +1251,23 @@ public final class ArchitectScreen extends Screen {
 
 	void button(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, boolean primary, boolean enabled, int mx, int my,
 		Runnable action) {
+		button(g, id, label, x, y, w, primary, false, enabled, null, mx, my, action);
+	}
+
+	/** (slice UI) A button that says why it is disabled ({@code whyNot}, its tooltip). */
+	void button(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, boolean primary, boolean enabled, @Nullable String whyNot, int mx,
+		int my, Runnable action) {
+		button(g, id, label, x, y, w, primary, false, enabled, whyNot, mx, my, action);
+	}
+
+	/** (slice UI) {@code danger}: a plain button with the error-coloured label (Remove), never the clay primary. */
+	void button(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, boolean primary, boolean danger, boolean enabled,
+		@Nullable String whyNot, int mx, int my, Runnable action) {
 		Hit h = new Hit(id, label, x, y, w, 20, enabled, primary, action);
 		hits.add(h);
 		UiBits.ButtonState st = !enabled ? UiBits.ButtonState.DISABLED : h.contains(mx, my) ? UiBits.ButtonState.HOVER : UiBits.ButtonState.NORMAL;
-		UiBits.button(g, font, label, 0, x, y, w, primary, st, false);
+		UiBits.button(g, font, label, 0, x, y, w, primary, st, danger);
+		offerReason(h, whyNot, mx, my);
 	}
 
 	int bw(String label) {
@@ -1266,17 +1284,44 @@ public final class ArchitectScreen extends Screen {
 		return y + 11;
 	}
 
+	/** The width {@link #chip} draws {@code label} at. */
+	int chipW(String label) {
+		return CHIP_PAINT.label(label).width(font);
+	}
+
+	/** One kit Chip, painted per call (the screen's {@link Hit}s do the clicking). */
+	private static final dev.larattalabs.labui.client.widget.Chip CHIP_PAINT = new dev.larattalabs.labui.client.widget.Chip("");
+
+	/**
+	 * (slice UI, A-chips) A lab-ui kit Chip (18 px, the selected fill, hover, disabled) instead of the 14 px tab-sprite chip; returns its
+	 * width. {@code whyNot}: a disabled chip's reason, shown as its tooltip.
+	 */
 	int chip(GuiGraphicsExtractor g, String id, String label, int x, int y, boolean on, boolean enabled, int mx, int my, Runnable action) {
-		int w = font.width(label) + 12;
+		return chip(g, id, label, x, y, on, enabled, null, mx, my, action);
+	}
+
+	int chip(GuiGraphicsExtractor g, String id, String label, int x, int y, boolean on, boolean enabled, @Nullable String whyNot, int mx, int my,
+		Runnable action) {
+		var c = CHIP_PAINT.label(label).selected(on);
+		c.disabled(!enabled);
+		int w = c.width(font);
 		Hit h = new Hit(id, label, x, y, w, CHIP_H, enabled, on, action);
 		hits.add(h);
-		Panels.sprite(g, on ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, x, y, w, CHIP_H, enabled ? 0xFFFFFFFF : 0x90FFFFFF);
-		if (enabled && !on && h.contains(mx, my)) {
-			g.fill(x + 1, y + 1, x + w - 1, y + CHIP_H - 1, 0x14000000);
-		}
-		int color = !enabled ? UiStyle.color("paper.disabled", 0xFFA39B8E) : on ? UiBits.ink() : UiBits.muted();
-		g.text(font, label, x + 6, y + 3, color, false);
+		c.draw(g, font, x, y, w, mx, my);
+		offerReason(h, whyNot, mx, my);
 		return w;
+	}
+
+	/** (slice UI) A kit control's tooltip, or its disabled reason, through the screen's one Tooltip. */
+	void tip(dev.larattalabs.labui.client.widget.Control c, int mx, int my) {
+		tooltip.offer(c, mx, my);
+	}
+
+	/** (slice UI) A disabled control's reason as the screen's tooltip while the mouse is over it. */
+	private void offerReason(Hit h, @Nullable String whyNot, int mx, int my) {
+		if (!h.enabled() && whyNot != null && h.contains(mx, my)) {
+			tooltip.offer(h.id(), whyNot);
+		}
 	}
 
 	private int chips(GuiGraphicsExtractor g, String prefix, List<DesignSpec.Choice> choices, @Nullable String selected, int x, int y, int w, int mx,
@@ -1394,32 +1439,88 @@ public final class ArchitectScreen extends Screen {
 		}
 	}
 
+	/** (slice UI, A-placed) A placed site's player name: its design's name, else its design id. */
+	private static String siteName(Site s) {
+		Blueprint b = Blueprints.get(s.blueprint());
+		return b == null ? s.blueprint() : b.name();
+	}
+
+	/** (slice UI, A-placed) The region a site was built for (a region target's ext), else null. */
+	private static @Nullable String regionOf(Site s) {
+		var e = s.ext() == null ? null : s.ext().get(dev.larattalabs.architect.site.RegionTargets.EXT_REGION);
+		return e != null && e.isJsonPrimitive() ? e.getAsString() : null;
+	}
+
+	/** (slice UI, A-placed) "facing as designed", "turned 90° clockwise". */
+	private static String facing(String rotation) {
+		return switch (rotation) {
+			case "none" -> "facing as designed";
+			case "clockwise_90" -> "turned 90° clockwise";
+			case "clockwise_180" -> "turned 180°";
+			case "counterclockwise_90" -> "turned 90° counter-clockwise";
+			default -> rotation.replace('_', ' ');
+		};
+	}
+
+	private static final int SITE_HEAD_H = 14;
+
+	/**
+	 * (slice UI, A-placed; UI audit 2 F4, UI-AUDIT 14) "Placed here", grouped: yours, each composite, each town plan, then one group per mod
+	 * that manages sites ("Managed by Steward"). Rows read as names and places, not ids and boxes; the selected row is the kit's. A managed
+	 * site can't be moved from here, and its Remove keeps the two-press ask (phase 4a R5).
+	 */
 	private void drawSites(GuiGraphicsExtractor g, int x, int ly, int listW, int lh, int dx, int dw, int footerY, int mx, int my) {
 		List<Site> sites = Sites.all();
 		if (selectedSite == null || Sites.get(selectedSite) == null) {
 			selectedSite = sites.isEmpty() ? null : sites.get(sites.size() - 1).id();
 		}
-		listNeeded = sites.size() * ROW_H + 4;
+		List<dev.larattalabs.architect.library.PlacedGroups.Row> rows = new ArrayList<>();
+		Map<String, Site> byId = new java.util.HashMap<>();
+		for (Site s : sites) {
+			byId.put(s.id(), s);
+			rows.add(new dev.larattalabs.architect.library.PlacedGroups.Row(s.id(), siteName(s), s.owner(), dev.larattalabs.architect.library.PlacedGroups
+				.compositeOf(s.blueprint(), dev.larattalabs.architect.site.Composites.MODULE_SEP), regionOf(s)));
+		}
+		List<dev.larattalabs.architect.library.PlacedGroups.Group> groups = dev.larattalabs.architect.library.PlacedGroups.group(rows,
+			LibraryFeature::nameOf);
+		int needed = 4;
+		for (var gr : groups) {
+			needed += SITE_HEAD_H + gr.rows().size() * ROW_H;
+		}
+		listNeeded = needed;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
 		g.enableScissor(x + 1, ly + 1, x + listW - 1, ly + lh - 1);
 		int ry = ly + 3 - listScroll;
-		for (Site s : sites) {
-			boolean sel = s.id().equals(selectedSite);
-			if (ry + ROW_H > ly && ry < ly + lh) {
-				Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(ROW_H - 2, ly + lh - ry), true, sel,
-					() -> selectedSite = s.id());
-				hits.add(h);
-				if (sel) {
-					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x22D97757);
-				}
-				Blueprint b = Blueprints.get(s.blueprint());
-				g.text(font, TextUtil.ellipsize(font, s.id() + "  " + (b == null ? s.blueprint() : b.name()), listW - 14), x + 6, ry + 2, UiBits.ink(), false);
-				String owned = ownedLabel(s);
-				g.text(font, TextUtil.ellipsize(font, s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + " · " + s.rotation().replace('_', ' ')
-					+ (owned == null ? "" : " · " + owned) + (s.group() == null ? "" : " · group " + s.group()) + (s.placing() ? " · placing" : ""), listW - 14),
-					x + 6, ry + 12, UiBits.muted(), false);
+		@Nullable String managedBy = null;
+		for (var gr : groups) {
+			if (ry + SITE_HEAD_H > ly && ry < ly + lh) {
+				String count = " · " + gr.rows().size();
+				String title = TextUtil.ellipsize(font, gr.title(), listW - 14 - font.width(count));
+				g.text(font, title, x + 6, ry + 4, gr.readOnly() ? UiBits.muted() : UiStyle.clayText(), false);
+				g.text(font, count, x + 6 + font.width(title), ry + 4, UiBits.muted(), false);
 			}
-			ry += ROW_H;
+			ry += SITE_HEAD_H;
+			for (var row : gr.rows()) {
+				Site s = byId.get(row.id());
+				boolean sel = row.id().equals(selectedSite);
+				if (sel && gr.readOnly()) {
+					managedBy = gr.title().substring("Managed by ".length());
+				}
+				if (ry + ROW_H > ly && ry < ly + lh) {
+					Hit h = new Hit("site:" + s.id(), s.id(), x + 2, Math.max(ry, ly), listW - 4, Math.min(ROW_H - 2, ly + lh - ry), true, sel,
+						() -> selectedSite = s.id());
+					hits.add(h);
+					if (sel) {
+						Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					} else if (h.contains(mx, my)) {
+						Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
+					}
+					g.text(font, TextUtil.ellipsize(font, row.name(), listW - 16), x + 8, ry + 2, UiBits.ink(), false);
+					g.text(font, TextUtil.ellipsize(font, "at " + s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + (s.placing() ? " · placing" : ""),
+						listW - 16), x + 8, ry + 12, UiBits.muted(), false);
+				}
+				ry += ROW_H;
+			}
 		}
 		g.disableScissor();
 		if (sites.isEmpty()) {
@@ -1435,22 +1536,30 @@ public final class ArchitectScreen extends Screen {
 			return;
 		}
 		int y = ly;
-		g.text(font, TextUtil.ellipsize(font, s.id() + " · " + s.blueprint(), dw), dx, y, UiBits.ink(), false);
+		g.text(font, TextUtil.ellipsize(font, siteName(s), dw), dx, y, UiBits.ink(), false);
 		y += 12;
-		List<String> lines = new java.util.ArrayList<>(List.of("box " + Anchors.str(s.box()), "restores " + Anchors.str(s.restoreBox()),
-			s.dimension() + " · " + s.rotation(),
-			s.movedFrom() == null ? "never moved" : "moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z()));
-		if (s.owner() != null) {
-			lines.add(0, ownedLabel(s) + " (" + s.owner() + ")");
+		var b = s.box();
+		List<String> lines = new ArrayList<>();
+		lines.add("At " + b.minX() + ", " + b.minY() + ", " + b.minZ() + " · " + facing(s.rotation()));
+		lines.add((b.maxX() - b.minX() + 1) + " × " + (b.maxY() - b.minY() + 1) + " × " + (b.maxZ() - b.minZ() + 1) + " blocks" + (Site.OVERWORLD.equals(s
+			.dimension()) ? "" : " · in " + s.dimension().substring(s.dimension().indexOf(':') + 1).replace('_', ' ')));
+		if (s.movedFrom() != null) {
+			lines.add("Moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z());
 		}
 		if (s.member() != null) {
-			// phase 4d: the site group (one undo for the set), the batch and item that placed it
-			lines.add("group " + s.member().group() + (s.member().batchId() == null ? "" : " · batch " + s.member().batchId())
-				+ (s.member().itemKey() == null ? "" : " · item " + s.member().itemKey()) + (s.placing() ? " · placing" : ""));
+			lines.add("Placed with others as one set: undo takes them together" + (s.placing() ? " · placing" : ""));
 		}
 		for (String line : lines) {
 			g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, UiBits.muted(), false);
 			y += 10;
+		}
+		if (managedBy != null) {
+			y += 2;
+			for (String line : TextUtil.wrapPlain(font, dev.larattalabs.architect.library.PlacedGroups.managedReason(managedBy) + ".", dw).stream().limit(2)
+				.toList()) {
+				g.text(font, line, dx, y, UiStyle.clayText(), false);
+				y += 10;
+			}
 		}
 		y = drawVersions(g, s, dx, y, dw, footerY, mx, my);
 		Sites.Report r = Sites.reports().get(s.id());
@@ -1468,7 +1577,8 @@ public final class ArchitectScreen extends Screen {
 		String rm = ownedArmed ? "Press again to remove (" + OWNED_REMOVE.secondsLeft(nowMs) + ")" : force ? "Remove anyway" : "Remove";
 		boolean coveredAsk = s.id().equals(coveredArmed);
 		int rmW = s.owner() != null ? Math.max(bw(rm), bw("Press again to remove (9)")) : bw(rm); // arming never shifts the row
-		button(g, "remove", rm, bx, by, rmW, true, true, mx, my, () -> {
+		// (slice UI, UI-AUDIT 14) Remove is a plain button with the error label: it was the solid primary, as if it were the main action
+		button(g, "remove", rm, bx, by, rmW, false, true, true, null, mx, my, () -> {
 			// a site another mod owns asks twice (R5)
 			if (ownedRemoveOk(s)) {
 				removeSite(s, force, coveredAsk ? Sites.Covered.KEEP : null);
@@ -1478,7 +1588,7 @@ public final class ArchitectScreen extends Screen {
 		if (coveredAsk) {
 			// phase 4e: the site is covered: Remove keeps the covered cells (hand-down), Remove both takes the covering sites first
 			String both = "Remove both";
-			button(g, "remove_both", both, bx, by, bw(both), true, true, mx, my, () -> removeSite(s, force, Sites.Covered.CASCADE));
+			button(g, "remove_both", both, bx, by, bw(both), false, true, true, null, mx, my, () -> removeSite(s, force, Sites.Covered.CASCADE));
 			bx += bw(both) + 4;
 			String cancel = "Cancel";
 			button(g, "remove_cancel", cancel, bx, by, bw(cancel), false, true, mx, my, () -> {
@@ -1488,13 +1598,14 @@ public final class ArchitectScreen extends Screen {
 			bx += bw(cancel) + 4;
 		}
 		String mv = "Move…";
-		button(g, "move", mv, bx, by, bw(mv), false, true, mx, my, () -> {
+		String mvWhy = managedBy != null ? dev.larattalabs.architect.library.PlacedGroups.managedReason(managedBy) : null;
+		button(g, "move", mv, bx, by, bw(mv), false, managedBy == null, mvWhy, mx, my, () -> {
 			String why = PlacementFeature.startMove(s.id());
 			LibraryFeature.say(why, why != null);
 		});
 		bx += bw(mv) + 4;
 		String undo = "Undo move";
-		button(g, "undo_move", undo, bx, by, bw(undo), false, s.movedFrom() != null, mx, my, () -> undoMove(s));
+		button(g, "undo_move", undo, bx, by, bw(undo), false, s.movedFrom() != null, "It hasn't been moved since it was placed", mx, my, () -> undoMove(s));
 	}
 
 	// ------------------------------------------------------------------ phase 5b: versions of a placed site
@@ -1701,6 +1812,28 @@ public final class ArchitectScreen extends Screen {
 		}
 	}
 
+	/** (slice UI, UI-AUDIT 14 raw internals) A job id the helper made ({@code gen_cabin_2}, {@code mas_tower_x}) in a step line. */
+	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp)_[A-Za-z0-9_]+\\b");
+
+	/**
+	 * (slice UI, UI-AUDIT 14) A job's status line in player words: "done · in the Library · 11×12×12", not "done · done: gen_cabin (11x12x12),
+	 * 3 previews"; elsewhere the status and the step without the status repeated or the helper's ids.
+	 */
+	static String jobLine(Job j) {
+		if ("done".equals(j.fam()) && j.blueprintId() != null) {
+			return "done · in the Library" + (j.size() == null ? "" : " · " + j.size()[0] + "×" + j.size()[1] + "×" + j.size()[2]);
+		}
+		String step = j.step();
+		if (step.regionMatches(true, 0, j.status() + ":", 0, j.status().length() + 1)) {
+			step = step.substring(j.status().length() + 1);
+		}
+		step = RAW_ID.matcher(step).replaceAll("").replaceAll("\\(\\s*\\)", "").replaceAll("\\s{2,}", " ").replaceAll("\\s+([,)])", "$1").strip();
+		if (step.startsWith(",") || step.startsWith("·")) {
+			step = step.substring(1).strip();
+		}
+		return j.status() + (step.isEmpty() ? "" : " · " + step);
+	}
+
 	/** A group's status as a dot family. */
 	static String fam(dev.larattalabs.architect.api.Group.Status st) {
 		return switch (st) {
@@ -1790,7 +1923,7 @@ public final class ArchitectScreen extends Screen {
 			};
 			String name = bj.bible().map(dev.larattalabs.architect.api.Bible::name).orElse(bj.request().has("name") ? bj.request().get("name").getAsString()
 				: bj.bibleId());
-			out.add(new Job(bj.id(), "bible", (bj.kind().equals("revise") ? "Revise " : "Bible ") + name + " v" + bj.version(), f, bj.status().name()
+			out.add(new Job(bj.id(), "style", (bj.kind().equals("revise") ? "Revise " : "Style ") + name + " v" + bj.version(), f, bj.status().name()
 				.toLowerCase(Locale.ROOT), bj.step(), null, null, bj.error().orElse(null), bj.createdAt(), !bj.finished(), null, null, null, bj));
 		}
 		for (SidecarState.Design d : Sidecar.state().designs()) {
@@ -1854,19 +1987,18 @@ public final class ArchitectScreen extends Screen {
 					() -> selectedDesign = j.id());
 				hits.add(h);
 				if (isSel) {
-					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x22D97757);
+					Panels.selectedRow(g, x + 2, ry, listW - 4, ROW_H - 2);
 				} else if (h.contains(mx, my)) {
-					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x12000000);
+					Panels.hoverRow(g, x + 2, ry, listW - 4, ROW_H - 2);
 				}
-				Panels.dot(g, j.fam(), x + 6, ry + 4, false);
+				Panels.paperDot(g, j.fam(), x + 6, ry + 4);
 				String kind = j.kind().equals("design") ? "" : j.kind().toUpperCase(Locale.ROOT);
 				int kw = kind.isEmpty() ? 0 : font.width(kind) + 6;
 				g.text(font, TextUtil.ellipsize(font, j.title(), listW - 26 - kw), x + 16, ry + 2, UiBits.ink(), false);
 				if (!kind.isEmpty()) {
 					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, UiStyle.clayText(), false);
 				}
-				g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : " · " + j.step()), listW - 24), x + 16, ry + 12,
-					UiBits.muted(), false);
+				g.text(font, TextUtil.ellipsize(font, jobLine(j), listW - 24), x + 16, ry + 12, UiBits.muted(), false);
 			}
 			ry += ROW_H;
 		}
@@ -1896,9 +2028,9 @@ public final class ArchitectScreen extends Screen {
 			drawBibleJob(g, j.bible(), dx, y, dw, footerY, mx, my);
 			return;
 		}
-		g.text(font, TextUtil.ellipsize(font, j.title() + "  (" + j.id() + ")", dw), dx, y, UiBits.ink(), false);
+		g.text(font, TextUtil.ellipsize(font, j.title(), dw), dx, y, UiBits.ink(), false);
 		y += 12;
-		g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : ": " + j.step()), dw), dx, y, UiBits.muted(), false);
+		g.text(font, TextUtil.ellipsize(font, jobLine(j), dw), dx, y, UiBits.muted(), false);
 		y += 12;
 		if (j.design() != null) {
 			JsonObject r = j.design().request();
@@ -1928,7 +2060,7 @@ public final class ArchitectScreen extends Screen {
 				JsonObject mraw = Sidecar.state().massing(mref.get().id());
 				String extra = mraw == null ? "" : " · " + dev.larattalabs.architect.apiimpl.Wire4c.massing(mraw).parts().size() + " masses" + (mraw.has(
 					"detail") ? " · detailed" : "");
-				g.text(font, TextUtil.ellipsize(font, "massing " + mref.get().id() + " v" + mref.get().version() + extra, dw), dx, y, UiStyle.clayText(), false);
+				g.text(font, TextUtil.ellipsize(font, "massing v" + mref.get().version() + extra, dw), dx, y, UiStyle.clayText(), false);
 				y += 10;
 				if (r.has("redirect") && r.get("redirect").isJsonObject()) {
 					for (String line : TextUtil.wrapPlain(font, "redirect: " + r.getAsJsonObject("redirect").get("notes").getAsString(), dw).stream().limit(2)
@@ -1939,8 +2071,8 @@ public final class ArchitectScreen extends Screen {
 				}
 			}
 			if (r.has("fromMassing")) {
-				g.text(font, TextUtil.ellipsize(font, "detail of massing " + r.get("fromMassing").getAsString() + (r.has("massingVersion") ? " v" + r.get(
-					"massingVersion").getAsString() : ""), dw), dx, y, UiStyle.clayText(), false);
+				g.text(font, TextUtil.ellipsize(font, "detail of the massing" + (r.has("massingVersion") ? " v" + r.get("massingVersion").getAsString() : ""),
+					dw), dx, y, UiStyle.clayText(), false);
 				y += 10;
 			}
 			var conf = dev.larattalabs.architect.apiimpl.Wire4c.conformance(j.design().raw().get("conformance"));
@@ -1970,11 +2102,11 @@ public final class ArchitectScreen extends Screen {
 		} else if (j.variant() != null) {
 			SidecarState.Variant v = j.variant();
 			if (v.from() != null) {
-				g.text(font, TextUtil.ellipsize(font, "from: " + LibraryFeature.nameOf(v.from()) + " (" + v.from() + ")", dw), dx, y, UiBits.ink(), false);
+				g.text(font, TextUtil.ellipsize(font, "from: " + LibraryFeature.nameOf(v.from()), dw), dx, y, UiBits.ink(), false);
 				y += 10;
 			}
 			if (v.path() != null) {
-				g.text(font, TextUtil.ellipsize(font, "file: " + v.path(), dw), dx, y, UiBits.ink(), false);
+				g.text(font, TextUtil.ellipsize(font, "file: " + java.nio.file.Path.of(v.path()).getFileName(), dw), dx, y, UiBits.ink(), false);
 				y += 10;
 			}
 			g.text(font, TextUtil.ellipsize(font, "no Claude call: the helper " + (v.isImport() ? "checks the structure (custom profile)"
@@ -1982,8 +2114,8 @@ public final class ArchitectScreen extends Screen {
 			y += 10;
 		}
 		if (j.blueprintId() != null) {
-			g.text(font, TextUtil.ellipsize(font, "result: " + j.blueprintId() + (j.size() == null ? "" : " (" + j.size()[0] + "×" + j.size()[1] + "×"
-				+ j.size()[2] + ")"), dw), dx, y, UiBits.okText(), false);
+			g.text(font, TextUtil.ellipsize(font, "result: " + LibraryFeature.nameOf(j.blueprintId()) + (j.size() == null ? "" : " (" + j.size()[0] + "×"
+				+ j.size()[1] + "×" + j.size()[2] + ")"), dw), dx, y, UiBits.okText(), false);
 			y += 10;
 		}
 		if (j.error() != null) {
@@ -1996,8 +2128,8 @@ public final class ArchitectScreen extends Screen {
 		int bx = dx;
 		if (j.design() != null) {
 			String cancel = "Cancel";
-			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), mx, my,
-				() -> DesignFeature.cancel(j.id()));
+			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), !j.running() ? "It has finished"
+				: "The design helper isn't connected", mx, my, () -> DesignFeature.cancel(j.id()));
 			bx += bw(cancel) + 4;
 		}
 		var jm = j.design() == null ? java.util.Optional.<dev.larattalabs.architect.api.MassingRef>empty() : dev.larattalabs.architect.apiimpl.Wire4c
@@ -2007,7 +2139,8 @@ public final class ArchitectScreen extends Screen {
 			String rv = "Review massing";
 			JsonObject mraw = Sidecar.state().massing(jm.get().id());
 			boolean grouped = mraw != null && mraw.has("group");
-			button(g, "design:review_massing", rv, bx, by, bw(rv), true, mraw != null && !grouped && inWorld(), mx, my, () -> {
+			button(g, "design:review_massing", rv, bx, by, bw(rv), true, mraw != null && !grouped && inWorld(), !inWorld() ? "Open a world first"
+				: grouped ? "Its set reviews it: open the set" : "The helper hasn't sent the massing yet", mx, my, () -> {
 				String why = dev.larattalabs.architect.client.design.MassingReview.open(jm.get().id());
 				if (why != null) {
 					LibraryFeature.say(why, true);
@@ -2019,7 +2152,8 @@ public final class ArchitectScreen extends Screen {
 		}
 		if (j.fam().equals("done") && j.blueprintId() != null) {
 			String show = "Show in Library";
-			button(g, "show_library", show, bx, by, bw(show), true, Blueprints.get(j.blueprintId()) != null, mx, my, () -> {
+			button(g, "show_library", show, bx, by, bw(show), true, Blueprints.get(j.blueprintId()) != null,
+				"It is no longer in the Library (deleted or not loaded)", mx, my, () -> {
 				LibraryFeature.select(j.blueprintId());
 				LibraryFeature.setQuery(dev.larattalabs.architect.library.LibraryQuery.ALL.withSort(LibraryFeature.query().sort()));
 				LibraryTab.dialog = LibraryTab.Dialog.NONE;
@@ -2078,7 +2212,7 @@ public final class ArchitectScreen extends Screen {
 			.orElse(gr.bible().id());
 		String cost = String.format(Locale.ROOT, "$%.2f", gr.cost().usd()) + gr.budgetUsd().map(b -> String.format(Locale.ROOT, " of $%.2f budget", b))
 			.orElse(" (no budget)");
-		g.text(font, TextUtil.ellipsize(font, "bible " + bibleName + " v" + gr.bible().version() + " · " + gr.concurrency() + " at a time · " + cost, dw),
+		g.text(font, TextUtil.ellipsize(font, "Style " + bibleName + " v" + gr.bible().version() + " · " + gr.concurrency() + " at a time · " + cost, dw),
 			dx, y, UiBits.muted(), false);
 		y += 10;
 		if (st == dev.larattalabs.architect.api.Group.Status.HELD_USAGE) {
@@ -2127,14 +2261,23 @@ public final class ArchitectScreen extends Screen {
 			if (approving && it.awaitingApproval()) {
 				String ik = it.itemKey();
 				int ax = dx + dw - 8;
-				ax -= font.width("×") + 12;
-				chip(g, "group:item_cancel:" + ik, "×", ax, ry - 2, false, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.approve(
-					gr.id(), List.of(), Map.of(), List.of(ik)));
+				// (slice UI, A-chips) the row's × drops a building from the set: it asks first ("Drop it?"), as Delete does
+				String armKey = gr.id() + "/" + ik;
+				long nowMs = net.minecraft.util.Util.getMillis();
+				String xl = GROUP_DROP.armed(armKey, nowMs) ? "Drop it? (" + GROUP_DROP.secondsLeft(nowMs) + ")" : "×";
+				ax -= chipW(xl);
+				chip(g, "group:item_cancel:" + ik, xl, ax, ry - 2, false, true, mx, my, () -> {
+					if (GROUP_DROP.press(armKey, net.minecraft.util.Util.getMillis()) == dev.larattalabs.labui.ui.ConfirmArm.Result.CONFIRMED) {
+						dev.larattalabs.architect.client.design.SetFeature.approve(gr.id(), List.of(), Map.of(), List.of(ik));
+					} else {
+						LibraryFeature.say("Drop " + name + " from the set? Press × again to drop it", false);
+					}
+				});
 				boolean canRedirect = it.rounds() < gr.maxRedirects();
-				ax -= font.width("Redirect…") + 12 + 3;
-				chip(g, "group:item_redirect:" + ik, "Redirect…", ax, ry - 2, (gr.id() + "/" + ik).equals(redirectItem), canRedirect, mx, my,
-					() -> startRedirect(gr.id(), ik));
-				ax -= font.width("Approve") + 12 + 3;
+				ax -= chipW("Redirect…") + 3;
+				chip(g, "group:item_redirect:" + ik, "Redirect…", ax, ry - 2, (gr.id() + "/" + ik).equals(redirectItem), canRedirect, "No redirects left ("
+					+ gr.maxRedirects() + " per building)", mx, my, () -> startRedirect(gr.id(), ik));
+				ax -= chipW("Approve") + 3;
 				chip(g, "group:item_approve:" + ik, "Approve", ax, ry - 2, true, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
 					.approve(gr.id(), List.of(ik), Map.of(), List.of()));
 				actionsW = dx + dw - 8 - ax + 6;
@@ -2249,8 +2392,9 @@ public final class ArchitectScreen extends Screen {
 	/** A bible job's detail: status, step, cost, the sheet once done. */
 	private void drawBibleJob(GuiGraphicsExtractor g, dev.larattalabs.architect.api.BibleJob bj, int dx, int top, int dw, int footerY, int mx, int my) {
 		int y = top;
-		g.text(font, TextUtil.ellipsize(font, (bj.kind().equals("revise") ? "Revise " : "Bible ") + bj.bibleId() + " v" + bj.version() + "  (" + bj.id()
-			+ ")", dw), dx, y, UiBits.ink(), false);
+		g.text(font, TextUtil.ellipsize(font, (bj.kind().equals("revise") ? "Revise the Style " : "New Style ") + bj.bible().map(
+			dev.larattalabs.architect.api.Bible::name).orElse(bj.request().has("name") ? bj.request().get("name").getAsString() : "") + " v" + bj.version(), dw),
+			dx, y, UiBits.ink(), false);
 		y += 12;
 		String bst = bj.status().name().toLowerCase(Locale.ROOT);
 		g.text(font, TextUtil.ellipsize(font, bj.step().isEmpty() ? bst : bj.step().startsWith(bst) ? bj.step() : bst + ": " + bj.step(), dw), dx, y,
@@ -2306,7 +2450,20 @@ public final class ArchitectScreen extends Screen {
 
 	// ------------------------------------------------------------------ Status tab
 
-	private void drawStatus(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
+	private void drawStatus(GuiGraphicsExtractor g, int x, int top0, int w, int footerY, int mx, int my) {
+		// (slice UI, A-placed "GUI-4 Status scroll"; UI-AUDIT 14) the tab scrolls when it is taller than the panel (GUI scale 4 cut it off)
+		int viewH = footerY - 2 - top0;
+		listArea = new int[] {x, top0, w, viewH};
+		listAvailable = viewH;
+		scrollStep = 20;
+		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - viewH)));
+		int hitsBefore = hits.size();
+		boolean scrolls = listNeeded > viewH;
+		if (scrolls) {
+			w -= 10;
+		}
+		g.enableScissor(x, top0, x + w + 10, top0 + viewH);
+		int top = top0 - listScroll;
 		int colW = (w - 14) / 2;
 		int lx = x;
 		int rx = x + colW + 14;
@@ -2347,13 +2504,17 @@ public final class ArchitectScreen extends Screen {
 		}
 		y += 2;
 		LauncherPlan.Source src = Launcher.source();
+		// (slice UI, UI-AUDIT 14 raw internals) player words; no absolute paths or environment variable names
 		List<String> facts = new ArrayList<>();
-		facts.add("node: " + (Launcher.node() == null ? "not found" : Launcher.node() + " (" + Launcher.nodeVersion() + ")"));
-		facts.add("from: " + (src == null ? "-" : src.origin() + (src.dir() == null ? "" : " " + src.dir())));
-		facts.add("port " + Sidecar.port() + (Launcher.reusedRunning() ? " · reused" : Launcher.startedByUs() ? " · started by this game" : ""));
-		facts.add("link: " + Sidecar.state().link().phaseName() + (Sidecar.state().link().lastError() == null ? "" : " (" + Sidecar.state().link()
-			.lastError() + ")"));
-		facts.add("log: " + Launcher.logFile());
+		facts.add("Node.js: " + (Launcher.node() == null ? "not found" : Launcher.nodeVersion() == null ? "found" : Launcher.nodeVersion()));
+		facts.add("Helper: " + (src == null ? "not found" : switch (src.kind()) {
+			case BUNDLED -> "bundled with Architect";
+			case DEV -> "a development copy";
+			default -> "not found";
+		}) + (Launcher.reusedRunning() ? " · already running" : Launcher.startedByUs() ? " · started by this game" : ""));
+		facts.add("Connection: " + Sidecar.state().link().phaseName() + " · port " + Sidecar.port() + (Sidecar.state().link().lastError() == null ? ""
+			: " (" + Sidecar.state().link().lastError() + ")"));
+		facts.add("Log: logs/" + Launcher.logFile().getFileName());
 		for (String f : facts) {
 			g.text(font, TextUtil.ellipsize(font, f, colW), lx, y, UiBits.muted(), false);
 			y += 10;
@@ -2427,8 +2588,7 @@ public final class ArchitectScreen extends Screen {
 		Panels.sprite(g, focus == Focus.KEY ? Kit.TEXT_FIELD_FOCUSED : Kit.TEXT_FIELD, rx, ry, fw, TextFieldView.BASE_H);
 		String shown = key.length() == 0 ? "" : "•".repeat(Math.min(key.length(), 48));
 		if (shown.isEmpty() && focus != Focus.KEY) {
-			g.text(font, TextUtil.ellipsize(font, "sk-ant-… (paste with Ctrl+V)", fw - 12), rx + 6, ry + 5, UiStyle.color("ink_ui.ghost_on_paper",
-				0xFFBCAD95), false);
+			g.text(font, TextUtil.ellipsize(font, "sk-ant-… (paste with Ctrl+V)", fw - 12), rx + 6, ry + 5, UiStyle.placeholder(), false);
 		} else {
 			String fit = TextUtil.ellipsize(font, shown, fw - 14);
 			g.text(font, fit, rx + 6, ry + 5, UiBits.ink(), false);
@@ -2439,13 +2599,15 @@ public final class ArchitectScreen extends Screen {
 		}
 		ry += TextFieldView.BASE_H + 4;
 		String save = "Save key";
-		button(g, "save_key", save, rx, ry, bw(save), true, key.length() > 0 && Sidecar.connected(), mx, my, this::saveKey);
+		button(g, "save_key", save, rx, ry, bw(save), true, key.length() > 0 && Sidecar.connected(), !Sidecar.connected()
+			? "The design helper isn't connected" : "Paste a key first", mx, my, this::saveKey);
 		String clear = "Remove key";
-		button(g, "clear_key", clear, rx + bw(save) + 4, ry, bw(clear), false, Sidecar.connected(), mx, my, this::clearKey);
+		button(g, "clear_key", clear, rx + bw(save) + 4, ry, bw(clear), false, Sidecar.connected(), "The design helper isn't connected", mx, my,
+			this::clearKey);
 		ry += 24;
 		statusLine(g, keyMessage, keyMessageError, rx, ry, colW);
 		ry += 12;
-		for (String line : TextUtil.wrapPlain(font, "Stored by the helper in sidecar-data/secrets.json, never in the game's files.", colW)) {
+		for (String line : TextUtil.wrapPlain(font, "Stored by the design helper, never in the game's files.", colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;
 		}
@@ -2509,6 +2671,19 @@ public final class ArchitectScreen extends Screen {
 			ry += 10;
 		}
 		statusLine(g, survivalMessage, survivalMessageError, rx, ry, colW);
+		ry += 12;
+		g.disableScissor();
+		listNeeded = Math.max(y, ry) - top;
+		// controls scrolled out of the view take no clicks
+		for (int i = hits.size() - 1; i >= hitsBefore; i--) {
+			Hit h = hits.get(i);
+			if (h.y() + h.h() <= top0 || h.y() >= top0 + viewH) {
+				hits.remove(i);
+			}
+		}
+		if (scrolls) {
+			scrollbar(g, x + w + 4, top0, viewH);
+		}
 		String[] hints = {"1-4", "tabs", "Esc", "close"};
 		UiBits.hints(g, font, x, footerY + 4, false, hints);
 	}

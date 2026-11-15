@@ -417,10 +417,9 @@ steps.gallery = async () => {
   }
   await sec('ui', 'library', 'variants_changed', async () => {
     await openTab('library'); await call('dev.library.select', { entry: pick }); await call('dev.library.variants.open', { entry: pick });
-    const vs = await call('dev.library.state').catch(() => ({}));
-    const presets = vs.variants?.presets ?? vs.variantForm?.presets ?? [];
-    const p = typeof presets[1] === 'string' ? presets[1] : presets[1]?.name ?? presets[1]?.id;
-    if (p) await call('dev.library.variants.set', { preset: p }); else await call('dev.library.variants.set', { steps: {} });
+    // (slice UI, UI-AUDIT 14 gallery gap) a real change: the preset lookup found none, so this shot was the untouched form; now the wood
+    // and the roof change, so the form and its preview differ from variants_form
+    await call('dev.library.variants.set', { wood: 'birch', roof: 'deepslate_tiles' });
   });
   await tryc('variant:cancel');
   await sec('ui', 'library', 'import_dialog', async () => { await openTab('library'); await call('dev.library.import.list'); });
@@ -504,6 +503,9 @@ steps.gallery = async () => {
     madeEntry = d?.blueprintId ?? null;
     GAL.notes.push(`designs: sim design ${id} ended ${d?.status}`);
     await sec('ui', 'designs', 'detail', async () => { await openTab('designs'); if (id) await call('dev.ui.click', { control: `design:${id}` }); });
+    // (slice UI) the shared Jobs & spend panel (lab-ui, K) over the jobs the gallery made: its title and step columns, the paper dots
+    await sec('ui', 'jobs', 'panel', async () => { await call('dev.screen', { open: null }); await call('dev.j3.open', {}); await sleep(600); });
+    await call('dev.screen', { open: null }).catch(() => null);
   } catch (e) { GAL.failed.push({ kind: 'ui', screen: 'designs', state: 'detail', scale: null, error: errMsg(e) }); }
   if (madeEntry) await call('dev.library.delete', { entry: madeEntry }).catch(() => null);
   GAL.library.designsBefore = designs0;
@@ -596,6 +598,19 @@ steps.gallery = async () => {
     await openTab('library'); await call('dev.ui.click', { control: 'library:placed' });
     if (row[0]) await call('dev.ui.click', { control: `site:${row[0]}` }).catch(() => null);
   });
+  // (slice UI, A-placed) Placed here with a site another mod owns (apitest is on the 6b client's classpath): its own "Managed by" group,
+  // Move disabled with its reason
+  let mid = null;
+  try {
+    const r = await call('dev.command', { cmd: `/apitest place cabin ${40 + 7 * 16} 64 40 INSTANT owned`, asPlayer: false });
+    const line = (r.messages ?? []).find((m) => m.startsWith('{'));
+    mid = line ? JSON.parse(line).siteId ?? null : null;
+    if (mid) row.push(mid);
+  } catch (e) { GAL.notes.push(`library/placed_managed: no owned site (${errMsg(e)})`); }
+  await sec('ui', 'library', 'placed_managed', async () => {
+    await openTab('library'); await call('dev.ui.click', { control: 'library:placed' });
+    if (mid) await call('dev.ui.click', { control: `site:${mid}` }).catch(() => null);
+  });
   for (const id of row) await chat(`/architect remove ${id} confirm`).catch(() => null);
   await sleep(2000);
 
@@ -636,6 +651,8 @@ steps.gallery = async () => {
     const claim = [-60, -60, 59, 59];
     const p = await L.plan('crater_works', claim, { surveyLoad: 'bounded:256' });
     await call('dev.region.ghost', { planId: p.planId }, 120_000);
+    // (slice UI, UI-AUDIT 14 gallery gap) the plot shots leave the Design screen open: close it, or the ghost is shot under it
+    await call('dev.screen', { open: null }).catch(() => null);
     await sleep(6000);
     const rc = async () => call('dev.camera', { x: -40, y: 90, z: 20, yaw: 180, pitch: 35, mode: 'spectator', closePause: true }, 30_000).then(() => sleep(2500));
     await sec('world', 'region_ghost', 'plan', rc, { once: true, closeScreen: false });

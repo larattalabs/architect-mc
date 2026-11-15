@@ -243,7 +243,7 @@ final class LibraryTab {
 		if (!c.id().equals(armedDelete) || now - armedAt > 6000) {
 			armedDelete = c.id();
 			armedAt = now;
-			LibraryFeature.say("Delete " + c.name() + "? Click Delete again to move it to architect/library-trash", true);
+			LibraryFeature.say("Delete " + c.name() + "? Click Delete again to move it to the Library's trash", true);
 			return;
 		}
 		armedDelete = null;
@@ -295,83 +295,101 @@ final class LibraryTab {
 		int sw = Math.max(56, gx + gridW - chipsRight - 6);
 		int sx = gx + gridW - sw;
 		s.textField(g, Focus.SEARCH, searchView, search, sx, top - 3, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
-		// filters row
-		int fy = top + 19;
+		// filters row (slice UI, A-chips: kit chips at 18 px; GUI 4 keeps whole words and wraps to a second row instead of "Coll.", a bare ★
+		// and a bare ↕)
+		int fy = top + ArchitectScreen.CHIP_H + 3;
 		LibraryQuery q = LibraryFeature.query();
 		List<LibraryCard> all = LibraryFeature.cards();
-		int cx = gx;
-		String typeLabel = narrow ? (q.type() == null ? "Type" : q.type()) + " ▾" : "Type: " + (q.type() == null ? "all" : q.type()) + " ▾";
-		cx += s.chip(g, "filter:type", typeLabel, cx, fy, q.type() != null, true, mx, my, () -> {
+		int rowEnd = gx + gridW;
+		int[] at = {gx, fy};
+		java.util.function.IntUnaryOperator flow = (cw) -> {
+			if (at[0] > gx && at[0] + cw > rowEnd) {
+				at[0] = gx;
+				at[1] += ArchitectScreen.CHIP_H + 3;
+			}
+			return at[0];
+		};
+		String typeLabel = (narrow ? (q.type() == null ? "Type" : q.type()) : "Type: " + (q.type() == null ? "all" : q.type())) + " ▾";
+		int typeX = flow.applyAsInt(s.chipW(typeLabel));
+		int typeY = at[1];
+		at[0] += s.chip(g, "filter:type", typeLabel, typeX, typeY, q.type() != null, true, mx, my, () -> {
 			List<ArchitectScreen.Option> opts = new ArrayList<>();
 			opts.add(new ArchitectScreen.Option("all", "All types", q.type() == null));
 			for (String t : LibraryQuery.types(all)) {
 				opts.add(new ArchitectScreen.Option(t, t, t.equals(LibraryFeature.query().type())));
 			}
-			s.openPopup("type", gx, fy + 16, 180, opts, v -> {
+			s.openPopup("type", typeX, typeY + ArchitectScreen.CHIP_H + 2, 180, opts, v -> {
 				LibraryFeature.setQuery(LibraryFeature.query().withType("all".equals(v) ? null : v));
 				s.resetScroll();
 			});
 		}) + 3;
 		List<String> userTags = LibraryQuery.userTags(all);
-		String tagLabel = narrow ? (q.tag() == null ? "Tag" : "#" + q.tag()) + " ▾" : "Tag: " + (q.tag() == null ? "all" : q.tag()) + " ▾";
-		int tagX = cx;
-		cx += s.chip(g, "filter:tag", tagLabel, cx, fy, q.tag() != null, !userTags.isEmpty() || q.tag() != null, mx, my, () -> {
-			List<ArchitectScreen.Option> opts = new ArrayList<>();
-			opts.add(new ArchitectScreen.Option("all", "All tags", q.tag() == null));
-			for (String t : userTags) {
-				opts.add(new ArchitectScreen.Option(t, "#" + t, t.equals(LibraryFeature.query().tag())));
-			}
-			s.openPopup("tag", tagX, fy + 16, 180, opts, v -> {
-				LibraryFeature.setQuery(LibraryFeature.query().withTag("all".equals(v) ? null : v));
-				s.resetScroll();
-			});
-		}) + 3;
-		cx += s.chip(g, "filter:favorites", narrow ? "★" : "★ Starred", cx, fy, q.favoritesOnly(), true, mx, my, () -> {
+		String tagLabel = (narrow ? (q.tag() == null ? "Tag" : "#" + q.tag()) : "Tag: " + (q.tag() == null ? "all" : q.tag())) + " ▾";
+		int tagX = flow.applyAsInt(s.chipW(tagLabel));
+		int tagY = at[1];
+		at[0] += s.chip(g, "filter:tag", tagLabel, tagX, tagY, q.tag() != null, !userTags.isEmpty() || q.tag() != null,
+			"No tags yet: add some with ⋯ > Tags", mx, my, () -> {
+				List<ArchitectScreen.Option> opts = new ArrayList<>();
+				opts.add(new ArchitectScreen.Option("all", "All tags", q.tag() == null));
+				for (String t : userTags) {
+					opts.add(new ArchitectScreen.Option(t, "#" + t, t.equals(LibraryFeature.query().tag())));
+				}
+				s.openPopup("tag", tagX, tagY + ArchitectScreen.CHIP_H + 2, 180, opts, v -> {
+					LibraryFeature.setQuery(LibraryFeature.query().withTag("all".equals(v) ? null : v));
+					s.resetScroll();
+				});
+			}) + 3;
+		String star = "★ Starred";
+		at[0] += s.chip(g, "filter:favorites", star, flow.applyAsInt(s.chipW(star)), at[1], q.favoritesOnly(), true, mx, my, () -> {
 			LibraryFeature.setQuery(LibraryFeature.query().withFavoritesOnly(!LibraryFeature.query().favoritesOnly()));
 			s.resetScroll();
 		}) + 3;
-		// collections (phase 4b, R10): the entries of one bible or one design set
+		// collections (phase 4b, R10): the entries of one Style or one design set
 		List<LibraryQuery.CollectionInfo> cols = LibraryQuery.collections(all);
-		String colLabel = TextUtil.ellipsize(font, q.collection() == null ? narrow ? "Coll. ▾" : "Collection ▾" : collectionName(q.collection()) + " ▾", narrow ? 56 : 78);
-		int colX = cx;
-		cx += s.chip(g, "filter:collection", colLabel, cx, fy, q.collection() != null, !cols.isEmpty() || q.collection() != null, mx, my, () -> {
-			List<ArchitectScreen.Option> opts = new ArrayList<>();
-			opts.add(new ArchitectScreen.Option("all", "All entries", LibraryFeature.query().collection() == null));
-			for (LibraryQuery.CollectionInfo c : cols) {
-				opts.add(new ArchitectScreen.Option(c.key(), collectionName(c.key()) + " (" + c.count() + ")", c.key().equals(LibraryFeature.query()
-					.collection())));
-			}
-			s.openPopup("collection", colX, fy + 16, 260, opts, v -> {
-				LibraryFeature.setQuery(LibraryFeature.query().withCollection("all".equals(v) ? null : v));
-				s.resetScroll();
-			});
-		}) + 3;
-		// sort chips, right-aligned in the grid column
+		String colLabel = TextUtil.ellipsize(font, q.collection() == null ? "Collection ▾" : collectionName(q.collection()) + " ▾", 110);
+		int colX = flow.applyAsInt(s.chipW(colLabel));
+		int colY = at[1];
+		at[0] += s.chip(g, "filter:collection", colLabel, colX, colY, q.collection() != null, !cols.isEmpty() || q.collection() != null,
+			"No collections yet: a Style's designs or a set make one", mx, my, () -> {
+				List<ArchitectScreen.Option> opts = new ArrayList<>();
+				opts.add(new ArchitectScreen.Option("all", "All entries", LibraryFeature.query().collection() == null));
+				for (LibraryQuery.CollectionInfo c : cols) {
+					opts.add(new ArchitectScreen.Option(c.key(), collectionName(c.key()) + " (" + c.count() + ")", c.key().equals(LibraryFeature.query()
+						.collection())));
+				}
+				s.openPopup("collection", colX, colY + ArchitectScreen.CHIP_H + 2, 260, opts, v -> {
+					LibraryFeature.setQuery(LibraryFeature.query().withCollection("all".equals(v) ? null : v));
+					s.resetScroll();
+				});
+			}) + 3;
+		// sort: three chips right-aligned when they fit on the last row, else one "Sort: Newest ▾" that opens the choices
 		int sortW = 0;
 		for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
-			sortW += font.width(so.label()) + 12 + 2;
+			sortW += s.chipW(so.label()) + 2;
 		}
-		if (cx + 4 + sortW <= gx + gridW + 2) {
-			int sortX = gx + gridW - sortW + 2;
+		if (at[0] + 4 + sortW <= rowEnd + 2) {
+			int sortX = rowEnd - sortW + 2;
 			for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
-				sortX += s.chip(g, "sort:" + so.id(), so.label(), sortX, fy, q.sort() == so, true, mx, my, () -> LibraryFeature.setQuery(LibraryFeature
+				sortX += s.chip(g, "sort:" + so.id(), so.label(), sortX, at[1], q.sort() == so, true, mx, my, () -> LibraryFeature.setQuery(LibraryFeature
 					.query().withSort(so))) + 2;
 			}
 		} else {
-			// no room for three chips (a collection is picked): one that opens the sort choices
-			String sl = narrow ? "↕ ▾" : "↕ " + q.sort().label() + " ▾";
-			int sw0 = font.width(sl) + 12;
-			int sortX = Math.max(cx + 2, gx + gridW - sw0);
-			s.chip(g, "sort", sl, sortX, fy, false, true, mx, my, () -> {
+			String sl = "Sort: " + q.sort().label() + " ▾";
+			int sw0 = s.chipW(sl);
+			int sortX = at[0] + sw0 > rowEnd ? flow.applyAsInt(sw0) : rowEnd - sw0;
+			int sortY = at[1];
+			s.chip(g, "sort", sl, sortX, sortY, false, true, mx, my, () -> {
 				List<ArchitectScreen.Option> opts = new ArrayList<>();
 				for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
 					opts.add(new ArchitectScreen.Option(so.id(), so.label(), LibraryFeature.query().sort() == so));
 				}
-				s.openPopup("sort", sortX, fy + 16, 160, opts, v -> LibraryFeature.setQuery(LibraryFeature.query().withSort(LibraryQuery.Sort.of(v))));
+				s.openPopup("sort", sortX, sortY + ArchitectScreen.CHIP_H + 2, 160, opts, v -> LibraryFeature.setQuery(LibraryFeature.query().withSort(
+					LibraryQuery.Sort.of(v))));
 			});
 		}
+		fy = at[1];
 		// grid (under the collection's header when one is picked)
-		int gy = fy + 19;
+		int gy = fy + ArchitectScreen.CHIP_H + 3;
 		if (q.collection() != null) {
 			gy = drawCollectionHeader(g, q.collection(), gx, gy, gridW, mx, my) + 3;
 		}
@@ -389,11 +407,11 @@ final class LibraryTab {
 		s.late(gg -> drawMenu(gg, mx, my));
 	}
 
-	/** "Ashfall" for {@code bible:<id>}, "Set: Ashfall hamlet" for {@code group:<id>}. */
+	/** "Style: Ashfall" for {@code bible:<id>} (slice UI wording-2: the player word is Style), "Set: Ashfall hamlet" for {@code group:<id>}. */
 	static String collectionName(String key) {
 		if (key.startsWith(LibraryQuery.BIBLE_PREFIX)) {
 			String id = key.substring(LibraryQuery.BIBLE_PREFIX.length());
-			return "Bible: " + dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name).orElse(id);
+			return "Style: " + dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name).orElse(id);
 		}
 		String id = key.substring(LibraryQuery.GROUP_PREFIX.length());
 		com.google.gson.JsonObject gr = Sidecar.state().group(id);
@@ -443,7 +461,7 @@ final class LibraryTab {
 		int clearW = font.width("×") + 12;
 		int textW = x + w - 4 - gw - 4 - clearW - 4 - tx;
 		g.text(font, TextUtil.ellipsize(font, title, textW), tx, y + 4, UiBits.ink(), false);
-		String sub = bible == null ? "bible unknown (not installed here)" : (bible.builtin() ? "built-in bible" : "bible v" + bible.version() + (bible
+		String sub = bible == null ? "Style unknown (not installed here)" : (bible.builtin() ? "built-in Style" : "Style v" + bible.version() + (bible
 			.versions().size() > 1 ? " of " + bible.versions().size() : "")) + " · " + bible.roles().size() + " roles";
 		if (key.startsWith(LibraryQuery.GROUP_PREFIX) && bible != null) {
 			sub = bible.name() + " · " + sub;
@@ -595,33 +613,37 @@ final class LibraryTab {
 		boolean survival = dev.larattalabs.architect.survival.SurvivalWorld.on();
 		List<Btn> items = new ArrayList<>();
 		if (DesignFeature.plotForBlueprint(c.id()) != null && !c.pinned()) {
-			items.add(new Btn("place_plot", "Place on the plot", false, inWorld, () -> placeOnPlot(c.id())));
+			items.add(new Btn("place_plot", "Place on the plot", false, inWorld, () -> placeOnPlot(c.id()), NO_WORLD));
 		}
 		// (7b ST, N-7b-6) a site-bound design places elsewhere only as a site variant of it
 		if (c.pinned()) {
 			items.add(new Btn("site_variant_here", "Site variant here… (mark a " + c.pinnedFit().replace('_', ' ') + " plot)", false, inWorld
-				&& dev.larattalabs.architect.client.design.SiteVariantHere.running() == null, () -> siteVariantHere(c.id())));
+				&& dev.larattalabs.architect.client.design.SiteVariantHere.running() == null, () -> siteVariantHere(c.id()), !inWorld ? NO_WORLD
+				: "A site variant is already being made"));
 		}
-		items.add(new Btn("variants", "Variants… (re-skin, parameters)", false, c.canVariant(), () -> openVariants(c.id())));
+		items.add(new Btn("variants", "Variants… (re-skin, parameters)", false, c.canVariant(), () -> openVariants(c.id()),
+			"An imported structure has no design program to re-run"));
 		items.add(new Btn("remix", "Remix… (Claude)", false, true, () -> s.remix(c.id())));
 		// (5a) a report critique of the entry: one critic call (about $0.1), the verdict lands in its critique.json
 		if (dev.larattalabs.architect.client.design.SetFeature.has("critique.report")) {
 			String why = dev.larattalabs.architect.design.CritiqueRules.reportRefusal(c.bundled(), false, true, Sidecar.connected());
 			items.add(new Btn("critique", DesignFeature.REPORT_PENDING.contains(c.id()) ? "Critiquing…" : dev.larattalabs.architect.design.CritiqueRules.reportLabel(
-				reportEstimate(c)), false, why == null && !DesignFeature.REPORT_PENDING.contains(c.id()), () -> requestReport(c)));
+				reportEstimate(c)), false, why == null && !DesignFeature.REPORT_PENDING.contains(c.id()), () -> requestReport(c), why != null ? why
+				: "A critique of it is running"));
 		}
 		items.add(new Btn("rename", "Rename", false, true, () -> startEdit(Edit.RENAME, c)));
 		items.add(new Btn("tags", "Tags", false, true, () -> startEdit(Edit.TAGS, c)));
 		items.add(new Btn("favorite", c.favorite() ? "★ Unstar" : "☆ Star", false, true, () -> LibraryFeature.setFavorite(c.id(), !c.favorite())));
-		items.add(new Btn("export", "Export .nbt", false, inWorld, () -> LibraryFeature.export(c.id())));
+		items.add(new Btn("export", "Export .nbt", false, inWorld, () -> LibraryFeature.export(c.id()), NO_WORLD));
 		// (6c SCH) a Sponge schematic (version 3) for WorldEdit and other tools
-		items.add(new Btn("export_schem", "Export .schem", false, inWorld, () -> LibraryFeature.exportSchem(c.id())));
+		items.add(new Btn("export_schem", "Export .schem", false, inWorld, () -> LibraryFeature.exportSchem(c.id()), NO_WORLD));
 		// phase 5b: versions (Compare…, Revert entry to the previous one, Polish…)
 		Blueprints.Entry ve = Blueprints.entry(c.id());
 		int headV = ve == null ? 1 : Blueprints.headVersion(ve);
 		if (headV > 1) {
-			items.add(new Btn("compare", "Compare v" + (headV - 1) + " and v" + headV + "…", false, inWorld, () -> compare(c.id(), headV - 1, headV)));
-			items.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1)));
+			items.add(new Btn("compare", "Compare v" + (headV - 1) + " and v" + headV + "…", false, inWorld, () -> compare(c.id(), headV - 1, headV), NO_WORLD));
+			items.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1),
+				c.bundled() ? "A bundled design can't change" : "The design helper isn't connected"));
 		}
 		// (5b) polish failed its gate (G4), so per the contract it stays behind a dev flag: -Darchitect.dev.polish=true
 		if (dev.larattalabs.architect.client.design.SetFeature.has("design.polish") && Boolean.getBoolean("architect.dev.polish")) {
@@ -839,7 +861,7 @@ final class LibraryTab {
 				menuOpen = false;
 				b.action().run();
 			});
-			bt.disabled(!b.enabled());
+			bt.disabled(!b.enabled(), b.whyNot());
 			bt.draw(g, font, x + 4, yy, w - 8, dev.larattalabs.labui.client.widget.Button.H, mx, my);
 			s.control(b.id(), b.label(), bt, false);
 			drawn.add(bt);
@@ -847,8 +869,14 @@ final class LibraryTab {
 		}
 		g.fill(x + 4, yy + 2, x + w - 4, yy + 3, UiStyle.rule());
 		yy += 7;
-		del.disabled(c.bundled()).tooltip(c.bundled() ? "a bundled design can't be deleted" : "moves it to architect/library-trash");
+		del.disabled(c.bundled(), "Bundled designs come with Architect and can't be deleted");
+		del.tooltip("Moves it to the Library's trash");
 		del.draw(g, font, x + 4, yy, w - 8, dev.larattalabs.labui.client.widget.Button.H, mx, my);
+		// (slice UI) a disabled item's reason, and Delete's what-it-does, as tooltips
+		for (dev.larattalabs.labui.client.widget.Control ct : drawn) {
+			s.tip(ct, mx, my);
+		}
+		s.tip(del, mx, my);
 		s.control("delete", "Delete…", del, false);
 		int[] r = menuRect;
 		// clicks go to the menu first; a click outside closes it
@@ -876,8 +904,14 @@ final class LibraryTab {
 		return false;
 	}
 
-	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
+	/** A ⋯ menu item; {@code whyNot}: why it is disabled (slice UI: no control disabled without a reason). */
+	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action, @Nullable String whyNot) {
+		Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
+			this(id, label, primary, enabled, action, null);
+		}
 	}
+
+	static final String NO_WORLD = "Open a world first";
 
 	// ------------------------------------------------------------------ phase 5b: versions
 

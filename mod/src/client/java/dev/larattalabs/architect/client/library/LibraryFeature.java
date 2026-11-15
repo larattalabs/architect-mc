@@ -266,7 +266,7 @@ public final class LibraryFeature {
 		try {
 			Path to = trash(e);
 			EDITS.remove(id);
-			say("Deleted " + nameOf(id) + " (kept in architect/library-trash/" + to.getFileName() + ")", false);
+			say("Deleted " + nameOf(id) + " (a copy is kept in the Library's trash)", false);
 			if (id.equals(selected)) {
 				selected = null;
 			}
