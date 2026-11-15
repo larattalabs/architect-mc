@@ -279,8 +279,9 @@ steps.kinds = async () => {
     const checkId = checkIdOf(lc.notes);
     const RV = await import('./lib/realised-virtual.mjs');
     const rv = await RV.realisedVsVirtual(planDir(checkId), after, before, { lots: true });
-    o.virtual = { checkId, written: rv.written, differ: rv.differ, first: rv.first };
+    o.virtual = { checkId, written: rv.written, differ: rv.differ, kept: rv.kept, first: rv.first, keptFirst: rv.keptFirst };
     const ok = RV.realisedOk(rv, [], { strict: true });
+    if (rv.kept) log(`  kept cells (the realise left them as they were): ${json(rv.keptFirst)}`);
     check(!!checkId && rv.written > 0 && ok.pass, `the ${kind}: the realised world equals the check's virtual world (strict): ${rv.differ} of ${rv.written} differ: ${RV.describeRealised(rv)}`, { loose: ok.loose, first: rv.first.slice(0, 3) });
     await L.tp(a[0] - 6, a[1] + 6, a[2] - 10);
     await L.settle(1500);
