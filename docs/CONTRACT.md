@@ -30423,7 +30423,12 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 - **Ran.**
   - Full kit suite: 1408/1408.
   - Scoped units, step-inputs check (409 steps) and api-compat `--baselines` (8/8 clean) all pass. `release-version --check --lenient` is consistent; `s6-br` re-plans byte for byte.
-  - Gate (ports 8916-8921): br-unit, br-s1, br-s2, br-s3, br-s5, br-s6 and br-s3v2 PASS (runs 20261114-214821, -222801, -232*). MSPT is recorded only; it missed on a loaded box.
+  - Gate (ports 8916-8921): br-unit, br-s1, br-s2, br-s3, br-s5, br-s6 and br-s3v2 PASS. The final full run, 20261114-231247 at 70cbeed4, passed 6 of 7. br-s5's sculpt plan hit its 30 s limit at load 98; its re-run, 20261114-235219, passed. MSPT is recorded only; it missed on a loaded box.
+  - Per scenario, all from the brief, E-flat 0 and 0 unclassified throughout:
+    - S1, S2: PICKED their program; each matches its golden.
+    - S3: compose PICKED `terraced_monastery`; its role shares are inside every band.
+    - S5: PICKED; Fit 6/6, disturbance 0.001.
+    - S6: compose PICKED; matches `s6-br`; Fit 7/7, disturbance 0.178.
 - **Leftovers:**
   - COMPOSED plan/0 artifacts aren't realised by the harness. That's PAY P2's plan-path hook, which also needs a skip-pick key outside the sim.
   - P1's cliff design writes past its box, so S3 v2 needs a fixed cliff design.
