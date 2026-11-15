@@ -25,6 +25,8 @@ import path from 'node:path';
 
 export async function registerHF(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait } = h;
+  // (BC-c) the towns realise under a maxBill (the put-down quote); read back after every restart
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER });
   const ctx = { L, OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pos = (m) => Object.fromEntries(Object.entries(m ?? {}).filter(([, v]) => v > 0));
@@ -77,6 +79,7 @@ export async function registerHF(steps, h) {
     await L.openWorld(path.basename(W.dir));
     await L.tp(W.at[0], W.at[1], W.at[2]);
     await call('dev.wait', { ms: 3000 }, 30_000);
+    await caps.afterRestart(tag); // (BC-c) the reconcile inside the region's maxBill
     const c2 = await counts();
     const total2 = G.plus(pick(c2.inv, items), pick(c2.stock, items));
     const d = G.minus(total2, total0);
@@ -110,6 +113,7 @@ export async function registerHF(steps, h) {
     await L.openWorld(path.basename(W.dir));
     await L.tp(W.at[0], W.at[1], W.at[2]);
     await call('dev.wait', { ms: 3000 }, 30_000);
+    await caps.afterRestart(tag); // (BC-c) the reconcile inside the region's maxBill
     const c2 = await counts();
     const total2 = G.plus(pick(c2.inv, items), pick(c2.stock, items));
     const d = G.minus(total2, total0);
@@ -135,7 +139,7 @@ export async function registerHF(steps, h) {
     const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
     check(!cr.refused, `window: a stockpile of 4 crates: ${json(cr.refused ?? 'made')}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...at);
     const W = { dir: path.join(L.SAVES, name), at, region };
     const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
@@ -205,7 +209,7 @@ export async function registerHF(steps, h) {
     const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
     check(!cr.refused, `HF: a stockpile of 4 crates for ${G.OWNER}: ${json(cr.refused ?? 'made')}`);
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    const region = await caps.realise(L, p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
     await L.tp(...at);
     const W = { dir: path.join(L.SAVES, name), at, region };
     // every target paused: the builder consumes nothing, so the stock moves only by the cases' own moves (a paused target still counts as

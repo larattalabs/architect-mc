@@ -885,7 +885,7 @@ public final class Revisions {
 			Quotes.capRefusal(s, p, r);
 			var pile = dev.larattalabs.architect.site.Stockpiles.get(rec.owner);
 			dev.larattalabs.architect.site.BillCaps.record(rec.survival, r.maxBill(), pile == null ? java.util.Map.of()
-				: dev.larattalabs.architect.site.BillCaps.drawn(pile.ledger(), rec.groupId));
+				: dev.larattalabs.architect.site.BillCaps.base(pile.ledger(), rec.groupId, rec.survival)); // (BC-c) the region's own charges too
 		}
 		Path w = l.world();
 		Path rd = dir(w, id, rid);

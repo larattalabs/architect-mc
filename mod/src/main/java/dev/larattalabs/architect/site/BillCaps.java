@@ -20,19 +20,76 @@ public final class BillCaps {
 	private BillCaps() {
 	}
 
-	/** A region's cap: the most its group may draw, and what it had drawn at the realise. */
-	public record Cap(String region, String group, Map<String, Integer> max, Map<String, Integer> base) {
-		/** What the group may still draw of {@code item}, given its draws {@code drawn} (ledger paid, summed over the group). */
+	/**
+	 * A region's cap: the most its group may draw, what it had drawn at the realise, and (BC-c) the region's own charges counted in its draws
+	 * ({@code charged}: its fluids' and gate mechanisms' charges, for a cap recorded since BC-c; empty for an older one, whose base left them out).
+	 */
+	public record Cap(String region, String group, Map<String, Integer> max, Map<String, Integer> base, Map<String, Integer> charged) {
+		public Cap(String region, String group, Map<String, Integer> max, Map<String, Integer> base) {
+			this(region, group, max, base, Map.of());
+		}
+
+		/** What the group may still draw of {@code item}, given its draws {@code drawn} ({@link #drawn(StockLedger, Cap)}). */
 		public int left(Map<String, Integer> drawn, String item) {
+			return Math.max(0, room(drawn, item));
+		}
+
+		/** (BC-c) {@link #left} unclamped: negative by the units the group's draws are past the cap (a reconcile's standing cells). */
+		public int room(Map<String, Integer> drawn, String item) {
 			int used = drawn.getOrDefault(item, 0) - base.getOrDefault(item, 0);
-			return Math.max(0, max.getOrDefault(item, 0) - Math.max(0, used));
+			return max.getOrDefault(item, 0) - Math.max(0, used);
+		}
+
+		/** (BC-c) The items the group's draws are past the cap, with the units over; empty within it. */
+		public Map<String, Integer> overshoot(Map<String, Integer> drawn) {
+			Map<String, Integer> out = new TreeMap<>();
+			java.util.Set<String> items = new java.util.TreeSet<>(drawn.keySet());
+			items.addAll(max.keySet());
+			for (String k : items) {
+				int r = room(drawn, k);
+				if (r < 0) {
+					out.put(k, -r);
+				}
+			}
+			return out;
 		}
 	}
 
-	/** The region record's survival members for a cap ({@code survival.maxBill}, {@code survival.billBase}). */
+	/** (BC-c) The region record's member that says its draws count the region's own charges (and its base, for a revision, includes them). */
+	static final String REGION_CHARGES = "billRegion";
+
+	/** The region record's survival members for a cap ({@code survival.maxBill}, {@code survival.billBase}, BC-c's {@code billRegion}). */
 	public static void record(JsonObject survival, Map<String, Integer> cap, Map<String, Integer> base) {
 		survival.add("maxBill", json(cap));
 		survival.add("billBase", json(base));
+		survival.addProperty(REGION_CHARGES, true);
+	}
+
+	/**
+	 * (BC-c) A survival region's own charges, out of its record: its fluids' charge ({@code survival.charged}, once per region) and each gate
+	 * mechanism's charged bill not refunded ({@code survival.mech.<lot>.charged}). Neither is a target's paid record in the ledger.
+	 */
+	public static Map<String, Integer> regionCharged(@Nullable JsonObject survival) {
+		Map<String, Integer> out = new TreeMap<>();
+		if (survival == null) {
+			return out;
+		}
+		items(survival.get("charged")).forEach((k, v) -> out.merge(k, v, Integer::sum));
+		if (survival.get(MechCharges.KEY) instanceof JsonObject m) {
+			for (var e : m.entrySet()) {
+				if (e.getValue() instanceof JsonObject x && x.has("charged") && !x.has("refunded")) {
+					items(x.get("charged")).forEach((k, v) -> out.merge(k, v, Integer::sum));
+				}
+			}
+		}
+		return out;
+	}
+
+	/** (BC-c) A revision's base: its group's draws now, the region's own charges with them. */
+	public static Map<String, Integer> base(StockLedger ledger, String group, @Nullable JsonObject survival) {
+		Map<String, Integer> out = drawn(ledger, group);
+		regionCharged(survival).forEach((k, v) -> out.merge(k, v, Integer::sum));
+		return out;
 	}
 
 	private static JsonObject json(Map<String, Integer> m) {
@@ -62,10 +119,51 @@ public final class BillCaps {
 		String region = g != null && g.ext().has(RegionItems.EXT_REGION) ? g.ext().get(RegionItems.EXT_REGION).getAsString() : null;
 		var live = region == null ? null : dev.larattalabs.architect.region.RegionsImpl.live(region);
 		JsonObject sv = live == null ? null : live.rec().survival;
+		return capOf(region, group, sv);
+	}
+
+	/** (BC-c) The cap a region record keeps ({@code survival.maxBill}), or null. */
+	public static @Nullable Cap ofRegionRecord(String region, String group, @Nullable JsonObject sv) {
+		return capOf(region, group, sv);
+	}
+
+	static @Nullable Cap capOf(String region, String group, @Nullable JsonObject sv) {
 		if (sv == null || !(sv.get("maxBill") instanceof JsonObject mb)) {
 			return null;
 		}
-		return new Cap(region, group, items(mb), items(sv.get("billBase")));
+		boolean counts = sv.has(REGION_CHARGES) && sv.get(REGION_CHARGES).getAsBoolean();
+		return new Cap(region, group, items(mb), items(sv.get("billBase")), counts ? regionCharged(sv) : Map.of());
+	}
+
+	/** (BC-c) A live region's cap, or null (no cap, creative). */
+	public static @Nullable Cap ofRegion(dev.larattalabs.architect.region.RegionsImpl.@Nullable Live live) {
+		return live == null ? null : capOf(live.rec().id, live.rec().groupId, live.rec().survival);
+	}
+
+	/** (BC-c) The group's draws as its cap counts them: its targets' paid records and the region's own charges. */
+	public static Map<String, Integer> drawn(StockLedger ledger, Cap cap) {
+		Map<String, Integer> out = drawn(ledger, cap.group());
+		cap.charged().forEach((k, v) -> out.merge(k, v, Integer::sum));
+		return out;
+	}
+
+	/**
+	 * (BC-c) Whether a region charge of {@code bill} fits its cap now (the region's fluids or a gate mechanism, charged at once): the items past
+	 * it with the units over, empty when it fits (or there is no cap). Nothing is charged here.
+	 */
+	public static Map<String, Integer> chargeOver(@Nullable Cap cap, @Nullable StockLedger ledger, Map<String, Integer> bill) {
+		Map<String, Integer> out = new TreeMap<>();
+		if (cap == null || ledger == null) {
+			return out;
+		}
+		Map<String, Integer> d = drawn(ledger, cap);
+		bill.forEach((k, v) -> {
+			int o = v - cap.left(d, k);
+			if (v > 0 && o > 0) {
+				out.put(k, o);
+			}
+		});
+		return out;
 	}
 
 	/**
@@ -107,7 +205,7 @@ public final class BillCaps {
 		r.fillOwed.forEach((k, v) -> need.merge(k, v, Integer::sum));
 		Map<String, Integer> out = new TreeMap<>();
 		need.forEach((k, v) -> {
-			int o = v - cap.left(drawn, k);
+			int o = v - cap.room(drawn, k); // (BC-c) past the cap (a reconcile's standing cells): the units the cap must rise to finish
 			if (o > 0) {
 				out.put(k, o);
 			}
@@ -135,7 +233,14 @@ public final class BillCaps {
 		o.add("maxBill", rec.survival.get("maxBill") == null ? null : rec.survival.get("maxBill").deepCopy());
 		o.add("billBase", rec.survival.get("billBase") == null ? null : rec.survival.get("billBase").deepCopy());
 		var pile = Stockpiles.get(rec.owner);
-		o.add("drawn", json(pile == null ? Map.of() : drawn(pile.ledger(), rec.groupId)));
+		Cap cap = capOf(region, rec.groupId, rec.survival);
+		Map<String, Integer> paid = pile == null ? Map.of() : drawn(pile.ledger(), rec.groupId);
+		o.add("paid", json(paid)); // (BC-c) the group's paid records alone
+		o.add("regionCharged", json(regionCharged(rec.survival))); // (BC-c) the region's own charges (fluids, gate mechanisms)
+		o.addProperty("countsRegion", cap != null && rec.survival.has(REGION_CHARGES));
+		Map<String, Integer> sum = cap == null || pile == null ? paid : drawn(pile.ledger(), cap);
+		o.add("drawn", json(sum));
+		o.add("overshoot", json(cap == null ? Map.of() : cap.overshoot(sum)));
 		com.google.gson.JsonArray ts = new com.google.gson.JsonArray();
 		java.util.List<Object> all = new java.util.ArrayList<>(Sites.all());
 		all.addAll(Infras.all());

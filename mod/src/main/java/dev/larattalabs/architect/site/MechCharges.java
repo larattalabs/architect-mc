@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import dev.larattalabs.architect.api.Reason;
+import dev.larattalabs.architect.api.SiteWait;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.region.GateMech;
@@ -192,6 +193,20 @@ public final class MechCharges {
 		}
 		Map<String, Integer> bill = items(e.get("bill"));
 		String owner = l.rec().owner;
+		// (BC-c) its bill counts against the region's maxBill while it builds: past it, the item waits (nothing charged or written)
+		Stockpiles.Pile capPile = Stockpiles.get(owner);
+		Map<String, Integer> capOver = BillCaps.chargeOver(BillCaps.ofRegion(l), capPile == null ? null : capPile.ledger(), bill);
+		if (!capOver.isEmpty()) {
+			JsonObject w = new JsonObject();
+			w.addProperty("target", capPile == null ? "stockpile" : Stockpiles.PREFIX + capPile.id());
+			w.addProperty("kind", SiteWait.BILL_CAP);
+			w.add("missing", json(capOver));
+			String say = RegionWaitTags.capital(subjectOf(l, i)) + " waits bill_cap: its bill is past the region's maxBill by " + capOver;
+			w.addProperty("say", say);
+			i.ext.add(RegionTargets.EXT_WAITS_FOR, w);
+			Batches.waitFor(b, i, Reason.SITE_BUSY, say + " (its whole bill is charged at once)", billWaitMoved(i));
+			return true;
+		}
 		if (!Stockpiles.charge(srv, owner, bill)) {
 			// (WE, Steward's ask on 0.53.0) The move from the lot or wall wait to this one keeps the reason (SITE_BUSY), so Batches.waitFor would
 			// not announce it. It is announced here, once per move: ITEM_WAITING again, with waitsFor {kind: bill, missing, say} naming what the

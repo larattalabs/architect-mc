@@ -1649,15 +1649,16 @@ public final class Stockpiles {
 			public void step(Object t, Builder.Run r, FeedOrder.Reserve reserve) {
 				// (BC, S-M5-9) the region's maxBill: what its group may still draw (its draws counted from the ledger, then as this step pays)
 				BillCaps.Cap billCap = BillCaps.of(t);
-				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap.group());
+				Map<String, Integer> drawn = billCap == null ? null : BillCaps.drawn(p.ledger, billCap); // (BC-c) the region's own charges too
 				boolean[] capHit = {false};
+				boolean[] settling = {false}; // (BC-c) an owed cell stands: it is charged whatever the cap (refusing it would mint)
 				Builder.Purse purse = new Builder.Purse() {
 					@Override
 					public int stock(String item) {
 						int n = reserve.available(item, p.ledger::stock);
-						if (billCap != null) {
+						if (billCap != null && !settling[0]) {
 							int left = billCap.left(drawn, item);
-							if (left < n) {
+							if (left < n || left <= 0) { // (BC-c) at or past the cap with no stock either: still the cap's wait
 								capHit[0] = true;
 								return left;
 							}
@@ -1712,7 +1713,12 @@ public final class Stockpiles {
 				};
 				// (RL) what it owes after a crash is charged first: an owed cell is built only once paid
 				r.attachOwed(owedOf(p, keyOf(t), r));
-				r.settleOwed(level, purse, SurvivalWorld.blocksPerTick() * 4);
+				settling[0] = true;
+				try {
+					r.settleOwed(level, purse, SurvivalWorld.blocksPerTick() * 4);
+				} finally {
+					settling[0] = false;
+				}
 				int before = r.built.cardinality();
 				if (t instanceof Site s) {
 					Builder.stepFed(srv, level, s, r, purse);
@@ -2640,6 +2646,35 @@ public final class Stockpiles {
 				reopen ? "; it builds again" : "");
 		}
 		return moved;
+	}
+
+	/**
+	 * (BC-c) After the reconcile, on the first server tick (the regions load after the stockpiles' SERVER_STARTED listener): the reconcile
+	 * charged every standing cell whatever its region's {@code maxBill} (conservation wins: the blocks exist, and leaving one unpaid would mint
+	 * it). A capped region whose group's draws (its targets' paid records and the region's own charges) are now past the cap is named in a WARN
+	 * and in the target's reconcile record ({@code capOver}, {@code capRegion}); its targets draw no more of the items over and wait
+	 * {@code bill_cap} (their feed step derives the wait; {@code nextNeeded} gives the units the cap must rise to finish). Server thread.
+	 */
+	static void capsAfterReconcile(MinecraftServer srv) {
+		if (LAST_RECONCILE.isEmpty()) {
+			return;
+		}
+		for (Pile p : List.copyOf(PILES.values())) {
+			for (Object t : bookTargets(p)) {
+				JsonObject o = LAST_RECONCILE.get(idOf(t));
+				BillCaps.Cap cap = o == null ? null : BillCaps.of(t);
+				if (cap == null) {
+					continue;
+				}
+				Map<String, Integer> over = cap.overshoot(BillCaps.drawn(p.ledger, cap));
+				o.addProperty("capRegion", cap.region());
+				o.add("capOver", Builder.counts(over));
+				if (!over.isEmpty()) {
+					Architect.LOGGER.warn("Stockpile {}: the reconcile of {} left region {}'s draws past its maxBill by {}: its standing cells were charged "
+						+ "(the blocks exist); the region's targets draw no more of it and wait bill_cap", p.owner, o.get("key").getAsString(), cap.region(), over);
+				}
+			}
+		}
 	}
 
 	/**

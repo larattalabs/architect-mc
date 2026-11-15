@@ -772,6 +772,15 @@ public final class RegionFluids {
 		if (l.rec().survival() && !l.rec().survival.has("chargedAt")) {
 			Map<String, Integer> charge = chargeOf(st);
 			if (!charge.isEmpty()) {
+				// (BC-c) the charge counts against the region's maxBill while it builds: past it, the stage waits (nothing charged or written)
+				var pile = dev.larattalabs.architect.site.Stockpiles.get(l.rec().owner);
+				Map<String, Integer> capOver = dev.larattalabs.architect.site.BillCaps.chargeOver(dev.larattalabs.architect.site.BillCaps.ofRegion(l), pile == null
+					? null : pile.ledger(), charge);
+				if (!capOver.isEmpty()) {
+					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait bill_cap: their charge " + charge + " is past the region's maxBill by "
+						+ capOver + " (a lava bucket per lava source, a grate's iron bars)");
+					return false;
+				}
 				if (!dev.larattalabs.architect.site.Stockpiles.charge(s, l.rec().owner, charge)) {
 					RegionItems.waitStage(b, stage, Reason.SITE_BUSY, "the fluid bodies wait for " + dev.larattalabs.architect.site.Stockpiles.chargeShort(l.rec()
 						.owner, charge) + " in the stockpile of " + l.rec().owner + " (a lava bucket per lava source, a grate's iron bars)");
