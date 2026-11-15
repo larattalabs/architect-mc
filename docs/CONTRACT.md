@@ -32659,3 +32659,26 @@ No API surface change.
 - **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
 - **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
 - **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).
+
+### Slice UI as built (branch `slice/UI` off origin/main d7d000ca; LEFTOVERS "UI"; no API change; $0; light; recorded 2026-11-15)
+
+- **Needs lab-ui 0.5.0** (branch `feat/0.5`, unreleased): built and shot with `-Plab_ui.dir`. Merge order: lab-ui feat/0.5 -> tag v0.5.0 ->
+  this branch's last commit (the `lab_ui_version` 0.5.0 pin and the `>=0.5.0` range, UI audit 2 F10) -> merge.
+- **A-chips:** `ArchitectScreen.chip` is lab-ui's 18 px Chip (`CHIP_H` follows it); Library filters wrap to a second row at GUI 4 with whole
+  words; a set row's × asks twice (`GROUP_DROP`). **wording-2:** "bible" -> "Style" in SetDialog, SetFeature, LibraryTab, the Designs tab.
+- **A-placed:** `library/PlacedGroups` (pure, `PlacedGroupsTest`): yours, composites, town plans, "Managed by <mod>"; rows by name and
+  place; a managed site's Move is disabled with its reason, its Remove keeps the two-press ask (the apijars' archived apitest script
+  removes an owned site through it). Status tab scrolls when taller than the panel.
+- **A-refund-honesty:** wording only ("refunds what was paid for"); the capped-refund toast is a leftover (Stockpiles is BCC's, strict).
+- **UI-AUDIT 14:** editor body ends above a rule over the status line; variants lock bar folds into the title row on a short panel; the
+  Style browser keeps detail lines at GUI 4 (lab-ui `detailThumbH`); job steps, ids, paths, env var names and the trash path out of
+  player text; disabled controls give reasons (tooltips); Placed Remove is a plain danger button; gallery: `variants_changed` really
+  changes, `region_ghost` closes the Design screen first, new `library/placed_managed` and `jobs/panel`.
+- **SD:** pill and Jobs box above the header's clay rule (`Panels.headerBand`); Options on one grid; a dropped Style chip counted; the
+  empty estimate names a missing Style; steppers are lab-ui's `Stepper` (SetDialog, the editor's W/H/D).
+- **DS:** `unfitRule` refuses SITE_UNFIT on a site *error* only (site_bound, site_keep); warnings pass (reverses DS reading 3; for
+  Steward: a site variant with only site warnings now installs). `sidecar/test/site-unfit.test.ts`.
+- **Checks:** mod compile against lab-ui feat/0.5; `PlacedGroupsTest` 2/2; sidecar site-unfit, site-design, follow 36/36; step-inputs
+  build+check clean; gitleaks clean. In game: the UI gallery before (d7d000ca) and after, ports 8916/8917, sheet in artifacts/UI/.
+- **Leftovers:** the capped-refund toast; Architect's own HasParent/ScreenPause/ClientEnv/Keys copies -> lab-ui's (both mods); Library
+  detail description clamp at GUI 4; A-first-run (later).
