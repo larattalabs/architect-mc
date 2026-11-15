@@ -44,7 +44,11 @@ export async function registerBCD(steps, h) {
     }
     return { done: false, held: [...held], waves };
   }
-  const placed = (region, rid) => async () => (await rvState(region)).revisions?.find((x) => x.rid === rid)?.state === 'PLACED' && (await rvState(region)).busy === null;
+  // put down (PLACED) and every target of the region built (its lots and roads build after the batch ends)
+  const placed = (region, rid) => async () => {
+    const st = await rvState(region);
+    return st.busy === null && st.revisions?.find((x) => x.rid === rid)?.state === 'PLACED' && (await G.rsState(ctx, region)).build?.done === true;
+  };
 
   async function growth(tag, region, id, { capped }) {
     const g = await growPlan(region, { lots: [{ id, type: 'house', size: [9, 9], villager: 'dwelling' }] });
