@@ -69,6 +69,8 @@ export const P1_COMPOSES = Object.freeze([
  */
 export const P1_VALIDATIONS = Object.freeze([
   { key: 'hillside', site: 'hill_site', style: 'rustic', brief: 'A hillside town climbing the slope: a market square and an inn at the foot, houses and workshops on the middle of the slope, a chapel and a few larger houses at the top.' },
+  // (CF3's terraces hint: a terraced hillside town on a slope other than hill_site, which the districts hint used)
+  { key: 'terraced', site: 'tunnel_hill', style: 'rustic', brief: 'A terraced hillside village on the slope: cottages, a bakery and a smithy stepping up the hill on levels, a small chapel at the top, and a lane winding between the levels.' },
   { key: 'hold', site: 'tunnel_hill', style: 'medieval', brief: "A small hold hollowed inside the hill: a great hall, a forge, a storehouse and four homes under the rock, with an entrance from the hill's foot." },
 ]);
 /** P1's format 3 settlement Style (non-scenario). */
@@ -557,9 +559,11 @@ subs['p1-compose'] = async () => {
       const claim = await siteWorld(L, s, 'P1');
       const step = `P1:${set === P1_VALIDATIONS ? 'validate' : 'compose'}:${s.key}${opt('attempt') ? `:${opt('attempt')}` : ''}`;
       try {
-        openPaid({ item: 'P1', step, capUsd: P.P1_BUDGETS.compose, authSource: auth.authSource, retry: !!opt('retry'), minutes: 30 });
+        // (--budget <usd>: this run's compose budget; --retry [tag]: charged to R)
+        const cBudget = opt('budget') ? Number(opt('budget')) : P.P1_BUDGETS.compose;
+        openPaid({ item: 'P1', step, capUsd: cBudget, authSource: auth.authSource, retry: opt('retry') === true ? true : typeof opt('retry') === 'string' ? String(opt('retry')) : false, minutes: 30 });
         const t0 = Date.now();
-        const d = await L.call('dev.region.compose', { brief: s.brief, claim, style: s.style, images: true, budgetUsd: P.P1_BUDGETS.compose, opKey: `pay-p1-${stamp}-${s.key}`, ext: { [SKIP_PICK]: true }, wait: true }, 1_800_000);
+        const d = await L.call('dev.region.compose', { brief: s.brief, claim, style: s.style, images: true, budgetUsd: cBudget, opKey: `pay-p1-${stamp}-${s.key}`, ext: { [SKIP_PICK]: true }, wait: true }, 1_800_000);
         const c = composeRead(d);
         c.roundJobs = roundJobs(L, c.designId).map((x) => ({ jobId: x.jobId, round: x.round, cost: x.cost }));
         closePaid(step, { usd: c.costUsd, ended: true, status: c.outcome ?? c.status, error: c.error, ref: c.designId, data: { outcome: c.outcome, rounds: c.rounds, history: c.history } });
@@ -682,7 +686,7 @@ subs.p2 = async () => {
       // (--attempt N: a later attempt's own run dir and step; --no-designs: no paid site archetypes, the lots then wait "not shown")
       const att = opt('attempt') ? `-${opt('attempt')}` : '';
       const runOut = path.join(out, 'scenarios', `${s.key}-pay${att}`);
-      const budget = s.via === 'compose' ? B.compose : B.pick;
+      const budget = opt('budget') ? Number(opt('budget')) : s.via === 'compose' ? B.compose : B.pick;
       const plan = s.designs && !args.includes('--no-designs') ? { item: 'P2', backend, ledger: backend === 'claude' ? LEDGER : path.join(out, 'sim-ledger.json'), ledgerModule: 'pay', opPrefix: `pay-p2-${backend}-${Date.now().toString(36)}`, capUsd: B.design, timeoutMin: 45, auto: { maxDesigns: B.maxDesigns, request: { buildingType: 'house', style: st.bibleId, bible: st.bibleId, name: 'PAY S6', notes: 'A home carved into the rock of the hall.' } } } : null;
       const pf = plan ? path.join(out, `pa-plan-${s.key}.json`) : null;
       if (plan) writeJson(pf, plan);

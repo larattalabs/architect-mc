@@ -75,7 +75,8 @@ export function guard(L, { item, step, capUsd, retry = false, now = new Date(), 
   if (!(capUsd > 0)) return { ok: false, kind: 'refuse', message: `refusing ${step}: no budgetUsd` };
   // (one retry per item: a retry may hold several jobs of one attempt, all carrying the same retry tag (a string); a job of another
   // retry attempt of the item is refused)
-  if (retry && L.jobs.some((j) => j.item === item && j.retry && (typeof retry !== 'string' || j.retryTag !== retry))) return { ok: false, kind: 'retry', message: `refusing ${step}: ${item} already used its one retry` };
+  // (an answer recorded for exactly this step, Noah's words through the coordinator, approves a further retry of the item)
+  if (retry && !approved(L, step) && L.jobs.some((j) => j.item === item && j.retry && (typeof retry !== 'string' || j.retryTag !== retry))) return { ok: false, kind: 'retry', message: `refusing ${step}: ${item} already used its one retry` };
   const c = committed(L);
   if (c + capUsd > HARD_CAP_USD + 1e-9) {
     return { ok: false, kind: 'refuse', message: `refusing ${step}: committed $${c.toFixed(2)} + its cap $${capUsd.toFixed(2)} passes the $${HARD_CAP_USD} hard cap (Noah's approval): report to the coordinator`, report: stopReport(L, { item, step, capUsd }) };

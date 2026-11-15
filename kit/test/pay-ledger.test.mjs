@@ -98,3 +98,11 @@ test('(R) one retry attempt may hold several jobs under one tag; another attempt
   assert.equal(g(L, { item: 'P3', step: 'P3:c:r', capUsd: 0.5, retry: true }).kind, 'retry');
   assert.equal(L.items.R.committedUsd, 0.5);
 });
+
+test('(R) an answer for exactly that step approves a further retry of the item', () => {
+  const L = P.emptyLedger();
+  P.openJob(L, { item: 'P2', step: 'P2:brief:s3-2', capUsd: 1.2, retry: 'R-s3' });
+  assert.equal(g(L, { item: 'P2', step: 'P2:brief:s3-3', capUsd: 0.5, retry: 'R-cf3' }).kind, 'retry');
+  L.answers.push({ step: 'P2:brief:s3-3', yes: true });
+  assert.equal(g(L, { item: 'P2', step: 'P2:brief:s3-3', capUsd: 0.5, retry: 'R-cf3' }).ok, true);
+});
