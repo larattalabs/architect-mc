@@ -32118,3 +32118,18 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
 - Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
   `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.
+
+### Slice QL-b as built (2026-11-15; in progress: the note fix only, the lot drift is open)
+
+- **Finding:** a module growth's IRR shells can't reach `survivalTerrain`. The growth's pads write every shell cell first (the bed
+  `grass_block`, the sides air up to the lot's top; IF_NATURAL), so A11's earlier-write rule drops them, correctly: a shell cell never
+  stands when its write lands, so it is always paid. The verges lose 22 of 54 gravel the same way (their earlier write, IF_AIR_OR_FLUID
+  grass, depends on the land). The pads bill nothing (free). So the shells can't drift, and their "may already stand" note was wrong.
+- **Fix (note and `exact`):** the kit records each earlier write's last state and condition (`evalTile`'s `writtenLast`). A dropped kept cell
+  whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state is always written; its items go to plan.json's
+  `survivalTerrainWritten` (group -> {item: n}; outside the IR; the sidecar forwards it). `Quotes.mayAlreadyHold` counts them as covered, so
+  the shells leave the note. `Quote.terrain` is unchanged (they are not readable cells). Farmland joins `TERRAIN_BLOCKS` (and the mod's
+  `TERRAIN`): it bills dirt and a realise skips it only on the same state.
+- **Steward's 209 -> 210 (crop-farm-067):** the tiles can't move (no kept cell stood: no "already stand" or "not loaded" note in either quote),
+  so the dirt moved in the lot piece (`lot:<id>`, FullBom over the land now). See the QL-b report for the open question.
+- Units: igb (the shells' `survivalTerrainWritten`, none kept), `QuotesWrittenQLBTest`.
