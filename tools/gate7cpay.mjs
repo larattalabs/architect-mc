@@ -374,6 +374,43 @@ subs['p0-compose'] = async () => {
   if (!res.ok) process.exitCode = 1;
 };
 
+/**
+ * The rows P0 judges on a plan-path run: the mechanism (the brief composed and planned, the checker, structure, spans, safety, the
+ * buildings, exactness, determinism, the realised virtual world). The scenario's own bars (Fit, disturbance, ports, reachability,
+ * palette, role shares) are the composer's, and the sim's stand-in plan is not one: recorded, not judged (§5: "mechanism green,
+ * composer not shown" until P2's paid run).
+ */
+export const PLAN_PATH_MECHANISM = Object.freeze(['brief', 'checker', 'structure', 'spans', 'safety', 'buildings', 'exactness', 'determinism', 'realisedVirtual']);
+
+/**
+ * P0 for P2's forced plan path (a gate step, the run dir's client on the sim): `p0-plan-path s3|s6`: the scenario from its one-line
+ * brief through Regions.compose with the template pick skipped (tools/lib/pay-compose-ext.json, CP's skipPick), the COMPOSED plan/0
+ * planned through plan_v0 by the scenario harness (tools/lib/scenario-br.mjs composedParams), flat then natural.
+ */
+subs['p0-plan-path'] = async () => {
+  const scn = args[1];
+  if (!['s3', 's6'].includes(scn)) throw new Error('p0-plan-path s3|s6');
+  const art = process.env.SCENARIOS_ART ?? path.join(ART, 'P0', 'scenarios');
+  const res = { at: new Date().toISOString(), head: gitHead(), scenario: scn, runs: {} };
+  for (const flat of [true, false]) {
+    const key = flat ? 'flat' : 'natural';
+    const outDir = path.join(art, `${scn}-co${flat ? '-flat' : ''}`);
+    const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), 'run', scn, '--brief', '--via', 'compose', '--brief-ext', path.join(root, 'tools', 'lib', 'pay-compose-ext.json'), '--phase', '7c-pay', ...(flat ? ['--flat'] : []), '--out', outDir], { stdio: 'inherit', env: process.env });
+    const m = readJson(path.join(outDir, 'metrics.json'), {});
+    const b = readJson(path.join(outDir, 'brief.json'), {});
+    const rows = m.rows ?? [];
+    const by = Object.fromEntries(rows.map((x) => [x.id, x]));
+    const judged = PLAN_PATH_MECHANISM.filter((k) => by[k] && by[k].gated !== false && !(flat && k === 'determinism' && by[k].pass === null));
+    const failing = judged.filter((k) => by[k].pass !== true);
+    res.runs[key] = { exit: r.status, outDir, outcome: b.outcome ?? null, composed: !!b.composed, program: b.program ?? null, artifactSha: b.artifactSha ?? null, pick: b.pick?.outcome ?? null, judged, failing, rows: rows.map((x) => ({ id: x.id, pass: x.pass, gated: x.gated, value: String(x.value).slice(0, 200) })) };
+    res.runs[key].pass = rows.length > 0 && b.composed === true && b.pick?.outcome === 'SKIPPED' && judged.includes('brief') && judged.includes('exactness') && failing.length === 0;
+    log(`P0 plan path ${scn} ${key}: exit ${r.status} (recorded), ${b.outcome} via ${b.program}, pick ${b.pick?.outcome}; mechanism ${res.runs[key].pass ? 'PASS' : `FAIL ${failing.join(',') || '(no rows)'}`}; scenario bars recorded: ${rows.filter((x) => !PLAN_PATH_MECHANISM.includes(x.id)).map((x) => `${x.id} ${x.pass}`).join(', ')}`);
+  }
+  res.pass = Object.values(res.runs).every((x) => x.pass);
+  writeJson(path.join(ART, 'P0', `plan-path-${scn}.json`), res);
+  if (!res.pass) process.exitCode = 1;
+};
+
 /** P0's verdict per paid item: what each item's sim dry run showed, and what is not built yet. */
 subs['p0-verdict'] = async () => {
   const s = readJson(path.join(ART, 'P0', 'styles.json'));
@@ -382,7 +419,16 @@ subs['p0-verdict'] = async () => {
   const v = {
     at: new Date().toISOString(),
     P1: { pass: ok(c, /^(cliff|caravan|hill): (compose|round 1 \(images on)/) && ok(s, /^P1: /), what: 'the 3 calibration composes on the sim (images on, the pick skipped) and the settlement Style job' },
-    P2: { pass: false, what: 'picks: BR\'s br-s1..s6 (sim, PASS on main 2026-11-14, not re-run); forced plan path: compose with the pick skipped (P1\'s rows); settlement Styles references off (P0 styles)', blocker: "a COMPOSED plan/0 artifact is not realised by tools/scenarios.mjs (BR's leftover): S3's and S6's forced plan path cannot reach the scenario's bars until that hook is built (stage 2, before P2)", parts: { styles: ok(s, /^P2:/), composeSkipPick: ok(c, /images on, pick skipped/) } },
+    P2: (() => {
+      // the picks: BR's br-s1, br-s2, br-s5 steps at this head (--picks <a gate run's summary.json>); the plan path: p0-plan-path s3, s6
+      const sum = opt('picks') ? readJson(path.resolve(String(opt('picks'))), {}) : readJson(path.join(ART, 'P0', 'picks-summary.json'), null);
+      if (opt('picks') && sum) writeJson(path.join(ART, 'P0', 'picks-summary.json'), { from: path.resolve(String(opt('picks'))), head: sum.head, steps: (sum.steps ?? []).map((x) => ({ id: x.id, status: x.status })) });
+      const st = Object.fromEntries((sum?.steps ?? []).map((x) => [x.id, x.status]));
+      const picks = Object.fromEntries(['br-s1', 'br-s2', 'br-s5'].map((k) => [k, st[k] ?? 'not run']));
+      const pp = Object.fromEntries(['s3', 's6'].map((k) => [k, readJson(path.join(ART, 'P0', `plan-path-${k}.json`))?.pass ?? null]));
+      const parts = { styles: ok(s, /^P2:/), composeSkipPick: ok(c, /images on, pick skipped/), picks, picksHead: sum?.head ?? null, planPath: pp };
+      return { pass: parts.styles && parts.composeSkipPick && Object.values(picks).every((x) => x === 'PASS') && Object.values(pp).every((x) => x === true), what: 'the S1/S2/S5 picks (BR\'s br-s1, br-s2, br-s5 on the sim at this head); the forced plan path on S3 and S6 (compose with the pick skipped, the COMPOSED plan/0 planned through plan_v0 by tools/scenarios.mjs, flat and natural: the mechanism rows judged, the scenario bars recorded); the settlement Styles with references off', parts };
+    })(),
     P3: { pass: ok(c, /^P3 mechanism/), what: 'Regions.authorProgram on the sim over a calibration claim: the call path ran end to end, but the sim session ended NOT_SHOWN (no program installed), so no authored program is shown in sim; P3\'s own two briefs are not dry-run yet' },
     P4: { pass: ok(c, /images off|images on and off are the same|prompt diff images/), what: 'the composer with images off from the same inputs: no image blocks, the prompt diff only the images section, the same sim plans', note: `land drift between two fresh copies of the same land: ${(c?.readings ?? []).map((r) => `${r.site} ${r.landDriftLines}`).join(', ')} affordance lines; P4's arms must share one generated, saved world (stage 2)` },
     P5: { pass: ok(s, /^s[35]: /) && ok(s, /^P5:/), what: 'the settlement Style job with N-7c-4\'s six references: image blocks, one prompt line, recorded in format 3 references' },

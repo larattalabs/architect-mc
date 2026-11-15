@@ -428,10 +428,12 @@ async function briefRun(sc, claim, flat, out) {
   } finally {
     if (fl) await L.cmd(`/forceload remove ${fl}`).catch(() => null);
   }
-  const b = { ...readBrief(via, d, briefText(sc)), scenarioProgram: sc.program, forceloaded: fl ? chunks : 0, variant: flat ? 'flat' : 'natural' };
-  fs.writeFileSync(path.join(out, 'brief.json'), `${JSON.stringify({ ...b, answer: d }, null, 2)}\n`);
+  const b = { ...readBrief(via, d, briefText(sc)), scenarioProgram: sc.program, forceloaded: fl ? chunks : 0, variant: flat ? 'flat' : 'natural', bible: sc.bible ?? null };
   const p = briefPlan(b);
-  L.log(`  brief: ${b.status} ${b.outcome} ${b.program ?? '-'} ${JSON.stringify(b.params)}${b.planId ? ` (the mod planned ${b.planId})` : ''} $${b.costUsd.toFixed(4)}${p.ok ? '' : `: ${p.why}`}`);
+  // (7c PAY) a COMPOSED answer goes on as its plan/0 through plan_v0 (the run's program and params from here on)
+  if (p.ok && p.composed) Object.assign(b, { composed: true, program: p.program, params: p.params });
+  fs.writeFileSync(path.join(out, 'brief.json'), `${JSON.stringify({ ...b, answer: d }, null, 2)}\n`);
+  L.log(`  brief: ${b.status} ${b.outcome} ${b.program ?? '-'} ${b.composed ? `(the composed plan/0, ${JSON.stringify(b.plan).length} characters, artifact ${String(b.artifactSha).slice(0, 12)})` : JSON.stringify(b.params)}${b.planId ? ` (the mod planned ${b.planId})` : ''} $${b.costUsd.toFixed(4)}${p.ok ? '' : `: ${p.why}`}`);
   if (!p.ok) throw new Error(`the brief reached no plan: ${p.why}`);
   return b;
 }
@@ -488,6 +490,9 @@ async function runScenario(id) {
   // Regions.compose (the plan path; tools/lib/scenario-br.mjs BRIEF_VIA), never from the scenario file
   let brief = null;
   if (briefOn) { t0 = Date.now(); brief = await briefRun(sc, claim, flat, out); T('brief', t0); t0 = Date.now(); }
+  // (7c PAY) a composed plan is the model's own: its golden key is goldens/<short>-co and none is committed (its determinism row is
+  // the 3 plans and 1 vs 4 workers, as a fixture without a golden); its lots are its own ids, given entries below
+  if (brief?.composed) { sc.goldenKey = BR.composedGoldenKey(short(sc)); sc.golden = false; }
   const program = brief ? brief.program : sc.program;
   const params = brief ? brief.params : sc.params;
   const p1 = await L.plan(program, claim, { params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });
@@ -526,6 +531,12 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'siteplan.json'), path.join(out, 'previews', 'siteplan.json'));
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  // (7c PAY) a composed plan's lots: the kit examples and the 6a stubs by size (fitEntries, as every scenario without its own entries),
+  // its site lots then from the scenario's site path below; a paid run's archetype designs are P2's (tools/gate7cpay.mjs)
+  if (brief?.composed) {
+    sc.lotEntries = fitEntries(ir.lots.filter((l) => !l.site));
+    L.log(`  composed: ${ir.lots.length} lots (${ir.lots.filter((l) => l.site).length} site lots); entries ${JSON.stringify(sc.lotEntries)}`);
+  }
   // (7b SB) the cameras: the plan's cam_* anchors looking at its hub (as `pin` aims them; the layout is the sculpt's, known only now)
   if (isSites(sc)) {
     const hub = ir.anchors.hub ?? ir.anchors.entrance;
@@ -538,7 +549,7 @@ async function runScenario(id) {
     const se = sc.siteLibrary ? await SBL.librarySiteEntries(L, sc, ir, `${short(sc)}-${runId}`) : await SBL.siteEntries(L, sc, ir, `${short(sc)}-${runId}`);
     sbRun ??= {};
     sbRun.entries = se;
-    sc.lotEntries = se.entries;
+    sc.lotEntries = brief?.composed ? { ...sc.lotEntries, ...se.entries } : se.entries;
     if (se.pa) sc.paSpendUsd = se.pa.spendUsd; // (7b PA) the paid batch's run: its archetypes' reported cost
     fs.writeFileSync(path.join(out, 'site-entries.json'), `${JSON.stringify(se, null, 2)}\n`);
     T('siteEntries', t0);
@@ -719,9 +730,11 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
   const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) || isF2(sc) || isT2(sc) || isD(sc) || isS2(sc) || isS3(sc) ? 3 : 1 });
+  // (7c PAY) a composed plan's run compares with no committed golden (the scenario's is another program's IR)
+  const composedRun = !!brief?.composed;
   const gFile = path.join(SCEN, 'goldens', `${gkey(sc)}.json`);
-  let golden = 'none';
-  if (fs.existsSync(gFile)) {
+  let golden = composedRun ? `none (a composed plan/0, planned through plan_v0: no committed golden; goldens/${cutKey(sc)} would be cut from this run)` : 'none';
+  if (!composedRun && fs.existsSync(gFile)) {
     const g = JSON.parse(fs.readFileSync(gFile, 'utf8'));
     // the bar is on the tiles: an IR that differs only by its recorded kitVersion (6c V's kit 0.16.0 over a golden cut by 0.12.0)
     // matches when every tile sha does

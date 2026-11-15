@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BRIEF_STYLE, BRIEF_VIA, briefCall, briefGoldenKey, briefPlan, briefRow, briefText, briefVia, readBrief } from '../../tools/lib/scenario-br.mjs';
+import { BRIEF_STYLE, BRIEF_VIA, COMPOSED_PROGRAM, briefCall, briefGoldenKey, briefPlan, briefRow, briefText, briefVia, composedGoldenKey, composedParams, readBrief } from '../../tools/lib/scenario-br.mjs';
 import { validateBible } from '../lib/bible.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -64,7 +64,18 @@ test('the answers read: a planned pick goes on, everything else stops with a rea
   assert.match(no({ outcome: 'NO_TEMPLATE', program: 's6_cave_city', fits: false, reason: 'no cave' }).why, /NO_TEMPLATE \(closest s6_cave_city\): no cave/);
   assert.match(no({ outcome: 'PICKED', program: 'x', fits: true, planError: 'E' }).why, /plan of the pick failed: E/);
   assert.match(no({ outcome: 'PICKED', program: 'x', fits: true }).why, /did not plan/);
-  assert.match(no({ outcome: 'COMPOSED', check: { artifactSha: 'abc' } }).why, /realiseApproved/);
+  // (7c PAY) COMPOSED: its plan/0 goes on through plan_v0 with checkPlan's params; one without its plan stops
+  assert.match(no({ outcome: 'COMPOSED', check: { artifactSha: 'abc' } }).why, /without its plan\/0/);
+  const plan = { schemaVersion: 'plan/0', zones: [] };
+  const co = readBrief('compose', { designId: 's2', kind: 'SETTLEMENT', status: 'DONE', result: { outcome: 'COMPOSED', plan, check: { artifactSha: 'abc', overall: 'READY' }, pick: { outcome: 'SKIPPED', program: null, fits: false }, cost: 0 } });
+  assert.deepEqual(co.plan, plan);
+  assert.deepEqual(briefPlan({ ...co, bible: 'g7cbr_s3_monastery' }), { ok: true, program: COMPOSED_PROGRAM, params: composedParams(plan, 'g7cbr_s3_monastery'), composed: true });
+  assert.equal(COMPOSED_PROGRAM, 'plan_v0');
+  assert.deepEqual(composedParams(plan), { plan, anchors: { anchors: {} }, protected: { areas: [] }, regions: { regions: [] }, builds: { builds: [] } });
+  assert.equal(composedParams(plan, 'b').bible.id, 'b');
+  assert.equal(briefRow({ ...co, program: COMPOSED_PROGRAM }, 'terraced_monastery').pass, true);
+  assert.equal(composedGoldenKey('s3'), 's3-co');
+  assert.equal(readBrief('compose', { status: 'DONE', result: { outcome: 'NO_PLAN', plan } }).plan, null);
   assert.match(no({}, { status: 'FAILED' }).why, /ended FAILED/);
   assert.match(briefPlan(readBrief('design', { refused: 'NOT_ALLOWED' })).why, /refused: NOT_ALLOWED/);
   assert.equal(briefRow(readBrief('design', { status: 'DONE', result: { outcome: 'NO_TEMPLATE' } }), 'x').pass, false);

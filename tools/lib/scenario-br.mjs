@@ -79,6 +79,8 @@ export function readBrief(via, d, brief = null) {
     pick: r.pick ? { designId: r.pick.designId ?? null, outcome: r.pick.outcome ?? null, program: r.pick.program ?? null, fits: r.pick.fits ?? null, reason: r.pick.reason ?? null } : null,
     rounds: r.rounds ?? 0,
     artifactSha: r.check?.artifactSha ?? null,
+    // (7c PAY) a COMPOSED answer's plan/0 document: planned through plan_v0 (composedPlan) as Regions.checkPlan planned it
+    plan: r.outcome === 'COMPOSED' && r.plan && typeof r.plan === 'object' ? r.plan : null,
     error: d?.refused ?? d?.error ?? null,
   };
   return out;
@@ -92,7 +94,12 @@ export function readBrief(via, d, brief = null) {
 export function briefPlan(b) {
   if (b.error) return { ok: false, why: `the ${b.via} call refused: ${b.error}` };
   if (b.status !== 'DONE') return { ok: false, why: `the ${b.via} ended ${b.status}${b.error ? `: ${b.error}` : ''}` };
-  if (b.outcome === 'COMPOSED') return { ok: false, why: `COMPOSED (artifact ${b.artifactSha ?? '?'}): a plan/0 artifact is realised by Regions.realiseApproved, which this harness does not drive (PAY's plan-path hook)` };
+  // (7c PAY, P2's plan-path hook) COMPOSED: the composed plan/0 planned through the bundled plan_v0 program by Regions.plan, the program
+  // Regions.checkPlan plans it through, so the run goes on through the scenario's own pipeline (its IR, lots, realise and bars)
+  if (b.outcome === 'COMPOSED') {
+    if (!b.plan) return { ok: false, why: `COMPOSED (artifact ${b.artifactSha ?? '?'}) without its plan/0 in the answer` };
+    return { ok: true, program: COMPOSED_PROGRAM, params: composedParams(b.plan, b.bible ?? null), composed: true };
+  }
   if (b.outcome !== 'PICKED' || !b.fits) return { ok: false, why: `${b.outcome ?? 'no outcome'}${b.program ? ` (closest ${b.program})` : ''}: ${b.reason ?? ''}`.trim() };
   if (!b.program) return { ok: false, why: 'PICKED without a program' };
   if (b.planError) return { ok: false, why: `the mod's plan of the pick failed: ${b.planError}` };
@@ -112,6 +119,22 @@ export function briefRow(b, scenarioProgram) {
     + `${b.planId ? `, planned ${String(b.planId).slice(0, 12)}` : ''}; the scenario's program ${scenarioProgram}${same ? ' (the same)' : ' (another program)'}; $${(b.costUsd ?? 0).toFixed(4)}${p.ok ? '' : `; ${p.why}`}`;
   return { id: 'brief', label: 'From its brief', value, threshold: 'a fitting pick (or a composed plan) through the API, planned by the mod; the program never named', pass: p.ok, gated: true };
 }
+
+/** (7c PAY) The program a composed plan/0 is planned through (mod PlanChecks.PROGRAM: Regions.checkPlan's own). */
+export const COMPOSED_PROGRAM = 'plan_v0';
+
+/**
+ * (7c PAY) plan_v0's params for a composed plan/0 over a brief run's fresh world, as Regions.checkPlan builds them (PlanChecks
+ * `params`) for a compose round's check: the plan, no caller anchors (compose's rounds have only the claim_* ones), no protected
+ * areas, no other regions and no players' builds meeting the claim (a scenario's world is the harness's own), the default budget, and
+ * the run's Style. The fingerprint is checkPlan's protection sha, an artifact key only: left out (the IR does not read it).
+ */
+export function composedParams(plan, bible = null) {
+  return { plan, anchors: { anchors: {} }, protected: { areas: [] }, regions: { regions: [] }, builds: { builds: [] }, ...(bible ? { bible: { id: bible } } : {}) };
+}
+
+/** (7c PAY) A composed brief run's golden key: goldens/<short>-co (a composed plan is the model's own; none is committed). */
+export const composedGoldenKey = (shortId) => `${shortId}-co`;
 
 /** The golden of a brief run: goldens/<short>-br (its own key, so the program runs' goldens never move). */
 export const briefGoldenKey = (shortId) => `${shortId}-br`;
