@@ -18,6 +18,8 @@ export function tempDir(prefix = 'arch-test-'): string {
 }
 
 export function rmrf(dir: string): void {
+  // ARCH_KEEP_TMP=1 keeps the test's own arch-* temp dirs for debugging (slice TS; tools/tmp-sweep.mjs removes them later)
+  if (process.env.ARCH_KEEP_TMP === '1' && path.basename(dir).startsWith('arch-')) return;
   fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
