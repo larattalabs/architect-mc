@@ -626,7 +626,7 @@ export class RegionDesigns {
     if (st.volume && st.affordances === undefined && st.affordanceError === undefined) {
       sc.designs.update(id, { status: 'designing', step: 'reading the claim\'s land features' });
       try {
-        const r = await sc.regions.claimAffordances(st.volume.blobId, st.volume.sha);
+        const r = await sc.regions.claimAffordances(st.volume.blobId, st.volume.sha, claimSize[0] * claimSize[1]);
         st.affordances = keepAffordances(r.affordances);
       } catch (e) {
         st.affordanceError = truncate((e as Error).message, 500);

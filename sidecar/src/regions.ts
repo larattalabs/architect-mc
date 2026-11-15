@@ -1382,14 +1382,21 @@ export class Regions {
   /**
    * (7c TC) The affordances of a whole frozen volume (the claim's, for region.design's pick): the kit's site analysis
    * (tools/affordances.mjs, no lot) over the blob, in a child process (a 192x192x150 claim takes about 2 s); `sha` must match.
+   * (7c CF) The time limit scales with the claim's `columns` (landAnalysisMs), and a run stopped by it is tried once more: P1's 128x128
+   * cliff claim, 1.3 s offline, was stopped at 120 s while the machine slept, which left the composer without the land's features.
    */
-  async claimAffordances(volumeBlobId: string, sha: string): Promise<{ sha: string; box: unknown; affordances: unknown[] }> {
+  async claimAffordances(volumeBlobId: string, sha: string, columns?: number): Promise<{ sha: string; box: unknown; affordances: unknown[] }> {
     const script = path.join(this.host.config.kitDir, 'tools', 'affordances.mjs');
     if (!fs.existsSync(script)) throw new Error('the kit has no tools/affordances.mjs (an older kit)');
     if (!this.host.blobs.get(volumeBlobId)) throw new Error(`no blob "${volumeBlobId}"`);
-    const r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
+    const limit = landAnalysisMs(columns);
+    let r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: limit });
+    if (r.timedOut) {
+      this.host.log.warn(`the land analysis of ${volumeBlobId} took longer than ${Math.round(limit / 1000)} s and was stopped; trying once more`);
+      r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: limit });
+    }
     const out = lastJson(r.stdout);
-    if (r.timedOut) throw new Error('the land analysis took longer than 120 s and was stopped');
+    if (r.timedOut) throw new Error(`the land analysis took longer than ${Math.round(limit / 1000)} s twice and was stopped`);
     if (!out || out.ok !== true) throw new Error(`the land analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
     return { sha: out.sha as string, box: out.box, affordances: Array.isArray(out.affordances) ? (out.affordances as unknown[]) : [] };
   }
@@ -1532,4 +1539,14 @@ export function lastJson(stdout: string): Record<string, unknown> | undefined {
     }
   }
   return undefined;
+}
+
+/** (7c CF) The claim land analysis's floor, its time per claim column and its hard bound. */
+export const LAND_ANALYSIS_MIN_MS = 180_000;
+export const LAND_ANALYSIS_MS_PER_COLUMN = 4;
+export const LAND_ANALYSIS_MAX_MS = 600_000;
+/** (7c CF) The claim land analysis's time limit: 180 s plus 4 ms per claim column, at most 600 s (no column count: the floor). */
+export function landAnalysisMs(columns?: number): number {
+  const n = Number.isFinite(columns) && (columns as number) > 0 ? (columns as number) : 0;
+  return Math.min(LAND_ANALYSIS_MAX_MS, LAND_ANALYSIS_MIN_MS + Math.round(n * LAND_ANALYSIS_MS_PER_COLUMN));
 }
