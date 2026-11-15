@@ -274,11 +274,12 @@ async function game() { return import('./lib/run6b.mjs'); }
 /** The sidecar's jobs of a design's compose rounds (state.json tags `design <id> compose round <n>`) and their recorded queries. */
 function roundJobs(L, designId) {
   const st = readJson(path.join(L.SIDECAR_DATA, 'state.json'), {});
-  const jobs = (st.jobs ?? st.jobBook?.jobs ?? []).filter((j) => typeof j.tag === 'string' && j.tag.startsWith(`design ${designId} compose round `));
+  const tag = (j) => j.spec?.tag ?? j.tag;
+  const jobs = (st.jobs ?? []).filter((j) => typeof tag(j) === 'string' && tag(j).startsWith(`design ${designId} compose round `));
   return jobs.map((j) => {
     const f = findFile(L.SIDECAR_DATA, j.id, 'sim-queries.jsonl');
     const q = f ? fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l))[0] : null;
-    return { jobId: j.id, round: Number(j.tag.split(' ').pop()), cost: j.cost?.usd ?? null, query: q ? { prompt: q.prompt, images: q.images ?? [], systemChars: q.system?.length ?? null } : null };
+    return { jobId: j.id, round: Number(tag(j).split(' ').pop()), cost: j.cost?.usd ?? null, query: q ? { prompt: q.prompt, images: q.images ?? [], systemChars: q.system?.length ?? null } : null };
   }).sort((a, b) => a.round - b.round);
 }
 /** A calibration site's world: a fresh copy of the pinned seed's base, the player over the claim, the claim forceloaded. */
@@ -493,3 +494,5 @@ try {
   log(`stopped: ${e.stack ?? e.message}`);
   process.exitCode = e.code ?? 1;
 }
+// (the DevBridge client and the box watcher keep the event loop alive: a step ends when its work does)
+process.exit(process.exitCode ?? 0);
