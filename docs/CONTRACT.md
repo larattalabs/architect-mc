@@ -32045,6 +32045,24 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
 
 
+### Slice CH as built (branch `slice/CH` off origin/main cccf611d; no API change; $0; light; recorded 2026-11-15)
+
+1. The hang: an opKey adopts the helper's first design in any state, and the helper's designs span every world and every game run in
+   its data dir; a snapshot carries only the last 20 (DESIGN_SNAPSHOT_LIMIT) plus the active ones. A design that ended outside that window
+   (CP's reused run dir: d120, 27 designs back) never reached the mod's reader, so `Designs.get` stayed empty and `dev.region.compose`'s
+   wait (and any caller waiting for DESIGN_DONE) ran to its 30 min timeout. Reproduced in `k3-designkeys.test.ts` "(CH)" (fails without the fix).
+2. Chosen: **re-run, $0 only.** On adoption the helper sends the ended design's record again (`DesignBook.announce`, before the ack; compose,
+   author, design.request incl. versionOf). Nothing paid re-runs: adoption still returns before the Claude check and `designs.create`, so a
+   key never spends twice. Only the world-local tail runs again: the mod's reader gets the record and a PICKED pick is planned in this world
+   (`Composes.reset` now clears PLAN_OF/PLAN_ERROR, so world A's planId never answers in world B). Refusing was not needed: a body pins the land
+   by its volume sha (and builds), so a key reused over other land is `OP_KEY_CONFLICT` as before; when no claim volume is sent (none
+   read) nothing pins it (leftover; Steward's keys carry its world id and card sha).
+3. Bounded: the mod's keyed compose, author and design paths wait for an adopted record at most 30 s (`AdoptWait`,
+   `-Darchitect.api.adoptWaitMs`), else `TIMED_OUT` naming the design ("ask again with the same key"). A PICKED pick's plan was already
+   bounded (`Regions.plan`, 300/600 s, then planError). `Regions.design` has no opKey, so no adoption path.
+4. Gate: `ch-compose` (fixed keys, world A then a fresh world B from the same base: same designs, answered in seconds, PICKED re-planned,
+   COMPOSED same artifact), co-compose and cp-compose re-run; AdoptWaitTest (the timeout); scoped units, full sidecar and kit suites.
+
 ### Slice QL as built (2026-11-14)
 
 - `Quote.terrain()`, the new last component (sorted, unmodifiable, null → empty); the 9-arg 1.55.0 constructor is kept and gives empty terrain.
