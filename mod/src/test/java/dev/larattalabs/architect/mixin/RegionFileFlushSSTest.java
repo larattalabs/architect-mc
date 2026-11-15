@@ -95,9 +95,12 @@ class RegionFileFlushSSTest {
 		String s = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/RegionFileFlushMixin.java"));
 		assertTrue(s.contains("@Inject(method = \"writeHeader\", at = @At(\"HEAD\"))"));
 		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"HEAD\"), cancellable = true)"));
-		int skip = s.indexOf("if (!architect$written && !SaveTiming.forceAll)");
-		int clear = s.indexOf("architect$written = false;");
-		assertTrue(skip > 0 && clear > skip, "cleared only on the forcing path, before the force runs");
+		int skip = s.indexOf("if (w == architect$forcedAt && !SaveTiming.forceAll)");
+		int head = s.indexOf("long w = architect$writes.get();");
+		assertTrue(head > 0 && skip > head, "the count read at the force's start decides the skip");
+		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"RETURN\"))"), "the covered count is recorded only when the force returns");
+		assertTrue(s.contains("architect$forcedAt = architect$forcing;"));
+		assertTrue(s.indexOf("architect$forcedAt =") == s.lastIndexOf("architect$forcedAt ="), "set in one place only");
 		String json = Files.readString(Path.of("src/main/resources/architect_mc.mixins.json"));
 		assertTrue(json.contains("\"RegionFileFlushMixin\""));
 	}
