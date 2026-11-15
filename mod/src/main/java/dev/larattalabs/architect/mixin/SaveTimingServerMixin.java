@@ -10,6 +10,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** (SS) Timing only: the server's part of a world save (level.dat, the server's saved data), for {@link SaveTiming}. Server thread. */
 @Mixin(MinecraftServer.class)
 public abstract class SaveTimingServerMixin {
+	@Inject(method = "saveAllChunks", at = @At("HEAD"))
+	private void architect$start(boolean silent, boolean flush, boolean force, CallbackInfoReturnable<Boolean> cir) {
+		if (((MinecraftServer) (Object) this).isSameThread()) {
+			SaveTiming.worldSave();
+		}
+	}
+
 	@Inject(method = "saveAllChunks", at = @At(value = "INVOKE",
 		target = "Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;saveDataTag(Lnet/minecraft/world/level/storage/WorldData;Ljava/util/UUID;)V"))
 	private void architect$levelDat(boolean silent, boolean flush, boolean force, CallbackInfoReturnable<Boolean> cir) {

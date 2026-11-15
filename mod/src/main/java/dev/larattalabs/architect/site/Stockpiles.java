@@ -276,11 +276,6 @@ public final class Stockpiles {
 		// (autosave) only queues its chunk writes, so their IO is waited for first. The ledger is then never on disk ahead of the chunks
 		// (a hopper's source saved full while the ledger counts the delivery: a dupe). The players are saved before the chunks
 		// (saveEverything), as in HF's order.
-		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> {
-			if (!explicitSave && server.isSameThread() && !SaveTiming.on()) {
-				SaveTiming.start(); // (SS) a world save's parts, timed to its ledger write (AFTER_SAVE)
-			}
-		});
 		ServerLifecycleEvents.AFTER_SAVE.register((server, flush, force) -> {
 			if (explicitSave) { // (HF) an explicit save writes the ledger itself, after the chunks are on disk
 				return;

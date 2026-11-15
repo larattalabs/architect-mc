@@ -27,6 +27,13 @@ public final class SaveTiming {
 		on = true;
 	}
 
+	/** A world save's head (saveAllChunks): an autosave or /save-all is timed from here to its ledger write (AFTER_SAVE). */
+	public static void worldSave() {
+		if (!on) {
+			start();
+		}
+	}
+
 	/** From now on the time counts to {@code p}. */
 	public static void at(int p) {
 		if (!on) {
