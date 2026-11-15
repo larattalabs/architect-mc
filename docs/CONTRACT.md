@@ -32232,3 +32232,11 @@ No API surface change.
    OK, or should FK-b carry 2b?
 3. **UC scope.** UC is the class "the journal is durable ahead of the chunks"; a general fix is on SS's save path. I propose J2 fixes only
    the two minimal repros if their settle logic can tell (evidence-side, no save-path change), else tags them for SS and reports. OK?
+
+### Changes from Steward's review (2026-11-15, through the coordinator: accepted)
+
+- **Item 1 is (a), for unnamed wild animals only.** An animal with a custom name, and every player, keeps blocking anywhere in the box
+  as today: Steward's `StewardMotion` steps the named steward out of a box before an undo and relies on that refusal. Gate both: a bee
+  in the air inside the box no longer blocks; a named mob anywhere in the box (in a cell the removal leaves unchanged) still blocks.
+- **Item 2's code waits until FK-b and SS merge** (accepted); items 1, 3 and 4 build now. **UC** as proposed (accepted).
+- **Steward RC areas (added):** an undo with the steward standing near the box, and an undo with a bee in the air inside it.
