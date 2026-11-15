@@ -233,6 +233,8 @@ public final class Builder {
 		final Map<String, Integer> unbuilt = new TreeMap<>();
 		final Map<String, Integer> bom = new TreeMap<>();
 		final Map<Integer, Long> blockedSince = new HashMap<>();
+		/** (GI2) A failed scaffold take-down: complete() tries again from this tick ({@link #SCAFFOLD_RETRY_TICKS} later), the site stays BUILDING. */
+		long scaffoldRetryAt;
 		final Set<UUID> sentTo = new HashSet<>();
 		int[] newly = new int[64];
 		int newlyCount;
@@ -1276,10 +1278,13 @@ public final class Builder {
 		return out;
 	}
 
-	/** (7b slice SO) A world block a site-aware building may hang its first cells on: site-solid, never scaffolding (vanilla or Architect's) or a crate. */
+	/**
+	 * (7b slice SO) A world block a site-aware building may hang its first cells on: site-solid, never scaffolding (vanilla or Architect's), a
+	 * crate or (GI2, A32) a hopper: the player's hopper chain feeds the crate and comes away again, so it is no attach face.
+	 */
 	static boolean anchorState(BlockState st) {
 		return !isScaffold(st) && !(st.getBlock() instanceof dev.larattalabs.architect.survival.CrateBlock) && !st.is(Blocks.SCAFFOLDING)
-			&& SiteFit.siteSolid(TerrainFit.flags(st));
+			&& !st.is(Blocks.HOPPER) && SiteFit.siteSolid(TerrainFit.flags(st));
 	}
 
 	/** (7b slice SO) A block that falls when nothing is under it (sand, gravel, concrete powder, anvils) or scaffolding. */
@@ -2093,7 +2098,17 @@ public final class Builder {
 
 	/** Every queued cell built: the site is built, the crate gives back its stock and goes, a toast and a chat note fire. */
 	private static void complete(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable CrateBlockEntity crate) {
-		removeScaffold(level, s.id()); // (7b SO) first: a stop before the BUILT record runs complete again, and this finds nothing left
+		// (7b SO) first: a stop before the BUILT record runs complete again, and this finds nothing left. (GI2, A32) A take-down that failed
+		// leaves the site BUILDING (never BUILT with its scaffolding still journaled): tried again SCAFFOLD_RETRY_TICKS later, not every tick
+		if (ticks < r.scaffoldRetryAt) {
+			return;
+		}
+		if (!removeScaffold(level, s.id())) {
+			r.scaffoldRetryAt = ticks + SCAFFOLD_RETRY_TICKS;
+			Architect.LOGGER.warn("Construction site {}: built, but its scaffolding did not come down; it stays BUILDING and tries again in {} ticks",
+				s.id(), SCAFFOLD_RETRY_TICKS);
+			return;
+		}
 		Construction c = s.construction();
 		// a group's shared crate stays while another of its sites still builds (R6)
 		boolean keepCrate = !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty();
@@ -2128,12 +2143,14 @@ public final class Builder {
 
 	/**
 	 * (7b slice SO) Takes a site's scaffolding down: its {@code architect:scaffold} entries undone through the journal (CELL: only cells
-	 * that still hold scaffolding go back, with the cell sites' flags, so nothing drops or falls), then released. Idempotent.
+	 * that still hold scaffolding go back, with the cell sites' flags, so nothing drops or falls), then released. Idempotent. (GI2) True when
+	 * nothing is left (none to take down, or it came down); false when the take-down failed (logged; the entries stay journaled), so the
+	 * caller does not record the site BUILT.
 	 */
-	static void removeScaffold(ServerLevel level, String siteId) {
+	static boolean removeScaffold(ServerLevel level, String siteId) {
 		List<String> ids = SiteJournal.idsOf(siteId, WorldJournal.SCAFFOLD);
 		if (ids.isEmpty()) {
-			return;
+			return true;
 		}
 		try {
 			String g = SiteJournal.group("scaffold-" + siteId);
@@ -2142,10 +2159,15 @@ public final class Builder {
 			SiteJournal.Restore rs = SiteJournal.writeNow(level, siteId, g);
 			SiteJournal.releaseGroup(u.work().ids());
 			Architect.LOGGER.info("Construction site {}: its scaffolding came down ({} cells)", siteId, rs.cells().size());
+			return true;
 		} catch (Sites.SiteException | RuntimeException e) {
-			Architect.LOGGER.error("Could not take the scaffolding of {} down", siteId, e);
+			Architect.LOGGER.error("Could not take the scaffolding of {} down (its entries stay journaled)", siteId, e);
+			return false;
 		}
 	}
+
+	/** (GI2) How long a failed scaffold take-down waits before complete() tries it again (10 s). */
+	static final int SCAFFOLD_RETRY_TICKS = 200;
 
 	// ------------------------------------------------------------------ ghost sync
 
