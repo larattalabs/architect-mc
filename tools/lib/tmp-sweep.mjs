@@ -2,9 +2,11 @@
 // each root (os.tmpdir() and the RAM disk's tmp/, tools/lib/ram-tmp.mjs). It keys on the owner marker (.arch-owner, written by
 // tools/lib/arch-tmp.mjs):
 //   - a dir with a valid marker: kept while its owner is a live process with the same start time, else removed past `hours`;
-//   - a dir without one: removed past `noMarkerHours` ONLY when its name is a known Architect temp name (tools/tmp-prefixes.json:
-//     the pre-TS prefixes plus mkdtemp's 6-character suffix); any other unmarked name is never touched (other tools share $TMPDIR);
-//   - a symlink with a known name: unlinked itself past `noMarkerHours`, never followed; plain files are never touched.
+//   - only with `unmarked: true` (tools/tmp-sweep.mjs --unmarked, by hand: the one-time cleanup of pre-TS dirs, after Noah's OK):
+//     a dir without one, past `noMarkerHours`, ONLY when its name is a known Architect temp name (tools/tmp-prefixes.json: the
+//     pre-TS prefixes plus mkdtemp's 6-character suffix), and a symlink with a known name (unlinked itself, never followed);
+//   - by default (gate-run, the nightly) no unmarked dir or symlink is ever selected; any other unmarked name never is, and plain
+//     files are never touched (other tools share $TMPDIR).
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -123,7 +125,7 @@ export function treeBytes(p) {
  * What the sweep would do with each candidate child of root: [{ name, kind: 'dir'|'symlink', action: 'remove'|'keep', reason,
  * ageHours, owner }]. Names it never touches (unmarked and unknown) and plain files are not listed at all.
  */
-export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMarkerHours = DEFAULTS.noMarkerHours, now = Date.now(), starts = processStarts(), alive = pidAlive, known = knownNames() } = {}) {
+export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMarkerHours = DEFAULTS.noMarkerHours, now = Date.now(), starts = processStarts(), alive = pidAlive, unmarked = false, known = unmarked ? knownNames() : () => false } = {}) {
   const out = [];
   let names;
   try {
@@ -141,14 +143,14 @@ export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMark
       continue;
     }
     if (st.isSymbolicLink()) {
-      if (!listed && !name.startsWith(PREFIX)) continue; // not ours: never touched
+      if (!unmarked || !listed) continue; // a symlink has no marker: only the --unmarked cleanup, and only a known name
       const ageHours = (now - st.mtimeMs) / HOUR;
       out.push({ name, kind: 'symlink', ageHours, owner: null, action: ageHours >= noMarkerHours ? 'remove' : 'keep', reason: ageHours >= noMarkerHours ? 'old symlink' : 'young symlink' });
       continue;
     }
     if (!st.isDirectory()) continue; // a plain file: never touched
     const owner = readOwner(p);
-    if (!owner && !listed) continue; // unmarked and not a known Architect name: never touched
+    if (!owner && !(unmarked && listed)) continue; // unmarked: only the --unmarked cleanup, and only a known Architect name
     const ageHours = (now - lastTouched(p, st)) / HOUR;
     if (owner && isHeld(owner, starts, alive)) {
       out.push({ name, kind: 'dir', ageHours, owner, action: 'keep', reason: `held by live pid ${owner.pid}` });

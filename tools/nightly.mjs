@@ -334,7 +334,7 @@ async function runGate(args, { guard = false } = {}) {
 // slice TS: leaked arch-* temp dirs out first (docs/GATES.md "Slice TS as built"); never fails the night (gate-run sweeps again)
 if (!flag('--plan')) {
   try {
-    const sw = sweepAll();
+    const sw = sweepAll({ unmarked: false }); // marker-only: the pre-TS cleanup is by hand (--unmarked)
     summary.tmpSweep = { removed: sw.removed, kept: sw.kept, bytes: sw.bytes, failed: sw.failed };
     log(`nightly: ${summaryAll(sw)}`);
   } catch (e) {

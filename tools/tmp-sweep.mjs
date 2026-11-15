@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Remove leaked Architect temp dirs (slice TS; docs/GATES.md "Slice TS as built").
 //
-//   node tools/tmp-sweep.mjs [--dry-run] [--hours 6] [--no-marker-hours 24] [--json]
+//   node tools/tmp-sweep.mjs [--dry-run] [--unmarked] [--hours 6] [--no-marker-hours 24] [--json]
 //
 // Only direct children of os.tmpdir() and of the RAM disk's /Volumes/MCTmp/tmp named `arch-*`; never follows symlinks; skips a dir whose owner (.arch-owner) is a live
 // process with the same start time. --dry-run lists what it would remove, with bytes. Always exits 0 (gate-run and the nightly call
-// it at their start; a sweep never fails a run).
+// it at their start, marker-only; a sweep never fails a run). --unmarked adds the unmarked pre-TS dirs named in
+// tools/tmp-prefixes.json, past --no-marker-hours: the one-time cleanup, run by hand only after Noah's OK.
 
 import { sweepAll, summaryAll, fmtBytes, DEFAULTS } from './lib/tmp-sweep.mjs';
 
@@ -26,7 +27,7 @@ const num = (k, d) => {
 };
 
 const dryRun = argv.includes('--dry-run');
-const r = sweepAll({ dryRun, hours: num('--hours', DEFAULTS.hours), noMarkerHours: num('--no-marker-hours', DEFAULTS.noMarkerHours) });
+const r = sweepAll({ dryRun, unmarked: argv.includes('--unmarked'), hours: num('--hours', DEFAULTS.hours), noMarkerHours: num('--no-marker-hours', DEFAULTS.noMarkerHours) });
 if (argv.includes('--json')) {
   console.log(JSON.stringify({ ...r, items: r.items.map(({ root, name, kind, action, reason, ageHours, bytes }) => ({ root, name, kind, action, reason, ageHours: Math.round(ageHours * 10) / 10, bytes })) }, null, 2));
 } else {

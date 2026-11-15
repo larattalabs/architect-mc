@@ -1369,10 +1369,10 @@ if (PLAN) {
 
 // ------------------------------------------------------------------ the temp sweep (slice TS)
 
-// leaked arch-* temp dirs (killed runs; docs/GATES.md "Slice TS as built"): cheap, logged, never fails the run
+// leaked marked temp dirs of dead owners (killed runs; docs/GATES.md "Slice TS as built"): marker-only, cheap, logged, never fails the run
 try {
   const { sweepAll, summaryAll } = await import('./lib/tmp-sweep.mjs');
-  console.log(`[${new Date().toISOString().slice(11, 19)}] gate-run ${chainName}: ${summaryAll(sweepAll())}`);
+  console.log(`[${new Date().toISOString().slice(11, 19)}] gate-run ${chainName}: ${summaryAll(sweepAll({ unmarked: false }))}`);
   console.log(`[${new Date().toISOString().slice(11, 19)}] gate-run ${chainName}: ${ramTmpNote}`);
 } catch (e) {
   console.log(`gate-run ${chainName}: tmp-sweep skipped (${e?.message ?? e})`);

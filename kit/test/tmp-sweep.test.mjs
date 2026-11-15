@@ -34,9 +34,10 @@ const LIVE = { pid: 4242, startMs: NOW - 5 * HOUR };
 const starts = new Map([[4242, LIVE.startMs], [5353, NOW - HOUR]]);
 // the known unmarked names in these fakes (the real list is tools/tmp-prefixes.json)
 const known = (n) => n.startsWith('arch-nomark-') || n === 'arch-link' || n === 'arch-fake-owner' || n.startsWith('arch-a-') || n.startsWith('arch-b-');
-const pick = (root, o = {}) => Object.fromEntries(selectSweep({ root, now: NOW, starts, alive: () => false, known, ...o }).map((i) => [i.name, i.action]));
+// the --unmarked path (the one-time pre-TS cleanup); the default sweep is marker-only
+const pick = (root, o = {}) => Object.fromEntries(selectSweep({ root, now: NOW, starts, alive: () => false, known, unmarked: true, ...o }).map((i) => [i.name, i.action]));
 
-test('selection: age, live pid, reused pid, no marker, symlink, non-arch names and plain files', () => {
+test('selection (--unmarked): age, live pid, reused pid, no marker, symlink, non-arch names and plain files', () => {
   const root = fake();
   roots.push(root);
   mk(root, 'arch-old-dead', { ageH: 7, owner: { pid: 999999, startMs: NOW - 8 * HOUR } });
@@ -70,12 +71,12 @@ test('selection: age, live pid, reused pid, no marker, symlink, non-arch names a
   assert.equal(pick(root, { hours: 0, noMarkerHours: 0 })['arch-old-live'], 'keep');
 
   // dry run touches nothing, reports bytes
-  const dry = sweep({ root, dryRun: true, now: NOW, starts, alive: () => false, known });
+  const dry = sweep({ root, dryRun: true, now: NOW, starts, alive: () => false, known, unmarked: true });
   assert.equal(dry.removed, 5);
   assert.ok(dry.bytes >= 3000);
   assert.ok(fs.existsSync(path.join(root, 'arch-old-dead')));
 
-  const r = sweep({ root, now: NOW, starts, alive: () => false, known });
+  const r = sweep({ root, now: NOW, starts, alive: () => false, known, unmarked: true });
   assert.equal(r.removed, 5);
   assert.equal(r.failed, 0);
   const left = fs.readdirSync(root).sort();
@@ -159,7 +160,7 @@ test('RAM disk choice: off switch, missing dir, low free space; ENOSPC names the
   assert.equal(explainEnospc(other), other);
 });
 
-test('sweepAll: every root, summed', async () => {
+test('sweepAll (--unmarked): every root, summed', async () => {
   const { sweepAll } = await import('../../tools/lib/tmp-sweep.mjs');
   const a = fake();
   const b = fake();
@@ -167,7 +168,7 @@ test('sweepAll: every root, summed', async () => {
   mk(a, 'arch-a-old', { ageH: 30 });
   mk(b, 'arch-b-old', { ageH: 30 });
   mk(b, 'arch-b-young', { ageH: 1 });
-  const r = sweepAll({ roots: [a, b], now: NOW, starts, alive: () => false, known });
+  const r = sweepAll({ roots: [a, b], now: NOW, starts, alive: () => false, known, unmarked: true });
   assert.equal(r.removed, 2);
   assert.deepEqual(r.roots.map((x) => x.removed), [1, 1]);
   assert.deepEqual(fs.readdirSync(b).sort(), ['.arch-owner', 'arch-b-young']);
@@ -175,8 +176,9 @@ test('sweepAll: every root, summed', async () => {
 
 test('the committed list of pre-TS names: exact mkdtemp shape only', () => {
   const k = knownNames();
-  for (const n of ['step-cache-abc123', 'arch-test-Zz9Zz9', 'adopt-pt2-q1W2e3', 'lint-mut-s-theme-AbCdEf', 'au-AbC123']) assert.equal(k(n), true, n);
-  for (const n of ['step-cache-abc12', 'step-cache-abc1234', 'step-cache-', 'com.google.Chrome.x', 'TemporaryDirectory.ab12cd', 'steward-m2-abc123', 'arch-newthing-abc123']) assert.equal(k(n), false, n);
+  for (const n of ['step-cache-abc123', 'arch-test-Zz9Zz9', 'adopt-pt2-q1W2e3', 'lint-mut-s-theme-AbCdEf']) assert.equal(k(n), true, n);
+  // short generic prefixes are left out (other tools may share them)
+  for (const n of ['au-AbC123', 'hr-AbC123', 'pm-AbC123', 'sc-AbC123', 'sv-AbC123', 'us-AbC123', 'step-cache-abc12', 'step-cache-abc1234', 'step-cache-', 'com.google.Chrome.x', 'TemporaryDirectory.ab12cd', 'steward-m2-abc123', 'arch-newthing-abc123']) assert.equal(k(n), false, n);
 });
 
 test('the RAM-disk TMPDIR reaches every `node --test` file process and its children', () => {
@@ -209,4 +211,22 @@ test('worker', () => {
   // ARCH_NO_RAMDISK=1: the normal TMPDIR
   const off = spawnSync(process.execPath, ['--test', '--test-reporter=tap', fixture], { encoding: 'utf8', env: { ...env, ARCH_NO_RAMDISK: '1', TMPDIR: ram } });
   assert.equal(JSON.parse(off.stdout.match(/TMPS (\{.*\})/)[1]).worker, ram);
+});
+
+test('the default sweep (gate-run, nightly) never selects an unmarked dir or symlink, even a listed, very old one', async () => {
+  const { sweepAll } = await import('../../tools/lib/tmp-sweep.mjs');
+  const root = fake();
+  roots.push(root);
+  mk(root, 'step-cache-abc123', { ageH: 1000 }); // on the real list
+  mk(root, 'arch-test-Zz9Zz9', { ageH: 1000 }); // on the real list
+  mk(root, 'arch-nomark-old', { ageH: 1000 });
+  fs.symlinkSync(path.join(root, 'step-cache-abc123'), path.join(root, 'arch-test-Lk3Lk3'));
+  mk(root, 'arch-dead-owner', { ageH: 7, owner: { pid: 999999, startMs: NOW - 8 * HOUR } });
+  const all = () => true; // even a "known" that matches everything
+  for (const o of [{}, { known: all }, { known: all, unmarked: false }]) {
+    assert.deepEqual(selectSweep({ root, now: NOW, starts, alive: () => false, ...o }).map((i) => [i.name, i.action]), [['arch-dead-owner', 'remove']]);
+  }
+  const r = sweepAll({ roots: [root], now: NOW, starts, alive: () => false, known: all });
+  assert.equal(r.removed, 1);
+  assert.deepEqual(fs.readdirSync(root).sort(), ['.arch-owner', 'arch-nomark-old', 'arch-test-Lk3Lk3', 'arch-test-Zz9Zz9', 'step-cache-abc123']);
 });

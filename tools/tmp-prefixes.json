@@ -1,5 +1,5 @@
 {
-  "_doc": "Slice TS (docs/GATES.md \"Slice TS as built\"): the temp-dir prefixes Architect's kit and sidecar tests, runners and drivers used before TS (origin/main 799a1df4), built from their mkdtemp/tempDir calls. tools/tmp-sweep.mjs removes a dir WITHOUT an .arch-owner marker only when its name is one of these plus mkdtemp's 6-character suffix (or matches a pattern), and only past the no-marker age. Every other unmarked name is never touched: other tools share $TMPDIR. New dirs (arch-*, marked) need no entry.",
+  "_doc": "Slice TS (docs/GATES.md \"Slice TS as built\"): the temp-dir prefixes Architect's kit and sidecar tests, runners and drivers used before TS (origin/main 799a1df4), built from their mkdtemp/tempDir calls. Only `tools/tmp-sweep.mjs --unmarked` (by hand, the one-time cleanup after Noah's OK) removes a dir WITHOUT an .arch-owner marker only when its name is one of these plus mkdtemp's 6-character suffix (or matches a pattern), and only past the no-marker age. Every other unmarked name is never touched: other tools share $TMPDIR. New dirs (arch-*, marked) need no entry. Short generic prefixes (au-, hr-, pm-, sc-, sv-, us-) are left out: other tools may share them.",
   "prefixes": [
     "ac-policy-link-",
     "ac-policy-npx-",
@@ -91,7 +91,6 @@
     "architect-kit-user-",
     "architect-massing-",
     "architect-seed-",
-    "au-",
     "basestamp-",
     "cm-a-",
     "co-pi-",
@@ -122,7 +121,6 @@
     "gate6cmp-",
     "gp-out-",
     "gp-test-",
-    "hr-",
     "irr-reserved-",
     "k3-cap-",
     "kit-bible-",
@@ -137,7 +135,6 @@
     "p0-det-",
     "pa-ledger-",
     "pinned-deps-",
-    "pm-",
     "pt2-src-",
     "pub-verify-",
     "relctx-",
@@ -146,7 +143,6 @@
     "run-shared-",
     "rv-det-",
     "sb-lots-",
-    "sc-",
     "sch-linux-",
     "sidecar-reuse-",
     "site-renders-",
@@ -159,9 +155,7 @@
     "step-cov-main-",
     "step-cov-pid-",
     "step-cov-snap-",
-    "step-jacoco-",
-    "sv-",
-    "us-"
+    "step-jacoco-"
   ],
   "patterns": [
     "^lint\\-mut\\-[a-z0-9_.-]+-[A-Za-z0-9]{6}$",
