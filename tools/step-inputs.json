@@ -26200,7 +26200,8 @@
     "tools/lib/cpu-budget.mjs",
     "tools/lib/f7a-norm.mjs",
     "tools/lib/fl-norm.mjs",
-    "tools/lib/kit-reuse.mjs"
+    "tools/lib/kit-reuse.mjs",
+    "tools/lib/sp2-norm.mjs"
    ],
    "verified": "20261023-114540-release k1b-unit"
   },
@@ -26653,6 +26654,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release k1b-ingame"
@@ -27106,6 +27108,7 @@
     "tools/lib/fl-norm.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release k1b-natural"
@@ -152505,6 +152508,7 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/probe-reuse.mjs",
     "tools/lib/run6b.mjs",
+    "tools/lib/sp2-norm.mjs",
     "tools/lib/sprint.mjs"
    ],
    "verified": "20261023-114540-release p2-calibration"
