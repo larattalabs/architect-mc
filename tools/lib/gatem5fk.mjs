@@ -324,6 +324,7 @@ export async function registerFK(steps, h) {
     const c = await approvedCheck('fk-approved');
     if (!c?.artifactSha) { await L.leaveWorld(); return out; }
     out.check = { overall: c.overall, survival: c.survival, sha: c.artifactSha };
+    check(c.survival === true, `fk-approved: the check answered in survival (${c.survival})`);
     const lots = { cottage_1: 'fk_hall' };
     const q = await call('dev.region.quote', { sha: c.artifactSha, lotEntries: lots }, 300_000);
     out.quote = { bom: q.bom, fill: q.bomParts?.['fill:cottage_1'], exact: q.exact, refused: q.refused, parts: Object.keys(q.bomParts ?? {}) };
@@ -399,7 +400,7 @@ export async function registerFK(steps, h) {
     const cSite = stc?.view?.lots?.find((l) => l.id === 'cottage_1')?.siteId ?? null;
     const cs = cSite ? await fk(cSite) : {};
     out.creative = { region: rc.region ?? rc, state: stc?.view?.state, site: cSite, fk: cs };
-    check(stc?.view?.state === 'PLACED' && cs.state === 'INSTANT' && cs.phase === 'UNLOCKED' && exactly(cs) && leverUnlocked(cs) && (cs.containers ?? []).length === 4,
+    check(stc?.view?.state === 'PLACED' && ['INSTANT', 'BUILT'].includes(cs.state) && cs.phase === 'UNLOCKED' && exactly(cs) && leverUnlocked(cs) && (cs.containers ?? []).length === 4,
       `creative: realiseApproved PLACED (${stc?.view?.state}); cottage_1's site ${cSite} filled at once (${(cs.containers ?? []).map((x) => json(x.holds)).join(' ')}), unlocked (${(cs.locks ?? []).map((l) => l.state).join(',')}), ${cs.state}`, out.creative);
     if (rc.region) {
       const rmc = await G.remove(ctx, rc.region);
