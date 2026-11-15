@@ -100632,6 +100632,8 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatebc.mjs",
+    "tools/lib/gatebcc.mjs",
+    "tools/lib/gatebcd.mjs",
     "tools/lib/gatem5fc.mjs",
     "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5fkb.mjs",
@@ -131650,6 +131652,7 @@
     "tools/lib/gatem5fkb.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
+    "tools/lib/gatem5lc.mjs",
     "tools/lib/gatem5qt.mjs",
     "tools/lib/gatem5rl.mjs",
     "tools/lib/gatem5ru.mjs",
@@ -131759,6 +131762,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5lc.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     },
     {
      "from": "tools/lib/gatem5fkb.mjs",
@@ -132148,6 +132155,7 @@
     "tools/lib/gatem5fkb.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
+    "tools/lib/gatem5lc.mjs",
     "tools/lib/gatem5qt.mjs",
     "tools/lib/gatem5rl.mjs",
     "tools/lib/gatem5ru.mjs",
@@ -132257,6 +132265,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5lc.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     },
     {
      "from": "tools/lib/gatem5fkb.mjs",
@@ -145510,11 +145522,14 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatebc.mjs",
+    "tools/lib/gatebcc.mjs",
+    "tools/lib/gatebcd.mjs",
     "tools/lib/gatem5fc.mjs",
     "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5fkb.mjs",
     "tools/lib/gatem5ig.mjs",
     "tools/lib/gatem5jr.mjs",
+    "tools/lib/gatem5lc.mjs",
     "tools/lib/gatem5qt.mjs",
     "tools/lib/gatem5rl.mjs",
     "tools/lib/gatem5ru.mjs",
@@ -145624,6 +145639,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/gatem5lc.mjs",
+     "expr": "`${pathToFileURL(tmp).href}?t=${Date.now()}`)"
     },
     {
      "from": "tools/lib/gatem5fkb.mjs",
@@ -147986,6 +148005,8 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/gatebc.mjs",
+    "tools/lib/gatebcc.mjs",
+    "tools/lib/gatebcd.mjs",
     "tools/lib/gatem5fc.mjs",
     "tools/lib/gatem5fk.mjs",
     "tools/lib/gatem5fkb.mjs",
