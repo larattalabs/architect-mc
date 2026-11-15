@@ -340,7 +340,7 @@ export async function registerFKB(steps, h) {
     const h1 = await h.hashOf(area);
     const kitNo = [bad1.ck.errors.find((e) => /can't be module-provided/.test(e)), bad2.ck.errors.find((e) => /is creative-only/.test(e))];
     out.bad = { kit: kitNo, place1: pBad1, place2: pBad2, hashSame: h0 === h1 };
-    check(kitNo.every(Boolean) && pBad1.placed !== true && /can't be module-provided/.test(json(pBad1)) && pBad2.placed !== true && /creative-only/.test(json(pBad2)) && h0 === h1,
+    check(kitNo.every(Boolean) && pBad1.placed !== true && /can't be module-provided/.test(JSON.stringify(pBad1)) && pBad2.placed !== true && /creative-only/.test(JSON.stringify(pBad2)) && h0 === h1,
       `a bad declaration is refused: by the kit (${kitNo.join(' | ')}); by the mod before any write, NOT_ALLOWED (${json(pBad1.refusals ?? pBad1).slice(0, 160)}; ${json(pBad2.refusals ?? pBad2).slice(0, 160)}); 0 cells written (the box's hash unchanged: ${h0 === h1})`, out.bad);
     await L.leaveWorld();
     spendZero();
