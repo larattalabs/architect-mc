@@ -31973,3 +31973,19 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
   one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
 
+
+### Slice QL as built (2026-11-14)
+
+- `Quote.terrain()`, the new last component (sorted, unmodifiable, null → empty); the 9-arg 1.55.0 constructor is kept and gives empty terrain.
+  Feature `quoteTerrain` is in `ApiRules` (Java-only, like `quote` and `maxBill`; no sidecar entry).
+- `Quotes.of` (survival): `terrain` = Σ over the `survivalTerrain` groups of covered − off, clamped to [0, bom]. A 0 key stays; an unloaded
+  kept cell counts as terrain (billed, `exact` false). Creative quotes carry an empty map. The `maxBill`/BILL_CAP path is unchanged.
+- Dev hooks: `dev.region.quote` returns `terrain`; the new `dev.ql.terrainCells {planId|sha, max}` lists kept cells with
+  {group, state, items, x, y, z, loaded, standing} for the gate.
+- `tools/lib/quote-terrain.mjs`: `terrainShape` (integers, ≤ bom, ≤ the tiles pieces, sorted) and `stewardCap` (Steward's rule over bom ∪ terrain).
+- Gate step `ql-drift` (x03 survival): q1 has terrain dirt 0. One grass cell billing a dirt is set to coarse dirt; q2 then moves only
+  `tiles:hamlet` by {dirt:1}. Under Steward's cap with planks 2 below the bill, the realise is refused BILL_CAP (world unchanged, nothing
+  consumed). With Steward's cap it is accepted; it consumes the put-down bill and the refund equals what was consumed. qt-growth (town and
+  growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
+- Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
+  `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.
