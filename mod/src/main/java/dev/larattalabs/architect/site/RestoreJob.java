@@ -272,6 +272,7 @@ final class RestoreJob implements Placement.Job {
 				return false;
 			}
 		}
+		lateCargo(level, s); // (slice LC) the container cells this tick may write: their late cargo out first, in this tick
 		TickDeferral.begin(level, held);
 		if (restore != null && restore.mask() != null) {
 			UpdateMask.begin(restore.mask());
@@ -311,6 +312,7 @@ final class RestoreJob implements Placement.Job {
 		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
+		lateCargo(level, s);
 		restore.writing(level, () -> {
 			SiteJournal.writeCells(level, restore.cells());
 			SiteJournal.fixHalves(level, restore.halves());
@@ -323,6 +325,29 @@ final class RestoreJob implements Placement.Job {
 		done = true;
 		futures.forEach(f -> f.complete(result));
 		return true;
+	}
+
+	/** (slice LC) The container cells the restore writes (found once; a reload finds them again). */
+	private @Nullable List<BlockPos> cargoCells;
+
+	/**
+	 * (slice LC, S-M5-12) Before a tick's writes: every container cell of the restore not yet written gives up its late cargo, dropped at the
+	 * site and kept from the end's drop clear ({@link #dropsBefore}).
+	 */
+	private void lateCargo(ServerLevel level, Site s) {
+		if (restore == null || !REMOVE.equals(purpose)) {
+			return;
+		}
+		if (cargoCells == null) {
+			cargoCells = LateCargo.containerCells(level, restore, s.restoreBox());
+		}
+		List<net.minecraft.world.item.ItemStack> cargo = LateCargo.take(level, restore, s, cargoCells);
+		if (cargo.isEmpty()) {
+			return;
+		}
+		List<String> keep = new java.util.ArrayList<>(dropsBefore == null ? List.of() : dropsBefore);
+		LateCargo.drop(level, Builder.dropPos(s), cargo, e -> keep.add(e.getUUID().toString()));
+		dropsBefore = keep;
 	}
 
 	/**
