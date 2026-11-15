@@ -22,6 +22,7 @@ fork and does not track upstream.
 | 2026-10-04 | Branding: "Powered by Claude" is fine. The name must never include "Claude Code". |
 | 2026-11-13 | **7c spend approved: $65 total, a hard cap** (Noah via parent session: "Approve $65"). It is the paid batch **PAY**'s CONTRACT 7c §4 plan (AU, PM and BR are $0 sim slices). Shares as §4 estimates: P1 $5, P2 $29, P3 $11, P4 $3, P5 $3, P6 $6 (optional, only if the ledger reads at most $50 after P5), R $8. Stop and ask Noah (through the parent session) before any item goes past its share by more than 20%, or before a step whose cap would take the total past $65. Order: the ranked queue (Status and parked items). |
 | 2026-11-14 | N-7c-6 (2026-11-14): Noah approved archSpan as is, flat profiles included (sheet ac9b3ab3). |
+| 2026-11-14 | **Survival quotes are approved "up to N"** (QD; Noah via parent session: "A: up to N"). A quote can drift by a terrain cell between approval and realise (A11 reads the live world). Steward sets `maxBill` = quote + max(2, ceil(2% of the item's terrain count)) on terrain items only (lot material exact) and asks again only past the cap; Architect slice QL adds `Quote.terrain()` (feature `quoteTerrain`). |
 
 ## Architecture
 
