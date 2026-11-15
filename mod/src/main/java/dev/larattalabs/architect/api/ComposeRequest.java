@@ -22,9 +22,9 @@ import org.jspecify.annotations.Nullable;
  *     {@link #EXT_STREET_FIX}); null is empty
  * @param level (7c CP) the level the claim is in, or null: the Overworld (as before CP). It is carried to the design, but regions are still
  *     Overworld only: a compose in another level ends {@code NO_PLAN} at once ($0, no pick or round) with {@code refused} {@code "NOT_ALLOWED:
- *     regions are Overworld only in this version"} and the summary "regions can only be built in the Overworld for now". Since NEXT.
+ *     regions are Overworld only in this version"} and the summary "regions can only be built in the Overworld for now". Since 1.63.0.
  * @param owner (7c CP) the design's and its plans' owner, or null: the player (as before CP). Every round's check gets it as its {@code
- *     PlanRequest.owner}. Since NEXT.
+ *     PlanRequest.owner}. Since 1.63.0.
  */
 public record ComposeRequest(String brief, BoundingBox claim, @Nullable String styleId, boolean images, @Nullable Double budgetUsd, String opKey,
 	JsonObject ext, @Nullable ServerLevel level, @Nullable String owner) {
@@ -44,18 +44,18 @@ public record ComposeRequest(String brief, BoundingBox claim, @Nullable String s
 	public static final String EXT_REPAIR_ROUNDS = "architect_mc:repairRounds";
 	/**
 	 * (7c CP) {@code ext[EXT_SKIP_PICK]}: {@code true} composes the brief from plan/0's parts with no template pick first (no {@code region.design}
-	 * pick, no pick cost, never PICKED; the result's {@code pick.outcome} is {@code SKIPPED}); absent or false: the pick first. Since NEXT.
+	 * pick, no pick cost, never PICKED; the result's {@code pick.outcome} is {@code SKIPPED}); absent or false: the pick first. Since 1.63.0.
 	 */
 	public static final String EXT_SKIP_PICK = "architect_mc:skipPick";
 	/**
 	 * (7c CP) {@code ext[EXT_VOCAB]}: {@code "families"} adds vocab/1's block families (the family names, groups, dyed families and the palette
 	 * line) to the composer's system, for a palette rule's {@code family}; the check still refuses a name it does not know. Absent: none. Since
-	 * NEXT.
+	 * 1.63.0.
 	 */
 	public static final String EXT_VOCAB = "architect_mc:composeVocab";
 	/**
 	 * (7c CP) {@code ext[EXT_STREET_FIX]}: {@code false} turns off the $0 street round (default on: after a paid round, a zone refused NO_ROOM
-	 * whose evidence names the street layout gets its {@code wouldFit} fragment applied, as a free round the mod checks; no job). Since NEXT.
+	 * whose evidence names the street layout gets its {@code wouldFit} fragment applied, as a free round the mod checks; no job). Since 1.63.0.
 	 */
 	public static final String EXT_STREET_FIX = "architect_mc:streetFix";
 

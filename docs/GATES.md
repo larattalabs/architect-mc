@@ -56,6 +56,20 @@ and replace stricter habits where they differ (the DEV MODE section below still 
    Raising max1 or shortening the wait is fine; anything outside needs Noah. `loadConfig` (tools/lib/turbo.mjs) clamps a config or
    env override (`GATE_LOAD_MAX`, `GATE_LOAD_WAIT_MAX_MIN`) outside the bounds, with a warning; the nightly runs through gate-run, so
    the same bounds hold there.
+11. **Deferred verification** (Noah via parent session, 2026-11-15: "Yes, apply all"). Overrides rules 1-4 where they conflict.
+   1. **Light tier: no in-game run per slice.** Compile, the scoped unit tests (rule 8) and gitleaks; the slice joins the next batch,
+      whose in-game run covers it.
+   2. **Strict tier: targeted scenario only.** Only the in-game scenarios for the risk the slice touches (its item-loss, billing,
+      refund, undo or crash case); no full gate of its own; the batch merge runs the full gate.
+   3. **Bigger batches.** The coordinator merges 4-6 ready slices together with one full merge suite on the combined result; on a
+      failure, bisect by slice.
+   4. **Fewer releases.** A release every 2 batches, with one full release gate and the gate-verifier (`--no-cache`).
+   5. **Verifier and GPT review per release.** The strict gate-verifier and the GPT review run once per release over all the strict
+      diffs it contains, not once per slice.
+   6. **Steward pins skip versions.** The Architect pin moves every other release; at the others, a smoke check (one field round plus
+      billing), unless the module's own code or Architect's realise or billing paths changed.
+   Unchanged: the targeted strict scenario on every strict slice, scoped units, gitleaks, the 3-full-runs cap, $0 without Noah's
+   approval, slices never merge or push main. Nightlies stay skipped until Noah says otherwise.
 
 (Rule 6, stall checks every ~25 minutes, is the parent session's.) Unchanged: the strict tier for survival billing and crash safety,
 the nightlies, slices never merge or push main, $0 unless Noah approves spend, gitleaks, kill only your own processes.
