@@ -358,6 +358,21 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(res.leftOut).toEqual([]);
   }, 600_000);
 
+  it('(CF2) a required zone short of its lots (LOTS_SHORT) checks NEEDS_REPAIR and the repair round runs with its reason; fewer lots check READY', async () => {
+    const halls = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `hall_${i + 1}`, type: 'hall', size: [17, 15] }));
+    const SHORT = { schemaVersion: 'plan/0', zones: [{ id: 'town', required: true, size: { preset: 'M' }, program: { lots: halls(8), layout: 'street', shared: 'none' } }] };
+    const FEWER = { ...SHORT, zones: [{ ...SHORT.zones[0]!, program: { ...SHORT.zones[0]!.program, lots: halls(4) } }] };
+    const { designId } = await compose('a hall quarter', { ext: { 'architect:simCompose': [{ plan: SHORT, reason: 'r1' }, { plan: FEWER, reason: 'r2' }] } });
+    const d = await playMod(designId);
+    const s = st(designId);
+    expect(s.rounds.map((r) => (r.check as { overall: string }).overall)).toEqual(['NEEDS_REPAIR', 'READY']);
+    const town = ((s.rounds[0]!.check as { parts: Array<Record<string, unknown>> }).parts).find((p) => p.part === 'town')!;
+    expect(town.class).toBe('adjusted');
+    expect((d.result as Record<string, unknown>).outcome).toBe('COMPOSED');
+    const q2 = queries(s.rounds[1]!.jobId)[0]!;
+    expect(q2.prompt).toMatch(/- town: adjusted \(zone\.standard\), required\n {2}- LOTS_SHORT: 4 of the zone's 8 lots did not fit/);
+  }, 600_000);
+
   it('a caller\'s repair rounds (2, then 0), hints and rules reach the rounds', async () => {
     const two = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: BAD, reason: 'r1' }], 'architect_mc:repairRounds': 2, 'architect_mc:composeHints': { zones: [{ id: 'town', lots: 3 }] }, 'architect_mc:composeSystem': 'Never build a wall.' } });
     const d2 = await playMod(two.designId);

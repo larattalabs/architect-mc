@@ -263,6 +263,19 @@ export const COMPOSE_SCHEMA: Record<string, unknown> = {
 /** The check's classes, best first: a round's place in this order (then the later round) picks the best plan. */
 const OVERALL_RANK = ['READY', 'NEEDS_REPAIR', 'REQUIRED_BLOCKED', 'INCOMPLETE', 'MALFORMED'];
 const GOOD = new Set(['fits', 'adjusted']);
+/** (CF2) The kit's reason on a required zone short of its lots (kit/lib/plan/finish.mjs LOTS_SHORT): adjusted, yet a repair target. */
+export const LOTS_SHORT = 'LOTS_SHORT';
+
+/** (CF2) A part's LOTS_SHORT reason (a fits/adjusted required zone whose unplaced lots exceed its allowance), or undefined. */
+export function lotsShortOf(p: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!p || !GOOD.has(String(p.class)) || !Array.isArray(p.reasons)) return undefined;
+  return (p.reasons as Array<Record<string, unknown>>).find((r) => r?.code === LOTS_SHORT);
+}
+
+/** (CF2) Whether a check's part is something a repair round is told about: not fits/adjusted, or a required zone short of its lots. */
+export function needsRepair(p: Record<string, unknown>): boolean {
+  return !GOOD.has(String(p.class)) || lotsShortOf(p) !== undefined;
+}
 
 /** An affordance as the composer keeps it (id, kind, box, metrics, score). */
 export interface ComposeAffordance {
@@ -476,7 +489,7 @@ export function repairKinds(plan: unknown, check: Record<string, unknown> | unde
 export function repairPrompt(first: string, round: ComposeRound, kindsText: string, closing: string): string {
   const check = round.check;
   const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
-  const bad = parts.filter((p) => !GOOD.has(String(p.class)));
+  const bad = parts.filter(needsRepair);
   const notes = Array.isArray(check?.notes) ? (check.notes as unknown[]).map(String) : [];
   return [
     first,
@@ -485,7 +498,7 @@ export function repairPrompt(first: string, round: ComposeRound, kindsText: stri
     truncate(JSON.stringify(round.plan ?? null), 70_000),
     '',
     '## The check',
-    round.refused ? `the check did not run: ${round.refused}` : `overall: ${String(check?.overall ?? 'unknown')}; ${parts.length - bad.length} of ${parts.length} part(s) fit or adjusted`,
+    round.refused ? `the check did not run: ${round.refused}` : `overall: ${String(check?.overall ?? 'unknown')}; ${parts.filter((p) => GOOD.has(String(p.class))).length} of ${parts.length} part(s) fit or adjusted`,
     ...((budget) => bad.map((p) => partAnswerLine(p, budget)))({ left: EVIDENCE_TOTAL_MAX }),
     ...(notes.length ? ['notes:', ...notes.slice(0, 12).map((n) => `- ${truncate(n, 600)}`)] : []),
     ...(check?.malformed ? [`malformed: ${truncate(JSON.stringify(check.malformed), 2000)}`] : []),
@@ -513,7 +526,8 @@ export function repairable(r: ComposeRound | undefined): boolean {
   if (!r) return false;
   if (r.refused || !r.check) return true;
   if (String(r.check.overall) === 'MALFORMED' || r.check.malformed) return true;
-  return (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).some((p) => p.class === 'refused' || p.class === 'malformed');
+  // ((CF2) a required zone short of its lots too: more room or fewer lots is the composer's to fix)
+  return (Array.isArray(r.check.parts) ? (r.check.parts as Array<Record<string, unknown>>) : []).some((p) => p.class === 'refused' || p.class === 'malformed' || lotsShortOf(p) !== undefined);
 }
 
 /** (7c AU) A round's typed answers as one string (overall, each part's class and reason codes; or the refusal): the oscillation stop compares them. */
@@ -545,12 +559,16 @@ export function bestRound(rounds: readonly ComposeRound[]): ComposeRound | undef
   return best;
 }
 
-/** What waits in a check: every part not fits/adjusted, with its block and the catalogue's `until` for it. */
+/** What waits in a check: every part not fits/adjusted (and (CF2) every required zone short of its lots, with `lotsShort`), with its block and the catalogue's `until` for it. */
 export function waitsOf(check: Record<string, unknown> | undefined, until: Map<string, string>): Array<Record<string, unknown>> {
   const parts = Array.isArray(check?.parts) ? (check.parts as Array<Record<string, unknown>>) : [];
   return parts
-    .filter((p) => !GOOD.has(String(p.class)))
-    .map((p) => ({ part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}) }));
+    .filter(needsRepair)
+    .map((p) => {
+      const ev = lotsShortOf(p)?.evidence as Record<string, unknown> | undefined;
+      const short = ev && typeof ev.lots === 'number' && typeof ev.unplaced === 'number' ? { lotsShort: { lots: ev.lots, unplaced: ev.unplaced } } : {};
+      return { part: p.part, class: p.class, ...(typeof p.block === 'string' ? { block: p.block } : {}), ...(typeof p.block === 'string' && until.has(p.block) ? { until: until.get(p.block) } : {}), ...(p.required === true ? { required: true } : {}), ...short };
+    });
 }
 
 /** (7c CP) The one level regions build in (the mod's Level.OVERWORLD), its refusal as the mod words it, and the player's words for it. */
@@ -626,6 +644,9 @@ export function partName(plan: unknown, id: unknown): string {
 /** (7c CP) A wait's player line (`say`), $0, from the check: what waits and for what. */
 export function waitSay(plan: unknown, w: Record<string, unknown>, blockedBy?: unknown): string {
   const name = partName(plan, w.part);
+  // ((CF2) a required zone short of its lots: how many didn't fit)
+  const short = w.lotsShort as { lots?: unknown; unplaced?: unknown } | undefined;
+  if (short && typeof short.lots === 'number' && typeof short.unplaced === 'number') return `${short.unplaced} of the ${short.lots} buildings in ${name} didn't fit here`;
   switch (String(w.class)) {
     case 'unsupported':
       return `${name} waits for ${typeof w.until === 'string' && w.until ? w.until : 'a later Architect release'}`;
