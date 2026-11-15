@@ -32075,16 +32075,55 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
 
 - **Profile** (`SaveTiming` plus timing-only mixins on ChunkMap, ServerLevel and MinecraftServer's save; one `SS save: <why> total .. | players | data | chunks | wait | poi | unloads | io | entities | leveldat | books | write | chunksSaved | forced/skipped | waitsSkipped` line per explicit save, autosave and `/save-all`). In run 1 (41fc9168, timing only), the spikes were not the ledger's own parts (books ≤ 2 ms, write ≤ 4 ms). They came from two parts of vanilla's flushed save. First, **chunks**: `saveAllChunks(true)` waits (`managedBlock(isReadyForSaving)`) for every accessible chunk's pending load or generation; for example, a crate created while chunks loaded spent 920 ms there with 70 chunks saved, and this caused the 714-998 ms maxima. Second, **io**: every flush forces (F_FULLFSYNC on macOS) every region file the storages hold open, written or not; 137 ms with 0 chunks saved. The removal saves (`Groups.credit`, JR's K5/RVU2) peaked at 338 ms, mostly real writes (189-595 chunks).
 - **Fix: neither of the brief's two options.** The profile showed the cost was in syncing files with no writes and waiting for chunks with no changes, not in the build's own chunks. The order (players, then chunks durable, then ledger) and every kill point are unchanged.
-  1. `RegionFileFlushMixin`: `RegionFile.flush` skips the force when the file has had no write since its last successful force. Every save.
-  2. `ChunkSaveWaitMixin`: only inside `saveWithWorld` / `saveLedgerFirst` (`SaveTiming.explicit`), the per-chunk wait is skipped for a chunk with nothing unsaved or still a ProtoChunk. An unsaved LevelChunk (or the LevelChunk an imposter wraps) is waited for and saved as before. Vanilla saves (`/save-all`, autosave, the stop's save) wait as vanilla.
+  1. `RegionFileFlushMixin` + `RegionDurability` (the rules; the mixin only reports a file's events): `RegionFile.flush` skips the force of a
+     file known clean, i.e. no write since a force of this object that returned normally. Every world save.
+  2. `ChunkSaveWaitMixin`: only inside `saveWithWorld` / `saveLedgerFirst` (`SaveTiming.explicit`), the per-chunk wait is skipped for a chunk
+     with nothing unsaved or still a ProtoChunk. An unsaved LevelChunk (or the LevelChunk an imposter wraps) is waited for and saved as before.
+     Vanilla saves (`/save-all`, autosave, the stop's save) wait as vanilla.
+  3. After the GPT review (SAFE-WITH-FIXES, 1875b15d), fixed in 94a2b371:
+     - each object starts unknown;
+     - a close owes until its force returns;
+     - one device barrier per world save (`RegionStorageBarrierMixin`, `SaveEpochMixin`);
+     - the ledger is published only over durable writes;
+     - an oversized chunk's `.mcc` is made durable;
+     - an autosave whose IO wait failed writes no ledger.
   Switches (TEST): `dev.stockpile.ps {forceAll, waitAll}`, `-Darchitect.regionForceAll`, `-Darchitect.chunkWaitAll`.
-- **Why the force skip can never leave a chunk write unforced when the ledger is written:**
-  - (a) Every write of a RegionFile's channel goes through `writeHeader`: `write` calls it after its sector writes, and `clear` calls it. The only other writes are `padToFullSector` (called only from `close`, which forces unconditionally) and `writeToExternalFile` (an oversized chunk's own `.mcc` channel, which vanilla never forces either; `write` then writes the stub and header through `writeHeader`). `RegionFileFlushSSTest` checks this against this version's bytecode, so an update that adds a write path fails the unit test.
-  - (b) Each `writeHeader` increments a per-object counter. A force reads the counter at its start, and records it as covered only when `flush` returns normally. So a force that throws is retried at the next flush, and a write counted after a force began is never taken as covered.
-  - (c) Reuse: a RegionFile object lives in its storage's cache across many saves, and its counter persists with it. Eviction and storage close call `close`, which forces unconditionally (not touched). A reopened file is a new object whose previous object's writes were forced by that close.
-  - (d) Two saves in flight: a storage's writes (`runStore`) and its `flush` all run on its IOWorker's consecutive executor, one task at a time. `synchronize(true)` runs the flush task only after every write queued before it has completed, `writeHeader` included, so the counter it reads covers them. A later save's writes either precede its own flush task (and are forced there) or follow it (and belong to the next save). Separate storages (chunks, entities, POI, per level) have separate RegionFile objects.
-  - (e) The ledger is written after `saveAllChunks` returns, which joins each storage's `synchronize(true)`: unchanged from PS/J1.
-  - Limit: the kill steps (`Runtime.halt`, the page cache survives) can't detect a wrong skip. The guards are the bytecode test and the in-game rule that every save with `chunksSaved > 0` forced ≥ 1 file: 0 violations over 413 lines in run 2.
+- **Why skipping a force can never leave a chunk write unforced when the ledger is written:**
+  - **Every write is counted.** A RegionFile's channel is written only by `writeHeader` (each call is one write generation), by `write`'s sector
+    writes. Those are followed by `writeHeader` on every path that returns; a `write` that throws before it wrote nothing
+    durable to force: vanilla reports the chunk save failure, and a force could not save it, with SS or without (a failure inside the
+    save's own `synchronize(true)` fails it, and no ledger is written). by `padToFullSector` (only in `close`, which forces), and by
+    `writeToExternalFile` (an oversized chunk's own `.mcc`). `RegionFileFlushSSTest` pins this against this version's bytecode.
+  - **Only a returned force covers.** A force records the generation it read at its start, and only when `flush` returns normally. A force
+    that throws covers nothing, so the file is forced again at the next flush. A write counted after a force began is never taken as covered.
+  - **Same object reused.** The object's counters persist with it across saves in the storage's cache.
+  - **New object.** A RegionFile object opens unknown (`forcedAt = -1`), so its first flush forces it, whatever an earlier object for the same
+    file did.
+  - **Failed close.** A close (eviction, storage close) of an object with uncovered writes records its path as owed. Vanilla removes the cache
+    entry and closes the channel even when the close's force throws. The owed path is cleared only by that close's successful force, or by a
+    later object's successful force of the same file (fsync is per file, not per descriptor).
+  - **The `.mcc` payload** is forced before its rename. The `.mcc`'s directory is synced at the region file's next forcing flush. On Windows
+    the directory can't be opened, and NTFS journals the rename.
+  - **Two saves in flight.** A storage's writes (`IOWorker.runStore`) and its `flush` run on its consecutive executor, one task at a time.
+    `synchronize(true)` runs the flush task only after every write queued before it has completed, `writeHeader` included. Each storage (chunks,
+    entities, POI, per level) has its own RegionFile objects.
+  - **The check before the ledger** (`RegionDurability.undurable`):
+    - `saveWithWorld`, and a flushed world save's AFTER_SAVE, publish the ledger only when no live chunk or entity region file has a write
+      generation no successful force covered, and no path is owed. An autosave checks the chunk files: J1's wait forces those.
+    - POI is outside the check: vanilla's flushed save never forces POI, and no ledger fact lives there.
+    - On a refusal:
+      - an explicit save throws, as a failed flush already did, so its caller does not drop the removal or the credit after it;
+      - the periodic save and the autosave log at ERROR and leave the ledger pending.
+    - An autosave whose chunk IO wait failed writes no ledger (finding 5, older than SS).
+  - **The device barrier.** On macOS, `force` is F_FULLFSYNC, which also flushes the drive's cache. Vanilla's flushed save relied on that for the
+    player files written just before it (O_SYNC, not a device flush). When a storage's flush ends and no force has returned in this world save,
+    one of its files is forced anyway: one force per save instead of one per open file.
+  - **Evidence:**
+    - `RegionDurabilityTest` (8): the rules without Minecraft.
+    - `SaveProbe`, `dev.stockpile.ss {probe}` at ps-crash's start: nine cases on real RegionFiles with the mixins applied. They cover a first
+      open, a clean flush, a write then a flush, a failed force retried, a failed close then a reopen, an oversized chunk, the barrier once
+      per save, a dirty imposter, and an earlier save's unforced write forced before the ledger.
+    - The kill steps (`Runtime.halt` keeps the page cache) prove the order, not the durability.
 - **Bench** (the same four worlds, the same regex; `artifacts/gate-runs-ss/save-bench.mjs`), "saved with the world's chunks" lines:
 
   | run | rs-survival-smoke, jr-crash, hf-crash, ps-crash | load1 mean / max |
@@ -32101,7 +32140,8 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
   - Vanilla `/save-all flush` world saves still reach 1.3 s under that load (io on files the eager saves wrote).
   - RL's book refresh (the 10 s periodic save's refresh): max 9.2 ms over every logged save, including sad-crash; report-only, not a spike source.
   - J1's autosave IO wait: 14.3 ms (2 autosaves).
-- **Steward RC:** no API change. Both mixins change vanilla's save behaviour: the force skip on every world save, the wait skip inside Architect's saves with the world. Expect shorter stalls at crate, feed and credit saves.
+- **Steward RC:** no API change. A ledger save over a region write that is not durable is refused (an explicit save throws, as a failed
+  flush did). The mixins change vanilla's save behaviour: the force skip and the one barrier on every world save, the wait skip inside Architect's saves with the world. Expect shorter stalls at crate, feed and credit saves.
 - **Checks** (rule 11 scope, `--out artifacts/gate-runs-ss`, 8906:8907): run 1 (41fc9168, before) rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0; run 2 (5fea7bd2) jr-crash 24/0, hf-crash 38/0 (HF1, AS1), ps-crash 45/0, sad-crash 24/0 (SAC1/SAC2), rs-survival-smoke 36/1 (item 10: its check ran out of the 120 s budget under load 128, no artifact sha; not the save path); run 3 (5fea7bd2, rs-survival-smoke only) 40/0. Gradle build 1275 tests, 0 failures (1 skipped); unit-scope PASS; kit 1426/1426; step-inputs 418 clean; api-compat `--baselines` 8/8; gitleaks clean. jr-crash-v063, rl-crash and sad-survival not run (rule 11, deferred to the release).
 
 ## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
