@@ -40,10 +40,10 @@ public final class ApiRules {
 		"composites",
 		// (BC) ArchitectApi.kitVersion and checkerVersion; Sites.loadHealthy; maxBill on a realise (BILL_CAP, the bill_cap wait)
 		"kitVersion", "sitesLoadHealthy", "maxBill",
-		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
-		"apiVersion",
 		// (QL) Quote.terrain: the part of a survival quote's bill that comes from the plan's kept paid terrain cells
-		"quoteTerrain");
+		"quoteTerrain",
+		// (TJ AV) ArchitectApi.apiVersion(): the loaded Architect's API version at runtime (ArchitectApi.VERSION is inlined at compile time)
+		"apiVersion");
 
 	/**
 	 * (TJ REL-table) camelCase aliases of the feature names that pass a dotted sidecar name straight through. Both names are advertised:
