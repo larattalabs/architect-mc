@@ -603,7 +603,8 @@ function needGo(item, backend) {
 const outOf = (item, backend) => path.join(ART, item, backend === 'claude' ? 'paid' : 'sim');
 /** One job: on the claude backend guarded and opened in the ledger; on the sim recorded only. `run` returns {usd, status, ref?, error?, data?}. */
 async function job(backend, { item, step, capUsd, authSource, minutes = 45 }, run) {
-  const retry = !!opt('retry');
+  // --retry: a retry of the item, charged to R; --retry <tag>: one retry attempt holding several jobs (each item's jobs share the tag)
+  const retry = opt('retry') === true ? true : typeof opt('retry') === 'string' ? String(opt('retry')) : false;
   if (backend === 'claude') openPaid({ item, step, capUsd, authSource, retry, minutes });
   else log(`${step}: sim (budget $${capUsd} as the paid run's)`);
   let r;
@@ -699,22 +700,25 @@ subs.p3 = async () => {
   const backend = backendOf();
   needGo('P3', backend);
   const out = outOf('P3', backend);
-  const res = { at: new Date().toISOString(), head: gitHead(), backend, sessions: {} };
+  // --budget <usd>: each session's budget (default the item's; the R retry runs two at $0.50, Noah's $1.00 for both)
+  const budget = opt('budget') ? Number(opt('budget')) : S2.BUDGETS.P3.author;
+  const res = { at: new Date().toISOString(), head: gitHead(), backend, budget, retry: opt('retry') ?? null, sessions: {} };
+  const file = opt('retry') ? 'p3-retry.json' : 'p3.json';
   const c = await client(backend, 'P3');
   const stamp = Date.now().toString(36);
   try {
     for (const s of S2.P3_SESSIONS) {
       const claim = await siteWorld(c.L, s, 'P3');
       try {
-        res.sessions[s.key] = await job(backend, { item: 'P3', step: `P3:author:${s.key}`, capUsd: S2.BUDGETS.P3.author, authSource: c.auth.authSource, minutes: 60 }, async () => {
-          const d = await c.L.call('dev.region.author', { brief: s.brief, claim, budgetUsd: S2.BUDGETS.P3.author, opKey: `pay-p3-${backend}-${stamp}-${s.key}`, wait: true }, 3_600_000);
+        res.sessions[s.key] = await job(backend, { item: 'P3', step: `P3:author:${s.key}${opt('retry') ? ':retry' : ''}`, capUsd: budget, authSource: c.auth.authSource, minutes: 60 }, async () => {
+          const d = await c.L.call('dev.region.author', { brief: s.brief, claim, budgetUsd: budget, opKey: `pay-p3-${backend}-${stamp}-${s.key}`, wait: true }, 3_600_000);
           const r = d.result ?? {};
           return { usd: d.costUsd ?? r.cost ?? 0, status: r.outcome ?? d.status ?? 'refused', ref: d.designId, error: d.refused ?? d.error ?? undefined, data: { site: s.site, claim, brief: s.brief, status: d.status, outcome: r.outcome ?? null, rounds: r.rounds ?? null, program: r.program ?? null, reason: r.reason ?? null } };
         });
       } finally { await c.L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null); }
-      writeJson(path.join(out, 'p3.json'), res);
+      writeJson(path.join(out, file), res);
     }
-  } finally { c.stop(); writeJson(path.join(out, 'p3.json'), res); }
+  } finally { c.stop(); writeJson(path.join(out, file), res); }
   report2('P3', backend, res);
 };
 
@@ -813,6 +817,36 @@ subs.p6 = async () => {
   report2('P6', backend, res);
 };
 
+/**
+ * `p4-sheet` ($0): P4's blind sheet as pictures. Each pair's two plans (images on: P2's arm; off: P4's) planned through plan_v0 by the kit's
+ * own check over the SAME land (P2's run's own plan survey) and Style, rendered by the kit's previews (siteplan, iso, top), sides
+ * randomised, the key in its own file. Writes ab/ over the text sheet (the plans stay in p4.json).
+ */
+subs['p4-sheet'] = async () => {
+  const backend = backendOf();
+  const out = outOf('P4', backend);
+  const p4 = readJson(path.join(out, 'p4.json'), null);
+  const p2 = readJson(path.join(outOf('P2', backend), 'p2.json'), null);
+  if (!p4 || !p2) throw new Error('p4-sheet needs P2\'s and P4\'s records');
+  const { renderPlan } = await import('./lib/pay-render.mjs');
+  const pairs = [];
+  for (const [k, pr] of Object.entries(p4.pairs)) {
+    if (!pr.on?.plan || !pr.off?.plan) continue;
+    const planDir = path.join(p2.runs[k].data.out, 'raw', 'plan');
+    const req = readJson(path.join(planDir, 'request.json'), {});
+    const survey = fs.readFileSync(path.join(planDir, 'survey.bin'));
+    const arms = {};
+    for (const arm of ['on', 'off']) {
+      const r = await renderPlan({ plan: pr[arm].plan, survey, claim: req.claim, bible: req.bible, roles: req.roles, outDir: path.join(out, 'render', `${k}-${arm}`) });
+      const views = ['siteplan', 'iso', 'top'].flatMap((v) => (r.paths[v] ?? []).filter((f) => f.endsWith('.png')).slice(0, 1));
+      arms[arm] = { imgs: views, overall: r.overall, lots: r.lots };
+      log(`P4 sheet ${k} ${arm}: ${r.overall}, ${r.lots} lots; ${views.map((f) => path.basename(f)).join(', ')}`);
+    }
+    pairs.push({ pair: k, ...arms });
+  }
+  abSheet('P4', out, pairs, 'Plan pick sheet', 'Two plans per pair, each composed from the same brief for the same land, drawn the same way (the site plan, a bird\'s-eye view and the top view). For each pair, pick the one you prefer (A or B).');
+};
+
 /** R: the reserve is retries only: every item's command takes --retry (charged to R, one per item; the guard refuses a second). */
 subs.r = async () => { console.log('R: no command of its own. Re-run an item\'s command with --retry (and --scn/--attempt where it takes them): its jobs are charged to R, at most one retry per item (tools/lib/pay-ledger.mjs guard).'); };
 
@@ -825,7 +859,10 @@ function abSheet(item, out, pairs, title, intro) {
   pairs.forEach((p, i) => {
     const flip = crypto.randomBytes(1)[0] & 1;
     key[p.pair] = flip ? { A: 'off', B: 'on' } : { A: 'on', B: 'off' };
-    const cell = (side) => { const arm = p[key[p.pair][side]]; if (arm.img && fs.existsSync(arm.img)) { const f = `pair-${i + 1}-${side}${path.extname(arm.img)}`; fs.copyFileSync(arm.img, path.join(dir, f)); return `<figure><img src="${f}"><figcaption>${side}</figcaption></figure>`; } return `<figure><pre>${String(arm.text ?? '').replace(/</g, '&lt;')}</pre><figcaption>${side}</figcaption></figure>`; };
+    const cell = (side) => { const arm = p[key[p.pair][side]];
+      // (several pictures per arm: the same views in the same order on both sides)
+      if (arm.imgs?.length) return `<figure>${arm.imgs.filter((f) => fs.existsSync(f)).map((f, j) => { const n = `pair-${i + 1}-${side}-${j + 1}${path.extname(f)}`; fs.copyFileSync(f, path.join(dir, n)); return `<img src="${n}">`; }).join('')}<figcaption>${side}</figcaption></figure>`;
+      if (arm.img && fs.existsSync(arm.img)) { const f = `pair-${i + 1}-${side}${path.extname(arm.img)}`; fs.copyFileSync(arm.img, path.join(dir, f)); return `<figure><img src="${f}"><figcaption>${side}</figcaption></figure>`; } return `<figure><pre>${String(arm.text ?? '').replace(/</g, '&lt;')}</pre><figcaption>${side}</figcaption></figure>`; };
     html.push(`<h2>Pair ${i + 1}</h2><div class="row">${cell('A')}${cell('B')}</div><p>Pick: A / B</p>`);
   });
   fs.writeFileSync(path.join(dir, 'sheet.html'), `${html.join('\n')}\n`);

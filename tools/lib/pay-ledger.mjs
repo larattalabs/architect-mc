@@ -73,7 +73,9 @@ export function guard(L, { item, step, capUsd, retry = false, now = new Date(), 
   if (authSource === null || !/claude login/i.test(String(authSource))) return { ok: false, kind: 'refuse', message: `refusing ${step}: the helper's auth is "${authSource}", not the claude login` };
   if (inNightly(now, minutes)) return { ok: false, kind: 'window', message: `refusing ${step}: the nightly window ${NIGHTLY.from.join(':')}-${NIGHTLY.to.join(':')} (this step could last ${minutes} min)` };
   if (!(capUsd > 0)) return { ok: false, kind: 'refuse', message: `refusing ${step}: no budgetUsd` };
-  if (retry && L.jobs.some((j) => j.item === item && j.retry)) return { ok: false, kind: 'retry', message: `refusing ${step}: ${item} already used its one retry` };
+  // (one retry per item: a retry may hold several jobs of one attempt, all carrying the same retry tag (a string); a job of another
+  // retry attempt of the item is refused)
+  if (retry && L.jobs.some((j) => j.item === item && j.retry && (typeof retry !== 'string' || j.retryTag !== retry))) return { ok: false, kind: 'retry', message: `refusing ${step}: ${item} already used its one retry` };
   const c = committed(L);
   if (c + capUsd > HARD_CAP_USD + 1e-9) {
     return { ok: false, kind: 'refuse', message: `refusing ${step}: committed $${c.toFixed(2)} + its cap $${capUsd.toFixed(2)} passes the $${HARD_CAP_USD} hard cap (Noah's approval): report to the coordinator`, report: stopReport(L, { item, step, capUsd }) };
@@ -94,7 +96,7 @@ export function stopReport(L, { item, step, capUsd }) {
 }
 
 export function openJob(L, { item, step, capUsd, retry = false, authSource = null, ref = null }) {
-  const j = { item, step, capUsd: r6(capUsd), usd: 0, ended: false, retry: !!retry, chargedTo: retry ? 'R' : item, authSource, ref, startedAt: new Date().toISOString() };
+  const j = { item, step, capUsd: r6(capUsd), usd: 0, ended: false, retry: !!retry, ...(typeof retry === 'string' ? { retryTag: retry } : {}), chargedTo: retry ? 'R' : item, authSource, ref, startedAt: new Date().toISOString() };
   L.jobs.push(j);
   tally(L);
   return j;

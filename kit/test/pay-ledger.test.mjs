@@ -89,3 +89,12 @@ test('(stage 2) each item\'s jobs at their budgets fit its ceiling with every jo
   assert.equal(S2.p4World('s3'), 'G6B PAY P2 s3 land');
   assert.equal(S2.P6_REQUEST.ext['architect_mc:allowComposite'], true);
 });
+
+test('(R) one retry attempt may hold several jobs under one tag; another attempt is refused', () => {
+  const L = P.emptyLedger();
+  P.openJob(L, { item: 'P3', step: 'P3:a:r', capUsd: 0.5, retry: 'P3-r1' });
+  assert.equal(g(L, { item: 'P3', step: 'P3:b:r', capUsd: 0.5, retry: 'P3-r1' }).ok, true);
+  assert.equal(g(L, { item: 'P3', step: 'P3:c:r', capUsd: 0.5, retry: 'P3-r2' }).kind, 'retry');
+  assert.equal(g(L, { item: 'P3', step: 'P3:c:r', capUsd: 0.5, retry: true }).kind, 'retry');
+  assert.equal(L.items.R.committedUsd, 0.5);
+});

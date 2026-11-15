@@ -116814,6 +116814,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-render.mjs",
     "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
@@ -116908,6 +116909,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/pay-render.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', rel)).href)"
     }
    ],
    "env": [
@@ -117216,6 +117221,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-render.mjs",
     "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
@@ -117310,6 +117316,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/pay-render.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', rel)).href)"
     }
    ],
    "env": [
@@ -117618,6 +117628,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-render.mjs",
     "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
@@ -117712,6 +117723,10 @@
     {
      "from": "kit/build.mjs",
      "expr": "pathToFileURL(file).href)"
+    },
+    {
+     "from": "tools/lib/pay-render.mjs",
+     "expr": "pathToFileURL(path.join(root, 'kit', rel)).href)"
     }
    ],
    "env": [
