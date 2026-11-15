@@ -679,15 +679,17 @@ subs.p2 = async () => {
     for (const s of scns) {
       const st = res.styles[s.key];
       if (st?.status !== 'done') { res.runs[s.key] = { skipped: `its Style is not shown (${st?.status} ${st?.error ?? ''})` }; continue; }
-      const runOut = path.join(out, 'scenarios', `${s.key}-pay`);
+      // (--attempt N: a later attempt's own run dir and step; --no-designs: no paid site archetypes, the lots then wait "not shown")
+      const att = opt('attempt') ? `-${opt('attempt')}` : '';
+      const runOut = path.join(out, 'scenarios', `${s.key}-pay${att}`);
       const budget = s.via === 'compose' ? B.compose : B.pick;
-      const plan = s.designs ? { item: 'P2', backend, ledger: backend === 'claude' ? LEDGER : path.join(out, 'sim-ledger.json'), ledgerModule: 'pay', opPrefix: `pay-p2-${backend}-${Date.now().toString(36)}`, capUsd: B.design, timeoutMin: 45, auto: { maxDesigns: B.maxDesigns, request: { buildingType: 'house', style: st.bibleId, bible: st.bibleId, name: 'PAY S6', notes: 'A home carved into the rock of the hall.' } } } : null;
+      const plan = s.designs && !args.includes('--no-designs') ? { item: 'P2', backend, ledger: backend === 'claude' ? LEDGER : path.join(out, 'sim-ledger.json'), ledgerModule: 'pay', opPrefix: `pay-p2-${backend}-${Date.now().toString(36)}`, capUsd: B.design, timeoutMin: 45, auto: { maxDesigns: B.maxDesigns, request: { buildingType: 'house', style: st.bibleId, bible: st.bibleId, name: 'PAY S6', notes: 'A home carved into the rock of the hall.' } } } : null;
       const pf = plan ? path.join(out, `pa-plan-${s.key}.json`) : null;
       if (plan) writeJson(pf, plan);
       const a = ['run', s.key, '--brief', '--via', s.via, '--budget', String(budget), '--images', '--style-file', st.file, '--phase', `7c-pay-${backend}`, '--out', runOut,
         ...(s.via === 'compose' ? ['--brief-ext', path.join(root, 'tools', 'lib', 'pay-compose-ext.json')] : []), ...(s.saveWorld ? ['--save-world', S2.p4World(s.key)] : [])];
-      const slog = path.join(out, `${s.key}.scenario.log`);
-      res.runs[s.key] = await job(backend, { item: 'P2', step: `P2:brief:${s.key}`, capUsd: budget, authSource: c.auth.authSource, minutes: 120 }, async () => {
+      const slog = path.join(out, `${s.key}${att}.scenario.log`);
+      res.runs[`${s.key}${att}`] = await job(backend, { item: 'P2', step: `P2:brief:${s.key}${att}`, capUsd: budget, authSource: c.auth.authSource, minutes: 120 }, async () => {
         const fd = fs.openSync(slog, 'a');
         const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), ...a], { cwd: root, stdio: ['ignore', fd, fd], env: { ...c.env, SCENARIOS_ART: path.join(out, 'scenarios'), ARCHITECT_SHOTS_DIR: path.join(out, 'shots'), ...(pf ? { PA_PLAN: pf } : {}) } });
         fs.closeSync(fd);
