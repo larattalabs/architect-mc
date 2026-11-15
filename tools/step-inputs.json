@@ -134642,7 +134642,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -134727,6 +134726,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -137601,7 +137604,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -137686,6 +137688,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
