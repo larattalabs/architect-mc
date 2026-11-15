@@ -32036,6 +32036,18 @@ realised and removed, the street free round, an invented family repaired, NO_PLA
 - e) (after merging PF: plan/0 grew) The families block is at most 2,000 characters (`FAMILIES_MAX`) and, with `composeVocab` "families",
   counts against the caller's rules: `composeSystem` at most 28,000 then (30,000 without), so a round's system stays under 120,000.
 
+### Slice CP as built
+
+1. Skip-pick: `ComposeRequest.EXT_SKIP_PICK` makes no region.design; the pick reads `{outcome: SKIPPED, program: null, fits: false}`, and round 1 is told no template was picked.
+2. Words: COMPOSED and NO_PLAN carry `summary` (the shown round's reason), `leftOut` and `waits[].say` (`waitSay`, $0); NO_PLAN's `reason` is unchanged.
+3. Vocab: `EXT_VOCAB` "families" adds a compose-local block-families block (about 1,700 characters, `FAMILIES_MAX` 2,000) that counts against the caller's rules (28,000 then).
+4. Street fix: `EXT_STREET_FIX` (default on) runs Steward's `streetFixes` port after each paid round's check; a fix is a free round (no job, $0), checked by the mod, never part of the oscillation compare. It is idempotent (unit).
+5. Owner and level: `ComposeRequest` gains trailing `level` and `owner`; the 7-argument constructor delegates. `region.compose` sends `owner`/`dimension` only when set. Regions stay Overworld only: another level ends NO_PLAN at once ($0) with `refused` NOT_ALLOWED and summary "regions can only be built in the Overworld for now".
+- Dev hooks: `dev.region.compose` takes `dimension`/`owner`; `dev.region.designKinds` counts designs by kind; `designJson` shows `owner`.
+- Gate: `cp-unit` (7 sidecar cases), `cp-compose` (tools/gate7ccp.mjs (a)-(e), opKeys unique per run); chain `7ccp`, impact rule "7c CP".
+- Evidence: change-tier runs 20261115-040728 (19/21; api-compat on the classless o1 lane, co-compose's adopted design) and the re-runs 051744, 052209 and 062646 at the final head.
+- Leftovers: regions in other dimensions (its own strict slice); the runner puts api-compat on an offline lane without classes; CO's gate (and any caller) reusing an opKey whose design finished under another world waits forever (the new world never hears of it); Steward's check load policy; model summaries (PAY).
+
 ## Slice J1, crash and refund edges (branch `slice/J1` off main bdc1cad1 (SA, FK in); 2026-11-14; DEV MODE, strict; versions NEXT; $0)
 
 - **RS-c (audit F8):** a piston can't push a survival region's free write (`PistonBaseBlock.isPushable`); a piston's break of one and an explosion (`BlockBehaviour.onExplosionHit`'s `dropFromExplosion`) take it without loot and record it in `mined`, so the removal puts it back (`RegionFreeDrops.pistonHolds` / `takenWithoutDrop`, a cheap claim test before the journal read). Decay, water and endermen accepted (Noah, "safety: defaults").

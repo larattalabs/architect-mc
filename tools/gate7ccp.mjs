@@ -93,21 +93,22 @@ async function compose(tag, b, over = {}) {
 }
 const kinds = async () => (await call('dev.region.designKinds', {}, 30_000)).kinds ?? {};
 
-/** The artifact's meta file (`<sha>.meta.json`, PlanChecks) anywhere under the run's saves. */
+/** The artifact's meta file (`<sha>.meta.json`, PlanChecks) under the run's saves: the newest (a reused run dir keeps earlier worlds). */
 function artifactMeta(sha) {
   const want = `${sha}.meta.json`;
+  const hits = [];
   const walk = (d, depth) => {
-    if (depth > 8) return null;
+    if (depth > 8) return;
     let es;
-    try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return null; }
+    try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of es) {
       const p = path.join(d, e.name);
-      if (e.isFile() && e.name === want) return p;
-      if (e.isDirectory()) { const f = walk(p, depth + 1); if (f) return f; }
+      if (e.isFile() && e.name === want) hits.push(p);
+      else if (e.isDirectory()) walk(p, depth + 1);
     }
-    return null;
   };
-  const f = walk(path.join(L.GAME_DIR, 'saves'), 0);
+  walk(path.join(L.GAME_DIR, 'saves'), 0);
+  const f = hits.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
   return f ? JSON.parse(fs.readFileSync(f, 'utf8')) : null;
 }
 
