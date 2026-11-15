@@ -129,7 +129,7 @@ export async function registerLC(steps, h) {
   steps.lcsurvival = async () => {
     await ensure();
     const out = {};
-    await call('dev.removal.state', { clear: true }, 10_000);
+    await call('dev.removal.state', { clear: true }, 10_000).catch(() => null);
     // town A: the stage undo (the path a region's undoRevision takes: Groups.undoStage, ownStage)
     const A = await town('G6B LC Undo');
     if (A) {
