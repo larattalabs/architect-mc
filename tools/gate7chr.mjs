@@ -32,6 +32,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { stewardCap, terrainShape } from './lib/quote-terrain.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-HR-run');
@@ -495,6 +496,94 @@ steps.bccap = async () => {
   const ps2 = await pile();
   const back = G.minus(ps2.ledger?.returned ?? {}, ps1.ledger?.returned ?? {});
   check(rm.removed && G.same(back, used), `removed: what came back equals what was consumed (${json(back)})`, { back, used });
+  return out;
+};
+
+// ------------------------------------------------------------------ (slice QL) ql-drift: Quote.terrain, one terrain cell's drift under Steward's maxBill
+
+/**
+ * (QL) x03 checked in survival and quoted: Quote.terrain names the grading dirt with 0 (every kept cell already stands, A11) and its shape
+ * holds; one standing kept cell turned to coarse dirt, quoted again: only terrain, bom and tiles:<group> move, by one dirt; Steward's maxBill
+ * from the first (approved) quote (bom + max(2, ceil(2% terrain)) on terrain items, the rest exact) with the lot's planks 2 under: refused
+ * BILL_CAP (the stand-in for a two-unit lot drift), the world unchanged and nothing consumed; the same cap as Steward builds it: accepted at
+ * put-down with the drifted cell, fed until PLACED: consumed equals the put-down quote and stays under the cap; removed: the refund equals
+ * what was consumed. $0.
+ */
+steps.qldrift = async () => {
+  await ensure();
+  spendZero();
+  const out = {};
+  const DIRT = 'minecraft:dirt', PL = 'minecraft:oak_planks';
+  const fx = fixture('x03_cellar');
+  const entries = entriesOf(fx);
+  const s = await G.site(ctx, 'ql drift', fx);
+  if (Object.keys(entries).length) await G.designs(ctx);
+  const ck = await G.check(ctx, 'ql-drift', s);
+  const sha = ck.check?.artifactSha;
+  check(ck.check?.survival === true && ck.check?.overall === 'READY' && !!sha, `x03 checked in survival: ${ck.check?.overall}`);
+  if (!sha) return out;
+  const quote = () => L.call('dev.region.quote', { sha, lotEntries: entries }, 300_000);
+  const q1 = await quote();
+  const shape1 = terrainShape(q1);
+  out.approved = { exact: q1.exact, bom: q1.bom, terrain: q1.terrain, shape: shape1 };
+  check(!q1.refused && q1.exact === true && shape1.length === 0 && q1.terrain?.[DIRT] === 0 && !q1.bom?.[DIRT],
+    `QL: x03's quote names its grading dirt as terrain with 0 (every kept cell stands): terrain ${json(q1.terrain)}, bom dirt ${q1.bom?.[DIRT] ?? 0}${shape1.length ? `; shape ${json(shape1)}` : ''}`, out.approved);
+  const tc = await L.call('dev.ql.terrainCells', { sha, max: 4096 }, 60_000);
+  // a kept cell billing exactly one dirt (its state may be grass or dirt: the item is what the quote bills)
+  const oneDirt = (c) => c.standing && c.loaded && json(c.items ?? {}) === json({ [DIRT]: 1 });
+  const cell = (tc.cells ?? []).find((c) => oneDirt(c) && c.state === DIRT) ?? (tc.cells ?? []).find(oneDirt);
+  out.cell = cell ?? null;
+  check(!!cell, `a standing kept cell billing one dirt to change: ${cell ? `${cell.x} ${cell.y} ${cell.z} ${cell.state} (${cell.group}; ${tc.cells.length} kept cells read)` : `none of ${tc.cells?.length ?? 0} (states ${json([...new Set((tc.cells ?? []).map((c) => c.state))].slice(0, 6))}, items ${json((tc.cells ?? [])[0]?.items ?? null)})`}`, { n: tc.cells?.length });
+  if (!cell) return out;
+  // the drift: one standing cell turned to coarse dirt (another state: a realise writes it; coarse dirt does not spread)
+  await L.cmd(`/setblock ${cell.x} ${cell.y} ${cell.z} minecraft:coarse_dirt`);
+  await L.settle(1500);
+  const q2 = await quote();
+  const shape2 = terrainShape(q2);
+  const moved = Object.fromEntries(Object.keys({ ...q1.bomParts, ...q2.bomParts }).filter((p) => json(q1.bomParts?.[p] ?? {}) !== json(q2.bomParts?.[p] ?? {}))
+    .map((p) => [p, G.minus(q2.bomParts?.[p] ?? {}, q1.bomParts?.[p] ?? {})]));
+  const pos = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v > 0)); // G.minus keeps the negatives
+  const bomMoved = pos(G.minus(q2.bom ?? {}, q1.bom ?? {})), bomBack = pos(G.minus(q1.bom ?? {}, q2.bom ?? {}));
+  out.drifted = { terrain: q2.terrain, bomMoved, bomBack, moved, shape: shape2, exact: q2.exact };
+  const tilesKey = `tiles:${cell.group}`;
+  check(!q2.refused && shape2.length === 0 && q2.terrain?.[DIRT] === 1 && json(bomMoved) === json({ [DIRT]: 1 }) && Object.keys(bomBack).length === 0
+    && json(Object.keys(moved)) === json([tilesKey]) && json(moved[tilesKey]) === json({ [DIRT]: 1 })
+    && json(Object.fromEntries(Object.entries(q2.terrain ?? {}).filter(([k]) => k !== DIRT))) === json(Object.fromEntries(Object.entries(q1.terrain ?? {}).filter(([k]) => k !== DIRT))),
+    `QL: one terrain cell changed, quoted again: terrain dirt ${q1.terrain?.[DIRT]} -> ${q2.terrain?.[DIRT]}, bom moved ${json(bomMoved)} (back ${json(bomBack)}), pieces moved ${json(moved)}`, out.drifted);
+  const pile = async () => (await L.call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+  await G.pile(ctx, s, 3);
+  const box = boxOf(s.W);
+  const pre = await G.snap(ctx, box, 'ql-drift-pre');
+  const ps0 = await pile();
+  const cap = stewardCap(q1);
+  out.cap = cap;
+  // a lot item stays exact: the cap with the planks 2 under the put-down bill (as a two-unit lot drift) refuses before any write
+  const lotUnder = { ...cap, [PL]: (q2.bom?.[PL] ?? 0) - 2 };
+  const rr = await L.call('dev.region.realiseApproved', { sha, lotEntries: entries, maxBill: lotUnder }, 300_000);
+  await L.settle(2000);
+  const d0 = await G.diff(ctx, box, pre);
+  const ps0b = await pile();
+  out.lotRefused = { reason: rr.reason, refused: rr.refused ?? rr.message, mismatches: d0.mismatches, consumed: G.minus(ps0b.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {}) };
+  check(!rr.region && rr.reason === 'BILL_CAP' && /oak_planks/.test(String(rr.refused ?? rr.message ?? '')) && !/dirt/.test(String(rr.refused ?? rr.message ?? ''))
+    && d0.mismatches === 0 && Object.keys(out.lotRefused.consumed).length === 0,
+    `QL: Steward's cap with a lot item 2 under (planks ${lotUnder[PL]}): refused ${rr.reason} (${rr.refused ?? rr.message}); the drifted dirt is within its allowance; the world unchanged (${d0.mismatches} differ), nothing consumed`, out.lotRefused);
+  // Steward's cap from the approved quote: the one-cell terrain drift passes at put-down
+  const ra = await L.call('dev.region.realiseApproved', { sha, lotEntries: entries, maxBill: cap }, 300_000);
+  check(!!ra.region, `QL: Steward's cap from the approved quote (${json(cap)}), the put-down bill one dirt over the quote: accepted (${ra.region ?? json(ra)})`);
+  if (!ra.region) return out;
+  const region = ra.region;
+  const f = await G.feed(ctx, region, { fraction: 0.5, timeoutMs: 2_400_000 });
+  const ps1 = await pile();
+  const used = G.minus(ps1.ledger?.consumed ?? {}, ps0.ledger?.consumed ?? {});
+  const over = Object.entries(used).filter(([k, v]) => v > (cap[k] ?? 0));
+  out.built = { state: f.last.st.view.state, waves: f.waves, consumed: used, over };
+  check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done && G.same(used, q2.bom ?? {}) && over.length === 0,
+    `QL: fed in ${f.waves} waves: ${f.last.st.view.state}; consumed equals the put-down quote item for item${G.same(used, q2.bom ?? {}) ? '' : `: over ${json(G.minus(used, q2.bom))}, under ${json(G.minus(q2.bom, used))}`}; within the cap${over.length ? `: past ${json(over)}` : ''}`, out.built);
+  const rm = await G.remove(ctx, region);
+  const ps2 = await pile();
+  const back = G.minus(ps2.ledger?.returned ?? {}, ps1.ledger?.returned ?? {});
+  out.removed = { removed: rm.removed, back };
+  check(rm.removed && G.same(back, used), `removed: what came back equals what was consumed (${json(back)})`, out.removed);
   return out;
 };
 

@@ -254,9 +254,7 @@ public final class Groups {
 			// drops the member from the saved removal (and end() drops the removal, its decCredit with it): a crash after that point finds the
 			// refund in the saved ledger, never the building gone and its refund gone. Before it, the removal resumes and credits the key
 			// again (once per key: the saved ledger hasn't it).
-			if (!Stockpiles.testNoCreditSave) {
-				Stockpiles.saveWithWorld(server);
-			}
+			Stockpiles.saveCredit(server);
 		}
 	}
 
@@ -1057,6 +1055,11 @@ public final class Groups {
 			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
 			if (pile != null) {
 				var dropped = RegionTargets.dropPlayerBlocks(level, inf); // (6c RS §9) a player's block in a region target drops at its cell first
+				var matches = RoadBuilder.dropPlayerMatches(level, inf); // (J1, F10 for roads) a player's matching block: theirs, not refunded
+				if (!matches.isEmpty()) {
+					dropped = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(dropped);
+					dropped.addAll(matches);
+				}
 				// (XR) a cell a later writer of the region owns (it matches what stands there) is that writer's refund, not this one's
 				Builder.Run ir = RoadBuilder.run(level.getServer(), inf);
 				if (ir != null) {

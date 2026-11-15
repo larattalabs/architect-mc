@@ -11,6 +11,7 @@
 // Evidence: artifacts/gate6d-gr/bcrelay.json (GATE6DGR_OUT), all.log, spend.json ($0.00).
 import fs from 'node:fs';
 import path from 'node:path';
+import { terrainShape } from './quote-terrain.mjs';
 
 /** IG's irrigated farm lot (Steward's crop farm ask) and IRR's field entry at its size. */
 const FARM = { id: 'farm_bc', type: 'crop_farm', size: [20, 21], irrigate: true };
@@ -86,6 +87,9 @@ export async function registerBC(steps, h) {
     const q = await call('dev.region.quote', { planId: g.planId, lotEntries: entries }, 300_000);
     out.quote = { bom: q.bom, exact: q.exact, notes: q.notes, refused: q.refused };
     check(!q.refused && q.bom?.['minecraft:dirt'] > 0 && q.bom?.['minecraft:wheat_seeds'] > 0, `the growth quoted: ${json(q.bom)} (exact ${q.exact})`, out.quote);
+    // (QL) the module's quote (the crop field entry on an irrigated growth): its terrain part within its bill
+    out.quote.terrain = q.terrain;
+    check(terrainShape(q).length === 0, `QL: the farm growth's quote has a terrain part within its bill: ${json(q.terrain)}${terrainShape(q).length ? `; ${json(terrainShape(q))}` : ''}`);
     // the town's leftover dirt out of the stockpile (to the player), so the growth's shells wait for theirs (Steward's half-fed round)
     const left0 = (await pile()).stock?.['minecraft:dirt'] ?? 0;
     if (left0 > 0) await call('dev.stockpile.withdraw', { owner: G.OWNER, items: { 'minecraft:dirt': left0 } }, 60_000);
