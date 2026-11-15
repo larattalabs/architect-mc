@@ -12,6 +12,7 @@ import * as P3 from './p3-tier.mjs';
 import { identicalToBase, skippedLine } from './base-tree.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
+import { PF_MOVED } from './pf-norm.mjs'; // (7c PF) the aqueducts' arches from the archSpan module
 
 /**
  * Item 12's named exceptions: fixtures HY re-answers by name. h/r08_course is a course (now HY-b's v51, the stub's UNREACHABLE until HYb
@@ -23,7 +24,7 @@ import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tu
 export const UNCHANGED_EXCEPTIONS = Object.freeze(['h/r08_course.json', 'extension/e15_every_reserved_a.json', 'valid/v51_voc_forge.json', 'asks/desert_jungle_wall.json',
   'asks/hidden_village.json', 'asks/mage_exiles.json', 'asks/old_new_town.json', 'asks/one_block.json', 'asks/rival_families.json', 'asks/row_houses.json',
   'extension/e05_reserved_rule.json', 'extension/e16_every_reserved_b.json', ...FL_MOVED.filter((n) => n !== 'extension/e15_every_reserved_a.json'),
-  ...Object.keys(F7A_MOVED).filter((n) => n !== 'extension/e15_every_reserved_a.json'), ...Object.keys(THEME_REST_MOVED)]); // ((7a foundation) its catalogue changes' named movers)
+  ...Object.keys(F7A_MOVED).filter((n) => n !== 'extension/e15_every_reserved_a.json'), ...Object.keys(THEME_REST_MOVED), ...Object.keys(PF_MOVED)]); // ((7a foundation) its catalogue changes' named movers)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const k3 = (c) => `${c[0]},${c[1]},${c[2]}`;

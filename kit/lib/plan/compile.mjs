@@ -39,6 +39,7 @@ import { CAVE, f3CaveEmit, f3CoralAnswers, f3Emit, f3Resolve, GROWN, INTO_BODY, 
 import { eachColumn } from '../forms/states.mjs';
 import { BIG_KINDS, bigNotes, bigSide, bigWantsFluids, emitBig } from '../forms/bigForms.mjs';
 import { emitHidden, resolveHidden } from '../forms/hiddenRoom.mjs';
+import { archSpanNotes, archSpanSide, archSpanSite, emitArchSpan } from '../forms/archSpanPart.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
 import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
@@ -658,6 +659,27 @@ function resolveBig(env, f, geomOf, obstacles) {
   const c = cands[0];
   const j = judge([{ what: 'move', value: c.move, ...tMove }, ...(sk ? [{ what: 'sketch', value: c.sketch, ...tolOf(part, 'sketch') }] : [])]);
   return { klass: j.klass, rect: c.rect, footprints: [rectArr(c.rect)], deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes: bigNotes(env, part, c.rect) };
+}
+
+/**
+ * (7c PF) An arch span (form.arch_span, the promoted archSpan module): a rect of length by width along its axis from its locator, clear
+ * of the zones and forms placed before it, dry, the ground under it at most DROP (32) under its springing (one over its highest ground);
+ * fits or adjusted (move) as a big form (forms/archSpanPart.mjs emits it).
+ */
+function resolveArchSpan(env, f, geomOf, obstacles) {
+  const part = f.part;
+  const loc = locatorOf(env, part.where, geomOf);
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
+  const [w, d] = archSpanSide(part);
+  const tMove = tolOf(part, 'move');
+  const sk = sketchPoint(env, part.sketch);
+  const obs = obstacles.map((o) => grow(o, ZONE_GAP));
+  const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove: tMove.ceiling, limit: 4096 }).filter((c) => c.water === 0);
+  let c = null, site = null, deepest = 0;
+  for (const q of cands) { const s = archSpanSite(env, q.rect); if (s.ok) { c = q; site = s; break; } deepest = Math.max(deepest, s.drop); }
+  if (!c) return { klass: 'refused', reasons: [{ code: obstacles.length && !cands.length ? 'OVERLAP' : 'NO_ROOM', message: cands.length ? `no ${w}x${d} dry rect for the arch span within its locator whose ground lies at most 32 under its springing (the deepest ${deepest})` : `no ${w}x${d} dry rect for the arch span within its locator, clear of the zones, forms and keep-out`, evidence: { size: [w, d], obstacles: obstacles.length, ...(cands.length ? { drop: deepest, limit: 32 } : {}) } }] };
+  const j = judge([{ what: 'move', value: c.move, ...tMove }, ...(sk ? [{ what: 'sketch', value: c.sketch, ...tolOf(part, 'sketch') }] : [])]);
+  return { klass: j.klass, rect: c.rect, y: site.y, footprints: [rectArr(c.rect)], deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes: archSpanNotes(part) };
 }
 
 /** Spikes: `count` sites (dry, off zones, forms and keep-out, 8 apart) within the locator's area, best first. */
@@ -1301,17 +1323,17 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
       // cached), as zones are
       const taken = [...zonesAccepted.map((o) => o.rect), ...formsAccepted];
       const zoneIds = new Set(V.parts.filter((q) => q.family === 'zone').map((q) => q.id));
-      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : BIG_KINDS.includes(p.kind) ? resolveBig(env, p, geomOf, obs) : resolveSpikes(env, p, geomOf, obs, keep));
+      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : BIG_KINDS.includes(p.kind) ? resolveBig(env, p, geomOf, obs) : p.kind === 'arch_span' ? resolveArchSpan(env, p, geomOf, obs) : resolveSpikes(env, p, geomOf, obs, keep));
       const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
-      const gapOf = p.kind === 'terrace' || BIG_KINDS.includes(p.kind) ? ZONE_GAP : 2;
+      const gapOf = p.kind === 'terrace' || p.kind === 'arch_span' || BIG_KINDS.includes(p.kind) ? ZONE_GAP : 2;
       const clashes = (x) => (x.footprints ?? []).some((fp) => taken.some((o) => meets(grow(arrRect(fp), gapOf), o)));
       const key = cacheKey(env, p, geom);
       const hit = env.cacheIn?.(key);
-      let f = hit && hit.footprints ? { klass: hit.klass, rect: arrRect(hit.rect), footprints: hit.footprints, sites: hit.sites ?? undefined, deviations: hit.deviations, reasons: hit.reasons, notes: hit.notes, cached: true } : resolveForm([]);
+      let f = hit && hit.footprints ? { klass: hit.klass, rect: arrRect(hit.rect), footprints: hit.footprints, sites: hit.sites ?? undefined, ...(hit.y !== undefined ? { y: hit.y } : {}), deviations: hit.deviations, reasons: hit.reasons, notes: hit.notes, cached: true } : resolveForm([]);
       if (ok(f) && clashes(f)) {
         f = resolveForm(taken);
         if (ok(f)) { f.notes = [...(f.notes ?? []), 'placed again around the zones and forms resolved before it']; if (f.klass === 'fits') f.klass = 'adjusted'; }
-      } else if (ok(f) && !f.cached) env.cacheOut[key] = { rect: rectArr(f.rect), footprints: f.footprints, ...(f.sites ? { sites: f.sites } : {}), klass: f.klass, deviations: f.deviations ?? [], reasons: f.reasons ?? [], notes: f.notes ?? [] };
+      } else if (ok(f) && !f.cached) env.cacheOut[key] = { rect: rectArr(f.rect), footprints: f.footprints, ...(f.sites ? { sites: f.sites } : {}), ...(f.y !== undefined ? { y: f.y } : {}), klass: f.klass, deviations: f.deviations ?? [], reasons: f.reasons ?? [], notes: f.notes ?? [] };
       if (ok(f)) formsAccepted.push(...f.footprints.map(arrRect));
       res.set(p.id, f);
       if (f.klass === 'fits' || f.klass === 'adjusted') geom.set(p.id, { rect: f.rect });
@@ -1641,6 +1663,9 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         f.big = emitBig({ env, r, ctx, stageOf }, p, f, id);
         const a0 = answers.get(p.id);
         if (a0 && f.big.notes.length) a0.notes = [...(a0.notes ?? []), ...f.big.notes];
+      } else if (p.kind === 'arch_span') {
+        // (7c PF) the promoted archSpan module as form part `id` (forms/archSpanPart.mjs): a built form (billed in survival)
+        f.big = emitArchSpan({ env, r, ctx, stageOf }, p, f, id);
       } else if (p.kind === 'terrace') {
         const a = f.rect;
         const part = r.part(id, { stage: stageOf('forms') });
