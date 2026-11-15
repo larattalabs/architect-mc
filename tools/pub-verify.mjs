@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 export const GROUP = 'dev.larattalabs', ARTIFACT = 'architect_mc';
 export const REPO = 'larattalabs/architect-mc';
@@ -89,7 +90,7 @@ export function verifyPackage(version, got, { jarEntries = readJar } = {}) {
 
 /** A jar's fabric.mod.json version and whether it has the plan/0 schema (unzip, as tools/api-compat.mjs does). */
 function readJar(bytes) {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pub-verify-'));
+  const d = archTmpDir('pub-verify');
   try {
     const f = path.join(d, 'a.jar');
     fs.writeFileSync(f, bytes);

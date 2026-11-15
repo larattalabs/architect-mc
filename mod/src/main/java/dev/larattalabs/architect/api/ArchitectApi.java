@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.60.0";
+	String VERSION = "1.62.0";
 
 	/**
 	 * (TJ AV) The API version of the Architect that is loaded, read at runtime. {@link #VERSION} is a compile-time constant, so javac
@@ -213,6 +213,7 @@ public interface ArchitectApi {
 	 * name. (TJ AV, since 1.58.0) {@code "apiVersion"}: {@link #apiVersion()} exists. (BC, since 1.60.0) {@code "kitVersion"}:
  * {@link #kitVersion()} and {@link #checkerVersion()}; {@code "sitesLoadHealthy"}: {@link Sites#loadHealthy()}; {@code "maxBill"}:
  * {@link RealiseRequest#maxBill}, {@link ApprovedRealise#maxBill}, {@link Reason#BILL_CAP} and {@link SiteWait#BILL_CAP}.
+	 * (QL, since 1.62.0) {@code "quoteTerrain"}: {@link Quote#terrain()} (the terrain part of a survival quote's bill).
 	 * Since 1.43.0 (7a K3), a helper with {@code design.opKeys} adds {@code "design.opKeys"} (the same name): {@link DesignRequest#opKey}
 	 * (request identity), {@link Designs#designByKey}, {@link Designs#cancelDesign} ({@link CancelOutcome}) and the DONE ordering
 	 * of {@link Designs#get}.
@@ -301,6 +302,11 @@ public interface ArchitectApi {
 	 * fill (docs/CONTRACT.md "### FK contract"). In survival the fill's items are billed to the site and its contents are refunded at removal
 	 * as construction; {@code SITE_BUILT} comes after the unlock. A checker refusal of a fill is {@link Reason#PROGRAM_REFUSED} with detail
 	 * {@code fill}. No new method or reason.
+	 * (7c PF, since 1.61.0) {@code "shapePromotion"} is advertised when the helper's kit plans promoted forms (its
+	 * {@code plan.shapePromotion}): generators that passed the kit's promotion pipeline (kit/lib/forms/CANDIDATES.md) are ordinary plan/0
+	 * {@code form.<name>} catalogue entries with their {@code sinceApi}; the first is {@code form.arch_span} (the archSpan module: an arcade
+	 * of masonry arches carrying a deck, its piers down to the ground), built in the Style's structure role and, in survival, a construction
+	 * target. A promoted form's IR is ordinary ops or baked voxels, so an older IR still evaluates. No new record, method or reason.
 	 */
 	Set<String> features();
 }

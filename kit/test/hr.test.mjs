@@ -16,6 +16,7 @@ import { renderPreviews } from '../lib/region/preview.mjs';
 import { themeOffenders } from '../lib/lint/theme.mjs';
 import { ROOM, roomSize, trapdoorOf } from '../lib/forms/hiddenRoom.mjs';
 import { asksSurvey, checkPlanVolumes, flatSurvey, stewardAnchors } from './plan-helpers.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIX = path.join(HERE, 'fixtures', 'plan', 'hr');
@@ -228,7 +229,7 @@ test('secrets: the entrance and the room only in the artifact\'s $.secrets[]; ne
     assert.equal(r.check.preview.bounds[id], undefined);
     assert.ok(!JSON.stringify(r.artifact.parts).includes(`[${cell}]`), `${n}: nor in the artifact's parts`);
     // the previews (a plan dir: the kit's preview over the IR and its meta, as the sidecar runs it)
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hr-'));
+    const dir = archTmpDir('hr');
     try {
       const out = renderPreviews({ ir: r.res.ir, survey: r.s.bytes, blobs: r.blobs, volumes: r.volumes, meta: r.res.meta, views: ['top', 'iso', 'siteplan'], outDir: dir });
       const sp = fs.readFileSync(out.sitePlanFile, 'utf8');
@@ -240,7 +241,7 @@ test('secrets: the entrance and the room only in the artifact\'s $.secrets[]; ne
       const bareIr = { ...r.res.ir, parts: r.res.ir.parts.filter((q) => !secretIds.has(q.id)) };
       const bareMeta = clone(r.res.meta);
       for (const k of secretIds) delete bareMeta.parts[k];
-      const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'hr-'));
+      const dir2 = archTmpDir('hr');
       try {
         const o2 = renderPreviews({ ir: bareIr, survey: r.s.bytes, blobs: r.blobs, volumes: r.volumes, meta: bareMeta, views: ['top', 'iso'], outDir: dir2 });
         assert.equal(out.pixels['top.png'], o2.pixels['top.png'], `${n}: top as without the room`);
@@ -250,7 +251,7 @@ test('secrets: the entrance and the room only in the artifact\'s $.secrets[]; ne
       if (n === 'x03_cellar') {
         const meta = clone(r.res.meta);
         for (const m of Object.values(meta.parts)) delete m.secret;
-        const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'hr-'));
+        const dir3 = archTmpDir('hr');
         try {
           const o3 = renderPreviews({ ir: r.res.ir, survey: r.s.bytes, blobs: r.blobs, volumes: r.volumes, meta, views: ['top', 'siteplan'], outDir: dir3 });
           assert.notEqual(o3.pixels['top.png'], out.pixels['top.png'], 'unmarked, the hatch would show');

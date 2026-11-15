@@ -1,0 +1,12 @@
+export const RAM_DISK: string;
+export const RAM_TMP: string;
+export const MIN_FREE_BYTES: number;
+export function freeBytes(dir: string): number | null;
+export function ramTmpChoice(opts?: { env?: NodeJS.ProcessEnv; dir?: string; minFree?: number }): { dir: string | null; why: string | null };
+export function ramTmpDir(): string | null;
+export function useRamTmp(env?: NodeJS.ProcessEnv): string;
+export function explainEnospc(e: unknown, where?: string): unknown;
+export function loudEnospc(): void;
+export const ORIGINAL_TMPDIR: string;
+export function ramTmpPath(env?: NodeJS.ProcessEnv): string;
+export function systemTmpDir(): string | null;

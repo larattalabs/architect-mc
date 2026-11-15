@@ -494,9 +494,14 @@ final class RestoreJob implements Placement.Job {
 			// C29: the restore is written: the road's refunds go into the stockpile now (once per key; a resumed job finds it)
 			Stockpiles.Pile p = Stockpiles.get(credit.owner());
 			boolean already = p != null && p.ledger().credited(credit.key());
-			Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null);
+			boolean booked = Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null);
 			if (!already) {
 				returned = credit.items();
+			}
+			if (booked) {
+				// (J1, N1's shape) saved with the world (the restored chunks flushed) before the job ends and the queue file drops it: a crash
+				// after this finds the refund on disk; before it, the job resumes and credits the key again (the saved ledger lacks it)
+				Stockpiles.saveCredit(server);
 			}
 		}
 		result = new Sites.Removed(null, returned, st.restored(), st.changed(), handed, List.of(), List.of());

@@ -19,6 +19,7 @@ import { gzipPinned, sha256Hex } from '../lib/region/pack.mjs';
 import { normalize } from '../lib/blocks.mjs';
 import { parse, plain } from '../lib/nbt.mjs';
 import { FIT_IDS } from '../lib/siteFits.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = path.join(KIT, 'test', 'fixtures', 'site');
@@ -331,7 +332,7 @@ test('CLI: check.mjs --site and build.mjs --json report the site', () => {
   const wrong = spawnSync(process.execPath, [path.join(KIT, 'check.mjs'), path.join(ex, 'fit_suspend.nbt'), path.join(ex, 'fit_suspend.blueprint.json'), '--site', path.join(FIX, 'grove', 'volume.bin'), '--json'], { encoding: 'utf8' });
   assert.equal(wrong.status, 2);
   assert.match(JSON.parse(wrong.stdout).errors[0], /not the spec's volumeSha/);
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'sc-'));
+  const out = archTmpDir('sc');
   try {
     const b = spawnSync(process.execPath, [path.join(KIT, 'build.mjs'), 'fit_span', '--site', path.join(FIX, 'rift_site', 'volume.bin'), '--lot', path.join(FIX, 'rift_site', 'site.json'), '--out', out, '--json'], { encoding: 'utf8' });
     assert.equal(b.status, 0, b.stderr);

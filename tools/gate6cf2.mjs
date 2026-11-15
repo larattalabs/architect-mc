@@ -31,6 +31,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-F2-run');
@@ -185,7 +186,7 @@ steps.harvest = async () => {
   await call('dev.camera', { x: 8.5, y: -40, z: 8.5, yaw: 0, pitch: 30 }).catch(() => null);
   const seeds = Array.from({ length: SEEDS }, (_, i) => i + 1);
   const lib = path.join(GAME_DIR, 'architect', 'stamps');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f2-stamps-'));
+  const tmp = archTmpDir('f2-stamps');
   const rows = [];
   let placed = 0, same = 0, total = 0;
   const t0 = Date.now();

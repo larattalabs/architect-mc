@@ -27,6 +27,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { benchRows } from './lib/bench-report.mjs';
+import { sweepAll, summaryAll } from './lib/tmp-sweep.mjs';
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(HERE, '..', 'architect-mc');
@@ -328,6 +329,17 @@ async function runGate(args, { guard = false } = {}) {
     // no out dir
   }
   return { code, run, sm: run ? readJson(path.join(run, 'summary.json')) : null, pid: child.pid };
+}
+
+// slice TS: leaked arch-* temp dirs out first (docs/GATES.md "Slice TS as built"); never fails the night (gate-run sweeps again)
+if (!flag('--plan')) {
+  try {
+    const sw = sweepAll({ unmarked: false }); // marker-only: the pre-TS cleanup is by hand (--unmarked)
+    summary.tmpSweep = { removed: sw.removed, kept: sw.kept, bytes: sw.bytes, failed: sw.failed };
+    log(`nightly: ${summaryAll(sw)}`);
+  } catch (e) {
+    log(`nightly: tmp-sweep skipped (${e?.message ?? e})`);
+  }
 }
 
 // --nightly: the judged benches run here with their timing judged, isolated, and their PASSes are recorded for the releases to

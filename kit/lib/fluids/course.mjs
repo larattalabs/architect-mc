@@ -46,6 +46,7 @@ import { localWorld } from './body.mjs';
 import { m15LookOf, regionM15Limits } from '../region/checkM15.mjs';
 import { bomOf } from '../connectors/bom.mjs';
 import { waterGate } from './gate.mjs';
+import { soffit as archSoffit } from '../forms/archSpan.mjs';
 
 export const acceptsOverflow = true;
 
@@ -514,7 +515,8 @@ export function courseGeometry(S, path, routeLevels, spec, ends, o) {
  * there (geo.banks) is dropped under the floor and kept over it (the bank course: the side walls stay 2 thick at the top, HY's single
  * breach rule) as the span's wall; a pier (a full cross-section from the ground to the trough, 1 thick) stands every `every` indexes
  * (both span ends included); `arches` turns the run between two piers into a round arch (its soffit 1 under the floor at the crown, the
- * springing down at the piers, never touching the ground). Returns {cells: [[x, y, z, 'wall' | 'pier' | 'arch']], cols: Set "x,z",
+ * springing down at the piers, never touching the ground; (7c PF) the profile is the promoted archSpan module's round soffit, archRise).
+ * Returns {cells: [[x, y, z, 'wall' | 'pier' | 'arch']], cols: Set "x,z",
  * span, every, length (span indexes), rise (the most clear cells under the floor), piers (those standing at least 1 high)}.
  */
 export function aqueductSpan(S, geo, spec, aq, { colsOf, bankOf, pcols, shells, stepCells }) {
@@ -585,10 +587,12 @@ export function aqueductSpan(S, geo, spec, aq, { colsOf, bankOf, pcols, shells, 
       for (let q = 0; q + 1 < at.length; q++) {
         const a = at[q], b = at[q + 1], n = b - a - 1;
         if (n < 1) continue;
-        const R = (n + 1) / 2;
+        // ((7c PF) the promoted archSpan module's round profile over the clear run: a soffit s cells over the springing, the arch
+        // 1 + crown - s thick under the floor)
+        const soff = archRise(n);
+        const crown = Math.max(...soff);
         for (let t = 1; t <= n; t++) {
-          const d = Math.min(t, n + 1 - t) - 0.5;
-          const thick = 1 + Math.round(R - Math.sqrt(Math.max(0, R * R - (R - d) * (R - d))));
+          const thick = 1 + crown - soff[t - 1];
           for (const [x, z] of crossOf.get(a + t)) {
             const top = under(x, z) - 1, g = S.groundAt(x, z);
             // (the soffit never reaches the ground: at least one clear cell under it, else the run is left open)
@@ -601,6 +605,16 @@ export function aqueductSpan(S, geo, spec, aq, { colsOf, bankOf, pcols, shells, 
   }
   const list = [...cells.values()].sort((p, q) => p[1] - q[1] || p[0] - q[0] || p[2] - q[2]);
   return { cells: list, cols, span: aq.span, every: aq.every, length, rise, piers };
+}
+
+/**
+ * (7c PF) An aqueduct arch's soffit over a clear run of n cells: the promoted archSpan module's `round` profile (kit/lib/forms/archSpan.mjs
+ * soffit, rounded as the module rounds it), one height over the springing per cell from the first pier.
+ */
+export function archRise(n) {
+  const out = [];
+  for (let t = 0; t < n; t++) out.push(Math.floor(archSoffit('round', n, Math.abs(t + 0.5 - n / 2), 0, 0) + 0.5));
+  return out;
 }
 
 /** (7c AQ) An aqueduct's support spacing: AQUEDUCT.every by span, its clear run (every - 1) at most RM's `span.aqueduct` when a Style sets one. */

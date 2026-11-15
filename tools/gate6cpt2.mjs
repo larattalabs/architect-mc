@@ -55,6 +55,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { kitReuse } from './lib/kit-reuse.mjs'; // (speed audit A) the kit files unit-kit already ran in this run
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= here;
@@ -437,7 +438,7 @@ steps.adopt = async () => {
   const dirt = await ptAt([X + 2, y + 1, Z + 2]);
   check(r.skipped >= 1 && !dirt.tracked, `item 3: skipped counts the void (${r.skipped}: the natural dirt in the chest's column among them)`);
   // the captured source rebuilds v1 exactly (the kit, as versionOf's designer builds it)
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pt2-src-'));
+  const tmp = archTmpDir('pt2-src');
   fs.mkdirSync(path.join(tmp, 'designs'));
   fs.symlinkSync(path.join(KIT, 'lib'), path.join(tmp, 'lib'));
   fs.copyFileSync(path.join(en.dir, `${r.entryId}.mjs`), path.join(tmp, 'designs', `${r.entryId}.mjs`));

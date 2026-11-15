@@ -92,6 +92,103 @@ export async function registerHF(steps, h) {
     return o;
   }
 
+  /**
+   * (J1, HF's window) A case halted by a kill point inside the move's own save (dev.journal.killAt): HF1 inside saveWithWorld, after the
+   * players and before the chunks and the ledger; LF1 inside saveLedgerFirst, after the ledger and before the players. The move's call
+   * drops with the halt. Judged: no dupe (minted 0); the window's loss recorded.
+   */
+  async function killCase(tag, W, items, point, move) {
+    await cmd('/save-all flush');
+    await call('dev.wait', { ms: 2000 }, 30_000);
+    const c0 = await counts();
+    const total0 = G.plus(pick(c0.inv, items), pick(c0.stock, items));
+    await call('dev.journal.killAt', { point }, 10_000);
+    const m = await move().catch((e) => ({ dropped: String(e?.message ?? e).slice(0, 120) }));
+    const down = await haltWait();
+    check(down, `${tag}: halted at kill point ${point} inside the move's save`);
+    if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); return null; }
+    await L.openWorld(path.basename(W.dir));
+    await L.tp(W.at[0], W.at[1], W.at[2]);
+    await call('dev.wait', { ms: 3000 }, 30_000);
+    const c2 = await counts();
+    const total2 = G.plus(pick(c2.inv, items), pick(c2.stock, items));
+    const d = G.minus(total2, total0);
+    const n = { tag, point, items, move: m, before: { inv: pick(c0.inv, items), stock: pick(c0.stock, items) }, after: { inv: pick(c2.inv, items), stock: pick(c2.stock, items) },
+      delta: d, mintUnits: sum(pos(d)), lossUnits: sum(pos(G.minus({}, d))) };
+    log(`  ${tag}: before ${json(n.before)}; after the restart ${json(n.after)}; minted ${n.mintUnits}, lost ${n.lossUnits}`);
+    check(n.mintUnits === 0, `${tag} (kill point ${point}): no dupe: inventory + stock after the restart ${json(total2)} <= before the move ${json(total0)} (minted ${n.mintUnits}, lost ${n.lossUnits}: the move, in the window)`, n);
+    return n;
+  }
+
+  /** (J1) A second world: D, T and X again, each halted inside its own save (HF1 for the deposit, LF1 for the Take and the dissolve). */
+  async function windowPart(out) {
+    await G.survivalBase(ctx);
+    const name = 'G6B HF window';
+    await L.fresh(name, G.SURV);
+    await L.setRules('exact');
+    await cmd('/weather clear');
+    await G.designs(ctx);
+    const gy = await groundY();
+    const crates = [0, 1, 2, 3].map((k) => [CLAIM[0] - 6 + 2 * k, gy + 1, CLAIM[1] - 6]);
+    const at = [CLAIM[0] - 3, gy + 2, CLAIM[1] - 3];
+    await L.tp(CX + 80, 80, CZ + 56);
+    const cr = await call('dev.stockpile.create', { owner: G.OWNER, crates }, 120_000);
+    check(!cr.refused, `window: a stockpile of 4 crates: ${json(cr.refused ?? 'made')}`);
+    const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
+    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' } });
+    await L.tp(...at);
+    const W = { dir: path.join(L.SAVES, name), at, region };
+    const st0 = (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
+    for (const id of st0.feedOrder ?? []) await call('dev.stockpile.pause', { owner: G.OWNER, site: id, paused: true }, 60_000);
+    const [A, kA] = Object.entries(st0.outstanding ?? {}).sort((a, b) => b[1] - a[1])[0] ?? [];
+    const n = Math.min(kA ?? 0, 64);
+    await cmd(`/give @s ${A} ${n}`);
+    out.DW = await killCase('DW', W, [A], 'HF1', async () => {
+      const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+      check(ins.moved > 0, `DW: ${ins.moved} item(s) moved from the inventory into the stockpile; then a crate added (its save halts at HF1)`);
+      return call('dev.stockpile.addcrate', { owner: G.OWNER, pos: [CLAIM[0] + 2, gy + 1, CLAIM[1] - 6] }, 30_000);
+    });
+    // AS (PS's leftover, audit N3): a deposit, then an unflushed world save (/save-all, as an autosave) halted at AS1, after its chunk writes
+    // and before its ledger write (the ledger now goes after the chunks' IO): never a dupe
+    {
+      const left = Math.max(0, (kA ?? 0) - ((await counts()).stock[A] ?? 0));
+      await cmd(`/give @s ${A} ${Math.min(64, left)}`);
+      out.AS = await killCase('AS', W, [A], 'AS1', async () => {
+        const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+        check(ins.moved > 0, `AS: ${ins.moved} item(s) moved into the stockpile; then /save-all (unflushed), halted at AS1`);
+        await call('dev.journal.killAt', { point: null }, 10_000);
+        await call('dev.stockpile.ps', { haltBeforeAutosaveLedger: true }, 10_000);
+        await cmd('/save-all');
+        return { moved: ins.moved };
+      });
+    }
+    // stocked once more without a halt (DW and AS lost theirs), saved; then the region removed: the stock becomes credit (a Take's source)
+    {
+      const left = Math.max(0, (kA ?? 0) - ((await counts()).stock[A] ?? 0));
+      await cmd(`/give @s ${A} ${Math.min(64, left)}`);
+      const ins = await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, inventory: true }, 120_000);
+      check(ins.moved > 0, `TW: ${ins.moved} item(s) stocked for the Take`);
+      await cmd('/save-all flush');
+    }
+    // the region removed: what the stock holds becomes credit (a Take's source)
+    await call('dev.region.remove', { region, requester: G.OWNER }, 600_000).catch(() => null);
+    for (let i = 0; i < 300; i++) {
+      const st = await call('dev.region.state', { region }, 60_000).catch(() => null);
+      if (!st?.view?.state || ['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state)) break;
+      await L.sleep(2000);
+    }
+    const credit = ((await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {}).credit ?? {};
+    const [T, kT] = Object.entries(credit).sort((a, b) => b[1] - a[1])[0] ?? [];
+    check((kT ?? 0) > 1, `TW: the region removed; credit ${json(credit)}`);
+    await cmd('/clear @s');
+    out.TW = await killCase('TW', W, [T], 'LF1', async () => call('dev.stockpile.withdraw', { owner: G.OWNER, items: { [T]: Math.floor(kT / 2) } }, 30_000));
+    const stock = (await counts()).stock;
+    await cmd('/clear @s');
+    out.XW = await killCase('XW', W, Object.keys(stock), 'LF1', async () => call('dev.stockpile.dissolve', { owner: G.OWNER, toPlayer: true }, 30_000));
+    await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null);
+    await L.leaveWorld();
+  }
+
   steps.hfcrash = async () => {
     await ensure();
     const out = {};
@@ -195,6 +292,7 @@ export async function registerHF(steps, h) {
       });
     }
     await L.leaveWorld();
+    if ((process.env.GATE_HF_PARTS ?? 'cases,window').split(',').includes('window')) await windowPart(out);
     spendZero();
     return out;
   };

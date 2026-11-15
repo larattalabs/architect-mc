@@ -16,7 +16,7 @@ const write = (root, rel, text) => {
 };
 
 function repo() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cache-'));
+  const root = archTmpDir('step-cache');
   git(root, 'init', '-q', '-b', 'slice/x');
   git(root, 'config', 'user.email', 't@t');
   git(root, 'config', 'user.name', 't');
@@ -51,7 +51,7 @@ const cfgOf = () => ({
 });
 function setup() {
   const root = repo();
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cache-main-'));
+  const main = archTmpDir('step-cache-main');
   const cfg = cfgOf();
   const files = treeAt(root, 'HEAD');
   const map = { steps: Object.fromEntries(Object.entries(cfg.steps).map(([id, e]) => [id, staticEntry(id, e, conf, files, { src: root })])) };
@@ -190,9 +190,10 @@ test('an archived input under artifacts/ is fingerprinted: changing it makes the
 
 import { coverageSet, constantChanges, collect, snapshotStart } from '../../tools/lib/step-coverage.mjs';
 import { lookupCoverage, coverageMode } from '../../tools/lib/step-cache.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 function covRepo() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-'));
+  const root = archTmpDir('step-cov');
   git(root, 'init', '-q', '-b', 'slice/x');
   git(root, 'config', 'user.email', 't@t');
   git(root, 'config', 'user.name', 't');
@@ -217,7 +218,7 @@ const covConf = {
 
 test('coverage: a class or kit module the run never touched is outside the set; touched, mixins and build files are in', () => {
   const root = covRepo();
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const main = archTmpDir('step-cov-main');
   const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
   const files = treeAt(root, 'HEAD');
   const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, files, { src: root }) } };
@@ -255,7 +256,7 @@ test('coverage: a class or kit module the run never touched is outside the set; 
 
 test('coverage: a touched file changing, or a compile-time constant anywhere, re-runs the step', () => {
   const root = covRepo();
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const main = archTmpDir('step-cov-main');
   const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
   const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
   const ctx = () => Object.assign(cacheContext({ src: root, main, cfg, conf: covConf, map, snapDir: null, env: {} }), { rawCfg: cfg });
@@ -280,7 +281,7 @@ test('coverage: a touched file changing, or a compile-time constant anywhere, re
 });
 
 test('coverage: a JVM alive at a step\'s start counts (a reused client), one that ended before does not', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-snap-'));
+  const dir = archTmpDir('step-cov-snap');
   write(dir, `jvm-${process.pid}.log`, '[0.1s] dev.larattalabs.A source: x\n'); // this process: alive
   write(dir, 'jvm-999999.log', '[0.1s] dev.larattalabs.Dead source: x\n');
   const old = new Date(Date.now() - 60_000);
@@ -318,7 +319,7 @@ test('coverage: a step whose trace shows the region CLI stat gets the CLI closur
 
 test('coverage, bytecode mode: keyed by the loaded classes\' class-file digests from the build artifact; no artifact, no key', () => {
   const root = covRepo();
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const main = archTmpDir('step-cov-main');
   const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
   const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
   const J = 'dev.larattalabs.architect';
@@ -378,7 +379,7 @@ test('coverage: drivers count by their eager imports; a lazy import() only when 
   write(root, 'tools/gate-g.mjs', "import { k } from '../kit/lib/used.mjs';\nif (process.argv[2] === 'scenario') await import('../kit/lib/lazy.mjs');\n");
   git(root, 'add', '-A');
   git(root, 'commit', '-qm', 'a driver with a lazy subcommand');
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const main = archTmpDir('step-cov-main');
   const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs base', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
   const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
   assert.ok(map.steps.g.closure.includes('kit/lib/lazy.mjs'), 'the full static closure (the CI check) has the lazy import');
@@ -398,7 +399,7 @@ test('coverage: drivers count by their eager imports; a lazy import() only when 
 
 test('coverage, execution mode (JaCoCo): a loaded class never entered counts by its skeleton; an entered one whole; load-mode PASSes still validate', () => {
   const root = covRepo();
-  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-main-'));
+  const main = archTmpDir('step-cov-main');
   const cfg = { steps: { g: { shell: 'node tools/gate-g.mjs', client: '6b', timeoutMin: 5 } }, clients: { '6b': { world: 'W' } } };
   const map = { steps: { g: staticEntry('g', cfg.steps.g, covConf, treeAt(root, 'HEAD'), { src: root }) } };
   const J = 'dev.larattalabs.architect';
@@ -440,7 +441,7 @@ test('coverage, execution mode (JaCoCo): a loaded class never entered counts by 
 });
 
 test('coverage: a hidden lambda class counts as its host (keyed by the host\'s bytecode, never its source)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-hidden-'));
+  const dir = archTmpDir('step-cov-hidden');
   write(dir, 'jvm-1.log', '[0.1s] dev.larattalabs.a.Roads source: x\n[0.2s] dev.larattalabs.a.Roads$$Lambda/0x000003e0025628a8 source: dev.larattalabs.a.Roads\n[0.3s] dev.larattalabs.b.Only$$Lambda/0x01 source: x\n');
   const c = collect(dir, { t: 0, alive: new Set() }, { exec: { token: 't' }, readDump: () => ({ token: 't', entered: new Set(), uninstrumented: new Set() }) });
   assert.deepEqual(c.classes, ['dev.larattalabs.a.Roads', 'dev.larattalabs.b.Only']);
@@ -449,7 +450,7 @@ test('coverage: a hidden lambda class counts as its host (keyed by the host\'s b
 
 test('coverage: a dump older than its JVM\'s agent start (a reused pid) is stale: that JVM counts every loaded class as entered', async () => {
   const { readDump } = await import('../../tools/lib/jacoco.mjs');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-cov-pid-'));
+  const dir = archTmpDir('step-cov-pid');
   write(dir, 'jvm-7.log', '[0.1s] dev.larattalabs.a.A source: x\n[0.1s] dev.larattalabs.a.B source: x\n[0.1s] dev.larattalabs.a.mixin.Helper source: x\n');
   write(dir, 'jvm-7.entered', '# token exit\n# at 1000\ne dev/larattalabs/a/A\n');
   write(dir, 'jvm-7.agent', 'pid 7\nstarted 2000\n');

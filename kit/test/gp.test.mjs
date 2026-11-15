@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildDesign, loadDesign, UsageError } from '../build.mjs';
 import { parseReserved, frameToTemplate } from '../lib/reserved.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'gp', 'gp_crop_field.mjs'), 'utf8');
@@ -16,12 +17,12 @@ const RESERVED = parseReserved({ front: 'south', size: [11, 11], cells: [[5, -1,
 
 /** A temp design dir (outside the kit: other runs copy it), its `../lib/` imports pointed at this kit's lib; removed after. */
 function designDir(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gp-test-'));
+  const dir = archTmpDir('gp-test');
   const lib = pathToFileURL(path.join(KIT, 'lib')).href;
   for (const [id, src] of Object.entries(files)) fs.writeFileSync(path.join(dir, `${id}.mjs`), src.replaceAll("'../lib/", `'${lib}/`));
   return dir;
 }
-const out = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gp-out-'));
+const out = () => archTmpDir('gp-out');
 
 test('a program is given the reserved cells and leaves them; the checker passes', async () => {
   const dir = designDir({ gp_crop_field: SOURCE });

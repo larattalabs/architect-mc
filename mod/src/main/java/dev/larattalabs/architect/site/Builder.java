@@ -2818,7 +2818,9 @@ public final class Builder {
 
 	/** After the restore: the deconstruct's items drop at the crate's cell (kept from the restore's drop cleanup). */
 	static void dropDeconstruction(ServerLevel level, Site s, Deconstruction d, Sites.Drops drops) {
-		creditRefund(level, d.stockpile(), d.key(), d.credit(), d.at(), drops);
+		if (creditRefund(level, d.stockpile(), d.key(), d.credit(), d.at(), drops)) {
+			Stockpiles.saveCredit(level.getServer()); // (J1, N1's shape) before the site's record goes (forget, then the sites file)
+		}
 		dropItems(level, d.at(), d.all(), drops);
 		forget(level.getServer(), s.id());
 		Construction c = s.construction();
@@ -2835,22 +2837,24 @@ public final class Builder {
 
 	/**
 	 * 6c Y: credits a stockpile target's refunds into its owner's stockpile under {@code key} (once); with the stockpile gone
-	 * (dissolved meanwhile), they drop at {@code at} as a legacy site's would.
+	 * (dissolved meanwhile), they drop at {@code at} as a legacy site's would. Returns whether a credit booked now (J1: its caller saves the
+	 * ledger with the world, {@link Stockpiles#saveCredit}, before it drops the record the credit came from).
 	 */
-	static void creditRefund(ServerLevel level, @Nullable String owner, @Nullable String key, Map<String, Integer> items, BlockPos at,
+	static boolean creditRefund(ServerLevel level, @Nullable String owner, @Nullable String key, Map<String, Integer> items, BlockPos at,
 		Sites.@Nullable Drops drops) {
 		if (owner == null || key == null) {
-			return;
+			return false;
 		}
 		Stockpiles.Pile p = Stockpiles.get(owner);
 		if (items.isEmpty() && (p == null || p.ledger().custody(key).isEmpty())) { // (M5 FK) a key's custody refunds with no block standing too
-			return;
+			return false;
 		}
 		if (p == null) {
 			dropItems(level, at, items, drops);
-			return;
+			return false;
 		}
-		Stockpiles.credit(level.getServer(), p, key, items, at);
+		dev.larattalabs.architect.survival.StockLedger.Credit c = Stockpiles.credit(level.getServer(), p, key, items, at);
+		return c != dev.larattalabs.architect.survival.StockLedger.Credit.NONE && !c.already();
 	}
 
 	/** Where items go when the crate is gone: the site's spawn anchor, else above the box's middle. */
@@ -3122,6 +3126,9 @@ public final class Builder {
 			if (r.built.get(i)) {
 				// (6c CU) what the cell would refund: the block standing (its last known state where its chunk is not loaded)
 				BlockState now = stateIfLoaded(level, r.pos(i));
+				if (now != null && dev.larattalabs.architect.placed.Placed.record(level, r.pos(i)) != null) {
+					continue; // (J1, JR-b's leftover) a player's block (a PT record): never paid, so not paid standing (F10 drops it as theirs)
+				}
 				(now == null ? r.cost.get(i) : r.refundCost(now, i)).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
 			} else if (r.old != null && r.swap.get(i) && r.old[i] != null && r.holdsOld(level.getBlockState(r.pos(i)), i)) {
 				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
@@ -3395,7 +3402,9 @@ public final class Builder {
 		Sites.replace(srv, built);
 		RUNS.remove(s.id());
 		if (stockpiled) {
-			creditRefund(level, s.owner(), "delta:" + entry + ":" + s.id(), refunded, dropPos(s), null);
+			if (creditRefund(level, s.owner(), "delta:" + entry + ":" + s.id(), refunded, dropPos(s), null)) {
+				Stockpiles.saveCredit(srv); // (J1, N1's shape) the delta's construction is already written: its refund is saved with it now
+			}
 		} else {
 			dropItems(level, crate != null ? cp.above() : dropPos(s), refunded, null);
 		}

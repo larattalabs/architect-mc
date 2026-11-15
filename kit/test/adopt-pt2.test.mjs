@@ -14,6 +14,7 @@ import { writeBlueprint } from '../lib/write.mjs';
 import { checkFiles } from '../lib/check.mjs';
 import { parse, plain } from '../lib/nbt.mjs';
 import { diffFiles } from '../lib/diff.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 /** A 5x4x5 log hut with a door in the north wall, a fence post with a raw connection, a sign with nested text, a bed. */
 function capture() {
@@ -49,7 +50,7 @@ function capture() {
     nbt: { '2,0,2': sign }, wall: 'minecraft:oak_log[axis=y]', anchors: { entrance: { x: 2.5, y: 0, z: -0.5, yaw: 0, pitch: 0 } } };
 }
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'adopt-pt2-'));
+const tmp = () => archTmpDir('adopt-pt2');
 
 test('floors 0 gives back exactly the captured cells: raw states, tagged block-entity data, one part', () => {
   const cap = capture();

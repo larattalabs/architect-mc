@@ -246,6 +246,7 @@ public final class RegionOverwrites {
 		if (Stockpiles.credit(srv, pile, key, all, dropAt).already()) {
 			return Map.of();
 		}
+		Stockpiles.saveCredit(srv); // (J1, N1's shape) one save per put-down's take-ups, before the job that read the befores can end
 		if (Builder.TRACE_REFUNDS) {
 			dev.larattalabs.architect.Architect.LOGGER.info("refund-trace retake {} once {}: {}", by, key, all);
 		}

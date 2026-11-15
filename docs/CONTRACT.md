@@ -30397,6 +30397,16 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
 - **Ran:** kit full suite 1400/1400; scoped units (unit-scope: kit 904/905, the one a gate-chains convention fixed then 6/6; Gradle picks pass; sidecar full 908/908); pm-promote.test 10/10 (+ au.test 6: 16/0); step-inputs check clean (402 steps); api-compat --baselines 8/8 clean; gate **20261114-202005-change** at 6516f550 PASS 2/2 (pm-unit, pm-promote; ports 8918/8919). Earlier runs failed on step wiring only (`${OUT}` in a shell, ok-line accounting).
 - **Leftovers (the coordinator's follow-on slice):** the catalogue entry `form.arch_span` and the `shapePromotion` feature (§2) need plan compile, the compact copy and Java; AQ's arches still come from course.mjs (rewiring them moves committed fixtures); the sheet's iso renders are compared by sha on one machine only.
 
+### Slice PF as built (branch `slice/PF` off main c787a7e5 (PM merged); versions NEXT; $0, sim only; light; recorded 2026-11-14)
+
+- **`form.arch_span`** (new id, `sinceApi NEXT`, schemaVersion 1; catalogueVersion unchanged): limits from archSpan's ranges (length 12-128, width 3-9, height 6-48, tiers 1-2, bays 1-16, pier/spandrel 1-4, ground drop 32; the four profiles, parapets and species). Compile (`kit/lib/forms/archSpanPart.mjs`, `resolveArchSpan` in compile.mjs): scan or `where`/`sketch` for a dry rect whose ground drops at most 32, deck at its highest ground + 1; refusals NO_ROOM `{drop, limit}`/OVERLAP, archSpan's own `{field, rule}` refusals, the "params X: not read" note. Emits `r.archSpan` in the forms stage with `{terrain: false}` (new `form()` opt): built in the structure role, a construction target in survival, never free. The compact copy follows the schema (82,441 -> 83,793 chars). Java needs nothing (PlanCatalogue reads the bundled plan.json); ApiPFTest covers it.
+- **`shapePromotion`**: helper feature `plan.shapePromotion` (sidecar FEATURES) -> ApiRules -> `ArchitectApi.features()` javadoc "since NEXT". Advertising only: no record, method or reason.
+- **AQ's arches from the module:** `course.mjs` `archRise(n)` = archSpan's round soffit over the clear run (arch `1 + crown - s` thick). A 7-clear run goes 3,2,1,1,1,2,3 -> 3,2,2,1,2,2,3; overhang stays <= 2.
+- **Goldens moved:** the catalogue golden (+form.arch_span, nothing else; `plan-catalogue-diff`). Fixtures: only the span part of an arched aqueduct moves (answers, overall and the other parts identical): aq/x01 (817 -> 831 span cells), aq/d16 (+14), valid/v7c_aq_valley, hy/r03, extension/e18. These are named `PF_MOVED` in `tools/lib/pf-norm.mjs` for every byte-identity helper. No SAD or J1 file or fixture is touched. The old IR: `aq/pre-pf-x01.json` (x01 planned at c787a7e5) evaluates to its recorded tiles.
+- **Tests renamed by id:** eight archived-catalogue tests (cl, f7a/b/c-foundation, gm-c, lp, sl, k2) leave form.arch_span to pf.test. New step `pf-unit` (chain `7cpf`, impact rule "7c PF").
+- **Ran:** pf.test 6/6; unit-scope kit picks green after the renames, sidecar 908/908, Gradle picks pass; the other catalogue tests 63/0; step-inputs check clean (403 steps); compact measured. Gate **20261114-220400-change** at 88786ea2: 21 PASS (unit-mod/Gradle build 1245/0, unit-sidecar 908, api-compat 8/0, aq-ingame 7/0, pf-unit, 6a-inv3, sims), 10 FAIL on the five movers, 2 TIMEOUT under load 170. Re-run of the failing steps **20261115-003419-change** at b8c0fe2e: 7 PASS (unit-kit full 1406/1406, 7af, irr, fl, s3, aq, lp); hy/kc/cl/f3/sl fail only their committed asks tables (stale on main: base == head).
+- **Leftovers:** `r.archSpan` called from a program still writes terrain (free natural blocks are free there; only the plan form opts out). The scan prefers flat rects, so a valley crossing needs `where`/`sketch`. The committed asks tables of KC, CL, F3 and SL are stale on main: base == head, PF moves no ask. PM's iso-render sha leftover stands.
+
 ### Slice BR as built (branch `slice/BR` off main c787a7e5; versions NEXT; $0, sim only; light; recorded 2026-11-14)
 
 - **Brief runs.**
@@ -32145,3 +32155,74 @@ the region's group, their crates join the owner's stockpile first, and its growt
 | un-adopt, then undo of old build b2 (crate-fed) | back 1018 = the two records; instant b1 back 0; E-flat 0 | neither |
 | instant town grown in survival | consumed 231 = quote; undo 231; lamp stands (2/2 cells); remove refunds 0, E-flat 0 | neither |
 | region remove | back 509 = paid records; E-flat 0 | neither |
+
+## Slice J1, crash and refund edges (branch `slice/J1` off main bdc1cad1 (SA, FK in); 2026-11-14; DEV MODE, strict; versions NEXT; $0)
+
+- **RS-c (audit F8):** a piston can't push a survival region's free write (`PistonBaseBlock.isPushable`); a piston's break of one and an explosion (`BlockBehaviour.onExplosionHit`'s `dropFromExplosion`) take it without loot and record it in `mined`, so the removal puts it back (`RegionFreeDrops.pistonHolds` / `takenWithoutDrop`, a cheap claim test before the journal read). Decay, water and endermen accepted (Noah, "safety: defaults").
+- **N1's shape:** `Stockpiles.saveCredit` (saveWithWorld unless PS's `noCreditSave`) at every booked refund credit before its source record goes: a standalone road's restore (RestoreJob), a site's deconstruct, a delta's refund, a put-down's take-ups (`retakeOnce`), and Groups.credit (PS). Per-cell unkeyed retakes stay with PS's 10 s save (a flushed save per cell is SS's cost).
+- **Save order:** autosave's ledger write moved from BEFORE_SAVE to AFTER_SAVE, after joining each level's chunk IO (`chunkMap.synchronize(true)`) when the save was unflushed (kill point AS1). HF's window was a dupe for moves into a player (a Take, a dissolve to the player: the player saved with the items, the ledger still holding them): those now save what was pending first, then `saveLedgerFirst` (ledger, players, chunks; kill point LF1). Deposits keep HF's order (kill point HF1: a loss). `fromPaid`'s `changed()`: closed by RL.
+- **Item 5:** the reconcile leaves an ahead cell with a PT record (a chunk attachment, on disk with its block) built and uncharged (`playerCells`); `Builder.paidStanding` skips PT-recorded cells (JR-b's leftover). Trade-off: RL charged these so the stock absorbed vanilla's player-rollback dupe; now the stock is whole and that dupe is vanilla's.
+- **Roads F10:** `RoadBuilder.dropPlayerMatches` before a stockpile road's refund (standalone and in Groups): a built, non-free cell holding its target with a PT record drops as the player's and gets its before; a CU equivalent stays (holdsOurs); both are left out of the refund.
+- **Deferred to J2, gate-only (coordinator, 11-14; no J1 code on these paths):** (a) crash + swap (RL "Known open"): a survival site with a construction delta's swap queued, halted mid-swap after a save (rl-crash's world + `dev.site.delta.apply`, `dev.stockpile.halt`); (b) a middle survival revision still building under a newer one (RU): a growth, a second growth approved while the first builds, a cancel of the middle one (ru-crash's world, kill points RVU1/RVC1); (c) a halted RegionTargets terrain target (RL): rs01-style terrain target fed after a save, halted (`dev.stockpile.halt`), reconcile of its book (gate6crs rs worlds).
+- **Steward RC:** a free block can no longer be moved by pistons (piston contraptions next to survival regions stop at free cells); explosions over free cells drop nothing; Take and dissolve-to-player cost a ledger-first save (plus one save first when something was pending); an autosave now waits for its chunk IO before the ledger write; refunds after a crash exclude a player's own blocks in roads; a player's block in a queued cell after a crash is not charged.
+- **Checks:** Gradle build 1250 tests, 0 failures (1 skipped); kit full 1400/1400 (after merging main c787a7e5, PM); sidecar `tsc --noEmit` clean (untouched); `step-inputs check` 403 steps clean; api-compat `--baselines` 8/8 clean; units `StockpileSaveJ1Test` (7), HF/PS guards updated. Gate (`--out artifacts/gate-runs-j1`, 8932 then 8900; `--only` lists, one final run 20261114-224130 of all six): rs-drops 7/0, rs-survival-smoke 40/0, jr-crash 24/0, hf-crash 38/0, ps-crash 45/0, rl-crash 90/0 (20261115-000858, after RL5's harness fixes: a build's blocks are guarded from a non-owner's break; rs_hut's wall torch hangs on its copper). Strict gate-verifier (8906:8907, `--no-cache`, daa7e607, `artifacts/gate-runs-j1-verify/20261115-001932-change`): **PASS**, rs-drops 7/0, rl-crash 90/0, hf-crash 38/0 (AS1 included), ps-crash 45/0, units 38/0; review: no finding Medium or above (Low: the piston hook's cost near survival regions). After merging main 24602971 (SAD, v0.68.0; conflicts only in JournalDev's kill-point list, both sets kept, and this file; Stockpiles.java auto-merged, SAD's two saves and `repairJoinedCrates` first in `reconcileAtStart` unchanged): Gradle 1258/0, step-inputs 407 clean, `--no-cache` sad-survival 48/0, sad-crash 24/0, jr-crash-v063 23/0, hf-crash 38/0.
+- **Leftovers:** JR-b's CU-equivalent case: the group removal takes the player's exposed copper away (no drop, no refund: a one-block loss to the player, no dupe), not "left standing" as JR-b's as-built says; per-cell unkeyed retakes rely on PS's 10 s save; leaf decay, water and endermen over free cells accepted; the autosave IO wait's cost is reported by `dev.stockpile.saved` (`maxAutosaveWaitMs`) but not measured on a big world (SS); the three gate-only cases above (J2).
+
+| case | before J1 | as built |
+|---|---|---|
+| rsc P0 / P1: a piston under a free cell | pushed; mined at its new cell, 1 tuff minted | not pushed (held 1); mined, nothing dropped |
+| rsc E0 / E1: a power-2 TNT-class blast | 1 free cell, 1 andesite minted | 18 free cells, 0 dropped; removal E-flat 0 |
+| RR0 / RR: a standalone road removed, a halt | lost 4 of 4 | kept 119 of 119 (credit save 17.5 ms) |
+| SD0 / SD: a standalone lot site removed, a halt | lost 142 of 142 | kept 142 of 142 (max 280.6 ms) |
+| DW (HF1) / AS (AS1): a deposit, halted in its save | (HF's order) | lost 64, minted 0 / lost 64, minted 0 |
+| TW / XW (LF1): a Take, a dissolve, halted in its save | dupe (players before the ledger) | lost 32, minted 0 / lost 32, minted 0 |
+| RL5: a player's block in a lot cell after the save | charged to the stock | 1 player cell uncharged; standing 388 = paid 388; second load changes nothing |
+| RL5 F10 roads + JR-b residual at the removal | the road cell refunded from its record | dropped as the player's; refund 385 = paid less the two cells and the popped torch |
+
+## Slice QL: quote terrain lines (branch `slice/QL` off main 24602971 / v0.68.0; 2026-11-14; DEV MODE, strict; versions NEXT; $0; accepted by Steward 2026-11-14)
+
+Why (Noah, QD "A: up to N"): Steward's `maxBill` gets a small allowance on terrain items only, because since A11's exact cut a quote can move
+by a terrain cell before the realise reaches it. **Additive API change, binary compatible.**
+
+- **`Quote.terrain()`: `Map<String, Integer>`** (item id -> count, sorted, unmodifiable; a new last record component). **Keys:** every item
+  of the plan's kept paid terrain cells (plan.json `survivalTerrain`, all groups), **including items whose count is 0** (x03: 49 dirt all
+  standing -> `{"minecraft:dirt": 0}`), so a terrain item can be told from any other. **Count:** the units of `bom` those cells bill at
+  quote time (cells not holding their block now, plus cells in unloaded chunks, which stay billed with `exact` false and a note). A standing
+  cell is in neither `terrain` nor `bom`. Each count is clamped to `[0, bom[item]]` (`bom` drops zero items, so a 0 key may be absent there).
+- **Empty** for a creative quote and for a plan with no `survivalTerrain`. Natural cells the plan could not keep (past the kit's cap, unknown
+  states) are not terrain: they stay billed as an upper bound (SA's note) and can only bill less. No unread-cell count: `exact` and `notes` say it.
+- **Steward's rule (named here so the field is unambiguous; Architect does not apply it):** a terrain item may go up to
+  `max(2, ceil(2% of terrain[item]))` over its quoted `bom` count; every other item stays exact. Build `maxBill` over **bom ∪ terrain keys**.
+- **One world read:** the same pass as the A11 cut; BILL_CAP and the `bill_cap` wait are unchanged.
+- **Compat:** the old 9-component constructor stays (empty `terrain`); `Since NEXT.`; feature `quoteTerrain` in `ArchitectApi.features()`
+  (Java side only, as `quote` and `maxBill`: quotes don't cross the sidecar, so no sidecar FEATURES or protocol change). `dev.region.quote` returns it.
+- **Gate:** units (split, 0 keys, clamp, x03, one cell changed between two quotes: only `terrain`, `bom` and `tiles:<group>` move, by one);
+  `bc-x03` extended in game with the one-cell drift; `bc-cap`; api-compat `--baselines`. **Steward RC:** `terrain`, `quoteTerrain`, a
+  `maxBill` built from it realising past a one-cell drift.
+
+### Changes from Steward's review (2026-11-14, through the coordinator: accepted on all three points)
+
+- **Zero keys:** confirmed. Steward builds `maxBill` over `bom` ∪ `terrain` keys, so a 0-count terrain item gets its allowance of 2.
+- **The allowance base is the terrain part:** `cap[item] = bom[item] + max(2, ceil(2% × terrain[item]))` for a terrain item; lot material
+  (and every other item) stays exact. Without `quoteTerrain` Steward keeps every item exact.
+- **Unkept cells** stay outside `terrain`: accepted.
+- **Steward RC areas:** a module quote, a survival region growth's quote, and `maxBill` at realise. **Tests:** a module quote with terrain
+  lines (bc-relay's crop field growth), a growth quote (qt-growth), and a realise under a `maxBill` built from Steward's rule where a
+  one-cell terrain drift passes and a two-unit drift on a lot item is refused BILL_CAP (`ql-drift`, new; units `QuotesTerrainQLTest`).
+
+
+### Slice QL as built (2026-11-14)
+
+- `Quote.terrain()`, the new last component (sorted, unmodifiable, null → empty); the 9-arg 1.55.0 constructor is kept and gives empty terrain.
+  Feature `quoteTerrain` is in `ApiRules` (Java-only, like `quote` and `maxBill`; no sidecar entry).
+- `Quotes.of` (survival): `terrain` = Σ over the `survivalTerrain` groups of covered − off, clamped to [0, bom]. A 0 key stays; an unloaded
+  kept cell counts as terrain (billed, `exact` false). Creative quotes carry an empty map. The `maxBill`/BILL_CAP path is unchanged.
+- Dev hooks: `dev.region.quote` returns `terrain`; the new `dev.ql.terrainCells {planId|sha, max}` lists kept cells with
+  {group, state, items, x, y, z, loaded, standing} for the gate.
+- `tools/lib/quote-terrain.mjs`: `terrainShape` (integers, ≤ bom, ≤ the tiles pieces, sorted) and `stewardCap` (Steward's rule over bom ∪ terrain).
+- Gate step `ql-drift` (x03 survival): q1 has terrain dirt 0. One grass cell billing a dirt is set to coarse dirt; q2 then moves only
+  `tiles:hamlet` by {dirt:1}. Under Steward's cap with planks 2 below the bill, the realise is refused BILL_CAP (world unchanged, nothing
+  consumed). With Steward's cap it is accepted; it consumes the put-down bill and the refund equals what was consumed. qt-growth (town and
+  growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
+- Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
+  `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.

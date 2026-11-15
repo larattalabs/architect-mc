@@ -23,6 +23,10 @@ import org.jspecify.annotations.Nullable;
 public final class RegionFreeDrops {
 	/** Dev: free cells broken without a drop this session. */
 	public static final AtomicLong BROKEN = new AtomicLong();
+	/** (J1, RS-c, dev) free cells a piston could not move, and free cells an explosion or a piston's break took without a drop. */
+	public static final AtomicLong PISTON_HELD = new AtomicLong(), EXPLODED = new AtomicLong(), PISTON_BROKEN = new AtomicLong();
+	/** (J1, RS-c, TEST) the piston and explosion hooks off (the case before the fix); the player's break hook stays. */
+	public static volatile boolean testNoPistonExplosion;
 
 	private RegionFreeDrops() {
 	}
@@ -41,7 +45,12 @@ public final class RegionFreeDrops {
 		}
 		sl.destroyBlock(pos, false, player);
 		BROKEN.incrementAndGet();
-		// (§9, item 15) remembered: the removal puts the region's write back first, so its undo restores the land as it was
+		mined(l, pos);
+		return false;
+	}
+
+	/** (§9, item 15) remembered: the removal puts the region's write back first, so its undo restores the land as it was. */
+	private static void mined(RegionsImpl.Live l, BlockPos pos) {
 		com.google.gson.JsonArray mined = l.rec().survival.getAsJsonArray("mined");
 		if (mined == null) {
 			mined = new com.google.gson.JsonArray();
@@ -49,6 +58,48 @@ public final class RegionFreeDrops {
 		}
 		mined.add(pos.asLong());
 		RegionsImpl.saveRec(l);
+	}
+
+	/**
+	 * (J1, RS-c, audit F8) A piston never moves a survival region's free write: pushed, it would leave its journal cell and drop as
+	 * vanilla wherever it is mined next (a free block turned into an item). The push fails as at an obsidian block. Server levels only.
+	 */
+	public static boolean pistonHolds(Level level, BlockPos pos) {
+		if (testNoPistonExplosion || !(level instanceof ServerLevel sl) || !nearSurvivalRegion(sl, pos) || freeWriteOf(sl, pos) == null) {
+			return false;
+		}
+		PISTON_HELD.incrementAndGet();
+		return true;
+	}
+
+	/**
+	 * (J1, RS-c) An explosion, or a piston's break of a block that can't be pushed (a plant), takes a free write: it goes without a drop,
+	 * as a player's break does, and is remembered as mined. Returns whether the drop is suppressed. Server levels only.
+	 */
+	public static boolean takenWithoutDrop(Level level, BlockPos pos, boolean explosion) {
+		if (testNoPistonExplosion || !(level instanceof ServerLevel sl) || !nearSurvivalRegion(sl, pos)) {
+			return false;
+		}
+		RegionsImpl.Live l = freeWriteOf(sl, pos);
+		if (l == null) {
+			return false;
+		}
+		(explosion ? EXPLODED : PISTON_BROKEN).incrementAndGet();
+		mined(l, pos);
+		return true;
+	}
+
+	/** A cheap first test before the journal read: a live survival region of this dimension whose claim (and a margin) holds the column. */
+	static boolean nearSurvivalRegion(ServerLevel level, BlockPos pos) {
+		String dim = Sites.dimensionId(level);
+		for (RegionsImpl.Live l : RegionsImpl.all()) {
+			int[] c = l.rec().claim;
+			// the claim is [x0, y0, z0, x1, y1, z1]
+			if (c != null && c.length >= 6 && l.rec().survival() && dim.equals(l.rec().dimension) && pos.getX() >= c[0] - 16 && pos.getX() <= c[3] + 16
+				&& pos.getZ() >= c[2] - 16 && pos.getZ() <= c[5] + 16) {
+				return true;
+			}
+		}
 		return false;
 	}
 
