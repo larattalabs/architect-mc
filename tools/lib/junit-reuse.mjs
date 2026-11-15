@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { srcGradle } from './src-gradle.mjs';
 
 const PROP_RE = /-D(umt\.|ledger\.|arvx\.write|mirror\.write|c6\.evidence)/;
 
@@ -110,4 +111,38 @@ export function methodPattern(p) {
   if (!/(^|\.)[A-Z][\w$]*$/.test(cls) || !/^[a-z_*$][\w$*]*$/.test(method)) return null;
   const re = new RegExp(`^${method.split('*').map((s) => s.replace(/[$]/g, '\\$')).join('.*')}$`);
   return { cls, method, re };
+}
+
+/**
+ * (chore GRB) A driver's Java classes, each -> { tests, failures } or null: unit-mod's XML when javaReuse() says it is exact, else
+ * `./gradlew test --offline --tests <patterns>` in <root>/mod under the checkout's gradle lock (srcGradle), its XML read inside the lock.
+ * SP2's run (20261115-075046): t3b-unit's unlocked gradle started 2 s after b-unit's locked one in the same run-src mod/; both exited 1
+ * and wrote no XML, so both steps read "no results" while unit-mod had passed every one of those classes.
+ * `classes` are the XML names under dev.larattalabs.architect. (e.g. 'region.PlanChecksT3Test'). -> { code, reused, classes: {name: row|null}, tail }
+ */
+export function javaClasses(root, patterns, classes, { env = process.env, log = console.log, quiet = false, timeout = 3_600_000 } = {}) {
+  const re = javaReuse(root, patterns, { log });
+  const row = (t) => {
+    const m = /<testsuite\b[^>]*?\btests="(\d+)"[^>]*?\bskipped="(\d+)"[^>]*?\bfailures="(\d+)"[^>]*?\berrors="(\d+)"/.exec(t);
+    return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
+  };
+  if (re) {
+    const by = new Map(re.files.map((r) => [r.name, r]));
+    const out = {};
+    for (const c of classes) {
+      const r = by.get(`dev.larattalabs.architect.${c}`);
+      out[c] = r ? { tests: r.tests, failures: r.failures + r.errors } : null;
+    }
+    return { code: 0, reused: re.reused, classes: out, tail: re.tail };
+  }
+  return srcGradle(root, () => {
+    const args = ['test', '--offline', ...(quiet ? ['-q'] : []), ...patterns.flatMap((p) => ['--tests', p])];
+    const g = spawnSync('./gradlew', args, { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout });
+    const out = {};
+    for (const c of classes) {
+      const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${c}.xml`);
+      out[c] = fs.existsSync(f) ? row(fs.readFileSync(f, 'utf8')) : null;
+    }
+    return { code: g.status, reused: null, classes: out, tail: `${g.stdout ?? ''}${g.stderr ?? ''}`.split('\n').filter((l) => /FAIL|error|Exception/i.test(l)).slice(0, 10) };
+  });
 }

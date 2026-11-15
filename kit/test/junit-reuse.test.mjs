@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { javaReuse, methodPattern, readJunitDir } from '../../tools/lib/junit-reuse.mjs';
+import { javaClasses, javaReuse, methodPattern, readJunitDir } from '../../tools/lib/junit-reuse.mjs';
 import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' }).trim();
@@ -79,4 +79,45 @@ test('javaReuse: method patterns fail closed (no match, skipped, failed, unknown
     assert.match(lines.join('\n'), why, p);
   }
   assert.equal(reuse(f, ['*BadTest']).r, null, 'a whole failed class is still refused');
+});
+
+// (chore GRB) b-unit's and t3b-unit's Java classes: their own patterns against unit-mod's XML, and the gradle fallback under the lock
+const xmlDir = (rows) => {
+  const dir = archTmpDir('junit-reuse-grb');
+  for (const [cls, cases] of rows) fs.writeFileSync(path.join(dir, `TEST-dev.larattalabs.architect.${cls}.xml`), suite(`dev.larattalabs.architect.${cls}`, cases));
+  return dir;
+};
+function withEnv(env, fn) {
+  const old = { ...process.env };
+  Object.assign(process.env, env);
+  for (const k of ['GRADLE_OPTS', 'JAVA_TOOL_OPTIONS', 'JAVA_OPTS']) delete process.env[k];
+  try { return fn(); } finally { for (const k of Object.keys(env)) if (old[k] === undefined) delete process.env[k]; else process.env[k] = old[k]; }
+}
+
+test('javaClasses: b-unit\'s and t3b-unit\'s patterns answer from unit-mod\'s XML, per class', () => {
+  const root = repo();
+  const dir = xmlDir([['api.ApiBTest', [{ n: 'a()' }, { n: 'b()' }]], ['region.BrushesTest', [{ n: 'a()' }]], ['region.volume.ArvxBlocksTest', [{ n: 'a()' }]],
+    ['region.volume.ArvxTest', [{ n: 'a()' }, { n: 'b()' }]], ['region.PlanChecksT3Test', [1, 2, 3, 4, 5].map((i) => ({ n: `t${i}()` }))], ['api.ApiT3Test', [{ n: 'a()' }]]]);
+  const env = { GATE_UNIT_MOD_JUNIT: dir, GATE_UNIT_MOD_TREE: git(root, 'rev-parse', 'HEAD^{tree}') };
+  const lines = [];
+  const b = withEnv(env, () => javaClasses(root, ['*ApiBTest', '*BrushesTest', '*ArvxBlocksTest', '*ArvxTest'], ['api.ApiBTest', 'region.BrushesTest', 'region.volume.ArvxBlocksTest', 'region.volume.ArvxTest'], { log: (m) => lines.push(m) }));
+  assert.equal(b.code, 0);
+  assert.ok(b.reused, lines.join('\n'));
+  assert.deepEqual(b.classes, { 'api.ApiBTest': { tests: 2, failures: 0 }, 'region.BrushesTest': { tests: 1, failures: 0 }, 'region.volume.ArvxBlocksTest': { tests: 1, failures: 0 }, 'region.volume.ArvxTest': { tests: 2, failures: 0 } });
+  const t = withEnv(env, () => javaClasses(root, ['*PlanChecksT3Test*', '*ApiT3Test*'], ['region.PlanChecksT3Test'], { log: () => {} }));
+  assert.deepEqual([t.code, t.classes['region.PlanChecksT3Test']], [0, { tests: 5, failures: 0 }]);
+});
+
+test('javaClasses: without unit-mod\'s XML it runs gradle holding the checkout\'s gradle lock and reads the XML inside it', () => {
+  const root = repo();
+  fs.mkdirSync(path.join(root, 'mod'));
+  // a stand-in gradlew: refuses to run unless the lock is held, then writes the class's XML
+  const res = path.join(root, 'mod', 'build', 'test-results', 'test');
+  fs.writeFileSync(path.join(root, 'mod', 'gradlew'), `#!/bin/sh\n[ -d .gradle/gate-gradle.lock ] || { echo "no lock"; exit 3; }\nmkdir -p build/test-results/test\ncat > build/test-results/test/TEST-dev.larattalabs.architect.region.PlanChecksT3Test.xml <<'X'\n${suite('dev.larattalabs.architect.region.PlanChecksT3Test', [{ n: 'a()' }, { n: 'b()' }, { n: 'c()' }, { n: 'd()' }])}X\n`, { mode: 0o755 });
+  const t = withEnv({ GATE_UNIT_MOD_JUNIT: '', GATE_UNIT_MOD_TREE: '' }, () => javaClasses(root, ['*PlanChecksT3Test*'], ['region.PlanChecksT3Test', 'api.ApiT3Test'], { log: () => {} }));
+  assert.equal(t.code, 0, t.tail.join('\n'));
+  assert.equal(t.reused, null);
+  assert.deepEqual(t.classes, { 'region.PlanChecksT3Test': { tests: 4, failures: 0 }, 'api.ApiT3Test': null });
+  assert.ok(fs.existsSync(res));
+  assert.ok(!fs.existsSync(path.join(root, 'mod', '.gradle', 'gate-gradle.lock')), 'the lock is released');
 });

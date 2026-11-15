@@ -104,16 +104,20 @@ steps.unit = async () => {
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
   fs.writeFileSync(path.join(OUT, 'bf-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   // the 59 asks on the merge base and here
-  const before = await B.asksGap(path.join(path.resolve(root, '..', 'architect-mc-BF-main'), 'kit'), { current: true }), after = await B.asksGap(KIT, { current: true });
+  const baseKit = path.join(path.resolve(root, '..', 'architect-mc-BF-main'), 'kit');
+  // ((chore GRB) BF is on main since 30c36d79: on a base past BF nothing moves, and the base's table is the head's, so it equals the committed
+  // after table; asks-before.txt stays BF's record of the five parts that waited on the three forms, as SL's and CL's items read their own)
+  const onMain = fs.existsSync(path.join(baseKit, 'lib', 'forms', 'bigForms.mjs'));
+  const before = await B.asksGap(baseKit, { current: true }), after = await B.asksGap(KIT, { current: true });
   fs.writeFileSync(path.join(OUT, 'bf-asks-before.txt'), before.text);
   fs.writeFileSync(path.join(OUT, 'bf-asks-after.txt'), after.text);
   const lines = (t) => new Map(t.split('\n').filter((l) => /^[a-z_0-9]+\/[a-z_0-9]+ /.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...new Set([...la.keys(), ...lb.keys()])].filter((k) => lb.get(k) !== la.get(k));
   const F = path.join(KIT, 'test', 'fixtures', 'plan', 'bf');
-  out.asks = { moved: moved.map((k) => la.get(k)), malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text };
-  check(after.malformed === 0 && moved.length === 5 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k))) && out.asks.committedAfter && out.asks.committedBefore,
-    `the 59 asks on the merge base and here: 0 malformed; exactly the four parts that waited on the three forms and ring_city's ring_town (blocked on its crater lake) move, each to fits or adjusted (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
+  out.asks = { moved: moved.map((k) => la.get(k)), malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && (fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text || (onMain && fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === before.text)) };
+  check(after.malformed === 0 && ((moved.length === 5 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k)))) || (onMain && moved.length === 0)) && out.asks.committedAfter && out.asks.committedBefore,
+    `the 59 asks on the merge base and here: 0 malformed; ${onMain ? 'BF on the base: nothing moves' : 'exactly the four parts that waited on the three forms and ring_city\'s ring_town (blocked on its crater lake) move, each to fits or adjusted'} (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
   spendZero();
   return out;
 };
