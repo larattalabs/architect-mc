@@ -86,17 +86,28 @@ export function programFit(source: string): string | undefined {
   return /export\s+const\s+fit\s*=\s*['"]([a-z_]+)['"]/.exec(source)?.[1];
 }
 
-/** The failing site rule of a build (SITE_UNFIT's detail): the first site finding, else `site_bound` when it did not build. */
+/**
+ * The failing site rule of a build (SITE_UNFIT's detail): the first site finding of severity `error` (site_bound, site_keep), else
+ * `site_bound` when it did not build. (UI slice, LEFTOVERS "DS's SITE_UNFIT firing on warnings": DS refused on any finding, so a design
+ * installed with a site warning, e.g. cantilever or floors_reachable, refused its own variant on the same site. Warnings now pass and
+ * stay in the check's warnings, as they do for a plain design.) A finding without a severity counts as an error.
+ */
 export function unfitRule(res: CheckResult): string | undefined {
   const site = siteResult(res.output);
-  const first = site?.findings?.[0]?.rule;
-  if (first) return first;
+  const firstError = site?.findings?.find((f) => (f.severity ?? 'error') === 'error')?.rule;
+  if (firstError) return firstError;
   if (!res.ok) return 'site_bound';
-  return site && site.ok === false ? 'site_bound' : undefined;
+  return undefined;
+}
+
+/** The first site finding's message for a refusal: the first error's, else the first finding's. */
+export function unfitMessage(res: CheckResult): string | undefined {
+  const f = siteResult(res.output)?.findings;
+  return (f?.find((x) => (x.severity ?? 'error') === 'error') ?? f?.[0])?.message;
 }
 
 /** The kit's `site` member of the build's --json line, if it printed one. */
-export function siteResult(output: string): { ok?: boolean; findings?: Array<{ rule: string; message?: string }>; metrics?: Record<string, unknown> } | undefined {
+export function siteResult(output: string): { ok?: boolean; findings?: Array<{ rule: string; severity?: string; message?: string }>; metrics?: Record<string, unknown> } | undefined {
   const lines = output.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('{') && l.endsWith('}'));
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
@@ -280,8 +291,7 @@ export class SiteVariants {
       const res = await checkDesign(cfg.kitDir, work, bp, { maxSize: siteSize(site), ...(type ? { type } : {}), ...(profile ? { profile } : {}) }, KIT_TIMEOUT_MS, extra);
       const rule = unfitRule(res);
       if (rule || !res.ok) {
-        const site0 = siteResult(res.output);
-        const msg = site0?.findings?.[0]?.message ?? res.problem ?? 'the check failed';
+        const msg = unfitMessage(res) ?? res.problem ?? 'the check failed';
         return this.finish(op, { refused: { code: 'SITE_UNFIT', detail: rule ?? 'site_bound', message: `${op.entryId} re-run on site ${site.volumeSha.slice(0, 12)}: ${msg}` } });
       }
       const rp = await renderPreviews(work, res.nbt!, KIT_TIMEOUT_MS);
