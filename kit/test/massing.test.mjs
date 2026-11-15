@@ -11,11 +11,12 @@ import { Blueprint, PALETTES, palette } from '../lib/kit.mjs';
 import { massing, checkConformance, roleBlock } from '../lib/massing.mjs';
 import { checkBlueprint } from '../lib/check.mjs';
 import { buildDesign, listDesigns } from '../build.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = path.join(KIT, 'test', 'fixtures', 'massing');
 const MASSINGS = path.join(KIT, 'massings');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-massing-'));
+const tmp = archTmpDir('architect-massing');
 const run = (script, args) => spawnSync(process.execPath, [path.join(KIT, script), ...args], { encoding: 'utf8' });
 const P = PALETTES.oak;
 const has = (list, re) => list.some((m) => re.test(m));
@@ -347,7 +348,7 @@ test('conformance --massing-cap (7a K3): the cap replaces the massing size + 2 f
   assert.deepEqual(checkConformance({ ...d, size: { x: 14, y: 28, z: 11 } }, m, { cap: { x: 13, y: 40, z: 11 } }).errors, ["size: x is 14, over the cap 13 (the lot's box)"]);
   assert.deepEqual(checkConformance({ ...d, front: 'east' }, m, { cap: { x: 13, y: 40, z: 11 } }).errors.length, 1);
   // build.mjs passes it through (an example detail against its own massing, capped below its size: refused)
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'k3-cap-'));
+  const tmp = archTmpDir('k3-cap');
   const mf = path.join(MASSINGS, 'cabin_massing', 'cabin_massing.blueprint.json');
   const r = run('build.mjs', ['cabin', '--out', tmp, '--massing', mf, '--massing-cap', '1,1,1', '--json']);
   const j = JSON.parse(r.stdout.trim().split('\n').at(-1));

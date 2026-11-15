@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 // one cheap fixture with a body (KC's census and F3's M18/M19 run on it), one ask, one plain valid plan
@@ -34,7 +35,7 @@ async function pass(env) {
 }
 
 test('the drivers\' unchanged() loops: the store cold, warm and off print the same passing checks', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-plan-'));
+  const dir = archTmpDir('corpus-plan');
   try {
     const cold = await pass({ GATE_PLAN_CACHE_DIR: dir, GATE_PLAN_WORKERS: '2' });
     const warm = await pass({ GATE_PLAN_CACHE_DIR: dir, GATE_PLAN_WORKERS: '1' });
@@ -59,7 +60,7 @@ test('the store\'s record carries the artifact (coa-unit compares it): cold, war
   assert.throws(() => artSig({}), /no artifact/);
   assert.throws(() => artSig({ check: {}, res: {} }), /no artifact/);
   assert.doesNotThrow(() => artSig({ artifact: null }));
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-plan-art-'));
+  const dir = archTmpDir('corpus-plan-art');
   const saved = { ...process.env };
   try {
     const CP = await import(pathToFileURL(path.join(ROOT, 'tools', 'lib', 'corpus-plan.mjs')).href);
@@ -98,7 +99,7 @@ test('the store\'s record carries the artifact (coa-unit compares it): cold, war
 // (speed audit A) hy-unit's item 12, h-unit's item 11 and vocc-unit's item 4 over the store: each loop's per-fixture comparison, this
 // checkout against itself, cold, warm and off, is the same table, every fixture the same.
 test('hy, h-core and vocc-c identity loops: the store cold, warm and off give the same tables, all identical', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-plan-hy-'));
+  const dir = archTmpDir('corpus-plan-hy');
   const run = async (env) => {
     const saved = { ...process.env };
     Object.assign(process.env, env);

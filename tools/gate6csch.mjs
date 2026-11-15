@@ -37,6 +37,7 @@ import { parseSchem, schemToStructure, structureCells, sortedState, canonTag } f
 import { srcGradle } from './lib/src-gradle.mjs';
 import { javaReuse } from './lib/junit-reuse.mjs'; // (speed audit A) the Java tests unit-mod already ran in this run
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -214,7 +215,7 @@ async function linux() {
     return {};
   }
   const exportsMac = JSON.parse(fs.readFileSync(rt, 'utf8')).data?.exports ?? {};
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sch-linux-'));
+  const tmp = archTmpDir('sch-linux');
   fs.copyFileSync(path.join(root, 'tools', 'lib', 'SchemGzip.java'), path.join(tmp, 'SchemGzip.java'));
   fs.mkdirSync(path.join(tmp, 'raw'));
   for (const [e, x] of Object.entries(exportsMac)) fs.writeFileSync(path.join(tmp, 'raw', `${e}.raw`), zlib.gunzipSync(fs.readFileSync(x.file)));

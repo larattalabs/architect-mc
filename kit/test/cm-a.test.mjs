@@ -16,10 +16,11 @@ import { plain } from '../lib/nbt.mjs';
 import { traceRole } from '../lib/connectors/style.mjs';
 import { renderStructure } from '../render.mjs';
 import buildCastle from '../designs/composite/castle.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GOLDENS = path.join(HERE, 'fixtures', 'cm-a.json');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-a-'));
+const tmp = archTmpDir('cm-a');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const codes = (c) => c.findings().map((f) => f.code);

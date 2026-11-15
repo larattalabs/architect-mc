@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { bytecodeDigest, classManifest } from '../../tools/lib/build-artifact.mjs';
 import { agentOption, helpers, readDump, requestDumps, skeletons, verify } from '../../tools/lib/jacoco.mjs';
 import { collect, javaLogOption, snapshotStart } from '../../tools/lib/step-coverage.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -90,7 +91,7 @@ function startJvm(classes, cov) {
 }
 
 const J = 'dev.larattalabs.fx';
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'step-jacoco-'));
+const tmp = () => archTmpDir('step-jacoco');
 
 /** One recorded run: phase1 in a JVM, the step's dump at its end. -> { loaded, entered, base } */
 async function recordedRun() {

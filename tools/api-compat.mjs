@@ -162,6 +162,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (process.argv[2] === '--baselines') {
@@ -501,7 +502,7 @@ const javapOut = (flags, target, isFile = true) => {
 };
 const API = 'dev/larattalabs/architect/api/';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'api-compat-'));
+const tmp = archTmpDir('api-compat');
 execFileSync('unzip', ['-q', '-o', path.resolve(jar), '-d', tmp]);
 const classFiles = [];
 const walk = (d) => {

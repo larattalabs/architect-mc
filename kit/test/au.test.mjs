@@ -11,11 +11,12 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lintAuthored, authoredSha, stageAuthored, loadAuthoredDir, authoredRef, AUTHORED_IMPORTS } from '../lib/plan/authored.mjs';
 import { checkPlanLocal, goldenSurvey, FIX } from './plan-helpers.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AU = path.join(KIT, 'test', 'fixtures', 'au');
 const COURT = fs.readFileSync(path.join(AU, 'courtyard.mjs'), 'utf8');
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'au-'));
+const tmp = () => archTmpDir('au');
 const rules = (src) => lintAuthored(src).map((f) => f.rule);
 const lintMsgs = (src) => lintAuthored(src).map((f) => f.message).join(' | ');
 const wrap = (body) => `import { region } from '../lib/region/program.mjs';\nexport const id = 'x';\nexport default function (ctx) {\n${body}\nreturn region(ctx);\n}\n`;

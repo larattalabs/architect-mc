@@ -82,6 +82,7 @@
 // final state "done" | "stopped" | "aborted"), SUMMARY.md, runner.log, <step>.log, the gates' own evidence under
 // [s<k>/]gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client[-s<k>].log.
 
+import { ramTmpNote } from './lib/ram-tmp-env.mjs'; // first: TMPDIR on the RAM disk for this run and its children (slice TS)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1364,6 +1365,17 @@ if (PLAN) {
     console.log(`preflight now, ${sh.name ?? `s${sh.k}`}: ports ${busy.length ? `BUSY ${busy.join(',')}` : 'free'}; processes in its run worktree: ${procs.length ? procs.map((p) => p.pid).join(',') : 'none'}`);
   }
   process.exit(0);
+}
+
+// ------------------------------------------------------------------ the temp sweep (slice TS)
+
+// leaked arch-* temp dirs (killed runs; docs/GATES.md "Slice TS as built"): cheap, logged, never fails the run
+try {
+  const { sweepAll, summaryAll } = await import('./lib/tmp-sweep.mjs');
+  console.log(`[${new Date().toISOString().slice(11, 19)}] gate-run ${chainName}: ${summaryAll(sweepAll())}`);
+  console.log(`[${new Date().toISOString().slice(11, 19)}] gate-run ${chainName}: ${ramTmpNote}`);
+} catch (e) {
+  console.log(`gate-run ${chainName}: tmp-sweep skipped (${e?.message ?? e})`);
 }
 
 // ------------------------------------------------------------------ the lock

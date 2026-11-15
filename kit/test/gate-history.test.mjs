@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { blobId, currentHistory, definitionNow, definitionsAt, driverPaths, effectiveTimeout, pct, stepDefinition } from '../../tools/lib/gate-history.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const entry = { desc: 'T3a in game', shell: 'node tools/gate6b.mjs base && node tools/gate6ct3a.mjs ingame', env: { X: '1' }, timeoutMin: 60, client: '6b', host: 'server', estMin: 12 };
 const blobs = { 'tools/gate6b.mjs': 'a1', 'tools/gate6ct3a.mjs': 'b1' };
@@ -67,7 +68,7 @@ test('samples with no head, or a head git does not know, never count toward the 
 });
 
 test('definitionsAt and definitionNow agree through git: a driver edit is a new definition', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-history-'));
+  const dir = archTmpDir('gate-history');
   try {
     const g = (...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
     g('init', '-q');

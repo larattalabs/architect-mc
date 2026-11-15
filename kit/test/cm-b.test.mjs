@@ -9,10 +9,11 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildDesign, loadDesign } from '../build.mjs';
 import { Composite } from '../lib/composite.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMPOSITES = path.join(HERE, '..', 'designs', 'composite');
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'kit-cmb-'));
+const tmp = () => archTmpDir('kit-cmb');
 
 test('build.mjs builds a Composite return: union, modules, manifest; checks clean; the max applies per module', async () => {
   const out = tmp();

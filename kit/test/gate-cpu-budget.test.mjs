@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { budgetEnv, cpuShare, machineCores, testConcurrencyArgs } from '../../tools/lib/cpu-budget.mjs';
 import { kitReuse } from '../../tools/lib/kit-reuse.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -42,7 +43,7 @@ test('the environment: every consumer gets the step\'s share (the plan pool at l
 });
 
 test('--test-concurrency bounds node --test: at 1 no two files overlap', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpu-budget-'));
+  const dir = archTmpDir('cpu-budget');
   try {
     const log = path.join(dir, 'log.txt');
     for (let i = 0; i < 4; i++) {
@@ -99,7 +100,7 @@ test('the drivers\' kit-suite reuse still hits: the flag stays out of kitReuse\'
     t.skip('kit/ is dirty or not a git tree: kitReuse would refuse anyway');
     return;
   }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpu-budget-junit-'));
+  const dir = archTmpDir('cpu-budget-junit');
   const saved = { GATE_KIT_RESULTS: process.env.GATE_KIT_RESULTS, GATE_KIT_TREE: process.env.GATE_KIT_TREE };
   try {
     const file = path.join(dir, 'kit.junit.xml');

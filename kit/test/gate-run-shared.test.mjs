@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const MOD = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tools', 'lib', 'run-shared.mjs')).href;
 
@@ -20,7 +21,7 @@ test('without a shared dir the work is only memoised in the process', async () =
 });
 
 test('two processes ask for the same key: one builds, the other waits for it and reuses it', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-shared-'));
+  const dir = archTmpDir('run-shared');
   const code = `
     const { sharedOnce } = await import(${JSON.stringify(MOD)});
     const t0 = Date.now();
@@ -39,7 +40,7 @@ test('two processes ask for the same key: one builds, the other waits for it and
 });
 
 test('a builder that fails publishes nothing and drops its lock; the next asker builds', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-shared-'));
+  const dir = archTmpDir('run-shared');
   process.env.GATE_RUN_SHARED = dir;
   const { sharedOnce } = await import(`${MOD}?b`);
   await assert.rejects(sharedOnce('t', 'f', async () => { throw new Error('boom'); }), /boom/);
@@ -50,7 +51,7 @@ test('a builder that fails publishes nothing and drops its lock; the next asker 
 });
 
 test('a lock whose pid is dead is taken over; onHit false builds again', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-shared-'));
+  const dir = archTmpDir('run-shared');
   process.env.GATE_RUN_SHARED = dir;
   const { sharedOnce } = await import(`${MOD}?c`);
   fs.mkdirSync(path.join(dir, 't', 'd.lock'), { recursive: true });

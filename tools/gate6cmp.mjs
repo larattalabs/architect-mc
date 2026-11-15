@@ -29,6 +29,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-MP-run');
@@ -144,7 +145,7 @@ steps.unit = async () => {
 // ------------------------------------------------------------------ item 9: the previous mod refuses a mask/pattern IR
 
 steps.stale = async () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6cmp-'));
+  const tmp = archTmpDir('gate6cmp');
   // the toolbox IR, planned by this kit over the synthetic survey
   const { planRegion } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'plan.mjs')).href);
   const { synthSurvey } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'synth.mjs')).href);

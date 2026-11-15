@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { archTmpDir } from './arch-tmp.mjs';
 
 /** The pins: a gradle.properties key -> the module its version names. Add a row for another dev.larattalabs dependency. */
 export const PINS = [{ prop: 'lab_ui_version', group: 'dev.larattalabs', module: 'lab_ui' }];
@@ -126,7 +127,7 @@ export const RESOLVE_ALL_GRADLE = `allprojects {
 
 /** One gradle run of architectResolveAll; offline unless `online` (then with the GitHub token, as the pins' resolve). -> { ok, out } */
 export function defaultSeedRun({ home, modDir, env, online }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-seed-'));
+  const dir = archTmpDir('architect-seed');
   const init = path.join(dir, 'resolve-all.gradle');
   fs.writeFileSync(init, RESOLVE_ALL_GRADLE);
   try {

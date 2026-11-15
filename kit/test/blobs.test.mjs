@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { blobPath, listBlobs, readBlob, readBlobJson } from '../lib/blobs.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const LIB = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'lib', 'blobs.mjs')).href;
 
@@ -35,7 +36,7 @@ function survey() {
 }
 
 function scratch() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-blobs-'));
+  const dir = archTmpDir('kit-blobs');
   fs.mkdirSync(path.join(dir, 'blobs'));
   return dir;
 }

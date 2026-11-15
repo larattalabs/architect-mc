@@ -18,9 +18,10 @@ import { loadDesign } from '../build.mjs';
 import { renderStructure, VIEWS } from '../render.mjs';
 import { slices, TRUNCATED } from '../tools/slices.mjs';
 import { runComponents } from '../tools/components.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'architect-kit-5a-'));
+const tmp = archTmpDir('architect-kit-5a');
 const run = (script, args) => spawnSync(process.execPath, [path.join(KIT, script), ...args], { encoding: 'utf8' });
 const NEW = /^(attach|facing):/;
 const newWarnings = (r) => r.warnings.filter((w) => NEW.test(w));

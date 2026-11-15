@@ -18,9 +18,10 @@ import { buildExample } from '../tools/examples.mjs';
 import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 import { asksSurvey, stewardAnchors, checkPlanVolumes, FIX } from './plan-helpers.mjs';
 import { read, run } from './plan-p0-shared.mjs';
+import { archTmpDir } from '../../tools/lib/arch-tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'us-'));
+const tmp = archTmpDir('us');
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 // ---------------------------------------------------------------- the flip, every state of every block

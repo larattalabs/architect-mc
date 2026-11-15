@@ -21,6 +21,7 @@
 // Output: <out>/<runId>/ (local: rounds, renders, verdicts, judge answers, logs) and eval/results/<label>/summary.json
 // (committed: metrics per brief, aggregates, versions and hashes; no PNGs). summary.json is a pure function of the stored
 // files, so `rescore` reproduces it byte for byte.
+import { ramTmpNote } from './lib/ram-tmp-env.mjs'; // first: TMPDIR on the RAM disk for this run and its children (slice TS)
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -29,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rebuild, verifyRebuild } from '../kit/lib/rebuild.mjs';
+import { archTmpDir } from './lib/arch-tmp.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -1166,7 +1168,7 @@ export function importRound0(fromDir, libraryDir, { briefs, tier } = {}) {
     const stored = readJson(path.join(r0, `${id}.blueprint.json`));
     const pin = stored.bible && typeof stored.bible === 'object' ? stored.bible : undefined;
     const bibleDir = pin ? fixtureBibleDir(pin) : undefined;
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-import-'));
+    const tmp = archTmpDir('arch-import');
     try {
       const v = verifyRebuild(r0, { bibleFor: fixtureBibleDir, kitDir: KIT, keep: tmp });
       if (!v.same) throw new Error(`${b.id}: the rebuild differs`);
@@ -1659,7 +1661,7 @@ export function prepareDevEntries(list, libraryDir) {
   for (const e of list) {
     const id = path.basename(e.source).replace(/\.mjs$/, '');
     const bp = readJson(e.blueprint);
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-dev-'));
+    const tmp = archTmpDir('arch-dev');
     try {
       const r = rebuild({ source: e.source, blueprint: bp, bibleDir: e.bible, out: tmp, kitDir: KIT });
       if (!r.ok) {
