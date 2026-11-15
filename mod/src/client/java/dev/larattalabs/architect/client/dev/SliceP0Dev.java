@@ -347,7 +347,7 @@ public final class SliceP0Dev {
 			});
 		// (QL gate) a plan's kept paid terrain cells, read-only: the gate picks one standing cell to change between two quotes
 		DevBridge.register("dev.ql.terrainCells", 60_000, "{planId | sha, max?: 64} - (QL gate) up to max of the plan's kept paid terrain cells "
-			+ "(plan.json survivalTerrain) -> {planId, cells: [{group, state, x, y, z, loaded, standing}]}", (req, mc) -> {
+			+ "(plan.json survivalTerrain) -> {planId, cells: [{group, state, items, x, y, z, loaded, standing}]}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId0 = f.optStr("planId", null);
 				String sha = f.optStr("sha", null);

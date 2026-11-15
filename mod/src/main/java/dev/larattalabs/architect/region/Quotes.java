@@ -293,6 +293,9 @@ public final class Quotes {
 					JsonObject c = new JsonObject();
 					c.addProperty("group", g.getKey());
 					c.addProperty("state", se.getAsString());
+					if (r.get("items") instanceof JsonElement ie) {
+						c.add("items", ie.deepCopy());
+					}
 					c.addProperty("x", x);
 					c.addProperty("y", y);
 					c.addProperty("z", z);

@@ -529,9 +529,11 @@ steps.qldrift = async () => {
   check(!q1.refused && q1.exact === true && shape1.length === 0 && q1.terrain?.[DIRT] === 0 && !q1.bom?.[DIRT],
     `QL: x03's quote names its grading dirt as terrain with 0 (every kept cell stands): terrain ${json(q1.terrain)}, bom dirt ${q1.bom?.[DIRT] ?? 0}${shape1.length ? `; shape ${json(shape1)}` : ''}`, out.approved);
   const tc = await L.call('dev.ql.terrainCells', { sha, max: 4096 }, 60_000);
-  const cell = (tc.cells ?? []).find((c) => c.standing && c.loaded && c.state === DIRT);
+  // a kept cell billing exactly one dirt (its state may be grass or dirt: the item is what the quote bills)
+  const oneDirt = (c) => c.standing && c.loaded && json(c.items ?? {}) === json({ [DIRT]: 1 });
+  const cell = (tc.cells ?? []).find((c) => oneDirt(c) && c.state === DIRT) ?? (tc.cells ?? []).find(oneDirt);
   out.cell = cell ?? null;
-  check(!!cell, `a standing kept dirt cell to change: ${cell ? `${cell.x} ${cell.y} ${cell.z} (${cell.group}; ${tc.cells.length} kept cells read)` : 'none'}`, { n: tc.cells?.length });
+  check(!!cell, `a standing kept cell billing one dirt to change: ${cell ? `${cell.x} ${cell.y} ${cell.z} ${cell.state} (${cell.group}; ${tc.cells.length} kept cells read)` : `none of ${tc.cells?.length ?? 0} (states ${json([...new Set((tc.cells ?? []).map((c) => c.state))].slice(0, 6))}, items ${json((tc.cells ?? [])[0]?.items ?? null)})`}`, { n: tc.cells?.length });
   if (!cell) return out;
   // the drift: one standing cell turned to coarse dirt (another state: a realise writes it; coarse dirt does not spread)
   await L.cmd(`/setblock ${cell.x} ${cell.y} ${cell.z} minecraft:coarse_dirt`);
