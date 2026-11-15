@@ -32659,3 +32659,23 @@ No API surface change.
 - **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
 - **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
 - **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).
+
+### Slice CS as built (branch `slice/CS` off main de4c88ac; versions NEXT; $0; light; recorded 2026-11-15)
+
+LEFTOVERS "CS composite and site edges". **API (additive, Steward reviews):** `DesignRequest.inverted` (28th component; the 27-argument
+constructor kept, every wither keeps it, `withInverted`), feature `invertedDesigns` (helper `design.inverted`, appended last); new detail
+`composite` on `VERSION_REFUSED` and on `follow`'s `NOT_ALLOWED`; `Library.delete` of a composite also trashes its modules, of a module alone false.
+- **SR pass-through:** variant and re-skin keep the source request's `allowComposite` and install a composite as a new composite entry with its
+  own modules; polish, versionOf, revert and follow of a composite or hidden module refuse at the request (`composite`): a new version would
+  need its modules versioned, which no path does. Site variants stay refused (SR reading 2). Group copies of a composite archetype keep falling back.
+- **CM-b:** delete cascade (client, headless bridge, API); batch item refusal kept (persistence, strict); the mid-batch rollback stays for the release run.
+- **CM-a:** stone under the four corner towers (goldens re-cut), so cmb-ingame's dirt_path allowance is gone; its item now asks `allowComposite`
+  (SR made it required; the step had not run since) and checks the delete; JOINT_FACING isolated in a test; vertical joints intended (pinned).
+- **PL, DS:** intended as recorded (CLEAR re-plan over KEEP, the queue persists no site, polish has no site check); pinned in ApiCSTest.
+- **US:** the brief's "Inverted lot" section, refused without a suspend site or helper, a versionOf keeps it; upside_down waits on R2.
+- **HR:** the ghost was closed by SR Fix 2; hidden_village and secret_tunnels wait on R2 (forms as land) and CN (hatch into a tunnel).
+- **SR Fix 1:** designs.ts, cm-b.test, the castle, composite.mjs and LibraryFeature joined the CM-b impact rule (cmb-ingame).
+- **Checks** ($0, no in-game run, rule 11.1): `unit-scope --run` kit PASS; sidecar 573/574 (eval.e2e's sim tier lost its sidecar under load,
+  4/4 alone; cm-b 5/5, cs-inverted 5/5 new); Gradle full 1340, 1 fail (Api7bFTest's last-component check, updated: 12/12 with ApiCSTest 7/7);
+  api-compat --baselines 8/8 clean (Steward's jar too); step-inputs check clean (426); gitleaks clean. For the release run: cmb-ingame (now
+  allowComposite, exact verify, the delete), cmb-crash, a module's mid-batch rollback, a region realise with an inverted lot.

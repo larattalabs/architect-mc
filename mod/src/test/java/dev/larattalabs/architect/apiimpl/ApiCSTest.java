@@ -4,19 +4,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.larattalabs.architect.api.Batch;
 import dev.larattalabs.architect.api.CompositeInfo;
 import dev.larattalabs.architect.api.DesignRequest;
 import dev.larattalabs.architect.api.FitMode;
+import dev.larattalabs.architect.api.PlaceRequest;
+import dev.larattalabs.architect.api.SiteBinding;
 import dev.larattalabs.architect.api.SiteSpec;
 import dev.larattalabs.architect.site.Composites;
+import dev.larattalabs.architect.site.SiteFit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Rotation;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -112,5 +119,20 @@ class ApiCSTest {
 		String why = Composites.deleteRefusal("keep__west", module("keep__west", "keep"));
 		assertNotNull(why);
 		assertTrue(why.contains("hidden module of composite keep"), why);
+	}
+
+	/**
+	 * (7c CS: PL's leftovers, intended) A batch item with a site stays refused (the queue persists no site), and a site-bound placement's
+	 * move, update and revert are refused (each would re-plan CLEAR terrain over a KEEP site): the guard and the record mark pinned.
+	 */
+	@Test
+	void siteBoundRefusalsStayAsDecided() {
+		PlaceRequest p = PlaceRequest.of("bp", null, BlockPos.ZERO, Rotation.NONE);
+		SiteGuards.batch(Batch.of(null, List.of(Batch.Item.of("a", p))));
+		assertThrows(UnsupportedOperationException.class, () -> SiteGuards.batch(Batch.of(null, List.of(Batch.Item.of("a", p), Batch.Item.of("b", p.withSite(suspend()))))));
+		JsonObject ext = SiteFit.withBinding(new JsonObject(), suspend());
+		assertTrue(SiteFit.bound(ext) && ext.has(SiteBinding.EXT_KEY));
+		assertFalse(SiteFit.bound(new JsonObject()));
+		assertTrue(SiteFit.fixedMessage("s1", "a move").contains("site-bound") && SiteFit.fixedMessage("s1", "a move").contains("remove it and place it again"));
 	}
 }
