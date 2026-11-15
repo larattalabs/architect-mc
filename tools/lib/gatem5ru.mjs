@@ -95,6 +95,14 @@ export async function registerRU(steps, h) {
       const lack = n - (ps.stock?.[it] ?? 0);
       if (lack > 0) need[it] = Math.max(1, Math.floor(lack * fraction));
     }
+    // (batch 3) a target builds a run only with its whole bill: when `fraction` of the lack covers no target's outstanding (a growth whose one
+    // target is put down first, its lot staged after it), the smallest target's whole lack is fed, so something builds and the rest waits
+    const covers = (o) => Object.entries(o ?? {}).every(([it, n]) => (need[it] ?? 0) + (ps.stock?.[it] ?? 0) >= n);
+    const open = Object.values(ps.targets ?? {}).map((x) => x.outstanding ?? {}).filter((o) => sum(o) > 0);
+    if (open.length && !open.some(covers)) {
+      const small = open.sort((a, b) => sum(a) - sum(b))[0];
+      for (const [it, n] of Object.entries(small)) need[it] = Math.max(need[it] ?? 0, n - (ps.stock?.[it] ?? 0));
+    }
     const acc = (await call('dev.crate.insert', { site: `stockpile:${G.OWNER}`, items: need, exact: true }, 120_000)).accepted ?? {};
     let last = null, still = 0, rs;
     for (let k = 0; k < 120 && still < 4; k++) {
