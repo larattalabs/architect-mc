@@ -262,9 +262,11 @@ export async function registerFKB(steps, h) {
     const bad2 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: SLAB, count: 1 }; } });
     const kitNo = [bad1.ck.errors.find((e) => /can't be module-provided/.test(e)), bad2.ck.errors.find((e) => /is creative-only/.test(e))];
     const origin = [CLAIM[0] - 20, W.gy, CLAIM[1] - 20];
-    const pBad = await call('dev.pl.place', { blueprint: 'fkb_bad', origin }, 120_000).catch((e) => ({ error: String(e) }));
+    // Sites.check (writes nothing) and Sites.place as the owner: both name the fill's refusal
+    const cBad = await call('dev.pl.place', { blueprint: 'fkb_bad', origin, check: true, owner: G.OWNER }, 120_000).catch((e) => ({ error: String(e) }));
+    const pBad = { ...(await call('dev.pl.place', { blueprint: 'fkb_bad', origin, owner: G.OWNER, mode: 'instant' }, 120_000).catch((e) => ({ error: String(e) }))), check: cBad };
     out.bad = { kit: kitNo, place: pBad };
-    check(kitNo.every(Boolean) && pBad.placed !== true && /creative-only/.test(json(pBad)) && !(pBad.cells > 0),
+    check(kitNo.every(Boolean) && pBad.placed !== true && /creative-only/.test(json(cBad)) && !(pBad.cells > 0),
       `a bad declaration is refused: the kit (${kitNo.join(' | ')}); the mod, before any write (${json(pBad).slice(0, 200)})`, out.bad);
     await entry(); // fk_hall back as it was
 
