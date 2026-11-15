@@ -82,8 +82,11 @@ const GOOD = { ...BAD, connectors: [{ id: 'lane', kind: 'path', from: { anchor: 
 const GRID = { schemaVersion: 'plan/0', zones: [{ id: 'town', required: true, size: { w: 30, d: 90 }, program: { layout: 'grid', lots: Array.from({ length: 3 }, (_, i) => ({ id: `cottage_${i + 1}`, type: 'cottage', size: [13, 14] })) } }] };
 const palette = (family) => ({ ...GOOD, rules: [{ id: 'palette_1', kind: 'palette', family, share: [0, 1] }] });
 
+// (the run dir's sidecar data outlives a run, so a fixed opKey would adopt the last run's finished design, which the new world never hears of)
+const NONCE = Date.now().toString(36);
 async function compose(tag, b, over = {}) {
-  const d = await call('dev.region.compose', { brief: b, claim: CLAIM, wait: true, ...over }, 1_800_000);
+  const o = over.opKey ? { ...over, opKey: `${over.opKey}.${NONCE}` } : over;
+  const d = await call('dev.region.compose', { brief: b, claim: CLAIM, wait: true, ...o }, 1_800_000);
   const r = d.result ?? {};
   log(`  ${tag}: ${d.status} ${d.kind} ${r.outcome} rounds ${r.rounds} ${json(r.history)} owner ${d.owner ?? '-'} ${d.error ?? d.refused ?? ''} $${(d.costUsd ?? 0).toFixed(4)} in ${((d.ms ?? 0) / 1000).toFixed(0)} s`);
   return d;
