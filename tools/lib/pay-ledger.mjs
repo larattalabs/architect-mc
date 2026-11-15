@@ -99,11 +99,14 @@ export function openJob(L, { item, step, capUsd, retry = false, authSource = nul
   tally(L);
   return j;
 }
-export function updateJob(L, step, { usd, ended = false, status = null, ref, error, data } = {}) {
+export function updateJob(L, step, { usd, ended = false, status = null, ref, error, data, designId, entryId } = {}) {
   const j = [...L.jobs].reverse().find((x) => x.step === step);
   if (!j) throw new Error(`no job ${step}`);
   if (typeof usd === 'number') j.usd = r6(usd);
   if (ref) j.ref = ref;
+  // (scenario-sb's paid lots name their design and entry, as 7b's ledger records them)
+  if (designId) j.designId = designId;
+  if (entryId) j.entryId = entryId;
   if (error) j.error = String(error).slice(0, 400);
   if (status) j.status = status;
   if (data !== undefined) j.data = data;

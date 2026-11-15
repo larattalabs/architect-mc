@@ -883,6 +883,7 @@
     "tools/lib/p3-tier.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/promote.mjs",
@@ -1015,6 +1016,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -3604,7 +3609,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -3665,6 +3669,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -4031,7 +4039,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -4098,6 +4105,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -4899,7 +4910,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -4963,6 +4973,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -5316,7 +5330,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -5386,6 +5399,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -5735,7 +5752,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -5800,6 +5816,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -6150,7 +6170,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -6221,6 +6240,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -6588,7 +6611,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -6652,6 +6674,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -6976,7 +7002,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -7038,6 +7063,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -7655,7 +7684,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -7735,6 +7763,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -8681,7 +8713,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -8750,6 +8781,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -9110,7 +9145,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -9174,6 +9208,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -9543,7 +9581,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -9613,6 +9650,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -10359,7 +10400,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/nomod-server.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -10439,6 +10479,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -10791,7 +10835,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/nomod-server.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -10871,6 +10914,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -11397,7 +11444,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -11477,6 +11523,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -11851,7 +11901,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -11931,6 +11980,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -12320,7 +12373,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -12390,6 +12442,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -12774,7 +12830,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -12844,6 +12899,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -13231,7 +13290,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -13306,6 +13364,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -13659,7 +13721,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -13721,6 +13782,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -14082,7 +14147,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -14149,6 +14213,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -14525,7 +14593,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -14598,6 +14665,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -14987,7 +15058,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -15056,6 +15126,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -15438,7 +15512,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -15507,6 +15580,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -15986,7 +16063,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -16049,6 +16125,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -16591,7 +16671,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -16654,6 +16733,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -17370,7 +17453,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -17463,6 +17545,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -17807,7 +17893,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -17899,6 +17984,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -18250,7 +18339,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -18342,6 +18430,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -18693,7 +18785,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -18785,6 +18876,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -19135,7 +19230,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -19227,6 +19321,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -19578,7 +19676,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -19670,6 +19767,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -20020,7 +20121,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -20112,6 +20212,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -20463,7 +20567,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -20555,6 +20658,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -21577,7 +21684,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -21645,6 +21751,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -21984,7 +22094,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -22052,6 +22161,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -22385,7 +22498,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -22447,6 +22559,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -22772,7 +22888,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -22834,6 +22949,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -23193,7 +23312,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -23268,6 +23386,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -23667,7 +23789,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -23750,6 +23871,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -24124,7 +24249,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -24213,6 +24337,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -24603,7 +24731,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -24692,6 +24819,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -25082,7 +25213,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -25171,6 +25301,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -25557,7 +25691,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -25646,6 +25779,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -26025,7 +26162,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -26114,6 +26250,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -26476,7 +26616,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -26557,6 +26696,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -26904,7 +27047,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -26991,6 +27133,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -27358,7 +27504,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -27445,6 +27590,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -27812,7 +27961,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -27901,6 +28049,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -28261,7 +28413,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -28356,6 +28507,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -28731,7 +28886,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -28826,6 +28980,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -29201,7 +29359,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -29296,6 +29453,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -29670,7 +29831,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -29765,6 +29925,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -30143,7 +30307,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -30233,6 +30396,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -30616,7 +30783,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -30712,6 +30878,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -31111,7 +31281,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -31207,6 +31376,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -31606,7 +31779,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -31702,6 +31874,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -32101,7 +32277,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -32197,6 +32372,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -32595,7 +32774,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -32691,6 +32869,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -33089,7 +33271,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -33185,6 +33366,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -33555,7 +33740,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -33635,6 +33819,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -34009,7 +34197,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -34095,6 +34282,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -34474,7 +34665,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -34560,6 +34750,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -34939,7 +35133,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -35025,6 +35218,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -35404,7 +35601,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -35490,6 +35686,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -36170,7 +36370,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -36256,6 +36455,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -36625,7 +36828,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -36705,6 +36907,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -37079,7 +37285,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -37165,6 +37370,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -37544,7 +37753,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -37630,6 +37838,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -38044,7 +38256,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -38111,6 +38322,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -38459,7 +38674,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -38526,6 +38740,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -39112,7 +39330,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -39180,6 +39397,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -39542,7 +39763,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -39610,6 +39830,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -40096,7 +40320,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -40182,6 +40405,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -40500,7 +40727,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -40592,6 +40818,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -40930,7 +41160,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -41022,6 +41251,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -41360,7 +41593,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -41452,6 +41684,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -41790,7 +42026,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -41882,6 +42117,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -42231,7 +42470,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -42319,6 +42557,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -42696,7 +42938,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -42792,6 +43033,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -43175,7 +43420,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -43271,6 +43515,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -43678,7 +43926,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -43774,6 +44021,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -44159,7 +44410,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -44253,6 +44503,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -44632,7 +44886,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -44726,6 +44979,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -45105,7 +45362,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -45199,6 +45455,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -45577,7 +45837,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -45671,6 +45930,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -46017,7 +46280,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -46101,6 +46363,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -46416,7 +46682,6 @@
     "tools/lib/gate7a-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -46485,6 +46750,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -46814,7 +47083,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -46903,6 +47171,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -47255,7 +47527,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -47350,6 +47621,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -47720,7 +47995,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -47815,6 +48089,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -48185,7 +48463,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -48280,6 +48557,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -48650,7 +48931,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -48745,6 +49025,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -49115,7 +49399,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -49210,6 +49493,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -49578,7 +49865,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -49670,6 +49956,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -50047,7 +50337,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -50145,6 +50434,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -50537,7 +50830,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -50635,6 +50927,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -51027,7 +51323,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -51125,6 +51420,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -51517,7 +51816,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -51615,6 +51913,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -51977,7 +52279,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -52050,6 +52351,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -52384,7 +52689,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -52463,6 +52767,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -52813,7 +53121,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -52892,6 +53199,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -53242,7 +53553,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -53321,6 +53631,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -53671,7 +53985,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -53750,6 +54063,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -54091,7 +54408,6 @@
     "tools/lib/gate7a-kit.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -54164,6 +54480,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -54497,7 +54817,6 @@
     "tools/lib/gate7a-kit.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -54576,6 +54895,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -54948,7 +55271,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -55039,6 +55361,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -55754,7 +56080,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -55851,6 +56176,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -56261,7 +56590,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -56358,6 +56686,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -56768,7 +57100,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -56865,6 +57196,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -57275,7 +57610,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -57372,6 +57706,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -57782,7 +58120,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -57879,6 +58216,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -58551,7 +58892,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -58629,6 +58969,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -58980,7 +59324,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -59064,6 +59407,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -59431,7 +59778,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -59515,6 +59861,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -59878,7 +60228,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -59962,6 +60311,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -60318,7 +60671,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -60402,6 +60754,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -60764,7 +61120,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -60853,6 +61208,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -61200,7 +61559,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -61295,6 +61653,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -61659,7 +62021,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -61754,6 +62115,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -62118,7 +62483,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -62213,6 +62577,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -62586,7 +62954,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -62675,6 +63042,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -63073,7 +63444,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -63162,6 +63532,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -63550,7 +63924,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -63633,6 +64006,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -64016,7 +64393,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -64105,6 +64481,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -64503,7 +64883,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -64592,6 +64971,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -64976,7 +65359,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -65063,6 +65445,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -65421,7 +65807,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -65514,6 +65899,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -65891,7 +66280,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -65980,6 +66368,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -66368,7 +66760,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -66451,6 +66842,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -66834,7 +67229,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -66923,6 +67317,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -67321,7 +67719,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -67410,6 +67807,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -67798,7 +68199,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -67881,6 +68281,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -68264,7 +68668,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -68353,6 +68756,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -68751,7 +69158,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -68840,6 +69246,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -69238,7 +69648,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -69327,6 +69736,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -69725,7 +70138,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -69814,6 +70226,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -70212,7 +70628,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -70301,6 +70716,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -70699,7 +71118,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -70788,6 +71206,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -71186,7 +71608,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -71275,6 +71696,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -71669,7 +72094,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -71762,6 +72186,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -72135,7 +72563,6 @@
     "tools/lib/lint-mutations.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -72228,6 +72655,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -72587,7 +73018,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -72677,6 +73107,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -73032,7 +73466,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -73121,6 +73554,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -73480,7 +73917,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -73575,6 +74011,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -73950,7 +74390,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -74045,6 +74484,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -74410,7 +74853,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -74499,6 +74941,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -74858,7 +75304,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -74953,6 +75398,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -75323,7 +75772,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -75413,6 +75861,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -75788,7 +76240,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -75884,6 +76335,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -76275,7 +76730,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -76371,6 +76825,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -76762,7 +77220,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -76858,6 +77315,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -77221,7 +77682,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -77288,6 +77748,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -77669,7 +78133,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -77742,6 +78205,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -78127,7 +78594,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -78200,6 +78666,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -78585,7 +79055,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -78658,6 +79127,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -79841,7 +80314,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -79937,6 +80409,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -80335,7 +80811,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -80431,6 +80906,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -80815,7 +81294,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -80909,6 +81387,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -81288,7 +81770,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -81382,6 +81863,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -81760,7 +82245,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -81854,6 +82338,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -82230,7 +82718,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -82326,6 +82813,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -82695,7 +83186,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -82785,6 +83275,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -83153,7 +83647,6 @@
     "tools/lib/gate6cvoc-c.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -83239,6 +83732,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -83827,7 +84324,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -83921,6 +84417,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -84277,7 +84777,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -84346,6 +84845,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -84721,7 +85224,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -84802,6 +85304,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -85203,7 +85709,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -85290,6 +85795,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -85650,7 +86159,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -85712,6 +86220,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -86042,7 +86554,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -86104,6 +86615,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -86431,7 +86946,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -86493,6 +87007,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -86824,7 +87342,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -86886,6 +87403,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -87275,7 +87796,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -87345,6 +87865,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -87764,7 +88288,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -87840,6 +88363,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -88200,7 +88727,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -88262,6 +88788,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -88639,7 +89169,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -88725,6 +89254,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -89103,7 +89636,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -89195,6 +89727,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -89581,7 +90117,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -89673,6 +90208,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -90059,7 +90598,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -90151,6 +90689,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -90537,7 +91079,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -90629,6 +91170,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -90978,7 +91523,6 @@
     "tools/lib/gate7ak2-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -91042,6 +91586,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -91392,7 +91940,6 @@
     "tools/lib/gate7ak2-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -91462,6 +92009,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -91832,7 +92383,6 @@
     "tools/lib/gate7ak2-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -91902,6 +92452,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -92268,7 +92822,6 @@
     "tools/lib/gate7ak2-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -92338,6 +92891,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -92697,7 +93254,6 @@
     "tools/lib/gate7ak2-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -92767,6 +93323,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -93176,7 +93736,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -93252,6 +93811,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -93657,7 +94220,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -93727,6 +94289,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -94118,7 +94684,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -94194,6 +94759,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -94601,7 +95170,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -94677,6 +95245,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -95084,7 +95656,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -95160,6 +95731,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -95567,7 +96142,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -95643,6 +96217,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -96050,7 +96628,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -96126,6 +96703,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -96533,7 +97114,6 @@
     "tools/lib/gate6crs-game.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -96609,6 +97189,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -97030,7 +97614,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -97093,6 +97676,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -97764,7 +98351,6 @@
     "tools/lib/gate6dlc-2.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -97854,6 +98440,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -98187,7 +98777,6 @@
     "tools/lib/gate6dlc-2.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -98277,6 +98866,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -98893,7 +99486,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -98982,6 +99574,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -99321,7 +99917,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -99410,6 +100005,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -99749,7 +100348,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -99838,6 +100436,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -100168,7 +100770,6 @@
     "tools/lib/gate6dlc-2.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -100258,6 +100859,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -100591,7 +101196,6 @@
     "tools/lib/gate6dlc-2.mjs",
     "tools/lib/gate7ak3-designs.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -100681,6 +101285,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -101309,7 +101917,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -101388,6 +101995,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -101727,7 +102338,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -101806,6 +102416,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -102264,7 +102878,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -102339,6 +102952,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -102774,7 +103391,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -102841,6 +103457,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -103287,7 +103907,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -103361,6 +103980,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -103687,7 +104310,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -103753,6 +104375,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -104082,7 +104708,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -104148,6 +104773,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -104477,7 +105106,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -104543,6 +105171,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -104872,7 +105504,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -104934,6 +105565,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -105263,7 +105898,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -105325,6 +105959,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -105654,7 +106292,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -105720,6 +106357,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -106075,7 +106716,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -106142,6 +106782,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -106516,7 +107160,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -106589,6 +107232,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -106956,7 +107603,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -107034,6 +107680,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -107374,7 +108024,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -107458,6 +108107,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -107816,7 +108469,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -107902,6 +108554,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -108261,7 +108917,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -108347,6 +109002,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -108706,7 +109365,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -108792,6 +109450,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -109141,7 +109803,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -109221,6 +109882,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -109563,7 +110228,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -109649,6 +110313,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -110008,7 +110676,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -110094,6 +110761,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -110453,7 +111124,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -110539,6 +111209,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -110891,7 +111565,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -110969,6 +111642,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -111313,7 +111990,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -111397,6 +112073,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -111758,7 +112438,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -111842,6 +112521,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -112180,7 +112863,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -112246,6 +112928,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -112638,7 +113324,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -112721,6 +113406,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -113066,7 +113755,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -113132,6 +113820,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -113842,7 +114534,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -113943,6 +114634,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     }
    ],
    "env": [
@@ -114280,7 +114975,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -114381,6 +115075,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     }
    ],
    "env": [
@@ -114996,7 +115694,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -115083,6 +115780,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -115628,7 +116329,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -115694,6 +116394,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -115786,7 +116490,8 @@
    "closure": [
     "kit/test/pay-ledger.test.mjs",
     "tools/lib/pa-ledger.mjs",
-    "tools/lib/pay-ledger.mjs"
+    "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs"
    ],
    "globs": [],
    "dynamic": [],
@@ -116109,6 +116814,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -116170,6 +116876,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -116256,6 +116966,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ]
@@ -116505,6 +117216,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -116566,6 +117278,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -116652,6 +117368,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ]
@@ -116901,6 +117618,7 @@
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-compose-ext.json",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -116962,6 +117680,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -117048,6 +117770,7 @@
     "tools/lib/devclient.mjs",
     "tools/lib/pa-ledger.mjs",
     "tools/lib/pay-ledger.mjs",
+    "tools/lib/pay-stage2.mjs",
     "tools/lib/run6b.mjs",
     "tools/lib/sprint.mjs"
    ]
@@ -117332,7 +118055,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -117394,6 +118116,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -117995,7 +118721,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -118078,6 +118803,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -118396,7 +119125,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -118458,6 +119186,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -120226,7 +120958,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -120288,6 +121019,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -120618,7 +121353,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -120680,6 +121414,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -121007,7 +121745,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -121069,6 +121806,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -121396,7 +122137,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -121458,6 +122198,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -121785,7 +122529,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -121847,6 +122590,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -122174,7 +122921,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -122236,6 +122982,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -122581,7 +123331,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -122657,6 +123406,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -123001,7 +123754,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -123083,6 +123835,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -123444,7 +124200,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -123526,6 +124281,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -123887,7 +124646,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -123969,6 +124727,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -124316,7 +125078,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -124395,6 +125156,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -124701,7 +125466,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -124721,6 +125485,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -125163,7 +125931,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -125225,6 +125992,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -125555,7 +126326,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -125617,6 +126387,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -126053,6 +126827,10 @@
      "expr": "path.join(root, 'kit', p))"
     },
     {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
+    },
+    {
      "from": "kit/lib/plan/authored.mjs",
      "expr": "), import.meta"
     },
@@ -126455,6 +127233,10 @@
      "expr": "path.join(root, 'kit', p))"
     },
     {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
+    },
+    {
      "from": "kit/lib/plan/authored.mjs",
      "expr": "), import.meta"
     },
@@ -126804,7 +127586,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -126886,6 +127667,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -127239,7 +128024,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/ram-tmp-env.mjs",
     "tools/lib/ram-tmp.mjs",
@@ -127300,6 +128084,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -127650,7 +128438,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -127717,6 +128504,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -128083,7 +128874,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -128150,6 +128940,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -128516,7 +129310,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -128583,6 +129376,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -128949,7 +129746,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -129016,6 +129812,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -129382,7 +130182,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -129449,6 +130248,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -129836,7 +130639,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -129913,6 +130715,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -130302,7 +131108,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -130385,6 +131190,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -130790,7 +131599,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -130873,6 +131681,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -131278,7 +132090,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -131361,6 +132172,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -131766,7 +132581,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -131849,6 +132663,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -132254,7 +133072,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -132337,6 +133154,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -132742,7 +133563,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -132825,6 +133645,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -133230,7 +134054,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -133313,6 +134136,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -133718,7 +134545,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -133801,6 +134627,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -134206,7 +135036,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -134289,6 +135118,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -134684,7 +135517,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -134761,6 +135593,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -135150,7 +135986,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -135233,6 +136068,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -135638,7 +136477,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -135721,6 +136559,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -136126,7 +136968,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -136209,6 +137050,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -136614,7 +137459,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -136697,6 +137541,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -137092,7 +137940,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -137169,6 +138016,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -137558,7 +138409,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -137641,6 +138491,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -138042,7 +138896,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -138125,6 +138978,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -138519,7 +139376,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -138602,6 +139458,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -139007,7 +139867,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -139090,6 +139949,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -139485,7 +140348,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -139562,6 +140424,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -139951,7 +140817,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -140034,6 +140899,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -140429,7 +141298,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -140506,6 +141374,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -140895,7 +141767,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -140978,6 +141849,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -141383,7 +142258,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -141466,6 +142340,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -141871,7 +142749,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -141954,6 +142831,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -142349,7 +143230,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -142426,6 +143306,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -142815,7 +143699,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -142898,6 +143781,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -143293,7 +144180,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -143370,6 +144256,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -143759,7 +144649,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -143842,6 +144731,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -144247,7 +145140,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -144330,6 +145222,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -144725,7 +145621,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/quote-terrain.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -144802,6 +145697,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -145191,7 +146090,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -145274,6 +146172,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -145679,7 +146581,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -145762,6 +146663,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -146167,7 +147072,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -146250,6 +147154,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -146655,7 +147563,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -146738,6 +147645,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -147143,7 +148054,6 @@
     "tools/lib/gatemsad.mjs",
     "tools/lib/gatesa-road.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/quote-terrain.mjs",
@@ -147226,6 +148136,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -147569,7 +148483,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -147631,6 +148544,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -147977,7 +148894,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -148057,6 +148973,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -148418,7 +149338,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -148498,6 +149417,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -148862,7 +149785,6 @@
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -148929,6 +149851,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -151795,7 +152721,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -151857,6 +152782,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -152183,7 +153112,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -152245,6 +153173,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -152571,7 +153503,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -152633,6 +153564,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -152959,7 +153894,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -153021,6 +153955,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -153346,7 +154284,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -153408,6 +154345,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -153733,7 +154674,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -153795,6 +154735,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -154121,7 +155065,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -154183,6 +155126,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -154509,7 +155456,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -154571,6 +155517,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -154901,7 +155851,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -154963,6 +155912,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -155294,7 +156247,6 @@
     "tools/lib/gate6chy-core.mjs",
     "tools/lib/gate6ckc-kit.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -155356,6 +156308,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -156108,7 +157064,6 @@
     "tools/lib/junit-reuse.mjs",
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -156203,6 +157158,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/realised-virtual.mjs",
@@ -157235,7 +158194,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/probe-reuse.mjs",
@@ -157328,6 +158286,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "tools/lib/corpus-derive.mjs",
@@ -157729,7 +158691,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -157800,6 +158761,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",
@@ -158211,7 +159176,6 @@
     "tools/lib/kit-reuse.mjs",
     "tools/lib/p2-trim.mjs",
     "tools/lib/p3-tier.mjs",
-    "tools/lib/pa-ledger.mjs",
     "tools/lib/pf-norm.mjs",
     "tools/lib/pinned-deps.mjs",
     "tools/lib/ram-tmp-env.mjs",
@@ -158287,6 +159251,10 @@
     {
      "from": "tools/lib/scenario-sb.mjs",
      "expr": "path.join(root, 'kit', p))"
+    },
+    {
+     "from": "tools/lib/scenario-sb.mjs",
+     "expr": "plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs')"
     },
     {
      "from": "kit/lib/plan/authored.mjs",

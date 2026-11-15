@@ -455,6 +455,10 @@ async function runScenario(id) {
   if (bibleOpt) { sc.bible = bibleOpt; sc.bibleFixture = `bibles/${bibleOpt}.json`; }
   // (7c BR) a brief run's Style: its format 3 settlement Style with roleShares bands where BRIEF_STYLE names one
   else if (briefOn && BR.BRIEF_STYLE[sc.id]) { sc.bible = BR.BRIEF_STYLE[sc.id]; sc.bibleFixture = `styles/${BR.BRIEF_STYLE[sc.id]}.json`; }
+  // (7c PAY) `--style-file <bible.json>`: the run's Style from a file (P2's paid settlement Style, made by tools/gate7cpay.mjs on its own
+  // helper), installed as the sidecar's Style <its id> v1 with the files beside it (components, prose), as a fixture Style is
+  const styleFile = typeof opt('style-file') === 'string' ? path.resolve(opt('style-file')) : null;
+  if (styleFile) { sc.bible = JSON.parse(fs.readFileSync(styleFile, 'utf8')).id; sc.bibleFixture = path.relative(SCEN, styleFile); }
   // (7c BR) a brief run's lots from the library where BRIEF_LIBRARY names cached entries (S5: 7b P2's treehouse entries, committed fixtures)
   if (briefOn && BR.BRIEF_LIBRARY[sc.id]) sc.siteLibrary = BR.BRIEF_LIBRARY[sc.id];
   const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-')}${flat ? '-flat' : ''}`;
@@ -469,6 +473,12 @@ async function runScenario(id) {
   const cams = Object.fromEntries(Object.entries(sc.cams).map(([k, v]) => [k, [v[0] + off[0], v[1], v[2] + off[1], v[3], v[4]]]));
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
   if (isV(sc) || isS2(sc) || isS3(sc)) await prepV(sc);
+  if (styleFile) {
+    const dst = path.join(L.GAME_DIR, 'architect', 'bibles', sc.bible, 'versions', '1');
+    fs.mkdirSync(dst, { recursive: true });
+    for (const f of fs.readdirSync(path.dirname(styleFile), { withFileTypes: true })) if (f.isFile()) fs.copyFileSync(path.join(path.dirname(styleFile), f.name), path.join(dst, f.name));
+    L.log(`  style ${sc.bible} from ${styleFile} -> ${dst}`);
+  }
   if (sc.siteLibrary) (await import('./lib/scenario-sb.mjs')).copyLibraryEntry(L, sc.siteLibrary, root);
   let t0 = Date.now();
   await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.claimBase(sc.world.seed, sc.fixture.claim));
@@ -493,6 +503,18 @@ async function runScenario(id) {
   // (7c PAY) a composed plan is the model's own: its golden key is goldens/<short>-co and none is committed (its determinism row is
   // the 3 plans and 1 vs 4 workers, as a fixture without a golden); its lots are its own ids, given entries below
   if (brief?.composed) { sc.goldenKey = BR.composedGoldenKey(short(sc)); sc.golden = false; }
+  // (7c PAY) `--save-world <name>`: the land the brief read, saved as a world of its own right after the brief (before any plan of the
+  // run writes): P4's images-off arm composes on a clone of it, never on land generated again (P0: two fresh copies differ)
+  if (typeof opt('save-world') === 'string') {
+    const w = opt('save-world');
+    await L.cmd('/save-off');
+    try {
+      await L.cmd('/save-all flush');
+      await L.settle(3000);
+      L.copyWorld(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, w);
+      L.log(`  the brief's land saved as world "${w}" (for P4)`);
+    } finally { await L.cmd('/save-on'); }
+  }
   const program = brief ? brief.program : sc.program;
   const params = brief ? brief.params : sc.params;
   const p1 = await L.plan(program, claim, { params, surveyLoad: 'bounded:256', seed: sc.seed, bible, owner });

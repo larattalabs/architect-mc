@@ -170,10 +170,27 @@ export async function librarySiteEntries(L, sc, ir, tag) {
  * plan = {item, opPrefix, ledger, backend, capUsd, timeoutMin, archetypes: [{key, lot, landmark?, request {buildingType, bible, name,
  * notes}}], variants {lot: key}, reuse? {key: entryId}}. Returns siteEntries' shape plus {pa: {item, jobs, spendUsd, notShown}}.
  */
-async function paSiteEntries(L, sc, ir, plan) {
-  const P = await import('./pa-ledger.mjs');
+async function paSiteEntries(L, sc, ir, plan0) {
+  let plan = plan0;
+  // (7c PAY) plan.ledgerModule 'pay': the 7c batch's ledger (tools/lib/pay-ledger.mjs: Noah's $65 hard cap, the 1.2 x share stop)
+  const P = await import(plan.ledgerModule === 'pay' ? './pay-ledger.mjs' : './pa-ledger.mjs');
   const entries = {}, rows = [], archetype = {}, jobs = [];
   const lots = new Map(ir.lots.filter((l) => l.site).map((l) => [l.id, l]));
+  // (7c PAY) plan.auto: a composed plan's lots are its own ids, so the archetypes come from the IR: per site fit, its first lot an
+  // archetype (at most plan.auto.maxDesigns in all, request from plan.auto.request with the lot's fit and brief), every other lot of that
+  // fit a $0 site variant of it; a fit past the limit gets none (its lots: not shown)
+  if (plan.auto) {
+    const byFit = new Map();
+    for (const l of lots.values()) { const f = l.site.fit ?? 'site'; if (!byFit.has(f)) byFit.set(f, []); byFit.get(f).push(l); }
+    plan = { ...plan, archetypes: [], variants: {} };
+    for (const [f, ls] of [...byFit.entries()].sort()) {
+      if (plan.archetypes.length >= (plan.auto.maxDesigns ?? 4)) break;
+      const key = `${f}`;
+      plan.archetypes.push({ key, lot: ls[0].id, request: { ...plan.auto.request, name: `${plan.auto.request.name ?? 'PAY'} ${f}`.slice(0, 40), notes: `${plan.auto.request.notes ?? ''} A ${f.replaceAll('_', ' ')} building on its site lot.`.trim() } });
+      for (const l of ls.slice(1)) plan.variants[l.id] = key;
+    }
+    L.log(`  PA auto: ${plan.archetypes.length} archetype(s) ${plan.archetypes.map((a) => `${a.key}@${a.lot}`).join(', ')}; ${Object.keys(plan.variants).length} variant lot(s)`);
+  }
   for (const lot of lots.values()) {
     const s = lot.site;
     if (volumeFile(L, s.volumeSha)) continue;

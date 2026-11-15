@@ -78,3 +78,14 @@ test('restatement per unit cost; P6 eligibility; the ledger file round-trips und
   assert.equal(P.readLedger(f).committedUsd, 2.4);
   assert.equal(fs.existsSync(`${f}.lock`), false);
 });
+
+test('(stage 2) each item\'s jobs at their budgets fit its ceiling with every job open; P2 saves the worlds P4 clones', async () => {
+  const S2 = await import('../../tools/lib/pay-stage2.mjs');
+  for (const item of ['P2', 'P3', 'P4', 'P5', 'P6']) assert.ok(S2.worstCase(item) <= P.ceilingOf(item) + 1e-9, `${item}: ${S2.worstCase(item)} over ${P.ceilingOf(item)}`);
+  assert.equal(S2.worstCase('P2'), 33.15);
+  const saved = S2.P2_SCENARIOS.filter((s) => s.saveWorld).map((s) => s.key);
+  assert.deepEqual(saved, ['s3', 's6']);
+  assert.deepEqual(S2.jobsOf('P4').map((j) => j.step), saved.map((k) => `P4:compose:${k}`));
+  assert.equal(S2.p4World('s3'), 'G6B PAY P2 s3 land');
+  assert.equal(S2.P6_REQUEST.ext['architect_mc:allowComposite'], true);
+});

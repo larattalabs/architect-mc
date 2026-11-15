@@ -25,10 +25,12 @@
 // Ports 8896 (helper / the client's sidecar) and 8897 (DevBridge), --shards 1 (the brief; 8930/8931 are QL-b's). The helper and the
 // client never run at once.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as P from './lib/pay-ledger.mjs';
+import * as S2 from './lib/pay-stage2.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(root, '..', 'architect-mc');
@@ -122,6 +124,7 @@ class Helper {
     this.ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === 'bible.upsert') this.bibles.set(m.bible.id, m.bible);
+      else if (m.type === 'design.upsert') (this.designs ??= new Map()).set(m.design.id, m.design);
       else if (m.type === 'status') this.status = m.status;
       else if (m.type === 'snapshot') { this.status = m.status ?? this.status; for (const b of m.bibles ?? []) this.bibles.set(b.id, b); } else this.msgs.push(m);
     };
@@ -212,6 +215,17 @@ const subs = {};
 
 subs.plan = async () => {
   const L = P.readLedger(LEDGER);
+  // (stage 2) `--plan --only <item>`: that item's jobs, their budgets, the worst case against its ceiling, what runs and its go
+  if (opt('only')) {
+    const item = String(opt('only')).toUpperCase();
+    if (!P.ITEMS[item]) throw new Error(`--plan --only P0..P6|R (got ${item})`);
+    const jobs = item === 'P1' ? [...P1_COMPOSES.map((c) => ({ step: `P1:compose:${c.key}`, capUsd: P.P1_BUDGETS.compose })), { step: 'P1:style', capUsd: P.P1_BUDGETS.style }] : S2.jobsOf(item);
+    const worst = Math.round(jobs.reduce((a, j) => a + j.capUsd, 0) * 1e6) / 1e6;
+    const it = L.items[item];
+    console.log(JSON.stringify({ item, what: P.ITEMS[item].what, estUsd: P.estimateOf(L, item), shareUsd: P.ITEMS[item].shareUsd, ceilingUsd: item === 'P0' ? 0 : P.ceilingOf(item), capUsd: P.ITEMS[item].capUsd, spentUsd: it.spentUsd, committedUsd: it.committedUsd, jobs, worstCaseUsd: worst, worstFitsCeiling: item === 'P0' || it.committedUsd + worst <= P.ceilingOf(item) + 1e-9, ledgerAfterWorstUsd: Math.round((L.committedUsd + worst) * 1e6) / 1e6, hardCapUsd: P.HARD_CAP_USD, go: item === 'P0' || item === 'R' ? 'n/a' : P.approved(L, `${item}:go`) ? 'recorded' : `none (answer --step ${item}:go)`,
+      inputs: item === 'P2' ? S2.P2_SCENARIOS : item === 'P3' ? S2.P3_SESSIONS : item === 'P4' ? S2.P2_SCENARIOS.filter((x) => x.saveWorld).map((x) => ({ ...x, clones: S2.p4World(x.key) })) : item === 'P5' ? S2.P5_STYLES : item === 'P6' ? { request: S2.P6_REQUEST, eligible: P.p6Eligible(L) } : null }, null, 2));
+    return;
+  }
   let running = 0;
   const rows = Object.entries(P.ITEMS).map(([k, it]) => {
     const est = P.estimateOf(L, k);
@@ -576,14 +590,260 @@ subs.restate = async () => {
   console.log(md.join('\n'));
 };
 
+// ---- stage 2: P2-P6 and R ($0 on --backend sim; paid on --backend claude, after the coordinator's recorded go) ---------------------
+
+const backendOf = () => { const b = String(opt('backend', 'sim')); if (!['sim', 'claude'].includes(b)) throw new Error('--backend sim|claude'); return b; };
+/** A paid item needs all of P0 and the coordinator's recorded go `<item>:go` (Noah's words); the sim needs neither. */
+function needGo(item, backend) {
+  if (backend !== 'claude') return;
+  needP0(item);
+  if (!P.approved(P.readLedger(LEDGER), `${item}:go`)) throw Object.assign(new Error(`refusing ${item}: no recorded go (answer --step ${item}:go --yes --text "<Noah's words>")`), { code: 2 });
+  if (item === 'P6' && !P.p6Eligible(P.readLedger(LEDGER))) throw Object.assign(new Error(`refusing P6: the ledger reads $${P.readLedger(LEDGER).totalUsd} (> $${P.P6_GATE_USD} after P5)`), { code: 2 });
+}
+const outOf = (item, backend) => path.join(ART, item, backend === 'claude' ? 'paid' : 'sim');
+/** One job: on the claude backend guarded and opened in the ledger; on the sim recorded only. `run` returns {usd, status, ref?, error?, data?}. */
+async function job(backend, { item, step, capUsd, authSource, minutes = 45 }, run) {
+  const retry = !!opt('retry');
+  if (backend === 'claude') openPaid({ item, step, capUsd, authSource, retry, minutes });
+  else log(`${step}: sim (budget $${capUsd} as the paid run's)`);
+  let r;
+  try { r = await run(); } catch (e) {
+    if (backend === 'claude') closePaid(step, { usd: 0, ended: false, status: 'error_open_at_cap', error: e.message });
+    throw e;
+  }
+  if (backend === 'claude') closePaid(step, { usd: r.usd ?? 0, ended: r.ended !== false, status: r.status, error: r.error, ref: r.ref, data: r.data });
+  log(`${step}: ${r.status} $${Number(r.usd ?? 0).toFixed(4)}${r.error ? ` ${r.error}` : ''}`);
+  return r;
+}
+/** A Style job on our own helper, waited for: {usd, status, bibleId, file (its installed bible.json)}. */
+async function styleJob(h, request, ms = 40 * 60_000) {
+  const a = await h.send({ type: 'bible.request', request });
+  const b = await h.waitBible(a.jobId, ms);
+  const dir = path.join(h.dir, 'bibles', b.bibleId ?? '');
+  return { usd: b.cost?.usd ?? 0, status: b.status, ended: b.status !== 'timeout', error: b.error ?? undefined, ref: b.bibleId, bibleId: b.bibleId, file: path.join(dir, 'bible.json'), sheet: path.join(dir, 'sheet.png'), jobId: a.jobId };
+}
+const helperAuthOk = (h, backend) => (backend === 'sim' ? h.auth().auth === 'ok' : h.auth().auth === 'ok' && /claude login/i.test(h.auth().authSource ?? ''));
+/** The run dir's client on the backend (gate6b start), base worlds made; returns {L, auth, stop}. */
+async function client(backend, item) {
+  const env = envCheck(`${item}:client`);
+  const e6 = { GATE6B_RUN: RUN, GATE6B_DEV_PORT: String(DEV_PORT), GATE6B_SIDECAR_PORT: String(SIDECAR_PORT), GATE6B_OUT: path.join(outOf(item, backend), 'gate6b'), JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' };
+  Object.assign(process.env, e6);
+  fs.mkdirSync(e6.GATE6B_OUT, { recursive: true });
+  if (!fs.existsSync(RUN)) throw new Error(`no run dir ${RUN}`);
+  const run = (a, extra = {}) => spawnSync(process.execPath, a, { cwd: root, stdio: 'inherit', env: { ...env, ...e6, ...extra } });
+  if (run([path.join(root, 'tools', 'gate6b.mjs'), 'start', 'G6B Flat Base', backend]).status !== 0) throw new Error('the client did not start');
+  const L = await game();
+  await L.connect();
+  if (run([path.join(root, 'tools', 'gate6b.mjs'), 'base']).status !== 0) throw new Error('gate6b base failed');
+  const auth = await L.logAuth(`${item}:client`);
+  if (backend === 'claude' && (auth.auth !== 'ok' || !/claude login/i.test(auth.authSource ?? ''))) { run([path.join(root, 'tools', 'gate6b.mjs'), 'stop']); throw Object.assign(new Error(`refusing ${item}: the client's sidecar is not on the claude login (${JSON.stringify(auth)})`), { code: 2 }); }
+  if (backend === 'sim' && !/sim/i.test(auth.authSource ?? '')) { run([path.join(root, 'tools', 'gate6b.mjs'), 'stop']); throw new Error(`${item} sim: the client's sidecar is not the sim (${auth.authSource})`); }
+  return { L, auth, env: { ...env, ...e6 }, stop: () => run([path.join(root, 'tools', 'gate6b.mjs'), 'stop']) };
+}
+const scnFile = (id) => JSON.parse(fs.readFileSync(path.join(root, 'scenarios', `${id}.json`), 'utf8'));
+
+/** P2: the Styles (own helper), then each scenario's brief run on the client (S6's site archetypes paid through scenario-sb's PAY plan). */
+subs.p2 = async () => {
+  const backend = backendOf();
+  needGo('P2', backend);
+  const out = outOf('P2', backend);
+  const only = opt('scn') ? String(opt('scn')).split(',') : null;
+  const scns = S2.P2_SCENARIOS.filter((s) => !only || only.includes(s.key));
+  const res = readJson(path.join(out, 'p2.json'), { styles: {}, runs: {} });
+  Object.assign(res, { at: new Date().toISOString(), head: gitHead(), backend });
+  const B = S2.BUDGETS.P2;
+  // 1. the Styles (no client: the helper and the client never share the port)
+  const h = await Helper.start(path.join(out, 'helper'), backend);
+  try {
+    if (!helperAuthOk(h, backend)) throw Object.assign(new Error(`refusing P2: the helper's auth ${JSON.stringify(h.auth())}`), { code: 2 });
+    for (const s of scns) {
+      if (res.styles[s.key]?.status === 'done' && fs.existsSync(res.styles[s.key].file)) continue; // (a re-run pays nothing twice)
+      const sc = scnFile(s.scenario);
+      res.styles[s.key] = await job(backend, { item: 'P2', step: `P2:style:${s.key}`, capUsd: B.style, authSource: h.auth().authSource, minutes: 40 }, () => styleJob(h, { prompt: S2.briefOf(sc), name: `PAY ${s.key.toUpperCase()} Settlement`, scope: 'settlement', budgetUsd: B.style }));
+      writeJson(path.join(out, 'p2.json'), res);
+    }
+  } finally { await h.stop(); }
+  // 2. the brief runs on the client
+  const c = await client(backend, 'P2');
+  try {
+    for (const s of scns) {
+      const st = res.styles[s.key];
+      if (st?.status !== 'done') { res.runs[s.key] = { skipped: `its Style is not shown (${st?.status} ${st?.error ?? ''})` }; continue; }
+      const runOut = path.join(out, 'scenarios', `${s.key}-pay`);
+      const budget = s.via === 'compose' ? B.compose : B.pick;
+      const plan = s.designs ? { item: 'P2', backend, ledger: backend === 'claude' ? LEDGER : path.join(out, 'sim-ledger.json'), ledgerModule: 'pay', opPrefix: `pay-p2-${backend}-${Date.now().toString(36)}`, capUsd: B.design, timeoutMin: 45, auto: { maxDesigns: B.maxDesigns, request: { buildingType: 'house', style: st.bibleId, bible: st.bibleId, name: 'PAY S6', notes: 'A home carved into the rock of the hall.' } } } : null;
+      const pf = plan ? path.join(out, `pa-plan-${s.key}.json`) : null;
+      if (plan) writeJson(pf, plan);
+      const a = ['run', s.key, '--brief', '--via', s.via, '--budget', String(budget), '--images', '--style-file', st.file, '--phase', `7c-pay-${backend}`, '--out', runOut,
+        ...(s.via === 'compose' ? ['--brief-ext', path.join(root, 'tools', 'lib', 'pay-compose-ext.json')] : []), ...(s.saveWorld ? ['--save-world', S2.p4World(s.key)] : [])];
+      const slog = path.join(out, `${s.key}.scenario.log`);
+      res.runs[s.key] = await job(backend, { item: 'P2', step: `P2:brief:${s.key}`, capUsd: budget, authSource: c.auth.authSource, minutes: 120 }, async () => {
+        const fd = fs.openSync(slog, 'a');
+        const r = spawnSync(process.execPath, [path.join(root, 'tools', 'scenarios.mjs'), ...a], { cwd: root, stdio: ['ignore', fd, fd], env: { ...c.env, SCENARIOS_ART: path.join(out, 'scenarios'), ARCHITECT_SHOTS_DIR: path.join(out, 'shots'), ...(pf ? { PA_PLAN: pf } : {}) } });
+        fs.closeSync(fd);
+        const b = readJson(path.join(runOut, 'brief.json'), {});
+        const m = readJson(path.join(runOut, 'metrics.json'), {});
+        const se = readJson(path.join(runOut, 'site-entries.json'), null);
+        const rows = (m.rows ?? []).map((x) => ({ id: x.id, pass: x.pass, gated: x.gated, value: String(x.value).slice(0, 160) }));
+        // (the brief's own cost is this job's; the site archetypes are their own ledger jobs, opened by scenario-sb)
+        return { usd: b.costUsd ?? 0, status: b.outcome ?? (b.status ?? `exit ${r.status}`), ended: true, ref: b.designId, error: b.error ?? undefined, data: { exit: r.status, via: s.via, outcome: b.outcome, program: b.program, composed: !!b.composed, pick: b.pick?.outcome, artifactSha: b.artifactSha, rows, failing: rows.filter((x) => x.gated && x.pass === false && x.id !== 'gallery').map((x) => x.id), archetypes: se?.pa?.jobs?.map((j) => ({ lot: j.lot, status: j.status, usd: j.usd, entryId: j.entryId })) ?? null, notShown: se?.pa?.notShown ?? null, savedWorld: s.saveWorld ? S2.p4World(s.key) : null, log: slog, out: runOut } };
+      });
+      writeJson(path.join(out, 'p2.json'), res);
+    }
+  } finally { c.stop(); writeJson(path.join(out, 'p2.json'), res); }
+  report2('P2', backend, res);
+};
+
+/** P3: the two authoring sessions on builder-written briefs (Regions.authorProgram), each on a fresh copy of its pinned site. */
+subs.p3 = async () => {
+  const backend = backendOf();
+  needGo('P3', backend);
+  const out = outOf('P3', backend);
+  const res = { at: new Date().toISOString(), head: gitHead(), backend, sessions: {} };
+  const c = await client(backend, 'P3');
+  const stamp = Date.now().toString(36);
+  try {
+    for (const s of S2.P3_SESSIONS) {
+      const claim = await siteWorld(c.L, s, 'P3');
+      try {
+        res.sessions[s.key] = await job(backend, { item: 'P3', step: `P3:author:${s.key}`, capUsd: S2.BUDGETS.P3.author, authSource: c.auth.authSource, minutes: 60 }, async () => {
+          const d = await c.L.call('dev.region.author', { brief: s.brief, claim, budgetUsd: S2.BUDGETS.P3.author, opKey: `pay-p3-${backend}-${stamp}-${s.key}`, wait: true }, 3_600_000);
+          const r = d.result ?? {};
+          return { usd: d.costUsd ?? r.cost ?? 0, status: r.outcome ?? d.status ?? 'refused', ref: d.designId, error: d.refused ?? d.error ?? undefined, data: { site: s.site, claim, brief: s.brief, status: d.status, outcome: r.outcome ?? null, rounds: r.rounds ?? null, program: r.program ?? null, reason: r.reason ?? null } };
+        });
+      } finally { await c.L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null); }
+      writeJson(path.join(out, 'p3.json'), res);
+    }
+  } finally { c.stop(); writeJson(path.join(out, 'p3.json'), res); }
+  report2('P3', backend, res);
+};
+
+/** P4: the composer on S3's and S6's briefs with the images OFF, each on a clone of the world P2's images-on arm read. */
+subs.p4 = async () => {
+  const backend = backendOf();
+  needGo('P4', backend);
+  const out = outOf('P4', backend);
+  const p2 = readJson(path.join(outOf('P2', backend), 'p2.json'), null);
+  const res = { at: new Date().toISOString(), head: gitHead(), backend, pairs: {} };
+  const c = await client(backend, 'P4');
+  try {
+    for (const s of S2.P2_SCENARIOS.filter((x) => x.saveWorld)) {
+      const on = p2?.runs?.[s.key];
+      const saved = path.join(c.L.SAVES, S2.p4World(s.key));
+      if (!on?.data?.out || !fs.existsSync(saved)) { res.pairs[s.key] = { skipped: `P2's ${s.key} run or its saved world is missing (${saved}): P4 never composes on land generated again` }; continue; }
+      const sc = scnFile(s.scenario);
+      const claim = sc.fixture.claim;
+      const st = p2.styles[s.key];
+      await c.L.fresh(`G6B PAY P4 ${s.key}`, S2.p4World(s.key));
+      await c.L.setRules('exact').catch(() => null);
+      await c.L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange?.[1] ?? 200, (claim[1] + claim[3]) / 2);
+      await c.L.call('dev.waitChunks', { timeoutMs: 180_000 }, 240_000).catch(() => null);
+      await c.L.cmd(`/forceload add ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`);
+      await c.L.settle(5000);
+      try {
+        const off = await job(backend, { item: 'P4', step: `P4:compose:${s.key}`, capUsd: S2.BUDGETS.P4.compose, authSource: c.auth.authSource, minutes: 30 }, async () => {
+          const d = await c.L.call('dev.region.compose', { brief: S2.briefOf(sc), claim, style: st?.bibleId, images: false, budgetUsd: S2.BUDGETS.P4.compose, opKey: `pay-p4-${backend}-${Date.now().toString(36)}-${s.key}`, ext: { [SKIP_PICK]: true }, wait: true }, 1_800_000);
+          const x = composeRead(d);
+          return { usd: x.costUsd, status: x.outcome ?? x.status, ref: x.designId, error: x.error ?? undefined, data: { ...x, plan: d.result?.plan ?? null } };
+        });
+        const onBrief = readJson(path.join(on.data.out, 'brief.json'), {});
+        res.pairs[s.key] = { savedWorld: S2.p4World(s.key), on: { outcome: onBrief.outcome, artifactSha: onBrief.artifactSha, plan: onBrief.plan ?? null, usd: onBrief.costUsd }, off: { outcome: off.data?.outcome, artifactSha: off.data?.artifactSha, plan: off.data?.plan ?? null, usd: off.usd } };
+      } finally { await c.L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null); }
+      writeJson(path.join(out, 'p4.json'), res);
+    }
+  } finally { c.stop(); writeJson(path.join(out, 'p4.json'), res); }
+  abSheet('P4', out, Object.entries(res.pairs).filter(([, p]) => p.on && p.off).map(([k, p]) => ({ pair: k, on: { text: planText(p.on) }, off: { text: planText(p.off) } })), 'Plan pick sheet', 'Two plans per pair, each composed from the same brief on the same land. For each pair, pick the one you prefer (A or B).');
+  report2('P4', backend, res);
+};
+const planText = (x) => `${x.outcome ?? '-'}\n${JSON.stringify(x.plan ?? null, null, 1)}`;
+
+/** P5: the settlement Style job on S3 and S5 with N-7c-4's references (own helper); the off arm is P2's Style of the same scenario. */
+subs.p5 = async () => {
+  const backend = backendOf();
+  needGo('P5', backend);
+  const out = outOf('P5', backend);
+  const p2 = readJson(path.join(outOf('P2', backend), 'p2.json'), {});
+  const res = { at: new Date().toISOString(), head: gitHead(), backend, styles: {} };
+  const h = await Helper.start(path.join(out, 'helper'), backend);
+  try {
+    if (!helperAuthOk(h, backend)) throw Object.assign(new Error(`refusing P5: the helper's auth ${JSON.stringify(h.auth())}`), { code: 2 });
+    for (const s of S2.P5_STYLES) {
+      const files = s.refs.map((r) => path.join(REFS, `${r}.png`));
+      if (!files.every((f) => fs.existsSync(f))) { res.styles[s.key] = { skipped: `references missing in ${REFS}` }; continue; }
+      const blobs = [];
+      for (const [i, f] of files.entries()) blobs.push({ blob: await h.image(f), label: `${s.refs[i]} (gpt-image-2)` });
+      const sc = scnFile(s.scenario);
+      res.styles[s.key] = await job(backend, { item: 'P5', step: `P5:style:${s.key}`, capUsd: S2.BUDGETS.P5.style, authSource: h.auth().authSource, minutes: 40 }, () => styleJob(h, { prompt: S2.briefOf(sc), name: `PAY ${s.key.toUpperCase()} Settlement R`, scope: 'settlement', budgetUsd: S2.BUDGETS.P5.style, ext: { [REF_EXT]: blobs } }));
+      const bj = readJson(res.styles[s.key].file, {});
+      res.styles[s.key].references = bj.references ?? null;
+      writeJson(path.join(out, 'p5.json'), res);
+    }
+  } finally { await h.stop(); writeJson(path.join(out, 'p5.json'), res); }
+  abSheet('P5', out, S2.P5_STYLES.filter((s) => res.styles[s.key]?.status === 'done' && p2.styles?.[s.key]?.status === 'done').map((s) => ({ pair: s.key, on: { img: res.styles[s.key].sheet }, off: { img: p2.styles[s.key].sheet } })), 'Style pick sheet', 'Two Styles per pair for the same place. For each pair, pick the one you prefer (A or B).');
+  report2('P5', backend, res);
+};
+
+/** P6 (optional): one landmark past the cap as a Composite, on our own helper (sim: the kit's composite castle, sim:composite). */
+subs.p6 = async () => {
+  const backend = backendOf();
+  needGo('P6', backend);
+  const out = outOf('P6', backend);
+  const res = { at: new Date().toISOString(), head: gitHead(), backend };
+  const h = await Helper.start(path.join(out, 'helper'), backend);
+  try {
+    if (!helperAuthOk(h, backend)) throw Object.assign(new Error(`refusing P6: the helper's auth ${JSON.stringify(h.auth())}`), { code: 2 });
+    const req = { ...S2.P6_REQUEST, budgetUsd: S2.BUDGETS.P6.design, ext: { ...S2.P6_REQUEST.ext, ...(backend === 'sim' ? { 'architect:sim': ['composite'] } : {}) } };
+    res.design = await job(backend, { item: 'P6', step: 'P6:composite', capUsd: S2.BUDGETS.P6.design, authSource: h.auth().authSource, minutes: 60 }, async () => {
+      const a = await h.send({ type: 'design.request', request: req });
+      const t0 = Date.now();
+      let d;
+      for (;;) {
+        d = h.designs?.get(a.designId);
+        if (d && ['done', 'failed', 'cancelled'].includes(d.status)) break;
+        if (Date.now() - t0 > 60 * 60_000) { d = { ...(d ?? {}), status: 'timeout' }; break; }
+        await sleep(5000);
+      }
+      const entry = d.blueprintId ?? d.entryId ?? null;
+      const bp = entry ? readJson(path.join(h.dir, 'library', entry, `${entry}.blueprint.json`), {}) : {};
+      return { usd: d.cost?.usd ?? 0, status: d.status, ended: d.status !== 'timeout', ref: a.designId, error: d.error ?? undefined, data: { entryId: entry, composite: bp.ext?.['architect_mc:composite'] ?? bp.ext?.composite ?? null, size: bp.size ?? null } };
+    });
+  } finally { await h.stop(); writeJson(path.join(out, 'p6.json'), res); }
+  report2('P6', backend, res);
+};
+
+/** R: the reserve is retries only: every item's command takes --retry (charged to R, one per item; the guard refuses a second). */
+subs.r = async () => { console.log('R: no command of its own. Re-run an item\'s command with --retry (and --scn/--attempt where it takes them): its jobs are charged to R, at most one retry per item (tools/lib/pay-ledger.mjs guard).'); };
+
+/** A blind A/B sheet: per pair, the two arms as A and B (sides randomised), the key in its own file (never on the sheet). */
+function abSheet(item, out, pairs, title, intro) {
+  const dir = path.join(out, 'ab');
+  fs.mkdirSync(dir, { recursive: true });
+  const key = {};
+  const html = [`<!doctype html><meta charset="utf-8"><title>${title}</title>`, '<style>body{font:16px system-ui;margin:24px;max-width:1200px}.row{display:flex;gap:12px}figure{flex:1;margin:0}img{width:100%;border:1px solid #888}pre{white-space:pre-wrap;font-size:12px;border:1px solid #888;padding:8px;max-height:600px;overflow:auto}</style>', `<h1>${title}</h1><p>${intro}</p>`];
+  pairs.forEach((p, i) => {
+    const flip = crypto.randomBytes(1)[0] & 1;
+    key[p.pair] = flip ? { A: 'off', B: 'on' } : { A: 'on', B: 'off' };
+    const cell = (side) => { const arm = p[key[p.pair][side]]; if (arm.img && fs.existsSync(arm.img)) { const f = `pair-${i + 1}-${side}${path.extname(arm.img)}`; fs.copyFileSync(arm.img, path.join(dir, f)); return `<figure><img src="${f}"><figcaption>${side}</figcaption></figure>`; } return `<figure><pre>${String(arm.text ?? '').replace(/</g, '&lt;')}</pre><figcaption>${side}</figcaption></figure>`; };
+    html.push(`<h2>Pair ${i + 1}</h2><div class="row">${cell('A')}${cell('B')}</div><p>Pick: A / B</p>`);
+  });
+  fs.writeFileSync(path.join(dir, 'sheet.html'), `${html.join('\n')}\n`);
+  writeJson(path.join(out, 'ab-key.json'), { at: new Date().toISOString(), note: `which arm each side shows (on = the references or images on; off = without). Not for Noah until his picks are recorded.`, key });
+  log(`${item} A/B sheet: ${path.join(dir, 'sheet.html')} (${pairs.length} pair(s)); key ${path.join(out, 'ab-key.json')}`);
+}
+function report2(item, backend, res) {
+  const L = P.readLedger(LEDGER);
+  log(`${item} (${backend}) done; ${backend === 'claude' ? `${item} spent $${L.items[item].spentUsd} of its ceiling $${P.ceilingOf(item)}; ledger $${L.totalUsd}` : '$0 (sim)'}; ${path.join(outOf(item, backend), `${item.toLowerCase()}.json`)}`);
+}
+
 // ---- the entry --------------------------------------------------------------------------------------------------------------------
 
-const STAGE2 = new Set(['P2', 'P3', 'P4', 'P5', 'P6', 'R']);
 async function only(item) {
-  if (STAGE2.has(item)) throw Object.assign(new Error(`refusing --only ${item}: stage 2 (P2-P6 and R start only after the coordinator relays Noah's go on P1's restated estimates)`), { code: 2 });
   if (item === 'P0') { await subs['p0-styles'](); await subs['p0-verdict'](); return; }
   if (item === 'P1') { await subs['p1-style'](); await subs['p1-compose'](); await subs.restate(); return; }
-  throw new Error(`--only P0|P1 (got ${item})`);
+  // (stage 2) P2-P6 and R: --backend sim ($0) by default; --backend claude needs the coordinator's recorded go `<item>:go`
+  const k = item.toLowerCase();
+  if (subs[k] && /^(p[2-6]|r)$/.test(k)) { await subs[k](); return; }
+  throw new Error(`--only P0|P1|P2|P3|P4|P5|P6|R (got ${item})`);
 }
 
 const sub = args[0];
