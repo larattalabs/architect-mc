@@ -53,7 +53,7 @@ export async function registerFKB(steps, h) {
   const slabsNear = async (at) => call('dev.fk.slabs', { pos: P(at) }, 30_000);
 
   /** fk_hall provided 1 (the fixture program, kit/test/fixtures/fk), written to the library as a given program's entry. */
-  async function entry({ mutate } = {}) {
+  async function entry({ mutate, keepId = false } = {}) {
     await G.designs(ctx);
     const src = fs.readFileSync(path.join(root, 'kit', 'test', 'fixtures', 'fk', 'fk_hall.mjs'), 'utf8')
       .replaceAll("'../lib/", `'${pathToFileURL(path.join(root, 'kit', 'lib')).href}/`);
@@ -65,14 +65,14 @@ export async function registerFKB(steps, h) {
     const bp = mod.default({ slots: 4, count: 18, provided: 1 });
     if (mutate) mutate(bp);
     const ck = checkBlueprint(bp, {});
-    const id = mutate ? 'fkb_bad' : 'fk_hall';
-    if (mutate) bp.id = id;
+    const id = mutate && !keepId ? 'fkb_bad' : 'fk_hall';
+    if (mutate && !keepId) bp.id = id;
     const dir = path.join(L.LIBRARY, id);
     fs.rmSync(dir, { recursive: true, force: true });
     const w = writeBlueprint(bp, dir);
     const j = JSON.parse(fs.readFileSync(w.jsonPath, 'utf8'));
     j.givenProgram = { sha: 'gate-fixture', opKey: `gate.fkb.${id}` };
-    if (mutate) j.id = id;
+    if (mutate && !keepId) j.id = id;
     fs.writeFileSync(w.jsonPath, `${JSON.stringify(j, null, 2)}\n`);
     await L.cmd('/architect reload');
     await L.settle(1500);
@@ -89,12 +89,12 @@ export async function registerFKB(steps, h) {
   }
 
   /** A fresh survival world with the stockpile and fk_hall provided 1; the town grown. */
-  async function town(name) {
+  async function town(name, { mutate } = {}) {
     await G.survivalBase(ctx);
     await L.fresh(name, G.SURV);
     await L.setRules('exact');
     await cmd('/weather clear');
-    const { ck } = await entry();
+    const { ck } = await entry(mutate ? { mutate, keepId: true } : {});
     check(ck.ok, `${name}: fk_hall (provided 1: petrified slabs declared provided) checks clean: ${ck.errors.slice(0, 3).join('; ') || 'OK'}`);
     await L.tp(CX + 80, 80, CZ + 56);
     const gy = await groundY();
@@ -160,13 +160,46 @@ export async function registerFKB(steps, h) {
     return { s, fed };
   }
 
+  /**
+   * (FK-b fix) A declared hopper swapped for an empty dropper between the builder's rescans, the site resumed in the same server task
+   * with its bill in the stock: the fill finds the swapped block and writes nothing (no provided item ever in the dropper); the hopper
+   * put back, the fill goes on. Returns what it delivered.
+   */
+  async function swapCase(tag, site) {
+    const s0 = await fk(site);
+    const at = s0.containers?.[2]?.at; // a hopper away from the lever (the lock disables the first)
+    const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: true }, 60_000);
+    check(!pr.refused, `${tag}: ${site} paused for the swap`);
+    const fed = await deliver({ fill: true });
+    const r0 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
+    let sw = null;
+    for (let i = 0; i < 20 && !sw?.swapped; i++) {
+      sw = await call('dev.fk.swap', { pos: P(at), block: 'minecraft:dropper', site }, 30_000);
+      if (sw?.error) break;
+    }
+    await L.sleep(3000);
+    const r1 = (await call('dev.fk.guard', {}, 10_000)).swapRefused;
+    const inDropper = (await hand(at, {})).holds ?? {};
+    const s1 = await fk(site);
+    const sl = await slabsNear(at);
+    const res = { at, swap: sw, refused: r1 - r0, inDropper, phase: s1.phase ?? null, provided: s1.provided ?? null, slabs: sl };
+    log(`  ${tag} swap: ${json(res)}`);
+    check(sw?.swapped === true && sw.block === 'minecraft:dropper' && r1 - r0 >= 1 && sum(inDropper) === 0 && slabsOf(s1) === 0 && s1.phase == null
+      && sl.entities === 0 && sl.player === 0,
+      `${tag}: a declared hopper swapped for an empty dropper mid-fill (${at}): the fill saw the swap (${r1 - r0} refused attempt(s)) and wrote nothing: the dropper holds ${json(inDropper)}, no slab in any container (${slabsOf(s1)}), phase ${s1.phase ?? 'none'}, no slab loose or with the player`, res);
+    await cmd(`/setblock ${at.join(' ')} minecraft:hopper[facing=down]`);
+    return fed;
+  }
+
   /** A town built, filled and PLACED; its fk site. */
-  async function built(W, tag, skip) {
+  async function built(W, tag, skip, { swap = false } = {}) {
     const site = await fkSite(skip);
     check(!!site, `${tag}: fk_hall's site joined the feed (${site})`);
     if (!site) return null;
     await blocksBuilt(tag, site);
+    const fed0 = swap ? await swapCase(tag, site) : {};
     const f = await filled(site);
+    f.fed = G.plus(fed0, f.fed);
     const r0 = await G.feed({ L }, W.region, { fraction: 1, until: (st, rs) => st.view.state === 'PLACED' && rs.build?.done, timeoutMs: 900_000, every: 2500 });
     check(r0.last.st.view.state === 'PLACED', `${tag}: the town PLACED`);
     return { site, s: await fk(site), fed: f.fed };
@@ -201,7 +234,7 @@ export async function registerFKB(steps, h) {
     out.quote = { bom: q.bom, fill: q.bomParts?.['fill:cottage_1'], refused: q.refused };
     check(!q.refused && G.same(q.bomParts?.['fill:cottage_1'], BILL) && !(SLAB in (q.bom ?? {})),
       `the quote: the piece fill:cottage_1 is the filter items only ${json(q.bomParts?.['fill:cottage_1'])}; no slab anywhere in the bill`, out.quote);
-    const b = await built(W, 'fkb-survival');
+    const b = await built(W, 'fkb-survival', undefined, { swap: true });
     if (!b) { await L.leaveWorld(); return out; }
     let s = b.s;
     const site = b.site;
@@ -463,10 +496,54 @@ export async function registerFKB(steps, h) {
     return res;
   }
 
+  /**
+   * (FK-b fix) FK3 with somewhere to eject: fk_hall with a chest under its third hopper (that hopper pushes down into it). The world is
+   * saved ahead of the ledger at FK3; at the restart the reconcile runs at the start of the first tick, before the hopper can move an
+   * item: the fill clears and fills once (the bill once), and no slab ever leaves a declared hopper (the chest gets the billed item only).
+   */
+  async function ejectCase() {
+    const tag = 'FK3-eject';
+    let chestAt = null;
+    const W = await town('G6B FKB FK3 eject', { mutate: (bp) => bp.set(3, 1, 1, 'minecraft:chest', { facing: 'south' }) });
+    const site = await fkSite();
+    if (!site) { check(false, `${tag}: no fk_hall site`); await L.leaveWorld(); return null; }
+    await blocksBuilt(tag, site);
+    const at = (await fk(site)).containers?.[2]?.at;
+    chestAt = [at[0], at[1] - 1, at[2]];
+    const pr = await call('dev.stockpile.pause', { owner: G.OWNER, site, paused: true }, 60_000);
+    check(!pr.refused, `${tag}: ${site} paused`);
+    const acc = await deliver({ fill: true });
+    check(G.same(acc, BILL), `${tag}: the filter items delivered while it is paused (${json(acc)})`);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/save-all flush');
+    await call('dev.journal.killAt', { point: 'FK3' }, 10_000);
+    call('dev.stockpile.pause', { owner: G.OWNER, site, paused: false }, 60_000).catch(() => null);
+    if (!(await halt(tag))) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); return null; }
+    const S = savedLedger(W.name);
+    const markerSaved = (S?.filled ?? []).some((k) => k.startsWith(`site:${site}@`));
+    await restart(W.name);
+    const f = await filled(site, { ms: 300_000 });
+    await L.sleep(4000); // the hopper has had time to push (one item per 8 ticks)
+    const s = await fk(site);
+    const chest = (await hand(chestAt, {})).holds ?? {};
+    const L2 = (await pile()).ledger;
+    const charged = only(G.minus(L2.consumed, S.consumed), ALL);
+    const sl = await slabsNear(at);
+    const res = { markerSaved, chest, charged, fed: f.fed, phase: s.phase, holds: s.containers?.map((c) => c.holds), provided: s.provided, slabs: sl };
+    log(`  ${tag}: ${json(res).slice(0, 700)}`);
+    check(!markerSaved && s.state === 'BUILT' && s.phase === 'UNLOCKED' && slabsOf(s) === SLABS && G.same(s.provided, { [SLAB]: SLABS }) && G.same(charged, BILL),
+      `${tag}: the world saved ahead of the ledger (marker on disk: ${markerSaved}); after the restart the fill ends once (${s.phase}): the slabs ${slabsOf(s)} in the declared hoppers, the bill charged once ${json(charged)}`, res);
+    check(!(SLAB in chest) && sl.entities === 0 && sl.player === 0 && (chest[FILTERS[2]] ?? 0) > 0,
+      `${tag}: the hopper over the chest pushed its billed item (${chest[FILTERS[2]] ?? 0} ${FILTERS[2]}) and never a slab (the chest ${json(chest)}); no slab loose or with the player`, res);
+    await L.leaveWorld();
+    return res;
+  }
+
   steps.fkbcrash = async () => {
     await ensure();
     const out = {};
     for (const p of ['FK2', 'FK3']) out[p] = await fillCase(p);
+    out.FK3eject = await ejectCase();
     for (const p of ['FKC1', 'FKC2']) out[p] = await removalCase(p);
     out.STRIP = await stripCase();
     spendZero();

@@ -141,8 +141,11 @@ public final class Builder {
 		RegionTargets.init(); // 6c RS (§10): a survival region's free pass rescanned at the world's start
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::reconcileAtStart); // (slice RL) after the above: the cells against the saved ledger
 		// (M5 FK) unfinished fills and custody at load: after every SERVER_STARTED listener (the queue file's removals, RL's reconcile), on the
-		// first server tick ({@link #tick})
+		// first server tick ({@link #fillsAtStart})
 		ServerLifecycleEvents.SERVER_STARTED.register(srv -> fkAtStart = true);
+		// (FK-b fix) at the START of the first server tick, before any level ticks: a hopper of a fill the world saved ahead of its ledger
+		// (FK3) must not move an item before the reconcile has seen the container
+		ServerTickEvents.START_SERVER_TICK.register(Builder::fillsAtStart);
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -1691,7 +1694,13 @@ public final class Builder {
 	/** (M5 FK) Set at SERVER_STARTED: the first tick runs {@link Fills#atStart}. */
 	private static volatile boolean fkAtStart;
 
-	static void tick(MinecraftServer srv) {
+	/** (TEST, {@code dev.fk.swap}) The builder's tick count: a rescan runs in the step of a tick whose count is a multiple of 20. */
+	public static long devTicks() {
+		return ticks;
+	}
+
+	/** (M5 FK; FK-b fix) {@link Fills#atStart} once, at the start of the first server tick: before any level (a hopper) ticks. */
+	static void fillsAtStart(MinecraftServer srv) {
 		if (fkAtStart) {
 			fkAtStart = false;
 			try {
@@ -1700,6 +1709,10 @@ public final class Builder {
 				Architect.LOGGER.error("Fills at start failed", e);
 			}
 		}
+	}
+
+	static void tick(MinecraftServer srv) {
+		fillsAtStart(srv); // a no-op after the first tick's START listener ran it
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {

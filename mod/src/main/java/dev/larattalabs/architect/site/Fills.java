@@ -340,15 +340,68 @@ public final class Fills {
 	}
 
 	private static @Nullable JsonObject entryJson(@Nullable MinecraftServer srv, Site s) {
+		Blueprints.Entry e = entryOf(srv, s);
+		return e == null ? null : e.json();
+	}
+
+	private static Blueprints.@Nullable Entry entryOf(@Nullable MinecraftServer srv, Site s) {
 		int v = s.versioning().version();
 		if (srv != null && v > 0) {
 			Blueprints.Version ver = Blueprints.version(srv, s.blueprint(), v);
 			if (ver != null) {
-				return ver.entry().json();
+				return ver.entry();
 			}
 		}
-		Blueprints.Entry e = Blueprints.entry(s.blueprint());
-		return e == null ? null : e.json();
+		return Blueprints.entry(s.blueprint());
+	}
+
+	/** (FK-b fix) Per site version: each declared container's template block, by its template cell ({@link BlockPos#asLong}). */
+	private static final Map<String, Map<Long, Block>> DECLARED_BLOCKS = new ConcurrentHashMap<>();
+
+	/** (FK-b fix) The template's block at a declared container's cell, or null (no template, or no block there). */
+	static @Nullable Block declaredBlock(@Nullable MinecraftServer srv, Site s, Box b) {
+		String key = s.blueprint() + "|" + s.versioning().version() + "|" + Blueprints.revision();
+		Map<Long, Block> m = DECLARED_BLOCKS.computeIfAbsent(key, k -> {
+			Blueprints.Entry e = entryOf(srv, s);
+			Spec spec = of(srv, s);
+			if (e == null || e.template() == null || spec == null) {
+				return Map.of();
+			}
+			dev.larattalabs.architect.placement.TemplateGrid g = dev.larattalabs.architect.placement.TemplateGrid.of(e);
+			java.util.Set<Long> want = new java.util.HashSet<>();
+			for (Box bx : spec.containers()) {
+				want.add(BlockPos.asLong(bx.x(), bx.y(), bx.z()));
+			}
+			Map<Long, Block> out = new java.util.HashMap<>();
+			for (int i = 0; i < g.states().length; i++) {
+				long at = BlockPos.asLong(g.xyz()[3 * i], g.xyz()[3 * i + 1], g.xyz()[3 * i + 2]);
+				if (want.contains(at)) {
+					out.put(at, g.states()[i].getBlock());
+				}
+			}
+			return Map.copyOf(out);
+		});
+		return m.get(BlockPos.asLong(b.x(), b.y(), b.z()));
+	}
+
+	/**
+	 * (FK-b fix) Whether provided items may be written into the live block at a declared container's cell: always for a box with none;
+	 * else the live block is the template's declared block and never a dropper or dispenser ({@link #PROVIDED_NOT_IN}). A swapped block
+	 * (a hopper replaced by a dropper between rescans) or an unknown template is refused: fail closed.
+	 */
+	static boolean providedFits(@Nullable MinecraftServer srv, Site s, Box b, BlockState live) {
+		if (b.providedItems().isEmpty()) {
+			return true;
+		}
+		return providedFits(declaredBlock(srv, s, b), live.getBlock());
+	}
+
+	/** (FK-b fix; TEST, {@code dev.fk.guard}) How many fill attempts found a declared container's block swapped (no provided item written). */
+	public static long SWAP_REFUSED;
+
+	/** (FK-b fix, pure) The rule of {@link #providedFits(MinecraftServer, Site, Box, BlockState)} for a box with provided items. */
+	static boolean providedFits(@Nullable Block declared, Block live) {
+		return declared != null && live == declared && !PROVIDED_NOT_IN.contains(live);
 	}
 
 	/** A template cell of a site in the world (the placement's rotation from the template box's corner). */
@@ -569,6 +622,12 @@ public final class Fills {
 				blocked.add(p); // the declared block is not a container (it can't stand: the cells are built); never filled
 				continue;
 			}
+			if (!providedFits(srv, s, spec.containers().get(i), level.getBlockState(p))) {
+				// (FK-b fix) another block stands there (a hopper swapped for a dropper): no provided item is written; the fill waits
+				SWAP_REFUSED++;
+				blocked.add(p);
+				continue;
+			}
 			if (c.isEmpty()) {
 				continue;
 			}
@@ -675,6 +734,10 @@ public final class Fills {
 			if (!(be instanceof Container c)) {
 				continue;
 			}
+			if (!providedFits(srv, s, spec.containers().get(i), level.getBlockState(p))) {
+				Architect.LOGGER.warn("Site {}: the container at {} is not its declared block; its provided items not written", s.id(), p.toShortString());
+				continue;
+			}
 			if (c.isEmpty()) {
 				write(level, p, c, spec.containers().get(i));
 			} else if (!holdsExactly(c, spec.containers().get(i))) {
@@ -697,6 +760,14 @@ public final class Fills {
 		}
 		Stockpiles.Pile pile = s.construction() == null ? null : Stockpiles.pileOf(s);
 		return pile != null && pile.ledger().filled(Builder.creditKey(s));
+	}
+
+	/**
+	 * (FK-b fix) Whether a site's declared containers are guarded ({@link FillGuard}): its fill written ({@link #filledSite}) or being
+	 * written ({@link #FILLING}: a survival fill the world saved ahead of its ledger, FK3, holds its items until the reconcile at start).
+	 */
+	static boolean guardedSite(Site s) {
+		return FILLING.equals(phase(s)) || filledSite(s);
 	}
 
 	/** The declared containers of a filled site (FILLED or UNLOCKED), by world cell, with their declarations; empty for any other site. */
@@ -796,9 +867,11 @@ public final class Fills {
 			if (!(level.getBlockEntity(p) instanceof Container c)) {
 				continue;
 			}
+			// (FK-b fix) a swapped block takes no provided item back (they end destroyed below, never dropped); billed items still go back
+			boolean fits = providedFits(level.getServer(), s, spec.containers().get(i), level.getBlockState(p));
 			for (Stack st : spec.containers().get(i).items()) {
 				int n = Math.min(st.count(), held.getOrDefault(st.item(), 0));
-				if (n <= 0 || st.slot() >= c.getContainerSize() || !c.getItem(st.slot()).isEmpty()) {
+				if (n <= 0 || st.provided() && !fits || st.slot() >= c.getContainerSize() || !c.getItem(st.slot()).isEmpty()) {
 					continue;
 				}
 				c.setItem(st.slot(), new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(st.item())), n));

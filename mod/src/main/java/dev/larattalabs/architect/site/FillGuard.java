@@ -30,7 +30,8 @@ import org.jspecify.annotations.Nullable;
  * Fabric Transfer API ({@code ContainerSlotWrapperMixin}, optional: {@link #transferGuardApplied()}).
  *
  * <p>The index is rebuilt lazily after {@link #invalidate} (any fill phase written, a fill's commit, the load), from the sites whose fill
- * is written ({@link Fills#filledSite}: the phase or the ledger's marker, so creative sites count). An entry stays while its site's record
+ * is written or being written ({@link Fills#guardedSite}: FILLING, FILLED, UNLOCKED or the ledger's marker, so creative sites count, and
+ * so does a FILLING site the world saved ahead of its ledger (FK3) until the reconcile at start has run). An entry stays while its site's record
  * stands (a removal's custody take keeps it: a removal ending unwritten writes the slabs back), and a hit is checked against the live
  * record, so a removed site's cells stop being guarded at once. Server thread.
  */
@@ -81,10 +82,10 @@ public final class FillGuard {
 		dirty = false;
 	}
 
-	/** A site's declared containers with provided items, by world cell, when its fill is written; empty otherwise. */
+	/** A site's declared containers with provided items, by world cell, when its fill is written or being written; empty otherwise. */
 	static Map<Long, Set<Item>> declared(MinecraftServer srv, Site s) {
 		Fills.Spec spec = Fills.of(srv, s);
-		if (spec == null || spec.provided().isEmpty() || !Fills.filledSite(s)) {
+		if (spec == null || spec.provided().isEmpty() || !Fills.guardedSite(s)) {
 			return Map.of();
 		}
 		Map<Long, Set<Item>> out = new HashMap<>();
@@ -115,7 +116,7 @@ public final class FillGuard {
 			return null;
 		}
 		Site s = Sites.get(e.site());
-		if (s == null || !Fills.filledSite(s)) {
+		if (s == null || !Fills.guardedSite(s)) {
 			dirty = true; // the site left (removed, or its record changed): the index follows at the next lookup
 			return null;
 		}

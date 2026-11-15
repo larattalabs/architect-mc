@@ -185,4 +185,25 @@ class FillsFKBTest {
 		assertFalse(l.toJson().has("provided"));
 		assertEquals(new TreeMap<>(), new TreeMap<>(l.provided(KEY)));
 	}
+
+	@Test
+	void providedItemsGoOnlyIntoTheDeclaredBlockNeverADropperOrDispenser() {
+		// (FK-b fix) the live block at a declared cell: a hopper swapped for a dropper (or a dispenser, a chest) takes no provided item
+		assertTrue(Fills.providedFits(Blocks.HOPPER, Blocks.HOPPER));
+		assertTrue(Fills.providedFits(Blocks.CHEST, Blocks.CHEST));
+		assertFalse(Fills.providedFits(Blocks.HOPPER, Blocks.DROPPER));
+		assertFalse(Fills.providedFits(Blocks.HOPPER, Blocks.DISPENSER));
+		assertFalse(Fills.providedFits(Blocks.HOPPER, Blocks.CHEST));
+		assertFalse(Fills.providedFits(Blocks.DROPPER, Blocks.DROPPER)); // never, even declared (the placement refuses such an entry)
+		assertFalse(Fills.providedFits(null, Blocks.HOPPER)); // no template: fail closed
+	}
+
+	@Test
+	void aFillingSiteIsGuardedFromTheStart() throws Exception {
+		// (FK-b fix) the reconcile at start runs at the START of the first server tick, before any level (a hopper) ticks
+		String src = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/Builder.java"));
+		assertTrue(src.contains("ServerTickEvents.START_SERVER_TICK.register(Builder::fillsAtStart)"), "the fill reconcile runs at START_SERVER_TICK");
+		String guard = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/dev/larattalabs/architect/site/FillGuard.java"));
+		assertFalse(guard.contains("Fills.filledSite("), "the guard asks guardedSite (FILLING counts), never filledSite alone");
+	}
 }
