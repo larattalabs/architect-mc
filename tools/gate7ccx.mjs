@@ -242,7 +242,16 @@ steps.kinds = async () => {
     if (kind === 'ladder') {
       // the hub's "Build a link…" (Library, Placed here): the same connector mode as the key, the screen closed
       await call('dev.ui.open', { tab: 'library' }, 10_000);
+      await L.settle(800);
       await call('dev.ui.click', { control: 'library:placed' }, 10_000);
+      // (the hit boxes are drawn per frame: wait until the Placed view's footer has the button)
+      let ui = null;
+      for (let i = 0; i < 20; i++) {
+        await L.settle(500);
+        ui = await call('dev.ui.state', {}, 10_000);
+        if ((ui.controls ?? []).some((c) => c.id === 'build_link')) break;
+      }
+      o.hubControls = (ui?.controls ?? []).filter((c) => /build_link|import|reload|library:/.test(c.id)).map((c) => [c.id, c.state]);
       await call('dev.ui.click', { control: 'build_link' }, 10_000);
       await L.settle(500);
       const m = await plotState();
