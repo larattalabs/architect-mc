@@ -974,7 +974,10 @@ steps.look = async () => {
 
 {
   const { registerIG } = await import('./lib/gatem5ig.mjs');
-  await registerIG(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest, cellsOf, diff, haltWait, removeRegion, OWNER });
+  const ig = await registerIG(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest, cellsOf, diff, haltWait, removeRegion, OWNER });
+  // ------------------------------------------------------------------ (slice SAD) sadunit, sadsurvival, sadcrash, sadinstant: tools/lib/gatemsad.mjs
+  const { registerSAD } = await import('./lib/gatemsad.mjs');
+  await registerSAD(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, growPlan, rvState, rvWait, root, javaTests, apiJars, nodeTest, cellsOf, diff, haltWait, removeRegion, ig });
 }
 
 // ------------------------------------------------------------------ (slice SA, A3) saroad: tools/lib/gatesa-road.mjs

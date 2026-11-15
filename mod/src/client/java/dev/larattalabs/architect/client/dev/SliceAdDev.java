@@ -35,8 +35,9 @@ public final class SliceAdDev {
 
 	public static void init() {
 		DevBridge.register("dev.ad.settlement", 120_000, "{owner, entry, streetZ, y, lots: [{id, x, z, sx, sz, north}], spans: [[x0, x1]...], group?, settlement?, "
-			+ "build?, keys?: [street item keys], stage?: stage1} - (6d AD) queues a Steward-shaped VillageLayout build as a batch (street first, then the lots) -> {batchId} or "
-			+ "{refused}", (req, mc) -> {
+			+ "build?, keys?: [street item keys], stage?: stage1, mode?: instant|construction, sharedCrate?: false, crateAt?: [x,y,z]} - (6d AD) queues a "
+			+ "Steward-shaped VillageLayout build as a batch (street first, then the lots); (SAD) mode construction builds it from materials (a Supplied "
+			+ "town: the owner's stockpile, else the batch's shared crate at crateAt) -> {batchId} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String owner = f.optStr("owner", null);
 				String entry = f.nonBlank("entry");
@@ -49,6 +50,9 @@ public final class SliceAdDev {
 				JsonArray lots = req.getAsJsonArray("lots");
 				JsonArray spans = req.has("spans") ? req.getAsJsonArray("spans") : new JsonArray();
 				JsonArray keys = req.has("keys") ? req.getAsJsonArray("keys") : null;
+				Mode mode = "construction".equals(f.optStr("mode", "instant")) ? Mode.CONSTRUCTION : Mode.INSTANT;
+				boolean shared = req.has("sharedCrate") && req.get("sharedCrate").getAsBoolean();
+				BlockPos crateAt = req.get("crateAt") instanceof JsonArray ca ? new BlockPos(ca.get(0).getAsInt(), ca.get(1).getAsInt(), ca.get(2).getAsInt()) : null;
 				return ServerTasks.callOnServer(s -> {
 					var level = s.overworld();
 					var sites = ArchitectApi.get().sites(s);
@@ -65,7 +69,7 @@ public final class SliceAdDev {
 						ext.addProperty("steward_mc:street_x0", x0);
 						ext.addProperty("steward_mc:street_x1", x1);
 						ext.addProperty("steward_mc:build", build);
-						RoadRequest rr = new RoadRequest(level, List.of(new BlockPos(x0, y, streetZ), new BlockPos(x1, y, streetZ)), 3, null, null, true, false, Mode.INSTANT, owner,
+						RoadRequest rr = new RoadRequest(level, List.of(new BlockPos(x0, y, streetZ), new BlockPos(x1, y, streetZ)), 3, null, null, true, false, mode, owner,
 							ext, null, false);
 						String key = keys != null && i < keys.size() ? keys.get(i).getAsString() : i == 0 ? "street" : "street#" + (i + 1);
 						items.add(Batch.Item.road(key, rr, "street", List.of()));
@@ -87,7 +91,7 @@ public final class SliceAdDev {
 						ext.addProperty("steward_mc:lot", id);
 						ext.addProperty("steward_mc:role", l.has("role") ? l.get("role").getAsString() : "house");
 						ext.addProperty("steward_mc:build", build);
-						PlaceRequest pr = new PlaceRequest(entry, level, fit.origin(), fit.rotation(), Mode.INSTANT, owner, ext, false, null);
+						PlaceRequest pr = new PlaceRequest(entry, level, fit.origin(), fit.rotation(), mode, owner, ext, false, null);
 						items.add(new Batch.Item(id, pr, lotStage, List.of(), null, null, null));
 						lotKeys.add(id);
 					}
@@ -96,7 +100,7 @@ public final class SliceAdDev {
 					bext.addProperty("steward_mc:settlement", settlement);
 					bext.addProperty("steward_mc:build", build);
 					Batch b = new Batch(null, owner, bext, group, items, stages, Batch.WaitPolicy.DEFAULT, dev.larattalabs.architect.api.LoadPolicy.LOADED_ONLY, null, false,
-						true, false, null, null);
+						true, shared, crateAt, null);
 					return sites.queue(b);
 				}).thenCompose(x -> x).handle((id, e) -> {
 					JsonObject o = new JsonObject();
