@@ -103,7 +103,7 @@ import { collect as collectCoverage, javaLogOption, snapshotStart } from './lib/
 import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDumps as jacocoRequestDumps } from './lib/jacoco.mjs';
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
-import { stallMinutes, stallWatch } from './lib/stall-watch.mjs';
+import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
@@ -1780,31 +1780,14 @@ function runProcess(sh, step, logFile) {
     // nothing for stallAfterFailMin minutes is killed now, not at its timeout; the failed-step path below stops the client by PID
     let stalled = null;
     const stallMin = stallMinutes(step, cfg);
-    const watch = stallWatch({ idleMs: stallMin * 60_000, barsRecorded: recordsTiming(step) });
-    let readAt = fs.statSync(logFile).size;
-    const stallTimer = stallMin > 0 ? setInterval(() => {
-      try {
-        const size = fs.statSync(logFile).size;
-        if (size > readAt) {
-          const rfd = fs.openSync(logFile, 'r');
-          const buf = Buffer.alloc(Math.min(size - readAt, 4 << 20));
-          fs.readSync(rfd, buf, 0, buf.length, size - buf.length);
-          fs.closeSync(rfd);
-          readAt = size;
-          watch.feed(buf.toString('utf8'));
-        }
-      } catch {
-        // the log is read again next tick
-      }
-      const st = stalled ? null : watch.check();
-      if (st) {
-        stalled = st;
-        log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
-        killGroup(child.pid, 'SIGTERM');
-        clearTimeout(killTimer);
-        killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
-      }
-    }, Number(process.env.GATE_STALL_POLL_MS ?? 10_000)) : null;
+    const watch = stallMin > 0 ? stallWatch({ idleMs: stallMin * 60_000, barsRecorded: recordsTiming(step) }) : null;
+    const stallTimer = watchLogFile({ logFile, watch, pollMs: Number(process.env.GATE_STALL_POLL_MS ?? 10_000), fsImpl: fs, onStall: (st) => {
+      stalled = st;
+      log(`  STALLED: no output for ${fmtDur(st.idleMs / 1000)} after "${st.failLine.replace(/^\[[\d:]+\] /, '')}": killing step group ${child.pid} (stallAfterFailMin ${stallMin})`, sh);
+      killGroup(child.pid, 'SIGTERM');
+      clearTimeout(killTimer);
+      killTimer = setTimeout(() => killGroup(child.pid, 'SIGKILL'), 20_000);
+    } });
     const timer = setTimeout(() => {
       timedOut = true;
       log(`  TIMEOUT after ${step.effTimeoutMin} min (${step.timeoutSource}): killing step group ${child.pid}`, sh);
@@ -1814,14 +1797,14 @@ function runProcess(sh, step, logFile) {
     }, step.effTimeoutMin * 60_000);
     child.on('error', (e) => {
       clearTimeout(timer);
-      clearInterval(stallTimer);
+      stallTimer.stop();
       fs.writeSync(fd, `spawn error: ${e.message}\n`);
       resolve({ code: 127, timedOut: false });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
       clearTimeout(killTimer);
-      clearInterval(stallTimer);
+      stallTimer.stop();
       killGroup(child.pid, 'SIGTERM'); // leftovers of its own group (vitest workers, ...)
       if (stalled) fs.writeSync(fd, `\n# ${new Date().toISOString()} gate-run: STALLED, no output for ${fmtDur(stalled.idleMs / 1000)} after a FAIL: the step group was killed\n`);
       fs.closeSync(fd);
