@@ -105,6 +105,7 @@ import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch, watchLogFile } from './lib/stall-watch.mjs';
 import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
+import { scopeChangeUnits } from './lib/change-units.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
@@ -340,6 +341,8 @@ function select() {
       for (const s of t.fallback) addW(s, 'unmapped files: the safe default');
       info.notes.push(`unmapped files: the safe default added ${t.fallback.join(' ')}`);
     }
+    // (GI2) the change tier's unit step is unit-scope; the full suites only for a step that waits for one (tools/lib/change-units.mjs)
+    scopeChangeUnits({ want, why, steps: cfg.steps, addW });
   } else if (chainName === 'slice') {
     // slice = the unit suites + apijars (api-compat) + the impact map's change and slice steps (the slice's own gate steps, found by
     // the impact rule of its driver). No `quick`. A diff of only ignored paths (docs) runs nothing, as for change.
@@ -974,6 +977,7 @@ function childEnv(sh, extra = {}, { cpuShares = null } = {}) {
   if (runShared.unitModRun) env.GATE_UNIT_MOD_RUN = runShared.unitModRun;
   // (GI2) the frozen source's classes, built at setup from this head: api-compat's fallback where no build ran (an offline lane)
   if (FROZEN && DRV !== SRC) env.GATE_FROZEN_SOURCE = DRV;
+  if (CHANGED_FILES) env.GATE_CHANGED_FILES = CHANGED_FILES;
   // the mod's Java tests once per run (tools/lib/junit-reuse.mjs): unit-mod's JUnit XML, copied when it passed, and the tree it ran
   // a probe's verdict once per run (tools/lib/probe-reuse.mjs): the evidence dirs of the steps that passed so far
   if (Object.keys(runShared.evidence).length) env.GATE_STEP_EVIDENCE = JSON.stringify(runShared.evidence);
@@ -1442,6 +1446,12 @@ for (const sh of shards) {
   fs.mkdirSync(path.join(sh.ev, 'shots'), { recursive: true });
 }
 fs.writeFileSync(path.join(OUT, 'runner.pid'), String(process.pid));
+// (GI2) the range's changed files for unit-scope (NUL-separated; the step reads GATE_CHANGED_FILES): only a tier run with a range has them
+const CHANGED_FILES = tierInfo?.changedFiles?.length ? path.join(RUN_SHARED_DIR, 'changed-files.nul') : null;
+if (CHANGED_FILES) {
+  fs.mkdirSync(RUN_SHARED_DIR, { recursive: true });
+  fs.writeFileSync(CHANGED_FILES, tierInfo.changedFiles.join('\0'));
+}
 const t0 = Date.now();
 const LOGF = path.join(OUT, 'runner.log');
 const log = (m, sh) => {
