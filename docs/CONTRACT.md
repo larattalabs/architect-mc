@@ -30453,6 +30453,22 @@ with the rock stair's refusal), `cx-placed.png` (the rope bridge).
   - S7 has no brief run.
   - The determinism row's threshold text names `goldens/s1.json` for every scenario.
 
+### Slice SP2 as built (branch `slice/SP2` off main 1d195edb; versions NEXT; $0, sim only; light; recorded 2026-11-15)
+
+- **Looks:** `aqueduct.maxSpan` 2..7 is a format 3 look (`LOOK_ONLY`, no slots) that `aqueductEvery` and M15 read (AQ's leftover). `rope_bridge.sagRatio` is read alike by the route's rope move, `ropeBridge` and M10:rope; the `meta.ropes` record carries it when it is not 12 (SF's leftover).
+- **Format:** the sidecar's plan `bible.json` now carries `format`. Below 3, `planRegion` refuses prefer and look params with validateBible's message; with no format it reads them as before. A revise of a format 3 Style stays format 3 and carries its forms, scatter, references and settlement by code (the prompt is unchanged).
+- **Crater params** (`craterParamsOf`): `depth`, `rim_height` and `diameter` (16..86; bowl radius floor(d / 2)) are read where the part sets no member of its own. A bad value is noted and the default used.
+- **SC bounds** (`SITE_BIBLE_LIMITS`): cliff cantilever 8, span 24, chain 16. The examples measure 6, 9 and 8, so they stay clean. A site design past a bound now refuses SITE_UNFIT as a site variant (any finding does).
+- **Palette:** `design X threw: Error: palette: ...` is now detail `palette` (Steward M1). ProgramRefused's javadoc already covers it; steward-mc MODULES.md:500 still says `program`.
+- **RM fixes, each M15-clean:** sky_isle has a ring of rim pillars (was farthest 10). A branch walk's lone rail post hangs on its own chain. S1's link landings are one cell nearer each rim (4 seeds checked).
+- **Moved:**
+  - `sky_isle.expected.json`: its 3 M15 rows are gone.
+  - `regions-6b` and `previews-6b` goldens: the sky_isle and floating_islands cases only.
+  - `scenarios/goldens/s1*`: re-planned from its own inputs (kit 0.12.0; the old program reproduced the old sha first), with a `recut` note.
+  - `asks/crater_mine.json`: still fits; named in `tools/lib/sp2-norm.mjs` `SP2_MOVED`, beside `PF_MOVED`.
+- **Checks:** Full kit suite 1429/1429 and sidecar 916/916, both run locally because both timed out in the gate. Gradle build passes (1272 tests, 0 failures). api-compat `--baselines` is 8/8 clean, step-inputs check passes (418) and gitleaks is clean. Gate run 2, 20261115-075046-change at 2c11a5c6 (after merging main), passed 27 steps, including sim-jobs, sets and massing, the h, hy, fl, s2, s3, d, d3, kc, irr, f3, aq and lp units, lint-structure, 6b-scenario-s1-flat and 6a-inv3. Its failures: k1b-unit item 6 listed SP2's own mover v14, now skipped by name (a3ed4d76; the step was not re-run, per speed rule 11). b-unit's and t3b-unit's Java sub-runs reported no results, while unit-mod passes those classes. lint-mutations crashes on main's TS import, `kit/test/plan-p0-shared.mjs` -> `tools/lib/arch-tmp.mjs`, which is outside the scratch kit. bf-unit's asks-before table doesn't match the merge base, a base-side table (likely pre-existing; not checked on main).
+- **Leftovers:** S1's in-game evidence predates the re-cut. Both looks reach plan parts only (not `r.ropeBridge` or `r.course`). An aqueduct never measures an M15 span past cantilever 4, so its `M15:span` stays unit-only.
+
 ## M5 support: the Architect side of Steward's phase 5 (functional modules) (contract draft, 2026-11-12)
 
 Steward's phase 5 (steward-mc `docs/MODULES.md` v2.2, GPT-reviewed; Noah approved the scope 2026-11-12) places verified modules (a crop
@@ -32320,3 +32336,48 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
 - Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
   `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.
+
+### Slice GD as built (branch `slice/GD` off main b003c214; versions NEXT, none added; $0; DEV MODE, light; recorded 2026-11-15)
+
+Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 districts zone, realised as one region).
+- `growPlan` (kit/lib/region/grow.mjs): on a region that is not a districts region, a named `grow.district` is looked up in the new
+  `zoneDistricts(eff)`: each zone's `program.districts` ids (the plan in `eff.params.plan`) plus every street road's
+  `architect_mc:street {zone, district}` flag. With `grow.zone` the zone must hold it; alone, the one zone holding it is taken.
+  The growth then filters the runs to that district's streets in that zone, as a districts region's does (`<d>_<k>` count ids, flags).
+- Refusals (NOT_ALLOWED [call]): unknown: "... is not a district of the region (<all districts>, or none)", as before; a zone that
+  doesn't hold it names whose it is; a name two zones hold without `grow.zone`: "... is a district of zones a, b: name one with grow.zone".
+- A districts region (`params.spec.districts`) is byte-identical: `kit/test/gd.test.mjs` (5) pins one growth's sha, taken on main b003c214.
+  `grow.zone` alone on a plan_v0 zone is unchanged (any street of the zone). No API or Java change (the request already carries `district`).
+- Not covered (not checked): a D2 following zone's district on plan_v0 gets no §5 boundary extension (its `follow` is a districts region's
+  param); `districtLand` stays null on plan_v0 (no land record there); plan/0's own `revision.grow` of a districts zone stays unsupported.
+
+### Slice QL-b as built (2026-11-15)
+
+- **The shells:** a module growth's pads write every IRR shell cell first (the bed grass, the sides air; IF_NATURAL), so A11's earlier-write
+  rule drops them, correctly: a shell cell is always paid and never drifts. The verges lose 22 of 54 gravel the same way (their earlier
+  write, IF_AIR_OR_FLUID grass, depends on the land). The pads bill nothing. `Quote.terrain` is unchanged.
+- **The note and `exact`:** the kit records each earlier write's last state and condition (`evalTile`'s `writtenLast`); a dropped kept cell
+  whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state goes to plan.json's `survivalTerrainWritten` (group -> {item: n},
+  outside the IR, forwarded by the sidecar), which `Quotes.mayAlreadyHold` counts as covered: the shells leave the may-stand note. Farmland
+  joins `TERRAIN_BLOCKS` and the mod's `TERRAIN`.
+- **Steward's 209 -> 210 (crop-farm-067):** the lot was priced over the land before the plan's own earlier tiles write. The growth's pads
+  write grass on the lot's floor row; one template dirt (1811,64,71965) sat over the land's own dirt, a no-op in FullBom's simulation, so it
+  went unbilled (209) until grass spread onto it (210); at put-down the pads' grass stands there and the realise pays it (consumed 205 + 5).
+  No mob was involved. (Billing every queued cell instead broke qt-growth: reverted.)
+- **D'' (the fix):** the kit keeps each lot's ground (plan.json `lotGround`): the writes of the tiles the realise puts down before the lot
+  under its box +-1 (earlier stages and its own stage's tiles, RegionsImpl.deps), per cell in realise order with their conditions, as column
+  runs (`LOT_GROUND_RUNS_MAX` 16384 per lot; past it {capped} and the quote names the lot inexact; about 25 KB for a 20 x 21 farm lot).
+  `Quotes.ground` applies each write where its condition passes on the cell as it then stands (not ours); FullBom prices the lot over it,
+  inside the template's box only (the fill and approach are planned over the land now, and priced so). The realise path is unchanged.
+- Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (10 pairs).
+- Units: igb (the shells' `survivalTerrainWritten`; the lot's ground), `QuotesWrittenQLBTest`, `QuotesLotGroundQLBTest`, `FullBomTest` (a lot
+  over its pads' grass bills the dirt; no ground, the land's dirt stays free).
+
+### Slice CF as built (branch `slice/CF` off origin/main d2580363; composer feedback from PAY's P1 diagnosis; no API change; $0; light; recorded 2026-11-15)
+- **Evidence in repair answers** (`sidecar/src/compose.ts`): `partAnswerLine` adds an `evidence:` line under each reason (`evidenceText`: arrays cut to 6 items plus "+N more", JSON truncated), at most 600 characters a reason, 1,500 a part and 12,000 a check (`EVIDENCE_*`); past that "evidence omitted". The caravan's `walls: [{court_wall, sealed: true}]` now reaches the model.
+- **Sealed-ring message** (`kit/lib/connectors/wall.mjs` `sealedWallMessage`, `kit/lib/plan/compile.mjs` `unreachableAnswer`): a leg refused UNREACHABLE with a sealed ring between its ends names it: "the wall ring <id> is closed with no gate part, so the route can't leave it; add a gate part ({kind: "gate", wall, crossing: <route>}) or open the ring (leave closed unwritten ...)", or for `gates: 0` "is sealed (gates 0) ... give the wall gates". Code and evidence unchanged.
+- **Land analysis** (`sidecar/src/regions.ts` `landAnalysisMs`, `claimAffordances(blob, sha, columns)`): limit 180 s + 4 ms per claim column, at most 600 s (128x128: 245 s), and one retry after a timeout. A list not analysed now tells the composer the features are missing from the list, not from the land, and to name no affordance.
+- **Composer rules** (`kit/prompts/composer.md`): the walls bullet says a ring written `closed: true` with no gate part (or `gates: 0`) is sealed, so a route leaving it needs a gate part or `closed` unwritten; the slopes bullet offers `layout: "spiral"` for a hilltop or steep high ground; the stale "reserved layout (a spiral, a ring, a grid)" line now reads "a ring, spiral or grid is written as that layout". General, not tied to a brief.
+- **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
+- **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
+- **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).

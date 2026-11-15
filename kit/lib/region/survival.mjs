@@ -9,10 +9,11 @@ export { CREATIVE_ONLY, FREE_NATURAL };
 /**
  * (BC, A11) The common terrain blocks a grade or a fill writes (the mod's Quotes.TERRAIN): a paid cell of one may already stand in the land,
  * and a realise skips a cell whose block the world already holds. The plan keeps those cells (survivalTerrain) so Regions.quote can read
- * the world at each and leave the ones already there out of the bill.
+ * the world at each and leave the ones already there out of the bill. (QL-b) Farmland too (it bills dirt; a realise skips it only
+ * where the world holds the same state): an irrigation shell's sides and a field's paid farmland.
  */
 export const TERRAIN_BLOCKS = new Set(['dirt', 'grass_block', 'coarse_dirt', 'rooted_dirt', 'podzol', 'mycelium', 'dirt_path', 'mud', 'stone', 'deepslate',
-  'granite', 'diorite', 'andesite', 'tuff', 'sand', 'red_sand', 'gravel', 'clay', 'sandstone', 'red_sandstone', 'netherrack', 'snow_block'].map((b) => `minecraft:${b}`));
+  'granite', 'diorite', 'andesite', 'tuff', 'sand', 'red_sand', 'gravel', 'clay', 'sandstone', 'red_sandstone', 'netherrack', 'snow_block', 'farmland'].map((b) => `minecraft:${b}`));
 
 export const CLASS_FREE = 0;
 export const CLASS_HELD = 1;

@@ -11,7 +11,7 @@ import { SimDesigner } from '../src/sim.js';
 import { Sidecar } from '../src/sidecar.js';
 import { Store } from '../src/store.js';
 import { memoryLogger } from '../src/context.js';
-import { findingRule, sha256 } from '../src/programs.js';
+import { findingRule, refusalOf, sha256 } from '../src/programs.js';
 import { makeSidecar, rmrf, until, type Harness } from './helpers.js';
 
 const KIT = path.resolve(__dirname, '..', '..', 'kit');
@@ -56,6 +56,11 @@ describe('given-program designs (M5 GP): pure parts', () => {
     expect(findingRule("missing required anchor 'entrance'")).toBe('anchors');
     expect(findingRule("palette[3]: unknown block 'minecraft:nope' (not a vanilla 26.3 block)")).toBe('blocks');
     expect(findingRule('design gp threw: Error: no')).toBe('program');
+    // (SP2, Steward M1) a program refusing its bible throws `palette: ...`: detail palette, not program
+    expect(findingRule("design gp threw: Error: palette: the lamp role 'glowstone' is under light 14\n    at default (file:///x/source.mjs:3:9)")).toBe('palette');
+    expect(findingRule('design gp threw: Error: no palette: here')).toBe('program');
+    expect(refusalOf({ ok: false, code: 2, errors: ["design gp threw: Error: palette: a gravity block on a core role"] } as never, 'the given program did not pass').detail).toBe('palette');
+    expect(refusalOf({ ok: false, code: 2, errors: ['design gp threw: Error: no'] } as never, 'x').detail).toBe('program');
     expect(findingRule('something else')).toBe('check');
   });
 });

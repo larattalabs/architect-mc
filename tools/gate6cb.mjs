@@ -27,9 +27,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { javaClasses } from './lib/junit-reuse.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { srcGradle } from './lib/src-gradle.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { archTmpDir } from './lib/arch-tmp.mjs';
 
@@ -98,16 +98,13 @@ steps.unit = async () => {
   out.goldens = kitOnce(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 11: the tile goldens hold (mega_bench, the 6b families, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = srcGradle(root, () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],
-    { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }));
-  const xml = (n) => {
-    const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
-    const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
-    const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(t);
-    return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
-  };
-  out.java = { code: g.status, api: xml('api.ApiBTest'), brushes: xml('region.BrushesTest'), arvx2: xml('region.volume.ArvxBlocksTest'), arvx: xml('region.volume.ArvxTest') };
-  check(g.status === 0 && Object.values(out.java).filter((v) => v && typeof v === 'object').every((v) => v.tests > 0 && v.failures === 0) && out.java.api && out.java.brushes && out.java.arvx2,
+  // ((chore GRB) unit-mod's XML when exact, else gradle under the checkout's lock with the XML read inside it: tools/lib/junit-reuse.mjs javaClasses)
+  const g = javaClasses(root, ['*ApiBTest', '*BrushesTest', '*ArvxBlocksTest', '*ArvxTest'], ['api.ApiBTest', 'region.BrushesTest', 'region.volume.ArvxBlocksTest', 'region.volume.ArvxTest'],
+    () => spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiBTest', '--tests', '*BrushesTest', '--tests', '*ArvxBlocksTest', '--tests', '*ArvxTest'],
+      { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 }), { log });
+  const xml = (n) => g.classes[n];
+  out.java = { code: g.code, api: xml('api.ApiBTest'), brushes: xml('region.BrushesTest'), arvx2: xml('region.volume.ArvxBlocksTest'), arvx: xml('region.volume.ArvxTest') };
+  check(g.code === 0 && Object.values(out.java).filter((v) => v && typeof v === 'object').every((v) => v.tests > 0 && v.failures === 0) && out.java.api && out.java.brushes && out.java.arvx2,
     `Java: ApiBTest ${json(out.java.api)} (1.21.0 surface, defaults, PERMISSION appended), BrushesTest ${json(out.java.brushes)} (fields, permission, boxes = the kit's, command options), ArvxBlocksTest ${json(out.java.arvx2)}`);
   spendZero();
   return out;

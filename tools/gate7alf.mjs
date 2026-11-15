@@ -49,6 +49,7 @@ import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-LF-run');
@@ -145,7 +146,9 @@ steps.unit = async () => {
   // the slice's Java: the StillOurs row (the verifier re-runs it: item 9), the fluids stage's bubble set, the census's reading, the IR kind,
   // the feature; H's fluid tests unchanged
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const gr = spawnSync('./gradlew', ['test', '--offline', '--tests', '*StillOursLFTest', '--tests', '*RegionFluidsLFTest', '--tests', '*ApiLFTest', '--tests', '*StillOursFluidsTest', '--tests', '*StillOursF3Test', '--tests', 'dev.larattalabs.architect.region.RegionFluids*', '--tests', '*PlanStaleTest', '--tests', '*UmtPropertiesTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '--tests', '*StillOursLFTest', '--tests', '*RegionFluidsLFTest', '--tests', '*ApiLFTest', '--tests', '*StillOursFluidsTest', '--tests', '*StillOursF3Test', '--tests', 'dev.larattalabs.architect.region.RegionFluids*', '--tests', '*PlanStaleTest', '--tests', '*UmtPropertiesTest'];
+  const gr = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: gr.status, tail: `${gr.stdout}${gr.stderr}`.trim().split('\n').slice(-8) };
   check(gr.status === 0, 'items 7, 9 (Java): StillOursLFTest (a written bubble column holds as any column, a source or air; a source holds as a column; a player\'s block does not; the journal\'s holds and same agree), RegionFluidsLFTest (the bubble set, open at the gate, the column\'s fluid a source, the IR kind appended), ApiLFTest (feature liftConnectors), H\'s and F3\'s fluid and StillOurs tests, PlanStaleTest, UMT', out.java.tail);
   // api-compat: the 0.47.0 and 0.45.0 apitest jars and mod surfaces (main's latest releases; copied into the evidence dir from their tag builds)

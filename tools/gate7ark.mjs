@@ -42,6 +42,7 @@ import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-RK-run');
@@ -134,7 +135,9 @@ steps.unit = async () => {
   check(d.status === 0 && flips.split(', ').includes('connector.rock_stair') && /retired: none/.test(out.diff) && /REMOVED \(never allowed\): none/.test(out.diff), `item 10: tools/plan-catalogue-diff.mjs pre-7a -> the golden flips connector.rock_stair reserved -> supported (limits.volume: true; with the other merged 7a slices'): ${flips}; nothing retired or removed`, out.diff.split('\n'));
   // the slice's Java: PlanChecks.hasTunnel counts rock_stair, the stale rock names it; the feature
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const gr = spawnSync('./gradlew', ['test', '--offline', '--tests', '*PlanChecksRKTest', '--tests', '*ApiRKTest', '--tests', '*PlanChecksT3Test'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '--tests', '*PlanChecksRKTest', '--tests', '*ApiRKTest', '--tests', '*PlanChecksT3Test'];
+  const gr = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: gr.status, tail: `${gr.stdout}${gr.stderr}`.trim().split('\n').slice(-8) };
   check(gr.status === 0, 'items 3, 7, 10 (Java): PlanChecksRKTest (a rock_stair part plans twice; the guard\'s connector names the stale rock "rock_stair <part>: ..."; a tunnel\'s message unchanged), ApiRKTest (feature rockStairs), PlanChecksT3Test', out.java.tail);
   // (the latest archived jars' mode: 0.42.0, 0.41.0, 0.40.1 apitest jars and the 0.42.0 surface; GATE7ARK_APICOMPAT another)

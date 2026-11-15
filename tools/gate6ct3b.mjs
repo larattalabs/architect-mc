@@ -40,6 +40,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
+import { javaClasses } from './lib/junit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -142,11 +143,12 @@ steps.unit = async () => {
   }
   // the Java side: the plan check's tunnel gate, the load option's key, the rock comparison (PlanChecksT3Test)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*PlanChecksT3Test*', '--tests', '*ApiT3Test*'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
-  const xml = path.join(root, 'mod', 'build', 'test-results', 'test', 'TEST-dev.larattalabs.architect.region.PlanChecksT3Test.xml');
-  const m = fs.existsSync(xml) ? /tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"/.exec(fs.readFileSync(xml, 'utf8')) : null;
-  out.java = { code: g.status, tests: m ? +m[1] : 0, failures: m ? +m[2] + +m[3] : -1 };
-  check(g.status === 0 && out.java.tests >= 4 && out.java.failures === 0, `items 5, 6 (Java): only a plan with a tunnel part asks for volumes; load "loaded" keeps the key's body; the rock comparison names the tunnel and the cells, PLANT as AIR, MISSING not judged, at most 16 named: ${out.java.tests} tests, ${out.java.failures} failures`);
+  // ((chore GRB) unit-mod's XML when exact, else gradle under the checkout's lock (it ran unlocked beside b-unit's and both exited 1): javaClasses)
+  const g = javaClasses(root, ['*PlanChecksT3Test*', '*ApiT3Test*'], ['region.PlanChecksT3Test'],
+    () => spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*PlanChecksT3Test*', '--tests', '*ApiT3Test*'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 }), { log });
+  const m = g.classes['region.PlanChecksT3Test'];
+  out.java = { code: g.code, tests: m ? m.tests : 0, failures: m ? m.failures : -1, ...(g.reused ? { reused: g.reused } : {}) };
+  check(g.code === 0 && out.java.tests >= 4 && out.java.failures === 0, `items 5, 6 (Java): only a plan with a tunnel part asks for volumes; load "loaded" keeps the key's body; the rock comparison names the tunnel and the cells, PLANT as AIR, MISSING not judged, at most 16 named: ${out.java.tests} tests, ${out.java.failures} failures`);
   spendZero();
   return out;
 };

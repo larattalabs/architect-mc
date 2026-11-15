@@ -27,6 +27,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-BF-run');
@@ -95,7 +96,9 @@ steps.unit = async () => {
   out.kit = kitOnce(['kit/test/bf.test.mjs', 'kit/test/f7c-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/catalogue-c38.test.mjs', 'kit/test/forms-island.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 20, `kit: bf.test.mjs (the flip, the generators, x01-x03 clean, the affordances, the lake body, the island's anchor, survival free, the four asks) and the 7c/P0/catalogue/island tests it touches: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.apiimpl.ApiBFTest', '--tests', 'dev.larattalabs.architect.api.Api7cFTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', 'dev.larattalabs.architect.apiimpl.ApiBFTest', '--tests', 'dev.larattalabs.architect.api.Api7cFTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAIL|error/i.test(l)).slice(0, 10) };
   check(g.status === 0, 'Java: ApiBFTest (bigForms follows the helper\'s plan.bigForms; the jar\'s plan.json holds the three supported) and Api7cFTest', out.java.tail);
   // byte identity against the merge base, the named exceptions aside
@@ -104,16 +107,20 @@ steps.unit = async () => {
   out.unchanged = { base: u.base, head: u.head, n: u.n, same: u.same, differ: u.differ, moved: u.moved };
   fs.writeFileSync(path.join(OUT, 'bf-unchanged.json'), `${JSON.stringify(u, null, 1)}\n`);
   // the 59 asks on the merge base and here
-  const before = await B.asksGap(path.join(path.resolve(root, '..', 'architect-mc-BF-main'), 'kit'), { current: true }), after = await B.asksGap(KIT, { current: true });
+  const baseKit = path.join(path.resolve(root, '..', 'architect-mc-BF-main'), 'kit');
+  // ((chore GRB) BF is on main since 30c36d79: on a base past BF nothing moves, and the base's table is the head's, so it equals the committed
+  // after table; asks-before.txt stays BF's record of the five parts that waited on the three forms, as SL's and CL's items read their own)
+  const onMain = fs.existsSync(path.join(baseKit, 'lib', 'forms', 'bigForms.mjs'));
+  const before = await B.asksGap(baseKit, { current: true }), after = await B.asksGap(KIT, { current: true });
   fs.writeFileSync(path.join(OUT, 'bf-asks-before.txt'), before.text);
   fs.writeFileSync(path.join(OUT, 'bf-asks-after.txt'), after.text);
   const lines = (t) => new Map(t.split('\n').filter((l) => /^[a-z_0-9]+\/[a-z_0-9]+ /.test(l)).map((l) => [l.split(' ')[0], l]));
   const lb = lines(before.text), la = lines(after.text);
   const moved = [...new Set([...la.keys(), ...lb.keys()])].filter((k) => lb.get(k) !== la.get(k));
   const F = path.join(KIT, 'test', 'fixtures', 'plan', 'bf');
-  out.asks = { moved: moved.map((k) => la.get(k)), malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text };
-  check(after.malformed === 0 && moved.length === 5 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k))) && out.asks.committedAfter && out.asks.committedBefore,
-    `the 59 asks on the merge base and here: 0 malformed; exactly the four parts that waited on the three forms and ring_city's ring_town (blocked on its crater lake) move, each to fits or adjusted (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
+  out.asks = { moved: moved.map((k) => la.get(k)), malformed: after.malformed, committedAfter: fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === after.text, committedBefore: fs.existsSync(path.join(F, 'asks-before.txt')) && (fs.readFileSync(path.join(F, 'asks-before.txt'), 'utf8') === before.text || (onMain && fs.existsSync(path.join(F, 'asks-after.txt')) && fs.readFileSync(path.join(F, 'asks-after.txt'), 'utf8') === before.text)) };
+  check(after.malformed === 0 && ((moved.length === 5 && moved.every((k) => ASKS_MOVE.test(`${k} `) && / (fits|adjusted)$/.test(la.get(k)))) || (onMain && moved.length === 0)) && out.asks.committedAfter && out.asks.committedBefore,
+    `the 59 asks on the merge base and here: 0 malformed; ${onMain ? 'BF on the base: nothing moves' : 'exactly the four parts that waited on the three forms and ring_city\'s ring_town (blocked on its crater lake) move, each to fits or adjusted'} (${out.asks.moved.join('; ')}); both tables equal fixtures/plan/bf/asks-{before,after}.txt (${out.asks.committedBefore}, ${out.asks.committedAfter})`);
   spendZero();
   return out;
 };

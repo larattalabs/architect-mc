@@ -366,6 +366,7 @@ export class Regions {
     let patterns: Record<string, unknown> | undefined;
     // (7a K1) the bible's connectors member ({wall?, gate?, rope_bridge?}: role names), passed to the kit's plan with its roles
     let connectors: Record<string, unknown> | undefined;
+    let connectorsFormat: number | undefined;
     // (6c H) the bible's fluids member ({bed?, rim?, coping?, spout?, quay?, mooring?}: role names), passed like connectors
     let fluids: Record<string, unknown> | undefined;
     // (6c VOC) the bible's rarity budget (format 2): to the kit's plan with its roles (ctx.rarity; the plan meta's style for M26)
@@ -375,9 +376,11 @@ export class Regions {
       bible = r.pin;
       roles = { ...r.info.roles };
       try {
-        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown; connectors?: unknown; fluids?: unknown; rarity?: unknown };
+        const j = JSON.parse(fs.readFileSync(r.files.json, 'utf8')) as { patterns?: unknown; connectors?: unknown; fluids?: unknown; rarity?: unknown; format?: unknown };
         if (j.patterns && typeof j.patterns === 'object' && !Array.isArray(j.patterns)) patterns = j.patterns as Record<string, unknown>;
         if (j.connectors && typeof j.connectors === 'object' && !Array.isArray(j.connectors)) connectors = j.connectors as Record<string, unknown>;
+        // ((SP2) the Style's format with its connectors: below 3 the kit's plan reads them as format 2's, never their look parameters)
+        if (connectors) connectorsFormat = j.format === 3 ? 3 : j.format === 2 ? 2 : 1;
         if (j.fluids && typeof j.fluids === 'object' && !Array.isArray(j.fluids)) fluids = j.fluids as Record<string, unknown>;
         if (j.rarity && typeof j.rarity === 'object' && !Array.isArray(j.rarity)) rarity = j.rarity as Record<string, unknown>;
       } catch {
@@ -445,7 +448,7 @@ export class Regions {
       for (const v of volumes) fs.writeFileSync(path.join(dir, 'volumes', `${v.sha}.bin`), v.gz);
     }
     const hasBible = !!bible || Object.keys(roles).length > 0;
-    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}) }));
+    if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}), ...(connectors ? { connectors, ...(connectorsFormat !== undefined ? { format: connectorsFormat } : {}) } : {}), ...(fluids ? { fluids } : {}), ...(rarity ? { rarity } : {}) }));
     if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     if (beside) fs.writeFileSync(path.join(dir, 'beside.json'), JSON.stringify(beside));
     // (6c D3, §2.4) the reach inputs kept with the plan: reach-survey.bin, held.json, standing.json, named by beside-reach.json (a plan
@@ -853,6 +856,10 @@ export class Regions {
         ...(kitPlan.survivalBom && typeof kitPlan.survivalBom === 'object' ? { survivalBom: kitPlan.survivalBom } : {}),
         // (BC, A11) its paid terrain cells by position (plan.json's survivalTerrain): Regions.quote leaves out the ones the land already holds
         ...(kitPlan.survivalTerrain && typeof kitPlan.survivalTerrain === 'object' ? { survivalTerrain: kitPlan.survivalTerrain } : {}),
+        // (QL-b) the paid terrain cells an earlier write always covers first, their items per group: always paid, so never "may already stand"
+        ...(kitPlan.survivalTerrainWritten && typeof kitPlan.survivalTerrainWritten === 'object' ? { survivalTerrainWritten: kitPlan.survivalTerrainWritten } : {}),
+        // (QL-b D'') each lot's ground as the tiles before it leave it (writes by cell, with their conditions): Regions.quote prices the lot over it
+        ...(kitPlan.lotGround && typeof kitPlan.lotGround === 'object' ? { lotGround: kitPlan.lotGround } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);
@@ -1375,14 +1382,21 @@ export class Regions {
   /**
    * (7c TC) The affordances of a whole frozen volume (the claim's, for region.design's pick): the kit's site analysis
    * (tools/affordances.mjs, no lot) over the blob, in a child process (a 192x192x150 claim takes about 2 s); `sha` must match.
+   * (7c CF) The time limit scales with the claim's `columns` (landAnalysisMs), and a run stopped by it is tried once more: P1's 128x128
+   * cliff claim, 1.3 s offline, was stopped at 120 s while the machine slept, which left the composer without the land's features.
    */
-  async claimAffordances(volumeBlobId: string, sha: string): Promise<{ sha: string; box: unknown; affordances: unknown[] }> {
+  async claimAffordances(volumeBlobId: string, sha: string, columns?: number): Promise<{ sha: string; box: unknown; affordances: unknown[] }> {
     const script = path.join(this.host.config.kitDir, 'tools', 'affordances.mjs');
     if (!fs.existsSync(script)) throw new Error('the kit has no tools/affordances.mjs (an older kit)');
     if (!this.host.blobs.get(volumeBlobId)) throw new Error(`no blob "${volumeBlobId}"`);
-    const r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: 120_000 });
+    const limit = landAnalysisMs(columns);
+    let r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: limit });
+    if (r.timedOut) {
+      this.host.log.warn(`the land analysis of ${volumeBlobId} took longer than ${Math.round(limit / 1000)} s and was stopped; trying once more`);
+      r = await run(process.execPath, [script, this.host.blobs.file(volumeBlobId), '--sha', sha], { cwd: this.host.config.kitDir, env: minimalEnv(), timeoutMs: limit });
+    }
     const out = lastJson(r.stdout);
-    if (r.timedOut) throw new Error('the land analysis took longer than 120 s and was stopped');
+    if (r.timedOut) throw new Error(`the land analysis took longer than ${Math.round(limit / 1000)} s twice and was stopped`);
     if (!out || out.ok !== true) throw new Error(`the land analysis failed: ${typeof out?.error === 'string' ? out.error : outputTail(`${r.stdout}\n${r.stderr}`)}`);
     return { sha: out.sha as string, box: out.box, affordances: Array.isArray(out.affordances) ? (out.affordances as unknown[]) : [] };
   }
@@ -1525,4 +1539,14 @@ export function lastJson(stdout: string): Record<string, unknown> | undefined {
     }
   }
   return undefined;
+}
+
+/** (7c CF) The claim land analysis's floor, its time per claim column and its hard bound. */
+export const LAND_ANALYSIS_MIN_MS = 180_000;
+export const LAND_ANALYSIS_MS_PER_COLUMN = 4;
+export const LAND_ANALYSIS_MAX_MS = 600_000;
+/** (7c CF) The claim land analysis's time limit: 180 s plus 4 ms per claim column, at most 600 s (no column count: the floor). */
+export function landAnalysisMs(columns?: number): number {
+  const n = Number.isFinite(columns) && (columns as number) > 0 ? (columns as number) : 0;
+  return Math.min(LAND_ANALYSIS_MAX_MS, LAND_ANALYSIS_MIN_MS + Math.round(n * LAND_ANALYSIS_MS_PER_COLUMN));
 }

@@ -42,7 +42,7 @@ import { emitHidden, resolveHidden } from '../forms/hiddenRoom.mjs';
 import { archSpanNotes, archSpanSide, archSpanSite, emitArchSpan } from '../forms/archSpanPart.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { lotSpecOf, withheldOf, withhold } from '../connectors/wallLots.mjs';
-import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
+import { WALL_KINDS, emitWalls, finishGates, mergeBases, planWalls, wallsBase, sealedWallMessage, wallsCutAnswer, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 import { AUTO_ROWS, PREFER_PENALTY } from '../style3.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
@@ -1962,7 +1962,7 @@ function runCheckOnce(ctx, P, { makeRegion, templates = new Map() }, k3Back = ne
         // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
         ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, kind: 'crossing' } }] }
-          : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g, ...(K ? wallsEvidence(K, l) : {}) } }] });
+          : unreachableAnswer(K, l, g));
       }
       if (retry.size) rounds++;
       group = group.filter((l) => !bad.has(l.conn.id) || (retry.has(l.conn.id) && !answers.has(l.conn.id)));
@@ -2631,4 +2631,14 @@ function wallLanes(K, stageOf) {
     K.rollback(cp);
     for (const w of want) w.W.notes.push(`${w.q.lot}: no inner lane (${e.message})`);
   }
+}
+
+/**
+ * A leg no route reached: refused UNREACHABLE with the walls between its ends in the evidence; (7c CF) when one of them is a sealed ring
+ * the message names it and the fix (sealedWallMessage) instead of blaming the grade, the cut and fill limits and the obstacles.
+ */
+function unreachableAnswer(K, l, g) {
+  const ev = K ? wallsEvidence(K, l) : {};
+  const sealed = K ? sealedWallMessage(K, l, ev) : null;
+  return { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: sealed ?? `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g, ...ev } }] };
 }

@@ -59,6 +59,82 @@ export async function registerBC(steps, h) {
     return { need, acc, ps };
   }
 
+  // (QL-b) qlb-lot: Steward's crop-farm-067 world (a COPY: the source is never opened or changed), its set_2 growth plans quoted again in
+  // a few seconds apart, each lot's bill taken apart (dev.qlb.lotBill: template, fill, approach, the template cells billed as another state,
+  // mobs). Steward's own plans (planned before lotGround) are recorded; a fresh growth with rv3's request is judged: priced over its pads'
+  // ground, every quote bills 210 dirt (template 205 + shell 5, what the realise consumed). $0.
+  steps.qlblot = async () => {
+    await ensure();
+    const out = { pairs: [] };
+    const { execFileSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const SRC = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', '_work', 'steward-cf067', 'mod', 'run');
+    const W = 'G6B QLB cf067';
+    const dst = path.join(L.SAVES, W);
+    check(fs.existsSync(path.join(SRC, 'saves', 'Steward E2E', 'level.dat')), `Steward's cf067 world is there to copy: ${SRC}`);
+    await L.leaveWorld();
+    fs.rmSync(dst, { recursive: true, force: true });
+    execFileSync('cp', ['-c', '-R', path.join(SRC, 'saves', 'Steward E2E'), dst]);
+    fs.rmSync(path.join(dst, 'session.lock'), { force: true });
+    for (const e of ['crop_farm', 'crop_farm_kv_295', 'crop_farm_kv_296', 'crop_farm_kv_297']) {
+      fs.rmSync(path.join(L.LIBRARY, e), { recursive: true, force: true });
+      execFileSync('cp', ['-c', '-R', path.join(SRC, 'architect', 'library', e), path.join(L.LIBRARY, e)]);
+    }
+    await L.openWorld(W);
+    await L.cmd('/architect reload');
+    await L.settle(2000);
+    const PLANS = [
+      { planId: 'pmwh3cnmi899bae', lot: 'gb1794702197830_1', entry: 'crop_farm_kv_295', label: 'rv1 wheat (quoted 210)' },
+      { planId: 'pmwh3ex8kc61d60', lot: 'gb1794702303198_1', entry: 'crop_farm_kv_297', label: 'rv3 carrots (quoted 209, consumed 205 + 5)' },
+    ];
+    const near = () => L.tp(1810, 80, 71966);
+    const away = () => L.tp(1810, 80, 71966 - 140);
+    const lotOf = (r, p) => r.lots?.[p.lot] ?? null;
+    const brief = (d) => d && { template: d.template, fill: d.fill, approach: d.approach, other: d.other, masked: d.maskedTemplateCells, changed: d.changed,
+      fillN: d.fillCells?.n, cutN: d.cutCells?.n, pathN: d.approachPath?.n, apprFillN: d.approachFill?.n, mobs: d.mobs, why: d.why, origin: d.origin };
+    await near();
+    for (const p of PLANS) {
+      const r = await call('dev.qlb.lotBill', { planId: p.planId, lotEntries: { [p.lot]: p.entry } }, 120_000);
+      out[p.planId] = { label: p.label, bom: r.bom, bomParts: r.bomParts, exact: r.exact, refused: r.refused, lot: lotOf(r, p) };
+      log(`${p.label}: bom dirt ${r.bom?.['minecraft:dirt']} (${r.refused ?? 'quoted'}); lot ${JSON.stringify(brief(lotOf(r, p))).slice(0, 1500)}`);
+    }
+    // (QL-b D'') a fresh growth with rv3's request (Steward's spec, read from the copy's plan): its plan keeps the lot's ground (lotGround), so the
+    // quote prices the lot over the pads' grass: 10 pairs 5 s apart (5 near, 5 away) bill the template's 205 + the shell's 5 dirt, none moves
+    const old = JSON.parse(fs.readFileSync(path.join(dst, 'architect-regions', 'plans', `${PLANS[1].planId}.json`), 'utf8'));
+    // Steward's flow plans its growths in survival; the copy's toggle was left off at the e2e's end: on (and the default game mode survival)
+    await call('dev.survival.set', { on: true }, 30_000);
+    await L.cmd('/defaultgamemode survival');
+    await L.settle(1000);
+    out.survival = await call('dev.survival.state', {}, 30_000).catch((e) => ({ error: String(e?.message ?? e) }));
+    const grow = old.ir?.params?.spec?.grow;
+    const ext = Object.fromEntries(Object.entries(old.ext ?? {}).filter(([k]) => !k.startsWith('architect_mc:'))); // Architect's own keys are refused
+    const g = await call('dev.rv.plan', { region: 'rg1', program: 'plan_v0', params: { grow }, ext }, 900_000);
+    out.fresh = { planId: g.planId, refused: g.refused ?? null, lots: (g.lots ?? []).map((l) => l.id) };
+    out.fresh.survival = g.planId ? JSON.parse(fs.readFileSync(path.join(dst, 'architect-regions', 'plans', `${g.planId}.json`), 'utf8')).ir?.survival != null : null;
+    check(!g.refused && !!g.planId && out.fresh.survival, `a fresh growth with rv3's request planned in survival: ${g.refused ?? g.planId} (survival ${out.fresh.survival})`, out.fresh);
+    if (g.refused) { await L.leaveWorld(); spendZero(); return out; }
+    const P = { planId: g.planId, lot: (g.lots ?? [])[0]?.id ?? PLANS[1].lot, entry: PLANS[1].entry };
+    for (let i = 0; i < 10; i++) {
+      if (i === 5) await away();
+      const a = await call('dev.qlb.lotBill', { planId: P.planId, lotEntries: { [P.lot]: P.entry } }, 120_000);
+      await sleep(5000);
+      const b = await call('dev.qlb.lotBill', { planId: P.planId, lotEntries: { [P.lot]: P.entry } }, 120_000);
+      const da = a.bom?.['minecraft:dirt'], db = b.bom?.['minecraft:dirt'];
+      const pair = { i, where: i < 5 ? 'near' : 'away', dirt: [da, db], refused: a.refused ?? b.refused ?? undefined, moved: da !== db, ground: lotOf(a, P)?.groundCells ?? 0, lotDirt: lotOf(a, P)?.template?.['minecraft:dirt'],
+        a: brief(lotOf(a, P)), b: da !== db ? brief(lotOf(b, P)) : undefined, parts: da !== db ? [a.bomParts, b.bomParts] : undefined, notes: i === 0 ? a.notes : undefined };
+      out.pairs.push(pair);
+      log(`pair ${i} (${pair.where}): dirt ${da} -> ${db}${pair.moved ? ' MOVED' : ''}; lot dirt ${pair.lotDirt}, ground cells ${pair.ground}; changed ${JSON.stringify(pair.a?.changed ?? []).slice(0, 400)}`);
+    }
+    out.moved = out.pairs.filter((x) => x.moved).length;
+    const dirts = out.pairs.flatMap((x) => x.dirt);
+    check(out.pairs.length === 10 && out.pairs.every((x) => x.ground > 0), `QL-b: the fresh growth's lot is priced over its pads' ground (${out.pairs[0]?.ground} cells)`, { ground: out.pairs.map((x) => x.ground) });
+    check(out.moved === 0 && dirts.every((d) => d === 210) && out.pairs.every((x) => x.lotDirt === 205),
+      `QL-b D'': every quote bills 210 dirt (the template's 205, as consumed, + the shell's 5) and none moves: ${JSON.stringify(dirts)}`, { dirts });
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
   steps.bcrelay = async () => {
     await ensure();
     const out = {};

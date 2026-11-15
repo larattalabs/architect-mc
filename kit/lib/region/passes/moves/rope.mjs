@@ -7,7 +7,7 @@
 // heights here), nor the pass's hard rects, keep-out or the claim margin. A rope_bridge edge with no route answers why (`fail`):
 // NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, or UNREACHABLE. Under the realise lint (integer math; Math.floor/abs/min/max only).
 import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../../pack.mjs';
-import { ROPE, checkSpan, deckY, maxRiseOf, profile } from '../../../connectors/ropeGeom.mjs';
+import { ROPE, checkSpan, deckY, maxRiseOf, profile, sagOf, sagRatioOf } from '../../../connectors/ropeGeom.mjs';
 import { VC, VOXEL_CLASSES, classAt as volumeClassAt } from '../../volume.mjs';
 
 const NONE = -32768;
@@ -74,6 +74,8 @@ export function ropeActive(state, edge) {
     approach: isInt(edge.approach) && edge.approach >= 0 && edge.approach <= ROPE.approachMax ? edge.approach : ROPE.approach,
     nMin: Math.max(ROPE.spanMin, isInt(sp.min) ? sp.min : ROPE.spanMin), nMax: Math.min(ROPE.spanMax, isInt(sp.max) ? sp.max : ROPE.spanMax),
     startK: kOf(edge.from), goalK: kOf(edge.to), reached: once ? new Int32Array(state.W * state.D) : null,
+    // ((SP2) the edge's sag ratio: a format 3 Style's rope_bridge.sagRatio on a plan's rope parts, else §3's 12)
+    sag: sagRatioOf(edge.sagRatio),
   };
   return true;
 }
@@ -112,7 +114,7 @@ export function ropeExpand(state, S) {
       const yf = builtY[k2] !== NONE ? builtY[k2] : G[k2];
       const rise = yf - y;
       if (Math.abs(rise) > maxRiseOf(n)) continue;
-      if (!checkSpan(land, [minX + i, y, minZ + j], [di, dj], n, rise, c.width).ok) continue;
+      if (!checkSpan(land, [minX + i, y, minZ + j], [di, dj], n, rise, c.width, { sagRatio: c.sag }).ok) continue;
       S.relax(k2, hf, 2, yf * FP, ROPE.cost + ROPE.costPer * n, n, c.once ? 1 : f);
     }
   }
@@ -120,7 +122,7 @@ export function ropeExpand(state, S) {
 
 /** The path cells of a rope move (after its start cell: the deck cells 1..n at their deck block's y, then the far landing) and the segment's data. */
 export function ropeCells(state, m) {
-  const n = m.arg, sx = Math.sign(m.dx), sz = Math.sign(m.dz), ys = profile(n, m.y0, m.y1 - m.y0);
+  const n = m.arg, sx = Math.sign(m.dx), sz = Math.sign(m.dz), ys = profile(n, m.y0, m.y1 - m.y0, sagOf(n, state?.cur?.sag ?? 12));
   const cells = [];
   for (let t = 1; t <= n; t++) cells.push([m.x0 + sx * t, deckY(ys[t]), m.z0 + sz * t]);
   cells.push([m.x1, m.y1, m.z1]);
@@ -159,12 +161,12 @@ export function ropeFail(state, edgeOut, inS) {
         const k2 = ci + cj * W;
         if (!inS(k2) || water[k2] || cheb(W, k2, c.goalK) > c.approach) continue;
         tried++;
-        const rise = G[k2] - y, ys = profile(n, y, rise);
+        const rise = G[k2] - y, ys = profile(n, y, rise, sagOf(n, c.sag));
         let gap = false;
         for (let t = 1; t <= n && !gap; t++) { const kk = (i + di * t) + (j + dj * t) * W; if (water[kk] || G[kk] < deckY(ys[t]) - ROPE.gapDepth) gap = true; }
         if (!gap) continue;
         gaps++;
-        const res = n >= c.nMin && n <= c.nMax ? checkSpan(land, [minX + i, y, minZ + j], [di, dj], n, rise, c.width) : { ok: false, code: 'SPAN', evidence: { span: n, min: c.nMin, max: c.nMax } };
+        const res = n >= c.nMin && n <= c.nMax ? checkSpan(land, [minX + i, y, minZ + j], [di, dj], n, rise, c.width, { sagRatio: c.sag }) : { ok: false, code: 'SPAN', evidence: { span: n, min: c.nMin, max: c.nMax } };
         const code = res.ok ? 'UNREACHABLE' : res.code;
         const key = [Math.max(Math.abs(ci - gi), Math.abs(cj - gj)), n, minX + i, minZ + j, hf];
         if (!best || cmpKey(key, best.key) < 0) best = { key, code, evidence: { ...(res.evidence ?? {}), span: n, from: [minX + i, y, minZ + j], to: [minX + ci, G[k2], minZ + cj] } };

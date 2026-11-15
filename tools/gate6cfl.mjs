@@ -26,6 +26,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-FL-run');
@@ -95,14 +96,6 @@ function nodeTest(files, timeout = 3_600_000) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), notes: t.split('\n').filter((l) => /^# (ring|spiral|grid|organic):/.test(l)) };
 }
 
-/** A JUnit result file's counts (the mod's own test run, `./gradlew test`). */
-function junit(name) {
-  const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-${name}.xml`);
-  if (!fs.existsSync(f)) return null;
-  const t = fs.readFileSync(f, 'utf8');
-  const g = (k) => Number((new RegExp(`${k}="(\\d+)"`).exec(t) ?? [])[1] ?? -1);
-  return { tests: g('tests'), failures: g('failures'), errors: g('errors') };
-}
 
 steps.unit = async () => {
   const out = {};
@@ -117,8 +110,10 @@ steps.unit = async () => {
   for (const n of out.kit.notes) log(`  ${n}`);
   // the mod: Ir reads a road's ext (S-FL-5)
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*IrRoadExtTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env });
-  out.mod = { code: g.status, ir: junit('dev.larattalabs.architect.region.IrRoadExtTest') };
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', '*IrRoadExtTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env }), { classes: ['dev.larattalabs.architect.region.IrRoadExtTest'], log });
+  out.mod = { code: g.status, ir: g.junit['dev.larattalabs.architect.region.IrRoadExtTest'] };
   check(g.status === 0 && out.mod.ir && out.mod.ir.tests > 0 && out.mod.ir.failures === 0 && out.mod.ir.errors === 0, `S-FL-5 (mod): Ir reads a road's ext (architect_mc:street) and keeps the 6- and 7-argument Road constructors: ${json(out.mod)}`);
   }
   // items 4 and 8: byte identity, the untouched files, the asks

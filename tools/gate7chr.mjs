@@ -33,6 +33,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { kitReuse } from './lib/kit-reuse.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
 import { stewardCap, terrainShape } from './lib/quote-terrain.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-HR-run');
@@ -97,7 +98,9 @@ steps.unit = async () => {
   out.kit = kitOnce(['kit/test/hr.test.mjs', 'kit/test/bf.test.mjs', 'kit/test/f7c-foundation.test.mjs', 'kit/test/plan-p0.test.mjs', 'kit/test/plan-p0-valid.test.mjs', 'kit/test/catalogue-c38.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 30, `kit: hr.test.mjs (the flip, x01-x03 clean in each host, the secrets only in the artifact, the renders and siteplan.json without the room, survival, the refusals, the recorded asks) and the 7c/P0/catalogue tests it touches: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--no-daemon', '--tests', 'dev.larattalabs.architect.apiimpl.ApiHRTest', '--tests', 'dev.larattalabs.architect.region.PlanChecksSecretsTest', '--tests', 'dev.larattalabs.architect.api.Api7cFTest'], { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 });
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--no-daemon', '--tests', 'dev.larattalabs.architect.apiimpl.ApiHRTest', '--tests', 'dev.larattalabs.architect.region.PlanChecksSecretsTest', '--tests', 'dev.larattalabs.architect.api.Api7cFTest'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', env, timeout: 1_800_000 }), { log });
   out.java = { code: g.status, tail: `${g.stdout}${g.stderr}`.split('\n').filter((l) => /FAIL|error/i.test(l)).slice(0, 10) };
   check(g.status === 0, 'Java: ApiHRTest (hiddenRooms follows the helper\'s plan.hiddenRooms; the jar\'s plan.json holds form.hidden_room supported), PlanChecksSecretsTest (the secrets in the preview and siteplan only when asked; the ask in the key only when made) and Api7cFTest', out.java.tail);
   // byte identity against the merge base, the named exceptions aside

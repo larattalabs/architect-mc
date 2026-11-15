@@ -195,4 +195,18 @@ class FullBomTest {
 		assertTrue(r.inexactBecause().contains("a cell the plan writes is not loaded"), r.inexactBecause().toString());
 		assertFalse(r.inexactBecause().contains("an updateShape threw"), r.inexactBecause().toString());
 	}
+
+	@Test
+	void aLotOverItsPadsGroundBillsTheDirtThePadsCover() {
+		// (QL-b D'') cf067: a template dirt over the land's own dirt is a no-op, unbilled (qt-growth's cottage: free at put-down too); over the
+		// ground the pads leave (grass) it is billed, whether the land there is dirt or grass now
+		int[] xyz = {0, 9, 0};
+		BlockState[] st = {Blocks.DIRT.defaultBlockState()};
+		long p0 = net.minecraft.core.BlockPos.asLong(0, 9, 0);
+		java.util.Map<Long, BlockState> pads = java.util.Map.of(p0, Blocks.GRASS_BLOCK.defaultBlockState());
+		FullBom.Result bare = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == p0 ? Blocks.DIRT.defaultBlockState() : air());
+		assertTrue(bare.items().isEmpty(), "no ground: the land's dirt stands, nothing to pay");
+		FullBom.Result padded = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> pads.containsKey(p) ? pads.get(p) : p == p0 ? Blocks.DIRT.defaultBlockState() : air());
+		assertEquals(1, padded.items().get("minecraft:dirt"), padded.items().toString());
+	}
 }

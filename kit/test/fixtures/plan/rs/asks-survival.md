@@ -30,7 +30,7 @@ cliff_monks cost.bom 84 items; survival true
 conquered_town/village zone.standard fits free 42442 held 843 paid-items 54
 conquered_town cost.bom 54 items; survival true
 crater_mine/mine_zone zone.standard fits free 57255 held 692 paid-items 57
-crater_mine/crater form.crater fits free 6362 held 0 paid-items 0
+crater_mine/crater form.crater fits free 22993 held 0 paid-items 0
 crater_mine/crater_relief form.relief fits free 1776 held 0 paid-items 0
 crater_mine cost.bom 57 items; survival true
 desert_jungle_wall/town zone.standard fits free 72067 held 1119 paid-items 54

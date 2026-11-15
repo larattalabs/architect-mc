@@ -316,6 +316,8 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {object} [o.roles] extra / bible roles {role: blockState}
  * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
  * @param {object} [o.connectors] (7a K1) the bible's connectors member {wall?, gate?, rope_bridge?} (role names; lib/connectors/style.mjs)
+ * @param {number} [o.format] (SP2) the bible's format (1, 2 or 3): below 3 its connectors are format 2's (no prefer, no look parameters);
+ *   absent, read as format 3's
  * @param {object} [o.fluids] (6c H) the bible's fluids member {bed?, rim?, coping?, spout?, quay?, mooring?} (role names; lib/fluids/place.mjs)
  * @param {object} [o.rarity] (6c VOC) the bible's rarity member (lib/vocab/rarity.mjs): ctx.rarity (its defaults filled in) and the plan
  *   meta's `vocab` (the style's own blocks, the resolved roles; the region checker's M26 and M27 read it)
@@ -409,11 +411,14 @@ export async function planRegion(o) {
     // (7a K1) the bible's connector roles (each slot a role the plan resolves, else its default chain)
     // ((7c SF) a format 3 Style's connectors: its slots as format 2's; its prefer list and look parameters, checked here, go to
     // ctx.connectorLook only when it has any, so a format 2 Style's plan is unchanged)
-    const split = splitConnectors(o.connectors ?? undefined);
-    const ce = connectorsError(split.slots ?? undefined, roles) ?? connectors3Errors(o.connectors ?? undefined, roles)[0] ?? null;
+    // ((SP2) `o.format`, the Style's format (the sidecar's bible.json carries it with the connectors): below 3 the connectors are format
+    // 2's, so a prefer list or a look parameter is refused with validateBible's own message; absent, read as today, format 3's rules)
+    const f3 = o.format === undefined || o.format === null || o.format === 3;
+    const split = f3 ? splitConnectors(o.connectors ?? undefined) : { slots: o.connectors ?? undefined, prefer: null, look: {} };
+    const ce = connectorsError(split.slots ?? undefined, roles) ?? (f3 ? connectors3Errors(o.connectors ?? undefined, roles)[0] : null) ?? null;
     if (ce) throw new Error(ce);
     const connectors = Object.freeze(connectorRoles(roles, split.slots ?? null));
-    const connectorLook = hasConnectors3(o.connectors) ? Object.freeze({ prefer: Object.freeze(split.prefer ?? []), look: Object.freeze(split.look) }) : null;
+    const connectorLook = f3 && hasConnectors3(o.connectors) ? Object.freeze({ prefer: Object.freeze(split.prefer ?? []), look: Object.freeze(split.look) }) : null;
     // (6c H) the bible's fluids member (role names per slot: bed, rim, coping, spout, quay, mooring; lib/fluids/place.mjs)
     const fe = fluidsError(o.fluids ?? undefined, roles);
     if (fe) throw new Error(fe);
@@ -764,31 +769,98 @@ export async function planRegion(o) {
   // the land does not already hold (a realise skips those), so the quote is what the realise consumes. plan.json's `survivalTerrain`
   // a kept cell an earlier evaluation of its tile key also writes is dropped (the realise writes that one first: the land then no longer holds
   // what the quote would read), so each key's earlier evaluations run again for the cells they write
+  // (QL-b) a dropped cell whose last earlier write is IF_NATURAL or ALWAYS_OURS and of another state: wherever the later write lands, the earlier
+  // one landed first (the cell then ours, never the later state), so the realise always writes and pays it: never "may already stand".
+  // plan.json's `survivalTerrainWritten`, their items per group (an IF_SOLID_NATURAL or IF_AIR_OR_FLUID write depends on the land: not counted)
+  const writtenFirst = {};
   if (sv) {
-    const written = new Map(); // `${key}|${at}` -> Set of the cells evaluations 0..at-1 write
+    const written = new Map(); // `${key}|${at}` -> Map of the cells evaluations 0..at-1 write -> [last state, its cond]
     const earlier = (key, at) => {
       const k = `${key}|${at}`;
       if (!written.has(k)) {
-        const set = new Set();
+        const last = new Map();
         const ev = evalsOf.get(key) ?? [];
-        for (let i = 0; i < at; i++) evalTile(ir, key, windows.get(key), { stage: ev[i].stage, set: ev[i].set, countOnly: true, blobs: evalBlobs, written: set });
-        written.set(k, set);
+        for (let i = 0; i < at; i++) evalTile(ir, key, windows.get(key), { stage: ev[i].stage, set: ev[i].set, countOnly: true, blobs: evalBlobs, writtenLast: last });
+        written.set(k, last);
       }
       return written.get(k);
     };
-    for (const g of Object.values(sv)) {
+    for (const [gn, g] of Object.entries(sv)) {
       if (!g.terrain) continue;
       g.terrain = g.terrain.map((q) => {
         if (!q.at) return q;
         const w = earlier(q.key, q.at);
         const cells = [];
-        for (let i = 0; i + 2 < q.cells.length; i += 3) if (!w.has(cellId(q.cells[i], q.cells[i + 1], q.cells[i + 2]))) cells.push(q.cells[i], q.cells[i + 1], q.cells[i + 2]);
+        for (let i = 0; i + 2 < q.cells.length; i += 3) {
+          const last = w.get(cellId(q.cells[i], q.cells[i + 1], q.cells[i + 2]));
+          if (!last) { cells.push(q.cells[i], q.cells[i + 1], q.cells[i + 2]); continue; }
+          if ((last[1] === 0 || last[1] === 3) && last[0] !== q.state) {
+            const t = (writtenFirst[gn] ??= {});
+            for (const [it, n] of Object.entries(q.items)) t[it] = (t[it] ?? 0) + n;
+          }
+        }
         return { ...q, cells };
       });
     }
   }
+  const survivalTerrainWritten = Object.keys(writtenFirst).length ? Object.fromEntries(Object.keys(writtenFirst).sort().map((g) => [g, Object.fromEntries(Object.entries(writtenFirst[g]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))])) : null;
+  // (QL-b D'') each lot's ground as the realise puts it down: the writes of the tiles before it under its box +-1 (every earlier stage, and its
+  // own stage's tiles: RegionsImpl.deps), in realise order, by cell, with their conditions. Regions.quote applies them over the world now
+  // (each write where its condition passes) before it prices the lot, so a lot is quoted over the land its pads leave. plan.json's
+  // `lotGround`: lotId -> {seqs: [[[state, cond], ...]], runs: base64 int32 [x, z, y0, y1, seq] (column runs)}; a lot past LOT_GROUND_RUNS_MAX
+  // runs keeps {capped: n} (Regions.quote then names it inexact)
+  const lotGround = sv && Array.isArray(ir.lots) && ir.lots.length ? lotGroundOf(ir, stages, evalsOf, windows, evalBlobs) : null;
   const survivalTerrain = sv ? survivalTerrainOf(sv) : null;
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}) };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes, ...(reachM ? { evalSurvey } : {}), ...(affordances.length ? { affordances } : {}), ...(survivalBom ? { survivalBom } : {}), ...(survivalTerrain ? { survivalTerrain } : {}), ...(survivalTerrainWritten ? { survivalTerrainWritten } : {}), ...(lotGround ? { lotGround } : {}) };
+}
+
+/** (QL-b D'') At most this many column runs per lot in plan.json's `lotGround`; past it the lot keeps {capped: n}. */
+export const LOT_GROUND_RUNS_MAX = 16384;
+
+/** (QL-b D'') plan.json's `lotGround` (see planRegion), or null when no lot has a tile write under it. */
+export function lotGroundOf(ir, stages, evalsOf, windows, blobs) {
+  const order = new Map(stages.map((s, i) => [s, i]));
+  const lots = ir.lots.filter((l) => l.box && order.has(l.stage)).map((l) => ({ id: l.id, si: order.get(l.stage), b: l.box,
+    x0: l.box.minX - 1, x1: l.box.maxX + 1, z0: l.box.minZ - 1, z1: l.box.maxZ + 1, y0: l.box.minY - 2, y1: l.box.maxY + 1, cells: new Map() }));
+  if (!lots.length) return null;
+  for (const [key, evs] of evalsOf) {
+    const [tx, tz] = key.split(',').map(Number);
+    const kx0 = tx * 64, kz0 = tz * 64;
+    const near = lots.filter((l) => l.x0 <= kx0 + 63 && kx0 <= l.x1 && l.z0 <= kz0 + 63 && kz0 <= l.z1);
+    if (!near.length) continue;
+    for (const ev of evs) {
+      const si = order.get(ev.stage);
+      const to = near.filter((l) => si <= l.si);
+      if (!to.length) continue;
+      evalTile(ir, key, windows.get(key), { stage: ev.stage, set: ev.set, countOnly: true, blobs, onWrite: (x, y, z, st, cond) => {
+        for (const l of to) {
+          if (x < l.x0 || x > l.x1 || z < l.z0 || z > l.z1 || y < l.y0 || y > l.y1) continue;
+          const id = `${x},${z},${y}`;
+          const c = l.cells.get(id);
+          if (c) c.w.push([st, cond]); else l.cells.set(id, { x, y, z, w: [[st, cond]] });
+        }
+      } });
+    }
+  }
+  const out = {};
+  for (const l of [...lots].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    if (!l.cells.size) continue;
+    const seqs = [], seqIdx = new Map(), runs = [];
+    const cells = [...l.cells.values()].sort((a, b) => a.x - b.x || a.z - b.z || a.y - b.y);
+    for (const c of cells) {
+      const k = JSON.stringify(c.w);
+      let si = seqIdx.get(k);
+      if (si === undefined) { si = seqs.length; seqs.push(c.w); seqIdx.set(k, si); }
+      const r = runs[runs.length - 1];
+      if (r && r[0] === c.x && r[1] === c.z && r[3] === c.y - 1 && r[4] === si) r[3] = c.y;
+      else runs.push([c.x, c.z, c.y, c.y, si]);
+    }
+    if (runs.length > LOT_GROUND_RUNS_MAX) { out[l.id] = { capped: runs.length }; continue; }
+    const buf = Buffer.alloc(runs.length * 20);
+    runs.forEach((r, i) => r.forEach((v, j) => buf.writeInt32LE(v, i * 20 + j * 4)));
+    out[l.id] = { seqs, runs: buf.toString('base64') };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** (BC, A11) At most this many paid terrain cells per group are kept by position; past it the group keeps none (the quote stays an upper bound). */

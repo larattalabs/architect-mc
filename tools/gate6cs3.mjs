@@ -30,6 +30,7 @@ import { sidecarReuse } from './lib/sidecar-reuse.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gatePart, sliceSections, slicesOf } from './lib/gate-part.mjs';
 import { testConcurrencyArgs } from './lib/cpu-budget.mjs';
+import { javaRun } from './lib/junit-reuse.mjs'; // (chore GRB) Java units under the gradle lock
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-S3-run');
@@ -99,13 +100,6 @@ function nodeTest(files, timeout = 3_600_000) {
   return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20) };
 }
 const kitOnce = (files) => kitReuse(root, files) ?? nodeTest(files);
-function junit(name) {
-  const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-${name}.xml`);
-  if (!fs.existsSync(f)) return null;
-  const t = fs.readFileSync(f, 'utf8');
-  const g = (k) => Number((new RegExp(`${k}="(\\d+)"`).exec(t) ?? [])[1] ?? -1);
-  return { tests: g('tests'), failures: g('failures'), errors: g('errors') };
-}
 
 steps.unit = async () => {
   const out = {};
@@ -119,8 +113,10 @@ steps.unit = async () => {
   out.sidecar = { code: sc.status, summary: `${sc.stdout}${sc.stderr}`.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ') };
   check(sc.status === 0, `§5 (sidecar): region.terracedZones and region.monastery appended to the features; the compact plan/0 within its bound: ${out.sidecar.summary}`);
   const env = { ...process.env, JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '-q', '--tests', '*ApiS3Test', '--tests', '*ApiS2Test'], { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env });
-  out.mod = { code: g.status, s3: junit('dev.larattalabs.architect.region.ApiS3Test') };
+  // ((chore GRB) unit-mod's XML when exact, else this gradle under the checkout's lock: tools/lib/junit-reuse.mjs javaRun)
+  const javaArgs = ['test', '--offline', '-q', '--tests', '*ApiS3Test', '--tests', '*ApiS2Test'];
+  const g = javaRun(root, javaArgs, () => spawnSync('./gradlew', javaArgs, { cwd: path.join(root, 'mod'), encoding: 'utf8', timeout: 1_800_000, env }), { classes: ['dev.larattalabs.architect.region.ApiS3Test'], log });
+  out.mod = { code: g.status, s3: g.junit['dev.larattalabs.architect.region.ApiS3Test'] };
   check(g.status === 0 && out.mod.s3 && out.mod.s3.tests > 0 && out.mod.s3.failures === 0 && out.mod.s3.errors === 0, `§5 (mod): ApiS3Test (the version floor, terracedZones and scenarioS3, no new kind): ${json(out.mod)}`);
   Object.assign(out, await apicompat());
   spendZero();

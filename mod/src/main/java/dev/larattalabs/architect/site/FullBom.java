@@ -91,7 +91,20 @@ final class FullBom {
 	}
 
 	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan) {
+		return of(level, bp, plan, null);
+	}
+
+	/**
+	 * {@link #of(ServerLevel, Blueprint, Sites.SitePlan)} over the world with {@code ground} on top (QL-b D'': a quote's lot over the land as the
+	 * region's tiles before it leave it; cell -> the state they leave there). Null: the world as it is.
+	 */
+	static @Nullable Result of(ServerLevel level, Blueprint bp, Sites.SitePlan plan, java.util.@Nullable Map<Long, BlockState> ground) {
+		// only inside the template's box: the fill and the approach outside it are planned over the land now (Sites.verdict), and priced so
+		var box = plan.box();
 		return compute(inputs(level, bp, plan), p -> {
+			if (ground != null && ground.get(p) instanceof BlockState g && inBox(box, p)) {
+				return g;
+			}
 			int x = BlockPos.getX(p);
 			int z = BlockPos.getZ(p);
 			LevelChunk c = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
@@ -105,6 +118,11 @@ final class FullBom {
 			}
 			return level.getBrightness(layer, BlockPos.of(p));
 		});
+	}
+
+	private static boolean inBox(dev.larattalabs.architect.placement.Anchors.Bounds b, long p) {
+		int x = BlockPos.getX(p), y = BlockPos.getY(p), z = BlockPos.getZ(p);
+		return x >= b.minX() && x <= b.maxX() && y >= b.minY() && y <= b.maxY() && z >= b.minZ() && z <= b.maxZ();
 	}
 
 	/**

@@ -118,6 +118,9 @@ export function findingRule(msg: string): string {
   if (/^(palette\[|unknown or non-vanilla blocks)/.test(m)) return 'blocks';
   if (/^(missing required anchor|anchor )/.test(m)) return 'anchors';
   if (/^fill:/.test(m)) return 'fill';
+  // (SP2, Steward M1) a program that refuses its bible throws `palette: ...` (Steward's PaletteCheck, mirrored in the program): that is
+  // the bible the program can't take (ProgramRefused's `palette`), not a program fault
+  if (/^design \S+ threw: (?:[A-Za-z]*Error: )?palette:/.test(m)) return 'palette';
   if (/^design \S+ threw|^kit\/designs\//.test(m)) return 'program';
   return 'check';
 }

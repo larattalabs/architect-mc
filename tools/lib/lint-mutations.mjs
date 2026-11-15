@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { archTmpDir } from './arch-tmp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/** This module's directory, tools/lib (taken from the URL so step-inputs doesn't read a tools/lib/** input into every step reaching this file). */
+const LIB = path.dirname(fileURLToPath(import.meta.url));
 
 export const MUTATIONS = [
   {
@@ -84,6 +86,10 @@ async function one(m) {
         const r = spawnSync('cp', ['-c', '-R', path.join(ROOT, d), path.join(scratch, d)]);
         if (r.status !== 0) spawnSync('cp', ['-R', path.join(ROOT, d), path.join(scratch, d)]);
       }
+      // ((chore GRB) since slice TS the kit's test helpers import ../../tools/lib/arch-tmp.mjs (and its ram-tmp deps): the scratch kit
+      // reaches this checkout's own tools/lib through a link (no mutation edits it; the trace records what is read))
+      fs.mkdirSync(path.join(scratch, 'tools'));
+      fs.symlinkSync(LIB, path.join(scratch, 'tools', path.basename(LIB)), 'dir');
       for (const [file, find, rep] of m.edits) {
         const f = path.join(scratch, 'kit', file);
         const src = fs.readFileSync(f, 'utf8');
