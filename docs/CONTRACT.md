@@ -32118,3 +32118,17 @@ by a terrain cell before the realise reaches it. **Additive API change, binary c
   growth quotes) and bc-relay (the farm-field module quote) now run `terrainShape`.
 - Found while building: kept cells are packed block states (grass_block bills dirt), so the gate picks a cell by its items. Also,
   `release-version.test.mjs` expects the `ApiRules` features list to end with `"apiVersion");`, so `quoteTerrain` sits just before it.
+
+### Slice GD as built (branch `slice/GD` off main b003c214; versions NEXT, none added; $0; DEV MODE, light; recorded 2026-11-15)
+
+Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 districts zone, realised as one region).
+- `growPlan` (kit/lib/region/grow.mjs): on a region that is not a districts region, a named `grow.district` is looked up in the new
+  `zoneDistricts(eff)`: each zone's `program.districts` ids (the plan in `eff.params.plan`) plus every street road's
+  `architect_mc:street {zone, district}` flag. With `grow.zone` the zone must hold it; alone, the one zone holding it is taken.
+  The growth then filters the runs to that district's streets in that zone, as a districts region's does (`<d>_<k>` count ids, flags).
+- Refusals (NOT_ALLOWED [call]): unknown: "... is not a district of the region (<all districts>, or none)", as before; a zone that
+  doesn't hold it names whose it is; a name two zones hold without `grow.zone`: "... is a district of zones a, b: name one with grow.zone".
+- A districts region (`params.spec.districts`) is byte-identical: `kit/test/gd.test.mjs` (5) pins one growth's sha, taken on main b003c214.
+  `grow.zone` alone on a plan_v0 zone is unchanged (any street of the zone). No API or Java change (the request already carries `district`).
+- Not covered: a D2 following zone on plan_v0 grows by frontage and §4 only (no boundary extension: its `follow` isn't in the IR); plan/0's
+  own `revision.grow` for a districts zone still answers unsupported.

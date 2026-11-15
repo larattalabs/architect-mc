@@ -53,6 +53,18 @@ function districtOfRoad(rd) {
 }
 
 /**
+ * (GD) A plan_v0 region's districts by zone: each districts zone's `program.districts` ids (the plan in the IR's params) and every street
+ * road's `architect_mc:street {zone, district}` flag (so a district realised only through its streets still reads). zone -> Set(district).
+ */
+export function zoneDistricts(eff) {
+  const out = new Map();
+  const add = (z, d) => { if (typeof z !== 'string' || typeof d !== 'string') return; if (!out.has(z)) out.set(z, new Set()); out.get(z).add(d); };
+  for (const z of eff.params?.plan?.zones ?? []) for (const d of Array.isArray(z?.program?.districts) ? z.program.districts : []) add(z.id, d?.id);
+  for (const rd of eff.roads ?? []) { const f = rd.ext?.['architect_mc:street']; if (f) add(f.zone, f.district); }
+  return out;
+}
+
+/**
  * The standing street runs of an effective IR: every straight, axis-aligned segment of a street road (flagged `architect_mc:street`, or the
  * `street_` stem; never a route or a following street `st_`), at least MIN_RUN long. `{road, seg, o, c, u0, u1, y, width, lanterns, lamp,
  * surface, ext, district, prefix, twoPoint, grown}` (`o` 'ew' when the run is along x). Sorted by road id, then segment.
@@ -246,7 +258,19 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   const districts = (eff.params?.spec?.districts ?? eff.params?.districts ?? []).map((d) => d.id);
   const district = g.district ?? null;
   if (isDistricts && !district) throw new Error('NOT_ALLOWED: [call] grow.district: a districts region grows one district (name it)');
-  if (district !== null && !districts.includes(district)) throw new Error(`NOT_ALLOWED: [call] grow.district '${district}' is not a district of the region (${districts.join(', ') || 'none'})`);
+  // (GD, S-PV1-1) a plan_v0 region: a district of one of its districts zones, read from the plan's zones and the street flags
+  let zone = typeof g.zone === 'string' ? g.zone : null;
+  if (!isDistricts && district !== null) {
+    const zd = zoneDistricts(eff);
+    const holds = [...zd].filter(([, ds]) => ds.has(district)).map(([z]) => z).sort();
+    if (!holds.length) {
+      const all = [...new Set([...zd.values()].flatMap((ds) => [...ds]))].sort();
+      throw new Error(`NOT_ALLOWED: [call] grow.district '${district}' is not a district of the region (${all.join(', ') || 'none'})`);
+    }
+    if (zone !== null && !holds.includes(zone)) throw new Error(`NOT_ALLOWED: [call] grow.district '${district}' is not a district of zone ${zone} (it is ${holds.join(', ')}'s; ${zone}'s: ${[...(zd.get(zone) ?? [])].sort().join(', ') || 'none'})`);
+    if (zone === null && holds.length > 1) throw new Error(`NOT_ALLOWED: [call] grow.district '${district}' is a district of zones ${holds.join(', ')}: name one with grow.zone`);
+    zone = zone ?? holds[0];
+  } else if (district !== null && !districts.includes(district)) throw new Error(`NOT_ALLOWED: [call] grow.district '${district}' is not a district of the region (${districts.join(', ') || 'none'})`);
   const prefix = district ? `${district}_` : '';
   // the lot specs: a list, or a count n (a district's <d>_<k> ids continue its numbering)
   let specs;
@@ -271,8 +295,7 @@ export function growPlan({ eff, standing, survey, grow, rid }) {
   const ordered = [...specs].sort((a, b) => orderOf(a) - orderOf(b) || a._i - b._i);
   const O = growObstacles(eff, standing);
   const allRuns = streetRuns(eff);
-  // (a plan/0 zone grows on its own streets: their `architect_mc:street` flag names it, §8)
-  const zone = typeof g.zone === 'string' ? g.zone : null;
+  // (a plan/0 zone grows on its own streets: their `architect_mc:street` flag names it, §8; GD: a named district's zone, resolved above)
   const runs = allRuns.filter((r) => (district ? r.district === district : r.district === null || !isDistricts) && (!zone || r.ext?.['architect_mc:street']?.zone === zone));
   if (!runs.length) throw new Error(`NO_ROOM: [street] ${district ? `district ${district}` : 'the region'} has no standing street to grow on`);
   const standingBoxes = (eff.lots ?? []).map((l) => [l.box.minX, l.box.minZ, l.box.maxX, l.box.maxZ]);
