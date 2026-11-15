@@ -63,6 +63,14 @@ export const P1_COMPOSES = Object.freeze([
   { key: 'caravan', site: 'rift_site', style: 'medieval', brief: "A caravan stop on the open desert: a walled court round a well, a few traders' houses and stalls, and a road out of the court." },
   { key: 'hill', site: 'tunnel_hill', style: 'rustic', brief: 'A farming village at the foot of the hill: cottages round a green, fields on the flat ground, and a road through a tunnel in the hill to the far side.' },
 ]);
+/**
+ * The calibration validations of CF2's composer hints (prompt fixes are validated on non-scenario calibration briefs before any
+ * scenario retry, AGENTS): districts by level band on a slope; grow a form before cutting lots. Charged to P1 (`--set validate`).
+ */
+export const P1_VALIDATIONS = Object.freeze([
+  { key: 'hillside', site: 'hill_site', style: 'rustic', brief: 'A hillside town climbing the slope: a market square and an inn at the foot, houses and workshops on the middle of the slope, a chapel and a few larger houses at the top.' },
+  { key: 'hold', site: 'tunnel_hill', style: 'medieval', brief: "A small hold hollowed inside the hill: a great hall, a forge, a storehouse and four homes under the rock, with an entrance from the hill's foot." },
+]);
 /** P1's format 3 settlement Style (non-scenario). */
 export const P1_STYLE = Object.freeze({ name: 'PAY Badlands Hamlet', prompt: 'A red-sandstone mining hamlet in the badlands: timber-propped cottages on stone footings, lanterns on chains, tracks and spoil heaps.' });
 /** P2's and P5's settlement Styles (sim only in stage 1): the scenario's brief, references off (P2) and on (P5, N-7c-4's six images). */
@@ -534,7 +542,7 @@ subs['p1-compose'] = async () => {
   const run = (a) => spawnSync(process.execPath, a, { cwd: root, stdio: 'inherit', env: { ...env, GATE6B_RUN: RUN, GATE6B_DEV_PORT: String(DEV_PORT), GATE6B_SIDECAR_PORT: String(SIDECAR_PORT), GATE6B_OUT: process.env.GATE6B_OUT, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
   if (!fs.existsSync(RUN)) throw new Error(`no run dir ${RUN} (P0's gate run makes it)`);
   const out = path.join(ART, 'P1');
-  const res = readJson(path.join(out, 'compose.json'), { composes: {} });
+  const res = readJson(path.join(out, opt('set') === 'validate' ? 'validate.json' : 'compose.json'), { composes: {} });
   Object.assign(res, { at: new Date().toISOString(), head: gitHead() });
   try {
     if (run([path.join(root, 'tools', 'gate6b.mjs'), 'start', 'G6B Flat Base', 'claude']).status !== 0) throw new Error('the client did not start');
@@ -543,10 +551,11 @@ subs['p1-compose'] = async () => {
     res.auth = auth;
     if (auth.auth !== 'ok' || !/claude login/i.test(auth.authSource ?? '')) throw Object.assign(new Error(`refusing P1:compose: the client's sidecar is not on the claude login (${JSON.stringify(auth)})`), { code: 2 });
     const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-    for (const s of P1_COMPOSES) {
+    const set = opt('set') === 'validate' ? P1_VALIDATIONS : P1_COMPOSES;
+    for (const s of set) {
       if (only && only !== s.key) continue;
       const claim = await siteWorld(L, s, 'P1');
-      const step = `P1:compose:${s.key}${opt('attempt') ? `:${opt('attempt')}` : ''}`;
+      const step = `P1:${set === P1_VALIDATIONS ? 'validate' : 'compose'}:${s.key}${opt('attempt') ? `:${opt('attempt')}` : ''}`;
       try {
         openPaid({ item: 'P1', step, capUsd: P.P1_BUDGETS.compose, authSource: auth.authSource, retry: !!opt('retry'), minutes: 30 });
         const t0 = Date.now();
@@ -558,12 +567,12 @@ subs['p1-compose'] = async () => {
         log(`P1 ${s.key}: ${c.status} ${c.outcome} $${Number(c.costUsd).toFixed(4)} rounds ${c.rounds} (${c.history.map((x) => x.overall ?? x.refused).join(' -> ')})${c.waits.length ? ` waits ${c.waits.map((w) => w.part).join(',')}` : ''}`);
       } finally {
         await L.cmd(`/forceload remove ${claim[0]} ${claim[1]} ${claim[2]} ${claim[3]}`).catch(() => null);
-        writeJson(path.join(out, 'compose.json'), res);
+        writeJson(path.join(out, opt('set') === 'validate' ? 'validate.json' : 'compose.json'), res);
       }
     }
   } finally {
     run([path.join(root, 'tools', 'gate6b.mjs'), 'stop']);
-    writeJson(path.join(out, 'compose.json'), res);
+    writeJson(path.join(out, opt('set') === 'validate' ? 'validate.json' : 'compose.json'), res);
   }
 };
 
