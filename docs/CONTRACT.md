@@ -32371,8 +32371,28 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   plans those over the land its tiles leave and can plan fewer (qt-growth's cottage: 3 approach dirt), so the quote names them and is
   inexact. qt-growth now judges an exact quote equal and an inexact one an upper bound, item for item.
 - **Leftover (accepted; a candidate for the next quote slice):** a realise whose approach comes out longer than the quote's (the plan's tiles
-  lower the land in front of a lot) pays for cells the quote never planned. With a `maxBill` set the realise never spends past it: it waits
-  `bill_cap` instead. Without a cap, consumed can exceed the quote in that case. Not seen in any gate.
+  lower the land in front of a lot) pays for cells the quote never planned. With a maxBill set, the realise waits
+  bill_cap; callers that set none, including Steward before its QD, can consume past the quote. Not seen in any gate. (Fixed in QL-c.)
 - Gate hook `dev.qlb.lotBill` (a quote with each lot's bill taken apart); step `qlb-lot` on a copy of Steward's cf067 world (rv3 in 10 pairs at 210).
 - Units: igb (the shells' `survivalTerrainWritten`), `QuotesWrittenQLBTest`, `FullBomTest` (grass over grass billed as over dirt, the review's
   case; a 96 x 96 dirt floor over dirt bills all 9216; an approach path over a standing path billed and counted).
+
+### Slice QL-c as built (2026-11-15)
+
+- **The land a lot goes down on:** `Regions.quote` now plans each lot's approach over the land the realise finds (`site.QuoteLand`, set on
+  the quote's thread with `QUOTE_ROADS`): every cell the plan's 4e roads write (air included), then the tiles' writes in the lot's approach
+  window, applied over the world as TileCheck decides them (a road's cell held, a failing condition skipped, the cell's own state a no-op,
+  ALWAYS_OURS over the region's own). The verdict's terrain reads (outside the placed box's columns) and the entrance style's surfaces read
+  it; the tiles' queued cells are the style's region ground (a first realise's quote style now has a group) and their walk cells road cells.
+- **The kit:** plan.json's `approachGround` (lotId -> {seqs [[state, cond, walk]], runs}, `approachGroundOf`; `{}` when no lot has a write,
+  `{capped}` past 16384 runs): the window is the lot, 5 cells across its front either side, 26 rows out of it, floorY +-50. Sidecar forwards it.
+- **Case 1** (planned gravel road): joined as gravel, 9 gravel, as the realise. **Case 2** (a path tile shortens it): 3 rows, 9 gravel, and
+  **case 4** (tiles lower the land): the realise's longer approach, cell for cell. A lot whose approach land the tiles change is billed that
+  approach and named inexact (the tiles' writes are the plan survey's); one whose land can't be known (capped, a chunk not loaded, an unknown
+  state, a plan made before QL-c) is inexact with a note saying the approach may differ either way: with a maxBill set, the realise waits
+  bill_cap; callers that set none, including Steward before its QD, can consume past the quote.
+- **Case 3** (farmland moisture): `Quotes.standing` compares the block as the region run does (`builderHolds`: `Builder.Run#matches` while a
+  target builds); grass where dirt is planned is still billed.
+- Units: `QuotesApproachQLCTest` (the four probes, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
+- **Leftovers:** TileCheck's player-build, unbreakable and incidental branches are not mirrored; a later-stage tile that writes over an
+  approach is not modelled (it does not change the lot's plan); the box's own columns are still priced over the land now (QL-b).
