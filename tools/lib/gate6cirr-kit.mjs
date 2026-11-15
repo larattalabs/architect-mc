@@ -18,12 +18,13 @@ import * as CP from './corpus-plan.mjs'; // (gate speed 3) the plans from the ru
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
 import { PF_MOVED } from './pf-norm.mjs'; // (7c PF) the aqueducts' arches from the archSpan module
+import { SP2_MOVED } from './sp2-norm.mjs'; // (SP2) a crater's recorded params read
 
 /** (The CU/IRR/VOC-c batch) VOC-c's named exceptions (rule.palette supported: the 7 asks with a palette rule, extension/e05 and e16): its own item 4 holds them. */
 export const LATER_EXCEPTIONS = [...VOCC_EXCEPTIONS, ...FL_MOVED.filter((n) => !VOCC_EXCEPTIONS.includes(n))];
 // ((7a foundation) its catalogue changes' named movers)
 for (const n of Object.keys(F7A_MOVED)) if (!LATER_EXCEPTIONS.includes(n)) LATER_EXCEPTIONS.push(n);
-for (const n of [...Object.keys(THEME_REST_MOVED), ...Object.keys(PF_MOVED)]) if (!LATER_EXCEPTIONS.includes(n)) LATER_EXCEPTIONS.push(n);
+for (const n of [...Object.keys(THEME_REST_MOVED), ...Object.keys(PF_MOVED), ...Object.keys(SP2_MOVED)]) if (!LATER_EXCEPTIONS.includes(n)) LATER_EXCEPTIONS.push(n);
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 

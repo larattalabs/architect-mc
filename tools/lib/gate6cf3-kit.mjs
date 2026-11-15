@@ -18,6 +18,7 @@ import { DERIVE } from './corpus-derive.mjs';
 import { F7A_MOVED } from './f7a-norm.mjs'; // (7a foundation) the fixtures the foundation's catalogue changes move by name
 import { THEME_REST_MOVED } from './theme-rest-norm.mjs'; // (theme rest) the tunnel fixtures' flush lamp
 import { PF_MOVED } from './pf-norm.mjs'; // (7c PF) the aqueducts' arches from the archSpan module
+import { SP2_MOVED } from './sp2-norm.mjs'; // (SP2) a crater's recorded params read
 
 const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
@@ -25,6 +26,7 @@ const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 export const EXCEPT = Object.freeze({
   ...THEME_REST_MOVED,
   ...PF_MOVED,
+  ...SP2_MOVED,
   ...F7A_MOVED, // ((7a foundation) its catalogue changes' named movers)
   'extension/e16_every_reserved_b.json': 'F3: form.giant_tree supported (f_giant_tree, a giant oak near the stone, now fits; it left the reserved list)',
   // (fix/survival-off-storm) their trees had a log held only from above or by leaves: now a leaf or gone; the answers unchanged
