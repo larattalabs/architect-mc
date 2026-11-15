@@ -196,7 +196,7 @@ public final class JobRows {
 		boolean parts = bj.request().has("parts") && bj.request().get("parts").isJsonPrimitive() && bj.request().get("parts").getAsBoolean();
 		String name = bj.bible().map(dev.larattalabs.architect.api.Bible::name).orElse(bj.request().has("name") && bj.request().get("name")
 			.isJsonPrimitive() ? bj.request().get("name").getAsString() : bj.bibleId());
-		String title = parts ? "Parts for " + name + " v" + bj.version() : (bj.kind().equals("revise") ? "Revise " : "Bible ") + name + " v" + bj.version();
+		String title = parts ? "Parts for " + name + " v" + bj.version() : (bj.kind().equals("revise") ? "Revise " : "Style ") + name + " v" + bj.version();
 		JobState state = switch (bj.status()) {
 			case QUEUED -> JobState.QUEUED;
 			case DONE -> JobState.DONE;
@@ -207,8 +207,8 @@ public final class JobRows {
 		if (!state.ended() && bj.usageLimitUntil() > now) {
 			state = JobState.HELD;
 		}
-		JobRow.Builder b = JobRow.builder(bibleRow(bj.id()), parts ? "parts" : "bible", title, state).step(bj.error().filter(e -> !e.isBlank())
-			.map(JobRows::firstLine).orElse(bj.step())).spent(bj.cost().usd()).created(bj.createdAt()).parent(parent)
+		JobRow.Builder b = JobRow.builder(bibleRow(bj.id()), parts ? "parts" : "style", title, state).step(bj.error().filter(e -> !e.isBlank())
+			.map(JobRows::firstLine).orElse(playerStep(bj.step(), state, null, new JsonObject()))).spent(bj.cost().usd()).created(bj.createdAt()).parent(parent)
 			.link("Architect · Designs tab", act.run(Action.of("open_designs", bj.id())));
 		double budget = dbl(bj.request(), "budgetUsd");
 		if (budget > 0) {
@@ -350,7 +350,7 @@ public final class JobRows {
 	}
 
 	/** (slice UI) A helper-made id in a step line: {@code gen_cabin_2}, {@code mas_tower_x}. */
-	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp)_[A-Za-z0-9_]+\\b");
+	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp|bib)_[A-Za-z0-9_]+\\b");
 
 	/**
 	 * (slice UI, UI-AUDIT 14 raw internals) The helper's step line in player words for the shared Jobs panel: no "done:" repeating the

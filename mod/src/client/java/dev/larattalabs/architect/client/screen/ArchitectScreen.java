@@ -1813,7 +1813,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	/** (slice UI, UI-AUDIT 14 raw internals) A job id the helper made ({@code gen_cabin_2}, {@code mas_tower_x}) in a step line. */
-	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp)_[A-Za-z0-9_]+\\b");
+	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp|bib)_[A-Za-z0-9_]+\\b");
 
 	/**
 	 * (slice UI, UI-AUDIT 14) A job's status line in player words: "done · in the Library · 11×12×12", not "done · done: gen_cabin (11x12x12),
