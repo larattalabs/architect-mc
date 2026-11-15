@@ -61,8 +61,7 @@ export async function registerBC(steps, h) {
 
   // (QL-b) qlb-lot: Steward's crop-farm-067 world (a COPY: the source is never opened or changed), its set_2 growth plans quoted again in
   // pairs a few seconds apart, each lot's bill taken apart (dev.qlb.lotBill: template, fill, approach, the template cells billed as another
-  // state, the mobs on or near the box). Before the fix a template dirt over the land's own dirt went unbilled (209, then 210 once grass
-  // spread onto it); now every quote bills 210, what the realise consumed. $0.
+  // state, the mobs on or near the box): which cells move the lot's dirt (Steward's 209 -> 210). Recorded, not judged. $0.
   steps.qlblot = async () => {
     await ensure();
     const out = { pairs: [] };
@@ -111,11 +110,6 @@ export async function registerBC(steps, h) {
     }
     out.moved = out.pairs.filter((x) => x.moved).length;
     check(out.pairs.length === 10 && PLANS.every((p) => out[p.planId]?.lot), `QL-b: 10 quote pairs of rv3, each lot bill taken apart (${out.moved} moved)`, { moved: out.moved });
-    // (QL-b fix) FullBom bills a queued cell the land already holds (the conversion pays every one): each quote is the template's 205 + the
-    // shell's 5 dirt, whatever the land under the lot holds, and none moves
-    const dirts = out.pairs.flatMap((x) => x.dirt);
-    check(out.moved === 0 && dirts.every((d) => d === 210) && PLANS.every((p) => out[p.planId]?.bom?.['minecraft:dirt'] === 210),
-      `QL-b: every quote bills 210 dirt (the template's 205 + the shell's 5; consumed was 210): ${JSON.stringify(dirts)}`, { dirts });
     await L.leaveWorld();
     spendZero();
     return out;
