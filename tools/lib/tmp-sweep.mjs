@@ -1,14 +1,26 @@
-// The temp sweep (slice TS, docs/GATES.md "Slice TS as built"): what tools/tmp-sweep.mjs removes. Only direct children of each
-// root (os.tmpdir() and the RAM disk's tmp/, tools/lib/ram-tmp.mjs) whose name starts with `arch-`; never follows a symlink (lstat; a symlink is removed itself, never its target);
-// skips a dir whose owner marker (.arch-owner, tools/lib/arch-tmp.mjs) names a live process with the same start time; removes the
-// rest once older than `hours` (with a marker) or `noMarkerHours` (without one: older runs). Plain files are never touched.
+// The temp sweep (slice TS, docs/GATES.md "Slice TS as built"): what tools/tmp-sweep.mjs removes, among the direct children of
+// each root (os.tmpdir() and the RAM disk's tmp/, tools/lib/ram-tmp.mjs). It keys on the owner marker (.arch-owner, written by
+// tools/lib/arch-tmp.mjs):
+//   - a dir with a valid marker: kept while its owner is a live process with the same start time, else removed past `hours`;
+//   - a dir without one: removed past `noMarkerHours` ONLY when its name is a known Architect temp name (tools/tmp-prefixes.json:
+//     the pre-TS prefixes plus mkdtemp's 6-character suffix); any other unmarked name is never touched (other tools share $TMPDIR);
+//   - a symlink with a known name: unlinked itself past `noMarkerHours`, never followed; plain files are never touched.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { PREFIX, OWNER_FILE } from './arch-tmp.mjs';
-import { RAM_TMP, freeBytes } from './ram-tmp.mjs';
+import { RAM_TMP, ORIGINAL_TMPDIR, freeBytes, systemTmpDir } from './ram-tmp.mjs';
+
+const PREFIX_FILE = new URL('../tmp-prefixes.json', import.meta.url);
+const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The known unmarked Architect temp names: (name) => boolean, from tools/tmp-prefixes.json (or a given { prefixes, patterns }). */
+export function knownNames(spec = JSON.parse(fs.readFileSync(PREFIX_FILE, 'utf8'))) {
+  const res = [...(spec.prefixes ?? []).map((p) => new RegExp(`^${escRe(p)}[A-Za-z0-9]{6}$`)), ...(spec.patterns ?? []).map((p) => new RegExp(p))];
+  return (name) => res.some((re) => re.test(name));
+}
 
 export const DEFAULTS = { hours: 6, noMarkerHours: 24 };
 /** A marker's start time (Node's timeOrigin) matches the live process's (ps, whole seconds, truncated) when the process started
@@ -60,7 +72,7 @@ export function readOwner(dir) {
   try {
     if (!fs.lstatSync(f).isFile()) return null;
     const o = JSON.parse(fs.readFileSync(f, 'utf8'));
-    return o && typeof o === 'object' ? o : null;
+    return o && typeof o === 'object' && Number.isInteger(o.pid) && o.pid > 0 ? o : null;
   } catch {
     return null;
   }
@@ -108,10 +120,10 @@ export function treeBytes(p) {
 }
 
 /**
- * What the sweep would do with each `arch-*` child of root: [{ name, kind: 'dir'|'symlink', action: 'remove'|'keep', reason,
- * ageHours, owner }]. Non-`arch-` names and plain files are not listed at all.
+ * What the sweep would do with each candidate child of root: [{ name, kind: 'dir'|'symlink', action: 'remove'|'keep', reason,
+ * ageHours, owner }]. Names it never touches (unmarked and unknown) and plain files are not listed at all.
  */
-export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMarkerHours = DEFAULTS.noMarkerHours, now = Date.now(), starts = processStarts(), alive = pidAlive } = {}) {
+export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMarkerHours = DEFAULTS.noMarkerHours, now = Date.now(), starts = processStarts(), alive = pidAlive, known = knownNames() } = {}) {
   const out = [];
   let names;
   try {
@@ -120,7 +132,7 @@ export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMark
     return out;
   }
   for (const name of names.sort()) {
-    if (!name.startsWith(PREFIX)) continue;
+    const listed = known(name);
     const p = path.join(root, name);
     let st;
     try {
@@ -129,12 +141,14 @@ export function selectSweep({ root = os.tmpdir(), hours = DEFAULTS.hours, noMark
       continue;
     }
     if (st.isSymbolicLink()) {
+      if (!listed && !name.startsWith(PREFIX)) continue; // not ours: never touched
       const ageHours = (now - st.mtimeMs) / HOUR;
       out.push({ name, kind: 'symlink', ageHours, owner: null, action: ageHours >= noMarkerHours ? 'remove' : 'keep', reason: ageHours >= noMarkerHours ? 'old symlink' : 'young symlink' });
       continue;
     }
     if (!st.isDirectory()) continue; // a plain file: never touched
     const owner = readOwner(p);
+    if (!owner && !listed) continue; // unmarked and not a known Architect name: never touched
     const ageHours = (now - lastTouched(p, st)) / HOUR;
     if (owner && isHeld(owner, starts, alive)) {
       out.push({ name, kind: 'dir', ageHours, owner, action: 'keep', reason: `held by live pid ${owner.pid}` });
@@ -189,12 +203,12 @@ export const fmtBytes = (n) => (n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(2)} GB
 
 /** The one-line summary. */
 export const summaryLine = (r) =>
-  `tmp-sweep${r.dryRun ? ' (dry run)' : ''}: ${r.dryRun ? 'would remove' : 'removed'} ${r.removed} arch-* entr${r.removed === 1 ? 'y' : 'ies'} (${fmtBytes(r.bytes)}), kept ${r.kept}${r.failed ? `, ${r.failed} failed` : ''}${r.error ? `, error: ${r.error}` : ''}`;
+  `tmp-sweep${r.dryRun ? ' (dry run)' : ''}: ${r.dryRun ? 'would remove' : 'removed'} ${r.removed} temp entr${r.removed === 1 ? 'y' : 'ies'} (${fmtBytes(r.bytes)}), kept ${r.kept}${r.failed ? `, ${r.failed} failed` : ''}${r.error ? `, error: ${r.error}` : ''}`;
 
-/** The roots swept: os.tmpdir() and the RAM disk's tmp/ when it exists (by real path, once each; never through a symlinked root). */
+/** The roots swept: the process's own and the OS's temp dir, and the RAM disk's tmp/ when it exists (by real path, once each; never through a symlinked root). */
 export function sweepRoots({ ram = RAM_TMP } = {}) {
   const out = [];
-  for (const r of [os.tmpdir(), ram]) {
+  for (const r of [ORIGINAL_TMPDIR, systemTmpDir(), os.tmpdir(), ram].filter(Boolean)) {
     try {
       const real = fs.realpathSync(r);
       if (fs.statSync(real).isDirectory() && !out.includes(real)) out.push(real);

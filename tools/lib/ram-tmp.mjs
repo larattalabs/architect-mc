@@ -2,14 +2,31 @@
 // APFS RAM disk with indexing off, recreated at login by a LaunchAgent (com.laratta.mctmp-ramdisk; never touched from here), its
 // contents gone at reboot. When its tmp/ dir exists, is writable and has at least MIN_FREE_BYTES free, Architect's temp dirs go
 // there (archTmpDir's default root; the gate runner, eval and run-headless-server also point TMPDIR there for their children);
-// otherwise the normal $TMPDIR. ARCH_NO_RAMDISK=1 turns it off. A full disk fails loudly (ENOSPC names the disk and the fix).
+// otherwise the normal $TMPDIR. ARCH_NO_RAMDISK=1 turns it off. tools/lib/arch-tmp.mjs imports ram-tmp-env.mjs, so every process
+// that makes an Architect temp dir (each `node --test` file process, each vitest worker) and its children get TMPDIR there too. A full disk fails loudly (ENOSPC names the disk and the fix).
 
 import fs from 'node:fs';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 export const RAM_DISK = '/Volumes/MCTmp';
 export const RAM_TMP = `${RAM_DISK}/tmp`;
 export const MIN_FREE_BYTES = 2 * 1024 ** 3;
+/** The temp dir this process started with, before useRamTmp (the sweep sweeps it too). */
+export const ORIGINAL_TMPDIR = os.tmpdir();
+
+/** The RAM tmp dir's path: ARCH_RAM_TMP overrides it (tests). */
+export const ramTmpPath = (env = process.env) => env.ARCH_RAM_TMP || RAM_TMP;
+
+/** The OS's own per-user temp dir (macOS: getconf DARWIN_USER_TEMP_DIR), whatever TMPDIR says; null elsewhere or on failure. */
+export function systemTmpDir() {
+  if (process.platform !== 'darwin') return null;
+  try {
+    return execFileSync('getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8' }).trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 /** Free bytes on the volume holding dir, or null. */
 export function freeBytes(dir) {
@@ -22,7 +39,7 @@ export function freeBytes(dir) {
 }
 
 /** -> { dir, why }: dir = RAM_TMP when usable, else null with the reason (for a log line). */
-export function ramTmpChoice({ env = process.env, dir = RAM_TMP, minFree = MIN_FREE_BYTES } = {}) {
+export function ramTmpChoice({ env = process.env, dir = ramTmpPath(env), minFree = MIN_FREE_BYTES } = {}) {
   if (env.ARCH_NO_RAMDISK === '1') return { dir: null, why: 'ARCH_NO_RAMDISK=1' };
   try {
     if (!fs.statSync(dir).isDirectory()) return { dir: null, why: `${dir} is not a dir` };
@@ -53,6 +70,10 @@ export function ramTmpDir() {
 export function useRamTmp(env = process.env) {
   const c = ramTmpChoice({ env });
   if (!c.dir) return `TMPDIR ${os.tmpdir()} (RAM disk not used: ${c.why})`;
+  if (env.TMPDIR === c.dir) {
+    cached = c.dir;
+    return `TMPDIR ${c.dir} (RAM disk, inherited)`;
+  }
   env.TMPDIR = c.dir;
   cached = c.dir;
   return `TMPDIR ${c.dir} (RAM disk ${RAM_DISK}, ${((freeBytes(c.dir) ?? 0) / 1024 ** 3).toFixed(1)} GB free)`;

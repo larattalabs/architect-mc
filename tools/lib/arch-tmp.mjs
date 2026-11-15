@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ramTmpDir, explainEnospc } from './ram-tmp.mjs';
+import './ram-tmp-env.mjs'; // TMPDIR on the RAM disk for this process and its children, when usable
 
 export const PREFIX = 'arch-';
 export const OWNER_FILE = '.arch-owner';

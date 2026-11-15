@@ -7,3 +7,6 @@ export function ramTmpDir(): string | null;
 export function useRamTmp(env?: NodeJS.ProcessEnv): string;
 export function explainEnospc(e: unknown, where?: string): unknown;
 export function loudEnospc(): void;
+export const ORIGINAL_TMPDIR: string;
+export function ramTmpPath(env?: NodeJS.ProcessEnv): string;
+export function systemTmpDir(): string | null;
