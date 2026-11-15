@@ -261,10 +261,13 @@ public final class JobRows {
 			state = JobState.HELD;
 		}
 		String blueprint = str(d, "blueprintId", null);
+		if (m == null || m.group().isPresent()) {
+			step = playerStep(step, state, d.has("critiqueOf") ? null : blueprint, d);
+		}
 		JobRow.Builder b = JobRow.builder(designRow(id), kind, title(req, kind), state).step(step).needsYou(needsYou).spent(usd(d))
 			.created(num(d, "createdAt")).parent(parent);
 		if (state == JobState.DONE && blueprint != null && !d.has("critiqueOf")) {
-			b.link("Architect · Library: " + blueprint, act.run(Action.of("open_entry", blueprint)));
+			b.link("Architect · Library", act.run(Action.of("open_entry", blueprint)));
 		} else {
 			b.link("Architect · Designs tab", act.run(Action.of("open_designs", id)));
 		}
@@ -306,9 +309,10 @@ public final class JobRows {
 			+ (from == null ? "?" : from);
 		String step = state == JobState.FAILED && str(v, "error", null) != null ? firstLine(str(v, "error", "")) : str(v, "step", "");
 		String blueprint = str(v, "blueprintId", null);
+		step = playerStep(step, state, blueprint, v);
 		JobRow.Builder b = JobRow.builder(variantRow(id), imp ? "import" : "variant", title, state).step(step).created(num(v, "createdAt"));
 		if (state == JobState.DONE && blueprint != null) {
-			b.link("Architect · Library: " + blueprint, act.run(Action.of("open_entry", blueprint)));
+			b.link("Architect · Library", act.run(Action.of("open_entry", blueprint)));
 		} else {
 			b.link("Architect · Designs tab", act.run(Action.of("open_designs", id)));
 		}
@@ -343,6 +347,33 @@ public final class JobRows {
 	private static String modOf(String owner) {
 		int c = owner.indexOf(':');
 		return c > 0 ? owner.substring(0, c) : owner;
+	}
+
+	/** (slice UI) A helper-made id in a step line: {@code gen_cabin_2}, {@code mas_tower_x}. */
+	private static final java.util.regex.Pattern RAW_ID = java.util.regex.Pattern.compile("\\b(?:gen|mas|var|imp)_[A-Za-z0-9_]+\\b");
+
+	/**
+	 * (slice UI, UI-AUDIT 14 raw internals) The helper's step line in player words for the shared Jobs panel: no "done:" repeating the
+	 * state, no helper ids. A done design or variant in the Library says so, with its size ("in the Library · 11×12×12").
+	 */
+	static String playerStep(String step, JobState state, @Nullable String blueprint, JsonObject raw) {
+		if (state == JobState.DONE && blueprint != null) {
+			String size = "";
+			if (raw.has("size") && raw.get("size").isJsonObject()) {
+				JsonObject z = raw.getAsJsonObject("size");
+				if (z.has("x") && z.has("y") && z.has("z")) {
+					size = " · " + z.get("x").getAsInt() + "×" + z.get("y").getAsInt() + "×" + z.get("z").getAsInt();
+				}
+			}
+			return "in the Library" + size;
+		}
+		String t = step == null ? "" : step;
+		String st = state.name().toLowerCase(java.util.Locale.ROOT);
+		if (t.regionMatches(true, 0, st + ":", 0, st.length() + 1)) {
+			t = t.substring(st.length() + 1);
+		}
+		t = RAW_ID.matcher(t).replaceAll("").replaceAll("\\(\\s*\\)", "").replaceAll("\\s{2,}", " ").replaceAll("\\s+([,)])", "$1").strip();
+		return t.startsWith(",") ? t.substring(1).strip() : t;
 	}
 
 	private static String firstLine(String s) {

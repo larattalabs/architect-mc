@@ -294,7 +294,7 @@ final class LibraryTab {
 		boolean narrow = gridW < 330;
 		int sw = Math.max(56, gx + gridW - chipsRight - 6);
 		int sx = gx + gridW - sw;
-		s.textField(g, Focus.SEARCH, searchView, search, sx, top - 3, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
+		s.textField(g, Focus.SEARCH, searchView, search, sx, top, sw, new TextFieldView.Style(null, 0, "search name, tags, text…", null, null, 0, 1));
 		// filters row (slice UI, A-chips: kit chips at 18 px; GUI 4 keeps whole words and wraps to a second row instead of "Coll.", a bare ★
 		// and a bare ↕)
 		int fy = top + ArchitectScreen.CHIP_H + 3;
@@ -458,7 +458,7 @@ final class LibraryTab {
 		String title = collectionName(key) + " · " + n + (n == 1 ? " entry" : " entries");
 		String go = "Re-skin…";
 		int gw = s.bw(go);
-		int clearW = font.width("×") + 12;
+		int clearW = s.chipW("×");
 		int textW = x + w - 4 - gw - 4 - clearW - 4 - tx;
 		g.text(font, TextUtil.ellipsize(font, title, textW), tx, y + 4, UiBits.ink(), false);
 		String sub = bible == null ? "Style unknown (not installed here)" : (bible.builtin() ? "built-in Style" : "Style v" + bible.version() + (bible
@@ -485,7 +485,7 @@ final class LibraryTab {
 					.whenComplete((id, err) -> LibraryFeature.say(dev.larattalabs.architect.client.design.SetFeature.message(),
 						dev.larattalabs.architect.client.design.SetFeature.messageError())));
 			});
-		s.chip(g, "collection:clear", "×", x + w - 4 - clearW, y + 6, false, true, mx, my, () -> {
+		s.chip(g, "collection:clear", "×", x + w - 4 - clearW, y + 3, false, true, mx, my, () -> {
 			LibraryFeature.setQuery(LibraryFeature.query().withCollection(null));
 			s.resetScroll();
 		});
@@ -668,7 +668,7 @@ final class LibraryTab {
 		for (PreviewImages.Found f : PreviewImages.find(c.id())) {
 			kinds.add(f.kind());
 		}
-		int chipsH = kinds.size() > 1 ? 16 : 0;
+		int chipsH = kinds.size() > 1 ? ArchitectScreen.CHIP_H + 3 : 0;
 		int box = Math.max(36, buttonsTop - 4 - textH - chipsH - y);
 		Panels.inset(g, x, y, w, box);
 		if (!kinds.contains(previewKind)) {
@@ -692,7 +692,7 @@ final class LibraryTab {
 		// name line, or the inline editor
 		if (edit != Edit.NONE && c.id().equals(editing)) {
 			boolean ren = edit == Edit.RENAME;
-			int okW = font.width("Save") + 12;
+			int okW = s.chipW("Save");
 			s.textField(g, ren ? Focus.RENAME : Focus.TAGS, ren ? renameView : tagsView, ren ? rename : tags, x, ty - 2, w - okW - 3,
 				new TextFieldView.Style(null, 0, ren ? "a name (empty = the design's own)" : "tags, comma separated", null, null, 0, 1));
 			s.chip(g, "edit:save", "Save", x + w - okW, ty + 1, true, true, mx, my, this::commitEdit);
@@ -768,17 +768,17 @@ final class LibraryTab {
 			String needs = bom == null ? "Needs: (the template isn't loaded)" : !bom.creativeOnly().isEmpty()
 				? "Survival can't build it: uses " + String.join(", ", bom.creativeOnly().stream().map(m -> m.replace("minecraft:", "")).toList())
 				: "Needs: " + bom.total() + " items";
-			int cw = bom == null || !bom.creativeOnly().isEmpty() ? 0 : font.width(showBom ? "Preview" : "BOM ▸") + 12;
+			int cw = bom == null || !bom.creativeOnly().isEmpty() ? 0 : s.chipW(showBom ? "Preview" : "BOM ▸");
 			g.text(font, TextUtil.ellipsize(font, needs, w - cw - 4), x, ty, bom != null && !bom.creativeOnly().isEmpty() ? UiBits.errorText()
 				: UiStyle.clayText(), false);
 			if (cw > 0) {
-				s.chip(g, "bom", showBom ? "Preview" : "BOM ▸", x + w - cw, ty - 3, showBom, true, mx, my, () -> showBom = !showBom);
+				s.chip(g, "bom", showBom ? "Preview" : "BOM ▸", x + w - cw, ty - 5, showBom, true, mx, my, () -> showBom = !showBom);
 			}
 		}
 		// buttons: Place, Edit, ⋯
 		String placeL = c.pinned() ? (survival ? "Construction site on its site" : "Place on its site") : survival ? "Place construction site" : "Place";
 		int pw = Math.max(40, Math.min(bw(placeL), w - bw("Edit") - bw("⋯") - 14));
-		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, mx, my, () -> place(c.id()));
+		s.button(g, "place", placeL, x, buttonsTop, pw, true, inWorld, NO_WORLD, mx, my, () -> place(c.id()));
 		int ex = x + pw + 4;
 		// Edit: the design's variants editor (its Style, materials and parameters), else a remix (an import has no source)
 		boolean variants = c.canVariant();
@@ -1120,8 +1120,8 @@ final class LibraryTab {
 		if (pages > 1) {
 			// pages: the chip turns to the next one (the list is largest first)
 			String more = "page " + (bomPage + 1) + "/" + pages + " \u25b8";
-			int cw = font.width(more) + 12;
-			s.chip(g, "bom:page", more, x + w - cw - 2, y + h - 14, false, true, mx, my, () -> bomPage++);
+			int cw = s.chipW(more);
+			s.chip(g, "bom:page", more, x + w - cw - 2, y + h - ArchitectScreen.CHIP_H - 2, false, true, mx, my, () -> bomPage++);
 		}
 	}
 

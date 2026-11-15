@@ -602,10 +602,21 @@ steps.gallery = async () => {
   // Move disabled with its reason
   let mid = null;
   try {
-    const r = await call('dev.command', { cmd: `/apitest place cabin ${40 + 7 * 16} 64 40 INSTANT owned`, asPlayer: false });
-    const line = (r.messages ?? []).find((m) => m.startsWith('{'));
-    mid = line ? JSON.parse(line).siteId ?? null : null;
-    if (mid) row.push(mid);
+    const apitest = async (args) => {
+      const r = await call('dev.command', { cmd: `/apitest ${args}`, asPlayer: false });
+      const line = (r.messages ?? []).find((m) => m.startsWith('{'));
+      if (!line) throw new Error(`/apitest ${args}: no JSON answer: ${JSON.stringify(r.messages ?? r).slice(0, 200)}`);
+      return JSON.parse(line);
+    };
+    let ans = await apitest(`place cabin ${40 + 7 * 16} 64 40 INSTANT owned`);
+    // an async step answers {pending: key}; its result comes from /apitest get <key> (as tools/apitest.mjs result())
+    for (let i = 0; ans.pending && i < 80; i++) {
+      await sleep(250);
+      const g = await apitest(`get ${ans.pending}`);
+      if (g.value !== undefined && g.value !== null) ans = g.value;
+    }
+    mid = ans.siteId ?? null;
+    if (mid) row.push(mid); else GAL.notes.push(`library/placed_managed: no owned site (${JSON.stringify(ans).slice(0, 200)})`);
   } catch (e) { GAL.notes.push(`library/placed_managed: no owned site (${errMsg(e)})`); }
   await sec('ui', 'library', 'placed_managed', async () => {
     await openTab('library'); await call('dev.ui.click', { control: 'library:placed' });

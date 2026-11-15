@@ -151,7 +151,7 @@ class JobRowsTest {
 		JobRow d1 = row(f, "architect_mc:design/d1");
 		assertEquals(JobState.DONE, d1.state());
 		assertEquals("Cabin, rustic", d1.title());
-		assertTrue(d1.linkLabel().contains("gen_cabin"));
+		assertEquals("Architect · Library", d1.linkLabel(), "(slice UI) no helper id in player text");
 		d1.link().run();
 		assertEquals(JobRows.Action.of("open_entry", "gen_cabin"), ran.get(0));
 		assertTrue(d1.endedAt() > 0);

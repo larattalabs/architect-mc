@@ -60,7 +60,7 @@ public final class SetSpec {
 			e.put("name", "at most " + MAX_NAME + " characters");
 		}
 		if (DesignSpec.blank(d.bible())) {
-			e.put("bible", "pick a bible, or draft a new one from a prompt");
+			e.put("bible", "pick a Style, or draft a new one from a prompt");
 		}
 		if (d.items().isEmpty()) {
 			e.put("items", "add at least one building");

@@ -2516,8 +2516,11 @@ public final class ArchitectScreen extends Screen {
 			: " (" + Sidecar.state().link().lastError() + ")"));
 		facts.add("Log: logs/" + Launcher.logFile().getFileName());
 		for (String f : facts) {
-			g.text(font, TextUtil.ellipsize(font, f, colW), lx, y, UiBits.muted(), false);
-			y += 10;
+			// (slice UI) wrapped, never cut: GUI 4 cut "started by this game"
+			for (String line : TextUtil.wrapPlain(font, f, colW)) {
+				g.text(font, line, lx, y, UiBits.muted(), false);
+				y += 10;
+			}
 		}
 		y += 4;
 		int bx = lx;
@@ -2540,7 +2543,7 @@ public final class ArchitectScreen extends Screen {
 		g.text(font, "Safety", lx, y, UiStyle.clayText(), false);
 		y += 12;
 		String safety = "Placing " + dev.larattalabs.architect.placement.PlaceConfirm.count(dev.larattalabs.architect.client.placement.BuildPlacement
-			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (confirmBlocks in config/architect_mc.json). Undo last "
+			.confirmThreshold()) + "+ blocks, or over blocks that aren't terrain, takes Enter twice (the number is in Architect's config file). Undo last "
 			+ "placement: " + dev.larattalabs.architect.client.hud.Keys.label(dev.larattalabs.architect.client.hud.Keys.undoLast) + " twice (Controls to rebind).";
 		for (String line : TextUtil.wrapPlain(font, safety, colW)) {
 			g.text(font, line, lx, y, UiBits.muted(), false);

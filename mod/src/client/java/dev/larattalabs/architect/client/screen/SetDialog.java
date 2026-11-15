@@ -475,7 +475,7 @@ final class SetDialog {
 				+ 5, ox + ow - cx);
 			y += ROW;
 		}
-		label(g, "Budget", ox, y);
+		label(g, "Budget", col2, y);
 		int bx = stepper(g, "set:budget", budget, Math.max(font.width("none"), font.width("$1000")) + 2, f.budgetUsd != null, bPlus, bDec, bInc, true, col3,
 			y, mx, my) + 10;
 		String be = errors.get("budget");
@@ -487,11 +487,11 @@ final class SetDialog {
 		}
 		y += ROW;
 		if (m4c) {
-			label(g, "Context", ox, y);
+			label(g, "Context", col2, y);
 			String ce = errors.get("context");
 			TextFieldView.Style cs = new TextFieldView.Style(null, 0, ce != null ? ce : "the site, its purpose, the neighbours, the street side: it goes "
 				+ "into every brief", null, f.context.length() > 200 ? f.context.length() + "/" + SetSpec.MAX_CONTEXT : null, UiStyle.mutedText(), 2);
-			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, ox + LABEL_W, y, ow - LABEL_W, cs);
+			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, col3, y, ox + ow - col3, cs);
 			y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
 		}
 		return y;

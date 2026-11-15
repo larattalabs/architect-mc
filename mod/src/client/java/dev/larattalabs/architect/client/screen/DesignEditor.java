@@ -1068,7 +1068,8 @@ final class DesignEditor {
 		boolean compact = footerY - top < 230;
 		int lh = Button.H + 4;
 		if (compact) {
-			int right = titleRow(g, "Variant of " + name, true, x, y, w, rw + 4, mx, my);
+			// the mode chip already says "Variant of “name”": no title text beside it
+			int right = titleRow(g, "", true, x, y, w, rw + 4, mx, my);
 			remix.tooltip(lockText);
 			remix.draw(g, font(), right - rw, y, rw, Button.MIN_H, mx, my);
 			s.tip(remix, mx, my);
@@ -1079,7 +1080,14 @@ final class DesignEditor {
 			y += Chip.H + 2;
 			// the lock bar: what is baked into the design's code
 			Paint.box(g, x, y, w, lh, 0xFFEDE6D8, UiStyle.rule());
-			g.text(font(), TextUtil.ellipsize(font(), lockText, w - rw - 14), x + 5, y + 7, UiStyle.mutedText(), false);
+			// wrapped to two lines: at GUI 2 one line cut it at "(Cla…" (design-critic, slice UI)
+			List<String> lock = TextUtil.wrapPlain(font(), lockText, w - rw - 14);
+			if (lock.size() == 1) {
+				g.text(font(), lock.get(0), x + 5, y + 7, UiStyle.mutedText(), false);
+			} else {
+				g.text(font(), lock.get(0), x + 5, y + 3, UiStyle.mutedText(), false);
+				g.text(font(), TextUtil.ellipsize(font(), lock.get(1), w - rw - 14), x + 5, y + 13, UiStyle.mutedText(), false);
+			}
 			remix.draw(g, font(), x + w - 2 - rw, y + 2, rw, Button.H, mx, my);
 		}
 		s.control("variant:remix", rm, remix, false);
