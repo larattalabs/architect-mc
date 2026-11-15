@@ -32499,10 +32499,10 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
   bill_cap; callers that set none, including Steward before its QD, can consume past the quote.
 - **Case 3** (farmland moisture): `Quotes.standing` compares the block as the region run does (`builderHolds`: `Builder.Run#matches` while a
   target builds); grass where dirt is planned is still billed.
-<<<<<<< HEAD
-- Units: `QuotesApproachQLCTest` (the four probes, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
-- **Leftovers:** TileCheck's player-build, unbreakable and incidental branches are not mirrored; a later-stage tile that writes over an
-  approach is not modelled (it does not change the lot's plan); the box's own columns are still priced over the land now (QL-b).
+- Units: `QuotesApproachQLCTest` (the four probes, the GPT review's walk over incidental cobblestone (9 gravel, not 18 dirt), a kept build
+  both ways, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
+- **Leftovers:** a later-stage tile that writes over an approach is not modelled (it does not change the lot's plan); the both-ways bound
+  covers a kept build's cells all written or none, not a mix; the box's own columns are still priced over the land now (QL-b).
 
 ## Slice J2, journal and removal durability backlog (branch `slice/J2` off main 91ce29bf; 2026-11-15; DEV MODE, strict; versions NEXT; $0, sim only; DRAFT for Steward's review)
 
@@ -32659,9 +32659,3 @@ No API surface change.
 - **Measured:** P1's cliff claim (128x128, blob b30f4ce3) analyses in 1.3 s offline at load 74; the paid run's 17-minute gap (14:18-14:35Z) coincides with a system DarkWake/sleep in `pmset -g log`, so the 120 s stop was wall-clock time through sleep, not compute; the retry covers that case.
 - **Replay** (diagnosis `replay.mjs`, $0): the caravan's final plan answers `desert_road` UNREACHABLE with the new sealed-ring message; with a gate part `{kind: gate, wall: court_wall, crossing: desert_road}` it is READY.
 - **Tests:** `kit/test/cf.test.mjs` (sealed ring message, gates 0, gate part opens it); `sidecar/test/compose-cf.test.ts` (evidence present and bounded, the rules lines, the 120k system budget with families + 28k rules, the limit and the notice).
-=======
-- Units: `QuotesApproachQLCTest` (the four probes, the GPT review's walk over incidental cobblestone (9 gravel, not 18 dirt), a kept build
-  both ways, held road cells, gaps, ALWAYS_OURS), igb (`approachGround`).
-- **Leftovers:** a later-stage tile that writes over an approach is not modelled (it does not change the lot's plan); the both-ways bound
-  covers a kept build's cells all written or none, not a mix; the box's own columns are still priced over the land now (QL-b).
->>>>>>> 9ffb0cd49118bbb38c1457cc42c18dc546d75044
