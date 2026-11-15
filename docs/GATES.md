@@ -2980,3 +2980,22 @@ at load p50 48.
 - **A32 (SO minors), skipped.** Both are mod Java: `Builder.anchorState` counts the player's hopper chain as support, and
   `Builder.removeScaffold` logs a failed undo and carries on. The so-survival driver's own connectivity scan already ignores the
   hopper chain (it reads the frozen fixture volume). A fix belongs to a mod slice.
+
+### Slice GI2 as built
+
+Gate infra 2 plus the gate-runner leftovers GR-a; tooling, two mod minors, no API change; units only (speed rule 11: no in-game run).
+- **`change` runs `unit-scope`** (new step: `tools/unit-scope.mjs --run` over the range's files, `GATE_CHANGED_FILES`; uncacheable). An impact
+  rule's unit-mod/unit-kit/unit-sidecar stands for it; a full suite joins only for a step that waits for it (`tools/lib/change-units.mjs`).
+  slice and release keep the full suites. **unit-kit** timeout 20 -> 40 min (measured 10m41s-17m44s under load; not split: one JUnit report).
+- **api-compat** checks this head's built classes: unit-mod's run, then the frozen source (`GATE_FROZEN_SOURCE`), then the checkout; none
+  fails with "no compiled classes ... build first" (exit 2), never a MISSING list (`tools/lib/api-classes.mjs`; the o1 lane's 951 MISSING).
+- **apijars** retries a failed jar once in a fresh world (`RETRY apijars ...`, the first run's FAIL lines, `retried` in apijars.json); the
+  second run decides, timing-only runs never retry (`tools/lib/apijars-judge.mjs`).
+- **co-compose's restarts**: the headless server's probe answered "" after 3 s against its own busy sidecar (19 times in the CP run), and
+  each world open killed it (STOP_THEN_START). The probe now skips frames without a version, waits 20 s more when slow, keeps its own live
+  sidecar (REUSE) and logs what it saw (`[probe: ...]`). The client Launcher has the same 3-s probe (product code, not changed).
+- **All-CACHED** runs write summary.json (done, PASS) and SUMMARY.md (`tools/lib/cached-summary.mjs`). **D3**: the log polling moved to
+  `watchLogFile` (stall-watch.mjs), tested with a real child. **D5**: a holder `startedAt` over 60 s in the future is ignored by loadGate
+  (rule 10 bounds unchanged). **junit-reuse** takes `Class.method` patterns (globs; fails closed). **j3's split** compares every mod.
+- **A32**: a hopper is no anchor (`Builder.anchorState`); `removeScaffold` returns false on a failed take-down and `complete` leaves the
+  site BUILDING, retried every 200 ticks. CLI units: api-baselines-build, plan-catalogue-diff, step-inputs, api-compat (kit/test/tool-clis).

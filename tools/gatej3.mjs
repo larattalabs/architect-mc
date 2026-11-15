@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { expectedByMod, splitDiffs } from './lib/j3-split.mjs';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-J3-run');
@@ -174,8 +175,12 @@ steps.ingame = async () => {
   const ids = (st.architectLedger ?? []).map((c) => c.jobId);
   check(ids.length === new Set(ids).size && ids.length === exp.size && ids.every((i) => exp.has(i)), `2: the ledger has one entry per spending sidecar object (${ids.length})`, { ids, expected: [...exp.keys()] });
   check(expTotal > 0 && near(st.todayUsd, expTotal), `2: today's total $${st.todayUsd?.toFixed(4)} = the sidecar's objects $${expTotal.toFixed(4)} (estimate)`, { todayUsd: st.todayUsd, expTotal, byMod: st.todayByMod });
-  check(expSteward > 0 && near(st.todayByMod?.steward_mc ?? 0, expSteward) && near((st.todayByMod?.architect_mc ?? 0) + expSteward, expTotal),
-    `2: the split: Steward $${(st.todayByMod?.steward_mc ?? 0).toFixed(4)}, Architect $${(st.todayByMod?.architect_mc ?? 0).toFixed(4)}`, st.todayByMod);
+  // (GI2) every mod on its own (tools/lib/j3-split.mjs): another owner spending today (sim-sets' apitest:) no longer skews Architect's part
+  const split = splitDiffs(st.todayByMod, expectedByMod(today));
+  const others = Object.keys(st.todayByMod ?? {}).filter((m) => m !== 'steward_mc' && m !== 'architect_mc');
+  check(expSteward > 0 && split.ok,
+    `2: the split: Steward $${(st.todayByMod?.steward_mc ?? 0).toFixed(4)}, Architect $${(st.todayByMod?.architect_mc ?? 0).toFixed(4)}${others.map((m) => `, ${m} $${Number(st.todayByMod[m]).toFixed(4)}`).join('')}`,
+    { byMod: st.todayByMod, diffs: split.diffs });
   data.ledger = { todayUsd: st.todayUsd, byMod: st.todayByMod, entries: st.architectLedger };
 
   // ---- 3. the header's Jobs button; the panel

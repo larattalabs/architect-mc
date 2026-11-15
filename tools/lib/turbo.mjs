@@ -173,6 +173,8 @@ export async function enqueue(dir, me) {
 export const LOAD_DEFAULTS = { max1: 72, settleSec: 300, maxWaitMin: 15 };
 /** Noah's rule 10 (docs/GATES.md "Speed rules", 2026-11-13): max1 at least 72 (0 = off is allowed), maxWaitMin at most 15. Outside them needs Noah. */
 export const LOAD_BOUNDS = { max1Min: 72, maxWaitMinMax: 15 };
+/** (GI2 D5) How far in the future a holder's startedAt may lie (clock skew) and still count for the settle rule. */
+export const FUTURE_SKEW_MS = 60_000;
 export function loadConfig(cfg, env = process.env, warn = (m) => console.warn(m)) {
   const c = { ...LOAD_DEFAULTS, ...(cfg.slots?.load ?? {}) };
   if (env.GATE_LOAD_MAX !== undefined && env.GATE_LOAD_MAX !== '') c.max1 = Number(env.GATE_LOAD_MAX);
@@ -193,7 +195,11 @@ export function loadGate(me, others, { load, loadNow = () => os.loadavg()[0], no
     return null;
   };
   if (!others.length) return go(false);
-  const newest = Math.max(0, ...others.map((h) => Date.parse(h.startedAt ?? '') || 0));
+  // (GI2 D5) a holder whose clock is in the future (another box's slot file, a bad clock) is not "just started": its startedAt is ignored
+  // past FUTURE_SKEW_MS, else every poll would read it as a run that started less than settleSec ago until the maxWaitMin cap
+  const starts = others.map((h) => Date.parse(h.startedAt ?? '') || 0);
+  if (starts.some((t) => t > now + FUTURE_SKEW_MS)) me.loadFutureIgnored = true; // recorded on the run (a wait never names it)
+  const newest = Math.max(0, ...starts.filter((t) => t <= now + FUTURE_SKEW_MS));
   const l1 = loadNow();
   const why = now - newest < load.settleSec * 1000
     ? `a run started less than ${load.settleSec} s ago: its load is not in the average yet`

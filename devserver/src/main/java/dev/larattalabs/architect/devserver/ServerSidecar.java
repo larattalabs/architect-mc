@@ -264,6 +264,11 @@ public final class ServerSidecar implements ClientBridge {
 		Files.createDirectories(data);
 		String expected = packageVersion(dir);
 		String answered = probe(port());
+		if (PROBE_SLOW.equals(answered)) {
+			Architect.LOGGER.info("devserver: sidecar port {}: {}; probing once more (20 s)", port(), probeNote);
+			answered = probe(port(), 20);
+		}
+		boolean slow = PROBE_SLOW.equals(answered);
 		JsonObject launcherJson = readJson(data.resolve("launcher.json"));
 		JsonObject sidecarJson = readJson(data.resolve("sidecar.json"));
 		long recordedPid = sidecarJson != null && sidecarJson.has("pid") ? sidecarJson.get("pid").getAsLong() : 0;
@@ -274,9 +279,12 @@ public final class ServerSidecar implements ClientBridge {
 		if (ownedPid > 0 && !LauncherPlan.sameProcess(procStart, spawnedAt)) {
 			ownedPid = 0;
 		}
-		LauncherPlan.Reuse r = LauncherPlan.reuse(answered, expected, recordedPid, ownedPid, alive);
-		Architect.LOGGER.info("devserver: sidecar port {} answered {}, expected {}, pid {} (alive {}), ours {}: {}", port(), answered, expected, recordedPid,
-			alive, ownedPid, r);
+		// (GI2) a sidecar that connects but sends no version in 23 s is busy, not another version: our own live one is kept (REUSE); one that
+		// is not ours is left alone and the port reported taken, as for another version
+		LauncherPlan.Reuse r = slow ? (recordedPid > 0 && recordedPid == ownedPid && alive ? LauncherPlan.Reuse.REUSE : LauncherPlan.Reuse.PORT_TAKEN)
+			: LauncherPlan.reuse(answered, expected, recordedPid, ownedPid, alive);
+		Architect.LOGGER.info("devserver: sidecar port {} answered {}, expected {}, pid {} (alive {}), ours {}: {}{}", port(),
+			slow ? "nothing in time (busy)" : answered, expected, recordedPid, alive, ownedPid, r, probeNote.isEmpty() ? "" : " [probe: " + probeNote + "]");
 		switch (r) {
 			case REUSE -> {
 				reused = true;
@@ -393,8 +401,27 @@ public final class ServerSidecar implements ClientBridge {
 		}
 	}
 
+	/**
+	 * (GI2) The probe's answer within its wait: connected, but no frame with a version yet (a busy sidecar: a large snapshot under load). Not a
+	 * version: {@link #launch} probes once more with a longer wait and never stops its own live sidecar on it.
+	 */
+	static final String PROBE_SLOW = "\u0000slow";
+	/** (GI2) What the last probe saw, for the launch log line (the frames it skipped, an error frame's message, a timeout). */
+	private static volatile String probeNote = "";
+
 	/** The client launcher's probe: {@code hello} on the port; the version it answers ("" without one), null when nothing is there. */
 	private static @Nullable String probe(int port) {
+		return probe(port, 3);
+	}
+
+	/**
+	 * (GI2) The probe with an answer wait of {@code waitSeconds}: frames without a version (a broadcast that beat the snapshot) are skipped; an
+	 * error frame answers ""; no versioned frame in time answers {@link #PROBE_SLOW}. In the 2026-11-15 CP run (co-compose, shard s2) the
+	 * old 3-s wait answered "" 19 times against our own busy sidecar after sim-sets, and each world open restarted it (STOP_THEN_START).
+	 */
+	private static @Nullable String probe(int port, int waitSeconds) {
+		probeNote = "";
+		java.util.concurrent.atomic.AtomicInteger skipped = new java.util.concurrent.atomic.AtomicInteger();
 		var http = java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(2)).build();
 		CompletableFuture<String> answer = new CompletableFuture<>();
 		java.net.http.WebSocket ws = null;
@@ -410,8 +437,17 @@ public final class ServerSidecar implements ClientBridge {
 							try {
 								JsonObject o = JsonParser.parseString(buf.toString()).getAsJsonObject();
 								buf.setLength(0);
-								answer.complete(o.has("version") && o.get("version").isJsonPrimitive() ? o.get("version").getAsString() : "");
+								if (o.has("version") && o.get("version").isJsonPrimitive()) {
+									answer.complete(o.get("version").getAsString());
+								} else if (o.has("type") && "error".equals(o.get("type").getAsString())) {
+									probeNote = "an error frame: " + (o.has("message") ? o.get("message").getAsString() : "?");
+									answer.complete("");
+								} else {
+									skipped.incrementAndGet(); // a broadcast before the snapshot: wait for the versioned frame
+								}
 							} catch (RuntimeException e) {
+								buf.setLength(0);
+								probeNote = "an unreadable frame (" + e.getClass().getSimpleName() + ")";
 								answer.complete("");
 							}
 						}
@@ -430,7 +466,13 @@ public final class ServerSidecar implements ClientBridge {
 				hello.addProperty("token", tok);
 			}
 			ws.sendText(hello.toString(), true);
-			return answer.get(3, TimeUnit.SECONDS);
+			return answer.get(waitSeconds, TimeUnit.SECONDS);
+		} catch (java.util.concurrent.TimeoutException e) {
+			if (ws == null) {
+				return null;
+			}
+			probeNote = "connected, no versioned frame in " + waitSeconds + " s (" + skipped.get() + " other frame(s) skipped)";
+			return answer.isDone() ? answer.getNow("") : PROBE_SLOW;
 		} catch (Exception e) {
 			return ws == null ? null : answer.getNow("");
 		} finally {
