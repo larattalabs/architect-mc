@@ -59,6 +59,62 @@ export async function registerBC(steps, h) {
     return { need, acc, ps };
   }
 
+  // (QL-b) qlb-lot: Steward's crop-farm-067 world (a COPY: the source is never opened or changed), its set_2 growth plans quoted again in
+  // pairs a few seconds apart, each lot's bill taken apart (dev.qlb.lotBill: template, fill, approach, the template cells billed as another
+  // state, the mobs on or near the box): which cells move the lot's dirt (Steward's 209 -> 210). Recorded, not judged. $0.
+  steps.qlblot = async () => {
+    await ensure();
+    const out = { pairs: [] };
+    const { execFileSync } = await import('node:child_process');
+    const os = await import('node:os');
+    const SRC = path.join(os.homedir(), 'Developer', 'LarattaLabs', 'Minecraft', '_work', 'steward-cf067', 'mod', 'run');
+    const W = 'G6B QLB cf067';
+    const dst = path.join(L.SAVES, W);
+    check(fs.existsSync(path.join(SRC, 'saves', 'Steward E2E', 'level.dat')), `Steward's cf067 world is there to copy: ${SRC}`);
+    await L.leaveWorld();
+    fs.rmSync(dst, { recursive: true, force: true });
+    execFileSync('cp', ['-c', '-R', path.join(SRC, 'saves', 'Steward E2E'), dst]);
+    fs.rmSync(path.join(dst, 'session.lock'), { force: true });
+    for (const e of ['crop_farm', 'crop_farm_kv_295', 'crop_farm_kv_296', 'crop_farm_kv_297']) {
+      fs.rmSync(path.join(L.LIBRARY, e), { recursive: true, force: true });
+      execFileSync('cp', ['-c', '-R', path.join(SRC, 'architect', 'library', e), path.join(L.LIBRARY, e)]);
+    }
+    await L.openWorld(W);
+    await L.cmd('/architect reload');
+    await L.settle(2000);
+    const PLANS = [
+      { planId: 'pmwh3cnmi899bae', lot: 'gb1794702197830_1', entry: 'crop_farm_kv_295', label: 'rv1 wheat (quoted 210)' },
+      { planId: 'pmwh3ex8kc61d60', lot: 'gb1794702303198_1', entry: 'crop_farm_kv_297', label: 'rv3 carrots (quoted 209, consumed 205 + 5)' },
+    ];
+    const near = () => L.tp(1810, 80, 71966);
+    const away = () => L.tp(1810, 80, 71966 - 140);
+    const lotOf = (r, p) => r.lots?.[p.lot] ?? null;
+    const brief = (d) => d && { template: d.template, fill: d.fill, approach: d.approach, other: d.other, masked: d.maskedTemplateCells, changed: d.changed,
+      fillN: d.fillCells?.n, cutN: d.cutCells?.n, pathN: d.approachPath?.n, apprFillN: d.approachFill?.n, mobs: d.mobs, why: d.why, origin: d.origin };
+    await near();
+    for (const p of PLANS) {
+      const r = await call('dev.qlb.lotBill', { planId: p.planId, lotEntries: { [p.lot]: p.entry } }, 120_000);
+      out[p.planId] = { label: p.label, bom: r.bom, bomParts: r.bomParts, exact: r.exact, refused: r.refused, lot: lotOf(r, p) };
+      log(`${p.label}: bom dirt ${r.bom?.['minecraft:dirt']} (${r.refused ?? 'quoted'}); lot ${JSON.stringify(brief(lotOf(r, p))).slice(0, 1500)}`);
+    }
+    const P = PLANS[1];
+    for (let i = 0; i < 10; i++) {
+      if (i === 5) await away();
+      const a = await call('dev.qlb.lotBill', { planId: P.planId, lotEntries: { [P.lot]: P.entry } }, 120_000);
+      await sleep(5000);
+      const b = await call('dev.qlb.lotBill', { planId: P.planId, lotEntries: { [P.lot]: P.entry } }, 120_000);
+      const da = a.bom?.['minecraft:dirt'], db = b.bom?.['minecraft:dirt'];
+      const pair = { i, where: i < 5 ? 'near' : 'away', dirt: [da, db], moved: da !== db, a: brief(lotOf(a, P)), b: da !== db ? brief(lotOf(b, P)) : undefined, parts: da !== db ? [a.bomParts, b.bomParts] : undefined };
+      out.pairs.push(pair);
+      log(`pair ${i} (${pair.where}): dirt ${da} -> ${db}${pair.moved ? ' MOVED' : ''}; changed ${JSON.stringify(pair.a?.changed ?? []).slice(0, 600)}; mobs ${JSON.stringify(pair.a?.mobs ?? []).slice(0, 300)}`);
+    }
+    out.moved = out.pairs.filter((x) => x.moved).length;
+    check(out.pairs.length === 10 && PLANS.every((p) => out[p.planId]?.lot), `QL-b: 10 quote pairs of rv3, each lot bill taken apart (${out.moved} moved)`, { moved: out.moved });
+    await L.leaveWorld();
+    spendZero();
+    return out;
+  };
+
   steps.bcrelay = async () => {
     await ensure();
     const out = {};

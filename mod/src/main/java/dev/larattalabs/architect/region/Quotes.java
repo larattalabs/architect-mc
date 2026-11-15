@@ -485,6 +485,36 @@ public final class Quotes {
 		return new Standing(off, covered, offCells, unloaded);
 	}
 
+	/** (QL-b, a gate hook) When set, each lot's bill taken apart ({@link dev.larattalabs.architect.site.LotBillDebug}) by lot id. */
+	static final ThreadLocal<@Nullable JsonObject> DEBUG_LOTS = new ThreadLocal<>();
+
+	/** (QL-b, a gate hook's reader) {@link #quote}'s quote of a plan, with each lot's bill taken apart. Read-only. Server thread. */
+	public static JsonObject devLotBill(MinecraftServer s, String planId, Map<String, String> entries) {
+		RegionsImpl.PlanRec p = planId == null ? null : RegionsImpl.planRec(planId);
+		JsonObject o = new JsonObject();
+		if (p == null) {
+			o.addProperty("refused", "no plan " + planId);
+			return o;
+		}
+		JsonObject lots = new JsonObject();
+		DEBUG_LOTS.set(lots);
+		try {
+			Quote q = of(s, p, null, entries);
+			o.add("bom", q.bom());
+			o.add("bomParts", q.bomParts());
+			o.addProperty("exact", q.exact());
+			com.google.gson.JsonArray n = new com.google.gson.JsonArray();
+			q.notes().forEach(n::add);
+			o.add("notes", n);
+		} catch (RuntimeException e) {
+			o.addProperty("refused", String.valueOf(e.getMessage()));
+		} finally {
+			DEBUG_LOTS.remove();
+		}
+		o.add("lots", lots);
+		return o;
+	}
+
 	/** A bound lot's bill (and, on a first realise, its gate mechanism's), as the realise puts it down. */
 	private static void lot(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, Map<String, String> entries, @Nullable EntranceStyle style,
 		it.unimi.dsi.fastutil.longs.LongSet roadCells, Bill bill, List<String> notes, boolean mech) {
@@ -518,6 +548,14 @@ public final class Quotes {
 			Sites.QUOTE_ROADS.remove();
 		}
 		Sites.BomFull b = Sites.quoteBill(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
+		if (DEBUG_LOTS.get() instanceof JsonObject dbg) { // (QL-b, a gate hook's reader) the lot bill taken apart
+			JsonObject d = dev.larattalabs.architect.site.LotBillDebug.of(level, bp, v, dev.larattalabs.architect.site.LotMask.cells(q.ext));
+			if (d != null) {
+				d.addProperty("entry", entry);
+				d.addProperty("origin", q.x + "," + q.y + "," + q.z + " turns " + q.turns);
+				dbg.add(lot.id(), d);
+			}
+		}
 		if (b == null) {
 			bill.exact = false;
 			notes.add("lot " + lot.id() + " (" + entry + "): no construction plan over the land now" + (v.typed().isEmpty() ? "" : " (" + v.typed().get(0)

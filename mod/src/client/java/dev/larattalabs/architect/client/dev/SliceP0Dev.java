@@ -360,6 +360,17 @@ public final class SliceP0Dev {
 					return o;
 				});
 			});
+		// (QL-b gate) a plan's quote with each lot's bill taken apart (template, fill, approach; changed template cells; mobs), read-only
+		DevBridge.register("dev.qlb.lotBill", 120_000, "{planId, lotEntries: {lot: entry}} - (QL-b gate) the plan's quote with each lot's bill taken "
+			+ "apart -> {bom, bomParts, exact, notes, lots: {lotId: {template, fill, approach, other, changed: [{at, template, billed, world, above}], "
+			+ "fillCells, cutCells, approachPath, approachFill, approachClear, mobs, box, why, entry, origin}}}", (req, mc) -> {
+				String planId = Fields.of(req).nonBlank("planId");
+				Map<String, String> entries = new java.util.LinkedHashMap<>();
+				if (req.get("lotEntries") instanceof JsonObject le) {
+					le.entrySet().forEach(e -> entries.put(e.getKey(), e.getValue().getAsString()));
+				}
+				return ServerTasks.callOnServer(s -> dev.larattalabs.architect.region.Quotes.devLotBill(s, planId, entries));
+			});
 		DevBridge.register("dev.qt.templateBom", 30_000, "{entry} - (M5 QT gate) an entry's template bill (Builder.templateBom: its template's cells only, the plan "
 			+ "check's lot bill) -> {entry, bom} or {missing}", (req, mc) -> {
 				String entry = Fields.of(req).nonBlank("entry");
