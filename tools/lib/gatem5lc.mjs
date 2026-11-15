@@ -242,7 +242,60 @@ export async function registerLC(steps, h) {
     check(['REMOVED', 'gone'].includes(out.LC1.state) && G.same(back, consumed) && !F.custody && sum(only(items, FK)) === 0,
       `LC1: after the restart and the retry the removal ends once (${out.LC1.state}): what came back = what the town consumed, item for item (${sum(back)} = ${sum(consumed)}; differ ${json(out.LC1.diff)}): items in = items out; no custody; none of the fill's items dropped`, out.LC1);
     await L.leaveWorld();
+    out.LC2 = await failThenHalt();
     spendZero();
     return out;
   };
+
+  /**
+   * LC2: dev.removal.failAfterCustody with no kill point: the region Remove answers unwritten (the custody written back in memory), then
+   * the JVM is halted with nothing saved since. After the restart: the custody on disk goes back at load (the region stands, its hoppers
+   * exactly their declarations, no custody), or, should the failed removal still be queued, it resumes (reported, not hidden); then the
+   * retry: back = consumed, item for item.
+   */
+  async function failThenHalt() {
+    const W = await town('G6B LC Crash LC2');
+    if (!W) return null;
+    const at = P(W.s.containers[0].at);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/save-all flush');
+    const B = savedLedger(W.name);
+    const consumed = G.minus(B.consumed, W.ps0.ledger?.consumed ?? {});
+    await call('dev.removal.failAfterCustody', { site: W.site }, 10_000);
+    const rm = await call('dev.region.remove', { region: W.region, requester: G.OWNER }, 600_000).catch((e) => ({ error: String(e) }));
+    const s1 = await fk(W.site);
+    check(rm.removed !== true && /failAfterCustody/.test(json(rm)) && exactly(s1) && sum(s1.custody) === 0,
+      `LC2: the region Remove answered unwritten after its custody take (${json(rm).slice(0, 200)}); the custody written back in memory (hoppers exactly their declarations, no custody)`, { rm, s1 });
+    await call('dev.stockpile.halt', { mode: 'now' }, 10_000).catch(() => null);
+    const down = await haltWait();
+    check(down, 'LC2: dev.stockpile.halt halted the server, nothing saved since the write-back');
+    if (!down) { await L.leaveWorld(); return null; }
+    const S = savedLedger(W.name);
+    const savedCustody = Object.values(S.custody ?? {}).reduce((a, m) => G.plus(a, m), {});
+    await L.openWorld(W.name);
+    await L.tp(CX + 80, 60, CZ + 56);
+    await L.settle(4000);
+    const st0 = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
+    const s2 = await fk(W.site).catch(() => null);
+    const F0 = (await pile()).ledger;
+    const res = { savedCustody, stateAfterRestart: st0?.view?.state ?? 'gone', holds: s2?.containers?.map((c) => c.holds), custody: F0.custody ?? null };
+    log(`  LC2 after the restart: ${json(res)}`);
+    check(res.stateAfterRestart === 'PLACED' && s2 && exactly(s2) && !F0.custody,
+      `LC2: after the restart the region still stands (${res.stateAfterRestart}; the failed removal is not resumed) and the custody on disk (${sum(savedCustody)} units) went back at load: hoppers exactly their declarations, no custody`, res);
+    if (res.stateAfterRestart === 'PLACED') await G.remove(ctx, W.region);
+    let st = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
+    for (let i = 0; i < 300 && st?.view && !['REMOVED', 'PARTIAL', 'FAILED'].includes(st.view.state); i++) {
+      await L.sleep(1000);
+      st = await call('dev.region.state', { region: W.region }, 60_000).catch(() => null);
+    }
+    await L.settle(2000);
+    const F = (await pile()).ledger;
+    const back = backOf(F, B);
+    const items = (await call('dev.items.near', { pos: at, radius: 64 }, 60_000)).items ?? {};
+    Object.assign(res, { state: st?.view?.state ?? 'gone', back: sum(back), consumed: sum(consumed), diff: G.minus(back, consumed), items: only(items, FK), custodyEnd: F.custody ?? null });
+    check(['REMOVED', 'gone'].includes(res.state) && G.same(back, consumed) && !F.custody && sum(only(items, FK)) === 0,
+      `LC2: write-back, restart, retry: the removal ends once (${res.state}): what came back = what the town consumed, item for item (${sum(back)} = ${sum(consumed)}; differ ${json(res.diff)}); no custody; none of the fill's items dropped`, res);
+    await L.leaveWorld();
+    return res;
+  }
 }
