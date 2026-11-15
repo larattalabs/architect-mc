@@ -23,13 +23,13 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * (7c CO) The standalone composer's mod half (docs/CONTRACT.md "Phase 7c" §3 row 12, "Slice CO as built"): {@code Regions.compose}
- * surveys the claim in the Overworld (as {@code Regions.design} does: the ARSV columns, the survey summary, TC's frozen claim volume) and
+ * surveys the claim in its level (the request's, else the Overworld; 7c CP) (as {@code Regions.design} does: the ARSV columns, the survey summary, TC's frozen claim volume) and
  * sends {@code region.compose}; the helper's design (kind {@code settlement}) then follows {@code design.upsert}. Two things happen here as
  * it changes:
  * <ul>
  * <li>a round waits for its check ({@code settlement.awaiting {round, plan}}, status CHECKING): the mod runs {@link
- * dev.larattalabs.architect.api.Regions#checkPlan} over the plan (the Overworld, the claim, the built-in {@code claim_*} anchors and the
- * caller's own from {@code ComposeRequest.EXT_HINTS}'s {@code anchors}, owner null (the player), the design's Style as the bible) and answers {@code region.compose.checked {designId,
+ * dev.larattalabs.architect.api.Regions#checkPlan} over the plan (the record's level, else the Overworld, the claim, the built-in {@code claim_*} anchors and the
+ * caller's own from {@code ComposeRequest.EXT_HINTS}'s {@code anchors}, the record's owner (null: the player), the design's Style as the bible) and answers {@code region.compose.checked {designId,
  * round, check}} (or {@code refused} with the reason), once per round per session; after a restart the next snapshot asks again;</li>
  * <li>a PICKED design (a template fits) has its program planned over the claim ({@code Regions.plan}, as 6b's {@link RegionDesigns}), and
  * its {@code planId} joins the result.</li>
@@ -83,13 +83,14 @@ public final class Composes {
 			return CompletableFuture.failedFuture(new RegionsImpl.RegionException(Reason.REGION_LIMIT, "the claim is " + c.getXSpan() + "x" + c.getZSpan()
 				+ " columns (at most 1024x1024)"));
 		}
-		return RegionsImpl.onServer(s, s::overworld).thenCompose(level -> {
+		return RegionsImpl.onServer(s, () -> r.level() != null ? r.level() : s.overworld()).thenCompose(level -> {
 			int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 			CompletableFuture<String> summary = ArchitectApi.get().survey().sample(level, c, res, LoadPolicy.LOADED_ONLY).thenApply(
 				dev.larattalabs.architect.api.Sample::summary).exceptionally(e -> "");
 			return summary.thenCompose(sum -> RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, LoadPolicy.LOADED_ONLY).thenCompose(
 				cols -> BlobPut.put(link, cols.encode(), "survey").thenCompose(blobId -> RegionDesigns.claimVolume(level, c, cols).thenCompose(vol -> link.send(
-					withBuilds(message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol), level, c)))))).thenCompose(ack -> {
+					withBuilds(message(r, key, level.getMinY(), level.getMaxY(), blobId, sum, vol, level == s.overworld() ? null : dev.larattalabs.architect.site.Sites
+						.dimensionId(level)), level, c)))))).thenCompose(ack -> {
 						if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
 							String err = opt(ack, "error");
 							return CompletableFuture.failedFuture(err != null && err.startsWith("op_key_conflict") ? new RegionsImpl.RegionException(Reason.OP_KEY_CONFLICT,
@@ -97,7 +98,7 @@ public final class Composes {
 						}
 						JsonObject res2 = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
 						String id = res2.get("designId").getAsString();
-						dev.larattalabs.architect.apiimpl.ApiImpl.rememberDesign(id, null, r.ext().deepCopy());
+						dev.larattalabs.architect.apiimpl.ApiImpl.rememberDesign(id, r.owner(), r.ext().deepCopy());
 						boolean adopted = res2.has("adopted") && res2.get("adopted").getAsBoolean();
 						Architect.LOGGER.info("Settlement design {} {} (compose): {}", id, adopted ? "adopted by its opKey" : "requested", r.brief());
 						// (CH) an adopted design may have ended in another world or before the last snapshot: the helper sends it again; never wait unbounded
@@ -113,9 +114,18 @@ public final class Composes {
 			+ " this world within " + dev.larattalabs.architect.apiimpl.AdoptWait.BOUND_MS / 1000 + " s: ask again with the same key");
 	}
 
-	/** The {@code region.compose} message. Pure. */
+	/** The {@code region.compose} message in the Overworld. Pure. */
 	static JsonObject message(ComposeRequest r, @Nullable String opKey, int minY, int maxY, String surveyBlobId, String surveySummary,
 		dev.larattalabs.architect.api.@Nullable Volume volume) {
+		return message(r, opKey, minY, maxY, surveyBlobId, surveySummary, volume, null);
+	}
+
+	/**
+	 * The {@code region.compose} message. {@code dimension}: the claim's level when it is not the Overworld, else null; it and the request's
+	 * owner are sent only when set, so a request as CO froze it sends the same body (and opKey body) as before CP. Pure.
+	 */
+	static JsonObject message(ComposeRequest r, @Nullable String opKey, int minY, int maxY, String surveyBlobId, String surveySummary,
+		dev.larattalabs.architect.api.@Nullable Volume volume, @Nullable String dimension) {
 		JsonObject m = new JsonObject();
 		m.addProperty("type", "region.compose");
 		m.addProperty("brief", r.brief());
@@ -144,6 +154,12 @@ public final class Composes {
 		}
 		if (opKey != null) {
 			m.addProperty("opKey", opKey);
+		}
+		if (r.owner() != null) {
+			m.addProperty("owner", r.owner());
+		}
+		if (dimension != null) {
+			m.addProperty("dimension", dimension);
 		}
 		if (r.ext().size() > 0) {
 			m.add("ext", r.ext().deepCopy());
@@ -185,6 +201,12 @@ public final class Composes {
 		}
 	}
 
+	/** (7c CP) The level a settlement record names ({@code dimension}; absent: the Overworld), or null when it is not loaded. */
+	static @Nullable ServerLevel levelOf(MinecraftServer server, JsonObject st) {
+		String dim = opt(st, "dimension");
+		return dim == null ? server.overworld() : dev.larattalabs.architect.site.Sites.levelOf(server, dim);
+	}
+
 	/** The claim a settlement record names, over the level's height; null when malformed. */
 	static @Nullable BoundingBox claimOf(JsonObject st, ServerLevel level) {
 		if (!(st.get("claim") instanceof JsonObject c)) {
@@ -198,7 +220,7 @@ public final class Composes {
 		}
 	}
 
-	/** The PlanRequest a round's plan is checked with (the Overworld, the claim, the record's anchors and Style). Pure. */
+	/** The PlanRequest a round's plan is checked with (the record's level, the claim, the record's anchors and Style). Pure. */
 	static PlanRequest checkRequest(JsonObject plan, ServerLevel level, BoundingBox claim, JsonObject st) {
 		String bible = null;
 		Integer version = null;
@@ -234,10 +256,11 @@ public final class Composes {
 		if (!CHECKING.add(id + "#" + round)) {
 			return;
 		}
-		ServerLevel level = server.overworld();
-		BoundingBox claim = claimOf(st, level);
-		CompletableFuture<PlanCheck> fut = claim == null ? CompletableFuture.failedFuture(new IllegalArgumentException("the design's claim is malformed"))
-			: RegionsImpl.INSTANCE.checkPlan(checkRequest(plan, level, claim, st));
+		ServerLevel level = levelOf(server, st);
+		BoundingBox claim = level == null ? null : claimOf(st, level);
+		CompletableFuture<PlanCheck> fut = level == null ? CompletableFuture.failedFuture(new IllegalStateException("the design's dimension " + opt(st, "dimension")
+			+ " is not loaded")) : claim == null ? CompletableFuture.failedFuture(new IllegalArgumentException("the design's claim is malformed"))
+				: RegionsImpl.INSTANCE.checkPlan(checkRequest(plan, level, claim, st));
 		Architect.LOGGER.info("Settlement design {}: checking round {}'s plan", id, round);
 		fut.whenComplete((pc, e) -> server.execute(() -> {
 			JsonObject m = new JsonObject();
@@ -270,9 +293,12 @@ public final class Composes {
 		if (PLAN_OF.containsKey(d.id()) || res.has("planId") || !res.has("program") || !res.get("program").isJsonPrimitive() || !PLANNING.add(d.id())) {
 			return;
 		}
-		ServerLevel level = server.overworld();
-		BoundingBox claim = claimOf(st, level);
+		ServerLevel level = levelOf(server, st);
+		BoundingBox claim = level == null ? null : claimOf(st, level);
 		if (claim == null) {
+			PLAN_ERROR.put(d.id(), level == null ? "the design's dimension " + opt(st, "dimension") + " is not loaded" : "the design's claim is malformed");
+			PLANNING.remove(d.id());
+			ArchitectApi.get().designs().get(d.id()).ifPresent(dev.larattalabs.architect.apiimpl.ApiEvents::designUpdated);
 			return;
 		}
 		JsonObject params = res.get("params") instanceof JsonObject p ? p : new JsonObject();

@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
 import type { Design, Outbound } from '../src/protocol.js';
@@ -23,6 +23,7 @@ import {
   EXT_REPAIRS,
   EXT_SYSTEM,
   CALLER_SYSTEM_MAX,
+  FAMILIES_MAX,
   composerText,
   composeSystemText,
   composeKeyBody,
@@ -35,6 +36,15 @@ import {
   repairPrompt,
   SIM_PLAN,
   waitsOf,
+  EXT_SKIP_PICK,
+  EXT_STREET_FIX,
+  EXT_VOCAB,
+  partName,
+  repairStop,
+  streetFixes,
+  vocabFamiliesText,
+  waitSay,
+  waitsSaid,
   type ComposeRound,
   type ComposeState,
 } from '../src/compose.js';
@@ -125,11 +135,11 @@ describe('the composer\'s pure parts (7c CO)', () => {
     expect(TEXT.system).toContain('claim_center, claim_n, claim_e, claim_s, claim_w');
     expect(TEXT.answer).toContain('## How to answer');
     expect([EXT_HINTS, EXT_SYSTEM, EXT_REPAIRS]).toEqual(['architect_mc:composeHints', 'architect_mc:composeSystem', 'architect_mc:repairRounds']); // = ComposeRequest.EXT_* (ApiCOTest)
-    expect(callerOptions(undefined)).toEqual({ repairs: 1 });
-    expect(callerOptions({ 'architect_mc:composeHints': { zones: [{ id: 'harbour' }] }, 'architect_mc:composeSystem': ' Keep a wall. ', 'architect_mc:repairRounds': 2 })).toEqual({ hints: { zones: [{ id: 'harbour' }] }, system: 'Keep a wall.', repairs: 2 });
+    expect(callerOptions(undefined)).toEqual({ repairs: 1, streetFix: true });
+    expect(callerOptions({ 'architect_mc:composeHints': { zones: [{ id: 'harbour' }] }, 'architect_mc:composeSystem': ' Keep a wall. ', 'architect_mc:repairRounds': 2 })).toEqual({ hints: { zones: [{ id: 'harbour' }] }, system: 'Keep a wall.', repairs: 2, streetFix: true });
     expect(() => callerOptions({ 'architect_mc:repairRounds': 3 })).toThrow(/FIELD_LIMIT.*repairRounds/);
     // composeHints.anchors: the caller's named places, validated and kept apart from the other hints
-    expect(callerOptions({ 'architect_mc:composeHints': { anchors: { stone: [1, 64, 2], player: [3, 64, 4] }, zones: [] } })).toEqual({ anchors: { player: [3, 64, 4], stone: [1, 64, 2] }, hints: { zones: [] }, repairs: 1 });
+    expect(callerOptions({ 'architect_mc:composeHints': { anchors: { stone: [1, 64, 2], player: [3, 64, 4] }, zones: [] } })).toEqual({ anchors: { player: [3, 64, 4], stone: [1, 64, 2] }, hints: { zones: [] }, repairs: 1, streetFix: true });
     expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: { claim_n: [0, 0, 0] } } })).toThrow(/not built in/);
     expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: { stone: [0, 1.5, 0] } } })).toThrow(/integer blocks/);
     expect(() => callerOptions({ 'architect_mc:composeHints': { anchors: [] } })).toThrow(/anchors is an object/);
@@ -147,6 +157,66 @@ describe('the composer\'s pure parts (7c CO)', () => {
     // the largest caller's rules still keep the whole system under the bound
     const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX)));
     expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
+  });
+
+  it('(7c CP) the ext keys: skipPick, composeVocab "families" only, streetFix (default on); the families block keeps the system under 120,000 with the largest rules', async () => {
+    expect([EXT_SKIP_PICK, EXT_VOCAB, EXT_STREET_FIX]).toEqual(['architect_mc:skipPick', 'architect_mc:composeVocab', 'architect_mc:streetFix']);
+    expect(callerOptions({ 'architect_mc:skipPick': true, 'architect_mc:composeVocab': 'families', 'architect_mc:streetFix': false })).toEqual({ repairs: 1, skipPick: true, vocab: 'families', streetFix: false });
+    expect(() => callerOptions({ 'architect_mc:composeVocab': 'compact' })).toThrow(/FIELD_LIMIT: ext\["architect_mc:composeVocab"\] is "families"/);
+    expect(() => callerOptions({ 'architect_mc:streetFix': 1 })).toThrow(/FIELD_LIMIT: ext\["architect_mc:streetFix"\] is a boolean/);
+    const fam = vocabFamiliesText(KIT);
+    expect(fam.startsWith('## Block families (vocab/1)\n')).toBe(true);
+    expect(fam).toMatch(/families: .*\boak\b.*\bspruce\b/);
+    expect(fam).toContain('group wood: ');
+    expect(fam).toContain('dyed (members are colour-prefixed): ');
+    expect(fam).toContain('rule.palette {family, share}');
+    expect(fam.length).toBeLessThanOrEqual(FAMILIES_MAX);
+    const sysText = composeSystemText(TEXT, 'Keep a wall.', fam);
+    expect(sysText).toBe(`${TEXT.system}\n\n${fam}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
+    expect(composeSystemText(TEXT, 'Keep a wall.')).toBe(`${TEXT.system}\n\n## The caller's rules (they add to the rules above)\n\nKeep a wall.`);
+    const big = await composeSystem(KIT, COMPOSE_REFS, composeSystemText(TEXT, 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), fam));
+    // the families count against the caller's rules: 28,000 with them, 30,000 without
+    expect(callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX), 'architect_mc:composeVocab': 'families' }).vocab).toBe('families');
+    expect(() => callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX - FAMILIES_MAX + 1), 'architect_mc:composeVocab': 'families' })).toThrow(/FIELD_LIMIT: ext\["architect_mc:composeSystem"\] is 28001 characters \(at most 28000 with ext\["architect_mc:composeVocab"\] "families"\)/);
+    expect(callerOptions({ 'architect_mc:composeSystem': 'r'.repeat(CALLER_SYSTEM_MAX) }).system?.length).toBe(CALLER_SYSTEM_MAX);
+    console.log(`7c CP: the composer's system with the families and the largest rules is ${big.length} characters (families ${fam.length})`);
+    expect(big.length).toBeLessThan(JOB_SYSTEM_MAX);
+  });
+
+  it('(7c CP) the street fix (Steward\'s streetFixes): one NO_ROOM alt street wouldFit applied, its dropped lots in words; anything else is no fix', () => {
+    const plan = { schemaVersion: 'plan/0', zones: [{ id: 'town', label: 'the town', program: { layout: 'grid', lots: [{ id: 'townhouse_4' }, { id: 'h1' }] } }, { id: 'farm' }] };
+    const street = (over: Record<string, unknown> = {}) => ({ part: 'town', class: 'refused', reasons: [{ code: 'NO_ROOM', message: 'no grid layout fits', evidence: { layout: 'grid', alt: 'street', altDropped: ['townhouse_4'] } }], wouldFit: [{ part: 'town', fragment: { program: { layout: 'street', lots: [{ id: 'h1' }] } } }], ...over });
+    const f = streetFixes(plan, { parts: [street(), { part: 'farm', class: 'fits' }] })!;
+    expect(f.parts).toEqual(['town']);
+    expect(f.leftOut).toEqual(['townhouse 4']);
+    expect((f.plan.zones as Array<Record<string, unknown>>)[0]).toEqual({ id: 'town', label: 'the town', program: { layout: 'street', lots: [{ id: 'h1' }] } });
+    expect((plan.zones[0]!.program as { layout: string }).layout).toBe('grid'); // a copy
+    expect(streetFixes(plan, { parts: [street({ class: 'adjusted' })] })).toBeUndefined();
+    expect(streetFixes(plan, { parts: [street({ wouldFit: [] })] })).toBeUndefined();
+    expect(streetFixes(plan, { parts: [street({ wouldFit: [{ fragment: {} }, { fragment: {} }] })] })).toBeUndefined();
+    expect(streetFixes(plan, { parts: [street({ reasons: [{ code: 'NO_ROOM', evidence: { layout: 'grid' } }] })] })).toBeUndefined();
+    expect(streetFixes(plan, { parts: [street({ part: 'nowhere', wouldFit: [{ fragment: { program: {} } }] })] })).toBeUndefined();
+    // idempotent: the fixed plan's own check carries no alt street, so a second pass (Steward's, after compose) changes nothing
+    expect(streetFixes(f.plan, { parts: [{ part: 'town', class: 'fits' }, { part: 'farm', class: 'fits' }] })).toBeUndefined();
+  });
+
+  it('(7c CP) waits in player words (say) and part names; a free round is never an oscillation of the round it fixed', () => {
+    const plan = { zones: [{ id: 'town', label: 'Market Square', program: { lots: [{ id: 'cottage_home_2' }] } }], forms: [{ id: 'hidden_room_1', kind: 'hidden_room' }] };
+    expect(partName(plan, 'town')).toBe('Market Square');
+    expect(partName(plan, 'cottage_home_2')).toBe('cottage home 2');
+    expect(waitSay(plan, { part: 'hidden_room_1', class: 'unsupported', until: '8b' })).toBe('hidden room 1 waits for 8b');
+    expect(waitSay(plan, { part: 'hidden_room_1', class: 'unsupported' })).toBe('hidden room 1 waits for a later Architect release');
+    expect(waitSay(plan, { part: 'cottage_home_2', class: 'blocked' }, ['town'])).toBe('cottage home 2 waits for Market Square');
+    expect(waitSay(plan, { part: 'town', class: 'refused' })).toBe("Market Square didn't fit here");
+    expect(waitSay(plan, { part: 'town', class: 'malformed' })).toBe("Market Square couldn't be read");
+    expect(waitSay(plan, { part: 'town', class: 'incomplete' })).toBe("Market Square couldn't be checked yet");
+    expect(waitsSaid(plan, { parts: [{ part: 'town', class: 'fits' }, { part: 'hidden_room_1', class: 'unsupported', block: 'form.hidden_room', required: true }] }, new Map([['form.hidden_room', '8b']])))
+      .toEqual([{ part: 'hidden_room_1', class: 'unsupported', block: 'form.hidden_room', until: '8b', required: true, say: 'hidden room 1 waits for 8b' }]);
+    const ref = { overall: 'NEEDS_REPAIR', parts: [{ part: 'town', class: 'refused', reasons: [{ code: 'NO_ROOM' }] }] };
+    const paid: ComposeRound = { n: 1, jobId: 'a', plan: {}, check: ref };
+    const free: ComposeRound = { n: 2, jobId: '', answer: {}, free: 'street', plan: {}, check: ref };
+    expect(repairStop([paid, free])).toBeUndefined();
+    expect(repairStop([paid, free, { n: 3, jobId: 'b', plan: {}, check: ref }])).toBe('oscillation');
   });
 
   it('keeps the structured job\'s system prompt under the 120,000 bound (plan/0#compact + the composer\'s)', async () => {
@@ -225,7 +295,7 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(d.kind).toBe('settlement');
     const s = st(designId);
     expect(s.pick?.outcome).toBe('NO_TEMPLATE');
-    expect(sc.designs.get(s.pick!.designId)?.kind).toBe('region');
+    expect(sc.designs.get(s.pick!.designId!)?.kind).toBe('region');
     expect(s.rounds.map((r) => (r.check as { overall: string }).overall)).toEqual(['NEEDS_REPAIR', 'READY']);
     const res = d.result as Record<string, unknown>;
     expect(res.outcome).toBe('COMPOSED');
@@ -281,7 +351,11 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(res.rounds).toBe(COMPOSE_ROUNDS);
     expect(res.round).toBe(2);
     expect(JSON.stringify(res.plan)).toBe(JSON.stringify(BAD));
-    expect(res.waits).toEqual([{ part: 'lane', class: 'malformed', block: 'connector.path' }]);
+    expect(res.waits).toEqual([{ part: 'lane', class: 'malformed', block: 'connector.path', say: "lane couldn't be read" }]);
+    // (7c CP) the best round's own words, NO_PLAN's diagnostic reason unchanged
+    expect(res.summary).toBe('r1');
+    expect(res.reason).toMatch(/^no round's plan checked READY; the best is round 2/);
+    expect(res.leftOut).toEqual([]);
   }, 600_000);
 
   it('a caller\'s repair rounds (2, then 0), hints and rules reach the rounds', async () => {
@@ -346,6 +420,106 @@ describe.skipIf(!hasCO)('the composer with the real kit (7c CO)', () => {
     expect(res.program).toBe('flat_village');
     expect(res.rounds).toBe(0);
     expect(st(designId).rounds).toHaveLength(0);
+  }, 600_000);
+
+  it('(7c CP) skipPick: a brief a template fits composes from plan/0\'s parts with no pick at all (no region.design asked); without it, PICKED', async () => {
+    const spy = vi.spyOn(sc.regionDesigns, 'request');
+    const regions0 = sc.designs.list().filter((d) => d.kind === 'region').length;
+    const { designId } = await compose('a flat village with a well', { ext: { 'architect_mc:skipPick': true } });
+    const d = await playMod(designId);
+    expect(spy).not.toHaveBeenCalled();
+    expect(sc.designs.list().filter((d) => d.kind === 'region').length).toBe(regions0);
+    const res = d.result as Record<string, unknown>;
+    expect(res.outcome).toBe('COMPOSED');
+    expect(res.pick).toEqual({ outcome: 'SKIPPED', program: null, fits: false });
+    expect(st(designId).pick).toEqual({ outcome: 'SKIPPED', program: null, fits: false });
+    const q1 = queries(st(designId).rounds[0]!.jobId)[0]!;
+    expect(q1.prompt).toContain('## The template pick\nthe caller asked for no template pick, so compose the settlement from plan/0\'s parts.');
+    // without the key: the pick first, PICKED (today's default)
+    const { designId: d2 } = await compose('a flat village with a well', { ext: { 'architect_mc:skipPick': false } });
+    await until(() => final(d2), 600_000);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((sc.designs.get(d2)!.result as Record<string, unknown>).outcome).toBe('PICKED');
+    spy.mockRestore();
+    const bad = await ask({ type: 'region.compose', brief: 'b', claim, surveyBlobId: sc.blobs.putBytes(survey, 'survey', 'bin'), ext: { 'architect_mc:skipPick': 'yes' } });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toMatch(/FIELD_LIMIT: ext\["architect_mc:skipPick"\] is a boolean/);
+  }, 600_000);
+
+  it('(7c CP) owner and dimension: the owner kept in the record and the design; another level than the Overworld ends NO_PLAN at once, $0', async () => {
+    const spy = vi.spyOn(sc.regionDesigns, 'request');
+    const { designId: nether } = await compose('a flat village with a well', { owner: 'steward:s1', dimension: 'minecraft:the_nether' });
+    await until(() => final(nether), 600_000);
+    const n = sc.designs.get(nether)!;
+    expect(n.status).toBe('done');
+    expect(st(nether).dimension).toBe('minecraft:the_nether');
+    expect(n.request.owner).toBe('steward:s1');
+    expect(n.result).toMatchObject({ outcome: 'NO_PLAN', refused: 'NOT_ALLOWED: regions are Overworld only in this version', summary: 'regions can only be built in the Overworld for now', rounds: 0, waits: [] });
+    expect(st(nether).rounds).toEqual([]); // no round
+    expect(spy).not.toHaveBeenCalled(); // no pick
+    spy.mockRestore();
+    const { designId } = await compose('a flat village with a well', { owner: 'steward:s1', dimension: 'minecraft:overworld', ext: { 'architect_mc:skipPick': true } });
+    await until(() => st(designId).awaiting !== undefined || final(designId), 600_000);
+    expect(st(designId).owner).toBe('steward:s1');
+    expect(sc.designs.get(designId)!.request.owner).toBe('steward:s1');
+    expect(st(designId).awaiting).toBeDefined();
+    await ask({ type: 'design.cancel', designId });
+    const { designId: plain } = await compose('a flat village with a well', { ext: { 'architect_mc:skipPick': true } });
+    await until(() => st(plain).awaiting !== undefined || final(plain), 600_000);
+    expect(st(plain).dimension).toBeUndefined();
+    expect(st(plain).owner).toBeUndefined();
+    await ask({ type: 'design.cancel', designId: plain });
+  }, 600_000);
+
+  it('(7c CP) the $0 street round: a grid zone refused NO_ROOM with a street wouldFit is fixed with no job and checks READY; streetFix false repairs instead', async () => {
+    const cottages = Array.from({ length: 3 }, (_, i) => ({ id: `cottage_${i + 1}`, type: 'cottage', size: [13, 14] }));
+    const GRID = { schemaVersion: 'plan/0', zones: [{ id: 'town', required: true, size: { w: 30, d: 90 }, program: { layout: 'grid', lots: cottages } }] };
+    const script = { 'architect:simCompose': [{ plan: GRID, reason: 'three cottages in a grid' }] };
+    const { designId } = await compose('three cottages', { ext: { ...script, 'architect_mc:skipPick': true } });
+    const d = await playMod(designId);
+    const res = d.result as Record<string, unknown>;
+    const rs = st(designId).rounds as ComposeRound[];
+    expect(rs.map((r) => [r.free ?? 'paid', r.refused ?? (r.check as { overall: string }).overall])).toEqual([['paid', expect.stringMatching(/NEEDS_REPAIR|REQUIRED_BLOCKED/)], ['street', 'READY']]);
+    expect(rs[1]!.jobId).toBe('');
+    expect(rs[1]!.cost).toBeUndefined();
+    expect(sc.jobs.book.get('')).toBeUndefined();
+    expect(res.outcome).toBe('COMPOSED');
+    expect(((res.plan as typeof GRID).zones[0]!.program as { layout: string }).layout).toBe('street');
+    expect((res.history as Array<Record<string, unknown>>)[1]).toMatchObject({ round: 2, free: 'street', overall: 'READY' });
+    expect(res.summary).toBe('three cottages in a grid');
+    expect(res.leftOut).toEqual([]);
+    expect(res.waits).toEqual([]);
+    expect(res.cost).toBe(d.cost!.usd);
+    expect(d.cost!.usd).toBeCloseTo((rs[0]!.cost?.usd ?? 0), 9);
+    // idempotent: Steward's own pass after compose finds nothing more to apply
+    expect(streetFixes(res.plan, res.check as Record<string, unknown>)).toBeUndefined();
+    // streetFix false: no free round, a paid repair instead (the sim repeats the grid plan)
+    const off = await compose('three cottages', { ext: { ...script, 'architect_mc:skipPick': true, 'architect_mc:streetFix': false } });
+    const d2 = await playMod(off.designId);
+    expect((st(off.designId).rounds as ComposeRound[]).some((r) => r.free)).toBe(false);
+    expect(st(off.designId).rounds.length).toBe(2);
+    expect((d2.result as Record<string, unknown>).outcome).toBe('NO_PLAN');
+  }, 600_000);
+
+  it('(7c CP) composeVocab families: the system carries the block families; a family the model made up is refused by the check and repaired', async () => {
+    const rule = (family: string) => ({ id: 'palette_1', kind: 'palette', family, share: [0, 1] });
+    const script = { 'architect:simCompose': [{ plan: { ...GOOD, rules: [rule('glitterwood')] }, reason: 'r1' }, { plan: { ...GOOD, rules: [rule('oak')] }, reason: 'r2' }] };
+    const { designId } = await compose('a few homes beside a winding lane', { ext: { ...script, 'architect_mc:skipPick': true, 'architect_mc:composeVocab': 'families' } });
+    const d = await playMod(designId);
+    const rs = st(designId).rounds as ComposeRound[];
+    const q1 = queries(rs[0]!.jobId)[0]!;
+    expect(q1.system).toContain(vocabFamiliesText(KIT));
+    expect(q1.system.indexOf('## Block families (vocab/1)')).toBeGreaterThan(q1.system.indexOf(COMPOSE_SYSTEM.slice(0, 200)));
+    const p1 = ((rs[0]!.check as { parts: Array<Record<string, unknown>> }).parts).find((p) => p.part === 'palette_1')!;
+    expect(p1.class).toBe('refused');
+    expect(queries(rs[1]!.jobId)[0]!.prompt).toMatch(/- palette_1: refused \(rule\.palette\)\n {2}- NO_FEATURE: "glitterwood" is not a vocab\/1 family or group/);
+    const res = d.result as Record<string, unknown>;
+    expect(res.outcome).toBe('COMPOSED');
+    expect(res.summary).toBe('r2');
+    // without the key: no families block (today's system)
+    const { designId: plain } = await compose('a few homes beside a winding lane', { ext: { 'architect:simCompose': [{ plan: GOOD, reason: 'r' }], 'architect_mc:skipPick': true } });
+    await playMod(plain);
+    expect(queries(st(plain).rounds[0]!.jobId)[0]!.system.endsWith(COMPOSE_SYSTEM)).toBe(true);
   }, 600_000);
 
   it('opKey: the same key and body adopt the first design; another body (images) conflicts', async () => {
