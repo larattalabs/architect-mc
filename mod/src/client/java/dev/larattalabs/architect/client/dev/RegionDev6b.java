@@ -460,6 +460,9 @@ public final class RegionDev6b {
 			d.error().ifPresent(e -> o.addProperty("error", e));
 			d.result().ifPresent(r -> o.add("result", r));
 			o.addProperty("costUsd", d.cost().usd());
+			if (d.request().get("owner") instanceof com.google.gson.JsonPrimitive ow && ow.isString()) {
+				o.addProperty("owner", ow.getAsString()); // (7c CP) the design's owner, as the helper keeps it
+			}
 		}
 		o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
 		return o;
