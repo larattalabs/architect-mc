@@ -1005,7 +1005,7 @@ steps.look = async () => {
 
 {
   const { registerFKB } = await import('./lib/gatem5fkb.mjs');
-  await registerFKB(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root, javaTests, apiJars, nodeTest });
+  await registerFKB(steps, { L, call, check, cmd, log, OUT, json, imp, G, ensure, spendZero, hashOf, groundY, CX, CZ, CLAIM, haltWait, root, javaTests, apiJars, nodeTest });
 }
 
 // ------------------------------------------------------------------ (slice JR) jrcrash: tools/lib/gatem5jr.mjs

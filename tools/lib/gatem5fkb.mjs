@@ -36,7 +36,7 @@ const SLABS = 16;
 const TOWN = [{ id: 'hall_1', type: 'hall', size: [13, 11], landmark: true }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }];
 
 export async function registerFKB(steps, h) {
-  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root } = h;
+  const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, CX, CZ, CLAIM, haltWait, root } = h; // h.hashOf: the creative box's hash
   const ctx = { L, OUT: h.OUT, imp: h.imp };
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
@@ -257,18 +257,6 @@ export async function registerFKB(steps, h) {
     await cmd('/kill @e[type=item]');
     await cmd(`/clear @a ${SLAB}`);
 
-    // a bad declaration: refused by the kit; the mod refuses it too, 0 cells written
-    const bad1 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: 'minecraft:diamond', count: 1, provided: true }; } });
-    const bad2 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: SLAB, count: 1 }; } });
-    const kitNo = [bad1.ck.errors.find((e) => /can't be module-provided/.test(e)), bad2.ck.errors.find((e) => /is creative-only/.test(e))];
-    const origin = [CLAIM[0] - 20, W.gy, CLAIM[1] - 20];
-    // Sites.check (writes nothing) and Sites.place as the owner: both name the fill's refusal
-    const cBad = await call('dev.pl.place', { blueprint: 'fkb_bad', origin, check: true, owner: G.OWNER }, 120_000).catch((e) => ({ error: String(e) }));
-    const pBad = { ...(await call('dev.pl.place', { blueprint: 'fkb_bad', origin, owner: G.OWNER, mode: 'instant' }, 120_000).catch((e) => ({ error: String(e) }))), check: cBad };
-    out.bad = { kit: kitNo, place: pBad };
-    check(kitNo.every(Boolean) && pBad.placed !== true && /creative-only/.test(json(cBad)) && !(pBad.cells > 0),
-      `a bad declaration is refused: the kit (${kitNo.join(' | ')}); the mod, before any write (${json(pBad).slice(0, 200)})`, out.bad);
-    await entry(); // fk_hall back as it was
 
     // the region removed: the filter items refunded, the slabs taken and refunded never; no slab anywhere
     const near = P(A);
@@ -325,6 +313,35 @@ export async function registerFKB(steps, h) {
           `repair, one cycle: grown again under a new key (${s0.key} -> ${s2.key}); the new bill the filter items only ${json(g2.q.bomParts?.['fill:cottage_1'])} (fed ${json(rb2.fed)}); consumed = the quote (differ ${json(G.minus(consumed2, g2.q.bom))}); the slabs exactly the plan (${slabsOf(s2)}); no slab with the player or loose`, out.repair);
       }
     }
+    await L.leaveWorld();
+
+    // creative: the entry placed instant fills its slabs (guarded); a bad declaration is refused by the kit and by the mod before any write
+    await L.fresh('G6B FKB Creative', G.FLAT);
+    await entry();
+    const cg = await groundY();
+    const origin = [CX, cg, CZ];
+    const area = [CX - 3, cg - 3, CZ - 3, CX + 12, cg + 8, CZ + 12];
+    await L.tp(CX + 4, cg + 20, CZ - 10);
+    await L.settle(1500);
+    const pc = await call('dev.pl.place', { blueprint: 'fk_hall', origin, mode: 'instant' }, 300_000);
+    await L.settle(1500);
+    const c = pc.site ? await fk(pc.site) : {};
+    out.creative = { placed: pc.placed, phase: c.phase, slabs: slabsOf(c), guarded: c.guarded };
+    check(pc.placed && c.phase === 'UNLOCKED' && exactly(c) && slabsOf(c) === SLABS && c.guarded === 4,
+      `creative: fk_hall provided 1 placed instant: filled with its slabs (${slabsOf(c)}), ${c.guarded} declared containers guarded`, out.creative);
+    if (pc.site) await call('dev.pl.remove', { site: pc.site }, 600_000);
+    await L.settle(1500);
+    const h0 = await h.hashOf(area);
+    const bad1 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: 'minecraft:diamond', count: 1, provided: true }; } });
+    const pBad1 = await call('dev.pl.place', { blueprint: 'fkb_bad', origin, mode: 'instant' }, 120_000).catch((e) => ({ error: String(e) }));
+    const bad2 = await entry({ mutate: (bp) => { bp.fillSpec.containers[0].items[1] = { slot: 1, id: SLAB, count: 1 }; } });
+    const pBad2 = await call('dev.pl.place', { blueprint: 'fkb_bad', origin, mode: 'instant' }, 120_000).catch((e) => ({ error: String(e) }));
+    await L.settle(1000);
+    const h1 = await h.hashOf(area);
+    const kitNo = [bad1.ck.errors.find((e) => /can't be module-provided/.test(e)), bad2.ck.errors.find((e) => /is creative-only/.test(e))];
+    out.bad = { kit: kitNo, place1: pBad1, place2: pBad2, hashSame: h0 === h1 };
+    check(kitNo.every(Boolean) && pBad1.placed !== true && /can't be module-provided/.test(json(pBad1)) && pBad2.placed !== true && /creative-only/.test(json(pBad2)) && h0 === h1,
+      `a bad declaration is refused: by the kit (${kitNo.join(' | ')}); by the mod before any write, NOT_ALLOWED (${json(pBad1.refusals ?? pBad1).slice(0, 160)}; ${json(pBad2.refusals ?? pBad2).slice(0, 160)}); 0 cells written (the box's hash unchanged: ${h0 === h1})`, out.bad);
     await L.leaveWorld();
     spendZero();
     return out;
