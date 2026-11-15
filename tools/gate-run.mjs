@@ -104,6 +104,7 @@ import { agentOption as jacocoAgentOption, readDump as jacocoReadDump, requestDu
 import { loadConf, loadMap } from './lib/step-inputs.mjs';
 import { aggregateProblems, entryOf, expandSplits, isPartId, parentOf, parentResults, planOrder, validateSplits } from './lib/step-split.mjs';
 import { stallMinutes, stallWatch } from './lib/stall-watch.mjs';
+import { cachedTableLines, writeAllCachedSummary } from './lib/cached-summary.mjs';
 import { explicitDecision, isStrict, ownSteps, platformNow } from './lib/explicit-cache.mjs';
 import { changeApplies, changeConfig, chooseChange, derivePairs, describeChange, usablePairs } from './lib/change-shards.mjs';
 import { acquire as acquireMachine, chooseTurbo, describeQueue, describeTurbo, foldSamples, liveHolders, loadConfig, releaseAll, sampleMachine, turboConfig } from './lib/turbo.mjs';
@@ -1351,6 +1352,14 @@ if (!steps.length) {
     .filter((p) => !p.startsWith('no step ran'));
   if (!PLAN && bad.length) die(`nothing to run, but: ${bad.join('; ')}`);
   printSelection();
+  // (GI2) an all-CACHED run still leaves its summary.json (state done: a waiter wakes) and SUMMARY.md (tools/lib/cached-summary.mjs)
+  if (!PLAN && tierInfo.cached?.length) {
+    const st = new Date().toISOString();
+    const dir = path.join(RUNS_ROOT, `${st.replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-')}-${chainName}`);
+    const w = writeAllCachedSummary(dir, { chain: chainName, head: git(SRC, 'rev-parse', 'HEAD'), range: tierInfo.range ?? null, startedAt: st,
+      cached: tierInfo.cached, explicit: !!tierInfo.cache?.explicit, worktree: SRC });
+    console.log(`summary: ${w.md}`);
+  }
   console.log(`${chainName}: nothing to run (${tierInfo.cached?.length ? 'every selected step is CACHED, listed above' : tierInfo.kind === 'tier' ? 'the diff maps to no gate step' : 'empty selection'}).`);
   process.exit(0);
 }
@@ -2038,10 +2047,7 @@ function summaryMd() {
   if (summary.cache) {
     const c = summary.cache;
     lines.push('', `Cache: lookups ${c.lookup ? 'on' : `off (${c.offWhy})`}; PASSes recorded ${c.record ? 'when the trace stayed inside the input set' : 'no'}${c.canaries?.length ? `; canaries: ${c.canaries.join(' ')}` : ''}.`);
-    if (summary.cached.length) {
-      lines.push('', `### CACHED (${summary.cached.length}): skipped, a PASS is recorded for the same key${c.explicit ? ' (an explicit list: own steps always ran, strict-tier steps took exact keys only)' : ''}`, '', '| step | key | PASS at | head | source run | evidence |', '|---|---|---|---|---|---|');
-      for (const h of summary.cached) lines.push(`| ${h.id} | ${String(h.key).slice(0, 12)} | ${h.at} | ${String(h.head).slice(0, 9)} | \`${path.basename(String(h.run ?? '?'))}\` | \`${h.log ?? h.run}\` |`);
-    }
+    lines.push(...cachedTableLines(summary.cached, { explicit: !!c.explicit }));
     if (c.explicit && Object.keys(c.explicit.own).length) lines.push('', `Own steps (always run; ${c.explicit.base}): ${Object.entries(c.explicit.own).map(([id, w]) => `${id} (${w})`).join('; ')}.`);
     if (summary.inputsMisses.length) {
       lines.push('', `### Inputs-map misses (${summary.inputsMisses.length}): these PASSes were not cached`, '', `A step read source files outside its set in tools/step-inputs.json. Widen it: \`node tools/step-inputs.mjs merge ${OUT}\`, review, commit.`, '');
