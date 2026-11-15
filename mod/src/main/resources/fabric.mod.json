@@ -23,6 +23,7 @@
 	},
 	"mixins": [
 		"architect_mc.mixins.json",
+		"architect_mc.compat.mixins.json",
 		{
 			"config": "architect_mc.client.mixins.json",
 			"environment": "client"

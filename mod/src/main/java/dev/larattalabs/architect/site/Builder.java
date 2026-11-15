@@ -330,7 +330,7 @@ public final class Builder {
 				}
 			}
 			if (fill != null && ph == null || fill != null && Fills.FILLING.equals(ph)) {
-				fillOwed = fill.items();
+				fillOwed = fill.billed(); // (FK-b) the provided items are written unbilled: never owed
 				fillOwed.forEach((k, v) -> unbuilt.merge(k, v, Integer::sum));
 			}
 		}
@@ -1082,7 +1082,7 @@ public final class Builder {
 		// (M5 FK) a fill builds from a stockpile in survival: its commit point is in the stockpile ledger (CONTRACT "### FK contract" 2)
 		Blueprints.Entry fe = Blueprints.entry(bp.id());
 		if (fe != null && fe.json().has("fill")) {
-			String no = Fills.refusal(fe.json());
+			String no = Fills.refusal(fe); // (FK-b) the template's blocks too (a provided item in a dropper or dispenser)
 			if (no != null) {
 				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, bp.id() + ": " + no);
 			}
