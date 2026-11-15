@@ -91,18 +91,39 @@ class RegionFileFlushSSTest {
 	}
 
 	@Test
-	void theMixinMarksAtWriteHeaderAndSkipsOnlyAnUnwrittenFlush() throws Exception {
+	void theMixinReportsEveryEventToRegionDurability() throws Exception {
+		// the rules are RegionDurabilityTest's; this pins the wiring (the behaviour with the mixins applied: SaveProbe, in ps-crash)
 		String s = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/RegionFileFlushMixin.java"));
-		assertTrue(s.contains("@Inject(method = \"writeHeader\", at = @At(\"HEAD\"))"));
-		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"HEAD\"), cancellable = true)"));
-		int skip = s.indexOf("if (w == architect$forcedAt && !SaveTiming.forceAll)");
-		int head = s.indexOf("long w = architect$writes.get();");
-		assertTrue(head > 0 && skip > head, "the count read at the force's start decides the skip");
-		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"RETURN\"))"), "the covered count is recorded only when the force returns");
-		assertTrue(s.contains("architect$forcedAt = architect$forcing;"));
-		assertTrue(s.indexOf("architect$forcedAt =") == s.lastIndexOf("architect$forcedAt ="), "set in one place only");
+		assertTrue(s.contains("RegionVersion;Z)V\", at = @At(\"RETURN\"))".replace("RegionVersion", "chunk/storage/RegionFileVersion")), "each object opens unknown");
+		assertTrue(s.contains("@Inject(method = \"writeHeader\", at = @At(\"HEAD\"))") && s.contains("RegionDurability.written(architect$state);"));
+		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"HEAD\"), cancellable = true)") && s.contains("if (RegionDurability.skip(architect$state)) {"));
+		assertTrue(s.contains("@Inject(method = \"flush\", at = @At(\"RETURN\"))") && s.contains("RegionDurability.forced(architect$state);"),
+			"covered only when the force returns");
+		assertTrue(s.contains("@Inject(method = \"close\", at = @At(\"HEAD\"))") && s.contains("RegionDurability.closing(architect$state);"));
+		assertTrue(s.contains("shift = At.Shift.AFTER") && s.contains("RegionDurability.closeForced(architect$state);"), "a close owes until its force returns");
+		assertTrue(s.contains("ext.force(true);"), "an oversized chunk's payload is forced");
+		assertTrue(s.contains("RegionDurability.needsDirSync(architect$state)"), "the .mcc rename's directory synced");
+		String b = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/RegionStorageBarrierMixin.java"));
+		assertTrue(b.contains("@Inject(method = \"flush\", at = @At(\"RETURN\"))") && b.contains("RegionDurability.barrier(rf::flush);"));
 		String json = Files.readString(Path.of("src/main/resources/architect_mc.mixins.json"));
-		assertTrue(json.contains("\"RegionFileFlushMixin\""));
+		for (String m : List.of("RegionFileFlushMixin", "RegionStorageBarrierMixin", "SaveEpochMixin")) {
+			assertTrue(json.contains("\"" + m + "\""), m);
+		}
+	}
+
+	@Test
+	void theLedgerWaitsForDurableWrites() throws Exception {
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		int sww = sp.indexOf("static void saveWithWorld(MinecraftServer srv) {");
+		String body = sp.substring(sww, sp.indexOf("\n\t}\n", sww));
+		int chunks = body.indexOf("srv.saveAllChunks(true, true, false);");
+		int check = body.indexOf("RegionDurability.undurable(\"chunk\", \"entities\")");
+		int ledger = body.lastIndexOf("save();");
+		assertTrue(chunks > 0 && check > chunks && ledger > check, "saveWithWorld: chunks, the durability check, then the ledger");
+		int after = sp.indexOf("ServerLifecycleEvents.AFTER_SAVE.register");
+		String a = sp.substring(after, sp.indexOf("\n\t\t});", after));
+		assertTrue(a.contains("ioFailed = true;") && a.indexOf("if (ioFailed || !undurable.isEmpty()) {") < a.lastIndexOf("save();"),
+			"(finding 5) an autosave whose chunk IO wait failed writes no ledger");
 	}
 
 	@Test
@@ -114,8 +135,10 @@ class RegionFileFlushSSTest {
 		assertEquals(List.of("Objects.requireNonNull", "lambda->isReadyForSaving", "BlockableEventLoop.managedBlock", "ChunkHolder.getLatestChunk"), l);
 		assertTrue(m.get("saveAllChunks").contains("lambda->lambda$saveAllChunks$0"), "saveAllChunks maps its chunks through that lambda");
 		String s = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/ChunkSaveWaitMixin.java"));
-		assertTrue(s.contains("if (c instanceof LevelChunk lc) {\n\t\t\treturn lc.isUnsaved();"), "an unsaved LevelChunk is waited for");
-		assertTrue(s.contains("return ip.getWrapped().isUnsaved();"), "an imposter's unsaved LevelChunk is waited for");
+		assertTrue(s.contains("!SaveTiming.hasChanges(h.getLatestChunk())"));
+		String t = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/SaveTiming.java"));
+		assertTrue(t.contains("lc) {\n\t\t\treturn lc.isUnsaved();"), "an unsaved LevelChunk is waited for");
+		assertTrue(t.contains("return ip.getWrapped().isUnsaved();"), "an imposter's unsaved LevelChunk is waited for");
 		assertTrue(s.contains("if (SaveTiming.explicit && !SaveTiming.waitAll"), "only inside a stockpile save with the world");
 		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
 		assertEquals(2, sp.split("SaveTiming.explicit = true;", -1).length - 1, "saveWithWorld and saveLedgerFirst set it");

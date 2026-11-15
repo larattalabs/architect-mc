@@ -16,8 +16,9 @@ public final class SaveTiming {
 	private static final long[] NANOS = new long[NAMES.length];
 	private static int chunksSaved;
 	private static long forced0, skipped0;
-	/** (SS) Region files forced (fsynced) and forces skipped (nothing written since the last force), this session: any IO worker thread. */
-	static final java.util.concurrent.atomic.AtomicLong FORCED = new java.util.concurrent.atomic.AtomicLong(), SKIPPED = new java.util.concurrent.atomic.AtomicLong();
+	/** (SS) Region files forced (successful forces) and forces skipped (known clean), this session: RegionDurability's counters. */
+	static final java.util.concurrent.atomic.AtomicLong FORCED = RegionDurability.FORCED, SKIPPED = RegionDurability.SKIPPED;
+	private static long barriers0;
 	/**
 	 * (SS) Every region file forced at a flush, as vanilla does (RegionFileFlushMixin off): {@code -Darchitect.regionForceAll=true}, or the
 	 * TEST switch {@code dev.stockpile.ps {forceAll}} (the gate's before case).
@@ -44,6 +45,7 @@ public final class SaveTiming {
 		waitsSkipped = 0;
 		forced0 = FORCED.get();
 		skipped0 = SKIPPED.get();
+		barriers0 = RegionDurability.BARRIERS.get();
 		phase = OTHER;
 		last = System.nanoTime();
 		started = last;
@@ -68,14 +70,19 @@ public final class SaveTiming {
 		phase = p;
 	}
 
-	/** A region file forced at a flush (an IO worker). */
-	public static void forced() {
-		FORCED.incrementAndGet();
-	}
-
-	/** A region file's force skipped: nothing written since its last one (an IO worker). */
-	public static void forceSkipped() {
-		SKIPPED.incrementAndGet();
+	/**
+	 * (SS, ChunkSaveWaitMixin) A chunk whose save would write a change made in the world: a LevelChunk marked unsaved, or the LevelChunk an
+	 * ImposterProtoChunk wraps (the imposter itself always reports clean). Anything else (a ProtoChunk loading or generating) holds no change
+	 * the ledger describes.
+	 */
+	public static boolean hasChanges(net.minecraft.world.level.chunk.ChunkAccess c) {
+		if (c instanceof net.minecraft.world.level.chunk.LevelChunk lc) {
+			return lc.isUnsaved();
+		}
+		if (c instanceof net.minecraft.world.level.chunk.ImposterProtoChunk ip) {
+			return ip.getWrapped().isUnsaved();
+		}
+		return false;
 	}
 
 	/** A flushed save's wait for a chunk with nothing unsaved, or still loading, skipped (server thread). */
@@ -109,6 +116,7 @@ public final class SaveTiming {
 		}
 		appendPart(b, OTHER);
 		b.append(" | chunksSaved ").append(chunksSaved).append(" | forced ").append(FORCED.get() - forced0).append(" skipped ").append(SKIPPED.get() - skipped0)
+			.append(" barriers ").append(RegionDurability.BARRIERS.get() - barriers0)
 			.append(" | waitsSkipped ").append(waitsSkipped);
 		if (forceAll) {
 			b.append(" | forceAll");

@@ -282,6 +282,7 @@ public final class Stockpiles {
 			}
 			boolean timed = SaveTiming.on();
 			long w0 = timed ? SaveTiming.started() : System.nanoTime();
+			boolean ioFailed = false;
 			if (!flush) {
 				long t0 = System.nanoTime();
 				SaveTiming.at(SaveTiming.IO); // (SS) J1's wait is the autosave's IO wait
@@ -289,7 +290,9 @@ public final class Stockpiles {
 					try {
 						l.getChunkSource().chunkMap.synchronize(true).join();
 					} catch (RuntimeException e) {
-						Architect.LOGGER.warn("Stockpiles: waiting for {}'s chunk writes failed; the ledger is saved anyway", l.dimension(), e);
+						// (SS, review finding 5) fail closed: no ledger write over chunk writes not known durable; the ledger stays pending
+						ioFailed = true;
+						Architect.LOGGER.error("Stockpiles: waiting for {}'s chunk writes failed; the ledger is not saved now", l.dimension(), e);
 					}
 				}
 				SaveTiming.at(SaveTiming.OTHER);
@@ -303,6 +306,15 @@ public final class Stockpiles {
 				// of at most the window's deliveries), never ahead of it
 				Architect.LOGGER.error("Stockpiles: kill point AS1: the autosave's chunks written, halting before the ledger write");
 				Runtime.getRuntime().halt(7);
+			}
+			// (SS) the ledger only over durable chunk writes: an autosave forces the chunk storages (J1's wait), a flushed save the entities too
+			java.util.List<String> undurable = flush ? RegionDurability.undurable("chunk", "entities") : RegionDurability.undurable("chunk");
+			if (ioFailed || !undurable.isEmpty()) {
+				refuseUndurable(flush ? "the world save" : "the autosave", undurable);
+				if (timed) {
+					logTiming((flush ? "world save (flush)" : "autosave") + " REFUSED", w0, SaveTiming.stop());
+				}
+				return;
 			}
 			save();
 			if (timed) {
@@ -1968,6 +1980,10 @@ public final class Stockpiles {
 					o.addProperty("lastAutosaveWaitMs", lastAutosaveWaitMs);
 					o.addProperty("maxAutosaveWaitMs", maxAutosaveWaitMs);
 					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
+					o.addProperty("regionBarriers", RegionDurability.BARRIERS.get());
+					o.addProperty("regionDirSyncs", RegionDurability.DIR_SYNCS.get());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
 					o.addProperty("chunkWaitsSkipped", SaveTiming.WAITS_SKIPPED.get());
@@ -1980,6 +1996,22 @@ public final class Stockpiles {
 						o.addProperty("loadFailedWhy", loadFailedWhy);
 					}
 					o.addProperty("format", FORMAT);
+					return o;
+				}
+				case "ss" -> {
+					// (SS, TEST) the region-file durability probe, with the mixins applied (SaveProbe)
+					if (req.has("probe") && req.get("probe").getAsBoolean()) {
+						try {
+							return SaveProbe.run(srv, player);
+						} catch (java.io.IOException e) {
+							throw new java.io.UncheckedIOException(e);
+						}
+					}
+					o.addProperty("forced", RegionDurability.FORCED.get());
+					o.addProperty("skipped", RegionDurability.SKIPPED.get());
+					o.addProperty("barriers", RegionDurability.BARRIERS.get());
+					o.addProperty("undurable", RegionDurability.undurable("chunk", "entities").size());
+					o.addProperty("durabilityRefusals", durabilityRefusals);
 					return o;
 				}
 				case "ps" -> {
@@ -2525,6 +2557,18 @@ public final class Stockpiles {
 				explicitSave = false;
 				SaveTiming.explicit = false;
 			}
+			// (SS) every chunk and entity write a successful force covered (RegionDurability): else the ledger is not published
+			java.util.List<String> undurable = RegionDurability.undurable("chunk", "entities");
+			if (!undurable.isEmpty()) {
+				refuseUndurable(quiet ? "the periodic save" : "a save with the world", undurable);
+				if (timed) {
+					logTiming((quiet ? "periodic" : caller()) + " REFUSED", t0, SaveTiming.stop());
+				}
+				if (quiet) {
+					return; // retried at the next periodic save; the ledger stays pending (unsaved)
+				}
+				throw new IllegalStateException("Stockpiles: the ledger was not saved: chunk writes not durable " + undurable);
+			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
 				Architect.LOGGER.error("Stockpiles: kill point FK3: the chunks flushed, halting before the ledger write (dev.journal.killAt)");
@@ -2545,6 +2589,17 @@ public final class Stockpiles {
 				logTiming(quiet ? "periodic" : caller(), t0, parts);
 			}
 		}
+	}
+
+	/** (SS, dev) ledger saves refused because a chunk or entity write was not known durable. */
+	static volatile int durabilityRefusals;
+
+	/** (SS) A ledger write refused: a chunk write not durable (a force that failed, a close that owes). Logged at ERROR; the ledger stays pending. */
+	private static void refuseUndurable(String what, java.util.List<String> undurable) {
+		durabilityRefusals++;
+		unsaved = true;
+		Architect.LOGGER.error("Stockpiles: {} did not write the ledger: {} region file(s) not durable ({}); it is written at the next save whose forces"
+			+ " succeed", what, undurable.size(), undurable.size() > 8 ? undurable.subList(0, 8) + " ..." : undurable);
 	}
 
 	/** (SS) A save with the world logs its parts at or above this (ms), and every one not periodic. */

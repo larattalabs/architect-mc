@@ -1,61 +1,110 @@
 package dev.larattalabs.architect.mixin;
 
-import dev.larattalabs.architect.site.SaveTiming;
-import java.util.concurrent.atomic.AtomicLong;
+import dev.larattalabs.architect.site.RegionDurability;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionFileVersion;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * (SS) A flushed save forces (fsyncs; F_FULLFSYNC on macOS) every region file the storage has open, written or not: chunks, entities and
- * POI, in every level. Most of a flushed save's wait was those forces of files nothing had written since their last force. This skips the
- * force of a file with no write since its last successful force: such a file has nothing to make durable, so every byte a save makes
- * durable before the ledger is written (the PS/J1 order) is still made durable first.
+ * (SS) A flushed save forces (fsyncs; F_FULLFSYNC on macOS) every region file its storages hold open, written or not. This skips the force
+ * of a file known clean: no write since a force of this object that returned normally. Every rule (unknown at open, a failed force
+ * covers nothing, a close owes until its force returns, the device barrier, the check before the ledger) is in {@link RegionDurability};
+ * this class only reports the file's events to it.
  * <ul>
- * <li>Every write of a region file's channel goes through {@code writeHeader} ({@code write}, after its sectors, and {@code clear}); a
- * bytecode test checks it. Each one counts a write.</li>
- * <li>A force records the count it saw at its start, and only when it returns normally: a write counted after that start, or a force that
- * threw, leaves the file to be forced at the next flush.</li>
- * <li>{@code close} (eviction from the storage's cache, the storage's close) still forces unconditionally; a file reopened is a new object
- * that starts with nothing to force.</li>
+ * <li>Writes: every write of the region file's channel goes through {@code writeHeader} ({@code write} after its sectors, {@code clear});
+ * {@code padToFullSector} runs only in {@code close}, which forces. A bytecode test pins this.</li>
+ * <li>An oversized chunk's payload ({@code writeToExternalFile}, its own .mcc channel, which vanilla never forces) is forced here before
+ * its channel closes, and the directory holding the renamed .mcc is synced at the file's next forcing flush, before the ledger.</li>
  * </ul>
- * A region file is written and flushed from its storage's IO worker (a consecutive executor: one task at a time); the counters are atomic
- * anyway.
  */
 @Mixin(RegionFile.class)
 public abstract class RegionFileFlushMixin {
-	/** Writes of this file's channel (via writeHeader), this object's life. */
+	@Shadow
+	@Final
+	private Path path;
+	@Shadow
+	@Final
+	private Path externalFileDir;
+	@Shadow
+	@Final
+	private RegionStorageInfo info;
+
 	@Unique
-	private final AtomicLong architect$writes = new AtomicLong();
-	/** The write count that the last successful force covered. */
-	@Unique
-	private volatile long architect$forcedAt;
-	/** The write count at the start of the force in progress. */
-	@Unique
-	private volatile long architect$forcing;
+	private RegionDurability.State architect$state;
+
+	@Inject(method = "<init>(Lnet/minecraft/world/level/chunk/storage/RegionStorageInfo;Ljava/nio/file/Path;Ljava/nio/file/Path;"
+		+ "Lnet/minecraft/world/level/chunk/storage/RegionFileVersion;Z)V", at = @At("RETURN"))
+	private void architect$open(RegionStorageInfo info, Path path, Path externalFileDir, RegionFileVersion version, boolean sync, CallbackInfo ci) {
+		architect$state = RegionDurability.open(path, info.type());
+	}
 
 	@Inject(method = "writeHeader", at = @At("HEAD"))
-	private void architect$markWritten(CallbackInfo ci) {
-		architect$writes.incrementAndGet();
+	private void architect$written(CallbackInfo ci) {
+		RegionDurability.written(architect$state);
+	}
+
+	@Redirect(method = "writeToExternalFile", at = @At(value = "INVOKE", target = "Ljava/nio/channels/FileChannel;write(Ljava/nio/ByteBuffer;)I"))
+	private int architect$external(FileChannel ext, ByteBuffer data) throws IOException {
+		int n = ext.write(data);
+		ext.force(true); // the payload durable before the rename publishes it
+		RegionDurability.externalWritten(architect$state);
+		return n;
 	}
 
 	@Inject(method = "flush", at = @At("HEAD"), cancellable = true)
-	private void architect$flush(CallbackInfo ci) {
-		long w = architect$writes.get();
-		if (w == architect$forcedAt && !SaveTiming.forceAll) {
-			SaveTiming.forceSkipped();
+	private void architect$flush(CallbackInfo ci) throws IOException {
+		if (RegionDurability.skip(architect$state)) {
 			ci.cancel();
 			return;
 		}
-		architect$forcing = w;
-		SaveTiming.forced();
+		if (RegionDurability.needsDirSync(architect$state)) {
+			architect$syncDir(externalFileDir);
+		}
 	}
 
 	@Inject(method = "flush", at = @At("RETURN"))
 	private void architect$forced(CallbackInfo ci) {
-		architect$forcedAt = architect$forcing; // only a force that returned: one that threw is retried at the next flush
+		RegionDurability.forced(architect$state);
+	}
+
+	@Inject(method = "close", at = @At("HEAD"))
+	private void architect$closing(CallbackInfo ci) {
+		RegionDurability.closing(architect$state);
+	}
+
+	@Inject(method = "close", at = @At(value = "INVOKE", target = "Ljava/nio/channels/FileChannel;force(Z)V"))
+	private void architect$closeForcing(CallbackInfo ci) throws IOException {
+		RegionDurability.closeForcing(architect$state);
+	}
+
+	@Inject(method = "close", at = @At(value = "INVOKE", target = "Ljava/nio/channels/FileChannel;force(Z)V", shift = At.Shift.AFTER))
+	private void architect$closeForced(CallbackInfo ci) {
+		RegionDurability.closeForced(architect$state);
+	}
+
+	/** The rename of a .mcc into {@code dir} made durable (a directory fsync). Windows can't open a directory: NTFS journals the rename. */
+	@Unique
+	private static void architect$syncDir(Path dir) throws IOException {
+		try (FileChannel d = FileChannel.open(dir, StandardOpenOption.READ)) {
+			d.force(true);
+		} catch (IOException e) {
+			if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
+				throw e;
+			}
+		}
+		RegionDurability.dirSynced();
 	}
 }

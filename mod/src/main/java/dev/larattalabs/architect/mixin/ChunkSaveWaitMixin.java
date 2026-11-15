@@ -6,8 +6,6 @@ import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.util.thread.BlockableEventLoop;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.ImposterProtoChunk;
-import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -40,7 +38,7 @@ public abstract class ChunkSaveWaitMixin {
 	private void architect$wait(BlockableEventLoop<?> loop, BooleanSupplier ready) {
 		ChunkHolder h = architect$holder;
 		architect$holder = null;
-		if (SaveTiming.explicit && !SaveTiming.waitAll && !ready.getAsBoolean() && h != null && !architect$hasChanges(h.getLatestChunk())) {
+		if (SaveTiming.explicit && !SaveTiming.waitAll && !ready.getAsBoolean() && h != null && !SaveTiming.hasChanges(h.getLatestChunk())) {
 			SaveTiming.waitSkipped();
 			return;
 		}
@@ -49,15 +47,4 @@ public abstract class ChunkSaveWaitMixin {
 		SaveTiming.at(SaveTiming.CHUNKS);
 	}
 
-	/** A chunk whose save would write a change made in the world: a LevelChunk (or the one an imposter wraps) marked unsaved. */
-	@Unique
-	private static boolean architect$hasChanges(ChunkAccess c) {
-		if (c instanceof LevelChunk lc) {
-			return lc.isUnsaved();
-		}
-		if (c instanceof ImposterProtoChunk ip) {
-			return ip.getWrapped().isUnsaved();
-		}
-		return false;
-	}
 }
