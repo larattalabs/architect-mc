@@ -32410,6 +32410,9 @@ Steward's S-PV1-1: `grow.district` on a plan_v0 region (a plan/0 plan with a D1 
 - **Fix (`TileCheck.fellsFrom`, `fellStops`):** a cell of the region's own tile entries (`ours`) neither seeds a felling nor is felled or
   flooded through, and is not counted in `M3:tree_kept`. Another owner's cell is still checked first; natural trees still go whole.
 - **Units:** `TileFellOwnRTTest` (a later write over the wall's own log fells nothing and the cells equal evalTile's; a grown trunk touching
-  the wall goes, the wall stays; a plain trunk goes whole; the decisions). In game: the paid plan realised on a copy of `G6B PAY P2 s3 land`.
+  the wall goes, the wall stays; a plain trunk goes whole; the decisions). In game ($0, sim, 8930:8931): the paid plan (same IR f94a4431d0b5)
+  realised on a copy of `G6B PAY P2 s3 land`: PLACED, all 264 of the wall's logs stand (0 air); against PAY's realise exactly those 231 cells
+  differ (air -> spruce_log) besides grass/dirt ticks; 12 natural tree cells still felled.
+  Gate (change, `--only`, head 60b95240): tile-gravity, c31-felling, rs-survival-smoke, 6c-scenario-s3, lint-mutations PASS.
 - **Affected:** every release since 6a (v0.11.0) whose region writes a later or neighbouring tile (or a brush stroke) over or beside its
   own log cells; most visible since composed plans build log retaining walls.
