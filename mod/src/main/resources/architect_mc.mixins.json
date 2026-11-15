@@ -6,6 +6,7 @@
 		"BlockBehaviourExplosionMixin",
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
+		"ChunkSaveWaitMixin",
 		"FallingBlockEntityMixin",
 		"LevelChunkMixin",
 		"LevelTicksAccessor",

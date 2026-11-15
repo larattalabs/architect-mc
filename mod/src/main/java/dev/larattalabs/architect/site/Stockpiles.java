@@ -1970,6 +1970,7 @@ public final class Stockpiles {
 					o.addProperty("regionForced", SaveTiming.FORCED.get()); // (SS)
 					o.addProperty("regionForceSkipped", SaveTiming.SKIPPED.get());
 					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("chunkWaitsSkipped", SaveTiming.WAITS_SKIPPED.get());
 					o.addProperty("lastPeriodicMs", lastPeriodicMs);
 					o.addProperty("maxPeriodicMs", maxPeriodicMs);
 					o.addProperty("medianPeriodicMs", periodicMedianMs());
@@ -1996,6 +1997,9 @@ public final class Stockpiles {
 					if (req.has("forceAll")) {
 						SaveTiming.forceAll = req.get("forceAll").getAsBoolean(); // (SS) every region file forced at a flush, as vanilla (the before case)
 					}
+					if (req.has("waitAll")) {
+						SaveTiming.waitAll = req.get("waitAll").getAsBoolean(); // (SS) a flushed save waits for every loading chunk, as vanilla
+					}
 					if (req.has("haltBeforeAutosaveLedger")) {
 						haltBeforeAutosaveLedger = req.get("haltBeforeAutosaveLedger").getAsBoolean(); // (J1) kill point AS1
 					}
@@ -2011,6 +2015,7 @@ public final class Stockpiles {
 					o.addProperty("joinSave", !testNoJoinSave);
 					o.addProperty("noCreditSave", testNoCreditSave);
 					o.addProperty("forceAll", SaveTiming.forceAll);
+					o.addProperty("waitAll", SaveTiming.waitAll);
 					return o;
 				}
 				case "state" -> {

@@ -27,8 +27,12 @@ class RegionFileFlushSSTest {
 
 	/** Per method of RegionFile: the calls it makes, in order ("FileChannel.write", "RegionFile.writeHeader", ...). */
 	static Map<String, List<String>> calls() throws Exception {
+		return calls(net.minecraft.world.level.chunk.storage.RegionFile.class);
+	}
+
+	static Map<String, List<String>> calls(Class<?> c) throws Exception {
 		Map<String, List<String>> m = new TreeMap<>();
-		try (InputStream in = net.minecraft.world.level.chunk.storage.RegionFile.class.getResourceAsStream("RegionFile.class")) {
+		try (InputStream in = c.getResourceAsStream(c.getSimpleName() + ".class")) {
 			new ClassReader(in.readAllBytes()).accept(new ClassVisitor(Opcodes.ASM9) {
 				@Override
 				public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
@@ -96,5 +100,19 @@ class RegionFileFlushSSTest {
 		assertTrue(skip > 0 && clear > skip, "cleared only on the forcing path, before the force runs");
 		String json = Files.readString(Path.of("src/main/resources/architect_mc.mixins.json"));
 		assertTrue(json.contains("\"RegionFileFlushMixin\""));
+	}
+
+	@Test
+	void theFlushedSaveWaitIsTheLambdaTheMixinTargets() throws Exception {
+		// ChunkSaveWaitMixin redirects the managedBlock in lambda$saveAllChunks$0 (the per-chunk wait of a flushed save), then the chunk's
+		// latest state is read and saved as before
+		Map<String, List<String>> m = calls(net.minecraft.server.level.ChunkMap.class);
+		List<String> l = m.get("lambda$saveAllChunks$0");
+		assertEquals(List.of("Objects.requireNonNull", "lambda->isReadyForSaving", "BlockableEventLoop.managedBlock", "ChunkHolder.getLatestChunk"), l);
+		assertTrue(m.get("saveAllChunks").contains("lambda->lambda$saveAllChunks$0"), "saveAllChunks maps its chunks through that lambda");
+		String s = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/ChunkSaveWaitMixin.java"));
+		assertTrue(s.contains("if (c instanceof LevelChunk lc) {\n\t\t\treturn lc.isUnsaved();"), "an unsaved LevelChunk is waited for");
+		assertTrue(s.contains("return ip.getWrapped().isUnsaved();"), "an imposter's unsaved LevelChunk is waited for");
+		assertTrue(Files.readString(Path.of("src/main/resources/architect_mc.mixins.json")).contains("\"ChunkSaveWaitMixin\""));
 	}
 }

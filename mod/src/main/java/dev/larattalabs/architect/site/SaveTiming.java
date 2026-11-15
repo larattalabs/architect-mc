@@ -7,8 +7,8 @@ package dev.larattalabs.architect.site;
  */
 public final class SaveTiming {
 	public static final int OTHER = 0, PLAYERS = 1, DATA = 2, CHUNKS = 3, POI = 4, UNLOADS = 5, IO = 6, ENTITIES = 7, LEVEL_DAT = 8, BOOKS = 9,
-		WRITE = 10;
-	static final String[] NAMES = {"other", "players", "data", "chunks", "poi", "unloads", "io", "entities", "leveldat", "books", "write"};
+		WRITE = 10, WAIT = 11;
+	static final String[] NAMES = {"other", "players", "data", "chunks", "poi", "unloads", "io", "entities", "leveldat", "books", "write", "wait"};
 
 	private static boolean on;
 	private static int phase;
@@ -23,6 +23,12 @@ public final class SaveTiming {
 	 * TEST switch {@code dev.stockpile.ps {forceAll}} (the gate's before case).
 	 */
 	public static volatile boolean forceAll = Boolean.getBoolean("architect.regionForceAll");
+	/**
+	 * (SS) A flushed save waits for every accessible chunk's pending futures, as vanilla does (ChunkSaveWaitMixin off):
+	 * {@code -Darchitect.chunkWaitAll=true}, or the TEST switch {@code dev.stockpile.ps {waitAll}}.
+	 */
+	public static volatile boolean waitAll = Boolean.getBoolean("architect.chunkWaitAll");
+	private static int waitsSkipped;
 
 	private SaveTiming() {
 	}
@@ -30,6 +36,7 @@ public final class SaveTiming {
 	static void start() {
 		java.util.Arrays.fill(NANOS, 0);
 		chunksSaved = 0;
+		waitsSkipped = 0;
 		forced0 = FORCED.get();
 		skipped0 = SKIPPED.get();
 		phase = OTHER;
@@ -66,6 +73,16 @@ public final class SaveTiming {
 		SKIPPED.incrementAndGet();
 	}
 
+	/** A flushed save's wait for a chunk with nothing unsaved, or still loading, skipped (server thread). */
+	public static void waitSkipped() {
+		WAITS_SKIPPED.incrementAndGet();
+		if (on) {
+			waitsSkipped++;
+		}
+	}
+
+	static final java.util.concurrent.atomic.AtomicLong WAITS_SKIPPED = new java.util.concurrent.atomic.AtomicLong();
+
 	/** A chunk copied for its write (ChunkMap.save returned true). */
 	public static void chunkSaved() {
 		if (on) {
@@ -86,9 +103,13 @@ public final class SaveTiming {
 			appendPart(b, i);
 		}
 		appendPart(b, OTHER);
-		b.append(" | chunksSaved ").append(chunksSaved).append(" | forced ").append(FORCED.get() - forced0).append(" skipped ").append(SKIPPED.get() - skipped0);
+		b.append(" | chunksSaved ").append(chunksSaved).append(" | forced ").append(FORCED.get() - forced0).append(" skipped ").append(SKIPPED.get() - skipped0)
+			.append(" | waitsSkipped ").append(waitsSkipped);
 		if (forceAll) {
 			b.append(" | forceAll");
+		}
+		if (waitAll) {
+			b.append(" | waitAll");
 		}
 		return b.toString();
 	}
