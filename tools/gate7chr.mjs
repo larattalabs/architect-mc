@@ -542,7 +542,8 @@ steps.qldrift = async () => {
   const shape2 = terrainShape(q2);
   const moved = Object.fromEntries(Object.keys({ ...q1.bomParts, ...q2.bomParts }).filter((p) => json(q1.bomParts?.[p] ?? {}) !== json(q2.bomParts?.[p] ?? {}))
     .map((p) => [p, G.minus(q2.bomParts?.[p] ?? {}, q1.bomParts?.[p] ?? {})]));
-  const bomMoved = G.minus(q2.bom ?? {}, q1.bom ?? {}), bomBack = G.minus(q1.bom ?? {}, q2.bom ?? {});
+  const pos = (m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v > 0)); // G.minus keeps the negatives
+  const bomMoved = pos(G.minus(q2.bom ?? {}, q1.bom ?? {})), bomBack = pos(G.minus(q1.bom ?? {}, q2.bom ?? {}));
   out.drifted = { terrain: q2.terrain, bomMoved, bomBack, moved, shape: shape2, exact: q2.exact };
   const tilesKey = `tiles:${cell.group}`;
   check(!q2.refused && shape2.length === 0 && q2.terrain?.[DIRT] === 1 && json(bomMoved) === json({ [DIRT]: 1 }) && Object.keys(bomBack).length === 0
