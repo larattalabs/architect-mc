@@ -53,14 +53,35 @@ public final class Fills {
 	public static final String UNLOCKED = "UNLOCKED";
 	public static final int CONTAINERS_MAX = dev.larattalabs.architect.api.Limits.FILL_CONTAINERS_MAX;
 	public static final int LOCKS_MAX = dev.larattalabs.architect.api.Limits.FILL_LOCKS_MAX;
+	/** (FK-b, dev) Provided items destroyed by a break's strip ({@link FillGuard#strip}), since the server started. Server thread. */
+	public static long STRIPPED;
 	/** (Steward's review A) the lock properties vanilla keeps as written, per block (kit/lib/fill.mjs LOCK_PROPS). */
 	static final Map<Block, Set<String>> LOCK_PROPS = Map.of(Blocks.LEVER, Set.of("powered"));
 
 	private Fills() {
 	}
 
-	/** One declared stack. */
-	public record Stack(int slot, String item, int count) {
+	/** One declared stack; (FK-b) {@code provided}: module-provided (an allow-listed item, written unbilled, never refunded). */
+	public record Stack(int slot, String item, int count, boolean provided) {
+		public Stack(int slot, String item, int count) {
+			this(slot, item, count, false);
+		}
+	}
+
+	/** (FK-b) Whether an item id is one a fill may mark provided ({@link dev.larattalabs.architect.api.Limits#FILL_PROVIDED_ITEMS}). */
+	public static boolean providedItem(String item) {
+		return dev.larattalabs.architect.api.Limits.FILL_PROVIDED_ITEMS.contains(item);
+	}
+
+	/** (FK-b) An item-count map's provided part ({@code provided} true) or billed part. */
+	static Map<String, Integer> part(Map<String, Integer> m, boolean provided) {
+		Map<String, Integer> out = new TreeMap<>();
+		m.forEach((k, v) -> {
+			if (providedItem(k) == provided && v > 0) {
+				out.put(k, v);
+			}
+		});
+		return out;
 	}
 
 	/** A declared container: its template cell and stacks. */
@@ -69,11 +90,22 @@ public final class Fills {
 			items = List.copyOf(items);
 		}
 
-		/** Its declaration per item. */
+		/** Its declaration per item (provided items included: ours, never cargo). */
 		public Map<String, Integer> counts() {
 			Map<String, Integer> m = new TreeMap<>();
 			items.forEach(s -> m.merge(s.item(), s.count(), Integer::sum));
 			return m;
+		}
+
+		/** (FK-b) The items its declaration marks provided. */
+		public Set<String> providedItems() {
+			Set<String> out = new java.util.TreeSet<>();
+			items.forEach(s -> {
+				if (s.provided()) {
+					out.add(s.item());
+				}
+			});
+			return out;
 		}
 	}
 
@@ -91,16 +123,27 @@ public final class Fills {
 			locks = List.copyOf(locks);
 		}
 
-		/** Every declared item, summed: the fill's bill. */
+		/** Every declared item, summed (provided ones included): what the fill writes. */
 		public Map<String, Integer> items() {
 			Map<String, Integer> m = new TreeMap<>();
 			containers.forEach(b -> b.counts().forEach((k, v) -> m.merge(k, v, Integer::sum)));
 			return m;
 		}
 
+		/** (FK-b) The fill's bill: every declared item but the provided ones (the pay, the stock check, the outstanding, the quote). */
+		public Map<String, Integer> billed() {
+			return part(items(), false);
+		}
+
+		/** (FK-b) The provided items, summed: written unbilled, never refunded. */
+		public Map<String, Integer> provided() {
+			return part(items(), true);
+		}
+
+		/** The bill as costs (the provided items left out). */
 		public List<SurvivalItems.Cost> costs() {
 			List<SurvivalItems.Cost> out = new ArrayList<>();
-			items().forEach((k, v) -> out.add(new SurvivalItems.Cost(k, v)));
+			billed().forEach((k, v) -> out.add(new SurvivalItems.Cost(k, v)));
 			return out;
 		}
 	}
@@ -152,7 +195,8 @@ public final class Fills {
 				if (slot < 0 || !slots.add(slot)) {
 					throw new IllegalArgumentException("fill slot " + slot + " at " + at[0] + "," + at[1] + "," + at[2] + " is bad or used twice");
 				}
-				items.add(new Stack(slot, BuiltInRegistries.ITEM.getKey(item.get()).toString(), count));
+				String key = BuiltInRegistries.ITEM.getKey(item.get()).toString();
+				items.add(new Stack(slot, key, count, provided(it, key)));
 			}
 			if (items.isEmpty()) {
 				throw new IllegalArgumentException("a declared container lists no stack");
@@ -171,6 +215,77 @@ public final class Fills {
 			locks.add(new Lock(at[0], at[1], at[2], props));
 		}
 		return new Spec(boxes, locks);
+	}
+
+	/** (FK-b) An item's {@code provided}, refused as the kit's rule {@code fill} refuses it (docs/CONTRACT.md "### FK-b contract" 1). */
+	private static boolean provided(JsonObject it, String id) {
+		boolean p = false;
+		if (it.has("provided")) {
+			JsonElement v = it.get("provided");
+			if (!v.isJsonPrimitive() || !v.getAsJsonPrimitive().isBoolean()) {
+				throw new IllegalArgumentException("fill: provided must be true or false");
+			}
+			p = v.getAsBoolean();
+		}
+		boolean allowed = providedItem(id);
+		if (p && !allowed) {
+			throw new IllegalArgumentException("fill: " + id + " can't be module-provided (allowed: " + String.join(", ",
+				new java.util.TreeSet<>(dev.larattalabs.architect.api.Limits.FILL_PROVIDED_ITEMS)) + ")");
+		}
+		if (!p && allowed) {
+			throw new IllegalArgumentException("fill: " + id + " is creative-only; declare it provided: true");
+		}
+		return p;
+	}
+
+	/** (FK-b) The containers a provided item can't go in (they eject their contents when powered). */
+	static final Set<Block> PROVIDED_NOT_IN = Set.of(Blocks.DROPPER, Blocks.DISPENSER);
+
+	/**
+	 * (FK-b) Why an entry's fill can't be placed, the template's blocks included (a provided item declared in a dropper or dispenser), or null.
+	 * The placement paths call this one.
+	 */
+	public static @Nullable String refusal(Blueprints.@Nullable Entry e) {
+		if (e == null) {
+			return null;
+		}
+		String no = refusal(e.json());
+		if (no != null || !e.json().has("fill")) {
+			return no;
+		}
+		Spec spec = parse(e.json());
+		if (spec == null || spec.provided().isEmpty() || e.template() == null) {
+			return null;
+		}
+		dev.larattalabs.architect.placement.TemplateGrid g = dev.larattalabs.architect.placement.TemplateGrid.of(e);
+		return providedCellRefusal(spec, (x, y, z) -> {
+			for (int i = 0; i < g.states().length; i++) {
+				if (g.xyz()[3 * i] == x && g.xyz()[3 * i + 1] == y && g.xyz()[3 * i + 2] == z) {
+					return g.states()[i].getBlock();
+				}
+			}
+			return null;
+		});
+	}
+
+	/** A template cell's block, or null. */
+	@FunctionalInterface
+	interface BlockAt {
+		@Nullable Block at(int x, int y, int z);
+	}
+
+	/** (FK-b, pure) The refusal of a provided item declared in a dropper or dispenser, or null. */
+	static @Nullable String providedCellRefusal(Spec spec, BlockAt blocks) {
+		for (Box b : spec.containers()) {
+			if (b.providedItems().isEmpty()) {
+				continue;
+			}
+			Block bl = blocks.at(b.x(), b.y(), b.z());
+			if (bl != null && PROVIDED_NOT_IN.contains(bl)) {
+				return "fill: a provided item can't go in a " + BuiltInRegistries.BLOCK.getKey(bl).getPath();
+			}
+		}
+		return null;
 	}
 
 	private static int[] at(JsonObject o, Set<Long> seen) {
@@ -322,6 +437,7 @@ public final class Fills {
 		ext.add(EXT_STATE, o);
 		Site n = s.withOwnership(s.owner(), ext);
 		Sites.replace(srv, n);
+		FillGuard.invalidate(); // (FK-b) the guard index follows the filled sites
 		Site now = Sites.get(s.id());
 		return now != null ? now : n;
 	}
@@ -471,7 +587,7 @@ public final class Fills {
 			return false;
 		}
 		SiteWaits.fillUnblocked(srv, s.id());
-		for (var e : spec.items().entrySet()) {
+		for (var e : spec.billed().entrySet()) {
 			if (purse.stock(e.getKey()) < e.getValue()) {
 				SiteWaits.observe(srv, level, s.id(), dev.larattalabs.architect.survival.WaitCalc.Outcome.STARVED);
 				return false;
@@ -497,10 +613,11 @@ public final class Fills {
 			BlockPos p = cells.get(i);
 			write(level, p, (Container) level.getBlockEntity(p), spec.containers().get(i));
 		}
-		led.markFilled(key);
+		led.markFilled(key, spec.provided()); // (FK-b) the provided items with the marker: unbilled, never in paid[key]
 		purse.changed();
-		Architect.LOGGER.info("Construction site {}: filled {} containers ({} items: {})", s.id(), cells.size(), dev.larattalabs.architect.survival.Refunds
-			.Tally.total(spec.items()), spec.items());
+		FillGuard.invalidate(); // (FK-b) its declared containers guarded from this tick
+		Architect.LOGGER.info("Construction site {}: filled {} containers ({} billed items: {}; provided, unbilled: {})", s.id(), cells.size(),
+			dev.larattalabs.architect.survival.Refunds.Tally.total(spec.billed()), spec.billed(), spec.provided());
 		WorldJournal.kill("FK2");
 		// (d) the commit: players, the chunks flushed, then the ledger with the marker and the charge
 		inCommit = true;
@@ -648,7 +765,9 @@ public final class Fills {
 			take.get(i).forEach((k, v) -> all.merge(k, v, Integer::sum));
 		}
 		String key = Builder.creditKey(s);
-		pile.ledger().holdCustody(key, all);
+		// (FK-b) billed items into custody (refunded with the blocks), provided ones apart (taken back, never refunded): the same change and save
+		pile.ledger().holdCustody(key, part(all, false));
+		pile.ledger().holdProvided(key, part(all, true));
 		Stockpiles.changed(pile);
 		Architect.LOGGER.info("Site {}: its declared containers' contents taken into custody for the removal: {}", s.id(), all);
 		return null;
@@ -666,6 +785,7 @@ public final class Fills {
 		}
 		String key = Builder.creditKey(s);
 		Map<String, Integer> held = new TreeMap<>(pile.ledger().releaseCustody(key));
+		pile.ledger().releaseProvided(key).forEach((k, v) -> held.merge(k, v, Integer::sum)); // (FK-b) the provided items go back too
 		if (held.isEmpty()) {
 			return;
 		}
@@ -689,8 +809,14 @@ public final class Fills {
 			}
 		}
 		held.values().removeIf(v -> v <= 0);
-		if (!held.isEmpty()) {
-			Builder.dropItems(level, Builder.dropPos(s), held, null); // no slot left for them: at the site, never lost
+		Map<String, Integer> gone = part(held, true);
+		if (!gone.isEmpty()) {
+			// (FK-b) a provided item with no free slot is destroyed, never dropped: it never reaches survival
+			Architect.LOGGER.warn("Site {}: provided fill items with no free slot destroyed (never dropped): {}", s.id(), gone);
+		}
+		Map<String, Integer> left = part(held, false);
+		if (!left.isEmpty()) {
+			Builder.dropItems(level, Builder.dropPos(s), left, null); // no slot left for them: at the site, never lost
 		}
 		Stockpiles.changed(pile);
 		Architect.LOGGER.info("Site {}: its custody went back into its containers (the removal ended unwritten)", s.id());
@@ -792,8 +918,12 @@ public final class Fills {
 				}
 			}
 		}
+		FillGuard.invalidate(); // (FK-b) the guard index from the loaded sites
+		FillGuard.checkTransferGuard(); // (FK-b, 5d) a WARN when the optional Transfer API guard did not apply
 		for (Stockpiles.Pile pile : Stockpiles.all()) {
-			for (String key : pile.ledger().custodyKeys()) {
+			Set<String> keys = new java.util.TreeSet<>(pile.ledger().custodyKeys());
+			keys.addAll(pile.ledger().heldProvidedKeys()); // (FK-b) a fill of provided items only has no billed custody
+			for (String key : keys) {
 				Site s = siteOfKey(key);
 				if (s != null && !Groups.leaving(s.id())) {
 					ServerLevel level = Sites.levelOf(srv, s);
@@ -835,13 +965,18 @@ public final class Fills {
 		if (pile != null) {
 			o.addProperty("filled", pile.ledger().filled(key));
 			o.add("custody", Builder.counts(pile.ledger().custody(key)));
+			o.add("provided", Builder.counts(pile.ledger().provided(key))); // (FK-b) the fill's provided items, with the marker
+			o.add("heldProvided", Builder.counts(pile.ledger().heldProvided(key))); // (FK-b) taken back by a removal, never refunded
 			Map<String, Integer> paid = pile.ledger().paid().get(key);
 			o.add("paid", Builder.counts(paid == null ? Map.of() : paid));
 		}
 		if (spec == null) {
 			return o;
 		}
-		o.add("fillItems", Builder.counts(spec.items()));
+		o.add("fillItems", Builder.counts(spec.billed())); // (FK-b) the bill (the provided items apart)
+		o.add("providedItems", Builder.counts(spec.provided()));
+		o.addProperty("stripped", STRIPPED);
+		o.addProperty("guarded", FillGuard.declaredCount(srv, s));
 		ServerLevel level = Sites.levelOf(srv, s);
 		JsonArray cs = new JsonArray();
 		for (int i = 0; i < spec.containers().size(); i++) {
@@ -852,7 +987,9 @@ public final class Fills {
 			if (level != null && level.isLoaded(p) && level.getBlockEntity(p) instanceof Container ct) {
 				Map<String, Integer> now = plainCounts(ct);
 				c.add("holds", now == null ? null : Builder.counts(now));
+				c.add("providedHolds", now == null ? null : Builder.counts(part(now, true))); // (FK-b)
 			}
+			c.add("providedDeclared", Builder.counts(part(spec.containers().get(i).counts(), true)));
 			cs.add(c);
 		}
 		o.add("containers", cs);

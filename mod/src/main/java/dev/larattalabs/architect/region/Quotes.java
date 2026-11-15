@@ -519,8 +519,8 @@ public final class Quotes {
 		}
 		// (M5 FK, S-M5-3) a given-program entry's declared containers' fill items: billed once at the fill, exact
 		dev.larattalabs.architect.site.Fills.Spec fill = dev.larattalabs.architect.site.Fills.ofEntry(bp.id());
-		if (fill != null) {
-			bill.add("fill:" + lot.id(), fill.items());
+		if (fill != null && !fill.billed().isEmpty()) {
+			bill.add("fill:" + lot.id(), fill.billed()); // (FK-b) the provided items are never billed
 		}
 		if (mech && site == null) {
 			String bpId = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;

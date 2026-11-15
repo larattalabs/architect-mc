@@ -147,6 +147,7 @@ public final class ApiRules {
 					case "plan.suspendedBuilds" -> "suspendedBuilds"; // 7c US: plan/0's rule.suspended (an elevated zone's lots hung inverted from overhang ceilings; since 1.58.0)
 					case "plan.shapePromotion" -> "shapePromotion"; // 7c PF: plan/0's promoted forms (form.arch_span, the archSpan module; since 1.61.0)
 					case "design.fill" -> "filledContainers"; // M5 FK: a given program's bp.fill (filled containers and lock cells; since 1.59.0)
+					case "design.fillProvided" -> "fillProvided"; // FK-b: a fill's provided: true items (Limits.FILL_PROVIDED_ITEMS; since NEXT)
 					case "entry.follow" -> "followSource"; // 6d FS: Designs.follow, followAll and Library.followers' behind (since 1.51.0)
 					case "design.opKeys" -> "design.opKeys"; // 7a K3: DesignRequest.opKey, Designs.designByKey, Designs.cancelDesign (since 1.43.0)
 					case "wallLots.exactMassing" -> "wallLots.exactMassing"; // 7a K3: a wall lot's massing takes its box, its detail's cap is the box (since 1.43.0)

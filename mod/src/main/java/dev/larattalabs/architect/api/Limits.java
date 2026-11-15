@@ -107,6 +107,12 @@ public final class Limits {
 	 */
 	public static final int FILL_CONTAINERS_MAX = 64;
 	public static final int FILL_LOCKS_MAX = 64;
+	/**
+	 * (FK-b) The items a given program's fill may mark {@code provided: true}: module-provided, written unbilled, never refunded, and kept out
+	 * of survival (stripped at a break, never taken by a non-creative player, a hopper or the Fabric Transfer API from a declared container).
+	 * An unmodifiable set; mirrored by the kit's {@code FILL_PROVIDED_ITEMS} (kit/lib/fill.mjs). A later item is an API change. Since NEXT.
+	 */
+	public static final java.util.Set<String> FILL_PROVIDED_ITEMS = java.util.Set.of("minecraft:petrified_oak_slab");
 	/** (since 1.41.0) The most roles a palette carries inline ({@code {bible: {id, version, roles}}}). */
 	public static final int PALETTE_ROLES_MAX = 64;
 
