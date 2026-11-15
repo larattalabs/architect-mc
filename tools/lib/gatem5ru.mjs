@@ -262,85 +262,37 @@ export async function registerRU(steps, h) {
   };
 
   /**
-   * (J2 item 3b, J1's deferred case) A middle survival revision still building under a newer one: a growth fed in part (stalled), a
-   * second growth planned and realised on top of it while the first still builds, both fed in part, the ledger and the chunks saved, then
-   * the undo to position 0 halted with nothing saved at RVU1 or RVC1. After the restart the cancel resumes and ends once for both: E-flat
-   * 0 over the claim; what came back equals what the saved ledger says the two growths consumed (no mint, no loss); every item put in is
-   * back; a second undo refuses.
+   * (J2 item 3b, J1's deferred case) "A middle survival revision still building under a newer one": measured in J2's first run, a growth
+   * stays revising (busy) until its build is done, and a second growth planned meanwhile is refused OVERLAP_BUSY ("region is busy
+   * (revising N)"), so the middle-revision state cannot arise. This step keeps that guard: a growth fed in part (still building, busy), a
+   * second growth planned on top of it: refused OVERLAP_BUSY with nothing changed (the stock, the feed order, the first growth still
+   * revising); then the first is fed until built and the second growth plans.
    */
   steps.rumid = async () => {
     await ensure();
     const out = {};
     const GROW2 = [{ id: 'qb', type: 'house', size: [9, 9], villager: 'dwelling' }];
-    for (const point of ['RVU1', 'RVC1']) {
-      const tag = `${point} mid`;
-      const W = await world(`G6B RU MID ${point}`);
-      const T = await town(tag);
-      const S0 = await cellsOf(W.BOX);
-      const ps0 = await pile();
-      const g1 = await grow(tag, T.region, T.t0);
-      if (!g1) { await L.leaveWorld(); continue; }
-      // a growth is planned only on a region not revising: the first growth fed in part until its batch has put every stage down
-      // (busy null) while its last targets still build
-      let f1 = await feedPart(`${tag} (first growth)`, T.region, 0.5);
-      for (let k = 0; k < 12 && f1.busy && !f1.build?.done; k++) f1 = await feedPart(`${tag} (first growth, wave ${k + 2})`, T.region, 0.25);
-      check(!f1.busy && !f1.build?.done, `${tag}: the first growth (rid ${g1.rid}) has put its stages down (busy ${f1.busy}) and still builds when the second is planned (${f1.build?.percent}%)`);
-      if (f1.busy || f1.build?.done) { await L.leaveWorld(); continue; }
-      const feed1 = (await pile()).feedOrder ?? [];
-      const g2 = await growPlan(T.region, { lots: GROW2 });
-      check(!g2.refused && g2.revisionOf?.rid > g1.rid, `${tag}: a second growth planned on top of it: ${g2.refused ?? `${g2.planId} rid ${g2.revisionOf?.rid} on ${g2.revisionOf?.parentRid}`}`);
-      if (g2.refused) { await L.leaveWorld(); continue; }
-      const r2 = await call('dev.region.realise', { planId: g2.planId, lots: { qb: 'rs_hut' } }, 300_000);
-      check(!r2.refused, `${tag}: the second growth realised while the first builds: ${r2.refused ?? r2.region}`);
-      let mine = [];
-      for (let i = 0; i < 90 && !mine.length; i++) {
-        mine = ((await pile()).feedOrder ?? []).filter((id) => !feed1.includes(id));
-        if (!mine.length) await L.sleep(2000);
-      }
-      check(mine.length > 0, `${tag}: the second growth's targets put down (${json(mine.slice(0, 6))})`);
-      const f2 = await feedPart(`${tag} (both growths)`, T.region, 0.3);
-      const st0 = await rvState(T.region);
-      const rid1 = st0.revisions?.find((x) => x.rid === g1.rid)?.state, rid2 = st0.revisions?.find((x) => x.rid === g2.revisionOf.rid)?.state;
-      log(`  ${tag}: before the undo: rid ${g1.rid} ${rid1}, rid ${g2.revisionOf.rid} ${rid2}; busy ${st0.busy}; the build ${f2.build?.percent}%`);
-      await cmd('/save-all flush');
-      await call('dev.wait', { ms: 2000 }, 30_000);
-      const live = await pile();
-      await call('dev.journal.killAt', { point }, 10_000);
-      call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
-      const down = await haltWait();
-      check(down, `${tag}: the kill point ${point} halted the server during the undo of both growths (nothing saved)`);
-      if (!down) { await call('dev.journal.killAt', { point: null }, 10_000).catch(() => null); await L.leaveWorld(); continue; }
-      const Ld = ledgerOf(JSON.parse(fs.readFileSync(path.join(W.dir, 'architect', 'stockpiles.json'), 'utf8')));
-      await L.openWorld(path.basename(W.dir));
-      await L.tp(CX + 80, 60, CZ + 56);
-      let st;
-      const t1 = Date.now();
-      for (; Date.now() - t1 < 1_800_000;) { st = await rvState(T.region); if (st.busy === null) break; await L.sleep(L.pollDelayMs(Date.now() - t1)); }
-      // the undo may have stopped short at the restart (a kill before its commit point): asked again, as a player would
-      if (st?.position !== 0) {
-        await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 4 * 3_600_000).catch(() => null);
-        const t2 = Date.now();
-        for (; Date.now() - t2 < 1_800_000;) { st = await rvState(T.region); if (st.busy === null) break; await L.sleep(L.pollDelayMs(Date.now() - t2)); }
-      }
-      await L.settle(3000);
-      const after = await pile();
-      const d = diff(S0, await cellsOf(W.BOX));
-      const owed = G.minus(Ld?.consumed, ps0.ledger?.consumed);
-      const back = G.minus(backOf(after.ledger), backOf(Ld));
-      const states = st?.revisions?.map((x) => [x.rid, x.state]);
-      const o = { point, states, consumedLive: G.minus(live.ledger?.consumed, ps0.ledger?.consumed), owed, back, mint: G.minus(back, owed), worldDiff: d.n };
-      log(`  ${tag}: consumed (saved ledger) ${json(owed)}; came back ${json(back)}; revisions ${json(states)}`);
-      const undone = (rid) => st?.revisions?.find((x) => x.rid === rid)?.state === 'UNDONE';
-      check(st?.busy === null && st.position === 0 && undone(g1.rid) && undone(g2.revisionOf.rid) && d.n === 0, `${tag}: after the restart both growths ended UNDONE, the middle one under the newer one included (${json(states)}); the world before them (${d.n} differ)`, d.first);
-      check(sum(owed) > 0 && G.same(back, owed) && after.identity !== false, `${tag}: items in = items out against the saved state: what came back ${json(back)} equals what the saved ledger says both growths consumed ${json(owed)}; identity ${after.identity}`, o);
-      o.inOut = inOut(tag, ps0, after);
-      o.left = await leftover(tag, T.region, T.t0, ps0);
-      const u2 = await call('dev.rv.undo', { region: T.region, toPosition: 0 }, 60_000);
-      const again = await pile();
-      check(String(u2.refused ?? '').startsWith('NOT_ALLOWED') && G.same(again.stock, after.stock), `${tag}: exactly once: a second undo refuses (${u2.refused}) and moves nothing`);
-      out[tag] = o;
-      await L.leaveWorld();
-    }
+    const tag = 'RU mid';
+    await world('G6B RU MID');
+    const T = await town(tag);
+    const g1 = await grow(tag, T.region, T.t0);
+    if (!g1) { await L.leaveWorld(); return out; }
+    const f1 = await feedPart(`${tag} (first growth)`, T.region, 0.5);
+    const p0 = await pile();
+    const g2 = await growPlan(T.region, { lots: GROW2 });
+    const p1 = await pile();
+    const st = await rvState(T.region);
+    out.refused = { g2: g2.refused ?? null, busy: st.busy, build: f1.build };
+    check(!f1.build?.done && String(g2.refused ?? '').startsWith('OVERLAP_BUSY') && /revising/.test(String(g2.refused)) && /^revising/.test(String(st.busy)),
+      `${tag}: a second growth planned while the first (rid ${g1.rid}) still builds (${f1.build?.percent}%) is refused: ${g2.refused ?? `planned ${g2.planId}`}; the first still ${st.busy}: no middle revision under a newer one can arise`, out.refused);
+    check(G.same(p1.stock, p0.stock) && json(p1.feedOrder) === json(p0.feedOrder), `${tag}: the refusal changed nothing (the stock and the feed order as before)`);
+    const f = await G.feed({ L }, T.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500, until: (s2, rs) => rs.build?.done });
+    let st2 = await rvState(T.region);
+    for (let k = 0; k < 60 && st2.busy; k++) { await L.sleep(2000); st2 = await rvState(T.region); }
+    const g3 = await growPlan(T.region, { lots: GROW2 });
+    out.after = { busy: st2.busy, g3: g3.refused ?? g3.planId };
+    check(f.last.rs.build?.done && !g3.refused, `${tag}: once the first growth is built (busy ${st2.busy}) the second growth plans: ${g3.refused ?? `${g3.planId} rid ${g3.revisionOf?.rid}`}`, out.after);
+    await L.leaveWorld();
     spendZero();
     return out;
   };
