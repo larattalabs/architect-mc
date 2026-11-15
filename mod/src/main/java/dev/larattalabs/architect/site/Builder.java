@@ -1708,6 +1708,11 @@ public final class Builder {
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Fills at start failed", e);
 			}
+			try {
+				Stockpiles.capsAfterReconcile(srv); // (BC-c) the regions are loaded now: a reconcile past a maxBill is named
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("The reconcile's maxBill check failed", e);
+			}
 		}
 	}
 

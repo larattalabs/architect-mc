@@ -257,12 +257,12 @@ public final class SliceP0Dev {
 				return o;
 			});
 		});
-		DevBridge.register("dev.bc.cap", 30_000, "{region, set?: {item: n}} - (BC, TEST) a survival region's maxBill: its cap, base, its group's draws and "
+		DevBridge.register("dev.bc.cap", 30_000, "{region, rid?, set?: {item: n}} - (BC, BC-d, TEST) a survival region's maxBill for one rid (default: the highest capped rid): its cap, its draws and "
 			+ "its targets' waits; set replaces the cap first (draws past the approved bound) -> {maxBill, billBase, drawn, targets: [{id, waiting, "
 			+ "blocked, nextNeeded}]}", (req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");
 				Map<String, Integer> set = req.get("set") instanceof JsonObject ? capOf(wrapSet(req)) : null;
-				return ServerTasks.callOnServer(srv -> dev.larattalabs.architect.site.BillCaps.devState(srv, region, set));
+				return ServerTasks.callOnServer(srv -> dev.larattalabs.architect.site.BillCaps.devState(srv, region, req.has("rid") ? Integer.valueOf(req.get("rid").getAsInt()) : null, set));
 			});
 		DevBridge.register("dev.api.versions", 30_000, "{} - (BC) ArchitectApi.apiVersion/kitVersion/checkerVersion, Sites.loadHealthy and the BC features "
 			+ "-> {apiVersion, kitVersion, checkerVersion, loadHealthy, features}", (req, mc) -> ServerTasks.callOnServer(srv -> {

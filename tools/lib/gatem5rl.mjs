@@ -28,6 +28,8 @@ import path from 'node:path';
 export async function registerRL(steps, h) {
   const { L, call, check, cmd, log, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, CLAIM, haltWait } = h;
   const ctx = { L, OUT: h.OUT, imp: h.imp };
+  // (BC-c) RL's crash cases realise under a maxBill (the put-down quote): the reconcile runs inside the running cap
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER });
   const pile = async () => (await call('dev.stockpile.state', { owner: G.OWNER }, 60_000)).stockpile ?? {};
   const audit = async () => call('dev.stockpile.audit', { owner: G.OWNER }, 120_000);
   const savedNow = async () => call('dev.stockpile.saved', { owner: G.OWNER }, 60_000);
@@ -46,7 +48,7 @@ export async function registerRL(steps, h) {
     return o;
   }
 
-  async function world(name, { joinSave = false } = {}) {
+  async function world(name, { joinSave = false, cap = false } = {}) {
     await G.survivalBase(ctx);
     await L.fresh(name, G.SURV);
     await L.setRules('exact');
@@ -60,7 +62,8 @@ export async function registerRL(steps, h) {
     const p0 = await L.plan('flat_village', CLAIM, { params: { lots: TOWN }, surveyLoad: 'bounded:256', check: false, owner: G.OWNER });
     // no auto approval: ground, street and lots approved now, props only after the restart (no target joins the feed, so nothing saves,
     // between the case's save and its halt)
-    const region = await L.realise(p0.planId, { load: 'bounded:512', lots: { cottage_1: 'rs_hut' }, autoApprove: false });
+    const ro = { load: 'bounded:512', lots: { cottage_1: 'rs_hut' }, autoApprove: false };
+    const region = cap ? await caps.realise(L, p0.planId, ro) : await L.realise(p0.planId, ro);
     const group = (await call('dev.region.state', { region }, 60_000)).view?.groupId;
     // (RL, joinSave) PS's periodic save off before any target joins: every ledger save until the case's own is RL's save when a target
     // joins the feed (production keeps it; the switch turns both off only from the case's save on)
@@ -79,7 +82,7 @@ export async function registerRL(steps, h) {
       await L.sleep(1000);
     }
     check(sum(ps?.outstanding) > 0, `${name}: the town realised in survival; its targets need ${sum(ps?.outstanding)} units`);
-    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region, group, js0 };
+    return { gy, BOX: BOXOF(CLAIM, gy), dir: path.join(L.SAVES, name), name, region, group, js0, cap };
   }
 
   /**
@@ -153,6 +156,7 @@ export async function registerRL(steps, h) {
   /** After the restart: the first audit (the reconcile's result), the build finished, the final audit, and a second restart. */
   async function after(tag, W, c, { lot }) {
     const a1 = await audit();
+    if (W.cap) c.caps = await caps.afterRestart(tag); // (BC-c) no overshoot; the cap's total = the charges
     const b1 = balance(a1);
     log(`  ${tag}: after the restart (unclean ${a1.uncleanStart}): standing ${b1.standing}, paid records ${b1.paid}; standing unpaid ${json(b1.dupe)}; paid not standing ${json(b1.double)}; stock ${sum(b1.stock)}; reconciled ${json(a1.reconciled ?? null)}`);
     check(a1.uncleanStart === true && b1.dupeUnits === 0, `${tag}: after the unclean restart no cell stands unpaid (standing ${b1.standing}, paid ${b1.paid}; dupe ${b1.dupeUnits}: ${json(b1.dupe)})`, b1);
@@ -175,7 +179,7 @@ export async function registerRL(steps, h) {
     log(`  ${tag}: built: standing ${b2.standing}, paid records ${b2.paid}; standing unpaid ${json(b2.dupe)}; paid not standing ${json(b2.double)}; taken since the baseline ${sum(consumed)}, records gained ${sum(gained)}`);
     check(b2.dupeUnits === 0 && b2.doubleUnits === 0 && a2.identity !== false, `${tag}: built after the restart, the paid cells standing equal the targets' paid records item for item (standing ${b2.standing}, paid ${b2.paid}; dupe ${b2.dupeUnits}: ${json(b2.dupe)}; double charge ${b2.doubleUnits}: ${json(b2.double)}; identity ${a2.identity})`, { b1, b2 });
     check(G.same(consumed, gained), `${tag}: what the targets took from the stock since the baseline (${sum(consumed)}: consumed less given back) is what their records gained (${sum(gained)}), item for item`, { consumed, gained });
-    return { a1, b1, r2, b2, consumed, gained, waves: f.waves };
+    return { a1, b1, r2, b2, consumed, gained, waves: f.waves, caps: c.caps ?? null };
   }
 
   /** Fed (all it lacks, in waves) until the region's lot site builds; then it is paused and the rest settles. Returns its id. */
@@ -269,7 +273,7 @@ export async function registerRL(steps, h) {
    * chunks' eager saves, then the halt (`mode`); the saved ledger off the disk; restarted.
    */
   async function crashCase(tag, fraction, { mode = 'now', waitMs = 12_000, restAfterSave = false, joinSave = false, playerBlock = false } = {}) {
-    const W = await world(`G6B RL ${tag}`, { joinSave });
+    const W = await world(`G6B RL ${tag}`, { joinSave, cap: true });
     const lot = await lotPaused(tag);
     if (!lot) { await L.leaveWorld(); return null; }
     if (joinSave) await joinSaved(tag, W, lot);
@@ -499,6 +503,98 @@ export async function registerRL(steps, h) {
     const out = {};
     out.RL6 = await swapCase('RL6');
     out.RL7 = await terrainCase('RL7');
+    spendZero();
+    return out;
+  };
+
+  /**
+   * (BC-c) The constructed overshoot: RL1's shape under a maxBill (the quote). The lot paused, half of what the targets lack delivered,
+   * saved (/save-all flush); the lot resumed and built after the save until it starved; then the cap of the item it drew most of since the save
+   * (one it still needs) lowered to its draws at the save (dev.bc.cap, the stand-in for a cap below what the reconcile must charge: region.json
+   * only, not the ledger); a halt with nothing saved. After the restart the reconcile charged the standing cells anyway (no cell stands
+   * unpaid), named the overshoot (capOver, the WARN), and the lot waits bill_cap with nextNeeded past its need by the overshoot; fed past the
+   * cap nothing of the item is drawn; the cap back at the quote: built; items in = items out.
+   */
+  steps.bccover = async () => {
+    await ensure();
+    const out = {};
+    const tag = 'BCC';
+    const W = await world('G6B BCC over', { cap: true });
+    const lot = await lotPaused(tag);
+    if (!lot) { await L.leaveWorld(); spendZero(); return out; }
+    const capAt = async () => call('dev.bc.cap', { region: W.region }, 30_000);
+    const c00 = await capAt();
+    const quote = c00.maxBill ?? {};
+    await deliver(0.5);
+    await call('dev.stockpile.ps', { noPeriodic: true }, 30_000);
+    await cmd('/save-all flush');
+    const s0 = await savedNow();
+    const b0 = { ledger: ledgerOf(s0.file) };
+    const cSave = await capAt();
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000);
+    check(await quiet(), `${tag}: ${lot} resumed and built after the save until it starved`);
+    const cLive = await capAt();
+    const need = (await pile()).targets?.[lot]?.outstanding ?? {};
+    // the item drawn most since the save that the lot still needs
+    const cand = Object.keys(need).filter((k) => (need[k] ?? 0) > 0).map((k) => [k, (cLive.drawn?.[k] ?? 0) - (cSave.drawn?.[k] ?? 0)]).filter(([, d]) => d > 0).sort((a, b) => b[1] - a[1]);
+    check(cand.length > 0, `${tag}: ${lot} drew an item it still needs after the save (${json(cand.slice(0, 3))})`);
+    if (!cand.length) { await L.leaveWorld(); spendZero(); return out; }
+    const [X, dX] = cand[0];
+    const low = { ...quote, [X]: cSave.drawn?.[X] ?? 0 };
+    const cl = await call('dev.bc.cap', { region: W.region, set: low }, 30_000);
+    const s1 = await savedNow();
+    out.set = { item: X, quote: quote[X], atSave: cSave.drawn?.[X], live: cLive.drawn?.[X], cap: cl.maxBill?.[X], need: need[X], saves: [s0.saves, s1.saves] };
+    check(cl.maxBill?.[X] === low[X] && s1.saves === s0.saves, `${tag}: ${X} capped at its draws at the save (${low[X]}; live ${cLive.drawn?.[X]}, +${dX} since the save; the lot still needs ${need[X]}); nothing saved the ledger (save #${s0.saves} -> #${s1.saves})`, out.set);
+    // the server's log: the runner's client.log (one up from the step's OUT when gate-run starts the client), this OUT's, or the game's
+    const logs = [path.join(path.dirname(L.OUT), 'client.log'), path.join(L.OUT, 'client.log'), path.join(L.GAME_DIR, 'logs', 'latest.log')];
+    const log0 = Object.fromEntries(logs.map((f) => [f, fs.existsSync(f) ? fs.statSync(f).size : 0]));
+    await call('dev.wait', { ms: 12_000 }, 60_000); // the chunks' eager saves (RL1's 12 s): the cells built after the save stand on the disk
+    if (!(await halt(tag))) { spendZero(); return out; }
+    await restart(W);
+    const a1 = await audit();
+    const b1 = balance(a1);
+    const rc = a1.reconciled?.[lot] ?? {};
+    out.reconcile = { rc, dupe: b1.dupe, unclean: a1.uncleanStart };
+    check(a1.uncleanStart === true && (rc.aheadCells ?? 0) > 0 && b1.dupeUnits === 0 && (rc.owedCells ?? 0) === 0, `${tag}: the reconcile charged ${lot}'s ${rc.aheadCells} standing cell(s) built after the save whatever the cap (charged ${json(rc.charged)}; owed ${rc.owedCells ?? 0}); no cell stands unpaid (dupe ${b1.dupeUnits})`, out.reconcile);
+    const over = rc.capOver?.[X] ?? 0;
+    check(rc.capRegion === W.region && over > 0 && over <= dX, `${tag}: the reconcile named the overshoot: capOver ${json(rc.capOver)} (${X}: at most +${dX}, the draws since the save), region ${rc.capRegion}`, rc);
+    const tail = logs.map((f) => (fs.existsSync(f) ? fs.readFileSync(f).subarray(fs.statSync(f).size >= log0[f] ? log0[f] : 0).toString('utf8') : '')).join('\n');
+    const warn = tail.split('\n').find((l) => /WARN/.test(l) && /past its maxBill by/.test(l) && l.includes(X)) ?? null;
+    out.warn = warn;
+    check(!!warn, `${tag}: the WARN names the overshoot: ${warn ? warn.slice(warn.indexOf('Stockpile')).slice(0, 260) : 'none in the server log'}`);
+    await call('dev.stockpile.pause', { owner: G.OWNER, site: lot, paused: false }, 60_000); // (as live before the halt)
+    // the lot waits bill_cap (all the rest delivered so it builds every cell it can first); nextNeeded: its need of X plus the overshoot
+    let capped = null;
+    for (let i = 0; i < 100 && !capped; i++) {
+      await deliver(1);
+      const c = await capAt();
+      capped = (c.targets ?? []).find((x) => x.id === lot && x.blocked === 'bill_cap') ?? null;
+      if (!capped) await L.sleep(3000);
+    }
+    const nn = (capped?.nextNeeded ?? []).find((n) => n.item === X)?.count ?? 0;
+    const needX = (await pile()).targets?.[lot]?.outstanding?.[X] ?? 0;
+    out.wait = { capped, needX, nextNeededX: nn };
+    check(!!capped && capped.waiting === true && nn === needX + over && needX > 0, `${tag}: ${lot} waits typed ${capped?.blocked} (waiting ${capped?.waiting}); nextNeeded ${X} ${nn} = its need ${needX} + the overshoot ${over}`, out.wait);
+    // fed past the cap: nothing of X drawn for 20 s
+    const d0 = (await capAt()).drawn?.[X];
+    await L.sleep(20_000);
+    const d1 = (await capAt()).drawn?.[X];
+    check(d0 === d1, `${tag}: past the cap nothing more of ${X} is drawn over 20 s (${d0} -> ${d1})`);
+    // the cap back at the quote: built; items in = items out
+    await call('dev.bc.cap', { region: W.region, set: quote }, 30_000);
+    await cmd(`/apitest sapprove ${W.group} props`);
+    const f = await G.feed({ L }, W.region, { fraction: 1, timeoutMs: 1_800_000, every: 2500 });
+    check(f.last.st.view.state === 'PLACED' && f.last.rs.build?.done, `${tag}: the cap back at the quote, fed until built (${f.waves} waves): ${f.last.st.view.state}`);
+    await quiet();
+    const a2 = await audit();
+    const b2 = balance(a2);
+    const consumed = G.minus(G.minus(a2.ledger?.consumed, b0.ledger.consumed), G.minus(a2.ledger?.returned, b0.ledger.returned));
+    const gained = G.minus(paidSum(a2.ledger), paidSum(b0.ledger));
+    const cEnd = await capAt();
+    out.built = { b2, consumed, gained, drawn: cEnd.drawn, quote, overshoot: cEnd.overshoot };
+    check(b2.dupeUnits === 0 && b2.doubleUnits === 0 && a2.identity !== false && G.same(consumed, gained), `${tag}: built: items in = items out (standing = paid records: dupe ${b2.dupeUnits}, double ${b2.doubleUnits}; identity ${a2.identity}; taken since the save ${sum(consumed)} = records gained ${sum(gained)})`, out.built);
+    check(Object.keys(cEnd.overshoot ?? {}).length === 0 && G.same(cEnd.drawn, G.plus(cEnd.paid, cEnd.regionCharged)), `${tag}: built within the quote (overshoot ${json(cEnd.overshoot)}); the cap's total = the charges`, cEnd);
+    await L.leaveWorld();
     spendZero();
     return out;
   };

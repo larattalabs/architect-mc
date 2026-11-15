@@ -30,6 +30,8 @@ import { spawnSync } from 'node:child_process';
 export async function registerSAD(steps, h) {
   const { L, call, check, cmd, log, OUT, json, G, ensure, spendZero, groundY, BOXOF, CX, CZ, growPlan, rvState, rvWait, root, cellsOf, diff, haltWait, removeRegion, ig } = h;
   const ctx = { L, OUT, KIT: path.join(root, 'kit'), imp: h.imp };
+  // (BC-c) row 4's growth realises under a maxBill (its quote); every halt's restart reads the cap back
+  const caps = (await import('./gatebcc.mjs')).bccCaps({ call, check, json, G, owner: G.OWNER });
   const OWNER = G.OWNER;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const sum = (m) => Object.values(m ?? {}).reduce((n, v) => n + v, 0);
@@ -195,6 +197,7 @@ export async function registerSAD(steps, h) {
     await L.openWorld(path.basename(W.dir));
     await L.tp(CX + 80, 80, CZ + 48);
     await sleep(3000);
+    await caps.afterRestart(tag); // (BC-c) the reconcile inside the growth's maxBill
     return Ld;
   }
 
@@ -362,8 +365,9 @@ export async function registerSAD(steps, h) {
     check(!q.refused && q.survival === true && sum(q.bom) > 0, `row 4: the growth quoted in survival: ${sum(q.bom)} units, exact ${q.exact}`, q.bom);
     const S0 = await cellsOf(BOX(W.gy));
     const c0 = (await pile()).ledger?.consumed ?? {};
-    const r = await call('dev.region.realise', { planId: g.planId, lots: entries }, 300_000);
-    check(!r.refused, `row 4: the growth realised: ${r.refused ?? r.region}`);
+    const r = await call('dev.region.realise', { planId: g.planId, lots: entries, maxBill: q.bom }, 300_000); // (BC-c) under its quote
+    check(!r.refused, `row 4: the growth realised under its quote as maxBill: ${r.refused ?? r.region}`);
+    caps.track(region);
     for (let i = 0; i < 90; i++) { if (sum((await pile()).outstanding) > 0) break; await sleep(2000); }
     const b4 = await baseline('row 4');
     const ps = await pile();
