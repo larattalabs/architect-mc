@@ -22,7 +22,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * LevelChunk, or the LevelChunk an ImposterProtoChunk wraps, unsaved): every change Architect or a player made to the world is in such a
  * chunk, and that chunk is still waited for and saved exactly as before, before the ledger. Skipped only for a chunk with nothing unsaved
  * (its save is a no-op) or one still loading or generating (a ProtoChunk: what it will hold came from the disk or the generator, never a
- * change the ledger describes). Server thread.
+ * change the ledger describes). Only inside a stockpile save with the world ({@link SaveTiming#explicit}); a vanilla save (/save-all, the
+ * stop's save) waits as vanilla, so a chunk being promoted is still saved there. Server thread.
  */
 @Mixin(ChunkMap.class)
 public abstract class ChunkSaveWaitMixin {
@@ -39,7 +40,7 @@ public abstract class ChunkSaveWaitMixin {
 	private void architect$wait(BlockableEventLoop<?> loop, BooleanSupplier ready) {
 		ChunkHolder h = architect$holder;
 		architect$holder = null;
-		if (!SaveTiming.waitAll && !ready.getAsBoolean() && h != null && !architect$hasChanges(h.getLatestChunk())) {
+		if (SaveTiming.explicit && !SaveTiming.waitAll && !ready.getAsBoolean() && h != null && !architect$hasChanges(h.getLatestChunk())) {
 			SaveTiming.waitSkipped();
 			return;
 		}

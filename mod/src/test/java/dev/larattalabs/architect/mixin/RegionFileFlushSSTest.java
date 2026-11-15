@@ -113,6 +113,10 @@ class RegionFileFlushSSTest {
 		String s = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/mixin/ChunkSaveWaitMixin.java"));
 		assertTrue(s.contains("if (c instanceof LevelChunk lc) {\n\t\t\treturn lc.isUnsaved();"), "an unsaved LevelChunk is waited for");
 		assertTrue(s.contains("return ip.getWrapped().isUnsaved();"), "an imposter's unsaved LevelChunk is waited for");
+		assertTrue(s.contains("if (SaveTiming.explicit && !SaveTiming.waitAll"), "only inside a stockpile save with the world");
+		String sp = Files.readString(Path.of("src/main/java/dev/larattalabs/architect/site/Stockpiles.java"));
+		assertEquals(2, sp.split("SaveTiming.explicit = true;", -1).length - 1, "saveWithWorld and saveLedgerFirst set it");
+		assertEquals(2, sp.split("SaveTiming.explicit = false;", -1).length - 1, "and clear it in a finally");
 		assertTrue(Files.readString(Path.of("src/main/resources/architect_mc.mixins.json")).contains("\"ChunkSaveWaitMixin\""));
 	}
 }

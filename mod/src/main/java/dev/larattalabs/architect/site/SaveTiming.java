@@ -29,6 +29,11 @@ public final class SaveTiming {
 	 */
 	public static volatile boolean waitAll = Boolean.getBoolean("architect.chunkWaitAll");
 	private static int waitsSkipped;
+	/**
+	 * (SS) Inside a stockpile save with the world (saveWithWorld, saveLedgerFirst): ChunkSaveWaitMixin skips waits only there, never in a
+	 * vanilla save (/save-all, autosave, the stop's save). Server thread.
+	 */
+	public static volatile boolean explicit;
 
 	private SaveTiming() {
 	}

@@ -2518,10 +2518,12 @@ public final class Stockpiles {
 			// (HF, N3) then the chunks, flushed (BEFORE_SAVE runs at saveAllChunks' head: it is skipped here), then the ledger: it is never on
 			// disk ahead of the world's chunks either
 			explicitSave = true;
+			SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope: Architect's own flushed saves
 			try {
 				srv.saveAllChunks(true, true, false);
 			} finally {
 				explicitSave = false;
+				SaveTiming.explicit = false;
 			}
 			if (Fills.haltBeforeLedger()) {
 				// (M5 FK, TEST kill point FK3) a crash inside the commit: the players and the chunks are on disk, the ledger is not
@@ -2593,10 +2595,12 @@ public final class Stockpiles {
 		lastPlayerSaveMs = pms;
 		maxPlayerSaveMs = Math.max(maxPlayerSaveMs, pms);
 		explicitSave = true;
+		SaveTiming.explicit = true; // (SS) ChunkSaveWaitMixin's scope
 		try {
 			srv.saveAllChunks(true, true, false);
 		} finally {
 			explicitSave = false;
+			SaveTiming.explicit = false;
 		}
 		double ms = (System.nanoTime() - t0) / 1e6;
 		ledgerFirstSaves++;
